@@ -1,2 +1,3 @@
 # vaxrank
-Ranked vaccine peptides for personalized cancer immunotherapy
+
+Mutant peptide ranking for personalized cancer vacines
