@@ -1,3 +1,4 @@
+from __future__ import absolute_import, print_function, division
 
 def create_vaccine_fasta_lines(vaccine_peptide_records):
     fasta_lines = []

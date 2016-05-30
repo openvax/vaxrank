@@ -39,7 +39,7 @@ except:
     pass
 
 
-with open('vaxrank/_metadata.py', 'r') as f:
+with open('vaxrank/__init__.py', 'r') as f:
     version = re.search(
         r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]',
         f.read(),
@@ -78,6 +78,6 @@ if __name__ == '__main__':
         long_description=readme,
         packages=['vaxrank'],
         scripts=[
-            "script/vaxrank.py"
+            "script/vaxrank-select-vaccine-peptides.py"
         ],
     )

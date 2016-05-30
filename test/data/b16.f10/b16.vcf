@@ -1,0 +1,6 @@
+##reference=mm10
+#chr	pos	id	ref	alt	qual	filter	info
+chr4	45802539	.	G	C	.	.	.
+chr9	82927102	.	G	T	.	.	.
+chr13	5864876	.	C	CG	.	.	.
+chrX	8125624	.	C	A	.	.	.

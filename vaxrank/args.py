@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import absolute_import, print_function, division
+
 import argparse
 
 from isovar.args import (
@@ -40,12 +42,6 @@ arg_parser.add_argument(
     help="Name of CSV file which contains predicted sequences")
 
 arg_parser.add_argument(
-    "--vaccine-peptide-min-length",
+    "--vaccine-peptide-length",
     default=25,
     type=int)
-
-arg_parser.add_argument(
-    "--vaccine-peptide-max-length",
-    default=25,
-    type=int)
-

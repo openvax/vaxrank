@@ -29,6 +29,7 @@ Example usage:
 
 
 from __future__ import print_function, division, absolute_import
+
 import logging
 
 from vaxrank.args import arg_parser
