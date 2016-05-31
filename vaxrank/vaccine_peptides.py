@@ -14,6 +14,8 @@
 
 from __future__ import absolute_import, print_function, division
 
+from collections import OrderedDict
+
 from varcode import load_vcf_fast as load_vcf
 from pysam import AlignmentFile
 from isovar.protein_sequence import variants_to_protein_sequences
@@ -80,22 +82,7 @@ def vaccine_peptides_dataframe(vcf_path, rna_bam_path, **kwargs):
     columns = OrderedDict()
     for field_name in VaccinePeptide._fields:
         columns[field_name] = []
-    """
-        ("chr", []),
-        ("pos", []),
-        ("ref", []),
-        ("alt", []),
-        ("amino_acid_sequence", []),
-        # offsets of codons containing mutant nucleotides, even if
-        # synonymous
-        ("mutant_codon_start_offset", []),
-        ("mutant_codon_end_offset", []),
-        ("num_mutant_codons", [])
-        # first non-synonymous codons resulting from the mutation
-        ("mutant_amino_acid_start_offset", []),
-        ("mutant_amino_acid_end_offset", []),
 
-    """
     vaccine_peptide_generator = vaccine_peptides(
         vcf_path=vcf_path,
         rna_bam_path=rna_bam_path, **kwargs)

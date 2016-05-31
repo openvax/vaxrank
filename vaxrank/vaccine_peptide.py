@@ -15,15 +15,53 @@
 from collections import namedtuple
 
 VaccinePeptide = namedtuple("VaccinePeptide", (
+    ###
+    # Mutation
+    ###
+    "variant",  # varcode.Variant object
+
+    ###
+    # Reference info
+    ###
+
+    # gene name or if multiple genes, then joined by semicolon
+    "gene",
+    # Ensembl IDs and names of transcripts used to get AA sequence
+    "transcript_ids",
+    "transcript_names",
+
+    ###
+    # Translated protein sequence, aggregated from possibly multiple
+    # synonymous coding sequences
+    ###
+
     "amino_acid_sequence",
-    "mutation_start_offset",
-    "mutation_end_offset",
-    "n_mutant_residues",
-    "mutation_distance_from_edge",
-    "epitope_score",
-    "start_offset_in_protein",
-    "variant_chr",
-    "variant_pos",
-    "variant_ref",
-    "variant_alt",
+    # offsets of amino acids which differ due to the mutation
+    "mutant_amino_acid_start_offset",
+    "mutant_amino_acid_end_offset",
+    "n_mutant_amino_acids",
+    # offsets of codons containing mutant nucleotides, even if
+    # synonymous with original reference sequence
+    "mutant_codon_start_offset",
+    "mutant_codon_end_offset",
+    "n_mutant_codons",
+
+    ###
+    # RNA evidence
+    ###
+
+    # number of RNA reads fully spanning the cDNA sequence(s) from which we
+    # translated this amino acid sequence.
+    "n_rna_reads",
+
+    ###
+    # Properties which affect ranking or filtering of vaccine peptide
+    ###
+
+    # how many amino acids from the center is the first mutant amino acid
+    "distance_from_center",
+    # list of epitope predictions
+    "epitope_predictions",
+    # sum of normalized IC50s
+    "combined_epitope_score",
 ))
