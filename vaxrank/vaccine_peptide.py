@@ -15,27 +15,15 @@
 from collections import namedtuple
 
 VaccinePeptide = namedtuple("VaccinePeptide", (
-    ###
-    # Mutation
-    ###
     "variant",  # varcode.Variant object
-
-    ###
-    # Reference info
-    ###
-
-    # gene name or if multiple genes, then joined by semicolon
-    "gene",
-    # Ensembl IDs and names of transcripts used to get AA sequence
-    "transcript_ids",
-    "transcript_names",
+    "isovar_protein_sequence"
 
     ###
     # Translated protein sequence, aggregated from possibly multiple
     # synonymous coding sequences
     ###
 
-    "amino_acid_sequence",
+    "amino_acids",
     # offsets of amino acids which differ due to the mutation
     "mutant_amino_acid_start_offset",
     "mutant_amino_acid_end_offset",

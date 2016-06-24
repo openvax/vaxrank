@@ -16,6 +16,7 @@ from __future__ import absolute_import, print_function, division
 
 import argparse
 
+from topiary.commandline_args import add_mhc_arg_group_to_parser
 from isovar.args import (
     add_somatic_vcf_args,
     add_rna_args,
@@ -35,6 +36,7 @@ arg_parser = argparse.ArgumentParser(
 add_somatic_vcf_args(arg_parser)
 add_rna_args(arg_parser)
 add_reference_context_args(arg_parser)
+add_mhc_arg_group_to_parser(arg_parser)
 
 arg_parser.add_argument(
     "--output-csv",
