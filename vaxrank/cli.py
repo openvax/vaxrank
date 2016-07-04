@@ -27,8 +27,8 @@ from topiary.commandline_args.mhc import (
     mhc_binding_predictor_from_args,
 )
 
-from .old_vaccine_peptides import generate_candidate_vaccine_peptides
 from .mutant_protein_fragment import MutantProteinFragment
+from .epitope_scoring import logistic_class1_ic50_epitope_scorer as mhc_scorer
 
 # inherit all commandline options from Isovar
 arg_parser = make_variant_sequences_arg_parser(
@@ -100,29 +100,24 @@ def main(args_list=None):
         min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence,
         max_protein_sequences_per_variant=1)
 
-    variant_to_mutant_protein_fragments = {}
-
     for variant, isovar_protein_sequences in protein_sequences_generator:
         isovar_protein_sequences = list(isovar_protein_sequences)
         if len(isovar_protein_sequences) == 0:
             logging.info("No protein sequences for %s" % (variant,))
             continue
-        isovar_protein_sequence = isovar_protein_sequences[0]
-        mutant_protein_fragment = MutantProteinFragment.from_isovar_protein_sequence(
-            isovar_protein_sequence)
-        variant_to_mutant_protein_fragments[variant] = mutant_protein_fragment
-        epitope_predictions = mhc_predictor.predict(variant_to_amino_acid_sequences_dict)
 
-    for variant, protein_sequence in variant_to_protein_sequence_objects_dict.items():
-        generate_candidate_vaccine_peptides(
-            protein_sequence.amino_acid,
-            epitopes=epitope_predictions,
-            mutation_start=protein_sequence.variant_aa_interval_start,
-            mutation_end=protein_sequence.variant_aa_interval_end,
-            epitope_scorer=None,
-            result_length=25,
-            padding=5)
+        protein_fragment = MutantProteinFragment.from_isovar_protein_sequence(
+            isovar_protein_sequences[0])
+        binding_predictions = mhc_predictor.predict({
+            "seq": protein_fragment.amino_acids})
+        # TODO: make this work for subsequences
+        total_mhc_score = mhc_scorer.sum_binding_prediction_scores(binding_predictions)
+        print("Total MHC binding score: %0.4f" % total_mhc_score)
 
+        for offset, candidate_vaccine_peptide in protein_fragment.top_k_subsequences(
+                subsequence_length=args.vaccine_peptide_length,
+                k=2 * args.padding_around_mutation + 1):
+            print(offset, candidate_vaccine_peptide)
     """
     df_vaccine_peptides = vaccine_peptides_dataframe_from_args(args)
     print(df_vaccine_peptides)

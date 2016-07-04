@@ -110,7 +110,7 @@ class DecreasingLogisticFunction(object):
         return logistic / normalizer
 
 # add up all the epitopes with IC50 <= 500nM
-simple_class1_ic50_epitope_scorer = EpitopeScorer(cutoff=500.0)
+simple_class1_ic50_epitope_scorer = EpitopeScorer(ic50_cutoff=500.0)
 
 # default midpoint and width for logistic determined by max likelihood fit
 # for data from Alessandro Sette's 1994 paper:
@@ -123,6 +123,6 @@ simple_class1_ic50_epitope_scorer = EpitopeScorer(cutoff=500.0)
 logistic_fn = DecreasingLogisticFunction(midpoint=350.0, width=150.0)
 
 logistic_class1_ic50_epitope_scorer = EpitopeScorer(
-    cutoff=2000.0,
+    ic50_cutoff=2000.0,
     transformation_function=logistic_fn,
 )
