@@ -21,6 +21,11 @@ from isovar.args.rna_reads import allele_reads_generator_from_args
 from isovar.protein_sequences import (
     reads_generator_to_protein_sequences_generator,
 )
+from topiary.commandline_args.mhc import (
+    add_mhc_args,
+    mhc_alleles_from_args,
+    mhc_binding_predictor_from_args,
+)
 
 # inherit all commandline options from Isovar
 arg_parser = make_variant_sequences_arg_parser(
@@ -30,24 +35,27 @@ arg_parser = make_variant_sequences_arg_parser(
         "expression data, and patient HLA type."),
 )
 
+add_mhc_args(arg_parser)
+
 arg_parser.add_argument(
     "--output-csv",
     default="vaccine_peptides.csv",
     help="Name of CSV file which contains predicted sequences")
 
-arg_parser.add_argument(
+vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
+vaccine_peptide_group.add_argument(
     "--vaccine-peptide-length",
     default=25,
     type=int,
-    help="Number of amino acids in the vaccine peptides (default %(default)%s)")
+    help="Number of amino acids in the vaccine peptides (default %(default)s)")
 
-arg_parser.add_argument(
+vaccine_peptide_group.add_argument(
     "--padding-around-mutation",
     default=0,
     type=int,
     help=(
         "Number of off-center windows around the mutation to consider "
-        "as vaccine peptides (default %(default)%s)"
+        "as vaccine peptides (default %(default)s)"
     ))
 
 def main(args_list=None):
@@ -67,6 +75,9 @@ def main(args_list=None):
 
     logging.basicConfig(level=logging.DEBUG)
     args = arg_parser.parse_args(args_list)
+    mhc_alleles = mhc_alleles_from_args(args)
+    print(mhc_alleles)
+    mhc_predictor = mhc_binding_predictor_from_args(args)
 
     # generator that for each variant gathers all RNA reads, both those
     # supporting the variant and reference alleles
@@ -83,15 +94,30 @@ def main(args_list=None):
         protein_sequence_length=protein_fragment_sequence_length,
         min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence,
         max_protein_sequences_per_variant=1)
+
+    variant_to_protein_sequence_objects_dict = {}
+    variant_to_amino_acid_sequences_dict = {}
     for variant, protein_sequences in protein_sequences_generator:
         protein_sequences = list(protein_sequences)
         if len(protein_sequences) == 0:
             logging.info("No protein sequences for %s" % (variant,))
             continue
         protein_sequence = protein_sequences[0]
-
+        variant_to_protein_sequence_objects_dict[variant] = protein_sequence
+        variant_to_amino_acid_sequences_dict[variant] = protein_sequence.amino_acids
         print(variant)
-        print(protein_sequence)
+        print("--> %s: %s (mutation %d:%d, %d alt reads, %d ref reads, %d spanning)" % (
+            ";".join(protein_sequence.gene),
+            protein_sequence.amino_acids,
+            protein_sequence.variant_aa_interval_start,
+            protein_sequence.variant_aa_interval_end,
+            len(protein_sequence.alt_reads),
+            len(protein_sequence.ref_reads),
+            len(protein_sequence.alt_reads_supporting_protein_sequence)))
+
+    epitope_predictions = mhc_predictor.predict(variant_to_amino_acid_sequences_dict)
+    print(epitope_predictions)
+
     """
     df_vaccine_peptides = vaccine_peptides_dataframe_from_args(args)
     print(df_vaccine_peptides)
