@@ -16,13 +16,14 @@ from __future__ import absolute_import, print_function, division
 import sys
 import logging
 
-from isovar.args.protein_sequences import (
-    make_protein_sequences_arg_parser,
-    protein_sequences_generator_from_args,
+from isovar.args.variant_sequences import make_variant_sequences_arg_parser
+from isovar.args.rna_reads import allele_reads_generator_from_args
+from isovar.protein_sequences import (
+    reads_generator_to_protein_sequences_generator,
 )
 
 # inherit all commandline options from Isovar
-arg_parser = make_protein_sequences_arg_parser(
+arg_parser = make_variant_sequences_arg_parser(
     prog="vaxrank",
     description=(
         "Select personalized vaccine peptides from cancer variants, "
@@ -37,8 +38,17 @@ arg_parser.add_argument(
 arg_parser.add_argument(
     "--vaccine-peptide-length",
     default=25,
-    type=int)
+    type=int,
+    help="Number of amino acids in the vaccine peptides (default %(default)%s)")
 
+arg_parser.add_argument(
+    "--padding-around-mutation",
+    default=0,
+    type=int,
+    help=(
+        "Number of off-center windows around the mutation to consider "
+        "as vaccine peptides (default %(default)%s)"
+    ))
 
 def main(args_list=None):
     """
@@ -49,8 +59,7 @@ def main(args_list=None):
         vaxrank
             --vcf somatic.vcf \
             --bam rnaseq.bam \
-            --min-vaccine-peptide-length 23 \
-            --max-vaccine-peptide-length 27 \
+            --vaccine-peptide-length 25 \
             --output-csv vaccine-peptides.csv
     """
     if args_list is None:
@@ -59,9 +68,30 @@ def main(args_list=None):
     logging.basicConfig(level=logging.DEBUG)
     args = arg_parser.parse_args(args_list)
 
-    for variant, protein_sequences in protein_sequences_generator_from_args(args):
+    # generator that for each variant gathers all RNA reads, both those
+    # supporting the variant and reference alleles
+    reads_generator = allele_reads_generator_from_args(args)
+
+    # total number of amino acids is the vaccine peptide length plus the
+    # number of off-center windows around the mutation
+    protein_fragment_sequence_length = (
+        args.vaccine_peptide_length + 2 * args.padding_around_mutation)
+
+    protein_sequences_generator = reads_generator_to_protein_sequences_generator(
+        reads_generator,
+        transcript_id_whitelist=None,
+        protein_sequence_length=protein_fragment_sequence_length,
+        min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence,
+        max_protein_sequences_per_variant=1)
+    for variant, protein_sequences in protein_sequences_generator:
+        protein_sequences = list(protein_sequences)
+        if len(protein_sequences) == 0:
+            logging.info("No protein sequences for %s" % (variant,))
+            continue
+        protein_sequence = protein_sequences[0]
+
         print(variant)
-        print(protein_sequences)
+        print(protein_sequence)
     """
     df_vaccine_peptides = vaccine_peptides_dataframe_from_args(args)
     print(df_vaccine_peptides)
