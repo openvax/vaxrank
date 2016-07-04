@@ -28,7 +28,7 @@ from topiary.commandline_args.mhc import (
 )
 
 from .old_vaccine_peptides import generate_candidate_vaccine_peptides
-
+from .mutant_protein_fragment import MutantProteinFragment
 
 # inherit all commandline options from Isovar
 arg_parser = make_variant_sequences_arg_parser(
@@ -78,8 +78,10 @@ def main(args_list=None):
 
     logging.basicConfig(level=logging.DEBUG)
     args = arg_parser.parse_args(args_list)
+    print(args)
+
     mhc_alleles = mhc_alleles_from_args(args)
-    print(mhc_alleles)
+    print("MHC alleles: %s" % (mhc_alleles,))
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
     # generator that for each variant gathers all RNA reads, both those
@@ -98,28 +100,18 @@ def main(args_list=None):
         min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence,
         max_protein_sequences_per_variant=1)
 
-    variant_to_protein_sequence_objects_dict = {}
-    variant_to_amino_acid_sequences_dict = {}
-    for variant, protein_sequences in protein_sequences_generator:
-        protein_sequences = list(protein_sequences)
-        if len(protein_sequences) == 0:
+    variant_to_mutant_protein_fragments = {}
+
+    for variant, isovar_protein_sequences in protein_sequences_generator:
+        isovar_protein_sequences = list(isovar_protein_sequences)
+        if len(isovar_protein_sequences) == 0:
             logging.info("No protein sequences for %s" % (variant,))
             continue
-        protein_sequence = protein_sequences[0]
-        variant_to_protein_sequence_objects_dict[variant] = protein_sequence
-        variant_to_amino_acid_sequences_dict[variant] = protein_sequence.amino_acids
-        print(variant)
-        print("--> %s: %s (mutation %d:%d, %d alt reads, %d ref reads, %d spanning)" % (
-            ";".join(protein_sequence.gene),
-            protein_sequence.amino_acids,
-            protein_sequence.variant_aa_interval_start,
-            protein_sequence.variant_aa_interval_end,
-            len(protein_sequence.alt_reads),
-            len(protein_sequence.ref_reads),
-            len(protein_sequence.alt_reads_supporting_protein_sequence)))
-
-    epitope_predictions = mhc_predictor.predict(variant_to_amino_acid_sequences_dict)
-    print(epitope_predictions)
+        isovar_protein_sequence = isovar_protein_sequences[0]
+        mutant_protein_fragment = MutantProteinFragment.from_isovar_protein_sequence(
+            isovar_protein_sequence)
+        variant_to_mutant_protein_fragments[variant] = mutant_protein_fragment
+        epitope_predictions = mhc_predictor.predict(variant_to_amino_acid_sequences_dict)
 
     for variant, protein_sequence in variant_to_protein_sequence_objects_dict.items():
         generate_candidate_vaccine_peptides(

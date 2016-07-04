@@ -47,7 +47,7 @@ class EpitopeScorer(object):
         else:
             return 1.0
 
-    def binding_value_score(self, ic50, allele_name=None):
+    def transform_ic50_into_score(self, ic50, allele_name=None):
         """
         Transform a binding prediction for a particular allele into a
         rescaled score (non-binders get a score of 0.0, strongest
@@ -62,36 +62,30 @@ class EpitopeScorer(object):
         if self.transformation_function:
             score = self.transformation_function(ic50)
         else:
-            score = 1.0 if ic50 < self.ic50_cutoff else 0.0
+            score = float(ic50 <= self.ic50_cutoff)
         allele_weight = self.allele_weight(allele_name) if allele_name else 1.0
         return allele_weight * score
 
-    def binding_record_score(self, record):
-        return self.binding_value_score(
-            ic50=record["IC50"],
-            allele_name=record["allele"])
+    def binding_prediction_score(self, binding_prediction):
+        return self.transform_ic50_into_score(
+            ic50=binding_prediction.value,
+            allele_name=binding_prediction.allele)
 
-    def sum_binding_record_scores(self, epitope_binding_prediction_records):
+    def sum_binding_prediction_scores(self, mhc_binding_predictions):
         """
 
         Parameters
         ----------
 
-        epitope_binding_prediction_records : dictionary of binding predictions
-            Keys are alleles, values are binding prediction records with
-            fields such as 'MHC_IC50' and 'MHC_Percentile_Rank'
+        mhc_binding_predictions : list of mhctools.BindingPrediction
 
         Returns sum of normalized binding prediction scores.
         """
-        if isinstance(epitope_binding_prediction_records, dict):
-            epitope_binding_prediction_records = list(
-                epitope_binding_prediction_records.values())
 
         return sum(
-            self.binding_record_score(record)
-            for record
-            in epitope_binding_prediction_records
-        )
+            self.binding_prediction(binding_prediction)
+            for binding_prediction
+            in mhc_binding_predictions)
 
     def epitope_score(self, epitope):
         binding_records = epitope['MHC_Allele_Scores']
