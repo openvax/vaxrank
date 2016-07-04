@@ -77,7 +77,9 @@ if __name__ == '__main__':
 
         long_description=readme,
         packages=['vaxrank'],
-        scripts=[
-            "script/vaxrank-select-vaccine-peptides.py"
-        ],
+        entry_points={
+            'console_scripts': [
+                'vaxrank = vaxrank.cli:main'
+            ]
+        }
     )
