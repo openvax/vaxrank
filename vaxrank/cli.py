@@ -27,6 +27,9 @@ from topiary.commandline_args.mhc import (
     mhc_binding_predictor_from_args,
 )
 
+from .old_vaccine_peptides import generate_candidate_vaccine_peptides
+
+
 # inherit all commandline options from Isovar
 arg_parser = make_variant_sequences_arg_parser(
     prog="vaxrank",
@@ -117,6 +120,16 @@ def main(args_list=None):
 
     epitope_predictions = mhc_predictor.predict(variant_to_amino_acid_sequences_dict)
     print(epitope_predictions)
+
+    for variant, protein_sequence in variant_to_protein_sequence_objects_dict.items():
+        generate_candidate_vaccine_peptides(
+            protein_sequence.amino_acid,
+            epitopes=epitope_predictions,
+            mutation_start=protein_sequence.variant_aa_interval_start,
+            mutation_end=protein_sequence.variant_aa_interval_end,
+            epitope_scorer=None,
+            result_length=25,
+            padding=5)
 
     """
     df_vaccine_peptides = vaccine_peptides_dataframe_from_args(args)

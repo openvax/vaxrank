@@ -1,14 +1,7 @@
 from __future__ import absolute_import, print_function, division
 
-import pandas as pd
-import numpy as np
-from isovar.cli_helpers import (
-    variants_to_protein_sequences_dataframe_from_args,
-)
 
-from epitope_scoring import simple_ic50_epitope_scorer
-from peptide_binding_measure import IC50_FIELD_NAME, PERCENTILE_RANK_FIELD_NAME
-from immunogenicity import THYMIC_DELETION_FIELD_NAME
+from .epitope_scoring import simple_ic50_epitope_scorer
 
 
 # To clarify the nomenclature (source seq vs. peptide vs. epitope)
@@ -70,11 +63,12 @@ def is_mutant_epitope(epitope, mutation_start, mutation_end):
     """
     start = epitope['EpitopeStart']
     end = epitope['EpitopeEnd']
-    overlaps = (start < mutation_end) and (end > mutation_start)
-    if THYMIC_DELETION_FIELD_NAME in epitope:
+    return (start < mutation_end) and (end > mutation_start)
+    """if THYMIC_DELETION_FIELD_NAME in epitope:
         return not epitope[THYMIC_DELETION_FIELD_NAME] and overlaps
     else:
         return overlaps
+    """
 
 def clamp(i, last_pos):
     """
@@ -161,7 +155,7 @@ def generate_candidate_vaccine_peptides(
 
     for peptide_start in xrange(first_pos, first_pos + n_candidates):
 
-        peptide_seq = seq[peptide_start : peptide_start+result_length]
+        peptide_seq = seq[peptide_start:peptide_start + result_length]
 
         # use this instead of 'result_length' just in case
         # we're dealing with a source sequence shorter than
@@ -185,10 +179,9 @@ def generate_candidate_vaccine_peptides(
             epitope_start = epitope['EpitopeStart']
             epitope_end = epitope['EpitopeEnd']
             overlaps = (
-                epitope_start >= peptide_start
-                and epitope_end <= peptide_end
+                epitope_start >= peptide_start and epitope_end <= peptide_end
             )
-            mutant = is_mutant_epitope(epitope, mutation_start, mutation_end)
+            # mutant = is_mutant_epitope(epitope, mutation_start, mutation_end)
 
             if overlaps:
                 score = epitope_scorer.epitope_score(epitope)
@@ -198,16 +191,16 @@ def generate_candidate_vaccine_peptides(
                     wildtype_score += score
 
         vaccine_peptide_record = {
-            'VaccinePeptide' : peptide_seq,
-            'VaccinePeptideMutationStart' : peptide_mutation_start,
-            'VaccinePeptideMutationEnd' : peptide_mutation_end,
-            'MutantEpitopeScore' : mutant_score,
-            'WildtypeEpitopeScore' : wildtype_score,
-            'VaccinePeptideStart' : peptide_start,
-            'VaccinePeptideEnd' : peptide_end,
-            'VaccinePeptideLength' : peptide_end - peptide_start,
-            'NumMutantResidues' : number_mutant_residues,
-            'MutationDistanceFromEdge' : mutation_distance_from_edge,
+            'VaccinePeptide': peptide_seq,
+            'VaccinePeptideMutationStart': peptide_mutation_start,
+            'VaccinePeptideMutationEnd': peptide_mutation_end,
+            'MutantEpitopeScore': mutant_score,
+            'WildtypeEpitopeScore': wildtype_score,
+            'VaccinePeptideStart': peptide_start,
+            'VaccinePeptideEnd': peptide_end,
+            'VaccinePeptideLength': peptide_end - peptide_start,
+            'NumMutantResidues': number_mutant_residues,
+            'MutationDistanceFromEdge': mutation_distance_from_edge,
         }
         candidate_peptides.append(vaccine_peptide_record)
 
