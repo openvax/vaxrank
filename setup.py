@@ -72,7 +72,8 @@ if __name__ == '__main__':
             'pyensembl',
             'varcode',
             'isovar',
-            'topiary'
+            'topiary',
+            'roman',
         ],
 
         long_description=readme,

@@ -26,6 +26,7 @@ from topiary.commandline_args.mhc import (
 )
 
 from .core_logic import ranked_vaccine_peptides, dataframe_from_ranked_list
+from .report import ascii_report_from_ranked_vaccine_peptides
 
 # inherit all commandline options from Isovar
 arg_parser = make_variant_sequences_arg_parser(
@@ -39,8 +40,13 @@ add_mhc_args(arg_parser)
 
 arg_parser.add_argument(
     "--output-csv",
-    default="vaccine_peptides.csv",
+    default="vaccine-peptides.csv",
     help="Name of CSV file which contains predicted sequences")
+
+arg_parser.add_argument(
+    "--output-ascii-report",
+    default="vaccine-peptides-report.txt",
+    help="Path to ASCII vaccine peptide report")
 
 vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
 vaccine_peptide_group.add_argument(
@@ -65,10 +71,10 @@ vaccine_peptide_group.add_argument(
     help="Number of vaccine peptides to generate for each mutation")
 
 vaccine_peptide_group.add_argument(
-    "--max-mutations",
+    "--max-mutations-in-report",
     default=10,
     type=int,
-    help="Number of mutations to return vaccine peptide predictions for")
+    help="Number of mutations to report")
 
 def main(args_list=None):
     """
@@ -107,3 +113,14 @@ def main(args_list=None):
     df = dataframe_from_ranked_list(ranked_list)
     print(df)
     df.to_csv(args.output_csv, index=False)
+
+    ascii_report = ascii_report_from_ranked_vaccine_peptides(
+        ranked_variants_with_vaccine_peptides=ranked_list,
+        mhc_alleles=mhc_alleles,
+        vcf_path=args.vcf,
+        bam_path=args.bam)
+
+    print(ascii_report)
+
+    with open(args.output_ascii_report, "w") as f:
+        f.write(ascii_report)

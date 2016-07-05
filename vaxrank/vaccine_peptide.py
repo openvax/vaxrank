@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+VaccinePeptide combines the sequence information of MutantProteinFragment
+with MHC binding predictions for subsequences of the protein fragment.
+"""
+
 from __future__ import absolute_import, print_function, division
 
 from collections import namedtuple
@@ -65,8 +70,10 @@ class VaccinePeptide(VaccinePeptideBase):
             -self.mutant_protein_fragment.mutation_distance_from_edge
         )
 
+    @property
     def expression_score(self):
         return np.sqrt(self.mutant_protein_fragment.n_alt_reads)
 
+    @property
     def combined_score(self):
-        return self.expression_score() * self.mutant_epitope_score
+        return self.expression_score * self.mutant_epitope_score

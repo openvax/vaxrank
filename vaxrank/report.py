@@ -1,41 +1,97 @@
-"""
-Patient ID: PGV001-012
----
-Tumor DNA: PGV-001-012-TU-DNA-01-01
-Tumor RNA: PGV-001-012-TU-RNA-01-01
-Normal DNA: PGV-001-012-PB-DNA-01-01
----
-HLA Type: HLA-A*02:01, HLA-A*02:24, HLA-B*07:02, HLA-B*07:01, HLA-C*04:01, HLA-C*01:01
----
+# Copyright (c) 2016. Mount Sinai School of Medicine
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-1) SIIFYYYYYYYYQFLFLFLFLFLFLFLLLF
-Variant: chr22:14848349 C>G
-Overlapping genes: TP53
-Predicted Epitopes:
-- QFLFLFLFLF HLA-A*02:01 3nM (1.0)
-- YYYYYQFLFLF HLA-A*02:24 40nM (0.89)
-Total Epitope Score: 1.89
-# RNA reads supporting variant: 384
-RNA sequence around variant: ACCCTTTTGTGTGTGGTGT_G_AAAAAAAAAAAAAAAAAAAA
-# RNA reads supporting sequence: 302
-Expression score: 0.89
-Inferred reading frame: +2
-Transcripts supporting reading frame: TP53-001, TP53-002
-Full translation of RNA sequence: SSSSSSIIFYYYYYYYYQFLFLFLFLFLFLFLLLF
-VaccinePeptideScore: 1.68
+from __future__ import absolute_import, print_function, division
+import logging
 
-2) <Amino acid sequence>
-Variant: <chromosome>:<position> <ref>-><alt>  <COSMIC ID if in cosmic>
-Overlapping genes: <overlappinggenes>
-Predicted Epitope[s]:
-- <prediced epitope sequence> <binding concentration> (<score>)
-Total epitope score: <total epitope score>
-# RNA reads supporting variant: <# RNA reads supporting variants>
-RNA sequence around variant: <RNA seq around variatn>
-# RNA reads supporting sequence: <# RNA reads supporting sequence>
-Expression score: <expression score>
-Inferred reading frame: <inferred reading frame>
-Transcripts supporting reading frame: <tr1>, <tw2>, ...
-Full translation of RNA sequence: <full translation of RNA seq>
-VaccinePeptideScore: <vaccine peptide score>
-"""
+import roman
+
+def ascii_report_from_ranked_vaccine_peptides(
+        ranked_variants_with_vaccine_peptides,
+        mhc_alleles,
+        vcf_path,
+        bam_path):
+    lines = [
+        "Somatic variants (VCF): %s" % vcf_path,
+        "RNAseq reads (BAM): %s" % bam_path,
+        "---",
+        "MHC alleles: %s" % (" ".join(mhc_alleles)),
+        "---",
+    ]
+    for i, (variant, vaccine_peptides) in enumerate(
+            ranked_variants_with_vaccine_peptides):
+        variant_short_description = variant.short_description
+        if len(vaccine_peptides) == 0:
+            logging.info(
+                "Skipping %s, no vaccine peptides" % variant_short_description)
+            continue
+
+        gene_name = vaccine_peptides[0].mutant_protein_fragment.gene_name
+        lines.append("\n%d) %s (%s)" % (
+            i + 1,
+            variant_short_description,
+            gene_name,))
+        lines.append(
+            "\tTop score: %0.2f" % (vaccine_peptides[0].combined_score))
+        lines.append(
+            "\tReads supporting variant allele: %d" % (
+                vaccine_peptides[0].mutant_protein_fragment.n_alt_reads))
+        lines.append(
+            "\tReads supporting reference allele: %d" % (
+                vaccine_peptides[0].mutant_protein_fragment.n_ref_reads))
+        lines.append(
+            "\tReads supporting other alleles: %d" % (
+                vaccine_peptides[0].mutant_protein_fragment.n_other_reads))
+
+        lines.append("\tVaccine Peptides:")
+        for j, vaccine_peptide in enumerate(vaccine_peptides):
+            mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
+            amino_acids = mutant_protein_fragment.amino_acids
+            mutation_start = mutant_protein_fragment.mutant_amino_acid_start_offset
+            mutation_end = mutant_protein_fragment.mutant_amino_acid_end_offset
+            aa_before_mutation = amino_acids[:mutation_start]
+            aa_mutant = amino_acids[mutation_start:mutation_end]
+            aa_after_mutation = amino_acids[mutation_end:]
+            lines.append("\t\t%s. %s_%s_%s (score = %0.2f)" % (
+                roman.toRoman(j + 1).lower(),
+                aa_before_mutation,
+                aa_mutant,
+                aa_after_mutation,
+                vaccine_peptide.combined_score))
+            lines.append(
+                "\t\t   - Expression score: %0.2f" % (vaccine_peptide.expression_score))
+            lines.append(
+                "\t\t   - Mutant epitope score: %0.2f" % (
+                    vaccine_peptide.mutant_epitope_score))
+            lines.append(
+                "\t\t   - Wildtype epitope score: %0.2f" % (
+                    vaccine_peptide.wildtype_epitope_score))
+
+            lines.append(
+                "\t\t   - Reads fully spanning cDNA sequence(s): %d" % (
+                    mutant_protein_fragment.n_alt_reads_supporting_protein_sequence))
+            lines.append(
+                "\t\t   - Mutant amino acids: %d" % (
+                    mutant_protein_fragment.n_mutant_amino_acids))
+            lines.append(
+                "\t\t   - Mutation distance from edge: %d" % (
+                    mutant_protein_fragment.mutation_distance_from_edge))
+            lines.append("\t\t   - Predicted mutant epitopes:")
+            for epitope_prediction in vaccine_peptide.epitope_predictions:
+                if epitope_prediction.overlaps_mutation and epitope_prediction.ic50 <= 2000:
+                    lines.append("\t\t\t * %s %0.2f (%s)" % (
+                        epitope_prediction.peptide_sequence,
+                        epitope_prediction.ic50,
+                        epitope_prediction.allele))
+    return "\n".join(lines)

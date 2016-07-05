@@ -68,10 +68,10 @@ def vaccine_peptides_for_variant(
 
         logging.info("%s, combined score: %0.4f" % (
             candidate_vaccine_peptide,
-            candidate_vaccine_peptide.combined_score()))
+            candidate_vaccine_peptide.combined_score))
         candidate_vaccine_peptides.append(candidate_vaccine_peptide)
 
-    max_score = max(vp.combined_score() for vp in candidate_vaccine_peptides)
+    max_score = max(vp.combined_score for vp in candidate_vaccine_peptides)
     n_total_candidates = len(candidate_vaccine_peptides)
 
     # only keep candidate vaccines that are within 1% of the maximum
@@ -79,7 +79,7 @@ def vaccine_peptides_for_variant(
     filtered_candidate_vaccine_peptides = [
         vp
         for vp in candidate_vaccine_peptides
-        if vp.combined_score() / max_score > 0.99
+        if vp.combined_score / max_score > 0.99
     ]
 
     print("Keeping %d/%d vaccine peptides for %s" % (
@@ -94,7 +94,7 @@ def vaccine_peptides_for_variant(
             print("%d) %s (combined score = %0.4f)\n" % (
                 i + 1,
                 vaccine_peptide,
-                vaccine_peptide.combined_score()))
+                vaccine_peptide.combined_score))
     return filtered_candidate_vaccine_peptides[:max_vaccine_peptides_per_variant]
 
 def generate_vaccine_peptides(
@@ -152,7 +152,7 @@ def ranked_vaccine_peptides(
         min_reads_supporting_cdna_sequence=min_reads_supporting_cdna_sequence)
     result_list = list(variants_to_vaccine_peptides_dict.items())
     result_list.sort(
-        key=lambda x: x[1][0].combined_score() if len(x[1]) > 0 else 0.0,
+        key=lambda x: x[1][0].combined_score if len(x[1]) > 0 else 0.0,
         reverse=True)
     for variant, vaccine_peptides in result_list:
         print("---")
@@ -161,7 +161,7 @@ def ranked_vaccine_peptides(
         for vaccine_peptide in vaccine_peptides:
             print(vaccine_peptide.mutant_protein_fragment.gene_name)
             print(vaccine_peptide.mutant_protein_fragment.amino_acids)
-            print(vaccine_peptide.combined_score())
+            print(vaccine_peptide.combined_score)
     return result_list
 
 
@@ -203,7 +203,7 @@ def dataframe_from_ranked_list(ranked_list_of_variants_with_vaccine_peptides):
             columns["peptide_secondary_rank"].append(j + 1)
             columns["mutant_epitope_score"].append(vaccine_peptide.mutant_epitope_score)
             columns["wildtype_epitope_score"].append(vaccine_peptide.wildtype_epitope_score)
-            columns["expression_score"].append(vaccine_peptide.expression_score())
-            columns["combined_score"].append(vaccine_peptide.combined_score())
+            columns["expression_score"].append(vaccine_peptide.expression_score)
+            columns["combined_score"].append(vaccine_peptide.combined_score)
     print(columns)
     return pd.DataFrame(columns, columns=columns.keys())
