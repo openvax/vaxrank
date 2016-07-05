@@ -83,7 +83,7 @@ class EpitopeScorer(object):
         """
 
         return sum(
-            self.binding_prediction(binding_prediction)
+            self.binding_prediction_score(binding_prediction)
             for binding_prediction
             in mhc_binding_predictions)
 

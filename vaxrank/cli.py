@@ -107,17 +107,23 @@ def main(args_list=None):
             continue
 
         protein_fragment = MutantProteinFragment.from_isovar_protein_sequence(
-            isovar_protein_sequences[0])
+            variant=variant,
+            protein_sequence=isovar_protein_sequences[0])
         binding_predictions = mhc_predictor.predict({
             "seq": protein_fragment.amino_acids})
         # TODO: make this work for subsequences
         total_mhc_score = mhc_scorer.sum_binding_prediction_scores(binding_predictions)
         print("Total MHC binding score: %0.4f" % total_mhc_score)
 
-        for offset, candidate_vaccine_peptide in protein_fragment.top_k_subsequences(
-                subsequence_length=args.vaccine_peptide_length,
-                k=2 * args.padding_around_mutation + 1):
-            print(offset, candidate_vaccine_peptide)
+        for i, (offset, candidate_vaccine_peptide) in enumerate(
+                protein_fragment.top_k_subsequences(
+                    subsequence_length=args.vaccine_peptide_length,
+                    k=2 * args.padding_around_mutation + 1)):
+            print("%d) Start offset = %d, mutation_distance_from_edge = %d" % (
+                i + 1,
+                offset,
+                candidate_vaccine_peptide.mutation_distance_from_edge))
+            print("-->", candidate_vaccine_peptide)
     """
     df_vaccine_peptides = vaccine_peptides_dataframe_from_args(args)
     print(df_vaccine_peptides)
