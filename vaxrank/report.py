@@ -70,6 +70,8 @@ def ascii_report_from_ranked_vaccine_peptides(
                 aa_after_mutation,
                 vaccine_peptide.combined_score))
             lines.append(
+                "\t\t   - Length: %d" % len(amino_acids))
+            lines.append(
                 "\t\t   - Expression score: %0.2f" % (vaccine_peptide.expression_score))
             lines.append(
                 "\t\t   - Mutant epitope score: %0.2f" % (
