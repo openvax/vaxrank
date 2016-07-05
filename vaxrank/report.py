@@ -21,15 +21,24 @@ import roman
 def ascii_report_from_ranked_vaccine_peptides(
         ranked_variants_with_vaccine_peptides,
         mhc_alleles,
-        vcf_path,
+        variants,
         bam_path):
+    # create dictionary mapping variants to coding effects
+    variants_to_top_coding_effect_dict = {
+        variant: effect_collection.top_priority_effect()
+        for (variant, effect_collection)
+        in variants.effects().drop_silent_and_noncoding().groupby_variant().items()
+    }
     lines = [
-        "Somatic variants (VCF): %s" % vcf_path,
-        "RNAseq reads (BAM): %s" % bam_path,
-        "---",
+        "VCF (somatic variants) path: %s" % variants.path,
+        "BAM (RNAseq reads) path: %s" % bam_path,
         "MHC alleles: %s" % (" ".join(mhc_alleles)),
+        "Total number of somatic variants: %d" % (len(variants),),
+        "Somatic variants with predicted coding effects: %d" % (
+            len(variants_to_top_coding_effect_dict),),
         "---",
     ]
+
     for i, (variant, vaccine_peptides) in enumerate(
             ranked_variants_with_vaccine_peptides):
         variant_short_description = variant.short_description
@@ -45,6 +54,9 @@ def ascii_report_from_ranked_vaccine_peptides(
             gene_name,))
         lines.append(
             "\tTop score: %0.2f" % (vaccine_peptides[0].combined_score))
+        lines.append(
+            "\tPredicted effect: %s" % (
+                variants_to_top_coding_effect_dict.get(variant)))
         lines.append(
             "\tReads supporting variant allele: %d" % (
                 vaccine_peptides[0].mutant_protein_fragment.n_alt_reads))

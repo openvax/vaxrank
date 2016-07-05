@@ -122,7 +122,7 @@ def main(args_list=None):
     ascii_report = ascii_report_from_ranked_vaccine_peptides(
         ranked_variants_with_vaccine_peptides=ranked_list,
         mhc_alleles=mhc_alleles,
-        vcf_path=args.vcf,
+        variants=variants,
         bam_path=args.bam)
 
     print(ascii_report)
