@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-VaccinePeptide combines the sequence information of MutantProteinFragment
-with MHC binding predictions for subsequences of the protein fragment.
-"""
 
 from __future__ import absolute_import, print_function, division
 
@@ -32,12 +28,9 @@ VaccinePeptideBase = namedtuple(
 
 class VaccinePeptide(VaccinePeptideBase):
     """
-            "n_mutant_residues",
-        "mutation_distance_from_edge",
-        "n_alt_reads",
-        "n_alt_reads_supporting_protein_sequence"
+    VaccinePeptide combines the sequence information of MutantProteinFragment
+    with MHC binding predictions for subsequences of the protein fragment.
     """
-
     def __new__(cls, mutant_protein_fragment, epitope_predictions):
         wildtype_epitope_score = sum(
             p.logistic_score()
