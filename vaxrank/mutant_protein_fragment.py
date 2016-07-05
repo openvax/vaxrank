@@ -72,7 +72,7 @@ class MutantProteinFragment(MutantProteinFragment_Fields):
         return len(self.amino_acids)
 
     @property
-    def num_mutant_amino_acids(self):
+    def n_mutant_amino_acids(self):
         return (
             self.mutant_amino_acid_end_offset - self.mutant_amino_acid_start_offset)
 
@@ -92,6 +92,16 @@ class MutantProteinFragment(MutantProteinFragment_Fields):
         Number of reads supporting alleles which are neither ref nor alt
         """
         return self.n_overlapping_reads - (self.n_ref_reads + self.n_alt_reads)
+
+    def interval_overlaps_mutation(self, start_offset, end_offset):
+        """
+        Does the given start_offset:end_offset interval overlap the mutated
+        region of this MutantProteinFragment? Interval offsets are expected
+        to be base-0 half-open (start is inclusive, end is exclusive).
+        """
+        return (
+            start_offset < self.mutant_amino_acid_end_offset and
+            end_offset > self.mutant_amino_acid_start_offset)
 
     def generate_subsequences(self, subsequence_length):
         """
@@ -135,7 +145,7 @@ class MutantProteinFragment(MutantProteinFragment_Fields):
             k,
             sort_key=lambda x: (
                 -x[1].mutation_distance_from_edge,
-                -x[1].num_mutant_amino_acids)):
+                -x[1].n_mutant_amino_acids)):
         """
         Returns k subsequences, paired with their offset from the start of the
         protein fragment. The default sort criterion is maximizing the

@@ -13,118 +13,205 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function, division
-
+import logging
+import heapq
 from collections import OrderedDict
 
-from varcode import load_vcf_fast as load_vcf
-from pysam import AlignmentFile
-from isovar.protein_sequence import variants_to_protein_sequences
-from isovar.default_parameters import (
-    MIN_TRANSCRIPT_PREFIX_LENGTH,
-    MAX_REFERENCE_TRANSCRIPT_MISMATCHES,
-    MIN_READS_SUPPORTING_VARIANT_CDNA_SEQUENCE,
-    MIN_READ_MAPPING_QUALITY,
+import pandas as pd
+from isovar.protein_sequences import (
+    reads_generator_to_protein_sequences_generator,
 )
-from topiary.commandline_args import mhc_binding_predictor_from_args
 
-from .vaccine_peptide import VaccinePeptide
+from .mutant_protein_fragment import MutantProteinFragment
+from .epitope_prediction import predict_epitopes, slice_epitope_predictions
+from .vaccine_peptide_metrics import VaccinePeptideMetrics
 
-def vaccine_peptides(
-        vcf_path,
-        rna_bam_path,
-        mhc_binding_predictor,
-        vaccine_peptide_length=25,
-        max_offset_from_center=0,
-        min_reads_supporting_rna_sequence=MIN_READS_SUPPORTING_VARIANT_CDNA_SEQUENCE,
-        min_transcript_prefix_length=MIN_TRANSCRIPT_PREFIX_LENGTH,
-        max_transcript_mismatches=MAX_REFERENCE_TRANSCRIPT_MISMATCHES,
+def vaccine_peptides_for_variant(
+        variant,
+        isovar_protein_sequences,
+        mhc_predictor,
+        vaccine_peptide_length,
+        padding_around_mutation,
+        max_vaccine_peptides_per_variant):
+    """
+    Returns list containing (MutantProteinFragment, VaccinePeptideMetrics) pairs
+    """
+    isovar_protein_sequences = list(isovar_protein_sequences)
+    if len(isovar_protein_sequences) == 0:
+        logging.info("No protein sequences for %s" % (variant,))
+        return []
 
-        min_mapping_quality=MIN_READ_MAPPING_QUALITY):
-    variants = load_vcf(vcf_path)
-    rna_reads = AlignmentFile(rna_bam_path)
+    protein_fragment = MutantProteinFragment.from_isovar_protein_sequence(
+        variant=variant,
+        protein_sequence=isovar_protein_sequences[0])
 
-    protein_fragment_length = vaccine_peptide_length + 2 * max_offset_from_center
+    epitope_predictions = predict_epitopes(
+        mhc_predictor=mhc_predictor,
+        protein_fragment=protein_fragment)
 
-    protein_fragment_generator = variants_to_protein_sequences(
-        variants,
-        rna_reads,
+    candidate_vaccine_peptides_to_metrics = {}
+    for offset, candidate_vaccine_peptide in protein_fragment.top_k_subsequences(
+            subsequence_length=vaccine_peptide_length,
+            k=2 * padding_around_mutation + 1):
+        subsequence_epitope_predictions = slice_epitope_predictions(
+            epitope_predictions,
+            start_offset=offset,
+            end_offset=offset + len(candidate_vaccine_peptide))
+        assert all(
+            p.source_sequence == candidate_vaccine_peptide.amino_acids
+            for p in subsequence_epitope_predictions)
+
+        vaccine_peptide_metrics = VaccinePeptideMetrics.from_epitope_predictions(
+            epitope_predictions=subsequence_epitope_predictions,
+            mutant_protein_fragment=candidate_vaccine_peptide)
+
+        logging.info("%s: %s, combined score: %0.4f" % (
+            candidate_vaccine_peptide,
+            vaccine_peptide_metrics,
+            vaccine_peptide_metrics.combined_score()))
+
+        candidate_vaccine_peptides_to_metrics[
+            candidate_vaccine_peptide] = vaccine_peptide_metrics
+
+    max_score = max(
+        metrics.combined_score()
+        for metrics in candidate_vaccine_peptides_to_metrics.values())
+    n_total_candidates = len(candidate_vaccine_peptides_to_metrics)
+    # only keep candidate vaccines that are within 1% of the maximum
+    # combined score
+    filtered_candidate_vaccine_peptides_with_metrics = [
+        (vaccine_peptide, metrics)
+        for (vaccine_peptide, metrics)
+        in candidate_vaccine_peptides_to_metrics.items()
+        if metrics.combined_score() / max_score > 0.99
+    ]
+    print("Keeping %d/%d vaccine peptides for %s" % (
+        len(filtered_candidate_vaccine_peptides_with_metrics),
+        n_total_candidates,
+        variant))
+    filtered_candidate_vaccine_peptides_with_metrics.sort(
+        key=lambda x: x[1].lexicographic_sort_key())
+    if len(filtered_candidate_vaccine_peptides_with_metrics) > 0:
+        print("\n\nTop vaccine peptides for %s:" % variant)
+        for i, (vaccine_peptide, metrics) in enumerate(
+                filtered_candidate_vaccine_peptides_with_metrics):
+            print("%d) %s: %s (combined score = %0.4f)\n" % (
+                i + 1,
+                vaccine_peptide,
+                metrics,
+                metrics.combined_score()))
+    return filtered_candidate_vaccine_peptides_with_metrics[
+        :max_vaccine_peptides_per_variant]
+
+def generate_vaccine_peptides(
+        reads_generator,
+        mhc_predictor,
+        vaccine_peptide_length,
+        padding_around_mutation,
+        max_vaccine_peptides_per_variant,
+        min_reads_supporting_cdna_sequence):
+    """
+    Returns dictionary mapping each variant to list containing
+    (MutantProteinFragment, VaccinePeptideMetrics) pairs
+    """
+
+    # total number of amino acids is the vaccine peptide length plus the
+    # number of off-center windows around the mutation
+    protein_fragment_sequence_length = (
+        vaccine_peptide_length + 2 * padding_around_mutation)
+
+    protein_sequences_generator = reads_generator_to_protein_sequences_generator(
+        reads_generator,
         transcript_id_whitelist=None,
-        protein_sequence_length=protein_fragment_length,
-        min_reads_supporting_rna_sequence=min_reads_supporting_rna_sequence,
-        min_transcript_prefix_length=min_transcript_prefix_length,
-        max_transcript_mismatches=max_transcript_mismatches,
-        max_protein_sequences_per_variant=1,
-        min_mapping_quality=min_mapping_quality)
+        protein_sequence_length=protein_fragment_sequence_length,
+        min_reads_supporting_cdna_sequence=min_reads_supporting_cdna_sequence,
+        max_protein_sequences_per_variant=1)
 
-    full_sequence_dictionary = {}
-    for variant, protein_sequence_records in protein_fragment_generator:
-        for protein_sequence_record in protein_sequence_records:
-            seq = protein_sequence_record.amino_acids
-            full_sequence_dictionary[(variant, protein_sequence_record)] = seq
+    result_dict = {}
+    for variant, isovar_protein_sequences in protein_sequences_generator:
+        vaccine_peptides_and_metrics = vaccine_peptides_for_variant(
+            variant=variant,
+            isovar_protein_sequences=isovar_protein_sequences,
+            mhc_predictor=mhc_predictor,
+            vaccine_peptide_length=vaccine_peptide_length,
+            padding_around_mutation=padding_around_mutation,
+            max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant)
+        result_dict[variant] = vaccine_peptides_and_metrics
+    return result_dict
 
-    epitopes_dict = mhc_binding_predictor.predict(full_sequence_dictionary)
-    for (variant, protein_sequence_record), epitopes in epitopes_dict.items():
-        print(variant)
-        print(protein_sequence_record)
-        print(epitopes)
-        print("---")
-        """
-        epitope_predictions = mhc_binding_predictor.predict([amino_acids])
+def select_vaccine_peptides(
+        reads_generator,
+        mhc_predictor,
+        vaccine_peptide_length,
+        padding_around_mutation,
+        max_vaccine_peptides_per_variant,
+        min_reads_supporting_cdna_sequence,
+        max_variants_selected):
+    """
+    Returns sorted list of at most `max_variants_selected` tuples whose
+    first element is a Variant and whose second element is a list of
+    (MutantProteinFragment, VaccinePeptideMetrics) pairs.
+    """
+    variants_to_vaccine_peptides_and_metrics_dict = generate_vaccine_peptides(
+        reads_generator=reads_generator,
+        mhc_predictor=mhc_predictor,
+        vaccine_peptide_length=vaccine_peptide_length,
+        padding_around_mutation=padding_around_mutation,
+        max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
+        min_reads_supporting_cdna_sequence=min_reads_supporting_cdna_sequence)
 
-            n_amino_acids = len(amino_acids)
-            midpoint = n_amino_acids // 2
-            mutant_aa_start = protein_sequence_record.variant_aa_interval_start=24
-            mutant_aa_end = protein_sequence_record.variant_aa_interval_end = 33
+    variants_to_combined_scores_dict = {
+        variant: vaccine_peptides_and_metrics[0][1].combined_score()
+        for (variant, vaccine_peptides_and_metrics) in
+        variants_to_vaccine_peptides_and_metrics_dict.items()
+        if len(vaccine_peptides_and_metrics) > 0
+    }
+    return [
+        (v, variants_to_vaccine_peptides_and_metrics_dict[v])
+        for v in heapq.nlargest(
+            max_variants_selected,
+            variants_to_combined_scores_dict,
+            key=variants_to_combined_scores_dict.get)
+    ]
 
-            for i in range(n_amino_acids - vaccine_peptide_length + 1):
-                subsequence = amino_acids[i:i + vaccine_peptide_length]
-                yield VaccinePeptide(
-                    variant=variant,
-                    isovar_protein_sequence=protein_sequence_record,
-                    frameshift=protein_sequence_record.frameshift,
-                    gene=protein_sequence_record.gene,
-                    amino_acids=subsequence,)
-        """
-        """
-        variant_chr=variant.original_contig,
-        variant_pos=variant.original_start,
-        variant_ref=variant.original_ref,
-        variant_alt=variant.original_alt,
-        amino_acid_sequence=subsequence,
-        mutation_start_offset=mutation_start_offset,
-        mutation_end_offset=mutation_end_offset,
-        n_mutant_residues=mutation_end_offset - mutation_start_offset,
-        deletion=is_deletion,
-        mutation_distance_from_edge=mutation_distance_from_edge,
-        epitope_score=epitope_score,
-        start_offset_in_protein=start_offset_in_protein + i)
-        """
+def select_vaccine_peptides_dataframe(**kwargs):
+    """
+    Takes the same arguments as `select_vaccine_peptides` but turns result
+    type into a DataFrame.
+    """
+    columns = OrderedDict([
+        ("genome", []),
+        ("chr", []),
+        ("pos", []),
+        ("ref", []),
+        ("alt", []),
 
-def vaccine_peptides_dataframe(
-        vcf_path, rna_bam_path, mhc_binding_predictor, **kwargs):
-    columns = OrderedDict()
-    for field_name in VaccinePeptide._fields:
-        columns[field_name] = []
+    ])
+    for field in MutantProteinFragment._fields + VaccinePeptideMetrics._fields:
+        columns[field] = []
+    columns["variant_rank"] = []
+    columns["peptide_secondary_rank"] = []
+    columns["expression_score"] = []
+    columns["combined_score"] = []
 
-    vaccine_peptide_generator = vaccine_peptides(
-        vcf_path=vcf_path,
-        rna_bam_path=rna_bam_path,
-        mhc_binding_predictor=mhc_binding_predictor,
-        **kwargs)
+    for i, (variant, vaccine_peptide_and_metrics_list) in enumerate(
+            select_vaccine_peptides(**kwargs)):
+        for j, (vaccine_peptide, metrics) in enumerate(
+                vaccine_peptide_and_metrics_list):
+            columns["genome"].append(variant.reference_name)
+            columns["chr"].append(variant.contig)
+            columns["pos"].append(variant.original_start)
+            columns["ref"].append(variant.original_ref)
+            columns["alt"].append(variant.original_alt)
 
-    for vaccine_peptide in vaccine_peptide_generator:
-        for field_name in VaccinePeptide._fields:
-            columns[field_name].append(getattr(vaccine_peptide, field_name))
-
-def vaccine_peptides_dataframe_from_args(args):
-    print(args)
-    mhc_binding_predictor = mhc_binding_predictor_from_args(args)
-    return vaccine_peptides_dataframe(
-        vcf_path=args.vcf,
-        rna_bam_path=args.bam,
-        mhc_binding_predictor=mhc_binding_predictor,
-        vaccine_peptide_length=args.vaccine_peptide_length,
-        min_reads_supporting_rna_sequence=args.min_reads,
-        max_transcript_mismatches=args.max_reference_transcript_mismatches,
-        max_protein_sequences_per_variant=1,
-        min_mapping_quality=args.min_mapping_quality)
+            for field in MutantProteinFragment._fields:
+                columns[field].append(getattr(vaccine_peptide, field))
+            for field in VaccinePeptideMetrics._fields:
+                if field in MutantProteinFragment._fields:
+                    continue
+                columns[field].append(getattr(metrics, field))
+            columns["variant_rank"].append(i + 1)
+            columns["peptide_secondary_rank"].append(j + 1)
+            columns["expression_score"].append(metrics.expression_score())
+            columns["combined_score"].append(metrics.combined_score())
+    return pd.DataFrame(columns, columns=columns.keys())

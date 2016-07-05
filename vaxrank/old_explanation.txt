@@ -1,0 +1,40 @@
+# To clarify the nomenclature (source seq vs. peptide vs. epitope)
+# look at this example.
+#
+# Let's say we have a small protein with this 48 residue sequence:
+#
+#   TAADMAAQTTKHKWEAAHVAEQLRAYLEGTCVEWLRRYLENGKETLQR
+#
+# and a somatic variant results in the a single amino acid change
+# of the first 'A' for a 'Q', then our mutated protein will be:
+#
+#   T[Q]ADMAAQTTKHKWEAAHVAEQLRAYLEGTCVEWLRRYLENGKETLQR
+#
+# now either this full protein or some subset of it will become
+# the 'SourceSequence' depending on how large of a vaccine peptide
+# we're aiming to generate. If, for example, we only want 15-mer
+# vaccine peptides, then the SourceSequence will be the union
+# of all 15-mer windows containing the modified residue. In this
+# case, since the change was near the start of the protein, there
+# are only two such windows, yielding a SourceSequence of length 16:
+#
+#  T[Q]ADMAAQTTKHKWEA
+#
+# From this source sequence, we generate shorter substrings we
+# expect to bind to MHC molecules (typically 8-11 residues).
+# Assuming for simplicity that epitopes will all be 9-mers,
+# the set of epitopes will be:
+#
+#  T[Q]ADMAAQT
+#  [Q]ADMAAQTT
+#  ADMAAQTTK
+#  DMAAQTTKH
+#  MAAQTTKHK
+#  AAQTTKHKW
+#  AQTTKHKWE
+#
+# We look at the scores for each of these epitopes to generate
+# scores for the 15-mer peptides which contains these epitopes.
+# So, the first peptide "TQADMAAQTTKHKWE" contains all but the
+# the last epitope, and the second peptide "QADMAAQTTKHKWEA"
+# contains all but the first epitope.
