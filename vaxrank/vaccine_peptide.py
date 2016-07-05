@@ -18,19 +18,22 @@ from collections import namedtuple
 
 import numpy as np
 
-class VaccinePeptideMetrics(namedtuple("VaccinePeptideMetrics", [
+VaccinePeptideBase = namedtuple(
+    "VaccinePeptide", [
+        "mutant_protein_fragment",
+        "epitope_predictions",
         "mutant_epitope_score",
-        "wildtype_epitope_score",
-        "n_mutant_residues",
+        "wildtype_epitope_score"])
+
+class VaccinePeptide(VaccinePeptideBase):
+    """
+            "n_mutant_residues",
         "mutation_distance_from_edge",
         "n_alt_reads",
-        "n_alt_reads_supporting_protein_sequence"])):
+        "n_alt_reads_supporting_protein_sequence"
+    """
 
-    @classmethod
-    def from_epitope_predictions(
-            cls,
-            epitope_predictions,
-            mutant_protein_fragment):
+    def __new__(cls, mutant_protein_fragment, epitope_predictions):
         wildtype_epitope_score = sum(
             p.logistic_score()
             for p in epitope_predictions
@@ -39,14 +42,12 @@ class VaccinePeptideMetrics(namedtuple("VaccinePeptideMetrics", [
             p.logistic_score()
             for p in epitope_predictions
             if p.overlaps_mutation)
-        n_supporting = mutant_protein_fragment.n_alt_reads_supporting_protein_sequence
-        return VaccinePeptideMetrics(
+        return VaccinePeptideBase.__new__(
+            cls,
+            mutant_protein_fragment=mutant_protein_fragment,
+            epitope_predictions=epitope_predictions,
             mutant_epitope_score=mutant_epitope_score,
-            wildtype_epitope_score=wildtype_epitope_score,
-            n_mutant_residues=mutant_protein_fragment.n_mutant_amino_acids,
-            mutation_distance_from_edge=mutant_protein_fragment.mutation_distance_from_edge,
-            n_alt_reads=mutant_protein_fragment.n_alt_reads,
-            n_alt_reads_supporting_protein_sequence=n_supporting)
+            wildtype_epitope_score=wildtype_epitope_score)
 
     def lexicographic_sort_key(self):
         """
@@ -57,15 +58,15 @@ class VaccinePeptideMetrics(namedtuple("VaccinePeptideMetrics", [
         """
         return (
             -self.mutant_epitope_score,
-            -self.n_alt_reads,
-            -self.n_alt_reads_supporting_protein_sequence,
+            -self.mutant_protein_fragment.n_alt_reads,
+            -self.mutant_protein_fragment.n_alt_reads_supporting_protein_sequence,
             self.wildtype_epitope_score,
-            -self.n_mutant_residues,
-            -self.mutation_distance_from_edge
+            -self.mutant_protein_fragment.n_mutant_amino_acids,
+            -self.mutant_protein_fragment.mutation_distance_from_edge
         )
 
     def expression_score(self):
-        return np.sqrt(self.n_alt_reads)
+        return np.sqrt(self.mutant_protein_fragment.n_alt_reads)
 
     def combined_score(self):
         return self.expression_score() * self.mutant_epitope_score

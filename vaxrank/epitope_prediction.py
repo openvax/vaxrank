@@ -17,9 +17,8 @@ from collections import namedtuple
 
 import numpy as np
 
-EpitopePrediction_Fields = namedtuple(
-    "EpitopePrediction",
-    [
+EpitopePredictionBase = namedtuple(
+    "EpitopePrediction", [
         "allele",
         "peptide_sequence",
         "length",
@@ -31,7 +30,7 @@ EpitopePrediction_Fields = namedtuple(
         "offset",
     ])
 
-class EpitopePrediction(EpitopePrediction_Fields):
+class EpitopePrediction(EpitopePredictionBase):
 
     @classmethod
     def from_mhctools_binding_prediction(

@@ -20,7 +20,7 @@ from collections import namedtuple
 # since it makes it clearer what the essential information is and provides
 # useful comparison/hashing methods
 
-MutantProteinFragment_Fields = namedtuple("MutantProteinFragment", (
+MutantProteinFragmentBase = namedtuple("MutantProteinFragment", (
     # varcode.Variant
     "variant",
     # gene and transcript(s) which were used to translate one or more
@@ -53,7 +53,7 @@ MutantProteinFragment_Fields = namedtuple("MutantProteinFragment", (
     "n_alt_reads_supporting_protein_sequence",
 ))
 
-class MutantProteinFragment(MutantProteinFragment_Fields):
+class MutantProteinFragment(MutantProteinFragmentBase):
     @classmethod
     def from_isovar_protein_sequence(cls, variant, protein_sequence):
         return cls(

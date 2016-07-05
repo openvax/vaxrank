@@ -25,7 +25,7 @@ from topiary.commandline_args.mhc import (
     mhc_binding_predictor_from_args,
 )
 
-from .vaccine_peptides import select_vaccine_peptides_dataframe
+from .core_logic import ranked_vaccine_peptides, dataframe_from_ranked_list
 
 # inherit all commandline options from Isovar
 arg_parser = make_variant_sequences_arg_parser(
@@ -97,13 +97,13 @@ def main(args_list=None):
     # supporting the variant and reference alleles
     reads_generator = allele_reads_generator_from_args(args)
 
-    df = select_vaccine_peptides_dataframe(
+    ranked_list = ranked_vaccine_peptides(
         reads_generator=reads_generator,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
         padding_around_mutation=args.padding_around_mutation,
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
-        min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence,
-        max_variants_selected=args.max_mutations)
+        min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence)
+    df = dataframe_from_ranked_list(ranked_list)
     print(df)
     df.to_csv(args.output_csv, index=False)
