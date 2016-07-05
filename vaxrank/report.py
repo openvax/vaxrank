@@ -17,6 +17,7 @@ import logging
 
 import roman
 
+
 def ascii_report_from_ranked_vaccine_peptides(
         ranked_variants_with_vaccine_peptides,
         mhc_alleles,

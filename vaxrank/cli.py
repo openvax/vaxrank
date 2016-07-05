@@ -18,6 +18,7 @@ import logging
 
 from isovar.args.variant_sequences import make_variant_sequences_arg_parser
 from isovar.args.rna_reads import allele_reads_generator_from_args
+from isovar.args.variants import variants_from_args
 
 from topiary.commandline_args.mhc import (
     add_mhc_args,
@@ -95,6 +96,9 @@ def main(args_list=None):
     args = arg_parser.parse_args(args_list)
     print(args)
 
+    variants = variants_from_args(args)
+    print(variants)
+
     mhc_alleles = mhc_alleles_from_args(args)
     print("MHC alleles: %s" % (mhc_alleles,))
     mhc_predictor = mhc_binding_predictor_from_args(args)
@@ -110,6 +114,7 @@ def main(args_list=None):
         padding_around_mutation=args.padding_around_mutation,
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
         min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence)
+
     df = dataframe_from_ranked_list(ranked_list)
     print(df)
     df.to_csv(args.output_csv, index=False)

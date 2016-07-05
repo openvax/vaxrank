@@ -44,6 +44,10 @@ def vaccine_peptides_for_variant(
         variant=variant,
         protein_sequence=isovar_protein_sequences[0])
 
+    logging.info("Mutant protein fragment for %s: %s" % (
+        variant,
+        protein_fragment))
+
     epitope_predictions = predict_epitopes(
         mhc_predictor=mhc_predictor,
         protein_fragment=protein_fragment)
