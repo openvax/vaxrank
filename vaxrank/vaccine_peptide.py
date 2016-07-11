@@ -12,56 +12,61 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from __future__ import absolute_import, print_function, division
+
 from collections import namedtuple
 
-VaccinePeptide = namedtuple("VaccinePeptide", (
-    ###
-    # Mutation
-    ###
-    "variant",  # varcode.Variant object
+import numpy as np
 
-    ###
-    # Reference info
-    ###
+VaccinePeptideBase = namedtuple(
+    "VaccinePeptide", [
+        "mutant_protein_fragment",
+        "epitope_predictions",
+        "mutant_epitope_score",
+        "wildtype_epitope_score"])
 
-    # gene name or if multiple genes, then joined by semicolon
-    "gene",
-    # Ensembl IDs and names of transcripts used to get AA sequence
-    "transcript_ids",
-    "transcript_names",
+class VaccinePeptide(VaccinePeptideBase):
+    """
+    VaccinePeptide combines the sequence information of MutantProteinFragment
+    with MHC binding predictions for subsequences of the protein fragment.
+    """
+    def __new__(cls, mutant_protein_fragment, epitope_predictions):
+        wildtype_epitope_score = sum(
+            p.logistic_score()
+            for p in epitope_predictions
+            if not p.overlaps_mutation)
+        mutant_epitope_score = sum(
+            p.logistic_score()
+            for p in epitope_predictions
+            if p.overlaps_mutation)
+        return VaccinePeptideBase.__new__(
+            cls,
+            mutant_protein_fragment=mutant_protein_fragment,
+            epitope_predictions=epitope_predictions,
+            mutant_epitope_score=mutant_epitope_score,
+            wildtype_epitope_score=wildtype_epitope_score)
 
-    ###
-    # Translated protein sequence, aggregated from possibly multiple
-    # synonymous coding sequences
-    ###
+    def lexicographic_sort_key(self):
+        """
+        Create tuple of scores so that candidates get sorted lexicographically
+        by multiple criteria. Make sure to make the wildtype epitope
+        score positive (since we want fewer wildtype epitopes) but the others
+        negative (since we want more of them).
+        """
+        return (
+            -self.mutant_epitope_score,
+            -self.mutant_protein_fragment.n_alt_reads,
+            -self.mutant_protein_fragment.n_alt_reads_supporting_protein_sequence,
+            self.wildtype_epitope_score,
+            -self.mutant_protein_fragment.n_mutant_amino_acids,
+            -self.mutant_protein_fragment.mutation_distance_from_edge
+        )
 
-    "amino_acid_sequence",
-    # offsets of amino acids which differ due to the mutation
-    "mutant_amino_acid_start_offset",
-    "mutant_amino_acid_end_offset",
-    "n_mutant_amino_acids",
-    # offsets of codons containing mutant nucleotides, even if
-    # synonymous with original reference sequence
-    "mutant_codon_start_offset",
-    "mutant_codon_end_offset",
-    "n_mutant_codons",
+    @property
+    def expression_score(self):
+        return np.sqrt(self.mutant_protein_fragment.n_alt_reads)
 
-    ###
-    # RNA evidence
-    ###
-
-    # number of RNA reads fully spanning the cDNA sequence(s) from which we
-    # translated this amino acid sequence.
-    "n_rna_reads",
-
-    ###
-    # Properties which affect ranking or filtering of vaccine peptide
-    ###
-
-    # how many amino acids from the center is the first mutant amino acid
-    "distance_from_center",
-    # list of epitope predictions
-    "epitope_predictions",
-    # sum of normalized IC50s
-    "combined_epitope_score",
-))
+    @property
+    def combined_score(self):
+        return self.expression_score * self.mutant_epitope_score

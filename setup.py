@@ -72,12 +72,15 @@ if __name__ == '__main__':
             'pyensembl',
             'varcode',
             'isovar',
-            'topiary'
+            'topiary',
+            'roman',
         ],
 
         long_description=readme,
         packages=['vaxrank'],
-        scripts=[
-            "script/vaxrank-select-vaccine-peptides.py"
-        ],
+        entry_points={
+            'console_scripts': [
+                'vaxrank = vaxrank.cli:main'
+            ]
+        }
     )
