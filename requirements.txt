@@ -1,0 +1,7 @@
+six
+pandas
+pyensembl
+varcode
+isovar
+topiary
+roman
