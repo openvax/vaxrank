@@ -70,9 +70,9 @@ if __name__ == '__main__':
             'six',
             'pandas',
             'pyensembl',
-            'varcode',
-            'isovar',
-            'topiary',
+            'varcode>=0.4.6',
+            'isovar>=0.2.0',
+            'mhctools',
             'roman',
         ],
 
