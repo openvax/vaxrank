@@ -16,15 +16,15 @@ from __future__ import absolute_import, print_function, division
 import sys
 import logging
 
-from isovar.args.variant_sequences import make_variant_sequences_arg_parser
-from isovar.args.rna_reads import allele_reads_generator_from_args
-from isovar.args.variants import variants_from_args
-
-from topiary.commandline_args.mhc import (
+from varcode.cli import variant_collection_from_args
+from mhctools.cli import (
     add_mhc_args,
     mhc_alleles_from_args,
     mhc_binding_predictor_from_args,
 )
+from isovar.cli.variant_sequences import make_variant_sequences_arg_parser
+from isovar.cli.rna_reads import allele_reads_generator_from_args
+
 
 from .core_logic import ranked_vaccine_peptides, dataframe_from_ranked_list
 from .report import ascii_report_from_ranked_vaccine_peptides
@@ -96,7 +96,7 @@ def main(args_list=None):
     args = arg_parser.parse_args(args_list)
     print(args)
 
-    variants = variants_from_args(args)
+    variants = variant_collection_from_args(args)
     print(variants)
 
     mhc_alleles = mhc_alleles_from_args(args)

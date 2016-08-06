@@ -69,10 +69,10 @@ if __name__ == '__main__':
         install_requires=[
             'six',
             'pandas',
-            'pyensembl',
-            'varcode',
-            'isovar',
-            'topiary',
+            'pyensembl>=0.9.5',
+            'varcode>=0.4.6',
+            'isovar>=0.2.0',
+            'mhctools>=0.3.0',
             'roman',
         ],
 
