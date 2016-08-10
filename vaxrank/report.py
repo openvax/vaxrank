@@ -30,7 +30,7 @@ def ascii_report_from_ranked_vaccine_peptides(
         in variants.effects().drop_silent_and_noncoding().groupby_variant().items()
     }
     lines = [
-        "VCF (somatic variants) path: %s" % variants.path,
+        "VCF (somatic variants) path(s): %s" % "; ".join(variants.sources),
         "BAM (RNAseq reads) path: %s" % bam_path,
         "MHC alleles: %s" % (" ".join(mhc_alleles)),
         "Total number of somatic variants: %d" % (len(variants),),
