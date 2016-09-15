@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function, division
-import logging
+
 
 from nose.tools import eq_
 from vaxrank.core_logic import ranked_vaccine_peptides
@@ -21,38 +21,40 @@ from mhctools import RandomBindingPredictor
 from isovar.cli.variant_sequences import make_variant_sequences_arg_parser
 from isovar.cli.rna_reads import allele_reads_generator_from_args
 
-from .common import data_path
+from .testing_helpers import data_path
 
-def check_vaxrank_agrees_with_varcode(variant, mutant_protein_fragment):
+
+def check_mutant_amino_acids(variant, mutant_protein_fragment, expected_amino_acids=None):
     predicted_effect = variant.effects().top_priority_effect()
 
-    varcode_mutant_amino_acids = predicted_effect.aa_alt
-
+    if expected_amino_acids is None:
+        # if no sequence given then we're assuming Varcode gets the annotation
+        # of the mutant amino acid sequence right
+        expected_amino_acids = predicted_effect.aa_alt
     vaxrank_mutant_amino_acids = mutant_protein_fragment.amino_acids[
-        mutant_protein_fragment.mutant_amino_acid_start_offset:
-        mutant_protein_fragment.mutant_amino_acid_end_offset]
+        mutant_protein_fragment.variant_aa_interval_start:
+        mutant_protein_fragment.variant_aa_interval_end]
 
-    eq_(varcode_mutant_amino_acids, vaxrank_mutant_amino_acids,
+    eq_(expected_amino_acids, vaxrank_mutant_amino_acids,
         "Expected amino acids '%s' for %s but got '%s' from vaxrank in '%s' %d:%d" % (
-            varcode_mutant_amino_acids,
+            expected_amino_acids,
             predicted_effect,
             vaxrank_mutant_amino_acids,
             mutant_protein_fragment.amino_acids,
-            mutant_protein_fragment.mutant_amino_acid_start_offset,
-            mutant_protein_fragment.mutant_amino_acid_end_offset))
+            mutant_protein_fragment.variant_aa_interval_start,
+            mutant_protein_fragment.variant_aa_interval_end))
 
-
-def test_mutant_amino_acids_agree_with_varcode():
-    logging.basicConfig(level=logging.WARN)
-
-    bam_path = data_path("b16.f10/b16.combined.sorted.bam")
-    vcf_path = data_path("b16.f10/b16.vcf")
+def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
+    # there are two co-occurring variants in the RNAseq data but since
+    # they don't happen in the same codon then we're considering the Varcode
+    # annotation to be correct
+    # TODO: deal with phasing of variants explicitly so that both
+    # variant positions are considered mutated
     arg_parser = make_variant_sequences_arg_parser()
-    args_list = [
-        "--vcf", vcf_path,
-        "--bam", bam_path
-    ]
-    args = arg_parser.parse_args(args_list)
+    args = arg_parser.parse_args([
+        "--vcf", data_path("data/b16.f10/b16.f10.Wdr13.vcf"),
+        "--bam", data_path("data/b16.f10/b16.combined.sorted.bam"),
+    ])
     reads_generator = allele_reads_generator_from_args(args)
     ranked_list = ranked_vaccine_peptides(
         reads_generator=reads_generator,
@@ -63,13 +65,33 @@ def test_mutant_amino_acids_agree_with_varcode():
         min_reads_supporting_cdna_sequence=1)
 
     for variant, vaccine_peptides in ranked_list:
-        if len(vaccine_peptides) == 0:
-            continue
         vaccine_peptide = vaccine_peptides[0]
         mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
+        check_mutant_amino_acids(variant, mutant_protein_fragment)
 
-        yield (
-            check_vaxrank_agrees_with_varcode,
+def test_mutant_amino_acids_in_mm10_chr9_82927102_refG_altT_pT441H():
+    # the variant chr9:82927102 G>T occurs right next to T>G so the varcode
+    # prediction for the protein sequence (Asparagine) will be wrong since
+    # the correct translation is Histidine
+    arg_parser = make_variant_sequences_arg_parser()
+    args = arg_parser.parse_args([
+        "--vcf", data_path("data/b16.f10/b16.f10.Phip.vcf"),
+        "--bam", data_path("data/b16.f10/b16.combined.sorted.bam"),
+    ])
+    reads_generator = allele_reads_generator_from_args(args)
+    ranked_list = ranked_vaccine_peptides(
+        reads_generator=reads_generator,
+        mhc_predictor=RandomBindingPredictor(["H-2-Kb", "H-2-Db"]),
+        vaccine_peptide_length=15,
+        padding_around_mutation=5,
+        max_vaccine_peptides_per_variant=1,
+        min_reads_supporting_cdna_sequence=1)
+
+    for variant, vaccine_peptides in ranked_list:
+
+        vaccine_peptide = vaccine_peptides[0]
+        mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
+        check_mutant_amino_acids(
             variant,
-            mutant_protein_fragment
-        )
+            mutant_protein_fragment,
+            expected_amino_acids="H")
