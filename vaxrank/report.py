@@ -71,8 +71,10 @@ def ascii_report_from_ranked_vaccine_peptides(
         for j, vaccine_peptide in enumerate(vaccine_peptides):
             mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
             amino_acids = mutant_protein_fragment.amino_acids
-            mutation_start = mutant_protein_fragment.mutant_amino_acid_start_offset
-            mutation_end = mutant_protein_fragment.mutant_amino_acid_end_offset
+            # Fixes an off-by-1 error for displaying the peptide; previously
+            # the highlighted mutation was one too far to the left.
+            mutation_start = mutant_protein_fragment.mutant_amino_acid_start_offset + 1
+            mutation_end = mutant_protein_fragment.mutant_amino_acid_end_offset + 1
             aa_before_mutation = amino_acids[:mutation_start]
             aa_mutant = amino_acids[mutation_start:mutation_end]
             aa_after_mutation = amino_acids[mutation_end:]
