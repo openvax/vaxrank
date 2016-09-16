@@ -60,3 +60,7 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+
+# Generated outputs
+vaccine-peptides-report.txt
+vaccine-peptides.csv
