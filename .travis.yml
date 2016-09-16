@@ -29,7 +29,7 @@ addons:
 install:
   - >
       conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION
-      numpy scipy nose pandas pylint 
+      numpy scipy nose pandas pylint
   - source activate test-environment
   - pip install pypandoc
   - pip install -r requirements.txt
@@ -37,9 +37,9 @@ install:
   - pip install coveralls
 script:
   - ./lint.sh
-  - pyensembl install --release 84 --species human
-  - pyensembl install --release 84 --species mouse
+  - pyensembl install --release 85 --species human
+  - pyensembl install --release 85 --species mouse
   # run tests
-  - nosetests test --with-coverage --cover-package=vaxrank 
+  - nosetests test --with-coverage --cover-package=vaxrank
 after_success:
   coveralls
