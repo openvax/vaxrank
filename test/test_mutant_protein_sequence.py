@@ -24,16 +24,12 @@ from isovar.cli.rna_reads import allele_reads_generator_from_args
 from .testing_helpers import data_path
 
 
-def check_mutant_amino_acids(variant, mutant_protein_fragment, expected_amino_acids=None):
+def check_mutant_amino_acids(variant, mutant_protein_fragment):
     predicted_effect = variant.effects().top_priority_effect()
-
-    if expected_amino_acids is None:
-        # if no sequence given then we're assuming Varcode gets the annotation
-        # of the mutant amino acid sequence right
-        expected_amino_acids = predicted_effect.aa_alt
+    expected_amino_acids = predicted_effect.aa_alt
     vaxrank_mutant_amino_acids = mutant_protein_fragment.amino_acids[
-        mutant_protein_fragment.variant_aa_interval_start:
-        mutant_protein_fragment.variant_aa_interval_end]
+        mutant_protein_fragment.mutant_amino_acid_start_offset:
+        mutant_protein_fragment.mutant_amino_acid_end_offset]
 
     eq_(expected_amino_acids, vaxrank_mutant_amino_acids,
         "Expected amino acids '%s' for %s but got '%s' from vaxrank in '%s' %d:%d" % (
@@ -41,8 +37,8 @@ def check_mutant_amino_acids(variant, mutant_protein_fragment, expected_amino_ac
             predicted_effect,
             vaxrank_mutant_amino_acids,
             mutant_protein_fragment.amino_acids,
-            mutant_protein_fragment.variant_aa_interval_start,
-            mutant_protein_fragment.variant_aa_interval_end))
+            mutant_protein_fragment.mutant_amino_acid_start_offset,
+            mutant_protein_fragment.mutant_amino_acid_end_offset))
 
 def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
     # there are two co-occurring variants in the RNAseq data but since
@@ -52,8 +48,8 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
     # variant positions are considered mutated
     arg_parser = make_variant_sequences_arg_parser()
     args = arg_parser.parse_args([
-        "--vcf", data_path("data/b16.f10/b16.f10.Wdr13.vcf"),
-        "--bam", data_path("data/b16.f10/b16.combined.sorted.bam"),
+        "--vcf", data_path("b16.f10/b16.f10.Wdr13.vcf"),
+        "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
     ])
     reads_generator = allele_reads_generator_from_args(args)
     ranked_list = ranked_vaccine_peptides(
@@ -69,14 +65,15 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
         mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
         check_mutant_amino_acids(variant, mutant_protein_fragment)
 
-def test_mutant_amino_acids_in_mm10_chr9_82927102_refG_altT_pT441H():
-    # the variant chr9:82927102 G>T occurs right next to T>G so the varcode
-    # prediction for the protein sequence (Asparagine) will be wrong since
-    # the correct translation is Histidine
+def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
+    # In the Isovar repository this test is weird because the VCF only
+    # mentions the G>T variant but doesn't include the subsequent nucleotide
+    # change T>G. To avoid having to think about phasing of variants I changed
+    # the VCF in vaxrank to contain a GT>TG variant.
     arg_parser = make_variant_sequences_arg_parser()
     args = arg_parser.parse_args([
-        "--vcf", data_path("data/b16.f10/b16.f10.Phip.vcf"),
-        "--bam", data_path("data/b16.f10/b16.combined.sorted.bam"),
+        "--vcf", data_path("b16.f10/b16.f10.Phip.vcf"),
+        "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
     ])
     reads_generator = allele_reads_generator_from_args(args)
     ranked_list = ranked_vaccine_peptides(
@@ -88,10 +85,8 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refG_altT_pT441H():
         min_reads_supporting_cdna_sequence=1)
 
     for variant, vaccine_peptides in ranked_list:
-
         vaccine_peptide = vaccine_peptides[0]
         mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
         check_mutant_amino_acids(
             variant,
-            mutant_protein_fragment,
-            expected_amino_acids="H")
+            mutant_protein_fragment)

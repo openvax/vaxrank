@@ -201,5 +201,4 @@ def dataframe_from_ranked_list(ranked_list_of_variants_with_vaccine_peptides):
             columns["wildtype_epitope_score"].append(vaccine_peptide.wildtype_epitope_score)
             columns["expression_score"].append(vaccine_peptide.expression_score)
             columns["combined_score"].append(vaccine_peptide.combined_score)
-    print(columns)
     return pd.DataFrame(columns, columns=columns.keys())
