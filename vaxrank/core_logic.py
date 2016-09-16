@@ -86,16 +86,16 @@ def vaccine_peptides_for_variant(
         if vp.combined_score / max_score > 0.99
     ]
 
-    print("Keeping %d/%d vaccine peptides for %s" % (
+    logging.info("Keeping %d/%d vaccine peptides for %s" % (
         len(filtered_candidate_vaccine_peptides),
         n_total_candidates,
         variant))
     filtered_candidate_vaccine_peptides.sort(key=VaccinePeptide.lexicographic_sort_key)
 
     if len(filtered_candidate_vaccine_peptides) > 0:
-        print("\n\nTop vaccine peptides for %s:" % variant)
+        logging.info("\n\nTop vaccine peptides for %s:" % variant)
         for i, vaccine_peptide in enumerate(filtered_candidate_vaccine_peptides):
-            print("%d) %s (combined score = %0.4f)\n" % (
+            logging.info("%d) %s (combined score = %0.4f)\n" % (
                 i + 1,
                 vaccine_peptide,
                 vaccine_peptide.combined_score))
@@ -158,14 +158,6 @@ def ranked_vaccine_peptides(
     result_list.sort(
         key=lambda x: x[1][0].combined_score if len(x[1]) > 0 else 0.0,
         reverse=True)
-    for variant, vaccine_peptides in result_list:
-        print("---")
-        print(variant)
-
-        for vaccine_peptide in vaccine_peptides:
-            print(vaccine_peptide.mutant_protein_fragment.gene_name)
-            print(vaccine_peptide.mutant_protein_fragment.amino_acids)
-            print(vaccine_peptide.combined_score)
     return result_list
 
 
@@ -209,5 +201,4 @@ def dataframe_from_ranked_list(ranked_list_of_variants_with_vaccine_peptides):
             columns["wildtype_epitope_score"].append(vaccine_peptide.wildtype_epitope_score)
             columns["expression_score"].append(vaccine_peptide.expression_score)
             columns["combined_score"].append(vaccine_peptide.combined_score)
-    print(columns)
     return pd.DataFrame(columns, columns=columns.keys())

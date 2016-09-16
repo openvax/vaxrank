@@ -117,6 +117,7 @@ def main(args_list=None):
 
     df = dataframe_from_ranked_list(ranked_list)
     print(df)
+
     df.to_csv(args.output_csv, index=False)
 
     ascii_report = ascii_report_from_ranked_vaccine_peptides(
