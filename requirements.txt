@@ -5,3 +5,5 @@ varcode>=0.4.19
 isovar>=0.2.1
 mhctools>=0.3.0
 roman
+jinja2
+pdfkit  # needs wkhtmltopdf: brew install Caskroom/cask/wkhtmltopdf

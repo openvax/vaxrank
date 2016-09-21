@@ -27,7 +27,10 @@ from isovar.cli.rna_reads import allele_reads_generator_from_args
 
 
 from .core_logic import ranked_vaccine_peptides, dataframe_from_ranked_list
-from .report import ascii_report_from_ranked_vaccine_peptides
+from .report import (
+    make_ascii_report_from_ranked_vaccine_peptides,
+    make_html_report_from_ranked_vaccine_peptides,
+)
 
 # inherit all commandline options from Isovar
 arg_parser = make_variant_sequences_arg_parser(
@@ -48,6 +51,16 @@ arg_parser.add_argument(
     "--output-ascii-report",
     default="vaccine-peptides-report.txt",
     help="Path to ASCII vaccine peptide report")
+
+arg_parser.add_argument(
+    "--output-html-report",
+    default="vaccine-peptides-report.html",
+    help="Path to HTML vaccine peptide report")
+
+arg_parser.add_argument(
+    "--output-pdf-report",
+    default="vaccine-peptides-report.pdf",
+    help="Path to PDF vaccine peptide report")
 
 vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
 vaccine_peptide_group.add_argument(
@@ -120,13 +133,17 @@ def main(args_list=None):
 
     df.to_csv(args.output_csv, index=False)
 
-    ascii_report = ascii_report_from_ranked_vaccine_peptides(
+    make_ascii_report_from_ranked_vaccine_peptides(
         ranked_variants_with_vaccine_peptides=ranked_list,
         mhc_alleles=mhc_alleles,
         variants=variants,
-        bam_path=args.bam)
+        bam_path=args.bam,
+        ascii_report_path=args.output_ascii_report)
 
-    print(ascii_report)
-
-    with open(args.output_ascii_report, "w") as f:
-        f.write(ascii_report)
+    make_html_report_from_ranked_vaccine_peptides(
+        ranked_variants_with_vaccine_peptides=ranked_list,
+        mhc_alleles=mhc_alleles,
+        variants=variants,
+        bam_path=args.bam,
+        html_report_path=args.output_html_report,
+        pdf_report_path=args.output_pdf_report)

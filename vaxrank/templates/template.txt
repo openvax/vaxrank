@@ -1,0 +1,31 @@
+VCF (somatic variants) path(s): {{ vcf_paths }}
+BAM (RNAseq reads) path: {{ bam_path }}
+MHC alleles: {{ mhc_alleles }}
+Total number of somatic variants: {{ num_total_somatic_variants }}
+Somatic variants with predicted coding effects: {{ num_somatic_variants_with_predicted_coding_effects }}
+---
+
+{% for v in variants %}
+{{ v.num }}) {{ v.short_description }} ({{ v.gene_name }})
+        Top score: {{ v.top_score|round(2) }}
+        Predicted effect: {{ v.predicted_effect }}
+        Reads supporting variant allele: {{ v.reads_supporting_variant_allele }}
+        Reads supporting reference allele: {{ v.reads_supporting_reference_allele }}
+        Reads supporting other alleles: {{ v.reads_supporting_other_alleles }}
+        Vaccine Peptides:
+        {% for p in v.peptides %}
+                {{ p.num }}. {{ p.aa_before_mutation }}_{{ p.aa_mutant }}_{{ p.aa_after_mutation }} (score = {{ p.score|round(2) }})
+                   - Length: {{ p.length }}
+                   - Expression score: {{ p.expression_score|round(2) }}
+                   - Mutant epitope score: {{ p.mutant_epitope_score|round(2) }}
+                   - Wildtype epitope score: {{ p.wildtype_epitope_score|round(2) }}
+                   - Reads fully spanning cDNA sequence(s): {{ p.num_alt_reads_supporting_protein_sequence }}
+                   - Mutant amino acids: {{ p.num_mutant_amino_acids }}
+                   - Mutation distance from edge: {{ p.mutation_distance_from_edge }}
+                   - Predicted mutant epitopes:
+                   {% for e in p.epitopes %}
+                         * {{ e.sequence }} {{ e.ic50|round(2) }} ({{ e.allele }})
+                   {% endfor %}
+
+        {% endfor %}
+{% endfor %}
