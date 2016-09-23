@@ -4,5 +4,5 @@
 
 Mutant peptide ranking for personalized cancer vaccines.
 
-Note that this package depends on wkhtmltopdf, which you can install (on a mac) like so:
+Note that to generate PDF reports, you first need to install wkhtmltopdf, which you can do (on a mac) like so:
 brew install Caskroom/cask/wkhtmltopdf
