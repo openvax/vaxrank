@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Vaxrank Report</title>
+        <meta charset="UTF-8">
+        <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.6.0/pure-min.css">
+        <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.6.0/base-min.css">
+        <style type="text/css">
+            {% include "templates/stylesheet.css" %}
+        </style>
+    </head>
+    <body>
+    <div id="main">
+    	<h1 id="report-header">Vaccine Peptides Report</h1>
+    	<h3 id="patient-info">PATIENT INFO</h3>
+    	<table class="pure-table pure-table-bordered patient-info">
+    		<tr>
+    			<td>VCF (somatic variants) path(s)</td>
+    			<td>{{ vcf_paths }}</td>
+    		</tr>
+    		<tr>
+    			<td>BAM (RNAseq reads) path</td>
+    			<td>{{ bam_path }}</td>
+    		</tr>
+    		<tr>
+    			<td>MHC alleles</td>
+    			<td>{{ mhc_alleles }}</td>
+    		</tr>
+    		<tr>
+    			<td>Total number of somatic variants</td>
+    			<td>{{ num_total_somatic_variants }}</td>
+    		</tr>
+    		<tr>
+    			<td>Somatic variants with predicted coding effects</td>
+    			<td>{{ num_somatic_variants_with_predicted_coding_effects }}</td>
+    		</tr>
+    	</table>
+    	<br>
+    	<h3 id="variants">VARIANTS</h3>
+    	<ol class="main">
+    	{% for v in variants %}
+    	<li class="variant-list-item">
+            <div class="variant-span">
+    		<table class="pure-table pure-table-bordered variant">
+    			<colgroup>
+                	<col class="variant-column-one">
+                    <col class="variant-column-two">
+                </colgroup>
+                <thead class="variant-head">
+                    <tr>
+                        <td class="variant-head">Variant</td>
+                        <td class="variant-head">{{ v.short_description }}</td>
+                    </tr>
+                </thead>
+                <tr>
+                    <td>Gene name</td>
+                    <td>{{ v.gene_name }}</td>
+                </tr>
+                <tr>
+                    <td>Top score</td>
+                    <td>{{ v.top_score|round(2) }}</td>
+                </tr>
+                <tr>
+                    <td>Reads supporting variant allele</td>
+                    <td>{{ v.reads_supporting_variant_allele }}</td>
+                </tr>
+                <tr>
+                    <td>Reads supporting reference allele</td>
+                    <td>{{ v.reads_supporting_reference_allele }}</td>
+                </tr>
+                <tr>
+                    <td>Reads supporting other alleles</td>
+                    <td>{{ v.reads_supporting_other_alleles }}</td>
+                </tr>
+            </table>
+            <br>
+            <h4 id="effects">Predicted Effect</h4>
+            <table class="pure-table pure-table-bordered">
+        		<tr>
+        			<td>Effect type</td>
+        			<td>{{ v.predicted_effect.__class__.__name__ }}</td>
+        		</tr>
+        		<tr>
+        			<td>Transcript name</td>
+        			<td>{{ v.predicted_effect.transcript_name }}</td>
+        		</tr>
+        		<tr>
+        			<td>Transcript ID</td>
+        			<td>{{ v.predicted_effect.transcript_id }}</td>
+        		</tr>
+        		<tr>
+        			<td>Effect description</td>
+        			<td>{{ v.predicted_effect.short_description }}</td>
+        		</tr>
+        	</table>
+        	<br>
+    		<h4 id="peptides">Vaccine Peptides for variant: {{ v.short_description }}</h4>
+    		<ol class="peptides" type="i">
+    			{% for p in v.peptides %}
+    			<li>
+    				<table class="pure-table pure-table-bordered peptide">
+    					<colgroup>
+		                	<col class="peptide-column-one">
+		                    <col class="peptide-column-two">
+		                </colgroup>
+    					<thead>
+                    		<tr>
+                        		<td>Amino acid sequence</td>
+		                        <td>{{ p.aa_before_mutation }}<span class="mutant">{{ p.aa_mutant }}</span>{{ p.aa_after_mutation }}</td>
+        	            	</tr>
+            		    </thead>
+            		    <tr>
+		        			<td>Transcript name</td>
+		        			<td>{{ v.predicted_effect.transcript_name }}</td>
+		        		</tr>
+            		    <tr>
+        	            	<td>Length</td>
+        	            	<td>{{ p.length }}</td>
+        	            </tr>
+        	            <tr>
+        	            	<td>Expression score</td>
+        	            	<td>{{ p.expression_score|round(2) }}</td>
+        	            </tr>
+        	            <tr>
+        	            	<td>Mutant epitope score</td>
+        	            	<td>{{ p.mutant_epitope_score|round(2) }}</td>
+        	            </tr>
+        	            <tr>
+        	            	<td>Reads fully spanning cDNA sequence(s)</td>
+        	            	<td>{{ p.num_alt_reads_supporting_protein_sequence }}</td>
+        	            </tr>
+        	            <tr>
+        	            	<td>Mutant amino acids</td>
+        	            	<td>{{ p.num_mutant_amino_acids }}</td>
+        	            </tr>
+        	            <tr>
+        	            	<td>Mutation distance from edge</td>
+        	            	<td>{{ p.mutation_distance_from_edge }}</td>
+        	            </tr>
+        	            <tr>
+        	            	<td>Predicted mutant epitopes</td>
+        	            	<td class="effect">
+                    			<table class="pure-table effect">
+                    				<thead>
+                    					<tr>
+			                        		<td>Sequence</td>
+					                        <td>IC50</td>
+					                        <td>Allele</td>
+			        	            	</tr>
+			            		    </thead>
+			            		    {% for e in p.epitopes %}
+		                    		<tr>
+        		            			<td>{{ e.sequence }}</td>
+        		            			<td>{{ e.ic50|round(2) }}</td>
+        		            			<td>{{ e.allele }}</td>
+		                    		</tr>
+		                    		{% endfor %}
+        		            	</table>
+		                    </td>
+        	            </tr>
+    				</table>
+    			</li>
+    			{% endfor %}
+    		</ol>
+            </div>
+    	</li>
+    	{% endfor %}
+    	</ol>
+    </div>
+    </body>
+</html>

@@ -25,9 +25,14 @@ from mhctools.cli import (
 from isovar.cli.variant_sequences import make_variant_sequences_arg_parser
 from isovar.cli.rna_reads import allele_reads_generator_from_args
 
-
 from .core_logic import ranked_vaccine_peptides, dataframe_from_ranked_list
-from .report import ascii_report_from_ranked_vaccine_peptides
+from .report import (
+    compute_template_data,
+    make_ascii_report,
+    make_html_report,
+    make_pdf_report,
+)
+
 
 # inherit all commandline options from Isovar
 arg_parser = make_variant_sequences_arg_parser(
@@ -46,8 +51,18 @@ arg_parser.add_argument(
 
 arg_parser.add_argument(
     "--output-ascii-report",
-    default="vaccine-peptides-report.txt",
+    default="",
     help="Path to ASCII vaccine peptide report")
+
+arg_parser.add_argument(
+    "--output-html-report",
+    default="",
+    help="Path to HTML vaccine peptide report")
+
+arg_parser.add_argument(
+    "--output-pdf-report",
+    default="",
+    help="Path to PDF vaccine peptide report")
 
 vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
 vaccine_peptide_group.add_argument(
@@ -94,13 +109,17 @@ def main(args_list=None):
 
     logging.basicConfig(level=logging.DEBUG)
     args = arg_parser.parse_args(args_list)
-    print(args)
+    logging.info(args)
+
+    if not (args.output_ascii_report or args.output_html_report or args.output_pdf_report):
+        raise ValueError('Must specify at least one of: --output-ascii-report, '
+            '--output-html-report, --output-pdf-report') 
 
     variants = variant_collection_from_args(args)
-    print(variants)
+    logging.info(variants)
 
     mhc_alleles = mhc_alleles_from_args(args)
-    print("MHC alleles: %s" % (mhc_alleles,))
+    logging.info("MHC alleles: %s" % (mhc_alleles,))
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
     # generator that for each variant gathers all RNA reads, both those
@@ -116,17 +135,27 @@ def main(args_list=None):
         min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence)
 
     df = dataframe_from_ranked_list(ranked_list)
-    print(df)
+    logging.info(df)
 
     df.to_csv(args.output_csv, index=False)
 
-    ascii_report = ascii_report_from_ranked_vaccine_peptides(
+    template_data = compute_template_data(
         ranked_variants_with_vaccine_peptides=ranked_list,
         mhc_alleles=mhc_alleles,
         variants=variants,
         bam_path=args.bam)
 
-    print(ascii_report)
+    if args.output_ascii_report:
+        make_ascii_report(
+            template_data=template_data,
+            ascii_report_path=args.output_ascii_report)
 
-    with open(args.output_ascii_report, "w") as f:
-        f.write(ascii_report)
+    if args.output_html_report:
+        make_html_report(
+            template_data=template_data,
+            html_report_path=args.output_html_report)
+
+    if args.output_pdf_report:
+        make_pdf_report(
+            template_data=template_data,
+            pdf_report_path=args.output_pdf_report)

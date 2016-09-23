@@ -4,4 +4,5 @@ vaxrank \
     --vaccine-peptide-length 25 \
     --mhc-predictor netmhc \
     --mhc-alleles H2-Kb,H2-Db \
-    --padding-around-mutation 5
+    --padding-around-mutation 5 \
+    --output-ascii-report vaccine-peptides-report.txt

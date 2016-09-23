@@ -1,0 +1,111 @@
+#main {
+	padding: 4em;
+}
+
+/* Various headers */
+#report-header {
+	padding-bottom: 1em;
+}
+
+#patient-info {
+	padding-bottom: 1em;
+}
+
+#variants {
+	padding-top: 1em;
+	padding-bottom: 1em;
+}
+
+#effects {
+	margin-bottom: 1.5em;
+}
+
+#peptides {
+	margin-bottom: 1.5em;
+}
+
+/* Variant list stuff */
+ol.main {
+	padding-left: 1.2em;
+	margin-left: 0.1em;
+	font-size: 2em;
+	color: #b3b3b3;
+}
+
+li.variant-list-item {
+	border-left: 0.3em solid;
+	padding: 0 2em 0 2em;
+	margin-bottom: 2em;
+}
+
+li.variant-list-item:nth-child(odd) {
+	border-left: 0.3em dotted;
+	padding: 0 2em 0 2em;
+	margin-bottom: 2em;
+}
+
+div.variant-span {
+	font-size: 16px;
+	color: black;
+}
+
+table.variant {
+	margin-top: -2em;
+	width: 90%;
+}
+
+col.variant-column-one {
+	width: 60%;
+}
+
+col.variant-column-two {
+	width: 40%;
+}
+
+thead.variant-head {
+	font-size: 135%;
+	margin-left: -2px;
+}
+
+td.variant-head {
+	padding-left: 0.7em;
+}
+
+/* Effects */
+table.effect {
+	width: 100%;
+	border: none;
+}
+
+td.effect {
+	padding: 0;
+}
+
+/* Peptides */
+ol.peptides {
+	padding-left: 0;
+	list-style-position: inside;
+}
+
+table.peptide {
+	margin: -1em 0 2em 2em;
+	width: 90%;
+}
+
+span.mutant {
+	background-color: yellow;
+	border: 1px;
+	border-style: solid;
+	border-color: red;
+	padding: 2px;
+	margin-left: 2px;
+	margin-right: 2px;
+}
+
+col.peptide-column-one {
+	width: 50%;
+}
+
+col.peptide-column-two {
+	width: 50%;
+}

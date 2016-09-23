@@ -63,4 +63,6 @@ target/
 
 # Generated outputs
 vaccine-peptides-report.txt
+vaccine-peptides-report.html
+vaccine-peptides-report.pdf
 vaccine-peptides.csv
