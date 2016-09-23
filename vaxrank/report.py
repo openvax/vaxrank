@@ -166,8 +166,7 @@ def compute_pdf_length_from_template_data(template_data):
 def make_pdf_report(
         template_data,
         pdf_report_path):
-    with tempfile.NamedTemporaryFile(
-            suffix='.html') as f:
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.html') as f:
         _make_report(template_data, f, 'templates/template.html')
         f.flush()
 
