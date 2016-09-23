@@ -15,6 +15,7 @@
 from __future__ import absolute_import, print_function, division
 import logging
 import os
+import uuid
 
 import jinja2
 import pdfkit
@@ -123,22 +124,30 @@ def compute_template_data(
     return template_data
 
 
-def make_ascii_report_from_ranked_vaccine_peptides(
-        ranked_variants_with_vaccine_peptides,
-        mhc_alleles,
-        variants,
-        bam_path,
-        ascii_report_path):
-    template = JINJA_ENVIRONMENT.get_template('templates/template.txt')
-    template_data = compute_template_data(
-        ranked_variants_with_vaccine_peptides,
-        mhc_alleles,
-        variants,
-        bam_path)
+def _make_report(
+        template_data,
+        file_handle,
+        template_path):
+    template = JINJA_ENVIRONMENT.get_template(template_path)
     report = template.render(template_data)
-    print(report)
+    logging.info(report)
+    file_handle.write(report)
+
+
+def make_ascii_report(
+        template_data,
+        ascii_report_path):
     with open(ascii_report_path, "w") as f:
-        f.write(report)
+        _make_report(template_data, f, 'templates/template.txt')
+    logging.info('Wrote ASCII report to %s', ascii_report_path)
+
+
+def make_html_report(
+        template_data,
+        html_report_path):
+    with open(html_report_path, "w") as f:
+        _make_report(template_data, f, 'templates/template.html')
+    logging.info('Wrote HTML report to %s', html_report_path)
 
 
 # this is the hackiest thing in all the hacks. once we find out what the useful
@@ -154,23 +163,14 @@ def compute_pdf_length_from_template_data(template_data):
     return length
 
 
-def make_html_report_from_ranked_vaccine_peptides(
-        ranked_variants_with_vaccine_peptides,
-        mhc_alleles,
-        variants,
-        bam_path,
-        html_report_path,
-        pdf_report_path=None):
-    template = JINJA_ENVIRONMENT.get_template('templates/template.html')
-    template_data = compute_template_data(
-        ranked_variants_with_vaccine_peptides,
-        mhc_alleles,
-        variants,
-        bam_path)
-    with open(html_report_path, "w") as f:
-        f.write(template.render(template_data))
+def make_pdf_report(
+        template_data,
+        pdf_report_path):
+    path = "%s.html" % uuid.uuid4()
+    try:
+        with open(path, "w") as f:
+            _make_report(template_data, f, 'templates/template.html')
 
-    if pdf_report_path:
         length_in_inches = compute_pdf_length_from_template_data(template_data)
         # output to pdf
         # note: these dimensions are bananas, and we'll need to fix the template
@@ -179,8 +179,9 @@ def make_html_report_from_ranked_vaccine_peptides(
             'page-height': '%din' % length_in_inches,
             'page-width': '13in'
         }
-        pdfkit.from_file(html_report_path, pdf_report_path, options=options)
+        pdfkit.from_file(path, pdf_report_path, options=options)
+        
+        logging.info('Wrote PDF report to %s', pdf_report_path)
 
-
-
-
+    finally:
+        os.remove(path)

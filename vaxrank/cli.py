@@ -25,12 +25,14 @@ from mhctools.cli import (
 from isovar.cli.variant_sequences import make_variant_sequences_arg_parser
 from isovar.cli.rna_reads import allele_reads_generator_from_args
 
-
 from .core_logic import ranked_vaccine_peptides, dataframe_from_ranked_list
 from .report import (
-    make_ascii_report_from_ranked_vaccine_peptides,
-    make_html_report_from_ranked_vaccine_peptides,
+    compute_template_data,
+    make_ascii_report,
+    make_html_report,
+    make_pdf_report,
 )
+
 
 # inherit all commandline options from Isovar
 arg_parser = make_variant_sequences_arg_parser(
@@ -49,17 +51,17 @@ arg_parser.add_argument(
 
 arg_parser.add_argument(
     "--output-ascii-report",
-    default="vaccine-peptides-report.txt",
+    default="",
     help="Path to ASCII vaccine peptide report")
 
 arg_parser.add_argument(
     "--output-html-report",
-    default="vaccine-peptides-report.html",
+    default="",
     help="Path to HTML vaccine peptide report")
 
 arg_parser.add_argument(
     "--output-pdf-report",
-    default="vaccine-peptides-report.pdf",
+    default="",
     help="Path to PDF vaccine peptide report")
 
 vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
@@ -133,17 +135,23 @@ def main(args_list=None):
 
     df.to_csv(args.output_csv, index=False)
 
-    make_ascii_report_from_ranked_vaccine_peptides(
+    template_data = compute_template_data(
         ranked_variants_with_vaccine_peptides=ranked_list,
         mhc_alleles=mhc_alleles,
         variants=variants,
-        bam_path=args.bam,
-        ascii_report_path=args.output_ascii_report)
+        bam_path=args.bam)
 
-    make_html_report_from_ranked_vaccine_peptides(
-        ranked_variants_with_vaccine_peptides=ranked_list,
-        mhc_alleles=mhc_alleles,
-        variants=variants,
-        bam_path=args.bam,
-        html_report_path=args.output_html_report,
-        pdf_report_path=args.output_pdf_report)
+    if args.output_ascii_report:
+        make_ascii_report(
+            template_data=template_data,
+            ascii_report_path=args.output_ascii_report)
+
+    if args.output_html_report:
+        make_html_report(
+            template_data=template_data,
+            html_report_path=args.output_html_report)
+
+    if args.output_pdf_report:
+        make_pdf_report(
+            template_data=template_data,
+            pdf_report_path=args.output_pdf_report)
