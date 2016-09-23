@@ -2,4 +2,7 @@
 
 # vaxrank
 
-Mutant peptide ranking for personalized cancer vacines
+Mutant peptide ranking for personalized cancer vaccines.
+
+Note that this package depends on wkhtmltopdf, which you can install (on a mac) like so:
+brew install Caskroom/cask/wkhtmltopdf
