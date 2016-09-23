@@ -15,7 +15,7 @@
 from __future__ import absolute_import, print_function, division
 import logging
 import os
-import uuid
+import tempfile
 
 import jinja2
 import pdfkit
@@ -166,22 +166,17 @@ def compute_pdf_length_from_template_data(template_data):
 def make_pdf_report(
         template_data,
         pdf_report_path):
-    path = "%s.html" % uuid.uuid4()
-    try:
-        with open(path, "w") as f:
-            _make_report(template_data, f, 'templates/template.html')
+    with tempfile.NamedTemporaryFile(
+            suffix='.html') as f:
+        _make_report(template_data, f, 'templates/template.html')
+        f.flush()
 
         length_in_inches = compute_pdf_length_from_template_data(template_data)
-        # output to pdf
         # note: these dimensions are bananas, and we'll need to fix the template
         # if the goal is to have this report be printable on physical paper
         options = {
             'page-height': '%din' % length_in_inches,
             'page-width': '13in'
         }
-        pdfkit.from_file(path, pdf_report_path, options=options)
-        
-        logging.info('Wrote PDF report to %s', pdf_report_path)
-
-    finally:
-        os.remove(path)
+        pdfkit.from_file(f.name, pdf_report_path, options=options)
+    logging.info('Wrote PDF report to %s', pdf_report_path)

@@ -109,13 +109,17 @@ def main(args_list=None):
 
     logging.basicConfig(level=logging.DEBUG)
     args = arg_parser.parse_args(args_list)
-    print(args)
+    logging.info(args)
+
+    if not (args.output_ascii_report or args.output_html_report or args.output_pdf_report):
+        raise ValueError('Must specify at least one of: --output-ascii-report, '
+            '--output-html-report, --output-pdf-report') 
 
     variants = variant_collection_from_args(args)
-    print(variants)
+    logging.info(variants)
 
     mhc_alleles = mhc_alleles_from_args(args)
-    print("MHC alleles: %s" % (mhc_alleles,))
+    logging.info("MHC alleles: %s" % (mhc_alleles,))
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
     # generator that for each variant gathers all RNA reads, both those
@@ -131,7 +135,7 @@ def main(args_list=None):
         min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence)
 
     df = dataframe_from_ranked_list(ranked_list)
-    print(df)
+    logging.info(df)
 
     df.to_csv(args.output_csv, index=False)
 
