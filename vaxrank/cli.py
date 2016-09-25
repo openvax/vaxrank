@@ -46,7 +46,7 @@ add_mhc_args(arg_parser)
 
 arg_parser.add_argument(
     "--output-csv",
-    default="vaccine-peptides.csv",
+    default="",
     help="Name of CSV file which contains predicted sequences")
 
 arg_parser.add_argument(
@@ -111,9 +111,15 @@ def main(args_list=None):
     args = arg_parser.parse_args(args_list)
     logging.info(args)
 
-    if not (args.output_ascii_report or args.output_html_report or args.output_pdf_report):
-        raise ValueError('Must specify at least one of: --output-ascii-report, '
-            '--output-html-report, --output-pdf-report') 
+    if (len(args.output_csv) == 0 and
+            len(args.output_ascii_report) == 0 and
+            len(args.output_html_report) == 0 and
+            len(args.output_pdf_report) == 0):
+        raise ValueError(
+            "Must specify at least one of: --output-csv, "
+            "--output-ascii-report, "
+            "--output-html-report, "
+            "--output-pdf-report")
 
     variants = variant_collection_from_args(args)
     logging.info(variants)
@@ -137,7 +143,8 @@ def main(args_list=None):
     df = dataframe_from_ranked_list(ranked_list)
     logging.info(df)
 
-    df.to_csv(args.output_csv, index=False)
+    if args.output_csv:
+        df.to_csv(args.output_csv, index=False)
 
     template_data = compute_template_data(
         ranked_variants_with_vaccine_peptides=ranked_list,

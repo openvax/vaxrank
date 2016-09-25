@@ -106,7 +106,7 @@ def compute_template_data(
                     mutant_protein_fragment.mutation_distance_from_edge,
                 'epitopes': epitopes,
             }
-            
+
             # compile epitope info
             for epitope_prediction in vaccine_peptide.epitope_predictions:
                 if epitope_prediction.overlaps_mutation and epitope_prediction.ic50 <= 2000:
@@ -130,9 +130,7 @@ def _make_report(
         template_path):
     template = JINJA_ENVIRONMENT.get_template(template_path)
     report = template.render(template_data)
-    logging.info(report)
     file_handle.write(report)
-
 
 def make_ascii_report(
         template_data,
