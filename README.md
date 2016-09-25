@@ -2,4 +2,7 @@
 
 # vaxrank
 
-Mutant peptide ranking for personalized cancer vacines
+Mutant peptide ranking for personalized cancer vaccines.
+
+Note that to generate PDF reports, you first need to install wkhtmltopdf, which you can do (on a mac) like so:
+brew install Caskroom/cask/wkhtmltopdf
