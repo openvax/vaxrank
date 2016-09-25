@@ -22,13 +22,13 @@ vaxrank \
 
 ## Installation
 
-Vaxrank can be install using [pip](https://packaging.python.org/installing/#use-pip-for-installing):
+Vaxrank can be installed using [pip](https://packaging.python.org/installing/#use-pip-for-installing):
 
 ```
 pip install vaxrank
 ```
 
-Note: to generate PDF reports, you first need to install [wkhtmltopdf](http://wkhtmltopdf.org/), which you can do (on a mac) like so:
+Note: to generate PDF reports, you first need to install [wkhtmltopdf](http://wkhtmltopdf.org/), which you can do (on OS X) like so:
 
 ```
 brew install Caskroom/cask/wkhtmltopdf
