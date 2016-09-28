@@ -6,3 +6,4 @@ mhctools>=0.3.0
 roman
 jinja2
 pdfkit  # needs wkhtmltopdf: brew install Caskroom/cask/wkhtmltopdf
+pypandoc  # needs pandoc: brew install pandoc
