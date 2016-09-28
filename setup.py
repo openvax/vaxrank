@@ -75,6 +75,7 @@ if __name__ == '__main__':
             'roman',
             'jinja2',
             'pdfkit',
+            'pypandoc',
         ],
 
         long_description=readme,
