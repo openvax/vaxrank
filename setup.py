@@ -80,6 +80,7 @@ if __name__ == '__main__':
 
         long_description=readme,
         packages=['vaxrank'],
+        package_data={'vaxrank': ['vaxrank/templates/*']},
         entry_points={
             'console_scripts': [
                 'vaxrank = vaxrank.cli:main'
