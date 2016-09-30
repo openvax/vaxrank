@@ -25,6 +25,11 @@ from .mutant_protein_fragment import MutantProteinFragment
 from .epitope_prediction import predict_epitopes, slice_epitope_predictions
 from .vaccine_peptide import VaccinePeptide
 
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
+
+
 def vaccine_peptides_for_variant(
         variant,
         isovar_protein_sequences,
@@ -37,14 +42,14 @@ def vaccine_peptides_for_variant(
     """
     isovar_protein_sequences = list(isovar_protein_sequences)
     if len(isovar_protein_sequences) == 0:
-        logging.info("No protein sequences for %s" % (variant,))
+        logger.info("No protein sequences for %s" % (variant,))
         return []
 
     protein_fragment = MutantProteinFragment.from_isovar_protein_sequence(
         variant=variant,
         protein_sequence=isovar_protein_sequences[0])
 
-    logging.info("Mutant protein fragment for %s: %s" % (
+    logger.info("Mutant protein fragment for %s: %s" % (
         variant,
         protein_fragment))
 
@@ -70,7 +75,7 @@ def vaccine_peptides_for_variant(
             mutant_protein_fragment=candidate_fragment,
             epitope_predictions=subsequence_epitope_predictions)
 
-        logging.info("%s, combined score: %0.4f" % (
+        logger.info("%s, combined score: %0.4f" % (
             candidate_vaccine_peptide,
             candidate_vaccine_peptide.combined_score))
         candidate_vaccine_peptides.append(candidate_vaccine_peptide)
@@ -86,16 +91,16 @@ def vaccine_peptides_for_variant(
         if vp.combined_score / max_score > 0.99
     ]
 
-    logging.info("Keeping %d/%d vaccine peptides for %s" % (
+    logger.info("Keeping %d/%d vaccine peptides for %s" % (
         len(filtered_candidate_vaccine_peptides),
         n_total_candidates,
         variant))
     filtered_candidate_vaccine_peptides.sort(key=VaccinePeptide.lexicographic_sort_key)
 
     if len(filtered_candidate_vaccine_peptides) > 0:
-        logging.info("\n\nTop vaccine peptides for %s:" % variant)
+        logger.info("\n\nTop vaccine peptides for %s:" % variant)
         for i, vaccine_peptide in enumerate(filtered_candidate_vaccine_peptides):
-            logging.info("%d) %s (combined score = %0.4f)\n" % (
+            logger.info("%d) %s (combined score = %0.4f)\n" % (
                 i + 1,
                 vaccine_peptide,
                 vaccine_peptide.combined_score))

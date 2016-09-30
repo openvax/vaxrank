@@ -22,6 +22,9 @@ import pdfkit
 import roman
 
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
+
 JINJA_ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
     extensions=['jinja2.ext.autoescape'],
@@ -58,7 +61,7 @@ def compute_template_data(
             ranked_variants_with_vaccine_peptides):
         variant_short_description = variant.short_description
         if len(vaccine_peptides) == 0:
-            logging.info(
+            logger.info(
                 "Skipping %s, no vaccine peptides" % variant_short_description)
             continue
         gene_name = vaccine_peptides[0].mutant_protein_fragment.gene_name
@@ -137,7 +140,7 @@ def make_ascii_report(
         ascii_report_path):
     with open(ascii_report_path, "w") as f:
         _make_report(template_data, f, 'templates/template.txt')
-    logging.info('Wrote ASCII report to %s', ascii_report_path)
+    logger.info('Wrote ASCII report to %s', ascii_report_path)
 
 
 def make_html_report(
@@ -145,7 +148,7 @@ def make_html_report(
         html_report_path):
     with open(html_report_path, "w") as f:
         _make_report(template_data, f, 'templates/template.html')
-    logging.info('Wrote HTML report to %s', html_report_path)
+    logger.info('Wrote HTML report to %s', html_report_path)
 
 
 # this is the hackiest thing in all the hacks. once we find out what the useful
@@ -176,4 +179,4 @@ def make_pdf_report(
             'page-width': '13in'
         }
         pdfkit.from_file(f.name, pdf_report_path, options=options)
-    logging.info('Wrote PDF report to %s', pdf_report_path)
+    logger.info('Wrote PDF report to %s', pdf_report_path)

@@ -34,6 +34,10 @@ from .report import (
 )
 
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
+
+
 # inherit all commandline options from Isovar
 arg_parser = make_variant_sequences_arg_parser(
     prog="vaxrank",
@@ -107,9 +111,9 @@ def main(args_list=None):
     if args_list is None:
         args_list = sys.argv[1:]
 
-    logging.basicConfig(level=logging.DEBUG)
+
     args = arg_parser.parse_args(args_list)
-    logging.info(args)
+    logger.info(args)
 
     if (len(args.output_csv) == 0 and
             len(args.output_ascii_report) == 0 and
@@ -122,10 +126,10 @@ def main(args_list=None):
             "--output-pdf-report")
 
     variants = variant_collection_from_args(args)
-    logging.info(variants)
+    logger.info(variants)
 
     mhc_alleles = mhc_alleles_from_args(args)
-    logging.info("MHC alleles: %s" % (mhc_alleles,))
+    logger.info("MHC alleles: %s" % (mhc_alleles,))
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
     # generator that for each variant gathers all RNA reads, both those
@@ -141,7 +145,7 @@ def main(args_list=None):
         min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence)
 
     df = dataframe_from_ranked_list(ranked_list)
-    logging.info(df)
+    logger.info(df)
 
     if args.output_csv:
         df.to_csv(args.output_csv, index=False)
