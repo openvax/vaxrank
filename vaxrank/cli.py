@@ -16,6 +16,7 @@ from __future__ import absolute_import, print_function, division
 import sys
 import logging
 import logging.config
+import pkg_resources
 
 from varcode.cli import variant_collection_from_args
 from mhctools.cli import (
@@ -35,7 +36,7 @@ from .report import (
 )
 
 
-logging.config.fileConfig('vaxrank/logging.conf')
+logging.config.fileConfig(pkg_resources.resource_filename(__name__, 'logging.conf'))
 logger = logging.getLogger(__name__)
 
 
