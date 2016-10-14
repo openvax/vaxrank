@@ -146,14 +146,15 @@ def main(args_list=None):
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
         min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence)
 
-    df = dataframe_from_ranked_list(ranked_list)
+    ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
+    df = dataframe_from_ranked_list(ranked_list_for_report)
     logger.debug(df)
 
     if args.output_csv:
         df.to_csv(args.output_csv, index=False)
 
     template_data = compute_template_data(
-        ranked_variants_with_vaccine_peptides=ranked_list,
+        ranked_variants_with_vaccine_peptides=ranked_list_for_report,
         mhc_alleles=mhc_alleles,
         variants=variants,
         bam_path=args.bam)
