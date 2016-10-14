@@ -13,9 +13,16 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function, division
-from collections import namedtuple
+from collections import namedtuple, defaultdict, OrderedDict
+import logging
+import os
 
+from appdirs import user_cache_dir
 import numpy as np
+import shellinford
+
+
+logger = logging.getLogger(__name__)
 
 EpitopePredictionBase = namedtuple(
     "EpitopePrediction", [
@@ -28,6 +35,7 @@ EpitopePredictionBase = namedtuple(
         "overlaps_mutation",
         "source_sequence",
         "offset",
+        "occurs_in_reference",
     ])
 
 class EpitopePrediction(EpitopePredictionBase):
@@ -36,7 +44,8 @@ class EpitopePrediction(EpitopePredictionBase):
     def from_mhctools_binding_prediction(
             cls,
             binding_prediction,
-            overlaps_mutation):
+            overlaps_mutation,
+            occurs_in_reference):
         return cls(
             allele=binding_prediction.allele,
             peptide_sequence=binding_prediction.peptide,
@@ -46,7 +55,8 @@ class EpitopePrediction(EpitopePredictionBase):
             prediction_method_name=binding_prediction.prediction_method_name,
             overlaps_mutation=overlaps_mutation,
             source_sequence=binding_prediction.source_sequence,
-            offset=binding_prediction.offset)
+            offset=binding_prediction.offset,
+            occurs_in_reference=occurs_in_reference)
 
     def logistic_score(
             self,
@@ -77,26 +87,93 @@ class EpitopePrediction(EpitopePredictionBase):
 
         return logistic / normalizer
 
-def predict_epitopes(mhc_predictor, protein_fragment, min_epitope_score=0):
-    results = []
+def fm_index_path(genome):
+    """
+    Returns a path for cached reference peptides, for the given genome.
+    """
+    cache_dir = user_cache_dir('vaxrank')
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+
+    return os.path.join(cache_dir, '%s_%d.fm' % (
+        genome.species.latin_name, genome.release))
+
+def index_contains_kmer(fm, kmer):
+    """
+    Checks FM index for kmer, returns true if found.
+    """
+    found = False
+    for _ in fm.search(kmer):
+        found = True
+        break
+    return found
+
+def load_reference_peptides_index(genome, force_reload=False):
+    """
+    Loads the FM index containing reference peptides.
+
+    Parameters
+    ----------
+    genome : pyensembl.EnsemblRelease
+        Input genome to load for reference peptides
+
+    force_reload : bool, optional
+        If true, will recompute index for this genome even if it already exists.
+
+    Returns
+    -------
+    fm : shellinford.FMIndex
+        Index populated with reference peptides from the genome
+    """
+    path = fm_index_path(genome)
+    if force_reload or not os.path.exists(path):
+        logger.info("Loading FM index to %s", path)
+        fm = shellinford.FMIndex()
+        fm.build(
+            (t.protein_sequence for t in genome.transcripts() if t.is_protein_coding),
+            path)
+        logger.info("Done.")
+    return shellinford.FMIndex(filename=path)
+
+def predict_epitopes(mhc_predictor, protein_fragment, min_epitope_score=0, genome=None):
+    """
+    Returns an OrderedDict of EpitopePrediction objects, keyed by peptide sequence, that have
+    a normalized score greater than min_epitope_score.
+
+    Uses the input genome to evaluate whether the epitope occurs in reference.
+    """
+    results = OrderedDict()
+    fm = load_reference_peptides_index(genome)
+
     mhctools_binding_predictions = mhc_predictor.predict(
         {"protein_fragment": protein_fragment.amino_acids})
     # convert from mhctools.BindingPrediction objects to EpitopePrediction
     # which differs primarily by also having a boolean field
     # 'overlaps_mutation' that indicates whether the epitope overlaps
     # mutant amino acids or both sides of a deletion
+    num_total = 0
+    num_occurs_in_reference = 0
     for binding_prediction in mhctools_binding_predictions:
+        num_total += 1
         peptide_start_offset = binding_prediction.offset
         peptide_end_offset = binding_prediction.offset + binding_prediction.length
 
+        peptide = binding_prediction.peptide
+        occurs_in_reference = index_contains_kmer(fm, peptide)
+        if occurs_in_reference:
+            logger.debug('Peptide %s occurs in reference', peptide)
+            num_occurs_in_reference += 1
         overlaps_mutation = protein_fragment.interval_overlaps_mutation(
             start_offset=peptide_start_offset,
             end_offset=peptide_end_offset)
         epitope_prediction = EpitopePrediction.from_mhctools_binding_prediction(
             binding_prediction,
-            overlaps_mutation=overlaps_mutation)
-        if epitope_prediction.logistic_score() > min_epitope_score:
-            results.append(epitope_prediction)
+            overlaps_mutation=overlaps_mutation,
+            occurs_in_reference=occurs_in_reference)
+        if epitope_prediction.logistic_score() >= min_epitope_score:
+            results[epitope_prediction.peptide_sequence] = epitope_prediction
+
+    logger.info('%d out of %d peptides occur in reference', num_occurs_in_reference, num_total)
     return results
 
 def slice_epitope_predictions(
@@ -104,7 +181,7 @@ def slice_epitope_predictions(
         start_offset,
         end_offset):
     """
-    Return subsert of EpitopePrediction objects which overlap the given interval
+    Return subset of EpitopePrediction objects which overlap the given interval
     and slice through their source sequences and adjust their offset.
     """
     return [
@@ -117,7 +194,8 @@ def slice_epitope_predictions(
             prediction_method_name=p.prediction_method_name,
             overlaps_mutation=p.overlaps_mutation,
             source_sequence=p.source_sequence[start_offset:end_offset],
-            offset=p.offset - start_offset)
+            offset=p.offset - start_offset,
+            occurs_in_reference=p.occurs_in_reference)
         for p in epitope_predictions
         if p.offset >= start_offset and p.offset + p.length <= end_offset
     ]

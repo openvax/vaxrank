@@ -29,6 +29,11 @@ from .vaccine_peptide import VaccinePeptide
 logger = logging.getLogger(__name__)
 
 
+# Lifted from https://www.python.org/dev/peps/pep-0485/#proposed-implementation
+def _isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
+    return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
+
+
 def vaccine_peptides_for_variant(
         variant,
         isovar_protein_sequences,
@@ -38,7 +43,7 @@ def vaccine_peptides_for_variant(
         max_vaccine_peptides_per_variant,
         min_epitope_score):
     """
-    Returns list containing (MutantProteinFragment, VaccinePeptideMetrics) pairs
+    Returns sorted list of VaccinePeptide objects.
     """
     isovar_protein_sequences = list(isovar_protein_sequences)
     if len(isovar_protein_sequences) == 0:
@@ -57,7 +62,8 @@ def vaccine_peptides_for_variant(
     epitope_predictions = predict_epitopes(
         mhc_predictor=mhc_predictor,
         protein_fragment=protein_fragment,
-        min_epitope_score=min_epitope_score)
+        min_epitope_score=min_epitope_score,
+        genome=variant.ensembl).values()
 
     candidate_vaccine_peptides = []
 
@@ -68,6 +74,12 @@ def vaccine_peptides_for_variant(
             epitope_predictions,
             start_offset=offset,
             end_offset=offset + len(candidate_fragment))
+        # filter out peptides that have no epitopes
+        if not subsequence_epitope_predictions:
+            logger.info(
+                "No epitope predictions for mutant protein fragment %s",
+                candidate_fragment)
+            continue
 
         assert all(
             p.source_sequence == candidate_fragment.amino_acids
@@ -83,15 +95,18 @@ def vaccine_peptides_for_variant(
             candidate_vaccine_peptide.combined_score)
         candidate_vaccine_peptides.append(candidate_vaccine_peptide)
 
-    max_score = max(vp.combined_score for vp in candidate_vaccine_peptides)
     n_total_candidates = len(candidate_vaccine_peptides)
+    if n_total_candidates == 0:
+        logger.info("No candidate peptides for variant %s", variant.short_description)
+        return candidate_vaccine_peptides
 
+    max_score = max(vp.combined_score for vp in candidate_vaccine_peptides)
     # only keep candidate vaccines that are within 1% of the maximum
     # combined score
     filtered_candidate_vaccine_peptides = [
         vp
         for vp in candidate_vaccine_peptides
-        if vp.combined_score / max_score > 0.99
+        if _isclose(max_score, 0.0) or vp.combined_score / max_score > 0.99
     ]
 
     logger.info(

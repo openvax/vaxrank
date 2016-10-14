@@ -7,3 +7,4 @@ roman
 jinja2
 pdfkit  # needs wkhtmltopdf: brew install Caskroom/cask/wkhtmltopdf
 pypandoc  # needs pandoc: brew install pandoc
+shellinford
