@@ -48,7 +48,8 @@ def vaccine_peptides_for_variant(
         variant=variant,
         protein_sequence=isovar_protein_sequences[0])
 
-    logger.info("Mutant protein fragment for %s: %s",
+    logger.info(
+        "Mutant protein fragment for %s: %s",
         variant,
         protein_fragment)
 
@@ -74,7 +75,8 @@ def vaccine_peptides_for_variant(
             mutant_protein_fragment=candidate_fragment,
             epitope_predictions=subsequence_epitope_predictions)
 
-        logger.debug("%s, combined score: %0.4f",
+        logger.debug(
+            "%s, combined score: %0.4f",
             candidate_vaccine_peptide,
             candidate_vaccine_peptide.combined_score)
         candidate_vaccine_peptides.append(candidate_vaccine_peptide)
@@ -90,7 +92,8 @@ def vaccine_peptides_for_variant(
         if vp.combined_score / max_score > 0.99
     ]
 
-    logger.info("Keeping %d/%d vaccine peptides for %s",
+    logger.info(
+        "Keeping %d/%d vaccine peptides for %s",
         len(filtered_candidate_vaccine_peptides),
         n_total_candidates,
         variant)
@@ -99,7 +102,8 @@ def vaccine_peptides_for_variant(
     if len(filtered_candidate_vaccine_peptides) > 0:
         logger.debug("Top vaccine peptides for %s:", variant)
         for i, vaccine_peptide in enumerate(filtered_candidate_vaccine_peptides):
-            logger.debug("%d) %s (combined score = %0.4f)",
+            logger.debug(
+                "%d) %s (combined score = %0.4f)",
                 i + 1,
                 vaccine_peptide,
                 vaccine_peptide.combined_score)
@@ -180,6 +184,7 @@ def dataframe_from_ranked_list(ranked_list_of_variants_with_vaccine_peptides):
     ])
     for field in MutantProteinFragment._fields:
         columns[field] = []
+
     columns["variant_rank"] = []
     columns["peptide_secondary_rank"] = []
     columns["mutant_epitope_score"] = []
