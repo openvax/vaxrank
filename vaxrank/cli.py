@@ -187,7 +187,10 @@ def load_template_data(args):
         'reviewers': args.output_reviewed_by.split(','),
         })
 
-    # save pickled template data if necessary
+    # save pickled template data if necessary. this is meant to make a dev's life easier:
+    # as of time of writing, vaxrank takes ~25 min to run, most of which is core logic
+    # that creates the template_data dictionary. the formatting is super fast, and it can
+    # be useful to save template_data to be able to iterate just on the formatting.
     if args.output_pickle_file:
         with open(args.output_pickle_file, 'wb') as f:
             pickle.dump(template_data, f)
