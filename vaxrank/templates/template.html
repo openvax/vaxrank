@@ -14,7 +14,15 @@
     	<h1 id="report-header">Vaccine Peptides Report</h1>
     	<h3 id="patient-info">PATIENT INFO</h3>
     	<table class="pure-table pure-table-bordered patient-info">
+            <colgroup>
+                <col class="patient-info-column-one">
+                <col class="patient-info-column-two">
+            </colgroup>
     		<tr>
+                <td>Patient ID</td>
+                <td>{{ patient_id }}</td>
+            </tr>
+            <tr>
     			<td>VCF (somatic variants) path(s)</td>
     			<td>{{ vcf_paths }}</td>
     		</tr>
@@ -36,7 +44,19 @@
     		</tr>
     	</table>
     	<br>
-    	<h3 id="variants">VARIANTS</h3>
+        <h3 id="args">COMMAND LINE ARGUMENTS</h4>
+        <table class="pure-table pure-table-bordered args">
+            <colgroup>
+                <col class="args-column-one">
+                <col class="args-column-two">
+            </colgroup>
+            {% for a in args %}
+            <tr>
+                <td class="arg">{{ a[0] }}</td>
+                <td class="arg">{{ a[1] }}</td>
+            </tr>
+            {% endfor %}
+        </table>
     	<ol class="main">
     	{% for v in variants %}
     	<li class="variant-list-item">
@@ -97,7 +117,7 @@
     		<h4 id="peptides">Vaccine Peptides for variant: {{ v.short_description }}</h4>
     		<ol class="peptides" type="i">
     			{% for p in v.peptides %}
-    			<li>
+    			<li class="peptide">
     				<table class="pure-table pure-table-bordered peptide">
     					<colgroup>
 		                	<col class="peptide-column-one">
@@ -166,6 +186,42 @@
     	</li>
     	{% endfor %}
     	</ol>
+        <table class="pure-table pure-table-bordered reviewed-by">
+            <thead>
+                <tr><td>Reviewed By</td></tr>
+            </thead>
+            {% for r in reviewers %}
+            <tr><td>{{ r }}</td></tr>
+            {% endfor %}
+        </table>
+        <br><br>
+        <table class="pure-table pure-table-bordered signature">
+            <thead>
+                <tr><td>Final Review</td></tr>
+            </thead>
+            <tr>
+                <td class="signature-inner">
+                    <table class="pure-table signature-inner">
+                        <colgroup>
+                            <col class="signature-column-one">
+                            <col class="signature-column-two">
+                        </colgroup>
+                        <tr>
+                            <td>Name</td>
+                            <td>{{ final_review }}</td>
+                        </tr>
+                        <tr>
+                            <td>Signature</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Date</td>
+                            <td></td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
     </div>
     </body>
 </html>

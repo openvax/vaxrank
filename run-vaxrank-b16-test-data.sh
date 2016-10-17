@@ -5,4 +5,10 @@ vaxrank \
     --mhc-predictor netmhc \
     --mhc-alleles H2-Kb,H2-Db \
     --padding-around-mutation 5 \
-    --output-ascii-report vaccine-peptides-report.txt
+    --output-ascii-report vaccine-peptides-report.txt \
+    --output-html-report vaccine-peptides-report.html \
+    --output-pdf-report vaccine-peptides-report.pdf \
+    --output-pickle-file report.pkl \
+    --output-reviewed-by "John Doe,Jane Doe" \
+    --output-final-review "All the Does" \
+    --output-patient-id "Namey McName"

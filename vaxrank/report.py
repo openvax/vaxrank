@@ -174,8 +174,8 @@ def make_pdf_report(
         # note: these dimensions are bananas, and we'll need to fix the template
         # if the goal is to have this report be printable on physical paper
         options = {
-            'page-height': '%din' % length_in_inches,
-            'page-width': '13in'
+            'zoom': 0.6,
+            'margin-top': '20mm'
         }
         pdfkit.from_file(f.name, pdf_report_path, options=options)
     logger.info('Wrote PDF report to %s', pdf_report_path)

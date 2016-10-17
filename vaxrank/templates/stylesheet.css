@@ -24,6 +24,37 @@
 	margin-bottom: 1.5em;
 }
 
+#args {
+	padding-top: 2em;
+	padding-bottom: 1em;
+}
+
+/* Patient info */
+table.patient-info {
+	width: 90%;
+}
+
+col.patient-info-column-one {
+	width: 40%;
+}
+
+col.patient-info-column-two {
+
+}
+
+/* Command-line args */
+table.args {
+	width: 90%;
+}
+
+col.args-column-one {
+	width: 40%;
+}
+
+col.args-column-two {
+
+}
+
 /* Variant list stuff */
 ol.main {
 	padding-left: 1.2em;
@@ -36,12 +67,16 @@ li.variant-list-item {
 	border-left: 0.3em solid;
 	padding: 0 2em 0 2em;
 	margin-bottom: 2em;
+	page-break-before: always;
+	page-break-after: always;
 }
 
 li.variant-list-item:nth-child(odd) {
 	border-left: 0.3em dotted;
 	padding: 0 2em 0 2em;
 	margin-bottom: 2em;
+	page-break-before: always;
+	page-break-after: always;
 }
 
 div.variant-span {
@@ -87,6 +122,10 @@ ol.peptides {
 	list-style-position: inside;
 }
 
+li.peptide {
+	page-break-inside: avoid;
+}
+
 table.peptide {
 	margin: -1em 0 2em 2em;
 	width: 90%;
@@ -108,4 +147,26 @@ col.peptide-column-one {
 
 col.peptide-column-two {
 	width: 50%;
+}
+
+/* Signatures */
+table.signature {
+	width: 70%;
+}
+
+table.signature-inner {
+	width: 100%;
+	border: none;
+}
+
+td.signature-inner {
+	padding: 0;
+}
+
+col.signature-column-one {
+	width: 30%;
+}
+
+col.signature-column-two {
+	width: 70%;
 }
