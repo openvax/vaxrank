@@ -51,51 +51,56 @@ arg_parser = make_variant_sequences_arg_parser(
 
 add_mhc_args(arg_parser)
 
-arg_parser.add_argument(
+###
+# OUTPUT ARGS
+###
+
+output_args_group = arg_parser.add_argument_group("Output options")
+
+output_args_group.add_argument(
     "--output-patient-id",
     default="",
     help="Patient ID to use in report")
 
-arg_parser.add_argument(
+output_args_group.add_argument(
     "--output-csv",
     default="",
     help="Name of CSV file which contains predicted sequences")
 
-arg_parser.add_argument(
+output_args_group.add_argument(
     "--output-ascii-report",
     default="",
     help="Path to ASCII vaccine peptide report")
 
-arg_parser.add_argument(
+output_args_group.add_argument(
     "--output-html-report",
     default="",
     help="Path to HTML vaccine peptide report")
 
-arg_parser.add_argument(
+output_args_group.add_argument(
     "--output-pdf-report",
     default="",
     help="Path to PDF vaccine peptide report")
 
-arg_parser.add_argument(
+output_args_group.add_argument(
     "--output-pickle-file",
     default="",
     help="Path to output pickle file containing report template data")
 
-arg_parser.add_argument(
-    "--input-pickle-file",
-    default="",
-    help="Path to input pickle file containing report template data. "
-    "If present, other report-relevant options will be ignored.")
-
-arg_parser.add_argument(
+output_args_group.add_argument(
     "--output-reviewed-by",
     default="",
     help="Comma-separated list of reviewer names")
 
-arg_parser.add_argument(
+output_args_group.add_argument(
     "--output-final-review",
     default="",
     help="Name of final reviewer of report")
+
+
+###
+# VACCINE PEPTIDE ARGS
+###
 
 vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
 vaccine_peptide_group.add_argument(
@@ -124,6 +129,22 @@ vaccine_peptide_group.add_argument(
     default=10,
     type=int,
     help="Number of mutations to report")
+
+vaccine_peptide_group.add_argument(
+    "--min-epitope-score",
+    default=0.0001,
+    type=float,
+    help="Ignore epitopes whose normalized score falls below this threshold")
+
+###
+# MISC. ARGS
+###
+
+arg_parser.add_argument(
+    "--input-pickle-file",
+    default="",
+    help="Path to input pickle file containing report template data. "
+    "If present, other report-relevant options will be ignored.")
 
 
 def load_template_data(args):
@@ -165,7 +186,8 @@ def load_template_data(args):
         vaccine_peptide_length=args.vaccine_peptide_length,
         padding_around_mutation=args.padding_around_mutation,
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
-        min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence)
+        min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence,
+        min_epitope_score=args.min_epitope_score)
 
     ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
     df = dataframe_from_ranked_list(ranked_list_for_report)
@@ -185,7 +207,7 @@ def load_template_data(args):
         'patient_id': args.output_patient_id,
         'final_review': args.output_final_review,
         'reviewers': args.output_reviewed_by.split(','),
-        })
+    })
 
     # save pickled template data if necessary. this is meant to make a dev's life easier:
     # as of time of writing, vaxrank takes ~25 min to run, most of which is core logic

@@ -34,11 +34,16 @@ class VaccinePeptide(VaccinePeptideBase):
     VaccinePeptide combines the sequence information of MutantProteinFragment
     with MHC binding predictions for subsequences of the protein fragment.
     """
-    def __new__(cls, mutant_protein_fragment, epitope_predictions):
+    def __new__(
+            cls,
+            mutant_protein_fragment,
+            epitope_predictions,
+            min_epitope_score=0):
         wildtype_epitope_score = sum(
             p.logistic_score()
             for p in epitope_predictions
             if not p.overlaps_mutation)
+
         mutant_epitope_score = sum(
             p.logistic_score()
             for p in epitope_predictions

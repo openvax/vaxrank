@@ -35,7 +35,8 @@ def vaccine_peptides_for_variant(
         mhc_predictor,
         vaccine_peptide_length,
         padding_around_mutation,
-        max_vaccine_peptides_per_variant):
+        max_vaccine_peptides_per_variant,
+        min_epitope_score):
     """
     Returns list containing (MutantProteinFragment, VaccinePeptideMetrics) pairs
     """
@@ -55,7 +56,8 @@ def vaccine_peptides_for_variant(
 
     epitope_predictions = predict_epitopes(
         mhc_predictor=mhc_predictor,
-        protein_fragment=protein_fragment)
+        protein_fragment=protein_fragment,
+        min_epitope_score=min_epitope_score)
 
     candidate_vaccine_peptides = []
 
@@ -115,7 +117,8 @@ def generate_vaccine_peptides(
         vaccine_peptide_length,
         padding_around_mutation,
         max_vaccine_peptides_per_variant,
-        min_reads_supporting_cdna_sequence):
+        min_reads_supporting_cdna_sequence,
+        min_epitope_score):
     """
     Returns dictionary mapping each variant to list of VaccinePeptide objects.
     """
@@ -140,7 +143,8 @@ def generate_vaccine_peptides(
             mhc_predictor=mhc_predictor,
             vaccine_peptide_length=vaccine_peptide_length,
             padding_around_mutation=padding_around_mutation,
-            max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant)
+            max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
+            min_epitope_score=min_epitope_score)
         result_dict[variant] = vaccine_peptides
     return result_dict
 
@@ -150,7 +154,8 @@ def ranked_vaccine_peptides(
         vaccine_peptide_length,
         padding_around_mutation,
         max_vaccine_peptides_per_variant,
-        min_reads_supporting_cdna_sequence):
+        min_reads_supporting_cdna_sequence,
+        min_epitope_score):
     """
     Returns sorted list whose first element is a Variant and whose second
     element is a list of VaccinePeptide objects.
@@ -161,7 +166,8 @@ def ranked_vaccine_peptides(
         vaccine_peptide_length=vaccine_peptide_length,
         padding_around_mutation=padding_around_mutation,
         max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
-        min_reads_supporting_cdna_sequence=min_reads_supporting_cdna_sequence)
+        min_reads_supporting_cdna_sequence=min_reads_supporting_cdna_sequence,
+        min_epitope_score=min_epitope_score)
     result_list = list(variants_to_vaccine_peptides_dict.items())
     result_list.sort(
         key=lambda x: x[1][0].combined_score if len(x[1]) > 0 else 0.0,

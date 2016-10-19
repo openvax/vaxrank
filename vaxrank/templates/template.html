@@ -78,7 +78,7 @@
                 </tr>
                 <tr>
                     <td>Top score</td>
-                    <td>{{ v.top_score|round(2) }}</td>
+                    <td>{{ v.top_score|round(4) }}</td>
                 </tr>
                 <tr>
                     <td>Reads supporting variant allele</td>
@@ -139,11 +139,11 @@
         	            </tr>
         	            <tr>
         	            	<td>Expression score</td>
-        	            	<td>{{ p.expression_score|round(2) }}</td>
+        	            	<td>{{ p.expression_score|round(4) }}</td>
         	            </tr>
         	            <tr>
         	            	<td>Mutant epitope score</td>
-        	            	<td>{{ p.mutant_epitope_score|round(2) }}</td>
+        	            	<td>{{ p.mutant_epitope_score|round(4) }}</td>
         	            </tr>
         	            <tr>
         	            	<td>Reads fully spanning cDNA sequence(s)</td>
@@ -157,6 +157,41 @@
         	            	<td>Mutation distance from edge</td>
         	            	<td>{{ p.mutation_distance_from_edge }}</td>
         	            </tr>
+                        <tr>
+                            <th>Manufacturability</th>
+                            <th></th>
+                        <tr>
+                            <td>N-terminal Glutamine, Glutamic Acid, or Cysteine</td>
+                            <td>{{p.difficult_n_terminal_residue}}</td>
+                        </tr>
+                        <tr>
+                            <td>C-terminal Cysteine</td>
+                            <td>{{p.c_terminal_cysteine}}</td>
+                        </tr>
+                        <tr>
+                            <td>C-terminal Proline</td>
+                            <td>{{p.c_terminal_proline}}</td>
+                        </tr>
+                        <tr>
+                            <td>N-terminal Asparagine</td>
+                            <td>{{p.n_terminal_asparagine}}</td>
+                        </tr>
+                         <tr>
+                            <td>Number of Asparagine-Proline bonds</td>
+                            <td>{{p.asparagine_proline_bond_count}}</td>
+                        </tr>
+                        <tr>
+                            <td>Total number of Cysteine residues</td>
+                            <td>{{p.cysteine_count}}</td>
+                        </tr>
+                        <tr>
+                            <td>C-terminal 7mer GRAVY score</td>
+                            <td>{{p.cterm_7mer_gravy_score|round(2)}}</td>
+                        </tr>
+                        <tr>
+                            <td>Max 7mer GRAVY score</td>
+                            <td>{{p.max_7mer_gravy_score|round(2)}}</td>
+                        </tr>
         	            <tr>
         	            	<td>Predicted mutant epitopes</td>
         	            	<td class="effect">
@@ -165,6 +200,7 @@
                     					<tr>
 			                        		<td>Sequence</td>
 					                        <td>IC50</td>
+                                            <td>Score</td>
 					                        <td>Allele</td>
 			        	            	</tr>
 			            		    </thead>
@@ -172,6 +208,7 @@
 		                    		<tr>
         		            			<td>{{ e.sequence }}</td>
         		            			<td>{{ e.ic50|round(2) }}</td>
+                                        <td>{{ e.normalized_binding_score|round(4)}}
         		            			<td>{{ e.allele }}</td>
 		                    		</tr>
 		                    		{% endfor %}

@@ -77,7 +77,7 @@ class EpitopePrediction(EpitopePredictionBase):
 
         return logistic / normalizer
 
-def predict_epitopes(mhc_predictor, protein_fragment):
+def predict_epitopes(mhc_predictor, protein_fragment, min_epitope_score=0):
     results = []
     mhctools_binding_predictions = mhc_predictor.predict(
         {"protein_fragment": protein_fragment.amino_acids})
@@ -92,9 +92,11 @@ def predict_epitopes(mhc_predictor, protein_fragment):
         overlaps_mutation = protein_fragment.interval_overlaps_mutation(
             start_offset=peptide_start_offset,
             end_offset=peptide_end_offset)
-        results.append(EpitopePrediction.from_mhctools_binding_prediction(
+        epitope_prediction = EpitopePrediction.from_mhctools_binding_prediction(
             binding_prediction,
-            overlaps_mutation=overlaps_mutation))
+            overlaps_mutation=overlaps_mutation)
+        if epitope_prediction.logistic_score() > min_epitope_score:
+            results.append(epitope_prediction)
     return results
 
 def slice_epitope_predictions(

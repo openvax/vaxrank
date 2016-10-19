@@ -22,6 +22,14 @@ Somatic variants with predicted coding effects: {{ num_somatic_variants_with_pre
                    - Reads fully spanning cDNA sequence(s): {{ p.num_alt_reads_supporting_protein_sequence }}
                    - Mutant amino acids: {{ p.num_mutant_amino_acids }}
                    - Mutation distance from edge: {{ p.mutation_distance_from_edge }}
+                   - N-terminal Glutamine, Glutamic Acid, or Cysteine: {{p.difficult_n_terminal_residue}}
+                   - C-terminal Cysteine: {{p.c_terminal_cysteine}}
+                   - C-terminal Proline: {{p.c_terminal_proline}}
+                   - N-terminal Asparagine: {{p.n_terminal_asparagine}}
+                   - Number of Asparagine-Proline bonds: {{p.asparagine_proline_bond_count}}
+                   - Total number of Cysteine residues: {{p.cysteine_count}}
+                   - C-terminal 7mer GRAVY score: {{p.cterm_7mer_gravy_score|round(2)}}
+                   - Max 7mer GRAVY score: {{p.max_7mer_gravy_score|round(2)}}
                    - Predicted mutant epitopes:
                    {% for e in p.epitopes %}
                          * {{ e.sequence }} {{ e.ic50|round(2) }} ({{ e.allele }})

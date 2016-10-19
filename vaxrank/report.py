@@ -90,6 +90,7 @@ def compute_template_data(
             aa_mutant = amino_acids[mutation_start:mutation_end]
             aa_after_mutation = amino_acids[mutation_end:]
             epitopes = []
+            manufacturability_scores = vaccine_peptide.manufacturability_scores
             peptide_dict = {
                 'num': roman.toRoman(j + 1).lower(),
                 'aa_before_mutation': aa_before_mutation,
@@ -107,14 +108,32 @@ def compute_template_data(
                 'mutation_distance_from_edge':
                     mutant_protein_fragment.mutation_distance_from_edge,
                 'epitopes': epitopes,
+                'difficult_n_terminal_residue':
+                    manufacturability_scores.difficult_n_terminal_residue,
+                'c_terminal_cysteine':
+                    manufacturability_scores.c_terminal_cysteine,
+                'c_terminal_proline':
+                    manufacturability_scores.c_terminal_proline,
+                'n_terminal_asparagine':
+                    manufacturability_scores.n_terminal_asparagine,
+                'asparagine_proline_bond_count':
+                    manufacturability_scores.asparagine_proline_bond_count,
+                'cysteine_count':
+                    manufacturability_scores.cysteine_count,
+                'cterm_7mer_gravy_score':
+                    manufacturability_scores.cterm_7mer_gravy_score,
+                'max_7mer_gravy_score':
+                    manufacturability_scores.max_7mer_gravy_score
             }
 
             # compile epitope info
             for epitope_prediction in vaccine_peptide.epitope_predictions:
-                if epitope_prediction.overlaps_mutation and epitope_prediction.ic50 <= 2000:
+                if epitope_prediction.overlaps_mutation:
+                    score = epitope_prediction.logistic_score()
                     epitope_dict = {
                         'sequence': epitope_prediction.peptide_sequence,
                         'ic50': epitope_prediction.ic50,
+                        'normalized_binding_score': score,
                         'allele': epitope_prediction.allele,
                     }
                     epitopes.append(epitope_dict)
