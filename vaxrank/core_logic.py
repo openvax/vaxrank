@@ -155,7 +155,7 @@ def ranked_vaccine_peptides(
         padding_around_mutation,
         max_vaccine_peptides_per_variant,
         min_reads_supporting_cdna_sequence,
-        min_epitope_score):
+        min_epitope_score=0):
     """
     Returns sorted list whose first element is a Variant and whose second
     element is a list of VaccinePeptide objects.
