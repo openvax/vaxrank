@@ -20,6 +20,7 @@ For more information see: https://github.com/hammerlab/vaxrank/issues/2
 """
 
 from __future__ import absolute_import, print_function, division
+from collections import namedtuple
 
 # Amino Acid Hydropathy Score
 # Table 2 from Kyte and Doolittle"s
@@ -54,20 +55,9 @@ def gravy_score(amino_acids):
     Mean amino acid hydropathy averaged across residues of a peptide
     or protein sequence.
     """
-    total = 0.0
-    count = 0
-    for amino_acid in amino_acids:
-        if amino_acid == "X":
-            # skip unknown amino acids
-            continue
-        elif amino_acid == "*":
-            # just in case stop codons sneak into the amino acid sequence
-            break
-        total += hydropathy_dict[amino_acid]
-        count += 1
-    if count == 0:
-        raise ValueError("Can't compute GRAVY score for '%s'" % amino_acids)
-    return total / count
+    total = sum(
+        hydropathy_dict[amino_acid] for amino_acid in amino_acids)
+    return total / len(amino_acids)
 
 def max_kmer_gravy_score(amino_acids, k):
     """
@@ -77,23 +67,49 @@ def max_kmer_gravy_score(amino_acids, k):
     """
     return max(
         gravy_score(amino_acids[i:i + k])
-        for i in range(len(amino_acids) - k))
+        for i in range(len(amino_acids) - k + 1))
+
+def max_7mer_gravy_score(amino_acids):
+    return max_kmer_gravy_score(amino_acids, 7)
+
+def cterm_kmer_gravy_score(amino_acids, k):
+    """
+    Mean hydropathy of last k residues on the C-terminus of the peptide.
+    """
+    n = len(amino_acids)
+    return gravy_score(amino_acids[n - k:n])
+
+def cterm_7mer_gravy_score(amino_acids):
+    return cterm_kmer_gravy_score(amino_acids, 7)
 
 def difficult_n_terminal_residue(amino_acids):
     """
-    Is the N-terminus one of {Gln, Glu, Asn, Cys}
+    Is the N-terminus one of {Gln, Glu, Cys}?
+    ---
+    Priority I: avoid N-terminal Gln, Glu, Cys
     """
-    nterm_amino_acid = amino_acids[0]
-    return nterm_amino_acid in {"Q", "E", "N", "C"}
+    return amino_acids[0] in {"Q", "E", "C"}
 
-def difficult_c_terminal_residue(amino_acids):
+def c_terminal_proline(amino_acids):
     """
-    Is the C-terminus either Pro and Cys?
+    Is the right-most (C-terminal) amino acid a proline?
     """
-    cterm_amino_acid = amino_acids[-1]
-    return cterm_amino_acid in {"P", "C"}
+    return amino_acids[-1] == "P"
 
-def count_asparagine_proline_bonds(amino_acids):
+def c_terminal_cysteine(amino_acids):
+    """
+    Is the right-most (C-terminal) amino acid a cysteine?
+    """
+    return amino_acids[-1] == "C"
+
+def n_terminal_asparagine(amino_acids):
+    """
+    Asparagine at the N-terminus of a peptide is also hard
+    to synthesize, though not as bad as {Gln, Glu, Cys}
+    """
+    return amino_acids[0] == "N"
+
+def asparagine_proline_bond_count(amino_acids):
     """
     Count the number of Asparagine/Asn/N-Proline/Pro/P bonds
     Problem with Asn-Pro bonds: can spontaneously cleave the peptide
@@ -102,10 +118,51 @@ def count_asparagine_proline_bonds(amino_acids):
         amino_acids[i:i + 2] == "NP"
         for i in range(len(amino_acids) - 1))
 
-def count_cysteine_residues(amino_acids):
+def cysteine_count(amino_acids):
     """
     How many cysteines are in the amino acid sequence?
     Problem with cysteine residues: They can form disulfide bonds across
     distant parts of the peptide,
     """
     return sum(amino_acid == "C" for amino_acid in amino_acids)
+
+def combine_scoring_functions(*scoring_functions):
+    """
+    Given a list of scoring functions, make a namedtuple with
+    fields of the same names.
+    """
+    names = [fn.__name__ for fn in scoring_functions]
+    klass = namedtuple("ManufacturabilityScores", names)
+
+    def run_scoring_functions(amino_acids):
+        return klass(*[fn(amino_acids) for fn in scoring_functions])
+
+    return run_scoring_functions
+
+
+compute_manufacturability_scores = combine_scoring_functions(
+    # Priority I: avoid N-terminal Gln, Glu, Cys
+    difficult_n_terminal_residue,
+
+    # Priority II: avoid C-terminal Cys
+    c_terminal_cysteine,
+
+    # Priority III: avoid C-terminal Pro
+    c_terminal_proline,
+
+    # Priority IV: avoid N-terminal Asn
+    n_terminal_asparagine,
+
+    # Priority V: avoid Asp-Pro bonds
+    asparagine_proline_bond_count,
+
+    # Priority VI: Total number of Cys residues
+    cysteine_count,
+
+    # Priority VII: GRAVY score of 7 residues closest to the C terminus.
+    cterm_7mer_gravy_score,
+
+    # Priority VIII: Maximum GRAVY score of any 7mer window
+    # in the peptide sequence.
+    max_7mer_gravy_score
+)
