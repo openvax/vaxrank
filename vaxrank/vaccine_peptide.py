@@ -19,7 +19,7 @@ from collections import namedtuple
 
 import numpy as np
 
-from .manufacturability import compute_manufacturability_scores
+from .manufacturability import ManufacturabilityScores
 
 VaccinePeptideBase = namedtuple(
     "VaccinePeptide", [
@@ -53,7 +53,7 @@ class VaccinePeptide(VaccinePeptideBase):
             epitope_predictions=epitope_predictions,
             mutant_epitope_score=mutant_epitope_score,
             wildtype_epitope_score=wildtype_epitope_score,
-            manufacturability_scores=compute_manufacturability_scores(
+            manufacturability_scores=ManufacturabilityScores.from_amino_acids(
                 mutant_protein_fragment.amino_acids))
 
     def peptide_synthesis_difficulty_score_tuple(
@@ -173,3 +173,9 @@ class VaccinePeptide(VaccinePeptideBase):
     @property
     def combined_score(self):
         return self.expression_score * self.mutant_epitope_score
+
+    def to_dict(self):
+        return {
+            "mutant_protein_fragment": self.mutant_protein_fragment,
+            "epitope_predictions": self.epitope_predictions,
+        }

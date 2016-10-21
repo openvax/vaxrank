@@ -90,11 +90,11 @@ table.variant {
 }
 
 col.variant-column-one {
-	width: 60%;
+	width: 40%;
 }
 
 col.variant-column-two {
-	width: 40%;
+	width: 60%;
 }
 
 thead.variant-head {
