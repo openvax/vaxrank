@@ -149,20 +149,6 @@ def make_html_report(
         _make_report(template_data, f, 'templates/template.html')
     logger.info('Wrote HTML report to %s', html_report_path)
 
-
-# this is the hackiest thing in all the hacks. once we find out what the useful
-# vaxrank output formats are (will PDF be used? viewed? printed?, we can
-# fix this if necessary
-def compute_pdf_length_from_template_data(template_data):
-    length = 8  # 8" baseline from patient info header
-    variants = template_data['variants']
-    for variant in variants:
-        length += 6  # 6" space for variant description
-        for peptide in variant['peptides']:
-            length += 4  # 4" space for peptide description
-    return length
-
-
 def make_pdf_report(
         template_data,
         pdf_report_path):
@@ -170,9 +156,6 @@ def make_pdf_report(
         _make_report(template_data, f, 'templates/template.html')
         f.flush()
 
-        length_in_inches = compute_pdf_length_from_template_data(template_data)
-        # note: these dimensions are bananas, and we'll need to fix the template
-        # if the goal is to have this report be printable on physical paper
         options = {
             'zoom': 0.6,
             'margin-top': '20mm'
