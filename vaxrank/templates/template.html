@@ -13,36 +13,18 @@
     <div id="main">
     	<h1 id="report-header">Vaccine Peptides Report</h1>
     	<h3 id="patient-info">PATIENT INFO</h3>
-    	<table class="pure-table pure-table-bordered patient-info">
+        <table class="pure-table pure-table-bordered patient-info">
             <colgroup>
                 <col class="patient-info-column-one">
                 <col class="patient-info-column-two">
             </colgroup>
-    		<tr>
-                <td>Patient ID</td>
-                <td>{{ patient_id }}</td>
-            </tr>
+            {% for key, val in patient_info.items() %}
             <tr>
-    			<td>VCF (somatic variants) path(s)</td>
-    			<td>{{ vcf_paths }}</td>
-    		</tr>
-    		<tr>
-    			<td>BAM (RNAseq reads) path</td>
-    			<td>{{ bam_path }}</td>
-    		</tr>
-    		<tr>
-    			<td>MHC alleles</td>
-    			<td>{{ mhc_alleles }}</td>
-    		</tr>
-    		<tr>
-    			<td>Total number of somatic variants</td>
-    			<td>{{ num_total_somatic_variants }}</td>
-    		</tr>
-    		<tr>
-    			<td>Somatic variants with predicted coding effects</td>
-    			<td>{{ num_somatic_variants_with_predicted_coding_effects }}</td>
-    		</tr>
-    	</table>
+                <td>{{ key }}</td>
+                <td>{{ val }}</td>
+            </tr>
+            {% endfor %}
+        </table>
     	<br>
         <h3 id="args">COMMAND LINE ARGUMENTS</h4>
         <table class="pure-table pure-table-bordered args">

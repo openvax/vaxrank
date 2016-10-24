@@ -1,8 +1,6 @@
-VCF (somatic variants) path(s): {{ vcf_paths }}
-BAM (RNAseq reads) path: {{ bam_path }}
-MHC alleles: {{ mhc_alleles }}
-Total number of somatic variants: {{ num_total_somatic_variants }}
-Somatic variants with predicted coding effects: {{ num_somatic_variants_with_predicted_coding_effects }}
+{% for key, val in patient_info.items() %}
+{{ key }}: {{ val }}
+{% endfor %}
 ---
 
 {% for v in variants %}

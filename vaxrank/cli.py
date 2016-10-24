@@ -196,18 +196,19 @@ def load_template_data(args):
     if args.output_csv:
         df.to_csv(args.output_csv, index=False)
 
-    template_data = compute_template_data(
-        ranked_variants_with_vaccine_peptides=ranked_list_for_report,
-        mhc_alleles=mhc_alleles,
-        variants=variants,
-        bam_path=args.bam)
-
-    template_data.update({
+    output_values = {
         'args': interesting_args,
         'patient_id': args.output_patient_id,
         'final_review': args.output_final_review,
         'reviewers': args.output_reviewed_by.split(','),
-    })
+    }
+
+    template_data = compute_template_data(
+        ranked_variants_with_vaccine_peptides=ranked_list_for_report,
+        mhc_alleles=mhc_alleles,
+        variants=variants,
+        bam_path=args.bam,
+        output_values=output_values)
 
     # save pickled template data if necessary. this is meant to make a dev's life easier:
     # as of time of writing, vaxrank takes ~25 min to run, most of which is core logic

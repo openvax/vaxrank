@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function, division
+from collections import OrderedDict
 import logging
 import os
 import tempfile
@@ -34,11 +35,25 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 )
 
 
+# def compute_template_data_ordered_dicts(
+#         ranked_variants_with_vaccine_peptides,
+#         mhc_alleles,
+#         variants,
+#         bam_path):
+#     # create dictionary mapping variants to coding effects
+#     variants_to_top_coding_effect_dict = {
+#         variant: effect_collection.top_priority_effect()
+#         for (variant, effect_collection)
+#         in variants.effects().drop_silent_and_noncoding().groupby_variant().items()
+#     }
+
+
 def compute_template_data(
         ranked_variants_with_vaccine_peptides,
         mhc_alleles,
         variants,
-        bam_path):
+        bam_path,
+        output_values):
     # create dictionary mapping variants to coding effects
     variants_to_top_coding_effect_dict = {
         variant: effect_collection.top_priority_effect()
@@ -46,14 +61,20 @@ def compute_template_data(
         in variants.effects().drop_silent_and_noncoding().groupby_variant().items()
     }
 
-    template_data = {
-        'vcf_paths': "; ".join(variants.sources),
-        'bam_path': bam_path,
-        'mhc_alleles': " ".join(mhc_alleles),
-        'num_total_somatic_variants': len(variants),
-        'num_somatic_variants_with_predicted_coding_effects':
-            len(variants_to_top_coding_effect_dict),
-    }
+    # seed it with the input "output_values", later get rid of this
+    template_data = output_values
+
+    # test the theory about ordered dicts
+    patient_info = OrderedDict()
+    patient_info['Patient ID'] = output_values['patient_id']
+    patient_info['VCF (somatic variants) path(s)'] = "; ".join(variants.sources)
+    patient_info['BAM (RNAseq reads) path'] = bam_path
+    patient_info['MHC alleles'] = " ".join(mhc_alleles)
+    patient_info['Total number of somatic variants'] = len(variants)
+    patient_info['Somatic variants with predicted coding effects'] = len(variants_to_top_coding_effect_dict)
+
+    template_data['patient_info'] = patient_info
+
 
     # list ranked variants with their peptides
     variants = []
