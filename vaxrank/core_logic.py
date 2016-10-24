@@ -35,7 +35,8 @@ def vaccine_peptides_for_variant(
         mhc_predictor,
         vaccine_peptide_length,
         padding_around_mutation,
-        max_vaccine_peptides_per_variant):
+        max_vaccine_peptides_per_variant,
+        min_epitope_score):
     """
     Returns list containing (MutantProteinFragment, VaccinePeptideMetrics) pairs
     """
@@ -48,13 +49,15 @@ def vaccine_peptides_for_variant(
         variant=variant,
         protein_sequence=isovar_protein_sequences[0])
 
-    logger.info("Mutant protein fragment for %s: %s",
+    logger.info(
+        "Mutant protein fragment for %s: %s",
         variant,
         protein_fragment)
 
     epitope_predictions = predict_epitopes(
         mhc_predictor=mhc_predictor,
-        protein_fragment=protein_fragment)
+        protein_fragment=protein_fragment,
+        min_epitope_score=min_epitope_score)
 
     candidate_vaccine_peptides = []
 
@@ -74,7 +77,8 @@ def vaccine_peptides_for_variant(
             mutant_protein_fragment=candidate_fragment,
             epitope_predictions=subsequence_epitope_predictions)
 
-        logger.debug("%s, combined score: %0.4f",
+        logger.debug(
+            "%s, combined score: %0.4f",
             candidate_vaccine_peptide,
             candidate_vaccine_peptide.combined_score)
         candidate_vaccine_peptides.append(candidate_vaccine_peptide)
@@ -90,7 +94,8 @@ def vaccine_peptides_for_variant(
         if vp.combined_score / max_score > 0.99
     ]
 
-    logger.info("Keeping %d/%d vaccine peptides for %s",
+    logger.info(
+        "Keeping %d/%d vaccine peptides for %s",
         len(filtered_candidate_vaccine_peptides),
         n_total_candidates,
         variant)
@@ -99,7 +104,8 @@ def vaccine_peptides_for_variant(
     if len(filtered_candidate_vaccine_peptides) > 0:
         logger.debug("Top vaccine peptides for %s:", variant)
         for i, vaccine_peptide in enumerate(filtered_candidate_vaccine_peptides):
-            logger.debug("%d) %s (combined score = %0.4f)",
+            logger.debug(
+                "%d) %s (combined score = %0.4f)",
                 i + 1,
                 vaccine_peptide,
                 vaccine_peptide.combined_score)
@@ -111,7 +117,8 @@ def generate_vaccine_peptides(
         vaccine_peptide_length,
         padding_around_mutation,
         max_vaccine_peptides_per_variant,
-        min_reads_supporting_cdna_sequence):
+        min_reads_supporting_cdna_sequence,
+        min_epitope_score):
     """
     Returns dictionary mapping each variant to list of VaccinePeptide objects.
     """
@@ -136,7 +143,8 @@ def generate_vaccine_peptides(
             mhc_predictor=mhc_predictor,
             vaccine_peptide_length=vaccine_peptide_length,
             padding_around_mutation=padding_around_mutation,
-            max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant)
+            max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
+            min_epitope_score=min_epitope_score)
         result_dict[variant] = vaccine_peptides
     return result_dict
 
@@ -146,7 +154,8 @@ def ranked_vaccine_peptides(
         vaccine_peptide_length,
         padding_around_mutation,
         max_vaccine_peptides_per_variant,
-        min_reads_supporting_cdna_sequence):
+        min_reads_supporting_cdna_sequence,
+        min_epitope_score=0):
     """
     Returns sorted list whose first element is a Variant and whose second
     element is a list of VaccinePeptide objects.
@@ -157,7 +166,8 @@ def ranked_vaccine_peptides(
         vaccine_peptide_length=vaccine_peptide_length,
         padding_around_mutation=padding_around_mutation,
         max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
-        min_reads_supporting_cdna_sequence=min_reads_supporting_cdna_sequence)
+        min_reads_supporting_cdna_sequence=min_reads_supporting_cdna_sequence,
+        min_epitope_score=min_epitope_score)
     result_list = list(variants_to_vaccine_peptides_dict.items())
     result_list.sort(
         key=lambda x: x[1][0].combined_score if len(x[1]) > 0 else 0.0,
@@ -180,6 +190,7 @@ def dataframe_from_ranked_list(ranked_list_of_variants_with_vaccine_peptides):
     ])
     for field in MutantProteinFragment._fields:
         columns[field] = []
+
     columns["variant_rank"] = []
     columns["peptide_secondary_rank"] = []
     columns["mutant_epitope_score"] = []

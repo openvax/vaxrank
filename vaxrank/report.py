@@ -82,6 +82,19 @@ def compute_template_data(
 
         # compile peptide info
         for j, vaccine_peptide in enumerate(vaccine_peptides):
+            epitopes = []
+            # compile epitope info
+            for epitope_prediction in vaccine_peptide.epitope_predictions:
+                if epitope_prediction.overlaps_mutation:
+                    score = epitope_prediction.logistic_score()
+                    epitope_dict = {
+                        'sequence': epitope_prediction.peptide_sequence,
+                        'ic50': epitope_prediction.ic50,
+                        'normalized_binding_score': score,
+                        'allele': epitope_prediction.allele,
+                    }
+                    epitopes.append(epitope_dict)
+
             mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
             amino_acids = mutant_protein_fragment.amino_acids
             mutation_start = mutant_protein_fragment.mutant_amino_acid_start_offset
@@ -89,7 +102,7 @@ def compute_template_data(
             aa_before_mutation = amino_acids[:mutation_start]
             aa_mutant = amino_acids[mutation_start:mutation_end]
             aa_after_mutation = amino_acids[mutation_end:]
-            epitopes = []
+            manufacturability_scores = vaccine_peptide.manufacturability_scores
             peptide_dict = {
                 'num': roman.toRoman(j + 1).lower(),
                 'aa_before_mutation': aa_before_mutation,
@@ -107,17 +120,23 @@ def compute_template_data(
                 'mutation_distance_from_edge':
                     mutant_protein_fragment.mutation_distance_from_edge,
                 'epitopes': epitopes,
+                'difficult_n_terminal_residue':
+                    int(manufacturability_scores.difficult_n_terminal_residue),
+                'c_terminal_cysteine':
+                    int(manufacturability_scores.c_terminal_cysteine),
+                'c_terminal_proline':
+                    int(manufacturability_scores.c_terminal_proline),
+                'n_terminal_asparagine':
+                    int(manufacturability_scores.n_terminal_asparagine),
+                'asparagine_proline_bond_count':
+                    manufacturability_scores.asparagine_proline_bond_count,
+                'cysteine_count':
+                    manufacturability_scores.cysteine_count,
+                'cterm_7mer_gravy_score':
+                    manufacturability_scores.cterm_7mer_gravy_score,
+                'max_7mer_gravy_score':
+                    manufacturability_scores.max_7mer_gravy_score
             }
-
-            # compile epitope info
-            for epitope_prediction in vaccine_peptide.epitope_predictions:
-                if epitope_prediction.overlaps_mutation and epitope_prediction.ic50 <= 2000:
-                    epitope_dict = {
-                        'sequence': epitope_prediction.peptide_sequence,
-                        'ic50': epitope_prediction.ic50,
-                        'allele': epitope_prediction.allele,
-                    }
-                    epitopes.append(epitope_dict)
 
             peptides.append(peptide_dict)
         variants.append(variant_dict)
