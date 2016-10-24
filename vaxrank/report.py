@@ -121,13 +121,13 @@ def compute_template_data(
                     mutant_protein_fragment.mutation_distance_from_edge,
                 'epitopes': epitopes,
                 'difficult_n_terminal_residue':
-                    manufacturability_scores.difficult_n_terminal_residue,
+                    int(manufacturability_scores.difficult_n_terminal_residue),
                 'c_terminal_cysteine':
-                    manufacturability_scores.c_terminal_cysteine,
+                    int(manufacturability_scores.c_terminal_cysteine),
                 'c_terminal_proline':
-                    manufacturability_scores.c_terminal_proline,
+                    int(manufacturability_scores.c_terminal_proline),
                 'n_terminal_asparagine':
-                    manufacturability_scores.n_terminal_asparagine,
+                    int(manufacturability_scores.n_terminal_asparagine),
                 'asparagine_proline_bond_count':
                     manufacturability_scores.asparagine_proline_bond_count,
                 'cysteine_count':
