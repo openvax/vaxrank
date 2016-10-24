@@ -158,8 +158,18 @@
         	            	<td>{{ p.mutation_distance_from_edge }}</td>
         	            </tr>
                         <tr>
-                            <th>Manufacturability</th>
-                            <th></th>
+                            <th colspan="2" style="padding-top: 1em; padding-bottom: 1em;">
+                                Manufacturability
+                            </th>
+                        </tr>
+                        <tr style="border-top-width: 1px;">
+                            <td>C-terminal 7mer GRAVY score</td>
+                            <td>{{p.cterm_7mer_gravy_score|round(2)}}</td>
+                        </tr>
+                        <tr>
+                            <td>Max 7mer GRAVY score</td>
+                            <td>{{p.max_7mer_gravy_score|round(2)}}</td>
+                        </tr>
                         <tr>
                             <td>N-terminal Glutamine, Glutamic Acid, or Cysteine</td>
                             <td>{{p.difficult_n_terminal_residue}}</td>
@@ -173,6 +183,10 @@
                             <td>{{p.c_terminal_proline}}</td>
                         </tr>
                         <tr>
+                            <td>Total number of Cysteine residues</td>
+                            <td>{{p.cysteine_count}}</td>
+                        </tr>
+                        <tr>
                             <td>N-terminal Asparagine</td>
                             <td>{{p.n_terminal_asparagine}}</td>
                         </tr>
@@ -180,21 +194,13 @@
                             <td>Number of Asparagine-Proline bonds</td>
                             <td>{{p.asparagine_proline_bond_count}}</td>
                         </tr>
-                        <tr>
-                            <td>Total number of Cysteine residues</td>
-                            <td>{{p.cysteine_count}}</td>
-                        </tr>
-                        <tr>
-                            <td>C-terminal 7mer GRAVY score</td>
-                            <td>{{p.cterm_7mer_gravy_score|round(2)}}</td>
-                        </tr>
-                        <tr>
-                            <td>Max 7mer GRAVY score</td>
-                            <td>{{p.max_7mer_gravy_score|round(2)}}</td>
-                        </tr>
         	            <tr>
-        	            	<td>Predicted mutant epitopes</td>
-        	            	<td class="effect">
+        	            	<th colspan="2" style="padding-top: 1em; padding-bottom: 1em;">
+                                Predicted mutant epitopes
+                            </th>
+                        </tr>
+                        <tr>
+        	            	<td class="effect" colspan="2">
                     			<table class="pure-table effect">
                     				<thead>
                     					<tr>

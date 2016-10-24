@@ -132,7 +132,7 @@ vaccine_peptide_group.add_argument(
 
 vaccine_peptide_group.add_argument(
     "--min-epitope-score",
-    default=0.0001,
+    default=0.001,
     type=float,
     help="Ignore epitopes whose normalized score falls below this threshold")
 

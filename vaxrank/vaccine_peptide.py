@@ -58,6 +58,75 @@ class VaccinePeptide(VaccinePeptideBase):
             manufacturability_scores=compute_manufacturability_scores(
                 mutant_protein_fragment.amino_acids))
 
+    def peptide_synthesis_difficulty_score_tuple(
+            self,
+            hydropathy_threshold_high_priority=1.5,
+            hydropathy_threshold_low_priority=0):
+        """
+        Generates a tuple of scores used for lexicographic sorting of vaccine
+        peptides.
+
+        The most important criterion for choosing a vaccine peptide is to
+        get the mean hydropathy of the C-terminal residues below 1.5
+        and also to ensure that no window of amino acids within
+        the sequence has a mean hydropathy score > 1.5 (using
+        AA values from Table 2 of Kyte & Doolittle 1982).
+
+        If there are multiple vaccine peptides all of whose subsequence
+        windows satisfy the GRAVY (mean hydropathy) < 1.5 constraint then
+        let's optimize the terminal amino acids to exclude ones known to
+        make solid phase synthesis difficult. Additionally we try to
+        minimize the number of cysteine residues to prevent the formation
+        of disulfide bonds.
+
+        If there are multiple vaccine peptides without difficult terminal
+        residues then we return to trying to minimize the GRAVY score, this
+        time trying to push it below 0.
+
+        If we are succsessful at getting the max GRAVY score of any
+        subsequence below 0 then also try to eliminate N-terminal
+        asparagine residues (not as harmful) and asparagine-proline bonds
+        (known to dissociate easily).
+
+        (Sort criteria determined through conversatiosn with JPT)
+        """
+        cterm_7mer_gravy = self.manufacturability_scores.cterm_7mer_gravy_score
+        max_7mer_gravy = self.manufacturability_scores.max_7mer_gravy_score
+
+        # numbers we want to minimize, so a bigger number is worse
+
+        return (
+            # Priority I: C-terminal 7mer GRAVY score < 1.5
+            max(0, cterm_7mer_gravy - hydropathy_threshold_high_priority),
+
+            # Priority II: max 7mer GRAVY score < 1.5
+            max(0, max_7mer_gravy - hydropathy_threshold_high_priority),
+
+            # Priority III: avoid N-terminal Gln, Glu, Cys
+            self.manufacturability_scores.difficult_n_terminal_residue,
+
+            # Priority IV: avoid C-terminal Cys
+            self.manufacturability_scores.c_terminal_cysteine,
+
+            # Priority V: avoid C-terminal Pro
+            self.manufacturability_scores.c_terminal_proline,
+
+            # Priority VI: total number of Cys residues
+            self.manufacturability_scores.cysteine_count,
+
+            # Priority VII: minimize C-terminal 7mer GRAVY score (if > 0)
+            max(0, cterm_7mer_gravy - hydropathy_threshold_low_priority),
+
+            # Priority VIII: minimize max 7mer GRAVY score (if > 0)
+            max(0, max_7mer_gravy - hydropathy_threshold_low_priority),
+
+            # Priority IX: avoid N-terminal Asn
+            self.manufacturability_scores.n_terminal_asparagine,
+
+            # Priority X: avoid Asp-Pro bonds
+            self.manufacturability_scores.asparagine_proline_bond_count,
+        )
+
     def lexicographic_sort_key(self):
         """
         Create tuple of scores so that candidates get sorted lexicographically
@@ -70,21 +139,25 @@ class VaccinePeptide(VaccinePeptideBase):
         essential_score_tuple = (
             # Sum of normalized MHC binding affinities of subsequences
             -self.mutant_epitope_score,
+
             # Number of reads supporting the variant
             -self.mutant_protein_fragment.n_alt_reads
         )
-        manufacturability_score_tuple = tuple(self.manufacturability_scores)
+        manufacturability_score_tuple = self.peptide_synthesis_difficulty_score_tuple()
         extra_score_tuple = (
             # Number of reads supporting the particular protein sequence
             # sequence we're using for this vaccine peptide. Currently
             # all vaccine peptides are drawn from the same larger sequence
             # so this score shouldn't change.
             -self.mutant_protein_fragment.n_alt_reads_supporting_protein_sequence,
+
             # Minimize the sum of non-mutant MHC binding scores
             self.wildtype_epitope_score,
+
             # All else being equal, we prefer to maximize the number of
             # mutant amino acids
             -self.mutant_protein_fragment.n_mutant_amino_acids,
+
             # If nothing else can serve as a tie break then try to center
             # the mutation in the vaccine peptide.
             -self.mutant_protein_fragment.mutation_distance_from_edge
