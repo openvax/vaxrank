@@ -16,6 +16,7 @@ from __future__ import absolute_import, print_function, division
 import logging
 from collections import OrderedDict
 
+from numpy import isclose
 import pandas as pd
 from isovar.protein_sequences import (
     reads_generator_to_protein_sequences_generator,
@@ -27,11 +28,6 @@ from .vaccine_peptide import VaccinePeptide
 
 
 logger = logging.getLogger(__name__)
-
-
-# Lifted from https://www.python.org/dev/peps/pep-0485/#proposed-implementation
-def _isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
-    return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
 
 
 def vaccine_peptides_for_variant(
@@ -101,13 +97,16 @@ def vaccine_peptides_for_variant(
         return candidate_vaccine_peptides
 
     max_score = max(vp.combined_score for vp in candidate_vaccine_peptides)
-    # only keep candidate vaccines that are within 1% of the maximum
-    # combined score
-    filtered_candidate_vaccine_peptides = [
-        vp
-        for vp in candidate_vaccine_peptides
-        if _isclose(max_score, 0.0) or vp.combined_score / max_score > 0.99
-    ]
+    if isclose(max_score, 0.0):
+        filtered_candidate_vaccine_peptides = candidate_vaccine_peptides
+    else:
+        # only keep candidate vaccines that are within 1% of the maximum
+        # combined score
+        filtered_candidate_vaccine_peptides = [
+            vp
+            for vp in candidate_vaccine_peptides
+            if vp.combined_score / max_score > 0.99
+        ]
 
     logger.info(
         "Keeping %d/%d vaccine peptides for %s",

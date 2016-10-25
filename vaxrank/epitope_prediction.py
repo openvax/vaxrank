@@ -132,7 +132,8 @@ def load_reference_peptides_index(genome, force_reload=False):
         fm.build(
             (t.protein_sequence for t in genome.transcripts() if t.is_protein_coding),
             path)
-        logger.info("Done.")
+        logger.info("Done loading FM index")
+        return fm
     return shellinford.FMIndex(filename=path)
 
 def predict_epitopes(mhc_predictor, protein_fragment, min_epitope_score=0, genome=None):

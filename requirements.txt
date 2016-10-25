@@ -1,4 +1,5 @@
 six
+numpy
 pandas
 varcode>=0.5.9
 isovar>=0.2.4
