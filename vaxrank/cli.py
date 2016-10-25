@@ -30,10 +30,10 @@ from isovar.cli.rna_reads import allele_reads_generator_from_args
 
 from .core_logic import ranked_vaccine_peptides, dataframe_from_ranked_list
 from .report import (
-    compute_template_data,
     make_ascii_report,
     make_html_report,
     make_pdf_report,
+    TemplateDataCreator,
 )
 
 
@@ -203,12 +203,14 @@ def load_template_data(args):
         'reviewers': args.output_reviewed_by.split(','),
     }
 
-    template_data = compute_template_data(
+    template_data_creator = TemplateDataCreator(
         ranked_variants_with_vaccine_peptides=ranked_list_for_report,
         mhc_alleles=mhc_alleles,
         variants=variants,
         bam_path=args.bam,
         output_values=output_values)
+
+    template_data = template_data_creator.compute_template_data()
 
     # save pickled template data if necessary. this is meant to make a dev's life easier:
     # as of time of writing, vaxrank takes ~25 min to run, most of which is core logic
