@@ -10,243 +10,150 @@
         </style>
     </head>
     <body>
-    <div id="main">
-    	<h1 id="report-header">Vaccine Peptides Report</h1>
-    	<h3 id="patient-info">PATIENT INFO</h3>
-        <table class="pure-table pure-table-bordered patient-info">
-            <colgroup>
-                <col class="patient-info-column-one">
-                <col class="patient-info-column-two">
-            </colgroup>
-            {% for key, val in patient_info.items() %}
-            <tr>
-                <td>{{ key }}</td>
-                <td>{{ val }}</td>
-            </tr>
-            {% endfor %}
-        </table>
-    	<br>
-        <h3 id="args">COMMAND LINE ARGUMENTS</h4>
-        <table class="pure-table pure-table-bordered args">
-            <colgroup>
-                <col class="args-column-one">
-                <col class="args-column-two">
-            </colgroup>
-            {% for a in args %}
-            <tr>
-                <td class="arg">{{ a[0] }}</td>
-                <td class="arg">{{ a[1] }}</td>
-            </tr>
-            {% endfor %}
-        </table>
-    	<ol class="main">
-    	{% for v in variants %}
-    	<li class="variant-list-item">
-            <div class="variant-span">
-    		<table class="pure-table pure-table-bordered variant">
-    			<colgroup>
-                	<col class="variant-column-one">
-                    <col class="variant-column-two">
+        <div id="main">
+        	<h1 id="report-header">Vaccine Peptides Report</h1>
+
+        	<h3 id="patient-info">PATIENT INFO</h3>
+            <table class="pure-table pure-table-bordered patient-info">
+                <colgroup>
+                    <col class="patient-info-column-one">
+                    <col class="patient-info-column-two">
                 </colgroup>
-                <thead class="variant-head">
-                    <tr>
-                        <td class="variant-head">Variant</td>
-                        <td class="variant-head">{{ v.short_description }}</td>
-                    </tr>
+                {% for key, val in patient_info.items() %}
+                <tr><td>{{ key }}</td><td>{{ val }}</td></tr>
+                {% endfor %}
+            </table>
+        	<br>
+
+            <h3 id="args">COMMAND LINE ARGUMENTS</h4>
+            <table class="pure-table pure-table-bordered args">
+                <colgroup>
+                    <col class="args-column-one">
+                    <col class="args-column-two">
+                </colgroup>
+                {% for a in args %}
+                <tr><td class="arg">{{ a[0] }}</td><td class="arg">{{ a[1] }}</td></tr>
+                {% endfor %}
+            </table>
+        	<ol class="main">
+
+        	{% for v in variants %}
+        	<li class="variant-list-item">
+                <div class="variant-span">
+            		<table class="pure-table pure-table-bordered variant">
+            			<colgroup>
+                        	<col class="variant-column-one">
+                            <col class="variant-column-two">
+                        </colgroup>
+                        <thead class="variant-head">
+                            <tr>
+                                <td class="variant-head">Variant</td>
+                                <td class="variant-head">{{ v.short_description }}</td>
+                            </tr>
+                        </thead>
+                        {% for key, val in v.variant_data.items() %}
+                        <tr><td>{{ key }}</td><td>{{ val }}</td></tr>
+                        {% endfor %}
+                    </table>
+                    <br>
+
+                    <h4 id="effects">Predicted Effect</h4>
+                    <table class="pure-table pure-table-bordered">
+                        {% for key, val in v.effect_data.items() %}
+                        <tr><td>{{ key }}</td><td>{{ val }}</td></tr>
+                        {% endfor %}
+                	</table>
+                	<br>
+
+            		<h4 id="peptides">Vaccine Peptides for variant: {{ v.short_description }}</h4>
+            		<ol class="peptides" type="i">
+            			{% for p in v.peptides %}
+            			<li class="peptide">
+            				<table class="pure-table pure-table-bordered peptide">
+                                <thead>
+                                    <tr><td class="peptide-inner-header">{{ p.header_display_data.aa_before_mutation }}<span class="mutant">{{ p.header_display_data.aa_mutant }}</span>{{ p.header_display_data.aa_after_mutation }}</td></tr>
+                                </thead>
+                                <tr><td class="peptide-inner">
+                                    <table class="pure-table pure-table-bordered peptide-inner">
+                                        <colgroup>
+                                            <col class="peptide-data-column-one">
+                                            <col class="peptide-data-column-two">
+                                        </colgroup>
+                                        {% for key, val in p.peptide_data.items() %}
+                                        <tr><td>{{ key }}</td><td>{{ val }}</td></tr>
+                                        {% endfor %}
+                                    </table>
+                                </td></tr>
+
+                                <tr><td class="peptide-inner-header">Manufacturability</td></tr>
+                                <tr><td class="peptide-inner">
+                                    <table class="pure-table pure-table-bordered peptide-inner">
+                                        <colgroup>
+                                            <col class="peptide-data-column-one">
+                                            <col class="peptide-data-column-two">
+                                        </colgroup>
+                                        {% for key, val in p.manufacturability_data.items() %}
+                                        <tr><td>{{ key }}</td><td>{{ val }}</td></tr>
+                                        {% endfor %}
+                                    </table>
+                                </td></tr>
+
+                                <tr><td class="peptide-inner-header">Predicted mutant epitopes</td></tr>
+                                <tr><td class="peptide-inner">
+                                    <table class="pure-table peptide-inner">
+                                        <thead>
+                                            <tr>
+                                                {% for key in p.epitopes[0] %}
+                                                <td>{{ key }}</td>
+                                                {% endfor %}
+                                            </tr>
+                                        </thead>
+                                        {% for e in p.epitopes %}
+                                        <tr>
+                                            {% for _, val in e.items() %}
+                                            <td>{{ val }}</td>
+                                            {% endfor %}
+                                        </tr>
+                                        {% endfor %}
+                                    </table>
+                                </td></tr>
+                            </table>                            
+            			</li>
+            			{% endfor %}
+            		</ol>
+                </div>
+        	</li>
+        	{% endfor %}
+        	</ol>
+
+            <table class="pure-table pure-table-bordered reviewed-by">
+                <thead>
+                    <tr><td>Reviewed By</td></tr>
+                </thead>
+                {% for r in reviewers %}
+                <tr><td>{{ r }}</td></tr>
+                {% endfor %}
+            </table>
+            <br><br>
+
+            <table class="pure-table pure-table-bordered signature">
+                <thead>
+                    <tr><td>Final Review</td></tr>
                 </thead>
                 <tr>
-                    <td>Gene name</td>
-                    <td>{{ v.gene_name }}</td>
-                </tr>
-                <tr>
-                    <td>Top score</td>
-                    <td>{{ v.top_score|round(4) }}</td>
-                </tr>
-                <tr>
-                    <td>Reads supporting variant allele</td>
-                    <td>{{ v.reads_supporting_variant_allele }}</td>
-                </tr>
-                <tr>
-                    <td>Reads supporting reference allele</td>
-                    <td>{{ v.reads_supporting_reference_allele }}</td>
-                </tr>
-                <tr>
-                    <td>Reads supporting other alleles</td>
-                    <td>{{ v.reads_supporting_other_alleles }}</td>
+                    <td class="signature-inner">
+                        <table class="pure-table signature-inner">
+                            <colgroup>
+                                <col class="signature-column-one">
+                                <col class="signature-column-two">
+                            </colgroup>
+                            <tr><td>Name</td><td>{{ final_review }}</td></tr>
+                            <tr><td>Signature</td><td></td></tr>
+                            <tr><td>Date</td><td></td></tr>
+                        </table>
+                    </td>
                 </tr>
             </table>
-            <br>
-            <h4 id="effects">Predicted Effect</h4>
-            <table class="pure-table pure-table-bordered">
-        		<tr>
-        			<td>Effect type</td>
-        			<td>{{ v.predicted_effect.__class__.__name__ }}</td>
-        		</tr>
-        		<tr>
-        			<td>Transcript name</td>
-        			<td>{{ v.predicted_effect.transcript_name }}</td>
-        		</tr>
-        		<tr>
-        			<td>Transcript ID</td>
-        			<td>{{ v.predicted_effect.transcript_id }}</td>
-        		</tr>
-        		<tr>
-        			<td>Effect description</td>
-        			<td>{{ v.predicted_effect.short_description }}</td>
-        		</tr>
-        	</table>
-        	<br>
-    		<h4 id="peptides">Vaccine Peptides for variant: {{ v.short_description }}</h4>
-    		<ol class="peptides" type="i">
-    			{% for p in v.peptides %}
-    			<li class="peptide">
-    				<table class="pure-table pure-table-bordered peptide">
-    					<colgroup>
-		                	<col class="peptide-column-one">
-		                    <col class="peptide-column-two">
-		                </colgroup>
-    					<thead>
-                    		<tr>
-                        		<td>Amino acid sequence</td>
-		                        <td>{{ p.aa_before_mutation }}<span class="mutant">{{ p.aa_mutant }}</span>{{ p.aa_after_mutation }}</td>
-        	            	</tr>
-            		    </thead>
-            		    <tr>
-		        			<td>Transcript name</td>
-		        			<td>{{ v.predicted_effect.transcript_name }}</td>
-		        		</tr>
-            		    <tr>
-        	            	<td>Length</td>
-        	            	<td>{{ p.length }}</td>
-        	            </tr>
-        	            <tr>
-        	            	<td>Expression score</td>
-        	            	<td>{{ p.expression_score|round(4) }}</td>
-        	            </tr>
-        	            <tr>
-        	            	<td>Mutant epitope score</td>
-        	            	<td>{{ p.mutant_epitope_score|round(4) }}</td>
-        	            </tr>
-        	            <tr>
-        	            	<td>Reads fully spanning cDNA sequence(s)</td>
-        	            	<td>{{ p.num_alt_reads_supporting_protein_sequence }}</td>
-        	            </tr>
-        	            <tr>
-        	            	<td>Mutant amino acids</td>
-        	            	<td>{{ p.num_mutant_amino_acids }}</td>
-        	            </tr>
-        	            <tr>
-        	            	<td>Mutation distance from edge</td>
-        	            	<td>{{ p.mutation_distance_from_edge }}</td>
-        	            </tr>
-                        <tr>
-                            <th colspan="2" style="padding-top: 1em; padding-bottom: 1em;">
-                                Manufacturability
-                            </th>
-                        </tr>
-                        <tr style="border-top-width: 1px;">
-                            <td>C-terminal 7mer GRAVY score</td>
-                            <td>{{p.cterm_7mer_gravy_score|round(2)}}</td>
-                        </tr>
-                        <tr>
-                            <td>Max 7mer GRAVY score</td>
-                            <td>{{p.max_7mer_gravy_score|round(2)}}</td>
-                        </tr>
-                        <tr>
-                            <td>N-terminal Glutamine, Glutamic Acid, or Cysteine</td>
-                            <td>{{p.difficult_n_terminal_residue}}</td>
-                        </tr>
-                        <tr>
-                            <td>C-terminal Cysteine</td>
-                            <td>{{p.c_terminal_cysteine}}</td>
-                        </tr>
-                        <tr>
-                            <td>C-terminal Proline</td>
-                            <td>{{p.c_terminal_proline}}</td>
-                        </tr>
-                        <tr>
-                            <td>Total number of Cysteine residues</td>
-                            <td>{{p.cysteine_count}}</td>
-                        </tr>
-                        <tr>
-                            <td>N-terminal Asparagine</td>
-                            <td>{{p.n_terminal_asparagine}}</td>
-                        </tr>
-                         <tr>
-                            <td>Number of Asparagine-Proline bonds</td>
-                            <td>{{p.asparagine_proline_bond_count}}</td>
-                        </tr>
-        	            <tr>
-        	            	<th colspan="2" style="padding-top: 1em; padding-bottom: 1em;">
-                                Predicted mutant epitopes
-                            </th>
-                        </tr>
-                        <tr>
-        	            	<td class="effect" colspan="2">
-                    			<table class="pure-table effect">
-                    				<thead>
-                    					<tr>
-			                        		<td>Sequence</td>
-					                        <td>IC50</td>
-                                            <td>Score</td>
-					                        <td>Allele</td>
-			        	            	</tr>
-			            		    </thead>
-			            		    {% for e in p.epitopes %}
-		                    		<tr>
-        		            			<td>{{ e.sequence }}</td>
-        		            			<td>{{ e.ic50|round(2) }}</td>
-                                        <td>{{ e.normalized_binding_score|round(4)}}
-        		            			<td>{{ e.allele }}</td>
-		                    		</tr>
-		                    		{% endfor %}
-        		            	</table>
-		                    </td>
-        	            </tr>
-    				</table>
-    			</li>
-    			{% endfor %}
-    		</ol>
-            </div>
-    	</li>
-    	{% endfor %}
-    	</ol>
-        <table class="pure-table pure-table-bordered reviewed-by">
-            <thead>
-                <tr><td>Reviewed By</td></tr>
-            </thead>
-            {% for r in reviewers %}
-            <tr><td>{{ r }}</td></tr>
-            {% endfor %}
-        </table>
-        <br><br>
-        <table class="pure-table pure-table-bordered signature">
-            <thead>
-                <tr><td>Final Review</td></tr>
-            </thead>
-            <tr>
-                <td class="signature-inner">
-                    <table class="pure-table signature-inner">
-                        <colgroup>
-                            <col class="signature-column-one">
-                            <col class="signature-column-two">
-                        </colgroup>
-                        <tr>
-                            <td>Name</td>
-                            <td>{{ final_review }}</td>
-                        </tr>
-                        <tr>
-                            <td>Signature</td>
-                            <td></td>
-                        </tr>
-                        <tr>
-                            <td>Date</td>
-                            <td></td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </div>
+        </div>
     </body>
 </html>
