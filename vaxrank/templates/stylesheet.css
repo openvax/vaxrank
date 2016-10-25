@@ -55,7 +55,7 @@ col.args-column-two {
 
 }
 
-/* Variant list stuff */
+/* Variants */
 ol.main {
 	padding-left: 1.2em;
 	margin-left: 0.1em;
@@ -106,16 +106,6 @@ td.variant-head {
 	padding-left: 0.7em;
 }
 
-/* Effects */
-table.effect {
-	width: 100%;
-	border: none;
-}
-
-td.effect {
-	padding: 0;
-}
-
 /* Peptides */
 ol.peptides {
 	padding-left: 0;
@@ -128,7 +118,7 @@ li.peptide {
 
 table.peptide {
 	margin: -1em 0 2em 2em;
-	width: 90%;
+	width: 80%;
 }
 
 span.mutant {
@@ -141,12 +131,28 @@ span.mutant {
 	margin-right: 2px;
 }
 
-col.peptide-column-one {
-	width: 50%;
+table.peptide-inner {
+	width: 100%;
+	border: none;
 }
 
-col.peptide-column-two {
-	width: 50%;
+td.peptide-inner {
+	padding: 0;
+}
+
+td.peptide-inner-header {
+	font-weight: bold;
+	text-align: center;
+	font-size: 125%;
+	padding: 0.75em;
+}
+
+col.peptide-data-column-one {
+	width: 70%;
+}
+
+col.peptide-data-column-two {
+	width: 30%;
 }
 
 /* Signatures */

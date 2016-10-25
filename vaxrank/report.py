@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import, print_function, division
+from __future__ import absolute_import, division
+from collections import OrderedDict
 import logging
 import os
 import tempfile
@@ -34,115 +35,210 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 )
 
 
-def compute_template_data(
-        ranked_variants_with_vaccine_peptides,
-        mhc_alleles,
-        variants,
-        bam_path):
-    # create dictionary mapping variants to coding effects
-    variants_to_top_coding_effect_dict = {
-        variant: effect_collection.top_priority_effect()
-        for (variant, effect_collection)
-        in variants.effects().drop_silent_and_noncoding().groupby_variant().items()
-    }
+class TemplateDataCreator(object):
+    def __init__(
+            self,
+            ranked_variants_with_vaccine_peptides,
+            mhc_alleles,
+            variants,
+            bam_path,
+            output_values):
+        """
+        Construct a TemplateDataCreator object, from the output of the vaxrank pipeline.
+        """
+        self.ranked_variants_with_vaccine_peptides = ranked_variants_with_vaccine_peptides
+        self.mhc_alleles = mhc_alleles
+        self.variants = variants
+        self.bam_path = bam_path
+        self.output_values = output_values
 
-    template_data = {
-        'vcf_paths': "; ".join(variants.sources),
-        'bam_path': bam_path,
-        'mhc_alleles': " ".join(mhc_alleles),
-        'num_total_somatic_variants': len(variants),
-        'num_somatic_variants_with_predicted_coding_effects':
-            len(variants_to_top_coding_effect_dict),
-    }
-
-    # list ranked variants with their peptides
-    variants = []
-    for i, (variant, vaccine_peptides) in enumerate(
-            ranked_variants_with_vaccine_peptides):
-        variant_short_description = variant.short_description
-        if len(vaccine_peptides) == 0:
-            logger.info("Skipping %s, no vaccine peptides", variant_short_description)
-            continue
-        gene_name = vaccine_peptides[0].mutant_protein_fragment.gene_name
-        peptides = []
-        variant_dict = {
-            'num': i + 1,
-            'short_description': variant_short_description,
-            'gene_name': gene_name,
-            'top_score': vaccine_peptides[0].combined_score,
-            'predicted_effect': variants_to_top_coding_effect_dict.get(variant),
-            'reads_supporting_variant_allele':
-                vaccine_peptides[0].mutant_protein_fragment.n_alt_reads,
-            'reads_supporting_reference_allele':
-                vaccine_peptides[0].mutant_protein_fragment.n_ref_reads,
-            'reads_supporting_other_alleles':
-                vaccine_peptides[0].mutant_protein_fragment.n_other_reads,
-            'peptides': peptides,
+        # create dictionary mapping variants to coding effects
+        self.variants_to_top_coding_effect_dict = {
+            variant: effect_collection.top_priority_effect()
+            for (variant, effect_collection)
+            in self.variants.effects().drop_silent_and_noncoding().groupby_variant().items()
         }
 
-        # compile peptide info
-        for j, vaccine_peptide in enumerate(vaccine_peptides):
-            epitopes = []
-            # compile epitope info
-            for epitope_prediction in vaccine_peptide.epitope_predictions:
-                if epitope_prediction.overlaps_mutation:
-                    score = epitope_prediction.logistic_score()
-                    epitope_dict = {
-                        'sequence': epitope_prediction.peptide_sequence,
-                        'ic50': epitope_prediction.ic50,
-                        'normalized_binding_score': score,
-                        'allele': epitope_prediction.allele,
-                    }
-                    epitopes.append(epitope_dict)
+    def _patient_info(self):
+        """
+        Returns an OrderedDict with patient info.
+        """
+        patient_info = OrderedDict([
+            ('Patient ID', self.output_values['patient_id']),
+            ('VCF (somatic variants) path(s)', '; '.join(self.variants.sources)),
+            ('BAM (RNAseq reads) path', self.bam_path),
+            ('MHC alleles', ' '.join(self.mhc_alleles)),
+            ('Total number of somatic variants', len(self.variants)),
+            ('Somatic variants with predicted coding effects',
+                len(self.variants_to_top_coding_effect_dict)),
+        ])
+        return patient_info
 
-            mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
-            amino_acids = mutant_protein_fragment.amino_acids
-            mutation_start = mutant_protein_fragment.mutant_amino_acid_start_offset
-            mutation_end = mutant_protein_fragment.mutant_amino_acid_end_offset
-            aa_before_mutation = amino_acids[:mutation_start]
-            aa_mutant = amino_acids[mutation_start:mutation_end]
-            aa_after_mutation = amino_acids[mutation_end:]
-            manufacturability_scores = vaccine_peptide.manufacturability_scores
-            peptide_dict = {
-                'num': roman.toRoman(j + 1).lower(),
-                'aa_before_mutation': aa_before_mutation,
-                'aa_mutant': aa_mutant,
-                'aa_after_mutation': aa_after_mutation,
-                'score': vaccine_peptide.combined_score,
-                'length': len(amino_acids),
-                'expression_score': vaccine_peptide.expression_score,
-                'mutant_epitope_score': vaccine_peptide.mutant_epitope_score,
-                'wildtype_epitope_score': vaccine_peptide.wildtype_epitope_score,
-                'num_alt_reads_supporting_protein_sequence':
-                    mutant_protein_fragment.n_alt_reads_supporting_protein_sequence,
-                'num_mutant_amino_acids':
-                    mutant_protein_fragment.n_mutant_amino_acids,
-                'mutation_distance_from_edge':
-                    mutant_protein_fragment.mutation_distance_from_edge,
-                'epitopes': epitopes,
-                'difficult_n_terminal_residue':
-                    int(manufacturability_scores.difficult_n_terminal_residue),
-                'c_terminal_cysteine':
-                    int(manufacturability_scores.c_terminal_cysteine),
-                'c_terminal_proline':
-                    int(manufacturability_scores.c_terminal_proline),
-                'n_terminal_asparagine':
-                    int(manufacturability_scores.n_terminal_asparagine),
-                'asparagine_proline_bond_count':
-                    manufacturability_scores.asparagine_proline_bond_count,
-                'cysteine_count':
-                    manufacturability_scores.cysteine_count,
-                'cterm_7mer_gravy_score':
-                    manufacturability_scores.cterm_7mer_gravy_score,
-                'max_7mer_gravy_score':
-                    manufacturability_scores.max_7mer_gravy_score
+    def _variant_data(self, top_vaccine_peptide):
+        """
+        Returns an OrderedDict with info used to populate variant info section.
+        """
+        variant_data = OrderedDict()
+        mutant_protein_fragment = top_vaccine_peptide.mutant_protein_fragment
+        top_score = round(top_vaccine_peptide.combined_score, 4)
+        variant_data = OrderedDict([
+            ('Gene name', mutant_protein_fragment.gene_name),
+            ('Top score', top_score),
+            ('Reads supporting variant allele', mutant_protein_fragment.n_alt_reads),
+            ('Reads supporting reference allele', mutant_protein_fragment.n_ref_reads),
+            ('Reads supporting other alleles', mutant_protein_fragment.n_other_reads),
+        ])
+        return variant_data
+
+    def _effect_data(self, predicted_effect):
+        """
+        Returns an OrderedDict with info about the given predicted effect.
+        """
+        effect_data = OrderedDict([
+            ('Effect type', predicted_effect.__class__.__name__),
+            ('Transcript name',predicted_effect.transcript_name),
+            ('Transcript ID', predicted_effect.transcript_id),
+            ('Effect description', predicted_effect.short_description),
+        ])
+        return effect_data
+
+    def _peptide_header_display_data(self, vaccine_peptide, rank):
+        """
+        Returns a dictionary with info used to populate the header section of a peptide table.
+
+        Parameters
+        ----------
+        vaccine_peptide : VaccinePeptide
+          The given peptide to convert to display form
+
+        rank : int
+          Rank of vaccine peptide in list
+        """
+        mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
+        amino_acids = mutant_protein_fragment.amino_acids
+        mutation_start = mutant_protein_fragment.mutant_amino_acid_start_offset
+        mutation_end = mutant_protein_fragment.mutant_amino_acid_end_offset
+        aa_before_mutation = amino_acids[:mutation_start]
+        aa_mutant = amino_acids[mutation_start:mutation_end]
+        aa_after_mutation = amino_acids[mutation_end:]
+
+        header_display_data = {
+            'num': roman.toRoman(rank + 1).lower(),
+            'aa_before_mutation': aa_before_mutation,
+            'aa_mutant': aa_mutant,
+            'aa_after_mutation': aa_after_mutation,
+        }
+        return header_display_data
+
+    def _peptide_data(self, vaccine_peptide, transcript_name):
+        """
+        Returns a dictionary with info used to populate peptide table contents.
+
+        Parameters
+        ----------
+        vaccine_peptide : VaccinePeptide
+          The given peptide to convert to display form
+
+        transcript_name : str
+            RNA transcript name (should match that displayed in effect section)
+        """
+        mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
+        amino_acids = mutant_protein_fragment.amino_acids
+        peptide_data = OrderedDict([
+            ('Transcript name', transcript_name),
+            ('Length', len(amino_acids)),
+            ('Expression score', round(vaccine_peptide.expression_score, 4)),
+            ('Mutant epitope score', round(vaccine_peptide.mutant_epitope_score, 4)),
+            ('Combined score', round(vaccine_peptide.combined_score, 4)),
+            ('Reads fully spanning cDNA sequence(s)',
+                mutant_protein_fragment.n_alt_reads_supporting_protein_sequence),
+            ('Mutant amino acids', mutant_protein_fragment.n_mutant_amino_acids),
+            ('Mutation distance from edge',
+                mutant_protein_fragment.mutation_distance_from_edge),
+        ])
+        return peptide_data
+
+    def _manufacturability_data(self, vaccine_peptide):
+        """
+        Returns an OrderedDict with manufacturability data for the given peptide.
+        """
+        scores = vaccine_peptide.manufacturability_scores
+        manufacturability_data = OrderedDict([
+            ('C-terminal 7mer GRAVY score', round(scores.cterm_7mer_gravy_score, 4)),
+            ('Max 7mer GRAVY score', round(scores.max_7mer_gravy_score, 4)),
+            ('N-terminal Glutamine, Glutamic Acid, or Cysteine',
+                int(scores.difficult_n_terminal_residue)),
+            ('C-terminal Cysteine', int(scores.c_terminal_cysteine)),
+            ('C-terminal Proline', int(scores.c_terminal_proline)),
+            ('Total number of Cysteine residues', scores.cysteine_count),
+            ('N-terminal Asparagine', int(scores.n_terminal_asparagine)),
+            ('Number of Asparagine-Proline bonds', scores.asparagine_proline_bond_count),
+        ])
+        return manufacturability_data
+
+    def _epitope_data(self, epitope_prediction):
+        """
+        Returns an OrderedDict with epitope data from the given prediction.
+        """
+        epitope_data = OrderedDict([
+            ('Sequence', epitope_prediction.peptide_sequence),
+            ('IC50', epitope_prediction.ic50),
+            ('Normalized binding score', round(epitope_prediction.logistic_score(), 4)),
+            ('Allele', epitope_prediction.allele),
+        ])
+        return epitope_data
+
+    def compute_template_data(self):
+        patient_info = self._patient_info()
+
+        # list ranked variants with their peptides
+        variants = []
+        for i, (variant, vaccine_peptides) in enumerate(
+                self.ranked_variants_with_vaccine_peptides):
+            variant_short_description = variant.short_description
+            if len(vaccine_peptides) == 0:
+                logger.info("Skipping %s, no vaccine peptides", variant_short_description)
+                continue
+
+            variant_data = self._variant_data(vaccine_peptides[0])
+            predicted_effect = self.variants_to_top_coding_effect_dict.get(variant)
+            effect_data = self._effect_data(predicted_effect)
+
+            peptides = []
+            for j, vaccine_peptide in enumerate(vaccine_peptides):
+                header_display_data = self._peptide_header_display_data(vaccine_peptide, j)
+                peptide_data = self._peptide_data(vaccine_peptide, predicted_effect.transcript_name)
+                manufacturability_data = self._manufacturability_data(vaccine_peptide)
+
+                epitopes = []
+                for epitope_prediction in vaccine_peptide.epitope_predictions:
+                    if epitope_prediction.overlaps_mutation:
+                        epitope_data = self._epitope_data(epitope_prediction)
+                        epitopes.append(epitope_data)
+
+                peptide_dict = {
+                    'header_display_data': header_display_data,
+                    'peptide_data': peptide_data,
+                    'manufacturability_data': manufacturability_data,
+                    'epitopes': epitopes,
+                }
+                peptides.append(peptide_dict)
+
+            variant_dict = {
+                'num': i + 1,
+                'short_description': variant_short_description,
+                'variant_data': variant_data,
+                'effect_data': effect_data,
+                'peptides': peptides,
             }
+            variants.append(variant_dict)
 
-            peptides.append(peptide_dict)
-        variants.append(variant_dict)
-
-    template_data['variants'] = variants
-    return template_data
+        template_data = {
+            'patient_info': patient_info,
+            'variants': variants,
+        }
+        template_data.update(self.output_values)
+        return template_data
 
 
 def _make_report(
