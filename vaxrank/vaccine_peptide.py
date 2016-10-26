@@ -42,13 +42,11 @@ class VaccinePeptide(VaccinePeptideBase):
         wildtype_epitope_score = sum(
             p.logistic_score()
             for p in epitope_predictions
-            if not p.overlaps_mutation)
-
+            if not p.overlaps_mutation or p.occurs_in_reference)
         mutant_epitope_score = sum(
             p.logistic_score()
             for p in epitope_predictions
-            if p.overlaps_mutation)
-
+            if p.overlaps_mutation and not p.occurs_in_reference)
         return VaccinePeptideBase.__new__(
             cls,
             mutant_protein_fragment=mutant_protein_fragment,

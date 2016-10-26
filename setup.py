@@ -68,6 +68,7 @@ if __name__ == '__main__':
         ],
         install_requires=[
             'six',
+            'numpy',
             'pandas',
             'varcode>=0.5.9',
             'isovar>=0.2.4',
@@ -76,6 +77,7 @@ if __name__ == '__main__':
             'jinja2',
             'pdfkit',
             'pypandoc',
+            'shellinford',
         ],
 
         long_description=readme,
