@@ -4,11 +4,12 @@
 ---
 
 {% for v in variants %}
-{{ v.num }}) {{ v.short_description }} ({{ v.gene_name }})
+{{ v.num }}) {{ v.short_description }} ({{ v.variant_data['Gene name'] }})
         {% for key, val in v.variant_data.items() %}
         {{ key }}: {{ val }}
         {% endfor %}
         Vaccine Peptides:
+
         {% for p in v.peptides %}
                 {{ p.header_display_data.num }}. {{ p.header_display_data.aa_before_mutation }}_{{ p.header_display_data.aa_mutant }}_{{ p.header_display_data.aa_after_mutation }} (score = {{ v.variant_data["Top score"] }})
                   {% for key, val in p.peptide_data.items() %}
@@ -24,5 +25,6 @@
                   {% for e in p.epitopes %}
                         * {{ e["Sequence"] }} {{ e["IC50"] }} ({{ e["Allele"] }})
                   {% endfor %}
+
         {% endfor %}
 {% endfor %}
