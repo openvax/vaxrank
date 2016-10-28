@@ -314,7 +314,7 @@ def make_csv_report(
         ranked_variants_with_vaccine_peptides,
         report_dir_path,
         combined_report_path=None):
-    if not os.path.exists(report_dir_path):
+    if report_dir_path and not os.path.exists(report_dir_path):
         os.makedirs(report_dir_path)
 
     frames = []
@@ -345,8 +345,9 @@ def make_csv_report(
                     _sanitize(getattr(vaccine_peptide.manufacturability_scores, field)))
         df = pd.DataFrame(columns, columns=columns.keys())
         frames.append(df)
-        df.to_csv(path, index=False)
-        logger.info('Wrote CSV to %s', path)
+        if report_dir_path:
+            df.to_csv(path, index=False)
+            logger.info('Wrote CSV to %s', path)
 
     if combined_report_path:
         all_dfs = pd.concat(frames)
