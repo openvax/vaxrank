@@ -213,7 +213,7 @@ def ranked_variant_list_with_saved_args(args):
     # be useful to save the data to be able to iterate just on the formatting
     if args.output_pickle_file:
         with open(args.output_pickle_file, 'wb') as f:
-            cPickle.dump(data, f, protocol=2)
+            cPickle.dump(data, f)
             logger.info('Wrote pickle file to %s', args.output_pickle_file)
 
     return data
