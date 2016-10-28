@@ -129,7 +129,7 @@ def cysteine_count(amino_acids):
 def combine_scoring_functions(*scoring_functions):
     """
     Given a list of scoring functions, make a namedtuple with
-    fields of the same names. Returns a ManufacturabilityScores object.
+    fields of the same names. Returns the ManufacturabilityScores class.
     """
     names = [fn.__name__ for fn in scoring_functions]
 

@@ -17,7 +17,6 @@ from collections import OrderedDict
 import sys
 import logging
 import logging.config
-import pickle
 import pkg_resources
 
 from argparse import ArgumentParser
@@ -28,6 +27,7 @@ from mhctools.cli import (
     mhc_alleles_from_args,
     mhc_binding_predictor_from_args,
 )
+from six.moves import cPickle
 from varcode.cli import variant_collection_from_args
 
 from .core_logic import ranked_vaccine_peptides
@@ -59,7 +59,12 @@ def new_run_arg_parser():
 
 
 def cached_run_arg_parser():
-    arg_parser = ArgumentParser()
+    arg_parser = ArgumentParser(
+        prog="vaxrank",
+        description=(
+            "Select personalized vaccine peptides from cancer variants, "
+            "expression data, and patient HLA type."),
+    )
     arg_parser.add_argument(
         "--input-pickle-file",
         default="",
@@ -178,7 +183,7 @@ def ranked_variant_list_with_saved_args(args):
     """
     if hasattr(args, 'input_pickle_file'):
         with open(args.input_pickle_file, 'rb') as f:
-            data = pickle.load(f)
+            data = cPickle.load(f)
             logger.info('Loaded pickle data from %s', args.input_pickle_file)
             return data
 
@@ -208,7 +213,7 @@ def ranked_variant_list_with_saved_args(args):
     # be useful to save the data to be able to iterate just on the formatting
     if args.output_pickle_file:
         with open(args.output_pickle_file, 'wb') as f:
-            pickle.dump(data, f)
+            cPickle.dump(data, f, protocol=2)
             logger.info('Wrote pickle file to %s', args.output_pickle_file)
 
     return data
