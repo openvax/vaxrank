@@ -39,6 +39,11 @@ def check_mutant_amino_acids(variant, mutant_protein_fragment):
             mutant_protein_fragment.amino_acids,
             mutant_protein_fragment.mutant_amino_acid_start_offset,
             mutant_protein_fragment.mutant_amino_acid_end_offset))
+    assert all(
+        t.gene.name in variant.gene_names
+        for t in
+        mutant_protein_fragment.supporting_reference_transcripts), \
+        "Wrong gene names for %s" % (mutant_protein_fragment.supporting_reference_transcripts,)
 
 def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
     # there are two co-occurring variants in the RNAseq data but since
@@ -61,9 +66,11 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
         min_reads_supporting_cdna_sequence=1)
 
     for variant, vaccine_peptides in ranked_list:
-        eq_(1, len(vaccine_peptides),
-        "Expected 1 vaccine peptide for variant '%s' but got %d" % (
-            variant, len(vaccine_peptides)))
+        eq_(
+            1,
+            len(vaccine_peptides),
+            "Expected 1 vaccine peptide for variant '%s' but got %d" % (
+                variant, len(vaccine_peptides)))
         vaccine_peptide = vaccine_peptides[0]
         mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
         check_mutant_amino_acids(variant, mutant_protein_fragment)
