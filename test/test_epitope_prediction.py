@@ -25,11 +25,11 @@ from vaxrank.vaccine_peptide import VaccinePeptide
 
 def test_reference_peptide_logic():
     genome = EnsemblRelease(species="mouse")
-    Wdr13_transcript = genome.transcripts_by_name("Wdr13-001")[0]
+    wdr13_transcript = genome.transcripts_by_name("Wdr13-001")[0]
 
     protein_fragment = MutantProteinFragment(
         variant=None,  # irrelevant to test
-        gene_name=u'Wdr13',
+        gene_name='Wdr13',
         amino_acids='KLQGHSAPVLDVIVNCDESLLASSD',
         mutant_amino_acid_start_offset=12,
         mutant_amino_acid_end_offset=13,
@@ -37,7 +37,7 @@ def test_reference_peptide_logic():
         n_alt_reads=25,
         n_ref_reads=46,
         n_alt_reads_supporting_protein_sequence=2,
-        supporting_reference_transcripts=[Wdr13_transcript])
+        supporting_reference_transcripts=[wdr13_transcript])
 
     epitope_predictions = predict_epitopes(
         mhc_predictor=RandomBindingPredictor(["H-2-Kb", "H-2-Db"]),
