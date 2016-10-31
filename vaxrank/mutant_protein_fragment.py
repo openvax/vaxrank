@@ -37,6 +37,11 @@ MutantProteinFragmentBase = namedtuple("MutantProteinFragment", (
     "mutant_amino_acid_start_offset",
     "mutant_amino_acid_end_offset",
 
+    # PyEnsembl Transcript objects for reference transcripts which
+    # were used to establish the reading frame of coding sequence(s)
+    # detected from RNA
+    "supporting_reference_transcripts",
+
     ###
     # RNA evidence
     ###
@@ -66,7 +71,12 @@ class MutantProteinFragment(MutantProteinFragmentBase):
             n_alt_reads=len(protein_sequence.alt_reads),
             n_ref_reads=len(protein_sequence.ref_reads),
             n_alt_reads_supporting_protein_sequence=len(
-                protein_sequence.alt_reads_supporting_protein_sequence))
+                protein_sequence.alt_reads_supporting_protein_sequence),
+            supporting_reference_transcripts=[
+                variant.ensembl.transcript_by_id(transcript_id)
+                for transcript_id in
+                protein_sequence.transcripts_supporting_protein_sequence
+            ])
 
     def __len__(self):
         return len(self.amino_acids)
@@ -136,7 +146,8 @@ class MutantProteinFragment(MutantProteinFragmentBase):
                     n_overlapping_reads=self.n_overlapping_reads,
                     n_ref_reads=self.n_ref_reads,
                     n_alt_reads=self.n_alt_reads,
-                    n_alt_reads_supporting_protein_sequence=n_supporting_reads)
+                    n_alt_reads_supporting_protein_sequence=n_supporting_reads,
+                    supporting_reference_transcripts=self.supporting_reference_transcripts)
                 yield subsequence_start_offset, subsequence_mutant_protein_fragment
 
     def top_k_subsequences(
