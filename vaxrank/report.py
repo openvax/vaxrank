@@ -13,7 +13,8 @@
 # limitations under the License.
 
 from __future__ import absolute_import, division
-from collections import OrderedDict
+from collections import namedtuple, OrderedDict
+from copy import copy
 import logging
 import os
 import tempfile
@@ -22,6 +23,7 @@ import jinja2
 import pandas as pd
 import pdfkit
 import roman
+from varcode.effects import top_priority_effect
 
 from .manufacturability import ManufacturabilityScores
 
@@ -38,28 +40,42 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 )
 
 
+PatientInfo = namedtuple(
+    "PatientInfo", (
+        "patient_id",
+        "vcf_paths",
+        "bam_path",
+        "mhc_alleles",
+        "num_somatic_variants",
+        "num_coding_effect_variants",
+))
+
+
 class TemplateDataCreator(object):
     def __init__(
             self,
             ranked_variants_with_vaccine_peptides,
-            mhc_alleles,
-            variants,
-            bam_path,
-            output_values):
+            patient_info,
+            final_review,
+            reviewers,
+            args_for_report,
+            input_json_file):
         """
         Construct a TemplateDataCreator object, from the output of the vaxrank pipeline.
         """
         self.ranked_variants_with_vaccine_peptides = ranked_variants_with_vaccine_peptides
-        self.bam_path = bam_path
-        self.output_values = output_values
-        self.mhc_alleles = mhc_alleles
-        self.variants = variants
+        self.patient_info = patient_info
 
-        # create dictionary mapping variants to coding effects
-        self.variants_to_top_coding_effect_dict = {
-            variant: effect_collection.top_priority_effect()
-            for (variant, effect_collection)
-            in self.variants.effects().drop_silent_and_noncoding().groupby_variant().items()
+        # filter output-related command-line args: we want to display everything else
+        args_to_display_in_report = {
+            k: v for k, v in args_for_report.items() if not k.startswith("output")
+        }
+
+        self.template_data = {
+            'args': sorted(args_to_display_in_report.items()),
+            'reviewers': reviewers.split(','),
+            'final_review': final_review,
+            'input_json_file': input_json_file,
         }
 
     def _patient_info(self):
@@ -67,13 +83,13 @@ class TemplateDataCreator(object):
         Returns an OrderedDict with patient info.
         """
         patient_info = OrderedDict([
-            ('Patient ID', self.output_values['patient_id']),
-            ('VCF (somatic variants) path(s)', '; '.join(self.variants.sources)),
-            ('BAM (RNAseq reads) path', self.bam_path),
-            ('MHC alleles', ' '.join(self.mhc_alleles)),
-            ('Total number of somatic variants', len(self.variants)),
+            ('Patient ID', self.patient_info.patient_id),
+            ('VCF (somatic variants) path(s)', '; '.join(self.patient_info.vcf_paths)),
+            ('BAM (RNAseq reads) path', self.patient_info.bam_path),
+            ('MHC alleles', ' '.join(self.patient_info.mhc_alleles)),
+            ('Total number of somatic variants', self.patient_info.num_somatic_variants),
             ('Somatic variants with predicted coding effects',
-                len(self.variants_to_top_coding_effect_dict)),
+                self.patient_info.num_coding_effect_variants),
         ])
         return patient_info
 
@@ -205,7 +221,9 @@ class TemplateDataCreator(object):
                 continue
 
             variant_data = self._variant_data(vaccine_peptides[0])
-            predicted_effect = self.variants_to_top_coding_effect_dict.get(variant)
+            # TODO(julia): is this right?
+            predicted_effect = top_priority_effect([
+                variant.effect_on_transcript(t) for t in variant.transcripts])
             effect_data = self._effect_data(predicted_effect)
 
             peptides = []
@@ -237,12 +255,11 @@ class TemplateDataCreator(object):
             }
             variants.append(variant_dict)
 
-        template_data = {
+        self.template_data.update({
             'patient_info': patient_info,
             'variants': variants,
-        }
-        template_data.update(self.output_values)
-        return template_data
+        })
+        return self.template_data
 
 
 def _make_report(

@@ -77,7 +77,7 @@ if __name__ == '__main__':
             'jinja2',
             'pdfkit',
             'pypandoc',
-            'shellinford>=0.3.3',
+            'shellinford>=0.3.4',
         ],
 
         long_description=readme,

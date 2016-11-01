@@ -8,7 +8,7 @@ vaxrank \
     --output-ascii-report vaccine-peptides-report.txt \
     --output-html-report vaccine-peptides-report.html \
     --output-pdf-report vaccine-peptides-report.pdf \
-    --output-pickle-file report.pkl \
+    --output-json-file report.json \
     --output-reviewed-by "John Doe,Jane Doe" \
     --output-final-review "All the Does" \
-    --output-patient-id "Namey McName"
+    --output-patient-id "Test Patient"
