@@ -20,6 +20,7 @@ import os
 from appdirs import user_cache_dir
 import numpy as np
 import shellinford
+import six
 
 
 logger = logging.getLogger(__name__)
@@ -95,8 +96,8 @@ def fm_index_path(genome):
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
 
-    return os.path.join(cache_dir, '%s_%d.fm' % (
-        genome.species.latin_name, genome.release))
+    return os.path.join(cache_dir, '%s_%d_%d.fm' % (
+        genome.species.latin_name, genome.release, 2 if six.PY2 else 3))
 
 def index_contains_kmer(fm, kmer):
     """

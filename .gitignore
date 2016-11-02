@@ -66,3 +66,5 @@ vaccine-peptides-report.txt
 vaccine-peptides-report.html
 vaccine-peptides-report.pdf
 vaccine-peptides.csv
+vaccine-peptides-reports/
+report.json

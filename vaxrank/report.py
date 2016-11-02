@@ -13,14 +13,19 @@
 # limitations under the License.
 
 from __future__ import absolute_import, division
-from collections import OrderedDict
+from collections import namedtuple, OrderedDict
+from copy import copy
 import logging
 import os
 import tempfile
 
 import jinja2
+import pandas as pd
 import pdfkit
 import roman
+from varcode.effects import top_priority_effect
+
+from .manufacturability import ManufacturabilityScores
 
 
 logger = logging.getLogger(__name__)
@@ -35,28 +40,42 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 )
 
 
+PatientInfo = namedtuple(
+    "PatientInfo", (
+        "patient_id",
+        "vcf_paths",
+        "bam_path",
+        "mhc_alleles",
+        "num_somatic_variants",
+        "num_coding_effect_variants",
+))
+
+
 class TemplateDataCreator(object):
     def __init__(
             self,
             ranked_variants_with_vaccine_peptides,
-            mhc_alleles,
-            variants,
-            bam_path,
-            output_values):
+            patient_info,
+            final_review,
+            reviewers,
+            args_for_report,
+            input_json_file):
         """
         Construct a TemplateDataCreator object, from the output of the vaxrank pipeline.
         """
         self.ranked_variants_with_vaccine_peptides = ranked_variants_with_vaccine_peptides
-        self.mhc_alleles = mhc_alleles
-        self.variants = variants
-        self.bam_path = bam_path
-        self.output_values = output_values
+        self.patient_info = patient_info
 
-        # create dictionary mapping variants to coding effects
-        self.variants_to_top_coding_effect_dict = {
-            variant: effect_collection.top_priority_effect()
-            for (variant, effect_collection)
-            in self.variants.effects().drop_silent_and_noncoding().groupby_variant().items()
+        # filter output-related command-line args: we want to display everything else
+        args_to_display_in_report = {
+            k: v for k, v in args_for_report.items() if not k.startswith("output")
+        }
+
+        self.template_data = {
+            'args': sorted(args_to_display_in_report.items()),
+            'reviewers': reviewers.split(','),
+            'final_review': final_review,
+            'input_json_file': input_json_file,
         }
 
     def _patient_info(self):
@@ -64,13 +83,13 @@ class TemplateDataCreator(object):
         Returns an OrderedDict with patient info.
         """
         patient_info = OrderedDict([
-            ('Patient ID', self.output_values['patient_id']),
-            ('VCF (somatic variants) path(s)', '; '.join(self.variants.sources)),
-            ('BAM (RNAseq reads) path', self.bam_path),
-            ('MHC alleles', ' '.join(self.mhc_alleles)),
-            ('Total number of somatic variants', len(self.variants)),
+            ('Patient ID', self.patient_info.patient_id),
+            ('VCF (somatic variants) path(s)', '; '.join(self.patient_info.vcf_paths)),
+            ('BAM (RNAseq reads) path', self.patient_info.bam_path),
+            ('MHC alleles', ' '.join(self.patient_info.mhc_alleles)),
+            ('Total number of somatic variants', self.patient_info.num_somatic_variants),
             ('Somatic variants with predicted coding effects',
-                len(self.variants_to_top_coding_effect_dict)),
+                self.patient_info.num_coding_effect_variants),
         ])
         return patient_info
 
@@ -197,11 +216,14 @@ class TemplateDataCreator(object):
                 self.ranked_variants_with_vaccine_peptides):
             variant_short_description = variant.short_description
             if len(vaccine_peptides) == 0:
-                logger.info("Skipping %s, no vaccine peptides", variant_short_description)
+                logger.info("Skipping gene(s) %s, variant %s: no vaccine peptides",
+                    variant.gene_names, variant_short_description)
                 continue
 
             variant_data = self._variant_data(vaccine_peptides[0])
-            predicted_effect = self.variants_to_top_coding_effect_dict.get(variant)
+            # TODO(julia): is this right?
+            predicted_effect = top_priority_effect([
+                variant.effect_on_transcript(t) for t in variant.transcripts])
             effect_data = self._effect_data(predicted_effect)
 
             peptides = []
@@ -233,12 +255,11 @@ class TemplateDataCreator(object):
             }
             variants.append(variant_dict)
 
-        template_data = {
+        self.template_data.update({
             'patient_info': patient_info,
             'variants': variants,
-        }
-        template_data.update(self.output_values)
-        return template_data
+        })
+        return self.template_data
 
 
 def _make_report(
@@ -277,3 +298,82 @@ def make_pdf_report(
         }
         pdfkit.from_file(f.name, pdf_report_path, options=options)
     logger.info('Wrote PDF report to %s', pdf_report_path)
+
+def new_columns():
+    columns = OrderedDict([
+        ("amino_acids", []),
+        ("chr", []),
+        ("pos", []),
+        ("ref", []),
+        ("alt", []),
+        ("variant_rank", []),
+        ("peptide_rank", []),
+        ("mutation_start", []),
+        ("mutation_end", []),
+        ("combined_score", []),
+        ("mutant_epitope_score", []),
+    ])
+    for field in ManufacturabilityScores._fields:
+        columns[field] = []
+    return columns
+
+def _sanitize(val):
+    """
+    Converts values into display-friendly
+    """
+    if type(val) == bool:
+        val = int(val)
+    elif type(val) == float:
+        val = round(val, 4)
+    return val
+
+def make_csv_report(
+        ranked_variants_with_vaccine_peptides,
+        report_dir_path,
+        combined_report_path=None):
+    if report_dir_path and not os.path.exists(report_dir_path):
+        os.makedirs(report_dir_path)
+
+    frames = []
+    for i, (variant, vaccine_peptides) in enumerate(ranked_variants_with_vaccine_peptides):
+        if not vaccine_peptides:
+            continue
+        filename = '%d_%s_chr%s_%d_%s_%s.csv' % (
+            i + 1, vaccine_peptides[0].mutant_protein_fragment.gene_name,
+            variant.contig, variant.start, variant.ref, variant.alt)
+        path = os.path.join(report_dir_path, filename)
+        columns = new_columns()
+        for j, vaccine_peptide in enumerate(vaccine_peptides):
+            columns["chr"].append(variant.contig)
+            columns["pos"].append(variant.original_start)
+            columns["ref"].append(variant.original_ref)
+            columns["alt"].append(variant.original_alt)
+            columns["variant_rank"].append(i + 1)
+            columns["peptide_rank"].append(j + 1)
+            columns["amino_acids"].append(vaccine_peptide.mutant_protein_fragment.amino_acids)
+            columns["mutation_start"].append(
+                vaccine_peptide.mutant_protein_fragment.mutant_amino_acid_start_offset)
+            columns["mutation_end"].append(
+                vaccine_peptide.mutant_protein_fragment.mutant_amino_acid_end_offset)
+            columns["combined_score"].append(round(vaccine_peptide.combined_score, 4))
+            columns["mutant_epitope_score"].append(round(vaccine_peptide.mutant_epitope_score, 4))
+            for field in ManufacturabilityScores._fields:
+                columns[field].append(
+                    _sanitize(getattr(vaccine_peptide.manufacturability_scores, field)))
+        df = pd.DataFrame(columns, columns=columns.keys())
+        frames.append(df)
+        if report_dir_path:
+            df.to_csv(path, index=False)
+            logger.info('Wrote CSV to %s', path)
+
+    if combined_report_path:
+        all_dfs = pd.concat(frames)
+        # move rank columns to the front of the lines, for easy visual grouping
+        colnames = all_dfs.columns.tolist()
+        colnames.insert(0, colnames.pop(colnames.index('peptide_rank')))
+        colnames.insert(0, colnames.pop(colnames.index('variant_rank')))
+        all_dfs = all_dfs.reindex(columns=colnames)
+
+        all_dfs.to_csv(combined_report_path, index=False)
+        logger.info('Wrote combined CSV to %s', combined_report_path)
+

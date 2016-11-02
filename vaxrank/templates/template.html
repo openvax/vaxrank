@@ -31,10 +31,13 @@
                     <col class="args-column-one">
                     <col class="args-column-two">
                 </colgroup>
-                {% for a in args %}
-                <tr><td class="arg">{{ a[0] }}</td><td class="arg">{{ a[1] }}</td></tr>
+                {% for key, val in args %}
+                <tr><td class="arg">{{ key }}</td><td class="arg">{{ val }}</td></tr>
                 {% endfor %}
             </table>
+            {% if input_json_file %}
+            <br><br><h4>Report generated from saved location: {{ input_json_file }}</h4>
+            {% endif %}
         	<ol class="main">
 
         	{% for v in variants %}

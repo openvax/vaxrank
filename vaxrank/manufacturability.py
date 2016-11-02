@@ -122,25 +122,25 @@ def cysteine_count(amino_acids):
     """
     How many cysteines are in the amino acid sequence?
     Problem with cysteine residues: They can form disulfide bonds across
-    distant parts of the peptide,
+    distant parts of the peptide
     """
     return sum(amino_acid == "C" for amino_acid in amino_acids)
 
 def combine_scoring_functions(*scoring_functions):
     """
     Given a list of scoring functions, make a namedtuple with
-    fields of the same names.
+    fields of the same names. Returns the ManufacturabilityScores class.
     """
     names = [fn.__name__ for fn in scoring_functions]
-    klass = namedtuple("ManufacturabilityScores", names)
 
-    def run_scoring_functions(amino_acids):
-        return klass(*[fn(amino_acids) for fn in scoring_functions])
+    class ManufacturabilityScores(namedtuple('ManufacturabilityScores', names)):
+        @classmethod
+        def from_amino_acids(cls, amino_acids):
+            return cls(*[fn(amino_acids) for fn in scoring_functions])
 
-    return run_scoring_functions
+    return ManufacturabilityScores
 
-
-compute_manufacturability_scores = combine_scoring_functions(
+ManufacturabilityScores = combine_scoring_functions(
 
     # Priority I: GRAVY score of 7 residues closest to the C terminus
     cterm_7mer_gravy_score,
