@@ -86,7 +86,7 @@ class VaccinePeptide(VaccinePeptideBase):
         asparagine residues (not as harmful) and asparagine-proline bonds
         (known to dissociate easily).
 
-        (Sort criteria determined through conversatiosn with JPT)
+        (Sort criteria determined through conversations with manufacturer)
         """
         cterm_7mer_gravy = self.manufacturability_scores.cterm_7mer_gravy_score
         max_7mer_gravy = self.manufacturability_scores.max_7mer_gravy_score
