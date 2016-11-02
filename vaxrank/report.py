@@ -220,10 +220,12 @@ class TemplateDataCreator(object):
                     variant.gene_names, variant_short_description)
                 continue
 
-            variant_data = self._variant_data(vaccine_peptides[0])
+            top_peptide = vaccine_peptides[0]
+            variant_data = self._variant_data(top_peptide)
             # TODO(julia): is this right?
-            predicted_effect = top_priority_effect([
-                variant.effect_on_transcript(t) for t in variant.transcripts])
+            effects = [variant.effect_on_transcript(t) for t in
+                top_peptide.mutant_protein_fragment.supporting_reference_transcripts]
+            predicted_effect = top_priority_effect(effects)
             effect_data = self._effect_data(predicted_effect)
 
             peptides = []
