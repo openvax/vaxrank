@@ -220,7 +220,7 @@ def ranked_variant_list_with_metadata(args):
 
     # TODO(julia): is this right?
     num_coding_effect_variants = len(
-        variants.effects().drop_silent_and_noncoding().groupby_variant().items())
+        variants.effects().drop_silent_and_noncoding().groupby_variant())
     patient_info = PatientInfo(
         patient_id=args.output_patient_id,
         vcf_paths=variants.sources,
