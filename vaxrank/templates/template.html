@@ -68,6 +68,16 @@
                 	</table>
                 	<br>
 
+                    {% if v.databases %}
+                    <h4 id="effects">Databases</h4>
+                    <table class="pure-table pure-table-bordered">
+                        {% for key, val in v.databases.items() %}
+                        <tr><td>{{ key }}</td><td><a href="{{ val }}">{{ val }}</a></td></tr>
+                        {% endfor %}
+                    </table>
+                    <br>
+                    {% endif %}
+
             		<h4 id="peptides">Vaccine Peptides for variant: {{ v.short_description }}</h4>
             		<ol class="peptides" type="i">
             			{% for p in v.peptides %}

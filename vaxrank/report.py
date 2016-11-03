@@ -15,9 +15,11 @@
 from __future__ import absolute_import, division
 from collections import namedtuple, OrderedDict
 from copy import copy
+import json
 import logging
 import os
 import tempfile
+import urllib2
 
 import jinja2
 import pandas as pd
@@ -207,6 +209,33 @@ class TemplateDataCreator(object):
         ])
         return epitope_data
 
+    def _query_wustl(self, predicted_effect, gene_name):
+        """
+        Returns a link to the WUSTL page for this variant, if present.
+        """
+        amino_acids = predicted_effect.short_description
+        api_url = "http://docm.genome.wustl.edu/api/v1/variants.json?amino_acids=%s&genes=%s" % (
+            amino_acids, gene_name.upper())
+        logger.info("WUSTL link: %s", api_url)
+        contents = json.load(urllib2.urlopen(api_url))
+
+        if len(contents) > 0:
+            hgvs = contents[0]['hgvs']
+            link_for_report = "http://docm.genome.wustl.edu/variants/%s" % hgvs
+            logger.info("Link for report: %s", link_for_report)
+            return link_for_report
+
+        logger.info("No response from WUSTL!")
+        return None
+
+    def _databases(self, predicted_effect, gene_name):
+        databases = {}
+        wustl_link = self._query_wustl(predicted_effect, gene_name)
+        if wustl_link:
+            databases['WUSTL'] = escape(wustl_link)
+
+        return databases
+
     def compute_template_data(self):
         patient_info = self._patient_info()
 
@@ -227,6 +256,9 @@ class TemplateDataCreator(object):
                 top_peptide.mutant_protein_fragment.supporting_reference_transcripts]
             predicted_effect = top_priority_effect(effects)
             effect_data = self._effect_data(predicted_effect)
+
+            databases = self._databases(
+                predicted_effect, top_peptide.mutant_protein_fragment.gene_name)
 
             peptides = []
             for j, vaccine_peptide in enumerate(vaccine_peptides):
@@ -254,6 +286,7 @@ class TemplateDataCreator(object):
                 'variant_data': variant_data,
                 'effect_data': effect_data,
                 'peptides': peptides,
+                'databases': databases,
             }
             variants.append(variant_dict)
 
