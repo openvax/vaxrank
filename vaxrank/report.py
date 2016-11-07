@@ -15,7 +15,6 @@
 from __future__ import absolute_import, division
 from collections import namedtuple, OrderedDict
 from copy import copy
-import json
 import logging
 from operator import attrgetter
 import os
@@ -24,8 +23,8 @@ import tempfile
 import jinja2
 import pandas as pd
 import pdfkit
+import requests
 import roman
-import six.moves.urllib.request as six_request
 from varcode import load_vcf_fast, Variant
 from varcode.effects import top_priority_effect
 
@@ -243,7 +242,7 @@ class TemplateDataCreator(object):
         api_url = "http://docm.genome.wustl.edu/api/v1/variants.json?amino_acids=%s&genes=%s" % (
             amino_acids, gene_name.upper())
         logger.info("WUSTL link: %s", api_url)
-        contents = json.load(six_request.urlopen(api_url))
+        contents = requests.get(api_url).json()
 
         if len(contents) > 0:
             hgvs = contents[0]['hgvs']
