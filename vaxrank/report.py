@@ -25,7 +25,7 @@ import jinja2
 import pandas as pd
 import pdfkit
 import roman
-from six.moves.urllib.request import urlopen
+import six.moves.urllib.request as six_request
 from varcode import load_vcf_fast, Variant
 from varcode.effects import top_priority_effect
 
@@ -243,7 +243,7 @@ class TemplateDataCreator(object):
         api_url = "http://docm.genome.wustl.edu/api/v1/variants.json?amino_acids=%s&genes=%s" % (
             amino_acids, gene_name.upper())
         logger.info("WUSTL link: %s", api_url)
-        contents = json.load(urlopen(api_url))
+        contents = json.load(six_request.urlopen(api_url))
 
         if len(contents) > 0:
             hgvs = contents[0]['hgvs']
