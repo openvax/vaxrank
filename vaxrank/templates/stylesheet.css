@@ -1,3 +1,9 @@
+/* this is to fix HTML->PDF rendering on Debian: wkhtmltopdf screws up the 
+line heights otherwise */
+table, table.th, table.td {
+    line-height: 1.1em;
+}
+
 #main {
 	padding: 4em;
 }
