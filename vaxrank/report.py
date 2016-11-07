@@ -17,6 +17,7 @@ from collections import namedtuple, OrderedDict
 from copy import copy
 import json
 import logging
+from operator import attrgetter
 import os
 import tempfile
 import urllib2
@@ -25,6 +26,7 @@ import jinja2
 import pandas as pd
 import pdfkit
 import roman
+from varcode import load_vcf_fast, Variant
 from varcode.effects import top_priority_effect
 
 from .manufacturability import ManufacturabilityScores
@@ -61,7 +63,8 @@ class TemplateDataCreator(object):
             final_review,
             reviewers,
             args_for_report,
-            input_json_file):
+            input_json_file,
+            cosmic_vcf_filename=None):
         """
         Construct a TemplateDataCreator object, from the output of the vaxrank pipeline.
         """
@@ -79,6 +82,15 @@ class TemplateDataCreator(object):
             'final_review': final_review,
             'input_json_file': input_json_file,
         }
+
+        # map from peptide objects to their COSMIC IDs if they exist
+        if cosmic_vcf_filename:
+            logger.info('Loading COSMIC data...')
+            self.cosmic_variant_collection = load_vcf_fast(
+                cosmic_vcf_filename, allow_extended_nucleotides=True, include_info=False)
+            logger.info('COSMIC data loaded.')
+        else:
+            self.cosmic_variant_collection = None
 
     def _patient_info(self):
         """
@@ -209,6 +221,20 @@ class TemplateDataCreator(object):
         ])
         return epitope_data
 
+    def _query_cosmic(self, variant):
+        if not self.cosmic_variant_collection:
+            return None
+        if variant in self.cosmic_variant_collection.metadata:
+            cosmic_id = self.cosmic_variant_collection.metadata[key]['id']
+            link_for_report = "http://cancer.sanger.ac.uk/cosmic/gene/analysis?ln=%s" % \
+                    cosmic_id[4:]  # IDs in the DB are of the form 'COSM725245'
+            logger.info("Link for report: %s", link_for_report)
+            return link_for_report
+
+        logger.info("Variant not in COSMIC")
+        return None
+
+
     def _query_wustl(self, predicted_effect, gene_name):
         """
         Returns a link to the WUSTL page for this variant, if present.
@@ -228,11 +254,15 @@ class TemplateDataCreator(object):
         logger.info("No response from WUSTL!")
         return None
 
-    def _databases(self, predicted_effect, gene_name):
+    def _databases(self, variant, predicted_effect, gene_name):
         databases = {}
         wustl_link = self._query_wustl(predicted_effect, gene_name)
         if wustl_link:
-            databases['WUSTL'] = escape(wustl_link)
+            databases['WUSTL'] = wustl_link
+
+        cosmic_link = self._query_cosmic(variant)
+        if cosmic_link:
+            databases['COSMIC'] = cosmic_link
 
         return databases
 
@@ -251,14 +281,13 @@ class TemplateDataCreator(object):
 
             top_peptide = vaccine_peptides[0]
             variant_data = self._variant_data(top_peptide)
-            # TODO(julia): is this right?
             effects = [variant.effect_on_transcript(t) for t in
                 top_peptide.mutant_protein_fragment.supporting_reference_transcripts]
             predicted_effect = top_priority_effect(effects)
             effect_data = self._effect_data(predicted_effect)
 
             databases = self._databases(
-                predicted_effect, top_peptide.mutant_protein_fragment.gene_name)
+                variant, predicted_effect, top_peptide.mutant_protein_fragment.gene_name)
 
             peptides = []
             for j, vaccine_peptide in enumerate(vaccine_peptides):
@@ -267,7 +296,9 @@ class TemplateDataCreator(object):
                 manufacturability_data = self._manufacturability_data(vaccine_peptide)
 
                 epitopes = []
-                for epitope_prediction in vaccine_peptide.epitope_predictions:
+                sorted_epitope_predictions = sorted(
+                    vaccine_peptide.epitope_predictions, key=attrgetter('ic50'))
+                for epitope_prediction in sorted_epitope_predictions:
                     if epitope_prediction.overlaps_mutation:
                         epitope_data = self._epitope_data(epitope_prediction)
                         epitopes.append(epitope_data)

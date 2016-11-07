@@ -56,6 +56,7 @@ def new_run_arg_parser():
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
     add_output_args(arg_parser)
+    add_supplemental_report_args(arg_parser)
     return arg_parser
 
 
@@ -71,6 +72,7 @@ def cached_run_arg_parser():
         default="",
         help="Path to JSON file containing results of vaccine peptide report")
     add_output_args(arg_parser)
+    add_supplemental_report_args(arg_parser)
     return arg_parser
 
 
@@ -157,6 +159,14 @@ def add_vaccine_peptide_args(arg_parser):
         default=0.001,
         type=float,
         help="Ignore epitopes whose normalized score falls below this threshold")
+
+
+def add_supplemental_report_args(arg_parser):
+    report_args_group = arg_parser.add_argument_group("Supplemental report options")
+    report_args_group.add_argument(
+        "--cosmic_vcf_filename",
+        default="",
+        help="Local path to COSMIC vcf")
 
 
 def check_args(args):
@@ -300,7 +310,8 @@ def main(args_list=None):
         final_review=args.output_final_review,
         reviewers=args.output_reviewed_by,
         args_for_report=args_for_report,
-        input_json_file=input_json_file)
+        input_json_file=input_json_file,
+        cosmic_vcf_filename=args.cosmic_vcf_filename)
     template_data = template_data_creator.compute_template_data()
 
     if args.output_ascii_report:
