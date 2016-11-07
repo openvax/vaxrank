@@ -225,7 +225,7 @@ class TemplateDataCreator(object):
         if not self.cosmic_variant_collection:
             return None
         if variant in self.cosmic_variant_collection.metadata:
-            cosmic_id = self.cosmic_variant_collection.metadata[key]['id']
+            cosmic_id = self.cosmic_variant_collection.metadata[variant]['id']
             link_for_report = "http://cancer.sanger.ac.uk/cosmic/gene/analysis?ln=%s" % \
                     cosmic_id[4:]  # IDs in the DB are of the form 'COSM725245'
             logger.info("Link for report: %s", link_for_report)
