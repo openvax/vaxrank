@@ -40,13 +40,13 @@ def test_reference_peptide_logic():
         supporting_reference_transcripts=[wdr13_transcript])
 
     epitope_predictions = predict_epitopes(
-        mhc_predictor=RandomBindingPredictor(["H-2-Kb", "H-2-Db"]),
+        mhc_predictor=RandomBindingPredictor(["H-2-Kb"]),
         protein_fragment=protein_fragment,
         genome=genome)
 
     # occurs in protein ENSMUSP00000033506
-    prediction_occurs_in_reference = epitope_predictions['NCDESLLAS']
-    prediction_does_not_occur_in_reference = epitope_predictions['LDVIVNCDE']
+    prediction_occurs_in_reference = epitope_predictions[('NCDESLLAS', 'H-2-Kb')]
+    prediction_does_not_occur_in_reference = epitope_predictions[('LDVIVNCDE', 'H-2-Kb')]
     ok_(prediction_occurs_in_reference.occurs_in_reference)
     ok_(not prediction_does_not_occur_in_reference.occurs_in_reference)
 
