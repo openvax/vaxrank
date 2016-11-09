@@ -139,8 +139,8 @@ def load_reference_peptides_index(genome, force_reload=False):
 
 def predict_epitopes(mhc_predictor, protein_fragment, min_epitope_score=0, genome=None):
     """
-    Returns an OrderedDict of EpitopePrediction objects, keyed by peptide sequence, that have
-    a normalized score greater than min_epitope_score.
+    Returns an OrderedDict of EpitopePrediction objects, keyed by a (peptide sequence, allele)
+    tuple, that have a normalized score greater than min_epitope_score.
 
     Uses the input genome to evaluate whether the epitope occurs in reference.
     """
@@ -173,7 +173,8 @@ def predict_epitopes(mhc_predictor, protein_fragment, min_epitope_score=0, genom
             overlaps_mutation=overlaps_mutation,
             occurs_in_reference=occurs_in_reference)
         if epitope_prediction.logistic_score() >= min_epitope_score:
-            results[epitope_prediction.peptide_sequence] = epitope_prediction
+            key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)
+            results[key] = epitope_prediction
 
     logger.info('%d out of %d peptides occur in reference', num_occurs_in_reference, num_total)
     return results
