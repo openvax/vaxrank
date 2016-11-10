@@ -392,6 +392,14 @@ def _sanitize(val):
         val = round(val, 4)
     return val
 
+def resize_columns(worksheet, amino_acids_col, pos_col):
+    """
+    Resizes amino acid and mutant position columns in the Excel sheet so that they don't
+    have to be expanded.
+    """
+    worksheet.set_column('%s:%s' % (amino_acids_col, amino_acids_col), 40)
+    worksheet.set_column('%s:%s' % (pos_col, pos_col), 12)
+
 def make_csv_report(
         ranked_variants_with_vaccine_peptides,
         excel_report_path=None,
@@ -444,10 +452,12 @@ def make_csv_report(
         colnames.insert(0, colnames.pop(colnames.index('')))
         all_dfs = all_dfs.reindex(columns=colnames)
         all_dfs.to_excel(writer, sheet_name='All', index=False)
+        resize_columns(writer.sheets['All'], 'B', 'D')
 
         # add one sheet per variant
         for sheet_name, df in frames.items():
             df.to_excel(writer, sheet_name=sheet_name, index=False)
+            resize_columns(writer.sheets[sheet_name], 'A', 'C')
 
         writer.save()
         logger.info('Wrote manufacturer XLSX file to %s', excel_report_path)
