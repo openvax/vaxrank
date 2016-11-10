@@ -20,6 +20,14 @@ def test_csv_report():
         lines = contents.split("\n")
         assert len(lines) > 0
 
+def test_xlsx_report():
+    with NamedTemporaryFile(mode="r", delete=False) as f:
+        csv_args = cli_args_for_b16_seqdata + ["--output-xlsx-report", f.name]
+        run_shell_script(csv_args)
+        contents = f.read()
+        lines = contents.split("\n")
+        assert len(lines) > 0
+
 def test_html_report():
     with NamedTemporaryFile(mode="r") as f:
         html_args = cli_args_for_b16_seqdata + ["--output-html", f.name]
