@@ -392,21 +392,31 @@ def _sanitize(val):
         val = round(val, 4)
     return val
 
+def resize_columns(worksheet, amino_acids_col, pos_col):
+    """
+    Resizes amino acid and mutant position columns in the Excel sheet so that they don't
+    have to be expanded.
+    """
+    worksheet.set_column('%s:%s' % (amino_acids_col, amino_acids_col), 40)
+    worksheet.set_column('%s:%s' % (pos_col, pos_col), 12)
+
 def make_csv_report(
         ranked_variants_with_vaccine_peptides,
-        report_dir_path,
-        combined_report_path=None):
-    if report_dir_path and not os.path.exists(report_dir_path):
-        os.makedirs(report_dir_path)
-
-    frames = []
+        excel_report_path=None,
+        csv_report_path=None):
+    """
+    Writes out CSV/XLSX reports as needed.
+    """
+    # make a bunch of pd frames, save them in an OrderedDict with keys being descriptive Excel
+    # sheet names (will be used later for making the Excel report if needed)
+    frames = OrderedDict()
     for i, (variant, vaccine_peptides) in enumerate(ranked_variants_with_vaccine_peptides):
         if not vaccine_peptides:
             continue
-        filename = '%d_%s_chr%s_%d_%s_%s.csv' % (
+
+        sheet_name = '%d_%s_chr%s_%d_%s_%s' % (
             i + 1, vaccine_peptides[0].mutant_protein_fragment.gene_name,
             variant.contig, variant.start, variant.ref, variant.alt)
-        path = os.path.join(report_dir_path, filename)
         columns = new_columns()
         for j, vaccine_peptide in enumerate(vaccine_peptides):
             columns["chr"].append(variant.contig)
@@ -426,19 +436,28 @@ def make_csv_report(
                 columns[field].append(
                     _sanitize(getattr(vaccine_peptide.manufacturability_scores, field)))
         df = pd.DataFrame(columns, columns=columns.keys())
-        frames.append(df)
-        if report_dir_path:
-            df.to_csv(path, index=False)
-            logger.info('Wrote CSV to %s', path)
+        frames[sheet_name] = df
 
-    if combined_report_path:
-        all_dfs = pd.concat(frames)
-        # move rank columns to the front of the lines, for easy visual grouping
+    all_dfs = pd.concat(frames.values())
+    if csv_report_path:
+        all_dfs.to_csv(csv_report_path, index=False)
+        logger.info('Wrote CSV report file to %s', csv_report_path)
+
+    if excel_report_path:
+        writer = pd.ExcelWriter(excel_report_path, engine='xlsxwriter')
+
+        # copy the variant rank column to position 0, make first sheet called "All"
+        all_dfs[''] = all_dfs['variant_rank']
         colnames = all_dfs.columns.tolist()
-        colnames.insert(0, colnames.pop(colnames.index('peptide_rank')))
-        colnames.insert(0, colnames.pop(colnames.index('variant_rank')))
+        colnames.insert(0, colnames.pop(colnames.index('')))
         all_dfs = all_dfs.reindex(columns=colnames)
+        all_dfs.to_excel(writer, sheet_name='All', index=False)
+        resize_columns(writer.sheets['All'], 'B', 'D')
 
-        all_dfs.to_csv(combined_report_path, index=False)
-        logger.info('Wrote combined CSV to %s', combined_report_path)
+        # add one sheet per variant
+        for sheet_name, df in frames.items():
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+            resize_columns(writer.sheets[sheet_name], 'A', 'C')
 
+        writer.save()
+        logger.info('Wrote manufacturer XLSX file to %s', excel_report_path)

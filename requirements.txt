@@ -9,3 +9,5 @@ jinja2
 pdfkit  # needs wkhtmltopdf: brew install Caskroom/cask/wkhtmltopdf
 pypandoc  # needs pandoc: brew install pandoc
 shellinford>=0.3.4
+xlsxwriter
+xlrd

@@ -78,6 +78,8 @@ if __name__ == '__main__':
             'pdfkit',
             'pypandoc',
             'shellinford>=0.3.4',
+            'xlrd',
+            'xlsxwriter',
         ],
 
         long_description=readme,

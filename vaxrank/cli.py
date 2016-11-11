@@ -110,9 +110,9 @@ def add_output_args(arg_parser):
         help="Path to JSON file containing results of vaccine peptide report")
 
     output_args_group.add_argument(
-        "--output-csv-report-dir",
+        "--output-xlsx-report",
         default="",
-        help="Path to CSV vaccine peptide report dir, one file per variant")
+        help="Path to XLSX vaccine peptide report worksheet, one sheet per variant")
 
     output_args_group.add_argument(
         "--output-reviewed-by",
@@ -175,10 +175,10 @@ def check_args(args):
             args.output_html_report or
             args.output_pdf_report or
             args.output_json_file or
-            args.output_csv_report_dir):
+            args.output_xlsx_report):
         raise ValueError(
             "Must specify at least one of: --output-csv, "
-            "--output-csv-report-dir, "
+            "--output-xlsx-report, "
             "--output-ascii-report, "
             "--output-html-report, "
             "--output-pdf-report, "
@@ -291,10 +291,10 @@ def main(args_list=None):
     ###################
     # CSV-based reports
     ###################
-    if args.output_csv or args.output_csv_report_dir:
+    if args.output_csv or args.output_xlsx_report:
         make_csv_report(ranked_variant_list,
-            report_dir_path=args.output_csv_report_dir,
-            combined_report_path=args.output_csv)
+            excel_report_path=args.output_xlsx_report,
+            csv_report_path=args.output_csv)
 
     ########################
     # Template-based reports
