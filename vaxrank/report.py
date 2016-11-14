@@ -242,15 +242,19 @@ class TemplateDataCreator(object):
         api_url = "http://docm.genome.wustl.edu/api/v1/variants.json?amino_acids=%s&genes=%s" % (
             amino_acids, gene_name.upper())
         logger.info("WUSTL link: %s", api_url)
-        contents = requests.get(api_url).json()
 
-        if len(contents) > 0:
-            hgvs = contents[0]['hgvs']
-            link_for_report = "http://docm.genome.wustl.edu/variants/%s" % hgvs
-            logger.info("Link for report: %s", link_for_report)
-            return link_for_report
+        try:
+            contents = requests.get(api_url).json()
+            if len(contents) > 0:
+                hgvs = contents[0]['hgvs']
+                link_for_report = "http://docm.genome.wustl.edu/variants/%s" % hgvs
+                logger.info("Link for report: %s", link_for_report)
+                return link_for_report
+        except requests.exceptions.ConnectionError as e:
+            logger.warn('ConnectionError reaching WUSTL: %s', e)
+            return None
 
-        logger.info("No response from WUSTL!")
+        logger.info('Variant not found in WUSTL')
         return None
 
     def _databases(self, variant, predicted_effect, gene_name):
