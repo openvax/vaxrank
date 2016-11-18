@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function, division
-from collections import OrderedDict
 import sys
 import logging
 import logging.config
@@ -223,8 +222,10 @@ def ranked_variant_list_with_metadata(args):
         vaccine_peptide_length=args.vaccine_peptide_length,
         padding_around_mutation=args.padding_around_mutation,
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
-        min_reads_supporting_cdna_sequence=args.min_reads_supporting_variant_sequence,
-        min_epitope_score=args.min_epitope_score)
+        min_alt_rna_reads=args.min_alt_rna_reads,
+        min_variant_sequence_coverage=args.min_variant_sequence_coverage,
+        min_epitope_score=args.min_epitope_score,
+        variant_sequence_assembly=not args.disable_variant_sequence_assembly)
 
     ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
 
@@ -292,7 +293,8 @@ def main(args_list=None):
     # CSV-based reports
     ###################
     if args.output_csv or args.output_xlsx_report:
-        make_csv_report(ranked_variant_list,
+        make_csv_report(
+            ranked_variant_list,
             excel_report_path=args.output_xlsx_report,
             csv_report_path=args.output_csv)
 
@@ -328,5 +330,3 @@ def main(args_list=None):
         make_pdf_report(
             template_data=template_data,
             pdf_report_path=args.output_pdf_report)
-
-    
