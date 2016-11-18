@@ -165,12 +165,30 @@ def generate_vaccine_peptides(
         result_dict[variant] = vaccine_peptides
     return result_dict
 
-def ranked_vaccine_peptides(*args, **kwargs):
+def ranked_vaccine_peptides(
+        reads_generator,
+        mhc_predictor,
+        vaccine_peptide_length,
+        padding_around_mutation,
+        max_vaccine_peptides_per_variant,
+        min_alt_rna_reads,
+        min_variant_sequence_coverage,
+        variant_sequence_assembly,
+        min_epitope_score=0):
     """
     Returns sorted list whose first element is a Variant and whose second
     element is a list of VaccinePeptide objects.
     """
-    variants_to_vaccine_peptides_dict = generate_vaccine_peptides(*args, **kwargs)
+    variants_to_vaccine_peptides_dict = generate_vaccine_peptides(
+        reads_generator=reads_generator,
+        mhc_predictor=mhc_predictor,
+        vaccine_peptide_length=vaccine_peptide_length,
+        padding_around_mutation=padding_around_mutation,
+        max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
+        min_alt_rna_reads=min_alt_rna_reads,
+        min_variant_sequence_coverage=min_variant_sequence_coverage,
+        variant_sequence_assembly=variant_sequence_assembly,
+        min_epitope_score=min_epitope_score)
     result_list = list(variants_to_vaccine_peptides_dict.items())
     result_list.sort(
         key=lambda x: x[1][0].combined_score if len(x[1]) > 0 else 0.0,
