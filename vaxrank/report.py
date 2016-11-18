@@ -182,7 +182,7 @@ class TemplateDataCreator(object):
             ('Expression score', round(vaccine_peptide.expression_score, 4)),
             ('Mutant epitope score', round(vaccine_peptide.mutant_epitope_score, 4)),
             ('Combined score', round(vaccine_peptide.combined_score, 4)),
-            ('Reads fully spanning cDNA sequence(s)',
+            ('Max coding sequence coverage',
                 mutant_protein_fragment.n_alt_reads_supporting_protein_sequence),
             ('Mutant amino acids', mutant_protein_fragment.n_mutant_amino_acids),
             ('Mutation distance from edge',
