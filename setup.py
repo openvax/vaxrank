@@ -80,6 +80,7 @@ if __name__ == '__main__':
             'shellinford>=0.3.4',
             'xlrd',
             'xlsxwriter',
+            'xvfbwrapper',
         ],
 
         long_description=readme,
