@@ -11,3 +11,4 @@ pypandoc  # needs pandoc: brew install pandoc
 shellinford>=0.3.4
 xlsxwriter
 xlrd
+xvfbwrapper

@@ -18,6 +18,7 @@ from copy import copy
 import logging
 from operator import attrgetter
 import os
+import sys
 import tempfile
 
 import jinja2
@@ -365,7 +366,18 @@ def make_pdf_report(
             'zoom': 0.6,
             'margin-top': '20mm'
         }
-        pdfkit.from_file(f.name, pdf_report_path, options=options)
+
+        if sys.platform in ('linux', 'linux2'):
+            # pdfkit uses wkhtmltopdf, which doesn't work on headless servers;
+            # recommended workaround is to use xvfb, as documented here:
+            # https://github.com/wkhtmltopdf/wkhtmltopdf/issues/2037#issuecomment-62019521
+            from xvfbwrapper import Xvfb
+            logger.info('Running pdfkit inside xvfb wrapper')
+            with Xvfb() as xvfb:
+                pdfkit.from_file(f.name, pdf_report_path, options=options)
+
+        else:
+            pdfkit.from_file(f.name, pdf_report_path, options=options)
     logger.info('Wrote PDF report to %s', pdf_report_path)
 
 def new_columns():
