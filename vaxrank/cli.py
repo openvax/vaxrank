@@ -225,7 +225,7 @@ def ranked_variant_list_with_metadata(args):
         min_alt_rna_reads=args.min_alt_rna_reads,
         min_variant_sequence_coverage=args.min_variant_sequence_coverage,
         min_epitope_score=args.min_epitope_score,
-        variant_sequence_assembly=not args.disable_variant_sequence_assembly)
+        variant_sequence_assembly=args.variant_sequence_assembly)
 
     ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
 
