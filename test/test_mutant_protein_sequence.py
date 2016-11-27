@@ -63,7 +63,9 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
         vaccine_peptide_length=15,
         padding_around_mutation=5,
         max_vaccine_peptides_per_variant=1,
-        min_reads_supporting_cdna_sequence=1)
+        min_alt_rna_reads=1,
+        min_variant_sequence_coverage=1,
+        variant_sequence_assembly=True)
 
     for variant, vaccine_peptides in ranked_list:
         eq_(
@@ -91,8 +93,10 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
         mhc_predictor=RandomBindingPredictor(["H-2-Kb", "H-2-Db"]),
         vaccine_peptide_length=15,
         padding_around_mutation=5,
-        max_vaccine_peptides_per_variant=1,
-        min_reads_supporting_cdna_sequence=1)
+        min_alt_rna_reads=1,
+        min_variant_sequence_coverage=1,
+        variant_sequence_assembly=True,
+        max_vaccine_peptides_per_variant=1)
 
     for variant, vaccine_peptides in ranked_list:
         vaccine_peptide = vaccine_peptides[0]

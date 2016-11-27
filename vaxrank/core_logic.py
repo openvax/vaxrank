@@ -14,10 +14,9 @@
 
 from __future__ import absolute_import, print_function, division
 import logging
-from collections import OrderedDict
 
 from numpy import isclose
-import pandas as pd
+
 from isovar.protein_sequences import (
     reads_generator_to_protein_sequences_generator,
 )
@@ -131,8 +130,10 @@ def generate_vaccine_peptides(
         vaccine_peptide_length,
         padding_around_mutation,
         max_vaccine_peptides_per_variant,
-        min_reads_supporting_cdna_sequence,
-        min_epitope_score):
+        min_alt_rna_reads,
+        min_variant_sequence_coverage,
+        variant_sequence_assembly,
+        min_epitope_score=0):
     """
     Returns dictionary mapping each variant to list of VaccinePeptide objects.
     """
@@ -146,7 +147,9 @@ def generate_vaccine_peptides(
         reads_generator,
         transcript_id_whitelist=None,
         protein_sequence_length=protein_fragment_sequence_length,
-        min_reads_supporting_cdna_sequence=min_reads_supporting_cdna_sequence,
+        min_alt_rna_reads=min_alt_rna_reads,
+        min_variant_sequence_coverage=min_variant_sequence_coverage,
+        variant_sequence_assembly=variant_sequence_assembly,
         max_protein_sequences_per_variant=1)
 
     result_dict = {}
@@ -168,7 +171,9 @@ def ranked_vaccine_peptides(
         vaccine_peptide_length,
         padding_around_mutation,
         max_vaccine_peptides_per_variant,
-        min_reads_supporting_cdna_sequence,
+        min_alt_rna_reads,
+        min_variant_sequence_coverage,
+        variant_sequence_assembly,
         min_epitope_score=0):
     """
     Returns sorted list whose first element is a Variant and whose second
@@ -180,7 +185,9 @@ def ranked_vaccine_peptides(
         vaccine_peptide_length=vaccine_peptide_length,
         padding_around_mutation=padding_around_mutation,
         max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
-        min_reads_supporting_cdna_sequence=min_reads_supporting_cdna_sequence,
+        min_alt_rna_reads=min_alt_rna_reads,
+        min_variant_sequence_coverage=min_variant_sequence_coverage,
+        variant_sequence_assembly=variant_sequence_assembly,
         min_epitope_score=min_epitope_score)
     result_list = list(variants_to_vaccine_peptides_dict.items())
     result_list.sort(
