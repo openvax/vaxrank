@@ -1,6 +1,11 @@
 {% for key, val in patient_info.items() %}
 {{ key }}: {{ val }}
 {% endfor %}
+
+Package version info
+{% for key, val in package_versions.items() %}
+    {{ key }}: {{ val }}
+{% endfor %}
 ---
 
 {% for v in variants %}
