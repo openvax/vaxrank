@@ -65,6 +65,6 @@ target/
 vaccine-peptides-report.txt
 vaccine-peptides-report.html
 vaccine-peptides-report.pdf
+vaccine-peptides-report.xlsx
+vaccine-peptides-report.json
 vaccine-peptides.csv
-vaccine-peptides-reports/
-report.json

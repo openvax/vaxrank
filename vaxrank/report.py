@@ -392,6 +392,7 @@ def new_columns():
         ("mutation_start", []),
         ("mutation_end", []),
         ("combined_score", []),
+        ("expression_score", []),
         ("mutant_epitope_score", []),
     ])
     for field in ManufacturabilityScores._fields:
@@ -447,6 +448,7 @@ def make_csv_report(
             columns["mutation_end"].append(
                 vaccine_peptide.mutant_protein_fragment.mutant_amino_acid_end_offset)
             columns["combined_score"].append(round(vaccine_peptide.combined_score, 4))
+            columns["expression_score"].append(round(vaccine_peptide.expression_score, 4))
             columns["mutant_epitope_score"].append(round(vaccine_peptide.mutant_epitope_score, 4))
             for field in ManufacturabilityScores._fields:
                 columns[field].append(
