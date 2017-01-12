@@ -54,7 +54,7 @@ if __name__ == '__main__':
         version=version,
         description="Mutant peptide ranking for personalized cancer vaccines",
         author="Alex Rubinsteyn",
-        author_email="alex {dot} rubinsteyn {at} gmail {dot} com",
+        author_email="alex.rubinsteyn@gmail.com",
         url="https://github.com/hammerlab/vaxrank",
         license="http://www.apache.org/licenses/LICENSE-2.0.html",
         classifiers=[
