@@ -15,6 +15,7 @@
 from __future__ import absolute_import, division
 from collections import namedtuple, OrderedDict
 from copy import copy
+from importlib import import_module
 import logging
 from operator import attrgetter
 import os
@@ -325,9 +326,17 @@ class TemplateDataCreator(object):
             }
             variants.append(variant_dict)
 
+        # add package metadata to the report
+        package_versions = {}
+        for name in ['vaxrank', 'isovar', 'mhctools', 'varcode', 'pyensembl']:
+            module = import_module(name)
+            version = getattr(module, '__version__')
+            package_versions[name] = version
+
         self.template_data.update({
             'patient_info': patient_info,
             'variants': variants,
+            'package_versions': package_versions,
         })
         return self.template_data
 
