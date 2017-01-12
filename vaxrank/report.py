@@ -474,8 +474,12 @@ def make_csv_report(
 
         # add one sheet per variant
         for sheet_name, df in frames.items():
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
-            resize_columns(writer.sheets[sheet_name], 'A', 'C')
+            # trim sheet names to 31 characters due to limit in Excel
+            # should still be unique since they start with the variant
+            # index
+            shortened_sheet_name = sheet_name[:31]
+            df.to_excel(writer, sheet_name=shortened_sheet_name, index=False)
+            resize_columns(writer.sheets[shortened_sheet_name], 'A', 'C')
 
         writer.save()
         logger.info('Wrote manufacturer XLSX file to %s', excel_report_path)
