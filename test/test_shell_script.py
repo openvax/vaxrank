@@ -10,7 +10,8 @@ cli_args_for_b16_seqdata = [
     "--vaccine-peptide-length", "25",
     "--mhc-predictor", "random",
     "--mhc-alleles", "H2-Kb,H2-Db",
-    "--padding-around-mutation", "5"
+    "--padding-around-mutation", "5",
+    "--include-mismatches-after-variant"
 ]
 
 def test_csv_report():
