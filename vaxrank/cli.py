@@ -20,12 +20,14 @@ import pkg_resources
 
 from argparse import ArgumentParser
 from isovar.cli.rna_reads import allele_reads_generator_from_args
+from isovar.cli.translation import add_translation_args
 from isovar.cli.variant_sequences import make_variant_sequences_arg_parser
 from mhctools.cli import (
     add_mhc_args,
     mhc_alleles_from_args,
     mhc_binding_predictor_from_args,
 )
+
 import serializable
 from varcode.cli import variant_collection_from_args
 
@@ -45,13 +47,14 @@ logger = logging.getLogger(__name__)
 
 
 def new_run_arg_parser():
-    # inherit all commandline options from Isovar
+    # inherit commandline options from Isovar
     arg_parser = make_variant_sequences_arg_parser(
         prog="vaxrank",
         description=(
             "Select personalized vaccine peptides from cancer variants, "
             "expression data, and patient HLA type."),
     )
+    add_translation_args(arg_parser)
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
     add_output_args(arg_parser)
