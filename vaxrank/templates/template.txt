@@ -25,7 +25,7 @@ Package version info
                   {% for key, val in p.manufacturability_data.items() %}
                   - {{ key }}: {{ val }}
                   {% endfor %}
-                  
+
                   Predicted mutant epitopes:
                   {% for e in p.epitopes %}
                         * {{ e["Sequence"] }} {{ e["IC50"] }} ({{ e["Allele"] }})

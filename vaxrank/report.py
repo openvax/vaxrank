@@ -276,13 +276,14 @@ class TemplateDataCreator(object):
 
         # list ranked variants with their peptides
         variants = []
-        for i, (variant, vaccine_peptides) in enumerate(
-                self.ranked_variants_with_vaccine_peptides):
+        num = 0
+        for (variant, vaccine_peptides) in self.ranked_variants_with_vaccine_peptides:
             variant_short_description = variant.short_description
             if len(vaccine_peptides) == 0:
                 logger.info("Skipping gene(s) %s, variant %s: no vaccine peptides",
                     variant.gene_names, variant_short_description)
                 continue
+            num += 1
 
             top_peptide = vaccine_peptides[0]
             variant_data = self._variant_data(top_peptide)
@@ -317,7 +318,7 @@ class TemplateDataCreator(object):
                 peptides.append(peptide_dict)
 
             variant_dict = {
-                'num': i + 1,
+                'num': num,
                 'short_description': variant_short_description,
                 'variant_data': variant_data,
                 'effect_data': effect_data,
