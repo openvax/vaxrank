@@ -54,3 +54,5 @@ You should run the linter and the test suite as you work on Vaxrank (and these w
 ./lint.sh
 nosetests test
 ```
+
+The first run of the tests may take a while (8 minutes on a 2016 Macbook Pro) to create the FM index of the proteome, but subsequent tests should take only a few seconds.
