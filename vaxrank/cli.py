@@ -83,7 +83,7 @@ def add_output_args(arg_parser):
 
     output_args_group.add_argument(
         "--output-patient-id",
-        default="UNKNOWN",
+        default="",
         help="Patient ID to use in report")
 
     output_args_group.add_argument(
@@ -185,10 +185,6 @@ def check_args(args):
             "--output-html-report, "
             "--output-pdf-report, "
             "--output-json-file")
-
-    if args.output_patient_id == "UNKNOWN":
-        logger.warn("Please specify --output-patient-id if possible; defaulting to unknown")
-
 
 def ranked_variant_list_with_metadata(args):
     """
