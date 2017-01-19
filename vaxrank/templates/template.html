@@ -130,15 +130,16 @@
                                         {% endfor %}
                                     </table>
                                 </td></tr>
-                            </table>                            
+                            </table>
             			</li>
             			{% endfor %}
             		</ol>
                 </div>
         	</li>
         	{% endfor %}
-        	</ol>
+                </ol>
 
+            {% if reviewers %}
             <table class="pure-table pure-table-bordered reviewed-by">
                 <thead>
                     <tr><td>Reviewed By</td></tr>
@@ -148,6 +149,7 @@
                 {% endfor %}
             </table>
             <br><br>
+            {% endif %}
 
             <table class="pure-table pure-table-bordered signature">
                 <thead>
