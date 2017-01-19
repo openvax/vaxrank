@@ -79,7 +79,7 @@ class TemplateDataCreator(object):
 
         self.template_data = {
             'args': sorted(args_to_display_in_report.items()),
-            'reviewers': reviewers.split(','),
+            'reviewers': reviewers.split(',') if reviewers else [],
             'final_review': final_review,
             'input_json_file': input_json_file,
         }
