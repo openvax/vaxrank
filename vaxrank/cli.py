@@ -232,7 +232,6 @@ def ranked_variant_list_with_metadata(args):
 
     ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
 
-    # TODO(julia): is this right?
     num_coding_effect_variants = len(
         variants.effects().drop_silent_and_noncoding().groupby_variant())
     patient_info = PatientInfo(
