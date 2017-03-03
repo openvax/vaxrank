@@ -1,3 +1,4 @@
+from mock import patch
 from tempfile import NamedTemporaryFile
 from vaxrank.cli import main as run_shell_script
 from xlrd import open_workbook
@@ -13,6 +14,22 @@ cli_args_for_b16_seqdata = [
     "--padding-around-mutation", "5",
     "--include-mismatches-after-variant"
 ]
+
+def test_ascii_report():
+    with NamedTemporaryFile(mode="r", delete=False) as f:
+        ascii_args = cli_args_for_b16_seqdata + ["--output-ascii-report", f.name]
+        run_shell_script(ascii_args)
+        contents = f.read()
+        lines = contents.split("\n")
+        assert len(lines) > 0
+
+def test_json_report():
+    with NamedTemporaryFile(mode="r", delete=False) as f:
+        json_args = cli_args_for_b16_seqdata + ["--output-json-file", f.name]
+        run_shell_script(json_args)
+        contents = f.read()
+        lines = contents.split("\n")
+        assert len(lines) > 0
 
 def test_csv_report():
     with NamedTemporaryFile(mode="r", delete=False) as f:
@@ -36,6 +53,26 @@ def test_html_report():
         contents = f.read()
         lines = contents.split("\n")
         assert len(lines) > 0
+
+def test_pdf_report():
+    with NamedTemporaryFile(mode="r") as f:
+        pdf_args = cli_args_for_b16_seqdata + ["--output-pdf-report", f.name]
+        run_shell_script(pdf_args)
+        contents = f.read()
+        # check that something got written - should eventually check that PDF is valid...
+        lines = contents.split("\n")
+        assert len(lines) > 0
+
+@patch('mhctools.random_predictor.RandomBindingPredictor.predict')
+def test_report_no_peptides(mock_predict):
+    # simulate case where we have no epitopes for any variant
+    mock_predict.return_value = []
+    with NamedTemporaryFile(mode="r") as f:
+        html_args = cli_args_for_b16_seqdata + ["--output-csv", f.name]
+        # test that this doesn't crash and that the CSV output is empty
+        run_shell_script(html_args)
+        contents = f.read()
+        assert contents == ''
 
 if __name__ == "__main__":
     test_csv_report()

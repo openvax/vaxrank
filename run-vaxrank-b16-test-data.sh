@@ -10,6 +10,7 @@ vaxrank \
     --output-pdf-report vaccine-peptides-report.pdf \
     --output-xlsx-report vaccine-peptides-report.xlsx \
     --output-json-file vaccine-peptides-report.json \
+    --output-csv vaccine-peptides.csv \
     --output-reviewed-by "John Doe,Jane Doe" \
     --output-final-review "All the Does" \
     --output-patient-id "Test Patient"

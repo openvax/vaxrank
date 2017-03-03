@@ -295,6 +295,10 @@ class TemplateDataCreator(object):
 
             peptides = []
             for j, vaccine_peptide in enumerate(vaccine_peptides):
+                if not peptide_contains_epitopes(vaccine_peptide):
+                    logger.info('No epitopes for peptide: %s', vaccine_peptide)
+                    continue
+
                 header_display_data = self._peptide_header_display_data(vaccine_peptide, j)
                 peptide_data = self._peptide_data(vaccine_peptide, predicted_effect.transcript_name)
                 manufacturability_data = self._manufacturability_data(vaccine_peptide)
@@ -314,6 +318,11 @@ class TemplateDataCreator(object):
                     'epitopes': epitopes,
                 }
                 peptides.append(peptide_dict)
+
+            # if there are no peptides for this variant, exclude from report
+            if len(peptides) == 0:
+                logger.info('No peptides for variant: %s', variant)
+                continue
 
             variant_dict = {
                 'num': num,
@@ -425,6 +434,15 @@ def resize_columns(worksheet, amino_acids_col, pos_col):
     worksheet.set_column('%s:%s' % (amino_acids_col, amino_acids_col), 40)
     worksheet.set_column('%s:%s' % (pos_col, pos_col), 12)
 
+
+def peptide_contains_epitopes(vaccine_peptide):
+    """Returns true if vaccine peptide contains mutant epitopes."""
+    for epitope in vaccine_peptide.epitope_predictions:
+        if epitope.overlaps_mutation:
+            return True
+    return False
+
+
 def make_csv_report(
         ranked_variants_with_vaccine_peptides,
         excel_report_path=None,
@@ -436,6 +454,7 @@ def make_csv_report(
     # sheet names (will be used later for making the Excel report if needed)
     frames = OrderedDict()
     for i, (variant, vaccine_peptides) in enumerate(ranked_variants_with_vaccine_peptides):
+        any_vaccine_peptides = False
         if not vaccine_peptides:
             continue
 
@@ -444,6 +463,12 @@ def make_csv_report(
             variant.contig, variant.start, variant.ref, variant.alt)
         columns = new_columns()
         for j, vaccine_peptide in enumerate(vaccine_peptides):
+
+            # if there are no predicted epitopes, exclude this peptide from the report
+            if not peptide_contains_epitopes(vaccine_peptide):
+                logger.info('No epitopes for peptide: %s', vaccine_peptide)
+                continue
+
             columns["chr"].append(variant.contig)
             columns["pos"].append(variant.original_start)
             columns["ref"].append(variant.original_ref)
@@ -461,8 +486,17 @@ def make_csv_report(
             for field in ManufacturabilityScores._fields:
                 columns[field].append(
                     _sanitize(getattr(vaccine_peptide.manufacturability_scores, field)))
+            any_vaccine_peptides = True
+        
+        if not any_vaccine_peptides:
+            continue
+
         df = pd.DataFrame(columns, columns=columns.keys())
         frames[sheet_name] = df
+
+    if not frames:
+        logger.info('No data for CSV or XLSX report')
+        return
 
     all_dfs = pd.concat(frames.values())
     if csv_report_path:
