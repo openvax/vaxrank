@@ -135,7 +135,6 @@ def load_reference_peptides_index(genome, force_reload=False):
 def predict_epitopes(
         mhc_predictor,
         protein_fragment,
-        peptide_lengths,
         min_epitope_score=0.0,
         genome=None):
     """
@@ -166,8 +165,7 @@ def predict_epitopes(
     fm = load_reference_peptides_index(genome)
 
     mhctools_binding_predictions = mhc_predictor.predict_subsequences(
-        {protein_fragment.gene_name: protein_fragment.amino_acids},
-        peptide_lengths=peptide_lengths)
+        {protein_fragment.gene_name: protein_fragment.amino_acids})
     # convert from mhctools.BindingPrediction objects to EpitopePrediction
     # which differs primarily by also having a boolean field
     # 'overlaps_mutation' that indicates whether the epitope overlaps
