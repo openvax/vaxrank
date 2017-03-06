@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function, division
-from collections import namedtuple, defaultdict, OrderedDict
+from collections import namedtuple, OrderedDict
 import logging
 import os
 
@@ -109,6 +109,24 @@ def index_contains_kmer(fm, kmer):
         break
     return found
 
+def generate_protein_sequences(genome):
+    """
+    Generator whose elements are protein sequences from the given genome.
+
+    Parameters
+    ----------
+    genome : pyensembl.EnsemblRelease
+        Input genome to load for reference peptides
+    """
+    for t in genome.transcripts():
+        if t.is_protein_coding:
+            protein_sequence = t.protein_sequence
+            if six.PY2:
+                # shellinford on PY2 seems to sometimes fail with
+                # unicode strings
+                protein_sequence = protein_sequence.encode("ascii")
+            yield protein_sequence
+
 def load_reference_peptides_index(genome, force_reload=False):
     """
     Loads the FM index containing reference peptides.
@@ -128,12 +146,10 @@ def load_reference_peptides_index(genome, force_reload=False):
     """
     path = fm_index_path(genome)
     if force_reload or not os.path.exists(path):
-        logger.info("Loading FM index to %s", path)
+        logger.info("Building FM index at %s", path)
         fm = shellinford.FMIndex()
-        fm.build(
-            (t.protein_sequence for t in genome.transcripts() if t.is_protein_coding),
-            path)
-        logger.info("Done loading FM index")
+        fm.build(generate_protein_sequences(genome), path)
+        logger.info("Done building FM index")
         return fm
     return shellinford.FMIndex(filename=path)
 
