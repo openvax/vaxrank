@@ -72,7 +72,7 @@ if __name__ == '__main__':
             'pandas',
             'varcode>=0.5.9',
             'isovar>=0.6.0',
-            'mhctools>=0.3.1',
+            'mhctools>=1.0.1',
             'roman',
             'jinja2',
             'pdfkit',
