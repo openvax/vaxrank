@@ -25,68 +25,47 @@ import six
 
 logger = logging.getLogger(__name__)
 
-EpitopePredictionBase = namedtuple(
-    "EpitopePrediction", [
-        "allele",
-        "peptide_sequence",
-        "length",
-        "ic50",
-        "percentile_rank",
-        "prediction_method_name",
-        "overlaps_mutation",
-        "source_sequence",
-        "offset",
-        "occurs_in_reference",
-    ])
+EpitopePrediction = namedtuple("EpitopePrediction", [
+    "allele",
+    "peptide_sequence",
+    "length",
+    "ic50",
+    "percentile_rank",
+    "prediction_method_name",
+    "overlaps_mutation",
+    "source_sequence",
+    "offset",
+    "occurs_in_reference",
+])
 
-class EpitopePrediction(EpitopePredictionBase):
+def logistic_epitope_score(
+        epitope_prediction,
+        midpoint=350.0,
+        width=150.0,
+        ic50_cutoff=2000.0):
+    """
+    Map from IC50 values to score where 1.0 = strong binder, 0.0 = weak binder
+    Default midpoint and width for logistic determined by max likelihood fit
+    for data from Alessandro Sette's 1994 paper:
 
-    @classmethod
-    def from_mhctools_binding_prediction(
-            cls,
-            binding_prediction,
-            overlaps_mutation,
-            occurs_in_reference):
-        return cls(
-            allele=binding_prediction.allele,
-            peptide_sequence=binding_prediction.peptide,
-            length=len(binding_prediction.peptide),
-            ic50=binding_prediction.value,
-            percentile_rank=binding_prediction.percentile_rank,
-            prediction_method_name=binding_prediction.prediction_method_name,
-            overlaps_mutation=overlaps_mutation,
-            source_sequence=binding_prediction.source_sequence,
-            offset=binding_prediction.offset,
-            occurs_in_reference=occurs_in_reference)
+       "The relationship between class I binding affinity
+        and immunogenicity of potential cytotoxic T cell epitopes.
 
-    def logistic_score(
-            self,
-            midpoint=350.0,
-            width=150.0,
-            ic50_cutoff=2000.0):
-        """
-        Map from IC50 values to score where 1.0 = strong binder, 0.0 = weak binder
-        Default midpoint and width for logistic determined by max likelihood fit
-        for data from Alessandro Sette's 1994 paper:
+    TODO: Use a large dataset to find MHC binding range predicted to #
+    correlate with immunogenicity
+    """
+    if epitope_prediction.ic50 >= ic50_cutoff:
+        return 0.0
 
-           "The relationship between class I binding affinity
-            and immunogenicity of potential cytotoxic T cell epitopes.
+    rescaled = (float(epitope_prediction.ic50) - midpoint) / width
+    # simplification of 1.0 - logistic(x) = logistic(-x)
+    logistic = 1.0 / (1.0 + np.exp(rescaled))
 
-        TODO: Use a large dataset to find MHC binding range predicted to #
-        correlate with immunogenicity
-        """
-        if self.ic50 >= ic50_cutoff:
-            return 0.0
+    # since we're scoring IC50 values, let's normalize the output
+    # so IC50 near 0.0 always returns a score of 1.0
+    normalizer = 1.0 / (1.0 + np.exp(-midpoint / width))
 
-        rescaled = (float(self.ic50) - midpoint) / width
-        # simplification of 1.0 - logistic(x) = logistic(-x)
-        logistic = 1.0 / (1.0 + np.exp(rescaled))
-
-        # since we're scoring IC50 values, let's normalize the output
-        # so IC50 near 0.0 always returns a score of 1.0
-        normalizer = 1.0 / (1.0 + np.exp(-midpoint / width))
-
-        return logistic / normalizer
+    return logistic / normalizer
 
 def fm_index_path(genome):
     """
@@ -153,18 +132,42 @@ def load_reference_peptides_index(genome, force_reload=False):
         return fm
     return shellinford.FMIndex(filename=path)
 
-def predict_epitopes(mhc_predictor, protein_fragment, min_epitope_score=0, genome=None):
+def predict_epitopes(
+        mhc_predictor,
+        protein_fragment,
+        peptide_lengths,
+        min_epitope_score=0.0,
+        genome=None):
     """
-    Returns an OrderedDict of EpitopePrediction objects, keyed by a (peptide sequence, allele)
-    tuple, that have a normalized score greater than min_epitope_score.
+    Parameters
+    ----------
+    mhc_predictor : mhctools.BasePredictor
+        Object with predict_peptides method
+
+    protein_fragment : MutantProteinFragment
+
+    peptide_length : list of int
+        Lengths of peptides to make pMHC binding predictions for
+
+    min_epitope_score : float
+        Ignore peptides with binding predictions whose normalized score is less
+        than this.
+
+    genome : pyensembl.Genome
+        Genome whose proteome to use for reference peptide filtering
+
+    Returns an OrderedDict of EpitopePrediction objects, keyed by a
+    (peptide sequence, allele) tuple, that have a normalized score greater
+    than min_epitope_score.
 
     Uses the input genome to evaluate whether the epitope occurs in reference.
     """
     results = OrderedDict()
     fm = load_reference_peptides_index(genome)
 
-    mhctools_binding_predictions = mhc_predictor.predict(
-        {"protein_fragment": protein_fragment.amino_acids})
+    mhctools_binding_predictions = mhc_predictor.predict_subsequences(
+        {protein_fragment.gene_name: protein_fragment.amino_acids},
+        peptide_lengths=peptide_lengths)
     # convert from mhctools.BindingPrediction objects to EpitopePrediction
     # which differs primarily by also having a boolean field
     # 'overlaps_mutation' that indicates whether the epitope overlaps
@@ -184,11 +187,18 @@ def predict_epitopes(mhc_predictor, protein_fragment, min_epitope_score=0, genom
         overlaps_mutation = protein_fragment.interval_overlaps_mutation(
             start_offset=peptide_start_offset,
             end_offset=peptide_end_offset)
-        epitope_prediction = EpitopePrediction.from_mhctools_binding_prediction(
-            binding_prediction,
-            overlaps_mutation=overlaps_mutation,
-            occurs_in_reference=occurs_in_reference)
-        if epitope_prediction.logistic_score() >= min_epitope_score:
+        epitope_prediction = EpitopePrediction(
+                allele=binding_prediction.allele,
+                peptide_sequence=peptide,
+                length=len(binding_prediction.peptide),
+                ic50=binding_prediction.value,
+                percentile_rank=binding_prediction.percentile_rank,
+                prediction_method_name=binding_prediction.prediction_method_name,
+                overlaps_mutation=overlaps_mutation,
+                source_sequence=protein_fragment.amino_acids,
+                offset=binding_prediction.offset,
+                occurs_in_reference=occurs_in_reference)
+        if logistic_epitope_score(epitope_prediction) >= min_epitope_score:
             key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)
             results[key] = epitope_prediction
 
