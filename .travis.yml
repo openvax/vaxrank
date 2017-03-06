@@ -43,8 +43,8 @@ install:
   - pip install coveralls
 script:
   - ./lint.sh
-  - pyensembl install --release 85 --species human
-  - pyensembl install --release 85 --species mouse
+  - pyensembl install --release 87 --species human
+  - pyensembl install --release 87 --species mouse
   # run tests
   - nosetests test --with-coverage --cover-package=vaxrank
 after_success:
