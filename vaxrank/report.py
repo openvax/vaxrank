@@ -14,7 +14,6 @@
 
 from __future__ import absolute_import, division
 from collections import namedtuple, OrderedDict
-from copy import copy
 from importlib import import_module
 import logging
 from operator import attrgetter
@@ -27,11 +26,11 @@ import pandas as pd
 import pdfkit
 import requests
 import roman
-from varcode import load_vcf_fast, Variant
+from varcode import load_vcf_fast
 from varcode.effects import top_priority_effect
 
 from .manufacturability import ManufacturabilityScores
-
+from .epitope_prediction import logistic_epitope_score
 
 logger = logging.getLogger(__name__)
 
@@ -45,14 +44,13 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 )
 
 
-PatientInfo = namedtuple(
-    "PatientInfo", (
-        "patient_id",
-        "vcf_paths",
-        "bam_path",
-        "mhc_alleles",
-        "num_somatic_variants",
-        "num_coding_effect_variants",
+PatientInfo = namedtuple("PatientInfo", (
+    "patient_id",
+    "vcf_paths",
+    "bam_path",
+    "mhc_alleles",
+    "num_somatic_variants",
+    "num_coding_effect_variants",
 ))
 
 
@@ -130,7 +128,7 @@ class TemplateDataCreator(object):
         """
         effect_data = OrderedDict([
             ('Effect type', predicted_effect.__class__.__name__),
-            ('Transcript name',predicted_effect.transcript_name),
+            ('Transcript name', predicted_effect.transcript_name),
             ('Transcript ID', predicted_effect.transcript_id),
             ('Effect description', predicted_effect.short_description),
         ])
@@ -217,7 +215,8 @@ class TemplateDataCreator(object):
         epitope_data = OrderedDict([
             ('Sequence', epitope_prediction.peptide_sequence),
             ('IC50', epitope_prediction.ic50),
-            ('Normalized binding score', round(epitope_prediction.logistic_score(), 4)),
+            ('Normalized binding score', round(
+                logistic_epitope_score(epitope_prediction), 4)),
             ('Allele', epitope_prediction.allele),
         ])
         return epitope_data
@@ -234,7 +233,6 @@ class TemplateDataCreator(object):
 
         logger.info("Variant not in COSMIC")
         return None
-
 
     def _query_wustl(self, predicted_effect, gene_name):
         """
@@ -383,7 +381,7 @@ def make_pdf_report(
             # https://github.com/wkhtmltopdf/wkhtmltopdf/issues/2037#issuecomment-62019521
             from xvfbwrapper import Xvfb
             logger.info('Running pdfkit inside xvfb wrapper')
-            with Xvfb() as xvfb:
+            with Xvfb():
                 pdfkit.from_file(f.name, pdf_report_path, options=options)
 
         else:

@@ -18,7 +18,7 @@ from nose.tools import eq_, ok_
 
 from mhctools import RandomBindingPredictor
 from pyensembl import EnsemblRelease
-from vaxrank.epitope_prediction import predict_epitopes
+from vaxrank.epitope_prediction import predict_epitopes, logistic_epitope_score
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.vaccine_peptide import VaccinePeptide
 
@@ -56,7 +56,7 @@ def test_reference_peptide_logic():
         protein_fragment,
         [prediction_occurs_in_reference, prediction_does_not_occur_in_reference])
 
-    eq_(prediction_occurs_in_reference.logistic_score(),
+    eq_(logistic_epitope_score(prediction_occurs_in_reference),
         vaccine_peptide.wildtype_epitope_score)
-    eq_(prediction_does_not_occur_in_reference.logistic_score(),
+    eq_(logistic_epitope_score(prediction_does_not_occur_in_reference),
         vaccine_peptide.mutant_epitope_score)
