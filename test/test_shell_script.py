@@ -1,7 +1,11 @@
 from mock import patch
+from nose.plugins.attrib import attr
+import os
 from tempfile import NamedTemporaryFile
-from vaxrank.cli import main as run_shell_script
+import unittest
 from xlrd import open_workbook
+
+from vaxrank.cli import main as run_shell_script
 
 from .testing_helpers import data_path
 
@@ -54,6 +58,7 @@ def test_html_report():
         lines = contents.split("\n")
         assert len(lines) > 0
 
+@attr('skip')  # want the ability to skip this test on some machines
 def test_pdf_report():
     with NamedTemporaryFile(mode="r") as f:
         pdf_args = cli_args_for_b16_seqdata + ["--output-pdf-report", f.name]
