@@ -1,8 +1,6 @@
 from mock import patch
 from nose.plugins.attrib import attr
-import os
 from tempfile import NamedTemporaryFile
-import unittest
 from xlrd import open_workbook
 
 from vaxrank.cli import main as run_shell_script
