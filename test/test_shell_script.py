@@ -63,10 +63,10 @@ def test_pdf_report():
         lines = contents.split("\n")
         assert len(lines) > 0
 
-@patch('mhctools.random_predictor.RandomBindingPredictor.predict')
-def test_report_no_peptides(mock_predict):
+@patch('vaxrank.core_logic.vaccine_peptides_for_variant')
+def test_report_no_peptides(mock_vaccine_peptides_for_variant):
     # simulate case where we have no epitopes for any variant
-    mock_predict.return_value = []
+    mock_vaccine_peptides_for_variant.return_value = []
     with NamedTemporaryFile(mode="r") as f:
         html_args = cli_args_for_b16_seqdata + ["--output-csv", f.name]
         # test that this doesn't crash and that the CSV output is empty
