@@ -8,6 +8,7 @@ Package version info
 {% endfor %}
 ---
 
+{% if variants %}
 {% for v in variants %}
 {{ v.num }}) {{ v.short_description }} ({{ v.variant_data['Gene name'] }})
         {% for key, val in v.variant_data.items() %}
@@ -33,3 +34,6 @@ Package version info
 
         {% endfor %}
 {% endfor %}
+{% else %}
+No variants with sufficient vaccine peptides were found.
+{% endif %}
