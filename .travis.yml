@@ -26,6 +26,16 @@ before_install:
   - conda update -q conda
   # Useful for debugging any issues with conda
   - conda info -a
+  # install netmhcbundle
+  - git clone https://mhcbundle:$MHC_BUNDLE_PASS@github.com/hammerlab/netmhc-bundle.git
+  - export NETMHC_BUNDLE_HOME=$PWD/netmhc-bundle
+  - mkdir tmp
+  - export NETMHC_BUNDLE_TMPDIR=$PWD/tmp
+  - export PATH=$PATH:$NETMHC_BUNDLE_HOME/bin
+env:
+  global:
+    # MHC_BUNDLE_PASS
+    - secure: "TIminZrp9m1kMXhemqz8Zx4BjojIoEYZJnNrDrL6T/pKMpP5FQ6sprj8meGfNse4ApRIPmp5lhqxbPOe7Cg7ooetIcORekjRueHwRkYXqgMbgffgZYuEJTAGLKFsBDEXFD1kWT7igmvXFsP1T0bb1TxRPK93Q5G+e1dEAm6Iqwo="
 addons:
   apt:
     packages:
