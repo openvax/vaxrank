@@ -26,9 +26,21 @@ before_install:
   - conda update -q conda
   # Useful for debugging any issues with conda
   - conda info -a
+  # install netmhcbundle
+  - git clone https://mhcbundle:$MHC_BUNDLE_PASS@github.com/hammerlab/netmhc-bundle.git
+  - export NETMHC_BUNDLE_HOME=$PWD/netmhc-bundle
+  - mkdir tmp
+  - export NETMHC_BUNDLE_TMPDIR=$PWD/tmp
+  - export PATH=$PATH:$NETMHC_BUNDLE_HOME/bin
+env:
+  global:
+    # MHC_BUNDLE_PASS
+    - secure: "X3FwUdvnhxDbHOfxSjMgJg8N4WSGcmQL7Nl7B/oWQUBico1n6H8JlOtrN9mLU+AfB+bAuZjonPaGakB5j9imZfHwyKbOtIbbXzvPMJBNpdlq6ongaAIMFVMr4963hOn+KEJqNmmeCF/AEPqQxFXQRYJKPNoxP8kp/lX391CQrxeH0NPSUZUFR5huQzElYSRNFug805u/0hdAQTyFRl9cIFxb+4zHxzd+roCrY6DNb24igBGz2/ArQRBJf/iPVRZEE3nKPYGRDXepnIyRaGVetaEM/k8FYR87oBkyyIXCTWLDIP1KwvoN8Uo94ODUyL/Hv2LjE7oF3fV1lwX6u6U5yN+girjlrfdgBiCkLPlxcBsZ7uGAepz+aD76Omhz2r3dyAjJMTBwoufRLPFNUumY7YK8TqB6DZFU9mu8DVTpzjMjrsMicV5NaSzSA/CKswwyCqu3U3OaHTEpwExuFKyAFMolQKTct2HpAqkQoLxHq8Jp0bfxz+xFsUC4akx5UXUsPBjgQEB27QaC0plJoHLj9gm/2bJWYUEmoOmpcu/dyZLaGBoPUH25MqYc8IJ+jdLnoOaEZDU5O8F32Ky9W4C8OFakz6ABhCsmD1JblnEJMJuNBiCA56QjYeuMIO3ilPwXXz/N/kyxCPVgwKRouqNZ9PlapB3agdy1m5Bn+wOvuaM="
 addons:
   apt:
     packages:
+    # Needed for NetMHC
+    - tcsh
     # install pandoc for use with pypandoc for converting the README
     # from markdown to RST
     - pandoc
