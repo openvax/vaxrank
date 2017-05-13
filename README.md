@@ -34,12 +34,15 @@ Note: to generate PDF reports, you first need to install [wkhtmltopdf](http://wk
 brew install Caskroom/cask/wkhtmltopdf
 ```
 
-Vaxrank uses [PyEnsembl](https://github.com/hammerlab/pyensembl) for accessing information about the reference genome. Before using Vaxrank you must install an Ensembl release corresponding to the reference genome used to call your mutations:
+Vaxrank uses [PyEnsembl](https://github.com/hammerlab/pyensembl) for accessing information about the reference genome. You must install an Ensembl release corresponding to the reference genome associated with the mutations provided to Vaxrank. 
 
+The latest release for GRCh38 is Ensembl 87:
 ```
-# GRCh38
 pyensembl install --release 87 --species human
-# GRCh37
+```
+
+The last releast for GRCh37 is Ensembl 75:
+```
 pyensembl install --release 75 --species human
 ```
 
