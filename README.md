@@ -41,11 +41,12 @@ The latest release for GRCh38 is Ensembl 87:
 pyensembl install --release 87 --species human
 ```
 
-The last releast for GRCh37 is Ensembl 75:
+The last release for GRCh37 is Ensembl 75:
 ```
 pyensembl install --release 75 --species human
 ```
 
+If your variants were called from alignments against hg19 then you can still use GRCh37 but should ignore mitochondrial variants.  
 
 # Development
 
