@@ -495,8 +495,9 @@ def make_csv_report(
         frames[sheet_name] = df
 
     if not frames:
-        logger.info('No data for CSV or XLSX report')
-        return
+        logger.info('No data for CSV or XLSX report; creating files only with headers.')
+        empty_columns = new_columns()
+        frames['Empty'] = pd.DataFrame(empty_columns, columns=empty_columns.keys())
 
     all_dfs = pd.concat(frames.values())
     if csv_report_path:
