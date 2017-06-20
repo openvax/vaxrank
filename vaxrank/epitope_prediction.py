@@ -164,8 +164,16 @@ def predict_epitopes(
     results = OrderedDict()
     fm = load_reference_peptides_index(genome)
 
-    mhctools_binding_predictions = mhc_predictor.predict_subsequences(
-        {protein_fragment.gene_name: protein_fragment.amino_acids})
+    # sometimes the predictors will fail, and we don't want to crash vaxrank in that situation
+    # TODO: make more specific or remove when we fix error handling in mhctools
+    try:
+        mhctools_binding_predictions = mhc_predictor.predict_subsequences(
+            {protein_fragment.gene_name: protein_fragment.amino_acids})
+    except Exception as exc:
+        logger.error('MHC prediction errored for protein fragment %s, with exception text "%s"',
+            protein_fragment, exc)
+        return results
+
     # convert from mhctools.BindingPrediction objects to EpitopePrediction
     # which differs primarily by also having a boolean field
     # 'overlaps_mutation' that indicates whether the epitope overlaps

@@ -81,6 +81,7 @@ if __name__ == '__main__':
             'xlrd',
             'xlsxwriter',
             'xvfbwrapper',
+            'future>=0.16.0',  # needed by pylint
         ],
 
         long_description=readme,

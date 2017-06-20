@@ -12,3 +12,4 @@ shellinford>=0.3.4
 xlsxwriter
 xlrd
 xvfbwrapper
+future>=0.16.0  # needed by pylint

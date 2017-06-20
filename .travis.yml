@@ -32,6 +32,8 @@ before_install:
   - mkdir tmp
   - export NETMHC_BUNDLE_TMPDIR=$PWD/tmp
   - export PATH=$PATH:$NETMHC_BUNDLE_HOME/bin
+  # needed for mhctools initialization so that it doesn't try to load tensorflow
+  - export KERAS_BACKEND=theano
 env:
   global:
     # MHC_BUNDLE_PASS
@@ -58,6 +60,6 @@ script:
   - pyensembl install --release 87 --species human
   - pyensembl install --release 87 --species mouse
   # run tests
-  - nosetests test -a '!skip' --with-coverage --cover-package=vaxrank
+  - travis_wait nosetests test -a '!skip' --with-coverage --cover-package=vaxrank
 after_success:
   coveralls
