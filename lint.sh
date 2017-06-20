@@ -6,6 +6,7 @@ set -o errexit
 # see these issues:
 # - https://bitbucket.org/logilab/pylint/issues/701/false-positives-with-not-an-iterable-and
 # - https://bitbucket.org/logilab/pylint/issues/58
+# - 
 
 find vaxrank test -name '*.py' \
   | xargs pylint \

@@ -79,7 +79,7 @@ def test_mhc_predictor_error():
 
     # throws an error for each prediction, make sure vaxrank doesn't fall down
     class FakeMHCPredictor:
-        def predict_subsequences(x):
+        def predict_subsequences(self, x):
             raise ValueError('I throw an error in your general direction')
 
     epitope_predictions = predict_epitopes(
