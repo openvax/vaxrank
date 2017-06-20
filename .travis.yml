@@ -60,6 +60,6 @@ script:
   - pyensembl install --release 87 --species human
   - pyensembl install --release 87 --species mouse
   # run tests
-  - nosetests test -a '!skip' --with-coverage --cover-package=vaxrank
+  - travis_wait nosetests test -a '!skip' --with-coverage --cover-package=vaxrank
 after_success:
   coveralls
