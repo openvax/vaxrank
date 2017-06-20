@@ -60,3 +60,31 @@ def test_reference_peptide_logic():
         vaccine_peptide.wildtype_epitope_score)
     eq_(logistic_epitope_score(prediction_does_not_occur_in_reference),
         vaccine_peptide.mutant_epitope_score)
+
+def test_mhc_predictor_error():
+    genome = EnsemblRelease(species="mouse")
+    wdr13_transcript = genome.transcripts_by_name("Wdr13-001")[0]
+
+    protein_fragment = MutantProteinFragment(
+        variant=None,  # irrelevant to test
+        gene_name='Wdr13',
+        amino_acids='KLQGHSAPVLDVIVNCDESLLASSD',
+        mutant_amino_acid_start_offset=12,
+        mutant_amino_acid_end_offset=13,
+        n_overlapping_reads=71,
+        n_alt_reads=25,
+        n_ref_reads=46,
+        n_alt_reads_supporting_protein_sequence=2,
+        supporting_reference_transcripts=[wdr13_transcript])
+
+    # throws an error for each prediction, make sure vaxrank doesn't fall down
+    class FakeMHCPredictor:
+        def predict_subsequences(x):
+            raise ValueError('I throw an error in your general direction')
+
+    epitope_predictions = predict_epitopes(
+        mhc_predictor=FakeMHCPredictor(),
+        protein_fragment=protein_fragment,
+        genome=genome)
+
+    eq_(0, len(epitope_predictions))
