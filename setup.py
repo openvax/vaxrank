@@ -71,7 +71,7 @@ if __name__ == '__main__':
             'numpy',
             'pandas',
             'varcode>=0.5.9',
-            'isovar>=0.6.1',
+            'isovar>=0.7.0',
             'mhctools>=1.3.0',
             'roman',
             'jinja2',
