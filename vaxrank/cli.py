@@ -152,7 +152,6 @@ def add_vaccine_peptide_args(arg_parser):
 
     vaccine_peptide_group.add_argument(
         "--max-mutations-in-report",
-        default=10,
         type=int,
         help="Number of mutations to report")
 
