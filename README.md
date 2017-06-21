@@ -58,8 +58,8 @@ conda create -q -n vaxrank-dev-env python=3.5.2 numpy scipy nose pandas pylint
 source activate vaxrank-dev-env
 pip install -r requirements.txt
 pip install .
-pyensembl install --release 85 --species human
-pyensembl install --release 85 --species mouse
+pyensembl install --release 87 --species human
+pyensembl install --release 87 --species mouse
 ```
 
 You should run the linter and the test suite as you work on Vaxrank (and these will be run automatically by our continuous integration server up on a PR being made).
