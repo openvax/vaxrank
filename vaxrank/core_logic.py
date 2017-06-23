@@ -49,6 +49,16 @@ def vaccine_peptides_for_variant(
         variant=variant,
         protein_sequence=isovar_protein_sequences[0])
 
+    min_expected_length = mhc_predictor.min_peptide_length
+    def_expected_length = mhc_predictor.default_peptide_lengths
+    if def_expected_length is not None and len(def_expected_length) > 0:
+        min_expected_length = min(def_expected_length)
+    if len(protein_fragment) < min_expected_length:
+        logger.info("Mutant protein fragment for %s (%s) is "
+                    "to short to be used in prediction. Skipping.",
+                    str(protein_fragment), str(variant))
+        return []
+
     logger.info(
         "Mutant protein fragment for %s: %s",
         variant,
