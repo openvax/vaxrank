@@ -30,7 +30,6 @@ from varcode import load_vcf_fast
 from varcode.effects import top_priority_effect
 
 from .manufacturability import ManufacturabilityScores
-from .epitope_prediction import logistic_epitope_score
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +215,7 @@ class TemplateDataCreator(object):
             ('Sequence', epitope_prediction.peptide_sequence),
             ('IC50', epitope_prediction.ic50),
             ('Normalized binding score', round(
-                logistic_epitope_score(epitope_prediction), 4)),
+                epitope_prediction.logistic_epitope_score(), 4)),
             ('Allele', epitope_prediction.allele),
         ])
         return epitope_data
@@ -285,9 +284,7 @@ class TemplateDataCreator(object):
 
             top_peptide = vaccine_peptides[0]
             variant_data = self._variant_data(top_peptide)
-            effects = [variant.effect_on_transcript(t) for t in
-                top_peptide.mutant_protein_fragment.supporting_reference_transcripts]
-            predicted_effect = top_priority_effect(effects)
+            predicted_effect = top_peptide.mutant_protein_fragment.predicted_effect()
             effect_data = self._effect_data(predicted_effect)
 
             databases = self._databases(
@@ -525,3 +522,21 @@ def make_csv_report(
 
         writer.save()
         logger.info('Wrote manufacturer XLSX file to %s', excel_report_path)
+
+def make_min_epitope_report(
+        ranked_variants_with_vaccine_peptides,
+        min_epitope_report_path):
+    # import pdb; pdb.set_trace()
+    # "column with the wt and its affinity next to the mutant min variant?
+    # Also is there a way to see if there are any non-variant related wt within the SLP
+    # with high affinity that we did not account for?"
+    # in practice, we want for each variant/vaccine peptide combination:
+    # - each mutant epitope included in the report needs to list its WT epitope and affinity
+    # - list all strong binders in the peptide that don't overlap the mutation
+
+    # all predictions, including WT ones, in:
+    # ranked_variants_with_vaccine_peptides[0][1][0].epitope_predictions
+    # each highly-ranked mutant epitope should also have a WT version that we want to run
+    # prediction numbers for
+    pass
+

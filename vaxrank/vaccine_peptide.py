@@ -20,7 +20,6 @@ from collections import namedtuple
 import numpy as np
 
 from .manufacturability import ManufacturabilityScores
-from .epitope_prediction import logistic_epitope_score
 
 VaccinePeptideBase = namedtuple(
     "VaccinePeptide", [
@@ -41,11 +40,11 @@ class VaccinePeptide(VaccinePeptideBase):
             epitope_predictions,
             min_epitope_score=0):
         wildtype_epitope_score = sum(
-            logistic_epitope_score(p)
+            p.logistic_epitope_score()
             for p in epitope_predictions
             if not p.overlaps_mutation or p.occurs_in_reference)
         mutant_epitope_score = sum(
-            logistic_epitope_score(p)
+            p.logistic_epitope_score()
             for p in epitope_predictions
             if p.overlaps_mutation and not p.occurs_in_reference)
         return VaccinePeptideBase.__new__(

@@ -6,6 +6,7 @@ vaxrank \
     --mhc-alleles H2-Kb,H2-Db \
     --mhc-epitope-lengths 8 \
     --padding-around-mutation 5 \
+    --min-epitope-score 0.0 \
     --output-ascii-report vaccine-peptides-report.txt \
     --output-html-report vaccine-peptides-report.html \
     --output-pdf-report vaccine-peptides-report.pdf \
