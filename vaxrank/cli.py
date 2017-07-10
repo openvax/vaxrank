@@ -133,7 +133,8 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-min-epitope-report",
         default="",
-        help="Path to the minimal epitope report")
+        help="Path to the minimal epitope report, which lists which mutant and wildtype peptides "
+        "can be used for T-cell response assays")
 
 
 def add_vaccine_peptide_args(arg_parser):

@@ -526,17 +526,4 @@ def make_csv_report(
 def make_min_epitope_report(
         ranked_variants_with_vaccine_peptides,
         min_epitope_report_path):
-    # import pdb; pdb.set_trace()
-    # "column with the wt and its affinity next to the mutant min variant?
-    # Also is there a way to see if there are any non-variant related wt within the SLP
-    # with high affinity that we did not account for?"
-    # in practice, we want for each variant/vaccine peptide combination:
-    # - each mutant epitope included in the report needs to list its WT epitope and affinity
-    # - list all strong binders in the peptide that don't overlap the mutation
-
-    # all predictions, including WT ones, in:
-    # ranked_variants_with_vaccine_peptides[0][1][0].epitope_predictions
-    # each highly-ranked mutant epitope should also have a WT version that we want to run
-    # prediction numbers for
-    pass
-
+    raise NotImplementedError('Will do soon, see https://github.com/hammerlab/vaxrank/issues/142')
