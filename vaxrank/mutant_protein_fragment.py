@@ -15,8 +15,12 @@
 from __future__ import absolute_import, print_function, division
 
 from collections import namedtuple
+import logging
 
 from varcode.effects import top_priority_effect
+
+
+logger = logging.getLogger(__name__)
 
 # using a namedtuple base class for the immutable fields of a MutantProteinFragment
 # since it makes it clearer what the essential information is and provides
