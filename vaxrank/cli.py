@@ -41,8 +41,6 @@ from .report import (
     PatientInfo,
 )
 
-
-logging.config.fileConfig(pkg_resources.resource_filename(__name__, 'logging.conf'))
 logger = logging.getLogger(__name__)
 
 
@@ -125,6 +123,11 @@ def add_output_args(arg_parser):
         "--output-final-review",
         default="",
         help="Name of final reviewer of report")
+
+    output_args_group.add_argument(
+        "--log-path",
+        default="python.log",
+        help="File path to write the vaxrank Python log to")
 
 
 def add_vaccine_peptide_args(arg_parser):
@@ -278,6 +281,10 @@ def main(args_list=None):
         arg_parser = new_run_arg_parser()
 
     args = arg_parser.parse_args(args_list)
+    logging.config.fileConfig(
+        pkg_resources.resource_filename(__name__, 'logging.conf'),
+            defaults={'logfilename': args.log_path})
+
     logger.info(args)
     check_args(args)
 
