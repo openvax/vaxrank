@@ -18,7 +18,8 @@ from nose.tools import eq_, ok_
 
 from mhctools import RandomBindingPredictor
 from pyensembl import EnsemblRelease
-from vaxrank.epitope_prediction import predict_epitopes, logistic_epitope_score
+from varcode import Variant
+from vaxrank.epitope_prediction import predict_epitopes
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.vaccine_peptide import VaccinePeptide
 
@@ -28,7 +29,7 @@ def test_reference_peptide_logic():
     wdr13_transcript = genome.transcripts_by_name("Wdr13-001")[0]
 
     protein_fragment = MutantProteinFragment(
-        variant=None,  # irrelevant to test
+        variant=Variant('X', '8125624', 'C', 'A'),
         gene_name='Wdr13',
         amino_acids='KLQGHSAPVLDVIVNCDESLLASSD',
         mutant_amino_acid_start_offset=12,
@@ -56,9 +57,9 @@ def test_reference_peptide_logic():
         protein_fragment,
         [prediction_occurs_in_reference, prediction_does_not_occur_in_reference])
 
-    eq_(logistic_epitope_score(prediction_occurs_in_reference),
+    eq_(prediction_occurs_in_reference.logistic_epitope_score(),
         vaccine_peptide.wildtype_epitope_score)
-    eq_(logistic_epitope_score(prediction_does_not_occur_in_reference),
+    eq_(prediction_does_not_occur_in_reference.logistic_epitope_score(),
         vaccine_peptide.mutant_epitope_score)
 
 def test_mhc_predictor_error():
@@ -66,7 +67,7 @@ def test_mhc_predictor_error():
     wdr13_transcript = genome.transcripts_by_name("Wdr13-001")[0]
 
     protein_fragment = MutantProteinFragment(
-        variant=None,  # irrelevant to test
+        variant=Variant('X', '8125624', 'C', 'A'),
         gene_name='Wdr13',
         amino_acids='KLQGHSAPVLDVIVNCDESLLASSD',
         mutant_amino_acid_start_offset=12,

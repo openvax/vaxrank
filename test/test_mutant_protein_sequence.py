@@ -25,7 +25,7 @@ from .testing_helpers import data_path
 
 
 def check_mutant_amino_acids(variant, mutant_protein_fragment):
-    predicted_effect = variant.effects().top_priority_effect()
+    predicted_effect = mutant_protein_fragment.predicted_effect()
     expected_amino_acids = predicted_effect.aa_alt
     vaxrank_mutant_amino_acids = mutant_protein_fragment.amino_acids[
         mutant_protein_fragment.mutant_amino_acid_start_offset:

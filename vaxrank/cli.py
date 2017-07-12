@@ -37,6 +37,7 @@ from .report import (
     make_html_report,
     make_pdf_report,
     make_csv_report,
+    make_min_epitope_report,
     TemplateDataCreator,
     PatientInfo,
 )
@@ -128,6 +129,12 @@ def add_output_args(arg_parser):
         "--log-path",
         default="python.log",
         help="File path to write the vaxrank Python log to")
+
+    output_args_group.add_argument(
+        "--output-min-epitope-report",
+        default="",
+        help="Path to the minimal epitope report, which lists which mutant and wildtype peptides "
+        "can be used for T-cell response assays")
 
 
 def add_vaccine_peptide_args(arg_parser):
@@ -292,6 +299,9 @@ def main(args_list=None):
     ranked_variant_list = data['variants']
     patient_info = data['patient_info']
     args_for_report = data['args']
+
+    if args.output_min_epitope_report:
+        make_min_epitope_report(ranked_variant_list, args.output_min_epitope_report)
 
     ###################
     # CSV-based reports

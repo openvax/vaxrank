@@ -15,6 +15,12 @@
 from __future__ import absolute_import, print_function, division
 
 from collections import namedtuple
+import logging
+
+from varcode.effects import top_priority_effect
+
+
+logger = logging.getLogger(__name__)
 
 # using a namedtuple base class for the immutable fields of a MutantProteinFragment
 # since it makes it clearer what the essential information is and provides
@@ -166,3 +172,23 @@ class MutantProteinFragment(MutantProteinFragmentBase):
         subsequences = list(self.generate_subsequences(subsequence_length))
         subsequences.sort(key=sort_key)
         return subsequences[:k]
+
+    def predicted_effect(self):
+        effects = [self.variant.effect_on_transcript(t) for t in
+            self.supporting_reference_transcripts]
+        predicted_effect = top_priority_effect(effects)
+        return predicted_effect
+
+    def global_start_pos(self):
+        # position of mutation start relative to the full amino acid sequence
+        global_mutation_start_pos = self.predicted_effect().aa_mutation_start_offset
+        if global_mutation_start_pos is None:
+            logger.error('Could not find mutation start pos for variant %s',
+                self.variant)
+            return -1
+
+        # get the global position of the mutant protein fragment: shift left by the amount of
+        # the relative mutant start position
+        return (
+            global_mutation_start_pos - self.mutant_amino_acid_start_offset
+        )
