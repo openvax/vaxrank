@@ -31,6 +31,7 @@ EpitopePredictionBase = namedtuple("EpitopePrediction", [
     "wt_peptide_sequence",
     "length",
     "ic50",
+    "wt_ic50",
     "percentile_rank",
     "prediction_method_name",
     "overlaps_mutation",
@@ -177,6 +178,35 @@ def predict_epitopes(
             protein_fragment, exc)
         return results
 
+    # compute the WT epitopes for each mutant fragment's epitopes; mutant -> WT
+    wt_peptides = {}
+    for binding_prediction in mhctools_binding_predictions:
+        peptide = binding_prediction.peptide
+        peptide_length = binding_prediction.length
+        peptide_start_offset = binding_prediction.offset
+        peptide_end_offset = peptide_start_offset + peptide_length
+
+        overlaps_mutation = protein_fragment.interval_overlaps_mutation(
+            start_offset=peptide_start_offset,
+            end_offset=peptide_end_offset)
+
+        if overlaps_mutation:
+            full_reference_protein_sequence = (
+                protein_fragment.predicted_effect().original_protein_sequence
+            )
+            global_epitope_start_pos = (
+                protein_fragment.global_start_pos() + peptide_start_offset
+            )
+            wt_peptide = full_reference_protein_sequence[
+                global_epitope_start_pos:global_epitope_start_pos + peptide_length]
+            wt_peptides[peptide] = wt_peptide
+
+    wt_predictions = mhc_predictor.predict_peptides(wt_peptides.values())
+    wt_predictions_grouped = {}
+    # break it out: (peptide, allele) -> prediction
+    for wt_prediction in wt_predictions:
+        wt_predictions_grouped[(wt_prediction.peptide, wt_prediction.allele)] = wt_prediction
+
     # convert from mhctools.BindingPrediction objects to EpitopePrediction
     # which differs primarily by also having a boolean field
     # 'overlaps_mutation' that indicates whether the epitope overlaps
@@ -185,40 +215,41 @@ def predict_epitopes(
     num_occurs_in_reference = 0
     for binding_prediction in mhctools_binding_predictions:
         num_total += 1
-        peptide_start_offset = binding_prediction.offset
-        peptide_end_offset = binding_prediction.offset + binding_prediction.length
-
         peptide = binding_prediction.peptide
-        occurs_in_reference = index_contains_kmer(fm, peptide)
-        if occurs_in_reference:
-            logger.debug('Peptide %s occurs in reference', peptide)
-            num_occurs_in_reference += 1
+        peptide_length = binding_prediction.length
+        peptide_start_offset = binding_prediction.offset
+        peptide_end_offset = peptide_start_offset + peptide_length
+
         overlaps_mutation = protein_fragment.interval_overlaps_mutation(
             start_offset=peptide_start_offset,
             end_offset=peptide_end_offset)
 
+        occurs_in_reference = index_contains_kmer(fm, peptide)
+        if occurs_in_reference:
+            logger.debug('Peptide %s occurs in reference', peptide)
+            num_occurs_in_reference += 1
+
         # compute WT epitope sequence, if this epitope overlaps the mutation
         if overlaps_mutation:
-            full_reference_protein_sequence = (
-                protein_fragment.predicted_effect().original_protein_sequence
-            )
-            global_epitope_start_pos = protein_fragment.global_start_pos() + peptide_start_offset
-            wt_peptide = full_reference_protein_sequence[
-                global_epitope_start_pos:global_epitope_start_pos + binding_prediction.length]
+            wt_peptide = wt_peptides[peptide]
+            wt_ic50 = wt_predictions_grouped[(wt_peptide, binding_prediction.allele)].value
+
         else:
             wt_peptide = peptide
+            wt_ic50 = binding_prediction.value
 
         epitope_prediction = EpitopePrediction(
                 allele=binding_prediction.allele,
                 peptide_sequence=peptide,
                 wt_peptide_sequence=wt_peptide,
-                length=len(binding_prediction.peptide),
+                length=len(peptide),
                 ic50=binding_prediction.value,
+                wt_ic50=wt_ic50,
                 percentile_rank=binding_prediction.percentile_rank,
                 prediction_method_name=binding_prediction.prediction_method_name,
                 overlaps_mutation=overlaps_mutation,
                 source_sequence=protein_fragment.amino_acids,
-                offset=binding_prediction.offset,
+                offset=peptide_start_offset,
                 occurs_in_reference=occurs_in_reference)
         if epitope_prediction.logistic_epitope_score() >= min_epitope_score:
             key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)
@@ -242,6 +273,7 @@ def slice_epitope_predictions(
             wt_peptide_sequence=p.wt_peptide_sequence,
             length=p.length,
             ic50=p.ic50,
+            wt_ic50=p.wt_ic50,
             percentile_rank=p.percentile_rank,
             prediction_method_name=p.prediction_method_name,
             overlaps_mutation=p.overlaps_mutation,

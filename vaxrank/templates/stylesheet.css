@@ -44,10 +44,6 @@ col.patient-info-column-one {
 	width: 40%;
 }
 
-col.patient-info-column-two {
-
-}
-
 /* Command-line args */
 table.args {
 	width: 90%;
@@ -55,10 +51,6 @@ table.args {
 
 col.args-column-one {
 	width: 40%;
-}
-
-col.args-column-two {
-
 }
 
 /* Variants */
@@ -113,6 +105,14 @@ td.variant-head {
 }
 
 /* Peptides */
+h4.peptides {
+	page-break-before: always;
+}
+
+h4.wt-epitopes {
+	page-break-before: always;
+}
+
 ol.peptides {
 	padding-left: 0;
 	list-style-position: inside;
@@ -159,6 +159,30 @@ col.peptide-data-column-one {
 
 col.peptide-data-column-two {
 	width: 30%;
+}
+
+col.epitope-data-column-one {
+	width: 16%;
+}
+
+col.epitope-data-column-two {
+	width: 16%;
+}
+
+col.epitope-data-column-three {
+	width: 16%;
+}
+
+col.epitope-data-column-four {
+	width: 16%;
+}
+
+col.epitope-data-column-five {
+	width: 16%;
+}
+
+col.epitope-data-column-six {
+	width: 16%;
 }
 
 /* Signatures */

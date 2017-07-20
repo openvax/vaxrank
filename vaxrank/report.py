@@ -79,6 +79,9 @@ class TemplateDataCreator(object):
             'reviewers': reviewers.split(',') if reviewers else [],
             'final_review': final_review,
             'input_json_file': input_json_file,
+            # these report sections are optional
+            'include_manufacturability': args_for_report['manufacturability'],
+            'include_wt_epitopes': args_for_report['wt_epitopes'],
         }
 
         # map from peptide objects to their COSMIC IDs if they exist
@@ -217,6 +220,8 @@ class TemplateDataCreator(object):
             ('Normalized binding score', round(
                 epitope_prediction.logistic_epitope_score(), 4)),
             ('Allele', epitope_prediction.allele),
+            ('WT sequence', epitope_prediction.wt_peptide_sequence),
+            ('WT IC50', epitope_prediction.wt_ic50),
         ])
         return epitope_data
 
@@ -301,18 +306,23 @@ class TemplateDataCreator(object):
                 manufacturability_data = self._manufacturability_data(vaccine_peptide)
 
                 epitopes = []
+                wt_epitopes = []
                 sorted_epitope_predictions = sorted(
                     vaccine_peptide.epitope_predictions, key=attrgetter('ic50'))
                 for epitope_prediction in sorted_epitope_predictions:
+                    epitope_data = self._epitope_data(epitope_prediction)
+                    # mutant vs WT epitope data
                     if epitope_prediction.overlaps_mutation:
-                        epitope_data = self._epitope_data(epitope_prediction)
                         epitopes.append(epitope_data)
+                    else:
+                        wt_epitopes.append(epitope_data)
 
                 peptide_dict = {
                     'header_display_data': header_display_data,
                     'peptide_data': peptide_data,
                     'manufacturability_data': manufacturability_data,
                     'epitopes': epitopes,
+                    'wt_epitopes': wt_epitopes,
                 }
                 peptides.append(peptide_dict)
 

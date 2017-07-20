@@ -57,6 +57,7 @@ def new_run_arg_parser():
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
     add_output_args(arg_parser)
+    add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
     return arg_parser
 
@@ -73,8 +74,39 @@ def cached_run_arg_parser():
         default="",
         help="Path to JSON file containing results of vaccine peptide report")
     add_output_args(arg_parser)
+    add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
     return arg_parser
+
+
+# Lets the user specify whether they want to see particular sections in the report.
+def add_optional_output_args(arg_parser):
+    manufacturability_args = arg_parser.add_mutually_exclusive_group(required=False)
+    manufacturability_args.add_argument(
+        "--include-manufacturability-in-report",
+        dest="manufacturability",
+        action="store_true")
+    manufacturability_args.add_argument(
+        "--no-manufacturability-in-report",
+        dest="manufacturability",
+        action="store_false")
+    arg_parser.set_defaults(manufacturability=True)
+
+    wt_epitope_args = arg_parser.add_mutually_exclusive_group(required=False)
+    wt_epitope_args.add_argument(
+        "--include-non-overlapping-epitopes-in-report",
+        dest="wt_epitopes",
+        action="store_true",
+        help="Set to true to include a report section for each vaccine peptide containing "
+             "strong binders that do not overlap the mutation")
+
+    wt_epitope_args.add_argument(
+        "--no-non-overlapping-epitopes-in-report",
+        dest="wt_epitopes",
+        action="store_false",
+        help="Set to false to exclude report information for each vaccine peptide about "
+             "strong binders that do not overlap the mutation")
+    arg_parser.set_defaults(wt_epitopes=True)
 
 
 def add_output_args(arg_parser):

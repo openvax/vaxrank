@@ -14,6 +14,11 @@ Package version info
         {% for key, val in v.variant_data.items() %}
         {{ key }}: {{ val }}
         {% endfor %}
+
+        {% for key, val in v.effect_data.items() %}
+        {{ key }}: {{ val }}
+        {% endfor %}
+
         Vaccine Peptides:
 
         {% for p in v.peptides %}
@@ -21,16 +26,25 @@ Package version info
                   {% for key, val in p.peptide_data.items() %}
                   - {{ key }}: {{ val }}
                   {% endfor %}
+                  {% if include_manufacturability %}
 
                   Manufacturability:
                   {% for key, val in p.manufacturability_data.items() %}
                   - {{ key }}: {{ val }}
                   {% endfor %}
-
+                  {% endif %}
+                  
                   Predicted mutant epitopes:
                   {% for e in p.epitopes %}
+                        * {{ e["Sequence"] }} {{ e["IC50"] }} ({{ e["Allele"] }}). Wildtype: {{ e["WT sequence"] }} {{ e["WT IC50"] }}
+                  {% endfor %}
+
+                  {% if include_wt_epitopes and p.wt_epitopes %}
+                  Predicted strong binders that do not overlap the mutation:
+                  {% for e in p.wt_epitopes %}
                         * {{ e["Sequence"] }} {{ e["IC50"] }} ({{ e["Allele"] }})
                   {% endfor %}
+                  {% endif %}
 
         {% endfor %}
 {% endfor %}
