@@ -201,7 +201,11 @@ def predict_epitopes(
                 global_epitope_start_pos:global_epitope_start_pos + peptide_length]
             wt_peptides[peptide] = wt_peptide
 
-    wt_predictions = mhc_predictor.predict_peptides(wt_peptides.values())
+    try:
+        wt_predictions = mhc_predictor.predict_peptides(wt_peptides.values())
+    except Exception as exc:
+        logger.error('MHC prediction for WT peptides errored, with exception text "%s"', exc)
+        wt_predictions = []
     wt_predictions_grouped = {}
     # break it out: (peptide, allele) -> prediction
     for wt_prediction in wt_predictions:
