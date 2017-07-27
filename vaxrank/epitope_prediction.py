@@ -203,17 +203,19 @@ def predict_epitopes(
                 global_epitope_start_pos:global_epitope_start_pos + peptide_length]
             wt_peptides[peptide] = wt_peptide
 
+    wt_predictions = []
     try:
         # filter to minimum peptide lengths
         valid_wt_peptides = [
-            x for x in wt_peptides.values() if len(x) > mhc_predictor.min_peptide_length
+            x for x in wt_peptides.values() if len(x) >= mhc_predictor.min_peptide_length
         ]
-        wt_predictions = mhc_predictor.predict_peptides(valid_wt_peptides)
+        if len(valid_wt_peptides) > 0:
+            wt_predictions = mhc_predictor.predict_peptides(valid_wt_peptides)
     except ValueError as err:
         logger.error(
             'MHC prediction for WT peptides errored, with traceback: %s',
             traceback.format_exc())
-        wt_predictions = []
+        
     wt_predictions_grouped = {}
     # break it out: (peptide, allele) -> prediction
     for wt_prediction in wt_predictions:
@@ -273,7 +275,6 @@ def predict_epitopes(
                 source_sequence=protein_fragment.amino_acids,
                 offset=peptide_start_offset,
                 occurs_in_reference=occurs_in_reference)
-        logger.info(epitope_prediction)
         if epitope_prediction.logistic_epitope_score() >= min_epitope_score:
             key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)
             results[key] = epitope_prediction
