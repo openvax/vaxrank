@@ -9,8 +9,8 @@ cache:
   # along with the indexed db of intervals and ID mappings and pickles
   # of sequence dictionaries
   directories:
-    - $HOME/.cache/pyensembl
-    - $HOME/.cache/pip
+    - /home/travis/.cache/pyensembl/
+    - /home/travis/.cache/pip
 before_install:
   # Commands below copied from: http://conda.pydata.org/docs/travis.html
   # We do this conditionally because it saves us some downloading if the
