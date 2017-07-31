@@ -5,11 +5,12 @@ python:
   - "2.7"
   - "3.5"
 cache:
-  pip: true
-  # cache directory used for Ensembl downloads of GTF and FASTA files
+  # cache pip files, also directory used for Ensembl downloads of GTF and FASTA files
   # along with the indexed db of intervals and ID mappings and pickles
   # of sequence dictionaries
-  directories: /home/travis/.cache/pyensembl/
+  directories:
+    - $HOME/.cache/pyensembl
+    - $HOME/.cache/pip
 before_install:
   # Commands below copied from: http://conda.pydata.org/docs/travis.html
   # We do this conditionally because it saves us some downloading if the
@@ -53,10 +54,11 @@ install:
   - pip install -r requirements.txt
   - pip install .
   - pip install coveralls
-script:
-  - ./lint.sh
+before_script:
   - pyensembl install --release 87 --species human
   - pyensembl install --release 87 --species mouse
+script:
+  - ./lint.sh
   # run tests
   - travis_wait nosetests -sv test -a '!skip' --with-coverage --cover-package=vaxrank
 after_success:
