@@ -109,10 +109,6 @@ h4.peptides {
 	page-break-before: always;
 }
 
-h4.wt-epitopes {
-	/* page-break-before: : always; */
-}
-
 div.wt-epitopes {
 	page-break-after: always;
 	page-break-inside: avoid;
