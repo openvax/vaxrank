@@ -110,7 +110,13 @@ h4.peptides {
 }
 
 h4.wt-epitopes {
-	page-break-before: always;
+	/* page-break-before: : always; */
+}
+
+div.wt-epitopes {
+	page-break-after: always;
+	page-break-inside: avoid;
+	margin: 2em 0 2em 2em;
 }
 
 ol.peptides {
@@ -120,6 +126,7 @@ ol.peptides {
 
 li.peptide {
 	page-break-inside: avoid;
+	page-break-before: always;
 }
 
 table.peptide {

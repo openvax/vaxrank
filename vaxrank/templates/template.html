@@ -79,7 +79,7 @@
                     <br>
                     {% endif %}
 
-            		<h4 class="peptides">Vaccine Peptides for variant: {{ v.short_description }}</h4>
+            		<!--<h4 class="peptides">Vaccine Peptides for variant: {{ v.short_description }}</h4>-->
             		<ol class="peptides" type="i">
             			{% for p in v.peptides %}
             			<li class="peptide">
@@ -141,9 +141,11 @@
                                     </table>
                                 </td></tr>
                             </table>
-                            {% if include_wt_epitopes and p.wt_epitopes %}
-                            <h4 class="wt-epitopes">Predicted strong binders that do not overlap the mutation</h5>
-                            <table class="pure-table pure-table-bordered">
+                            {% if include_wt_epitopes %}
+                            <div class="wt-epitopes">
+                            {% if p.wt_epitopes %}
+                            <h4 class="wt-epitopes">Predicted strong binders that do not overlap the mutation</h4>
+                            <table class="pure-table pure-table-bordered wt-epitopes">
                                 <thead>
                                     <tr>
                                         <td>Sequence</td>
@@ -159,6 +161,10 @@
                                 </tr>
                                 {% endfor %}
                             </table>
+                            {% else %}
+                            <h4 class="wt-epitopes">No predicted strong binders that do not overlap the mutation.</h4>
+                            {% endif %}
+                            </div>
                             {% endif %}
             			</li>
             			{% endfor %}

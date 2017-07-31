@@ -219,7 +219,7 @@ class TemplateDataCreator(object):
             ('IC50', epitope_prediction.ic50),
             ('Normalized binding score', round(
                 epitope_prediction.logistic_epitope_score(), 4)),
-            ('Allele', epitope_prediction.allele),
+            ('Allele', epitope_prediction.allele.replace('HLA-', '')),
             ('WT sequence', epitope_prediction.wt_peptide_sequence),
             ('WT IC50', epitope_prediction.wt_ic50),
         ])
