@@ -322,14 +322,14 @@ class TemplateDataCreator(object):
 
 
                 # hack: make a nicely-formatted fixed width table for epitopes, used in ASCII report
-                with tempfile.TemporaryFile() as temp:
+                with tempfile.TemporaryFile(mode='r+') as temp:
                     asc.write(epitopes, temp, format='fixed_width')
                     temp.seek(0)
                     ascii_epitopes = temp.read()
 
                 ascii_wt_epitopes = None
                 if len(wt_epitopes) > 0:
-                    with tempfile.TemporaryFile() as temp:
+                    with tempfile.TemporaryFile(mode='r+') as temp:
                         asc.write(wt_epitopes, temp, format='fixed_width')
                         temp.seek(0)
                         ascii_wt_epitopes = temp.read()
