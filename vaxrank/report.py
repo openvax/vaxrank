@@ -21,6 +21,7 @@ import os
 import sys
 import tempfile
 
+from astropy.io import ascii as asc
 import jinja2
 import pandas as pd
 import pdfkit
@@ -216,12 +217,12 @@ class TemplateDataCreator(object):
         """
         epitope_data = OrderedDict([
             ('Sequence', epitope_prediction.peptide_sequence),
-            ('IC50', epitope_prediction.ic50),
+            ('IC50', '%.2fnM' % epitope_prediction.ic50),
             ('Normalized binding score', round(
                 epitope_prediction.logistic_epitope_score(), 4)),
             ('Allele', epitope_prediction.allele.replace('HLA-', '')),
             ('WT sequence', epitope_prediction.wt_peptide_sequence),
-            ('WT IC50', epitope_prediction.wt_ic50),
+            ('WT IC50', '%.2fnM' % epitope_prediction.wt_ic50),
         ])
         return epitope_data
 
@@ -315,14 +316,29 @@ class TemplateDataCreator(object):
                     if epitope_prediction.overlaps_mutation:
                         epitopes.append(epitope_data)
                     else:
-                        wt_epitopes.append(epitope_data)
+                        # only care about allele, ic50, sequence (other info is redundant)
+                        key_list = ['Allele', 'IC50', 'Sequence']
+                        wt_epitopes.append({key: epitope_data[key] for key in key_list})
 
+
+                # hack: make a nicely-formatted fixed width table for epitopes, used in ASCII report
+                with tempfile.TemporaryFile() as temp:
+                    asc.write(epitopes, temp, format='fixed_width')
+                    temp.seek(0)
+                    ascii_epitopes = temp.read()
+
+                with tempfile.TemporaryFile() as temp:
+                    asc.write(wt_epitopes, temp, format='fixed_width')
+                    temp.seek(0)
+                    ascii_wt_epitopes = temp.read()
                 peptide_dict = {
                     'header_display_data': header_display_data,
                     'peptide_data': peptide_data,
                     'manufacturability_data': manufacturability_data,
                     'epitopes': epitopes,
+                    'ascii_epitopes': ascii_epitopes,
                     'wt_epitopes': wt_epitopes,
+                    'ascii_wt_epitopes': ascii_wt_epitopes,
                 }
                 peptides.append(peptide_dict)
 

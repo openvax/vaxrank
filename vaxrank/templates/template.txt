@@ -20,7 +20,6 @@ Package version info
         {% endfor %}
 
         Vaccine Peptides:
-
         {% for p in v.peptides %}
                 {{ p.header_display_data.num }}. {{ p.header_display_data.aa_before_mutation }}_{{ p.header_display_data.aa_mutant }}_{{ p.header_display_data.aa_after_mutation }} (score = {{ v.variant_data["Top score"] }})
                   {% for key, val in p.peptide_data.items() %}
@@ -35,15 +34,11 @@ Package version info
                   {% endif %}
                   
                   Predicted mutant epitopes:
-                  {% for e in p.epitopes %}
-                        * {{ e["Sequence"] }} {{ e["IC50"] }} ({{ e["Allele"] }}). Wildtype: {{ e["WT sequence"] }} {{ e["WT IC50"] }}
-                  {% endfor %}
+                  {{ p.ascii_epitopes|indent(18) }}
 
                   {% if include_wt_epitopes and p.wt_epitopes %}
                   Predicted strong binders that do not overlap the mutation:
-                  {% for e in p.wt_epitopes %}
-                        * {{ e["Sequence"] }} {{ e["IC50"] }} ({{ e["Allele"] }})
-                  {% endfor %}
+                  {{ p.ascii_wt_epitopes|indent(18) }}
                   {% endif %}
 
         {% endfor %}

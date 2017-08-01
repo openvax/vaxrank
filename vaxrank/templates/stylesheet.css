@@ -143,6 +143,7 @@ span.mutant {
 table.peptide-inner {
 	width: 100%;
 	border: none;
+	font-size: 90%;
 }
 
 td.peptide-inner {
