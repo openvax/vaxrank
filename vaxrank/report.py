@@ -328,7 +328,7 @@ class TemplateDataCreator(object):
                     ascii_epitopes = temp.read()
 
                 ascii_wt_epitopes = None
-                if self.template_data['include_wt_epitopes'] == True:
+                if len(wt_epitopes) > 0:
                     with tempfile.TemporaryFile() as temp:
                         asc.write(wt_epitopes, temp, format='fixed_width')
                         temp.seek(0)
