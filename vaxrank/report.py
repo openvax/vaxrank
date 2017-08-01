@@ -327,10 +327,12 @@ class TemplateDataCreator(object):
                     temp.seek(0)
                     ascii_epitopes = temp.read()
 
-                with tempfile.TemporaryFile() as temp:
-                    asc.write(wt_epitopes, temp, format='fixed_width')
-                    temp.seek(0)
-                    ascii_wt_epitopes = temp.read()
+                ascii_wt_epitopes = None
+                if self.template_data['include_wt_epitopes'] == True:
+                    with tempfile.TemporaryFile() as temp:
+                        asc.write(wt_epitopes, temp, format='fixed_width')
+                        temp.seek(0)
+                        ascii_wt_epitopes = temp.read()
                 peptide_dict = {
                     'header_display_data': header_display_data,
                     'peptide_data': peptide_data,
