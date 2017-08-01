@@ -82,6 +82,7 @@ if __name__ == '__main__':
             'xlsxwriter',
             'xvfbwrapper',
             'future>=0.16.0',  # needed by pylint
+            'astropy',
         ],
 
         long_description=readme,
