@@ -79,7 +79,6 @@
                     <br>
                     {% endif %}
 
-            		<h4 id="peptides">Vaccine Peptides for variant: {{ v.short_description }}</h4>
             		<ol class="peptides" type="i">
             			{% for p in v.peptides %}
             			<li class="peptide">
@@ -98,7 +97,7 @@
                                         {% endfor %}
                                     </table>
                                 </td></tr>
-
+                                {% if include_manufacturability %}
                                 <tr><td class="peptide-inner-header">Manufacturability</td></tr>
                                 <tr><td class="peptide-inner">
                                     <table class="pure-table pure-table-bordered peptide-inner">
@@ -111,10 +110,19 @@
                                         {% endfor %}
                                     </table>
                                 </td></tr>
+                                {% endif %}
 
                                 <tr><td class="peptide-inner-header">Predicted mutant epitopes</td></tr>
                                 <tr><td class="peptide-inner">
-                                    <table class="pure-table peptide-inner">
+                                    <table class="pure-table epitope-inner">
+                                    <colgroup>
+                                        <col class="epitope-data-column-one">
+                                        <col class="epitope-data-column-two">
+                                        <col class="epitope-data-column-three">
+                                        <col class="epitope-data-column-four">
+                                        <col class="epitope-data-column-five">
+                                        <col class="epitope-data-column-six">
+                                    </colgroup>
                                         <thead>
                                             <tr>
                                                 {% for key in p.epitopes[0] %}
@@ -132,6 +140,31 @@
                                     </table>
                                 </td></tr>
                             </table>
+                            {% if include_wt_epitopes %}
+                            <div class="wt-epitopes">
+                            {% if p.wt_epitopes %}
+                            <h4 class="wt-epitopes">Predicted strong binders that do not overlap the mutation</h4>
+                            <table class="pure-table pure-table-bordered wt-epitopes">
+                                <thead>
+                                    <tr>
+                                        <td>Sequence</td>
+                                        <td>IC50</td>
+                                        <td>Allele</td>
+                                    </tr>
+                                </thead>
+                                {% for e in p.wt_epitopes %}
+                                <tr>
+                                    <td>{{ e["Sequence"] }}</td>
+                                    <td>{{ e["IC50"] }}</td>
+                                    <td>{{ e["Allele"] }}</td>
+                                </tr>
+                                {% endfor %}
+                            </table>
+                            {% else %}
+                            <h4 class="wt-epitopes">No predicted strong binders that do not overlap the mutation.</h4>
+                            {% endif %}
+                            </div>
+                            {% endif %}
             			</li>
             			{% endfor %}
             		</ol>

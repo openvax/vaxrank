@@ -21,6 +21,7 @@ import os
 import sys
 import tempfile
 
+from astropy.io import ascii as asc
 import jinja2
 import pandas as pd
 import pdfkit
@@ -79,6 +80,9 @@ class TemplateDataCreator(object):
             'reviewers': reviewers.split(',') if reviewers else [],
             'final_review': final_review,
             'input_json_file': input_json_file,
+            # these report sections are optional
+            'include_manufacturability': args_for_report['manufacturability'],
+            'include_wt_epitopes': args_for_report['wt_epitopes'],
         }
 
         # map from peptide objects to their COSMIC IDs if they exist
@@ -213,10 +217,12 @@ class TemplateDataCreator(object):
         """
         epitope_data = OrderedDict([
             ('Sequence', epitope_prediction.peptide_sequence),
-            ('IC50', epitope_prediction.ic50),
-            ('Normalized binding score', round(
+            ('IC50', '%.2f nM' % epitope_prediction.ic50),
+            ('Score', round(
                 epitope_prediction.logistic_epitope_score(), 4)),
-            ('Allele', epitope_prediction.allele),
+            ('Allele', epitope_prediction.allele.replace('HLA-', '')),
+            ('WT sequence', epitope_prediction.wt_peptide_sequence),
+            ('WT IC50', '%.2f nM' % epitope_prediction.wt_ic50),
         ])
         return epitope_data
 
@@ -301,18 +307,41 @@ class TemplateDataCreator(object):
                 manufacturability_data = self._manufacturability_data(vaccine_peptide)
 
                 epitopes = []
+                wt_epitopes = []
                 sorted_epitope_predictions = sorted(
                     vaccine_peptide.epitope_predictions, key=attrgetter('ic50'))
                 for epitope_prediction in sorted_epitope_predictions:
+                    epitope_data = self._epitope_data(epitope_prediction)
+                    # mutant vs WT epitope data
                     if epitope_prediction.overlaps_mutation:
-                        epitope_data = self._epitope_data(epitope_prediction)
                         epitopes.append(epitope_data)
+                    else:
+                        # only care about allele, ic50, sequence (other info is redundant)
+                        key_list = ['Allele', 'IC50', 'Sequence']
+                        wt_epitopes.append({key: epitope_data[key] for key in key_list})
 
+
+                # hack: make a nicely-formatted fixed width table for epitopes, used in ASCII report
+                with tempfile.TemporaryFile(mode='r+') as temp:
+                    asc.write(epitopes, temp, format='fixed_width_two_line', delimiter_pad=' ')
+                    temp.seek(0)
+                    ascii_epitopes = temp.read()
+
+                ascii_wt_epitopes = None
+                if len(wt_epitopes) > 0:
+                    with tempfile.TemporaryFile(mode='r+') as temp:
+                        asc.write(
+                            wt_epitopes, temp, format='fixed_width_two_line', delimiter_pad=' ')
+                        temp.seek(0)
+                        ascii_wt_epitopes = temp.read()
                 peptide_dict = {
                     'header_display_data': header_display_data,
                     'peptide_data': peptide_data,
                     'manufacturability_data': manufacturability_data,
                     'epitopes': epitopes,
+                    'ascii_epitopes': ascii_epitopes,
+                    'wt_epitopes': wt_epitopes,
+                    'ascii_wt_epitopes': ascii_wt_epitopes,
                 }
                 peptides.append(peptide_dict)
 

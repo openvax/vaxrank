@@ -14,23 +14,32 @@ Package version info
         {% for key, val in v.variant_data.items() %}
         {{ key }}: {{ val }}
         {% endfor %}
-        Vaccine Peptides:
 
+        {% for key, val in v.effect_data.items() %}
+        {{ key }}: {{ val }}
+        {% endfor %}
+
+        Vaccine Peptides:
         {% for p in v.peptides %}
                 {{ p.header_display_data.num }}. {{ p.header_display_data.aa_before_mutation }}_{{ p.header_display_data.aa_mutant }}_{{ p.header_display_data.aa_after_mutation }} (score = {{ v.variant_data["Top score"] }})
                   {% for key, val in p.peptide_data.items() %}
                   - {{ key }}: {{ val }}
                   {% endfor %}
+                  {% if include_manufacturability %}
 
                   Manufacturability:
                   {% for key, val in p.manufacturability_data.items() %}
                   - {{ key }}: {{ val }}
                   {% endfor %}
-
+                  {% endif %}
+                  
                   Predicted mutant epitopes:
-                  {% for e in p.epitopes %}
-                        * {{ e["Sequence"] }} {{ e["IC50"] }} ({{ e["Allele"] }})
-                  {% endfor %}
+                  {{ p.ascii_epitopes|indent(18) }}
+
+                  {% if include_wt_epitopes and p.wt_epitopes %}
+                  Predicted strong binders that do not overlap the mutation:
+                  {{ p.ascii_wt_epitopes|indent(18) }}
+                  {% endif %}
 
         {% endfor %}
 {% endfor %}
