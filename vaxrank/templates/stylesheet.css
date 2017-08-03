@@ -115,6 +115,10 @@ div.wt-epitopes {
 	margin: 2em 0 2em 2em;
 }
 
+table.wt-epitopes {
+	font-size: 80%;
+}
+
 ol.peptides {
 	padding-left: 0;
 	list-style-position: inside;
@@ -143,7 +147,6 @@ span.mutant {
 table.peptide-inner {
 	width: 100%;
 	border: none;
-	font-size: 90%;
 }
 
 td.peptide-inner {
@@ -187,6 +190,12 @@ col.epitope-data-column-five {
 
 col.epitope-data-column-six {
 	width: 16%;
+}
+
+table.epitope-inner {
+	font-size: 80%;
+	width: 100%;
+	border: none;
 }
 
 /* Signatures */

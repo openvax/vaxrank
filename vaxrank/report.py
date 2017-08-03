@@ -217,12 +217,12 @@ class TemplateDataCreator(object):
         """
         epitope_data = OrderedDict([
             ('Sequence', epitope_prediction.peptide_sequence),
-            ('IC50', '%.2fnM' % epitope_prediction.ic50),
-            ('Normalized binding score', round(
+            ('IC50', '%.2f nM' % epitope_prediction.ic50),
+            ('Score', round(
                 epitope_prediction.logistic_epitope_score(), 4)),
             ('Allele', epitope_prediction.allele.replace('HLA-', '')),
             ('WT sequence', epitope_prediction.wt_peptide_sequence),
-            ('WT IC50', '%.2fnM' % epitope_prediction.wt_ic50),
+            ('WT IC50', '%.2f nM' % epitope_prediction.wt_ic50),
         ])
         return epitope_data
 
@@ -323,14 +323,15 @@ class TemplateDataCreator(object):
 
                 # hack: make a nicely-formatted fixed width table for epitopes, used in ASCII report
                 with tempfile.TemporaryFile(mode='r+') as temp:
-                    asc.write(epitopes, temp, format='fixed_width')
+                    asc.write(epitopes, temp, format='fixed_width_two_line', delimiter_pad=' ')
                     temp.seek(0)
                     ascii_epitopes = temp.read()
 
                 ascii_wt_epitopes = None
                 if len(wt_epitopes) > 0:
                     with tempfile.TemporaryFile(mode='r+') as temp:
-                        asc.write(wt_epitopes, temp, format='fixed_width')
+                        asc.write(
+                            wt_epitopes, temp, format='fixed_width_two_line', delimiter_pad=' ')
                         temp.seek(0)
                         ascii_wt_epitopes = temp.read()
                 peptide_dict = {
