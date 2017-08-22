@@ -37,7 +37,7 @@ from .report import (
     make_html_report,
     make_pdf_report,
     make_csv_report,
-    make_min_epitope_report,
+    make_neoepitope_report,
     TemplateDataCreator,
     PatientInfo,
 )
@@ -145,7 +145,14 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-xlsx-report",
         default="",
-        help="Path to XLSX vaccine peptide report worksheet, one sheet per variant")
+        help="Path to XLSX vaccine peptide report worksheet, one sheet per variant. This is meant "
+             "for use by the vaccine manufacturer.")
+
+    output_args_group.add_argument(
+        "--output-neoepitope-report",
+        default="",
+        help="Path to XLSX neoepitope report, containing information focusing on short peptide "
+             "sequences.")
 
     output_args_group.add_argument(
         "--output-reviewed-by",
@@ -161,12 +168,6 @@ def add_output_args(arg_parser):
         "--log-path",
         default="python.log",
         help="File path to write the vaxrank Python log to")
-
-    output_args_group.add_argument(
-        "--output-min-epitope-report",
-        default="",
-        help="Path to the minimal epitope report, which lists which mutant and wildtype peptides "
-        "can be used for T-cell response assays")
 
 
 def add_vaccine_peptide_args(arg_parser):
@@ -332,9 +333,6 @@ def main(args_list=None):
     patient_info = data['patient_info']
     args_for_report = data['args']
 
-    if args.output_min_epitope_report:
-        make_min_epitope_report(ranked_variant_list, args.output_min_epitope_report)
-
     ###################
     # CSV-based reports
     ###################
@@ -343,6 +341,11 @@ def main(args_list=None):
             ranked_variant_list,
             excel_report_path=args.output_xlsx_report,
             csv_report_path=args.output_csv)
+
+    if args.output_neoepitope_report:
+        make_neoepitope_report(
+            ranked_variant_list,
+            excel_report_path=args.output_neoepitope_report)
 
     ########################
     # Template-based reports

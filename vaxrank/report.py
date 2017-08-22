@@ -390,7 +390,6 @@ def make_ascii_report(
         _make_report(template_data, f, 'templates/template.txt')
     logger.info('Wrote ASCII report to %s', ascii_report_path)
 
-
 def make_html_report(
         template_data,
         html_report_path):
@@ -467,6 +466,44 @@ def peptide_contains_epitopes(vaccine_peptide):
         if epitope.overlaps_mutation:
             return True
     return False
+
+def make_neoepitope_report(
+        ranked_variants_with_vaccine_peptides,
+        excel_report_path=None):
+    rows = []
+    # each row in the spreadsheet is a neoepitope
+    for (variant, vaccine_peptides) in ranked_variants_with_vaccine_peptides:
+        for vaccine_peptide in vaccine_peptides:
+            sorted_epitope_predictions = sorted(
+                vaccine_peptide.epitope_predictions, key=attrgetter('ic50'))
+            for epitope_prediction in sorted_epitope_predictions:
+                # only include mutant epitopes
+                if epitope_prediction.overlaps_mutation:
+                    row = OrderedDict([
+                        ('Allele', epitope_prediction.allele),
+                        ('Mutant peptide sequence', epitope_prediction.peptide_sequence),
+                        ('Predicted mutant pMHC affinity', epitope_prediction.ic50),
+                        ('Wildtype sequence', epitope_prediction.wt_peptide_sequence),
+                        ('Predicted wildtype pMHC affinity', epitope_prediction.wt_ic50),
+                        ('Gene name', vaccine_peptide.mutant_protein_fragment.gene_name),
+                        ('Genomic variant', variant.short_description),
+                    ])
+                    rows.append(row)
+
+    if len(rows) > 0:
+        df = pd.DataFrame.from_dict(rows)
+        writer = pd.ExcelWriter(excel_report_path, engine='xlsxwriter')
+        df.to_excel(writer, sheet_name='Neoepitopes', index=False)
+
+        # resize columns to be not crappy
+        worksheet = writer.sheets['Neoepitopes']
+        worksheet.set_column('%s:%s' % ('B', 'B'), 23)
+        worksheet.set_column('%s:%s' % ('C', 'C'), 27)
+        worksheet.set_column('%s:%s' % ('D', 'D'), 17)
+        worksheet.set_column('%s:%s' % ('E', 'E'), 30)
+        worksheet.set_column('%s:%s' % ('F', 'F'), 9)
+        worksheet.set_column('%s:%s' % ('G', 'G'), 18)
+        writer.save()
 
 
 def make_csv_report(
@@ -551,8 +588,3 @@ def make_csv_report(
 
         writer.save()
         logger.info('Wrote manufacturer XLSX file to %s', excel_report_path)
-
-def make_min_epitope_report(
-        ranked_variants_with_vaccine_peptides,
-        min_epitope_report_path):
-    raise NotImplementedError('Will do soon, see https://github.com/hammerlab/vaxrank/issues/142')
