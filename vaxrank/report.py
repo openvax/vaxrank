@@ -301,7 +301,6 @@ class TemplateDataCreator(object):
             databases = self._databases(
                 variant, predicted_effect, top_peptide.mutant_protein_fragment.gene_name)
 
-            logger.info(variant)
             peptides = []
             for j, vaccine_peptide in enumerate(vaccine_peptides):
                 if not peptide_contains_epitopes(vaccine_peptide):
