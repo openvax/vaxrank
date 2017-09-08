@@ -469,14 +469,30 @@ def peptide_contains_epitopes(vaccine_peptide):
 
 def make_neoepitope_report(
         ranked_variants_with_vaccine_peptides,
+        num_epitopes_per_peptide=None,
         excel_report_path=None):
+    """
+    Creates a simple Excel spreadsheet containing one neoepitope per row
+
+    Parameters
+    ----------
+    ranked_variants_with_vaccine_peptides : 
+      Ranked list of (variant, list of its vaccine peptides)
+
+    num_epitopes_per_peptide : int
+      The number of epitopes to include for each vaccine peptide; these are sorted before cutoff.
+      If None, all epitopes will be included in the output
+
+    excel_report_path : str
+      Path to which to write the output Excel file
+    """
     rows = []
     # each row in the spreadsheet is a neoepitope
     for (variant, vaccine_peptides) in ranked_variants_with_vaccine_peptides:
         for vaccine_peptide in vaccine_peptides:
             sorted_epitope_predictions = sorted(
                 vaccine_peptide.epitope_predictions, key=attrgetter('ic50'))
-            for epitope_prediction in sorted_epitope_predictions:
+            for epitope_prediction in sorted_epitope_predictions[:num_epitopes_per_peptide]:
                 # only include mutant epitopes
                 if epitope_prediction.overlaps_mutation:
                     row = OrderedDict([

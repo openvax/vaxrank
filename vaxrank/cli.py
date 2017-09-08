@@ -155,6 +155,12 @@ def add_output_args(arg_parser):
              "sequences.")
 
     output_args_group.add_argument(
+        "--num-epitopes-per-peptide",
+        type=int,
+        help="Number of top-ranking epitopes for each vaccine peptide to include in the "
+             "neoepitope report.")
+
+    output_args_group.add_argument(
         "--output-reviewed-by",
         default="",
         help="Comma-separated list of reviewer names")
@@ -345,6 +351,7 @@ def main(args_list=None):
     if args.output_neoepitope_report:
         make_neoepitope_report(
             ranked_variant_list,
+            num_epitopes_per_peptide=args.num_epitopes_per_peptide,
             excel_report_path=args.output_neoepitope_report)
 
     ########################
