@@ -244,6 +244,8 @@ def ranked_variant_list_with_metadata(args):
     if hasattr(args, 'input_json_file'):
         with open(args.input_json_file) as f:
             data = serializable.from_json(f.read())
+            # the JSON data from the previous run will have the older args saved, which may need to
+            # be overridden with args from this run (which all be output related)
             data['args'].update(vars(args))
             return data
 
