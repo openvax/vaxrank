@@ -520,6 +520,7 @@ def make_neoepitope_report(
         worksheet.set_column('%s:%s' % ('F', 'F'), 9)
         worksheet.set_column('%s:%s' % ('G', 'G'), 18)
         writer.save()
+        logger.info('Wrote XLSX neoepitope report file to %s', excel_report_path)
 
 
 def make_csv_report(

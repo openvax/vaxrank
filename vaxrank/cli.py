@@ -225,13 +225,15 @@ def check_args(args):
             args.output_html_report or
             args.output_pdf_report or
             args.output_json_file or
-            args.output_xlsx_report):
+            args.output_xlsx_report or
+            args.output_neoepitope_report):
         raise ValueError(
             "Must specify at least one of: --output-csv, "
             "--output-xlsx-report, "
             "--output-ascii-report, "
             "--output-html-report, "
             "--output-pdf-report, "
+            "--output-neoepitope-report, "
             "--output-json-file")
 
 def ranked_variant_list_with_metadata(args):
