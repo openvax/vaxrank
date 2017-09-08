@@ -498,9 +498,10 @@ def make_neoepitope_report(
                     row = OrderedDict([
                         ('Allele', epitope_prediction.allele),
                         ('Mutant peptide sequence', epitope_prediction.peptide_sequence),
-                        ('Predicted mutant pMHC affinity', epitope_prediction.ic50),
+                        ('Predicted mutant pMHC affinity', '%.2f nM' % epitope_prediction.ic50),
                         ('Wildtype sequence', epitope_prediction.wt_peptide_sequence),
-                        ('Predicted wildtype pMHC affinity', epitope_prediction.wt_ic50),
+                        ('Predicted wildtype pMHC affinity',
+                            '%.2f nM' % epitope_prediction.wt_ic50),
                         ('Gene name', vaccine_peptide.mutant_protein_fragment.gene_name),
                         ('Genomic variant', variant.short_description),
                     ])
