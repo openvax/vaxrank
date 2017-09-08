@@ -5,12 +5,13 @@ python:
   - "2.7"
   - "3.5"
 cache:
-  # cache pip files, also directory used for Ensembl downloads of GTF and FASTA files
+  # cache pip files; directory used for Ensembl downloads of GTF and FASTA files
   # along with the indexed db of intervals and ID mappings and pickles
-  # of sequence dictionaries
+  # of sequence dictionaries; vaxrank directory containing FM index of reference kmers
   directories:
     - /home/travis/.cache/pyensembl/
     - /home/travis/.cache/pip
+    - /home/travis/.cache/vaxrank
 before_install:
   # Commands below copied from: http://conda.pydata.org/docs/travis.html
   # We do this conditionally because it saves us some downloading if the
