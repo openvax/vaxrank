@@ -14,7 +14,6 @@
 
 from __future__ import absolute_import, print_function, division
 import logging
-import sys
 
 from numpy import isclose
 
@@ -136,7 +135,7 @@ def generate_vaccine_peptides(
         min_alt_rna_reads,
         min_variant_sequence_coverage,
         variant_sequence_assembly,
-        num_mutant_epitopes_to_keep=sys.maxint,
+        num_mutant_epitopes_to_keep=10000,
         min_epitope_score=0):
     """
     Returns dictionary mapping each variant to list of VaccinePeptide objects.
@@ -179,7 +178,7 @@ def ranked_vaccine_peptides(
         min_alt_rna_reads,
         min_variant_sequence_coverage,
         variant_sequence_assembly,
-        num_mutant_epitopes_to_keep=sys.maxint,
+        num_mutant_epitopes_to_keep=10000,
         min_epitope_score=0):
     """
     Returns sorted list whose first element is a Variant and whose second

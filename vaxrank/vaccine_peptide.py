@@ -17,7 +17,6 @@ from __future__ import absolute_import, print_function, division
 
 from collections import namedtuple
 from operator import attrgetter
-import sys
 
 import numpy as np
 
@@ -43,7 +42,7 @@ class VaccinePeptide(VaccinePeptideBase):
             cls,
             mutant_protein_fragment,
             epitope_predictions,
-            num_mutant_epitopes_to_keep=sys.maxint,
+            num_mutant_epitopes_to_keep=10000,
             min_epitope_score=0):
         # only keep the top k epitopes
         mutant_epitope_predictions = sorted([

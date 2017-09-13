@@ -15,7 +15,7 @@
 from __future__ import absolute_import, print_function, division
 from operator import attrgetter
 
-from nose.tools import eq_
+from nose.tools import eq_, assert_almost_equal
 from vaxrank.core_logic import ranked_vaccine_peptides
 from mhctools import RandomBindingPredictor
 from isovar.cli.variant_sequences import make_variant_sequences_arg_parser
@@ -132,4 +132,4 @@ def test_keep_top_k_epitopes():
         # propagated as expected
         mutant_epitope_score = sum(
             p.logistic_epitope_score() for p in vaccine_peptide.mutant_epitope_predictions)
-        eq_(mutant_epitope_score, vaccine_peptide.mutant_epitope_score)
+        assert_almost_equal(mutant_epitope_score, vaccine_peptide.mutant_epitope_score)
