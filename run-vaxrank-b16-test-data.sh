@@ -7,7 +7,7 @@ vaxrank \
     --mhc-epitope-lengths 8 \
     --padding-around-mutation 0 \
     --min-epitope-score 0.0 \
-    --num-epitopes-per-peptide 8 \
+    --num-epitopes-per-peptide 5 \
     --output-ascii-report vaccine-peptides-report.txt \
     --output-html-report vaccine-peptides-report.html \
     --output-pdf-report vaccine-peptides-report.pdf \

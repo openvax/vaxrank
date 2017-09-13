@@ -16,6 +16,8 @@
 from __future__ import absolute_import, print_function, division
 
 from collections import namedtuple
+from operator import attrgetter
+import sys
 
 import numpy as np
 
@@ -24,7 +26,8 @@ from .manufacturability import ManufacturabilityScores
 VaccinePeptideBase = namedtuple(
     "VaccinePeptide", [
         "mutant_protein_fragment",
-        "epitope_predictions",
+        "mutant_epitope_predictions",
+        "wildtype_epitope_predictions",
         "mutant_epitope_score",
         "wildtype_epitope_score",
         "manufacturability_scores"])
@@ -33,24 +36,34 @@ class VaccinePeptide(VaccinePeptideBase):
     """
     VaccinePeptide combines the sequence information of MutantProteinFragment
     with MHC binding predictions for subsequences of the protein fragment.
+
+    The resulting lists of mutant and wildtype epitope predictions are sorted by ic50.
     """
     def __new__(
             cls,
             mutant_protein_fragment,
             epitope_predictions,
+            num_mutant_epitopes_to_keep=sys.maxint,
             min_epitope_score=0):
+        # only keep the top k epitopes
+        mutant_epitope_predictions = sorted([
+            p for p in epitope_predictions if p.overlaps_mutation and not p.occurs_in_reference
+        ], key=attrgetter('ic50'))[:num_mutant_epitopes_to_keep]
+        wildtype_epitope_predictions = sorted([
+            p for p in epitope_predictions if not p.overlaps_mutation or p.occurs_in_reference
+        ], key=attrgetter('ic50'))
+
         wildtype_epitope_score = sum(
-            p.logistic_epitope_score()
-            for p in epitope_predictions
-            if not p.overlaps_mutation or p.occurs_in_reference)
+            p.logistic_epitope_score() for p in wildtype_epitope_predictions)
+        # only keep the top k epitopes for the purposes of the score
         mutant_epitope_score = sum(
-            p.logistic_epitope_score()
-            for p in epitope_predictions
-            if p.overlaps_mutation and not p.occurs_in_reference)
+            p.logistic_epitope_score() for p in mutant_epitope_predictions)
+
         return VaccinePeptideBase.__new__(
             cls,
             mutant_protein_fragment=mutant_protein_fragment,
-            epitope_predictions=epitope_predictions,
+            mutant_epitope_predictions=mutant_epitope_predictions,
+            wildtype_epitope_predictions=wildtype_epitope_predictions,
             mutant_epitope_score=mutant_epitope_score,
             wildtype_epitope_score=wildtype_epitope_score,
             manufacturability_scores=ManufacturabilityScores.from_amino_acids(
@@ -177,5 +190,6 @@ class VaccinePeptide(VaccinePeptideBase):
     def to_dict(self):
         return {
             "mutant_protein_fragment": self.mutant_protein_fragment,
-            "epitope_predictions": self.epitope_predictions,
+            "mutant_epitope_predictions": self.mutant_epitope_predictions,
+            "wildtype_epitope_predictions": self.wildtype_epitope_predictions,
         }

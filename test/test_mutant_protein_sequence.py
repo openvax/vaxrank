@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function, division
-
+from operator import attrgetter
 
 from nose.tools import eq_
 from vaxrank.core_logic import ranked_vaccine_peptides
@@ -104,3 +104,32 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
         check_mutant_amino_acids(
             variant,
             mutant_protein_fragment)
+
+def test_keep_top_k_epitopes():
+    arg_parser = make_variant_sequences_arg_parser()
+    args = arg_parser.parse_args([
+        "--vcf", data_path("b16.f10/b16.f10.Phip.vcf"),
+        "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
+    ])
+    reads_generator = allele_reads_generator_from_args(args)
+
+    keep_k_epitopes = 3
+    ranked_list = ranked_vaccine_peptides(
+        reads_generator=reads_generator,
+        mhc_predictor=RandomBindingPredictor(["H-2-Kb", "H-2-Db"]),
+        vaccine_peptide_length=15,
+        padding_around_mutation=5,
+        min_alt_rna_reads=1,
+        min_variant_sequence_coverage=1,
+        variant_sequence_assembly=True,
+        max_vaccine_peptides_per_variant=1,
+        num_mutant_epitopes_to_keep=keep_k_epitopes)
+
+    for variant, vaccine_peptides in ranked_list:
+        vaccine_peptide = vaccine_peptides[0]
+        eq_(keep_k_epitopes, len(vaccine_peptide.mutant_epitope_predictions))
+        # recompute the expected score, make sure the top-k argument from ranked_vaccine_peptides()
+        # propagated as expected
+        mutant_epitope_score = sum(
+            p.logistic_epitope_score() for p in vaccine_peptide.mutant_epitope_predictions)
+        eq_(mutant_epitope_score, vaccine_peptide.mutant_epitope_score)

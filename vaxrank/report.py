@@ -308,18 +308,13 @@ class TemplateDataCreator(object):
 
                 epitopes = []
                 wt_epitopes = []
-                sorted_epitope_predictions = sorted(
-                    vaccine_peptide.epitope_predictions, key=attrgetter('ic50'))
-                for epitope_prediction in sorted_epitope_predictions:
-                    epitope_data = self._epitope_data(epitope_prediction)
-                    # mutant vs WT epitope data
-                    if epitope_prediction.overlaps_mutation:
-                        epitopes.append(epitope_data)
-                    else:
-                        # only care about allele, ic50, sequence (other info is redundant)
-                        key_list = ['Allele', 'IC50', 'Sequence']
-                        wt_epitopes.append({key: epitope_data[key] for key in key_list})
+                for mutant_epitope_prediction in vaccine_peptide.mutant_epitope_predictions:
+                    epitopes.append(self._epitope_data(mutant_epitope_prediction))
 
+                for wt_epitope_prediction in vaccine_peptide.wildtype_epitope_predictions:
+                    epitope_data = self._epitope_data(wt_epitope_prediction)
+                    key_list = ['Allele', 'IC50', 'Sequence']
+                    wt_epitopes.append({key: epitope_data[key] for key in key_list})
 
                 # hack: make a nicely-formatted fixed width table for epitopes, used in ASCII report
                 with tempfile.TemporaryFile(mode='r+') as temp:
@@ -462,10 +457,8 @@ def resize_columns(worksheet, amino_acids_col, pos_col):
 
 def peptide_contains_epitopes(vaccine_peptide):
     """Returns true if vaccine peptide contains mutant epitopes."""
-    for epitope in vaccine_peptide.epitope_predictions:
-        if epitope.overlaps_mutation:
-            return True
-    return False
+    return len(vaccine_peptide.mutant_epitope_predictions) > 0
+
 
 def make_neoepitope_report(
         ranked_variants_with_vaccine_peptides,
@@ -490,22 +483,22 @@ def make_neoepitope_report(
     # each row in the spreadsheet is a neoepitope
     for (variant, vaccine_peptides) in ranked_variants_with_vaccine_peptides:
         for vaccine_peptide in vaccine_peptides:
-            sorted_epitope_predictions = sorted(
-                vaccine_peptide.epitope_predictions, key=attrgetter('ic50'))
-            for epitope_prediction in sorted_epitope_predictions[:num_epitopes_per_peptide]:
-                # only include mutant epitopes
-                if epitope_prediction.overlaps_mutation:
-                    row = OrderedDict([
-                        ('Allele', epitope_prediction.allele),
-                        ('Mutant peptide sequence', epitope_prediction.peptide_sequence),
-                        ('Predicted mutant pMHC affinity', '%.2f nM' % epitope_prediction.ic50),
-                        ('Wildtype sequence', epitope_prediction.wt_peptide_sequence),
-                        ('Predicted wildtype pMHC affinity',
-                            '%.2f nM' % epitope_prediction.wt_ic50),
-                        ('Gene name', vaccine_peptide.mutant_protein_fragment.gene_name),
-                        ('Genomic variant', variant.short_description),
-                    ])
-                    rows.append(row)
+            # only include mutant epitopes
+            for epitope_prediction in vaccine_peptide.mutant_epitope_predictions:
+                row = OrderedDict([
+                    ('Allele', epitope_prediction.allele),
+                    ('Mutant peptide sequence', epitope_prediction.peptide_sequence),
+                    ('Score', vaccine_peptide.mutant_epitope_score),
+                    ('Predicted mutant pMHC affinity', '%.2f nM' % epitope_prediction.ic50),
+                    ('Variant allele RNA read count',
+                        vaccine_peptide.mutant_protein_fragment.n_alt_reads),
+                    ('Wildtype sequence', epitope_prediction.wt_peptide_sequence),
+                    ('Predicted wildtype pMHC affinity',
+                        '%.2f nM' % epitope_prediction.wt_ic50),
+                    ('Gene name', vaccine_peptide.mutant_protein_fragment.gene_name),
+                    ('Genomic variant', variant.short_description),
+                ])
+                rows.append(row)
 
     if len(rows) > 0:
         df = pd.DataFrame.from_dict(rows)
@@ -515,11 +508,12 @@ def make_neoepitope_report(
         # resize columns to be not crappy
         worksheet = writer.sheets['Neoepitopes']
         worksheet.set_column('%s:%s' % ('B', 'B'), 23)
-        worksheet.set_column('%s:%s' % ('C', 'C'), 27)
-        worksheet.set_column('%s:%s' % ('D', 'D'), 17)
-        worksheet.set_column('%s:%s' % ('E', 'E'), 30)
-        worksheet.set_column('%s:%s' % ('F', 'F'), 9)
-        worksheet.set_column('%s:%s' % ('G', 'G'), 18)
+        worksheet.set_column('%s:%s' % ('D', 'D'), 27)
+        worksheet.set_column('%s:%s' % ('E', 'E'), 26)
+        worksheet.set_column('%s:%s' % ('F', 'F'), 17)
+        worksheet.set_column('%s:%s' % ('G', 'G'), 30)
+        worksheet.set_column('%s:%s' % ('H', 'H'), 9)
+        worksheet.set_column('%s:%s' % ('I', 'I'), 18)
         writer.save()
         logger.info('Wrote XLSX neoepitope report file to %s', excel_report_path)
 
