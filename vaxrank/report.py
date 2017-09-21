@@ -215,6 +215,11 @@ class TemplateDataCreator(object):
         """
         Returns an OrderedDict with epitope data from the given prediction.
         """
+        # if the WT peptide is too short, it's possible that we're missing a prediction for it
+        if epitope_prediction.wt_ic50 != None:
+            wt_ic50_str = '%.2f nM' % epitope_prediction.wt_ic50
+        else:
+            wt_ic50_str = 'No prediction'
         epitope_data = OrderedDict([
             ('Sequence', epitope_prediction.peptide_sequence),
             ('IC50', '%.2f nM' % epitope_prediction.ic50),
@@ -222,7 +227,7 @@ class TemplateDataCreator(object):
                 epitope_prediction.logistic_epitope_score(), 4)),
             ('Allele', epitope_prediction.allele.replace('HLA-', '')),
             ('WT sequence', epitope_prediction.wt_peptide_sequence),
-            ('WT IC50', '%.2f nM' % epitope_prediction.wt_ic50),
+            ('WT IC50', wt_ic50_str),
         ])
         return epitope_data
 
