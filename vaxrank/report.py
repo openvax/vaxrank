@@ -460,7 +460,7 @@ def peptide_contains_epitopes(vaccine_peptide):
     return len(vaccine_peptide.mutant_epitope_predictions) > 0
 
 
-def make_neoepitope_report(
+def make_minimal_neoepitope_report(
         ranked_variants_with_vaccine_peptides,
         num_epitopes_per_peptide=None,
         excel_report_path=None):

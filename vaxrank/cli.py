@@ -37,7 +37,7 @@ from .report import (
     make_html_report,
     make_pdf_report,
     make_csv_report,
-    make_neoepitope_report,
+    make_minimal_neoepitope_report,
     TemplateDataCreator,
     PatientInfo,
 )
@@ -352,7 +352,7 @@ def main(args_list=None):
             csv_report_path=args.output_csv)
 
     if args.output_neoepitope_report:
-        make_neoepitope_report(
+        make_minimal_neoepitope_report(
             ranked_variant_list,
             num_epitopes_per_peptide=args.num_epitopes_per_peptide,
             excel_report_path=args.output_neoepitope_report)
