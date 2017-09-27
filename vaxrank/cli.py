@@ -37,7 +37,7 @@ from .report import (
     make_html_report,
     make_pdf_report,
     make_csv_report,
-    make_min_epitope_report,
+    make_minimal_neoepitope_report,
     TemplateDataCreator,
     PatientInfo,
 )
@@ -145,7 +145,20 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-xlsx-report",
         default="",
-        help="Path to XLSX vaccine peptide report worksheet, one sheet per variant")
+        help="Path to XLSX vaccine peptide report worksheet, one sheet per variant. This is meant "
+             "for use by the vaccine manufacturer.")
+
+    output_args_group.add_argument(
+        "--output-neoepitope-report",
+        default="",
+        help="Path to XLSX neoepitope report, containing information focusing on short peptide "
+             "sequences.")
+
+    output_args_group.add_argument(
+        "--num-epitopes-per-peptide",
+        type=int,
+        help="Number of top-ranking epitopes for each vaccine peptide to include in the "
+             "neoepitope report.")
 
     output_args_group.add_argument(
         "--output-reviewed-by",
@@ -161,12 +174,6 @@ def add_output_args(arg_parser):
         "--log-path",
         default="python.log",
         help="File path to write the vaxrank Python log to")
-
-    output_args_group.add_argument(
-        "--output-min-epitope-report",
-        default="",
-        help="Path to the minimal epitope report, which lists which mutant and wildtype peptides "
-        "can be used for T-cell response assays")
 
 
 def add_vaccine_peptide_args(arg_parser):
@@ -218,13 +225,15 @@ def check_args(args):
             args.output_html_report or
             args.output_pdf_report or
             args.output_json_file or
-            args.output_xlsx_report):
+            args.output_xlsx_report or
+            args.output_neoepitope_report):
         raise ValueError(
             "Must specify at least one of: --output-csv, "
             "--output-xlsx-report, "
             "--output-ascii-report, "
             "--output-html-report, "
             "--output-pdf-report, "
+            "--output-neoepitope-report, "
             "--output-json-file")
 
 def ranked_variant_list_with_metadata(args):
@@ -268,6 +277,7 @@ def ranked_variant_list_with_metadata(args):
         min_alt_rna_reads=args.min_alt_rna_reads,
         min_variant_sequence_coverage=args.min_variant_sequence_coverage,
         min_epitope_score=args.min_epitope_score,
+        num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide,
         variant_sequence_assembly=args.variant_sequence_assembly)
 
     ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
@@ -335,9 +345,6 @@ def main(args_list=None):
     patient_info = data['patient_info']
     args_for_report = data['args']
 
-    if args.output_min_epitope_report:
-        make_min_epitope_report(ranked_variant_list, args.output_min_epitope_report)
-
     ###################
     # CSV-based reports
     ###################
@@ -346,6 +353,12 @@ def main(args_list=None):
             ranked_variant_list,
             excel_report_path=args.output_xlsx_report,
             csv_report_path=args.output_csv)
+
+    if args.output_neoepitope_report:
+        make_minimal_neoepitope_report(
+            ranked_variant_list,
+            num_epitopes_per_peptide=args.num_epitopes_per_peptide,
+            excel_report_path=args.output_neoepitope_report)
 
     ########################
     # Template-based reports
