@@ -181,4 +181,84 @@ Manufacturability optimization does not affect the ranking of mutations but is o
 
 \bibliography{bibliography}
 
+
+\pagebreak
+
+\begin{center}
+	\textbf{\large Supplemental Materials}
+\end{center}
+
+%%%%%%%%%% Merge with supplemental materials %%%%%%%%%%
+%%%%%%%%%% Prefix a "S" to all equations, figures, tables and reset the counter %%%%%%%%%%
+\setcounter{equation}{0}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\setcounter{page}{1}
+\makeatletter
+\renewcommand{\theequation}{S\arabic{equation}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\bibnumfmt}[1]{[S#1]}
+\renewcommand{\citenumfont}[1]{S#1}
+%%%%%%%%%% Prefix a "S" to all equations, figures, tables and reset the counter %%%%%%%%%%
+
+\section*{Installing Vaxrank}
+Vaxrank can be installed using pip:
+
+\begin{verbatim}
+pip install vaxrank
+\end{verbatim}
+
+This will install the Vaxrank library, along with all of its dependencies, including PyEnsembl, Varcode, Topiary, and MHCtools. 
+
+To generate PDF reports, you first need to install wkhtmltopdf. On Mac OS X this can be done by running: 
+\begin{verbatim}
+brew install Caskroom/cask/wkhtmltopdf
+\end{verbatim}
+
+Vaxrank uses PyEnsembl for accessing information about the reference genome. You must install an Ensembl release corresponding to the reference genome associated with the mutations provided to Vaxrank.
+
+The latest supported release for GRCh38 is Ensembl 87:
+\begin{verbatim}
+pyensembl install --release 87 --species human
+\end{verbatim}
+
+The last release for GRCh37 was Ensembl 75:
+
+\begin{verbatim}
+pyensembl install --release 75 --species human
+\end{verbatim}
+
+If using Vaxrank for a large number of mutations, it is recommended to locally install an MHC binding predictor such as NetMHCpan or MHCflurry. NetMHCpan can be downloaded from \href{http://www.cbs.dtu.dk/services/NetMHCpan/}{www.cbs.dtu.dk/services/NetMHCpan/}, whereas MHCflurry can be installed by running the following commands:
+
+\begin{verbatim}
+pip install mhcflurry
+mhcflurry-downloads fetch
+\end{verbatim}
+
+\section*{Basic Usage}
+
+\begin{verbatim}
+vaxrank \
+--vcf somatic-variants.vcf \
+--bam tumor-rna.bam \
+--mhc-predictor netmhc \
+--mhc-alleles A*02:01,A*02:03 \
+--mhc-epitope-lengths 8 \
+--padding-around-mutation 5 \
+--vaccine-peptide-length 25 \
+--output-ascii-report vaccine-peptides-report.txt
+\end{verbatim}
+
+This tells Vaxrank to:
+\begin{itemize}
+	\item load mutations from the input VCF file \verb|somatic-variants.vcf| 
+	\item look for evidence of expression for mutations in the RNA eBAM file \verb|tumor-rna.bam|
+	\item predict MHC binding of each possible 8mer peptide overlapping expressed mutations  using the NetMHC prediction algorithm with the A*02:01 and A*02:03 MHC alleles
+	\item choose protein vaccine candidates composed of 25 amino acids
+	\item write top ranked variants with their associated vaccine proteins to \verb|vaccine-peptides-report.txt|
+\end{itemize}
+
+You can read the complete Vaxrank documentation at \href{http://vaxrank.readthedocs.io}{vaxrank.readthedocs.io}.
+
+
 \end{document}
