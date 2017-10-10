@@ -151,14 +151,13 @@ There are some more options to specify the desired characteristics of the output
 Output Parameters
 -----------------
 
-There are some more options to specify the desired characteristics of the output vaccine peptides, which will contain shorter sequences that contain the mutation and are predicted to be strong MHC binders.
+By default, the report will contain all high-confidence vaccine peptides, but the report can be made more restrictive using the following parameters:
 
---vaccine-peptide-length VACCINE_PEPTIDE_LENGTH
-  Number of amino acids in the resulting vaccine peptides. Default: 25.
---padding-around-mutation PADDING_AROUND_MUTATION
-  Number of off-center windows around the mutation to consider as vaccine peptides. Default: 0.
---min-epitope-score MIN_EPITOPE_SCORE
-  Ignore epitopes whose normalized score falls below this threshold. Default: 0.001. 
+--max-vaccine-peptides-per-mutation MAX_VACCINE_PEPTIDES_PER_MUTATION
+                        Number of vaccine peptides to generate for each
+                        mutation
+--max-mutations-in-report MAX_MUTATIONS_IN_REPORT
+                        Number of mutations to report
 
 Output Formats
 ^^^^^^^^^^^^^^
