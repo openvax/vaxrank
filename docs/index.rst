@@ -14,7 +14,7 @@ Overview
 --------
 Vaxrank is a tool for selecting mutated peptides for use in personalized therapeutic cancer vaccination. Vaxrank determines which peptides should be used in a vaccine from tumor-specific somatic mutations, tumor RNA sequencing data, and a patient's HLA type. Additionally, Vaxrank considers surrounding non-mutated residues in a peptide to prioritize vaccine peptide candidates and improve the odds of successful synthesis.
 
-Vaxrank is being actively developed at the Icahn School of Medicine at Mount Sinai as part of the Genetics and Genomic Sciences program.
+Vaxrank is being actively developed at the Icahn School of Medicine at Mount Sinai.
 
 Questions, Bug Reporting, and Issue Tracking
 --------------------------------------------
