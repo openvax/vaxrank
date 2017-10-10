@@ -37,7 +37,7 @@ Note: to generate PDF reports, you first need to install `wkhtmltopdf <http://wk
 
 Vaxrank uses `PyEnsembl <https://github.com/hammerlab/pyensembl>`_ for accessing information about the reference genome. You must install an Ensembl release corresponding to the reference genome associated with the mutations provided to Vaxrank.
 
-The latest release for GRCh38 is Ensembl 87:
+The latest supported release for GRCh38 is Ensembl 87:
 
 .. code-block:: bash
 
