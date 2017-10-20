@@ -109,7 +109,7 @@ Jeffrey Hammerbacher$^{1,2}$
 \section{Introduction}
 
 
-Mutated cancer proteins recognized by T-cells have become known as ``neoantigens'' and are considered an essential component of a tumor-specific immune response ~\citep{neoantigens-finnigan, neoantigens-schumacher, neoantigens-gubin}. Therapeutic vaccination against neoantigens is an emerging experimental cancer therapy that attempts to mobilize an antigen-specific immune response against mutated tumor proteins~\citep{neovax-sharma, neovax-sahin}. Since few tumor mutations are shared between patients, neoantigen vaccines must be personalized therapies. A common approach for achieving personalization is high-throughput sequencing of tumor and normal patient samples followed by in-silico prioritization of mutated peptides that are likely to be presented on the surface of tumor cells by MHC (major histocompatibility complex) molecules.
+Mutated cancer proteins recognized by T-cells, known as ``neoantigens'', are considered an essential component of a tumor-specific immune response ~\citep{neoantigens-finnigan, neoantigens-schumacher, neoantigens-gubin}. Therapeutic vaccination against neoantigens is an emerging cancer therapy that attempts to mobilize an antigen-specific immune response against mutated tumor proteins~\citep{neovax-sharma, neovax-sahin}. Since few tumor mutations are shared between patients, neoantigen vaccines must be personalized. A common approach for achieving personalization is high-throughput sequencing of tumor and normal patient samples followed by in-silico prioritization of mutated peptides that are likely to be presented on the surface of tumor cells by MHC (major histocompatibility complex) molecules.
 
 Vaxrank is a tool for selecting mutated peptides for personalized therapeutic cancer vaccination. Vaxrank determines which peptides should be used in a vaccine from tumor-specific somatic mutations, tumor RNA sequencing data, and a patient's HLA type. These peptides can then be synthesized and combined with an adjuvant to attempt to elicit an anti-tumor T-cell response in a patient.
 
@@ -135,14 +135,17 @@ To generate a Vaxrank vaccine report, the user must provide one or more files co
       --bam tumor-rna.bam
       --mhc-predictor netmhc
       --mhc-alleles H2-Kb,H2-Db
-      --mhc-peptide-lengths 8-10
+      --mhc-peptide-lengths 8-10www
       --vaccine-peptide-length 21
-      --min-alt-rna-reads 3
       --output-pdf-report vaccine-peptides.pdf
 \end{verbatim}
 \vspace{1ex}
 
-The \verb|--mhc-predictor| argument controls which program is used to predict the affinity between a peptide-MHC pair. Vaxrank supports the use of locally installed instances of NetMHC~\citep{netmhc2016}, NetMHCpan~\citep{netmhcpan2007}, NetMHCcons~\citep{netmhccons}, MHCflurry~\citep{mhcflurry}, or a variety of web-based predictors through IEDB~\citep{iedb}. The \verb|--min-alt-rna-reads| argument controls the minimum number of RNA reads supporting a variant required to include that variant in the output report. In addition to quantifying tumor expression of a mutations, the RNA reads are used to phase adjacent variants when reconstructing the mutated coding sequence. A more complete list of options for input data, filtering, and output formats can be seen by running \verb|vaxrank --help|. Vaxrank's output can be formatted as PDF, plain-text, HTML, or an Excel spreadsheet. The output lists variants in ranked order along with vaccine peptide(s) containing that variant, predicted MHC ligands, number of supporting RNA reads, and sequence properties that affect manufacturability.
+Somatic variants can be specified using the \verb|--vcf| option. Vaxrank also requires a BAM file of aligned tumor RNA reads (\verb|--bam|). This allows Vaxrank to both quantify tumor expression of each mutation and to phase adjacent variants when reconstructing a mutated coding sequence.
+
+The \verb|--mhc-predictor| argument controls which program is used to predict the affinity between a peptide-MHC pair. Vaxrank supports the use of locally installed instances of NetMHC~\citep{netmhc2016}, NetMHCpan~\citep{netmhcpan2007}, NetMHCcons~\citep{netmhccons}, MHCflurry~\citep{mhcflurry}, or a variety of web-based predictors through IEDB~\citep{iedb}. 
+
+Vaxrank's output can be formatted as PDF, plain-text, HTML, or an Excel spreadsheet. The output lists variants in ranked order along with vaccine peptide(s) containing that variant, predicted MHC ligands, number of supporting RNA reads, and sequence properties that affect manufacturability. A larger list of options for input data, filtering, and output formats can be seen by running \verb|vaxrank --help|. Documentation is available online at \href{http://vaxrank.readthedocs.io}{wwvaxrank.readthedocs.org}
 
 % \vspace{-3ex}
 \section{Ranking Mutations}
@@ -155,7 +158,9 @@ A patient's coding mutations are ranked according to a score that combines each 
 \textit{TotalBindingScore} 		&= \sum_{s \in \textit{subsequences}}\sum_{a \in \textit{alleles}}\textit{BindingScore}(s, a)
 \end{align*}
 
-The {\it BindingScore} function is, by default, a logistic transformation of the peptide-MHC binding affinity that loosely approximates the probability of T-cell response~\citep{Sette1994}. Alternatively, binding predictions can be scored using an affinity threshold (commonly $\leq 500$nM) or a threshold on the percentile rank of the affinity. Only subsequences which overlap mutant residues and do not occur in the reference proteome are considered as part of the {\it TotalBindingScore}.
+The {\it BindingScore} function is, by default, a logistic transformation of the peptide-MHC binding affinity that loosely approximates the probability of T-cell response~\citep{Sette1994}. Alternatively, binding predictions can be scored using an affinity threshold (commonly $\leq 500$nM) or a threshold on the percentile rank of the affinity. Only subsequences which overlap mutant residues and do not occur in the reference proteome are considered as part of the {\it TotalBindingScore}. 
+
+It is important to note that there is at best a loose relationship between {\it RankingScore} and immunogenicity. Intracellular factors such as antigen processing are not captured by Vaxrank's scoring logic. More importantly, even if a particular peptide is presented by a patient's MHCs, it is not currently possible to predict whether it will generate a cytotoxic T-cell response. Further work is required to quantify the accuracy of Vaxrank's ranking algorithm. 
 
 %\vspace{-3ex}
 \section{Manufacturability}
@@ -208,7 +213,7 @@ Vaxrank can be installed using pip:
 pip install vaxrank
 \end{verbatim}
 
-This will install the Vaxrank library, along with all of its dependencies, including PyEnsembl, Varcode, Topiary, and MHCtools. 
+This will install the Vaxrank library, along with all of its dependencies, including PyEnsembl, Varcode, Isovar, and MHCtools. 
 
 To generate PDF reports, you first need to install wkhtmltopdf. On Mac OS X this can be done by running: 
 \begin{verbatim}
@@ -228,7 +233,7 @@ The last release for GRCh37 was Ensembl 75:
 pyensembl install --release 75 --species human
 \end{verbatim}
 
-If using Vaxrank for a large number of mutations, it is recommended to locally install an MHC binding predictor such as NetMHCpan or MHCflurry. NetMHCpan can be downloaded from \href{http://www.cbs.dtu.dk/services/NetMHCpan/}{www.cbs.dtu.dk/services/NetMHCpan/}, whereas MHCflurry can be installed by running the following commands:
+If using Vaxrank for a large number of mutations, it is recommended to locally install an MHC binding predictor such as NetMHCpan or MHCflurry. NetMHCpan can be downloaded from \href{http://www.cbs.dtu.dk/services/NetMHCpan/}{/www.cbs.dtu.dk/services/NetMHCpan/}, whereas MHCflurry can be installed by running the following commands:
 
 \begin{verbatim}
 pip install mhcflurry
@@ -252,13 +257,52 @@ vaxrank \
 This tells Vaxrank to:
 \begin{itemize}
 	\item load mutations from the input VCF file \verb|somatic-variants.vcf| 
-	\item look for evidence of expression for mutations in the RNA eBAM file \verb|tumor-rna.bam|
+	\item look for evidence of expression for mutations in the RNA BAM file \verb|tumor-rna.bam|
 	\item predict MHC binding of each possible 8mer peptide overlapping expressed mutations  using the NetMHC prediction algorithm with the A*02:01 and A*02:03 MHC alleles
 	\item choose protein vaccine candidates composed of 25 amino acids
 	\item write top ranked variants with their associated vaccine proteins to \verb|vaccine-peptides-report.txt|
 \end{itemize}
 
-You can read the complete Vaxrank documentation at \href{http://vaxrank.readthedocs.io}{vaxrank.readthedocs.io}.
+You can read the complete Vaxrank documentation at \href{http://vaxrank.readthedocs.io}{http://vaxrank.readthedocs.io}.
 
+\section*{RNA Options}
+Vaxrank uses the Isovar library to identify RNA reads supporting each genomic variant and assemble them into a mutant coding sequence. The assembly algorithm works by iteratively extending candidate sequences using overlapping reads. Determining the coding sequence from RNA reads, rather than simply substituting a variant into a reference transcript, Vaxrank is able to capture local phasing of variants. There are several Isovar options which are exposed as commandline flags in Vaxrank:
+
+
+\begin{itemize}
+	\item \verb|--min-mapping-quality| Reads which mapping quality below this value are ignored when gathering evidence of variant expression. 
+	
+	\item \verb|--use-duplicate-reads| Duplicate reads are normally ignored by Isovar/Vaxrank since they can inflate estimated abundance.
+	
+	
+	\item \verb|--min-alt-rna-reads| Controls the minimum number of RNA reads supporting a variant required to include that variant in the output report. Ignore variants with fewer than this number of supporting RNA reads.
+	
+	\item \verb|--min-variant-sequence-coverage| Assembly of overlapping RNA reads may result in variable coverage across the assembled transcript fragment. This option allows the user to trim portions of the sequence that fall below some desired number of reads, creating a trade-off between assembled sequence and minimum coverage for each nucleotide.
+	
+	\item \verb|--max-reference-transcript-mismatches| The reference transcriptome is used to determine the reading frame for an assembled sequence. Any transcript with more than this number of mismatches is discarded when trying to determine the reading frame.
+	
+	\item \verb|--include-mismatches-after-variant| Make mismatches after the variant locus count toward the \verb|--max-reference-transcript-mismatches|
+	filter. This is normally disabled since technically only the sequence leading up to a variant should affect its reading frame.--
+	
+	
+	\item \verb|--min-transcript-prefix-length| Number of nucleotides before the variant we try to match against a reference transcript. Values greater
+	than zero exclude variants near the start codon of
+	transcripts without 5' UTRs.
+\end{itemize}
+
+\section*{Performance}
+
+
+The MHC binding prediction algorithm used by Vaxrank can profoundly influence how long it takes to determine results for a patient. To give a rough sense of Vaxrank's performance, we generated the following timing results on a 2013 Macbook Air. The inputs were patient data with 521 somatic variants, 83.7M aligned tumor RNA reads, and peptide predictions for lengths 8-11. 
+\begin{center}
+\begin{tabular}{ | l | l | }
+	\hline
+	Predictor & Time \\ \hline
+	NetMHC 4.0 & 42 seconds\\
+	NetMHCpan 3.0 & 2 minutes, 17 seconds \\
+	MHCflurry 0.9.1 & 44 seconds \\ \hline
+\end{tabular} 
+
+\end{center}
 
 \end{document}
