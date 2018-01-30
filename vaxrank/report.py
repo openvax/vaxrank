@@ -51,6 +51,8 @@ PatientInfo = namedtuple("PatientInfo", (
     "mhc_alleles",
     "num_somatic_variants",
     "num_coding_effect_variants",
+    "num_variants_with_rna_support",
+    "num_variants_with_vaccine_peptides",
 ))
 
 
@@ -106,6 +108,11 @@ class TemplateDataCreator(object):
             ('Total number of somatic variants', self.patient_info.num_somatic_variants),
             ('Somatic variants with predicted coding effects',
                 self.patient_info.num_coding_effect_variants),
+            ('Somatic variants with predicted coding effects and RNA support',
+                self.patient_info.num_variants_with_rna_support),
+            ('Somatic variants with predicted coding effects, RNA support and predicted MHC '
+                'expression',
+                self.patient_info.num_variants_with_vaccine_peptides),
         ])
         return patient_info
 
@@ -372,6 +379,7 @@ class TemplateDataCreator(object):
             'variants': variants,
             'package_versions': package_versions,
         })
+
         return self.template_data
 
 

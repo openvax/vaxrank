@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function, division
+from collections import defaultdict
 import logging
 
 from numpy import isclose
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 def vaccine_peptides_for_variant(
         variant,
-        isovar_protein_sequences,
+        isovar_protein_sequence,
         mhc_predictor,
         vaccine_peptide_length,
         padding_around_mutation,
@@ -41,14 +42,9 @@ def vaccine_peptides_for_variant(
     """
     Returns sorted list of VaccinePeptide objects.
     """
-    isovar_protein_sequences = list(isovar_protein_sequences)
-    if len(isovar_protein_sequences) == 0:
-        logger.info("No protein sequences for %s", variant)
-        return []
-
     protein_fragment = MutantProteinFragment.from_isovar_protein_sequence(
         variant=variant,
-        protein_sequence=isovar_protein_sequences[0])
+        protein_sequence=isovar_protein_sequence)
 
     logger.info(
         "Mutant protein fragment for %s: %s",
@@ -95,7 +91,7 @@ def vaccine_peptides_for_variant(
     n_total_candidates = len(candidate_vaccine_peptides)
     if n_total_candidates == 0:
         logger.info("No candidate peptides for variant %s", variant.short_description)
-        return candidate_vaccine_peptides
+        return []
 
     max_score = max(vp.combined_score for vp in candidate_vaccine_peptides)
     if isclose(max_score, 0.0):
@@ -138,7 +134,9 @@ def generate_vaccine_peptides(
         num_mutant_epitopes_to_keep=10000,
         min_epitope_score=0):
     """
-    Returns dictionary mapping each variant to list of VaccinePeptide objects.
+    Returns a tuple of two values:
+    - dictionary mapping each variant to list of VaccinePeptide objects
+    - dictionary containing some variant counts for report display
     """
 
     # total number of amino acids is the vaccine peptide length plus the
@@ -156,18 +154,36 @@ def generate_vaccine_peptides(
         max_protein_sequences_per_variant=1)
 
     result_dict = {}
+    counts_dict = defaultdict(int)
     for variant, isovar_protein_sequences in protein_sequences_generator:
+        counts_dict['num_coding_effect_variants'] += 1
+        isovar_protein_sequences = list(isovar_protein_sequences)
+        if len(isovar_protein_sequences) == 0:
+            # this means the variant RNA support is below threshold
+            logger.info("No protein sequences for %s", variant)
+            continue
+
+        # use the first protein sequence - why?
+        counts_dict['num_variants_with_rna_support'] += 1
+        isovar_protein_sequence = isovar_protein_sequences[0]
         vaccine_peptides = vaccine_peptides_for_variant(
             variant=variant,
-            isovar_protein_sequences=isovar_protein_sequences,
+            isovar_protein_sequence=isovar_protein_sequence,
             mhc_predictor=mhc_predictor,
             vaccine_peptide_length=vaccine_peptide_length,
             padding_around_mutation=padding_around_mutation,
             max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
             min_epitope_score=min_epitope_score)
+
+        if len(vaccine_peptides) > 0:
+            counts_dict['num_variants_with_vaccine_peptides'] += 1
         result_dict[variant] = vaccine_peptides
-    return result_dict
+
+    for key, value in counts_dict.items():
+        logger.info('%s: %d', key, value)
+
+    return result_dict, counts_dict
 
 def ranked_vaccine_peptides(
         reads_generator,
@@ -181,10 +197,12 @@ def ranked_vaccine_peptides(
         num_mutant_epitopes_to_keep=10000,
         min_epitope_score=0):
     """
-    Returns sorted list whose first element is a Variant and whose second
-    element is a list of VaccinePeptide objects.
+    Returns a tuple of two values:
+    - sorted list whose first element is a Variant and whose second
+    element is a list of VaccinePeptide objects
+    - dictionary containing some variant counts for report display
     """
-    variants_to_vaccine_peptides_dict = generate_vaccine_peptides(
+    variants_to_vaccine_peptides_dict, variant_counts_dict = generate_vaccine_peptides(
         reads_generator=reads_generator,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=vaccine_peptide_length,
@@ -199,4 +217,4 @@ def ranked_vaccine_peptides(
     result_list.sort(
         key=lambda x: x[1][0].combined_score if len(x[1]) > 0 else 0.0,
         reverse=True)
-    return result_list
+    return result_list, variant_counts_dict
