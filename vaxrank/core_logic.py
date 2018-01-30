@@ -156,7 +156,8 @@ def generate_vaccine_peptides(
     result_dict = {}
     counts_dict = defaultdict(int)
     for variant, isovar_protein_sequences in protein_sequences_generator:
-        counts_dict['num_coding_effect_variants'] += 1
+        if len(variant.effects().drop_silent_and_noncoding()) > 0:
+            counts_dict['num_coding_effect_variants'] += 1
         isovar_protein_sequences = list(isovar_protein_sequences)
         if len(isovar_protein_sequences) == 0:
             # this means the variant RNA support is below threshold
