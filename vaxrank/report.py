@@ -310,7 +310,7 @@ class TemplateDataCreator(object):
 
             peptides = []
             for j, vaccine_peptide in enumerate(vaccine_peptides):
-                if not peptide_contains_epitopes(vaccine_peptide):
+                if not vaccine_peptide.contains_epitopes():
                     logger.info('No epitopes for peptide: %s', vaccine_peptide)
                     continue
 
@@ -379,7 +379,6 @@ class TemplateDataCreator(object):
             'variants': variants,
             'package_versions': package_versions,
         })
-
         return self.template_data
 
 
@@ -467,12 +466,6 @@ def resize_columns(worksheet, amino_acids_col, pos_col):
     worksheet.set_column('%s:%s' % (amino_acids_col, amino_acids_col), 40)
     worksheet.set_column('%s:%s' % (pos_col, pos_col), 12)
 
-
-def peptide_contains_epitopes(vaccine_peptide):
-    """Returns true if vaccine peptide contains mutant epitopes."""
-    return len(vaccine_peptide.mutant_epitope_predictions) > 0
-
-
 def make_minimal_neoepitope_report(
         ranked_variants_with_vaccine_peptides,
         num_epitopes_per_peptide=None,
@@ -553,7 +546,7 @@ def make_csv_report(
         for j, vaccine_peptide in enumerate(vaccine_peptides):
 
             # if there are no predicted epitopes, exclude this peptide from the report
-            if not peptide_contains_epitopes(vaccine_peptide):
+            if not vaccine_peptide.contains_epitopes():
                 logger.info('No epitopes for peptide: %s', vaccine_peptide)
                 continue
 

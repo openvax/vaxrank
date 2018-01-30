@@ -176,7 +176,13 @@ def generate_vaccine_peptides(
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
             min_epitope_score=min_epitope_score)
 
-        if len(vaccine_peptides) > 0:
+        # do any of this variant's vaccine peptides contain mutant epitopes?
+        any_mutant_epitopes = False
+        for vaccine_peptide in vaccine_peptides:
+            if vaccine_peptide.contains_epitopes():
+                any_mutant_epitopes = True
+                break
+        if any_mutant_epitopes:
             counts_dict['num_variants_with_vaccine_peptides'] += 1
         result_dict[variant] = vaccine_peptides
 

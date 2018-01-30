@@ -42,8 +42,7 @@ class VaccinePeptide(VaccinePeptideBase):
             cls,
             mutant_protein_fragment,
             epitope_predictions,
-            num_mutant_epitopes_to_keep=10000,
-            min_epitope_score=0):
+            num_mutant_epitopes_to_keep=10000):
         # only keep the top k epitopes
         mutant_epitope_predictions = sorted([
             p for p in epitope_predictions if p.overlaps_mutation and not p.occurs_in_reference
@@ -177,6 +176,10 @@ class VaccinePeptide(VaccinePeptideBase):
             manufacturability_score_tuple +
             extra_score_tuple
         )
+
+    def contains_epitopes(self):
+        """Returns true if this vaccine peptide contains mutant epitopes."""
+        return len(self.mutant_epitope_predictions) > 0
 
     @property
     def expression_score(self):
