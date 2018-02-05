@@ -206,7 +206,7 @@ def add_vaccine_peptide_args(arg_parser):
 
     vaccine_peptide_group.add_argument(
         "--min-epitope-score",
-        default=0.001,
+        default=1e-10,
         type=float,
         help="Ignore epitopes whose normalized score falls below this threshold")
 
