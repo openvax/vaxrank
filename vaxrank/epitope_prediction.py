@@ -47,7 +47,7 @@ class EpitopePrediction(EpitopePredictionBase):
             self,
             midpoint=350.0,
             width=150.0,
-            ic50_cutoff=2000.0):
+            ic50_cutoff=3000.0):
         """
         Map from IC50 values to score where 1.0 = strong binder, 0.0 = weak binder
         Default midpoint and width for logistic determined by max likelihood fit
