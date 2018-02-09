@@ -111,7 +111,7 @@ class TemplateDataCreator(object):
             ('Somatic variants with predicted coding effects and RNA support',
                 self.patient_info.num_variants_with_rna_support),
             ('Somatic variants with predicted coding effects, RNA support and predicted MHC '
-                'expression',
+                'ligands',
                 self.patient_info.num_variants_with_vaccine_peptides),
         ])
         return patient_info
@@ -126,9 +126,9 @@ class TemplateDataCreator(object):
         variant_data = OrderedDict([
             ('Gene name', mutant_protein_fragment.gene_name),
             ('Top score', top_score),
-            ('Reads supporting variant allele', mutant_protein_fragment.n_alt_reads),
-            ('Reads supporting reference allele', mutant_protein_fragment.n_ref_reads),
-            ('Reads supporting other alleles', mutant_protein_fragment.n_other_reads),
+            ('RNA reads supporting variant allele', mutant_protein_fragment.n_alt_reads),
+            ('RNA reads supporting reference allele', mutant_protein_fragment.n_ref_reads),
+            ('RNA reads supporting other alleles', mutant_protein_fragment.n_other_reads),
         ])
         return variant_data
 
@@ -309,7 +309,7 @@ class TemplateDataCreator(object):
 
             peptides = []
             for j, vaccine_peptide in enumerate(vaccine_peptides):
-                if not vaccine_peptide.contains_epitopes():
+                if not vaccine_peptide.contains_mutant_epitopes():
                     logger.info('No epitopes for peptide: %s', vaccine_peptide)
                     continue
 
@@ -545,7 +545,7 @@ def make_csv_report(
         for j, vaccine_peptide in enumerate(vaccine_peptides):
 
             # if there are no predicted epitopes, exclude this peptide from the report
-            if not vaccine_peptide.contains_epitopes():
+            if not vaccine_peptide.contains_mutant_epitopes():
                 logger.info('No epitopes for peptide: %s', vaccine_peptide)
                 continue
 

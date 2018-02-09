@@ -180,7 +180,7 @@ def generate_vaccine_peptides(
         # do any of this variant's vaccine peptides contain mutant epitopes?
         any_mutant_epitopes = False
         for vaccine_peptide in vaccine_peptides:
-            if vaccine_peptide.contains_epitopes():
+            if vaccine_peptide.contains_mutant_epitopes():
                 any_mutant_epitopes = True
                 break
         if any_mutant_epitopes:
@@ -207,7 +207,8 @@ def ranked_vaccine_peptides(
     Returns a tuple of two values:
     - sorted list whose first element is a Variant and whose second
     element is a list of VaccinePeptide objects
-    - dictionary containing some variant counts for report display
+    - dictionary containing "funnel" variant counts for report display. Keys are e.g.
+    "num_variants_with_rna_support", values are integer counts.
     """
     variants_to_vaccine_peptides_dict, variant_counts_dict = generate_vaccine_peptides(
         reads_generator=reads_generator,
@@ -221,6 +222,7 @@ def ranked_vaccine_peptides(
         num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         min_epitope_score=min_epitope_score)
     result_list = list(variants_to_vaccine_peptides_dict.items())
+    # TODO: move this sort key into its own function, also make less nuts
     result_list.sort(
         key=lambda x: x[1][0].combined_score if len(x[1]) > 0 else 0.0,
         reverse=True)

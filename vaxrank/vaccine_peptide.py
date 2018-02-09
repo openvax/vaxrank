@@ -177,8 +177,7 @@ class VaccinePeptide(VaccinePeptideBase):
             extra_score_tuple
         )
 
-    def contains_epitopes(self):
-        """Returns true if this vaccine peptide contains mutant epitopes."""
+    def contains_mutant_epitopes(self):
         return len(self.mutant_epitope_predictions) > 0
 
     @property
