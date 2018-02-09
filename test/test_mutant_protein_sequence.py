@@ -57,7 +57,7 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
         "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
     ])
     reads_generator = allele_reads_generator_from_args(args)
-    ranked_list = ranked_vaccine_peptides(
+    ranked_list, _ = ranked_vaccine_peptides(
         reads_generator=reads_generator,
         mhc_predictor=RandomBindingPredictor(["H-2-Kb", "H-2-Db"]),
         vaccine_peptide_length=15,
@@ -88,7 +88,7 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
         "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
     ])
     reads_generator = allele_reads_generator_from_args(args)
-    ranked_list = ranked_vaccine_peptides(
+    ranked_list, _ = ranked_vaccine_peptides(
         reads_generator=reads_generator,
         mhc_predictor=RandomBindingPredictor(["H-2-Kb", "H-2-Db"]),
         vaccine_peptide_length=15,
@@ -114,7 +114,7 @@ def test_keep_top_k_epitopes():
     reads_generator = allele_reads_generator_from_args(args)
 
     keep_k_epitopes = 3
-    ranked_list = ranked_vaccine_peptides(
+    ranked_list, _ = ranked_vaccine_peptides(
         reads_generator=reads_generator,
         mhc_predictor=RandomBindingPredictor(["H-2-Kb", "H-2-Db"]),
         vaccine_peptide_length=15,

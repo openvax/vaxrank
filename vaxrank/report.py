@@ -51,6 +51,8 @@ PatientInfo = namedtuple("PatientInfo", (
     "mhc_alleles",
     "num_somatic_variants",
     "num_coding_effect_variants",
+    "num_variants_with_rna_support",
+    "num_variants_with_vaccine_peptides",
 ))
 
 
@@ -106,6 +108,11 @@ class TemplateDataCreator(object):
             ('Total number of somatic variants', self.patient_info.num_somatic_variants),
             ('Somatic variants with predicted coding effects',
                 self.patient_info.num_coding_effect_variants),
+            ('Somatic variants with predicted coding effects and RNA support',
+                self.patient_info.num_variants_with_rna_support),
+            ('Somatic variants with predicted coding effects, RNA support and predicted MHC '
+                'ligands',
+                self.patient_info.num_variants_with_vaccine_peptides),
         ])
         return patient_info
 
@@ -115,13 +122,13 @@ class TemplateDataCreator(object):
         """
         variant_data = OrderedDict()
         mutant_protein_fragment = top_vaccine_peptide.mutant_protein_fragment
-        top_score = round(top_vaccine_peptide.combined_score, 4)
+        top_score = _sanitize(top_vaccine_peptide.combined_score)
         variant_data = OrderedDict([
             ('Gene name', mutant_protein_fragment.gene_name),
             ('Top score', top_score),
-            ('Reads supporting variant allele', mutant_protein_fragment.n_alt_reads),
-            ('Reads supporting reference allele', mutant_protein_fragment.n_ref_reads),
-            ('Reads supporting other alleles', mutant_protein_fragment.n_other_reads),
+            ('RNA reads supporting variant allele', mutant_protein_fragment.n_alt_reads),
+            ('RNA reads supporting reference allele', mutant_protein_fragment.n_ref_reads),
+            ('RNA reads supporting other alleles', mutant_protein_fragment.n_other_reads),
         ])
         return variant_data
 
@@ -182,9 +189,9 @@ class TemplateDataCreator(object):
         peptide_data = OrderedDict([
             ('Transcript name', transcript_name),
             ('Length', len(amino_acids)),
-            ('Expression score', round(vaccine_peptide.expression_score, 4)),
-            ('Mutant epitope score', round(vaccine_peptide.mutant_epitope_score, 4)),
-            ('Combined score', round(vaccine_peptide.combined_score, 4)),
+            ('Expression score', _sanitize(vaccine_peptide.expression_score)),
+            ('Mutant epitope score', _sanitize(vaccine_peptide.mutant_epitope_score)),
+            ('Combined score', _sanitize(vaccine_peptide.combined_score)),
             ('Max coding sequence coverage',
                 mutant_protein_fragment.n_alt_reads_supporting_protein_sequence),
             ('Mutant amino acids', mutant_protein_fragment.n_mutant_amino_acids),
@@ -199,8 +206,8 @@ class TemplateDataCreator(object):
         """
         scores = vaccine_peptide.manufacturability_scores
         manufacturability_data = OrderedDict([
-            ('C-terminal 7mer GRAVY score', round(scores.cterm_7mer_gravy_score, 4)),
-            ('Max 7mer GRAVY score', round(scores.max_7mer_gravy_score, 4)),
+            ('C-terminal 7mer GRAVY score', _sanitize(scores.cterm_7mer_gravy_score)),
+            ('Max 7mer GRAVY score', _sanitize(scores.max_7mer_gravy_score)),
             ('N-terminal Glutamine, Glutamic Acid, or Cysteine',
                 int(scores.difficult_n_terminal_residue)),
             ('C-terminal Cysteine', int(scores.c_terminal_cysteine)),
@@ -223,8 +230,7 @@ class TemplateDataCreator(object):
         epitope_data = OrderedDict([
             ('Sequence', epitope_prediction.peptide_sequence),
             ('IC50', '%.2f nM' % epitope_prediction.ic50),
-            ('Score', round(
-                epitope_prediction.logistic_epitope_score(), 4)),
+            ('Score', _sanitize(epitope_prediction.logistic_epitope_score())),
             ('Allele', epitope_prediction.allele.replace('HLA-', '')),
             ('WT sequence', epitope_prediction.wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
@@ -303,7 +309,7 @@ class TemplateDataCreator(object):
 
             peptides = []
             for j, vaccine_peptide in enumerate(vaccine_peptides):
-                if not peptide_contains_epitopes(vaccine_peptide):
+                if not vaccine_peptide.contains_mutant_epitopes():
                     logger.info('No epitopes for peptide: %s', vaccine_peptide)
                     continue
 
@@ -448,7 +454,7 @@ def _sanitize(val):
     if type(val) == bool:
         val = int(val)
     elif type(val) == float:
-        val = round(val, 4)
+        val = round(val, 10)
     return val
 
 def resize_columns(worksheet, amino_acids_col, pos_col):
@@ -458,12 +464,6 @@ def resize_columns(worksheet, amino_acids_col, pos_col):
     """
     worksheet.set_column('%s:%s' % (amino_acids_col, amino_acids_col), 40)
     worksheet.set_column('%s:%s' % (pos_col, pos_col), 12)
-
-
-def peptide_contains_epitopes(vaccine_peptide):
-    """Returns true if vaccine peptide contains mutant epitopes."""
-    return len(vaccine_peptide.mutant_epitope_predictions) > 0
-
 
 def make_minimal_neoepitope_report(
         ranked_variants_with_vaccine_peptides,
@@ -545,7 +545,7 @@ def make_csv_report(
         for j, vaccine_peptide in enumerate(vaccine_peptides):
 
             # if there are no predicted epitopes, exclude this peptide from the report
-            if not peptide_contains_epitopes(vaccine_peptide):
+            if not vaccine_peptide.contains_mutant_epitopes():
                 logger.info('No epitopes for peptide: %s', vaccine_peptide)
                 continue
 
@@ -560,9 +560,9 @@ def make_csv_report(
                 vaccine_peptide.mutant_protein_fragment.mutant_amino_acid_start_offset)
             columns["mutation_end"].append(
                 vaccine_peptide.mutant_protein_fragment.mutant_amino_acid_end_offset)
-            columns["combined_score"].append(round(vaccine_peptide.combined_score, 4))
-            columns["expression_score"].append(round(vaccine_peptide.expression_score, 4))
-            columns["mutant_epitope_score"].append(round(vaccine_peptide.mutant_epitope_score, 4))
+            columns["combined_score"].append(_sanitize(vaccine_peptide.combined_score))
+            columns["expression_score"].append(_sanitize(vaccine_peptide.expression_score))
+            columns["mutant_epitope_score"].append(_sanitize(vaccine_peptide.mutant_epitope_score))
             for field in ManufacturabilityScores._fields:
                 columns[field].append(
                     _sanitize(getattr(vaccine_peptide.manufacturability_scores, field)))

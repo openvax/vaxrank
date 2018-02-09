@@ -206,7 +206,7 @@ def add_vaccine_peptide_args(arg_parser):
 
     vaccine_peptide_group.add_argument(
         "--min-epitope-score",
-        default=0.001,
+        default=1e-10,
         type=float,
         help="Ignore epitopes whose normalized score falls below this threshold")
 
@@ -268,7 +268,7 @@ def ranked_variant_list_with_metadata(args):
     reads_generator = allele_reads_generator_from_args(args)
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
-    ranked_list = ranked_vaccine_peptides(
+    ranked_list, variants_count_dict = ranked_vaccine_peptides(
         reads_generator=reads_generator,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
@@ -282,15 +282,15 @@ def ranked_variant_list_with_metadata(args):
 
     ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
 
-    num_coding_effect_variants = len(
-        variants.effects().drop_silent_and_noncoding().groupby_variant())
     patient_info = PatientInfo(
         patient_id=args.output_patient_id,
         vcf_paths=variants.sources,
         bam_path=args.bam,
         mhc_alleles=mhc_alleles,
         num_somatic_variants=len(variants),
-        num_coding_effect_variants=num_coding_effect_variants,
+        num_coding_effect_variants=variants_count_dict['num_coding_effect_variants'],
+        num_variants_with_rna_support=variants_count_dict['num_variants_with_rna_support'],
+        num_variants_with_vaccine_peptides=variants_count_dict['num_variants_with_vaccine_peptides']
     )
 
     # return variants, patient info, and command-line args
