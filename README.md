@@ -34,7 +34,7 @@ Note: to generate PDF reports, you first need to install [wkhtmltopdf](http://wk
 brew install Caskroom/cask/wkhtmltopdf
 ```
 
-Vaxrank uses [PyEnsembl](https://github.com/openvax/pyensembl) for accessing information about the reference genome. You must install an Ensembl release corresponding to the reference genome associated with the mutations provided to Vaxrank. 
+Vaxrank uses [PyEnsembl](https://github.com/openvax/pyensembl) for accessing information about the reference genome. You must install an Ensembl release corresponding to the reference genome associated with the mutations provided to Vaxrank.
 
 The latest release for GRCh38 is Ensembl 87:
 ```
@@ -46,7 +46,7 @@ The last release for GRCh37 is Ensembl 75:
 pyensembl install --release 75 --species human
 ```
 
-If your variants were called from alignments against hg19 then you can still use GRCh37 but should ignore mitochondrial variants.  
+If your variants were called from alignments against hg19 then you can still use GRCh37 but should ignore mitochondrial variants.
 
 # Development
 

@@ -22,18 +22,20 @@ import re
 from setuptools import setup
 
 readme_dir = os.path.dirname(__file__)
-readme_filename = os.path.join(readme_dir, 'README.md')
+readme_path = os.path.join(readme_dir, 'README.md')
 
 try:
-    with open(readme_filename, 'r') as f:
+    with open(readme_path, 'r') as f:
         readme = f.read()
 except:
-    logging.warn("Failed to load %s" % readme_filename)
+    logging.warn("Failed to load %s" % readme_path)
     readme = ""
 
 try:
     import pypandoc
     readme = pypandoc.convert(readme, to='rst', format='md')
+    with open(readme_path.replace(".md", ".rst")) as f:
+        f.write(readme)
 except:
     logging.warn("Conversion of long_description from MD to RST failed")
     pass
