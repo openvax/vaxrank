@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/hammerlab/vaxrank.svg?branch=master)](https://travis-ci.org/hammerlab/vaxrank) [![Coverage Status](https://coveralls.io/repos/github/hammerlab/vaxrank/badge.svg?branch=master)](https://coveralls.io/github/hammerlab/vaxrank?branch=master)
+[![Build Status](https://travis-ci.org/openvax/vaxrank.svg?branch=master)](https://travis-ci.org/openvax/vaxrank) [![Coverage Status](https://coveralls.io/repos/github/openvax/vaxrank/badge.svg?branch=master)](https://coveralls.io/github/openvax/vaxrank?branch=master)
 
 # vaxrank
 
@@ -34,7 +34,7 @@ Note: to generate PDF reports, you first need to install [wkhtmltopdf](http://wk
 brew install Caskroom/cask/wkhtmltopdf
 ```
 
-Vaxrank uses [PyEnsembl](https://github.com/hammerlab/pyensembl) for accessing information about the reference genome. You must install an Ensembl release corresponding to the reference genome associated with the mutations provided to Vaxrank. 
+Vaxrank uses [PyEnsembl](https://github.com/openvax/pyensembl) for accessing information about the reference genome. You must install an Ensembl release corresponding to the reference genome associated with the mutations provided to Vaxrank. 
 
 The latest release for GRCh38 is Ensembl 87:
 ```
@@ -53,7 +53,7 @@ If your variants were called from alignments against hg19 then you can still use
 To install Vaxrank for local development, you may do the below:
 
 ```
-git clone git@github.com:hammerlab/vaxrank.git
+git clone git@github.com:openvax/vaxrank.git
 conda create -q -n vaxrank-dev-env python=3.5.2 numpy scipy nose pandas pylint
 source activate vaxrank-dev-env
 pip install -r requirements.txt
