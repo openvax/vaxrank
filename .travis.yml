@@ -30,7 +30,7 @@ before_install:
   # Useful for debugging any issues with conda
   - conda info -a
   # install netmhcbundle
-  - git clone https://mhcbundle:$MHC_BUNDLE_PASS@github.com/hammerlab/netmhc-bundle.git
+  - git clone https://mhcbundle:$MHC_BUNDLE_PASS@github.com/openvax/netmhc-bundle.git
   - export NETMHC_BUNDLE_HOME=$PWD/netmhc-bundle
   - mkdir tmp
   - export NETMHC_BUNDLE_TMPDIR=$PWD/tmp
@@ -49,7 +49,7 @@ addons:
 install:
   - >
       conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION
-      numpy scipy nose pandas pylint pandoc
+      numpy nose pylint pandoc
   - source activate test-environment
   - pip install pypandoc
   - pip install -r requirements.txt
@@ -67,8 +67,8 @@ after_success:
 deploy:
   provider: pypi
   distributions: sdist
-  user: hammerlab
+  user: openvax
   password: # See http://docs.travis-ci.com/user/encryption-keys/
-    secure: "TZrNOmCEXd1NMn0k73CwjaN84dCw9VPITE3FXJJ1+PE11fNLBOnDeJd5xVWPNw+PmJir9KuincUwxhNldvwJFNFIUqdmdDB1C5E3mmYe90IK4xWBdtr7nn1iV393bFao2p8rVP5Ari0rsk3ntUa06PA232ElXnPt/m/TBj9s04Uqw1ItnEVvX9FyEaYcBjU5Wv0Y8NPtlXvXuzeZ4i8lHJh/qJ9xYbYdYCtbz5H/q5vC1XvMnWU69iN2HsxtQ9uPHoUmlQ3IpJXBHAfUCqbws/XacsFpdfdpb/BNsFTaDQiWtN5FOc2ByFT693+SqDNES1qyO0boTGJ1wlQjOT2PPFd3ynK7j0c/mvlBWD/odFeLxPLWXWn0WnJ3qQ4P9UbPcc4YbyzkXW/7W/dnkpeetDaBErXEc2P/w4UKDvg9HTBNWIIQjS0KKGQ6D+9xmpGzObP9nQ7YaSWRbP6Dux+JR0m7QXRZikPryAdLOIuUe3BTTB5GKS221ad9cUB3qsQSno2h6iiY47D2ajBFggC4Mte9Eqlc7S/+Sm2vcG5iIjKSQZRZXSrwejv0qfOaBnKEgXhgFcY/YJ4RRqRDv11ByVC9f1k/XKQb3gEY8rZbL3nJrBJQetB5n5sNsqfBM8fDn3SlIDyClj64yQqdmpgzr9/9zxYC85O73W0QvCL/XxU="
+    secure: "S4KWAhJpKYx5F/cBc6cf9GCZ8Hd+WtMA6V6PP25PglLnVaXrxB5QxuAIWGAvr/jGuTHjfCSCNDwTptW3natLjJR9IfJdJPp3gNvM0RDjWY4FsziFz/nG/bZo9qnh4ZCDhK/Po1izxXM0u9z6gUc0U2iKK1ZSdfawyW4nZbAXQUU="
   on:
     branch: master
