@@ -1,5 +1,7 @@
 [![Build Status](https://travis-ci.org/openvax/vaxrank.svg?branch=master)](https://travis-ci.org/openvax/vaxrank) [![Coverage Status](https://coveralls.io/repos/github/openvax/vaxrank/badge.svg?branch=master)](https://coveralls.io/github/openvax/vaxrank?branch=master)
-
+<a href="https://pypi.python.org/pypi/vaxrank/">
+    <img src="https://img.shields.io/pypi/v/vaxrank.svg?maxAge=1000" alt="PyPI" />
+</a>
 # vaxrank
 
 Selection of mutated protein fragments for therapeutic personalized cancer vaccines.
