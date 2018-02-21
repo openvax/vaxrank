@@ -46,11 +46,10 @@ addons:
     packages:
     # Needed for NetMHC
     - tcsh
-    - pandoc
 install:
   - >
       conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION
-      numpy nose pylint
+      numpy nose pylint pandoc
   - source activate test-environment
   - pip install pypandoc
   - pip install -r requirements.txt
