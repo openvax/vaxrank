@@ -26,17 +26,16 @@ readme_path = os.path.join(readme_dir, 'README.md')
 
 try:
     with open(readme_path, 'r') as f:
-        readme = f.read()
+        readme_markdown = f.read()
 except:
     logging.warn("Failed to load %s" % readme_path)
-    readme = ""
+    readme_markdown = ""
 
 try:
     import pypandoc
-    readme = pypandoc.convert(readme, to='rst', format='md')
-    with open(readme_path.replace(".md", ".rst")) as f:
-        f.write(readme)
+    readme_restructured = pypandoc.convert(readme_markdown, to='rst', format='md')
 except:
+    readme_restructured = readme_markdown
     logging.warn("Conversion of long_description from MD to RST failed")
     pass
 
@@ -87,7 +86,7 @@ if __name__ == '__main__':
             'astropy',
         ],
 
-        long_description=readme,
+        long_description=readme_restructured,
         packages=['vaxrank'],
         package_data={'vaxrank': ['templates/*', 'logging.conf']},
         entry_points={
