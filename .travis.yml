@@ -4,6 +4,12 @@ language: python
 python:
   - "2.7"
   - "3.6"
+git:
+  # don't need the default depth of 50
+  # but don't want to use a depth of 1 since that affects
+  # whether jobs run when you have multiple commits queued
+  # https://github.com/travis-ci/travis-ci/issues/4575
+  depth: 10
 cache:
   pip: true
   # cache pip files; directory used for Ensembl downloads of GTF and FASTA files
@@ -13,25 +19,16 @@ cache:
     - $HOME/.cache/pyensembl/
     - $HOME/.cache/pyensembl/GRCh38/ensembl87/
     - $HOME/.cache/pyensembl/GRCm38/ensembl87/
-    - $HOME/miniconda
     - $HOME/.cache/vaxrank
 before_install:
-  # don't install miniconda if it's already cached
-  # if not yet installed, use different versions for py2 vs. py3
-  - |
-    if [ -f  $HOME/miniconda/bin ];
-      then
-      echo "miniconda already installed"
+ - |
+    if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
+      wget https://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh;
     else
-      rm -rf $HOME/miniconda
-      if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
-        wget https://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh;
-      else
-        wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
-      fi
-      bash miniconda.sh -b -p $HOME/miniconda
-      export PATH="$HOME/miniconda/bin:$PATH"
+      wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
     fi
+  - bash miniconda.sh -b -p $HOME/miniconda
+  - export PATH="$HOME/miniconda/bin:$PATH"
   # reset the shell's lookup table for program name to path mappings
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
