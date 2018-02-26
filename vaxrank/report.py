@@ -116,14 +116,16 @@ class TemplateDataCreator(object):
         ])
         return patient_info
 
-    def _variant_data(self, top_vaccine_peptide):
+    def _variant_data(self, variant, top_vaccine_peptide):
         """
         Returns an OrderedDict with info used to populate variant info section.
         """
         variant_data = OrderedDict()
         mutant_protein_fragment = top_vaccine_peptide.mutant_protein_fragment
         top_score = _sanitize(top_vaccine_peptide.combined_score)
+        igv_locus = "chr%s:%d" % (variant.contig, variant.start)
         variant_data = OrderedDict([
+            ('IGV locus', igv_locus),
             ('Gene name', mutant_protein_fragment.gene_name),
             ('Top score', top_score),
             ('RNA reads supporting variant allele', mutant_protein_fragment.n_alt_reads),
@@ -300,7 +302,7 @@ class TemplateDataCreator(object):
             num += 1
 
             top_peptide = vaccine_peptides[0]
-            variant_data = self._variant_data(top_peptide)
+            variant_data = self._variant_data(variant, top_peptide)
             predicted_effect = top_peptide.mutant_protein_fragment.predicted_effect()
             effect_data = self._effect_data(predicted_effect)
 
