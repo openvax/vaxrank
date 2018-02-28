@@ -29,6 +29,7 @@ VaccinePeptideBase = namedtuple(
         "wildtype_epitope_predictions",
         "mutant_epitope_score",
         "wildtype_epitope_score",
+        "num_mutant_epitopes_to_keep",
         "manufacturability_scores"])
 
 class VaccinePeptide(VaccinePeptideBase):
@@ -64,6 +65,7 @@ class VaccinePeptide(VaccinePeptideBase):
             wildtype_epitope_predictions=wildtype_epitope_predictions,
             mutant_epitope_score=mutant_epitope_score,
             wildtype_epitope_score=wildtype_epitope_score,
+            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
             manufacturability_scores=ManufacturabilityScores.from_amino_acids(
                 mutant_protein_fragment.amino_acids))
 
@@ -193,4 +195,5 @@ class VaccinePeptide(VaccinePeptideBase):
         return {
             "mutant_protein_fragment": self.mutant_protein_fragment,
             "epitope_predictions": epitope_predictions,
+            "num_mutant_epitopes_to_keep": self.num_mutant_epitopes_to_keep,
         }
