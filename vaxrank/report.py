@@ -257,7 +257,7 @@ class TemplateDataCreator(object):
         Returns a link to the WUSTL page for this variant, if present.
         """
         amino_acids = predicted_effect.short_description
-        api_url = "http://docm.genome.wustl.edu/api/v1/variants.json?amino_acids=%s&genes=%s" % (
+        api_url = "http://www.docm.info/api/v1/variants.json?amino_acids=%s&genes=%s" % (
             amino_acids, gene_name.upper())
         logger.info("WUSTL link: %s", api_url)
 

@@ -189,8 +189,8 @@ class VaccinePeptide(VaccinePeptideBase):
         return self.expression_score * self.mutant_epitope_score
 
     def to_dict(self):
+        epitope_predictions = self.mutant_epitope_predictions + self.wildtype_epitope_predictions
         return {
             "mutant_protein_fragment": self.mutant_protein_fragment,
-            "mutant_epitope_predictions": self.mutant_epitope_predictions,
-            "wildtype_epitope_predictions": self.wildtype_epitope_predictions,
+            "epitope_predictions": epitope_predictions,
         }
