@@ -20,6 +20,7 @@ cache:
     - $HOME/.cache/pyensembl/GRCm38/ensembl87/
     - $HOME/.cache/vaxrank
     - $HOME/.cache/pip
+  timeout: 300
 before_install:
   - |
     if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
