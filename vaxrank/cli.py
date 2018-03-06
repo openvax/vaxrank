@@ -175,6 +175,11 @@ def add_output_args(arg_parser):
         default="python.log",
         help="File path to write the vaxrank Python log to")
 
+    output_args_group.add_argument(
+        "--max-mutations-in-report",
+        type=int,
+        help="Number of mutations to report")
+
 
 def add_vaccine_peptide_args(arg_parser):
     vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
@@ -198,11 +203,6 @@ def add_vaccine_peptide_args(arg_parser):
         default=1,
         type=int,
         help="Number of vaccine peptides to generate for each mutation")
-
-    vaccine_peptide_group.add_argument(
-        "--max-mutations-in-report",
-        type=int,
-        help="Number of mutations to report")
 
     vaccine_peptide_group.add_argument(
         "--min-epitope-score",
@@ -256,6 +256,10 @@ def ranked_variant_list_with_metadata(args):
             # the JSON data from the previous run will have the older args saved, which may need to
             # be overridden with args from this run (which all be output related)
             data['args'].update(vars(args))
+
+            # if we need to truncate the variant list based on max_mutations_in_report, do that here
+            if len(data['variants']) > args.max_mutations_in_report:
+                data['variants'] = data['variants'][:args.max_mutations_in_report]
             return data
 
     # get various things from user args
