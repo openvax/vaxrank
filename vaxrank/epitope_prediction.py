@@ -18,11 +18,11 @@ import traceback
 import logging
 import os
 
-from appdirs import user_cache_dir
 import numpy as np
 import shellinford
 import six
 
+from datacache import get_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,8 @@ def fm_index_path(genome):
     """
     Returns a path for cached reference peptides, for the given genome.
     """
-    cache_dir = user_cache_dir('vaxrank')
+    # if $VAXRANK_REF_PEPTIDES_DIR is set, that'll be the location of the cache
+    cache_dir = get_data_dir(envkey='VAXRANK_REF_PEPTIDES_DIR')
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
 
