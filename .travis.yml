@@ -42,6 +42,8 @@ before_install:
   - mkdir tmp
   - export NETMHC_BUNDLE_TMPDIR=$PWD/tmp
   - export PATH=$PATH:$NETMHC_BUNDLE_HOME/bin
+  # tells vaxrank where to install the reference peptide cache
+  - export REF_PEPTIDES_DIR=$HOME/.cache/vaxrank
 env:
   global:
     # MHC_BUNDLE_PASS
