@@ -14,3 +14,4 @@ xlrd
 xvfbwrapper
 future>=0.16.0  # needed by pylint
 astropy
+datacache
