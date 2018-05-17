@@ -76,8 +76,8 @@ def fm_index_path(genome):
     """
     Returns a path for cached reference peptides, for the given genome.
     """
-    # if $REF_PEPTIDES_DIR is set, that'll be the location of the cache
-    cache_dir = get_data_dir(envkey='REF_PEPTIDES_DIR')
+    # if $VAXRANK_REF_PEPTIDES_DIR is set, that'll be the location of the cache
+    cache_dir = get_data_dir(envkey='VAXRANK_REF_PEPTIDES_DIR')
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
 
