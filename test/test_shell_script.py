@@ -1,3 +1,4 @@
+from os.path import getsize
 from mock import patch
 from nose.plugins.attrib import attr
 from tempfile import NamedTemporaryFile
@@ -28,6 +29,7 @@ cli_args_for_b16_seqdata_real_predictor = [
     "--include-mismatches-after-variant"
 ]
 
+
 def test_ascii_report():
     with NamedTemporaryFile(mode="r", delete=False) as f:
         ascii_args = cli_args_for_b16_seqdata + ["--output-ascii-report", f.name]
@@ -35,6 +37,7 @@ def test_ascii_report():
         contents = f.read()
         lines = contents.split("\n")
         assert len(lines) > 0
+
 
 def test_ascii_report_real_netmhc_predictor():
     with NamedTemporaryFile(mode="r", delete=False) as f:
@@ -47,6 +50,7 @@ def test_ascii_report_real_netmhc_predictor():
         no_variants_text = 'No variants'
         assert no_variants_text not in contents
 
+
 def test_json_report():
     with NamedTemporaryFile(mode="r", delete=False) as f:
         json_args = cli_args_for_b16_seqdata + ["--output-json-file", f.name]
@@ -54,6 +58,7 @@ def test_json_report():
         contents = f.read()
         lines = contents.split("\n")
         assert len(lines) > 0
+
 
 def test_csv_report():
     with NamedTemporaryFile(mode="r", delete=False) as f:
@@ -63,12 +68,14 @@ def test_csv_report():
         lines = contents.split("\n")
         assert len(lines) > 0
 
+
 def test_xlsx_report():
     with NamedTemporaryFile(mode="r", delete=False) as f:
         xlsx_args = cli_args_for_b16_seqdata + ["--output-xlsx-report", f.name]
         run_shell_script(xlsx_args)
         book = open_workbook(f.name)
         assert book.nsheets > 0
+
 
 def test_html_report():
     with NamedTemporaryFile(mode="r") as f:
@@ -78,15 +85,13 @@ def test_html_report():
         lines = contents.split("\n")
         assert len(lines) > 0
 
+
 @attr('skip')  # want the ability to skip this test on some machines
 def test_pdf_report():
-    with NamedTemporaryFile(mode="r") as f:
+    with NamedTemporaryFile(mode="rb", delete=False) as f:
         pdf_args = cli_args_for_b16_seqdata + ["--output-pdf-report", f.name]
         run_shell_script(pdf_args)
-        contents = f.read()
-        # check that something got written - should eventually check that PDF is valid...
-        lines = contents.split("\n")
-        assert len(lines) > 0
+        assert getsize(f.name) > 0
 
 @patch('vaxrank.core_logic.vaccine_peptides_for_variant')
 def test_report_no_peptides(mock_vaccine_peptides_for_variant):

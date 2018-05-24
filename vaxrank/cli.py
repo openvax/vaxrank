@@ -19,9 +19,9 @@ import logging.config
 import pkg_resources
 
 from argparse import ArgumentParser
-from isovar.cli.rna_reads import allele_reads_generator_from_args
-from isovar.cli.translation import add_translation_args
-from isovar.cli.variant_sequences import make_variant_sequences_arg_parser
+from isovar.cli.rna_args import allele_reads_generator_from_args
+from isovar.cli.translation_args import add_translation_args
+from isovar.cli.variant_sequences_args import make_variant_sequences_arg_parser
 from mhctools.cli import (
     add_mhc_args,
     mhc_alleles_from_args,
@@ -338,8 +338,10 @@ def main(args_list=None):
 
     args = arg_parser.parse_args(args_list)
     logging.config.fileConfig(
-        pkg_resources.resource_filename(__name__, 'logging.conf'),
-            defaults={'logfilename': args.log_path})
+        pkg_resources.resource_filename(
+            __name__,
+            'logging.conf'),
+        defaults={'logfilename': args.log_path})
 
     logger.info(args)
     check_args(args)

@@ -1,4 +1,4 @@
-# Copyright (c) 2016. Mount Sinai School of Medicine
+# Copyright (c) 2016-2018. Mount Sinai School of Medicine
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,13 +13,12 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function, division
-from operator import attrgetter
 
 from nose.tools import eq_, assert_almost_equal
 from vaxrank.core_logic import ranked_vaccine_peptides
 from mhctools import RandomBindingPredictor
-from isovar.cli.variant_sequences import make_variant_sequences_arg_parser
-from isovar.cli.rna_reads import allele_reads_generator_from_args
+from isovar.cli.variant_sequences_args import make_variant_sequences_arg_parser
+from isovar.cli.rna_args import allele_reads_generator_from_args
 
 from .testing_helpers import data_path
 
