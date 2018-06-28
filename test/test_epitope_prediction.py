@@ -1,4 +1,4 @@
-# Copyright (c) 2016. Mount Sinai School of Medicine
+# Copyright (c) 2016-2018. Mount Sinai School of Medicine
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,16 +17,17 @@ from __future__ import absolute_import, print_function, division
 from nose.tools import eq_, ok_
 
 from mhctools import RandomBindingPredictor
-from pyensembl import EnsemblRelease
+from pyensembl import genome_for_reference_name
 from varcode import Variant
 from vaxrank.epitope_prediction import predict_epitopes
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.vaccine_peptide import VaccinePeptide
 
+mouse_genome = genome_for_reference_name("GRCm38")
 
 def test_reference_peptide_logic():
-    genome = EnsemblRelease(species="mouse")
-    wdr13_transcript = genome.transcripts_by_name("Wdr13-001")[0]
+
+    wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-001")[0]
 
     protein_fragment = MutantProteinFragment(
         variant=Variant('X', '8125624', 'C', 'A'),
@@ -43,7 +44,7 @@ def test_reference_peptide_logic():
     epitope_predictions = predict_epitopes(
         mhc_predictor=RandomBindingPredictor(["H-2-Kb"]),
         protein_fragment=protein_fragment,
-        genome=genome)
+        genome=mouse_genome)
 
     # occurs in protein ENSMUSP00000033506
     prediction_occurs_in_reference = epitope_predictions[('NCDESLLAS', 'H-2-Kb')]
@@ -63,8 +64,7 @@ def test_reference_peptide_logic():
         vaccine_peptide.mutant_epitope_score)
 
 def test_mhc_predictor_error():
-    genome = EnsemblRelease(species="mouse")
-    wdr13_transcript = genome.transcripts_by_name("Wdr13-001")[0]
+    wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-001")[0]
 
     protein_fragment = MutantProteinFragment(
         variant=Variant('X', '8125624', 'C', 'A'),
@@ -86,6 +86,6 @@ def test_mhc_predictor_error():
     epitope_predictions = predict_epitopes(
         mhc_predictor=FakeMHCPredictor(),
         protein_fragment=protein_fragment,
-        genome=genome)
+        genome=mouse_genome)
 
     eq_(0, len(epitope_predictions))
