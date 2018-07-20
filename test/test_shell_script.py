@@ -94,7 +94,7 @@ def test_pdf_report():
         assert getsize(f.name) > 0
 
 
-@patch('vaxrank.core_logic.vaccine_peptides_for_variant')
+@patch('vaxrank.core_logic.VaxrankCoreLogic.vaccine_peptides_for_variant')
 def test_report_no_peptides(mock_vaccine_peptides_for_variant):
     # simulate case where we have no epitopes for any variant
     mock_vaccine_peptides_for_variant.return_value = []

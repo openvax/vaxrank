@@ -31,7 +31,7 @@ from mhctools.cli import (
 import serializable
 from varcode.cli import variant_collection_from_args
 
-from .core_logic import ranked_vaccine_peptides
+from .core_logic import VaxrankCoreLogic
 from .report import (
     make_ascii_report,
     make_html_report,
@@ -272,7 +272,7 @@ def ranked_variant_list_with_metadata(args):
     reads_generator = allele_reads_generator_from_args(args)
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
-    ranked_list, variants_count_dict = ranked_vaccine_peptides(
+    core_logic = VaxrankCoreLogic(
         reads_generator=reads_generator,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
@@ -284,6 +284,7 @@ def ranked_variant_list_with_metadata(args):
         num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide,
         variant_sequence_assembly=args.variant_sequence_assembly)
 
+    ranked_list, variants_count_dict = core_logic.ranked_vaccine_peptides()
     ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
 
     patient_info = PatientInfo(
