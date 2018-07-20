@@ -285,19 +285,19 @@ def ranked_variant_list_with_metadata(args):
         variant_sequence_assembly=args.variant_sequence_assembly)
 
     ranked_list, variants_count_dict = core_logic.ranked_vaccine_peptides()
-    ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
+    assert len(variants) == variants_count_dict['num_total_variants']
 
+    ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
     patient_info = PatientInfo(
         patient_id=args.output_patient_id,
         vcf_paths=variants.sources,
         bam_path=args.bam,
         mhc_alleles=mhc_alleles,
-        num_somatic_variants=len(variants),
+        num_somatic_variants=variants_count_dict['num_total_variants'],
         num_coding_effect_variants=variants_count_dict['num_coding_effect_variants'],
         num_variants_with_rna_support=variants_count_dict['num_variants_with_rna_support'],
         num_variants_with_vaccine_peptides=variants_count_dict['num_variants_with_vaccine_peptides']
     )
-
     # return variants, patient info, and command-line args
     data = {
         'variants': ranked_list_for_report,

@@ -164,6 +164,7 @@ class VaxrankCoreLogic:
         result_dict = {}
         counts_dict = defaultdict(int)
         for variant, isovar_protein_sequences in protein_sequences_generator:
+            counts_dict['num_total_variants'] += 1
             if len(variant.effects().drop_silent_and_noncoding()) > 0:
                 counts_dict['num_coding_effect_variants'] += 1
             isovar_protein_sequences = list(isovar_protein_sequences)
@@ -199,6 +200,7 @@ class VaxrankCoreLogic:
             num_mutant_epitopes_to_keep=10000,
             min_epitope_score=0):
         """
+        This function is an entrypoint into the core vaccine peptide ranking logic.
         Returns a tuple of two values:
         - sorted list whose first element is a Variant and whose second
         element is a list of VaccinePeptide objects
