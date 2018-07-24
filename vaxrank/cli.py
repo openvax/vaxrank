@@ -59,6 +59,7 @@ def new_run_arg_parser():
     add_output_args(arg_parser)
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
+    add_gene_list_args(arg_parser)
     return arg_parser
 
 
@@ -76,6 +77,7 @@ def cached_run_arg_parser():
     add_output_args(arg_parser)
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
+    add_gene_list_args(arg_parser)
     return arg_parser
 
 
@@ -218,6 +220,24 @@ def add_supplemental_report_args(arg_parser):
         default="",
         help="Local path to COSMIC vcf")
 
+def add_gene_list_args(arg_parser):
+    gene_list_args_group = arg_parser.add_argument_group("Interesting gene list file paths")
+    gene_list_args_group.add_argument(
+        "--interferon-gamma-response-csv",
+        default="",
+        help="Local path to interferon-gamma response CSV file")
+    gene_list_args_group.add_argument(
+        "--class1-mhc-presentation-pathway-csv",
+        default="",
+        help="Local path to MHC class I presentation pathway CSV file")
+    gene_list_args_group.add_argument(
+        "--cancer-driver-genes-csv",
+        default="",
+        help="Local path to cancer driver genes CSV file")
+    gene_list_args_group.add_argument(
+        "--cancer-driver-variants-csv",
+        default="",
+        help="Local path to cancer driver variants CSV file")
 
 def check_args(args):
     if not (args.output_csv or
@@ -273,6 +293,7 @@ def ranked_variant_list_with_metadata(args):
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
     core_logic = VaxrankCoreLogic(
+        variants=variants,
         reads_generator=reads_generator,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
@@ -282,7 +303,12 @@ def ranked_variant_list_with_metadata(args):
         min_variant_sequence_coverage=args.min_variant_sequence_coverage,
         min_epitope_score=args.min_epitope_score,
         num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide,
-        variant_sequence_assembly=args.variant_sequence_assembly)
+        variant_sequence_assembly=args.variant_sequence_assembly,
+        interferon_gamma_response_csv=args.interferon_gamma_response_csv,
+        class1_mhc_presentation_pathway_csv=args.class1_mhc_presentation_pathway_csv,
+        cancer_driver_genes_csv=args.cancer_driver_genes_csv,
+        cancer_driver_variants_csv=args.cancer_driver_variants_csv
+    )
 
     ranked_list, variants_count_dict = core_logic.ranked_vaccine_peptides()
     assert len(variants) == variants_count_dict['num_total_variants']
