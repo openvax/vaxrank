@@ -67,6 +67,7 @@ install:
   - pip install .
   - pip install coveralls
 before_script:
+  - ./lint.sh
   - >
       pyensembl install
       --release 93
@@ -78,9 +79,7 @@ before_script:
       --species mouse
       --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCm38.93/
 script:
-  - >
-    ./lint.sh &&
-    travis_wait nosetests -sv test -a '!skip' --with-coverage --cover-package=vaxrank
+  - travis_wait nosetests -sv test -a '!skip' --with-coverage --cover-package=vaxrank
 after_success:
   coveralls
 deploy:
