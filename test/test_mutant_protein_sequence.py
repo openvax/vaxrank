@@ -22,6 +22,8 @@ from isovar.cli.rna_args import allele_reads_generator_from_args
 
 from .testing_helpers import data_path
 
+random_binding_predictor = RandomBindingPredictor(["H-2-Kb", "H-2-Db"])
+
 
 def check_mutant_amino_acids(variant, mutant_protein_fragment):
     predicted_effect = mutant_protein_fragment.predicted_effect()
@@ -58,7 +60,7 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
     reads_generator = allele_reads_generator_from_args(args)
     ranked_list, _ = ranked_vaccine_peptides(
         reads_generator=reads_generator,
-        mhc_predictor=RandomBindingPredictor(["H-2-Kb", "H-2-Db"]),
+        mhc_predictor=random_binding_predictor,
         vaccine_peptide_length=15,
         padding_around_mutation=5,
         max_vaccine_peptides_per_variant=1,
@@ -89,7 +91,7 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
     reads_generator = allele_reads_generator_from_args(args)
     ranked_list, _ = ranked_vaccine_peptides(
         reads_generator=reads_generator,
-        mhc_predictor=RandomBindingPredictor(["H-2-Kb", "H-2-Db"]),
+        mhc_predictor=random_binding_predictor,
         vaccine_peptide_length=15,
         padding_around_mutation=5,
         min_alt_rna_reads=1,
@@ -115,7 +117,7 @@ def test_keep_top_k_epitopes():
     keep_k_epitopes = 3
     ranked_list, _ = ranked_vaccine_peptides(
         reads_generator=reads_generator,
-        mhc_predictor=RandomBindingPredictor(["H-2-Kb", "H-2-Db"]),
+        mhc_predictor=random_binding_predictor,
         vaccine_peptide_length=15,
         padding_around_mutation=5,
         min_alt_rna_reads=1,

@@ -27,7 +27,7 @@ mouse_genome = genome_for_reference_name("GRCm38")
 
 def test_reference_peptide_logic():
 
-    wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-001")[0]
+    wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-201")[0]
 
     protein_fragment = MutantProteinFragment(
         variant=Variant('X', '8125624', 'C', 'A'),
@@ -64,7 +64,7 @@ def test_reference_peptide_logic():
         vaccine_peptide.mutant_epitope_score)
 
 def test_mhc_predictor_error():
-    wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-001")[0]
+    wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-201")[0]
 
     protein_fragment = MutantProteinFragment(
         variant=Variant('X', '8125624', 'C', 'A'),
