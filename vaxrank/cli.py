@@ -32,6 +32,7 @@ import serializable
 from varcode.cli import variant_collection_from_args
 
 from .core_logic import VaxrankCoreLogic
+from .gene_pathway_check import GenePathwayCheck
 from .report import (
     make_ascii_report,
     make_html_report,
@@ -292,6 +293,13 @@ def ranked_variant_list_with_metadata(args):
     reads_generator = allele_reads_generator_from_args(args)
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
+    gene_pathway_check = GenePathwayCheck(
+        interferon_gamma_response_csv=args.interferon_gamma_response_csv,
+        class1_mhc_presentation_pathway_csv=args.class1_mhc_presentation_pathway_csv,
+        cancer_driver_genes_csv=args.cancer_driver_genes_csv,
+        cancer_driver_variants_csv=args.cancer_driver_variants_csv
+    )
+
     core_logic = VaxrankCoreLogic(
         variants=variants,
         reads_generator=reads_generator,
@@ -304,14 +312,12 @@ def ranked_variant_list_with_metadata(args):
         min_epitope_score=args.min_epitope_score,
         num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide,
         variant_sequence_assembly=args.variant_sequence_assembly,
-        interferon_gamma_response_csv=args.interferon_gamma_response_csv,
-        class1_mhc_presentation_pathway_csv=args.class1_mhc_presentation_pathway_csv,
-        cancer_driver_genes_csv=args.cancer_driver_genes_csv,
-        cancer_driver_variants_csv=args.cancer_driver_variants_csv
+        gene_pathway_check=gene_pathway_check
     )
 
     ranked_list, variants_count_dict = core_logic.ranked_vaccine_peptides()
-    assert len(variants) == variants_count_dict['num_total_variants']
+    assert len(variants) == variants_count_dict['num_total_variants'], \
+        "Len(variants) is %d but variants_count_dict came back with %d" % (len(variants), variants_count_dict['num_total_variants'])
 
     ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
     patient_info = PatientInfo(

@@ -26,6 +26,7 @@ from isovar.protein_sequences import (
 from .mutant_protein_fragment import MutantProteinFragment
 from .epitope_prediction import predict_epitopes, slice_epitope_predictions
 from .vaccine_peptide import VaccinePeptide
+from .gene_pathway_check import GenePathwayCheck
 
 
 logger = logging.getLogger(__name__)
@@ -44,10 +45,7 @@ class VaxrankCoreLogic:
             variant_sequence_assembly,
             num_mutant_epitopes_to_keep=10000,
             min_epitope_score=0.0,
-            interferon_gamma_response_csv=None,
-            class1_mhc_presentation_pathway_csv=None,
-            cancer_driver_genes_csv=None,
-            cancer_driver_variants_csv=None):
+            gene_pathway_check=None):
         """
         Construct a VaxrankCoreLogic object.
 
@@ -89,17 +87,9 @@ class VaxrankCoreLogic:
         min_epitope_score : float, optional
             Ignore peptides with binding predictions whose normalized score is less than this.
 
-        interferon_gamma_response_csv : str, optional
-            Local path to interferon-gamma response CSV file.
-
-        class1_mhc_presentation_pathway_csv : str, optional
-            Local path to MHC class I presentation pathway CSV file.
-
-        cancer_driver_genes_csv : str, optional
-            Local path to cancer driver genes CSV file.
-
-        cancer_driver_variants_csv : str, optional
-            Local path to cancer driver variants CSV file.
+        gene_pathway_check : GenePathwayCheck object, optional
+            If provided, will check against known pathways/gene sets/variant sets and include the
+            info in the all-variants output file.
 
         """
         self.variants = variants
@@ -113,21 +103,7 @@ class VaxrankCoreLogic:
         self.variant_sequence_assembly = variant_sequence_assembly
         self.num_mutant_epitopes_to_keep = num_mutant_epitopes_to_keep
         self.min_epitope_score = min_epitope_score
-
-        # load in gene dataframes we want to search
-        self.interferon_gamma_response = None
-        self.class1_mhc_presentation_pathway = None
-        self.cancer_driver_genes = None
-        self.cancer_driver_variants = None
-
-        if interferon_gamma_response_csv:
-            self.interferon_gamma_response = pd.read_csv(interferon_gamma_response_csv)
-        if class1_mhc_presentation_pathway_csv:
-            self.class1_mhc_presentation_pathway = pd.read_csv(class1_mhc_presentation_pathway_csv)
-        if cancer_driver_genes_csv:
-            self.cancer_driver_genes = pd.read_csv(cancer_driver_genes_csv)
-        if cancer_driver_variants_csv:
-            self.cancer_driver_variants = pd.read_csv(cancer_driver_variants_csv)
+        self.gene_pathway_check = gene_pathway_check
 
     def vaccine_peptides_for_variant(
             self,
@@ -228,6 +204,24 @@ class VaxrankCoreLogic:
         protein_fragment_sequence_length = (
             self.vaccine_peptide_length + 2 * self.padding_around_mutation)
 
+        # these sequences are only the ones that overlap the variant and support the mutation
+        #
+        # If a variant is returned at all, this means it has RNA support (either ref or alt), so
+        # it's in a coding region. May be silent or nonsynonymous. If a variant does not come back,
+        # possible that it's nonsynonymous with no supporting reads - should predict the effect
+        # with varcode and check.
+        # 
+        # Given that, this generator yields:
+        # - (variant, mutant protein sequences) if there's enough alt RNA support
+        # - (variant, None) if the variant is silent or there are ref reads overlapping the variant locus but inadequate alt
+        # RNA support (weird to have that look the same). Can a variant be noncoding
+        # but have supporting RNA reads? I guess that means it's in a coding region but silent? Any
+        # other possibilities? (In that case, noncoding = synonymous mutation)
+        # - does not return the variant if there's no RNA support for ref or alt - we may miss some
+        # coding variants this way unless we check for them explicitly
+
+        # returns all passing variants, with a protein sequences generator that is non empty
+        # only if there are enough alt RNA reads supporting the variant
         protein_sequences_generator = reads_generator_to_protein_sequences_generator(
             self.reads_generator,
             transcript_id_whitelist=None,
@@ -261,36 +255,12 @@ class VaxrankCoreLogic:
                 ('is_coding_nonsynonymous', False),
                 ('rna_support', False),
                 ('mhc_binder', False),
-                ('interferon_gamma_response', False),
-                ('class1_mhc_presentation_pathway', False),
-                ('cancer_driver_gene', False),
-                ('cancer_driver_variant', False),
             ])
             variant_metadata_dicts.append(variant_metadata_dict)
 
-            # check this variant against some databases
-            effect = variant.effects().top_priority_effect().short_description
-            gene_ids = variant.gene_ids
-
-            # check each gene ID against databases
-            def is_present(df, value, column):
-                return len(df.loc[df[column] == value]) > 0
-
-            for gene_id in gene_ids:
-                if self.interferon_gamma_response is not None and \
-                        is_present(self.interferon_gamma_response, gene_id, 'Ensembl Gene ID'):
-                    variant_metadata_dict['interferon_gamma_response'] = True
-                if self.class1_mhc_presentation_pathway is not None and \
-                        is_present(self.class1_mhc_presentation_pathway, gene_id, 'Ensembl Gene ID'):
-                    variant_metadata_dict['class1_mhc_presentation_pathway'] = True
-                if self.cancer_driver_genes is not None and \
-                        is_present(self.cancer_driver_genes, gene_id, 'Ensembl Gene ID'):
-                    variant_metadata_dict['cancer_driver_gene'] = True
-                if self.cancer_driver_variants is not None and \
-                        len(self.cancer_driver_variants.loc[
-                            (self.cancer_driver_variants['Ensembl Gene ID'] == gene_id) & 
-                            (self.cancer_driver_variants['Mutation'] == effect)]) > 0:
-                    variant_metadata_dict['cancer_driver_variant'] = True
+            if self.gene_pathway_check is not None:
+                pathway_dict = self.gene_pathway_check.make_variant_dict(variant)
+                variant_metadata_dict.update(pathway_dict)
 
             counts_dict['num_total_variants'] += 1
             if len(variant.effects().drop_silent_and_noncoding()) > 0:
