@@ -107,14 +107,14 @@ class GenePathwayCheck:
         gene_ids = variant.gene_ids
 
         for gene_id in gene_ids:
-            if len(self.interferon_gamma_response) > 0 and \
-                    is_present(self.interferon_gamma_response, gene_id, _ENSEMBL_GENE_ID):
+            if len(self.interferon_gamma_response) > 0 and self.is_present(
+                    self.interferon_gamma_response, gene_id, _ENSEMBL_GENE_ID):
                 variant_dict[_IFG_RESPONSE] = True
-            if len(self.class1_mhc_presentation_pathway) > 0 and \
-                    is_present(self.class1_mhc_presentation_pathway, gene_id, _ENSEMBL_GENE_ID):
+            if len(self.class1_mhc_presentation_pathway) > 0 and self.is_present(
+                    self.class1_mhc_presentation_pathway, gene_id, _ENSEMBL_GENE_ID):
                 variant_dict[_CLASS_I_MHC] = True
-            if len(self.cancer_driver_genes) > 0 and \
-                    is_present(self.cancer_driver_genes, gene_id, _ENSEMBL_GENE_ID):
+            if len(self.cancer_driver_genes) > 0 and self.is_present(
+                    self.cancer_driver_genes, gene_id, _ENSEMBL_GENE_ID):
                 variant_dict[_DRIVER_GENE] = True
             if len(self.cancer_driver_variants) > 0 and \
                     len(self.cancer_driver_variants.loc[

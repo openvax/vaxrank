@@ -15,6 +15,7 @@ vaxrank \
     --output-neoepitope-report neoepitope-report.xlsx \
     --output-json-file vaccine-peptides-report.json \
     --output-csv vaccine-peptides.csv \
+    --output-passing-variants-csv all_variants.csv \
     --interferon-gamma-response-csv /Users/julia/code/gene-lists/interferon-gamma-response.csv \
     --class1-mhc-presentation-pathway-csv /Users/julia/code/gene-lists/class1-mhc-presentation-pathway.csv \
     --cancer-driver-genes-csv /Users/julia/code/gene-lists/cancer-driver-genes.csv \

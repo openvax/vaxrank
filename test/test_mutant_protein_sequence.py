@@ -70,7 +70,8 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
         min_alt_rna_reads=1,
         min_variant_sequence_coverage=1,
         variant_sequence_assembly=True)
-    ranked_list, _ = core_logic.ranked_vaccine_peptides()
+    core_logic.process_variants()
+    ranked_list = core_logic.ranked_vaccine_peptides()
 
     for variant, vaccine_peptides in ranked_list:
         eq_(
@@ -104,7 +105,8 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
         min_variant_sequence_coverage=1,
         variant_sequence_assembly=True,
         max_vaccine_peptides_per_variant=1)
-    ranked_list, _ = core_logic.ranked_vaccine_peptides()
+    core_logic.process_variants()
+    ranked_list = core_logic.ranked_vaccine_peptides()
 
     for variant, vaccine_peptides in ranked_list:
         vaccine_peptide = vaccine_peptides[0]
@@ -133,7 +135,8 @@ def test_keep_top_k_epitopes():
         variant_sequence_assembly=True,
         max_vaccine_peptides_per_variant=1,
         num_mutant_epitopes_to_keep=keep_k_epitopes)
-    ranked_list, _ = core_logic.ranked_vaccine_peptides()
+    core_logic.process_variants()
+    ranked_list = core_logic.ranked_vaccine_peptides()
 
     for variant, vaccine_peptides in ranked_list:
         vaccine_peptide = vaccine_peptides[0]

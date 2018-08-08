@@ -28,6 +28,7 @@ from mhctools.cli import (
     mhc_binding_predictor_from_args,
 )
 
+import pandas as pd
 import serializable
 from varcode.cli import variant_collection_from_args
 
@@ -183,6 +184,11 @@ def add_output_args(arg_parser):
         type=int,
         help="Number of mutations to report")
 
+    output_args_group.add_argument(
+        "--output-passing-variants-csv",
+        default="",
+        help="Path to CSV file containing some metadata about every passing variant")
+
 
 def add_vaccine_peptide_args(arg_parser):
     vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
@@ -314,11 +320,18 @@ def ranked_variant_list_with_metadata(args):
         variant_sequence_assembly=args.variant_sequence_assembly,
         gene_pathway_check=gene_pathway_check
     )
+    core_logic.process_variants()
 
-    ranked_list, variants_count_dict = core_logic.ranked_vaccine_peptides()
+    variants_count_dict = core_logic.variant_counts()
     assert len(variants) == variants_count_dict['num_total_variants'], \
         "Len(variants) is %d but variants_count_dict came back with %d" % (len(variants), variants_count_dict['num_total_variants'])
 
+    if args.output_passing_variants_csv:
+        variant_metadata_dicts = core_logic.variant_properties()
+        df = pd.DataFrame(variant_metadata_dicts)
+        df.to_csv(args.output_passing_variants_csv, index=False)
+
+    ranked_list = core_logic.ranked_vaccine_peptides()
     ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
     patient_info = PatientInfo(
         patient_id=args.output_patient_id,
