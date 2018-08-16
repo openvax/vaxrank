@@ -1,0 +1,10 @@
+Gene,Name,Function,Ensembl Gene ID
+IFNGR1,interferon gamma receptor 1,receptor,ENSG00000027697
+IFNGR2,interferon gamma receptor 2,receptor,ENSG00000159128
+STAT1,signal transducer and activator of transcription 1,signal transducer,ENSG00000115415
+STAT2,signal transducer and activator of transcription 2,signal transducer,ENSG00000170581
+STAT3,signal transducer and activator of transcription 3,signal transducer,ENSG00000168610
+JAK1,Janus kinase 1,kinase,ENSG00000162434
+JAK2,Janus kinase 2,kinase,ENSG00000096968
+SOCS1,suppressor of cytokine signaling 1,negative regulator,ENSG00000185338
+SOCS3,suppressor of cytokine signaling 3,negative regulator,ENSG00000184557

@@ -14,6 +14,7 @@
 
 from __future__ import absolute_import, print_function, division
 from collections import OrderedDict
+from os.path import join, dirname
 
 import pandas as pd
 
@@ -53,14 +54,22 @@ class GenePathwayCheck:
             class1_mhc_presentation_pathway_csv=None,
             cancer_driver_genes_csv=None,
             cancer_driver_variants_csv=None):
-        self.interferon_gamma_response = pd.read_csv(interferon_gamma_response_csv) \
-            if interferon_gamma_response_csv else pd.DataFrame()
-        self.class1_mhc_presentation_pathway = pd.read_csv(class1_mhc_presentation_pathway_csv) \
-            if class1_mhc_presentation_pathway_csv else pd.DataFrame()
-        self.cancer_driver_genes = pd.read_csv(cancer_driver_genes_csv) \
-            if cancer_driver_genes_csv else pd.DataFrame()
-        self.cancer_driver_variants = pd.read_csv(cancer_driver_variants_csv) \
-            if cancer_driver_variants_csv else pd.DataFrame()
+        if interferon_gamma_response_csv is None:
+            interferon_gamma_response_csv = join(
+                dirname(__file__), "data", "interferon-gamma-response.csv")
+        if class1_mhc_presentation_pathway_csv is None:
+            class1_mhc_presentation_pathway_csv = join(
+                dirname(__file__), "data", "class1-mhc-presentation-pathway.csv")
+        if cancer_driver_genes_csv is None:
+            cancer_driver_genes_csv = join(
+                dirname(__file__), "data", "cancer-driver-genes.csv")
+        if cancer_driver_variants_csv is None:
+            cancer_driver_variants_csv = join(
+                dirname(__file__), "data", "cancer-driver-variants.csv")
+        self.interferon_gamma_response = pd.read_csv(interferon_gamma_response_csv)
+        self.class1_mhc_presentation_pathway = pd.read_csv(class1_mhc_presentation_pathway_csv)
+        self.cancer_driver_genes = pd.read_csv(cancer_driver_genes_csv)
+        self.cancer_driver_variants = pd.read_csv(cancer_driver_variants_csv)
         self.check_expected_columns()
 
     def check_expected_columns(self):
@@ -83,10 +92,6 @@ class GenePathwayCheck:
                     "Cancer driver variant file needs columns: %s, %s" % (
                         _ENSEMBL_GENE_ID, _MUTATION))
 
-    @staticmethod
-    def is_present(df, value, column):
-        return len(df.loc[df[column] == value]) > 0
-
     def make_variant_dict(self, variant):
         """
         Returns a dictionary of boolean values, depending on whether we see this variant in any
@@ -107,19 +112,15 @@ class GenePathwayCheck:
         gene_ids = variant.gene_ids
 
         for gene_id in gene_ids:
-            if len(self.interferon_gamma_response) > 0 and self.is_present(
-                    self.interferon_gamma_response, gene_id, _ENSEMBL_GENE_ID):
+            if any(self.interferon_gamma_response[_ENSEMBL_GENE_ID] == gene_id):
                 variant_dict[_IFG_RESPONSE] = True
-            if len(self.class1_mhc_presentation_pathway) > 0 and self.is_present(
-                    self.class1_mhc_presentation_pathway, gene_id, _ENSEMBL_GENE_ID):
+            if any(self.class1_mhc_presentation_pathway[_ENSEMBL_GENE_ID] == gene_id):
                 variant_dict[_CLASS_I_MHC] = True
-            if len(self.cancer_driver_genes) > 0 and self.is_present(
-                    self.cancer_driver_genes, gene_id, _ENSEMBL_GENE_ID):
+            if any(self.cancer_driver_genes[_ENSEMBL_GENE_ID] == gene_id):
                 variant_dict[_DRIVER_GENE] = True
-            if len(self.cancer_driver_variants) > 0 and \
-                    len(self.cancer_driver_variants.loc[
-                        (self.cancer_driver_variants[_ENSEMBL_GENE_ID] == gene_id) & 
-                        (self.cancer_driver_variants[_MUTATION] == effect)]) > 0:
+            if len(self.cancer_driver_variants.loc[
+                    (self.cancer_driver_variants[_ENSEMBL_GENE_ID] == gene_id) & 
+                    (self.cancer_driver_variants[_MUTATION] == effect)]) > 0:
                 variant_dict[_DRIVER_VARIANT] = True
 
         return variant_dict
