@@ -28,7 +28,7 @@ _DRIVER_GENE = 'cancer_driver_gene'
 _DRIVER_VARIANT = 'cancer_driver_variant'
 
 
-class GenePathwayCheck:
+class GenePathwayCheck(object):
     """
     This class is meant for use with gene/variant list files from 
     https://github.com/openvax/gene-lists. Other files can be used as well, but need to follow
