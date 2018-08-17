@@ -16,7 +16,7 @@ from __future__ import absolute_import, print_function, division
 from collections import defaultdict, namedtuple, OrderedDict
 import logging
 
-from numpy import isclose
+from numpy import isclose, asarray
 import pandas as pd
 
 from isovar.protein_sequences import (
@@ -306,7 +306,7 @@ class VaxrankCoreLogic:
             if variant in self.vaccine_peptides:
                 variant_dict['mhc_binder'] = True
             variant_properties_dict[variant] = variant_dict
-        return variant_properties_dict.values()
+        return list(variant_properties_dict.values())
 
     def variant_counts(self):
         # dictionary which will contain some overall variant counts for report display
