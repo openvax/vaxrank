@@ -294,6 +294,7 @@ class VaxrankCoreLogic:
                 ('is_coding_nonsynonymous', False),
                 ('rna_support', False),
                 ('mhc_binder', False),
+                ('gene_name', variant.gene_names[0] if variant.gene_names else ''),
             ))
             if self.gene_pathway_check is not None:
                 pathway_dict = self.gene_pathway_check.make_variant_dict(variant)
