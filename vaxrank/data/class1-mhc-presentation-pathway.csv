@@ -1,0 +1,19 @@
+Gene,Name,Function,Ensembl Gene ID
+PSMB8,proteasome subunit beta 8,immunoproteasome,ENSG00000204264
+PSMB9,proteasome subunit beta 9,immunoproteasome,ENSG00000240065
+PSMB10,proteasome subunit beta 10,immunoproteasome,ENSG00000205220
+TAP1,transporter associated with antigen processing 1,peptide transport,ENSG00000168394
+TAP2,transporter associated with antigen processing 2,peptide transport,ENSG00000204267
+CALR,calreticulin,peptide loading,ENSG00000179218
+CANX,calnexin,peptide loading,ENSG00000127022
+PDIA3,protein disulfide-isomerase A3,peptide loading,ENSG00000167004
+TAPBP,tapasin,peptide loading,ENSG00000231925
+TAPBPL,tapasin-related protein,peptide loading,ENSG00000139192
+NLRC5,NOD-like receptor family CARD domain containing 5,transcription factor,ENSG00000140853
+IRF1,interferon regulatory factor 1,transcription factor,ENSG00000125347
+ERAP1,endoplasmic reticulum aminopeptidase 1,peptidase,ENSG00000164307
+ERAP2,endoplasmic reticulum aminopeptidase 2,peptidase,ENSG00000164308
+B2M,beta-2 microglobulin,MHC subunit,ENSG00000166710
+HLA-A,human leukocyte antigen A,MHC subunit,ENSG00000206503
+HLA-B,human leukocyte antigen B,MHC subunit,ENSG00000234745
+HLA-C,human leukocyte antigen C,MHC subunit,ENSG00000204525

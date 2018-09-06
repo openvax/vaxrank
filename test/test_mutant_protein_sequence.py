@@ -15,10 +15,11 @@
 from __future__ import absolute_import, print_function, division
 
 from nose.tools import eq_, assert_almost_equal
-from vaxrank.core_logic import ranked_vaccine_peptides
+from vaxrank.core_logic import VaxrankCoreLogic
 from mhctools import RandomBindingPredictor
 from isovar.cli.variant_sequences_args import make_variant_sequences_arg_parser
 from isovar.cli.rna_args import allele_reads_generator_from_args
+from varcode.cli import variant_collection_from_args
 
 from .testing_helpers import data_path
 
@@ -58,7 +59,9 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
         "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
     ])
     reads_generator = allele_reads_generator_from_args(args)
-    ranked_list, _ = ranked_vaccine_peptides(
+    variants = variant_collection_from_args(args)
+    core_logic = VaxrankCoreLogic(
+        variants=variants,
         reads_generator=reads_generator,
         mhc_predictor=random_binding_predictor,
         vaccine_peptide_length=15,
@@ -67,6 +70,7 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
         min_alt_rna_reads=1,
         min_variant_sequence_coverage=1,
         variant_sequence_assembly=True)
+    ranked_list = core_logic.ranked_vaccine_peptides()
 
     for variant, vaccine_peptides in ranked_list:
         eq_(
@@ -89,15 +93,18 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
         "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
     ])
     reads_generator = allele_reads_generator_from_args(args)
-    ranked_list, _ = ranked_vaccine_peptides(
+    variants = variant_collection_from_args(args)
+    core_logic = VaxrankCoreLogic(
         reads_generator=reads_generator,
         mhc_predictor=random_binding_predictor,
+        variants=variants,
         vaccine_peptide_length=15,
         padding_around_mutation=5,
         min_alt_rna_reads=1,
         min_variant_sequence_coverage=1,
         variant_sequence_assembly=True,
         max_vaccine_peptides_per_variant=1)
+    ranked_list = core_logic.ranked_vaccine_peptides()
 
     for variant, vaccine_peptides in ranked_list:
         vaccine_peptide = vaccine_peptides[0]
@@ -113,11 +120,12 @@ def test_keep_top_k_epitopes():
         "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
     ])
     reads_generator = allele_reads_generator_from_args(args)
-
+    variants = variant_collection_from_args(args)
     keep_k_epitopes = 3
-    ranked_list, _ = ranked_vaccine_peptides(
+    core_logic = VaxrankCoreLogic(
         reads_generator=reads_generator,
         mhc_predictor=random_binding_predictor,
+        variants=variants,
         vaccine_peptide_length=15,
         padding_around_mutation=5,
         min_alt_rna_reads=1,
@@ -125,6 +133,7 @@ def test_keep_top_k_epitopes():
         variant_sequence_assembly=True,
         max_vaccine_peptides_per_variant=1,
         num_mutant_epitopes_to_keep=keep_k_epitopes)
+    ranked_list = core_logic.ranked_vaccine_peptides()
 
     for variant, vaccine_peptides in ranked_list:
         vaccine_peptide = vaccine_peptides[0]

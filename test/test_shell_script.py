@@ -2,6 +2,8 @@ from os.path import getsize
 from mock import patch
 from nose.plugins.attrib import attr
 from tempfile import NamedTemporaryFile
+
+import pandas as pd
 from xlrd import open_workbook
 
 from vaxrank.cli import main as run_shell_script
@@ -69,6 +71,20 @@ def test_csv_report():
         assert len(lines) > 0
 
 
+def test_all_variant_csv_report():
+    with NamedTemporaryFile(mode="r") as f:
+        all_csv_args = cli_args_for_b16_seqdata + [
+            "--output-passing-variants-csv", f.name, "--output-csv", f.name + "ignored"]
+        run_shell_script(all_csv_args)
+        contents = f.read()
+        lines = contents.split("\n")
+        assert len(lines) > 0
+        # make sure it can be a valid dataframe
+        f.seek(0)
+        df = pd.read_csv(f)
+        assert len(df) > 0
+
+
 def test_xlsx_report():
     with NamedTemporaryFile(mode="r") as f:
         xlsx_args = cli_args_for_b16_seqdata + ["--output-xlsx-report", f.name]
@@ -94,7 +110,7 @@ def test_pdf_report():
         assert getsize(f.name) > 0
 
 
-@patch('vaxrank.core_logic.vaccine_peptides_for_variant')
+@patch('vaxrank.core_logic.VaxrankCoreLogic.vaccine_peptides_for_variant')
 def test_report_no_peptides(mock_vaccine_peptides_for_variant):
     # simulate case where we have no epitopes for any variant
     mock_vaccine_peptides_for_variant.return_value = []

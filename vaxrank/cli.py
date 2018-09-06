@@ -28,10 +28,12 @@ from mhctools.cli import (
     mhc_binding_predictor_from_args,
 )
 
+import pandas as pd
 import serializable
 from varcode.cli import variant_collection_from_args
 
-from .core_logic import ranked_vaccine_peptides
+from .core_logic import VaxrankCoreLogic
+from .gene_pathway_check import GenePathwayCheck
 from .report import (
     make_ascii_report,
     make_html_report,
@@ -180,6 +182,12 @@ def add_output_args(arg_parser):
         type=int,
         help="Number of mutations to report")
 
+    output_args_group.add_argument(
+        "--output-passing-variants-csv",
+        default="",
+        help="Path to CSV file containing some metadata about every variant that has passed all "
+             "variant caller filters")
+
 
 def add_vaccine_peptide_args(arg_parser):
     vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
@@ -272,7 +280,8 @@ def ranked_variant_list_with_metadata(args):
     reads_generator = allele_reads_generator_from_args(args)
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
-    ranked_list, variants_count_dict = ranked_vaccine_peptides(
+    core_logic = VaxrankCoreLogic(
+        variants=variants,
         reads_generator=reads_generator,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
@@ -282,21 +291,32 @@ def ranked_variant_list_with_metadata(args):
         min_variant_sequence_coverage=args.min_variant_sequence_coverage,
         min_epitope_score=args.min_epitope_score,
         num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide,
-        variant_sequence_assembly=args.variant_sequence_assembly)
+        variant_sequence_assembly=args.variant_sequence_assembly,
+        gene_pathway_check=GenePathwayCheck()
+    )
 
+    variants_count_dict = core_logic.variant_counts()
+    assert len(variants) == variants_count_dict['num_total_variants'], \
+        "Len(variants) is %d but variants_count_dict came back with %d" % (
+            len(variants), variants_count_dict['num_total_variants'])
+
+    if args.output_passing_variants_csv:
+        variant_metadata_dicts = core_logic.variant_properties()
+        df = pd.DataFrame(variant_metadata_dicts)
+        df.to_csv(args.output_passing_variants_csv, index=False)
+
+    ranked_list = core_logic.ranked_vaccine_peptides()
     ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
-
     patient_info = PatientInfo(
         patient_id=args.output_patient_id,
         vcf_paths=variants.sources,
         bam_path=args.bam,
         mhc_alleles=mhc_alleles,
-        num_somatic_variants=len(variants),
+        num_somatic_variants=variants_count_dict['num_total_variants'],
         num_coding_effect_variants=variants_count_dict['num_coding_effect_variants'],
         num_variants_with_rna_support=variants_count_dict['num_variants_with_rna_support'],
         num_variants_with_vaccine_peptides=variants_count_dict['num_variants_with_vaccine_peptides']
     )
-
     # return variants, patient info, and command-line args
     data = {
         'variants': ranked_list_for_report,

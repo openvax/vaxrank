@@ -15,6 +15,7 @@ vaxrank \
     --output-neoepitope-report neoepitope-report.xlsx \
     --output-json-file vaccine-peptides-report.json \
     --output-csv vaccine-peptides.csv \
+    --output-passing-variants-csv all_variants.csv \
     --output-reviewed-by "John Doe,Jane Doe" \
     --output-final-review "All the Does" \
     --output-patient-id "Test Patient"
