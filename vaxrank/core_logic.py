@@ -286,6 +286,9 @@ class VaxrankCoreLogic:
         # whether this variant is part of a pathway of interest, is a strong MHC binder, etc.
         variant_properties_dict = OrderedDict()
         for variant in self.variants:
+            gene_name = ''
+            if variant.gene_names:
+                gene_name = variant.effects().top_priority_effect().gene_name
             variant_dict = OrderedDict((
                 ('contig', variant.contig),
                 ('start', variant.start),
@@ -294,7 +297,7 @@ class VaxrankCoreLogic:
                 ('is_coding_nonsynonymous', False),
                 ('rna_support', False),
                 ('mhc_binder', False),
-                ('gene_name', variant.gene_names[0] if variant.gene_names else ''),
+                ('gene_name', gene_name),
             ))
             if self.gene_pathway_check is not None:
                 pathway_dict = self.gene_pathway_check.make_variant_dict(variant)

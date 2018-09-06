@@ -112,15 +112,14 @@ class GenePathwayCheck(object):
         gene_ids = variant.gene_ids
 
         for gene_id in gene_ids:
-            if any(self.interferon_gamma_response[_ENSEMBL_GENE_ID] == gene_id):
+            if (self.interferon_gamma_response[_ENSEMBL_GENE_ID] == gene_id).any():
                 variant_dict[_IFG_RESPONSE] = True
-            if any(self.class1_mhc_presentation_pathway[_ENSEMBL_GENE_ID] == gene_id):
+            if (self.class1_mhc_presentation_pathway[_ENSEMBL_GENE_ID] == gene_id).any():
                 variant_dict[_CLASS_I_MHC] = True
-            if any(self.cancer_driver_genes[_ENSEMBL_GENE_ID] == gene_id):
+            if (self.cancer_driver_genes[_ENSEMBL_GENE_ID] == gene_id).any():
                 variant_dict[_DRIVER_GENE] = True
-            if len(self.cancer_driver_variants.loc[
-                    (self.cancer_driver_variants[_ENSEMBL_GENE_ID] == gene_id) & 
-                    (self.cancer_driver_variants[_MUTATION] == effect)]) > 0:
+            if ((self.cancer_driver_variants[_ENSEMBL_GENE_ID] == gene_id) &
+                    (self.cancer_driver_variants[_MUTATION] == effect)).any():
                 variant_dict[_DRIVER_VARIANT] = True
 
         return variant_dict

@@ -185,7 +185,8 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-passing-variants-csv",
         default="",
-        help="Path to CSV file containing some metadata about every passing variant")
+        help="Path to CSV file containing some metadata about every variant that has passed all "
+             "variant caller filters")
 
 
 def add_vaccine_peptide_args(arg_parser):
