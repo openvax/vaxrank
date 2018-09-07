@@ -1,2 +1,1 @@
 include LICENSE README.md
-recursive-include vaxrank/data *
