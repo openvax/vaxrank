@@ -89,7 +89,7 @@ if __name__ == '__main__':
 
         long_description=readme_restructured,
         packages=['vaxrank'],
-        package_data={'vaxrank': ['templates/*', 'logging.conf']},
+        package_data={'vaxrank': ['templates/*', 'data/*', 'logging.conf']},
         entry_points={
             'console_scripts': [
                 'vaxrank = vaxrank.cli:main'
