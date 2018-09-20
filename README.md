@@ -39,9 +39,9 @@ brew install Caskroom/cask/wkhtmltopdf
 
 Vaxrank uses [PyEnsembl](https://github.com/openvax/pyensembl) for accessing information about the reference genome. You must install an Ensembl release corresponding to the reference genome associated with the mutations provided to Vaxrank.
 
-The latest release for GRCh38 is Ensembl 87:
+The latest release for GRCh38 is Ensembl 93:
 ```
-pyensembl install --release 87 --species human
+pyensembl install --release 93 --species human
 ```
 
 The last release for GRCh37 is Ensembl 75:
@@ -50,6 +50,23 @@ pyensembl install --release 75 --species human
 ```
 
 If your variants were called from alignments against hg19 then you can still use GRCh37 but should ignore mitochondrial variants.
+
+## Citation
+
+There is a brief preprint on biorxiv called [Vaxrank: A Computational Tool For Designing Personalized Cancer Vaccines](https://www.biorxiv.org/content/early/2017/05/27/142919) which can be cited as: 
+
+    @article {Rubinsteyn142919,
+        author = {Rubinsteyn, Alex and Hodes, Isaac and Kodysh, Julia and Hammerbacher, Jeffrey},
+        title = {Vaxrank: A Computational Tool For Designing Personalized Cancer Vaccines},
+        year = {2017},
+        doi = {10.1101/142919},
+        publisher = {Cold Spring Harbor Laboratory},
+        abstract = {Therapeutic vaccines targeting mutant tumor antigens ({\textquotedblleft}neoantigens{\textquotedblright}) are an increasingly popular form of personalized cancer immunotherapy. Vaxrank is a computational tool for selecting neoantigen vaccine peptides from tumor mutations, tumor RNA data, and patient HLA type. Vaxrank is freely available at www.github.com/hammerlab/vaxrank under the Apache 2.0 open source license and can also be installed from the Python Package Index.},
+        URL = {https://www.biorxiv.org/content/early/2017/05/27/142919},
+        eprint = {https://www.biorxiv.org/content/early/2017/05/27/142919.full.pdf},
+        journal = {bioRxiv}
+    }
+
 
 # Development
 
@@ -73,3 +90,4 @@ nosetests test
 ```
 
 The first run of the tests may take a while (8 minutes on a 2016 Macbook Pro) to create the FM index of the proteome, but subsequent tests should take only a few seconds.
+
