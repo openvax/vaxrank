@@ -51,7 +51,7 @@ pyensembl install --release 75 --species human
 
 If your variants were called from alignments against hg19 then you can still use GRCh37 but should ignore mitochondrial variants.
 
-## Citation
+## Paper & Citation
 
 There is a brief preprint on biorxiv called [Vaxrank: A Computational Tool For Designing Personalized Cancer Vaccines](https://www.biorxiv.org/content/early/2017/05/27/142919) which can be cited as: 
 
