@@ -6,7 +6,7 @@ vaxrank \
     --mhc-alleles H2-Kb,H2-Db \
     --mhc-epitope-lengths 8 \
     --padding-around-mutation 0 \
-    --min-epitope-score 0.0 \
+    --min-epitope-score 10e-100 \
     --num-epitopes-per-peptide 5 \
     --output-ascii-report vaccine-peptides-report.txt \
     --output-html-report vaccine-peptides-report.html \
@@ -15,7 +15,7 @@ vaxrank \
     --output-neoepitope-report neoepitope-report.xlsx \
     --output-json-file vaccine-peptides-report.json \
     --output-csv vaccine-peptides.csv \
-    --output-passing-variants-csv all_variants.csv \
+    --output-passing-variants-csv vaccine-peptides-all-passing.csv \
     --output-reviewed-by "John Doe,Jane Doe" \
     --output-final-review "All the Does" \
     --output-patient-id "Test Patient"

@@ -413,7 +413,7 @@ def make_pdf_report(
         f.flush()
 
         options = {
-            'zoom': 0.6,
+            'zoom': 0.55,
             'margin-top': '20mm'
         }
 
@@ -449,15 +449,17 @@ def new_columns():
         columns[field] = []
     return columns
 
+def _str_sig_figs(input, n_sig_figs):
+    return '{:g}'.format(float('{:.{p}g}'.format(input, p=n_sig_figs)))
+
 def _sanitize(val):
     """
     Converts values into display-friendly
     """
     if type(val) == bool:
-        val = int(val)
-    elif type(val) == float:
-        val = round(val, 10)
-    return val
+        return int(val)
+    else:
+        return _str_sig_figs(val, 5)
 
 def resize_columns(worksheet, amino_acids_col, pos_col):
     """
