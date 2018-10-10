@@ -76,7 +76,6 @@ class GenePathwayCheck(object):
             default_filename="cancer-driver-genes.csv",
             description="Cancer driver genes",
             column_names=[_ENSEMBL_GENE_ID_COLUMN_NAME])
-
         # set of gene ID, variant description pairs
         self.cancer_driver_variants_set = self._load_set_from_csv(
             csv_path=cancer_driver_variants_csv,
@@ -96,8 +95,11 @@ class GenePathwayCheck(object):
                     description,
                     csv_path,
                     column_name))
-            columns.append(df[column_name])
-        return set(zip(*columns))
+            columns.append(df[column_name].values)
+        if len(columns) == 1:
+            return set(columns[0])
+        else:
+            return set(zip(*columns))
 
     def make_variant_dict(self, variant):
         """
@@ -124,6 +126,7 @@ class GenePathwayCheck(object):
             gene_id in self.cancer_driver_genes_set
             for gene_id in overlapping_gene_ids
         ])
+
         variant_dict[_DRIVER_VARIANT_COLUMN_NAME] = any([
             (gene_id, effect_description) in self.cancer_driver_variants_set
             for gene_id in overlapping_gene_ids
