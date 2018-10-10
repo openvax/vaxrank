@@ -1,4 +1,4 @@
-# Copyright (c) 2016. Mount Sinai School of Medicine
+# Copyright (c) 2016-2018. Mount Sinai School of Medicine
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,11 +13,10 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function, division
-from collections import defaultdict, namedtuple, OrderedDict
+from collections import OrderedDict
 import logging
 
-from numpy import isclose, asarray
-import pandas as pd
+from numpy import isclose
 
 from isovar.protein_sequences import (
     reads_generator_to_protein_sequences_generator,
@@ -26,12 +25,11 @@ from isovar.protein_sequences import (
 from .mutant_protein_fragment import MutantProteinFragment
 from .epitope_prediction import predict_epitopes, slice_epitope_predictions
 from .vaccine_peptide import VaccinePeptide
-from .gene_pathway_check import GenePathwayCheck
-
 
 logger = logging.getLogger(__name__)
 
-class VaxrankCoreLogic:
+
+class VaxrankCoreLogic(object):
     def __init__(
             self,
             variants,
@@ -47,50 +45,53 @@ class VaxrankCoreLogic:
             min_epitope_score=0.0,
             gene_pathway_check=None):
         """
-        Construct a VaxrankCoreLogic object.
-
         Parameters
         ----------
         variants : VariantCollection
             Variant objects to evaluate for vaccine inclusion
 
         reads_generator : generator
-            Yields sequence of varcode.Variant objects paired with sequences of AlleleRead objects
-            that support that variant.
+            Yields sequence of varcode.Variant objects paired with sequences of
+            AlleleRead objects that support that variant.
 
         mhc_predictor : mhctools.BasePredictor
-            Object with predict_peptides method, used for making pMHC binding predictions
+            Object with predict_peptides method, used for making pMHC binding
+            predictions
 
         vaccine_peptide_length : int
             Length of vaccine SLP to construct
 
         padding_around_mutation : int
-            Number of off-center windows around the mutation to consider as vaccine peptides.
+            Number of off-center windows around the mutation to consider as vaccine
+            peptides.
 
         max_vaccine_peptides_per_variant : int
             Number of vaccine peptides to generate for each mutation.
 
         min_alt_rna_reads : int
-            Drop variant sequences at loci with fewer than this number of reads supporting the alt
-            allele.
+            Drop variant sequences at loci with fewer than this number of reads
+            supporting the alt allele.
 
         min_variant_sequence_coverage : int
-            Trim variant sequences to positions supported by at least this number of RNA reads.
+            Trim variant sequences to positions supported by at least this number
+            of RNA reads.
 
         variant_sequence_assembly : int
-            If True, then assemble variant cDNA sequences based on overlap of RNA reads. If False,
-            then variant cDNA sequences must be fully spanned and contained within RNA reads.
+            If True, then assemble variant cDNA sequences based on overlap of RNA
+            reads. If False, then variant cDNA sequences must be fully spanned and
+            contained within RNA reads.
 
         num_mutant_epitopes_to_keep : int, optional
-            Number of top-ranking epitopes for each vaccine peptide to include in computation.
+            Number of top-ranking epitopes for each vaccine peptide to include in
+            computation.
 
         min_epitope_score : float, optional
-            Ignore peptides with binding predictions whose normalized score is less than this.
+            Ignore peptides with binding predictions whose normalized score is less
+            than this.
 
-        gene_pathway_check : GenePathwayCheck object, optional
-            If provided, will check against known pathways/gene sets/variant sets and include the
-            info in the all-variants output file.
-
+        gene_pathway_check : GenePathwayCheck, optional
+            If provided, will check against known pathways/gene sets/variant sets and
+            include the info in the all-variants output file.
         """
         self.variants = variants
         self.reads_generator = reads_generator
@@ -272,7 +273,7 @@ class VaxrankCoreLogic:
         """
         This function returns a sorted list whose first element is a Variant and whose second
         element is a list of VaccinePeptide objects.
-        """            
+        """
         variant_peptides_dict = self.vaccine_peptides
         result_list = list(variant_peptides_dict.items())
         # TODO: move this sort key into its own function, also make less nuts

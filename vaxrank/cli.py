@@ -1,4 +1,4 @@
-# Copyright (c) 2016. Mount Sinai School of Medicine
+# Copyright (c) 2016-2018. Mount Sinai School of Medicine
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -216,7 +216,9 @@ def add_vaccine_peptide_args(arg_parser):
         "--min-epitope-score",
         default=1e-10,
         type=float,
-        help="Ignore epitopes whose normalized score falls below this threshold")
+        help=(
+            "Ignore predicted MHC ligands whose normalized binding score "
+            "falls below this threshold"))
 
 
 def add_supplemental_report_args(arg_parser):

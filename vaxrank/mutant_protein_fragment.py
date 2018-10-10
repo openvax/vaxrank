@@ -174,8 +174,10 @@ class MutantProteinFragment(MutantProteinFragmentBase):
         return subsequences[:k]
 
     def predicted_effect(self):
-        effects = [self.variant.effect_on_transcript(t) for t in
-            self.supporting_reference_transcripts]
+        effects = [
+            self.variant.effect_on_transcript(t) for t in
+            self.supporting_reference_transcripts
+        ]
         predicted_effect = top_priority_effect(effects)
         return predicted_effect
 
