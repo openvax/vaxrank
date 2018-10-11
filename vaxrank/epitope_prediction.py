@@ -41,6 +41,7 @@ EpitopePredictionBase = namedtuple("EpitopePrediction", [
     "occurs_in_reference",
 ])
 
+
 class EpitopePrediction(EpitopePredictionBase):
 
     def logistic_epitope_score(
@@ -90,11 +91,9 @@ def index_contains_kmer(fm, kmer):
     """
     Checks FM index for kmer, returns true if found.
     """
-    found = False
     for _ in fm.search(kmer):
-        found = True
-        break
-    return found
+        return True
+    return False
 
 
 def generate_protein_sequences(genome):

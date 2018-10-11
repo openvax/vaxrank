@@ -67,6 +67,11 @@ before_script:
   - ./lint.sh
   - >
       pyensembl install
+      --release 75
+      --species human
+      --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCh37.75/
+  - >
+      pyensembl install
       --release 93
       --species human
       --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCh38.93/
