@@ -1,4 +1,6 @@
-sudo: false  # Use container-based infrastructure
+# Don't use container-based infrastructure, sudo enabled has 18G disk
+# whereas sudo disabled has only 9G
+sudo: true
 language: python
 python:
   - "2.7"
