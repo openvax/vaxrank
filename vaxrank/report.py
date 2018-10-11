@@ -1,4 +1,4 @@
-# Copyright (c) 2016. Mount Sinai School of Medicine
+# Copyright (c) 2016-2018. Mount Sinai School of Medicine
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@ from __future__ import absolute_import, division
 from collections import namedtuple, OrderedDict
 from importlib import import_module
 import logging
-from operator import attrgetter
 import os
 import sys
 import tempfile
@@ -28,7 +27,6 @@ import pdfkit
 import requests
 import roman
 from varcode import load_vcf_fast
-from varcode.effects import top_priority_effect
 
 from .manufacturability import ManufacturabilityScores
 
@@ -225,7 +223,7 @@ class TemplateDataCreator(object):
         Returns an OrderedDict with epitope data from the given prediction.
         """
         # if the WT peptide is too short, it's possible that we're missing a prediction for it
-        if epitope_prediction.wt_ic50 != None:
+        if epitope_prediction.wt_ic50 is not None:
             wt_ic50_str = '%.2f nM' % epitope_prediction.wt_ic50
         else:
             wt_ic50_str = 'No prediction'
@@ -243,9 +241,10 @@ class TemplateDataCreator(object):
         if not self.cosmic_variant_collection:
             return None
         if variant in self.cosmic_variant_collection.metadata:
+            # IDs in the DB are of the form 'COSM725245'
             cosmic_id = self.cosmic_variant_collection.metadata[variant]['id']
-            link_for_report = "http://cancer.sanger.ac.uk/cosmic/gene/analysis?ln=%s" % \
-                    cosmic_id[4:]  # IDs in the DB are of the form 'COSM725245'
+            link_for_report = \
+                "http://cancer.sanger.ac.uk/cosmic/gene/analysis?ln=%s" % cosmic_id[4:]
             logger.info("Link for report: %s", link_for_report)
             return link_for_report
 
@@ -296,7 +295,8 @@ class TemplateDataCreator(object):
         for (variant, vaccine_peptides) in self.ranked_variants_with_vaccine_peptides:
             variant_short_description = variant.short_description
             if len(vaccine_peptides) == 0:
-                logger.info("Skipping gene(s) %s, variant %s: no vaccine peptides",
+                logger.info(
+                    "Skipping gene(s) %s, variant %s: no vaccine peptides",
                     variant.gene_names, variant_short_description)
                 continue
             num += 1
@@ -478,7 +478,7 @@ def make_minimal_neoepitope_report(
 
     Parameters
     ----------
-    ranked_variants_with_vaccine_peptides : 
+    ranked_variants_with_vaccine_peptides :
       Ranked list of (variant, list of its vaccine peptides)
 
     num_epitopes_per_peptide : int
@@ -571,7 +571,7 @@ def make_csv_report(
                 columns[field].append(
                     _sanitize(getattr(vaccine_peptide.manufacturability_scores, field)))
             any_vaccine_peptides = True
-        
+
         if not any_vaccine_peptides:
             continue
 

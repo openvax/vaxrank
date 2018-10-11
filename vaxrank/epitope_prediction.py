@@ -1,4 +1,4 @@
-# Copyright (c) 2016. Mount Sinai School of Medicine
+# Copyright (c) 2016-2018. Mount Sinai School of Medicine
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,13 +16,10 @@ from __future__ import absolute_import, print_function, division
 from collections import namedtuple, OrderedDict
 import traceback
 import logging
-import os
 
 import numpy as np
-import shellinford
-import six
 
-from datacache import get_data_dir
+from .reference_proteome import ReferenceProteome
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +37,7 @@ EpitopePredictionBase = namedtuple("EpitopePrediction", [
     "offset",
     "occurs_in_reference",
 ])
+
 
 class EpitopePrediction(EpitopePredictionBase):
 
@@ -72,71 +70,6 @@ class EpitopePrediction(EpitopePredictionBase):
 
         return logistic / normalizer
 
-def fm_index_path(genome):
-    """
-    Returns a path for cached reference peptides, for the given genome.
-    """
-    # if $VAXRANK_REF_PEPTIDES_DIR is set, that'll be the location of the cache
-    cache_dir = get_data_dir(envkey='VAXRANK_REF_PEPTIDES_DIR')
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
-
-    return os.path.join(cache_dir, '%s_%d_%d.fm' % (
-        genome.species.latin_name, genome.release, 2 if six.PY2 else 3))
-
-def index_contains_kmer(fm, kmer):
-    """
-    Checks FM index for kmer, returns true if found.
-    """
-    found = False
-    for _ in fm.search(kmer):
-        found = True
-        break
-    return found
-
-def generate_protein_sequences(genome):
-    """
-    Generator whose elements are protein sequences from the given genome.
-
-    Parameters
-    ----------
-    genome : pyensembl.EnsemblRelease
-        Input genome to load for reference peptides
-    """
-    for t in genome.transcripts():
-        if t.is_protein_coding:
-            protein_sequence = t.protein_sequence
-            if six.PY2:
-                # shellinford on PY2 seems to sometimes fail with
-                # unicode strings
-                protein_sequence = protein_sequence.encode("ascii")
-            yield protein_sequence
-
-def load_reference_peptides_index(genome, force_reload=False):
-    """
-    Loads the FM index containing reference peptides.
-
-    Parameters
-    ----------
-    genome : pyensembl.EnsemblRelease
-        Input genome to load for reference peptides
-
-    force_reload : bool, optional
-        If true, will recompute index for this genome even if it already exists.
-
-    Returns
-    -------
-    fm : shellinford.FMIndex
-        Index populated with reference peptides from the genome
-    """
-    path = fm_index_path(genome)
-    if force_reload or not os.path.exists(path):
-        logger.info("Building FM index at %s", path)
-        fm = shellinford.FMIndex()
-        fm.build(generate_protein_sequences(genome), path)
-        logger.info("Done building FM index")
-        return fm
-    return shellinford.FMIndex(filename=path)
 
 def predict_epitopes(
         mhc_predictor,
@@ -168,14 +101,14 @@ def predict_epitopes(
     Uses the input genome to evaluate whether the epitope occurs in reference.
     """
     results = OrderedDict()
-    fm = load_reference_peptides_index(genome)
+    reference_proteome = ReferenceProteome(genome)
 
     # sometimes the predictors will fail, and we don't want to crash vaxrank in that situation
     # TODO: make more specific or remove when we fix error handling in mhctools
     try:
         mhctools_binding_predictions = mhc_predictor.predict_subsequences(
             {protein_fragment.gene_name: protein_fragment.amino_acids})
-    except Exception as exc:
+    except:
         logger.error(
             'MHC prediction errored for protein fragment %s, with traceback: %s',
             protein_fragment, traceback.format_exc())
@@ -212,11 +145,11 @@ def predict_epitopes(
         ]
         if len(valid_wt_peptides) > 0:
             wt_predictions = mhc_predictor.predict_peptides(valid_wt_peptides)
-    except ValueError as err:
+    except:
         logger.error(
             'MHC prediction for WT peptides errored, with traceback: %s',
             traceback.format_exc())
-        
+
     wt_predictions_grouped = {}
     # break it out: (peptide, allele) -> prediction
     for wt_prediction in wt_predictions:
@@ -240,7 +173,7 @@ def predict_epitopes(
             start_offset=peptide_start_offset,
             end_offset=peptide_end_offset)
 
-        occurs_in_reference = index_contains_kmer(fm, peptide)
+        occurs_in_reference = reference_proteome.contains(peptide)
         if occurs_in_reference:
             logger.debug('Peptide %s occurs in reference', peptide)
             num_occurs_in_reference += 1
@@ -264,27 +197,31 @@ def predict_epitopes(
             wt_ic50 = binding_prediction.value
 
         epitope_prediction = EpitopePrediction(
-                allele=binding_prediction.allele,
-                peptide_sequence=peptide,
-                wt_peptide_sequence=wt_peptide,
-                length=len(peptide),
-                ic50=binding_prediction.value,
-                wt_ic50=wt_ic50,
-                percentile_rank=binding_prediction.percentile_rank,
-                prediction_method_name=binding_prediction.prediction_method_name,
-                overlaps_mutation=overlaps_mutation,
-                source_sequence=protein_fragment.amino_acids,
-                offset=peptide_start_offset,
-                occurs_in_reference=occurs_in_reference)
+            allele=binding_prediction.allele,
+            peptide_sequence=peptide,
+            wt_peptide_sequence=wt_peptide,
+            length=len(peptide),
+            ic50=binding_prediction.value,
+            wt_ic50=wt_ic50,
+            percentile_rank=binding_prediction.percentile_rank,
+            prediction_method_name=binding_prediction.prediction_method_name,
+            overlaps_mutation=overlaps_mutation,
+            source_sequence=protein_fragment.amino_acids,
+            offset=peptide_start_offset,
+            occurs_in_reference=occurs_in_reference)
         if epitope_prediction.logistic_epitope_score() >= min_epitope_score:
             key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)
             results[key] = epitope_prediction
         else:
             num_low_scoring += 1
 
-    logger.info('%d total peptides: %d occur in reference, %d failed score threshold',
-        num_total, num_occurs_in_reference, num_low_scoring)
+    logger.info(
+        "%d total peptides: %d occur in reference, %d failed score threshold",
+        num_total,
+        num_occurs_in_reference,
+        num_low_scoring)
     return results
+
 
 def slice_epitope_predictions(
         epitope_predictions,

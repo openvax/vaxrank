@@ -1,4 +1,6 @@
-sudo: false  # Use container-based infrastructure
+# Don't use container-based infrastructure, sudo enabled has 18G disk
+# whereas sudo disabled has only 9G
+sudo: true
 language: python
 python:
   - "2.7"
@@ -10,13 +12,14 @@ git:
   # https://github.com/travis-ci/travis-ci/issues/4575
   depth: 10
 cache:
+  pip: true
   # cache pip files; directory used for Ensembl downloads of GTF and FASTA files
   # along with the indexed db of intervals and ID mappings and pickles
   # of sequence dictionaries; vaxrank directory containing FM index of reference kmers
   directories:
-    - $HOME/.cache/pyensembl/
-    - $HOME/.cache/vaxrank
-    - $HOME/.cache/pip
+    - $HOME/.cache/pyensembl/GRCh37/ensembl75/
+    - $HOME/.cache/pyensembl/GRCh38/ensembl93/
+    - $HOME/.cache/pyensembl/GRCm38/ensembl93/
   timeout: 300
 before_install:
   - |
@@ -65,6 +68,11 @@ install:
   - pip install coveralls
 before_script:
   - ./lint.sh
+  - >
+      pyensembl install
+      --release 75
+      --species human
+      --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCh37.75/
   - >
       pyensembl install
       --release 93

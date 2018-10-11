@@ -59,6 +59,7 @@ def gravy_score(amino_acids):
         hydropathy_dict[amino_acid] for amino_acid in amino_acids)
     return total / len(amino_acids)
 
+
 def max_kmer_gravy_score(amino_acids, k):
     """
     Returns max GRAVY score of any kmer in the amino acid sequence,
@@ -69,8 +70,10 @@ def max_kmer_gravy_score(amino_acids, k):
         gravy_score(amino_acids[i:i + k])
         for i in range(len(amino_acids) - k + 1))
 
+
 def max_7mer_gravy_score(amino_acids):
     return max_kmer_gravy_score(amino_acids, 7)
+
 
 def cterm_kmer_gravy_score(amino_acids, k):
     """
@@ -79,8 +82,10 @@ def cterm_kmer_gravy_score(amino_acids, k):
     n = len(amino_acids)
     return gravy_score(amino_acids[n - k:n])
 
+
 def cterm_7mer_gravy_score(amino_acids):
     return cterm_kmer_gravy_score(amino_acids, 7)
+
 
 def difficult_n_terminal_residue(amino_acids):
     """
@@ -90,11 +95,13 @@ def difficult_n_terminal_residue(amino_acids):
     """
     return amino_acids[0] in {"Q", "E", "C"}
 
+
 def c_terminal_proline(amino_acids):
     """
     Is the right-most (C-terminal) amino acid a proline?
     """
     return amino_acids[-1] == "P"
+
 
 def c_terminal_cysteine(amino_acids):
     """
@@ -102,12 +109,14 @@ def c_terminal_cysteine(amino_acids):
     """
     return amino_acids[-1] == "C"
 
+
 def n_terminal_asparagine(amino_acids):
     """
     Asparagine at the N-terminus of a peptide is also hard
     to synthesize, though not as bad as {Gln, Glu, Cys}
     """
     return amino_acids[0] == "N"
+
 
 def asparagine_proline_bond_count(amino_acids):
     """
@@ -118,6 +127,7 @@ def asparagine_proline_bond_count(amino_acids):
         amino_acids[i:i + 2] == "NP"
         for i in range(len(amino_acids) - 1))
 
+
 def cysteine_count(amino_acids):
     """
     How many cysteines are in the amino acid sequence?
@@ -125,6 +135,7 @@ def cysteine_count(amino_acids):
     distant parts of the peptide
     """
     return sum(amino_acid == "C" for amino_acid in amino_acids)
+
 
 def combine_scoring_functions(*scoring_functions):
     """
