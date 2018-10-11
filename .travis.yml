@@ -10,13 +10,14 @@ git:
   # https://github.com/travis-ci/travis-ci/issues/4575
   depth: 10
 cache:
+  pip: true
   # cache pip files; directory used for Ensembl downloads of GTF and FASTA files
   # along with the indexed db of intervals and ID mappings and pickles
   # of sequence dictionaries; vaxrank directory containing FM index of reference kmers
   directories:
-    - $HOME/.cache/pyensembl/
-    - $HOME/.cache/vaxrank
-    - $HOME/.cache/pip
+    - $HOME/.cache/pyensembl/GRCh37/ensembl75/
+    - $HOME/.cache/pyensembl/GRCh38/ensembl93/
+    - $HOME/.cache/pyensembl/GRCm38/ensembl93/
   timeout: 300
 before_install:
   - |
