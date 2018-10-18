@@ -153,27 +153,27 @@ def combine_scoring_functions(*scoring_functions):
 
 ManufacturabilityScores = combine_scoring_functions(
 
-    # Priority I: GRAVY score of 7 residues closest to the C terminus
+    # GRAVY score of 7 residues closest to the C terminus
     cterm_7mer_gravy_score,
 
-    # Priority II: GRAVY score of any 7mer window in the peptide sequence
+    # GRAVY score of any 7mer window in the peptide sequence
     max_7mer_gravy_score,
 
-    # Priority III: avoid N-terminal Gln, Glu, Cys
+    # avoid N-terminal Gln, Glu, Cys
     difficult_n_terminal_residue,
 
-    # Priority IV: avoid C-terminal Cys
+    # avoid C-terminal Cys
     c_terminal_cysteine,
 
-    # Priority V: avoid C-terminal Pro
+    # avoid C-terminal Pro
     c_terminal_proline,
 
-    # Priority VI: total number of Cys residues
+    # total number of Cys residues
     cysteine_count,
 
-    # Priority VII: avoid N-terminal Asn
+    # avoid N-terminal Asn
     n_terminal_asparagine,
 
-    # Priority VIII: avoid Asp-Pro bonds
+    # avoid Asp-Pro bonds
     asparagine_proline_bond_count,
 )
