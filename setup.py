@@ -1,4 +1,4 @@
-# Copyright (c) 2016. Mount Sinai School of Medicine
+# Copyright (c) 2016-2018. Mount Sinai School of Medicine
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,15 +30,6 @@ try:
 except:
     logging.warn("Failed to load %s" % readme_path)
     readme_markdown = ""
-
-try:
-    import pypandoc
-    readme_restructured = pypandoc.convert(readme_markdown, to='rst', format='md')
-except:
-    readme_restructured = readme_markdown
-    logging.warn("Conversion of long_description from MD to RST failed")
-    pass
-
 
 with open('vaxrank/__init__.py', 'r') as f:
     version = re.search(
@@ -87,7 +78,8 @@ if __name__ == '__main__':
             'astropy',
         ],
 
-        long_description=readme_restructured,
+        long_description=readme_markdown,
+        long_description_content_type='text/markdown',
         packages=['vaxrank'],
         package_data={'vaxrank': ['templates/*', 'data/*', 'logging.conf']},
         entry_points={

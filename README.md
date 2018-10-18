@@ -53,7 +53,7 @@ If your variants were called from alignments against hg19 then you can still use
 
 ## Paper & Citation
 
-There is a brief preprint on biorxiv called [Vaxrank: A Computational Tool For Designing Personalized Cancer Vaccines](https://www.biorxiv.org/content/early/2017/05/27/142919) which can be cited as: 
+There is a Vaxrank paper on biorxiv called [Vaxrank: A Computational Tool For Designing Personalized Cancer Vaccines](https://www.biorxiv.org/content/early/2017/05/27/142919) which can be cited as:
 
     @article {Rubinsteyn142919,
         author = {Rubinsteyn, Alex and Hodes, Isaac and Kodysh, Julia and Hammerbacher, Jeffrey},
