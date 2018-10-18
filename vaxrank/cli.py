@@ -32,6 +32,7 @@ import pandas as pd
 import serializable
 from varcode.cli import variant_collection_from_args
 
+from . import __version__
 from .core_logic import VaxrankCoreLogic
 from .gene_pathway_check import GenePathwayCheck
 from .report import (
@@ -55,6 +56,7 @@ def new_run_arg_parser():
             "Select personalized vaccine peptides from cancer variants, "
             "expression data, and patient HLA type."),
     )
+    add_version_args(arg_parser)
     add_translation_args(arg_parser)
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
@@ -71,6 +73,7 @@ def cached_run_arg_parser():
             "Select personalized vaccine peptides from cancer variants, "
             "expression data, and patient HLA type."),
     )
+    add_version_args(arg_parser)
     arg_parser.add_argument(
         "--input-json-file",
         default="",
@@ -79,6 +82,14 @@ def cached_run_arg_parser():
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
     return arg_parser
+
+
+def add_version_args(parser):
+    parser.add_argument(
+        "--version",
+        help="Print Vaxrank version and immediately exit",
+        default=False,
+        action="store_true")
 
 
 # Lets the user specify whether they want to see particular sections in the report.
@@ -236,7 +247,8 @@ def check_args(args):
             args.output_pdf_report or
             args.output_json_file or
             args.output_xlsx_report or
-            args.output_neoepitope_report):
+            args.output_neoepitope_report or
+            args.output_passing_variants_csv):
         raise ValueError(
             "Must specify at least one of: --output-csv, "
             "--output-xlsx-report, "
@@ -244,7 +256,9 @@ def check_args(args):
             "--output-html-report, "
             "--output-pdf-report, "
             "--output-neoepitope-report, "
-            "--output-json-file")
+            "--output-json-file, "
+            "--output-passing-variants-csv")
+
 
 def ranked_variant_list_with_metadata(args):
     """
@@ -353,6 +367,10 @@ def main(args_list=None):
     if args_list is None:
         args_list = sys.argv[1:]
 
+    if "--version" in args_list:
+        print("Vaxrank version: %s" % __version__)
+        return
+
     if "--input-json-file" in args_list:
         arg_parser = cached_run_arg_parser()
     else:
@@ -404,6 +422,7 @@ def main(args_list=None):
         args_for_report=args_for_report,
         input_json_file=input_json_file,
         cosmic_vcf_filename=args.cosmic_vcf_filename)
+
     template_data = template_data_creator.compute_template_data()
 
     if args.output_ascii_report:
