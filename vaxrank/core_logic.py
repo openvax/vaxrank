@@ -184,22 +184,26 @@ class VaxrankCoreLogic(object):
                 for vp in candidate_vaccine_peptides
                 if vp.combined_score / max_score > 0.99
             ]
-
+        n_filtered = len(filtered_candidate_vaccine_peptides)
         logger.info(
             "Keeping %d/%d vaccine peptides for %s",
-            len(filtered_candidate_vaccine_peptides),
+            n_filtered,
             n_total_candidates,
             variant)
+
+        if n_filtered == 0:
+            return []
+
         filtered_candidate_vaccine_peptides.sort(key=VaccinePeptide.lexicographic_sort_key)
 
-        if len(filtered_candidate_vaccine_peptides) > 0:
-            logger.debug("Top vaccine peptides for %s:", variant)
-            for i, vaccine_peptide in enumerate(filtered_candidate_vaccine_peptides):
-                logger.debug(
-                    "%d) %s (combined score = %0.4f)",
-                    i + 1,
-                    vaccine_peptide,
-                    vaccine_peptide.combined_score)
+        logger.debug("Top vaccine peptides for %s:", variant)
+        for i, vaccine_peptide in enumerate(filtered_candidate_vaccine_peptides):
+            logger.debug(
+                "%d) %s (combined score = %0.4f)",
+                i + 1,
+                vaccine_peptide,
+                vaccine_peptide.combined_score)
+
         return filtered_candidate_vaccine_peptides[:self.max_vaccine_peptides_per_variant]
 
     @property

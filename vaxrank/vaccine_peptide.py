@@ -73,7 +73,9 @@ class VaccinePeptide(VaccinePeptideBase):
     def peptide_synthesis_difficulty_score_tuple(
             self,
             max_c_terminal_hydropathy=1.5,
-            max_kmer_hydropathy=2.5):
+            min_kmer_hydropathy=0,
+            max_kmer_hydropathy_low_priority=1.5,
+            max_kmer_hydropathy_high_priority=2.5):
         """
         Generates a tuple of scores used for lexicographic sorting of vaccine
         peptides.
@@ -95,7 +97,10 @@ class VaccinePeptide(VaccinePeptideBase):
         If there are multiple vaccine peptides without difficult terminal
         residues then try to eliminate N-terminal asparagine residues
         (not as harmful) and asparagine-proline bonds
-        (known to dissociate easily).
+        (known to dissociate easily). If all of these constraints
+        are satisfied, then attempt to keep the max k-mer hydropahy below
+        a lower constant (default GRAVY score 1.5) and above a minimum value
+        (default 0).
 
         (Sort criteria determined through conversations with manufacturer)
         """
@@ -109,10 +114,12 @@ class VaccinePeptide(VaccinePeptideBase):
             self.manufacturability_scores.cysteine_count,
 
             # C-terminal 7mer GRAVY score < 1.5
+            # (or user specified max GRAVY score for C terminus of peptide)
             max(0, cterm_7mer_gravy - max_c_terminal_hydropathy),
 
             # max 7mer GRAVY score < 2.5
-            max(0, max_7mer_gravy - max_kmer_hydropathy),
+            # (or user specified higher priority maximum for GRAVY score)
+            max(0, max_7mer_gravy - max_kmer_hydropathy_high_priority),
 
             # avoid N-terminal Gln, Glu, Cys
             self.manufacturability_scores.difficult_n_terminal_residue,
@@ -128,6 +135,14 @@ class VaccinePeptide(VaccinePeptideBase):
 
             # avoid Asp-Pro bonds
             self.manufacturability_scores.asparagine_proline_bond_count,
+
+            # max 7mer GRAVY score < 1.5
+            # (or user specified lower priority maximum for GRAVY score)
+            max(0, max_7mer_gravy - max_kmer_hydropathy_low_priority),
+
+            # max 7mer GRAVY score > 0
+            # (or user specified min GRAVY for 7mer windows in peptide)
+            max(0, min_kmer_hydropathy - max_7mer_gravy),
         )
 
     def lexicographic_sort_key(self):
