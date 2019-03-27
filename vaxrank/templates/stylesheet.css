@@ -11,6 +11,7 @@ table, table.th, table.td {
 /* Various headers */
 #report-header {
 	padding-bottom: 1em;
+	margin-top: -2em;
 }
 
 #patient-info {
