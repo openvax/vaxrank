@@ -1,4 +1,5 @@
 vaxrank \
+    --download-reference-genome-data \
     --vcf test/data/b16.f10/b16.vcf \
     --bam test/data/b16.f10/b16.combined.bam \
     --vaccine-peptide-length 15 \
