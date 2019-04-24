@@ -84,6 +84,25 @@ def cached_run_arg_parser():
     return arg_parser
 
 
+def add_variant_filter_args(arg_parser):
+    filter_group = arg_parser.add_argument_group("Variant filtering")
+    filter_group.add_argument(
+        "--filter-min-rna-vaf",
+        default=0.001,
+        type=float,
+        help="Minimum RNA VAF (variant allele fraction) (default %(default)s)")
+    filter_group.add_argument(
+        "--filter-min-ratio-rna-variant-count-to-other-nonref-alleles",
+        default=4.0,
+        type=float,
+        help=(
+            "If other non-ref alleles are present in RNA besides variant, "
+            "how many times more support required for variant than total for "
+            "other alleles. For example, if ref is 'G' and alt is 'A', then "
+            "the number of reads supporting 'A' must be at least %(default)sx "
+            "more than the number of reads supporting 'C' and 'T'."))
+
+
 def add_version_args(parser):
     parser.add_argument(
         "--version",
