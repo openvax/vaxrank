@@ -24,12 +24,8 @@ from setuptools import setup
 readme_dir = os.path.dirname(__file__)
 readme_path = os.path.join(readme_dir, 'README.md')
 
-try:
-    with open(readme_path, 'r') as f:
-        readme_markdown = f.read()
-except:
-    logging.warn("Failed to load %s" % readme_path)
-    readme_markdown = ""
+with open(readme_path, 'r') as f:
+    readme_markdown = f.read()
 
 with open('vaxrank/__init__.py', 'r') as f:
     version = re.search(
@@ -46,17 +42,18 @@ if __name__ == '__main__':
         version=version,
         description="Mutant peptide ranking for personalized cancer vaccines",
         author="Alex Rubinsteyn",
-        author_email="alex.rubinsteyn@gmail.com",
-        url="https://github.com/hammerlab/vaxrank",
+        author_email="alex.rubinsteyn@mssm.edu",
+        url="https://github.com/openvax/vaxrank",
         license="http://www.apache.org/licenses/LICENSE-2.0.html",
         classifiers=[
-            'Development Status :: 3 - Alpha',
+            'Development Status :: 4 - Beta',
             'Environment :: Console',
             'Operating System :: OS Independent',
             'Intended Audience :: Science/Research',
             'License :: OSI Approved :: Apache Software License',
             'Programming Language :: Python',
             'Topic :: Scientific/Engineering :: Bio-Informatics',
+            'Topic :: Scientific/Engineering :: Medical Science Apps.'
         ],
         install_requires=[
             'six',
@@ -64,7 +61,7 @@ if __name__ == '__main__':
             'pandas',
             'pyensembl>=1.5.0',
             'varcode>=0.5.9',
-            'isovar>=0.8.5,<1.0.0',
+            'isovar>=1.0.0,<1.1.0',
             'mhctools>=1.5.0',
             'roman',
             'jinja2',
