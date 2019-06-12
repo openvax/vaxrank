@@ -18,9 +18,8 @@ import logging
 
 from numpy import isclose
 
-from isovar.protein_sequences import (
-    reads_generator_to_protein_sequences_generator,
-)
+from isovar import run_isovar
+
 
 from .mutant_protein_fragment import MutantProteinFragment
 from .epitope_prediction import predict_epitopes, slice_epitope_predictions
@@ -32,28 +31,19 @@ logger = logging.getLogger(__name__)
 class VaxrankCoreLogic(object):
     def __init__(
             self,
-            variants,
-            reads_generator,
             mhc_predictor,
+            read_collector,
+            protein_sequence_creator,
+            filter_thresholds,
             vaccine_peptide_length,
             padding_around_mutation,
             max_vaccine_peptides_per_variant,
-            min_alt_rna_reads,
-            min_variant_sequence_coverage,
-            variant_sequence_assembly,
             num_mutant_epitopes_to_keep=10000,
             min_epitope_score=0.0,
             gene_pathway_check=None):
         """
         Parameters
         ----------
-        variants : VariantCollection
-            Variant objects to evaluate for vaccine inclusion
-
-        reads_generator : generator
-            Yields sequence of varcode.Variant objects paired with sequences of
-            AlleleRead objects that support that variant.
-
         mhc_predictor : mhctools.BasePredictor
             Object with predict_peptides method, used for making pMHC binding
             predictions
@@ -64,22 +54,6 @@ class VaxrankCoreLogic(object):
         padding_around_mutation : int
             Number of off-center windows around the mutation to consider as vaccine
             peptides.
-
-        max_vaccine_peptides_per_variant : int
-            Number of vaccine peptides to generate for each mutation.
-
-        min_alt_rna_reads : int
-            Drop variant sequences at loci with fewer than this number of reads
-            supporting the alt allele.
-
-        min_variant_sequence_coverage : int
-            Trim variant sequences to positions supported by at least this number
-            of RNA reads.
-
-        variant_sequence_assembly : int
-            If True, then assemble variant cDNA sequences based on overlap of RNA
-            reads. If False, then variant cDNA sequences must be fully spanned and
-            contained within RNA reads.
 
         num_mutant_epitopes_to_keep : int, optional
             Number of top-ranking epitopes for each vaccine peptide to include in
@@ -93,34 +67,33 @@ class VaxrankCoreLogic(object):
             If provided, will check against known pathways/gene sets/variant sets and
             include the info in the all-variants output file.
         """
-        self.variants = variants
-        self.reads_generator = reads_generator
         self.mhc_predictor = mhc_predictor
         self.vaccine_peptide_length = vaccine_peptide_length
         self.padding_around_mutation = padding_around_mutation
         self.max_vaccine_peptides_per_variant = max_vaccine_peptides_per_variant
-        self.min_alt_rna_reads = min_alt_rna_reads
-        self.min_variant_sequence_coverage = min_variant_sequence_coverage
-        self.variant_sequence_assembly = variant_sequence_assembly
         self.num_mutant_epitopes_to_keep = num_mutant_epitopes_to_keep
         self.min_epitope_score = min_epitope_score
         self.gene_pathway_check = gene_pathway_check
 
-        # will be a dictionary: varcode.Variant -> isovar protein sequence object
-        self._isovar_protein_sequence_dict = None
+        # will be a dictionary: varcode.Variant -> IsovarResult
+        self.variant_to_isovar_result_dict = None
 
         # will be a dictionary: varcode.Variant -> list(VaccinePeptide)
-        self._vaccine_peptides_dict = None
+        self.variant_to_vaccine_peptides_dict = None
 
     def vaccine_peptides_for_variant(
             self,
             variant,
-            isovar_protein_sequence):
+            isovar_result):
         """
+        Parameters
+        ----------
+        variant : varcode.Variant
+
+        isovar_result : isovar.IsovarResult
+
         Returns sorted list of VaccinePeptide objects. If there are no suitable vaccine peptides
         (no strong MHC binder subsequences), returns an empty list.
-
-        At this point, we know the variant has RNA support, as per the isovar_protein_sequence.
         """
         protein_fragment = MutantProteinFragment.from_isovar_protein_sequence(
             variant=variant,
@@ -206,12 +179,19 @@ class VaxrankCoreLogic(object):
 
         return filtered_candidate_vaccine_peptides[:self.max_vaccine_peptides_per_variant]
 
-    @property
-    def isovar_protein_sequence_dict(self):
+    def run_isovar(self, variants, alignment_file):
         """
-        This function computes a dictionary of Variant objects to a single isovar protein sequence
-        that will be used to try to construct VaccinePeptides. If this function has been previously
-        called, the result will be cached.
+        This function populates a dictionary of Variant objects to a single
+        IsovarResult (called `_variant_to_isovar_result_dict`), which will be later
+        used to construct VaccinePeptides and compute statistics about the
+        variants. If this function has been previously called, the result will
+        be cached.
+
+        Parameters
+        ----------
+        variants : varcode.VariantCollection or str
+
+        alignment_file : pysam.AlignmentFile or str
         """
         if self._isovar_protein_sequence_dict is None:
             # total number of amino acids is the vaccine peptide length plus the
@@ -230,7 +210,14 @@ class VaxrankCoreLogic(object):
             Future intended behavior: returns all passing variants, with a protein sequences
             generator that is non empty if there are enough alt RNA reads supporting the variant
             """
-            protein_sequences_generator = reads_generator_to_protein_sequences_generator(
+
+            protein_sequences_generator = run_isovar(
+                variants,
+                alignment_file,
+                read_collector=self.read_collector,
+                protein_sequence_creator=self.protein_sequence_creator,
+                filter_thresholds=self.filter_thresholds)
+
                 self.reads_generator,
                 transcript_id_whitelist=None,
                 protein_sequence_length=protein_fragment_sequence_length,
@@ -252,23 +239,32 @@ class VaxrankCoreLogic(object):
         return self._isovar_protein_sequence_dict
 
     @property
-    def vaccine_peptides(self):
+    def vaccine_peptides(self, isovar_results):
         """
-        Returns a dictionary of varcode.Variant objects to a list of VaccinePeptides. After called
-        once, the result is cached.
+        Determine vaccine peptides for each variant in a list of IsovarResult
+        objects that have non-coding effects and sufficient RNA to determine
+        a mutant sequence.
+
+        Parameters
+        ----------
+        isovar_results : list of IsovarResult
+
+        Returns
+        -------
+        Dictionary of varcode.Variant objects to a list of VaccinePeptides.
         """
-        if self._vaccine_peptides_dict is None:
-            self._vaccine_peptides_dict = {}
-            isovar_protein_sequence_dict = self.isovar_protein_sequence_dict
-            for variant, isovar_protein_sequence in isovar_protein_sequence_dict.items():
-                vaccine_peptides = self.vaccine_peptides_for_variant(
-                    variant=variant,
-                    isovar_protein_sequence=isovar_protein_sequence)
+        vaccine_peptides_dict = OrderedDict()
+        for isovar_result in isovar_results:
+            vaccine_peptides = self.vaccine_peptides_for_single_variant(
+                isovar_result,
+                require_mutant_mhc_ligands=True)
 
-                if any(x.contains_mutant_epitopes() for x in vaccine_peptides):
-                    self._vaccine_peptides_dict[variant] = vaccine_peptides
+            if len(vaccine_peptides) == 0:
+                continue
 
-        return self._vaccine_peptides_dict
+            vaccine_peptides_dict[isovar_result.variant] = vaccine_peptides
+
+        return vaccine_peptides_dict
 
     def ranked_vaccine_peptides(
             self,
@@ -286,9 +282,18 @@ class VaxrankCoreLogic(object):
             reverse=True)
         return result_list
 
-    def variant_properties(self):
-        # dictionary: varcode.Variant -> dictionary of properties we want to analyze later, e.g.
-        # whether this variant is part of a pathway of interest, is a strong MHC binder, etc.
+    def variant_properties(self, isovar_results):
+        """
+        Parameters
+        ----------
+        isovar_results : list of isovar.IsovarResult
+
+        Returns
+        -------
+        Dictionary from varcode.Variant to dictionary of properties we want to
+        analyze later, e.g. whether this variant is part of a pathway of interest,
+        is a strong MHC binder, etc.
+        """
         variant_properties_dict = OrderedDict()
         for variant in self.variants:
             gene_name = ''
@@ -317,15 +322,25 @@ class VaxrankCoreLogic(object):
             variant_properties_dict[variant] = variant_dict
         return list(variant_properties_dict.values())
 
-    def variant_counts(self):
+    def variant_counts(self, isovar_results):
+        """
+        Parameters
+        ----------
+        isovar_results : list of isovar.IsovarResult
+
+        Returns
+        -------
+        Dictionary from keys such as 'num_total_variants' to int
+        """
         # dictionary which will contain some overall variant counts for report display
         counts_dict = {
-            'num_total_variants': len(self.variants),
+            'num_total_variants': len(isovar_results),
             'num_coding_effect_variants': 0,
             'num_variants_with_rna_support': 0,
             'num_variants_with_vaccine_peptides': 0,
         }
-        for variant in self.variants:
+        for isovar_result in isovar_results:
+            isovar_result.predicted_effect
             if len(variant.effects().drop_silent_and_noncoding()) > 0:
                 counts_dict['num_coding_effect_variants'] += 1
             if variant in self.isovar_protein_sequence_dict:

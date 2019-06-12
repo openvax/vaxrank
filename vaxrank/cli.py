@@ -305,8 +305,7 @@ def ranked_variant_list_with_metadata(args):
         min_epitope_score=args.min_epitope_score,
         num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide,
         variant_sequence_assembly=args.variant_sequence_assembly,
-        gene_pathway_check=GenePathwayCheck()
-    )
+        gene_pathway_check=GenePathwayCheck())
 
     variants_count_dict = core_logic.variant_counts()
     assert len(variants) == variants_count_dict['num_total_variants'], \
