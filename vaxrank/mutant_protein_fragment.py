@@ -1,4 +1,4 @@
-# Copyright (c) 2016. Mount Sinai School of Medicine
+# Copyright (c) 2016-2019. Mount Sinai School of Medicine
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -66,7 +66,8 @@ MutantProteinFragmentBase = namedtuple("MutantProteinFragment", (
 
 class MutantProteinFragment(MutantProteinFragmentBase):
     @classmethod
-    def from_isovar_protein_sequence(cls, variant, protein_sequence):
+    def from_isovar_result(cls, isovar_result):
+        variant = isovar_result.variant
         return cls(
             variant=variant,
             gene_name=";".join(protein_sequence.gene),

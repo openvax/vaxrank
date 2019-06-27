@@ -1,4 +1,4 @@
-# Copyright (c) 2016-2018. Mount Sinai School of Medicine
+# Copyright (c) 2016-2019. Mount Sinai School of Medicine
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,10 +31,10 @@ logger = logging.getLogger(__name__)
 class VaxrankCoreLogic(object):
     def __init__(
             self,
-            mhc_predictor,
             read_collector,
             protein_sequence_creator,
             filter_thresholds,
+            mhc_predictor,
             vaccine_peptide_length,
             padding_around_mutation,
             max_vaccine_peptides_per_variant,
@@ -44,6 +44,19 @@ class VaxrankCoreLogic(object):
         """
         Parameters
         ----------
+        read_collector : isovar.ReadCollector
+            Isovar object used to extract reads from the tumor RNA, holds
+            options related to read processing.
+
+        protein_sequence_creator : isovar.ProteinSequenceCreator
+            Isovar object used to assemble mutant protein sequences from RNA
+            reads, holds options related to assembly.
+
+        filter_thresholds : dict
+            Dictionary mapping names of IsovarResult properties (with either
+            "min_" or "max" beforehand) to threshold cutoffs,
+            e.g. {"max_num_ref_reads": 10}
+
         mhc_predictor : mhctools.BasePredictor
             Object with predict_peptides method, used for making pMHC binding
             predictions
@@ -67,6 +80,9 @@ class VaxrankCoreLogic(object):
             If provided, will check against known pathways/gene sets/variant sets and
             include the info in the all-variants output file.
         """
+        self.read_collector = read_collector
+        self.protein_sequence_creator = protein_sequence_creator
+        self.filter_thresholds = filter_thresholds
         self.mhc_predictor = mhc_predictor
         self.vaccine_peptide_length = vaccine_peptide_length
         self.padding_around_mutation = padding_around_mutation
@@ -76,28 +92,34 @@ class VaxrankCoreLogic(object):
         self.gene_pathway_check = gene_pathway_check
 
         # will be a dictionary: varcode.Variant -> IsovarResult
-        self.variant_to_isovar_result_dict = None
+        self._variant_to_isovar_result_dict = None
 
         # will be a dictionary: varcode.Variant -> list(VaccinePeptide)
-        self.variant_to_vaccine_peptides_dict = None
+        self._variant_to_vaccine_peptides_dict = None
 
-    def vaccine_peptides_for_variant(
-            self,
-            variant,
-            isovar_result):
+    @property
+    def variant_to_isovar_result_dict(self):
+        if self._variant_to_isovar_result_dict is None:
+            raise ValueError("You must call VaxrankCoreLogic.run_isovar")
+        return self._variant_to_isovar_result_dict
+
+    @property
+    def variant_to_vaccine_peptides_dict(self):
+        if self._variant_to_vaccine_peptides_dict is None:
+            raise ValueError("You must call VaxrankCoreLogic.select_vaccine_peptides")
+        return self._variant_to_vaccine_peptides_dict
+
+    def vaccine_peptides_for_variant(self, isovar_result):
         """
         Parameters
         ----------
-        variant : varcode.Variant
-
         isovar_result : isovar.IsovarResult
 
-        Returns sorted list of VaccinePeptide objects. If there are no suitable vaccine peptides
-        (no strong MHC binder subsequences), returns an empty list.
+        Returns sorted list of VaccinePeptide objects. If there are no suitable
+        vaccine peptides returns an empty list.
         """
-        protein_fragment = MutantProteinFragment.from_isovar_protein_sequence(
-            variant=variant,
-            protein_sequence=isovar_protein_sequence)
+        variant = isovar_result.variant
+        protein_fragment = MutantProteinFragment.from_isovar_result(isovar_result)
 
         logger.info(
             "Mutant protein fragment for %s: %s",
@@ -126,9 +148,9 @@ class VaxrankCoreLogic(object):
                     candidate_fragment)
                 continue
 
-            assert all(
+            assert all([
                 p.source_sequence == candidate_fragment.amino_acids
-                for p in subsequence_epitope_predictions)
+                for p in subsequence_epitope_predictions])
 
             candidate_vaccine_peptide = VaccinePeptide(
                 mutant_protein_fragment=candidate_fragment,
