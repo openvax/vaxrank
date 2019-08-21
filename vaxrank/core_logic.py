@@ -233,20 +233,17 @@ class VaxrankCoreLogic(object):
             generator that is non empty if there are enough alt RNA reads supporting the variant
             """
 
-            protein_sequences_generator = run_isovar(
-                variants,
-                alignment_file,
-                read_collector=self.read_collector,
-                protein_sequence_creator=self.protein_sequence_creator,
-                filter_thresholds=self.filter_thresholds)
+            protein_sequences_generator =
 
-                self.reads_generator,
+                """
+                self.reads_generator
                 transcript_id_whitelist=None,
                 protein_sequence_length=protein_fragment_sequence_length,
                 min_alt_rna_reads=self.min_alt_rna_reads,
                 min_variant_sequence_coverage=self.min_variant_sequence_coverage,
                 variant_sequence_assembly=self.variant_sequence_assembly,
                 max_protein_sequences_per_variant=1)
+                """
 
             self._isovar_protein_sequence_dict = {}
             for variant, isovar_protein_sequences in protein_sequences_generator:
@@ -304,45 +301,7 @@ class VaxrankCoreLogic(object):
             reverse=True)
         return result_list
 
-    def variant_properties(self, isovar_results):
-        """
-        Parameters
-        ----------
-        isovar_results : list of isovar.IsovarResult
 
-        Returns
-        -------
-        Dictionary from varcode.Variant to dictionary of properties we want to
-        analyze later, e.g. whether this variant is part of a pathway of interest,
-        is a strong MHC binder, etc.
-        """
-        variant_properties_dict = OrderedDict()
-        for variant in self.variants:
-            gene_name = ''
-            if variant.gene_names:
-                gene_name = variant.effects().top_priority_effect().gene_name
-            variant_dict = OrderedDict((
-                ('contig', variant.contig),
-                ('start', variant.start),
-                ('ref', variant.ref),
-                ('alt', variant.alt),
-                ('is_coding_nonsynonymous', False),
-                ('rna_support', False),
-                ('mhc_binder', False),
-                ('gene_name', gene_name),
-            ))
-            if self.gene_pathway_check is not None:
-                pathway_dict = self.gene_pathway_check.make_variant_dict(variant)
-                variant_dict.update(pathway_dict)
-            if len(variant.effects().drop_silent_and_noncoding()) > 0:
-                variant_dict['is_coding_nonsynonymous'] = True
-            if variant in self.isovar_protein_sequence_dict:
-                variant_dict['rna_support'] = True
-            # TODO: compute MHC binder status for variants that don't have RNA support
-            if variant in self.vaccine_peptides:
-                variant_dict['mhc_binder'] = True
-            variant_properties_dict[variant] = variant_dict
-        return list(variant_properties_dict.values())
 
     def variant_counts(self, isovar_results):
         """

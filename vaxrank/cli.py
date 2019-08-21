@@ -19,13 +19,17 @@ import logging.config
 import pkg_resources
 
 from argparse import ArgumentParser
-from isovar.cli import run_isovar_from_parsed_args, make_isovar_arg_parser
+from isovar.cli import (
+    make_isovar_arg_parser,
+    protein_sequence_creator_from_args,
+    read_collector_from_args
+)
+from isovar import run_isovar
 from mhctools.cli import (
     add_mhc_args,
     mhc_alleles_from_args,
     mhc_binding_predictor_from_args,
 )
-
 import pandas as pd
 import serializable
 from varcode.cli import variant_collection_from_args
@@ -155,14 +159,16 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-xlsx-report",
         default="",
-        help="Path to XLSX vaccine peptide report worksheet, one sheet per variant. This is meant "
-             "for use by the vaccine manufacturer.")
+        help=(
+            "Path to XLSX vaccine peptide report worksheet, one sheet per "
+            "variant. This is meant for use by the vaccine manufacturer."))
 
     output_args_group.add_argument(
         "--output-neoepitope-report",
         default="",
-        help="Path to XLSX neoepitope report, containing information focusing on short peptide "
-             "sequences.")
+        help=(
+            "Path to XLSX neoepitope report, containing information focusing"
+            " on short peptide sequences."))
 
     output_args_group.add_argument(
         "--num-epitopes-per-peptide",
@@ -183,18 +189,20 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--log-path",
         default="python.log",
-        help="File path to write the vaxrank Python log to")
+        help="File path to write the vaxrank Python log to (default=%(default)s)")
 
     output_args_group.add_argument(
         "--max-mutations-in-report",
         type=int,
-        help="Number of mutations to report")
+        help="Number of mutations to report (default=%(default)s)",
+        default=10**6)
 
     output_args_group.add_argument(
         "--output-passing-variants-csv",
         default="",
-        help="Path to CSV file containing some metadata about every variant that has passed all "
-             "variant caller filters")
+        help=(
+            "Path to CSV file containing some metadata about every variant that "
+            "has passed all variant caller filters"))
 
 
 def add_vaccine_peptide_args(arg_parser):
@@ -226,13 +234,13 @@ def add_vaccine_peptide_args(arg_parser):
         type=float,
         help=(
             "Ignore predicted MHC ligands whose normalized binding score "
-            "falls below this threshold"))
+            "falls below this threshold (default=%(default)s)"))
 
 
 def add_supplemental_report_args(arg_parser):
     report_args_group = arg_parser.add_argument_group("Supplemental report options")
     report_args_group.add_argument(
-        "--cosmic_vcf_filename",
+        "--cosmic-vcf-filename",
         default="",
         help="Local path to COSMIC vcf")
 
@@ -288,10 +296,22 @@ def ranked_variant_list_with_metadata(args):
     logger.info("MHC alleles: %s", mhc_alleles)
     variants = variant_collection_from_args(args)
     logger.info("Variants: %s", variants)
-    # generator that for each variant gathers all RNA reads, both those
-    # supporting the variant and reference alleles
-    reads_generator = allele_reads_generator_from_args(args)
+
     mhc_predictor = mhc_binding_predictor_from_args(args)
+    # Vaxrank is going to evaluate multiple vaccine peptides containing
+    # the same mutation so need a longer sequence from Isovar
+    isovar_amino_acid_sequence_length = (
+        args.vaccine_peptide_length + 2 * args.padding_around_mutation
+
+    )
+    args.protein_sequence_length = isovar_amino_acid_sequence_length
+    protein_sequence_creator = protein_sequence_creator_from_args(args)
+    isovar_results = run_isovar(
+        variants=variants,
+        alignment_file=alignment_file,
+        read_collector=self.read_collector,
+        protein_sequence_creator=self.protein_sequence_creator,
+        filter_thresholds=self.filter_thresholds)
 
     core_logic = VaxrankCoreLogic(
         variants=variants,
@@ -305,7 +325,7 @@ def ranked_variant_list_with_metadata(args):
         min_epitope_score=args.min_epitope_score,
         num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide,
         variant_sequence_assembly=args.variant_sequence_assembly,
-        gene_pathway_check=GenePathwayCheck())
+        gene_pathway_check=)
 
     variants_count_dict = core_logic.variant_counts()
     assert len(variants) == variants_count_dict['num_total_variants'], \
@@ -327,8 +347,7 @@ def ranked_variant_list_with_metadata(args):
         num_somatic_variants=variants_count_dict['num_total_variants'],
         num_coding_effect_variants=variants_count_dict['num_coding_effect_variants'],
         num_variants_with_rna_support=variants_count_dict['num_variants_with_rna_support'],
-        num_variants_with_vaccine_peptides=variants_count_dict['num_variants_with_vaccine_peptides']
-    )
+        num_variants_with_vaccine_peptides=variants_count_dict['num_variants_with_vaccine_peptides'])
     # return variants, patient info, and command-line args
     data = {
         'variants': ranked_list_for_report,
