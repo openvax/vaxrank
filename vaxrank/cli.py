@@ -22,7 +22,8 @@ from argparse import ArgumentParser
 from isovar.cli import (
     make_isovar_arg_parser,
     protein_sequence_creator_from_args,
-    read_collector_from_args
+    read_collector_from_args,
+    run_isovar_from_parsed_args,
 )
 from isovar import run_isovar
 from mhctools.cli import (
@@ -305,27 +306,10 @@ def ranked_variant_list_with_metadata(args):
 
     )
     args.protein_sequence_length = isovar_amino_acid_sequence_length
-    protein_sequence_creator = protein_sequence_creator_from_args(args)
-    isovar_results = run_isovar(
-        variants=variants,
-        alignment_file=alignment_file,
-        read_collector=self.read_collector,
-        protein_sequence_creator=self.protein_sequence_creator,
-        filter_thresholds=self.filter_thresholds)
 
-    core_logic = VaxrankCoreLogic(
-        variants=variants,
-        reads_generator=reads_generator,
-        mhc_predictor=mhc_predictor,
-        vaccine_peptide_length=args.vaccine_peptide_length,
-        padding_around_mutation=args.padding_around_mutation,
-        max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
-        min_alt_rna_reads=args.min_alt_rna_reads,
-        min_variant_sequence_coverage=args.min_variant_sequence_coverage,
-        min_epitope_score=args.min_epitope_score,
-        num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide,
-        variant_sequence_assembly=args.variant_sequence_assembly,
-        gene_pathway_check=)
+    isovar_results = run_isovar_from_parsed_args(args)
+
+
 
     variants_count_dict = core_logic.variant_counts()
     assert len(variants) == variants_count_dict['num_total_variants'], \
