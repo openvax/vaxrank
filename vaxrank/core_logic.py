@@ -91,25 +91,23 @@ class VaxrankCoreLogic(object):
         self.min_epitope_score = min_epitope_score
         self.gene_pathway_check = gene_pathway_check
 
-        # will be a dictionary: varcode.Variant -> IsovarResult
-        self._variant_to_isovar_result_dict = None
+        # total number of amino acids is the vaccine peptide length plus the
+        # number of off-center windows around the mutation
+        self.max_padded_sequence_length = (
+                self.vaccine_peptide_length + 2 * self.padding_around_mutation)
 
-        # will be a dictionary: varcode.Variant -> list(VaccinePeptide)
-        self._variant_to_vaccine_peptides_dict = None
+        # have to patch our instance of ProteinSequenceCreator to make it
+        # give back sequences big enough to tile over multiple vaccine peptide
+        # lengths
+        self.protein_sequence_creator.protein_sequence_length = \
+            self.max_padded_sequence_length
 
-    @property
-    def variant_to_isovar_result_dict(self):
-        if self._variant_to_isovar_result_dict is None:
-            raise ValueError("You must call VaxrankCoreLogic.run_isovar")
-        return self._variant_to_isovar_result_dict
+        # will be a list of IsovarResult
+        self._isovar_results = None
 
-    @property
-    def variant_to_vaccine_peptides_dict(self):
-        if self._variant_to_vaccine_peptides_dict is None:
-            raise ValueError("You must call VaxrankCoreLogic.select_vaccine_peptides")
-        return self._variant_to_vaccine_peptides_dict
 
-    def vaccine_peptides_for_variant(self, isovar_result):
+
+    def vaccine_peptides_for_isovar_result(self, isovar_result):
         """
         Parameters
         ----------
@@ -201,12 +199,19 @@ class VaxrankCoreLogic(object):
 
         return filtered_candidate_vaccine_peptides[:self.max_vaccine_peptides_per_variant]
 
+
+    @property
+    def isovar_results(self):
+        if self._isovar_results is None:
+            raise ValueError(
+                "You have to call VaxrankCoreLogic.run_isovar")
+        return self._isovar_results
+
     def run_isovar(self, variants, alignment_file):
         """
-        This function populates a dictionary of Variant objects to a single
-        IsovarResult (called `_variant_to_isovar_result_dict`), which will be later
-        used to construct VaccinePeptides and compute statistics about the
-        variants. If this function has been previously called, the result will
+        This function populates a list of IsovarResult objects which will be
+        later used to construct VaccinePeptides and compute statistics about
+        the variants. If this function has been previously called, the result will
         be cached.
 
         Parameters
@@ -214,51 +219,23 @@ class VaxrankCoreLogic(object):
         variants : varcode.VariantCollection or str
 
         alignment_file : pysam.AlignmentFile or str
+
+        Returns
+        -------
+        list of isovar.IsovarResult
         """
-        if self._isovar_protein_sequence_dict is None:
-            # total number of amino acids is the vaccine peptide length plus the
-            # number of off-center windows around the mutation
-            protein_fragment_sequence_length = (
-                self.vaccine_peptide_length + 2 * self.padding_around_mutation)
-            """
-            These sequences are only the ones that overlap the variant and support the mutation.
-            Right now, this generator yields:
-            - (variant, mutant protein sequences) if there's enough alt RNA support
-            - (variant, None) if the variant is silent or there are ref reads overlapping the
-            variant locus but inadequate alt RNA support.
-            - does not return the variant if there's no RNA support for ref or alt - we may miss
-            some coding variants this way unless we check for them explicitly
-
-            Future intended behavior: returns all passing variants, with a protein sequences
-            generator that is non empty if there are enough alt RNA reads supporting the variant
-            """
-
-            protein_sequences_generator =
-
-                """
-                self.reads_generator
-                transcript_id_whitelist=None,
-                protein_sequence_length=protein_fragment_sequence_length,
-                min_alt_rna_reads=self.min_alt_rna_reads,
-                min_variant_sequence_coverage=self.min_variant_sequence_coverage,
-                variant_sequence_assembly=self.variant_sequence_assembly,
-                max_protein_sequences_per_variant=1)
-                """
-
-            self._isovar_protein_sequence_dict = {}
-            for variant, isovar_protein_sequences in protein_sequences_generator:
-                if len(isovar_protein_sequences) == 0:
-                    # variant RNA support is below threshold
-                    logger.info("No protein sequences for %s", variant)
-                    continue
-
-                # use the first protein sequence - why?
-                self._isovar_protein_sequence_dict[variant] = isovar_protein_sequences[0]
-
-        return self._isovar_protein_sequence_dict
+        if self._isovar_results is None:
+            isovar_result_generator = run_isovar(
+                variants=variants,
+                alignment_file=alignment_file,
+                read_collector=self.read_collector,
+                protein_sequence_creator=self.protein_sequence_creator,
+                filter_thresholds=self.filter_thresholds)
+            self._isovar_results = list(isovar_result_generator)
+        return self._isovar_results
 
     @property
-    def vaccine_peptides(self, isovar_results):
+    def vaccine_peptides_dict(self):
         """
         Determine vaccine peptides for each variant in a list of IsovarResult
         objects that have non-coding effects and sufficient RNA to determine
@@ -273,10 +250,8 @@ class VaxrankCoreLogic(object):
         Dictionary of varcode.Variant objects to a list of VaccinePeptides.
         """
         vaccine_peptides_dict = OrderedDict()
-        for isovar_result in isovar_results:
-            vaccine_peptides = self.vaccine_peptides_for_single_variant(
-                isovar_result,
-                require_mutant_mhc_ligands=True)
+        for isovar_result in self.isovar_results:
+            vaccine_peptides = self.vaccine_peptides_for_isovar_result(isovar_result)
 
             if len(vaccine_peptides) == 0:
                 continue
@@ -303,17 +278,19 @@ class VaxrankCoreLogic(object):
 
 
 
-    def variant_counts(self, isovar_results):
+    def variant_counts(self):
         """
-        Parameters
-        ----------
-        isovar_results : list of isovar.IsovarResult
+        Gather statistics about the number of variants at different filtering
+        steps.
 
         Returns
         -------
         Dictionary from keys such as 'num_total_variants' to int
         """
-        # dictionary which will contain some overall variant counts for report display
+        # dictionary which will contain some overall variant counts for report
+        # display
+
+        isovar_results = self.isovar_results
         counts_dict = {
             'num_total_variants': len(isovar_results),
             'num_coding_effect_variants': 0,
@@ -322,10 +299,14 @@ class VaxrankCoreLogic(object):
         }
         for isovar_result in isovar_results:
             isovar_result.predicted_effect
+            # TODO:
+            #  don't redo effect prediction, get this straight
+            #  out of the IsovarResult object
             if len(variant.effects().drop_silent_and_noncoding()) > 0:
                 counts_dict['num_coding_effect_variants'] += 1
+            # TODO: check directly on IsovarResult
             if variant in self.isovar_protein_sequence_dict:
                 counts_dict['num_variants_with_rna_support'] += 1
-            if variant in self.vaccine_peptides:
+            if variant in self.vaccine_peptides_dict:
                 counts_dict['num_variants_with_vaccine_peptides'] += 1
         return counts_dict
