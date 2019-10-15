@@ -235,7 +235,7 @@ class VaxrankCoreLogic(object):
         return self._isovar_results
 
     @property
-    def vaccine_peptides_dict(self):
+    def vaccine_peptides_dict(self, isovar_results):
         """
         Determine vaccine peptides for each variant in a list of IsovarResult
         objects that have non-coding effects and sufficient RNA to determine
@@ -268,7 +268,7 @@ class VaxrankCoreLogic(object):
         This function returns a sorted list whose first element is a Variant and whose second
         element is a list of VaccinePeptide objects.
         """
-        variant_peptides_dict = self.vaccine_peptides
+        variant_peptides_dict = self.vaccine_peptides_dict
         result_list = list(variant_peptides_dict.items())
         # TODO: move this sort key into its own function, also make less nuts
         result_list.sort(
@@ -276,37 +276,3 @@ class VaxrankCoreLogic(object):
             reverse=True)
         return result_list
 
-
-
-    def variant_counts(self):
-        """
-        Gather statistics about the number of variants at different filtering
-        steps.
-
-        Returns
-        -------
-        Dictionary from keys such as 'num_total_variants' to int
-        """
-        # dictionary which will contain some overall variant counts for report
-        # display
-
-        isovar_results = self.isovar_results
-        counts_dict = {
-            'num_total_variants': len(isovar_results),
-            'num_coding_effect_variants': 0,
-            'num_variants_with_rna_support': 0,
-            'num_variants_with_vaccine_peptides': 0,
-        }
-        for isovar_result in isovar_results:
-            isovar_result.predicted_effect
-            # TODO:
-            #  don't redo effect prediction, get this straight
-            #  out of the IsovarResult object
-            if len(variant.effects().drop_silent_and_noncoding()) > 0:
-                counts_dict['num_coding_effect_variants'] += 1
-            # TODO: check directly on IsovarResult
-            if variant in self.isovar_protein_sequence_dict:
-                counts_dict['num_variants_with_rna_support'] += 1
-            if variant in self.vaccine_peptides_dict:
-                counts_dict['num_variants_with_vaccine_peptides'] += 1
-        return counts_dict

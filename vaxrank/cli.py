@@ -21,11 +21,9 @@ import pkg_resources
 from argparse import ArgumentParser
 from isovar.cli import (
     make_isovar_arg_parser,
-    protein_sequence_creator_from_args,
-    read_collector_from_args,
     run_isovar_from_parsed_args,
 )
-from isovar import run_isovar
+
 from mhctools.cli import (
     add_mhc_args,
     mhc_alleles_from_args,
@@ -37,6 +35,7 @@ from varcode.cli import variant_collection_from_args
 
 from . import __version__
 from .core_logic import VaxrankCoreLogic
+from .summary import variant_counts
 from .gene_pathway_check import GenePathwayCheck
 from .report import (
     make_ascii_report,
@@ -311,7 +310,9 @@ def ranked_variant_list_with_metadata(args):
 
 
 
-    variants_count_dict = core_logic.variant_counts()
+    variants_count_dict = variant_counts(
+        isovar_results,
+        ranked_vaccine_peptides_dict)
     assert len(variants) == variants_count_dict['num_total_variants'], \
         "Len(variants) is %d but variants_count_dict came back with %d" % (
             len(variants), variants_count_dict['num_total_variants'])

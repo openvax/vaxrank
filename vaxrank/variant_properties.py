@@ -61,7 +61,10 @@ def make_variant_properties_dataframe(
         ])
         if gene_pathways is not None:
             variant_dict.update(gene_pathways.make_variant_dict(variant))
+
         if variant in self.vaccine_peptides:
             variant_dict['mhc_binder'] = True
-        variant_properties_dict[variant] = variant_dict
-    return list(variant_properties_dict.values())
+
+        variant_dict[variant] = variant_dict
+
+    return list(variant_dict.values())
