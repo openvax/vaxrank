@@ -41,41 +41,43 @@ EpitopePredictionBase = namedtuple("EpitopePrediction", [
 
 class EpitopePrediction(EpitopePredictionBase):
 
-    def logistic_epitope_score(
-            self,
-            midpoint=350.0,
-            width=150.0,
-            ic50_cutoff=5000.0):  # TODO: add these default values into CLI as arguments
-        """
-        Map from IC50 values to score where 1.0 = strong binder, 0.0 = weak binder
-        Default midpoint and width for logistic determined by max likelihood fit
-        for data from Alessandro Sette's 1994 paper:
 
-           "The relationship between class I binding affinity
-            and immunogenicity of potential cytotoxic T cell epitopes.
 
-        TODO: Use a large dataset to find MHC binding range predicted to #
+def logistic_epitope_score(
+        self,
+        midpoint=350.0,
+        width=150.0,
+        ic50_cutoff=5000.0):  # TODO: add these default values into CLI as arguments
+    """
+    Map from IC50 values to score where 1.0 = strong binder, 0.0 = weak binder
+    Default midpoint and width for logistic determined by max likelihood fit
+    for data from Alessandro Sette's 1994 paper:
+
+       "The relationship between class I binding affinity
+        and immunogenicity of potential cytotoxic T cell epitopes.
+
+    TODO:
+        Use a large dataset to find MHC binding range predicted to #
         correlate with immunogenicity
-        """
-        if self.ic50 >= ic50_cutoff:
-            return 0.0
+    """
+    if self.ic50 >= ic50_cutoff:
+        return 0.0
 
-        rescaled = (float(self.ic50) - midpoint) / width
-        # simplification of 1.0 - logistic(x) = logistic(-x)
-        logistic = 1.0 / (1.0 + np.exp(rescaled))
+    rescaled = (float(self.ic50) - midpoint) / width
+    # simplification of 1.0 - logistic(x) = logistic(-x)
+    logistic = 1.0 / (1.0 + np.exp(rescaled))
 
-        # since we're scoring IC50 values, let's normalize the output
-        # so IC50 near 0.0 always returns a score of 1.0
-        normalizer = 1.0 / (1.0 + np.exp(-midpoint / width))
+    # since we're scoring IC50 values, let's normalize the output
+    # so IC50 near 0.0 always returns a score of 1.0
+    normalizer = 1.0 / (1.0 + np.exp(-midpoint / width))
 
-        return logistic / normalizer
-
+    return logistic / normalizer
 
 def predict_epitopes(
         mhc_predictor,
         protein_fragment,
         min_epitope_score=0.0,
-        genome=None):
+        reference_proteome=None):
     """
     Parameters
     ----------
@@ -91,17 +93,14 @@ def predict_epitopes(
         Ignore peptides with binding predictions whose normalized score is less
         than this.
 
-    genome : pyensembl.Genome
-        Genome whose proteome to use for reference peptide filtering
+    reference_proteome : ReferenceProteome or None
 
-    Returns an OrderedDict of EpitopePrediction objects, keyed by a
-    (peptide sequence, allele) tuple, that have a normalized score greater
-    than min_epitope_score.
+    Returns a list of EpitopePrediction objects
 
     Uses the input genome to evaluate whether the epitope occurs in reference.
     """
     results = OrderedDict()
-    reference_proteome = ReferenceProteome(genome)
+
 
     # sometimes the predictors will fail, and we don't want to crash vaxrank in that situation
     # TODO: make more specific or remove when we fix error handling in mhctools
@@ -210,8 +209,7 @@ def predict_epitopes(
             offset=peptide_start_offset,
             occurs_in_reference=occurs_in_reference)
         if epitope_prediction.logistic_epitope_score() >= min_epitope_score:
-            key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)
-            results[key] = epitope_prediction
+            results.append(epitope_prediction)
         else:
             num_low_scoring += 1
 

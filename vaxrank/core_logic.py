@@ -24,6 +24,7 @@ from isovar import run_isovar
 from .mutant_protein_fragment import MutantProteinFragment
 from .epitope_prediction import predict_epitopes, slice_epitope_predictions
 from .vaccine_peptide import VaccinePeptide
+from .reference_proteome import ReferenceProteome
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +32,6 @@ logger = logging.getLogger(__name__)
 class VaxrankCoreLogic(object):
     def __init__(
             self,
-            read_collector,
-            protein_sequence_creator,
-            filter_thresholds,
             mhc_predictor,
             vaccine_peptide_length,
             padding_around_mutation,
@@ -80,9 +78,6 @@ class VaxrankCoreLogic(object):
             If provided, will check against known pathways/gene sets/variant sets and
             include the info in the all-variants output file.
         """
-        self.read_collector = read_collector
-        self.protein_sequence_creator = protein_sequence_creator
-        self.filter_thresholds = filter_thresholds
         self.mhc_predictor = mhc_predictor
         self.vaccine_peptide_length = vaccine_peptide_length
         self.padding_around_mutation = padding_around_mutation
@@ -90,22 +85,6 @@ class VaxrankCoreLogic(object):
         self.num_mutant_epitopes_to_keep = num_mutant_epitopes_to_keep
         self.min_epitope_score = min_epitope_score
         self.gene_pathway_check = gene_pathway_check
-
-        # total number of amino acids is the vaccine peptide length plus the
-        # number of off-center windows around the mutation
-        self.max_padded_sequence_length = (
-                self.vaccine_peptide_length + 2 * self.padding_around_mutation)
-
-        # have to patch our instance of ProteinSequenceCreator to make it
-        # give back sequences big enough to tile over multiple vaccine peptide
-        # lengths
-        self.protein_sequence_creator.protein_sequence_length = \
-            self.max_padded_sequence_length
-
-        # will be a list of IsovarResult
-        self._isovar_results = None
-
-
 
     def vaccine_peptides_for_isovar_result(self, isovar_result):
         """
@@ -124,11 +103,13 @@ class VaxrankCoreLogic(object):
             variant,
             protein_fragment)
 
+        reference_proteome = ReferenceProteome(variant.genome)
+
         epitope_predictions = predict_epitopes(
             mhc_predictor=self.mhc_predictor,
             protein_fragment=protein_fragment,
             min_epitope_score=self.min_epitope_score,
-            genome=variant.ensembl).values()
+            reference_proteome=reference_proteome)
 
         candidate_vaccine_peptides = []
 
@@ -187,7 +168,8 @@ class VaxrankCoreLogic(object):
         if n_filtered == 0:
             return []
 
-        filtered_candidate_vaccine_peptides.sort(key=VaccinePeptide.lexicographic_sort_key)
+        filtered_candidate_vaccine_peptides.sort(
+            key=VaccinePeptide.lexicographic_sort_key)
 
         logger.debug("Top vaccine peptides for %s:", variant)
         for i, vaccine_peptide in enumerate(filtered_candidate_vaccine_peptides):
@@ -199,43 +181,7 @@ class VaxrankCoreLogic(object):
 
         return filtered_candidate_vaccine_peptides[:self.max_vaccine_peptides_per_variant]
 
-
-    @property
-    def isovar_results(self):
-        if self._isovar_results is None:
-            raise ValueError(
-                "You have to call VaxrankCoreLogic.run_isovar")
-        return self._isovar_results
-
-    def run_isovar(self, variants, alignment_file):
-        """
-        This function populates a list of IsovarResult objects which will be
-        later used to construct VaccinePeptides and compute statistics about
-        the variants. If this function has been previously called, the result will
-        be cached.
-
-        Parameters
-        ----------
-        variants : varcode.VariantCollection or str
-
-        alignment_file : pysam.AlignmentFile or str
-
-        Returns
-        -------
-        list of isovar.IsovarResult
-        """
-        if self._isovar_results is None:
-            isovar_result_generator = run_isovar(
-                variants=variants,
-                alignment_file=alignment_file,
-                read_collector=self.read_collector,
-                protein_sequence_creator=self.protein_sequence_creator,
-                filter_thresholds=self.filter_thresholds)
-            self._isovar_results = list(isovar_result_generator)
-        return self._isovar_results
-
-    @property
-    def vaccine_peptides_dict(self, isovar_results):
+    def vaccine_peptides(self, isovar_results):
         """
         Determine vaccine peptides for each variant in a list of IsovarResult
         objects that have non-coding effects and sufficient RNA to determine
@@ -247,28 +193,26 @@ class VaxrankCoreLogic(object):
 
         Returns
         -------
-        Dictionary of varcode.Variant objects to a list of VaccinePeptides.
+        List of tuples, whose first element is an isovar.IsovarResult
+        and whose second element is an an unsorted list of VaccinePeptides
         """
-        vaccine_peptides_dict = OrderedDict()
-        for isovar_result in self.isovar_results:
-            vaccine_peptides = self.vaccine_peptides_for_isovar_result(isovar_result)
-
+        results = []
+        for isovar_result in isovar_results:
+            if isovar_result.passes_all_filters:
+                vaccine_peptides = self.vaccine_peptides_for_isovar_result(isovar_result)
             if len(vaccine_peptides) == 0:
                 continue
+            results.append((isovar_result, vaccine_peptides))
+        return results
 
-            vaccine_peptides_dict[isovar_result.variant] = vaccine_peptides
-
-        return vaccine_peptides_dict
-
-    def ranked_vaccine_peptides(
-            self,
-            num_mutant_epitopes_to_keep=10000,
-            min_epitope_score=0):
+    def ranked_vaccine_peptides(self, isovar_results):
         """
-        This function returns a sorted list whose first element is a Variant and whose second
-        element is a list of VaccinePeptide objects.
+        This function returns a sorted list whose first element is an
+        IsovarResult and whose second element is a list of VaccinePeptide
+        objects.
         """
-        variant_peptides_dict = self.vaccine_peptides_dict
+        vaccine_peptides = self.vaccine_peptides(isovar_results)
+
         result_list = list(variant_peptides_dict.items())
         # TODO: move this sort key into its own function, also make less nuts
         result_list.sort(

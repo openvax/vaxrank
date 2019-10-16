@@ -19,9 +19,13 @@ import logging.config
 import pkg_resources
 
 from argparse import ArgumentParser
+
+from isovar import run_isovar
 from isovar.cli import (
     make_isovar_arg_parser,
     run_isovar_from_parsed_args,
+    protein_sequence_creator_from_args,
+
 )
 
 from mhctools.cli import (
@@ -300,15 +304,11 @@ def ranked_variant_list_with_metadata(args):
     mhc_predictor = mhc_binding_predictor_from_args(args)
     # Vaxrank is going to evaluate multiple vaccine peptides containing
     # the same mutation so need a longer sequence from Isovar
-    isovar_amino_acid_sequence_length = (
+    args.protein_sequence_length = (
         args.vaccine_peptide_length + 2 * args.padding_around_mutation
-
     )
-    args.protein_sequence_length = isovar_amino_acid_sequence_length
 
     isovar_results = run_isovar_from_parsed_args(args)
-
-
 
     variants_count_dict = variant_counts(
         isovar_results,

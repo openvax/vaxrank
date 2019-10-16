@@ -29,49 +29,99 @@ logger = logging.getLogger(__name__)
 MutantProteinFragmentBase = namedtuple("MutantProteinFragment", (
     # varcode.Variant
     "variant",
-    # gene and transcript(s) which were used to translate one or more
+
+    # gene(s) and transcript(s) which were used to translate one or more
     # variant cDNA sequences into the following amino acids
+    "genes",
     "gene_name",
+    "transcripts",
 
     ###
     # Translated protein sequence, aggregated from possibly multiple
     # synonymous coding sequences
     ###
-
     "amino_acids",
     # offsets of amino acids which differ due to the mutation
     "mutant_amino_acid_start_offset",
     "mutant_amino_acid_end_offset",
 
-    # PyEnsembl Transcript objects for reference transcripts which
-    # were used to establish the reading frame of coding sequence(s)
-    # detected from RNA
-    "supporting_reference_transcripts",
 
     ###
     # RNA evidence
     ###
-
     # number of reads overlapping the variant locus
-    "n_overlapping_reads",
+    "num_total_reads_at_locus",
+    # number of fragments overlapping the variant locus
+    "num_total_fragments_at_locus",
+
+    # number of fragments supporting the variant
+    "num_alt_fragments_at_locus",
+    # number of fragments supporting the reference allele
+    "num_ref_fragments_at_locus",
+
     # number of reads supporting the variant
-    "n_alt_reads",
+    "num_alt_reads_at_locus",
     # number of reads supporting the reference allele
-    "n_ref_reads",
+    "num_ref_reads_at_locus",
 
     # number of RNA reads fully spanning the cDNA sequence(s) from which we
     # translated this amino acid sequence.
-    "n_alt_reads_supporting_protein_sequence",
+    "num_alt_reads_supporting_protein_sequence",
+
+    # number of RNA fragments fully spanning the cDNA sequence(s) from which we
+    # translated this amino acid sequence.
+    "num_alt_fragments_supporting_protein_sequence",
 ))
 
 class MutantProteinFragment(MutantProteinFragmentBase):
+
     @classmethod
     def from_isovar_result(cls, isovar_result):
+        """
+        Create MutantProteinFragment from isovar.IsovarResult
+
+        Parameters
+        ----------
+        isovar_result : isovar.IsovarResult
+
+        Returns
+        -------
+        MutantProteinFragment
+
+        """
         variant = isovar_result.variant
+        # Properties and methods of isovar.ProteinSequence
+        #
+        #     def supporting_reads(self):
+        #     def read_names_supporting_protein_sequence(self):
+        #     def num_supporting_fragments(self):
+        #     def num_supporting_reads(self):
+        #     def num_mismatches_before_variant(self):
+        #     def num_mismatches_after_variant(self):
+        #     def num_mismatches(self):
+        #     def transcripts(self):
+        #     def transcript_names(self):
+        #     def transcript_ids(self):
+        #     def genes(self):
+        #     def gene_names(self):
+        #     def gene_name(self):
+        #     def gene_ids(self):
+        #     def cdna_sequences(self):
+        #     def num_cdna_sequences(self):
+        #     def mutation_start(self):
+        #     def mutation_end(self):
+        #     def num_mutant_amino_acids(self):
+        #     def ascending_sort_key(self):
+
+        top_protein_sequence = isovar_result.top_protein_sequence
+        genes = top_protein_sequence.genes
+        transcripts = isovar_result.transcripts_from_protein_sequences(1)
+        top_protein_sequence
         return cls(
             variant=variant,
-            gene_name=";".join(protein_sequence.gene),
-            amino_acids=protein_sequence.amino_acids,
+            genes=genes,
+            transcripts=transcripts,
+            amino_acids=top_protein_sequence.amino_acids,
             mutant_amino_acid_start_offset=protein_sequence.variant_aa_interval_start,
             mutant_amino_acid_end_offset=protein_sequence.variant_aa_interval_end,
             n_overlapping_reads=len(protein_sequence.overlapping_reads),
@@ -87,6 +137,19 @@ class MutantProteinFragment(MutantProteinFragmentBase):
 
     def __len__(self):
         return len(self.amino_acids)
+
+    @property
+    def gene_name(self):
+        """
+        Name of gene(s) associated with this mutant protein fragment. If
+        more than one gene is involved then their names are separated by
+        semi-colons.
+
+        Returns
+        -------
+        str
+        """
+        return ";".join([g.name for g in self.genes])
 
     @property
     def n_mutant_amino_acids(self):
@@ -184,7 +247,7 @@ class MutantProteinFragment(MutantProteinFragmentBase):
 
     def global_start_pos(self):
         # position of mutation start relative to the full amino acid sequence
-        global_mutation_start_pos = self.predicted_effect().aa_mutation_start_offset
+        global_mutation_start_pos = self.predicted_effect.aa_mutation_start_offset
         if global_mutation_start_pos is None:
             logger.error('Could not find mutation start pos for variant %s',
                 self.variant)

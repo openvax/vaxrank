@@ -1,4 +1,4 @@
-# Copyright (c) 2016. Mount Sinai School of Medicine
+# Copyright (c) 2016-2019. Mount Sinai School of Medicine
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,6 +59,9 @@ class VaccinePeptide(VaccinePeptideBase):
         mutant_epitope_score = sum(
             p.logistic_epitope_score() for p in mutant_epitope_predictions)
 
+        manufacturability_scores = ManufacturabilityScores.from_amino_acids(
+                mutant_protein_fragment.amino_acids)
+
         return VaccinePeptideBase.__new__(
             cls,
             mutant_protein_fragment=mutant_protein_fragment,
@@ -67,8 +70,7 @@ class VaccinePeptide(VaccinePeptideBase):
             mutant_epitope_score=mutant_epitope_score,
             wildtype_epitope_score=wildtype_epitope_score,
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
-            manufacturability_scores=ManufacturabilityScores.from_amino_acids(
-                mutant_protein_fragment.amino_acids))
+            manufacturability_scores=manufacturability_scores)
 
     def peptide_synthesis_difficulty_score_tuple(
             self,
