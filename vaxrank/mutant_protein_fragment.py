@@ -73,105 +73,13 @@ MutantProteinFragmentBase = namedtuple("MutantProteinFragment", (
     "num_alt_fragments_supporting_protein_sequence",
 ))
 
-class MutantProteinFragment(MutantProteinFragmentBase):
-
-    @classmethod
-    def from_isovar_result(cls, isovar_result):
-        """
-        Create MutantProteinFragment from isovar.IsovarResult
-
-        Parameters
-        ----------
-        isovar_result : isovar.IsovarResult
-
-        Returns
-        -------
-        MutantProteinFragment
-
-        """
-        variant = isovar_result.variant
-        # Properties and methods of isovar.ProteinSequence
-        #
-        #     def supporting_reads(self):
-        #     def read_names_supporting_protein_sequence(self):
-        #     def num_supporting_fragments(self):
-        #     def num_supporting_reads(self):
-        #     def num_mismatches_before_variant(self):
-        #     def num_mismatches_after_variant(self):
-        #     def num_mismatches(self):
-        #     def transcripts(self):
-        #     def transcript_names(self):
-        #     def transcript_ids(self):
-        #     def genes(self):
-        #     def gene_names(self):
-        #     def gene_name(self):
-        #     def gene_ids(self):
-        #     def cdna_sequences(self):
-        #     def num_cdna_sequences(self):
-        #     def mutation_start(self):
-        #     def mutation_end(self):
-        #     def num_mutant_amino_acids(self):
-        #     def ascending_sort_key(self):
-
-        top_protein_sequence = isovar_result.top_protein_sequence
-        genes = top_protein_sequence.genes
-        transcripts = isovar_result.transcripts_from_protein_sequences(1)
-        top_protein_sequence
-        return cls(
-            variant=variant,
-            genes=genes,
-            transcripts=transcripts,
-            amino_acids=top_protein_sequence.amino_acids,
-            mutant_amino_acid_start_offset=protein_sequence.variant_aa_interval_start,
-            mutant_amino_acid_end_offset=protein_sequence.variant_aa_interval_end,
-            n_overlapping_reads=len(protein_sequence.overlapping_reads),
-            n_alt_reads=len(protein_sequence.alt_reads),
-            n_ref_reads=len(protein_sequence.ref_reads),
-            n_alt_reads_supporting_protein_sequence=len(
-                protein_sequence.alt_reads_supporting_protein_sequence),
-            supporting_reference_transcripts=[
-                variant.ensembl.transcript_by_id(transcript_id)
-                for transcript_id in
-                protein_sequence.transcripts_supporting_protein_sequence
-            ])
-
-    def __len__(self):
-        return len(self.amino_acids)
-
-    @property
-    def gene_name(self):
-        """
-        Name of gene(s) associated with this mutant protein fragment. If
-        more than one gene is involved then their names are separated by
-        semi-colons.
-
-        Returns
-        -------
-        str
-        """
-        return ";".join([g.name for g in self.genes])
-
-    @property
-    def n_mutant_amino_acids(self):
-        return (
-            self.mutant_amino_acid_end_offset - self.mutant_amino_acid_start_offset)
-
+class MutantProteinFragment(object):
     @property
     def mutation_distance_from_edge(self):
         distance_from_left = self.mutant_amino_acid_start_offset
         distance_from_right = len(self) - self.mutant_amino_acid_end_offset
         return min(distance_from_left, distance_from_right)
 
-    @property
-    def is_deletion(self):
-        return self.n_mutant_amino_acids == 0 and self.variant.is_deletion
-
-    @property
-    def n_other_reads(self):
-        """
-        Number of reads supporting alleles which are neither ref nor alt
-        """
-        return self.n_overlapping_reads - (self.n_ref_reads + self.n_alt_reads)
 
     def interval_overlaps_mutation(self, start_offset, end_offset):
         """
@@ -185,7 +93,7 @@ class MutantProteinFragment(MutantProteinFragmentBase):
 
     def generate_subsequences(self, subsequence_length):
         """
-        Yields (int, MutantProteinFragment) pairs, where the integer
+        Yields (int, isovar.ProteinSequence) pairs, where the integer
         indicates the offset into the amino acid sequences.
         """
         n_total_amino_acids = len(self.amino_acids)
