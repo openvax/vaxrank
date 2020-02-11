@@ -1,5 +1,3 @@
-# Copyright (c) 2016-2018. Mount Sinai School of Medicine
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -17,61 +15,69 @@ from collections import namedtuple, OrderedDict
 import traceback
 import logging
 
-import numpy as np
-
 from .reference_proteome import ReferenceProteome
+
+import numpy as np
+from serializable import Serializable
 
 logger = logging.getLogger(__name__)
 
-EpitopePredictionBase = namedtuple("EpitopePrediction", [
-    "allele",
-    "peptide_sequence",
-    "wt_peptide_sequence",
-    "length",
-    "ic50",
-    "wt_ic50",
-    "percentile_rank",
-    "prediction_method_name",
-    "overlaps_mutation",
-    "source_sequence",
-    "offset",
-    "occurs_in_reference",
-])
+class EpitopePrediction(Serializable):
+    def __init__(
+            self,
+            allele,
+            peptide_sequence,
+            wt_peptide_sequence,
+            ic50,
+            wt_ic50,
+            percentile_rank,
+            prediction_method_name,
+            overlaps_mutation,
+            source_sequence,
+            offset,
+            occurs_in_reference):
+        self.allele = allele
+        self.peptide_sequence = peptide_sequence
+        self.wt_peptide_sequence = wt_peptide_sequence
+        self.ic50 = ic50
+        self.wt_ic50 = wt_ic50
+        self.percentile_rank = percentile_rank
+        self.prediction_method_name = prediction_method_name
+        self.overlaps_mutation = overlaps_mutation
+        self.source_sequence = source_sequence
+        self.offset = offset
+        self.occurs_in_reference = occurs_in_reference
 
+    def logistic_epitope_score(
+            self,
+            midpoint=350.0,
+            width=150.0,
+            ic50_cutoff=5000.0):
+        """
+        Map from IC50 values to score where 1.0 = strong binder, 0.0 = weak binder
+        Default midpoint and width for logistic determined by max likelihood fit
+        for data from Alessandro Sette's 1994 paper:
 
-class EpitopePrediction(EpitopePredictionBase):
+           "The relationship between class I binding affinity
+            and immunogenicity of potential cytotoxic T cell epitopes.
 
+        TODO:
+            * Use a large dataset to find MHC binding range predicted to #
+            correlate with immunogenicity
+            * Add logistic parameters to CLI
+        """
+        if self.ic50 >= ic50_cutoff:
+            return 0.0
 
+        rescaled = (float(self.ic50) - midpoint) / width
+        # simplification of 1.0 - logistic(x) = logistic(-x)
+        logistic = 1.0 / (1.0 + np.exp(rescaled))
 
-def logistic_epitope_score(
-        self,
-        midpoint=350.0,
-        width=150.0,
-        ic50_cutoff=5000.0):  # TODO: add these default values into CLI as arguments
-    """
-    Map from IC50 values to score where 1.0 = strong binder, 0.0 = weak binder
-    Default midpoint and width for logistic determined by max likelihood fit
-    for data from Alessandro Sette's 1994 paper:
+        # since we're scoring IC50 values, let's normalize the output
+        # so IC50 near 0.0 always returns a score of 1.0
+        normalizer = 1.0 / (1.0 + np.exp(-midpoint / width))
 
-       "The relationship between class I binding affinity
-        and immunogenicity of potential cytotoxic T cell epitopes.
-
-    TODO:
-        Use a large dataset to find MHC binding range predicted to #
-        correlate with immunogenicity
-    """
-    if self.ic50 >= ic50_cutoff:
-        return 0.0
-
-    rescaled = (float(self.ic50) - midpoint) / width
-    # simplification of 1.0 - logistic(x) = logistic(-x)
-    logistic = 1.0 / (1.0 + np.exp(rescaled))
-
-    # since we're scoring IC50 values, let's normalize the output
-    # so IC50 near 0.0 always returns a score of 1.0
-    normalizer = 1.0 / (1.0 + np.exp(-midpoint / width))
-
-    return logistic / normalizer
+        return logistic / normalizer
 
 def predict_epitopes(
         mhc_predictor,

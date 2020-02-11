@@ -1,5 +1,3 @@
-# Copyright (c) 2016-2019. Mount Sinai School of Medicine
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -17,41 +15,46 @@ from __future__ import absolute_import, print_function, division
 
 from collections import namedtuple
 from operator import attrgetter
+from serializable import Serializable
 
 import numpy as np
 
 from .manufacturability import ManufacturabilityScores
 
-VaccinePeptideBase = namedtuple(
-    "VaccinePeptide", [
-        "mutant_protein_fragment",
-        "mutant_epitope_predictions",
-        "wildtype_epitope_predictions",
-        "mutant_epitope_score",
-        "wildtype_epitope_score",
-        "num_mutant_epitopes_to_keep",
-        "manufacturability_scores"])
-
-
-class VaccinePeptide(VaccinePeptideBase):
+class VaccinePeptide(Serializable):
     """
     VaccinePeptide combines the sequence information of MutantProteinFragment
     with MHC binding predictions for subsequences of the protein fragment.
 
     The resulting lists of mutant and wildtype epitope predictions are sorted by ic50.
     """
-    def __new__(
-            cls,
-            mutant_protein_fragment,
-            epitope_predictions,
-            num_mutant_epitopes_to_keep=10000):
-        # only keep the top k epitopes
-        mutant_epitope_predictions = sorted([
-            p for p in epitope_predictions if p.overlaps_mutation and not p.occurs_in_reference
-        ], key=attrgetter('ic50'))[:num_mutant_epitopes_to_keep]
-        wildtype_epitope_predictions = sorted([
-            p for p in epitope_predictions if not p.overlaps_mutation or p.occurs_in_reference
-        ], key=attrgetter('ic50'))
+
+    def __init__(
+            self,
+            isovar_result,
+            mhc_ligand_predictions,
+            num_mutant_epitopes_to_keep=10 ** 5,
+            sort_predictions_by='ic50'):
+        self.isovar_result = isovar_result
+        self.mhc_ligand_predictions = mhc_ligand_predictions
+        self.sort_predictions_by = sort_predictions_by
+
+        self.mutant_mhc_ligand_predictions = sorted(
+            [
+                p for p in mhc_ligand_predictions
+                if p.overlaps_mutation and not p.occurs_in_reference
+            ],
+            key=attrgetter(sort_predictions_by))
+
+        self.mutant_mhc_ligand_predictions = \
+            self.mutant_mhc_ligand_predictions[:num_mutant_epitopes_to_keep]
+
+        self.wildtype_mhc_ligand_predictions = sorted(
+            [
+                p for p in mhc_ligand_predictions
+                if not p.overlaps_mutation or p.occurs_in_reference
+            ],
+            key=attrgetter(sort_predictions_by))
 
         wildtype_epitope_score = sum(
             p.logistic_epitope_score() for p in wildtype_epitope_predictions)
