@@ -13,7 +13,6 @@
 
 from __future__ import absolute_import, print_function, division
 
-from collections import namedtuple
 from operator import attrgetter
 from serializable import Serializable
 
@@ -32,48 +31,44 @@ class VaccinePeptide(Serializable):
     def __init__(
             self,
             isovar_result,
-            mhc_ligand_predictions,
+            epitope_predictions,
             num_mutant_epitopes_to_keep=10 ** 5,
-            sort_predictions_by='ic50'):
+            sort_epitope_predictions_by='ic50'):
         self.isovar_result = isovar_result
-        self.mhc_ligand_predictions = mhc_ligand_predictions
-        self.sort_predictions_by = sort_predictions_by
+        self.epitope_predictions = epitope_predictions
+        self.num_mutant_epitopes_to_keep = num_mutant_epitopes_to_keep
+        self.sort_predictions_by = sort_epitope_predictions_by
 
-        self.mutant_mhc_ligand_predictions = sorted(
+        sort_key = attrgetter(sort_epitope_predictions_by)
+        self.mutant_epitope_predictions = sorted(
             [
-                p for p in mhc_ligand_predictions
+                p for p in epitope_predictions
                 if p.overlaps_mutation and not p.occurs_in_reference
             ],
-            key=attrgetter(sort_predictions_by))
+            key=sort_key)
 
         self.mutant_mhc_ligand_predictions = \
             self.mutant_mhc_ligand_predictions[:num_mutant_epitopes_to_keep]
 
-        self.wildtype_mhc_ligand_predictions = sorted(
+        self.wildtype_epitope_predictions = sorted(
             [
-                p for p in mhc_ligand_predictions
+                p for p in epitope_predictions
                 if not p.overlaps_mutation or p.occurs_in_reference
             ],
-            key=attrgetter(sort_predictions_by))
+            key=sort_key)
 
-        wildtype_epitope_score = sum(
-            p.logistic_epitope_score() for p in wildtype_epitope_predictions)
+        self.wildtype_epitope_score = sum(
+            p.logistic_epitope_score()
+            for p in self.wildtype_epitope_predictions)
+
         # only keep the top k epitopes for the purposes of the score
-        mutant_epitope_score = sum(
-            p.logistic_epitope_score() for p in mutant_epitope_predictions)
+        self.mutant_epitope_score = sum(
+            p.logistic_epitope_score()
+            for p in self.mutant_epitope_predictions)
 
-        manufacturability_scores = ManufacturabilityScores.from_amino_acids(
-                mutant_protein_fragment.amino_acids)
-
-        return VaccinePeptideBase.__new__(
-            cls,
-            mutant_protein_fragment=mutant_protein_fragment,
-            mutant_epitope_predictions=mutant_epitope_predictions,
-            wildtype_epitope_predictions=wildtype_epitope_predictions,
-            mutant_epitope_score=mutant_epitope_score,
-            wildtype_epitope_score=wildtype_epitope_score,
-            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
-            manufacturability_scores=manufacturability_scores)
+        self.amino_acids = isovar_result.top_protein_sequence
+        self.manufacturability_scores = \
+            ManufacturabilityScores.from_amino_acids(self.amino_acids)
 
     def peptide_synthesis_difficulty_score_tuple(
             self,
@@ -200,16 +195,16 @@ class VaccinePeptide(Serializable):
 
     @property
     def expression_score(self):
-        return np.sqrt(self.mutant_protein_fragment.n_alt_reads)
+        return np.sqrt(self.isovar_result.num_alt_fragments)
 
     @property
     def combined_score(self):
         return self.expression_score * self.mutant_epitope_score
 
     def to_dict(self):
-        epitope_predictions = self.mutant_epitope_predictions + self.wildtype_epitope_predictions
         return {
-            "mutant_protein_fragment": self.mutant_protein_fragment,
-            "epitope_predictions": epitope_predictions,
+            "isovar_result": self.isovar_result,
             "num_mutant_epitopes_to_keep": self.num_mutant_epitopes_to_keep,
+            "epitope_predictions": self.epitope_predictions,
+            "sort_epitope_predictions_by": self.sort_predictions_by,
         }

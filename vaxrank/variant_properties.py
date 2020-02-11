@@ -14,6 +14,8 @@ from __future__ import absolute_import, print_function, division
 
 from collections import OrderedDict
 
+import pandas as pd
+
 from .gene_pathway_check import GenePathwayCheck
 
 default_gene_pathways = GenePathwayCheck()
@@ -36,7 +38,7 @@ def make_variant_properties_dataframe(
     analyze later, e.g. whether this variant is part of a pathway of interest,
     is a strong MHC binder, etc.
     """
-    variant_properties_dicts = ()
+    variant_properties_dicts = []
 
     for isovar_result in isovar_results:
         variant = isovar_result.variant
@@ -63,6 +65,7 @@ def make_variant_properties_dataframe(
         if variant in self.vaccine_peptides:
             variant_dict['mhc_binder'] = True
 
-        variant_dict[variant] = variant_dict
+        variant_dict[variant] = variant
+        variant_properties_dicts.append(variant_dict)
 
-    return list(variant_dict.values())
+    return pd.DataFrame.from_records(variant_properties_dicts)
