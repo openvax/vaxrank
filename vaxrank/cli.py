@@ -40,8 +40,8 @@ from .report import (
     make_csv_report,
     make_minimal_neoepitope_report,
     TemplateDataCreator,
-    PatientInfo,
 )
+from .patient_info import PatientInfo
 
 logger = logging.getLogger(__name__)
 
