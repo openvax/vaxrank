@@ -17,6 +17,7 @@ from operator import attrgetter
 
 import numpy as np
 from serializable import Serializable
+from manufacturability import ManufacturabilityScores
 
 
 class VaccinePeptide(Serializable):
@@ -59,6 +60,10 @@ class VaccinePeptide(Serializable):
         self.mutant_epitope_score = sum(
             p.logistic_epitope_score()
             for p in self.mutant_epitope_predictions)
+
+        self.manufacturability_scores = \
+            ManufacturabilityScores.from_amino_acids(
+                self.mutant_protein_fragment.amino_acids)
 
     def peptide_synthesis_difficulty_score_tuple(
             self,
