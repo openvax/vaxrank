@@ -1,5 +1,3 @@
-# Copyright (c) 2016-2018. Mount Sinai School of Medicine
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,33 +11,57 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function, division
-from collections import namedtuple, OrderedDict
+from collections import OrderedDict
 import traceback
 import logging
 
 import numpy as np
+from serializable import Serializable
 
 from .reference_proteome import ReferenceProteome
 
+
 logger = logging.getLogger(__name__)
 
-EpitopePredictionBase = namedtuple("EpitopePrediction", [
-    "allele",
-    "peptide_sequence",
-    "wt_peptide_sequence",
-    "length",
-    "ic50",
-    "wt_ic50",
-    "percentile_rank",
-    "prediction_method_name",
-    "overlaps_mutation",
-    "source_sequence",
-    "offset",
-    "occurs_in_reference",
-])
 
+class EpitopePrediction(Serializable):
+    def __init__(
+            self,
+            allele,
+            peptide_sequence,
+            wt_peptide_sequence,
+            ic50,
+            wt_ic50,
+            percentile_rank,
+            prediction_method_name,
+            overlaps_mutation,
+            source_sequence,
+            offset,
+            occurs_in_reference):
+        self.allele = allele
+        self.peptide_sequence = peptide_sequence
+        self.wt_peptide_sequence = wt_peptide_sequence
+        self.length = len(peptide_sequence)
+        self.ic50 = ic50
+        self.wt_ic50 = wt_ic50
+        self.percentile_rank = percentile_rank
+        self.prediction_method_name = prediction_method_name
+        self.overlaps_mutation = overlaps_mutation
+        self.source_sequence = source_sequence
+        self.offset = offset
+        self.overlaps_mutation = overlaps_mutation
+        self.occurs_in_reference = occurs_in_reference
 
-class EpitopePrediction(EpitopePredictionBase):
+    @classmethod
+    def from_dict(cls, d):
+        """
+        Deserialize EpitopePrediction from a dictionary of keywords.
+        """
+        d = d.copy()
+        if "length" in d:
+            # lenth argument removed in version 1.1.0
+            del d["length"]
+        return cls(**d)
 
     def logistic_epitope_score(
             self,
@@ -70,6 +92,56 @@ class EpitopePrediction(EpitopePredictionBase):
 
         return logistic / normalizer
 
+    def slice_source_sequence(self, start_offset, end_offset):
+        """
+
+        Parameters
+        ----------
+        start_offset : int
+
+        end_offset : int
+
+        Return EpitopePrediction object with source sequence and offset
+        adjusted. If this slicing would shorten the mutant peptide, then
+        return None.
+        """
+        if self.offset < start_offset:
+            # this peptide starts before the requested slice through the
+            # source sequence
+            return None
+
+        if self.offset + self.length > end_offset:
+            # this peptide goes beyond the end of the requested slice
+            # through the source sequence
+            return None
+
+        return EpitopePrediction(
+            allele=self.allele,
+            peptide_sequence=self.peptide_sequence,
+            wt_peptide_sequence=self.wt_peptide_sequence,
+            ic50=self.ic50,
+            wt_ic50=self.wt_ic50,
+            percentile_rank=self.percentile_rank,
+            prediction_method_name=self.prediction_method_name,
+            overlaps_mutation=self.overlaps_mutation,
+            source_sequence=self.source_sequence[start_offset:end_offset],
+            offset=self.offset - start_offset,
+            occurs_in_reference=self.occurs_in_reference)
+
+
+def slice_epitope_predictions(
+        epitope_predictions,
+        start_offset,
+        end_offset):
+    """
+    Return subset of EpitopePrediction objects which overlap the given interval
+    and slice through their source sequences and adjust their offset.
+    """
+    return [
+        p.slice_source_sequence(start_offset, end_offset)
+        for p in epitope_predictions
+        if p.offset >= start_offset and p.offset + p.length <= end_offset
+    ]
 
 def predict_epitopes(
         mhc_predictor,
@@ -150,10 +222,11 @@ def predict_epitopes(
             'MHC prediction for WT peptides errored, with traceback: %s',
             traceback.format_exc())
 
-    wt_predictions_grouped = {}
     # break it out: (peptide, allele) -> prediction
-    for wt_prediction in wt_predictions:
-        wt_predictions_grouped[(wt_prediction.peptide, wt_prediction.allele)] = wt_prediction
+    wt_predictions_grouped = {
+        (wt_prediction.peptide, wt_prediction.allele): wt_prediction
+        for wt_prediction in wt_predictions
+    }
 
     # convert from mhctools.BindingPrediction objects to EpitopePrediction
     # which differs primarily by also having a boolean field
@@ -181,7 +254,8 @@ def predict_epitopes(
         # compute WT epitope sequence, if this epitope overlaps the mutation
         if overlaps_mutation:
             wt_peptide = wt_peptides[peptide]
-            wt_prediction = wt_predictions_grouped.get((wt_peptide, binding_prediction.allele))
+            wt_prediction = wt_predictions_grouped.get(
+                (wt_peptide, binding_prediction.allele))
             wt_ic50 = None
             if wt_prediction is None:
                 # this can happen in a stop-loss variant: do we want to check that here?
@@ -200,7 +274,6 @@ def predict_epitopes(
             allele=binding_prediction.allele,
             peptide_sequence=peptide,
             wt_peptide_sequence=wt_peptide,
-            length=len(peptide),
             ic50=binding_prediction.value,
             wt_ic50=wt_ic50,
             percentile_rank=binding_prediction.percentile_rank,
@@ -209,6 +282,7 @@ def predict_epitopes(
             source_sequence=protein_fragment.amino_acids,
             offset=peptide_start_offset,
             occurs_in_reference=occurs_in_reference)
+
         if epitope_prediction.logistic_epitope_score() >= min_epitope_score:
             key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)
             results[key] = epitope_prediction
@@ -221,30 +295,3 @@ def predict_epitopes(
         num_occurs_in_reference,
         num_low_scoring)
     return results
-
-
-def slice_epitope_predictions(
-        epitope_predictions,
-        start_offset,
-        end_offset):
-    """
-    Return subset of EpitopePrediction objects which overlap the given interval
-    and slice through their source sequences and adjust their offset.
-    """
-    return [
-        EpitopePrediction(
-            allele=p.allele,
-            peptide_sequence=p.peptide_sequence,
-            wt_peptide_sequence=p.wt_peptide_sequence,
-            length=p.length,
-            ic50=p.ic50,
-            wt_ic50=p.wt_ic50,
-            percentile_rank=p.percentile_rank,
-            prediction_method_name=p.prediction_method_name,
-            overlaps_mutation=p.overlaps_mutation,
-            source_sequence=p.source_sequence[start_offset:end_offset],
-            offset=p.offset - start_offset,
-            occurs_in_reference=p.occurs_in_reference)
-        for p in epitope_predictions
-        if p.offset >= start_offset and p.offset + p.length <= end_offset
-    ]

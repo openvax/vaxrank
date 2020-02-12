@@ -1,5 +1,3 @@
-# Copyright (c) 2016-2018. Mount Sinai School of Medicine
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -19,7 +17,7 @@ from nose.tools import eq_, ok_
 from mhctools import RandomBindingPredictor
 from pyensembl import genome_for_reference_name
 from varcode import Variant
-from vaxrank.epitope_prediction import predict_epitopes
+from vaxrank.epitope_prediction import predict_epitopes, EpitopePrediction
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.vaccine_peptide import VaccinePeptide
 
@@ -89,3 +87,20 @@ def test_mhc_predictor_error():
         genome=mouse_genome)
 
     eq_(0, len(epitope_predictions))
+
+def test_EpitopePrediction_json_serialization():
+    e = EpitopePrediction(
+        allele="HLA-A*02:01",
+        peptide_sequence="SIINFEQL",
+        ic50=2.0,
+        wt_peptide_sequence="SIINFEKL",
+        wt_ic50=2000.0,
+        percentile_rank=0.3,
+        prediction_method_name="ImaginationMHCpan",
+        overlaps_mutation=True,
+        source_sequence="SSIINFEQL",
+        offset=1,
+        occurs_in_reference=False)
+    json = e.to_json()
+    e2 = EpitopePrediction.from_json((json))
+    eq_(e, e2)

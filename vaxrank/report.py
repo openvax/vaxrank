@@ -1,5 +1,3 @@
-# Copyright (c) 2016-2018. Mount Sinai School of Medicine
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,7 +11,7 @@
 # limitations under the License.
 
 from __future__ import absolute_import, division
-from collections import namedtuple, OrderedDict
+from collections import OrderedDict
 from importlib import import_module
 import logging
 import os
@@ -40,18 +38,6 @@ JINJA_ENVIRONMENT = jinja2.Environment(
     trim_blocks=True,
     lstrip_blocks=True,
 )
-
-
-PatientInfo = namedtuple("PatientInfo", (
-    "patient_id",
-    "vcf_paths",
-    "bam_path",
-    "mhc_alleles",
-    "num_somatic_variants",
-    "num_coding_effect_variants",
-    "num_variants_with_rna_support",
-    "num_variants_with_vaccine_peptides",
-))
 
 
 class TemplateDataCreator(object):
