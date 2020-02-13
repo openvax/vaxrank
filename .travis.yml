@@ -27,6 +27,7 @@ before_install:
     # of this when using py3.6+
     if [[ "$TRAVIS_PYTHON_VERSION" == "3.5" ]]; then
       pip install setuptools --upgrade
+      pip install wrapt --upgrade
     fi
   - |
     if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
