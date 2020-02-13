@@ -22,13 +22,6 @@ cache:
   timeout: 300
 before_install:
   - |
-    # possibly required to fix Travis for py3.5 but we should get rid
-    # of this when using py3.6+
-    if [[ "$TRAVIS_PYTHON_VERSION" == "3.5" ]]; then
-      pip install setuptools --upgrade
-      pip install wrapt --upgrade
-    fi
-  - |
     if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
       wget https://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh;
     else
@@ -68,6 +61,13 @@ install:
   # install pysam from conda because I'm having trouble installing Cython
   # for Python 3 on Travis
   - conda install -c bioconda pysam=0.9.0
+  - |
+    # required to fix Travis for py3.5 but we should get rid
+    # of this when using py3.6+
+    if [[ "$TRAVIS_PYTHON_VERSION" == "3.5" ]]; then
+      pip install setuptools --upgrade
+      pip install wrapt --upgrade
+    fi
   - pip install -r requirements.txt
   - pip install .
   - pip install coveralls
