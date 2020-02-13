@@ -3,6 +3,7 @@
 sudo: true
 language: python
 python:
+  - "2.7"
   - "3.5"
 git:
   # don't need the default depth of 50
