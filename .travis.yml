@@ -56,7 +56,7 @@ addons:
 install:
   - >
       conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION
-      numpy nose pylint cython
+      numpy nose pylint cython wrapt==1.11.2
   - source activate test-environment
   # install pysam from conda because I'm having trouble installing Cython
   # for Python 3 on Travis
@@ -66,7 +66,6 @@ install:
     # of this when using py3.6+
     if [[ "$TRAVIS_PYTHON_VERSION" == "3.5" ]]; then
       pip install setuptools --upgrade
-      pip install wrapt --upgrade
     fi
   - pip install -r requirements.txt
   - pip install .
