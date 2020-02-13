@@ -17,7 +17,8 @@ from operator import attrgetter
 
 import numpy as np
 from serializable import Serializable
-from manufacturability import ManufacturabilityScores
+
+from .manufacturability import ManufacturabilityScores
 
 
 class VaccinePeptide(Serializable):
