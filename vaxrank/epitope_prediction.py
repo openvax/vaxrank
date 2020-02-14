@@ -59,7 +59,7 @@ class EpitopePrediction(Serializable):
         """
         d = d.copy()
         if "length" in d:
-            # lenth argument removed in version 1.1.0
+            # length argument removed in version 1.1.0
             del d["length"]
         return cls(**d)
 

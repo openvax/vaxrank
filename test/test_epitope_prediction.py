@@ -102,5 +102,5 @@ def test_EpitopePrediction_json_serialization():
         offset=1,
         occurs_in_reference=False)
     json = e.to_json()
-    e2 = EpitopePrediction.from_json((json))
+    e2 = EpitopePrediction.from_json(json)
     eq_(e, e2)

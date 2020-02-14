@@ -52,7 +52,6 @@ class MutantProteinFragment(Serializable):
         mutant_amino_acid_end_offset : int
             End offset of amino acids which differ due to the mutation
 
-
         supporting_reference_transcripts : list of pyensembl.Transcript
             PyEnsembl Transcript objects for reference transcripts which
             were used to establish the reading frame of coding sequence(s)
