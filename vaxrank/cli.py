@@ -1,5 +1,3 @@
-# Copyright (c) 2016-2018. Mount Sinai School of Medicine
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -42,8 +40,8 @@ from .report import (
     make_csv_report,
     make_minimal_neoepitope_report,
     TemplateDataCreator,
-    PatientInfo,
 )
+from .patient_info import PatientInfo
 
 logger = logging.getLogger(__name__)
 
