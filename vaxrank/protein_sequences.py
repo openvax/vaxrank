@@ -21,9 +21,10 @@ logger = logging.getLogger(__name__)
 
 def create_variant_to_protein_sequence_dict(
         reads_generator,
-        vaccine_peptide_length=25,
-        padding_around_mutation=5,
-        min_alt_rna_reads=1,):
+        sequence_length,
+        min_alt_rna_reads,
+        min_variant_sequence_coverage,
+        variant_sequence_assembly=True):
     """
     This function computes a dictionary of Variant objects to a
     single isovar protein sequence that will be used to try to construct
@@ -35,19 +36,9 @@ def create_variant_to_protein_sequence_dict(
         Yields sequence of varcode.Variant objects paired with sequences of
         AlleleRead objects that support that variant.
 
-    mhc_predictor : mhctools.BasePredictor
-        Object with predict_peptides method, used for making pMHC binding
-        predictions
-
-    vaccine_peptide_length : int
-        Length of vaccine SLP to construct
-
-    padding_around_mutation : int
-        Number of off-center windows around the mutation to consider as vaccine
-        peptides.
-
-    max_vaccine_peptides_per_variant : int
-        Number of vaccine peptides to generate for each mutation.
+    sequence_length : int
+        Number of amino acids including mutant residues and padding on either
+        side.
 
     min_alt_rna_reads : int
         Drop variant sequences at loci with fewer than this number of reads
@@ -57,19 +48,13 @@ def create_variant_to_protein_sequence_dict(
         Trim variant sequences to positions supported by at least this number
         of RNA reads.
 
-    variant_sequence_assembly : int
+    variant_sequence_assembly : bool
         If True, then assemble variant cDNA sequences based on overlap of RNA
         reads. If False, then variant cDNA sequences must be fully spanned and
         contained within RNA reads.
-
     """
 
-
     variant_to_protein_sequence_dict = {}
-    # total number of amino acids is the vaccine peptide length plus the
-    # number of off-center windows around the mutation
-    protein_fragment_sequence_length = (
-            vaccine_peptide_length + 2 * padding_around_mutation)
 
     # These sequences are only the ones that overlap the variant and support
     # the mutation.
@@ -89,7 +74,7 @@ def create_variant_to_protein_sequence_dict(
     protein_sequences_generator = reads_generator_to_protein_sequences_generator(
         reads_generator,
         transcript_id_whitelist=None,
-        protein_sequence_length=protein_fragment_sequence_length,
+        protein_sequence_length=sequence_length,
         min_alt_rna_reads=min_alt_rna_reads,
         min_variant_sequence_coverage=min_variant_sequence_coverage,
         variant_sequence_assembly=variant_sequence_assembly,

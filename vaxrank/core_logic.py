@@ -20,94 +20,95 @@ from .mutant_protein_fragment import MutantProteinFragment
 from .epitope_prediction import predict_epitopes, slice_epitope_predictions
 from .vaccine_peptide import VaccinePeptide
 from .vaxrank_results import VaxrankResults
+from .protein_sequences import create_variant_to_protein_sequence_dict
 
 logger = logging.getLogger(__name__)
 
 def run_vaxrank(
-            variants,
-            reads_generator,
-            mhc_predictor,
-            vaccine_peptide_length,
-            padding_around_mutation,
-            max_vaccine_peptides_per_variant,
-            min_alt_rna_reads,
-            min_variant_sequence_coverage,
-            variant_sequence_assembly,
-            num_mutant_epitopes_to_keep=10000,
-            min_epitope_score=0.0,
-            gene_pathway_check=None):
-        """
-        Parameters
-        ----------
-        variants : VariantCollection
-            Variant objects to evaluate for vaccine inclusion
+        variants,
+        reads_generator,
+        mhc_predictor,
+        vaccine_peptide_length=25,
+        padding_around_mutation=5,
+        max_vaccine_peptides_per_variant=1,
+        min_alt_rna_reads=1,
+        min_variant_sequence_coverage=1,
+        variant_sequence_assembly=True,
+        num_mutant_epitopes_to_keep=10000,
+        min_epitope_score=0.0):
+    """
+    Parameters
+    ----------
+    variants : VariantCollection
+        Variant objects to evaluate for vaccine inclusion
 
-        reads_generator : generator
-            Yields sequence of varcode.Variant objects paired with sequences of
-            AlleleRead objects that support that variant.
+    reads_generator : generator
+        Yields sequence of varcode.Variant objects paired with sequences of
+        AlleleRead objects that support that variant.
 
-        mhc_predictor : mhctools.BasePredictor
-            Object with predict_peptides method, used for making pMHC binding
-            predictions
+    mhc_predictor : mhctools.BasePredictor
+        Object with predict_peptides method, used for making pMHC binding
+        predictions
 
-        vaccine_peptide_length : int
-            Length of vaccine SLP to construct
+    vaccine_peptide_length : int
+        Length of vaccine SLP to construct
 
-        padding_around_mutation : int
-            Number of off-center windows around the mutation to consider as vaccine
-            peptides.
+    padding_around_mutation : int
+        Number of off-center windows around the mutation to consider as vaccine
+        peptides.
 
-        max_vaccine_peptides_per_variant : int
-            Number of vaccine peptides to generate for each mutation.
+    max_vaccine_peptides_per_variant : int
+        Number of vaccine peptides to generate for each mutation.
 
-        min_alt_rna_reads : int
-            Drop variant sequences at loci with fewer than this number of reads
-            supporting the alt allele.
+    min_alt_rna_reads : int
+        Drop variant sequences at loci with fewer than this number of reads
+        supporting the alt allele.
 
-        min_variant_sequence_coverage : int
-            Trim variant sequences to positions supported by at least this number
-            of RNA reads.
+    min_variant_sequence_coverage : int
+        Trim variant sequences to positions supported by at least this number
+        of RNA reads.
 
-        variant_sequence_assembly : int
-            If True, then assemble variant cDNA sequences based on overlap of RNA
-            reads. If False, then variant cDNA sequences must be fully spanned and
-            contained within RNA reads.
+    variant_sequence_assembly : bool
+        If True, then assemble variant cDNA sequences based on overlap of RNA
+        reads. If False, then variant cDNA sequences must be fully spanned and
+        contained within RNA reads.
 
-        num_mutant_epitopes_to_keep : int, optional
-            Number of top-ranking epitopes for each vaccine peptide to include in
-            computation.
+    num_mutant_epitopes_to_keep : int, optional
+        Number of top-ranking epitopes for each vaccine peptide to include in
+        computation.
 
-        min_epitope_score : float, optional
-            Ignore peptides with binding predictions whose normalized score is less
-            than this.
+    min_epitope_score : float, optional
+        Ignore peptides with binding predictions whose normalized score is less
+        than this.
+    """
+    # total number of amino acids is the vaccine peptide length plus the
+    # number of off-center windows around the mutation
+    protein_fragment_sequence_length = (
+            vaccine_peptide_length + 2 * padding_around_mutation)
+    variant_to_protein_sequences_dict = create_variant_to_protein_sequence_dict(
+        reads_generator=reads_generator,
+        sequence_length=protein_fragment_sequence_length,
+        min_alt_rna_reads=min_alt_rna_reads,
+        min_variant_sequence_coverage=min_variant_sequence_coverage,
+        variant_sequence_assembly=variant_sequence_assembly)
+    variant_to_vaccine_peptides_dict = create_vaccine_peptides_dict(
+        protein_sequence_dict=variant_to_protein_sequences_dict,
+        mhc_predictor=mhc_predictor,
+        vaccine_peptide_length=vaccine_peptide_length,
+        padding_around_mutation=padding_around_mutation,
+        max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
+        num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+        min_epitope_score=min_epitope_score)
+    ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
+    return VaxrankResults(
+        variants=variants,
+        variant_to_protein_sequences_dict=variant_to_protein_sequences_dict,
+        variant_to_vaccine_peptides_dict=variant_to_vaccine_peptides_dict,
+        ranked_vaccine_peptides=ranked_list)
 
-        gene_pathway_check : GenePathwayCheck, optional
-            If provided, will check against known pathways/gene sets/variant sets and
-            include the info in the all-variants output file.
-        """
-        variant_to_protein_sequences_dict = None
-        variant_to_vaccine_peptides_dict = create_vaccine_peptides_dict(
-            variants=variants,
-            reads_generator=reads_generator,
-            mhc_predictor=mhc_predictor,
-            vaccine_peptide_length=vaccine_peptide_length,
-            padding_around_mutation=padding_around_mutation,
-            max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
-            min_alt_rna_reads=min_alt_rna_reads,
-            min_variant_sequence_coverage=min_variant_sequence_coverage,
-            variant_sequence_assembly=variant_sequence_assembly)
-        ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
 
-        return VaxrankResults(
-            variants=variants,
-            variant_to_protein_sequences_dict=variant_to_protein_sequences_dict,
-            variant_to_vaccine_peptides_dict=variant_to_vaccine_peptides_dict,
-            ranked_vaccine_peptides=ranked_list)
-
-
-def vaccine_peptides_for_variant(
-        variant,
-        isovar_protein_sequence,
+def create_vaccine_peptides_dict(
+        protein_sequence_dict,
         mhc_predictor,
         vaccine_peptide_length=25,
         padding_around_mutation=10,
@@ -115,6 +116,67 @@ def vaccine_peptides_for_variant(
         num_mutant_epitopes_to_keep=10 ** 5,
         min_epitope_score=0.0):
     """
+    Parameters
+    ----------
+    protein_sequence_dict : dict
+        Dictionary from varcode.Variant to isovar ProteinSequence
+
+    mhc_predictor : mhctools.BasePredictor
+        Object with predict_peptides method, used for making pMHC binding
+        predictions
+
+    vaccine_peptide_length : int
+        Length of vaccine SLP to construct
+
+    padding_around_mutation : int
+        Number of off-center windows around the mutation to consider as vaccine
+        peptides.
+
+    max_vaccine_peptides_per_variant : int
+        Number of vaccine peptides to generate for each mutation.
+
+    num_mutant_epitopes_to_keep : int, optional
+        Number of top-ranking epitopes for each vaccine peptide to include in
+        computation.
+
+    min_epitope_score : float, optional
+        Ignore peptides with binding predictions whose normalized score is less
+        than this.
+
+    Returns
+    -------
+    Returns a dictionary of varcode.Variant objects to a list of
+    VaccinePeptides.
+    """
+    vaccine_peptides_dict = {}
+    for variant, isovar_protein_sequence in protein_sequence_dict.items():
+        vaccine_peptides = vaccine_peptides_for_variant(
+            variant=variant,
+            isovar_protein_sequence=isovar_protein_sequence,
+            mhc_predictor=mhc_predictor,
+            vaccine_peptide_length=vaccine_peptide_length,
+            padding_around_mutation=padding_around_mutation,
+            max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
+            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+            min_epitope_score=min_epitope_score)
+
+        if any(x.contains_mutant_epitopes() for x in vaccine_peptides):
+            vaccine_peptides_dict[variant] = vaccine_peptides
+
+    return vaccine_peptides_dict
+
+def vaccine_peptides_for_variant(
+        variant,
+        isovar_protein_sequence,
+        mhc_predictor,
+        vaccine_peptide_length,
+        padding_around_mutation,
+        max_vaccine_peptides_per_variant,
+        num_mutant_epitopes_to_keep=None,
+        min_epitope_score=0.0):
+    """
+    Parameters
+    ----------
     variant : varcode.Variant
 
     isovar_protein_sequence : isovar. ProteinSequence
@@ -235,63 +297,6 @@ def vaccine_peptides_for_variant(
     return filtered_candidate_vaccine_peptides[:max_vaccine_peptides_per_variant]
 
 
-def create_vaccine_peptides_dict(
-        protein_sequence_dict,
-        mhc_predictor,
-        vaccine_peptide_length=25,
-        padding_around_mutation=10,
-        max_vaccine_peptides_per_variant=1,
-        num_mutant_epitopes_to_keep=10 ** 5,
-        min_epitope_score=0.0):
-    """
-    Parameters
-    ----------
-    protein_sequence_dict : dict
-        Dictionary from varcode.Variant to isovar ProteinSequence
-
-    mhc_predictor : mhctools.BasePredictor
-        Object with predict_peptides method, used for making pMHC binding
-        predictions
-
-    vaccine_peptide_length : int
-        Length of vaccine SLP to construct
-
-    padding_around_mutation : int
-        Number of off-center windows around the mutation to consider as vaccine
-        peptides.
-
-    max_vaccine_peptides_per_variant : int
-        Number of vaccine peptides to generate for each mutation.
-
-    num_mutant_epitopes_to_keep : int, optional
-        Number of top-ranking epitopes for each vaccine peptide to include in
-        computation.
-
-    min_epitope_score : float, optional
-        Ignore peptides with binding predictions whose normalized score is less
-        than this.
-
-    Returns
-    -------
-    Returns a dictionary of varcode.Variant objects to a list of
-    VaccinePeptides.
-    """
-    vaccine_peptides_dict = {}
-    for variant, isovar_protein_sequence in protein_sequence_dict.items():
-        vaccine_peptides = vaccine_peptides_for_variant(
-            variant=variant,
-            isovar_protein_sequence=isovar_protein_sequence,
-            mhc_predictor=mhc_predictor,
-            vaccine_peptide_length=vaccine_peptide_length,
-            padding_around_mutation=padding_around_mutation,
-            max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
-            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
-            min_epitope_score=min_epitope_score)
-
-        if any(x.contains_mutant_epitopes() for x in vaccine_peptides):
-            vaccine_peptides_dict[variant] = vaccine_peptides
-
-    return vaccine_peptides_dict
 
 
 def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):

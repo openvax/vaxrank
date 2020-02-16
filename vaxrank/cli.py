@@ -31,7 +31,7 @@ import serializable
 from varcode.cli import variant_collection_from_args
 
 from . import __version__
-from .core_logic import VaxrankCoreLogic
+from .core_logic import run_vaxrank
 from .gene_pathway_check import GenePathwayCheck
 from .report import (
     make_ascii_report,
@@ -294,7 +294,7 @@ def ranked_variant_list_with_metadata(args):
     reads_generator = allele_reads_generator_from_args(args)
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
-    core_logic = VaxrankCoreLogic(
+    vaxrank_results = run_vaxrank(
         variants=variants,
         reads_generator=reads_generator,
         mhc_predictor=mhc_predictor,
@@ -305,21 +305,20 @@ def ranked_variant_list_with_metadata(args):
         min_variant_sequence_coverage=args.min_variant_sequence_coverage,
         min_epitope_score=args.min_epitope_score,
         num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide,
-        variant_sequence_assembly=args.variant_sequence_assembly,
-        gene_pathway_check=GenePathwayCheck()
-    )
+        variant_sequence_assembly=args.variant_sequence_assembly)
 
-    variants_count_dict = core_logic.variant_counts()
+    variants_count_dict = vaxrank_results.variant_counts()
     assert len(variants) == variants_count_dict['num_total_variants'], \
         "Len(variants) is %d but variants_count_dict came back with %d" % (
             len(variants), variants_count_dict['num_total_variants'])
 
     if args.output_passing_variants_csv:
-        variant_metadata_dicts = core_logic.variant_properties()
+        variant_metadata_dicts = vaxrank_results.variant_properties(
+            gene_pathway_check=GenePathwayCheck())
         df = pd.DataFrame(variant_metadata_dicts)
         df.to_csv(args.output_passing_variants_csv, index=False)
 
-    ranked_list = core_logic.ranked_vaccine_peptides()
+    ranked_list = vaxrank_results.ranked_vaccine_peptides
     ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
     patient_info = PatientInfo(
         patient_id=args.output_patient_id,
