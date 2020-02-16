@@ -14,45 +14,6 @@ from __future__ import absolute_import, print_function, division
 
 from collections import OrderedDict
 
-def variant_counts(
-        variants,
-        protein_sequence_dict,
-        vaccine_peptides_dict):
-    """
-    Summarize Vaxrank counts for total variants, variants with coding effects,
-    variants with RNA support, and variants with associated vaccine peptides.
-
-    Parameters
-    ----------
-    variants : list of varcode.Variant
-
-    protein_sequence_dict : dict
-        Dictionary from variants to isovar protein sequences
-
-    vaccine_peptides_dict : dict
-        Dictionary from variants to VaccinePeptide objects
-
-    Returns
-    -------
-    dict
-
-    """
-    # dictionary which will contain some overall variant counts for report display
-    counts_dict = {
-        'num_total_variants': len(variants),
-        'num_coding_effect_variants': 0,
-        'num_variants_with_rna_support': 0,
-        'num_variants_with_vaccine_peptides': 0,
-    }
-    for variant in variants:
-        if len(variant.effects().drop_silent_and_noncoding()) > 0:
-            counts_dict['num_coding_effect_variants'] += 1
-        if variant in protein_sequence_dict:
-            counts_dict['num_variants_with_rna_support'] += 1
-        if variant in vaccine_peptides_dict:
-            counts_dict['num_variants_with_vaccine_peptides'] += 1
-    return counts_dict
-
 
 def variant_properties(
         variants,

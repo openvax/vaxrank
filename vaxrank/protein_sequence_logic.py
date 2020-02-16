@@ -20,7 +20,10 @@ from isovar.protein_sequences import (
 logger = logging.getLogger(__name__)
 
 def create_variant_to_protein_sequence_dict(
-        vaccine_peptide_length=25,):
+        reads_generator,
+        vaccine_peptide_length=25,
+        padding_around_mutation=5,
+        min_alt_rna_reads=1,):
     """
     This function computes a dictionary of Variant objects to a
     single isovar protein sequence that will be used to try to construct
@@ -28,9 +31,6 @@ def create_variant_to_protein_sequence_dict(
 
     Parameters
     ----------
-    variants : VariantCollection
-        Variant objects to evaluate for vaccine inclusion
-
     reads_generator : generator
         Yields sequence of varcode.Variant objects paired with sequences of
         AlleleRead objects that support that variant.
