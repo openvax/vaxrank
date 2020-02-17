@@ -13,7 +13,7 @@
 from __future__ import absolute_import, print_function, division
 
 from nose.tools import eq_, assert_almost_equal
-from vaxrank.core_logic import VaxrankCoreLogic
+from vaxrank.core_logic import run_vaxrank
 from mhctools import RandomBindingPredictor
 from isovar.cli.variant_sequences_args import make_variant_sequences_arg_parser
 from isovar.cli.rna_args import allele_reads_generator_from_args
@@ -58,7 +58,7 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
     ])
     reads_generator = allele_reads_generator_from_args(args)
     variants = variant_collection_from_args(args)
-    core_logic = VaxrankCoreLogic(
+    results = run_vaxrank(
         variants=variants,
         reads_generator=reads_generator,
         mhc_predictor=random_binding_predictor,
@@ -68,7 +68,7 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
         min_alt_rna_reads=1,
         min_variant_sequence_coverage=1,
         variant_sequence_assembly=True)
-    ranked_list = core_logic.ranked_vaccine_peptides()
+    ranked_list = results.ranked_vaccine_peptides
 
     for variant, vaccine_peptides in ranked_list:
         eq_(
@@ -92,7 +92,7 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
     ])
     reads_generator = allele_reads_generator_from_args(args)
     variants = variant_collection_from_args(args)
-    core_logic = VaxrankCoreLogic(
+    results = run_vaxrank(
         reads_generator=reads_generator,
         mhc_predictor=random_binding_predictor,
         variants=variants,
@@ -102,7 +102,7 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
         min_variant_sequence_coverage=1,
         variant_sequence_assembly=True,
         max_vaccine_peptides_per_variant=1)
-    ranked_list = core_logic.ranked_vaccine_peptides()
+    ranked_list = results.ranked_vaccine_peptides
 
     for variant, vaccine_peptides in ranked_list:
         vaccine_peptide = vaccine_peptides[0]
@@ -120,7 +120,7 @@ def test_keep_top_k_epitopes():
     reads_generator = allele_reads_generator_from_args(args)
     variants = variant_collection_from_args(args)
     keep_k_epitopes = 3
-    core_logic = VaxrankCoreLogic(
+    results = run_vaxrank(
         reads_generator=reads_generator,
         mhc_predictor=random_binding_predictor,
         variants=variants,
@@ -131,7 +131,7 @@ def test_keep_top_k_epitopes():
         variant_sequence_assembly=True,
         max_vaccine_peptides_per_variant=1,
         num_mutant_epitopes_to_keep=keep_k_epitopes)
-    ranked_list = core_logic.ranked_vaccine_peptides()
+    ranked_list = results.ranked_vaccine_peptides
 
     for variant, vaccine_peptides in ranked_list:
         vaccine_peptide = vaccine_peptides[0]

@@ -34,8 +34,23 @@ class VaccinePeptide(Serializable):
             self,
             mutant_protein_fragment,
             epitope_predictions,
-            num_mutant_epitopes_to_keep=10000,
+            num_mutant_epitopes_to_keep=None,
             sort_predictions_by='ic50'):
+        """
+        Parameters
+        ----------
+        mutant_protein_fragment : MutantProteinFragment
+
+        epitope_predictions : list of EpitopePrediction
+
+        num_mutant_epitopes_to_keep : int or None
+            If None then keep all mutant epitopes.
+
+        sort_predictions_by : str
+            Field of EpitopePrediction used for sorting epitope predictions
+            overlapping mutation in ascending order. Can be either 'ic50'
+            or 'percentile_rank'.
+        """
         self.mutant_protein_fragment = mutant_protein_fragment
         self.epitope_predictions = epitope_predictions
         self.num_mutant_epitopes_to_keep = num_mutant_epitopes_to_keep
@@ -47,7 +62,10 @@ class VaccinePeptide(Serializable):
         self.mutant_epitope_predictions = sorted([
             p for p in epitope_predictions
             if p.overlaps_mutation and not p.occurs_in_reference
-        ], key=sort_key)[:self.num_mutant_epitopes_to_keep]
+        ], key=sort_key)
+        if num_mutant_epitopes_to_keep:
+            self.mutant_epitope_predictions = \
+                self.mutant_epitope_predictions[:num_mutant_epitopes_to_keep]
 
         self.wildtype_epitope_predictions = sorted([
             p for p in epitope_predictions
@@ -104,7 +122,6 @@ class VaccinePeptide(Serializable):
         max_7mer_gravy = self.manufacturability_scores.max_7mer_gravy_score
 
         # numbers we want to minimize, so a bigger number is worse
-
         return (
             # total number of Cys residues
             self.manufacturability_scores.cysteine_count,
