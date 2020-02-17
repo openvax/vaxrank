@@ -297,8 +297,6 @@ def vaccine_peptides_for_variant(
     return filtered_candidate_vaccine_peptides[:max_vaccine_peptides_per_variant]
 
 
-
-
 def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):
     """
     This function returns a sorted list whose first element is a Variant and whose second
