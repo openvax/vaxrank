@@ -44,7 +44,7 @@ class VaccinePeptide(Serializable):
         epitope_predictions : list of EpitopePrediction
 
         num_mutant_epitopes_to_keep : int or None
-            If None then keep all mutant epitopes. 
+            If None then keep all mutant epitopes.
 
         sort_predictions_by : str
             Field of EpitopePrediction used for sorting epitope predictions
@@ -122,7 +122,6 @@ class VaccinePeptide(Serializable):
         max_7mer_gravy = self.manufacturability_scores.max_7mer_gravy_score
 
         # numbers we want to minimize, so a bigger number is worse
-
         return (
             # total number of Cys residues
             self.manufacturability_scores.cysteine_count,
