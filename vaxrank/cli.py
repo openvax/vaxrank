@@ -46,14 +46,18 @@ logger = logging.getLogger(__name__)
 
 
 def make_vaxrank_arg_parser():
+    # create common parser with the --version flag
+    parent_parser = ArgumentParser('parent', add_help=False)
+    parent_parser.add_argument('--version', action='version', version='Vaxrank %s' % (__version__,))
+
     # inherit commandline options from Isovar
     arg_parser = make_isovar_arg_parser(
         prog="vaxrank",
         description=(
             "Select personalized vaccine peptides from cancer variants, "
             "expression data, and patient HLA type."),
+        parents=[parent_parser],
     )
-    add_version_args(arg_parser)
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
     add_output_args(arg_parser)
@@ -69,7 +73,6 @@ def cached_run_arg_parser():
             "Select personalized vaccine peptides from cancer variants, "
             "expression data, and patient HLA type."),
     )
-    add_version_args(arg_parser)
     arg_parser.add_argument(
         "--input-json-file",
         default="",
@@ -79,13 +82,6 @@ def cached_run_arg_parser():
     add_supplemental_report_args(arg_parser)
     return arg_parser
 
-
-def add_version_args(parser):
-    parser.add_argument(
-        "--version",
-        help="Print Vaxrank version and immediately exit",
-        default=False,
-        action="store_true")
 
 
 # Lets the user specify whether they want to see particular sections in the report.
@@ -165,12 +161,6 @@ def add_output_args(arg_parser):
              "sequences.")
 
     output_args_group.add_argument(
-        "--num-epitopes-per-peptide",
-        type=int,
-        help="Number of top-ranking epitopes for each vaccine peptide to include in the "
-             "neoepitope report.")
-
-    output_args_group.add_argument(
         "--output-reviewed-by",
         default="",
         help="Comma-separated list of reviewer names")
@@ -228,6 +218,13 @@ def add_vaccine_peptide_args(arg_parser):
             "Ignore predicted MHC ligands whose normalized binding score "
             "falls below this threshold"))
 
+    vaccine_peptide_group.add_argument(
+        "--num-epitopes-per-vaccine-peptide",
+        type=int,
+        help=(
+            "Maximum number of mutant epitopes to consider when scoring "
+            "each vaccine peptide."))
+
 
 def add_supplemental_report_args(arg_parser):
     report_args_group = arg_parser.add_argument_group("Supplemental report options")
@@ -272,7 +269,7 @@ def run_vaxrank_from_parsed_args(args):
         vaccine_peptide_length=args.vaccine_peptide_length,
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
         min_epitope_score=args.min_epitope_score,
-        num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide)
+        num_mutant_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide)
 
 def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     """
@@ -363,6 +360,7 @@ def configure_logging(args):
         defaults={'logfilename': args.log_path})
 
 def choose_arg_parser(args_list):
+    # TODO: replace this with a command sub-parser
     if "--input-json-file" in args_list:
         return cached_run_arg_parser()
     else:
@@ -387,10 +385,6 @@ def main(args_list=None):
     if args_list is None:
         args_list = sys.argv[1:]
 
-    if "--version" in args_list:
-        print("Vaxrank version: %s" % __version__)
-        return
-
     args = parse_vaxrank_args(args_list)
     configure_logging(args)
     logger.info(args)
@@ -414,7 +408,7 @@ def main(args_list=None):
     if args.output_neoepitope_report:
         make_minimal_neoepitope_report(
             ranked_variants_with_vaccine_peptides,
-            num_epitopes_per_peptide=args.num_epitopes_per_peptide,
+            num_epitopes_per_peptide=args.num_epitopes_per_vaccine_peptide,
             excel_report_path=args.output_neoepitope_report)
 
     ########################

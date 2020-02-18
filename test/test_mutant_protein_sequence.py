@@ -96,25 +96,17 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
             mutant_protein_fragment)
 
 def test_keep_top_k_epitopes():
-    arg_parser = make_variant_sequences_arg_parser()
+    arg_parser = make_vaxrank_arg_parser()
+    keep_k_epitopes = 3
     args = arg_parser.parse_args([
         "--vcf", data_path("b16.f10/b16.f10.Phip.vcf"),
         "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
+        "--vaccine-peptide-length", "15",
+        "--padding-around-mutation", "5",
+        "--num-epitopes-per-vaccine-peptide", str(keep_k_epitopes),
     ])
-    reads_generator = allele_reads_generator_from_args(args)
-    variants = variant_collection_from_args(args)
-    keep_k_epitopes = 3
-    results = run_vaxrank(
-        reads_generator=reads_generator,
-        mhc_predictor=random_binding_predictor,
-        variants=variants,
-        vaccine_peptide_length=15,
-        padding_around_mutation=5,
-        min_alt_rna_reads=1,
-        min_variant_sequence_coverage=1,
-        variant_sequence_assembly=True,
-        max_vaccine_peptides_per_variant=1,
-        num_mutant_epitopes_to_keep=keep_k_epitopes)
+    results = run_vaxrank_from_parsed_args(args)
+
     ranked_list = results.ranked_vaccine_peptides
 
     for variant, vaccine_peptides in ranked_list:
