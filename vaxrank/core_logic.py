@@ -81,7 +81,7 @@ def run_vaxrank(
 
 
 def create_vaccine_peptides_dict(
-        protein_sequence_dict,
+        isovar_results,
         mhc_predictor,
         vaccine_peptide_length=25,
         max_vaccine_peptides_per_variant=1,
@@ -117,10 +117,10 @@ def create_vaccine_peptides_dict(
     VaccinePeptides.
     """
     vaccine_peptides_dict = {}
-    for variant, isovar_protein_sequence in protein_sequence_dict.items():
+    for isovar_result in isovar_results:
+        variant = isovar_result.variant
         vaccine_peptides = vaccine_peptides_for_variant(
             variant=variant,
-            isovar_protein_sequence=isovar_protein_sequence,
             mhc_predictor=mhc_predictor,
             vaccine_peptide_length=vaccine_peptide_length,
             max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
@@ -133,8 +133,7 @@ def create_vaccine_peptides_dict(
     return vaccine_peptides_dict
 
 def vaccine_peptides_for_variant(
-        variant,
-        isovar_protein_sequence,
+        isovar_result,
         mhc_predictor,
         vaccine_peptide_length,
         max_vaccine_peptides_per_variant,
@@ -143,9 +142,7 @@ def vaccine_peptides_for_variant(
     """
     Parameters
     ----------
-    variant : varcode.Variant
-
-    isovar_protein_sequence : isovar. ProteinSequence
+    isovar_result : isovar.IsovarResult
 
     mhc_predictor : mhctools.BasePredictor
         Object with predict_peptides method, used for making pMHC binding
@@ -173,9 +170,8 @@ def vaccine_peptides_for_variant(
     At this point, we know the variant has RNA support, as per the
     isovar_protein_sequence.
     """
-    protein_fragment = MutantProteinFragment.from_isovar_protein_sequence(
-        variant=variant,
-        protein_sequence=isovar_protein_sequence)
+    variant = isovar_result.variant
+    protein_fragment = MutantProteinFragment.from_isovar_result(isovar_result)
 
     logger.info(
         "Mutant protein fragment for %s: %s",

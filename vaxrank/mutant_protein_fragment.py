@@ -84,18 +84,32 @@ class MutantProteinFragment(Serializable):
             n_alt_reads_supporting_protein_sequence
 
     @classmethod
-    def from_isovar_protein_sequence(cls, variant, protein_sequence):
+    def from_isovar_result(cls, isovar_result):
+        """
+        Create a MutantProteinFragment from an isovar.IsovarResult object
+
+        Parameters
+        ----------
+        isovar_result : isovar.IsovarResult
+
+        Returns
+        -------
+        MutantProteinFragment
+        """
+        variant = isovar_result.variant
+        protein_sequence = isovar_result.top_protein_sequence
+
         return cls(
             variant=variant,
-            gene_name=";".join(protein_sequence.gene),
+            gene_name=protein_sequence.gene_name,
             amino_acids=protein_sequence.amino_acids,
-            mutant_amino_acid_start_offset=protein_sequence.variant_aa_interval_start,
-            mutant_amino_acid_end_offset=protein_sequence.variant_aa_interval_end,
+            mutant_amino_acid_start_offset=protein_sequence.mutation_start_idx,
+            mutant_amino_acid_end_offset=protein_sequence.mutation_end_idx,
             n_overlapping_reads=len(protein_sequence.overlapping_reads),
-            n_alt_reads=len(protein_sequence.alt_reads),
-            n_ref_reads=len(protein_sequence.ref_reads),
-            n_alt_reads_supporting_protein_sequence=len(
-                protein_sequence.alt_reads_supporting_protein_sequence),
+            # TODO: distinguish reads and fragments in Vaxrank?
+            n_alt_reads=isovar_result.num_alt_fragments,
+            n_ref_reads=isovar_result.num_ref_fragments,
+            n_alt_reads_supporting_protein_sequence=protein_sequence.num_supporting_fragments,
             supporting_reference_transcripts=[
                 variant.ensembl.transcript_by_id(transcript_id)
                 for transcript_id in
