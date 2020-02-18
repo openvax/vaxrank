@@ -30,7 +30,8 @@ cli_args_for_b16_seqdata = [
     "--mhc-predictor", "random",
     "--mhc-alleles", "H2-Kb,H2-Db",
     "--padding-around-mutation", "5",
-    "--include-mismatches-after-variant"
+    # TODO: figure out what happened to this argument in Isovar
+    # "--include-mismatches-after-variant"
 ]
 
 cli_args_for_b16_seqdata_real_predictor = [
@@ -41,7 +42,8 @@ cli_args_for_b16_seqdata_real_predictor = [
     "--mhc-alleles", "H2-Kb,H2-Db",
     "--mhc-epitope-lengths", "8",
     "--padding-around-mutation", "5",
-    "--include-mismatches-after-variant"
+    # TODO: figure out what happened to this argument in Isovar
+    # "--include-mismatches-after-variant"
 ]
 
 
