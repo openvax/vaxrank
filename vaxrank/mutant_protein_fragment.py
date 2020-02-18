@@ -174,22 +174,24 @@ class MutantProteinFragment(Serializable):
                     supporting_reference_transcripts=self.supporting_reference_transcripts)
                 yield subsequence_start_offset, subsequence_mutant_protein_fragment
 
-    def top_k_subsequences(
+    def sorted_subsequences(
             self,
             subsequence_length,
-            k,
+            limit=None,
             sort_key=lambda x: (
                 -x[1].mutation_distance_from_edge,
                 -x[1].n_mutant_amino_acids)):
         """
-        Returns k subsequences, paired with their offset from the start of the
+        Returns subsequences, paired with their offset from the start of the
         protein fragment. The default sort criterion is maximizing the
         mutation distance from the edge of the sequence and secondarily
         maximizing the number of mutant amino acids.
         """
         subsequences = list(self.generate_subsequences(subsequence_length))
         subsequences.sort(key=sort_key)
-        return subsequences[:k]
+        if limit:
+            subsequences = subsequences[:limit]
+        return subsequences
 
     def predicted_effect(self):
         effects = [

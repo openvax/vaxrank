@@ -17,9 +17,14 @@ import logging.config
 import pkg_resources
 
 from argparse import ArgumentParser
-from isovar.cli.rna_args import allele_reads_generator_from_args
-from isovar.cli.translation_args import add_translation_args
-from isovar.cli.variant_sequences_args import make_variant_sequences_arg_parser
+
+from isovar import run_isovar
+from isovar.cli import (
+    make_isovar_arg_parser,
+    run_isovar_from_parsed_args,
+    protein_sequence_creator_from_args,
+
+)
 from mhctools.cli import (
     add_mhc_args,
     mhc_alleles_from_args,
@@ -48,14 +53,13 @@ logger = logging.getLogger(__name__)
 
 def new_run_arg_parser():
     # inherit commandline options from Isovar
-    arg_parser = make_variant_sequences_arg_parser(
+    arg_parser = make_isovar_arg_parser(
         prog="vaxrank",
         description=(
             "Select personalized vaccine peptides from cancer variants, "
             "expression data, and patient HLA type."),
     )
     add_version_args(arg_parser)
-    add_translation_args(arg_parser)
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
     add_output_args(arg_parser)
@@ -289,23 +293,22 @@ def ranked_variant_list_with_metadata(args):
     logger.info("MHC alleles: %s", mhc_alleles)
     variants = variant_collection_from_args(args)
     logger.info("Variants: %s", variants)
-    # generator that for each variant gathers all RNA reads, both those
-    # supporting the variant and reference alleles
-    reads_generator = allele_reads_generator_from_args(args)
+
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
+    args.protein_sequence_length = (
+        args.vaccine_peptide_length + 2 * args.padding_around_mutation
+    )
+    # Vaxrank is going to evaluate multiple vaccine peptides containing
+    # the same mutation so need a longer sequence from Isovar
+    isovar_results = run_isovar_from_parsed_args(args)
     vaxrank_results = run_vaxrank(
-        variants=variants,
-        reads_generator=reads_generator,
+        isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
-        padding_around_mutation=args.padding_around_mutation,
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
-        min_alt_rna_reads=args.min_alt_rna_reads,
-        min_variant_sequence_coverage=args.min_variant_sequence_coverage,
         min_epitope_score=args.min_epitope_score,
-        num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide,
-        variant_sequence_assembly=args.variant_sequence_assembly)
+        num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide)
 
     variants_count_dict = vaxrank_results.variant_counts()
     assert len(variants) == variants_count_dict['num_total_variants'], \

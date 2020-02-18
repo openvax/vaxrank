@@ -20,31 +20,22 @@ from .mutant_protein_fragment import MutantProteinFragment
 from .epitope_prediction import predict_epitopes, slice_epitope_predictions
 from .vaccine_peptide import VaccinePeptide
 from .vaxrank_results import VaxrankResults
-from .protein_sequences import create_variant_to_protein_sequence_dict
 
 logger = logging.getLogger(__name__)
 
 def run_vaxrank(
-        variants,
-        reads_generator,
+        isovar_results,
         mhc_predictor,
         vaccine_peptide_length=25,
-        padding_around_mutation=5,
         max_vaccine_peptides_per_variant=1,
-        min_alt_rna_reads=1,
-        min_variant_sequence_coverage=1,
-        variant_sequence_assembly=True,
         num_mutant_epitopes_to_keep=10000,
         min_epitope_score=0.0):
     """
     Parameters
     ----------
-    variants : VariantCollection
-        Variant objects to evaluate for vaccine inclusion
-
-    reads_generator : generator
-        Yields sequence of varcode.Variant objects paired with sequences of
-        AlleleRead objects that support that variant.
+    isovar_results : list of isovar.IsovarResult
+        Each IsovarResult corresponds to one somatic variant and its collection
+         of protein sequences determined from RNA.
 
     mhc_predictor : mhctools.BasePredictor
         Object with predict_peptides method, used for making pMHC binding
@@ -53,25 +44,9 @@ def run_vaxrank(
     vaccine_peptide_length : int
         Length of vaccine SLP to construct
 
-    padding_around_mutation : int
-        Number of off-center windows around the mutation to consider as vaccine
-        peptides.
-
     max_vaccine_peptides_per_variant : int
         Number of vaccine peptides to generate for each mutation.
 
-    min_alt_rna_reads : int
-        Drop variant sequences at loci with fewer than this number of reads
-        supporting the alt allele.
-
-    min_variant_sequence_coverage : int
-        Trim variant sequences to positions supported by at least this number
-        of RNA reads.
-
-    variant_sequence_assembly : bool
-        If True, then assemble variant cDNA sequences based on overlap of RNA
-        reads. If False, then variant cDNA sequences must be fully spanned and
-        contained within RNA reads.
 
     num_mutant_epitopes_to_keep : int, optional
         Number of top-ranking epitopes for each vaccine peptide to include in
@@ -83,19 +58,17 @@ def run_vaxrank(
     """
     # total number of amino acids is the vaccine peptide length plus the
     # number of off-center windows around the mutation
-    protein_fragment_sequence_length = (
-            vaccine_peptide_length + 2 * padding_around_mutation)
-    variant_to_protein_sequences_dict = create_variant_to_protein_sequence_dict(
-        reads_generator=reads_generator,
-        sequence_length=protein_fragment_sequence_length,
-        min_alt_rna_reads=min_alt_rna_reads,
-        min_variant_sequence_coverage=min_variant_sequence_coverage,
-        variant_sequence_assembly=variant_sequence_assembly)
+    variants = [isovar_result.variant for isovar_result in isovar_results]
+    variant_to_protein_sequences_dict = {
+        isovar_result.variant: isovar_result.sorted_protein_sequences[0]
+        for isovar_result in isovar_results
+        if isovar_result.passes_all_filters
+        and len(isovar_result.sorted_protein_sequences) > 0
+    }
     variant_to_vaccine_peptides_dict = create_vaccine_peptides_dict(
         protein_sequence_dict=variant_to_protein_sequences_dict,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=vaccine_peptide_length,
-        padding_around_mutation=padding_around_mutation,
         max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
         num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         min_epitope_score=min_epitope_score)
@@ -111,7 +84,6 @@ def create_vaccine_peptides_dict(
         protein_sequence_dict,
         mhc_predictor,
         vaccine_peptide_length=25,
-        padding_around_mutation=10,
         max_vaccine_peptides_per_variant=1,
         num_mutant_epitopes_to_keep=10 ** 5,
         min_epitope_score=0.0):
@@ -127,10 +99,6 @@ def create_vaccine_peptides_dict(
 
     vaccine_peptide_length : int
         Length of vaccine SLP to construct
-
-    padding_around_mutation : int
-        Number of off-center windows around the mutation to consider as vaccine
-        peptides.
 
     max_vaccine_peptides_per_variant : int
         Number of vaccine peptides to generate for each mutation.
@@ -155,7 +123,6 @@ def create_vaccine_peptides_dict(
             isovar_protein_sequence=isovar_protein_sequence,
             mhc_predictor=mhc_predictor,
             vaccine_peptide_length=vaccine_peptide_length,
-            padding_around_mutation=padding_around_mutation,
             max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
             min_epitope_score=min_epitope_score)
@@ -170,7 +137,6 @@ def vaccine_peptides_for_variant(
         isovar_protein_sequence,
         mhc_predictor,
         vaccine_peptide_length,
-        padding_around_mutation,
         max_vaccine_peptides_per_variant,
         num_mutant_epitopes_to_keep=None,
         min_epitope_score=0.0):
@@ -187,10 +153,6 @@ def vaccine_peptides_for_variant(
 
     vaccine_peptide_length : int
         Length of vaccine SLP to construct
-
-    padding_around_mutation : int
-        Number of off-center windows around the mutation to consider as vaccine
-        peptides.
 
     max_vaccine_peptides_per_variant : int
         Number of vaccine peptides to generate for each mutation.
@@ -228,9 +190,8 @@ def vaccine_peptides_for_variant(
 
     candidate_vaccine_peptides = []
 
-    for offset, candidate_fragment in protein_fragment.top_k_subsequences(
-            subsequence_length=vaccine_peptide_length,
-            k=2 * padding_around_mutation + 1):
+    for offset, candidate_fragment in protein_fragment.sorted_subsequences(
+            subsequence_length=vaccine_peptide_length):
 
         subsequence_epitope_predictions = slice_epitope_predictions(
             epitope_predictions,
