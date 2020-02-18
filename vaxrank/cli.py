@@ -391,7 +391,7 @@ def main(args_list=None):
         print("Vaxrank version: %s" % __version__)
         return
 
-    args = parse_vaxrank_args()
+    args = parse_vaxrank_args(args_list)
     configure_logging(args)
     logger.info(args)
     check_args(args)
