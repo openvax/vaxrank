@@ -14,10 +14,11 @@ from __future__ import absolute_import, print_function, division
 
 from nose.tools import eq_, assert_almost_equal
 from vaxrank.core_logic import run_vaxrank
+from vaxrank.cli import make_vaxrank_arg_parser, run_vaxrank_from_parsed_args
 from mhctools import RandomBindingPredictor
-from isovar.cli.variant_sequences_args import make_variant_sequences_arg_parser
-from isovar.cli.rna_args import allele_reads_generator_from_args
+from isovar.cli import (make_isovar_arg_parser, run_isovar_from_parsed_args,)
 from varcode.cli import variant_collection_from_args
+
 
 from .testing_helpers import data_path
 
@@ -49,25 +50,17 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
     # there are two co-occurring variants in the RNAseq data but since
     # they don't happen in the same codon then we're considering the Varcode
     # annotation to be correct
-    # TODO: deal with phasing of variants explicitly so that both
-    # variant positions are considered mutated
-    arg_parser = make_variant_sequences_arg_parser()
+    # TODO:
+    #  deal with phasing of variants explicitly so that both
+    #  variant positions are considered mutated
+    arg_parser = make_vaxrank_arg_parser()
     args = arg_parser.parse_args([
         "--vcf", data_path("b16.f10/b16.f10.Wdr13.vcf"),
         "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
+        "--vaccine-peptide-length", "15",
+        "--padding-around-mutation", "5",
     ])
-    reads_generator = allele_reads_generator_from_args(args)
-    variants = variant_collection_from_args(args)
-    results = run_vaxrank(
-        variants=variants,
-        reads_generator=reads_generator,
-        mhc_predictor=random_binding_predictor,
-        vaccine_peptide_length=15,
-        padding_around_mutation=5,
-        max_vaccine_peptides_per_variant=1,
-        min_alt_rna_reads=1,
-        min_variant_sequence_coverage=1,
-        variant_sequence_assembly=True)
+    results = run_vaxrank_from_parsed_args(args)
     ranked_list = results.ranked_vaccine_peptides
 
     for variant, vaccine_peptides in ranked_list:
@@ -85,23 +78,14 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
     # mentions the G>T variant but doesn't include the subsequent nucleotide
     # change T>G. To avoid having to think about phasing of variants I changed
     # the VCF in vaxrank to contain a GT>TG variant.
-    arg_parser = make_variant_sequences_arg_parser()
+    arg_parser = make_vaxrank_arg_parser()
     args = arg_parser.parse_args([
         "--vcf", data_path("b16.f10/b16.f10.Phip.vcf"),
         "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
+        "--vaccine-peptide-length", "15",
+        "--padding-around-mutation", "5",
     ])
-    reads_generator = allele_reads_generator_from_args(args)
-    variants = variant_collection_from_args(args)
-    results = run_vaxrank(
-        reads_generator=reads_generator,
-        mhc_predictor=random_binding_predictor,
-        variants=variants,
-        vaccine_peptide_length=15,
-        padding_around_mutation=5,
-        min_alt_rna_reads=1,
-        min_variant_sequence_coverage=1,
-        variant_sequence_assembly=True,
-        max_vaccine_peptides_per_variant=1)
+    results = run_vaxrank_from_parsed_args(args)
     ranked_list = results.ranked_vaccine_peptides
 
     for variant, vaccine_peptides in ranked_list:

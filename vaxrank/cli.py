@@ -18,13 +18,7 @@ import pkg_resources
 
 from argparse import ArgumentParser
 
-from isovar import run_isovar
-from isovar.cli import (
-    make_isovar_arg_parser,
-    run_isovar_from_parsed_args,
-    protein_sequence_creator_from_args,
-
-)
+from isovar.cli import (make_isovar_arg_parser, run_isovar_from_parsed_args,)
 from mhctools.cli import (
     add_mhc_args,
     mhc_alleles_from_args,
@@ -51,7 +45,7 @@ from .patient_info import PatientInfo
 logger = logging.getLogger(__name__)
 
 
-def new_run_arg_parser():
+def make_vaxrank_arg_parser():
     # inherit commandline options from Isovar
     arg_parser = make_isovar_arg_parser(
         prog="vaxrank",
@@ -101,6 +95,7 @@ def add_optional_output_args(arg_parser):
         "--include-manufacturability-in-report",
         dest="manufacturability",
         action="store_true")
+
     manufacturability_args.add_argument(
         "--no-manufacturability-in-report",
         dest="manufacturability",
@@ -261,8 +256,25 @@ def check_args(args):
             "--output-json-file, "
             "--output-passing-variants-csv")
 
+def run_vaxrank_from_parsed_args(args):
 
-def ranked_variant_list_with_metadata(args):
+    mhc_predictor = mhc_binding_predictor_from_args(args)
+
+    args.protein_sequence_length = (
+        args.vaccine_peptide_length + 2 * args.padding_around_mutation
+    )
+    # Vaxrank is going to evaluate multiple vaccine peptides containing
+    # the same mutation so need a longer sequence from Isovar
+    isovar_results = run_isovar_from_parsed_args(args)
+    return run_vaxrank(
+        isovar_results=isovar_results,
+        mhc_predictor=mhc_predictor,
+        vaccine_peptide_length=args.vaccine_peptide_length,
+        max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
+        min_epitope_score=args.min_epitope_score,
+        num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide)
+
+def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     """
     Computes all the data needed for report generation.
 
@@ -276,8 +288,10 @@ def ranked_variant_list_with_metadata(args):
     - a dictionary of command-line arguments used to generate it
     - patient info object
     """
+
     if hasattr(args, 'input_json_file'):
         with open(args.input_json_file) as f:
+
             data = serializable.from_json(f.read())
             # the JSON data from the previous run will have the older args saved, which may need to
             # be overridden with args from this run (which all be output related)
@@ -287,28 +301,14 @@ def ranked_variant_list_with_metadata(args):
             if len(data['variants']) > args.max_mutations_in_report:
                 data['variants'] = data['variants'][:args.max_mutations_in_report]
             return data
-
     # get various things from user args
     mhc_alleles = mhc_alleles_from_args(args)
     logger.info("MHC alleles: %s", mhc_alleles)
+
     variants = variant_collection_from_args(args)
     logger.info("Variants: %s", variants)
 
-    mhc_predictor = mhc_binding_predictor_from_args(args)
-
-    args.protein_sequence_length = (
-        args.vaccine_peptide_length + 2 * args.padding_around_mutation
-    )
-    # Vaxrank is going to evaluate multiple vaccine peptides containing
-    # the same mutation so need a longer sequence from Isovar
-    isovar_results = run_isovar_from_parsed_args(args)
-    vaxrank_results = run_vaxrank(
-        isovar_results=isovar_results,
-        mhc_predictor=mhc_predictor,
-        vaccine_peptide_length=args.vaccine_peptide_length,
-        max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
-        min_epitope_score=args.min_epitope_score,
-        num_mutant_epitopes_to_keep=args.num_epitopes_per_peptide)
+    vaxrank_results = run_vaxrank_from_parsed_args(args)
 
     variants_count_dict = vaxrank_results.variant_counts()
     assert len(variants) == variants_count_dict['num_total_variants'], \
@@ -321,8 +321,9 @@ def ranked_variant_list_with_metadata(args):
         df = pd.DataFrame(variant_metadata_dicts)
         df.to_csv(args.output_passing_variants_csv, index=False)
 
-    ranked_list = vaxrank_results.ranked_vaccine_peptides
-    ranked_list_for_report = ranked_list[:args.max_mutations_in_report]
+    ranked_variants_with_vaccine_peptides = vaxrank_results.ranked_vaccine_peptides
+    ranked_variants_with_vaccine_peptides_for_report = \
+        ranked_variants_with_vaccine_peptides[:args.max_mutations_in_report]
     patient_info = PatientInfo(
         patient_id=args.output_patient_id,
         vcf_paths=variants.sources,
@@ -335,7 +336,10 @@ def ranked_variant_list_with_metadata(args):
     )
     # return variants, patient info, and command-line args
     data = {
-        'variants': ranked_list_for_report,
+        # TODO:
+        #  change this field to 'ranked_variants_with_vaccine_peptides' but figure out
+        #  how to do it in a backwards compatible way
+        'variants': ranked_variants_with_vaccine_peptides_for_report,
         'patient_info': patient_info,
         'args': vars(args),
     }
@@ -351,6 +355,22 @@ def ranked_variant_list_with_metadata(args):
 
     return data
 
+def configure_logging(args):
+    logging.config.fileConfig(
+        pkg_resources.resource_filename(
+            __name__,
+            'logging.conf'),
+        defaults={'logfilename': args.log_path})
+
+def choose_arg_parser(args_list):
+    if "--input-json-file" in args_list:
+        return cached_run_arg_parser()
+    else:
+        return make_vaxrank_arg_parser()
+
+def parse_vaxrank_args(args_list):
+    arg_parser = choose_arg_parser(args_list)
+    return arg_parser.parse_args(args_list)
 
 def main(args_list=None):
     """
@@ -371,23 +391,14 @@ def main(args_list=None):
         print("Vaxrank version: %s" % __version__)
         return
 
-    if "--input-json-file" in args_list:
-        arg_parser = cached_run_arg_parser()
-    else:
-        arg_parser = new_run_arg_parser()
-
-    args = arg_parser.parse_args(args_list)
-    logging.config.fileConfig(
-        pkg_resources.resource_filename(
-            __name__,
-            'logging.conf'),
-        defaults={'logfilename': args.log_path})
-
+    args = parse_vaxrank_args()
+    configure_logging(args)
     logger.info(args)
     check_args(args)
 
-    data = ranked_variant_list_with_metadata(args)
-    ranked_variant_list = data['variants']
+    data = ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
+
+    ranked_variants_with_vaccine_peptides = data['variants']
     patient_info = data['patient_info']
     args_for_report = data['args']
 
@@ -396,13 +407,13 @@ def main(args_list=None):
     ###################
     if args.output_csv or args.output_xlsx_report:
         make_csv_report(
-            ranked_variant_list,
+            ranked_variants_with_vaccine_peptides,
             excel_report_path=args.output_xlsx_report,
             csv_report_path=args.output_csv)
 
     if args.output_neoepitope_report:
         make_minimal_neoepitope_report(
-            ranked_variant_list,
+            ranked_variants_with_vaccine_peptides,
             num_epitopes_per_peptide=args.num_epitopes_per_peptide,
             excel_report_path=args.output_neoepitope_report)
 
@@ -415,7 +426,7 @@ def main(args_list=None):
 
     input_json_file = args.input_json_file if hasattr(args, 'input_json_file') else None
     template_data_creator = TemplateDataCreator(
-        ranked_variants_with_vaccine_peptides=ranked_variant_list,
+        ranked_variants_with_vaccine_peptides=ranked_variants_with_vaccine_peptides,
         patient_info=patient_info,
         final_review=args.output_final_review,
         reviewers=args.output_reviewed_by,
