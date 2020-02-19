@@ -96,25 +96,22 @@ class MutantProteinFragment(Serializable):
         -------
         MutantProteinFragment
         """
-        variant = isovar_result.variant
         protein_sequence = isovar_result.top_protein_sequence
-
+        if protein_sequence is None:
+            return None
         return cls(
-            variant=variant,
+            variant=isovar_result.variant,
             gene_name=protein_sequence.gene_name,
             amino_acids=protein_sequence.amino_acids,
             mutant_amino_acid_start_offset=protein_sequence.mutation_start_idx,
             mutant_amino_acid_end_offset=protein_sequence.mutation_end_idx,
-            n_overlapping_reads=len(protein_sequence.overlapping_reads),
+
             # TODO: distinguish reads and fragments in Vaxrank?
+            n_overlapping_reads=isovar_result.num_total_fragments,
             n_alt_reads=isovar_result.num_alt_fragments,
             n_ref_reads=isovar_result.num_ref_fragments,
             n_alt_reads_supporting_protein_sequence=protein_sequence.num_supporting_fragments,
-            supporting_reference_transcripts=[
-                variant.ensembl.transcript_by_id(transcript_id)
-                for transcript_id in
-                protein_sequence.transcripts_supporting_protein_sequence
-            ])
+            supporting_reference_transcripts=protein_sequence.transcripts)
 
     def __len__(self):
         return len(self.amino_acids)

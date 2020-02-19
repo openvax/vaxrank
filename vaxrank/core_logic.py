@@ -47,7 +47,6 @@ def run_vaxrank(
     max_vaccine_peptides_per_variant : int
         Number of vaccine peptides to generate for each mutation.
 
-
     num_mutant_epitopes_to_keep : int, optional
         Number of top-ranking epitopes for each vaccine peptide to include in
         computation.
@@ -56,25 +55,26 @@ def run_vaxrank(
         Ignore peptides with binding predictions whose normalized score is less
         than this.
     """
-    # total number of amino acids is the vaccine peptide length plus the
-    # number of off-center windows around the mutation
-    variants = [isovar_result.variant for isovar_result in isovar_results]
-    variant_to_protein_sequences_dict = {
-        isovar_result.variant: isovar_result.sorted_protein_sequences[0]
-        for isovar_result in isovar_results
-        if isovar_result.passes_all_filters
-        and len(isovar_result.sorted_protein_sequences) > 0
-    }
     variant_to_vaccine_peptides_dict = create_vaccine_peptides_dict(
-        protein_sequence_dict=variant_to_protein_sequences_dict,
+        isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=vaccine_peptide_length,
         max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
         num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         min_epitope_score=min_epitope_score)
     ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
+
+    # TODO:
+    #  get rid of this since it's only being used a proxy for
+    #  expressed variants
+    variant_to_protein_sequences_dict = {
+        isovar_result.variant: isovar_result.sorted_protein_sequences[0]
+        for isovar_result in isovar_results
+        if isovar_result.passes_all_filters
+           and len(isovar_result.sorted_protein_sequences) > 0
+    }
     return VaxrankResults(
-        variants=variants,
+        variants=[isovar_result.variant for isovar_result in isovar_results],
         variant_to_protein_sequences_dict=variant_to_protein_sequences_dict,
         variant_to_vaccine_peptides_dict=variant_to_vaccine_peptides_dict,
         ranked_vaccine_peptides=ranked_list)
@@ -90,8 +90,8 @@ def create_vaccine_peptides_dict(
     """
     Parameters
     ----------
-    protein_sequence_dict : dict
-        Dictionary from varcode.Variant to isovar ProteinSequence
+    isovar_results : list of isovar.IsovarResult
+        List with one object per variant optionally containing protein sequences
 
     mhc_predictor : mhctools.BasePredictor
         Object with predict_peptides method, used for making pMHC binding
@@ -120,7 +120,7 @@ def create_vaccine_peptides_dict(
     for isovar_result in isovar_results:
         variant = isovar_result.variant
         vaccine_peptides = vaccine_peptides_for_variant(
-            variant=variant,
+            isovar_result=isovar_result,
             mhc_predictor=mhc_predictor,
             vaccine_peptide_length=vaccine_peptide_length,
             max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
@@ -170,23 +170,28 @@ def vaccine_peptides_for_variant(
     At this point, we know the variant has RNA support, as per the
     isovar_protein_sequence.
     """
+    if not isovar_result.passes_all_filters:
+        # don't consider candidate vaccine peptides from variants which either
+        # failed their filters or don't have an RNA-derived protein sequence
+        return []
+
     variant = isovar_result.variant
-    protein_fragment = MutantProteinFragment.from_isovar_result(isovar_result)
+    long_protein_fragment = MutantProteinFragment.from_isovar_result(isovar_result)
 
     logger.info(
         "Mutant protein fragment for %s: %s",
         variant,
-        protein_fragment)
+        long_protein_fragment)
 
     epitope_predictions = predict_epitopes(
         mhc_predictor=mhc_predictor,
-        protein_fragment=protein_fragment,
+        protein_fragment=long_protein_fragment,
         min_epitope_score=min_epitope_score,
         genome=variant.ensembl).values()
 
     candidate_vaccine_peptides = []
 
-    for offset, candidate_fragment in protein_fragment.sorted_subsequences(
+    for offset, candidate_fragment in long_protein_fragment.sorted_subsequences(
             subsequence_length=vaccine_peptide_length):
 
         subsequence_epitope_predictions = slice_epitope_predictions(

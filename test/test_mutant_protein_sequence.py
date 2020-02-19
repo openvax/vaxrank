@@ -13,11 +13,8 @@
 from __future__ import absolute_import, print_function, division
 
 from nose.tools import eq_, assert_almost_equal
-from vaxrank.core_logic import run_vaxrank
 from vaxrank.cli import make_vaxrank_arg_parser, run_vaxrank_from_parsed_args
 from mhctools import RandomBindingPredictor
-from isovar.cli import (make_isovar_arg_parser, run_isovar_from_parsed_args,)
-from varcode.cli import variant_collection_from_args
 
 
 from .testing_helpers import data_path
@@ -59,6 +56,8 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
         "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
         "--vaccine-peptide-length", "15",
         "--padding-around-mutation", "5",
+        "--mhc-predictor", "random",
+        "--mhc-alleles", "HLA-A*02:01",
     ])
     results = run_vaxrank_from_parsed_args(args)
     ranked_list = results.ranked_vaccine_peptides
@@ -84,6 +83,8 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
         "--bam", data_path("b16.f10/b16.combined.sorted.bam"),
         "--vaccine-peptide-length", "15",
         "--padding-around-mutation", "5",
+        "--mhc-predictor", "random",
+        "--mhc-alleles", "HLA-A*02:01",
     ])
     results = run_vaxrank_from_parsed_args(args)
     ranked_list = results.ranked_vaccine_peptides
@@ -104,6 +105,8 @@ def test_keep_top_k_epitopes():
         "--vaccine-peptide-length", "15",
         "--padding-around-mutation", "5",
         "--num-epitopes-per-vaccine-peptide", str(keep_k_epitopes),
+        "--mhc-predictor", "random",
+        "--mhc-alleles", "HLA-A*02:01",
     ])
     results = run_vaxrank_from_parsed_args(args)
 

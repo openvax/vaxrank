@@ -30,7 +30,7 @@ class VaxrankResults(Serializable):
         """
         Parameters
         ----------
-        variants : varcode.VariantCollection
+        variants : varcode.VariantCollection or list of varcode.Variant
             All variants without any filtering
 
         variant_to_protein_sequences_dict : dict
@@ -52,11 +52,9 @@ class VaxrankResults(Serializable):
         Summarize Vaxrank counts for total variants, variants with coding effects,
         variants with RNA support, and variants with associated vaccine peptides.
 
-
         Returns
         -------
         dict
-
         """
         # dictionary which will contain some overall variant counts for report display
         counts_dict = {
@@ -79,14 +77,6 @@ class VaxrankResults(Serializable):
         """
         Parameters
         ----------
-        variants : list of varcode.Variant
-
-        protein_sequence_dict : dict
-            Dictionary from variants to isovar protein sequences
-
-        vaccine_peptides_dict : dict
-            Dictionary from variants to VaccinePeptide objects
-
         gene_pathway_check : GenePathwayCheck (optional)
             Used to look up whether a mutation or its affected gene are in some
             biologically important pathway.
