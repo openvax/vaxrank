@@ -105,7 +105,7 @@ def test_keep_top_k_epitopes():
         "--vaccine-peptide-length", "15",
         "--padding-around-mutation", "5",
         "--num-epitopes-per-vaccine-peptide", str(keep_k_epitopes),
-        "--mhc-predictor", "random",
+        "--mhc-predictor", "netmhc",
         "--mhc-alleles", "HLA-A*02:01",
     ])
     results = run_vaxrank_from_parsed_args(args)
