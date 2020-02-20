@@ -177,6 +177,7 @@ def add_output_args(arg_parser):
 
     output_args_group.add_argument(
         "--max-mutations-in-report",
+        default=None,
         type=int,
         help="Number of mutations to report")
 
@@ -193,22 +194,25 @@ def add_vaccine_peptide_args(arg_parser):
         "--vaccine-peptide-length",
         default=25,
         type=int,
-        help="Number of amino acids in the vaccine peptides (default %(default)s)")
+        help="Number of amino acids in the vaccine peptides. (default: %(default)s)")
 
     vaccine_peptide_group.add_argument(
         "--padding-around-mutation",
-        default=0,
+        default=5,
         type=int,
         help=(
             "Number of off-center windows around the mutation to consider "
-            "as vaccine peptides (default %(default)s)"
+            "as vaccine peptides. (default: %(default)s)"
         ))
 
     vaccine_peptide_group.add_argument(
         "--max-vaccine-peptides-per-mutation",
         default=1,
         type=int,
-        help="Number of vaccine peptides to generate for each mutation")
+        help=(
+            "Number of vaccine peptides to generate for each mutation. "
+            "(default: %(default)s)"
+        ))
 
     vaccine_peptide_group.add_argument(
         "--min-epitope-score",
@@ -216,14 +220,14 @@ def add_vaccine_peptide_args(arg_parser):
         type=float,
         help=(
             "Ignore predicted MHC ligands whose normalized binding score "
-            "falls below this threshold"))
+            "falls below this threshold. (default: %(default)s)"))
 
     vaccine_peptide_group.add_argument(
         "--num-epitopes-per-vaccine-peptide",
         type=int,
         help=(
             "Maximum number of mutant epitopes to consider when scoring "
-            "each vaccine peptide."))
+            "each vaccine peptide. (default: %(default)s)"))
 
 
 def add_supplemental_report_args(arg_parser):
