@@ -20,7 +20,6 @@ class VaxrankResults(Serializable):
     """
     Data class used to represent all results captured by running  Vaxrank.
     """
-
     def __init__(
             self,
             isovar_results,
@@ -47,6 +46,7 @@ class VaxrankResults(Serializable):
         self.variant_to_vaccine_peptides_dict = variant_to_vaccine_peptides_dict
         self.ranked_vaccine_peptides = ranked_vaccine_peptides
 
+
     @property
     def variants(self):
         """
@@ -57,6 +57,7 @@ class VaxrankResults(Serializable):
         list of varcode.Variant
         """
         return [isovar_result.variant for isovar_result in self.isovar_results]
+
 
     def variant_counts(self):
         """
@@ -76,7 +77,7 @@ class VaxrankResults(Serializable):
         }
         for isovar_result in self.isovar_results:
             variant = isovar_result.variant
-            if isovar_result.predicted_effect_modifies_protein_sequence > 0:
+            if isovar_result.predicted_effect_modifies_protein_sequence:
                 counts_dict['num_coding_effect_variants'] += 1
             if isovar_result.has_mutant_protein_sequence_from_rna:
                 counts_dict['num_variants_with_rna_support'] += 1
