@@ -23,7 +23,6 @@ class VaxrankResults(Serializable):
     def __init__(
             self,
             isovar_results,
-            variant_to_protein_sequences_dict,
             variant_to_vaccine_peptides_dict,
             ranked_vaccine_peptides):
         """
@@ -32,17 +31,12 @@ class VaxrankResults(Serializable):
         isovar_results : list of isovar.IsovarResult
             IsovarResult object for each variant without any filtering
 
-        variant_to_protein_sequences_dict : dict
-            Dictionary mapping each variant to a list of candidate
-            protein sequences
-
         variant_to_vaccine_peptides_dict : dict
             Dictionary mapping variant to a list of possible vaccine peptides
 
         ranked_vaccine_peptides : list of VaccinePeptide
         """
         self.isovar_results = isovar_results
-        self.variant_to_protein_sequences_dict = variant_to_protein_sequences_dict
         self.variant_to_vaccine_peptides_dict = variant_to_vaccine_peptides_dict
         self.ranked_vaccine_peptides = ranked_vaccine_peptides
 
@@ -68,7 +62,7 @@ class VaxrankResults(Serializable):
             if isovar_result.passes_all_filters
                and len(isovar_result.sorted_protein_sequences) > 0
         }
-    
+
     def variant_counts(self):
         """
         Summarize Vaxrank counts for total variants, variants with coding effects,
