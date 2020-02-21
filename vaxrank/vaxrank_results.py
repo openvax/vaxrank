@@ -23,15 +23,15 @@ class VaxrankResults(Serializable):
 
     def __init__(
             self,
-            variants,
+            isovar_results,
             variant_to_protein_sequences_dict,
             variant_to_vaccine_peptides_dict,
             ranked_vaccine_peptides):
         """
         Parameters
         ----------
-        variants : varcode.VariantCollection or list of varcode.Variant
-            All variants without any filtering
+        isovar_results : list of isovar.IsovarResult
+            IsovarResult object for each variant without any filtering
 
         variant_to_protein_sequences_dict : dict
             Dictionary mapping each variant to a list of candidate
@@ -42,10 +42,21 @@ class VaxrankResults(Serializable):
 
         ranked_vaccine_peptides : list of VaccinePeptide
         """
-        self.variants = variants
+        self.isovar_results = isovar_results
         self.variant_to_protein_sequences_dict = variant_to_protein_sequences_dict
         self.variant_to_vaccine_peptides_dict = variant_to_vaccine_peptides_dict
         self.ranked_vaccine_peptides = ranked_vaccine_peptides
+
+    @property
+    def variants(self):
+        """
+        Unfiltered list of variants
+
+        Returns
+        -------
+        list of varcode.Variant
+        """
+        return [isovar_result.variant for isovar_result in self.isovar_results]
 
     def variant_counts(self):
         """
@@ -58,15 +69,16 @@ class VaxrankResults(Serializable):
         """
         # dictionary which will contain some overall variant counts for report display
         counts_dict = {
-            'num_total_variants': len(self.variants),
+            'num_total_variants': len(self.isovar_results),
             'num_coding_effect_variants': 0,
             'num_variants_with_rna_support': 0,
             'num_variants_with_vaccine_peptides': 0,
         }
-        for variant in self.variants:
-            if len(variant.effects().drop_silent_and_noncoding()) > 0:
+        for isovar_result in self.isovar_results:
+            variant = isovar_result.variant
+            if isovar_result.predicted_effect_modifies_protein_sequence > 0:
                 counts_dict['num_coding_effect_variants'] += 1
-            if variant in self.variant_to_protein_sequences_dict:
+            if isovar_result.has_mutant_protein_sequence_from_rna:
                 counts_dict['num_variants_with_rna_support'] += 1
             if variant in self.variant_to_vaccine_peptides_dict:
                 counts_dict['num_variants_with_vaccine_peptides'] += 1

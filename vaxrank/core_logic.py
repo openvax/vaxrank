@@ -74,7 +74,7 @@ def run_vaxrank(
            and len(isovar_result.sorted_protein_sequences) > 0
     }
     return VaxrankResults(
-        variants=[isovar_result.variant for isovar_result in isovar_results],
+        isovar_results=isovar_results,
         variant_to_protein_sequences_dict=variant_to_protein_sequences_dict,
         variant_to_vaccine_peptides_dict=variant_to_vaccine_peptides_dict,
         ranked_vaccine_peptides=ranked_list)
