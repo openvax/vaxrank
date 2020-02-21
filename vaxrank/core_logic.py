@@ -64,18 +64,8 @@ def run_vaxrank(
         min_epitope_score=min_epitope_score)
     ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
 
-    # TODO:
-    #  get rid of this since it's only being used a proxy for
-    #  expressed variants
-    variant_to_protein_sequences_dict = {
-        isovar_result.variant: isovar_result.sorted_protein_sequences[0]
-        for isovar_result in isovar_results
-        if isovar_result.passes_all_filters
-           and len(isovar_result.sorted_protein_sequences) > 0
-    }
     return VaxrankResults(
         isovar_results=isovar_results,
-        variant_to_protein_sequences_dict=variant_to_protein_sequences_dict,
         variant_to_vaccine_peptides_dict=variant_to_vaccine_peptides_dict,
         ranked_vaccine_peptides=ranked_list)
 

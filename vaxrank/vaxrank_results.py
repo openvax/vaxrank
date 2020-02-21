@@ -59,6 +59,16 @@ class VaxrankResults(Serializable):
         return [isovar_result.variant for isovar_result in self.isovar_results]
 
 
+    @property
+    def variant_to_protein_sequences_dict(self):
+        # TODO: find out if we can safely get rid of this property
+        return {
+            isovar_result.variant: isovar_result.sorted_protein_sequences[0]
+            for isovar_result in self.isovar_results
+            if isovar_result.passes_all_filters
+               and len(isovar_result.sorted_protein_sequences) > 0
+        }
+    
     def variant_counts(self):
         """
         Summarize Vaxrank counts for total variants, variants with coding effects,
