@@ -62,7 +62,7 @@ if __name__ == '__main__':
             'pandas',
             'pyensembl>=1.5.0',
             'varcode>=0.5.9',
-            'isovar>=0.8.5,<1.0.0',
+            'isovar>=1.1.0',
             'mhctools>=1.5.0',
             'roman',
             'jinja2',

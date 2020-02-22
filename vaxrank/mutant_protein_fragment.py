@@ -84,23 +84,34 @@ class MutantProteinFragment(Serializable):
             n_alt_reads_supporting_protein_sequence
 
     @classmethod
-    def from_isovar_protein_sequence(cls, variant, protein_sequence):
+    def from_isovar_result(cls, isovar_result):
+        """
+        Create a MutantProteinFragment from an isovar.IsovarResult object
+
+        Parameters
+        ----------
+        isovar_result : isovar.IsovarResult
+
+        Returns
+        -------
+        MutantProteinFragment
+        """
+        protein_sequence = isovar_result.top_protein_sequence
+        if protein_sequence is None:
+            return None
         return cls(
-            variant=variant,
-            gene_name=";".join(protein_sequence.gene),
+            variant=isovar_result.variant,
+            gene_name=protein_sequence.gene_name,
             amino_acids=protein_sequence.amino_acids,
-            mutant_amino_acid_start_offset=protein_sequence.variant_aa_interval_start,
-            mutant_amino_acid_end_offset=protein_sequence.variant_aa_interval_end,
-            n_overlapping_reads=len(protein_sequence.overlapping_reads),
-            n_alt_reads=len(protein_sequence.alt_reads),
-            n_ref_reads=len(protein_sequence.ref_reads),
-            n_alt_reads_supporting_protein_sequence=len(
-                protein_sequence.alt_reads_supporting_protein_sequence),
-            supporting_reference_transcripts=[
-                variant.ensembl.transcript_by_id(transcript_id)
-                for transcript_id in
-                protein_sequence.transcripts_supporting_protein_sequence
-            ])
+            mutant_amino_acid_start_offset=protein_sequence.mutation_start_idx,
+            mutant_amino_acid_end_offset=protein_sequence.mutation_end_idx,
+
+            # TODO: distinguish reads and fragments in Vaxrank?
+            n_overlapping_reads=isovar_result.num_total_fragments,
+            n_alt_reads=isovar_result.num_alt_fragments,
+            n_ref_reads=isovar_result.num_ref_fragments,
+            n_alt_reads_supporting_protein_sequence=protein_sequence.num_supporting_fragments,
+            supporting_reference_transcripts=protein_sequence.transcripts)
 
     def __len__(self):
         return len(self.amino_acids)
@@ -174,22 +185,24 @@ class MutantProteinFragment(Serializable):
                     supporting_reference_transcripts=self.supporting_reference_transcripts)
                 yield subsequence_start_offset, subsequence_mutant_protein_fragment
 
-    def top_k_subsequences(
+    def sorted_subsequences(
             self,
             subsequence_length,
-            k,
+            limit=None,
             sort_key=lambda x: (
                 -x[1].mutation_distance_from_edge,
                 -x[1].n_mutant_amino_acids)):
         """
-        Returns k subsequences, paired with their offset from the start of the
+        Returns subsequences, paired with their offset from the start of the
         protein fragment. The default sort criterion is maximizing the
         mutation distance from the edge of the sequence and secondarily
         maximizing the number of mutant amino acids.
         """
         subsequences = list(self.generate_subsequences(subsequence_length))
         subsequences.sort(key=sort_key)
-        return subsequences[:k]
+        if limit:
+            subsequences = subsequences[:limit]
+        return subsequences
 
     def predicted_effect(self):
         effects = [
