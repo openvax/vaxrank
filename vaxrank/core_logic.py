@@ -156,9 +156,6 @@ def vaccine_peptides_for_variant(
     -------
     Sorted list of VaccinePeptide objects. If there are no suitable vaccine
     peptides (no strong MHC binder subsequences), returns an empty list.
-
-    At this point, we know the variant has RNA support, as per the
-    isovar_protein_sequence.
     """
     if not isovar_result.passes_all_filters:
         # don't consider candidate vaccine peptides from variants which either
