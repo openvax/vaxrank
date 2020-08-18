@@ -111,7 +111,6 @@ class VaxrankResults(Serializable):
                     isovar_result.predicted_effect_modifies_protein_sequence),
                 ('rna_support',
                     isovar_result.has_mutant_protein_sequence_from_rna),
-                ('mhc_binder', False),
                 ('gene_name', gene_name),
             ))
             if gene_pathway_check is not None:
@@ -120,8 +119,8 @@ class VaxrankResults(Serializable):
 
             # TODO:
             #  compute MHC binder status for variants that don't have RNA support
-            if variant in self.variant_to_vaccine_peptides_dict:
-                variant_dict['mhc_binder'] = \
-                    variant_dict["has_vaccine_peptide"] = True
+            variant_dict['mhc_binder'] = \
+                variant_dict["has_vaccine_peptide"] = \
+                    variant in self.variant_to_vaccine_peptides_dict
             variant_properties_list.append(variant_dict)
         return variant_properties_list
