@@ -75,7 +75,7 @@ class VaxrankResults(Serializable):
             sum([v['is_coding_nonsynonymous'] for v in variant_properties])
         counts_dict['num_variants_with_rna_support'] = \
             sum([v['rna_support'] for v in variant_properties])
-        # TODO: in the future
+
         counts_dict['num_variants_with_vaccine_peptides'] =  \
             sum([v['has_vaccine_peptide'] for v in variant_properties])
         return counts_dict
@@ -99,8 +99,15 @@ class VaxrankResults(Serializable):
             variant = isovar_result.variant
             if isovar_result.top_protein_sequence:
                 gene_name = isovar_result.top_protein_sequence.gene_name
+            elif hasattr(isovar_result.predicted_effect, "gene_name"):
+                # if no protein sequence was determined from the RNA,
+                # see if the top predicted effect is associated with a gene
+                gene_name = isovar_result.predicted_effect, "gene_name"
             else:
-                gene_name = isovar_result.overlapping_gene_names(only_coding=False)
+                # if nothing about the gene can be guessed from the predicted
+                # effect, then use all overlapping gene names
+                gene_name = ";".join(
+                    isovar_result.overlapping_gene_names(only_coding=False))
 
             variant_dict = OrderedDict((
                 ('contig', variant.contig),
@@ -113,14 +120,16 @@ class VaxrankResults(Serializable):
                     isovar_result.has_mutant_protein_sequence_from_rna),
                 ('gene_name', gene_name),
             ))
-            if gene_pathway_check is not None:
-                pathway_dict = gene_pathway_check.make_variant_dict(variant)
-                variant_dict.update(pathway_dict)
 
             # TODO:
             #  compute MHC binder status for variants that don't have RNA support
             variant_dict['mhc_binder'] = \
                 variant_dict["has_vaccine_peptide"] = \
                     variant in self.variant_to_vaccine_peptides_dict
+
+            if gene_pathway_check is not None:
+                pathway_dict = gene_pathway_check.make_variant_dict(variant)
+                variant_dict.update(pathway_dict)
+
             variant_properties_list.append(variant_dict)
         return variant_properties_list
