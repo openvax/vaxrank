@@ -77,7 +77,7 @@ class VaxrankResults(Serializable):
             sum([v['rna_support'] for v in variant_properties])
         # TODO: in the future
         counts_dict['num_variants_with_vaccine_peptides'] =  \
-            sum([v['mhc_binder'] for v in variant_properties])
+            sum([v['has_vaccine_peptide'] for v in variant_properties])
         return counts_dict
 
     def variant_properties(self, gene_pathway_check=None):
@@ -122,6 +122,6 @@ class VaxrankResults(Serializable):
             #  compute MHC binder status for variants that don't have RNA support
             if variant in self.variant_to_vaccine_peptides_dict:
                 variant_dict['mhc_binder'] = \
-                    variant_dict["has_vaccine_peptides"] = True
+                    variant_dict["has_vaccine_peptide"] = True
             variant_properties_list.append(variant_dict)
         return variant_properties_list
