@@ -81,29 +81,43 @@ def test_csv_report():
         run_shell_script(csv_args)
         contents = f.read()
         lines = contents.split("\n")
-        assert len(lines) > 0
+        assert len(lines) > 1
 
 
 def test_all_variant_csv_report():
     with NamedTemporaryFile(mode="r") as f:
         all_csv_args = cli_args_for_b16_seqdata + [
-            "--output-passing-variants-csv", f.name, "--output-csv", f.name + "ignored"]
+            "--output-passing-variants-csv", f.name,
+            # TODO: make this flag not necessary
+            "--output-csv", f.name + "ignored"]
         run_shell_script(all_csv_args)
         contents = f.read()
         lines = contents.split("\n")
-        assert len(lines) > 0
+        assert len(lines) > 1
         # make sure it can be a valid dataframe
         f.seek(0)
         df = pd.read_csv(f)
-        assert len(df) > 0
+        assert len(df) > 1
 
+def test_isovar_csv():
+    with NamedTemporaryFile(mode="r") as f:
+        isovar_csv_args = cli_args_for_b16_seqdata + [
+            "--output-isovar-csv", f.name,
+            # TODO: make this flag not necessary
+            "--output-csv", f.name + "ignored"
+        ]
+        run_shell_script(isovar_csv_args)
+        df = pd.read_csv(f)
+        assert len(df) > 1
 
 def test_xlsx_report():
     with NamedTemporaryFile(mode="r") as f:
         xlsx_args = cli_args_for_b16_seqdata + ["--output-xlsx-report", f.name]
         run_shell_script(xlsx_args)
         book = open_workbook(f.name)
-        assert book.nsheets > 0
+        assert book.nsheets > 1
+
+
 
 
 def test_html_report():
@@ -112,7 +126,7 @@ def test_html_report():
         run_shell_script(html_args)
         contents = f.read()
         lines = contents.split("\n")
-        assert len(lines) > 0
+        assert len(lines) > 1
 
 
 @attr('skip')  # want the ability to skip this test on some machines
@@ -120,7 +134,7 @@ def test_pdf_report():
     with NamedTemporaryFile(mode="rb") as f:
         pdf_args = cli_args_for_b16_seqdata + ["--output-pdf-report", f.name]
         run_shell_script(pdf_args)
-        assert getsize(f.name) > 0
+        assert getsize(f.name) > 1
 
 
 @patch('vaxrank.core_logic.vaccine_peptides_for_variant')
