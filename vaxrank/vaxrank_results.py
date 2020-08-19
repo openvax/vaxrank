@@ -97,19 +97,9 @@ class VaxrankResults(Serializable):
         variant_properties_list = []
         for isovar_result in self.isovar_results:
             variant = isovar_result.variant
-            if isovar_result.top_protein_sequence:
-                gene_name = isovar_result.top_protein_sequence.gene_name
-            elif hasattr(isovar_result.predicted_effect, "gene_name"):
-                # if no protein sequence was determined from the RNA,
-                # see if the top predicted effect is associated with a gene
-                gene_name = isovar_result.predicted_effect, "gene_name"
-            else:
-                # if nothing about the gene can be guessed from the predicted
-                # effect, then use all overlapping gene names
-                gene_name = ";".join(
-                    isovar_result.overlapping_gene_names(only_coding=False))
 
             variant_dict = OrderedDict((
+                ('gene_name', isovar_result.top_gene_name),
                 ('contig', variant.contig),
                 ('start', variant.start),
                 ('ref', variant.ref),
@@ -118,7 +108,6 @@ class VaxrankResults(Serializable):
                     isovar_result.predicted_effect_modifies_protein_sequence),
                 ('rna_support',
                     isovar_result.has_mutant_protein_sequence_from_rna),
-                ('gene_name', gene_name),
             ))
 
             # TODO:

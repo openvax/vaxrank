@@ -18,6 +18,7 @@ import pkg_resources
 
 from argparse import ArgumentParser
 
+from isovar import isovar_results_to_dataframe
 from isovar.cli import (make_isovar_arg_parser, run_isovar_from_parsed_args,)
 from mhctools.cli import (
     add_mhc_args,
@@ -252,7 +253,8 @@ def check_args(args):
             args.output_json_file or
             args.output_xlsx_report or
             args.output_neoepitope_report or
-            args.output_passing_variants_csv):
+            args.output_passing_variants_csv or
+            args.output_isovar_csv):
         raise ValueError(
             "Must specify at least one of: --output-csv, "
             "--output-xlsx-report, "
@@ -261,19 +263,25 @@ def check_args(args):
             "--output-pdf-report, "
             "--output-neoepitope-report, "
             "--output-json-file, "
-            "--output-passing-variants-csv")
+            "--output-passing-variants-csv, "
+            "--output-isovar-csv")
 
-def run_vaxrank_from_parsed_args(args):
-
-    mhc_predictor = mhc_binding_predictor_from_args(args)
-
+def run_isovar_from_parsed_args(args):
     args.protein_sequence_length = (
-        args.vaccine_peptide_length + 2 * args.padding_around_mutation
+            args.vaccine_peptide_length + 2 * args.padding_around_mutation
     )
 
-    args.output = args.output_isovar_csv
     # Vaxrank is going to evaluate multiple vaccine peptides containing
     # the same mutation so need a longer sequence from Isovar
+    isovar_results = run_isovar_from_parsed_args(args)
+
+    if args.output_isovar_csv:
+        df = isovar_results_to_dataframe(isovar_results)
+        df.to_csv(args.output_isovar_csv, index=False)
+    return isovar_results
+
+def run_vaxrank_from_parsed_args(args):
+    mhc_predictor = mhc_binding_predictor_from_args(args)
     isovar_results = run_isovar_from_parsed_args(args)
     return run_vaxrank(
         isovar_results=isovar_results,
@@ -346,8 +354,8 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     # return variants, patient info, and command-line args
     data = {
         # TODO:
-        #  change this field to 'ranked_variants_with_vaccine_peptides' but figure out
-        #  how to do it in a backwards compatible way
+        #  change this field to 'ranked_variants_with_vaccine_peptides'
+        #  but figure out how to do it in a backwards compatible way
         'variants': ranked_variants_with_vaccine_peptides_for_report,
         'patient_info': patient_info,
         'args': vars(args),
