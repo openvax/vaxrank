@@ -175,7 +175,8 @@ def predict_epitopes(
     results = OrderedDict()
     reference_proteome = ReferenceProteome(genome)
 
-    # sometimes the predictors will fail, and we don't want to crash vaxrank in that situation
+    # sometimes the predictors will fail, and we don't want to crash vaxrank
+    # in that situation
     # TODO: make more specific or remove when we fix error handling in mhctools
     try:
         mhctools_binding_predictions = mhc_predictor.predict_subsequences(

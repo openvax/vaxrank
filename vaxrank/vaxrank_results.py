@@ -50,18 +50,11 @@ class VaxrankResults(Serializable):
         -------
         list of varcode.Variant
         """
-        return [isovar_result.variant for isovar_result in self.isovar_results]
-
-
-    @property
-    def variant_to_protein_sequences_dict(self):
-        # TODO: find out if we can safely get rid of this property
-        return {
-            isovar_result.variant: isovar_result.sorted_protein_sequences[0]
-            for isovar_result in self.isovar_results
-            if isovar_result.passes_all_filters
-               and len(isovar_result.sorted_protein_sequences) > 0
-        }
+        return [
+            isovar_result.variant
+            for isovar_result
+            in self.isovar_results
+        ]
 
     def variant_counts(self):
         """
@@ -72,23 +65,20 @@ class VaxrankResults(Serializable):
         -------
         dict
         """
-        # dictionary which will contain some overall variant counts for report display
-        counts_dict = {
-            'num_total_variants': len(self.isovar_results),
-            'num_coding_effect_variants': 0,
-            'num_variants_with_rna_support': 0,
-            'num_variants_with_vaccine_peptides': 0,
-        }
-        for isovar_result in self.isovar_results:
-            variant = isovar_result.variant
-            if isovar_result.predicted_effect_modifies_protein_sequence:
-                counts_dict['num_coding_effect_variants'] += 1
-            if isovar_result.has_mutant_protein_sequence_from_rna:
-                counts_dict['num_variants_with_rna_support'] += 1
-            if variant in self.variant_to_vaccine_peptides_dict:
-                counts_dict['num_variants_with_vaccine_peptides'] += 1
-        return counts_dict
+        variant_properties = self.variant_properties()
 
+        # dictionary which will contain some overall variant counts
+        # for report display
+        counts_dict = {}
+        counts_dict['num_total_variants'] = len(self.isovar_results)
+        counts_dict['num_coding_effect_variants'] = \
+            sum([v['is_coding_nonsynonymous'] for v in variant_properties])
+        counts_dict['num_variants_with_rna_support'] = \
+            sum([v['rna_support'] for v in variant_properties])
+
+        counts_dict['num_variants_with_vaccine_peptides'] =  \
+            sum([v['has_vaccine_peptide'] for v in variant_properties])
+        return counts_dict
 
     def variant_properties(self, gene_pathway_check=None):
         """
@@ -105,29 +95,30 @@ class VaxrankResults(Serializable):
         is a strong MHC binder, etc.
         """
         variant_properties_list = []
-        for variant in self.variants:
-            gene_name = ''
-            if variant.gene_names:
-                gene_name = variant.effects().top_priority_effect().gene_name
+        for isovar_result in self.isovar_results:
+            variant = isovar_result.variant
+
             variant_dict = OrderedDict((
+                ('gene_name', isovar_result.top_gene_name),
                 ('contig', variant.contig),
                 ('start', variant.start),
                 ('ref', variant.ref),
                 ('alt', variant.alt),
-                ('is_coding_nonsynonymous', False),
-                ('rna_support', False),
-                ('mhc_binder', False),
-                ('gene_name', gene_name),
+                ('is_coding_nonsynonymous',
+                    isovar_result.predicted_effect_modifies_protein_sequence),
+                ('rna_support',
+                    isovar_result.has_mutant_protein_sequence_from_rna),
             ))
+
+            # TODO:
+            #  compute MHC binder status for variants that don't have RNA support
+            variant_dict['mhc_binder'] = \
+                variant_dict["has_vaccine_peptide"] = \
+                    variant in self.variant_to_vaccine_peptides_dict
+
             if gene_pathway_check is not None:
                 pathway_dict = gene_pathway_check.make_variant_dict(variant)
                 variant_dict.update(pathway_dict)
-            if len(variant.effects().drop_silent_and_noncoding()) > 0:
-                variant_dict['is_coding_nonsynonymous'] = True
-            if variant in self.variant_to_protein_sequences_dict:
-                variant_dict['rna_support'] = True
-            # TODO: compute MHC binder status for variants that don't have RNA support
-            if variant in self.variant_to_vaccine_peptides_dict:
-                variant_dict['mhc_binder'] = True
+
             variant_properties_list.append(variant_dict)
         return variant_properties_list

@@ -3,8 +3,8 @@
 sudo: true
 language: python
 python:
-  - "2.7"
-  - "3.5"
+  - "3.6"
+  - "3.7"
 git:
   # don't need the default depth of 50
   # but don't want to use a depth of 1 since that affects
@@ -22,12 +22,7 @@ cache:
     - $HOME/.cache/pyensembl/GRCm38/ensembl93/
   timeout: 300
 before_install:
-  - |
-    if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
-      wget https://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh;
-    else
-      wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
-    fi
+  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
   - bash miniconda.sh -b -p $HOME/miniconda
   - export PATH="$HOME/miniconda/bin:$PATH"
   # reset the shell's lookup table for program name to path mappings
@@ -94,4 +89,4 @@ deploy:
     secure: "kt07TyCxiumbu2SGZvl7J5LLzsLq0zxcCceOSGb4RE0tFOmiUmDv5LfGKME5lEFhPxleChaq/AILDOudEZO3H9xJY90/dXPgyXJOd6pCOzKq3zIKEjz3MEx3wBizcjR7ucHxYxDQzIBEBeoC4wTIc53mBR5gMgqyG8Dbciueg9Yo5qZED9rq/uY1ELxW2iQsS9LBK7n/blTPTisdmdG3g64eVEDsZD/0egPdupWhlkNuUQlA4LVr2KUifGrtXPL0A/m3CUEABJWre7PJ6motFS1KramP7/PQJwpXmZEHI1ayknNeN2ndMp4Ni64cEhtF/JIRYWBuGxzZXSuIv1g8XxKijm/qxSc4Gv0yIiP/Q3pZ5hfSC1RZhcpkc3ugCSOy5VwlF5O0P/EflMnsUE9ZRFON3s5+yjsJtNldsCRpdEsquFPn0BJC4kOdWKfIkYuhln6xcJawl+8uKlCJuOa1vZcsJ16E6RPN3TpkfChaMVBrD6zEbYZfrI5QCMV/uwkwutgV4H95FR0TlnDrOTwAMamxFBN7R8+YEHff9n21c4i7vzjBVlI16W/t2qqmaG/0w1hBhAiYvvV5BLh84km5gSewcjcKjBHVhYscF1Xxyq0CPmKdcOB6ePFbIWh/+NHQzDpzY8yKp9kzkZizZJGUAxsI2ZH3++BzQwcSUn664VY="
   on:
     branch: master
-    condition: $TRAVIS_PYTHON_VERSION = "2.7"
+    condition: $TRAVIS_PYTHON_VERSION = "3.6"

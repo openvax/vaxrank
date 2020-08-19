@@ -3,7 +3,7 @@ numpy>=1.14.0
 pandas
 pyensembl>=1.5.0
 varcode>=0.5.9
-isovar>=1.1.0
+isovar>=1.1.1
 mhctools>=1.5.0
 roman
 jinja2
@@ -16,3 +16,4 @@ xvfbwrapper
 future>=0.16.0  # needed by pylint
 astropy
 datacache
+pysam>=0.15.2
