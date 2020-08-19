@@ -266,7 +266,9 @@ def check_args(args):
             "--output-passing-variants-csv, "
             "--output-isovar-csv")
 
-def run_isovar_from_parsed_args(args):
+def run_vaxrank_from_parsed_args(args):
+    mhc_predictor = mhc_binding_predictor_from_args(args)
+
     args.protein_sequence_length = (
             args.vaccine_peptide_length + 2 * args.padding_around_mutation
     )
@@ -278,11 +280,7 @@ def run_isovar_from_parsed_args(args):
     if args.output_isovar_csv:
         df = isovar_results_to_dataframe(isovar_results)
         df.to_csv(args.output_isovar_csv, index=False)
-    return isovar_results
 
-def run_vaxrank_from_parsed_args(args):
-    mhc_predictor = mhc_binding_predictor_from_args(args)
-    isovar_results = run_isovar_from_parsed_args(args)
     return run_vaxrank(
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
