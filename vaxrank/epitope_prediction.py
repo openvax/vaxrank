@@ -20,7 +20,6 @@ from serializable import Serializable
 
 from .reference_proteome import ReferenceProteome
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -31,6 +30,7 @@ class EpitopePrediction(Serializable):
             peptide_sequence,
             wt_peptide_sequence,
             ic50,
+            el_score,
             wt_ic50,
             percentile_rank,
             prediction_method_name,
@@ -38,6 +38,7 @@ class EpitopePrediction(Serializable):
             source_sequence,
             offset,
             occurs_in_reference):
+        self.el_score = el_score
         self.allele = allele
         self.peptide_sequence = peptide_sequence
         self.wt_peptide_sequence = wt_peptide_sequence
@@ -67,7 +68,7 @@ class EpitopePrediction(Serializable):
             self,
             midpoint=350.0,
             width=150.0,
-            ic50_cutoff=5000.0):  # TODO: add these default values into CLI as arguments
+            el_score_cut_off=10.0):  # TODO: add these default values into CLI as arguments
         """
         Map from IC50 values to score where 1.0 = strong binder, 0.0 = weak binder
         Default midpoint and width for logistic determined by max likelihood fit
@@ -79,18 +80,9 @@ class EpitopePrediction(Serializable):
         TODO: Use a large dataset to find MHC binding range predicted to #
         correlate with immunogenicity
         """
-        if self.ic50 >= ic50_cutoff:
+        if self.percentile_rank >= el_score_cut_off:
             return 0.0
-
-        rescaled = (float(self.ic50) - midpoint) / width
-        # simplification of 1.0 - logistic(x) = logistic(-x)
-        logistic = 1.0 / (1.0 + np.exp(rescaled))
-
-        # since we're scoring IC50 values, let's normalize the output
-        # so IC50 near 0.0 always returns a score of 1.0
-        normalizer = 1.0 / (1.0 + np.exp(-midpoint / width))
-
-        return logistic / normalizer
+        return self.el_score
 
     def slice_source_sequence(self, start_offset, end_offset):
         """
@@ -120,6 +112,7 @@ class EpitopePrediction(Serializable):
             peptide_sequence=self.peptide_sequence,
             wt_peptide_sequence=self.wt_peptide_sequence,
             ic50=self.ic50,
+            el_score=self.el_score,
             wt_ic50=self.wt_ic50,
             percentile_rank=self.percentile_rank,
             prediction_method_name=self.prediction_method_name,
@@ -142,6 +135,7 @@ def slice_epitope_predictions(
         for p in epitope_predictions
         if p.offset >= start_offset and p.offset + p.length <= end_offset
     ]
+
 
 def predict_epitopes(
         mhc_predictor,
@@ -204,10 +198,10 @@ def predict_epitopes(
                 protein_fragment.predicted_effect().original_protein_sequence
             )
             global_epitope_start_pos = (
-                protein_fragment.global_start_pos() + peptide_start_offset
+                    protein_fragment.global_start_pos() + peptide_start_offset
             )
             wt_peptide = full_reference_protein_sequence[
-                global_epitope_start_pos:global_epitope_start_pos + peptide_length]
+                         global_epitope_start_pos:global_epitope_start_pos + peptide_length]
             wt_peptides[peptide] = wt_peptide
 
     wt_predictions = []
@@ -276,6 +270,7 @@ def predict_epitopes(
             peptide_sequence=peptide,
             wt_peptide_sequence=wt_peptide,
             ic50=binding_prediction.value,
+            el_score=binding_prediction.score,
             wt_ic50=wt_ic50,
             percentile_rank=binding_prediction.percentile_rank,
             prediction_method_name=binding_prediction.prediction_method_name,

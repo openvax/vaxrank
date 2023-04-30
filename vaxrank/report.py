@@ -219,7 +219,8 @@ class TemplateDataCreator(object):
         epitope_data = OrderedDict([
             ('Sequence', epitope_prediction.peptide_sequence),
             ('IC50', '%.2f nM' % epitope_prediction.ic50),
-            ('Score', _sanitize(epitope_prediction.logistic_epitope_score())),
+            ('EL Percentile', epitope_prediction.percentile_rank),
+            ('EL Score', _sanitize(epitope_prediction.logistic_epitope_score())),
             ('Allele', epitope_prediction.allele.replace('HLA-', '')),
             ('WT sequence', epitope_prediction.wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),

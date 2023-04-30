@@ -170,27 +170,31 @@ col.peptide-data-column-two {
 }
 
 col.epitope-data-column-one {
-	width: 16%;
+	width: 14%;
 }
 
 col.epitope-data-column-two {
-	width: 16%;
+	width: 14%;
 }
 
 col.epitope-data-column-three {
-	width: 16%;
+	width: 14%;
 }
 
 col.epitope-data-column-four {
-	width: 16%;
+	width: 14%;
 }
 
 col.epitope-data-column-five {
-	width: 16%;
+	width: 14%;
 }
 
 col.epitope-data-column-six {
-	width: 16%;
+	width: 14%;
+}
+
+col.epitope-data-column-seven {
+	width: 14%;
 }
 
 table.epitope-inner {
