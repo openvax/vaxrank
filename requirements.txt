@@ -1,10 +1,10 @@
-six
-numpy>=1.14.0
-pandas
-pyensembl>=1.5.0
-varcode>=0.5.9
-isovar>=1.1.1
-mhctools>=1.5.0
+six==1.12.0
+numpy==1.16.2
+pandas==0.24.2
+pyensembl==1.7.3
+varcode==0.8.0
+isovar==0.9.0
+mhctools==1.6.18
 roman
 jinja2
 pdfkit  # needs wkhtmltopdf: brew install Caskroom/cask/wkhtmltopdf
@@ -13,7 +13,7 @@ shellinford>=0.3.4
 xlsxwriter
 xlrd
 xvfbwrapper
-future>=0.16.0  # needed by pylint
+future==0.17.1  # needed by pylint
 astropy
 datacache
-pysam>=0.15.2
+pysam==0.9.0
