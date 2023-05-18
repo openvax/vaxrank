@@ -1,3 +1,5 @@
+# Copyright (c) 2016-2018. Mount Sinai School of Medicine
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -10,11 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# pylint: disable=abstract-class-instantiated
-# For more details see https://github.com/PyCQA/pylint/issues/3060
-
 from __future__ import absolute_import, division
-from collections import OrderedDict
+from collections import namedtuple, OrderedDict
 from importlib import import_module
 import logging
 import os
@@ -41,6 +40,18 @@ JINJA_ENVIRONMENT = jinja2.Environment(
     trim_blocks=True,
     lstrip_blocks=True,
 )
+
+
+PatientInfo = namedtuple("PatientInfo", (
+    "patient_id",
+    "vcf_paths",
+    "bam_path",
+    "mhc_alleles",
+    "num_somatic_variants",
+    "num_coding_effect_variants",
+    "num_variants_with_rna_support",
+    "num_variants_with_vaccine_peptides",
+))
 
 
 class TemplateDataCreator(object):
@@ -94,12 +105,12 @@ class TemplateDataCreator(object):
             ('MHC alleles', ' '.join(self.patient_info.mhc_alleles)),
             ('Total number of somatic variants', self.patient_info.num_somatic_variants),
             ('Somatic variants with predicted coding effects',
-                self.patient_info.num_coding_effect_variants),
+             self.patient_info.num_coding_effect_variants),
             ('Somatic variants with predicted coding effects and RNA support',
-                self.patient_info.num_variants_with_rna_support),
+             self.patient_info.num_variants_with_rna_support),
             ('Somatic variants with predicted coding effects, RNA support and predicted MHC '
-                'ligands',
-                self.patient_info.num_variants_with_vaccine_peptides),
+             'ligands',
+             self.patient_info.num_variants_with_vaccine_peptides),
         ])
         return patient_info
 
@@ -182,10 +193,10 @@ class TemplateDataCreator(object):
             ('Mutant epitope score', _sanitize(vaccine_peptide.mutant_epitope_score)),
             ('Combined score', _sanitize(vaccine_peptide.combined_score)),
             ('Max coding sequence coverage',
-                mutant_protein_fragment.n_alt_reads_supporting_protein_sequence),
+             mutant_protein_fragment.n_alt_reads_supporting_protein_sequence),
             ('Mutant amino acids', mutant_protein_fragment.n_mutant_amino_acids),
             ('Mutation distance from edge',
-                mutant_protein_fragment.mutation_distance_from_edge),
+             mutant_protein_fragment.mutation_distance_from_edge),
         ])
         return peptide_data
 
@@ -198,7 +209,7 @@ class TemplateDataCreator(object):
             ('C-terminal 7mer GRAVY score', _sanitize(scores.cterm_7mer_gravy_score)),
             ('Max 7mer GRAVY score', _sanitize(scores.max_7mer_gravy_score)),
             ('N-terminal Glutamine, Glutamic Acid, or Cysteine',
-                int(scores.difficult_n_terminal_residue)),
+             int(scores.difficult_n_terminal_residue)),
             ('C-terminal Cysteine', int(scores.c_terminal_cysteine)),
             ('C-terminal Proline', int(scores.c_terminal_proline)),
             ('Total number of Cysteine residues', scores.cysteine_count),
@@ -219,8 +230,7 @@ class TemplateDataCreator(object):
         epitope_data = OrderedDict([
             ('Sequence', epitope_prediction.peptide_sequence),
             ('IC50', '%.2f nM' % epitope_prediction.ic50),
-            ('EL Percentile', epitope_prediction.percentile_rank),
-            ('EL Score', _sanitize(epitope_prediction.logistic_epitope_score())),
+            ('Score', _sanitize(epitope_prediction.logistic_epitope_score())),
             ('Allele', epitope_prediction.allele.replace('HLA-', '')),
             ('WT sequence', epitope_prediction.wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
@@ -490,10 +500,10 @@ def make_minimal_neoepitope_report(
                     ('Score', vaccine_peptide.mutant_epitope_score),
                     ('Predicted mutant pMHC affinity', '%.2f nM' % epitope_prediction.ic50),
                     ('Variant allele RNA read count',
-                        vaccine_peptide.mutant_protein_fragment.n_alt_reads),
+                     vaccine_peptide.mutant_protein_fragment.n_alt_reads),
                     ('Wildtype sequence', epitope_prediction.wt_peptide_sequence),
                     ('Predicted wildtype pMHC affinity',
-                        '%.2f nM' % epitope_prediction.wt_ic50),
+                     '%.2f nM' % epitope_prediction.wt_ic50),
                     ('Gene name', vaccine_peptide.mutant_protein_fragment.gene_name),
                     ('Genomic variant', variant.short_description),
                 ])

@@ -1,3 +1,5 @@
+# Copyright (c) 2016. Mount Sinai School of Medicine
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,76 +15,60 @@
 
 from __future__ import absolute_import, print_function, division
 
+from collections import namedtuple
 from operator import attrgetter
 
 import numpy as np
-from serializable import Serializable
 
 from .manufacturability import ManufacturabilityScores
 
+VaccinePeptideBase = namedtuple(
+    "VaccinePeptide", [
+        "mutant_protein_fragment",
+        "mutant_epitope_predictions",
+        "wildtype_epitope_predictions",
+        "mutant_epitope_score",
+        "wildtype_epitope_score",
+        "num_mutant_epitopes_to_keep",
+        "manufacturability_scores"])
 
-class VaccinePeptide(Serializable):
+
+class VaccinePeptide(VaccinePeptideBase):
     """
     VaccinePeptide combines the sequence information of MutantProteinFragment
     with MHC binding predictions for subsequences of the protein fragment.
 
-    The resulting lists of mutant and wildtype epitope predictions
-    are sorted by affinity.
+    The resulting lists of mutant and wildtype epitope predictions are sorted by ic50.
     """
-
-    def __init__(
-            self,
+    def __new__(
+            cls,
             mutant_protein_fragment,
             epitope_predictions,
-            num_mutant_epitopes_to_keep=None,
-            sort_predictions_by='ic50'):
-        """
-        Parameters
-        ----------
-        mutant_protein_fragment : MutantProteinFragment
-
-        epitope_predictions : list of EpitopePrediction
-
-        num_mutant_epitopes_to_keep : int or None
-            If None then keep all mutant epitopes.
-
-        sort_predictions_by : str
-            Field of EpitopePrediction used for sorting epitope predictions
-            overlapping mutation in ascending order. Can be either 'ic50'
-            or 'percentile_rank'.
-        """
-        self.mutant_protein_fragment = mutant_protein_fragment
-        self.epitope_predictions = epitope_predictions
-        self.num_mutant_epitopes_to_keep = num_mutant_epitopes_to_keep
-        self.sort_predictions_by = sort_predictions_by
-
-        sort_key = attrgetter(sort_predictions_by)
-
+            num_mutant_epitopes_to_keep=10000):
         # only keep the top k epitopes
-        self.mutant_epitope_predictions = sorted([
-            p for p in epitope_predictions
-            if p.overlaps_mutation and not p.occurs_in_reference
-        ], key=sort_key)
-        if num_mutant_epitopes_to_keep:
-            self.mutant_epitope_predictions = \
-                self.mutant_epitope_predictions[:num_mutant_epitopes_to_keep]
+        mutant_epitope_predictions = sorted([
+            p for p in epitope_predictions if p.overlaps_mutation and not p.occurs_in_reference
+        ], key=attrgetter('ic50'))[:num_mutant_epitopes_to_keep]
+        wildtype_epitope_predictions = sorted([
+            p for p in epitope_predictions if not p.overlaps_mutation or p.occurs_in_reference
+        ], key=attrgetter('ic50'))
 
-        self.wildtype_epitope_predictions = sorted([
-            p for p in epitope_predictions
-            if not p.overlaps_mutation or p.occurs_in_reference
-        ], key=sort_key)
-
-        self.wildtype_epitope_score = sum(
-            p.logistic_epitope_score()
-            for p in self.wildtype_epitope_predictions)
+        wildtype_epitope_score = sum(
+            p.logistic_epitope_score() for p in wildtype_epitope_predictions)
         # only keep the top k epitopes for the purposes of the score
-        self.mutant_epitope_score = sum(
-            p.logistic_epitope_score()
-            for p in self.mutant_epitope_predictions)
+        mutant_epitope_score = sum(
+            p.logistic_epitope_score() for p in mutant_epitope_predictions)
 
-        self.manufacturability_scores = \
-            ManufacturabilityScores.from_amino_acids(
-                self.mutant_protein_fragment.amino_acids)
+        return VaccinePeptideBase.__new__(
+            cls,
+            mutant_protein_fragment=mutant_protein_fragment,
+            mutant_epitope_predictions=mutant_epitope_predictions,
+            wildtype_epitope_predictions=wildtype_epitope_predictions,
+            mutant_epitope_score=mutant_epitope_score,
+            wildtype_epitope_score=wildtype_epitope_score,
+            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+            manufacturability_scores=ManufacturabilityScores.from_amino_acids(
+                mutant_protein_fragment.amino_acids))
 
     def peptide_synthesis_difficulty_score_tuple(
             self,
@@ -122,6 +108,7 @@ class VaccinePeptide(Serializable):
         max_7mer_gravy = self.manufacturability_scores.max_7mer_gravy_score
 
         # numbers we want to minimize, so a bigger number is worse
+
         return (
             # total number of Cys residues
             self.manufacturability_scores.cysteine_count,
@@ -198,9 +185,9 @@ class VaccinePeptide(Serializable):
             -self.mutant_protein_fragment.mutation_distance_from_edge
         )
         return (
-            essential_score_tuple +
-            manufacturability_score_tuple +
-            extra_score_tuple
+                essential_score_tuple +
+                manufacturability_score_tuple +
+                extra_score_tuple
         )
 
     def contains_mutant_epitopes(self):
@@ -220,12 +207,4 @@ class VaccinePeptide(Serializable):
             "mutant_protein_fragment": self.mutant_protein_fragment,
             "epitope_predictions": epitope_predictions,
             "num_mutant_epitopes_to_keep": self.num_mutant_epitopes_to_keep,
-            "sort_predictions_by": self.sort_predictions_by,
         }
-
-    @classmethod
-    def from_dict(cls, d):
-        d = d.copy()
-        if "sort_predictions_by" not in d:
-            d["sort_predictions_by"] = "ic50"
-        return cls(**d)

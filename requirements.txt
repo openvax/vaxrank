@@ -5,15 +5,16 @@ pyensembl==1.7.3
 varcode==0.8.0
 isovar==0.9.0
 mhctools==1.6.18
-roman
-jinja2
-pdfkit  # needs wkhtmltopdf: brew install Caskroom/cask/wkhtmltopdf
-pypandoc  # needs pandoc: brew install pandoc
-shellinford>=0.3.4
+roman==3.1
+jinja2<3.1
+pdfkit==0.6.1  # needs wkhtmltopdf: brew install Caskroom/cask/wkhtmltopdf
+pypandoc==1.4  # needs pandoc: brew install pandoc
+shellinford==0.4.1
 xlsxwriter
-xlrd
-xvfbwrapper
+xlrd==1.2.0
+xvfbwrapper==0.2.9
 future==0.17.1  # needed by pylint
-astropy
-datacache
+astropy==3.1.2
+datacache==1.1.5
 pysam==0.9.0
+gtfparse==1.2.0
