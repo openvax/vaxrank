@@ -1,3 +1,5 @@
+set -e
+set -x
 vaxrank \
     --download-reference-genome-data \
     --vcf test/data/b16.f10/b16.vcf \
