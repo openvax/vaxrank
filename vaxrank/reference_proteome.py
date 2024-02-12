@@ -14,7 +14,6 @@ from __future__ import absolute_import, print_function, division
 import os
 import logging
 
-import six
 from datacache import get_data_dir
 import shellinford
 
@@ -31,8 +30,8 @@ def fm_index_path(genome):
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
 
-    return os.path.join(cache_dir, '%s_%d_%d.fm' % (
-        genome.species.latin_name, genome.release, 2 if six.PY2 else 3))
+    return os.path.join(cache_dir, '%s_%d_3.fm' % (
+        genome.species.latin_name, genome.release))
 
 
 def generate_protein_sequences(genome):
@@ -46,12 +45,7 @@ def generate_protein_sequences(genome):
     """
     for t in genome.transcripts():
         if t.is_protein_coding:
-            protein_sequence = t.protein_sequence
-            if six.PY2:
-                # shellinford on PY2 seems to sometimes fail with
-                # unicode strings
-                protein_sequence = protein_sequence.encode("ascii")
-            yield protein_sequence
+            yield t.protein_sequence
 
 
 def load_reference_peptides_index(genome, force_reload=False):

@@ -17,7 +17,6 @@ solid-phase synthesis.
 For more information see: https://github.com/hammerlab/vaxrank/issues/2
 """
 
-from __future__ import absolute_import, print_function, division
 from collections import namedtuple
 
 # Amino Acid Hydropathy Score

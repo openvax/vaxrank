@@ -13,7 +13,6 @@
 # pylint: disable=abstract-class-instantiated
 # For more details see https://github.com/PyCQA/pylint/issues/3060
 
-from __future__ import absolute_import, division
 from collections import OrderedDict
 from importlib import import_module
 import logging
