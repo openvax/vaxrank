@@ -64,7 +64,7 @@ if __name__ == '__main__':
             'isovar>=1.3.0,<2.0.0',
             'mhctools>=1.8.2,<2.0.0',
             'roman',
-            'jinja2',
+            'jinja2<3.1',
             'pdfkit',
             'pypandoc',
             'shellinford>=0.3.4',
