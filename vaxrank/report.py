@@ -511,7 +511,7 @@ def make_minimal_neoepitope_report(
         worksheet.set_column('%s:%s' % ('G', 'G'), 30)
         worksheet.set_column('%s:%s' % ('H', 'H'), 9)
         worksheet.set_column('%s:%s' % ('I', 'I'), 18)
-        writer.save()
+        writer.close()
         logger.info('Wrote XLSX neoepitope report file to %s', excel_report_path)
 
 
@@ -595,5 +595,5 @@ def make_csv_report(
             df.to_excel(writer, sheet_name=shortened_sheet_name, index=False)
             resize_columns(writer.sheets[shortened_sheet_name], 'A', 'C')
 
-        writer.save()
+        writer.close()
         logger.info('Wrote manufacturer XLSX file to %s', excel_report_path)
