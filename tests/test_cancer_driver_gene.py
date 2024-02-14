@@ -19,7 +19,8 @@ from vaxrank.gene_pathway_check import (
     _DRIVER_VARIANT_COLUMN_NAME
 )
 from varcode import Variant
-from nose.tools import eq_
+
+from .common import eq_
 
 
 def test_HRAS_G13C_in_cancer_driver_genes():

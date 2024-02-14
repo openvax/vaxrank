@@ -75,7 +75,7 @@ To install Vaxrank for local development, you may do the below:
 
 ```
 git clone git@github.com:openvax/vaxrank.git
-conda create -q -n vaxrank-dev-env python=3.5.2 numpy scipy nose pandas pylint
+conda create -q -n vaxrank-dev-env python=3.5.2 numpy scipy pandas pylint
 source activate vaxrank-dev-env
 pip install -r requirements.txt
 pip install .
@@ -86,8 +86,7 @@ pyensembl install --release 87 --species mouse
 You should run the linter and the test suite as you work on Vaxrank (and these will be run automatically by our continuous integration server up on a PR being made).
 
 ```
-./lint.sh
-nosetests test
+./lint.sh && ./test.sh 
 ```
 
 The first run of the tests may take a while (8 minutes on a 2016 Macbook Pro) to create the FM index of the proteome, but subsequent tests should take only a few seconds.

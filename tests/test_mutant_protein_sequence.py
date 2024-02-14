@@ -10,13 +10,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import, print_function, division
-
-from nose.tools import eq_, assert_almost_equal
-from vaxrank.cli import make_vaxrank_arg_parser, run_vaxrank_from_parsed_args
-from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from mhctools import RandomBindingPredictor
 
+from vaxrank.cli import make_vaxrank_arg_parser, run_vaxrank_from_parsed_args
+from vaxrank.mutant_protein_fragment import MutantProteinFragment
+
+from .common import eq_, almost_eq_
 from .testing_helpers import data_path
 
 random_binding_predictor = RandomBindingPredictor(["H-2-Kb", "H-2-Db"])
@@ -119,7 +118,7 @@ def test_keep_top_k_epitopes():
         # propagated as expected
         mutant_epitope_score = sum(
             p.logistic_epitope_score() for p in vaccine_peptide.mutant_epitope_predictions)
-        assert_almost_equal(mutant_epitope_score, vaccine_peptide.mutant_epitope_score)
+        almost_eq_(mutant_epitope_score, vaccine_peptide.mutant_epitope_score)
 
 def test_mutant_protein_fragment_serialization():
     arg_parser = make_vaxrank_arg_parser()

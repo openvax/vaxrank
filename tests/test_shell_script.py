@@ -13,7 +13,7 @@
 
 from os.path import getsize
 from mock import patch
-from nose.plugins.attrib import attr
+
 from tempfile import NamedTemporaryFile
 
 import pandas as pd
@@ -129,7 +129,6 @@ def test_html_report():
         assert len(lines) > 1
 
 
-@attr('skip')  # want the ability to skip this test on some machines
 def test_pdf_report():
     with NamedTemporaryFile(mode="rb") as f:
         pdf_args = cli_args_for_b16_seqdata + ["--output-pdf-report", f.name]
@@ -148,7 +147,3 @@ def test_report_no_peptides(mock_vaccine_peptides_for_variant):
         contents = f.read()
         assert contents == ''
 
-
-if __name__ == "__main__":
-    test_csv_report()
-    test_html_report()

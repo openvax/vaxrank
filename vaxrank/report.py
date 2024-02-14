@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 JINJA_ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
-    extensions=['jinja2.ext.autoescape'],
+    extensions=[],
     autoescape=False,
     trim_blocks=True,
     lstrip_blocks=True,

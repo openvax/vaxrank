@@ -10,16 +10,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import, print_function, division
-
-from nose.tools import eq_, ok_
-
 from mhctools import RandomBindingPredictor
 from pyensembl import genome_for_reference_name
 from varcode import Variant
 from vaxrank.epitope_prediction import predict_epitopes, EpitopePrediction
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.vaccine_peptide import VaccinePeptide
+
+from .common import eq_, ok_
 
 mouse_genome = genome_for_reference_name("GRCm38")
 

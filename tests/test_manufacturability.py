@@ -12,7 +12,6 @@
 
 from vaxrank.manufacturability import ManufacturabilityScores
 
-
 def test_c_terminal_proline():
     scores = ManufacturabilityScores.from_amino_acids("A" * 6 + "P")
     assert scores.c_terminal_proline
