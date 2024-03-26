@@ -47,7 +47,8 @@ jobs:
           echo "Before installing Ensembl releases" && df -h
           pyensembl install --release 75 --species human --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCh37.75/
           pyensembl install --release 102 --species mouse --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCm38.102/
-          echo "After installing Ensembl releases" && df -h
+          pyensembl install --release 93 --species human --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCh38.93/
+          pyensembl install --release 93 --species mouse --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCm38.93/
       - name: Test with pytest
         run: |
           # configure netmhc-bundle paths
