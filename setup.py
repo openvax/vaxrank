@@ -68,7 +68,7 @@ if __name__ == '__main__':
             'pdfkit',
             'pypandoc',
             'shellinford>=0.3.4',
-            'xlrd',
+            'xlrd>=1.0.0,<2.0.0',
             'xlsxwriter',
             'xvfbwrapper',
             'future>=0.16.0',  # needed by pylint

@@ -11,7 +11,7 @@ pdfkit  # needs wkhtmltopdf: brew install Caskroom/cask/wkhtmltopdf
 pypandoc  # needs pandoc: brew install pandoc
 shellinford>=0.3.4
 xlsxwriter
-xlrd
+xlrd>=1.0.0,<2.0.0
 xvfbwrapper
 future>=0.16.0  # needed by pylint
 astropy
