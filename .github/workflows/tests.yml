@@ -32,19 +32,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install flake8 pytest pytest-cov pylint 
+          python -m pip install pytest pytest-cov pylint 
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Install wkthtmltopdf
         run: |
           sudo apt-get install -y xfonts-base xfonts-75dpi
           wget https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox_0.12.6-1.bionic_amd64.deb
           sudo dpkg -i wkhtmltox_0.12.6-1.bionic_amd64.deb
-      - name: Lint with flake8
-        run: |
-          # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Lint with PyLint
         run: |
           ./lint.sh
@@ -63,3 +57,5 @@ jobs:
           export NETMHC_BUNDLE_TMPDIR=$PWD/netmhc-bundle-tmp
           export PATH=$PATH:$NETMHC_BUNDLE_HOME/bin
           ./test.sh
+      - name: Publish coverage to Coveralls
+        uses: coverallsapp/github-action@v2.2.3
