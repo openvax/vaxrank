@@ -35,6 +35,9 @@ with open('vaxrank/__init__.py', 'r') as f:
         f.read(),
         re.MULTILINE).group(1)
 
+with open("requirements.txt")  as f:
+    requirements = [req.strip() for req in f.read().splitlines() if req.strip()]
+
 if not version:
     raise RuntimeError("Cannot find version information")
 
@@ -56,25 +59,7 @@ if __name__ == '__main__':
             'Programming Language :: Python',
             'Topic :: Scientific/Engineering :: Bio-Informatics',
         ],
-        install_requires=[
-            'numpy>=1.14.0,<2.0.0',
-            'pandas>=2.1.4,<3.0.0',
-            'pyensembl>=2.0.0,<3.0.0',
-            'varcode>=1.1.0,<2.0.0',
-            'isovar>=1.3.0,<2.0.0',
-            'mhctools>=1.8.2,<2.0.0',
-            'roman',
-            'jinja2<3.1',
-            'pdfkit',
-            'pypandoc',
-            'shellinford>=0.3.4',
-            'xlrd>=1.0.0,<2.0.0',
-            'xlsxwriter',
-            'xvfbwrapper',
-            'future>=0.16.0',  # needed by pylint
-            'astropy',
-        ],
-
+        install_requires=requirements,
         long_description=readme_markdown,
         long_description_content_type='text/markdown',
         packages=['vaxrank'],
