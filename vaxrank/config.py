@@ -1,9 +1,9 @@
 import msgspec
 
-class Confiug(msgspec.Struct):
+class Config(msgspec.Struct):
 
     """Parameters for score, filtering, and ranking both epitopes and vaccine peptides"""
-    logistic_epitope_score_midpoint : float =350.0
+    logistic_epitope_score_midpoint : float = 350.0
     logistic_epitope_score_width : float = 150.0
     
     min_epitope_score : float = 0.0

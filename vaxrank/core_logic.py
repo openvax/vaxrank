@@ -16,7 +16,7 @@ import logging
 from numpy import isclose
 
 from .mutant_protein_fragment import MutantProteinFragment
-from .epitope_prediction import predict_epitopes, slice_epitope_predictions
+from .epitope_logic import slice_epitope_predictions, predict_epitopes
 from .vaccine_peptide import VaccinePeptide
 from .vaxrank_results import VaxrankResults
 
@@ -270,3 +270,5 @@ def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):
     # sort in descending order of combined (expression * mhc binding) scores
     result_list.sort(key=sort_key, reverse=True)
     return result_list
+
+
