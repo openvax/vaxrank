@@ -17,6 +17,7 @@ from mock import patch
 from tempfile import NamedTemporaryFile
 
 import pandas as pd
+# TODO: change this to use openpyxl
 from xlrd import open_workbook
 
 from vaxrank.cli import main as run_shell_script
