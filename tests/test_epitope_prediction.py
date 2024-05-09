@@ -13,7 +13,8 @@
 from mhctools import RandomBindingPredictor
 from pyensembl import genome_for_reference_name
 from varcode import Variant
-from vaxrank.epitope_prediction import predict_epitopes, EpitopePrediction
+from vaxrank.epitope_logic import predict_epitopes
+from vaxrank.epitope_prediction import EpitopePrediction
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.vaccine_peptide import VaccinePeptide
 
