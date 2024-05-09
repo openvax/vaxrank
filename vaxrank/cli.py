@@ -41,6 +41,7 @@ from .report import (
     TemplateDataCreator,
 )
 from .patient_info import PatientInfo
+from .config import Config 
 
 logger = logging.getLogger(__name__)
 
@@ -280,13 +281,14 @@ def run_vaxrank_from_parsed_args(args):
         df = isovar_results_to_dataframe(isovar_results)
         df.to_csv(args.output_isovar_csv, index=False)
 
+    config = Config(min_epitope_score=args.min_epitope_score)
     return run_vaxrank(
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
-        min_epitope_score=args.min_epitope_score,
-        num_mutant_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide)
+        num_mutant_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
+        config=config)
 
 def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     """

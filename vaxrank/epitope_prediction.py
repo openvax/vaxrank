@@ -15,6 +15,30 @@ from serializable import Serializable
 
 
 class EpitopePrediction(Serializable):
+    # TODO: 
+    #   - rename to CandidateEpitope
+    #   - add groups of predictions: 
+    #      * mhc_affinity_ic50
+    #      * mhc_affinity_score
+    #      * mhc_affinity_percentile_rank
+    #      * mhc_stability_hours
+    #      * mhc_stability_score
+    #      * mhc_stability_percentile_rank
+    #      * antigen_processing_score
+    #      * antigen_processing_percentile_rank
+    #      * pmhc_presentation_score
+    #      * pmhc_presentation_percentile_rank
+    #      * immunogenicity_score
+    #      * immunogenicity_percentile_rank
+    #  - also change wt_peptide_sequence to:
+    #      * closest_reference_peptide_sequence_in_any_protein 
+    #      * closest_reference_peptide_sequence_in_same_protein
+    #  - and calculate:
+    #      * edit_distance_to_closest_reference_peptide_in_any_protein
+    #      * edit_distance_to_closest_reference_peptide_in_same_protein
+    #      * edit_distance_to_closest_reference_peptide_in_any_protein_PMBEC
+    #      * edit_distance_to_closest_reference_peptide_in_same_protein_PMBEC
+    #  - how to avoid duplicating every prediction for MT vs. WT-any vs. WT-same?
     def __init__(
             self,
             allele,
