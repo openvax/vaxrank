@@ -500,7 +500,7 @@ def make_minimal_neoepitope_report(
 
     if len(rows) > 0:
         df = pd.DataFrame.from_dict(rows)
-        writer = pd.ExcelWriter(excel_report_path, engine='xlsxwriter')
+        writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
         df.to_excel(writer, sheet_name='Neoepitopes', index=False)
 
         # resize columns to be not crappy
@@ -578,7 +578,7 @@ def make_csv_report(
         logger.info('Wrote CSV report file to %s', csv_report_path)
 
     if excel_report_path:
-        writer = pd.ExcelWriter(excel_report_path, engine='xlsxwriter')
+        writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
 
         # copy the variant rank column to position 0, make first sheet called "All"
         all_dfs[''] = all_dfs['variant_rank']
