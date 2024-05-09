@@ -455,8 +455,9 @@ def resize_columns(worksheet, amino_acids_col, pos_col):
     Resizes amino acid and mutant position columns in the Excel sheet so that they don't
     have to be expanded.
     """
-    worksheet.set_column('%s:%s' % (amino_acids_col, amino_acids_col), 40)
-    worksheet.set_column('%s:%s' % (pos_col, pos_col), 12)
+    worksheet.column_dimensions[amino_acids_col].width = 40
+    worksheet.column_dimensions[pos_col].width = 12
+
 
 def make_minimal_neoepitope_report(
         ranked_variants_with_vaccine_peptides,
