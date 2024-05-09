@@ -17,7 +17,7 @@ import logging
 
 
 from pyensembl import Genome
-from mhctools import BasePredictor
+from mhctools.base_predictor import BasePredictor
 
 
 from .config import Config 
