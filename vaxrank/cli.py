@@ -15,6 +15,7 @@ import logging
 import logging.config
 import pkg_resources
 
+import msgspec 
 from argparse import ArgumentParser
 from isovar import isovar_results_to_dataframe
 from isovar.cli import (make_isovar_arg_parser, run_isovar_from_parsed_args,)
@@ -28,8 +29,9 @@ import pandas as pd
 import serializable
 from varcode.cli import variant_collection_from_args
 
-from . import __version__
+from .version import __version__
 from .core_logic import run_vaxrank
+from .config import MIN_EPITOPE_SCORE_DEFAULT
 from .gene_pathway_check import GenePathwayCheck
 from .report import (
     make_ascii_report,
@@ -60,6 +62,7 @@ def make_vaxrank_arg_parser():
     )
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
+    add_epitope_prediction_args(arg_parser)
     add_output_args(arg_parser)
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
@@ -193,6 +196,21 @@ def add_output_args(arg_parser):
         type=int,
         help="Number of mutations to report")
 
+def add_epitope_prediction_args(arg_parser):
+    epitope_prediction_args = arg_parser.add_argument_group("T-cell epitope prediction options")
+    epitope_prediction_args.add_argument(
+        "--min-epitope-score",
+        default=MIN_EPITOPE_SCORE_DEFAULT,
+        type=float,
+        help=(
+            "Ignore predicted MHC ligands whose normalized binding score "
+            "falls below this threshold. (default: %(default)s)"))
+    
+    epitope_prediction_args.add_argument(
+        "--epitope-prediction-config",
+        default=None,
+        help="Path to YAML file with options related to epitope prediction, scoring, and filtering.")
+
 
 def add_vaccine_peptide_args(arg_parser):
     vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
@@ -219,14 +237,6 @@ def add_vaccine_peptide_args(arg_parser):
             "Number of vaccine peptides to generate for each mutation. "
             "(default: %(default)s)"
         ))
-
-    vaccine_peptide_group.add_argument(
-        "--min-epitope-score",
-        default=1e-10,
-        type=float,
-        help=(
-            "Ignore predicted MHC ligands whose normalized binding score "
-            "falls below this threshold. (default: %(default)s)"))
 
     vaccine_peptide_group.add_argument(
         "--num-epitopes-per-vaccine-peptide",
@@ -280,7 +290,18 @@ def run_vaxrank_from_parsed_args(args):
         df = isovar_results_to_dataframe(isovar_results)
         df.to_csv(args.output_isovar_csv, index=False)
 
-    config = Config(min_epitope_score=args.min_epitope_score)
+   
+
+    if args.epitope_prediction_config:
+        with open(args.epitope_prediction_config) as f:
+            config = msgspec.yaml.decode(f.read(), Config)
+    else:
+        config = Config()
+
+    if args.min_epitope_score != config.min_epitope_score:
+        config.min_epitope_score = args.min_epitope_score
+    
+
     return run_vaxrank(
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
