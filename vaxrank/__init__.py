@@ -10,5 +10,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "1.6.0"
 
+from .core_logic import run_vaxrank
+from .epitope_prediction import EpitopePrediction
+from .epitope_logic import predict_epitopes
+from .vaccine_peptide import VaccinePeptide
+from .version import __version__
+
+__all__ = [
+    "__version__",
+    EpitopePrediction,
+    VaccinePeptide,
+    run_vaxrank,
+    predict_epitopes,
+]

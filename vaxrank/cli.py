@@ -16,7 +16,6 @@ import logging.config
 import pkg_resources
 
 from argparse import ArgumentParser
-
 from isovar import isovar_results_to_dataframe
 from isovar.cli import (make_isovar_arg_parser, run_isovar_from_parsed_args,)
 from mhctools.cli import (
