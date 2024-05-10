@@ -13,7 +13,7 @@
 
 import msgspec
 
-MIN_EPITOPE_SCORE_DEFAULT = 1e-10
+MIN_EPITOPE_SCORE_DEFAULT = 0
 BINDING_AFFINITY_CUTOFF = 5000.0
 
 class Config(msgspec.Struct):
