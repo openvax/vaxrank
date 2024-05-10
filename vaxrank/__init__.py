@@ -19,8 +19,8 @@ from .version import __version__
 
 __all__ = [
     "__version__",
-    EpitopePrediction,
-    VaccinePeptide,
-    run_vaxrank,
-    predict_epitopes,
+    "EpitopePrediction",
+    "VaccinePeptide",
+    "run_vaxrank",
+    "predict_epitopes",
 ]
