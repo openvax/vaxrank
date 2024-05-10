@@ -17,8 +17,7 @@ from mock import patch
 from tempfile import NamedTemporaryFile
 
 import pandas as pd
-# TODO: change this to use openpyxl
-from xlrd import open_workbook
+
 
 from vaxrank.cli import main as run_shell_script
 
@@ -113,12 +112,14 @@ def test_isovar_csv():
 
 def test_xlsx_report():
     with NamedTemporaryFile(mode="r") as f:
+              
         xlsx_args = cli_args_for_b16_seqdata + ["--output-xlsx-report", f.name]
+
+        print("vaxrank %s" % (" ".join(xlsx_args))) 
         run_shell_script(xlsx_args)
-        book = open_workbook(f.name)
-        assert book.nsheets > 1
-
-
+        df = pd.read_excel(f.name, engine='openpyxl')
+        assert len(df) == 2
+        
 
 
 def test_html_report():
