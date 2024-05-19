@@ -31,7 +31,7 @@ from varcode.cli import variant_collection_from_args
 
 from .version import __version__
 from .core_logic import run_vaxrank
-from .config import MIN_EPITOPE_SCORE_DEFAULT
+from .epitope_config import DEFAULT_MIN_EPITOPE_SCORE
 from .gene_pathway_check import GenePathwayCheck
 from .report import (
     make_ascii_report,
@@ -42,7 +42,7 @@ from .report import (
     TemplateDataCreator,
 )
 from .patient_info import PatientInfo
-from .config import Config 
+from .epitope_config import epitope_config_from_args
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +200,7 @@ def add_epitope_prediction_args(arg_parser):
     epitope_prediction_args = arg_parser.add_argument_group("T-cell epitope prediction options")
     epitope_prediction_args.add_argument(
         "--min-epitope-score",
-        default=MIN_EPITOPE_SCORE_DEFAULT,
+        default=DEFAULT_MIN_EPITOPE_SCORE,
         type=float,
         help=(
             "Ignore predicted MHC ligands whose normalized binding score "
@@ -290,17 +290,7 @@ def run_vaxrank_from_parsed_args(args):
         df = isovar_results_to_dataframe(isovar_results)
         df.to_csv(args.output_isovar_csv, index=False)
 
-   
-
-    if args.epitope_prediction_config:
-        with open(args.epitope_prediction_config) as f:
-            config = msgspec.yaml.decode(f.read(), Config)
-    else:
-        config = Config()
-
-    if args.min_epitope_score != config.min_epitope_score:
-        config.min_epitope_score = args.min_epitope_score
-    
+    epitope_config = epitope_config_from_args(args)
 
     return run_vaxrank(
         isovar_results=isovar_results,
@@ -308,7 +298,7 @@ def run_vaxrank_from_parsed_args(args):
         vaccine_peptide_length=args.vaccine_peptide_length,
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
         num_mutant_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
-        config=config)
+        config=epitope_config)
 
 def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     """
