@@ -16,6 +16,8 @@ from .epitope_prediction import EpitopePrediction
 from .epitope_logic import predict_epitopes
 from .vaccine_peptide import VaccinePeptide
 from .version import __version__
+from .epitope_config import EpitopeConfig
+from .vaccine_config import VaccineConfig
 
 __all__ = [
     "__version__",
@@ -23,4 +25,6 @@ __all__ = [
     "VaccinePeptide",
     "run_vaxrank",
     "predict_epitopes",
+    "EpitopeConfig",
+    "VaccineConfig",
 ]

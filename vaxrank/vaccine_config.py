@@ -13,15 +13,10 @@
 
 import msgspec
 
-MIN_EPITOPE_SCORE_DEFAULT = 0
-BINDING_AFFINITY_CUTOFF = 5000.0
+VACCINE_PEPTIDE_LENGTH_DEFAULT = 25
 
-class Config(msgspec.Struct):
-
-    """Parameters for score, filtering, and ranking both epitopes and vaccine peptides"""
-    logistic_epitope_score_midpoint : float = 350.0
-    logistic_epitope_score_width : float = 150.0
+class VaccineConfig(msgspec.Struct):
+    """Parameters for assembling epitope predictions into vaccine peptides"""
+    vaccine_peptide_length : int = VACCINE_PEPTIDE_LENGTH_DEFAULT
     
-    min_epitope_score : float = MIN_EPITOPE_SCORE_DEFAULT
-    binding_affinity_cutoff : float = BINDING_AFFINITY_CUTOFF
     

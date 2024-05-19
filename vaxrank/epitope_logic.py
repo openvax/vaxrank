@@ -20,7 +20,7 @@ from pyensembl import Genome
 from mhctools.base_predictor import BasePredictor
 
 
-from .config import Config 
+from .epitope_config import EpitopeConfig 
 from .epitope_prediction import EpitopePrediction
 from .mutant_protein_fragment import MutantProteinFragment
 from .reference_proteome import ReferenceProteome
@@ -45,7 +45,7 @@ def slice_epitope_predictions(
 def predict_epitopes(
         mhc_predictor : BasePredictor,
         protein_fragment : MutantProteinFragment,
-        config : Config = None,
+        config : EpitopeConfig = None,
         genome :  Genome = None):
     """
     Parameters
@@ -70,7 +70,7 @@ def predict_epitopes(
     Uses the input genome to evaluate whether the epitope occurs in reference.
     """
     if config is None:
-        config = Config()
+        config = EpitopeConfig()
 
     results = OrderedDict()
     reference_proteome = ReferenceProteome(genome)

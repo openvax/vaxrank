@@ -18,7 +18,7 @@ from numpy import isclose
 from isovar import IsovarResult
 from mhctools.base_predictor import BasePredictor
 
-from .config import Config
+from .epitope_config import EpitopeConfig
 from .epitope_logic import slice_epitope_predictions, predict_epitopes
 from .mutant_protein_fragment import MutantProteinFragment
 from .vaccine_peptide import VaccinePeptide
@@ -32,7 +32,7 @@ def run_vaxrank(
         vaccine_peptide_length : int = 25,
         max_vaccine_peptides_per_variant : int = 1,
         num_mutant_epitopes_to_keep : int = 10000,
-        config : Config = None):
+        config : EpitopeConfig = None):
     """
     Parameters
     ----------
@@ -78,7 +78,7 @@ def create_vaccine_peptides_dict(
         vaccine_peptide_length : int = 25,
         max_vaccine_peptides_per_variant : int = 1,
         num_mutant_epitopes_to_keep : int = 10 ** 5,
-        config : Config = None):
+        config : EpitopeConfig = None):
     """
     Parameters
     ----------
@@ -130,7 +130,7 @@ def vaccine_peptides_for_variant(
         vaccine_peptide_length : int,
         max_vaccine_peptides_per_variant : int,
         num_mutant_epitopes_to_keep : int = None,
-        config : Config = None):
+        config : EpitopeConfig = None):
     """
     Parameters
     ----------
