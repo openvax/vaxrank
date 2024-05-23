@@ -14,7 +14,7 @@ import msgspec
 
 import argparse
 
-DEFAULT_MIN_EPITOPE_SCORE = 0
+DEFAULT_MIN_EPITOPE_SCORE = 0.00001
 DEFAULT_BINDING_AFFINITY_CUTOFF = 5000.0
 
 class EpitopeConfig(msgspec.Struct):
@@ -25,7 +25,18 @@ class EpitopeConfig(msgspec.Struct):
     
     min_epitope_score : float = DEFAULT_MIN_EPITOPE_SCORE
     binding_affinity_cutoff : float = DEFAULT_BINDING_AFFINITY_CUTOFF
+
+
+def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
+    epitope_prediction_args = arg_parser.add_argument_group("T-cell epitope prediction options")
+    epitope_prediction_args.add_argument(
+        "--min-epitope-score",
+        type=float,
+        help=(
+            f"Ignore predicted MHC ligands whose normalized binding score "
+            "falls below this threshold. (default: {DEFAULT_MIN_EPITOPE_SCORE})"))
     
+
 def epitope_config_from_args(args : argparse.Namespace) -> EpitopeConfig:
     """
     Extract config path and overrides from argument namespace
@@ -35,7 +46,7 @@ def epitope_config_from_args(args : argparse.Namespace) -> EpitopeConfig:
         with open(args.epitope_prediction_config) as f:
             epitope_config_kwargs.update(msgspec.yaml.decode(f.read()))
 
-    if args.min_epitope_score != DEFAULT_MIN_EPITOPE_SCORE:
+    if args.min_epitope_score is not None:
         epitope_config_kwargs["min_epitope_score"] = args.min_epitope_score
     epitope_config = msgspec.convert(epitope_config_kwargs, EpitopeConfig)
     return epitope_config

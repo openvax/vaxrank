@@ -66,7 +66,7 @@ if __name__ == '__main__':
         package_data={'vaxrank': ['templates/*', 'data/*', 'logging.conf']},
         entry_points={
             'console_scripts': [
-                'vaxrank = vaxrank.cli:main'
+                'vaxrank = vaxrank.cli.entry_point:main'
             ]
         }
     )

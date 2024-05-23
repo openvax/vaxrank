@@ -20,3 +20,5 @@ class VaccineConfig(msgspec.Struct):
     vaccine_peptide_length : int = VACCINE_PEPTIDE_LENGTH_DEFAULT
     
     
+def vaccine_config_from_args(args):
+    pass
