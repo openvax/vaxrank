@@ -10,15 +10,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import msgspec
-
-VACCINE_PEPTIDE_LENGTH_DEFAULT = 25
 
 class VaccineConfig(msgspec.Struct):
     """Parameters for assembling epitope predictions into vaccine peptides"""
-    vaccine_peptide_length : int = VACCINE_PEPTIDE_LENGTH_DEFAULT
+    vaccine_peptide_length : int = 25
     
+    padding_around_mutation : int = 5
+
+    max_vaccine_peptides_per_variant : int = 1
     
-def vaccine_config_from_args(args):
-    pass
+    num_mutant_epitopes_to_keep : int = 1000 
