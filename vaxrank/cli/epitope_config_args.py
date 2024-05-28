@@ -10,21 +10,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import msgspec
-
 import argparse
 
-DEFAULT_MIN_EPITOPE_SCORE = 0.00001
-DEFAULT_BINDING_AFFINITY_CUTOFF = 5000.0
+import msgspec 
 
-class EpitopeConfig(msgspec.Struct):
-
-    """Parameters for score, filtering, and ranking both epitopes and vaccine peptides"""
-    logistic_epitope_score_midpoint : float = 350.0
-    logistic_epitope_score_width : float = 150.0
-    
-    min_epitope_score : float = DEFAULT_MIN_EPITOPE_SCORE
-    binding_affinity_cutoff : float = DEFAULT_BINDING_AFFINITY_CUTOFF
+from ..epitope_config import EpitopeConfig
 
 
 def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):

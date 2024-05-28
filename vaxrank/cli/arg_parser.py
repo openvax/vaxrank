@@ -10,37 +10,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
-import logging
-import logging.config
-import pkg_resources
 
-import msgspec 
+
 from argparse import ArgumentParser
 
 from isovar.cli import make_isovar_arg_parser
 from mhctools.cli import add_mhc_args
 
-import pandas as pd
-import serializable
 
+from .epitope_config_args import add_epitope_prediction_args
+from .vaccine_config_args import add_vaccine_peptide_args
+from ..version import __version__
 
-from .version import __version__
-from .core_logic import run_vaxrank
-from .epitope_config import DEFAULT_MIN_EPITOPE_SCORE
-from .gene_pathway_check import GenePathwayCheck
-from .report import (
-    make_ascii_report,
-    make_html_report,
-    make_pdf_report,
-    make_csv_report,
-    make_minimal_neoepitope_report,
-    TemplateDataCreator,
-)
-from .patient_info import PatientInfo
-from .epitope_config import epitope_config_from_args
-
-logger = logging.getLogger(__name__)
 
 
 def make_vaxrank_arg_parser():
@@ -199,39 +180,6 @@ def add_output_args(arg_parser):
         help="Number of mutations to report")
 
 
-def add_vaccine_peptide_args(arg_parser):
-    vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
-    vaccine_peptide_group.add_argument(
-        "--vaccine-peptide-length",
-        default=25,
-        type=int,
-        help="Number of amino acids in the vaccine peptides. (default: %(default)s)")
-
-    vaccine_peptide_group.add_argument(
-        "--padding-around-mutation",
-        default=5,
-        type=int,
-        help=(
-            "Number of off-center windows around the mutation to consider "
-            "as vaccine peptides. (default: %(default)s)"
-        ))
-
-    vaccine_peptide_group.add_argument(
-        "--max-vaccine-peptides-per-mutation",
-        default=1,
-        type=int,
-        help=(
-            "Number of vaccine peptides to generate for each mutation. "
-            "(default: %(default)s)"
-        ))
-
-    vaccine_peptide_group.add_argument(
-        "--num-epitopes-per-vaccine-peptide",
-        type=int,
-        help=(
-            "Maximum number of mutant epitopes to consider when scoring "
-            "each vaccine peptide. (default: %(default)s)"))
-
 
 def add_supplemental_report_args(arg_parser):
     report_args_group = arg_parser.add_argument_group("Supplemental report options")
@@ -262,12 +210,6 @@ def check_args(args):
             "--output-passing-variants-csv, "
             "--output-isovar-csv")
 
-def configure_logging(args):
-    logging.config.fileConfig(
-        pkg_resources.resource_filename(
-            __name__,
-            'logging.conf'),
-        defaults={'logfilename': args.log_path})
 
 def choose_arg_parser(args_list):
     # TODO: replace this with a command sub-parser
