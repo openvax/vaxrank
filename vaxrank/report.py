@@ -454,8 +454,9 @@ def resize_columns(worksheet, amino_acids_col, pos_col):
     Resizes amino acid and mutant position columns in the Excel sheet so that they don't
     have to be expanded.
     """
-    worksheet.set_column('%s:%s' % (amino_acids_col, amino_acids_col), 40)
-    worksheet.set_column('%s:%s' % (pos_col, pos_col), 12)
+    worksheet.column_dimensions[amino_acids_col].width = 40
+    worksheet.column_dimensions[pos_col].width = 12
+
 
 def make_minimal_neoepitope_report(
         ranked_variants_with_vaccine_peptides,
@@ -499,7 +500,7 @@ def make_minimal_neoepitope_report(
 
     if len(rows) > 0:
         df = pd.DataFrame.from_dict(rows)
-        writer = pd.ExcelWriter(excel_report_path, engine='xlsxwriter')
+        writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
         df.to_excel(writer, sheet_name='Neoepitopes', index=False)
 
         # resize columns to be not crappy
@@ -576,7 +577,7 @@ def make_csv_report(
         logger.info('Wrote CSV report file to %s', csv_report_path)
 
     if excel_report_path:
-        writer = pd.ExcelWriter(excel_report_path, engine='xlsxwriter')
+        writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
 
         # copy the variant rank column to position 0, make first sheet called "All"
         all_dfs[''] = all_dfs['variant_rank']

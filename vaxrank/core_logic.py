@@ -15,44 +15,52 @@ import logging
 
 from numpy import isclose
 
+from isovar import IsovarResult
+from mhctools.base_predictor import BasePredictor
+
+from .epitope_config import EpitopeConfig
+from .vaccine_config import VaccineConfig
+from .epitope_logic import slice_epitope_predictions, predict_epitopes
 from .mutant_protein_fragment import MutantProteinFragment
-from .epitope_prediction import predict_epitopes, slice_epitope_predictions
 from .vaccine_peptide import VaccinePeptide
 from .vaxrank_results import VaxrankResults
 
 logger = logging.getLogger(__name__)
 
 def run_vaxrank(
-        isovar_results,
-        mhc_predictor,
-        vaccine_peptide_length=25,
-        max_vaccine_peptides_per_variant=1,
-        num_mutant_epitopes_to_keep=10000,
-        min_epitope_score=0.0):
+        isovar_results : list[IsovarResult],
+        mhc_predictor : BasePredictor,
+        vaccine_peptide_length : int = 25,
+        max_vaccine_peptides_per_variant : int = 1,
+        num_mutant_epitopes_to_keep : int = 10000,
+        epitope_config : EpitopeConfig = None,
+        vaccine_config : VaccineConfig = None):
     """
     Parameters
     ----------
-    isovar_results : list of isovar.IsovarResult
+    isovar_results  
         Each IsovarResult corresponds to one somatic variant and its collection
          of protein sequences determined from RNA.
 
-    mhc_predictor : mhctools.BasePredictor
+    mhc_predictor
         Object with predict_peptides method, used for making pMHC binding
         predictions
 
-    vaccine_peptide_length : int
+    vaccine_peptide_length 
         Length of vaccine SLP to construct
 
-    max_vaccine_peptides_per_variant : int
+    max_vaccine_peptides_per_variant
         Number of vaccine peptides to generate for each mutation.
 
-    num_mutant_epitopes_to_keep : int, optional
+    num_mutant_epitopes_to_keep 
         Number of top-ranking epitopes for each vaccine peptide to include in
         computation.
 
-    min_epitope_score : float, optional
-        Ignore peptides with binding predictions whose normalized score is less
-        than this.
+    epitope_config 
+        Configuration options for epitope scoring, using defaults if not provided
+    
+    vaccine_config
+        Configuration options for vaccine peptide selection, using defaults if not provided
     """
     variant_to_vaccine_peptides_dict = create_vaccine_peptides_dict(
         isovar_results=isovar_results,
@@ -60,7 +68,8 @@ def run_vaxrank(
         vaccine_peptide_length=vaccine_peptide_length,
         max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
         num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
-        min_epitope_score=min_epitope_score)
+        epitope_config=epitope_config,
+        vaccine_config=vaccine_config)
     ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
 
     return VaxrankResults(
@@ -70,35 +79,38 @@ def run_vaxrank(
 
 
 def create_vaccine_peptides_dict(
-        isovar_results,
-        mhc_predictor,
-        vaccine_peptide_length=25,
-        max_vaccine_peptides_per_variant=1,
-        num_mutant_epitopes_to_keep=10 ** 5,
-        min_epitope_score=0.0):
+        isovar_results : list[IsovarResult],
+        mhc_predictor : BasePredictor,
+        vaccine_peptide_length : int = 25,
+        max_vaccine_peptides_per_variant : int = 1,
+        num_mutant_epitopes_to_keep : int = 10 ** 5,
+        epitope_config : EpitopeConfig = None,
+        vaccine_config : VaccineConfig = None):
     """
     Parameters
     ----------
-    isovar_results : list of isovar.IsovarResult
+    isovar_results 
         List with one object per variant optionally containing protein sequences
 
-    mhc_predictor : mhctools.BasePredictor
+    mhc_predictor
         Object with predict_peptides method, used for making pMHC binding
         predictions
 
-    vaccine_peptide_length : int
+    vaccine_peptide_length 
         Length of vaccine SLP to construct
 
-    max_vaccine_peptides_per_variant : int
+    max_vaccine_peptides_per_variant 
         Number of vaccine peptides to generate for each mutation.
 
-    num_mutant_epitopes_to_keep : int, optional
+    num_mutant_epitopes_to_keep 
         Number of top-ranking epitopes for each vaccine peptide to include in
         computation.
 
-    min_epitope_score : float, optional
-        Ignore peptides with binding predictions whose normalized score is less
-        than this.
+    epitope_config 
+        Configuration options for epitope scoring, using defaults if not provided
+    
+    vaccine_config
+        Configuration options for vaccine peptide selection, using defaults if not provided
 
     Returns
     -------
@@ -114,7 +126,8 @@ def create_vaccine_peptides_dict(
             vaccine_peptide_length=vaccine_peptide_length,
             max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
-            min_epitope_score=min_epitope_score)
+            epitope_config=epitope_config,
+            vaccine_config=vaccine_config)
 
         if any(x.contains_mutant_epitopes() for x in vaccine_peptides):
             vaccine_peptides_dict[variant] = vaccine_peptides
@@ -122,35 +135,32 @@ def create_vaccine_peptides_dict(
     return vaccine_peptides_dict
 
 def vaccine_peptides_for_variant(
-        isovar_result,
-        mhc_predictor,
-        vaccine_peptide_length,
-        max_vaccine_peptides_per_variant,
-        num_mutant_epitopes_to_keep=None,
-        min_epitope_score=0.0):
+        isovar_result : IsovarResult,
+        mhc_predictor : BasePredictor,
+        vaccine_peptide_length : int,
+        max_vaccine_peptides_per_variant : int,
+        num_mutant_epitopes_to_keep : int = None,
+        epitope_config : EpitopeConfig = None,
+        vaccine_config : VaccineConfig = None):
     """
     Parameters
     ----------
-    isovar_result : isovar.IsovarResult
+    isovar_result
 
-    mhc_predictor : mhctools.BasePredictor
+    mhc_predictor 
         Object with predict_peptides method, used for making pMHC binding
         predictions
 
-    vaccine_peptide_length : int
+    vaccine_peptide_length 
         Length of vaccine SLP to construct
 
-    max_vaccine_peptides_per_variant : int
+    max_vaccine_peptides_per_variant 
         Number of vaccine peptides to generate for each mutation.
 
-    num_mutant_epitopes_to_keep : int, optional
+    num_mutant_epitopes_to_keep 
         Number of top-ranking epitopes for each vaccine peptide to include in
         computation.
-
-    min_epitope_score : float, optional
-        Ignore peptides with binding predictions whose normalized score is less
-        than this.
-
+    
     Returns
     -------
     Sorted list of VaccinePeptide objects. If there are no suitable vaccine
@@ -172,9 +182,11 @@ def vaccine_peptides_for_variant(
     epitope_predictions = predict_epitopes(
         mhc_predictor=mhc_predictor,
         protein_fragment=long_protein_fragment,
-        min_epitope_score=min_epitope_score,
+        epitope_config=epitope_config,
         genome=variant.ensembl).values()
-
+    
+    # TODO: make a function called vaccine_peptides_from_epitopes that
+    # takes vaccine_config as an option
     candidate_vaccine_peptides = []
 
     for offset, candidate_fragment in long_protein_fragment.sorted_subsequences(
@@ -270,3 +282,5 @@ def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):
     # sort in descending order of combined (expression * mhc binding) scores
     result_list.sort(key=sort_key, reverse=True)
     return result_list
+
+

@@ -10,21 +10,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import msgspec 
 
-from .core_logic import run_vaxrank
-from .epitope_prediction import EpitopePrediction
-from .epitope_logic import predict_epitopes
-from .vaccine_peptide import VaccinePeptide
-from .version import __version__
-from .epitope_config import EpitopeConfig
-from .vaccine_config import VaccineConfig
+DEFAULT_MIN_EPITOPE_SCORE = 0.00001
+DEFAULT_BINDING_AFFINITY_CUTOFF = 5000.0
 
-__all__ = [
-    "__version__",
-    "EpitopePrediction",
-    "VaccinePeptide",
-    "run_vaxrank",
-    "predict_epitopes",
-    "EpitopeConfig",
-    "VaccineConfig",
-]
+class EpitopeConfig(msgspec.Struct):
+
+    """Parameters for score, filtering, and ranking both epitopes and vaccine peptides"""
+    logistic_epitope_score_midpoint : float = 350.0
+    logistic_epitope_score_width : float = 150.0
+    
+    min_epitope_score : float = DEFAULT_MIN_EPITOPE_SCORE
+    binding_affinity_cutoff : float = DEFAULT_BINDING_AFFINITY_CUTOFF

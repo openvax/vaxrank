@@ -10,21 +10,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import msgspec
 
-from .core_logic import run_vaxrank
-from .epitope_prediction import EpitopePrediction
-from .epitope_logic import predict_epitopes
-from .vaccine_peptide import VaccinePeptide
-from .version import __version__
-from .epitope_config import EpitopeConfig
-from .vaccine_config import VaccineConfig
+class VaccineConfig(msgspec.Struct):
+    """Parameters for assembling epitope predictions into vaccine peptides"""
+    vaccine_peptide_length : int = 25
+    
+    padding_around_mutation : int = 5
 
-__all__ = [
-    "__version__",
-    "EpitopePrediction",
-    "VaccinePeptide",
-    "run_vaxrank",
-    "predict_epitopes",
-    "EpitopeConfig",
-    "VaccineConfig",
-]
+    max_vaccine_peptides_per_variant : int = 1
+    
+    num_mutant_epitopes_to_keep : int = 1000 
