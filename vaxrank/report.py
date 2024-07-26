@@ -426,6 +426,7 @@ def new_columns():
         ("pos", []),
         ("ref", []),
         ("alt", []),
+        ("gene_name", []),
         ("variant_rank", []),
         ("peptide_rank", []),
         ("mutation_start", []),
@@ -546,6 +547,7 @@ def make_csv_report(
             columns["pos"].append(variant.original_start)
             columns["ref"].append(variant.original_ref)
             columns["alt"].append(variant.original_alt)
+            columns["gene_name"].append(vaccine_peptide.mutant_protein_fragment.gene_name)
             columns["variant_rank"].append(i + 1)
             columns["peptide_rank"].append(j + 1)
             columns["amino_acids"].append(vaccine_peptide.mutant_protein_fragment.amino_acids)
