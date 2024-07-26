@@ -513,7 +513,7 @@ def make_minimal_neoepitope_report(
         worksheet.set_column('%s:%s' % ('G', 'G'), 30)
         worksheet.set_column('%s:%s' % ('H', 'H'), 9)
         worksheet.set_column('%s:%s' % ('I', 'I'), 18)
-        writer.save()
+        writer.close()
         logger.info('Wrote XLSX neoepitope report file to %s', excel_report_path)
 
 
