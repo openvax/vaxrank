@@ -598,5 +598,5 @@ def make_csv_report(
             df.to_excel(writer, sheet_name=shortened_sheet_name, index=False)
             resize_columns(writer.sheets[shortened_sheet_name], 'A', 'C')
 
-        writer.save()
+        writer.close()
         logger.info('Wrote manufacturer XLSX file to %s', excel_report_path)
