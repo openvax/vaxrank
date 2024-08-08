@@ -19,10 +19,12 @@ from ..vaccine_config import VaccineConfig
 
 
 def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
+    default_vaccine_config = VaccineConfig()
+
     vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
     vaccine_peptide_group.add_argument(
         "--vaccine-peptide-length",
-        default=25,
+        default=default_vaccine_config.vaccine_peptide_length,
         type=int,
         help="Number of amino acids in the vaccine peptides. (default: %(default)s)")
 

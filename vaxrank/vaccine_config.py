@@ -20,4 +20,4 @@ class VaccineConfig(msgspec.Struct):
 
     max_vaccine_peptides_per_variant : int = 1
     
-    num_mutant_epitopes_to_keep : int = 1000 
+    num_mutant_epitopes_to_keep : int = 1000

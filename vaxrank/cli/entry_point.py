@@ -24,7 +24,7 @@ import serializable
 
 
 from varcode.cli import variant_collection_from_args
-from isovar import isovar_results_to_dataframe
+from isovar import isovar_results_to_dataframe, run_isovar_from_parsed_args
 from mhctools.cli import (
     mhc_alleles_from_args,
     mhc_binding_predictor_from_args,

@@ -137,9 +137,7 @@ def create_vaccine_peptides_dict(
 def vaccine_peptides_for_variant(
         isovar_result : IsovarResult,
         mhc_predictor : BasePredictor,
-        vaccine_peptide_length : int,
-        max_vaccine_peptides_per_variant : int,
-        num_mutant_epitopes_to_keep : int = None,
+        
         epitope_config : EpitopeConfig = None,
         vaccine_config : VaccineConfig = None):
     """
@@ -179,12 +177,18 @@ def vaccine_peptides_for_variant(
         variant,
         long_protein_fragment)
 
-    epitope_predictions = predict_epitopes(
+    epitope_predictions_dict = predict_epitopes(
         mhc_predictor=mhc_predictor,
         protein_fragment=long_protein_fragment,
         epitope_config=epitope_config,
-        genome=variant.ensembl).values()
+        genome=variant.ensembl)
+    epitope_predictions : list[] = epitope_predictions_dict.values()
+    return vaccine_peptides_from_epitopes(
+        epitope_predictions, 
+        vaccine_config=vaccine_config)
     
+
+def vaccine_peptides_from_epitopes():
     # TODO: make a function called vaccine_peptides_from_epitopes that
     # takes vaccine_config as an option
     candidate_vaccine_peptides = []
@@ -210,7 +214,7 @@ def vaccine_peptides_for_variant(
         candidate_vaccine_peptide = VaccinePeptide(
             mutant_protein_fragment=candidate_fragment,
             epitope_predictions=subsequence_epitope_predictions,
-            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep)
+            num_mutant_epitopes_to_keep=vaccine_config.num_mutant_epitopes_to_keep)
 
         logger.debug(
             "%s, combined score: %0.4f",

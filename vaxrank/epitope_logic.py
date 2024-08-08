@@ -20,7 +20,7 @@ from pyensembl import Genome
 from mhctools.base_predictor import BasePredictor
 
 
-from .epitope_config import EpitopeConfig 
+from .cli.epitope_config_args import EpitopeConfig 
 from .epitope_prediction import EpitopePrediction
 from .mutant_protein_fragment import MutantProteinFragment
 from .reference_proteome import ReferenceProteome
@@ -42,11 +42,14 @@ def slice_epitope_predictions(
         if p.offset >= start_offset and p.offset + p.length <= end_offset
     ]
 
+Peptide = str
+Allele = str
+
 def predict_epitopes(
         mhc_predictor : BasePredictor,
         protein_fragment : MutantProteinFragment,
-        config : EpitopeConfig = None,
-        genome :  Genome = None):
+        epitope_config : EpitopeConfig = None,
+        genome :  Genome = None) -> dict[tuple[Peptide, Allele], EpitopePrediction]
     """
     Parameters
     ----------
@@ -56,7 +59,7 @@ def predict_epitopes(
     protein_fragment 
         Protein sub-sequence to run MHC binding predictor over 
 
-    config
+    epitope_config
         Configuration object with parameters for scoring epitopes, if 
         missing then default values are used
 
@@ -69,8 +72,8 @@ def predict_epitopes(
 
     Uses the input genome to evaluate whether the epitope occurs in reference.
     """
-    if config is None:
-        config = EpitopeConfig()
+    if epitope_config is None:
+        epitope_config = EpitopeConfig()
 
     results = OrderedDict()
     reference_proteome = ReferenceProteome(genome)
@@ -185,11 +188,11 @@ def predict_epitopes(
             offset=peptide_start_offset,
             occurs_in_reference=occurs_in_reference)
         epitope_score = epitope_prediction.logistic_epitope_score(
-            midpoint=config.logistic_epitope_score_midpoint,
-            width=config.logistic_epitope_score_width,
-            ic50_cutoff=config.binding_affinity_cutoff)
+            midpoint=epitope_config.logistic_epitope_score_midpoint,
+            width=epitope_config.logistic_epitope_score_width,
+            ic50_cutoff=epitope_config.binding_affinity_cutoff)
 
-        if epitope_score >= config.min_epitope_score:
+        if epitope_score >= epitope_config.min_epitope_score:
             key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)
             results[key] = epitope_prediction
         else:
