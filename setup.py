@@ -11,7 +11,9 @@
 # limitations under the License.
 
 
-from __future__ import (absolute_import,)
+from __future__ import (
+    absolute_import,
+)
 
 import os
 import logging
@@ -20,30 +22,33 @@ import re
 from setuptools import setup
 
 readme_dir = os.path.dirname(__file__)
-readme_path = os.path.join(readme_dir, 'README.md')
+readme_path = os.path.join(readme_dir, "README.md")
 
 try:
-    with open(readme_path, 'r') as f:
+    with open(readme_path, "r") as f:
         readme_markdown = f.read()
 except:
     logging.warn("Failed to load %s" % readme_path)
     readme_markdown = ""
 
-with open('vaxrank/__init__.py', 'r') as f:
-    version = re.search(
-        r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]',
-        f.read(),
-        re.MULTILINE).group(1)
-
-with open("requirements.txt")  as f:
-    requirements = [req.strip() for req in f.read().splitlines() if req.strip()]
+with open("vaxrank/version.py", "r") as f:
+    match = re.search(r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]', f.read(), re.MULTILINE)
+    if not match:
+        raise RuntimeError("Cannot find version information")
+    else:
+        version = match.group(1)
 
 if not version:
     raise RuntimeError("Cannot find version information")
 
-if __name__ == '__main__':
+
+with open("requirements.txt") as f:
+    requirements = [req.strip() for req in f.read().splitlines() if req.strip()]
+
+
+if __name__ == "__main__":
     setup(
-        name='vaxrank',
+        name="vaxrank",
         version=version,
         description="Mutant peptide ranking for personalized cancer vaccines",
         author="Alex Rubinsteyn, Julia Kodysh",
@@ -51,22 +56,18 @@ if __name__ == '__main__':
         url="https://github.com/openvax/vaxrank",
         license="http://www.apache.org/licenses/LICENSE-2.0.html",
         classifiers=[
-            'Development Status :: 4 - Beta',
-            'Environment :: Console',
-            'Operating System :: OS Independent',
-            'Intended Audience :: Science/Research',
-            'License :: OSI Approved :: Apache Software License',
-            'Programming Language :: Python',
-            'Topic :: Scientific/Engineering :: Bio-Informatics',
+            "Development Status :: 4 - Beta",
+            "Environment :: Console",
+            "Operating System :: OS Independent",
+            "Intended Audience :: Science/Research",
+            "License :: OSI Approved :: Apache Software License",
+            "Programming Language :: Python",
+            "Topic :: Scientific/Engineering :: Bio-Informatics",
         ],
         install_requires=requirements,
         long_description=readme_markdown,
-        long_description_content_type='text/markdown',
-        packages=['vaxrank'],
-        package_data={'vaxrank': ['templates/*', 'data/*', 'logging.conf']},
-        entry_points={
-            'console_scripts': [
-                'vaxrank = vaxrank.cli.entry_point:main'
-            ]
-        }
+        long_description_content_type="text/markdown",
+        packages=["vaxrank"],
+        package_data={"vaxrank": ["templates/*", "data/*", "logging.conf"]},
+        entry_points={"console_scripts": ["vaxrank = vaxrank.cli.entry_point:main"]},
     )
