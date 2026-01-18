@@ -8,7 +8,6 @@ roman
 jinja2<3.1
 pdfkit  # needs wkhtmltopdf: brew install Caskroom/cask/wkhtmltopdf
 pypandoc  # needs pandoc: brew install pandoc
-shellinford>=0.3.4
 openpyxl
 xvfbwrapper
 future>=0.16.0  # needed by pylint

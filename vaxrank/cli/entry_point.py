@@ -24,17 +24,18 @@ import serializable
 
 
 from varcode.cli import variant_collection_from_args
-from isovar import isovar_results_to_dataframe, run_isovar_from_parsed_args
+from isovar import isovar_results_to_dataframe
+from isovar.cli import run_isovar_from_parsed_args
 from mhctools.cli import (
     mhc_alleles_from_args,
     mhc_binding_predictor_from_args,
 )
 
-from .arg_parser import parse_vaxrank_args
+from .arg_parser import parse_vaxrank_args, check_args
 from .epitope_config_args import epitope_config_from_args
 from .vaccine_config_args import vaccine_config_from_args
 
-from ..core_logic import run_vaxrank, run_vaxrank_from_parsed_args
+from ..core_logic import run_vaxrank
 from ..gene_pathway_check import GenePathwayCheck
 from ..report import (
     make_ascii_report,
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
 def configure_logging(args):
     logging.config.fileConfig(
         pkg_resources.resource_filename(
-            __name__,
+            'vaxrank',
             'logging.conf'),
         defaults={'logfilename': args.log_path})
     

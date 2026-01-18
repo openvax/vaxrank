@@ -10,178 +10,193 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Reference proteome indexing for checking if peptides exist in the reference.
+
+Uses a set-based index for O(1) membership testing of peptide kmers.
+"""
+
 import os
 import logging
+import pickle
 
 from datacache import get_data_dir
-import shellinford
-import pandas as pd
-from tqdm import tqdm
-from collections import defaultdict
-
 
 logger = logging.getLogger(__name__)
 
+# Default kmer length range for epitope peptides
+DEFAULT_MIN_KMER_LENGTH = 8
+DEFAULT_MAX_KMER_LENGTH = 15
+
 
 def get_cache_dir() -> str:
-    # if $VAXRANK_REF_PEPTIDES_DIR is set, that'll be the location of the cache
+    """Get the cache directory for reference peptide indices."""
     cache_dir = get_data_dir(envkey="VAXRANK_REF_PEPTIDES_DIR")
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
     return cache_dir
 
 
-def fm_index_path(genome) -> str:
-    """
-    Returns a path for cached reference peptides, for the given genome.
-    """
-    return os.path.join(
-        get_cache_dir(), "%s_%d_3.fm" % (genome.species.latin_name, genome.release)
-    )
-
-
-def kmer_index_path(genome, min_len=8, max_len=15) -> str:
+def kmer_set_index_path(genome, min_len: int, max_len: int) -> str:
+    """Returns path for the cached kmer set index."""
     return os.path.join(
         get_cache_dir(),
-        "%s_%d_kmers_%d_%d.csv"
+        "%s_%d_kmer_set_%d_%d.pkl"
         % (genome.species.latin_name, genome.release, min_len, max_len),
     )
 
 
-def generate_protein_sequences_dict(genome) -> dict[str, str]:
+def build_kmer_set_index(
+    genome,
+    min_len: int = DEFAULT_MIN_KMER_LENGTH,
+    max_len: int = DEFAULT_MAX_KMER_LENGTH,
+) -> set[str]:
     """
-    Generator whose elements are protein sequences from the given genome.
+    Build a set of all kmers from protein sequences in the genome.
 
     Parameters
     ----------
     genome : pyensembl.EnsemblRelease
         Input genome to load for reference peptides
+
+    min_len : int
+        Minimum kmer length to index
+
+    max_len : int
+        Maximum kmer length to index
+
+    Returns
+    -------
+    set[str]
+        Set of all kmers found in the reference proteome
     """
-    return {
-        t.id: t.protein_sequence for t in genome.transcripts() if t.is_protein_coding
-    }
+    logger.info(
+        "Building kmer set index for %s release %d (lengths %d-%d)",
+        genome.species.latin_name,
+        genome.release,
+        min_len,
+        max_len,
+    )
+    kmers = set()
+    transcripts = genome.transcripts()
+    n_transcripts = len(transcripts)
 
-
-def generate_protein_sequences(genome) -> list[str]:
-    return list(generate_protein_sequences_dict(genome).values())
-
-
-def build_reference_peptides_fm_index(genome, path):
-    """
-    Parameters
-    ----------
-    genome : pyensembl.EnsemblRelease
-        Input genome to load for reference peptides
-
-    """
-    logger.info("Building FM index at %s", path)
-    fm = shellinford.FMIndex()
-    fm.build(generate_protein_sequences(genome), path)
-    logger.info("Done building FM index")
-    return fm
-
-
-def build_reference_peptides_kmer_index(
-    genome, path, min_len=8, max_len=15
-) -> dict[str, list[str, int]]:
-    """
-    Parameters
-    ----------
-    genome : pyensembl.EnsemblRelease
-        Input genome to load for reference peptides
-
-    path : str
-        Path to save the kmer index
-    """
-    logger.info("Building kmer index at %s", path)
-    kmers = defaultdict(list)
-    for t in tqdm(genome.transcripts()):
+    for i, t in enumerate(transcripts):
         if not t.is_protein_coding:
             continue
-        t_id = t.id
         protein = t.protein_sequence
-        for i in range(len(protein) - min_len + 1):
+        if protein is None:
+            continue
 
-            for k in range(min_len, max_len + 1):
-                kmer = protein[i : i + k]
-                if len(kmer) == k:
-                    kmers[kmer].append((t_id, i))
-    cols = {"kmer": [], "transcript": [], "offset": []}
-    for kmer, pairs in tqdm(kmers.items()):
-        for transcript, offset in pairs:
-            cols["kmer"].append(kmer)
-            cols["transcript"].append(transcript)
-            cols["offset"].append(offset)
-    df = pd.DataFrame(cols)
-    df.to_csv(path, index=False)
-    logger.info("Done building kmer index")
+        # Extract all kmers of each length
+        for k in range(min_len, max_len + 1):
+            for j in range(len(protein) - k + 1):
+                kmers.add(protein[j : j + k])
+
+        if (i + 1) % 10000 == 0:
+            logger.info("Processed %d/%d transcripts", i + 1, n_transcripts)
+
+    logger.info(
+        "Done building kmer set index: %d unique kmers from %d transcripts",
+        len(kmers),
+        n_transcripts,
+    )
     return kmers
 
 
-def load_reference_peptides_fm_index(genome, force_reload=False) -> shellinford.FMIndex:
+def load_kmer_set_index(
+    genome,
+    min_len: int = DEFAULT_MIN_KMER_LENGTH,
+    max_len: int = DEFAULT_MAX_KMER_LENGTH,
+    force_reload: bool = False,
+) -> set[str]:
     """
-    Loads the FM index containing reference peptides.
+    Load or build the kmer set index for the given genome.
 
     Parameters
     ----------
     genome : pyensembl.EnsemblRelease
         Input genome to load for reference peptides
 
-    force_reload : bool, optional
-        If true, will recompute index for this genome even if it already exists.
+    min_len : int
+        Minimum kmer length to index
+
+    max_len : int
+        Maximum kmer length to index
+
+    force_reload : bool
+        If true, rebuild index even if cached version exists
 
     Returns
     -------
-    fm : shellinford.FMIndex
-        Index populated with reference peptides from the genome
+    set[str]
+        Set of all kmers found in the reference proteome
     """
-    path = fm_index_path(genome)
-    if force_reload or not os.path.exists(path):
-        return build_reference_peptides_fm_index(genome, path)
-    return shellinford.FMIndex(filename=path)
+    path = kmer_set_index_path(genome, min_len, max_len)
+
+    if not force_reload and os.path.exists(path):
+        logger.info("Loading cached kmer set index from %s", path)
+        with open(path, "rb") as f:
+            return pickle.load(f)
+
+    kmers = build_kmer_set_index(genome, min_len, max_len)
+
+    logger.info("Saving kmer set index to %s", path)
+    with open(path, "wb") as f:
+        pickle.dump(kmers, f)
+
+    return kmers
 
 
-def load_reference_peptides_kmer_index(
-    genome, force_reload=False
-) -> dict[str, list[str, int]]:
+class ReferenceProteome:
     """
-    Loads the FM index containing reference peptides.
+    Index for checking if peptide sequences exist in a reference proteome.
 
-    Parameters
-    ----------
-    genome : pyensembl.EnsemblRelease
-        Input genome to load for reference peptides
-
-    force_reload : bool, optional
-        If true, will recompute index for this genome even if it already exists.
-
-    Returns
-    -------
-    kmer_index : dict[str, list[str, int]]
-        Index mapping kmer peptides to the list of transcript IDs and amino acid positions
+    Uses a set-based index for O(1) membership testing.
     """
-    path = kmer_index_path(genome)
-    if force_reload or not os.path.exists(path):
-        return build_reference_peptides_kmer_index(genome, path)
-    df = pd.read_csv(path)
-    return {k: list(v) for k, v in df.set_index("kmer").to_dict(orient="index").items()}
 
+    def __init__(
+        self,
+        genome,
+        min_kmer_length: int = DEFAULT_MIN_KMER_LENGTH,
+        max_kmer_length: int = DEFAULT_MAX_KMER_LENGTH,
+    ):
+        """
+        Parameters
+        ----------
+        genome : pyensembl.EnsemblRelease or None
+            Input genome for reference peptides. If None, contains() always
+            returns False.
 
-class ReferenceProteome(object):
-    def __init__(self, genome, index_type="kmer"):
+        min_kmer_length : int
+            Minimum peptide length to index
+
+        max_kmer_length : int
+            Maximum peptide length to index
+        """
         self.genome = genome
-        self.index_type = index_type
+        self.min_kmer_length = min_kmer_length
+        self.max_kmer_length = max_kmer_length
 
-        if index_type == "kmer":
-            self.fm_index = None
-            self.kmer_index = load_reference_peptides_kmer_index(genome)
-        elif index_type == "fm":
-            self.fm_index = load_reference_peptides_fm_index(genome)
+        if genome is not None:
+            self._kmer_set = load_kmer_set_index(
+                genome, min_kmer_length, max_kmer_length
+            )
         else:
-            raise ValueError("Uknown index type: %s" % index_type)
+            self._kmer_set = set()
 
-    def contains(self, kmer):
-        if self.index_type == "kmer":
-            return kmer in self.kmer_index
-        elif self.index_type == "fm":
-            return len(self.fm_index.search(kmer)) > 0
+    def contains(self, peptide: str) -> bool:
+        """
+        Check if a peptide sequence exists in the reference proteome.
+
+        Parameters
+        ----------
+        peptide : str
+            Peptide sequence to check
+
+        Returns
+        -------
+        bool
+            True if the peptide exists in the reference proteome
+        """
+        return peptide in self._kmer_set

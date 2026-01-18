@@ -61,12 +61,22 @@ def vaccine_config_from_args(args : argparse.Namespace) -> VaccineConfig:
     """
     Extract config path and overrides from argument namespace
     """
-    epitope_config_kwargs = {}
-    if args.epitope_prediction_config:
-        with open(args.epitope_prediction_config) as f:
-            epitope_config_kwargs.update(msgspec.yaml.decode(f.read()))
+    vaccine_config_kwargs = {}
+    if args.config:
+        with open(args.config) as f:
+            yaml_config = msgspec.yaml.decode(f.read(), type=dict)
+            # Extract vaccine-related config if present
+            if "vaccine_config" in yaml_config:
+                vaccine_config_kwargs.update(yaml_config["vaccine_config"])
 
-    if args.min_epitope_score is not None:
-        epitope_config_kwargs["min_epitope_score"] = args.min_epitope_score
-    epitope_config = msgspec.convert(epitope_config_kwargs, EpitopeConfig)
-    return epitope_config
+    if args.vaccine_peptide_length is not None:
+        vaccine_config_kwargs["vaccine_peptide_length"] = args.vaccine_peptide_length
+    if args.padding_around_mutation is not None:
+        vaccine_config_kwargs["padding_around_mutation"] = args.padding_around_mutation
+    if args.max_vaccine_peptides_per_mutation is not None:
+        vaccine_config_kwargs["max_vaccine_peptides_per_variant"] = args.max_vaccine_peptides_per_mutation
+    if args.num_epitopes_per_vaccine_peptide is not None:
+        vaccine_config_kwargs["num_mutant_epitopes_to_keep"] = args.num_epitopes_per_vaccine_peptide
+
+    vaccine_config = msgspec.convert(vaccine_config_kwargs, VaccineConfig)
+    return vaccine_config

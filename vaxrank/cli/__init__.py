@@ -9,3 +9,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from .arg_parser import make_vaxrank_arg_parser
+from .entry_point import main, run_vaxrank_from_parsed_args
+
+__all__ = [
+    "make_vaxrank_arg_parser",
+    "run_vaxrank_from_parsed_args",
+    "main",
+]

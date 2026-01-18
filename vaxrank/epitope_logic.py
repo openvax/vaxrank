@@ -20,7 +20,7 @@ from pyensembl import Genome
 from mhctools.base_predictor import BasePredictor
 
 
-from .cli.epitope_config_args import EpitopeConfig 
+from .epitope_config import EpitopeConfig 
 from .epitope_prediction import EpitopePrediction
 from .mutant_protein_fragment import MutantProteinFragment
 from .reference_proteome import ReferenceProteome
@@ -49,7 +49,7 @@ def predict_epitopes(
         mhc_predictor : BasePredictor,
         protein_fragment : MutantProteinFragment,
         epitope_config : EpitopeConfig = None,
-        genome :  Genome = None) -> dict[tuple[Peptide, Allele], EpitopePrediction]
+        genome :  Genome = None) -> dict[tuple[Peptide, Allele], EpitopePrediction]:
     """
     Parameters
     ----------

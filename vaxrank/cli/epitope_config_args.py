@@ -14,7 +14,7 @@ import argparse
 
 import msgspec 
 
-from ..epitope_config import EpitopeConfig
+from ..epitope_config import EpitopeConfig, DEFAULT_MIN_EPITOPE_SCORE
 
 
 def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
@@ -32,9 +32,12 @@ def epitope_config_from_args(args : argparse.Namespace) -> EpitopeConfig:
     Extract config path and overrides from argument namespace
     """
     epitope_config_kwargs = {}
-    if args.epitope_prediction_config:
-        with open(args.epitope_prediction_config) as f:
-            epitope_config_kwargs.update(msgspec.yaml.decode(f.read()))
+    if args.config:
+        with open(args.config) as f:
+            yaml_config = msgspec.yaml.decode(f.read(), type=dict)
+            # Extract epitope-related config if present
+            if "epitope_config" in yaml_config:
+                epitope_config_kwargs.update(yaml_config["epitope_config"])
 
     if args.min_epitope_score is not None:
         epitope_config_kwargs["min_epitope_score"] = args.min_epitope_score
