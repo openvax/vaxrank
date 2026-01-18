@@ -256,7 +256,11 @@ class TemplateDataCreator(object):
                 logger.info("Link for report: %s", link_for_report)
                 return link_for_report
         except requests.exceptions.ConnectionError as e:
-            logger.warn('ConnectionError reaching WUSTL: %s', e)
+            logger.warning('ConnectionError reaching WUSTL: %s', e)
+            return None
+        except requests.exceptions.JSONDecodeError as e:
+            # DoCM API may be down or returning invalid response
+            logger.warning('JSONDecodeError from WUSTL API: %s', e)
             return None
 
         logger.info('Variant not found in WUSTL')
