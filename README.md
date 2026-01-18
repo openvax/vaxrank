@@ -11,7 +11,6 @@ Selection of mutated protein fragments for therapeutic personalized cancer vacci
 ## Usage
 
 ```sh
-
 vaxrank \
     --vcf test/data/b16.f10/b16.vcf \
     --bam test/data/b16.f10/b16.combined.bam \
@@ -24,6 +23,29 @@ vaxrank \
     --output-html-report vaccine-peptides.html
 ```
 
+### Using a YAML Configuration File
+
+You can specify common parameters in a YAML configuration file to avoid repeating them on every run:
+
+```sh
+vaxrank --config my_config.yaml --vcf variants.vcf --bam tumor.bam
+```
+
+Example `my_config.yaml`:
+```yaml
+epitope_config:
+  min_epitope_score: 0.001
+  logistic_epitope_score_midpoint: 350.0
+  logistic_epitope_score_width: 150.0
+
+vaccine_config:
+  vaccine_peptide_length: 25
+  padding_around_mutation: 5
+  max_vaccine_peptides_per_variant: 1
+```
+
+CLI arguments override values from the config file.
+
 ## Installation
 
 Vaxrank can be installed using [pip](https://packaging.python.org/installing/#use-pip-for-installing):
@@ -31,6 +53,8 @@ Vaxrank can be installed using [pip](https://packaging.python.org/installing/#us
 ```
 pip install vaxrank
 ```
+
+**Requirements:** Python 3.9+
 
 Note: to generate PDF reports, you first need to install [wkhtmltopdf](http://wkhtmltopdf.org/), which you can do (on OS X) like so:
 
@@ -52,6 +76,22 @@ pyensembl install --release 75 --species human
 
 If your variants were called from alignments against hg19 then you can still use GRCh37 but should ignore mitochondrial variants.
 
+## Features
+
+### Reference Proteome Filtering
+
+Vaxrank filters out peptides that exist in the reference proteome to focus on truly novel mutant sequences. This uses a set-based kmer index for O(1) membership testing. The index is built once and cached locally for subsequent runs.
+
+### Cancer Hotspot Annotation
+
+Vaxrank annotates variants that occur at known cancer mutation hotspots using bundled data from [cancerhotspots.org](https://www.cancerhotspots.org/) (Chang et al. 2016, 2017). This helps identify clinically relevant mutations. The hotspot data includes ~2,700 recurrently mutated positions across cancer types.
+
+### MHC Binding Prediction
+
+Vaxrank integrates with multiple MHC binding predictors via [mhctools](https://github.com/openvax/mhctools), including:
+- NetMHC / NetMHCpan
+- MHCflurry (open source, installed by default)
+
 ## Paper & Citation
 
 There is a Vaxrank paper on biorxiv called [Vaxrank: A Computational Tool For Designing Personalized Cancer Vaccines](https://www.biorxiv.org/content/early/2017/05/27/142919) which can be cited as:
@@ -69,25 +109,62 @@ There is a Vaxrank paper on biorxiv called [Vaxrank: A Computational Tool For De
     }
 
 
-# Development
+## Development
 
-To install Vaxrank for local development, you may do the below:
+To install Vaxrank for local development:
 
-```
+```bash
 git clone git@github.com:openvax/vaxrank.git
-conda create -q -n vaxrank-dev-env python=3.5.2 numpy scipy pandas pylint
-source activate vaxrank-dev-env
+cd vaxrank
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-pip install .
-pyensembl install --release 87 --species human
-pyensembl install --release 87 --species mouse
+pip install -e .
+pyensembl install --release 93 --species human
+pyensembl install --release 102 --species mouse
 ```
 
-You should run the linter and the test suite as you work on Vaxrank (and these will be run automatically by our continuous integration server up on a PR being made).
+Run linting and tests:
 
+```bash
+./lint.sh && ./test.sh
 ```
-./lint.sh && ./test.sh 
-```
 
-The first run of the tests may take a while (8 minutes on a 2016 Macbook Pro) to create the FM index of the proteome, but subsequent tests should take only a few seconds.
+The first run of the tests may take a while to build the reference proteome kmer index, but subsequent runs will use the cached index.
 
+## Architecture
+
+### Configuration
+
+Vaxrank uses [msgspec](https://jcristharif.com/msgspec/) Struct objects for configuration:
+
+- **`EpitopeConfig`**: Parameters for epitope scoring and filtering
+  - `logistic_epitope_score_midpoint`: IC50 value at which epitope score is 0.5 (default: 350 nM)
+  - `logistic_epitope_score_width`: Width parameter for logistic scoring function (default: 150)
+  - `min_epitope_score`: Minimum normalized score threshold (default: 0.00001)
+  - `binding_affinity_cutoff`: Maximum IC50 to consider (default: 5000 nM)
+
+- **`VaccineConfig`**: Parameters for vaccine peptide assembly
+  - `vaccine_peptide_length`: Length of vaccine peptides (default: 25 aa)
+  - `padding_around_mutation`: Off-center windows to consider (default: 5)
+  - `max_vaccine_peptides_per_variant`: Max peptides per variant (default: 1)
+  - `num_mutant_epitopes_to_keep`: Epitopes to keep per variant (default: 1000)
+
+### Key Modules
+
+- **`reference_proteome.py`**: Set-based kmer index for checking if peptides exist in the reference proteome
+- **`cancer_hotspots.py`**: Lookup for known cancer mutation hotspots
+- **`epitope_logic.py`**: Epitope scoring and filtering logic
+- **`core_logic.py`**: Main vaccine peptide selection algorithm
+- **`report.py`**: Report generation (ASCII, HTML, PDF, XLSX)
+
+## Dependencies
+
+Key dependencies:
+- `pyensembl`: Reference genome annotation
+- `varcode`: Variant effect prediction
+- `isovar`: RNA-based variant calling
+- `mhctools`: MHC binding prediction
+- `msgspec`: Configuration serialization (YAML/JSON)
+- `pandas`, `numpy`: Data processing
+- `jinja2`, `pdfkit`: Report generation
