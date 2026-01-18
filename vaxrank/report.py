@@ -28,6 +28,7 @@ import requests
 import roman
 from varcode import load_vcf_fast
 
+from .cancer_hotspots import get_hotspot_url
 from .manufacturability import ManufacturabilityScores
 
 logger = logging.getLogger(__name__)
@@ -239,38 +240,23 @@ class TemplateDataCreator(object):
         logger.info("Variant not in COSMIC")
         return None
 
-    def _query_wustl(self, predicted_effect, gene_name):
+    def _query_cancer_hotspots(self, predicted_effect, gene_name):
         """
-        Returns a link to the WUSTL page for this variant, if present.
+        Check if variant is a known cancer hotspot and return link if so.
+
+        Uses bundled cancer hotspots data from Chang et al. 2016/2017.
         """
         amino_acids = predicted_effect.short_description
-        api_url = "http://www.docm.info/api/v1/variants.json?amino_acids=%s&genes=%s" % (
-            amino_acids, gene_name.upper())
-        logger.info("WUSTL link: %s", api_url)
-
-        try:
-            contents = requests.get(api_url).json()
-            if len(contents) > 0:
-                hgvs = contents[0]['hgvs']
-                link_for_report = "http://docm.genome.wustl.edu/variants/%s" % hgvs
-                logger.info("Link for report: %s", link_for_report)
-                return link_for_report
-        except requests.exceptions.ConnectionError as e:
-            logger.warning('ConnectionError reaching WUSTL: %s', e)
-            return None
-        except requests.exceptions.JSONDecodeError as e:
-            # DoCM API may be down or returning invalid response
-            logger.warning('JSONDecodeError from WUSTL API: %s', e)
-            return None
-
-        logger.info('Variant not found in WUSTL')
-        return None
+        hotspot_url = get_hotspot_url(gene_name, amino_acids)
+        if hotspot_url:
+            logger.info("Cancer hotspot found: %s %s -> %s", gene_name, amino_acids, hotspot_url)
+        return hotspot_url
 
     def _databases(self, variant, predicted_effect, gene_name):
         databases = {}
-        wustl_link = self._query_wustl(predicted_effect, gene_name)
-        if wustl_link:
-            databases['WUSTL'] = wustl_link
+        hotspot_link = self._query_cancer_hotspots(predicted_effect, gene_name)
+        if hotspot_link:
+            databases['Cancer Hotspots'] = hotspot_link
 
         cosmic_link = self._query_cosmic(variant)
         if cosmic_link:
