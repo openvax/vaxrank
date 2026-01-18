@@ -64,10 +64,12 @@ def vaccine_config_from_args(args : argparse.Namespace) -> VaccineConfig:
     vaccine_config_kwargs = {}
     if args.config:
         with open(args.config) as f:
-            yaml_config = msgspec.yaml.decode(f.read(), type=dict)
-            # Extract vaccine-related config if present
-            if "vaccine_config" in yaml_config:
-                vaccine_config_kwargs.update(yaml_config["vaccine_config"])
+            content = f.read()
+            if content.strip():  # Only decode if file is not empty
+                yaml_config = msgspec.yaml.decode(content, type=dict)
+                # Extract vaccine-related config if present
+                if yaml_config and "vaccine_config" in yaml_config:
+                    vaccine_config_kwargs.update(yaml_config["vaccine_config"])
 
     if args.vaccine_peptide_length is not None:
         vaccine_config_kwargs["vaccine_peptide_length"] = args.vaccine_peptide_length
