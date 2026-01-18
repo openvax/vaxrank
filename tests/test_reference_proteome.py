@@ -19,8 +19,6 @@ import pickle
 import tempfile
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from vaxrank.reference_proteome import (
     ReferenceProteome,
     build_kmer_set_index,

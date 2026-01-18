@@ -16,8 +16,6 @@ Tests for core_logic.py integration with config objects.
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.vaccine_config import VaccineConfig
 from vaxrank.core_logic import (
@@ -26,7 +24,7 @@ from vaxrank.core_logic import (
 )
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 
-from .common import eq_, ok_, gt_, gte_
+from .common import eq_, ok_, gt_
 
 
 # =============================================================================
@@ -119,7 +117,7 @@ class TestVaccinePeptidesForVariant:
             with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
                 mock_predict.return_value = {}
 
-                result = vaccine_peptides_for_variant(
+                vaccine_peptides_for_variant(
                     isovar_result=mock_isovar_result,
                     mhc_predictor=mock_predictor,
                     vaccine_peptide_length=25,  # Explicit, should be overridden
@@ -146,7 +144,7 @@ class TestVaccinePeptidesForVariant:
             with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
                 mock_predict.return_value = {}
 
-                result = vaccine_peptides_for_variant(
+                vaccine_peptides_for_variant(
                     isovar_result=mock_isovar_result,
                     mhc_predictor=mock_predictor,
                     vaccine_peptide_length=35,  # Should be used
@@ -174,7 +172,7 @@ class TestVaccinePeptidesForVariant:
             with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
                 mock_predict.return_value = {}
 
-                result = vaccine_peptides_for_variant(
+                vaccine_peptides_for_variant(
                     isovar_result=mock_isovar_result,
                     mhc_predictor=mock_predictor,
                     epitope_config=epitope_config,

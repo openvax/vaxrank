@@ -37,7 +37,7 @@ from vaxrank.cli.vaccine_config_args import (
     add_vaccine_peptide_args,
 )
 
-from .common import eq_, ok_, almost_eq_
+from .common import eq_
 
 
 # =============================================================================

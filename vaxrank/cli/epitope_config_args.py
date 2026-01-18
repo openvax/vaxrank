@@ -14,7 +14,7 @@ import argparse
 
 import msgspec 
 
-from ..epitope_config import EpitopeConfig, DEFAULT_MIN_EPITOPE_SCORE
+from ..epitope_config import EpitopeConfig
 
 
 def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
@@ -23,8 +23,8 @@ def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
         "--min-epitope-score",
         type=float,
         help=(
-            f"Ignore predicted MHC ligands whose normalized binding score "
-            "falls below this threshold. (default: {DEFAULT_MIN_EPITOPE_SCORE})"))
+            "Ignore predicted MHC ligands whose normalized binding score "
+            "falls below this threshold."))
     
 
 def epitope_config_from_args(args : argparse.Namespace) -> EpitopeConfig:
