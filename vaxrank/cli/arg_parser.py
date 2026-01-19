@@ -183,10 +183,10 @@ def add_output_args(arg_parser):
 
 def add_supplemental_report_args(arg_parser):
     report_args_group = arg_parser.add_argument_group("Supplemental report options")
-    # Support both underscore (original) and dash versions for backwards compatibility
+    # Primary option uses dashes; underscore version kept for backwards compatibility
     report_args_group.add_argument(
-        "--cosmic_vcf_filename",
         "--cosmic-vcf-filename",
+        "--cosmic_vcf_filename",  # legacy fallback
         dest="cosmic_vcf_filename",
         default="",
         help="Local path to COSMIC vcf")
