@@ -93,9 +93,11 @@ def main(args_list=None):
             csv_report_path=args.output_csv)
 
     if args.output_neoepitope_report:
+        # num_epitopes_per_vaccine_peptide may not be set in cached mode
+        num_epitopes = getattr(args, 'num_epitopes_per_vaccine_peptide', None)
         make_minimal_neoepitope_report(
             ranked_variants_with_vaccine_peptides,
-            num_epitopes_per_peptide=args.num_epitopes_per_vaccine_peptide,
+            num_epitopes_per_peptide=num_epitopes,
             excel_report_path=args.output_neoepitope_report)
 
     ########################
@@ -185,7 +187,7 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
             data['args'].update(vars(args))
 
             # if we need to truncate the variant list based on max_mutations_in_report, do that here
-            if len(data['variants']) > args.max_mutations_in_report:
+            if args.max_mutations_in_report is not None and len(data['variants']) > args.max_mutations_in_report:
                 data['variants'] = data['variants'][:args.max_mutations_in_report]
             return data
     # get various things from user args

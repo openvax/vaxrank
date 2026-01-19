@@ -30,7 +30,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
 
     vaccine_peptide_group.add_argument(
         "--padding-around-mutation",
-        default=5,
+        default=default_vaccine_config.padding_around_mutation,
         type=int,
         help=(
             "Number of off-center windows around the mutation to consider "
@@ -39,7 +39,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
 
     vaccine_peptide_group.add_argument(
         "--max-vaccine-peptides-per-mutation",
-        default=1,
+        default=default_vaccine_config.max_vaccine_peptides_per_variant,
         type=int,
         help=(
             "Number of vaccine peptides to generate for each mutation. "
@@ -48,6 +48,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
 
     vaccine_peptide_group.add_argument(
         "--num-epitopes-per-vaccine-peptide",
+        default=default_vaccine_config.num_mutant_epitopes_to_keep,
         type=int,
         help=(
             "Maximum number of mutant epitopes to consider when scoring "
