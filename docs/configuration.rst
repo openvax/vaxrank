@@ -67,11 +67,19 @@ affinity values into a normalized score between 0 and 1:
 
 .. math::
 
-    score = \\frac{1}{1 + (ic50 / midpoint)^{4 \\cdot \\ln(3) / width}}
+    rescaled = \\frac{ic50 - midpoint}{width}
 
-Where:
+    score = \\frac{1}{1 + e^{rescaled}} \\cdot \\frac{1}{normalizer}
 
-- **midpoint**: IC50 value at which score equals 0.5 (default: 350 nM)
+Where normalizer ensures score ≈ 1.0 when IC50 ≈ 0:
+
+.. math::
+
+    normalizer = \\frac{1}{1 + e^{-midpoint / width}}
+
+Parameters:
+
+- **midpoint**: IC50 value (nM) around which scores transition (default: 350 nM)
 - **width**: Controls steepness of the scoring curve (default: 150)
 
 Lower IC50 values indicate stronger MHC binding and result in higher scores.

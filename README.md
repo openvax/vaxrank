@@ -12,8 +12,8 @@ Selection of mutated protein fragments for therapeutic personalized cancer vacci
 
 ```sh
 vaxrank \
-    --vcf test/data/b16.f10/b16.vcf \
-    --bam test/data/b16.f10/b16.combined.bam \
+    --vcf tests/data/b16.f10/b16.vcf \
+    --bam tests/data/b16.f10/b16.combined.bam \
     --vaccine-peptide-length 25 \
     --mhc-predictor netmhc \
     --mhc-alleles H2-Kb,H2-Db \

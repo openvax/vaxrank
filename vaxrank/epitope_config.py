@@ -20,10 +20,15 @@ selection.
 The epitope scoring uses a logistic function to transform IC50 binding
 affinity values into a normalized score between 0 and 1:
 
-    score = 1 / (1 + (ic50 / midpoint) ^ (4 * ln(3) / width))
+    rescaled = (ic50 - midpoint) / width
+    score = (1 / (1 + exp(rescaled))) / normalizer
 
-Where:
-- midpoint: IC50 value at which score equals 0.5 (default: 350 nM)
+Where normalizer ensures score ≈ 1.0 when ic50 ≈ 0:
+
+    normalizer = 1 / (1 + exp(-midpoint / width))
+
+Parameters:
+- midpoint: IC50 value (nM) around which scores transition (default: 350 nM)
 - width: Controls steepness of the scoring curve (default: 150)
 
 Lower IC50 values indicate stronger binding and result in higher scores.
