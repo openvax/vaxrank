@@ -70,3 +70,5 @@ vaccine-peptides-report.json
 vaccine-peptides-all-passing.csv
 vaccine-peptides.csv
 neoepitope-report.xlsx
+*.xlsx
+~$*
