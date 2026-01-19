@@ -72,3 +72,5 @@ vaccine-peptides.csv
 neoepitope-report.xlsx
 *.xlsx
 ~$*
+site/
+docs/
