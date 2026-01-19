@@ -19,7 +19,7 @@ import os
 import logging
 import re
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 readme_dir = os.path.dirname(__file__)
 readme_path = os.path.join(readme_dir, "README.md")
@@ -67,7 +67,7 @@ if __name__ == "__main__":
         install_requires=requirements,
         long_description=readme_markdown,
         long_description_content_type="text/markdown",
-        packages=["vaxrank"],
+        packages=find_packages(exclude=["tests", "tests.*"]),
         package_data={"vaxrank": ["templates/*", "data/*", "logging.conf"]},
         entry_points={"console_scripts": ["vaxrank = vaxrank.cli.entry_point:main"]},
     )
