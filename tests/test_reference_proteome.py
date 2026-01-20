@@ -27,6 +27,7 @@ from vaxrank.reference_proteome import (
     get_cache_dir,
     DEFAULT_MIN_KMER_LENGTH,
     DEFAULT_MAX_KMER_LENGTH,
+    _kmer_set_cache,
 )
 
 from .common import eq_, ok_
@@ -234,7 +235,7 @@ class TestLoadKmerSetIndex:
                 ok_(os.path.exists(cache_path))
 
     def test_loads_from_cache_when_exists(self):
-        """Test that index is loaded from cache when it exists"""
+        """Test that index is loaded from disk cache when it exists"""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Pre-create a cache file
             cached_kmers = {"CACHED01", "CACHED02"}
@@ -244,8 +245,12 @@ class TestLoadKmerSetIndex:
 
             genome = create_mock_genome([], species_name="test_species", release=100)
 
+            # Clear in-memory cache to test disk cache loading
+            cache_key = ("test_species", 100, 8, 8)
+            _kmer_set_cache.pop(cache_key, None)
+
             with patch('vaxrank.reference_proteome.get_cache_dir', return_value=tmpdir):
-                # Should load from cache, not build new index
+                # Should load from disk cache, not build new index
                 kmers = load_kmer_set_index(genome, min_len=8, max_len=8)
 
                 ok_("CACHED01" in kmers)

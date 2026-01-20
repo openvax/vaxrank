@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_MIN_KMER_LENGTH = 8
 DEFAULT_MAX_KMER_LENGTH = 15
 
+# In-memory cache for loaded kmer sets to avoid repeated disk reads
+# Key: (species, release, min_len, max_len) -> set of kmers
+_kmer_set_cache: dict[tuple, set[str]] = {}
+
 
 def get_cache_dir() -> str:
     """Get the cache directory for reference peptide indices."""
@@ -132,12 +136,20 @@ def load_kmer_set_index(
     set[str]
         Set of all kmers found in the reference proteome
     """
+    # Check in-memory cache first to avoid repeated disk reads
+    cache_key = (genome.species.latin_name, genome.release, min_len, max_len)
+    if not force_reload and cache_key in _kmer_set_cache:
+        logger.debug("Using in-memory cached kmer set for %s", cache_key)
+        return _kmer_set_cache[cache_key]
+
     path = kmer_set_index_path(genome, min_len, max_len)
 
     if not force_reload and os.path.exists(path):
         logger.info("Loading cached kmer set index from %s", path)
         with open(path, "rb") as f:
-            return pickle.load(f)
+            kmers = pickle.load(f)
+        _kmer_set_cache[cache_key] = kmers
+        return kmers
 
     kmers = build_kmer_set_index(genome, min_len, max_len)
 
@@ -145,6 +157,7 @@ def load_kmer_set_index(
     with open(path, "wb") as f:
         pickle.dump(kmers, f)
 
+    _kmer_set_cache[cache_key] = kmers
     return kmers
 
 
