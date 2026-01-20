@@ -84,7 +84,7 @@ def predict_epitopes(
     try:
         mhctools_binding_predictions = mhc_predictor.predict_subsequences(
             {protein_fragment.gene_name: protein_fragment.amino_acids})
-    except:
+    except Exception:
         logger.error(
             'MHC prediction errored for protein fragment %s, with traceback: %s',
             protein_fragment, traceback.format_exc())
@@ -122,7 +122,7 @@ def predict_epitopes(
 
         try:
             wt_predictions = mhc_predictor.predict_peptides(valid_wt_peptides)
-        except:
+        except Exception:
             logger.error(
                 'MHC prediction for WT peptides errored, with traceback: %s',
                 traceback.format_exc())

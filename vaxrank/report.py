@@ -24,7 +24,6 @@ from astropy.io import ascii as asc
 import jinja2
 import pandas as pd
 import pdfkit
-import requests
 import roman
 from varcode import load_vcf_fast
 
@@ -435,7 +434,7 @@ def _sanitize(val):
     """
     Converts values into display-friendly
     """
-    if type(val) == bool:
+    if isinstance(val, bool):
         return int(val)
     else:
         return _str_sig_figs(val, 5)
