@@ -230,8 +230,8 @@ class TestLoadKmerSetIndex:
                 # Should contain expected kmers
                 ok_("ABCDEFGH" in kmers)
 
-                # Cache file should now exist
-                cache_path = os.path.join(tmpdir, "test_species_100_kmer_set_8_8.pkl")
+                # Cache file should now exist (compressed)
+                cache_path = os.path.join(tmpdir, "test_species_100_kmer_set_8_8.pkl.gz")
                 ok_(os.path.exists(cache_path))
 
     def test_loads_from_cache_when_exists(self):
@@ -289,7 +289,7 @@ class TestKmerSetIndexPath:
         with patch('vaxrank.reference_proteome.get_cache_dir', return_value="/cache"):
             path = kmer_set_index_path(genome, min_len=8, max_len=15)
 
-            eq_(path, "/cache/homo_sapiens_104_kmer_set_8_15.pkl")
+            eq_(path, "/cache/homo_sapiens_104_kmer_set_8_15.pkl.gz")
 
     def test_different_kmer_lengths(self):
         """Test that different kmer lengths produce different paths"""

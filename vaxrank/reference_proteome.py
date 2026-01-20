@@ -16,11 +16,14 @@ Reference proteome indexing for checking if peptides exist in the reference.
 Uses a set-based index for O(1) membership testing of peptide kmers.
 """
 
+import gzip
+import io
 import os
 import logging
 import pickle
 
 from datacache import get_data_dir
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,7 @@ def kmer_set_index_path(genome, min_len: int, max_len: int) -> str:
     """Returns path for the cached kmer set index."""
     return os.path.join(
         get_cache_dir(),
-        "%s_%d_kmer_set_%d_%d.pkl"
+        "%s_%d_kmer_set_%d_%d.pkl.gz"
         % (genome.species.latin_name, genome.release, min_len, max_len),
     )
 
@@ -83,9 +86,8 @@ def build_kmer_set_index(
     )
     kmers = set()
     transcripts = genome.transcripts()
-    n_transcripts = len(transcripts)
 
-    for i, t in enumerate(transcripts):
+    for t in tqdm(transcripts, desc="Extracting kmers", unit="transcripts"):
         if not t.is_protein_coding:
             continue
         protein = t.protein_sequence
@@ -97,13 +99,10 @@ def build_kmer_set_index(
             for j in range(len(protein) - k + 1):
                 kmers.add(protein[j : j + k])
 
-        if (i + 1) % 10000 == 0:
-            logger.info("Processed %d/%d transcripts", i + 1, n_transcripts)
-
     logger.info(
         "Done building kmer set index: %d unique kmers from %d transcripts",
         len(kmers),
-        n_transcripts,
+        len(transcripts),
     )
     return kmers
 
@@ -143,19 +142,55 @@ def load_kmer_set_index(
         return _kmer_set_cache[cache_key]
 
     path = kmer_set_index_path(genome, min_len, max_len)
+    # Also check for legacy uncompressed path
+    legacy_path = path.replace(".pkl.gz", ".pkl")
 
     if not force_reload and os.path.exists(path):
-        logger.info("Loading cached kmer set index from %s", path)
-        with open(path, "rb") as f:
-            kmers = pickle.load(f)
+        file_size = os.path.getsize(path)
+        with tqdm(
+            total=file_size, unit="B", unit_scale=True, desc="Loading reference proteome"
+        ) as pbar:
+            with open(path, "rb") as raw_f:
+                # Wrap raw file to track compressed bytes read
+                class ProgressReader:
+                    def __init__(self, f, pbar):
+                        self._f = f
+                        self._pbar = pbar
+                    def read(self, n=-1):
+                        data = self._f.read(n)
+                        self._pbar.update(len(data))
+                        return data
+
+                with gzip.GzipFile(fileobj=ProgressReader(raw_f, pbar)) as f:
+                    kmers = pickle.load(f)
         _kmer_set_cache[cache_key] = kmers
+        return kmers
+
+    # Check for legacy uncompressed file
+    if not force_reload and os.path.exists(legacy_path):
+        file_size = os.path.getsize(legacy_path)
+        with tqdm(
+            total=file_size, unit="B", unit_scale=True, desc="Loading reference proteome"
+        ) as pbar:
+            with open(legacy_path, "rb") as f:
+                data = io.BytesIO()
+                while chunk := f.read(1024 * 1024):
+                    data.write(chunk)
+                    pbar.update(len(chunk))
+                data.seek(0)
+                kmers = pickle.load(data)
+        _kmer_set_cache[cache_key] = kmers
+        # Save as compressed for next time
+        logger.info("Converting to compressed format: %s", path)
+        with gzip.open(path, "wb", compresslevel=6) as f:
+            pickle.dump(kmers, f, protocol=pickle.HIGHEST_PROTOCOL)
         return kmers
 
     kmers = build_kmer_set_index(genome, min_len, max_len)
 
     logger.info("Saving kmer set index to %s", path)
-    with open(path, "wb") as f:
-        pickle.dump(kmers, f)
+    with gzip.open(path, "wb", compresslevel=6) as f:
+        pickle.dump(kmers, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     _kmer_set_cache[cache_key] = kmers
     return kmers
