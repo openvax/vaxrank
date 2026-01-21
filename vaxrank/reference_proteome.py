@@ -84,25 +84,34 @@ def build_kmer_set_index(
         min_len,
         max_len,
     )
-    kmers = set()
+
+    # First, collect unique proteins - many transcripts share the same protein
+    # This avoids redundant kmer extraction (250k transcripts -> ~20k proteins)
+    unique_proteins = set()
     transcripts = genome.transcripts()
-
-    for t in tqdm(transcripts, desc="Extracting kmers", unit="transcripts"):
-        if not t.is_protein_coding:
-            continue
-        protein = t.protein_sequence
-        if protein is None:
-            continue
-
-        # Extract all kmers of each length
-        for k in range(min_len, max_len + 1):
-            for j in range(len(protein) - k + 1):
-                kmers.add(protein[j : j + k])
+    for t in tqdm(transcripts, desc="Collecting unique proteins", unit="transcripts"):
+        if t.is_protein_coding and t.protein_sequence:
+            unique_proteins.add(t.protein_sequence)
 
     logger.info(
-        "Done building kmer set index: %d unique kmers from %d transcripts",
-        len(kmers),
+        "Found %d unique proteins from %d transcripts",
+        len(unique_proteins),
         len(transcripts),
+    )
+
+    # Extract kmers from unique proteins only, using batch updates
+    kmers = set()
+    for protein in tqdm(unique_proteins, desc="Extracting kmers", unit="proteins"):
+        kmers.update(
+            protein[j : j + k]
+            for k in range(min_len, max_len + 1)
+            for j in range(len(protein) - k + 1)
+        )
+
+    logger.info(
+        "Done building kmer set index: %d unique kmers from %d proteins",
+        len(kmers),
+        len(unique_proteins),
     )
     return kmers
 
