@@ -16,7 +16,7 @@ from serializable import Serializable
 
 class VaxrankResults(Serializable):
     """
-    Data class used to represent all results captured by running  Vaxrank.
+    Data class used to represent all results captured by running Vaxrank.
     """
     def __init__(
             self,

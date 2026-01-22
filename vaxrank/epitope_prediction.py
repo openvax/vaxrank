@@ -63,7 +63,6 @@ class EpitopePrediction(Serializable):
         self.overlaps_mutation = overlaps_mutation
         self.source_sequence = source_sequence
         self.offset = offset
-        self.overlaps_mutation = overlaps_mutation
         self.occurs_in_reference = occurs_in_reference
 
     @classmethod

@@ -106,7 +106,6 @@ class TemplateDataCreator(object):
         """
         Returns an OrderedDict with info used to populate variant info section.
         """
-        variant_data = OrderedDict()
         mutant_protein_fragment = top_vaccine_peptide.mutant_protein_fragment
         top_score = _sanitize(top_vaccine_peptide.combined_score)
         igv_locus = "chr%s:%d" % (variant.contig, variant.start)
@@ -202,7 +201,7 @@ class TemplateDataCreator(object):
             ('C-terminal Proline', int(scores.c_terminal_proline)),
             ('Total number of Cysteine residues', scores.cysteine_count),
             ('N-terminal Asparagine', int(scores.n_terminal_asparagine)),
-            ('Number of Asparagine-Proline bonds', scores.asparagine_proline_bond_count),
+            ('Number of Aspartate-Proline bonds', scores.aspartate_proline_bond_count),
         ])
         return manufacturability_data
 
@@ -588,4 +587,4 @@ def make_csv_report(
             resize_columns(writer.sheets[shortened_sheet_name], 'A', 'C')
 
         writer.close()
-        logger.info('Wrote manufacturer XLSX file to %s', excel_report_path)
+        logger.info('Wrote manufacturability XLSX file to %s', excel_report_path)

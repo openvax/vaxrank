@@ -20,7 +20,7 @@ from pyensembl import Genome
 from mhctools.base_predictor import BasePredictor
 
 
-from .epitope_config import EpitopeConfig 
+from .epitope_config import EpitopeConfig
 from .epitope_prediction import EpitopePrediction
 from .mutant_protein_fragment import MutantProteinFragment
 from .reference_proteome import ReferenceProteome

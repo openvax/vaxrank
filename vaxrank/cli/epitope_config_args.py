@@ -12,7 +12,7 @@
 
 import argparse
 
-import msgspec 
+import msgspec
 
 from ..epitope_config import EpitopeConfig
 

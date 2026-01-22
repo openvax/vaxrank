@@ -145,7 +145,7 @@ class VaccinePeptide(Serializable):
             self.manufacturability_scores.n_terminal_asparagine,
 
             # avoid Asp-Pro bonds
-            self.manufacturability_scores.asparagine_proline_bond_count,
+            self.manufacturability_scores.aspartate_proline_bond_count,
 
             # max 7mer GRAVY score < 1.5
             # (or user specified lower priority maximum for GRAVY score)

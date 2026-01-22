@@ -11,7 +11,7 @@
 # limitations under the License.
 
 """
-Scoring functions for determing which sequences are easy to manufacture using
+Scoring functions for determining which sequences are easy to manufacture using
 solid-phase synthesis.
 
 For more information see: https://github.com/hammerlab/vaxrank/issues/2
@@ -52,6 +52,8 @@ def gravy_score(amino_acids):
     Mean amino acid hydropathy averaged across residues of a peptide
     or protein sequence.
     """
+    if not amino_acids:
+        return 0.0
     total = sum(
         hydropathy_dict[amino_acid] for amino_acid in amino_acids)
     return total / len(amino_acids)
@@ -63,6 +65,8 @@ def max_kmer_gravy_score(amino_acids, k):
     used to determine if there are any extremely hydrophobic regions within a
     longer amino acid sequence.
     """
+    if len(amino_acids) < k:
+        return gravy_score(amino_acids)
     return max(
         gravy_score(amino_acids[i:i + k])
         for i in range(len(amino_acids) - k + 1))
@@ -115,13 +119,14 @@ def n_terminal_asparagine(amino_acids):
     return amino_acids[0] == "N"
 
 
-def asparagine_proline_bond_count(amino_acids):
+def aspartate_proline_bond_count(amino_acids):
     """
-    Count the number of Asparagine/Asn/N-Proline/Pro/P bonds
-    Problem with Asn-Pro bonds: can spontaneously cleave the peptide
+    Count the number of Aspartate/Asp/D-Proline/Pro/P bonds.
+    Asp-Pro bonds are particularly susceptible to non-enzymatic hydrolysis
+    under acidic conditions, which can spontaneously cleave the peptide.
     """
     return sum(
-        amino_acids[i:i + 2] == "NP"
+        amino_acids[i:i + 2] == "DP"
         for i in range(len(amino_acids) - 1))
 
 
@@ -172,5 +177,5 @@ ManufacturabilityScores = combine_scoring_functions(
     n_terminal_asparagine,
 
     # avoid Asp-Pro bonds
-    asparagine_proline_bond_count,
+    aspartate_proline_bond_count,
 )
