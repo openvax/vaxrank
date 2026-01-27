@@ -7,7 +7,7 @@ All contributions can be made as pull requests on Github. One of the core develo
 
 A few other guidelines:
 
- * Vaxrank supports 3.3+ on Linux and OS X. We don't guarantee support for Windows. 
+ * Vaxrank supports Python 3.9+ on Linux and OS X. We don't guarantee support for Windows. 
  * All functions should be documented using [numpy-style docstrings](https://numpydoc.readthedocs.io/en/latest/format.html) and associated with unit tests.
  * Bugfixes should be accompanied with a test that illustrates the bug when feasible.
  * Contributions are licensed under Apache 2.0
