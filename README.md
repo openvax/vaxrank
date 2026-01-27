@@ -56,20 +56,20 @@ pip install vaxrank
 
 **Requirements:** Python 3.9+
 
-Note: to generate PDF reports, you first need to install [wkhtmltopdf](http://wkhtmltopdf.org/), which you can do (on OS X) like so:
+Note: to generate PDF reports, you first need to install [wkhtmltopdf](http://wkhtmltopdf.org/), which you can do (on macOS) like so:
 
 ```
-brew install Caskroom/cask/wkhtmltopdf
+brew install --cask wkhtmltopdf
 ```
 
 Vaxrank uses [PyEnsembl](https://github.com/openvax/pyensembl) for accessing information about the reference genome. You must install an Ensembl release corresponding to the reference genome associated with the mutations provided to Vaxrank.
 
-The latest release for GRCh38 is Ensembl 93:
+Example for GRCh38 (adjust release to match your reference):
 ```
-pyensembl install --release 93 --species human
+pyensembl install --release 113 --species human
 ```
 
-The last release for GRCh37 is Ensembl 75:
+Example for GRCh37 (legacy):
 ```
 pyensembl install --release 75 --species human
 ```
@@ -120,8 +120,9 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
-pyensembl install --release 93 --species human
-pyensembl install --release 102 --species mouse
+# Examples; adjust release to match your reference
+pyensembl install --release 113 --species human
+pyensembl install --release 113 --species mouse
 ```
 
 Run linting and tests:
@@ -168,3 +169,11 @@ Key dependencies:
 - `msgspec`: Configuration serialization (YAML/JSON)
 - `pandas`, `numpy`: Data processing
 - `jinja2`, `pdfkit`: Report generation
+
+## Scripts
+
+Helper scripts included in the repo:
+- `develop.sh`: installs the package in editable mode and sets `PYTHONPATH` to the repo root.
+- `lint.sh`: runs ruff on `vaxrank` and `tests`.
+- `test.sh`: runs pytest with coverage.
+- `deploy.sh`: runs lint/tests, builds a distribution with `build`, uploads via `twine`, and tags the release.
