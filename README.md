@@ -176,4 +176,4 @@ Helper scripts included in the repo:
 - `develop.sh`: installs the package in editable mode and sets `PYTHONPATH` to the repo root.
 - `lint.sh`: runs ruff on `vaxrank` and `tests`.
 - `test.sh`: runs pytest with coverage.
-- `deploy.sh`: runs lint/tests, builds a distribution with `build`, uploads via `twine`, and tags the release.
+- `deploy.sh`: runs lint/tests, builds a distribution with `build`, uploads via `twine`, and tags the release (`vX.Y.Z`).

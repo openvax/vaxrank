@@ -8,6 +8,7 @@ This document explains what to do once your [Pull Request](https://www.atlassian
 3. Run `./deploy.sh` (builds with `build`, uploads with `twine`, and tags the release), or run the steps manually:
    - `python -m pip install --upgrade build twine`
    - `python -m build`
+   - `python -m twine check dist/*`
    - `python -m twine upload dist/*`
-   - `git tag "$(python vaxrank/version.py)"`
+   - `git tag "v${VERSION}"`
    - `git push --tags`

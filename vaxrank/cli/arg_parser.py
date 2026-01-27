@@ -60,6 +60,10 @@ def cached_run_arg_parser():
             "expression data, and patient HLA type."),
     )
     arg_parser.add_argument(
+        '--version',
+        action='version',
+        version='Vaxrank %s' % (__version__,))
+    arg_parser.add_argument(
         "--input-json-file",
         default="",
         help="Path to JSON file containing results of vaccine peptide report")
