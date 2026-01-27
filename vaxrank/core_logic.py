@@ -210,6 +210,7 @@ def vaccine_peptides_for_variant(
         vaccine_peptide_length=vaccine_peptide_length,
         max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
         num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+        epitope_config=epitope_config,
     )
 
 
@@ -220,6 +221,7 @@ def vaccine_peptides_from_epitopes(
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
     num_mutant_epitopes_to_keep: int = 10**5,
+    epitope_config: EpitopeConfig = None,
 ):
     """
     Generate vaccine peptide candidates from epitope predictions.
@@ -244,10 +246,21 @@ def vaccine_peptides_from_epitopes(
     num_mutant_epitopes_to_keep
         Number of top-ranking epitopes for each vaccine peptide to include
 
+    epitope_config
+        Configuration options for epitope scoring, using defaults if not provided
+
     Returns
     -------
     Sorted list of VaccinePeptide objects
     """
+    if epitope_config is None:
+        epitope_config = EpitopeConfig()
+
+    epitope_score_params = {
+        "midpoint": epitope_config.logistic_epitope_score_midpoint,
+        "width": epitope_config.logistic_epitope_score_width,
+        "ic50_cutoff": epitope_config.binding_affinity_cutoff,
+    }
     candidate_vaccine_peptides = []
 
     for offset, candidate_fragment in long_protein_fragment.sorted_subsequences(
@@ -276,6 +289,7 @@ def vaccine_peptides_from_epitopes(
             mutant_protein_fragment=candidate_fragment,
             epitope_predictions=subsequence_epitope_predictions,
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+            epitope_score_params=epitope_score_params,
         )
 
         logger.debug(

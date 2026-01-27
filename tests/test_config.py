@@ -536,14 +536,14 @@ class TestCLIArgumentParsing:
         eq_(args.max_vaccine_peptides_per_mutation, 5)
 
     def test_vaccine_peptide_args_defaults(self):
-        """Test that vaccine peptide args have correct defaults"""
+        """Test that vaccine peptide args default to None for config override"""
         parser = argparse.ArgumentParser()
         add_vaccine_peptide_args(parser)
 
         args = parser.parse_args([])
-        eq_(args.vaccine_peptide_length, 25)  # default from VaccineConfig
-        eq_(args.padding_around_mutation, 5)
-        eq_(args.max_vaccine_peptides_per_mutation, 1)
+        eq_(args.vaccine_peptide_length, None)
+        eq_(args.padding_around_mutation, None)
+        eq_(args.max_vaccine_peptides_per_mutation, None)
 
 
 # =============================================================================

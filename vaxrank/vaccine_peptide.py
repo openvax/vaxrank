@@ -33,6 +33,7 @@ class VaccinePeptide(Serializable):
             mutant_protein_fragment,
             epitope_predictions,
             num_mutant_epitopes_to_keep=None,
+            epitope_score_params=None,
             sort_predictions_by='ic50'):
         """
         Parameters
@@ -44,6 +45,9 @@ class VaccinePeptide(Serializable):
         num_mutant_epitopes_to_keep : int or None
             If None then keep all mutant epitopes.
 
+        epitope_score_params : dict or None
+            Parameters passed to EpitopePrediction.logistic_epitope_score.
+
         sort_predictions_by : str
             Field of EpitopePrediction used for sorting epitope predictions
             overlapping mutation in ascending order. Can be either 'ic50'
@@ -52,6 +56,7 @@ class VaccinePeptide(Serializable):
         self.mutant_protein_fragment = mutant_protein_fragment
         self.epitope_predictions = epitope_predictions
         self.num_mutant_epitopes_to_keep = num_mutant_epitopes_to_keep
+        self.epitope_score_params = epitope_score_params or {}
         self.sort_predictions_by = sort_predictions_by
 
         sort_key = attrgetter(sort_predictions_by)
@@ -70,12 +75,15 @@ class VaccinePeptide(Serializable):
             if not p.overlaps_mutation or p.occurs_in_reference
         ], key=sort_key)
 
+        def epitope_score(prediction):
+            return prediction.logistic_epitope_score(**self.epitope_score_params)
+
         self.wildtype_epitope_score = sum(
-            p.logistic_epitope_score()
+            epitope_score(p)
             for p in self.wildtype_epitope_predictions)
         # only keep the top k epitopes for the purposes of the score
         self.mutant_epitope_score = sum(
-            p.logistic_epitope_score()
+            epitope_score(p)
             for p in self.mutant_epitope_predictions)
 
         self.manufacturability_scores = \
@@ -218,6 +226,7 @@ class VaccinePeptide(Serializable):
             "mutant_protein_fragment": self.mutant_protein_fragment,
             "epitope_predictions": epitope_predictions,
             "num_mutant_epitopes_to_keep": self.num_mutant_epitopes_to_keep,
+            "epitope_score_params": self.epitope_score_params,
             "sort_predictions_by": self.sort_predictions_by,
         }
 
@@ -226,4 +235,6 @@ class VaccinePeptide(Serializable):
         d = d.copy()
         if "sort_predictions_by" not in d:
             d["sort_predictions_by"] = "ic50"
+        if "epitope_score_params" not in d:
+            d["epitope_score_params"] = None
         return cls(**d)

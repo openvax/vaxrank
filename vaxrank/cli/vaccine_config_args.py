@@ -24,35 +24,41 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
     vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
     vaccine_peptide_group.add_argument(
         "--vaccine-peptide-length",
-        default=default_vaccine_config.vaccine_peptide_length,
+        default=None,
         type=int,
-        help="Number of amino acids in the vaccine peptides. (default: %(default)s)")
+        help=(
+            "Number of amino acids in the vaccine peptides. "
+            f"(default: {default_vaccine_config.vaccine_peptide_length})"
+        ))
 
     vaccine_peptide_group.add_argument(
         "--padding-around-mutation",
-        default=default_vaccine_config.padding_around_mutation,
+        default=None,
         type=int,
         help=(
             "Number of off-center windows around the mutation to consider "
-            "as vaccine peptides. (default: %(default)s)"
+            "as vaccine peptides. "
+            f"(default: {default_vaccine_config.padding_around_mutation})"
         ))
 
     vaccine_peptide_group.add_argument(
         "--max-vaccine-peptides-per-mutation",
-        default=default_vaccine_config.max_vaccine_peptides_per_variant,
+        default=None,
         type=int,
         help=(
             "Number of vaccine peptides to generate for each mutation. "
-            "(default: %(default)s)"
+            f"(default: {default_vaccine_config.max_vaccine_peptides_per_variant})"
         ))
 
     vaccine_peptide_group.add_argument(
         "--num-epitopes-per-vaccine-peptide",
-        default=default_vaccine_config.num_mutant_epitopes_to_keep,
+        default=None,
         type=int,
         help=(
             "Maximum number of mutant epitopes to consider when scoring "
-            "each vaccine peptide. (default: %(default)s)"))
+            "each vaccine peptide. "
+            f"(default: {default_vaccine_config.num_mutant_epitopes_to_keep})"
+        ))
 
 
 

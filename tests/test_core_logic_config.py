@@ -23,6 +23,7 @@ from vaxrank.core_logic import (
     vaccine_peptides_from_epitopes,
 )
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
+from vaxrank.epitope_prediction import EpitopePrediction
 
 from .common import eq_, ok_, gt_
 
@@ -207,6 +208,70 @@ class TestConfigIntegration:
         config_long = VaccineConfig(vaccine_peptide_length=35)
 
         gt_(config_long.vaccine_peptide_length, config_short.vaccine_peptide_length)
+
+    def test_epitope_config_affects_vaccine_peptide_scoring(self):
+        """Test that EpitopeConfig parameters affect VaccinePeptide scores"""
+        class DummyFragment:
+            def __init__(self, amino_acids):
+                self.amino_acids = amino_acids
+                self.n_alt_reads = 4
+                self.n_alt_reads_supporting_protein_sequence = 4
+                self.n_mutant_amino_acids = 1
+                self.mutation_distance_from_edge = 0
+                self.mutant_amino_acid_start_offset = 0
+                self.mutant_amino_acid_end_offset = 1
+
+            def __len__(self):
+                return len(self.amino_acids)
+
+        class DummyLongFragment:
+            def __init__(self, fragment):
+                self.fragment = fragment
+
+            def sorted_subsequences(self, subsequence_length):
+                return [(0, self.fragment)]
+
+        fragment = DummyFragment("ACDEFGHIK")
+        long_fragment = DummyLongFragment(fragment)
+
+        prediction = EpitopePrediction(
+            allele="HLA-A*02:01",
+            peptide_sequence="ACDEFGHIK",
+            wt_peptide_sequence="ACDEFGHIK",
+            ic50=100.0,
+            wt_ic50=200.0,
+            percentile_rank=0.5,
+            prediction_method_name="test",
+            overlaps_mutation=True,
+            source_sequence="ACDEFGHIK",
+            offset=0,
+            occurs_in_reference=False,
+        )
+
+        default_score = prediction.logistic_epitope_score()
+        epitope_config = EpitopeConfig(
+            logistic_epitope_score_midpoint=50.0,
+            logistic_epitope_score_width=10.0,
+            binding_affinity_cutoff=5000.0,
+        )
+        custom_score = prediction.logistic_epitope_score(
+            midpoint=epitope_config.logistic_epitope_score_midpoint,
+            width=epitope_config.logistic_epitope_score_width,
+            ic50_cutoff=epitope_config.binding_affinity_cutoff,
+        )
+        ok_(custom_score != default_score)
+
+        peptides = vaccine_peptides_from_epitopes(
+            variant=MagicMock(),
+            long_protein_fragment=long_fragment,
+            epitope_predictions=[prediction],
+            vaccine_peptide_length=len(fragment),
+            max_vaccine_peptides_per_variant=1,
+            num_mutant_epitopes_to_keep=10,
+            epitope_config=epitope_config,
+        )
+        eq_(len(peptides), 1)
+        eq_(peptides[0].mutant_epitope_score, custom_score)
 
     def test_config_defaults_match_historical_behavior(self):
         """Test that default config values match historical defaults"""

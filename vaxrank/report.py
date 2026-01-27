@@ -471,7 +471,14 @@ def make_minimal_neoepitope_report(
     for (variant, vaccine_peptides) in ranked_variants_with_vaccine_peptides:
         for vaccine_peptide in vaccine_peptides:
             # only include mutant epitopes
-            for epitope_prediction in vaccine_peptide.mutant_epitope_predictions:
+            epitope_predictions = vaccine_peptide.mutant_epitope_predictions
+            if num_epitopes_per_peptide is not None:
+                epitope_predictions = epitope_predictions[:num_epitopes_per_peptide]
+            for epitope_prediction in epitope_predictions:
+                if epitope_prediction.wt_ic50 is not None:
+                    wt_ic50_str = '%.2f nM' % epitope_prediction.wt_ic50
+                else:
+                    wt_ic50_str = 'No prediction'
                 row = OrderedDict([
                     ('Allele', epitope_prediction.allele),
                     ('Mutant peptide sequence', epitope_prediction.peptide_sequence),
@@ -480,8 +487,7 @@ def make_minimal_neoepitope_report(
                     ('Variant allele RNA read count',
                         vaccine_peptide.mutant_protein_fragment.n_alt_reads),
                     ('Wildtype sequence', epitope_prediction.wt_peptide_sequence),
-                    ('Predicted wildtype pMHC affinity',
-                        '%.2f nM' % epitope_prediction.wt_ic50),
+                    ('Predicted wildtype pMHC affinity', wt_ic50_str),
                     ('Gene name', vaccine_peptide.mutant_protein_fragment.gene_name),
                     ('Genomic variant', variant.short_description),
                 ])
@@ -494,13 +500,13 @@ def make_minimal_neoepitope_report(
 
         # resize columns to be not crappy
         worksheet = writer.sheets['Neoepitopes']
-        worksheet.set_column('%s:%s' % ('B', 'B'), 23)
-        worksheet.set_column('%s:%s' % ('D', 'D'), 27)
-        worksheet.set_column('%s:%s' % ('E', 'E'), 26)
-        worksheet.set_column('%s:%s' % ('F', 'F'), 17)
-        worksheet.set_column('%s:%s' % ('G', 'G'), 30)
-        worksheet.set_column('%s:%s' % ('H', 'H'), 9)
-        worksheet.set_column('%s:%s' % ('I', 'I'), 18)
+        worksheet.column_dimensions['B'].width = 23
+        worksheet.column_dimensions['D'].width = 27
+        worksheet.column_dimensions['E'].width = 26
+        worksheet.column_dimensions['F'].width = 17
+        worksheet.column_dimensions['G'].width = 30
+        worksheet.column_dimensions['H'].width = 9
+        worksheet.column_dimensions['I'].width = 18
         writer.close()
         logger.info('Wrote XLSX neoepitope report file to %s', excel_report_path)
 

@@ -136,6 +136,16 @@ def main(args_list=None):
 
 
 def run_vaxrank_from_parsed_args(args):
+    epitope_config = epitope_config_from_args(args)
+    vaccine_config = vaccine_config_from_args(args)
+
+    # Sync args with merged config values so downstream consumers (Isovar,
+    # reports, etc.) see the effective configuration.
+    args.vaccine_peptide_length = vaccine_config.vaccine_peptide_length
+    args.padding_around_mutation = vaccine_config.padding_around_mutation
+    args.max_vaccine_peptides_per_mutation = vaccine_config.max_vaccine_peptides_per_variant
+    args.num_epitopes_per_vaccine_peptide = vaccine_config.num_mutant_epitopes_to_keep
+
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
     args.protein_sequence_length = (
@@ -149,10 +159,6 @@ def run_vaxrank_from_parsed_args(args):
     if args.output_isovar_csv:
         df = isovar_results_to_dataframe(isovar_results)
         df.to_csv(args.output_isovar_csv, index=False)
-
-
-    epitope_config = epitope_config_from_args(args)
-    vaccine_config = vaccine_config_from_args(args)
 
     return run_vaxrank(
         isovar_results=isovar_results,
