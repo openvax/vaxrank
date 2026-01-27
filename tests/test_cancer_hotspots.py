@@ -256,6 +256,7 @@ class TestEdgeCases:
         )
         # This may or may not be true depending on the dataset
         # Just verify the check doesn't crash
+        ok_(isinstance(del_ins_found, bool))
 
     def test_caching_works(self):
         """Test that the LRU cache is working"""
