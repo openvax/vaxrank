@@ -32,332 +32,334 @@ from .common import eq_, ok_, gt_
 # vaccine_peptides_from_epitopes Tests
 # =============================================================================
 
-class TestVaccinePeptidesFromEpitopes:
-    """Tests for vaccine_peptides_from_epitopes function"""
+def test_vaccine_peptides_from_epitopes_basic_parameters():
+    """Test that basic parameters are used correctly"""
+    # Create a mock protein fragment
+    mock_fragment = MagicMock(spec=MutantProteinFragment)
+    mock_fragment.sorted_subsequences.return_value = []  # No subsequences
 
-    def test_basic_parameters(self):
-        """Test that basic parameters are used correctly"""
-        # Create a mock protein fragment
-        mock_fragment = MagicMock(spec=MutantProteinFragment)
-        mock_fragment.sorted_subsequences.return_value = []  # No subsequences
+    mock_variant = MagicMock()
+    mock_variant.short_description = "test_variant"
 
-        mock_variant = MagicMock()
-        mock_variant.short_description = "test_variant"
+    result = vaccine_peptides_from_epitopes(
+        variant=mock_variant,
+        long_protein_fragment=mock_fragment,
+        epitope_predictions=[],
+        vaccine_peptide_length=25,
+        max_vaccine_peptides_per_variant=1,
+        num_mutant_epitopes_to_keep=1000,
+    )
 
-        result = vaccine_peptides_from_epitopes(
-            variant=mock_variant,
-            long_protein_fragment=mock_fragment,
-            epitope_predictions=[],
-            vaccine_peptide_length=25,
-            max_vaccine_peptides_per_variant=1,
-            num_mutant_epitopes_to_keep=1000,
-        )
-
-        # Should return empty list since no subsequences
-        eq_(result, [])
-
-    def test_vaccine_peptide_length_used(self):
-        """Test that vaccine_peptide_length is passed to sorted_subsequences"""
-        mock_fragment = MagicMock(spec=MutantProteinFragment)
-        mock_fragment.sorted_subsequences.return_value = []
-
-        mock_variant = MagicMock()
-        mock_variant.short_description = "test"
-
-        vaccine_peptides_from_epitopes(
-            variant=mock_variant,
-            long_protein_fragment=mock_fragment,
-            epitope_predictions=[],
-            vaccine_peptide_length=30,  # Custom length
-            max_vaccine_peptides_per_variant=1,
-            num_mutant_epitopes_to_keep=1000,
-        )
-
-        # Verify sorted_subsequences was called with correct length
-        mock_fragment.sorted_subsequences.assert_called_once_with(subsequence_length=30)
+    # Should return empty list since no subsequences
+    eq_(result, [])
 
 
-class TestVaccinePeptidesForVariant:
-    """Tests for vaccine_peptides_for_variant function"""
+def test_vaccine_peptides_from_epitopes_length_used():
+    """Test that vaccine_peptide_length is passed to sorted_subsequences"""
+    mock_fragment = MagicMock(spec=MutantProteinFragment)
+    mock_fragment.sorted_subsequences.return_value = []
 
-    def test_fails_filter_returns_empty(self):
-        """Test that variant failing filters returns empty list"""
-        mock_isovar_result = MagicMock()
-        mock_isovar_result.passes_all_filters = False
+    mock_variant = MagicMock()
+    mock_variant.short_description = "test"
 
-        mock_predictor = MagicMock()
+    vaccine_peptides_from_epitopes(
+        variant=mock_variant,
+        long_protein_fragment=mock_fragment,
+        epitope_predictions=[],
+        vaccine_peptide_length=30,  # Custom length
+        max_vaccine_peptides_per_variant=1,
+        num_mutant_epitopes_to_keep=1000,
+    )
 
-        result = vaccine_peptides_for_variant(
-            isovar_result=mock_isovar_result,
-            mhc_predictor=mock_predictor,
-        )
+    # Verify sorted_subsequences was called with correct length
+    mock_fragment.sorted_subsequences.assert_called_once_with(subsequence_length=30)
 
-        eq_(result, [])
 
-    def test_config_overrides_explicit_params(self):
-        """Test that vaccine_config values override explicit parameters"""
-        mock_isovar_result = MagicMock()
-        mock_isovar_result.passes_all_filters = True
-        mock_isovar_result.variant = MagicMock()
-        mock_isovar_result.variant.ensembl = None
+# =============================================================================
+# vaccine_peptides_for_variant Tests
+# =============================================================================
 
-        # Mock the MutantProteinFragment
-        mock_fragment = MagicMock()
-        mock_fragment.sorted_subsequences.return_value = []
+def test_vaccine_peptides_for_variant_fails_filter_returns_empty():
+    """Test that variant failing filters returns empty list"""
+    mock_isovar_result = MagicMock()
+    mock_isovar_result.passes_all_filters = False
 
-        mock_predictor = MagicMock()
+    mock_predictor = MagicMock()
 
-        vaccine_config = VaccineConfig(
-            vaccine_peptide_length=40,
-            max_vaccine_peptides_per_variant=5,
-            num_mutant_epitopes_to_keep=500,
-        )
+    result = vaccine_peptides_for_variant(
+        isovar_result=mock_isovar_result,
+        mhc_predictor=mock_predictor,
+    )
 
-        with patch('vaxrank.core_logic.MutantProteinFragment') as MockFragment:
-            MockFragment.from_isovar_result.return_value = mock_fragment
-            with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
-                mock_predict.return_value = {}
+    eq_(result, [])
 
-                vaccine_peptides_for_variant(
-                    isovar_result=mock_isovar_result,
-                    mhc_predictor=mock_predictor,
-                    vaccine_peptide_length=25,  # Explicit, should be overridden
-                    vaccine_config=vaccine_config,
-                )
 
-                # The vaccine_config values should have been used
-                mock_fragment.sorted_subsequences.assert_called_with(subsequence_length=40)
+def test_vaccine_peptides_for_variant_config_overrides_explicit_params():
+    """Test that vaccine_config values override explicit parameters"""
+    mock_isovar_result = MagicMock()
+    mock_isovar_result.passes_all_filters = True
+    mock_isovar_result.variant = MagicMock()
+    mock_isovar_result.variant.ensembl = None
 
-    def test_explicit_params_used_without_config(self):
-        """Test that explicit parameters are used when no config provided"""
-        mock_isovar_result = MagicMock()
-        mock_isovar_result.passes_all_filters = True
-        mock_isovar_result.variant = MagicMock()
-        mock_isovar_result.variant.ensembl = None
+    # Mock the MutantProteinFragment
+    mock_fragment = MagicMock()
+    mock_fragment.sorted_subsequences.return_value = []
 
-        mock_fragment = MagicMock()
-        mock_fragment.sorted_subsequences.return_value = []
+    mock_predictor = MagicMock()
 
-        mock_predictor = MagicMock()
+    vaccine_config = VaccineConfig(
+        vaccine_peptide_length=40,
+        max_vaccine_peptides_per_variant=5,
+        num_mutant_epitopes_to_keep=500,
+    )
 
-        with patch('vaxrank.core_logic.MutantProteinFragment') as MockFragment:
-            MockFragment.from_isovar_result.return_value = mock_fragment
-            with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
-                mock_predict.return_value = {}
+    with patch('vaxrank.core_logic.MutantProteinFragment') as MockFragment:
+        MockFragment.from_isovar_result.return_value = mock_fragment
+        with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
+            mock_predict.return_value = {}
 
-                vaccine_peptides_for_variant(
-                    isovar_result=mock_isovar_result,
-                    mhc_predictor=mock_predictor,
-                    vaccine_peptide_length=35,  # Should be used
-                    vaccine_config=None,  # No config
-                )
+            vaccine_peptides_for_variant(
+                isovar_result=mock_isovar_result,
+                mhc_predictor=mock_predictor,
+                vaccine_peptide_length=25,  # Explicit, should be overridden
+                vaccine_config=vaccine_config,
+            )
 
-                mock_fragment.sorted_subsequences.assert_called_with(subsequence_length=35)
+            # The vaccine_config values should have been used
+            mock_fragment.sorted_subsequences.assert_called_with(subsequence_length=40)
 
-    def test_epitope_config_passed_to_predict(self):
-        """Test that epitope_config is passed to predict_epitopes"""
-        mock_isovar_result = MagicMock()
-        mock_isovar_result.passes_all_filters = True
-        mock_isovar_result.variant = MagicMock()
-        mock_isovar_result.variant.ensembl = None
 
-        mock_fragment = MagicMock()
-        mock_fragment.sorted_subsequences.return_value = []
+def test_vaccine_peptides_for_variant_explicit_params_used_without_config():
+    """Test that explicit parameters are used when no config provided"""
+    mock_isovar_result = MagicMock()
+    mock_isovar_result.passes_all_filters = True
+    mock_isovar_result.variant = MagicMock()
+    mock_isovar_result.variant.ensembl = None
 
-        mock_predictor = MagicMock()
+    mock_fragment = MagicMock()
+    mock_fragment.sorted_subsequences.return_value = []
 
-        epitope_config = EpitopeConfig(min_epitope_score=0.05)
+    mock_predictor = MagicMock()
 
-        with patch('vaxrank.core_logic.MutantProteinFragment') as MockFragment:
-            MockFragment.from_isovar_result.return_value = mock_fragment
-            with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
-                mock_predict.return_value = {}
+    with patch('vaxrank.core_logic.MutantProteinFragment') as MockFragment:
+        MockFragment.from_isovar_result.return_value = mock_fragment
+        with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
+            mock_predict.return_value = {}
 
-                vaccine_peptides_for_variant(
-                    isovar_result=mock_isovar_result,
-                    mhc_predictor=mock_predictor,
-                    epitope_config=epitope_config,
-                )
+            vaccine_peptides_for_variant(
+                isovar_result=mock_isovar_result,
+                mhc_predictor=mock_predictor,
+                vaccine_peptide_length=35,  # Should be used
+                vaccine_config=None,  # No config
+            )
 
-                # Verify predict_epitopes was called with the config
-                call_kwargs = mock_predict.call_args[1]
-                eq_(call_kwargs['epitope_config'], epitope_config)
+            mock_fragment.sorted_subsequences.assert_called_with(subsequence_length=35)
+
+
+def test_vaccine_peptides_for_variant_epitope_config_passed_to_predict():
+    """Test that epitope_config is passed to predict_epitopes"""
+    mock_isovar_result = MagicMock()
+    mock_isovar_result.passes_all_filters = True
+    mock_isovar_result.variant = MagicMock()
+    mock_isovar_result.variant.ensembl = None
+
+    mock_fragment = MagicMock()
+    mock_fragment.sorted_subsequences.return_value = []
+
+    mock_predictor = MagicMock()
+
+    epitope_config = EpitopeConfig(min_epitope_score=0.05)
+
+    with patch('vaxrank.core_logic.MutantProteinFragment') as MockFragment:
+        MockFragment.from_isovar_result.return_value = mock_fragment
+        with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
+            mock_predict.return_value = {}
+
+            vaccine_peptides_for_variant(
+                isovar_result=mock_isovar_result,
+                mhc_predictor=mock_predictor,
+                epitope_config=epitope_config,
+            )
+
+            # Verify predict_epitopes was called with the config
+            call_kwargs = mock_predict.call_args[1]
+            eq_(call_kwargs['epitope_config'], epitope_config)
 
 
 # =============================================================================
 # Config Integration Tests
 # =============================================================================
 
-class TestConfigIntegration:
-    """Integration tests for config objects with core logic"""
+def test_config_integration_epitope_config_affects_filtering():
+    """Test that EpitopeConfig min_epitope_score affects filtering"""
+    # This is more of a documentation test - the actual filtering
+    # happens in epitope_logic.py, but we can verify the config flows through
 
-    def test_epitope_config_affects_filtering(self):
-        """Test that EpitopeConfig min_epitope_score affects filtering"""
-        # This is more of a documentation test - the actual filtering
-        # happens in epitope_logic.py, but we can verify the config flows through
+    config_strict = EpitopeConfig(min_epitope_score=0.5)  # Very strict
+    config_lenient = EpitopeConfig(min_epitope_score=0.0)  # No filtering
 
-        config_strict = EpitopeConfig(min_epitope_score=0.5)  # Very strict
-        config_lenient = EpitopeConfig(min_epitope_score=0.0)  # No filtering
+    # The configs should have different min_epitope_score values
+    gt_(config_strict.min_epitope_score, config_lenient.min_epitope_score)
 
-        # The configs should have different min_epitope_score values
-        gt_(config_strict.min_epitope_score, config_lenient.min_epitope_score)
 
-    def test_vaccine_config_affects_peptide_generation(self):
-        """Test that VaccineConfig affects vaccine peptide generation"""
-        config_short = VaccineConfig(vaccine_peptide_length=20)
-        config_long = VaccineConfig(vaccine_peptide_length=35)
+def test_config_integration_vaccine_config_affects_peptide_generation():
+    """Test that VaccineConfig affects vaccine peptide generation"""
+    config_short = VaccineConfig(vaccine_peptide_length=20)
+    config_long = VaccineConfig(vaccine_peptide_length=35)
 
-        gt_(config_long.vaccine_peptide_length, config_short.vaccine_peptide_length)
+    gt_(config_long.vaccine_peptide_length, config_short.vaccine_peptide_length)
 
-    def test_epitope_config_affects_vaccine_peptide_scoring(self):
-        """Test that EpitopeConfig parameters affect VaccinePeptide scores"""
-        class DummyFragment:
-            def __init__(self, amino_acids):
-                self.amino_acids = amino_acids
-                self.n_alt_reads = 4
-                self.n_alt_reads_supporting_protein_sequence = 4
-                self.n_mutant_amino_acids = 1
-                self.mutation_distance_from_edge = 0
-                self.mutant_amino_acid_start_offset = 0
-                self.mutant_amino_acid_end_offset = 1
 
-            def __len__(self):
-                return len(self.amino_acids)
+def test_config_integration_epitope_config_affects_vaccine_peptide_scoring():
+    """Test that EpitopeConfig parameters affect VaccinePeptide scores"""
+    class DummyFragment:
+        def __init__(self, amino_acids):
+            self.amino_acids = amino_acids
+            self.n_alt_reads = 4
+            self.n_alt_reads_supporting_protein_sequence = 4
+            self.n_mutant_amino_acids = 1
+            self.mutation_distance_from_edge = 0
+            self.mutant_amino_acid_start_offset = 0
+            self.mutant_amino_acid_end_offset = 1
 
-        class DummyLongFragment:
-            def __init__(self, fragment):
-                self.fragment = fragment
+        def __len__(self):
+            return len(self.amino_acids)
 
-            def sorted_subsequences(self, subsequence_length):
-                return [(0, self.fragment)]
+    class DummyLongFragment:
+        def __init__(self, fragment):
+            self.fragment = fragment
 
-        fragment = DummyFragment("ACDEFGHIK")
-        long_fragment = DummyLongFragment(fragment)
+        def sorted_subsequences(self, subsequence_length):
+            return [(0, self.fragment)]
 
-        prediction = EpitopePrediction(
-            allele="HLA-A*02:01",
-            peptide_sequence="ACDEFGHIK",
-            wt_peptide_sequence="ACDEFGHIK",
-            ic50=100.0,
-            wt_ic50=200.0,
-            percentile_rank=0.5,
-            prediction_method_name="test",
-            overlaps_mutation=True,
-            source_sequence="ACDEFGHIK",
-            offset=0,
-            occurs_in_reference=False,
-        )
+    fragment = DummyFragment("ACDEFGHIK")
+    long_fragment = DummyLongFragment(fragment)
 
-        default_score = prediction.logistic_epitope_score()
-        epitope_config = EpitopeConfig(
-            logistic_epitope_score_midpoint=50.0,
-            logistic_epitope_score_width=10.0,
-            binding_affinity_cutoff=5000.0,
-        )
-        custom_score = prediction.logistic_epitope_score(
-            midpoint=epitope_config.logistic_epitope_score_midpoint,
-            width=epitope_config.logistic_epitope_score_width,
-            ic50_cutoff=epitope_config.binding_affinity_cutoff,
-        )
-        ok_(custom_score != default_score)
+    prediction = EpitopePrediction(
+        allele="HLA-A*02:01",
+        peptide_sequence="ACDEFGHIK",
+        wt_peptide_sequence="ACDEFGHIK",
+        ic50=100.0,
+        wt_ic50=200.0,
+        percentile_rank=0.5,
+        prediction_method_name="test",
+        overlaps_mutation=True,
+        source_sequence="ACDEFGHIK",
+        offset=0,
+        occurs_in_reference=False,
+    )
 
-        peptides = vaccine_peptides_from_epitopes(
-            variant=MagicMock(),
-            long_protein_fragment=long_fragment,
-            epitope_predictions=[prediction],
-            vaccine_peptide_length=len(fragment),
-            max_vaccine_peptides_per_variant=1,
-            num_mutant_epitopes_to_keep=10,
-            epitope_config=epitope_config,
-        )
-        eq_(len(peptides), 1)
-        eq_(peptides[0].mutant_epitope_score, custom_score)
+    default_score = prediction.logistic_epitope_score()
+    epitope_config = EpitopeConfig(
+        logistic_epitope_score_midpoint=50.0,
+        logistic_epitope_score_width=10.0,
+        binding_affinity_cutoff=5000.0,
+    )
+    custom_score = prediction.logistic_epitope_score(
+        midpoint=epitope_config.logistic_epitope_score_midpoint,
+        width=epitope_config.logistic_epitope_score_width,
+        ic50_cutoff=epitope_config.binding_affinity_cutoff,
+    )
+    ok_(custom_score != default_score)
 
-    def test_config_defaults_match_historical_behavior(self):
-        """Test that default config values match historical defaults"""
-        epitope_config = EpitopeConfig()
-        vaccine_config = VaccineConfig()
+    peptides = vaccine_peptides_from_epitopes(
+        variant=MagicMock(),
+        long_protein_fragment=long_fragment,
+        epitope_predictions=[prediction],
+        vaccine_peptide_length=len(fragment),
+        max_vaccine_peptides_per_variant=1,
+        num_mutant_epitopes_to_keep=10,
+        epitope_config=epitope_config,
+    )
+    eq_(len(peptides), 1)
+    eq_(peptides[0].mutant_epitope_score, custom_score)
 
-        # These were the historical defaults
-        eq_(vaccine_config.vaccine_peptide_length, 25)
-        eq_(vaccine_config.padding_around_mutation, 5)
-        eq_(vaccine_config.max_vaccine_peptides_per_variant, 1)
 
-        # Epitope scoring defaults
-        eq_(epitope_config.logistic_epitope_score_midpoint, 350.0)
-        eq_(epitope_config.logistic_epitope_score_width, 150.0)
+def test_config_defaults_match_historical_behavior():
+    """Test that default config values match historical defaults"""
+    epitope_config = EpitopeConfig()
+    vaccine_config = VaccineConfig()
+
+    # These were the historical defaults
+    eq_(vaccine_config.vaccine_peptide_length, 25)
+    eq_(vaccine_config.padding_around_mutation, 5)
+    eq_(vaccine_config.max_vaccine_peptides_per_variant, 1)
+
+    # Epitope scoring defaults
+    eq_(epitope_config.logistic_epitope_score_midpoint, 350.0)
+    eq_(epitope_config.logistic_epitope_score_width, 150.0)
 
 
 # =============================================================================
 # Config Struct Immutability Tests
 # =============================================================================
 
-class TestConfigImmutability:
-    """Tests to verify config structs behave correctly"""
+def test_config_immutability_epitope_config_hashable():
+    """Test that EpitopeConfig can be used in sets/dicts"""
+    config1 = EpitopeConfig(min_epitope_score=0.01)
+    config2 = EpitopeConfig(min_epitope_score=0.01)
+    config3 = EpitopeConfig(min_epitope_score=0.02)
 
-    def test_epitope_config_hashable(self):
-        """Test that EpitopeConfig can be used in sets/dicts"""
-        config1 = EpitopeConfig(min_epitope_score=0.01)
-        config2 = EpitopeConfig(min_epitope_score=0.01)
-        config3 = EpitopeConfig(min_epitope_score=0.02)
+    # Same values should be equal
+    eq_(config1, config2)
 
-        # Same values should be equal
-        eq_(config1, config2)
+    # Different values should not be equal
+    ok_(config1 != config3)
 
-        # Different values should not be equal
-        ok_(config1 != config3)
 
-    def test_vaccine_config_hashable(self):
-        """Test that VaccineConfig can be used in sets/dicts"""
-        config1 = VaccineConfig(vaccine_peptide_length=25)
-        config2 = VaccineConfig(vaccine_peptide_length=25)
-        config3 = VaccineConfig(vaccine_peptide_length=30)
+def test_config_immutability_vaccine_config_hashable():
+    """Test that VaccineConfig can be used in sets/dicts"""
+    config1 = VaccineConfig(vaccine_peptide_length=25)
+    config2 = VaccineConfig(vaccine_peptide_length=25)
+    config3 = VaccineConfig(vaccine_peptide_length=30)
 
-        eq_(config1, config2)
-        ok_(config1 != config3)
+    eq_(config1, config2)
+    ok_(config1 != config3)
 
-    def test_config_repr(self):
-        """Test that configs have useful repr"""
-        config = EpitopeConfig(min_epitope_score=0.05)
-        repr_str = repr(config)
 
-        # Should contain class name and values
-        ok_("EpitopeConfig" in repr_str)
-        ok_("0.05" in repr_str)
+def test_config_immutability_config_repr():
+    """Test that configs have useful repr"""
+    config = EpitopeConfig(min_epitope_score=0.05)
+    repr_str = repr(config)
+
+    # Should contain class name and values
+    ok_("EpitopeConfig" in repr_str)
+    ok_("0.05" in repr_str)
 
 
 # =============================================================================
 # Edge Case Tests
 # =============================================================================
 
-class TestConfigEdgeCases:
-    """Edge case tests for config handling"""
+def test_config_edge_case_zero_min_epitope_score():
+    """Test that min_epitope_score of 0 is valid"""
+    config = EpitopeConfig(min_epitope_score=0)
+    eq_(config.min_epitope_score, 0)
 
-    def test_zero_min_epitope_score(self):
-        """Test that min_epitope_score of 0 is valid"""
-        config = EpitopeConfig(min_epitope_score=0)
-        eq_(config.min_epitope_score, 0)
 
-    def test_very_small_min_epitope_score(self):
-        """Test that very small min_epitope_score is preserved"""
-        config = EpitopeConfig(min_epitope_score=1e-10)
-        eq_(config.min_epitope_score, 1e-10)
+def test_config_edge_case_very_small_min_epitope_score():
+    """Test that very small min_epitope_score is preserved"""
+    config = EpitopeConfig(min_epitope_score=1e-10)
+    eq_(config.min_epitope_score, 1e-10)
 
-    def test_large_vaccine_peptide_length(self):
-        """Test that large vaccine_peptide_length is valid"""
-        config = VaccineConfig(vaccine_peptide_length=100)
-        eq_(config.vaccine_peptide_length, 100)
 
-    def test_zero_vaccine_peptides_per_variant(self):
-        """Test behavior with 0 max_vaccine_peptides_per_variant"""
-        config = VaccineConfig(max_vaccine_peptides_per_variant=0)
-        eq_(config.max_vaccine_peptides_per_variant, 0)
+def test_config_edge_case_large_vaccine_peptide_length():
+    """Test that large vaccine_peptide_length is valid"""
+    config = VaccineConfig(vaccine_peptide_length=100)
+    eq_(config.vaccine_peptide_length, 100)
 
-    def test_config_with_all_defaults(self):
-        """Test that configs work with all default values"""
-        epitope_config = EpitopeConfig()
-        vaccine_config = VaccineConfig()
 
-        # Should be usable without any custom values
-        ok_(epitope_config.min_epitope_score > 0)
-        ok_(vaccine_config.vaccine_peptide_length > 0)
+def test_config_edge_case_zero_vaccine_peptides_per_variant():
+    """Test behavior with 0 max_vaccine_peptides_per_variant"""
+    config = VaccineConfig(max_vaccine_peptides_per_variant=0)
+    eq_(config.max_vaccine_peptides_per_variant, 0)
+
+
+def test_config_edge_case_config_with_all_defaults():
+    """Test that configs work with all default values"""
+    epitope_config = EpitopeConfig()
+    vaccine_config = VaccineConfig()
+
+    # Should be usable without any custom values
+    ok_(epitope_config.min_epitope_score > 0)
+    ok_(vaccine_config.vaccine_peptide_length > 0)
