@@ -319,7 +319,7 @@ def test_vaccine_config_from_args_no_config_file_no_cli_args():
         config=None,
         vaccine_peptide_length=None,
         padding_around_mutation=None,
-        max_vaccine_peptides_per_mutation=None,
+        max_vaccine_peptides_per_variant=None,
         num_epitopes_per_vaccine_peptide=None,
     )
     config = vaccine_config_from_args(args)
@@ -335,7 +335,7 @@ def test_vaccine_config_from_args_cli_override_vaccine_peptide_length():
         config=None,
         vaccine_peptide_length=35,
         padding_around_mutation=None,
-        max_vaccine_peptides_per_mutation=None,
+        max_vaccine_peptides_per_variant=None,
         num_epitopes_per_vaccine_peptide=None,
     )
     config = vaccine_config_from_args(args)
@@ -348,7 +348,7 @@ def test_vaccine_config_from_args_cli_override_all_values():
         config=None,
         vaccine_peptide_length=30,
         padding_around_mutation=10,
-        max_vaccine_peptides_per_mutation=5,
+        max_vaccine_peptides_per_variant=5,
         num_epitopes_per_vaccine_peptide=500,
     )
     config = vaccine_config_from_args(args)
@@ -356,6 +356,19 @@ def test_vaccine_config_from_args_cli_override_all_values():
     eq_(config.padding_around_mutation, 10)
     eq_(config.max_vaccine_peptides_per_variant, 5)
     eq_(config.num_mutant_epitopes_to_keep, 500)
+
+
+def test_vaccine_config_from_args_legacy_mutation_namespace_attr():
+    """Backward compatibility for callers using old namespace attribute."""
+    args = argparse.Namespace(
+        config=None,
+        vaccine_peptide_length=None,
+        padding_around_mutation=None,
+        max_vaccine_peptides_per_mutation=7,
+        num_epitopes_per_vaccine_peptide=None,
+    )
+    config = vaccine_config_from_args(args)
+    eq_(config.max_vaccine_peptides_per_variant, 7)
 
 
 def test_vaccine_config_from_args_yaml_config_file():
@@ -376,7 +389,7 @@ vaccine_config:
             config=config_path,
             vaccine_peptide_length=None,
             padding_around_mutation=None,
-            max_vaccine_peptides_per_mutation=None,
+            max_vaccine_peptides_per_variant=None,
             num_epitopes_per_vaccine_peptide=None,
         )
         config = vaccine_config_from_args(args)
@@ -404,7 +417,7 @@ vaccine_config:
             config=config_path,
             vaccine_peptide_length=50,  # Override YAML's 40
             padding_around_mutation=None,
-            max_vaccine_peptides_per_mutation=None,
+            max_vaccine_peptides_per_variant=None,
             num_epitopes_per_vaccine_peptide=None,
         )
         config = vaccine_config_from_args(args)
@@ -429,7 +442,7 @@ epitope_config:
             config=config_path,
             vaccine_peptide_length=None,
             padding_around_mutation=None,
-            max_vaccine_peptides_per_mutation=None,
+            max_vaccine_peptides_per_variant=None,
             num_epitopes_per_vaccine_peptide=None,
         )
         config = vaccine_config_from_args(args)
@@ -469,7 +482,7 @@ vaccine_config:
             config=config_path,
             vaccine_peptide_length=None,
             padding_around_mutation=None,
-            max_vaccine_peptides_per_mutation=None,
+            max_vaccine_peptides_per_variant=None,
             num_epitopes_per_vaccine_peptide=None,
         )
         vaccine_config = vaccine_config_from_args(vaccine_args)
@@ -503,7 +516,7 @@ vaccine_config:
             config=config_path,
             vaccine_peptide_length=40,  # Override
             padding_around_mutation=None,
-            max_vaccine_peptides_per_mutation=None,
+            max_vaccine_peptides_per_variant=None,
             num_epitopes_per_vaccine_peptide=None,
         )
         vaccine_config = vaccine_config_from_args(vaccine_args)
@@ -535,11 +548,20 @@ def test_cli_add_vaccine_peptide_args():
     args = parser.parse_args([
         '--vaccine-peptide-length', '30',
         '--padding-around-mutation', '10',
-        '--max-vaccine-peptides-per-mutation', '5',
+        '--max-vaccine-peptides-per-variant', '5',
     ])
     eq_(args.vaccine_peptide_length, 30)
     eq_(args.padding_around_mutation, 10)
-    eq_(args.max_vaccine_peptides_per_mutation, 5)
+    eq_(args.max_vaccine_peptides_per_variant, 5)
+
+
+def test_cli_add_vaccine_peptide_args_legacy_mutation_alias():
+    """Legacy mutation flag maps to variant destination for compatibility."""
+    parser = argparse.ArgumentParser()
+    add_vaccine_peptide_args(parser)
+
+    args = parser.parse_args(['--max-vaccine-peptides-per-mutation', '5'])
+    eq_(args.max_vaccine_peptides_per_variant, 5)
 
 
 def test_cli_vaccine_peptide_args_defaults():
@@ -550,7 +572,7 @@ def test_cli_vaccine_peptide_args_defaults():
     args = parser.parse_args([])
     eq_(args.vaccine_peptide_length, None)
     eq_(args.padding_around_mutation, None)
-    eq_(args.max_vaccine_peptides_per_mutation, None)
+    eq_(args.max_vaccine_peptides_per_variant, None)
 
 
 # =============================================================================
@@ -565,6 +587,15 @@ def test_cli_version_cached_parser_has_version_flag():
     with pytest.raises(SystemExit) as excinfo:
         parser.parse_args(["--version"])
     eq_(excinfo.value.code, 0)
+
+
+def test_choose_arg_parser_detects_input_json_file_equals_form():
+    """--input-json-file=<path> should select the cached-mode parser."""
+    from vaxrank.cli.arg_parser import choose_arg_parser
+
+    parser = choose_arg_parser(["--input-json-file=dummy.json"])
+    args = parser.parse_args(["--input-json-file=dummy.json", "--output-ascii-report", "out.txt"])
+    eq_(args.input_json_file, "dummy.json")
 
 
 # =============================================================================

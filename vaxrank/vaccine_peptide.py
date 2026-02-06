@@ -43,7 +43,7 @@ class VaccinePeptide(Serializable):
         epitope_predictions : list of EpitopePrediction
 
         num_mutant_epitopes_to_keep : int or None
-            If None then keep all mutant epitopes.
+            If None or 0 then keep all mutant epitopes.
 
         epitope_score_params : dict or None
             Parameters passed to EpitopePrediction.logistic_epitope_score.

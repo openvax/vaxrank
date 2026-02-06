@@ -143,6 +143,8 @@ def run_vaxrank_from_parsed_args(args):
     # reports, etc.) see the effective configuration.
     args.vaccine_peptide_length = vaccine_config.vaccine_peptide_length
     args.padding_around_mutation = vaccine_config.padding_around_mutation
+    args.max_vaccine_peptides_per_variant = vaccine_config.max_vaccine_peptides_per_variant
+    # Keep legacy key for backward compatibility in JSON/report args.
     args.max_vaccine_peptides_per_mutation = vaccine_config.max_vaccine_peptides_per_variant
     args.num_epitopes_per_vaccine_peptide = vaccine_config.num_mutant_epitopes_to_keep
 
@@ -164,7 +166,7 @@ def run_vaxrank_from_parsed_args(args):
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
-        max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_mutation,
+        max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_variant,
         num_mutant_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
         epitope_config=epitope_config,
         vaccine_config=vaccine_config)

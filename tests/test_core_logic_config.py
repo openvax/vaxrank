@@ -14,16 +14,20 @@
 Tests for core_logic.py integration with config objects.
 """
 
+from inspect import signature
 from unittest.mock import MagicMock, patch
 
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.vaccine_config import VaccineConfig
 from vaxrank.core_logic import (
+    run_vaxrank,
+    create_vaccine_peptides_dict,
     vaccine_peptides_for_variant,
     vaccine_peptides_from_epitopes,
 )
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.epitope_prediction import EpitopePrediction
+from vaxrank.vaccine_peptide import VaccinePeptide
 
 from .common import eq_, ok_, gt_
 
@@ -290,6 +294,17 @@ def test_config_defaults_match_historical_behavior():
     eq_(epitope_config.logistic_epitope_score_width, 150.0)
 
 
+def test_core_logic_default_num_epitope_limit_matches_vaccine_config():
+    """Public core helpers should share the same default epitope limit."""
+    expected = VaccineConfig().num_mutant_epitopes_to_keep
+    for fn in (
+            run_vaxrank,
+            create_vaccine_peptides_dict,
+            vaccine_peptides_for_variant,
+            vaccine_peptides_from_epitopes):
+        eq_(signature(fn).parameters["num_mutant_epitopes_to_keep"].default, expected)
+
+
 # =============================================================================
 # Config Struct Immutability Tests
 # =============================================================================
@@ -353,6 +368,46 @@ def test_config_edge_case_zero_vaccine_peptides_per_variant():
     """Test behavior with 0 max_vaccine_peptides_per_variant"""
     config = VaccineConfig(max_vaccine_peptides_per_variant=0)
     eq_(config.max_vaccine_peptides_per_variant, 0)
+
+
+def test_vaccine_peptide_zero_epitope_limit_keeps_all():
+    """A value of 0 means no truncation of mutant epitope list."""
+    fragment = MagicMock()
+    fragment.amino_acids = "ACDEFGHIK"
+
+    prediction1 = EpitopePrediction(
+        allele="HLA-A*02:01",
+        peptide_sequence="ACDEFGHIK",
+        wt_peptide_sequence="ACDEFGHIK",
+        ic50=100.0,
+        wt_ic50=200.0,
+        percentile_rank=0.5,
+        prediction_method_name="test",
+        overlaps_mutation=True,
+        source_sequence="ACDEFGHIK",
+        offset=0,
+        occurs_in_reference=False,
+    )
+    prediction2 = EpitopePrediction(
+        allele="HLA-A*02:01",
+        peptide_sequence="CDEFGHIKL",
+        wt_peptide_sequence="CDEFGHIKL",
+        ic50=120.0,
+        wt_ic50=220.0,
+        percentile_rank=0.4,
+        prediction_method_name="test",
+        overlaps_mutation=True,
+        source_sequence="CDEFGHIKL",
+        offset=0,
+        occurs_in_reference=False,
+    )
+
+    vaccine_peptide = VaccinePeptide(
+        mutant_protein_fragment=fragment,
+        epitope_predictions=[prediction1, prediction2],
+        num_mutant_epitopes_to_keep=0,
+    )
+    eq_(len(vaccine_peptide.mutant_epitope_predictions), 2)
 
 
 def test_config_edge_case_config_with_all_defaults():

@@ -220,7 +220,10 @@ def check_args(args):
 
 def choose_arg_parser(args_list):
     # TODO: replace this with a command sub-parser
-    if "--input-json-file" in args_list:
+    if any(
+            arg == "--input-json-file" or
+            arg.startswith("--input-json-file=")
+            for arg in args_list):
         return cached_run_arg_parser()
     else:
         return make_vaxrank_arg_parser()

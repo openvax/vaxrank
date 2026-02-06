@@ -12,6 +12,7 @@
 
 
 import logging
+from typing import Optional
 
 from numpy import isclose
 
@@ -33,9 +34,9 @@ def run_vaxrank(
     mhc_predictor: BasePredictor,
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
-    num_mutant_epitopes_to_keep: int = 10000,
-    epitope_config: EpitopeConfig = None,
-    vaccine_config: VaccineConfig = None,
+    num_mutant_epitopes_to_keep: int = 1000,
+    epitope_config: Optional[EpitopeConfig] = None,
+    vaccine_config: Optional[VaccineConfig] = None,
 ):
     """
     Parameters
@@ -52,7 +53,7 @@ def run_vaxrank(
         Length of vaccine SLP to construct
 
     max_vaccine_peptides_per_variant
-        Number of vaccine peptides to generate for each mutation.
+        Number of vaccine peptides to generate for each variant.
 
     num_mutant_epitopes_to_keep
         Number of top-ranking epitopes for each vaccine peptide to include in
@@ -87,9 +88,9 @@ def create_vaccine_peptides_dict(
     mhc_predictor: BasePredictor,
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
-    num_mutant_epitopes_to_keep: int = 10**5,
-    epitope_config: EpitopeConfig = None,
-    vaccine_config: VaccineConfig = None,
+    num_mutant_epitopes_to_keep: int = 1000,
+    epitope_config: Optional[EpitopeConfig] = None,
+    vaccine_config: Optional[VaccineConfig] = None,
 ):
     """
     Parameters
@@ -105,7 +106,7 @@ def create_vaccine_peptides_dict(
         Length of vaccine SLP to construct
 
     max_vaccine_peptides_per_variant
-        Number of vaccine peptides to generate for each mutation.
+        Number of vaccine peptides to generate for each variant.
 
     num_mutant_epitopes_to_keep
         Number of top-ranking epitopes for each vaccine peptide to include in
@@ -146,9 +147,9 @@ def vaccine_peptides_for_variant(
     mhc_predictor: BasePredictor,
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
-    num_mutant_epitopes_to_keep: int = 10**5,
-    epitope_config: EpitopeConfig = None,
-    vaccine_config: VaccineConfig = None,
+    num_mutant_epitopes_to_keep: int = 1000,
+    epitope_config: Optional[EpitopeConfig] = None,
+    vaccine_config: Optional[VaccineConfig] = None,
 ):
     """
     Parameters
@@ -163,7 +164,7 @@ def vaccine_peptides_for_variant(
         Length of vaccine SLP to construct
 
     max_vaccine_peptides_per_variant
-        Number of vaccine peptides to generate for each mutation.
+        Number of vaccine peptides to generate for each variant.
 
     num_mutant_epitopes_to_keep
         Number of top-ranking epitopes for each vaccine peptide to include in
@@ -220,8 +221,8 @@ def vaccine_peptides_from_epitopes(
     epitope_predictions: list,
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
-    num_mutant_epitopes_to_keep: int = 10**5,
-    epitope_config: EpitopeConfig = None,
+    num_mutant_epitopes_to_keep: int = 1000,
+    epitope_config: Optional[EpitopeConfig] = None,
 ):
     """
     Generate vaccine peptide candidates from epitope predictions.
@@ -241,7 +242,7 @@ def vaccine_peptides_from_epitopes(
         Length of vaccine SLP to construct
 
     max_vaccine_peptides_per_variant
-        Number of vaccine peptides to generate for each mutation
+        Number of vaccine peptides to generate for each variant
 
     num_mutant_epitopes_to_keep
         Number of top-ranking epitopes for each vaccine peptide to include

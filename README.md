@@ -1,5 +1,7 @@
 [![Tests](https://github.com/openvax/vaxrank/actions/workflows/tests.yml/badge.svg)](https://github.com/openvax/vaxrank/actions/workflows/tests.yml)
 [![Coverage Status](https://coveralls.io/repos/github/openvax/vaxrank/badge.svg?branch=master)](https://coveralls.io/github/openvax/vaxrank?branch=master)
+[![Docs](https://github.com/openvax/vaxrank/actions/workflows/docs.yml/badge.svg)](https://github.com/openvax/vaxrank/actions/workflows/docs.yml)
+[![GitHub Pages](https://github.com/openvax/vaxrank/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/openvax/vaxrank/actions/workflows/pages/pages-build-deployment)
 <a href="https://pypi.python.org/pypi/vaxrank/">
     <img src="https://img.shields.io/pypi/v/vaxrank.svg?maxAge=1000" alt="PyPI" />
 </a>
@@ -42,6 +44,7 @@ vaccine_config:
   vaccine_peptide_length: 25
   padding_around_mutation: 5
   max_vaccine_peptides_per_variant: 1
+  num_mutant_epitopes_to_keep: 1000  # set to 0 to keep all
 ```
 
 CLI arguments override values from the config file.
@@ -149,7 +152,7 @@ Vaxrank uses [msgspec](https://jcristharif.com/msgspec/) Struct objects for conf
   - `vaccine_peptide_length`: Length of vaccine peptides (default: 25 aa)
   - `padding_around_mutation`: Off-center windows to consider (default: 5)
   - `max_vaccine_peptides_per_variant`: Max peptides per variant (default: 1)
-  - `num_mutant_epitopes_to_keep`: Epitopes to keep per variant (default: 1000)
+  - `num_mutant_epitopes_to_keep`: Epitopes to keep per variant (default: 1000, set to 0 to keep all)
 
 ### Key Modules
 

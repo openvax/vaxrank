@@ -14,6 +14,7 @@
 from collections import OrderedDict
 import traceback
 import logging
+from typing import Optional
 
 
 from pyensembl import Genome
@@ -48,8 +49,8 @@ Allele = str
 def predict_epitopes(
         mhc_predictor : BasePredictor,
         protein_fragment : MutantProteinFragment,
-        epitope_config : EpitopeConfig = None,
-        genome :  Genome = None) -> dict[tuple[Peptide, Allele], EpitopePrediction]:
+        epitope_config : Optional[EpitopeConfig] = None,
+        genome : Optional[Genome] = None) -> dict[tuple[Peptide, Allele], EpitopePrediction]:
     """
     Parameters
     ----------

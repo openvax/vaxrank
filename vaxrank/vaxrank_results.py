@@ -32,7 +32,7 @@ class VaxrankResults(Serializable):
         variant_to_vaccine_peptides_dict : dict
             Dictionary mapping variant to a list of possible vaccine peptides
 
-        ranked_vaccine_peptides : list of VaccinePeptide
+        ranked_vaccine_peptides : list of tuple(varcode.Variant, list of VaccinePeptide)
         """
         self.isovar_results = isovar_results
         self.variant_to_vaccine_peptides_dict = variant_to_vaccine_peptides_dict

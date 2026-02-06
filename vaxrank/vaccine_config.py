@@ -59,7 +59,8 @@ class VaccineConfig(msgspec.Struct, frozen=True):
     num_mutant_epitopes_to_keep : int
         Maximum number of epitope predictions to retain per variant
         during processing. Higher values increase computational cost
-        but may capture more potential vaccine targets.
+        but may capture more potential vaccine targets. Set to 0 to
+        keep all predicted mutant epitopes.
         Default: 1000
 
     Examples
