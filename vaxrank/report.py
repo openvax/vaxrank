@@ -24,10 +24,10 @@ from astropy.io import ascii as asc
 import jinja2
 import pandas as pd
 import pdfkit
-import requests
 import roman
 from varcode import load_vcf_fast
 
+from .cancer_hotspots import get_hotspot_url
 from .manufacturability import ManufacturabilityScores
 
 logger = logging.getLogger(__name__)
@@ -106,7 +106,6 @@ class TemplateDataCreator(object):
         """
         Returns an OrderedDict with info used to populate variant info section.
         """
-        variant_data = OrderedDict()
         mutant_protein_fragment = top_vaccine_peptide.mutant_protein_fragment
         top_score = _sanitize(top_vaccine_peptide.combined_score)
         igv_locus = "chr%s:%d" % (variant.contig, variant.start)
@@ -202,7 +201,7 @@ class TemplateDataCreator(object):
             ('C-terminal Proline', int(scores.c_terminal_proline)),
             ('Total number of Cysteine residues', scores.cysteine_count),
             ('N-terminal Asparagine', int(scores.n_terminal_asparagine)),
-            ('Number of Asparagine-Proline bonds', scores.asparagine_proline_bond_count),
+            ('Number of Aspartate-Proline bonds', scores.aspartate_proline_bond_count),
         ])
         return manufacturability_data
 
@@ -239,34 +238,23 @@ class TemplateDataCreator(object):
         logger.info("Variant not in COSMIC")
         return None
 
-    def _query_wustl(self, predicted_effect, gene_name):
+    def _query_cancer_hotspots(self, predicted_effect, gene_name):
         """
-        Returns a link to the WUSTL page for this variant, if present.
+        Check if variant is a known cancer hotspot and return link if so.
+
+        Uses bundled cancer hotspots data from Chang et al. 2016/2017.
         """
         amino_acids = predicted_effect.short_description
-        api_url = "http://www.docm.info/api/v1/variants.json?amino_acids=%s&genes=%s" % (
-            amino_acids, gene_name.upper())
-        logger.info("WUSTL link: %s", api_url)
-
-        try:
-            contents = requests.get(api_url).json()
-            if len(contents) > 0:
-                hgvs = contents[0]['hgvs']
-                link_for_report = "http://docm.genome.wustl.edu/variants/%s" % hgvs
-                logger.info("Link for report: %s", link_for_report)
-                return link_for_report
-        except requests.exceptions.ConnectionError as e:
-            logger.warn('ConnectionError reaching WUSTL: %s', e)
-            return None
-
-        logger.info('Variant not found in WUSTL')
-        return None
+        hotspot_url = get_hotspot_url(gene_name, amino_acids)
+        if hotspot_url:
+            logger.info("Cancer hotspot found: %s %s -> %s", gene_name, amino_acids, hotspot_url)
+        return hotspot_url
 
     def _databases(self, variant, predicted_effect, gene_name):
         databases = {}
-        wustl_link = self._query_wustl(predicted_effect, gene_name)
-        if wustl_link:
-            databases['WUSTL'] = wustl_link
+        hotspot_link = self._query_cancer_hotspots(predicted_effect, gene_name)
+        if hotspot_link:
+            databases['Cancer Hotspots'] = hotspot_link
 
         cosmic_link = self._query_cosmic(variant)
         if cosmic_link:
@@ -445,7 +433,7 @@ def _sanitize(val):
     """
     Converts values into display-friendly
     """
-    if type(val) == bool:
+    if isinstance(val, bool):
         return int(val)
     else:
         return _str_sig_figs(val, 5)
@@ -455,8 +443,9 @@ def resize_columns(worksheet, amino_acids_col, pos_col):
     Resizes amino acid and mutant position columns in the Excel sheet so that they don't
     have to be expanded.
     """
-    worksheet.set_column('%s:%s' % (amino_acids_col, amino_acids_col), 40)
-    worksheet.set_column('%s:%s' % (pos_col, pos_col), 12)
+    worksheet.column_dimensions[amino_acids_col].width = 40
+    worksheet.column_dimensions[pos_col].width = 12
+
 
 def make_minimal_neoepitope_report(
         ranked_variants_with_vaccine_peptides,
@@ -482,7 +471,14 @@ def make_minimal_neoepitope_report(
     for (variant, vaccine_peptides) in ranked_variants_with_vaccine_peptides:
         for vaccine_peptide in vaccine_peptides:
             # only include mutant epitopes
-            for epitope_prediction in vaccine_peptide.mutant_epitope_predictions:
+            epitope_predictions = vaccine_peptide.mutant_epitope_predictions
+            if num_epitopes_per_peptide is not None:
+                epitope_predictions = epitope_predictions[:num_epitopes_per_peptide]
+            for epitope_prediction in epitope_predictions:
+                if epitope_prediction.wt_ic50 is not None:
+                    wt_ic50_str = '%.2f nM' % epitope_prediction.wt_ic50
+                else:
+                    wt_ic50_str = 'No prediction'
                 row = OrderedDict([
                     ('Allele', epitope_prediction.allele),
                     ('Mutant peptide sequence', epitope_prediction.peptide_sequence),
@@ -491,8 +487,7 @@ def make_minimal_neoepitope_report(
                     ('Variant allele RNA read count',
                         vaccine_peptide.mutant_protein_fragment.n_alt_reads),
                     ('Wildtype sequence', epitope_prediction.wt_peptide_sequence),
-                    ('Predicted wildtype pMHC affinity',
-                        '%.2f nM' % epitope_prediction.wt_ic50),
+                    ('Predicted wildtype pMHC affinity', wt_ic50_str),
                     ('Gene name', vaccine_peptide.mutant_protein_fragment.gene_name),
                     ('Genomic variant', variant.short_description),
                 ])
@@ -500,18 +495,18 @@ def make_minimal_neoepitope_report(
 
     if len(rows) > 0:
         df = pd.DataFrame.from_dict(rows)
-        writer = pd.ExcelWriter(excel_report_path, engine='xlsxwriter')
+        writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
         df.to_excel(writer, sheet_name='Neoepitopes', index=False)
 
         # resize columns to be not crappy
         worksheet = writer.sheets['Neoepitopes']
-        worksheet.set_column('%s:%s' % ('B', 'B'), 23)
-        worksheet.set_column('%s:%s' % ('D', 'D'), 27)
-        worksheet.set_column('%s:%s' % ('E', 'E'), 26)
-        worksheet.set_column('%s:%s' % ('F', 'F'), 17)
-        worksheet.set_column('%s:%s' % ('G', 'G'), 30)
-        worksheet.set_column('%s:%s' % ('H', 'H'), 9)
-        worksheet.set_column('%s:%s' % ('I', 'I'), 18)
+        worksheet.column_dimensions['B'].width = 23
+        worksheet.column_dimensions['D'].width = 27
+        worksheet.column_dimensions['E'].width = 26
+        worksheet.column_dimensions['F'].width = 17
+        worksheet.column_dimensions['G'].width = 30
+        worksheet.column_dimensions['H'].width = 9
+        worksheet.column_dimensions['I'].width = 18
         writer.close()
         logger.info('Wrote XLSX neoepitope report file to %s', excel_report_path)
 
@@ -578,7 +573,7 @@ def make_csv_report(
         logger.info('Wrote CSV report file to %s', csv_report_path)
 
     if excel_report_path:
-        writer = pd.ExcelWriter(excel_report_path, engine='xlsxwriter')
+        writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
 
         # copy the variant rank column to position 0, make first sheet called "All"
         all_dfs[''] = all_dfs['variant_rank']
@@ -598,4 +593,4 @@ def make_csv_report(
             resize_columns(writer.sheets[shortened_sheet_name], 'A', 'C')
 
         writer.close()
-        logger.info('Wrote manufacturer XLSX file to %s', excel_report_path)
+        logger.info('Wrote manufacturability XLSX file to %s', excel_report_path)

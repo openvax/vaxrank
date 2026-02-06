@@ -10,21 +10,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-from .core_logic import run_vaxrank
-from .epitope_prediction import EpitopePrediction
-from .epitope_logic import predict_epitopes
-from .vaccine_peptide import VaccinePeptide
-from .version import __version__
-from .epitope_config import EpitopeConfig
-from .vaccine_config import VaccineConfig
+from .arg_parser import make_vaxrank_arg_parser
+from .entry_point import main, run_vaxrank_from_parsed_args
 
 __all__ = [
-    "__version__",
-    "EpitopePrediction",
-    "VaccinePeptide",
-    "run_vaxrank",
-    "predict_epitopes",
-    "EpitopeConfig",
-    "VaccineConfig",
+    "make_vaxrank_arg_parser",
+    "run_vaxrank_from_parsed_args",
+    "main",
 ]
