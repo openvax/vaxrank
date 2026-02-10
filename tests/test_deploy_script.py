@@ -10,21 +10,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import subprocess
+from pathlib import Path
 
-from .core_logic import run_vaxrank
-from .epitope_prediction import EpitopePrediction
-from .epitope_logic import predict_epitopes
-from .vaccine_peptide import VaccinePeptide
-from .version import __version__
-from .epitope_config import EpitopeConfig
-from .vaccine_config import VaccineConfig
 
-__all__ = [
-    "__version__",
-    "EpitopePrediction",
-    "VaccinePeptide",
-    "run_vaxrank",
-    "predict_epitopes",
-    "EpitopeConfig",
-    "VaccineConfig",
-]
+def test_deploy_rejects_non_release_branch():
+    repo_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["VAXRANK_DEPLOY_BRANCH"] = "yaml-config"
+    result = subprocess.run(
+        ["bash", "deploy.sh", "--dry-run"],
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "only allowed from main or master" in result.stderr

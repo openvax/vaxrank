@@ -9,6 +9,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 env/
+.venv/
 build/
 develop-eggs/
 dist/
@@ -70,3 +71,7 @@ vaccine-peptides-report.json
 vaccine-peptides-all-passing.csv
 vaccine-peptides.csv
 neoepitope-report.xlsx
+*.xlsx
+~$*
+site/
+docs/

@@ -46,10 +46,10 @@ def test_n_terminal_glutamine():
 
 def test_asp_pro_bond_count():
     scores = ManufacturabilityScores.from_amino_acids("A" * 7)
-    assert scores.asparagine_proline_bond_count == 0
+    assert scores.aspartate_proline_bond_count == 0
 
-    scores = ManufacturabilityScores.from_amino_acids("NP" + "A" * 7 + "NP")
-    assert scores.asparagine_proline_bond_count == 2
+    scores = ManufacturabilityScores.from_amino_acids("DP" + "A" * 7 + "DP")
+    assert scores.aspartate_proline_bond_count == 2
 
 
 def test_cysteine_count():

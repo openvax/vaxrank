@@ -1,0 +1,24 @@
+site_name: Vaxrank
+site_description: Selection of mutated protein fragments for therapeutic personalized cancer vaccines
+site_url: https://openvax.github.io/vaxrank
+repo_url: https://github.com/openvax/vaxrank
+repo_name: openvax/vaxrank
+
+theme:
+  name: material
+  palette:
+    primary: indigo
+  features:
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - admonition
+  - toc:
+      permalink: true

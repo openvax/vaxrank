@@ -13,7 +13,9 @@
 from mhctools import RandomBindingPredictor
 from pyensembl import genome_for_reference_name
 from varcode import Variant
-from vaxrank.epitope_prediction import predict_epitopes, EpitopePrediction
+from vaxrank.epitope_config import EpitopeConfig
+from vaxrank.epitope_logic import predict_epitopes
+from vaxrank.epitope_prediction import EpitopePrediction
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.vaccine_peptide import VaccinePeptide
 
@@ -37,9 +39,13 @@ def test_reference_peptide_logic():
         n_alt_reads_supporting_protein_sequence=2,
         supporting_reference_transcripts=[wdr13_transcript])
 
+    # Use min_epitope_score=0 to ensure no epitopes are filtered by score
+    # (RandomBindingPredictor generates random IC50 values that can cause filtering)
+    epitope_config = EpitopeConfig(min_epitope_score=0)
     epitope_predictions = predict_epitopes(
         mhc_predictor=RandomBindingPredictor(["H-2-Kb"]),
         protein_fragment=protein_fragment,
+        epitope_config=epitope_config,
         genome=mouse_genome)
 
     # occurs in protein ENSMUSP00000033506

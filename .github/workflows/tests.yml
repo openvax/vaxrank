@@ -18,6 +18,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Checkout private netmhc-bundle repo
+        if: ${{ secrets.NETMHC_BUNDLE_ACCESS_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: openvax/netmhc-bundle
@@ -25,6 +26,7 @@ jobs:
           path: netmhc-bundle
 
       - name: Install netmhc-bundle dependencies
+        if: ${{ secrets.NETMHC_BUNDLE_ACCESS_TOKEN != '' }}
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: tcsh gawk python2-minimal
@@ -51,12 +53,18 @@ jobs:
           pyensembl install --release 93 --species mouse --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCm38.93/
       - name: Test with pytest
         run: |
-          # configure netmhc-bundle paths
-          export NETMHC_BUNDLE_HOME=$PWD/netmhc-bundle
-          echo "NetMHC-bundle dir:" && ls -l $NETMHC_BUNDLE_HOME
-          mkdir $PWD/netmhc-bundle-tmp
-          export NETMHC_BUNDLE_TMPDIR=$PWD/netmhc-bundle-tmp
-          export PATH=$PATH:$NETMHC_BUNDLE_HOME/bin
+          # Configure netmhc-bundle paths when private bundle is available.
+          if [ -d "$PWD/netmhc-bundle/bin" ]; then
+            export NETMHC_BUNDLE_HOME=$PWD/netmhc-bundle
+            echo "NetMHC-bundle dir:" && ls -l $NETMHC_BUNDLE_HOME
+            mkdir -p $PWD/netmhc-bundle-tmp
+            export NETMHC_BUNDLE_TMPDIR=$PWD/netmhc-bundle-tmp
+            export PATH=$PATH:$NETMHC_BUNDLE_HOME/bin
+          else
+            echo "netmhc-bundle unavailable; NetMHCpan-specific tests will be skipped."
+          fi
           ./test.sh
       - name: Publish coverage to Coveralls
         uses: coverallsapp/github-action@v2.2.3
+        with:
+          parallel: true
