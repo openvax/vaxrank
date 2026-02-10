@@ -56,6 +56,13 @@ fi
 
 TAG="v${VERSION}"
 
+# Deploys should only run from the release branch.
+CURRENT_BRANCH="${VAXRANK_DEPLOY_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
+if [[ "${CURRENT_BRANCH}" != "main" && "${CURRENT_BRANCH}" != "master" ]]; then
+  echo "Deploys are only allowed from main or master (current: ${CURRENT_BRANCH})." >&2
+  exit 1
+fi
+
 # Ensure a clean tree before deploy.
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "Working tree not clean; commit or stash changes before deploy." >&2
