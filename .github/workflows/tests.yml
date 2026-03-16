@@ -12,7 +12,7 @@ jobs:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
@@ -22,6 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: openvax/netmhc-bundle
+          ref: v1.0.0
           token: ${{ secrets.NETMHC_BUNDLE_ACCESS_TOKEN }}
           path: netmhc-bundle
 
@@ -31,6 +32,14 @@ jobs:
         with:
           packages: tcsh gawk python2-minimal
           version: 1.0
+      - name: Verify netmhc-bundle tools
+        if: ${{ secrets.NETMHC_BUNDLE_ACCESS_TOKEN != '' }}
+        run: |
+          export NETMHC_BUNDLE_HOME=$PWD/netmhc-bundle
+          export PATH=$PATH:$NETMHC_BUNDLE_HOME/bin
+          echo `which netMHC` && netMHC -h
+          echo `which netMHCpan` && netMHCpan -h
+          echo `which netMHCcons` && netMHCcons -h
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -52,6 +61,7 @@ jobs:
           pyensembl install --release 93 --species human --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCh38.93/
           pyensembl install --release 93 --species mouse --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCm38.93/
       - name: Test with pytest
+        if: ${{ secrets.NETMHC_BUNDLE_ACCESS_TOKEN != '' }}
         run: |
           # Configure netmhc-bundle paths when private bundle is available.
           if [ -d "$PWD/netmhc-bundle/bin" ]; then
