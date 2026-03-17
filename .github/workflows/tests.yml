@@ -7,6 +7,8 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_NETMHC_TOKEN: ${{ secrets.NETMHC_BUNDLE_ACCESS_TOKEN != '' }}
     strategy:
       fail-fast: true
       matrix:
@@ -14,11 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Checkout private netmhc-bundle repo
-        if: ${{ secrets.NETMHC_BUNDLE_ACCESS_TOKEN != '' }}
+        if: env.HAS_NETMHC_TOKEN == 'true'
         uses: actions/checkout@v4
         with:
           repository: openvax/netmhc-bundle
@@ -27,13 +29,13 @@ jobs:
           path: netmhc-bundle
 
       - name: Install netmhc-bundle dependencies
-        if: ${{ secrets.NETMHC_BUNDLE_ACCESS_TOKEN != '' }}
+        if: env.HAS_NETMHC_TOKEN == 'true'
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: tcsh gawk python2-minimal
           version: 1.0
       - name: Verify netmhc-bundle tools
-        if: ${{ secrets.NETMHC_BUNDLE_ACCESS_TOKEN != '' }}
+        if: env.HAS_NETMHC_TOKEN == 'true'
         run: |
           export NETMHC_BUNDLE_HOME=$PWD/netmhc-bundle
           export PATH=$PATH:$NETMHC_BUNDLE_HOME/bin
@@ -61,7 +63,7 @@ jobs:
           pyensembl install --release 93 --species human --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCh38.93/
           pyensembl install --release 93 --species mouse --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCm38.93/
       - name: Test with pytest
-        if: ${{ secrets.NETMHC_BUNDLE_ACCESS_TOKEN != '' }}
+        if: env.HAS_NETMHC_TOKEN == 'true'
         run: |
           # Configure netmhc-bundle paths when private bundle is available.
           if [ -d "$PWD/netmhc-bundle/bin" ]; then
