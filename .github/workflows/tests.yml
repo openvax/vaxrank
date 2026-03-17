@@ -38,6 +38,8 @@ jobs:
         if: env.HAS_NETMHC_TOKEN == 'true'
         run: |
           export NETMHC_BUNDLE_HOME=$PWD/netmhc-bundle
+          mkdir -p $PWD/netmhc-bundle-tmp
+          export NETMHC_BUNDLE_TMPDIR=$PWD/netmhc-bundle-tmp
           export PATH=$PATH:$NETMHC_BUNDLE_HOME/bin
           echo `which netMHC` && netMHC -h
           echo `which netMHCpan` && netMHCpan -h
