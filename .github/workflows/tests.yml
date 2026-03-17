@@ -65,7 +65,6 @@ jobs:
           pyensembl install --release 93 --species human --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCh38.93/
           pyensembl install --release 93 --species mouse --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCm38.93/
       - name: Test with pytest
-        if: env.HAS_NETMHC_TOKEN == 'true'
         run: |
           # Configure netmhc-bundle paths when private bundle is available.
           if [ -d "$PWD/netmhc-bundle/bin" ]; then
