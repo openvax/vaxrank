@@ -12,7 +12,7 @@
 
 
 from os.path import getsize
-from mock import patch
+from unittest.mock import patch
 
 from tempfile import NamedTemporaryFile
 
