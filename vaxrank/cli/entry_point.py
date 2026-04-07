@@ -23,9 +23,15 @@ import pandas as pd
 import serializable
 
 
+from varcode import VariantCollection
 from varcode.cli import variant_collection_from_args
-from isovar import isovar_results_to_dataframe
-from isovar.cli import run_isovar_from_parsed_args
+from isovar import isovar_results_to_dataframe, run_isovar
+from isovar.cli import (
+    protein_sequence_creator_from_args,
+    read_collector_from_args,
+)
+from isovar.cli.rna_args import alignment_file_from_args
+from isovar.cli.filter_args import filter_threshold_dict_from_args
 from mhctools.cli import (
     mhc_alleles_from_args,
     mhc_binding_predictor_from_args,
@@ -48,6 +54,49 @@ from ..report import (
 from ..patient_info import PatientInfo
 
 logger = logging.getLogger(__name__)
+
+
+def _filter_unannotatable_variants(variants):
+    """
+    Filter out variants whose contigs cannot be resolved by varcode/pyensembl.
+
+    Some VCF files include variants on alt/decoy contigs (e.g.
+    chr14_GL000194v1_random) that varcode cannot normalize to a contig
+    in the pyensembl annotation database. These variants crash during
+    gene annotation lookups and cannot contribute vaccine peptides
+    since no gene annotations are available for them.
+
+    We use varcode's own contig validation (via variant.gene_names)
+    rather than comparing raw contig names, since varcode normalizes
+    names (e.g. chr1 -> 1) before checking.
+
+    See: https://github.com/openvax/vaxrank/issues/193
+    """
+    if len(variants) == 0:
+        return variants
+
+    valid = []
+    skipped_contigs = set()
+    for v in variants:
+        try:
+            # Triggers varcode's contig validation and normalization.
+            # Raises ValueError if the contig can't be resolved.
+            v.gene_names
+            valid.append(v)
+        except ValueError:
+            skipped_contigs.add(v.contig)
+
+    if skipped_contigs:
+        logger.warning(
+            "Skipping %d variant(s) on contigs not recognized by %s: %s. "
+            "These cannot be annotated with gene information.",
+            len(variants) - len(valid),
+            variants[0].ensembl.reference_name,
+            ", ".join(sorted(skipped_contigs)),
+        )
+        return VariantCollection(valid)
+    return variants
+
 
 def configure_logging(args):
     logging.config.fileConfig(
@@ -155,8 +204,18 @@ def run_vaxrank_from_parsed_args(args):
     )
 
     # Vaxrank is going to evaluate multiple vaccine peptides containing
-    # the same mutation so need a longer sequence from Isovar
-    isovar_results = run_isovar_from_parsed_args(args)
+    # the same mutation so need a longer sequence from Isovar.
+    # We load variants ourselves (instead of run_isovar_from_parsed_args)
+    # so we can filter out alt contigs that would crash downstream.
+    variants = variant_collection_from_args(args)
+    variants = _filter_unannotatable_variants(variants)
+    isovar_results = run_isovar(
+        variants=variants,
+        alignment_file=alignment_file_from_args(args),
+        read_collector=read_collector_from_args(args),
+        protein_sequence_creator=protein_sequence_creator_from_args(args),
+        filter_thresholds=filter_threshold_dict_from_args(args),
+    )
 
     if args.output_isovar_csv:
         df = isovar_results_to_dataframe(isovar_results)
@@ -202,8 +261,10 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     mhc_alleles = mhc_alleles_from_args(args)
     logger.info("MHC alleles: %s", mhc_alleles)
 
-    variants = variant_collection_from_args(args)
-    logger.info("Variants: %s", variants)
+    all_variants = variant_collection_from_args(args)
+    variants = _filter_unannotatable_variants(all_variants)
+    logger.info("Variants: %d loaded, %d after filtering invalid contigs",
+                len(all_variants), len(variants))
 
     vaxrank_results = run_vaxrank_from_parsed_args(args)
 
