@@ -271,9 +271,13 @@ class TemplateDataCreator(object):
         for (variant, vaccine_peptides) in self.ranked_variants_with_vaccine_peptides:
             variant_short_description = variant.short_description
             if len(vaccine_peptides) == 0:
+                try:
+                    gene_names = variant.gene_names
+                except ValueError:
+                    gene_names = ["(unknown — invalid contig)"]
                 logger.info(
                     "Skipping gene(s) %s, variant %s: no vaccine peptides",
-                    variant.gene_names, variant_short_description)
+                    gene_names, variant_short_description)
                 continue
             num += 1
 

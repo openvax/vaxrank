@@ -50,13 +50,31 @@ def test_config_overrides_defaults_for_protein_sequence_length(tmp_path):
 
     captured = {}
 
-    def fake_run_isovar(parsed_args):
-        captured["protein_sequence_length"] = parsed_args.protein_sequence_length
+    def fake_run_isovar(**kwargs):
+        captured["protein_sequence_length"] = args.protein_sequence_length
         return []
 
+    mock_variants = MagicMock()
+    mock_variants.__len__ = MagicMock(return_value=0)
+
     with patch(
-        "vaxrank.cli.entry_point.run_isovar_from_parsed_args",
+        "vaxrank.cli.entry_point.variant_collection_from_args",
+        return_value=mock_variants,
+    ), patch(
+        "vaxrank.cli.entry_point.run_isovar",
         side_effect=fake_run_isovar,
+    ), patch(
+        "vaxrank.cli.entry_point.alignment_file_from_args",
+        return_value=MagicMock(),
+    ), patch(
+        "vaxrank.cli.entry_point.read_collector_from_args",
+        return_value=MagicMock(),
+    ), patch(
+        "vaxrank.cli.entry_point.protein_sequence_creator_from_args",
+        return_value=MagicMock(),
+    ), patch(
+        "vaxrank.cli.entry_point.filter_threshold_dict_from_args",
+        return_value={},
     ), patch(
         "vaxrank.cli.entry_point.mhc_binding_predictor_from_args",
         return_value=MagicMock(),

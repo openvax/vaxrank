@@ -108,8 +108,14 @@ class GenePathwayCheck(object):
         variant : varcode.Variant
             Variant object to evaluate
         """
-        effect_description = variant.effects().top_priority_effect().short_description
-        overlapping_gene_ids = variant.gene_ids
+        try:
+            effect_description = variant.effects().top_priority_effect().short_description
+            overlapping_gene_ids = variant.gene_ids
+        except ValueError:
+            # Variant is on a contig not in the reference genome
+            # (e.g. alt contigs like chr14_GL000194v1_random)
+            effect_description = ""
+            overlapping_gene_ids = []
         variant_dict = OrderedDict()
         variant_dict[_IFNG_RESPONSE_COLUMN_NAME] = any([
             gene_id in self.interferon_gamma_response_gene_set

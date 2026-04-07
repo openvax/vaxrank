@@ -23,9 +23,15 @@ import pandas as pd
 import serializable
 
 
+from varcode import VariantCollection
 from varcode.cli import variant_collection_from_args
-from isovar import isovar_results_to_dataframe
-from isovar.cli import run_isovar_from_parsed_args
+from isovar import isovar_results_to_dataframe, run_isovar
+from isovar.cli import (
+    protein_sequence_creator_from_args,
+    read_collector_from_args,
+)
+from isovar.cli.rna_args import alignment_file_from_args
+from isovar.cli.filter_args import filter_threshold_dict_from_args
 from mhctools.cli import (
     mhc_alleles_from_args,
     mhc_binding_predictor_from_args,
@@ -48,6 +54,37 @@ from ..report import (
 from ..patient_info import PatientInfo
 
 logger = logging.getLogger(__name__)
+
+
+def _filter_variants_to_valid_contigs(variants):
+    """
+    Filter out variants on contigs not recognized by the reference genome.
+
+    Some VCF files include variants on alt contigs (e.g. chr14_GL000194v1_random)
+    that are not present in the canonical reference genome used by pyensembl.
+    These would cause a ValueError when accessing gene annotations.
+
+    See: https://github.com/openvax/vaxrank/issues/193
+    """
+    if len(variants) == 0:
+        return variants
+
+    reference_genome = variants[0].ensembl
+    valid_contigs = set(reference_genome.contigs())
+
+    invalid_variants = [v for v in variants if v.contig not in valid_contigs]
+    if not invalid_variants:
+        return variants
+
+    invalid_contigs = sorted({v.contig for v in invalid_variants})
+    logger.warning(
+        "Dropping %d variant(s) on contig(s) not in reference %s: %s",
+        len(invalid_variants),
+        reference_genome.reference_name,
+        ", ".join(invalid_contigs),
+    )
+    return VariantCollection([v for v in variants if v.contig in valid_contigs])
+
 
 def configure_logging(args):
     logging.config.fileConfig(
@@ -155,8 +192,18 @@ def run_vaxrank_from_parsed_args(args):
     )
 
     # Vaxrank is going to evaluate multiple vaccine peptides containing
-    # the same mutation so need a longer sequence from Isovar
-    isovar_results = run_isovar_from_parsed_args(args)
+    # the same mutation so need a longer sequence from Isovar.
+    # We load variants ourselves (instead of run_isovar_from_parsed_args)
+    # so we can filter out alt contigs that would crash downstream.
+    variants = variant_collection_from_args(args)
+    variants = _filter_variants_to_valid_contigs(variants)
+    isovar_results = run_isovar(
+        variants=variants,
+        alignment_file=alignment_file_from_args(args),
+        read_collector=read_collector_from_args(args),
+        protein_sequence_creator=protein_sequence_creator_from_args(args),
+        filter_thresholds=filter_threshold_dict_from_args(args),
+    )
 
     if args.output_isovar_csv:
         df = isovar_results_to_dataframe(isovar_results)
@@ -202,8 +249,10 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     mhc_alleles = mhc_alleles_from_args(args)
     logger.info("MHC alleles: %s", mhc_alleles)
 
-    variants = variant_collection_from_args(args)
-    logger.info("Variants: %s", variants)
+    all_variants = variant_collection_from_args(args)
+    variants = _filter_variants_to_valid_contigs(all_variants)
+    logger.info("Variants: %d loaded, %d after filtering invalid contigs",
+                len(all_variants), len(variants))
 
     vaxrank_results = run_vaxrank_from_parsed_args(args)
 
