@@ -11,33 +11,38 @@
 # limitations under the License.
 
 """
-Tests for filtering variants on non-canonical contigs.
+Tests for filtering variants on unannotatable contigs.
 
 See: https://github.com/openvax/vaxrank/issues/193
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
 
 from varcode import VariantCollection
 
-from vaxrank.cli.entry_point import _filter_variants_to_valid_contigs
+from vaxrank.cli.entry_point import _filter_unannotatable_variants
 
 
-CANONICAL_CONTIGS = [
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
-    "11", "12", "13", "14", "15", "16", "17", "18", "19",
-    "20", "21", "22", "X", "Y", "MT",
-]
+def _make_variant(contig, annotatable=True):
+    """
+    Create a mock variant.
 
-
-def _make_variant(contig):
-    """Create a mock variant with a contig and a mock ensembl genome."""
+    If annotatable=False, accessing gene_names will raise ValueError,
+    simulating a contig that varcode can't resolve.
+    """
     v = MagicMock()
     v.contig = contig
     mock_genome = MagicMock()
-    mock_genome.contigs.return_value = CANONICAL_CONTIGS
     mock_genome.reference_name = "GRCh38"
     v.ensembl = mock_genome
+    if annotatable:
+        type(v).gene_names = PropertyMock(return_value=["BRCA1"])
+    else:
+        type(v).gene_names = PropertyMock(
+            side_effect=ValueError(
+                "Invalid contig name '%s' for reference 'GRCh38'" % contig
+            )
+        )
     return v
 
 
@@ -51,47 +56,56 @@ def _make_collection(variants):
 
 def test_empty_collection():
     variants = VariantCollection([])
-    result = _filter_variants_to_valid_contigs(variants)
+    result = _filter_unannotatable_variants(variants)
     assert len(result) == 0
 
 
-def test_all_valid_contigs():
+def test_all_annotatable():
     v1 = _make_variant("1")
     v2 = _make_variant("X")
     collection = _make_collection([v1, v2])
-    result = _filter_variants_to_valid_contigs(collection)
+    result = _filter_unannotatable_variants(collection)
     # Should return the original collection unchanged
     assert result is collection
 
 
-def test_filters_alt_contigs():
-    v_valid = _make_variant("14")
-    v_alt = _make_variant("chr14_GL000194v1_random")
+def test_filters_unannotatable_contig():
+    v_ok = _make_variant("14")
+    v_bad = _make_variant("chr14_GL000194v1_random", annotatable=False)
 
     with patch(
         "vaxrank.cli.entry_point.VariantCollection",
         side_effect=lambda variants: variants,
     ):
-        result = _filter_variants_to_valid_contigs(
-            _make_collection([v_valid, v_alt])
+        result = _filter_unannotatable_variants(
+            _make_collection([v_ok, v_bad])
         )
     assert len(result) == 1
     assert result[0].contig == "14"
 
 
-def test_filters_multiple_alt_contigs():
+def test_filters_multiple_unannotatable_contigs():
     v1 = _make_variant("1")
-    v2 = _make_variant("chr14_GL000194v1_random")
-    v3 = _make_variant("chrUn_gl000220")
+    v2 = _make_variant("chr14_GL000194v1_random", annotatable=False)
+    v3 = _make_variant("chrUn_gl000220", annotatable=False)
     v4 = _make_variant("22")
 
     with patch(
         "vaxrank.cli.entry_point.VariantCollection",
         side_effect=lambda variants: variants,
     ):
-        result = _filter_variants_to_valid_contigs(
+        result = _filter_unannotatable_variants(
             _make_collection([v1, v2, v3, v4])
         )
     assert len(result) == 2
     assert result[0].contig == "1"
     assert result[1].contig == "22"
+
+
+def test_chr_prefixed_contigs_kept_if_annotatable():
+    """Variants with chr-prefixed contigs should be kept if varcode can resolve them."""
+    v_chr1 = _make_variant("chr1", annotatable=True)
+    v_chrX = _make_variant("chrX", annotatable=True)
+    collection = _make_collection([v_chr1, v_chrX])
+    result = _filter_unannotatable_variants(collection)
+    assert result is collection

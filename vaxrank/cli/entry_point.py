@@ -56,34 +56,46 @@ from ..patient_info import PatientInfo
 logger = logging.getLogger(__name__)
 
 
-def _filter_variants_to_valid_contigs(variants):
+def _filter_unannotatable_variants(variants):
     """
-    Filter out variants on contigs not recognized by the reference genome.
+    Filter out variants whose contigs cannot be resolved by varcode/pyensembl.
 
-    Some VCF files include variants on alt contigs (e.g. chr14_GL000194v1_random)
-    that are not present in the canonical reference genome used by pyensembl.
-    These would cause a ValueError when accessing gene annotations.
+    Some VCF files include variants on alt/decoy contigs (e.g.
+    chr14_GL000194v1_random) that varcode cannot normalize to a contig
+    in the pyensembl annotation database. These variants crash during
+    gene annotation lookups and cannot contribute vaccine peptides
+    since no gene annotations are available for them.
+
+    We use varcode's own contig validation (via variant.gene_names)
+    rather than comparing raw contig names, since varcode normalizes
+    names (e.g. chr1 -> 1) before checking.
 
     See: https://github.com/openvax/vaxrank/issues/193
     """
     if len(variants) == 0:
         return variants
 
-    reference_genome = variants[0].ensembl
-    valid_contigs = set(reference_genome.contigs())
+    valid = []
+    skipped_contigs = set()
+    for v in variants:
+        try:
+            # Triggers varcode's contig validation and normalization.
+            # Raises ValueError if the contig can't be resolved.
+            v.gene_names
+            valid.append(v)
+        except ValueError:
+            skipped_contigs.add(v.contig)
 
-    invalid_variants = [v for v in variants if v.contig not in valid_contigs]
-    if not invalid_variants:
-        return variants
-
-    invalid_contigs = sorted({v.contig for v in invalid_variants})
-    logger.warning(
-        "Dropping %d variant(s) on contig(s) not in reference %s: %s",
-        len(invalid_variants),
-        reference_genome.reference_name,
-        ", ".join(invalid_contigs),
-    )
-    return VariantCollection([v for v in variants if v.contig in valid_contigs])
+    if skipped_contigs:
+        logger.warning(
+            "Skipping %d variant(s) on contigs not recognized by %s: %s. "
+            "These cannot be annotated with gene information.",
+            len(variants) - len(valid),
+            variants[0].ensembl.reference_name,
+            ", ".join(sorted(skipped_contigs)),
+        )
+        return VariantCollection(valid)
+    return variants
 
 
 def configure_logging(args):
@@ -196,7 +208,7 @@ def run_vaxrank_from_parsed_args(args):
     # We load variants ourselves (instead of run_isovar_from_parsed_args)
     # so we can filter out alt contigs that would crash downstream.
     variants = variant_collection_from_args(args)
-    variants = _filter_variants_to_valid_contigs(variants)
+    variants = _filter_unannotatable_variants(variants)
     isovar_results = run_isovar(
         variants=variants,
         alignment_file=alignment_file_from_args(args),
@@ -250,7 +262,7 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     logger.info("MHC alleles: %s", mhc_alleles)
 
     all_variants = variant_collection_from_args(args)
-    variants = _filter_variants_to_valid_contigs(all_variants)
+    variants = _filter_unannotatable_variants(all_variants)
     logger.info("Variants: %d loaded, %d after filtering invalid contigs",
                 len(all_variants), len(variants))
 
