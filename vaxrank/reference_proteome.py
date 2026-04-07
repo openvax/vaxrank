@@ -22,7 +22,7 @@ import os
 import logging
 import pickle
 
-from datacache import get_data_dir
+from platformdirs import user_cache_dir
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -38,9 +38,12 @@ _kmer_set_cache: dict[tuple, set[str]] = {}
 
 def get_cache_dir() -> str:
     """Get the cache directory for reference peptide indices."""
-    cache_dir = get_data_dir(envkey="VAXRANK_REF_PEPTIDES_DIR")
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
+    env_dir = os.environ.get("VAXRANK_REF_PEPTIDES_DIR")
+    if env_dir:
+        cache_dir = env_dir
+    else:
+        cache_dir = user_cache_dir("vaxrank")
+    os.makedirs(cache_dir, exist_ok=True)
     return cache_dir
 
 

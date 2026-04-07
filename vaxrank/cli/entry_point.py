@@ -16,7 +16,7 @@ import logging
 import logging.config
 
 import sys
-import pkg_resources
+from importlib.resources import files
 
 
 import pandas as pd
@@ -100,9 +100,7 @@ def _filter_unannotatable_variants(variants):
 
 def configure_logging(args):
     logging.config.fileConfig(
-        pkg_resources.resource_filename(
-            'vaxrank',
-            'logging.conf'),
+        str(files('vaxrank').joinpath('logging.conf')),
         defaults={'logfilename': args.log_path})
     
 
