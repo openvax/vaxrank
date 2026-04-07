@@ -19,17 +19,14 @@ Data source: Chang et al. 2016/2017 cancer hotspots, via maftools.
 import logging
 import os
 from functools import lru_cache
-
-import pkg_resources
+from importlib.resources import files
 
 logger = logging.getLogger(__name__)
 
 
 def _get_hotspots_path():
     """Get path to bundled cancer hotspots TSV file."""
-    return pkg_resources.resource_filename(
-        'vaxrank', 'data/cancer_hotspots_v2.tsv'
-    )
+    return str(files('vaxrank').joinpath('data/cancer_hotspots_v2.tsv'))
 
 
 @lru_cache(maxsize=1)

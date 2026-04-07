@@ -10,9 +10,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# pylint: disable=abstract-class-instantiated
-# For more details see https://github.com/PyCQA/pylint/issues/3060
-
 from collections import OrderedDict
 from importlib import import_module
 import logging

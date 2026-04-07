@@ -462,7 +462,7 @@ def test_cache_dir_created():
         new_cache_dir = os.path.join(tmpdir, "new_cache")
         ok_(not os.path.exists(new_cache_dir))
 
-        with patch('vaxrank.reference_proteome.get_data_dir', return_value=new_cache_dir):
+        with patch('vaxrank.reference_proteome.user_cache_dir', return_value=new_cache_dir):
             result = get_cache_dir()
             eq_(result, new_cache_dir)
             ok_(os.path.exists(new_cache_dir))
