@@ -80,29 +80,36 @@ class EpitopePrediction(Serializable):
             self,
             midpoint=350.0,
             width=150.0,
-            ic50_cutoff=5000.0):  # TODO: add these default values into CLI as arguments
+            ic50_cutoff=5000.0,
+            scoring_mode="affinity"):
         """
-        Map from IC50 values to score where 1.0 = strong binder, 0.0 = weak binder
-        Default midpoint and width for logistic determined by max likelihood fit
-        for data from Alessandro Sette's 1994 paper:
+        Map from binding predictions to score where 1.0 = strong binder,
+        0.0 = weak binder.
 
-           "The relationship between class I binding affinity
-            and immunogenicity of potential cytotoxic T cell epitopes.
-
-        TODO: Use a large dataset to find MHC binding range predicted to #
-        correlate with immunogenicity
+        Parameters
+        ----------
+        scoring_mode : str
+            "affinity" (default): logistic transform of IC50
+            "percentile_rank": inverted percentile rank (lower rank = higher score)
         """
+        if scoring_mode == "percentile_rank":
+            if self.percentile_rank is None:
+                return 0.0
+            # Percentile rank: 0 = best, 100 = worst
+            # Convert to score: 0..1 where 1 = best
+            # Epitopes with rank > 10% are considered weak
+            rank = float(self.percentile_rank)
+            if rank >= 10.0:
+                return 0.0
+            return max(0.0, 1.0 - rank / 10.0)
+
+        # Default: affinity-based logistic scoring
         if self.ic50 >= ic50_cutoff:
             return 0.0
 
         rescaled = (float(self.ic50) - midpoint) / width
-        # simplification of 1.0 - logistic(x) = logistic(-x)
         logistic = 1.0 / (1.0 + np.exp(rescaled))
-
-        # since we're scoring IC50 values, let's normalize the output
-        # so IC50 near 0.0 always returns a score of 1.0
         normalizer = 1.0 / (1.0 + np.exp(-midpoint / width))
-
         return logistic / normalizer
 
     def slice_source_sequence(self, start_offset, end_offset):

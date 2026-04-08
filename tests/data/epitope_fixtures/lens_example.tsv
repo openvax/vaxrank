@@ -1,0 +1,4 @@
+antigen_source	mhc_allele	peptide	binding_affinity	score_ba	score_el	percent_rank_ba	percent_rank_el	pos	gene_name	variant_type	reference_peptide	reference_binding_affinity	agretopicity
+SNV	HLA-A*02:01	SVVGSSSSS	76.11	0.85	0.92	0.5	0.3	5	TP53	missense	SVVGGSSSS	4520.30	0.017
+SNV	HLA-B*07:02	LATEKSRWS	120.50	0.78	0.88	0.3	0.4	4	BRAF	missense	LATEKSRWL	8901.20	0.014
+SNV	HLA-A*02:01	VVVGADGVG	250.00	0.65	0.70	1.2	0.8	4	KRAS	missense	VVVGAGGVG	6500.00	0.038

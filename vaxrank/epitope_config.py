@@ -49,47 +49,34 @@ class EpitopeConfig(msgspec.Struct, frozen=True):
     """
     Configuration parameters for epitope scoring and filtering.
 
-    This immutable struct contains all parameters needed to score epitopes
-    based on their MHC binding affinity predictions and filter them for
-    vaccine peptide selection.
-
     Attributes
     ----------
     logistic_epitope_score_midpoint : float
         IC50 value (in nM) at which the epitope score equals 0.5.
-        Lower values make the scoring more stringent.
         Default: 350.0 nM
 
     logistic_epitope_score_width : float
         Width parameter controlling the steepness of the logistic scoring
-        function. Smaller values create a sharper transition between
-        high and low scores.
+        function.
         Default: 150.0
 
     min_epitope_score : float
-        Minimum normalized score threshold. Epitopes with scores below
-        this value are filtered out and not considered for vaccine
-        peptide selection.
+        Minimum normalized score threshold. Epitopes below this are excluded.
         Default: 0.00001
 
     binding_affinity_cutoff : float
-        Maximum IC50 value (in nM) to consider. Epitopes with predicted
-        binding affinity above this threshold are considered non-binders
-        and excluded.
+        Maximum IC50 value (in nM) to consider.
         Default: 5000.0 nM
 
-    Examples
-    --------
-    >>> config = EpitopeConfig()
-    >>> config.logistic_epitope_score_midpoint
-    350.0
-
-    >>> strict_config = EpitopeConfig(min_epitope_score=0.01)
-    >>> strict_config.min_epitope_score
-    0.01
+    scoring_mode : str
+        How to score epitopes. Options:
+        - "affinity": Use IC50 binding affinity with logistic scoring (default)
+        - "percentile_rank": Use percentile rank directly (lower = better,
+          inverted to produce higher scores for better binders)
     """
 
     logistic_epitope_score_midpoint: float = 350.0
     logistic_epitope_score_width: float = 150.0
     min_epitope_score: float = DEFAULT_MIN_EPITOPE_SCORE
     binding_affinity_cutoff: float = DEFAULT_BINDING_AFFINITY_CUTOFF
+    scoring_mode: str = "affinity"

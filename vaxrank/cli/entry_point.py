@@ -42,6 +42,12 @@ from .epitope_config_args import epitope_config_from_args
 from .vaccine_config_args import vaccine_config_from_args
 
 from ..core_logic import run_vaxrank
+from ..epitope_io import (
+    load_pvacseq,
+    load_lens,
+    save_predictions,
+    write_neoepitope_report,
+)
 from ..gene_pathway_check import GenePathwayCheck
 from ..report import (
     make_ascii_report,
@@ -98,6 +104,44 @@ def _filter_unannotatable_variants(variants):
     return variants
 
 
+def _run_external_input_mode(args):
+    """
+    Load epitope predictions from pVACseq or LENS, score them, and
+    write the requested output reports (CSV, XLSX neoepitope report).
+    """
+    from ..epitope_config import EpitopeConfig
+    from .epitope_config_args import epitope_config_from_args
+
+    try:
+        epitope_config = epitope_config_from_args(args)
+    except Exception:
+        epitope_config = EpitopeConfig()
+
+    if getattr(args, 'input_pvacseq', None):
+        report_df, predictions = load_pvacseq(args.input_pvacseq)
+    elif getattr(args, 'input_lens', None):
+        report_df, predictions = load_lens(args.input_lens)
+    else:
+        return False  # no external input
+
+    if report_df.empty:
+        logger.warning("No epitope predictions loaded")
+        return True
+
+    write_neoepitope_report(
+        report_df=report_df,
+        predictions=predictions,
+        excel_report_path=getattr(args, 'output_neoepitope_report', '') or None,
+        csv_report_path=getattr(args, 'output_csv', '') or None,
+        epitope_config=epitope_config,
+    )
+
+    if getattr(args, 'output_epitopes', ''):
+        save_predictions(predictions, args.output_epitopes)
+
+    return True
+
+
 def configure_logging(args):
     logging.config.fileConfig(
         str(files('vaxrank').joinpath('logging.conf')),
@@ -139,6 +183,12 @@ def main(args_list=None):
     configure_logging(args)
     _resolve_ensembl_release(args)
     logger.info(args)
+
+    # When --input-pvacseq or --input-lens is provided, load external
+    # predictions, score, and write reports — skip the full pipeline.
+    if _run_external_input_mode(args):
+        return
+
     check_args(args)
 
     data = ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
@@ -236,7 +286,7 @@ def run_vaxrank_from_parsed_args(args):
         df = isovar_results_to_dataframe(isovar_results)
         df.to_csv(args.output_isovar_csv, index=False)
 
-    return run_vaxrank(
+    vaxrank_results = run_vaxrank(
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
@@ -244,6 +294,16 @@ def run_vaxrank_from_parsed_args(args):
         num_mutant_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
         epitope_config=epitope_config,
         vaccine_config=vaccine_config)
+
+    if getattr(args, 'output_epitopes', ''):
+        # Collect all epitope predictions across all variants
+        all_predictions = []
+        for _variant, peptides in vaxrank_results.ranked_vaccine_peptides:
+            for vp in peptides:
+                all_predictions.extend(vp.mutant_epitope_predictions)
+        save_predictions(all_predictions, args.output_epitopes)
+
+    return vaxrank_results
 
 def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     """

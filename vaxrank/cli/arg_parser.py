@@ -58,6 +58,20 @@ def make_vaxrank_arg_parser():
         help="Print debug-level log messages to the console (by default only "
              "INFO and above are printed; DEBUG is always written to the log file).")
 
+    arg_parser.add_argument(
+        "--input-pvacseq",
+        default=None,
+        help="Path to a pVACseq aggregated TSV file (all_epitopes.aggregated.tsv). "
+             "When provided without --vcf/--bam, vaxrank scores and ranks the "
+             "pVACseq predictions and writes the requested output reports.")
+
+    arg_parser.add_argument(
+        "--input-lens",
+        default=None,
+        help="Path to a LENS report TSV file. "
+             "When provided without --vcf/--bam, vaxrank scores and ranks the "
+             "LENS predictions and writes the requested output reports.")
+
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
     add_epitope_prediction_args(arg_parser)
@@ -182,6 +196,12 @@ def add_output_args(arg_parser):
              "variant caller filters")
 
     output_args_group.add_argument(
+        "--output-epitopes",
+        default="",
+        help="Path to save epitope predictions as a TSV/CSV file (format inferred "
+             "from extension). This file can later be loaded with --input-epitopes.")
+
+    output_args_group.add_argument(
         "--output-isovar-csv",
         default="",
         help="Path to CSV file containing raw RNA counts and filtering metadata "
@@ -220,7 +240,8 @@ def check_args(args):
             args.output_xlsx_report or
             args.output_neoepitope_report or
             args.output_passing_variants_csv or
-            args.output_isovar_csv):
+            args.output_isovar_csv or
+            args.output_epitopes):
         raise ValueError(
             "Must specify at least one of: --output-csv, "
             "--output-xlsx-report, "
@@ -230,7 +251,31 @@ def check_args(args):
             "--output-neoepitope-report, "
             "--output-json-file, "
             "--output-passing-variants-csv, "
-            "--output-isovar-csv")
+            "--output-isovar-csv, "
+            "--output-epitopes")
+
+
+def external_input_arg_parser():
+    """Parser for --input-pvacseq / --input-lens mode (no BAM/VCF required)."""
+    arg_parser = ArgumentParser(
+        prog="vaxrank",
+        description=(
+            "Score and rank pre-computed epitope predictions from "
+            "pVACseq or LENS."),
+    )
+    arg_parser.add_argument(
+        '--version',
+        action='version',
+        version='Vaxrank %s' % (__version__,))
+    arg_parser.add_argument("--input-pvacseq", default=None)
+    arg_parser.add_argument("--input-lens", default=None)
+    arg_parser.add_argument(
+        "--verbose", "-v", action="store_true", default=False)
+    add_output_args(arg_parser)
+    add_epitope_prediction_args(arg_parser)
+    # config arg needed for epitope_config_from_args
+    arg_parser.add_argument("--config", default=None)
+    return arg_parser
 
 
 def choose_arg_parser(args_list):
@@ -240,6 +285,12 @@ def choose_arg_parser(args_list):
             arg.startswith("--input-json-file=")
             for arg in args_list):
         return cached_run_arg_parser()
+    elif any(
+            arg in ("--input-pvacseq", "--input-lens") or
+            arg.startswith("--input-pvacseq=") or
+            arg.startswith("--input-lens=")
+            for arg in args_list):
+        return external_input_arg_parser()
     else:
         return make_vaxrank_arg_parser()
 

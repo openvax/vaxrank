@@ -264,6 +264,7 @@ def vaccine_peptides_from_epitopes(
         "midpoint": epitope_config.logistic_epitope_score_midpoint,
         "width": epitope_config.logistic_epitope_score_width,
         "ic50_cutoff": epitope_config.binding_affinity_cutoff,
+        "scoring_mode": epitope_config.scoring_mode,
     }
     candidate_vaccine_peptides = []
 
