@@ -42,7 +42,12 @@ from .epitope_config_args import epitope_config_from_args
 from .vaccine_config_args import vaccine_config_from_args
 
 from ..core_logic import run_vaxrank
-from ..epitope_io import load_epitopes, save_predictions
+from ..epitope_io import (
+    load_pvacseq,
+    load_lens,
+    save_predictions,
+    write_neoepitope_report,
+)
 from ..gene_pathway_check import GenePathwayCheck
 from ..report import (
     make_ascii_report,
@@ -99,69 +104,42 @@ def _filter_unannotatable_variants(variants):
     return variants
 
 
-def _rank_external_epitopes(args, input_epitopes_path):
+def _run_external_input_mode(args):
     """
-    Standalone mode: load external epitope predictions (pVACseq, LENS, or
-    vaxrank format), score them with vaxrank's logistic scoring, and output
-    a ranked CSV/TSV.
-
-    This mode does NOT require --vcf, --bam, or MHC predictor args.
+    Load epitope predictions from pVACseq or LENS, score them, and
+    write the requested output reports (CSV, XLSX neoepitope report).
     """
     from ..epitope_config import EpitopeConfig
     from .epitope_config_args import epitope_config_from_args
-
-    predictions = load_epitopes(input_epitopes_path)
-    if not predictions:
-        logger.warning("No epitope predictions loaded from %s", input_epitopes_path)
-        return
 
     try:
         epitope_config = epitope_config_from_args(args)
     except Exception:
         epitope_config = EpitopeConfig()
 
-    # Score and rank
-    scored = []
-    for p in predictions:
-        score = p.logistic_epitope_score(
-            midpoint=epitope_config.logistic_epitope_score_midpoint,
-            width=epitope_config.logistic_epitope_score_width,
-            ic50_cutoff=epitope_config.binding_affinity_cutoff,
-        )
-        scored.append((score, p))
-    scored.sort(key=lambda x: -x[0])
+    if getattr(args, 'input_pvacseq', None):
+        report_df, predictions = load_pvacseq(args.input_pvacseq)
+    elif getattr(args, 'input_lens', None):
+        report_df, predictions = load_lens(args.input_lens)
+    else:
+        return False  # no external input
 
-    # Build output DataFrame
-    rows = []
-    for rank, (score, p) in enumerate(scored, 1):
-        rows.append({
-            "rank": rank,
-            "peptide_sequence": p.peptide_sequence,
-            "allele": p.allele,
-            "ic50": p.ic50,
-            "wt_ic50": p.wt_ic50,
-            "wt_peptide_sequence": p.wt_peptide_sequence,
-            "percentile_rank": p.percentile_rank,
-            "vaxrank_score": round(score, 6),
-            "overlaps_mutation": p.overlaps_mutation,
-            "occurs_in_reference": p.occurs_in_reference,
-            "prediction_method_name": p.prediction_method_name,
-        })
-    df = pd.DataFrame(rows)
+    if report_df.empty:
+        logger.warning("No epitope predictions loaded")
+        return True
 
-    logger.info("Scored %d epitope predictions from %s", len(df), input_epitopes_path)
-
-    # Write to requested outputs
-    if getattr(args, 'output_csv', ''):
-        df.to_csv(args.output_csv, index=False)
-        logger.info("Wrote ranked epitopes to %s", args.output_csv)
+    write_neoepitope_report(
+        report_df=report_df,
+        predictions=predictions,
+        excel_report_path=getattr(args, 'output_neoepitope_report', '') or None,
+        csv_report_path=getattr(args, 'output_csv', '') or None,
+        epitope_config=epitope_config,
+    )
 
     if getattr(args, 'output_epitopes', ''):
-        save_predictions([p for _, p in scored], args.output_epitopes)
+        save_predictions(predictions, args.output_epitopes)
 
-    # Print summary to stdout if no file output was requested
-    if not (getattr(args, 'output_csv', '') or getattr(args, 'output_epitopes', '')):
-        print(df.to_string(index=False))
+    return True
 
 
 def configure_logging(args):
@@ -206,11 +184,9 @@ def main(args_list=None):
     _resolve_ensembl_release(args)
     logger.info(args)
 
-    # When --input-epitopes is provided without VCF/BAM, run in standalone
-    # ranking mode: load external predictions, score, and output.
-    input_epitopes = getattr(args, 'input_epitopes', None)
-    if input_epitopes and not (args.vcf or args.maf or args.variant or args.json_variants):
-        _rank_external_epitopes(args, input_epitopes)
+    # When --input-pvacseq or --input-lens is provided, load external
+    # predictions, score, and write reports — skip the full pipeline.
+    if _run_external_input_mode(args):
         return
 
     check_args(args)

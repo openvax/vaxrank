@@ -59,12 +59,18 @@ def make_vaxrank_arg_parser():
              "INFO and above are printed; DEBUG is always written to the log file).")
 
     arg_parser.add_argument(
-        "--input-epitopes",
+        "--input-pvacseq",
         default=None,
-        help="Path to a file of pre-computed epitope predictions (CSV or TSV). "
-             "Supported formats: vaxrank native, pVACseq aggregated, or LENS report. "
-             "Format is auto-detected from column headers. When provided, vaxrank "
-             "skips internal MHC prediction and uses these predictions for ranking.")
+        help="Path to a pVACseq aggregated TSV file (all_epitopes.aggregated.tsv). "
+             "When provided without --vcf/--bam, vaxrank scores and ranks the "
+             "pVACseq predictions and writes the requested output reports.")
+
+    arg_parser.add_argument(
+        "--input-lens",
+        default=None,
+        help="Path to a LENS report TSV file. "
+             "When provided without --vcf/--bam, vaxrank scores and ranks the "
+             "LENS predictions and writes the requested output reports.")
 
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
@@ -249,6 +255,29 @@ def check_args(args):
             "--output-epitopes")
 
 
+def external_input_arg_parser():
+    """Parser for --input-pvacseq / --input-lens mode (no BAM/VCF required)."""
+    arg_parser = ArgumentParser(
+        prog="vaxrank",
+        description=(
+            "Score and rank pre-computed epitope predictions from "
+            "pVACseq or LENS."),
+    )
+    arg_parser.add_argument(
+        '--version',
+        action='version',
+        version='Vaxrank %s' % (__version__,))
+    arg_parser.add_argument("--input-pvacseq", default=None)
+    arg_parser.add_argument("--input-lens", default=None)
+    arg_parser.add_argument(
+        "--verbose", "-v", action="store_true", default=False)
+    add_output_args(arg_parser)
+    add_epitope_prediction_args(arg_parser)
+    # config arg needed for epitope_config_from_args
+    arg_parser.add_argument("--config", default=None)
+    return arg_parser
+
+
 def choose_arg_parser(args_list):
     # TODO: replace this with a command sub-parser
     if any(
@@ -256,6 +285,12 @@ def choose_arg_parser(args_list):
             arg.startswith("--input-json-file=")
             for arg in args_list):
         return cached_run_arg_parser()
+    elif any(
+            arg in ("--input-pvacseq", "--input-lens") or
+            arg.startswith("--input-pvacseq=") or
+            arg.startswith("--input-lens=")
+            for arg in args_list):
+        return external_input_arg_parser()
     else:
         return make_vaxrank_arg_parser()
 

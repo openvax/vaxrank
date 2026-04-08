@@ -25,8 +25,7 @@ from vaxrank.epitope_io import (
     load_predictions,
     load_pvacseq,
     load_lens,
-    load_epitopes,
-    detect_format,
+    write_neoepitope_report,
 )
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "epitope_fixtures")
@@ -98,8 +97,9 @@ def test_roundtrip_preserves_values(tmp_path):
 
 def test_load_pvacseq():
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
-    preds = load_pvacseq(path)
+    report_df, preds = load_pvacseq(path)
     assert len(preds) == 3
+    assert len(report_df) == 3
 
     # Check first prediction
     p = preds[0]
@@ -109,6 +109,11 @@ def test_load_pvacseq():
     assert p.wt_ic50 == pytest.approx(4520.30)
     assert p.percentile_rank == pytest.approx(0.5)
     assert p.overlaps_mutation is True
+
+    # Check report DataFrame has expected columns
+    assert "Gene name" in report_df.columns
+    assert "Genomic variant" in report_df.columns
+    assert "Tier" in report_df.columns
 
     # Check third prediction has occurs_in_reference=True (Ref Match=True)
     assert preds[2].occurs_in_reference is True
@@ -125,8 +130,9 @@ def test_load_pvacseq_missing_columns(tmp_path):
 
 def test_load_lens():
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    preds = load_lens(path)
+    report_df, preds = load_lens(path)
     assert len(preds) == 3
+    assert len(report_df) == 3
 
     p = preds[0]
     assert p.allele == "HLA-A*02:01"
@@ -137,6 +143,10 @@ def test_load_lens():
     # Should prefer EL percentile rank
     assert p.percentile_rank == pytest.approx(0.3)
 
+    # Check LENS-specific report columns
+    assert "Antigen source" in report_df.columns
+    assert "Agretopicity" in report_df.columns
+
 
 def test_load_lens_missing_columns(tmp_path):
     bad_file = tmp_path / "bad.tsv"
@@ -145,41 +155,30 @@ def test_load_lens_missing_columns(tmp_path):
         load_lens(bad_file)
 
 
-# ── Format auto-detection ────────────────────────────────────────────────────
+# ── Report generation from imports ───────────────────────────────────────────
 
-def test_detect_format_pvacseq():
+def test_write_neoepitope_report_csv(tmp_path):
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
-    assert detect_format(path) == "pvacseq"
+    report_df, preds = load_pvacseq(path)
+    csv_path = tmp_path / "report.csv"
+    write_neoepitope_report(report_df, preds, csv_report_path=str(csv_path))
+    assert csv_path.exists()
+
+    import pandas as pd
+    result = pd.read_csv(csv_path)
+    assert "rank" in result.columns
+    assert "vaxrank_score" in result.columns
+    assert len(result) == 3
+    # Should be sorted by score descending
+    assert result["vaxrank_score"].iloc[0] >= result["vaxrank_score"].iloc[1]
 
 
-def test_detect_format_lens():
+def test_write_neoepitope_report_xlsx(tmp_path):
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    assert detect_format(path) == "lens"
-
-
-def test_detect_format_vaxrank(tmp_path):
-    path = tmp_path / "vaxrank.csv"
-    save_predictions([_make_prediction()], path)
-    assert detect_format(path) == "vaxrank"
-
-
-def test_detect_format_unknown(tmp_path):
-    bad_file = tmp_path / "unknown.csv"
-    bad_file.write_text("foo,bar\n1,2\n")
-    with pytest.raises(ValueError, match="Cannot detect"):
-        detect_format(bad_file)
-
-
-def test_load_epitopes_auto_pvacseq():
-    path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
-    preds = load_epitopes(path)
-    assert len(preds) == 3
-
-
-def test_load_epitopes_auto_lens():
-    path = os.path.join(DATA_DIR, "lens_example.tsv")
-    preds = load_epitopes(path)
-    assert len(preds) == 3
+    report_df, preds = load_lens(path)
+    xlsx_path = tmp_path / "report.xlsx"
+    write_neoepitope_report(report_df, preds, excel_report_path=str(xlsx_path))
+    assert xlsx_path.exists()
 
 
 # ── Scoring modes ────────────────────────────────────────────────────────────
@@ -206,3 +205,36 @@ def test_scoring_mode_percentile_rank_none():
     p = _make_prediction(percentile_rank=None)
     score = p.logistic_epitope_score(scoring_mode="percentile_rank")
     assert score == 0.0
+
+
+# ── CLI integration test ─────────────────────────────────────────────────────
+
+def test_pvacseq_cli_csv_output(tmp_path):
+    """Test the --input-pvacseq flag produces CSV output."""
+    from vaxrank.cli.entry_point import main
+    pvacseq_path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
+    csv_path = str(tmp_path / "output.csv")
+    main([
+        "--input-pvacseq", pvacseq_path,
+        "--output-csv", csv_path,
+    ])
+    assert os.path.exists(csv_path)
+    import pandas as pd
+    df = pd.read_csv(csv_path)
+    assert len(df) == 3
+    assert "vaxrank_score" in df.columns
+
+
+def test_lens_cli_csv_output(tmp_path):
+    """Test the --input-lens flag produces CSV output."""
+    from vaxrank.cli.entry_point import main
+    lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
+    csv_path = str(tmp_path / "output.csv")
+    main([
+        "--input-lens", lens_path,
+        "--output-csv", csv_path,
+    ])
+    assert os.path.exists(csv_path)
+    import pandas as pd
+    df = pd.read_csv(csv_path)
+    assert len(df) == 3

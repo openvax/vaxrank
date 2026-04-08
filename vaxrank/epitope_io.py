@@ -13,17 +13,13 @@
 """
 Serialization, deserialization, and import of epitope predictions.
 
-Supports three formats:
+Supports:
   - vaxrank native (CSV/TSV roundtrip of EpitopePrediction fields)
   - pVACseq aggregated TSV (all_epitopes.aggregated.tsv)
   - LENS report TSV
-
-The common goal: produce a list of EpitopePrediction objects that can
-be fed into vaxrank's vaccine peptide ranking pipeline.
 """
 
 import logging
-import re
 
 import pandas as pd
 
@@ -87,7 +83,7 @@ def save_predictions(predictions, path):
     """
     Save EpitopePrediction objects to a CSV/TSV file.
 
-    Format is inferred from the file extension (.tsv → tab, else comma).
+    Format is inferred from the file extension (.tsv -> tab, else comma).
     """
     df = predictions_to_dataframe(predictions)
     sep = "\t" if str(path).endswith(".tsv") else ","
@@ -136,26 +132,26 @@ def _dataframe_to_predictions(df):
 
 # ── pVACseq import ───────────────────────────────────────────────────────────
 
-# Regex for HLA allele columns in pVACseq aggregated files (e.g. A*29:02)
-_PVAC_ALLELE_COL_RE = re.compile(r"^[ABC]\*\d+:\d+$|^D[PQR]")
-
-
 def load_pvacseq(path):
     """
-    Import epitope predictions from a pVACseq aggregated TSV file
-    (``*all_epitopes.aggregated.tsv``).
+    Import a pVACseq aggregated TSV (``*all_epitopes.aggregated.tsv``)
+    and return a neoepitope report DataFrame ready for output.
 
-    Each row in the pVACseq file is one variant; we extract the best
-    epitope per variant and convert it to an EpitopePrediction.
+    Each row is one variant's best epitope.
 
     Parameters
     ----------
     path : str or Path
-        Path to the pVACseq aggregated TSV file.
 
     Returns
     -------
+    pandas.DataFrame
+        Columns: Allele, Mutant peptide sequence, Predicted mutant pMHC
+        affinity, Wildtype sequence, Predicted wildtype pMHC affinity,
+        Gene name, Genomic variant, Tier, Ref Match, RNA Expr, DNA VAF,
+        vaxrank_score
     list of EpitopePrediction
+        Corresponding EpitopePrediction objects
     """
     df = pd.read_csv(path, sep="\t")
     required = {"Best Peptide", "Allele", "IC50 MT"}
@@ -165,6 +161,7 @@ def load_pvacseq(path):
             f"pVACseq file {path} missing required columns: {missing}")
 
     predictions = []
+    report_rows = []
     for _, row in df.iterrows():
         peptide = row.get("Best Peptide", "")
         if not peptide or pd.isna(peptide):
@@ -185,9 +182,6 @@ def load_pvacseq(path):
         percentile = row.get("%ile MT")
         percentile_rank = float(percentile) if not pd.isna(percentile) else None
 
-        # pVACseq doesn't always include the WT peptide sequence in the
-        # aggregated file, but the per-epitope file does. Use empty string
-        # as fallback.
         wt_peptide = row.get("WT Epitope Seq", "")
         if pd.isna(wt_peptide):
             wt_peptide = ""
@@ -202,7 +196,17 @@ def load_pvacseq(path):
         if pd.isna(method):
             method = "pvacseq"
 
-        predictions.append(EpitopePrediction(
+        gene = row.get("Gene", "")
+        if pd.isna(gene):
+            gene = ""
+        variant_id = row.get("ID", "")
+        if pd.isna(variant_id):
+            variant_id = ""
+        tier = row.get("Tier", "")
+        if pd.isna(tier):
+            tier = ""
+
+        pred = EpitopePrediction(
             allele=str(allele),
             peptide_sequence=str(peptide),
             wt_peptide_sequence=str(wt_peptide),
@@ -210,30 +214,51 @@ def load_pvacseq(path):
             wt_ic50=wt_ic50,
             percentile_rank=percentile_rank,
             prediction_method_name=str(method),
-            overlaps_mutation=True,  # pVACseq only reports mutant epitopes
-            source_sequence="",  # not available in aggregated format
+            overlaps_mutation=True,
+            source_sequence="",
             offset=0,
             occurs_in_reference=occurs_in_reference,
-        ))
+        )
+        predictions.append(pred)
 
+        # Build report row preserving pVACseq metadata
+        wt_ic50_str = '%.2f nM' % wt_ic50 if wt_ic50 is not None else 'No prediction'
+        report_rows.append({
+            'Allele': str(allele),
+            'Mutant peptide sequence': str(peptide),
+            'Predicted mutant pMHC affinity': '%.2f nM' % ic50_mt,
+            'Wildtype sequence': str(wt_peptide),
+            'Predicted wildtype pMHC affinity': wt_ic50_str,
+            'Gene name': str(gene),
+            'Genomic variant': str(variant_id),
+            'Tier': str(tier),
+            'Ref Match': occurs_in_reference,
+            'RNA Expr': _safe_float(row.get("RNA Expr")),
+            'RNA VAF': _safe_float(row.get("RNA VAF")),
+            'DNA VAF': _safe_float(row.get("DNA VAF")),
+            '%ile MT': percentile_rank,
+        })
+
+    report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
     logger.info("Loaded %d epitope predictions from pVACseq file %s", len(predictions), path)
-    return predictions
+    return report_df, predictions
 
-
-# ── LENS import ──────────────────────────────────────────────────────────────
 
 def load_lens(path):
     """
-    Import epitope predictions from a LENS report TSV file.
+    Import a LENS report TSV and return a neoepitope report DataFrame
+    ready for output.
 
     Parameters
     ----------
     path : str or Path
-        Path to the LENS report TSV file.
 
     Returns
     -------
+    pandas.DataFrame
+        Report-ready DataFrame
     list of EpitopePrediction
+        Corresponding EpitopePrediction objects
     """
     df = pd.read_csv(path, sep="\t")
     required = {"peptide", "mhc_allele", "binding_affinity"}
@@ -243,6 +268,7 @@ def load_lens(path):
             f"LENS file {path} missing required columns: {missing}")
 
     predictions = []
+    report_rows = []
     for _, row in df.iterrows():
         peptide = row.get("peptide", "")
         if not peptide or pd.isna(peptide):
@@ -268,7 +294,6 @@ def load_lens(path):
 
         percentile_ba = row.get("percent_rank_ba")
         percentile_el = row.get("percent_rank_el")
-        # Prefer EL percentile rank if available
         if percentile_el is not None and not pd.isna(percentile_el):
             percentile_rank = float(percentile_el)
         elif percentile_ba is not None and not pd.isna(percentile_ba):
@@ -278,7 +303,17 @@ def load_lens(path):
 
         has_wt = bool(wt_peptide) and wt_peptide != peptide
 
-        predictions.append(EpitopePrediction(
+        gene = row.get("gene_name", "")
+        if pd.isna(gene):
+            gene = ""
+        variant_pos = row.get("variant_position", "")
+        if pd.isna(variant_pos):
+            variant_pos = ""
+        antigen_source = row.get("antigen_source", "")
+        if pd.isna(antigen_source):
+            antigen_source = ""
+
+        pred = EpitopePrediction(
             allele=str(allele),
             peptide_sequence=str(peptide),
             wt_peptide_sequence=str(wt_peptide),
@@ -290,66 +325,92 @@ def load_lens(path):
             source_sequence="",
             offset=0,
             occurs_in_reference=False,
-        ))
+        )
+        predictions.append(pred)
 
+        wt_ic50_str = '%.2f nM' % wt_ic50 if wt_ic50 is not None else 'No prediction'
+        report_rows.append({
+            'Allele': str(allele),
+            'Mutant peptide sequence': str(peptide),
+            'Predicted mutant pMHC affinity': '%.2f nM' % ic50,
+            'Wildtype sequence': str(wt_peptide),
+            'Predicted wildtype pMHC affinity': wt_ic50_str,
+            'Gene name': str(gene),
+            'Genomic variant': str(variant_pos),
+            'Antigen source': str(antigen_source),
+            '%ile EL': _safe_float(row.get("percent_rank_el")),
+            '%ile BA': _safe_float(row.get("percent_rank_ba")),
+            'Agretopicity': _safe_float(row.get("agretopicity")),
+            'TPM': _safe_float(row.get("tpm")),
+        })
+
+    report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
     logger.info("Loaded %d epitope predictions from LENS file %s", len(predictions), path)
-    return predictions
+    return report_df, predictions
 
 
-# ── Format auto-detection ────────────────────────────────────────────────────
+def _safe_float(val):
+    """Convert to float, returning None for NaN/missing."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
 
-def detect_format(path):
+
+def write_neoepitope_report(report_df, predictions, excel_report_path=None,
+                            csv_report_path=None, epitope_config=None):
     """
-    Auto-detect epitope file format by inspecting column headers.
-
-    Returns
-    -------
-    str
-        One of "vaxrank", "pvacseq", "lens"
-
-    Raises
-    ------
-    ValueError
-        If format cannot be determined.
-    """
-    sep = "\t" if str(path).endswith(".tsv") else ","
-    df = pd.read_csv(path, sep=sep, nrows=0)
-    cols = set(df.columns)
-
-    if "peptide_sequence" in cols and "allele" in cols:
-        return "vaxrank"
-    if "Best Peptide" in cols and "IC50 MT" in cols:
-        return "pvacseq"
-    if "peptide" in cols and "mhc_allele" in cols and "binding_affinity" in cols:
-        return "lens"
-
-    raise ValueError(
-        f"Cannot detect epitope file format from columns: {sorted(cols)[:10]}... "
-        "Expected vaxrank (peptide_sequence, allele), "
-        "pVACseq (Best Peptide, IC50 MT), or "
-        "LENS (peptide, mhc_allele, binding_affinity).")
-
-
-def load_epitopes(path):
-    """
-    Load epitope predictions from any supported format (auto-detected).
+    Score predictions and write a neoepitope report from imported data.
 
     Parameters
     ----------
-    path : str or Path
-        Path to epitope predictions file.
+    report_df : pandas.DataFrame
+        Report-ready DataFrame from load_pvacseq or load_lens
 
-    Returns
-    -------
-    list of EpitopePrediction
+    predictions : list of EpitopePrediction
+
+    excel_report_path : str, optional
+        Path for XLSX output
+
+    csv_report_path : str, optional
+        Path for CSV output
+
+    epitope_config : EpitopeConfig, optional
     """
-    fmt = detect_format(path)
-    logger.info("Detected epitope file format: %s", fmt)
-    if fmt == "vaxrank":
-        return load_predictions(path)
-    elif fmt == "pvacseq":
-        return load_pvacseq(path)
-    elif fmt == "lens":
-        return load_lens(path)
-    else:
-        raise ValueError(f"Unknown epitope file format: {fmt}")
+    from .epitope_config import EpitopeConfig
+    if epitope_config is None:
+        epitope_config = EpitopeConfig()
+
+    # Add vaxrank score column
+    scores = []
+    for p in predictions:
+        scores.append(p.logistic_epitope_score(
+            midpoint=epitope_config.logistic_epitope_score_midpoint,
+            width=epitope_config.logistic_epitope_score_width,
+            ic50_cutoff=epitope_config.binding_affinity_cutoff,
+            scoring_mode=epitope_config.scoring_mode,
+        ))
+    report_df = report_df.copy()
+    report_df.insert(2, 'vaxrank_score', [round(s, 6) for s in scores])
+
+    # Sort by score descending
+    report_df = report_df.sort_values('vaxrank_score', ascending=False)
+    report_df.insert(0, 'rank', range(1, len(report_df) + 1))
+
+    if csv_report_path:
+        report_df.to_csv(csv_report_path, index=False)
+        logger.info('Wrote CSV neoepitope report to %s', csv_report_path)
+
+    if excel_report_path:
+        writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
+        report_df.to_excel(writer, sheet_name='Neoepitopes', index=False)
+        worksheet = writer.sheets['Neoepitopes']
+        worksheet.column_dimensions['C'].width = 23
+        worksheet.column_dimensions['E'].width = 27
+        worksheet.column_dimensions['F'].width = 17
+        worksheet.column_dimensions['G'].width = 30
+        worksheet.column_dimensions['H'].width = 18
+        writer.close()
+        logger.info('Wrote XLSX neoepitope report to %s', excel_report_path)
