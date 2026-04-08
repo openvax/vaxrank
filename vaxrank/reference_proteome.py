@@ -208,6 +208,53 @@ def load_kmer_set_index(
     return kmers
 
 
+def extract_kmers(sequences, min_len, max_len):
+    """Extract all kmers from an iterable of protein sequences."""
+    kmers = set()
+    for seq in sequences:
+        kmers.update(
+            seq[j: j + k]
+            for k in range(min_len, max_len + 1)
+            for j in range(len(seq) - k + 1)
+        )
+    return kmers
+
+
+def genome_protein_dict(genome, exclude_gene_ids=None):
+    """
+    Build a dict of transcript_id -> protein_sequence from a pyensembl genome,
+    optionally excluding proteins from specific genes.
+
+    Parameters
+    ----------
+    genome : pyensembl.EnsemblRelease
+    exclude_gene_ids : set of str, optional
+        Ensembl gene IDs whose proteins should be excluded.
+
+    Returns
+    -------
+    dict[str, str]
+    """
+    if exclude_gene_ids:
+        exclude_tids = set()
+        for gene_id in exclude_gene_ids:
+            try:
+                exclude_tids.update(genome.transcript_ids_of_gene_id(gene_id))
+            except ValueError:
+                logger.warning("Gene ID %s not found in genome, skipping", gene_id)
+        logger.info(
+            "Excluding %d transcripts from %d genes",
+            len(exclude_tids), len(exclude_gene_ids))
+    else:
+        exclude_tids = set()
+
+    proteins = {}
+    for t in genome.transcripts():
+        if t.is_protein_coding and t.protein_sequence and t.transcript_id not in exclude_tids:
+            proteins[t.transcript_id] = t.protein_sequence
+    return proteins
+
+
 class ReferenceProteome:
     """
     Index for checking if peptide sequences exist in a reference proteome.
@@ -222,6 +269,8 @@ class ReferenceProteome:
         max_kmer_length: int = DEFAULT_MAX_KMER_LENGTH,
     ):
         """
+        Backwards-compatible constructor: load from a pyensembl genome.
+
         Parameters
         ----------
         genome : pyensembl.EnsemblRelease or None
@@ -245,6 +294,112 @@ class ReferenceProteome:
         else:
             self._kmer_set = set()
 
+    @classmethod
+    def from_sequences(cls, proteins, min_kmer_length=None, max_kmer_length=None,
+                       epitope_lengths=None):
+        """
+        Build a ReferenceProteome from a dict of protein sequences.
+
+        Parameters
+        ----------
+        proteins : dict[str, str]
+            Mapping of protein name/ID to amino acid sequence.
+
+        min_kmer_length : int, optional
+            Minimum kmer length. If None, derived from epitope_lengths.
+
+        max_kmer_length : int, optional
+            Maximum kmer length. If None, derived from epitope_lengths.
+
+        epitope_lengths : collection of int, optional
+            Epitope lengths being predicted. Used to derive kmer range
+            when min/max not explicitly set.
+        """
+        if epitope_lengths and (min_kmer_length is None or max_kmer_length is None):
+            lengths = sorted(epitope_lengths)
+            if min_kmer_length is None:
+                min_kmer_length = lengths[0]
+            if max_kmer_length is None:
+                max_kmer_length = lengths[-1]
+        if min_kmer_length is None:
+            min_kmer_length = DEFAULT_MIN_KMER_LENGTH
+        if max_kmer_length is None:
+            max_kmer_length = DEFAULT_MAX_KMER_LENGTH
+
+        unique_seqs = set(proteins.values())
+        logger.info(
+            "Building kmer set from %d proteins (%d unique), lengths %d-%d",
+            len(proteins), len(unique_seqs), min_kmer_length, max_kmer_length)
+        kmer_set = extract_kmers(unique_seqs, min_kmer_length, max_kmer_length)
+        logger.info("Built kmer set with %d unique kmers", len(kmer_set))
+
+        obj = cls.__new__(cls)
+        obj.genome = None
+        obj.min_kmer_length = min_kmer_length
+        obj.max_kmer_length = max_kmer_length
+        obj._kmer_set = kmer_set
+        return obj
+
+    @classmethod
+    def from_genome(cls, genome, exclude_gene_ids=None,
+                    exclude_pirlygenes_cta=False, exclude_fasta=None,
+                    epitope_lengths=None,
+                    min_kmer_length=None, max_kmer_length=None):
+        """
+        Build a ReferenceProteome from a pyensembl genome with optional
+        exclusions.
+
+        Parameters
+        ----------
+        genome : pyensembl.EnsemblRelease
+        exclude_gene_ids : set of str, optional
+            Ensembl gene IDs to exclude.
+        exclude_pirlygenes_cta : bool
+            If True, exclude cancer-testis antigen genes from pirlygenes.
+            Requires pirlygenes to be installed.
+        exclude_fasta : str or Path, optional
+            Path to a FASTA file whose sequences should be excluded.
+        epitope_lengths : collection of int, optional
+            Used to derive kmer range.
+        min_kmer_length : int, optional
+        max_kmer_length : int, optional
+        """
+        all_exclude_ids = set(exclude_gene_ids or [])
+
+        if exclude_pirlygenes_cta:
+            try:
+                from pirlygenes.gene_sets_cancer import CTA_gene_ids
+            except ImportError:
+                raise ImportError(
+                    "Config has exclude_pirlygenes_cta: true but pirlygenes "
+                    "is not installed. Install with: pip install pirlygenes"
+                ) from None
+            cta_ids = CTA_gene_ids()
+            logger.info("Excluding %d CTA gene IDs from pirlygenes", len(cta_ids))
+            all_exclude_ids.update(cta_ids)
+
+        proteins = genome_protein_dict(genome, exclude_gene_ids=all_exclude_ids)
+
+        if exclude_fasta:
+            exclude_seqs = set(_read_fasta(exclude_fasta).values())
+            before = len(proteins)
+            proteins = {
+                tid: seq for tid, seq in proteins.items()
+                if seq not in exclude_seqs
+            }
+            logger.info(
+                "Excluded %d proteins matching FASTA %s",
+                before - len(proteins), exclude_fasta)
+
+        obj = cls.from_sequences(
+            proteins,
+            min_kmer_length=min_kmer_length,
+            max_kmer_length=max_kmer_length,
+            epitope_lengths=epitope_lengths,
+        )
+        obj.genome = genome
+        return obj
+
     def contains(self, peptide: str) -> bool:
         """
         Check if a peptide sequence exists in the reference proteome.
@@ -260,3 +415,23 @@ class ReferenceProteome:
             True if the peptide exists in the reference proteome
         """
         return peptide in self._kmer_set
+
+
+def _read_fasta(path):
+    """Read a FASTA file into a dict of name -> sequence."""
+    proteins = {}
+    current_name = None
+    current_seq = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith(">"):
+                if current_name is not None:
+                    proteins[current_name] = "".join(current_seq)
+                current_name = line[1:].split()[0]
+                current_seq = []
+            elif current_name is not None:
+                current_seq.append(line)
+    if current_name is not None:
+        proteins[current_name] = "".join(current_seq)
+    return proteins

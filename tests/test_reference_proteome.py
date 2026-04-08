@@ -19,9 +19,13 @@ import pickle
 import tempfile
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from vaxrank.reference_proteome import (
     ReferenceProteome,
     build_kmer_set_index,
+    extract_kmers,
+    genome_protein_dict,
     load_kmer_set_index,
     kmer_set_index_path,
     get_cache_dir,
@@ -37,12 +41,15 @@ from .common import eq_, ok_
 # Mock Genome and Transcript for Testing
 # =============================================================================
 
-def create_mock_transcript(transcript_id, protein_sequence, is_protein_coding=True):
+def create_mock_transcript(transcript_id, protein_sequence, is_protein_coding=True,
+                           gene_id=None):
     """Create a mock transcript object"""
     transcript = MagicMock()
     transcript.id = transcript_id
+    transcript.transcript_id = transcript_id
     transcript.protein_sequence = protein_sequence
     transcript.is_protein_coding = is_protein_coding
+    transcript.gene_id = gene_id or f"GENE_{transcript_id}"
     return transcript
 
 
@@ -466,3 +473,234 @@ def test_cache_dir_created():
             result = get_cache_dir()
             eq_(result, new_cache_dir)
             ok_(os.path.exists(new_cache_dir))
+
+
+# =============================================================================
+# extract_kmers Tests
+# =============================================================================
+
+def test_extract_kmers_basic():
+    seqs = ["ABCDEF"]
+    kmers = extract_kmers(seqs, min_len=3, max_len=4)
+    assert "ABC" in kmers
+    assert "BCD" in kmers
+    assert "ABCD" in kmers
+    assert "CDEF" in kmers
+    assert "AB" not in kmers  # too short
+    assert "ABCDE" not in kmers  # too long
+
+
+def test_extract_kmers_empty():
+    assert extract_kmers([], min_len=8, max_len=10) == set()
+    assert extract_kmers(["AB"], min_len=8, max_len=10) == set()
+
+
+def test_extract_kmers_deduplicates():
+    # Same kmer from two proteins
+    seqs = ["ABCDEFGH", "XXABCDEFGHXX"]
+    kmers = extract_kmers(seqs, min_len=8, max_len=8)
+    assert "ABCDEFGH" in kmers
+
+
+# =============================================================================
+# genome_protein_dict Tests
+# =============================================================================
+
+def test_genome_protein_dict_basic():
+    t1 = create_mock_transcript("T1", "ABCDEF", gene_id="G1")
+    t2 = create_mock_transcript("T2", "GHIJKL", gene_id="G2")
+    genome = create_mock_genome([t1, t2])
+    proteins = genome_protein_dict(genome)
+    assert proteins == {"T1": "ABCDEF", "T2": "GHIJKL"}
+
+
+def test_genome_protein_dict_excludes_gene_ids():
+    t1 = create_mock_transcript("T1", "ABCDEF", gene_id="G1")
+    t2 = create_mock_transcript("T2", "GHIJKL", gene_id="G2")
+    t3 = create_mock_transcript("T3", "MNOPQR", gene_id="G1")
+    genome = create_mock_genome([t1, t2, t3])
+    genome.transcript_ids_of_gene_id.return_value = ["T1", "T3"]
+
+    proteins = genome_protein_dict(genome, exclude_gene_ids={"G1"})
+    assert "T1" not in proteins
+    assert "T3" not in proteins
+    assert proteins == {"T2": "GHIJKL"}
+
+
+def test_genome_protein_dict_skips_non_coding():
+    t1 = create_mock_transcript("T1", "ABCDEF", gene_id="G1")
+    t2 = create_mock_transcript("T2", "GHIJKL", gene_id="G2", is_protein_coding=False)
+    genome = create_mock_genome([t1, t2])
+    proteins = genome_protein_dict(genome)
+    assert "T1" in proteins
+    assert "T2" not in proteins
+
+
+def test_genome_protein_dict_exclude_unknown_gene_id():
+    """Excluding a gene ID not in the genome should warn, not crash."""
+    t1 = create_mock_transcript("T1", "ABCDEF", gene_id="G1")
+    genome = create_mock_genome([t1])
+    genome.transcript_ids_of_gene_id.side_effect = ValueError("not found")
+
+    proteins = genome_protein_dict(genome, exclude_gene_ids={"NONEXISTENT"})
+    assert "T1" in proteins
+
+
+# =============================================================================
+# ReferenceProteome.from_sequences Tests
+# =============================================================================
+
+def test_from_sequences_basic():
+    proteins = {"P1": "ABCDEFGHIJ", "P2": "KLMNOPQRST"}
+    ref = ReferenceProteome.from_sequences(proteins, min_kmer_length=8, max_kmer_length=10)
+    assert ref.contains("ABCDEFGH")    # 8-mer
+    assert ref.contains("ABCDEFGHIJ")  # 10-mer
+    assert ref.contains("KLMNOPQR")    # 8-mer from P2
+    assert not ref.contains("ZZZZZ")   # not in proteome
+
+
+def test_from_sequences_empty():
+    ref = ReferenceProteome.from_sequences({})
+    assert not ref.contains("ANYTHING")
+
+
+def test_from_sequences_derives_kmer_lengths_from_epitopes():
+    proteins = {"P1": "ABCDEFGHIJKLMNOP"}
+    ref = ReferenceProteome.from_sequences(proteins, epitope_lengths=[9, 10, 11])
+    assert ref.min_kmer_length == 9
+    assert ref.max_kmer_length == 11
+    assert ref.contains("ABCDEFGHI")     # 9-mer: yes
+    assert ref.contains("ABCDEFGHIJK")   # 11-mer: yes
+    assert not ref.contains("ABCDEFGH")  # 8-mer: not indexed
+
+
+def test_from_sequences_explicit_overrides_epitope_lengths():
+    proteins = {"P1": "ABCDEFGHIJKLMNOP"}
+    ref = ReferenceProteome.from_sequences(
+        proteins, min_kmer_length=8, max_kmer_length=8, epitope_lengths=[9, 10, 11])
+    assert ref.min_kmer_length == 8
+    assert ref.max_kmer_length == 8
+    assert ref.contains("ABCDEFGH")       # 8-mer: yes
+    assert not ref.contains("ABCDEFGHI")  # 9-mer: not indexed
+
+
+def test_from_sequences_defaults_when_no_epitope_lengths():
+    proteins = {"P1": "ABCDEFGHIJKLMNOP"}
+    ref = ReferenceProteome.from_sequences(proteins)
+    assert ref.min_kmer_length == DEFAULT_MIN_KMER_LENGTH
+    assert ref.max_kmer_length == DEFAULT_MAX_KMER_LENGTH
+
+
+# =============================================================================
+# ReferenceProteome.from_genome Tests
+# =============================================================================
+
+def test_from_genome_basic():
+    t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="G1")
+    genome = create_mock_genome([t1])
+    ref = ReferenceProteome.from_genome(genome, min_kmer_length=8, max_kmer_length=8)
+    assert ref.contains("ABCDEFGH")
+    assert ref.genome is genome
+
+
+def test_from_genome_with_exclude_gene_ids():
+    t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="G1")
+    t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="G2")
+    genome = create_mock_genome([t1, t2])
+    genome.transcript_ids_of_gene_id.return_value = ["T1"]
+
+    ref = ReferenceProteome.from_genome(
+        genome, exclude_gene_ids={"G1"}, min_kmer_length=8, max_kmer_length=8)
+    assert not ref.contains("ABCDEFGH")  # G1 excluded
+    assert ref.contains("KLMNOPQR")      # G2 still there
+
+
+def test_from_genome_with_pirlygenes_cta():
+    t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="ENSG00000001")
+    t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="ENSG00000002")
+    genome = create_mock_genome([t1, t2])
+    genome.transcript_ids_of_gene_id.return_value = ["T1"]
+
+    with patch(
+        "pirlygenes.gene_sets_cancer.CTA_gene_ids",
+        return_value={"ENSG00000001"},
+    ):
+        ref = ReferenceProteome.from_genome(
+            genome, exclude_pirlygenes_cta=True,
+            min_kmer_length=8, max_kmer_length=8)
+
+    assert not ref.contains("ABCDEFGH")  # CTA gene excluded
+    assert ref.contains("KLMNOPQR")
+
+
+def test_from_genome_pirlygenes_not_installed():
+    genome = create_mock_genome([])
+    import builtins
+    real_import = builtins.__import__
+
+    def mock_import(name, *args, **kwargs):
+        if "pirlygenes" in name:
+            raise ImportError("No module named 'pirlygenes'")
+        return real_import(name, *args, **kwargs)
+
+    with patch("builtins.__import__", side_effect=mock_import):
+        with pytest.raises(ImportError, match="pirlygenes is not installed"):
+            ReferenceProteome.from_genome(
+                genome, exclude_pirlygenes_cta=True)
+
+
+def test_from_genome_with_exclude_fasta(tmp_path):
+    fasta_path = tmp_path / "exclude.fasta"
+    fasta_path.write_text(">EXCLUDE1\nABCDEFGHIJ\n")
+
+    t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="G1")
+    t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="G2")
+    genome = create_mock_genome([t1, t2])
+
+    ref = ReferenceProteome.from_genome(
+        genome, exclude_fasta=str(fasta_path),
+        min_kmer_length=8, max_kmer_length=8)
+    assert not ref.contains("ABCDEFGH")  # excluded via FASTA
+    assert ref.contains("KLMNOPQR")
+
+
+def test_from_genome_with_epitope_lengths():
+    t1 = create_mock_transcript("T1", "ABCDEFGHIJKLMNOP", gene_id="G1")
+    genome = create_mock_genome([t1])
+    ref = ReferenceProteome.from_genome(genome, epitope_lengths=[9, 10])
+    assert ref.min_kmer_length == 9
+    assert ref.max_kmer_length == 10
+
+
+def test_from_genome_combined_exclusions(tmp_path):
+    """Test gene ID exclusion + FASTA exclusion together."""
+    fasta_path = tmp_path / "exclude.fasta"
+    fasta_path.write_text(">FASTA_EXCLUDE\nKLMNOPQRST\n")
+
+    t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="G1")
+    t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="G2")
+    t3 = create_mock_transcript("T3", "UVWXYZABCD", gene_id="G3")
+    genome = create_mock_genome([t1, t2, t3])
+    genome.transcript_ids_of_gene_id.return_value = ["T1"]
+
+    ref = ReferenceProteome.from_genome(
+        genome,
+        exclude_gene_ids={"G1"},
+        exclude_fasta=str(fasta_path),
+        min_kmer_length=8, max_kmer_length=8)
+
+    assert not ref.contains("ABCDEFGH")  # excluded by gene ID
+    assert not ref.contains("KLMNOPQR")  # excluded by FASTA
+    assert ref.contains("UVWXYZAB")      # kept
+
+
+# =============================================================================
+# Backwards compatibility
+# =============================================================================
+
+def test_old_init_still_works():
+    """The old ReferenceProteome(genome) constructor still works."""
+    ref = ReferenceProteome(None)
+    assert not ref.contains("ANYTHING")
+    assert ref.min_kmer_length == DEFAULT_MIN_KMER_LENGTH
+    assert ref.max_kmer_length == DEFAULT_MAX_KMER_LENGTH
