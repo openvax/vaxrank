@@ -43,6 +43,21 @@ def make_vaxrank_arg_parser():
         default=None,
         help="Path to YAML file with options related to epitope prediction and vaccine design.")
 
+    arg_parser.add_argument(
+        "--ensembl-release",
+        default=None,
+        type=int,
+        help="Ensembl release number to use for gene annotations (e.g. 75, 93, 102). "
+             "By default, pyensembl picks the most recent locally installed release "
+             "for the reference assembly specified by --genome.")
+
+    arg_parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        default=False,
+        help="Print debug-level log messages to the console (by default only "
+             "INFO and above are printed; DEBUG is always written to the log file).")
+
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
     add_epitope_prediction_args(arg_parser)
