@@ -102,7 +102,23 @@ def configure_logging(args):
     logging.config.fileConfig(
         str(files('vaxrank').joinpath('logging.conf')),
         defaults={'logfilename': args.log_path})
-    
+    if getattr(args, 'verbose', False):
+        for name in ['vaxrank', 'isovar', 'varcode', 'pyensembl', 'mhctools']:
+            for handler in logging.getLogger(name).handlers:
+                if isinstance(handler, logging.StreamHandler) \
+                        and not isinstance(handler, logging.FileHandler):
+                    handler.setLevel(logging.DEBUG)
+
+
+def _resolve_ensembl_release(args):
+    """If --ensembl-release was given, override args.genome with a specific
+    pyensembl EnsemblRelease so that varcode/isovar use that release."""
+    ensembl_release = getattr(args, 'ensembl_release', None)
+    if ensembl_release is not None:
+        import pyensembl
+        args.genome = pyensembl.EnsemblRelease(ensembl_release)
+        logger.info("Using Ensembl release %d", ensembl_release)
+
 
 def main(args_list=None):
     """
@@ -121,6 +137,7 @@ def main(args_list=None):
 
     args = parse_vaxrank_args(args_list)
     configure_logging(args)
+    _resolve_ensembl_release(args)
     logger.info(args)
     check_args(args)
 
