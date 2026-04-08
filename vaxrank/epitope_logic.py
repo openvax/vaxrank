@@ -16,10 +16,9 @@ import traceback
 import logging
 from typing import Optional
 
-
+import numpy as np
 from pyensembl import Genome
-from mhctools.base_predictor import BasePredictor
-
+from topiary import TopiaryPredictor
 
 from .epitope_config import EpitopeConfig
 from .epitope_prediction import EpitopePrediction
@@ -47,7 +46,7 @@ Peptide = str
 Allele = str
 
 def predict_epitopes(
-        mhc_predictor : BasePredictor,
+        mhc_predictor,
         protein_fragment : MutantProteinFragment,
         epitope_config : Optional[EpitopeConfig] = None,
         genome : Optional[Genome] = None) -> dict[tuple[Peptide, Allele], EpitopePrediction]:
@@ -55,13 +54,14 @@ def predict_epitopes(
     Parameters
     ----------
     mhc_predictor
-        Object with predict_peptides method
+        Either a topiary.TopiaryPredictor or a mhctools BasePredictor.
+        If a BasePredictor is given, it will be wrapped in a TopiaryPredictor.
 
-    protein_fragment 
-        Protein sub-sequence to run MHC binding predictor over 
+    protein_fragment
+        Protein sub-sequence to run MHC binding predictor over
 
     epitope_config
-        Configuration object with parameters for scoring epitopes, if 
+        Configuration object with parameters for scoring epitopes, if
         missing then default values are used
 
     genome
@@ -79,11 +79,15 @@ def predict_epitopes(
     results = OrderedDict()
     reference_proteome = ReferenceProteome(genome)
 
-    # sometimes the predictors will fail, and we don't want to crash vaxrank
-    # in that situation
-    # TODO: make more specific or remove when we fix error handling in mhctools
+    # Wrap bare mhctools predictors in a TopiaryPredictor
+    if not isinstance(mhc_predictor, TopiaryPredictor):
+        topiary_predictor = TopiaryPredictor(models=[mhc_predictor])
+    else:
+        topiary_predictor = mhc_predictor
+
+    # Run predictions via Topiary
     try:
-        mhctools_binding_predictions = mhc_predictor.predict_subsequences(
+        predictions_df = topiary_predictor.predict_from_named_sequences(
             {protein_fragment.gene_name: protein_fragment.amino_acids})
     except Exception:
         logger.error(
@@ -91,19 +95,22 @@ def predict_epitopes(
             protein_fragment, traceback.format_exc())
         return results
 
-    # compute the WT epitopes for each mutant fragment's epitopes; mutant -> WT
+    if predictions_df.empty:
+        return results
+
+    # Compute WT epitopes for peptides that overlap the mutation
     wt_peptides = {}
-    for binding_prediction in mhctools_binding_predictions:
-        peptide = binding_prediction.peptide
-        peptide_length = binding_prediction.length
-        peptide_start_offset = binding_prediction.offset
+    for _, row in predictions_df.iterrows():
+        peptide = row["peptide"]
+        peptide_start_offset = row["peptide_offset"]
+        peptide_length = row["peptide_length"]
         peptide_end_offset = peptide_start_offset + peptide_length
 
         overlaps_mutation = protein_fragment.interval_overlaps_mutation(
             start_offset=peptide_start_offset,
             end_offset=peptide_end_offset)
 
-        if overlaps_mutation:
+        if overlaps_mutation and peptide not in wt_peptides:
             full_reference_protein_sequence = (
                 protein_fragment.predicted_effect().original_protein_sequence
             )
@@ -114,38 +121,35 @@ def predict_epitopes(
                 global_epitope_start_pos:global_epitope_start_pos + peptide_length]
             wt_peptides[peptide] = wt_peptide
 
-    wt_predictions = []
-    # filter to minimum peptide lengths
-    valid_wt_peptides = [
-        x for x in wt_peptides.values() if len(x) >= mhc_predictor.min_peptide_length
-    ]
-    if len(valid_wt_peptides) > 0:
-
+    # Predict binding for WT peptides via Topiary
+    wt_predictions_grouped = {}
+    min_peptide_length = min(predictions_df["peptide_length"]) if len(predictions_df) > 0 else 8
+    valid_wt_peptides = {
+        f"wt_{i}": seq
+        for i, seq in enumerate(set(wt_peptides.values()))
+        if len(seq) >= min_peptide_length
+    }
+    if valid_wt_peptides:
         try:
-            wt_predictions = mhc_predictor.predict_peptides(valid_wt_peptides)
+            wt_df = topiary_predictor.predict_from_named_sequences(valid_wt_peptides)
+            # Index WT predictions by (peptide, allele)
+            for _, row in wt_df.iterrows():
+                key = (row["peptide"], row["allele"])
+                wt_predictions_grouped[key] = row
         except Exception:
             logger.error(
                 'MHC prediction for WT peptides errored, with traceback: %s',
                 traceback.format_exc())
 
-    # break it out: (peptide, allele) -> prediction
-    wt_predictions_grouped = {
-        (wt_prediction.peptide, wt_prediction.allele): wt_prediction
-        for wt_prediction in wt_predictions
-    }
-
-    # convert from mhctools.BindingPrediction objects to EpitopePrediction
-    # which differs primarily by also having a boolean field
-    # 'overlaps_mutation' that indicates whether the epitope overlaps
-    # mutant amino acids or both sides of a deletion
+    # Convert Topiary DataFrame rows to EpitopePrediction objects
     num_total = 0
     num_occurs_in_reference = 0
     num_low_scoring = 0
-    for binding_prediction in mhctools_binding_predictions:
+    for _, row in predictions_df.iterrows():
         num_total += 1
-        peptide = binding_prediction.peptide
-        peptide_length = binding_prediction.length
-        peptide_start_offset = binding_prediction.offset
+        peptide = row["peptide"]
+        peptide_length = row["peptide_length"]
+        peptide_start_offset = row["peptide_offset"]
         peptide_end_offset = peptide_start_offset + peptide_length
 
         overlaps_mutation = protein_fragment.interval_overlaps_mutation(
@@ -157,33 +161,44 @@ def predict_epitopes(
             logger.debug('Peptide %s occurs in reference', peptide)
             num_occurs_in_reference += 1
 
-        # compute WT epitope sequence, if this epitope overlaps the mutation
+        # IC50 value: use the "affinity" column if available, otherwise "value"
+        ic50 = row.get("affinity")
+        if ic50 is None or (isinstance(ic50, float) and np.isnan(ic50)):
+            ic50 = row["value"]
+
+        percentile_rank = row.get("percentile_rank")
+        if percentile_rank is not None and isinstance(percentile_rank, float) and np.isnan(percentile_rank):
+            percentile_rank = None
+
+        # Compute WT epitope sequence and binding
         if overlaps_mutation:
             wt_peptide = wt_peptides[peptide]
-            wt_prediction = wt_predictions_grouped.get(
-                (wt_peptide, binding_prediction.allele))
+            wt_row = wt_predictions_grouped.get(
+                (wt_peptide, row["allele"]))
             wt_ic50 = None
-            if wt_prediction is None:
-                # this can happen in a stop-loss variant: do we want to check that here?
-                if len(wt_peptide) < mhc_predictor.min_peptide_length:
+            if wt_row is None:
+                if len(wt_peptide) < min_peptide_length:
                     logger.info(
                         'No prediction for too-short WT epitope %s: possible stop-loss variant',
                         wt_peptide)
             else:
-                wt_ic50 = wt_prediction.value
-
+                wt_affinity = wt_row.get("affinity")
+                if wt_affinity is not None and not (isinstance(wt_affinity, float) and np.isnan(wt_affinity)):
+                    wt_ic50 = wt_affinity
+                else:
+                    wt_ic50 = wt_row["value"]
         else:
             wt_peptide = peptide
-            wt_ic50 = binding_prediction.value
+            wt_ic50 = ic50
 
         epitope_prediction = EpitopePrediction(
-            allele=binding_prediction.allele,
+            allele=row["allele"],
             peptide_sequence=peptide,
             wt_peptide_sequence=wt_peptide,
-            ic50=binding_prediction.value,
+            ic50=ic50,
             wt_ic50=wt_ic50,
-            percentile_rank=binding_prediction.percentile_rank,
-            prediction_method_name=binding_prediction.prediction_method_name,
+            percentile_rank=percentile_rank,
+            prediction_method_name=row.get("prediction_method_name", ""),
             overlaps_mutation=overlaps_mutation,
             source_sequence=protein_fragment.amino_acids,
             offset=peptide_start_offset,

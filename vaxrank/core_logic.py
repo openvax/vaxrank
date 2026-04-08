@@ -14,10 +14,13 @@
 import logging
 from typing import Optional
 
+from typing import Union
+
 from numpy import isclose
 
 from isovar import IsovarResult
 from mhctools.base_predictor import BasePredictor
+from topiary import TopiaryPredictor
 
 from .epitope_config import EpitopeConfig
 from .vaccine_config import VaccineConfig
@@ -31,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 def run_vaxrank(
     isovar_results: list[IsovarResult],
-    mhc_predictor: BasePredictor,
+    mhc_predictor: Union[BasePredictor, TopiaryPredictor],
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
     num_mutant_epitopes_to_keep: int = 1000,
@@ -85,7 +88,7 @@ def run_vaxrank(
 
 def create_vaccine_peptides_dict(
     isovar_results: list[IsovarResult],
-    mhc_predictor: BasePredictor,
+    mhc_predictor: Union[BasePredictor, TopiaryPredictor],
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
     num_mutant_epitopes_to_keep: int = 1000,
@@ -144,7 +147,7 @@ def create_vaccine_peptides_dict(
 
 def vaccine_peptides_for_variant(
     isovar_result: IsovarResult,
-    mhc_predictor: BasePredictor,
+    mhc_predictor: Union[BasePredictor, TopiaryPredictor],
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
     num_mutant_epitopes_to_keep: int = 1000,

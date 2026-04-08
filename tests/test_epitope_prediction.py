@@ -82,7 +82,10 @@ def test_mhc_predictor_error():
 
     # throws an error for each prediction, make sure vaxrank doesn't fall down
     class FakeMHCPredictor:
+        default_peptide_lengths = [9]
         def predict_subsequences(self, x):
+            raise ValueError('I throw an error in your general direction')
+        def predict_proteins_dataframe(self, x):
             raise ValueError('I throw an error in your general direction')
 
     epitope_predictions = predict_epitopes(
