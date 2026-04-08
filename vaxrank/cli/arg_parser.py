@@ -42,6 +42,7 @@ def make_vaxrank_arg_parser():
         "--config",
         default=None,
         help="Path to YAML file with options related to epitope prediction and vaccine design.")
+    add_config_override_args(arg_parser)
 
     arg_parser.add_argument(
         "--ensembl-release",
@@ -275,7 +276,33 @@ def external_input_arg_parser():
     add_epitope_prediction_args(arg_parser)
     # config arg needed for epitope_config_from_args
     arg_parser.add_argument("--config", default=None)
+    add_config_override_args(arg_parser)
     return arg_parser
+
+
+def add_config_override_args(arg_parser):
+    arg_parser.add_argument(
+        "--set",
+        dest="config_set_overrides",
+        action="append",
+        default=None,
+        metavar="PATH=VALUE",
+        help=(
+            "Override a config value using dotted.path=value. VALUE is parsed as "
+            "YAML, so numbers, booleans, null, lists, and maps are supported."
+        ),
+    )
+    arg_parser.add_argument(
+        "--expr",
+        dest="config_expr_overrides",
+        action="append",
+        default=None,
+        metavar="PATH=EXPR",
+        help=(
+            "Override an expression-valued config field using dotted.path=expression. "
+            "The expression is stored as a raw string."
+        ),
+    )
 
 
 def choose_arg_parser(args_list):

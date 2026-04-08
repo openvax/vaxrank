@@ -391,6 +391,7 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
             width=epitope_config.logistic_epitope_score_width,
             ic50_cutoff=epitope_config.binding_affinity_cutoff,
             scoring_mode=epitope_config.scoring_mode,
+            percentile_rank_cutoff=epitope_config.percentile_rank_cutoff,
         ))
     report_df = report_df.copy()
     report_df.insert(2, 'vaxrank_score', [round(s, 6) for s in scores])

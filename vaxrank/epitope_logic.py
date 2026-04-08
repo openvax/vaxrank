@@ -207,7 +207,8 @@ def predict_epitopes(
             midpoint=epitope_config.logistic_epitope_score_midpoint,
             width=epitope_config.logistic_epitope_score_width,
             ic50_cutoff=epitope_config.binding_affinity_cutoff,
-            scoring_mode=epitope_config.scoring_mode)
+            scoring_mode=epitope_config.scoring_mode,
+            percentile_rank_cutoff=epitope_config.percentile_rank_cutoff)
 
         if epitope_score >= epitope_config.min_epitope_score:
             key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)

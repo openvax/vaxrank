@@ -36,13 +36,13 @@ Lower IC50 values indicate stronger binding and result in higher scores.
 
 import msgspec
 
-# Default minimum epitope score threshold
-# Epitopes with scores below this are filtered out
-DEFAULT_MIN_EPITOPE_SCORE = 0.00001
-
-# Default maximum IC50 value to consider
-# Epitopes with IC50 above this are considered non-binders
-DEFAULT_BINDING_AFFINITY_CUTOFF = 5000.0
+from .config.defaults import (
+    DEFAULT_BINDING_AFFINITY_CUTOFF,
+    DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT,
+    DEFAULT_LOGISTIC_EPITOPE_SCORE_WIDTH,
+    DEFAULT_MIN_EPITOPE_SCORE,
+    DEFAULT_PERCENTILE_RANK_CUTOFF,
+)
 
 
 class EpitopeConfig(msgspec.Struct, frozen=True):
@@ -73,10 +73,15 @@ class EpitopeConfig(msgspec.Struct, frozen=True):
         - "affinity": Use IC50 binding affinity with logistic scoring (default)
         - "percentile_rank": Use percentile rank directly (lower = better,
           inverted to produce higher scores for better binders)
+
+    percentile_rank_cutoff : float
+        The percentile rank at or above which an epitope is treated as a
+        non-binder in percentile-rank scoring mode.
     """
 
-    logistic_epitope_score_midpoint: float = 350.0
-    logistic_epitope_score_width: float = 150.0
+    logistic_epitope_score_midpoint: float = DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT
+    logistic_epitope_score_width: float = DEFAULT_LOGISTIC_EPITOPE_SCORE_WIDTH
     min_epitope_score: float = DEFAULT_MIN_EPITOPE_SCORE
     binding_affinity_cutoff: float = DEFAULT_BINDING_AFFINITY_CUTOFF
     scoring_mode: str = "affinity"
+    percentile_rank_cutoff: float = DEFAULT_PERCENTILE_RANK_CUTOFF

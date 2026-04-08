@@ -27,6 +27,14 @@ The vaccine peptide selection considers:
 
 import msgspec
 
+from .config.defaults import (
+    DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT,
+    DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP,
+    DEFAULT_PADDING_AROUND_MUTATION,
+    DEFAULT_VACCINE_PEPTIDE_LENGTH,
+    DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST,
+)
+
 
 class VaccineConfig(msgspec.Struct, frozen=True):
     """
@@ -63,6 +71,11 @@ class VaccineConfig(msgspec.Struct, frozen=True):
         keep all predicted mutant epitopes.
         Default: 1000
 
+    score_fraction_of_best : float
+        Keep vaccine peptide candidates whose score is at least this fraction
+        of the best candidate for the variant before lexicographic tie-breaking.
+        Default: 0.99
+
     Examples
     --------
     >>> config = VaccineConfig()
@@ -78,7 +91,8 @@ class VaccineConfig(msgspec.Struct, frozen=True):
     3
     """
 
-    vaccine_peptide_length: int = 25
-    padding_around_mutation: int = 5
-    max_vaccine_peptides_per_variant: int = 1
-    num_mutant_epitopes_to_keep: int = 1000
+    vaccine_peptide_length: int = DEFAULT_VACCINE_PEPTIDE_LENGTH
+    padding_around_mutation: int = DEFAULT_PADDING_AROUND_MUTATION
+    max_vaccine_peptides_per_variant: int = DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT
+    num_mutant_epitopes_to_keep: int = DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP
+    score_fraction_of_best: float = DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST

@@ -14,6 +14,7 @@ import argparse
 
 import msgspec
 
+from ..config.loader import extract_vaccine_config_kwargs, load_merged_vaxrank_config
 from ..vaccine_config import VaccineConfig
 
 
@@ -70,15 +71,8 @@ def vaccine_config_from_args(args : argparse.Namespace) -> VaccineConfig:
     """
     Extract config path and overrides from argument namespace
     """
-    vaccine_config_kwargs = {}
-    if args.config:
-        with open(args.config) as f:
-            content = f.read()
-            if content.strip():  # Only decode if file is not empty
-                yaml_config = msgspec.yaml.decode(content, type=dict)
-                # Extract vaccine-related config if present
-                if yaml_config and "vaccine_config" in yaml_config:
-                    vaccine_config_kwargs.update(yaml_config["vaccine_config"])
+    merged_config = load_merged_vaxrank_config(args)
+    vaccine_config_kwargs = extract_vaccine_config_kwargs(merged_config)
 
     if args.vaccine_peptide_length is not None:
         vaccine_config_kwargs["vaccine_peptide_length"] = args.vaccine_peptide_length

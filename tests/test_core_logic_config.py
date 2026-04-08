@@ -16,6 +16,7 @@ Tests for core_logic.py integration with config objects.
 
 from inspect import signature
 from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
 
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.vaccine_config import VaccineConfig
@@ -212,6 +213,66 @@ def test_config_integration_vaccine_config_affects_peptide_generation():
     config_long = VaccineConfig(vaccine_peptide_length=35)
 
     gt_(config_long.vaccine_peptide_length, config_short.vaccine_peptide_length)
+
+
+def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
+    class DummyCandidateFragment:
+        def __init__(self, amino_acids):
+            self.amino_acids = amino_acids
+
+        def __len__(self):
+            return len(self.amino_acids)
+
+    class DummyLongFragment:
+        def sorted_subsequences(self, subsequence_length):
+            return [
+                (0, DummyCandidateFragment("AAAA")),
+                (1, DummyCandidateFragment("BBBB")),
+            ]
+
+    class FakeVaccinePeptide:
+        def __init__(
+            self,
+            mutant_protein_fragment,
+            epitope_predictions,
+            num_mutant_epitopes_to_keep=None,
+            epitope_score_params=None,
+        ):
+            self.mutant_protein_fragment = mutant_protein_fragment
+            self.combined_score = 10.0 if mutant_protein_fragment.amino_acids == "AAAA" else 8.5
+
+        @staticmethod
+        def lexicographic_sort_key(obj):
+            return (-obj.combined_score,)
+
+    def fake_slice_predictions(epitope_predictions, start_offset, end_offset):
+        amino_acids = "AAAA" if start_offset == 0 else "BBBB"
+        return [SimpleNamespace(source_sequence=amino_acids)]
+
+    mock_variant = MagicMock()
+    mock_variant.short_description = "test_variant"
+
+    with patch("vaxrank.core_logic.VaccinePeptide", FakeVaccinePeptide), patch(
+        "vaxrank.core_logic.slice_epitope_predictions",
+        side_effect=fake_slice_predictions,
+    ):
+        default_result = vaccine_peptides_from_epitopes(
+            variant=mock_variant,
+            long_protein_fragment=DummyLongFragment(),
+            epitope_predictions=[MagicMock()],
+        )
+        relaxed_result = vaccine_peptides_from_epitopes(
+            variant=mock_variant,
+            long_protein_fragment=DummyLongFragment(),
+            epitope_predictions=[MagicMock()],
+            vaccine_config=VaccineConfig(
+                score_fraction_of_best=0.8,
+                max_vaccine_peptides_per_variant=2,
+            ),
+        )
+
+    eq_(len(default_result), 1)
+    eq_(len(relaxed_result), 2)
 
 
 def test_config_integration_epitope_config_affects_vaccine_peptide_scoring():

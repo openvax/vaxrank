@@ -13,6 +13,13 @@
 import numpy as np
 from serializable import Serializable
 
+from .config.defaults import (
+    DEFAULT_BINDING_AFFINITY_CUTOFF,
+    DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT,
+    DEFAULT_LOGISTIC_EPITOPE_SCORE_WIDTH,
+    DEFAULT_PERCENTILE_RANK_CUTOFF,
+)
+
 
 class EpitopePrediction(Serializable):
     # TODO: 
@@ -78,10 +85,11 @@ class EpitopePrediction(Serializable):
 
     def logistic_epitope_score(
             self,
-            midpoint=350.0,
-            width=150.0,
-            ic50_cutoff=5000.0,
-            scoring_mode="affinity"):
+            midpoint=DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT,
+            width=DEFAULT_LOGISTIC_EPITOPE_SCORE_WIDTH,
+            ic50_cutoff=DEFAULT_BINDING_AFFINITY_CUTOFF,
+            scoring_mode="affinity",
+            percentile_rank_cutoff=DEFAULT_PERCENTILE_RANK_CUTOFF):
         """
         Map from binding predictions to score where 1.0 = strong binder,
         0.0 = weak binder.
@@ -99,9 +107,9 @@ class EpitopePrediction(Serializable):
             # Convert to score: 0..1 where 1 = best
             # Epitopes with rank > 10% are considered weak
             rank = float(self.percentile_rank)
-            if rank >= 10.0:
+            if rank >= percentile_rank_cutoff:
                 return 0.0
-            return max(0.0, 1.0 - rank / 10.0)
+            return max(0.0, 1.0 - rank / percentile_rank_cutoff)
 
         # Default: affinity-based logistic scoring
         if self.ic50 >= ic50_cutoff:

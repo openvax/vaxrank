@@ -14,6 +14,7 @@ import argparse
 
 import msgspec
 
+from ..config.loader import extract_epitope_config_kwargs, load_merged_vaxrank_config
 from ..epitope_config import EpitopeConfig
 
 
@@ -39,15 +40,8 @@ def epitope_config_from_args(args : argparse.Namespace) -> EpitopeConfig:
     """
     Extract config path and overrides from argument namespace
     """
-    epitope_config_kwargs = {}
-    if args.config:
-        with open(args.config) as f:
-            content = f.read()
-            if content.strip():  # Only decode if file is not empty
-                yaml_config = msgspec.yaml.decode(content, type=dict)
-                # Extract epitope-related config if present
-                if yaml_config and "epitope_config" in yaml_config:
-                    epitope_config_kwargs.update(yaml_config["epitope_config"])
+    merged_config = load_merged_vaxrank_config(args)
+    epitope_config_kwargs = extract_epitope_config_kwargs(merged_config)
 
     if args.min_epitope_score is not None:
         epitope_config_kwargs["min_epitope_score"] = args.min_epitope_score

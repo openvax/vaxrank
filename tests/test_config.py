@@ -27,7 +27,13 @@ from vaxrank.epitope_config import (
     DEFAULT_MIN_EPITOPE_SCORE,
     DEFAULT_BINDING_AFFINITY_CUTOFF,
 )
+from vaxrank.config.defaults import (
+    DEFAULT_PERCENTILE_RANK_CUTOFF,
+    DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST,
+)
+from vaxrank.config.loader import load_merged_vaxrank_config
 from vaxrank.vaccine_config import VaccineConfig
+from vaxrank.cli.arg_parser import add_config_override_args
 from vaxrank.cli.epitope_config_args import (
     epitope_config_from_args,
     add_epitope_prediction_args,
@@ -51,6 +57,7 @@ def test_epitope_config_default_values():
     eq_(config.logistic_epitope_score_width, 150.0)
     eq_(config.min_epitope_score, DEFAULT_MIN_EPITOPE_SCORE)
     eq_(config.binding_affinity_cutoff, DEFAULT_BINDING_AFFINITY_CUTOFF)
+    eq_(config.percentile_rank_cutoff, DEFAULT_PERCENTILE_RANK_CUTOFF)
 
 
 def test_epitope_config_custom_values():
@@ -60,11 +67,13 @@ def test_epitope_config_custom_values():
         logistic_epitope_score_width=200.0,
         min_epitope_score=0.01,
         binding_affinity_cutoff=1000.0,
+        percentile_rank_cutoff=5.0,
     )
     eq_(config.logistic_epitope_score_midpoint, 400.0)
     eq_(config.logistic_epitope_score_width, 200.0)
     eq_(config.min_epitope_score, 0.01)
     eq_(config.binding_affinity_cutoff, 1000.0)
+    eq_(config.percentile_rank_cutoff, 5.0)
 
 
 def test_epitope_config_partial_custom_values():
@@ -141,6 +150,7 @@ def test_vaccine_config_default_values():
     eq_(config.padding_around_mutation, 5)
     eq_(config.max_vaccine_peptides_per_variant, 1)
     eq_(config.num_mutant_epitopes_to_keep, 1000)
+    eq_(config.score_fraction_of_best, DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST)
 
 
 def test_vaccine_config_custom_values():
@@ -150,11 +160,13 @@ def test_vaccine_config_custom_values():
         padding_around_mutation=10,
         max_vaccine_peptides_per_variant=3,
         num_mutant_epitopes_to_keep=500,
+        score_fraction_of_best=0.95,
     )
     eq_(config.vaccine_peptide_length, 30)
     eq_(config.padding_around_mutation, 10)
     eq_(config.max_vaccine_peptides_per_variant, 3)
     eq_(config.num_mutant_epitopes_to_keep, 500)
+    eq_(config.score_fraction_of_best, 0.95)
 
 
 def test_vaccine_config_partial_custom_values():
@@ -309,6 +321,45 @@ def test_epitope_config_from_args_empty_yaml_file():
         os.unlink(config_path)
 
 
+def test_epitope_config_from_args_schema_v2_yaml_config_file():
+    yaml_content = """
+schema_version: 2
+epitopes:
+  filters:
+    min_score: 0.02
+  scoring:
+    mode: percentile_rank
+    derived_fields:
+      affinity_score:
+        midpoint: 410.0
+        width: 110.0
+        cutoff: 1200.0
+      percentile_score:
+        worst: 7.5
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        args = argparse.Namespace(
+            config=config_path,
+            min_epitope_score=None,
+            scoring_mode=None,
+            config_set_overrides=None,
+            config_expr_overrides=None,
+        )
+        config = epitope_config_from_args(args)
+        eq_(config.min_epitope_score, 0.02)
+        eq_(config.scoring_mode, "percentile_rank")
+        eq_(config.logistic_epitope_score_midpoint, 410.0)
+        eq_(config.logistic_epitope_score_width, 110.0)
+        eq_(config.binding_affinity_cutoff, 1200.0)
+        eq_(config.percentile_rank_cutoff, 7.5)
+    finally:
+        os.unlink(config_path)
+
+
 # =============================================================================
 # vaccine_config_from_args Tests
 # =============================================================================
@@ -451,6 +502,69 @@ epitope_config:
         os.unlink(config_path)
 
 
+def test_vaccine_config_from_args_schema_v2_yaml_config_file():
+    yaml_content = """
+schema_version: 2
+vaccine_peptides:
+  generation:
+    lengths: [31]
+    padding_around_mutation: 9
+  keep:
+    per_mutation: 2
+    max_epitopes_per_candidate: 42
+    score_fraction_of_best: 0.95
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        args = argparse.Namespace(
+            config=config_path,
+            vaccine_peptide_length=None,
+            padding_around_mutation=None,
+            max_vaccine_peptides_per_variant=None,
+            num_epitopes_per_vaccine_peptide=None,
+            config_set_overrides=None,
+            config_expr_overrides=None,
+        )
+        config = vaccine_config_from_args(args)
+        eq_(config.vaccine_peptide_length, 31)
+        eq_(config.padding_around_mutation, 9)
+        eq_(config.max_vaccine_peptides_per_variant, 2)
+        eq_(config.num_mutant_epitopes_to_keep, 42)
+        eq_(config.score_fraction_of_best, 0.95)
+    finally:
+        os.unlink(config_path)
+
+
+def test_vaccine_config_from_args_schema_v2_multiple_lengths_not_supported():
+    yaml_content = """
+schema_version: 2
+vaccine_peptides:
+  generation:
+    lengths: [25, 31]
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        args = argparse.Namespace(
+            config=config_path,
+            vaccine_peptide_length=None,
+            padding_around_mutation=None,
+            max_vaccine_peptides_per_variant=None,
+            num_epitopes_per_vaccine_peptide=None,
+            config_set_overrides=None,
+            config_expr_overrides=None,
+        )
+        with pytest.raises(ValueError):
+            vaccine_config_from_args(args)
+    finally:
+        os.unlink(config_path)
+
+
 # =============================================================================
 # Combined Config Tests
 # =============================================================================
@@ -555,6 +669,20 @@ def test_cli_add_vaccine_peptide_args():
     eq_(args.max_vaccine_peptides_per_variant, 5)
 
 
+def test_cli_add_config_override_args():
+    parser = argparse.ArgumentParser()
+    add_config_override_args(parser)
+
+    args = parser.parse_args(
+        [
+            "--set", "epitope_config.min_epitope_score=0.05",
+            "--expr", "vaccine_peptides.ranking.score=sqrt(n_alt_reads)",
+        ]
+    )
+    eq_(args.config_set_overrides, ["epitope_config.min_epitope_score=0.05"])
+    eq_(args.config_expr_overrides, ["vaccine_peptides.ranking.score=sqrt(n_alt_reads)"])
+
+
 def test_cli_add_vaccine_peptide_args_legacy_mutation_alias():
     """Legacy mutation flag maps to variant destination for compatibility."""
     parser = argparse.ArgumentParser()
@@ -646,3 +774,32 @@ epitope_config:
             epitope_config_from_args(args)
     finally:
         os.unlink(config_path)
+
+
+def test_load_merged_vaxrank_config_set_override():
+    args = argparse.Namespace(
+        config=None,
+        config_set_overrides=[
+            "epitopes.scoring.derived_fields.affinity_score.midpoint=425.0",
+            "vaccine_peptides.generation.lengths=[31]",
+        ],
+        config_expr_overrides=None,
+    )
+    config = load_merged_vaxrank_config(args)
+    eq_(config["epitopes"]["scoring"]["derived_fields"]["affinity_score"]["midpoint"], 425.0)
+    eq_(config["vaccine_peptides"]["generation"]["lengths"], [31])
+
+
+def test_load_merged_vaxrank_config_expr_override():
+    args = argparse.Namespace(
+        config=None,
+        config_set_overrides=None,
+        config_expr_overrides=[
+            "vaccine_peptides.ranking.score=sqrt(n_alt_reads) * mutant_epitope_score"
+        ],
+    )
+    config = load_merged_vaxrank_config(args)
+    eq_(
+        config["vaccine_peptides"]["ranking"]["score"],
+        "sqrt(n_alt_reads) * mutant_epitope_score",
+    )
