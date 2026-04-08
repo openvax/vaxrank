@@ -25,6 +25,14 @@ def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
         help=(
             "Ignore predicted MHC ligands whose normalized binding score "
             "falls below this threshold."))
+    epitope_prediction_args.add_argument(
+        "--scoring-mode",
+        choices=["affinity", "percentile_rank"],
+        default=None,
+        help=(
+            "How to score epitopes. 'affinity' (default) uses IC50 binding "
+            "affinity with logistic scoring. 'percentile_rank' uses the "
+            "percentile rank directly (lower rank = better)."))
     
 
 def epitope_config_from_args(args : argparse.Namespace) -> EpitopeConfig:
@@ -43,5 +51,7 @@ def epitope_config_from_args(args : argparse.Namespace) -> EpitopeConfig:
 
     if args.min_epitope_score is not None:
         epitope_config_kwargs["min_epitope_score"] = args.min_epitope_score
+    if getattr(args, 'scoring_mode', None) is not None:
+        epitope_config_kwargs["scoring_mode"] = args.scoring_mode
     epitope_config = msgspec.convert(epitope_config_kwargs, EpitopeConfig)
     return epitope_config

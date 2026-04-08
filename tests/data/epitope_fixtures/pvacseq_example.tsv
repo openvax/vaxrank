@@ -1,0 +1,4 @@
+ID	Index	A*02:01	B*07:02	Gene	AA Change	Num Passing Transcripts	Best Peptide	Best Transcript	MANE Select	Canonical	TSL	Allele	Pos	Prob Pos	Num Included Peptides	Num Passing Peptides	IC50 MT	IC50 WT	%ile MT	%ile WT	RNA Expr	RNA VAF	Allele Expr	RNA Depth	DNA VAF	Tier	Ref Match	Evaluation
+chr1-100000-100001-A-T	1.TP53.ENST00000269305.missense.245G/S	5		TP53	G245S	1	SVVGSSSSS	ENST00000269305	True	True	1	HLA-A*02:01	5	None	8	5	76.11	4520.30	0.5	12.3	45.2	0.34	15.4	200	0.45	Pass	False	Pending
+chr2-200000-200001-G-C	2.BRAF.ENST00000288602.missense.600V/E	3	2	BRAF	V600E	1	LATEKSRWS	ENST00000288602	True	True	1	HLA-B*07:02	4	None	6	3	120.50	8901.20	0.3	15.1	92.1	0.51	47.0	350	0.38	Pass	False	Pending
+chr3-300000-300001-C-T	3.KRAS.ENST00000311936.missense.12G/D	1		KRAS	G12D	1	VVVGADGVG	ENST00000311936	True	True	1	HLA-A*02:01	4	None	4	2	250.00	6500.00	1.2	18.5	35.0	0.28	9.8	150	0.30	Pass	True	Pending

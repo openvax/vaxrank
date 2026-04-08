@@ -58,6 +58,14 @@ def make_vaxrank_arg_parser():
         help="Print debug-level log messages to the console (by default only "
              "INFO and above are printed; DEBUG is always written to the log file).")
 
+    arg_parser.add_argument(
+        "--input-epitopes",
+        default=None,
+        help="Path to a file of pre-computed epitope predictions (CSV or TSV). "
+             "Supported formats: vaxrank native, pVACseq aggregated, or LENS report. "
+             "Format is auto-detected from column headers. When provided, vaxrank "
+             "skips internal MHC prediction and uses these predictions for ranking.")
+
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
     add_epitope_prediction_args(arg_parser)
@@ -182,6 +190,12 @@ def add_output_args(arg_parser):
              "variant caller filters")
 
     output_args_group.add_argument(
+        "--output-epitopes",
+        default="",
+        help="Path to save epitope predictions as a TSV/CSV file (format inferred "
+             "from extension). This file can later be loaded with --input-epitopes.")
+
+    output_args_group.add_argument(
         "--output-isovar-csv",
         default="",
         help="Path to CSV file containing raw RNA counts and filtering metadata "
@@ -220,7 +234,8 @@ def check_args(args):
             args.output_xlsx_report or
             args.output_neoepitope_report or
             args.output_passing_variants_csv or
-            args.output_isovar_csv):
+            args.output_isovar_csv or
+            args.output_epitopes):
         raise ValueError(
             "Must specify at least one of: --output-csv, "
             "--output-xlsx-report, "
@@ -230,7 +245,8 @@ def check_args(args):
             "--output-neoepitope-report, "
             "--output-json-file, "
             "--output-passing-variants-csv, "
-            "--output-isovar-csv")
+            "--output-isovar-csv, "
+            "--output-epitopes")
 
 
 def choose_arg_parser(args_list):

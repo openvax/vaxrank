@@ -42,6 +42,7 @@ from .epitope_config_args import epitope_config_from_args
 from .vaccine_config_args import vaccine_config_from_args
 
 from ..core_logic import run_vaxrank
+from ..epitope_io import load_epitopes, save_predictions
 from ..gene_pathway_check import GenePathwayCheck
 from ..report import (
     make_ascii_report,
@@ -98,6 +99,71 @@ def _filter_unannotatable_variants(variants):
     return variants
 
 
+def _rank_external_epitopes(args, input_epitopes_path):
+    """
+    Standalone mode: load external epitope predictions (pVACseq, LENS, or
+    vaxrank format), score them with vaxrank's logistic scoring, and output
+    a ranked CSV/TSV.
+
+    This mode does NOT require --vcf, --bam, or MHC predictor args.
+    """
+    from ..epitope_config import EpitopeConfig
+    from .epitope_config_args import epitope_config_from_args
+
+    predictions = load_epitopes(input_epitopes_path)
+    if not predictions:
+        logger.warning("No epitope predictions loaded from %s", input_epitopes_path)
+        return
+
+    try:
+        epitope_config = epitope_config_from_args(args)
+    except Exception:
+        epitope_config = EpitopeConfig()
+
+    # Score and rank
+    scored = []
+    for p in predictions:
+        score = p.logistic_epitope_score(
+            midpoint=epitope_config.logistic_epitope_score_midpoint,
+            width=epitope_config.logistic_epitope_score_width,
+            ic50_cutoff=epitope_config.binding_affinity_cutoff,
+        )
+        scored.append((score, p))
+    scored.sort(key=lambda x: -x[0])
+
+    # Build output DataFrame
+    rows = []
+    for rank, (score, p) in enumerate(scored, 1):
+        rows.append({
+            "rank": rank,
+            "peptide_sequence": p.peptide_sequence,
+            "allele": p.allele,
+            "ic50": p.ic50,
+            "wt_ic50": p.wt_ic50,
+            "wt_peptide_sequence": p.wt_peptide_sequence,
+            "percentile_rank": p.percentile_rank,
+            "vaxrank_score": round(score, 6),
+            "overlaps_mutation": p.overlaps_mutation,
+            "occurs_in_reference": p.occurs_in_reference,
+            "prediction_method_name": p.prediction_method_name,
+        })
+    df = pd.DataFrame(rows)
+
+    logger.info("Scored %d epitope predictions from %s", len(df), input_epitopes_path)
+
+    # Write to requested outputs
+    if getattr(args, 'output_csv', ''):
+        df.to_csv(args.output_csv, index=False)
+        logger.info("Wrote ranked epitopes to %s", args.output_csv)
+
+    if getattr(args, 'output_epitopes', ''):
+        save_predictions([p for _, p in scored], args.output_epitopes)
+
+    # Print summary to stdout if no file output was requested
+    if not (getattr(args, 'output_csv', '') or getattr(args, 'output_epitopes', '')):
+        print(df.to_string(index=False))
+
+
 def configure_logging(args):
     logging.config.fileConfig(
         str(files('vaxrank').joinpath('logging.conf')),
@@ -139,6 +205,14 @@ def main(args_list=None):
     configure_logging(args)
     _resolve_ensembl_release(args)
     logger.info(args)
+
+    # When --input-epitopes is provided without VCF/BAM, run in standalone
+    # ranking mode: load external predictions, score, and output.
+    input_epitopes = getattr(args, 'input_epitopes', None)
+    if input_epitopes and not (args.vcf or args.maf or args.variant or args.json_variants):
+        _rank_external_epitopes(args, input_epitopes)
+        return
+
     check_args(args)
 
     data = ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
@@ -236,7 +310,7 @@ def run_vaxrank_from_parsed_args(args):
         df = isovar_results_to_dataframe(isovar_results)
         df.to_csv(args.output_isovar_csv, index=False)
 
-    return run_vaxrank(
+    vaxrank_results = run_vaxrank(
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
@@ -244,6 +318,16 @@ def run_vaxrank_from_parsed_args(args):
         num_mutant_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
         epitope_config=epitope_config,
         vaccine_config=vaccine_config)
+
+    if getattr(args, 'output_epitopes', ''):
+        # Collect all epitope predictions across all variants
+        all_predictions = []
+        for _variant, peptides in vaxrank_results.ranked_vaccine_peptides:
+            for vp in peptides:
+                all_predictions.extend(vp.mutant_epitope_predictions)
+        save_predictions(all_predictions, args.output_epitopes)
+
+    return vaxrank_results
 
 def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     """
