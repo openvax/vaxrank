@@ -3,73 +3,19 @@ from typing import Optional, Union
 import msgspec
 
 
-class AffinityScoreConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    midpoint: Optional[float] = None
-    width: Optional[float] = None
-    cutoff: Optional[float] = None
-
-
-class PercentileScoreConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    worst: Optional[float] = None
-
-
-class DerivedFieldsConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    affinity_score: Optional[AffinityScoreConfigSchema] = None
-    percentile_score: Optional[PercentileScoreConfigSchema] = None
-
-
-class EpitopesFiltersConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    min_score: Optional[float] = None
-
-
-class EpitopesScoringConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    mode: Optional[str] = None
-    derived_fields: Optional[DerivedFieldsConfigSchema] = None
-
-
-class EpitopesKeepConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    top_n_per_candidate: Optional[int] = None
-
-
 class EpitopesConfigSchema(
     msgspec.Struct,
     frozen=True,
     kw_only=True,
     forbid_unknown_fields=True,
 ):
-    filters: Optional[EpitopesFiltersConfigSchema] = None
-    scoring: Optional[EpitopesScoringConfigSchema] = None
-    keep: Optional[EpitopesKeepConfigSchema] = None
+    min_score: Optional[float] = None
+    scoring_mode: Optional[str] = None
+    logistic_midpoint: Optional[float] = None
+    logistic_width: Optional[float] = None
+    affinity_cutoff: Optional[float] = None
+    percentile_rank_cutoff: Optional[float] = None
+    top_epitopes_per_candidate: Optional[int] = None
 
 
 class VaccinePeptideGenerationConfigSchema(

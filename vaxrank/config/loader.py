@@ -149,12 +149,12 @@ _MISSING = object()
 
 # Declarative mapping: (dotted config path) -> (EpitopeConfig kwarg name)
 _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
-    ("epitopes.filters.min_score", "min_epitope_score"),
-    ("epitopes.scoring.mode", "scoring_mode"),
-    ("epitopes.scoring.derived_fields.affinity_score.midpoint", "logistic_epitope_score_midpoint"),
-    ("epitopes.scoring.derived_fields.affinity_score.width", "logistic_epitope_score_width"),
-    ("epitopes.scoring.derived_fields.affinity_score.cutoff", "binding_affinity_cutoff"),
-    ("epitopes.scoring.derived_fields.percentile_score.worst", "percentile_rank_cutoff"),
+    ("epitopes.min_score", "min_epitope_score"),
+    ("epitopes.scoring_mode", "scoring_mode"),
+    ("epitopes.logistic_midpoint", "logistic_epitope_score_midpoint"),
+    ("epitopes.logistic_width", "logistic_epitope_score_width"),
+    ("epitopes.affinity_cutoff", "binding_affinity_cutoff"),
+    ("epitopes.percentile_rank_cutoff", "percentile_rank_cutoff"),
 ]
 
 # Declarative mapping: (dotted config path) -> (VaccineConfig kwarg name)
@@ -220,12 +220,12 @@ def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
         config, "vaccine_peptides.keep.max_epitopes_per_candidate"
     )
     from_epitopes = _resolve_dotted(
-        config, "epitopes.keep.top_n_per_candidate"
+        config, "epitopes.top_epitopes_per_candidate"
     )
     if from_vaccine is not _MISSING and from_epitopes is not _MISSING:
         raise ValueError(
             "Cannot set both vaccine_peptides.keep.max_epitopes_per_candidate "
-            "and epitopes.keep.top_n_per_candidate. Use one or the other."
+            "and epitopes.top_epitopes_per_candidate. Use one or the other."
         )
     if from_vaccine is not _MISSING:
         kwargs["num_mutant_epitopes_to_keep"] = from_vaccine

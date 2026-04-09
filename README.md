@@ -38,17 +38,13 @@ Example `my_config.yaml`:
 
 ```yaml
 epitopes:
-  filters:
-    min_score: 0.00001                      # drop epitopes below this score
-  scoring:
-    mode: affinity                          # "affinity" or "percentile_rank"
-    derived_fields:
-      affinity_score:
-        midpoint: 350.0                     # IC50 (nM) at which score = 0.5
-        width: 150.0                        # steepness of logistic curve
-        cutoff: 5000.0                      # IC50 >= this → score 0
-      percentile_score:
-        worst: 10.0                         # rank >= this → score 0 (percentile mode)
+  min_score: 0.00001                        # drop epitopes below this score
+  scoring_mode: affinity                    # "affinity" or "percentile_rank"
+  logistic_midpoint: 350.0                  # IC50 (nM) at which score = 0.5
+  logistic_width: 150.0                     # steepness of logistic curve
+  affinity_cutoff: 5000.0                   # IC50 >= this → score 0
+  percentile_rank_cutoff: 10.0              # rank >= this → score 0 (percentile mode)
+  top_epitopes_per_candidate: 1000          # 0 = keep all
 
 vaccine_peptides:
   generation:
@@ -71,7 +67,7 @@ CLI arguments override values from the config file.  You can also use
 ```sh
 vaxrank --config my_config.yaml \
   --config-value vaccine_peptides.keep.score_fraction_of_best=0.95 \
-  --config-value epitopes.scoring.derived_fields.percentile_score.worst=5.0
+  --config-value epitopes.percentile_rank_cutoff=5.0
 ```
 
 Use `--config-text` when the right-hand side should be kept as a raw

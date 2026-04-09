@@ -249,13 +249,9 @@ def test_epitope_config_from_args_yaml_config_file():
     """Test loading config from YAML file"""
     yaml_content = """
 epitopes:
-  filters:
-    min_score: 0.01
-  scoring:
-    derived_fields:
-      affinity_score:
-        midpoint: 400.0
-        cutoff: 1000.0
+  min_score: 0.01
+  logistic_midpoint: 400.0
+  affinity_cutoff: 1000.0
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -275,12 +271,8 @@ def test_epitope_config_from_args_cli_overrides_yaml():
     """Test that CLI arguments override YAML config values"""
     yaml_content = """
 epitopes:
-  filters:
-    min_score: 0.01
-  scoring:
-    derived_fields:
-      affinity_score:
-        midpoint: 400.0
+  min_score: 0.01
+  logistic_midpoint: 400.0
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -333,17 +325,12 @@ def test_epitope_config_from_args_empty_yaml_file():
 def test_epitope_config_from_args_nested_yaml_config_file():
     yaml_content = """
 epitopes:
-  filters:
-    min_score: 0.02
-  scoring:
-    mode: percentile_rank
-    derived_fields:
-      affinity_score:
-        midpoint: 410.0
-        width: 110.0
-        cutoff: 1200.0
-      percentile_score:
-        worst: 7.5
+  min_score: 0.02
+  scoring_mode: percentile_rank
+  logistic_midpoint: 410.0
+  logistic_width: 110.0
+  affinity_cutoff: 1200.0
+  percentile_rank_cutoff: 7.5
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -494,8 +481,7 @@ def test_vaccine_config_from_args_yaml_without_vaccine_peptides_section():
     """Test YAML file without vaccine_peptides section uses defaults"""
     yaml_content = """
 epitopes:
-  filters:
-    min_score: 0.01
+  min_score: 0.01
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -641,12 +627,8 @@ def test_combined_config_both_configs_from_single_yaml():
     """Test loading both epitope and vaccine configs from one YAML file"""
     yaml_content = """
 epitopes:
-  filters:
-    min_score: 0.02
-  scoring:
-    derived_fields:
-      affinity_score:
-        midpoint: 400.0
+  min_score: 0.02
+  logistic_midpoint: 400.0
 
 vaccine_peptides:
   generation:
@@ -684,8 +666,7 @@ def test_combined_config_mixed_cli_and_yaml_overrides():
     """Test mixing CLI and YAML overrides for both configs"""
     yaml_content = """
 epitopes:
-  filters:
-    min_score: 0.01
+  min_score: 0.01
 
 vaccine_peptides:
   generation:
@@ -764,19 +745,19 @@ def test_load_vaxrank_config_preserves_mixed_override_order():
     add_config_override_args(parser)
 
     args_expr_then_set = parser.parse_args([
-        "--config-text", "epitopes.scoring.mode=percentile_rank",
-        "--config-value", "epitopes.scoring.mode=affinity",
+        "--config-text", "epitopes.scoring_mode=percentile_rank",
+        "--config-value", "epitopes.scoring_mode=affinity",
     ])
     args_set_then_expr = parser.parse_args([
-        "--config-value", "epitopes.scoring.mode=affinity",
-        "--config-text", "epitopes.scoring.mode=percentile_rank",
+        "--config-value", "epitopes.scoring_mode=affinity",
+        "--config-text", "epitopes.scoring_mode=percentile_rank",
     ])
 
     config_expr_then_set = load_vaxrank_config(args_expr_then_set)
     config_set_then_expr = load_vaxrank_config(args_set_then_expr)
 
-    eq_(config_expr_then_set["epitopes"]["scoring"]["mode"], "affinity")
-    eq_(config_set_then_expr["epitopes"]["scoring"]["mode"], "percentile_rank")
+    eq_(config_expr_then_set["epitopes"]["scoring_mode"], "affinity")
+    eq_(config_set_then_expr["epitopes"]["scoring_mode"], "percentile_rank")
 
 
 def test_cli_add_vaccine_peptide_args_legacy_mutation_alias():
@@ -858,8 +839,7 @@ def test_config_error_invalid_config_value_type():
     """Test that invalid value type raises appropriate error"""
     yaml_content = """
 epitopes:
-  filters:
-    min_score: "not_a_number"
+  min_score: "not_a_number"
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -927,13 +907,13 @@ def test_load_vaxrank_config_set_override():
     args = argparse.Namespace(
         config=None,
         config_set_overrides=[
-            "epitopes.scoring.derived_fields.affinity_score.midpoint=425.0",
+            "epitopes.logistic_midpoint=425.0",
             "vaccine_peptides.generation.lengths=[31]",
         ],
         config_expr_overrides=None,
     )
     config = load_vaxrank_config(args)
-    eq_(config["epitopes"]["scoring"]["derived_fields"]["affinity_score"]["midpoint"], 425.0)
+    eq_(config["epitopes"]["logistic_midpoint"], 425.0)
     eq_(config["vaccine_peptides"]["generation"]["lengths"], [31])
 
 
@@ -942,11 +922,11 @@ def test_load_vaxrank_config_expr_override():
         config=None,
         config_set_overrides=None,
         config_expr_overrides=[
-            "epitopes.scoring.mode=percentile_rank"
+            "epitopes.scoring_mode=percentile_rank"
         ],
     )
     config = load_vaxrank_config(args)
-    eq_(config["epitopes"]["scoring"]["mode"], "percentile_rank")
+    eq_(config["epitopes"]["scoring_mode"], "percentile_rank")
 
 
 # =============================================================================
@@ -957,8 +937,7 @@ def test_load_vaxrank_config_legacy_epitope_config_key_warns():
     """Legacy epitope_config top-level key emits a deprecation warning."""
     yaml_content = """
 epitope_config:
-  filters:
-    min_score: 0.01
+  min_score: 0.01
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -967,7 +946,7 @@ epitope_config:
     try:
         with pytest.warns(DeprecationWarning, match="epitope_config"):
             config = load_vaxrank_config(config_path=config_path)
-        assert config["epitopes"]["filters"]["min_score"] == 0.01
+        assert config["epitopes"]["min_score"] == 0.01
     finally:
         os.unlink(config_path)
 
@@ -995,11 +974,9 @@ def test_load_vaxrank_config_legacy_and_new_key_conflict():
     """Using both legacy and new key raises ValueError."""
     yaml_content = """
 epitope_config:
-  filters:
-    min_score: 0.01
+  min_score: 0.01
 epitopes:
-  filters:
-    min_score: 0.05
+  min_score: 0.05
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -1154,7 +1131,7 @@ def test_extract_vaccine_config_kwargs_errors_on_conflicting_epitope_keep():
     from vaxrank.config.loader import extract_vaccine_config_kwargs
 
     config = {
-        "epitopes": {"keep": {"top_n_per_candidate": 10}},
+        "epitopes": {"top_epitopes_per_candidate": 10},
         "vaccine_peptides": {"keep": {"max_epitopes_per_candidate": 20}},
     }
     with pytest.raises(ValueError, match="Cannot set both"):
@@ -1166,7 +1143,7 @@ def test_extract_vaccine_config_kwargs_accepts_single_epitope_keep_path():
     from vaxrank.config.loader import extract_vaccine_config_kwargs
 
     config_a = {
-        "epitopes": {"keep": {"top_n_per_candidate": 10}},
+        "epitopes": {"top_epitopes_per_candidate": 10},
     }
     kwargs_a = extract_vaccine_config_kwargs(config_a)
     eq_(kwargs_a["num_mutant_epitopes_to_keep"], 10)
