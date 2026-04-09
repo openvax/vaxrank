@@ -174,7 +174,7 @@ for configuration, with all defaults centralised in
 
 1. Compiled-in defaults
 2. YAML config file (`--config`)
-3. `--set` / `--expr` CLI overrides
+3. `--config-value` / `--config-text` CLI overrides
 4. Dedicated CLI flags (e.g. `--vaccine-peptide-length`)
 
 #### `EpitopeConfig` — epitope scoring and filtering

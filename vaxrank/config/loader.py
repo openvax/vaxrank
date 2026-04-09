@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import msgspec
 
 from .schema import VaxrankConfigSchema
+
+_LEGACY_KEY_MAP = {
+    "epitope_config": "epitopes",
+    "vaccine_config": "vaccine_peptides",
+}
 
 
 def _drop_none(value: Any) -> Any:
@@ -101,6 +107,21 @@ def load_vaxrank_config(
             "schema_version is not supported yet. Use the current unversioned config schema."
         )
 
+    for legacy_key, new_key in _LEGACY_KEY_MAP.items():
+        if legacy_key in raw:
+            warnings.warn(
+                f"Config key '{legacy_key}' is deprecated, use '{new_key}' instead. "
+                f"Support for '{legacy_key}' will be removed in a future release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if new_key in raw:
+                raise ValueError(
+                    f"Cannot use both '{legacy_key}' and '{new_key}' in the same config. "
+                    f"Rename '{legacy_key}' to '{new_key}'."
+                )
+            raw[new_key] = raw.pop(legacy_key)
+
     if ordered_overrides is not None:
         for kind, override in ordered_overrides:
             path, value_text = _split_override(override)
@@ -183,13 +204,13 @@ def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     lengths = _resolve_dotted(config, "vaccine_peptides.generation.lengths")
     if lengths is not _MISSING:
         if isinstance(lengths, list):
-            if len(lengths) > 1:
+            if len(lengths) != 1:
                 raise ValueError(
                     "Current Vaxrank implementation supports a single vaccine peptide "
-                    "length. Use one value in vaccine_peptides.generation.lengths."
+                    "length. Provide exactly one value in "
+                    "vaccine_peptides.generation.lengths."
                 )
-            if lengths:
-                kwargs["vaccine_peptide_length"] = lengths[0]
+            kwargs["vaccine_peptide_length"] = lengths[0]
         else:
             kwargs["vaccine_peptide_length"] = lengths
 

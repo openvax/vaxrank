@@ -607,6 +607,32 @@ vaccine_peptides:
         os.unlink(config_path)
 
 
+def test_vaccine_config_from_args_empty_lengths_rejected():
+    yaml_content = """
+vaccine_peptides:
+  generation:
+    lengths: []
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        args = argparse.Namespace(
+            config=config_path,
+            vaccine_peptide_length=None,
+            padding_around_mutation=None,
+            max_vaccine_peptides_per_variant=None,
+            num_epitopes_per_vaccine_peptide=None,
+            config_set_overrides=None,
+            config_expr_overrides=None,
+        )
+        with pytest.raises(ValueError, match="exactly one value"):
+            vaccine_config_from_args(args)
+    finally:
+        os.unlink(config_path)
+
+
 # =============================================================================
 # Combined Config Tests
 # =============================================================================
@@ -924,38 +950,63 @@ def test_load_vaxrank_config_expr_override():
 
 
 # =============================================================================
-# Legacy Config Key Rejection Tests
+# Legacy Config Key Compatibility Tests
 # =============================================================================
 
-def test_load_vaxrank_config_rejects_legacy_epitope_config_key():
-    """Legacy epitope_config top-level key is now rejected."""
+def test_load_vaxrank_config_legacy_epitope_config_key_warns():
+    """Legacy epitope_config top-level key emits a deprecation warning."""
     yaml_content = """
 epitope_config:
-  min_epitope_score: 0.01
+  filters:
+    min_score: 0.01
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
         config_path = f.name
 
     try:
-        with pytest.raises(msgspec.ValidationError, match="epitope_config"):
-            load_vaxrank_config(config_path=config_path)
+        with pytest.warns(DeprecationWarning, match="epitope_config"):
+            config = load_vaxrank_config(config_path=config_path)
+        assert config["epitopes"]["filters"]["min_score"] == 0.01
     finally:
         os.unlink(config_path)
 
 
-def test_load_vaxrank_config_rejects_legacy_vaccine_config_key():
-    """Legacy vaccine_config top-level key is now rejected."""
+def test_load_vaxrank_config_legacy_vaccine_config_key_warns():
+    """Legacy vaccine_config top-level key emits a deprecation warning."""
     yaml_content = """
 vaccine_config:
-  vaccine_peptide_length: 30
+  generation:
+    lengths: [25]
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
         config_path = f.name
 
     try:
-        with pytest.raises(msgspec.ValidationError, match="vaccine_config"):
+        with pytest.warns(DeprecationWarning, match="vaccine_config"):
+            config = load_vaxrank_config(config_path=config_path)
+        assert config["vaccine_peptides"]["generation"]["lengths"] == [25]
+    finally:
+        os.unlink(config_path)
+
+
+def test_load_vaxrank_config_legacy_and_new_key_conflict():
+    """Using both legacy and new key raises ValueError."""
+    yaml_content = """
+epitope_config:
+  filters:
+    min_score: 0.01
+epitopes:
+  filters:
+    min_score: 0.05
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        with pytest.raises(ValueError, match="Cannot use both"):
             load_vaxrank_config(config_path=config_path)
     finally:
         os.unlink(config_path)
