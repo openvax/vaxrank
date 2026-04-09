@@ -27,27 +27,46 @@ vaxrank \
 
 ### Using a YAML Configuration File
 
-You can specify common parameters in a YAML configuration file to avoid repeating them on every run:
+You can specify common parameters in a YAML configuration file to avoid
+repeating them on every run:
 
 ```sh
 vaxrank --config my_config.yaml --vcf variants.vcf --bam tumor.bam
 ```
 
 Example `my_config.yaml`:
+
 ```yaml
 epitope_config:
-  min_epitope_score: 0.001
-  logistic_epitope_score_midpoint: 350.0
-  logistic_epitope_score_width: 150.0
+  logistic_epitope_score_midpoint: 350.0  # IC50 (nM) at which score = 0.5
+  logistic_epitope_score_width: 150.0     # steepness of logistic curve
+  min_epitope_score: 0.00001              # drop epitopes below this score
+  binding_affinity_cutoff: 5000.0         # IC50 >= this → score 0
+  scoring_mode: affinity                  # "affinity" or "percentile_rank"
+  percentile_rank_cutoff: 10.0            # rank >= this → score 0 (percentile mode)
 
 vaccine_config:
-  vaccine_peptide_length: 25
-  padding_around_mutation: 5
-  max_vaccine_peptides_per_variant: 1
-  num_mutant_epitopes_to_keep: 1000  # set to 0 to keep all
+  vaccine_peptide_length: 25              # amino acids per vaccine peptide
+  padding_around_mutation: 5              # off-centre windows to consider
+  max_vaccine_peptides_per_variant: 1     # peptides to keep per variant
+  num_mutant_epitopes_to_keep: 1000       # 0 = keep all
+  score_fraction_of_best: 0.99           # drop candidates scoring < 99% of best
+
+  # Manufacturability thresholds (GRAVY = mean hydropathy)
+  max_c_terminal_hydropathy: 1.5          # max GRAVY of C-terminal 7-mer
+  min_kmer_hydropathy: 0.0                # min max-7mer GRAVY (floor)
+  max_kmer_hydropathy_low_priority: 1.5   # low-priority max-7mer GRAVY cap
+  max_kmer_hydropathy_high_priority: 2.5  # high-priority max-7mer GRAVY cap
 ```
 
-CLI arguments override values from the config file.
+CLI arguments override values from the config file.  You can also use
+`--set` to override any config value without editing the file:
+
+```sh
+vaxrank --config my_config.yaml \
+  --set vaccine_config.score_fraction_of_best=0.95 \
+  --set epitope_config.percentile_rank_cutoff=5.0
+```
 
 ## Installation
 
@@ -140,19 +159,43 @@ The first run of the tests may take a while to build the reference proteome kmer
 
 ### Configuration
 
-Vaxrank uses [msgspec](https://jcristharif.com/msgspec/) Struct objects for configuration:
+Vaxrank uses [msgspec](https://jcristharif.com/msgspec/) frozen Struct objects
+for configuration, with all defaults centralised in
+`vaxrank/config/defaults.py`.  Config values are resolved in order:
 
-- **`EpitopeConfig`**: Parameters for epitope scoring and filtering
-  - `logistic_epitope_score_midpoint`: IC50 value at which epitope score is 0.5 (default: 350 nM)
-  - `logistic_epitope_score_width`: Width parameter for logistic scoring function (default: 150)
-  - `min_epitope_score`: Minimum normalized score threshold (default: 0.00001)
-  - `binding_affinity_cutoff`: Maximum IC50 to consider (default: 5000 nM)
+1. Compiled-in defaults
+2. YAML config file (`--config`)
+3. `--set` / `--expr` CLI overrides
+4. Dedicated CLI flags (e.g. `--vaccine-peptide-length`)
 
-- **`VaccineConfig`**: Parameters for vaccine peptide assembly
-  - `vaccine_peptide_length`: Length of vaccine peptides (default: 25 aa)
-  - `padding_around_mutation`: Off-center windows to consider (default: 5)
-  - `max_vaccine_peptides_per_variant`: Max peptides per variant (default: 1)
-  - `num_mutant_epitopes_to_keep`: Epitopes to keep per variant (default: 1000, set to 0 to keep all)
+#### `EpitopeConfig` — epitope scoring and filtering
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `logistic_epitope_score_midpoint` | 350.0 | IC50 (nM) at which epitope score = 0.5 |
+| `logistic_epitope_score_width` | 150.0 | Steepness of logistic scoring curve |
+| `min_epitope_score` | 0.00001 | Epitopes scoring below this are dropped |
+| `binding_affinity_cutoff` | 5000.0 | IC50 >= this → score 0 |
+| `scoring_mode` | `"affinity"` | `"affinity"` (IC50-based) or `"percentile_rank"` |
+| `percentile_rank_cutoff` | 10.0 | Rank >= this → score 0 (percentile mode) |
+
+#### `VaccineConfig` — peptide assembly and manufacturability
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `vaccine_peptide_length` | 25 | Amino acids per vaccine peptide |
+| `padding_around_mutation` | 5 | Off-centre window positions to consider |
+| `max_vaccine_peptides_per_variant` | 1 | Peptides to keep per variant |
+| `num_mutant_epitopes_to_keep` | 1000 | Max epitope predictions per peptide (0 = all) |
+| `score_fraction_of_best` | 0.99 | Drop candidates scoring below this fraction of the best |
+| `max_c_terminal_hydropathy` | 1.5 | Max GRAVY score of the C-terminal 7-mer |
+| `min_kmer_hydropathy` | 0.0 | Minimum max-7mer GRAVY (floor) |
+| `max_kmer_hydropathy_low_priority` | 1.5 | Low-priority max-7mer GRAVY cap |
+| `max_kmer_hydropathy_high_priority` | 2.5 | High-priority max-7mer GRAVY cap |
+
+The four `*_hydropathy*` fields control the manufacturability tie-breaking
+in vaccine peptide ranking.  See `VaccinePeptide.peptide_synthesis_difficulty_score_tuple`
+for details on how each threshold is applied.
 
 ### Key Modules
 

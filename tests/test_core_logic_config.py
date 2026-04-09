@@ -237,6 +237,7 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
             epitope_predictions,
             num_mutant_epitopes_to_keep=None,
             epitope_score_params=None,
+            manufacturability_thresholds=None,
         ):
             self.mutant_protein_fragment = mutant_protein_fragment
             self.combined_score = 10.0 if mutant_protein_fragment.amino_acids == "AAAA" else 8.5
@@ -469,6 +470,67 @@ def test_vaccine_peptide_zero_epitope_limit_keeps_all():
         num_mutant_epitopes_to_keep=0,
     )
     eq_(len(vaccine_peptide.mutant_epitope_predictions), 2)
+
+
+def test_manufacturability_thresholds_flow_from_vaccine_config():
+    """Manufacturability thresholds from VaccineConfig reach VaccinePeptide."""
+    class DummyFragment:
+        def __init__(self, amino_acids):
+            self.amino_acids = amino_acids
+            self.n_alt_reads = 4
+            self.n_alt_reads_supporting_protein_sequence = 4
+            self.n_mutant_amino_acids = 1
+            self.mutation_distance_from_edge = 0
+            self.mutant_amino_acid_start_offset = 0
+            self.mutant_amino_acid_end_offset = 1
+
+        def __len__(self):
+            return len(self.amino_acids)
+
+    class DummyLongFragment:
+        def __init__(self, fragment):
+            self.fragment = fragment
+
+        def sorted_subsequences(self, subsequence_length):
+            return [(0, self.fragment)]
+
+    fragment = DummyFragment("ACDEFGHIK")
+    long_fragment = DummyLongFragment(fragment)
+
+    prediction = EpitopePrediction(
+        allele="HLA-A*02:01",
+        peptide_sequence="ACDEFGHIK",
+        wt_peptide_sequence="ACDEFGHIK",
+        ic50=100.0,
+        wt_ic50=200.0,
+        percentile_rank=0.5,
+        prediction_method_name="test",
+        overlaps_mutation=True,
+        source_sequence="ACDEFGHIK",
+        offset=0,
+        occurs_in_reference=False,
+    )
+
+    vaccine_config = VaccineConfig(max_kmer_hydropathy_high_priority=3.0)
+
+    peptides = vaccine_peptides_from_epitopes(
+        variant=MagicMock(),
+        long_protein_fragment=long_fragment,
+        epitope_predictions=[prediction],
+        vaccine_peptide_length=len(fragment),
+        vaccine_config=vaccine_config,
+    )
+    eq_(len(peptides), 1)
+    eq_(peptides[0].manufacturability_thresholds["max_kmer_hydropathy_high_priority"], 3.0)
+
+
+def test_vaccine_config_manufacturability_defaults():
+    """VaccineConfig has manufacturability fields with correct defaults."""
+    config = VaccineConfig()
+    eq_(config.max_c_terminal_hydropathy, 1.5)
+    eq_(config.min_kmer_hydropathy, 0.0)
+    eq_(config.max_kmer_hydropathy_low_priority, 1.5)
+    eq_(config.max_kmer_hydropathy_high_priority, 2.5)
 
 
 def test_config_edge_case_config_with_all_defaults():

@@ -16,12 +16,6 @@ from operator import attrgetter
 import numpy as np
 from serializable import Serializable
 
-from .config.defaults import (
-    DEFAULT_MANUFACTURABILITY_MAX_C_TERMINAL_HYDROPATHY,
-    DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_HIGH_PRIORITY,
-    DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_LOW_PRIORITY,
-    DEFAULT_MANUFACTURABILITY_MIN_KMER_HYDROPATHY,
-)
 from .manufacturability import ManufacturabilityScores
 
 
@@ -40,7 +34,8 @@ class VaccinePeptide(Serializable):
             epitope_predictions,
             num_mutant_epitopes_to_keep=None,
             epitope_score_params=None,
-            sort_predictions_by='ic50'):
+            sort_predictions_by='ic50',
+            manufacturability_thresholds=None):
         """
         Parameters
         ----------
@@ -58,12 +53,19 @@ class VaccinePeptide(Serializable):
             Field of EpitopePrediction used for sorting epitope predictions
             overlapping mutation in ascending order. Can be either 'ic50'
             or 'percentile_rank'.
+
+        manufacturability_thresholds : dict or None
+            Hydropathy thresholds for peptide synthesis difficulty scoring.
+            Keys match the parameters of
+            ``peptide_synthesis_difficulty_score_tuple``.  When None the
+            compiled-in defaults from ``config.defaults`` are used.
         """
         self.mutant_protein_fragment = mutant_protein_fragment
         self.epitope_predictions = epitope_predictions
         self.num_mutant_epitopes_to_keep = num_mutant_epitopes_to_keep
         self.epitope_score_params = epitope_score_params or {}
         self.sort_predictions_by = sort_predictions_by
+        self.manufacturability_thresholds = manufacturability_thresholds or {}
 
         sort_key = attrgetter(sort_predictions_by)
 
@@ -98,10 +100,10 @@ class VaccinePeptide(Serializable):
 
     def peptide_synthesis_difficulty_score_tuple(
             self,
-            max_c_terminal_hydropathy=DEFAULT_MANUFACTURABILITY_MAX_C_TERMINAL_HYDROPATHY,
-            min_kmer_hydropathy=DEFAULT_MANUFACTURABILITY_MIN_KMER_HYDROPATHY,
-            max_kmer_hydropathy_low_priority=DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_LOW_PRIORITY,
-            max_kmer_hydropathy_high_priority=DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_HIGH_PRIORITY):
+            max_c_terminal_hydropathy=1.5,
+            min_kmer_hydropathy=0.0,
+            max_kmer_hydropathy_low_priority=1.5,
+            max_kmer_hydropathy_high_priority=2.5):
         """
         Generates a tuple of scores used for lexicographic sorting of vaccine
         peptides.
@@ -188,7 +190,8 @@ class VaccinePeptide(Serializable):
             # Number of reads supporting the variant
             -self.mutant_protein_fragment.n_alt_reads
         )
-        manufacturability_score_tuple = self.peptide_synthesis_difficulty_score_tuple()
+        manufacturability_score_tuple = self.peptide_synthesis_difficulty_score_tuple(
+            **self.manufacturability_thresholds)
         extra_score_tuple = (
             # Number of reads supporting the particular protein sequence
             # sequence we're using for this vaccine peptide. Currently
@@ -228,13 +231,16 @@ class VaccinePeptide(Serializable):
 
     def to_dict(self):
         epitope_predictions = self.mutant_epitope_predictions + self.wildtype_epitope_predictions
-        return {
+        d = {
             "mutant_protein_fragment": self.mutant_protein_fragment,
             "epitope_predictions": epitope_predictions,
             "num_mutant_epitopes_to_keep": self.num_mutant_epitopes_to_keep,
             "epitope_score_params": self.epitope_score_params,
             "sort_predictions_by": self.sort_predictions_by,
         }
+        if self.manufacturability_thresholds:
+            d["manufacturability_thresholds"] = self.manufacturability_thresholds
+        return d
 
     @classmethod
     def from_dict(cls, d):
@@ -243,4 +249,6 @@ class VaccinePeptide(Serializable):
             d["sort_predictions_by"] = "ic50"
         if "epitope_score_params" not in d:
             d["epitope_score_params"] = None
+        if "manufacturability_thresholds" not in d:
+            d["manufacturability_thresholds"] = None
         return cls(**d)

@@ -538,6 +538,38 @@ vaccine_peptides:
         os.unlink(config_path)
 
 
+def test_vaccine_config_from_args_schema_v2_manufacturability():
+    yaml_content = """
+schema_version: 2
+vaccine_peptides:
+  manufacturability:
+    max_c_terminal_hydropathy: 2.0
+    max_kmer_hydropathy_high_priority: 3.0
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        args = argparse.Namespace(
+            config=config_path,
+            vaccine_peptide_length=None,
+            padding_around_mutation=None,
+            max_vaccine_peptides_per_variant=None,
+            num_epitopes_per_vaccine_peptide=None,
+            config_set_overrides=None,
+            config_expr_overrides=None,
+        )
+        config = vaccine_config_from_args(args)
+        eq_(config.max_c_terminal_hydropathy, 2.0)
+        eq_(config.max_kmer_hydropathy_high_priority, 3.0)
+        # Unset fields keep defaults
+        eq_(config.min_kmer_hydropathy, 0.0)
+        eq_(config.max_kmer_hydropathy_low_priority, 1.5)
+    finally:
+        os.unlink(config_path)
+
+
 def test_vaccine_config_from_args_schema_v2_multiple_lengths_not_supported():
     yaml_content = """
 schema_version: 2

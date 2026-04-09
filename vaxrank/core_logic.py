@@ -298,6 +298,12 @@ def vaccine_peptides_from_epitopes(
             epitope_predictions=subsequence_epitope_predictions,
             num_mutant_epitopes_to_keep=vaccine_config.num_mutant_epitopes_to_keep,
             epitope_score_params=epitope_score_params,
+            manufacturability_thresholds={
+                "max_c_terminal_hydropathy": vaccine_config.max_c_terminal_hydropathy,
+                "min_kmer_hydropathy": vaccine_config.min_kmer_hydropathy,
+                "max_kmer_hydropathy_low_priority": vaccine_config.max_kmer_hydropathy_low_priority,
+                "max_kmer_hydropathy_high_priority": vaccine_config.max_kmer_hydropathy_high_priority,
+            },
         )
 
         logger.debug(

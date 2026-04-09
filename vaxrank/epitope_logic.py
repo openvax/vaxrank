@@ -20,6 +20,7 @@ import numpy as np
 from pyensembl import Genome
 from topiary import TopiaryPredictor
 
+from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
 from .epitope_prediction import EpitopePrediction
 from .mutant_protein_fragment import MutantProteinFragment
@@ -123,7 +124,7 @@ def predict_epitopes(
 
     # Predict binding for WT peptides via Topiary
     wt_predictions_grouped = {}
-    min_peptide_length = min(predictions_df["peptide_length"]) if len(predictions_df) > 0 else 8
+    min_peptide_length = min(predictions_df["peptide_length"]) if len(predictions_df) > 0 else DEFAULT_MIN_KMER_LENGTH
     valid_wt_peptides = {
         f"wt_{i}": seq
         for i, seq in enumerate(set(wt_peptides.values()))

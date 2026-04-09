@@ -28,6 +28,10 @@ The vaccine peptide selection considers:
 import msgspec
 
 from .config.defaults import (
+    DEFAULT_MANUFACTURABILITY_MAX_C_TERMINAL_HYDROPATHY,
+    DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_HIGH_PRIORITY,
+    DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_LOW_PRIORITY,
+    DEFAULT_MANUFACTURABILITY_MIN_KMER_HYDROPATHY,
     DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT,
     DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP,
     DEFAULT_PADDING_AROUND_MUTATION,
@@ -76,6 +80,28 @@ class VaccineConfig(msgspec.Struct, frozen=True):
         of the best candidate for the variant before lexicographic tie-breaking.
         Default: 0.99
 
+    max_c_terminal_hydropathy : float
+        Maximum acceptable mean hydropathy (GRAVY) score for the 7
+        C-terminal residues.  Peptides exceeding this are penalised
+        during manufacturability ranking.
+        Default: 1.5
+
+    min_kmer_hydropathy : float
+        Minimum acceptable max-7mer GRAVY score.  Peptides with all
+        windows below this floor are penalised (too hydrophilic).
+        Default: 0.0
+
+    max_kmer_hydropathy_low_priority : float
+        Low-priority upper bound on any 7-mer GRAVY window.  Applied
+        as a tie-breaker after higher-priority constraints.
+        Default: 1.5
+
+    max_kmer_hydropathy_high_priority : float
+        High-priority upper bound on any 7-mer GRAVY window.  Exceeding
+        this indicates a severely hydrophobic region that will be
+        difficult to synthesise.
+        Default: 2.5
+
     Examples
     --------
     >>> config = VaccineConfig()
@@ -96,3 +122,7 @@ class VaccineConfig(msgspec.Struct, frozen=True):
     max_vaccine_peptides_per_variant: int = DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT
     num_mutant_epitopes_to_keep: int = DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP
     score_fraction_of_best: float = DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST
+    max_c_terminal_hydropathy: float = DEFAULT_MANUFACTURABILITY_MAX_C_TERMINAL_HYDROPATHY
+    min_kmer_hydropathy: float = DEFAULT_MANUFACTURABILITY_MIN_KMER_HYDROPATHY
+    max_kmer_hydropathy_low_priority: float = DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_LOW_PRIORITY
+    max_kmer_hydropathy_high_priority: float = DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_HIGH_PRIORITY

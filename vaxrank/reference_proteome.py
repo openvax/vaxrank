@@ -27,9 +27,7 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
-# Default kmer length range for epitope peptides
-DEFAULT_MIN_KMER_LENGTH = 8
-DEFAULT_MAX_KMER_LENGTH = 15
+from .config.defaults import DEFAULT_MAX_KMER_LENGTH, DEFAULT_MIN_KMER_LENGTH
 
 # In-memory cache for loaded kmer sets to avoid repeated disk reads
 # Key: (species, release, min_len, max_len) -> set of kmers

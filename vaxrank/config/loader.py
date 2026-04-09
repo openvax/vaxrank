@@ -163,4 +163,14 @@ def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     if "top_n_per_candidate" in epitope_keep:
         kwargs["num_mutant_epitopes_to_keep"] = epitope_keep["top_n_per_candidate"]
 
+    manufacturability = vaccine_peptides.get("manufacturability") or {}
+    if "max_c_terminal_hydropathy" in manufacturability:
+        kwargs["max_c_terminal_hydropathy"] = manufacturability["max_c_terminal_hydropathy"]
+    if "min_kmer_hydropathy" in manufacturability:
+        kwargs["min_kmer_hydropathy"] = manufacturability["min_kmer_hydropathy"]
+    if "max_kmer_hydropathy_low_priority" in manufacturability:
+        kwargs["max_kmer_hydropathy_low_priority"] = manufacturability["max_kmer_hydropathy_low_priority"]
+    if "max_kmer_hydropathy_high_priority" in manufacturability:
+        kwargs["max_kmer_hydropathy_high_priority"] = manufacturability["max_kmer_hydropathy_high_priority"]
+
     return kwargs
