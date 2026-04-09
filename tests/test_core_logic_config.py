@@ -271,9 +271,20 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
                 max_vaccine_peptides_per_variant=2,
             ),
         )
+        strict_result = vaccine_peptides_from_epitopes(
+            variant=mock_variant,
+            long_protein_fragment=DummyLongFragment(),
+            epitope_predictions=[MagicMock()],
+            vaccine_config=VaccineConfig(
+                score_fraction_of_best=1.0,
+                max_vaccine_peptides_per_variant=2,
+            ),
+        )
 
     eq_(len(default_result), 1)
     eq_(len(relaxed_result), 2)
+    eq_(len(strict_result), 1)
+    eq_(strict_result[0].combined_score, 10.0)
 
 
 def test_config_integration_epitope_config_affects_vaccine_peptide_scoring():

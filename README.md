@@ -60,13 +60,16 @@ vaccine_config:
 ```
 
 CLI arguments override values from the config file.  You can also use
-`--set` to override any config value without editing the file:
+`--config-value` to override any config value without editing the file:
 
 ```sh
 vaxrank --config my_config.yaml \
-  --set vaccine_config.score_fraction_of_best=0.95 \
-  --set epitope_config.percentile_rank_cutoff=5.0
+  --config-value vaccine_config.score_fraction_of_best=0.95 \
+  --config-value epitope_config.percentile_rank_cutoff=5.0
 ```
+
+Use `--config-text` when the right-hand side should be kept as a raw
+string instead of being YAML-parsed.
 
 ## Installation
 

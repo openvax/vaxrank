@@ -321,9 +321,8 @@ def test_epitope_config_from_args_empty_yaml_file():
         os.unlink(config_path)
 
 
-def test_epitope_config_from_args_schema_v2_yaml_config_file():
+def test_epitope_config_from_args_nested_yaml_config_file():
     yaml_content = """
-schema_version: 2
 epitopes:
   filters:
     min_score: 0.02
@@ -502,9 +501,8 @@ epitope_config:
         os.unlink(config_path)
 
 
-def test_vaccine_config_from_args_schema_v2_yaml_config_file():
+def test_vaccine_config_from_args_nested_yaml_config_file():
     yaml_content = """
-schema_version: 2
 vaccine_peptides:
   generation:
     lengths: [31]
@@ -538,9 +536,8 @@ vaccine_peptides:
         os.unlink(config_path)
 
 
-def test_vaccine_config_from_args_schema_v2_manufacturability():
+def test_vaccine_config_from_args_nested_manufacturability():
     yaml_content = """
-schema_version: 2
 vaccine_peptides:
   manufacturability:
     max_c_terminal_hydropathy: 2.0
@@ -570,9 +567,8 @@ vaccine_peptides:
         os.unlink(config_path)
 
 
-def test_vaccine_config_from_args_schema_v2_multiple_lengths_not_supported():
+def test_vaccine_config_from_args_multiple_lengths_not_supported():
     yaml_content = """
-schema_version: 2
 vaccine_peptides:
   generation:
     lengths: [25, 31]
@@ -707,12 +703,32 @@ def test_cli_add_config_override_args():
 
     args = parser.parse_args(
         [
-            "--set", "epitope_config.min_epitope_score=0.05",
-            "--expr", "vaccine_peptides.ranking.score=sqrt(n_alt_reads)",
+            "--config-value", "epitope_config.min_epitope_score=0.05",
+            "--config-text", "vaccine_peptides.ranking.score=sqrt(n_alt_reads)",
         ]
     )
     eq_(args.config_set_overrides, ["epitope_config.min_epitope_score=0.05"])
     eq_(args.config_expr_overrides, ["vaccine_peptides.ranking.score=sqrt(n_alt_reads)"])
+
+
+def test_load_vaxrank_config_preserves_mixed_override_order():
+    parser = argparse.ArgumentParser()
+    add_config_override_args(parser)
+
+    args_expr_then_set = parser.parse_args([
+        "--config-text", "epitope_config.scoring_mode=percentile_rank",
+        "--config-value", "epitope_config.scoring_mode=affinity",
+    ])
+    args_set_then_expr = parser.parse_args([
+        "--config-value", "epitope_config.scoring_mode=affinity",
+        "--config-text", "epitope_config.scoring_mode=percentile_rank",
+    ])
+
+    config_expr_then_set = load_vaxrank_config(args_expr_then_set)
+    config_set_then_expr = load_vaxrank_config(args_set_then_expr)
+
+    eq_(config_expr_then_set["epitope_config"]["scoring_mode"], "affinity")
+    eq_(config_set_then_expr["epitope_config"]["scoring_mode"], "percentile_rank")
 
 
 def test_cli_add_vaccine_peptide_args_legacy_mutation_alias():
@@ -808,6 +824,56 @@ epitope_config:
         os.unlink(config_path)
 
 
+def test_load_vaxrank_config_rejects_schema_version():
+    yaml_content = """
+schema_version: 2
+epitope_config:
+  min_epitope_score: 0.01
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        with pytest.raises(ValueError, match="schema_version is not supported"):
+            load_vaxrank_config(config_path=config_path)
+    finally:
+        os.unlink(config_path)
+
+
+def test_load_vaxrank_config_rejects_unsupported_top_level_section():
+    yaml_content = """
+self_proteome:
+  exclude_gene_ids: ["ENSG000001"]
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        with pytest.raises(msgspec.ValidationError, match="self_proteome"):
+            load_vaxrank_config(config_path=config_path)
+    finally:
+        os.unlink(config_path)
+
+
+def test_load_vaxrank_config_rejects_unsupported_nested_section():
+    yaml_content = """
+vaccine_peptides:
+  ranking:
+    score: sqrt(n_alt_reads)
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        with pytest.raises(msgspec.ValidationError, match="ranking"):
+            load_vaxrank_config(config_path=config_path)
+    finally:
+        os.unlink(config_path)
+
+
 def test_load_vaxrank_config_set_override():
     args = argparse.Namespace(
         config=None,
@@ -827,11 +893,8 @@ def test_load_vaxrank_config_expr_override():
         config=None,
         config_set_overrides=None,
         config_expr_overrides=[
-            "vaccine_peptides.ranking.score=sqrt(n_alt_reads) * mutant_epitope_score"
+            "epitope_config.scoring_mode=percentile_rank"
         ],
     )
     config = load_vaxrank_config(args)
-    eq_(
-        config["vaccine_peptides"]["ranking"]["score"],
-        "sqrt(n_alt_reads) * mutant_epitope_score",
-    )
+    eq_(config["epitope_config"]["scoring_mode"], "percentile_rank")

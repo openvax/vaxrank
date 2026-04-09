@@ -40,7 +40,7 @@ from .config.defaults import (
 )
 
 
-class VaccineConfig(msgspec.Struct, frozen=True):
+class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """
     Configuration parameters for vaccine peptide assembly.
 

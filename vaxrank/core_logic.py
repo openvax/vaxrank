@@ -327,7 +327,7 @@ def vaccine_peptides_from_epitopes(
         filtered_candidate_vaccine_peptides = [
             vp
             for vp in candidate_vaccine_peptides
-            if vp.combined_score / max_score > vaccine_config.score_fraction_of_best
+            if vp.combined_score / max_score >= vaccine_config.score_fraction_of_best
         ]
     n_filtered = len(filtered_candidate_vaccine_peptides)
     logger.info(

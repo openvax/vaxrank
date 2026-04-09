@@ -7,18 +7,20 @@ import msgspec
 from .schema import VaxrankConfigSchema
 
 
+def _drop_none(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _drop_none(nested_value)
+            for key, nested_value in value.items()
+            if nested_value is not None
+        }
+    if isinstance(value, list):
+        return [_drop_none(item) for item in value]
+    return value
+
+
 def _schema_to_dict(schema: VaxrankConfigSchema) -> dict[str, Any]:
-    return {
-        "schema_version": schema.schema_version,
-        "inputs": schema.inputs,
-        "epitope_config": schema.epitope_config,
-        "vaccine_config": schema.vaccine_config,
-        "self_proteome": schema.self_proteome,
-        "epitopes": schema.epitopes,
-        "mutations": schema.mutations,
-        "vaccine_peptides": schema.vaccine_peptides,
-        "compat": schema.compat,
-    }
+    return _drop_none(msgspec.to_builtins(schema))
 
 
 def _read_config_file(config_path: str | None) -> dict[str, Any]:
@@ -85,21 +87,38 @@ def load_vaxrank_config(
     config_path: str | None = None,
     set_overrides: list[str] | None = None,
     expr_overrides: list[str] | None = None,
+    ordered_overrides: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     if args is not None:
         config_path = getattr(args, "config", config_path)
         set_overrides = getattr(args, "config_set_overrides", set_overrides)
         expr_overrides = getattr(args, "config_expr_overrides", expr_overrides)
+        ordered_overrides = getattr(args, "config_overrides", ordered_overrides)
 
     raw = _read_config_file(config_path)
+    if "schema_version" in raw:
+        raise ValueError(
+            "schema_version is not supported yet. Use the current unversioned config schema."
+        )
 
-    for override in set_overrides or []:
-        path, value_text = _split_override(override)
-        _set_nested_value(raw, path, _decode_override_value(value_text))
+    if ordered_overrides is not None:
+        for kind, override in ordered_overrides:
+            path, value_text = _split_override(override)
+            if kind == "set":
+                value = _decode_override_value(value_text)
+            elif kind == "expr":
+                value = value_text.strip()
+            else:
+                raise ValueError(f"Unknown config override kind '{kind}'")
+            _set_nested_value(raw, path, value)
+    else:
+        for override in set_overrides or []:
+            path, value_text = _split_override(override)
+            _set_nested_value(raw, path, _decode_override_value(value_text))
 
-    for override in expr_overrides or []:
-        path, value_text = _split_override(override)
-        _set_nested_value(raw, path, value_text.strip())
+        for override in expr_overrides or []:
+            path, value_text = _split_override(override)
+            _set_nested_value(raw, path, value_text.strip())
 
     schema = msgspec.convert(raw, VaxrankConfigSchema)
     return _schema_to_dict(schema)

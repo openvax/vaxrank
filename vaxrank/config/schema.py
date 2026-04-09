@@ -1,8 +1,150 @@
-from typing import Any
+from typing import Optional, Union
 
 import msgspec
 
-from .defaults import DEFAULT_SCHEMA_VERSION
+
+class EpitopeConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    logistic_epitope_score_midpoint: Optional[float] = None
+    logistic_epitope_score_width: Optional[float] = None
+    min_epitope_score: Optional[float] = None
+    binding_affinity_cutoff: Optional[float] = None
+    scoring_mode: Optional[str] = None
+    percentile_rank_cutoff: Optional[float] = None
+
+
+class VaccineConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    vaccine_peptide_length: Optional[int] = None
+    padding_around_mutation: Optional[int] = None
+    max_vaccine_peptides_per_variant: Optional[int] = None
+    num_mutant_epitopes_to_keep: Optional[int] = None
+    score_fraction_of_best: Optional[float] = None
+    max_c_terminal_hydropathy: Optional[float] = None
+    min_kmer_hydropathy: Optional[float] = None
+    max_kmer_hydropathy_low_priority: Optional[float] = None
+    max_kmer_hydropathy_high_priority: Optional[float] = None
+
+
+class AffinityScoreConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    midpoint: Optional[float] = None
+    width: Optional[float] = None
+    cutoff: Optional[float] = None
+
+
+class PercentileScoreConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    worst: Optional[float] = None
+
+
+class DerivedFieldsConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    affinity_score: Optional[AffinityScoreConfigSchema] = None
+    percentile_score: Optional[PercentileScoreConfigSchema] = None
+
+
+class EpitopesFiltersConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    min_score: Optional[float] = None
+
+
+class EpitopesScoringConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    mode: Optional[str] = None
+    derived_fields: Optional[DerivedFieldsConfigSchema] = None
+
+
+class EpitopesKeepConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    top_n_per_candidate: Optional[int] = None
+
+
+class EpitopesConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    filters: Optional[EpitopesFiltersConfigSchema] = None
+    scoring: Optional[EpitopesScoringConfigSchema] = None
+    keep: Optional[EpitopesKeepConfigSchema] = None
+
+
+class VaccinePeptideGenerationConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    lengths: Optional[Union[list[int], int]] = None
+    padding_around_mutation: Optional[int] = None
+
+
+class VaccinePeptideKeepConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    per_mutation: Optional[int] = None
+    max_epitopes_per_candidate: Optional[int] = None
+    score_fraction_of_best: Optional[float] = None
+
+
+class ManufacturabilityConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    max_c_terminal_hydropathy: Optional[float] = None
+    min_kmer_hydropathy: Optional[float] = None
+    max_kmer_hydropathy_low_priority: Optional[float] = None
+    max_kmer_hydropathy_high_priority: Optional[float] = None
+
+
+class VaccinePeptidesConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    generation: Optional[VaccinePeptideGenerationConfigSchema] = None
+    keep: Optional[VaccinePeptideKeepConfigSchema] = None
+    manufacturability: Optional[ManufacturabilityConfigSchema] = None
 
 
 class VaxrankConfigSchema(
@@ -11,12 +153,7 @@ class VaxrankConfigSchema(
     kw_only=True,
     forbid_unknown_fields=True,
 ):
-    schema_version: int = DEFAULT_SCHEMA_VERSION
-    inputs: dict[str, Any] = msgspec.field(default_factory=dict)
-    epitope_config: dict[str, Any] = msgspec.field(default_factory=dict)
-    vaccine_config: dict[str, Any] = msgspec.field(default_factory=dict)
-    self_proteome: dict[str, Any] = msgspec.field(default_factory=dict)
-    epitopes: dict[str, Any] = msgspec.field(default_factory=dict)
-    mutations: dict[str, Any] = msgspec.field(default_factory=dict)
-    vaccine_peptides: dict[str, Any] = msgspec.field(default_factory=dict)
-    compat: dict[str, Any] = msgspec.field(default_factory=dict)
+    epitope_config: Optional[EpitopeConfigSchema] = None
+    vaccine_config: Optional[VaccineConfigSchema] = None
+    epitopes: Optional[EpitopesConfigSchema] = None
+    vaccine_peptides: Optional[VaccinePeptidesConfigSchema] = None

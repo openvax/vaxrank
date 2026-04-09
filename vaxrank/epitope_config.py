@@ -45,7 +45,7 @@ from .config.defaults import (
 )
 
 
-class EpitopeConfig(msgspec.Struct, frozen=True):
+class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """
     Configuration parameters for epitope scoring and filtering.
 

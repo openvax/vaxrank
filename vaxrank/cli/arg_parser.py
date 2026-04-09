@@ -12,7 +12,7 @@
 
 
 
-from argparse import ArgumentParser
+from argparse import Action, ArgumentParser
 
 from isovar.cli import make_isovar_arg_parser
 from mhctools.cli import add_mhc_args
@@ -282,9 +282,10 @@ def external_input_arg_parser():
 
 def add_config_override_args(arg_parser):
     arg_parser.add_argument(
-        "--set",
+        "--config-value",
         dest="config_set_overrides",
-        action="append",
+        action=_ConfigOverrideAction,
+        override_kind="set",
         default=None,
         metavar="PATH=VALUE",
         help=(
@@ -293,14 +294,15 @@ def add_config_override_args(arg_parser):
         ),
     )
     arg_parser.add_argument(
-        "--expr",
+        "--config-text",
         dest="config_expr_overrides",
-        action="append",
+        action=_ConfigOverrideAction,
+        override_kind="expr",
         default=None,
         metavar="PATH=EXPR",
         help=(
-            "Override an expression-valued config field using dotted.path=expression. "
-            "The expression is stored as a raw string."
+            "Override a config value using dotted.path=text without YAML parsing. "
+            "The right-hand side is stored as a raw string."
         ),
     )
 
@@ -324,3 +326,20 @@ def choose_arg_parser(args_list):
 def parse_vaxrank_args(args_list):
     arg_parser = choose_arg_parser(args_list)
     return arg_parser.parse_args(args_list)
+class _ConfigOverrideAction(Action):
+    def __init__(self, option_strings, dest, **kwargs):
+        self.override_kind = kwargs.pop("override_kind")
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        existing = getattr(namespace, self.dest, None)
+        if existing is None:
+            existing = []
+        existing.append(values)
+        setattr(namespace, self.dest, existing)
+
+        ordered = getattr(namespace, "config_overrides", None)
+        if ordered is None:
+            ordered = []
+        ordered.append((self.override_kind, values))
+        setattr(namespace, "config_overrides", ordered)
