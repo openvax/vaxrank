@@ -79,7 +79,7 @@ def _set_nested_value(target: dict[str, Any], path: str, value: Any) -> None:
     current[keys[-1]] = value
 
 
-def load_merged_vaxrank_config(
+def load_vaxrank_config(
     args=None,
     *,
     config_path: str | None = None,

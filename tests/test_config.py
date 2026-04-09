@@ -31,7 +31,7 @@ from vaxrank.config.defaults import (
     DEFAULT_PERCENTILE_RANK_CUTOFF,
     DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST,
 )
-from vaxrank.config.loader import load_merged_vaxrank_config
+from vaxrank.config.loader import load_vaxrank_config
 from vaxrank.vaccine_config import VaccineConfig
 from vaxrank.cli.arg_parser import add_config_override_args
 from vaxrank.cli.epitope_config_args import (
@@ -776,7 +776,7 @@ epitope_config:
         os.unlink(config_path)
 
 
-def test_load_merged_vaxrank_config_set_override():
+def test_load_vaxrank_config_set_override():
     args = argparse.Namespace(
         config=None,
         config_set_overrides=[
@@ -785,12 +785,12 @@ def test_load_merged_vaxrank_config_set_override():
         ],
         config_expr_overrides=None,
     )
-    config = load_merged_vaxrank_config(args)
+    config = load_vaxrank_config(args)
     eq_(config["epitopes"]["scoring"]["derived_fields"]["affinity_score"]["midpoint"], 425.0)
     eq_(config["vaccine_peptides"]["generation"]["lengths"], [31])
 
 
-def test_load_merged_vaxrank_config_expr_override():
+def test_load_vaxrank_config_expr_override():
     args = argparse.Namespace(
         config=None,
         config_set_overrides=None,
@@ -798,7 +798,7 @@ def test_load_merged_vaxrank_config_expr_override():
             "vaccine_peptides.ranking.score=sqrt(n_alt_reads) * mutant_epitope_score"
         ],
     )
-    config = load_merged_vaxrank_config(args)
+    config = load_vaxrank_config(args)
     eq_(
         config["vaccine_peptides"]["ranking"]["score"],
         "sqrt(n_alt_reads) * mutant_epitope_score",

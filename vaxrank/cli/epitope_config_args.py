@@ -14,7 +14,7 @@ import argparse
 
 import msgspec
 
-from ..config.loader import extract_epitope_config_kwargs, load_merged_vaxrank_config
+from ..config.loader import extract_epitope_config_kwargs, load_vaxrank_config
 from ..epitope_config import EpitopeConfig
 
 
@@ -49,7 +49,7 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
         vaccine configs are built from the same args.
     """
     if merged_config is None:
-        merged_config = load_merged_vaxrank_config(args)
+        merged_config = load_vaxrank_config(args)
     epitope_config_kwargs = extract_epitope_config_kwargs(merged_config)
 
     if args.min_epitope_score is not None:

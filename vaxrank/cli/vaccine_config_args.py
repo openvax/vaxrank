@@ -14,7 +14,7 @@ import argparse
 
 import msgspec
 
-from ..config.loader import extract_vaccine_config_kwargs, load_merged_vaxrank_config
+from ..config.loader import extract_vaccine_config_kwargs, load_vaxrank_config
 from ..vaccine_config import VaccineConfig
 
 
@@ -80,7 +80,7 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
         vaccine configs are built from the same args.
     """
     if merged_config is None:
-        merged_config = load_merged_vaxrank_config(args)
+        merged_config = load_vaxrank_config(args)
     vaccine_config_kwargs = extract_vaccine_config_kwargs(merged_config)
 
     if args.vaccine_peptide_length is not None:

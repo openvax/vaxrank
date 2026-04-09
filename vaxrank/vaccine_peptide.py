@@ -16,6 +16,12 @@ from operator import attrgetter
 import numpy as np
 from serializable import Serializable
 
+from .config.defaults import (
+    DEFAULT_MANUFACTURABILITY_MAX_C_TERMINAL_HYDROPATHY,
+    DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_HIGH_PRIORITY,
+    DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_LOW_PRIORITY,
+    DEFAULT_MANUFACTURABILITY_MIN_KMER_HYDROPATHY,
+)
 from .manufacturability import ManufacturabilityScores
 
 
@@ -92,10 +98,10 @@ class VaccinePeptide(Serializable):
 
     def peptide_synthesis_difficulty_score_tuple(
             self,
-            max_c_terminal_hydropathy=1.5,
-            min_kmer_hydropathy=0,
-            max_kmer_hydropathy_low_priority=1.5,
-            max_kmer_hydropathy_high_priority=2.5):
+            max_c_terminal_hydropathy=DEFAULT_MANUFACTURABILITY_MAX_C_TERMINAL_HYDROPATHY,
+            min_kmer_hydropathy=DEFAULT_MANUFACTURABILITY_MIN_KMER_HYDROPATHY,
+            max_kmer_hydropathy_low_priority=DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_LOW_PRIORITY,
+            max_kmer_hydropathy_high_priority=DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_HIGH_PRIORITY):
         """
         Generates a tuple of scores used for lexicographic sorting of vaccine
         peptides.
