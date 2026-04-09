@@ -552,3 +552,56 @@ def test_config_edge_case_config_with_all_defaults():
     # Should be usable without any custom values
     ok_(epitope_config.min_epitope_score > 0)
     ok_(vaccine_config.vaccine_peptide_length > 0)
+
+
+# =============================================================================
+# Override Warning Tests
+# =============================================================================
+
+def test_vaccine_config_override_warns_on_conflicting_explicit_params(caplog):
+    """When vaccine_config overrides non-default explicit params, a warning is logged."""
+    import logging
+
+    mock_fragment = MagicMock(spec=MutantProteinFragment)
+    mock_fragment.sorted_subsequences.return_value = []
+
+    mock_variant = MagicMock()
+    mock_variant.short_description = "test"
+
+    vaccine_config = VaccineConfig(vaccine_peptide_length=40)
+
+    with caplog.at_level(logging.WARNING, logger="vaxrank.core_logic"):
+        vaccine_peptides_from_epitopes(
+            variant=mock_variant,
+            long_protein_fragment=mock_fragment,
+            epitope_predictions=[],
+            vaccine_peptide_length=30,  # Non-default, differs from config's 40
+            vaccine_config=vaccine_config,
+        )
+
+    assert "overrides explicit" in caplog.text
+    assert "vaccine_peptide_length" in caplog.text
+
+
+def test_vaccine_config_override_no_warning_when_default_params(caplog):
+    """No warning when explicit params match their defaults."""
+    import logging
+
+    mock_fragment = MagicMock(spec=MutantProteinFragment)
+    mock_fragment.sorted_subsequences.return_value = []
+
+    mock_variant = MagicMock()
+    mock_variant.short_description = "test"
+
+    vaccine_config = VaccineConfig(vaccine_peptide_length=40)
+
+    with caplog.at_level(logging.WARNING, logger="vaxrank.core_logic"):
+        vaccine_peptides_from_epitopes(
+            variant=mock_variant,
+            long_protein_fragment=mock_fragment,
+            epitope_predictions=[],
+            # All defaults — no conflict
+            vaccine_config=vaccine_config,
+        )
+
+    assert "overrides explicit" not in caplog.text

@@ -24,9 +24,10 @@ def test_config_overrides_defaults_for_protein_sequence_length(tmp_path):
     config_path.write_text(
         "\n".join(
             [
-                "vaccine_config:",
-                "  vaccine_peptide_length: 31",
-                "  padding_around_mutation: 9",
+                "vaccine_peptides:",
+                "  generation:",
+                "    lengths: 31",
+                "    padding_around_mutation: 9",
                 "",
             ]
         )

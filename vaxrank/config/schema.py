@@ -3,37 +3,6 @@ from typing import Optional, Union
 import msgspec
 
 
-class EpitopeConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    logistic_epitope_score_midpoint: Optional[float] = None
-    logistic_epitope_score_width: Optional[float] = None
-    min_epitope_score: Optional[float] = None
-    binding_affinity_cutoff: Optional[float] = None
-    scoring_mode: Optional[str] = None
-    percentile_rank_cutoff: Optional[float] = None
-
-
-class VaccineConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    vaccine_peptide_length: Optional[int] = None
-    padding_around_mutation: Optional[int] = None
-    max_vaccine_peptides_per_variant: Optional[int] = None
-    num_mutant_epitopes_to_keep: Optional[int] = None
-    score_fraction_of_best: Optional[float] = None
-    max_c_terminal_hydropathy: Optional[float] = None
-    min_kmer_hydropathy: Optional[float] = None
-    max_kmer_hydropathy_low_priority: Optional[float] = None
-    max_kmer_hydropathy_high_priority: Optional[float] = None
-
-
 class AffinityScoreConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -153,7 +122,5 @@ class VaxrankConfigSchema(
     kw_only=True,
     forbid_unknown_fields=True,
 ):
-    epitope_config: Optional[EpitopeConfigSchema] = None
-    vaccine_config: Optional[VaccineConfigSchema] = None
     epitopes: Optional[EpitopesConfigSchema] = None
     vaccine_peptides: Optional[VaccinePeptidesConfigSchema] = None

@@ -269,6 +269,21 @@ def vaccine_peptides_from_epitopes(
             max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         )
+    else:
+        _defaults = VaccineConfig()
+        for param_name, explicit_val, config_val, default_val in [
+            ("vaccine_peptide_length", vaccine_peptide_length,
+             vaccine_config.vaccine_peptide_length, _defaults.vaccine_peptide_length),
+            ("max_vaccine_peptides_per_variant", max_vaccine_peptides_per_variant,
+             vaccine_config.max_vaccine_peptides_per_variant, _defaults.max_vaccine_peptides_per_variant),
+            ("num_mutant_epitopes_to_keep", num_mutant_epitopes_to_keep,
+             vaccine_config.num_mutant_epitopes_to_keep, _defaults.num_mutant_epitopes_to_keep),
+        ]:
+            if explicit_val != default_val and explicit_val != config_val:
+                logger.warning(
+                    "vaccine_config.%s=%s overrides explicit %s=%s",
+                    param_name, config_val, param_name, explicit_val,
+                )
     candidate_vaccine_peptides = []
 
     for offset, candidate_fragment in long_protein_fragment.sorted_subsequences(

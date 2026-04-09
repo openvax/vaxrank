@@ -126,3 +126,30 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     min_kmer_hydropathy: float = DEFAULT_MANUFACTURABILITY_MIN_KMER_HYDROPATHY
     max_kmer_hydropathy_low_priority: float = DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_LOW_PRIORITY
     max_kmer_hydropathy_high_priority: float = DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_HIGH_PRIORITY
+
+    def __post_init__(self):
+        if self.vaccine_peptide_length < 1:
+            raise ValueError(
+                f"vaccine_peptide_length must be at least 1, "
+                f"got {self.vaccine_peptide_length}"
+            )
+        if self.padding_around_mutation < 0:
+            raise ValueError(
+                f"padding_around_mutation must be non-negative, "
+                f"got {self.padding_around_mutation}"
+            )
+        if self.max_vaccine_peptides_per_variant < 0:
+            raise ValueError(
+                f"max_vaccine_peptides_per_variant must be non-negative, "
+                f"got {self.max_vaccine_peptides_per_variant}"
+            )
+        if self.num_mutant_epitopes_to_keep < 0:
+            raise ValueError(
+                f"num_mutant_epitopes_to_keep must be non-negative, "
+                f"got {self.num_mutant_epitopes_to_keep}"
+            )
+        if not (0 < self.score_fraction_of_best <= 1):
+            raise ValueError(
+                f"score_fraction_of_best must be in (0, 1], "
+                f"got {self.score_fraction_of_best}"
+            )

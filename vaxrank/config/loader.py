@@ -124,42 +124,64 @@ def load_vaxrank_config(
     return _schema_to_dict(schema)
 
 
-def extract_epitope_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
-    kwargs = dict(config.get("epitope_config") or {})
+_MISSING = object()
 
-    epitopes = config.get("epitopes") or {}
-    filters = epitopes.get("filters") or {}
-    scoring = epitopes.get("scoring") or {}
-    derived_fields = scoring.get("derived_fields") or {}
-    affinity_score = derived_fields.get("affinity_score") or {}
-    percentile_score = derived_fields.get("percentile_score") or {}
+# Declarative mapping: (dotted config path) -> (EpitopeConfig kwarg name)
+_EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
+    ("epitopes.filters.min_score", "min_epitope_score"),
+    ("epitopes.scoring.mode", "scoring_mode"),
+    ("epitopes.scoring.derived_fields.affinity_score.midpoint", "logistic_epitope_score_midpoint"),
+    ("epitopes.scoring.derived_fields.affinity_score.width", "logistic_epitope_score_width"),
+    ("epitopes.scoring.derived_fields.affinity_score.cutoff", "binding_affinity_cutoff"),
+    ("epitopes.scoring.derived_fields.percentile_score.worst", "percentile_rank_cutoff"),
+]
 
-    if "min_score" in filters:
-        kwargs["min_epitope_score"] = filters["min_score"]
-    if "mode" in scoring:
-        kwargs["scoring_mode"] = scoring["mode"]
-    if "midpoint" in affinity_score:
-        kwargs["logistic_epitope_score_midpoint"] = affinity_score["midpoint"]
-    if "width" in affinity_score:
-        kwargs["logistic_epitope_score_width"] = affinity_score["width"]
-    if "cutoff" in affinity_score:
-        kwargs["binding_affinity_cutoff"] = affinity_score["cutoff"]
-    if "worst" in percentile_score:
-        kwargs["percentile_rank_cutoff"] = percentile_score["worst"]
+# Declarative mapping: (dotted config path) -> (VaccineConfig kwarg name)
+_VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
+    ("vaccine_peptides.generation.padding_around_mutation", "padding_around_mutation"),
+    ("vaccine_peptides.keep.per_mutation", "max_vaccine_peptides_per_variant"),
+    ("vaccine_peptides.keep.score_fraction_of_best", "score_fraction_of_best"),
+    ("vaccine_peptides.manufacturability.max_c_terminal_hydropathy", "max_c_terminal_hydropathy"),
+    ("vaccine_peptides.manufacturability.min_kmer_hydropathy", "min_kmer_hydropathy"),
+    ("vaccine_peptides.manufacturability.max_kmer_hydropathy_low_priority", "max_kmer_hydropathy_low_priority"),
+    ("vaccine_peptides.manufacturability.max_kmer_hydropathy_high_priority", "max_kmer_hydropathy_high_priority"),
+]
 
+
+def _resolve_dotted(config: dict[str, Any], dotted_path: str) -> Any:
+    """Resolve a dotted path like 'a.b.c' to a value in a nested dict."""
+    keys = dotted_path.split(".")
+    current = config
+    for key in keys:
+        if not isinstance(current, dict) or key not in current:
+            return _MISSING
+        current = current[key]
+    return current
+
+
+def _extract_via_mapping(
+    config: dict[str, Any],
+    mapping: list[tuple[str, str]],
+) -> dict[str, Any]:
+    """Extract kwargs from config using a declarative mapping."""
+    kwargs: dict[str, Any] = {}
+    for config_path, kwarg_name in mapping:
+        value = _resolve_dotted(config, config_path)
+        if value is not _MISSING:
+            kwargs[kwarg_name] = value
     return kwargs
 
 
+def extract_epitope_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
+    return _extract_via_mapping(config, _EPITOPE_CONFIG_MAPPING)
+
+
 def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
-    kwargs = dict(config.get("vaccine_config") or {})
+    kwargs = _extract_via_mapping(config, _VACCINE_CONFIG_MAPPING)
 
-    vaccine_peptides = config.get("vaccine_peptides") or {}
-    generation = vaccine_peptides.get("generation") or {}
-    keep = vaccine_peptides.get("keep") or {}
-    epitope_keep = (config.get("epitopes") or {}).get("keep") or {}
-
-    lengths = generation.get("lengths")
-    if lengths is not None:
+    # Handle lengths specially: list -> single value
+    lengths = _resolve_dotted(config, "vaccine_peptides.generation.lengths")
+    if lengths is not _MISSING:
         if isinstance(lengths, list):
             if len(lengths) > 1:
                 raise ValueError(
@@ -171,25 +193,22 @@ def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
         else:
             kwargs["vaccine_peptide_length"] = lengths
 
-    if "padding_around_mutation" in generation:
-        kwargs["padding_around_mutation"] = generation["padding_around_mutation"]
-    if "per_mutation" in keep:
-        kwargs["max_vaccine_peptides_per_variant"] = keep["per_mutation"]
-    if "score_fraction_of_best" in keep:
-        kwargs["score_fraction_of_best"] = keep["score_fraction_of_best"]
-    if "max_epitopes_per_candidate" in keep:
-        kwargs["num_mutant_epitopes_to_keep"] = keep["max_epitopes_per_candidate"]
-    if "top_n_per_candidate" in epitope_keep:
-        kwargs["num_mutant_epitopes_to_keep"] = epitope_keep["top_n_per_candidate"]
-
-    manufacturability = vaccine_peptides.get("manufacturability") or {}
-    if "max_c_terminal_hydropathy" in manufacturability:
-        kwargs["max_c_terminal_hydropathy"] = manufacturability["max_c_terminal_hydropathy"]
-    if "min_kmer_hydropathy" in manufacturability:
-        kwargs["min_kmer_hydropathy"] = manufacturability["min_kmer_hydropathy"]
-    if "max_kmer_hydropathy_low_priority" in manufacturability:
-        kwargs["max_kmer_hydropathy_low_priority"] = manufacturability["max_kmer_hydropathy_low_priority"]
-    if "max_kmer_hydropathy_high_priority" in manufacturability:
-        kwargs["max_kmer_hydropathy_high_priority"] = manufacturability["max_kmer_hydropathy_high_priority"]
+    # Handle num_mutant_epitopes_to_keep from two possible locations;
+    # error if both are set.
+    from_vaccine = _resolve_dotted(
+        config, "vaccine_peptides.keep.max_epitopes_per_candidate"
+    )
+    from_epitopes = _resolve_dotted(
+        config, "epitopes.keep.top_n_per_candidate"
+    )
+    if from_vaccine is not _MISSING and from_epitopes is not _MISSING:
+        raise ValueError(
+            "Cannot set both vaccine_peptides.keep.max_epitopes_per_candidate "
+            "and epitopes.keep.top_n_per_candidate. Use one or the other."
+        )
+    if from_vaccine is not _MISSING:
+        kwargs["num_mutant_epitopes_to_keep"] = from_vaccine
+    elif from_epitopes is not _MISSING:
+        kwargs["num_mutant_epitopes_to_keep"] = from_epitopes
 
     return kwargs

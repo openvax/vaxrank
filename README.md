@@ -37,26 +37,32 @@ vaxrank --config my_config.yaml --vcf variants.vcf --bam tumor.bam
 Example `my_config.yaml`:
 
 ```yaml
-epitope_config:
-  logistic_epitope_score_midpoint: 350.0  # IC50 (nM) at which score = 0.5
-  logistic_epitope_score_width: 150.0     # steepness of logistic curve
-  min_epitope_score: 0.00001              # drop epitopes below this score
-  binding_affinity_cutoff: 5000.0         # IC50 >= this → score 0
-  scoring_mode: affinity                  # "affinity" or "percentile_rank"
-  percentile_rank_cutoff: 10.0            # rank >= this → score 0 (percentile mode)
+epitopes:
+  filters:
+    min_score: 0.00001                      # drop epitopes below this score
+  scoring:
+    mode: affinity                          # "affinity" or "percentile_rank"
+    derived_fields:
+      affinity_score:
+        midpoint: 350.0                     # IC50 (nM) at which score = 0.5
+        width: 150.0                        # steepness of logistic curve
+        cutoff: 5000.0                      # IC50 >= this → score 0
+      percentile_score:
+        worst: 10.0                         # rank >= this → score 0 (percentile mode)
 
-vaccine_config:
-  vaccine_peptide_length: 25              # amino acids per vaccine peptide
-  padding_around_mutation: 5              # off-centre windows to consider
-  max_vaccine_peptides_per_variant: 1     # peptides to keep per variant
-  num_mutant_epitopes_to_keep: 1000       # 0 = keep all
-  score_fraction_of_best: 0.99           # drop candidates scoring < 99% of best
-
-  # Manufacturability thresholds (GRAVY = mean hydropathy)
-  max_c_terminal_hydropathy: 1.5          # max GRAVY of C-terminal 7-mer
-  min_kmer_hydropathy: 0.0                # min max-7mer GRAVY (floor)
-  max_kmer_hydropathy_low_priority: 1.5   # low-priority max-7mer GRAVY cap
-  max_kmer_hydropathy_high_priority: 2.5  # high-priority max-7mer GRAVY cap
+vaccine_peptides:
+  generation:
+    lengths: 25                             # amino acids per vaccine peptide
+    padding_around_mutation: 5              # off-centre windows to consider
+  keep:
+    per_mutation: 1                         # peptides to keep per variant
+    max_epitopes_per_candidate: 1000        # 0 = keep all
+    score_fraction_of_best: 0.99            # drop candidates scoring < 99% of best
+  manufacturability:                        # GRAVY = mean hydropathy
+    max_c_terminal_hydropathy: 1.5          # max GRAVY of C-terminal 7-mer
+    min_kmer_hydropathy: 0.0                # min max-7mer GRAVY (floor)
+    max_kmer_hydropathy_low_priority: 1.5   # low-priority max-7mer GRAVY cap
+    max_kmer_hydropathy_high_priority: 2.5  # high-priority max-7mer GRAVY cap
 ```
 
 CLI arguments override values from the config file.  You can also use
@@ -64,8 +70,8 @@ CLI arguments override values from the config file.  You can also use
 
 ```sh
 vaxrank --config my_config.yaml \
-  --config-value vaccine_config.score_fraction_of_best=0.95 \
-  --config-value epitope_config.percentile_rank_cutoff=5.0
+  --config-value vaccine_peptides.keep.score_fraction_of_best=0.95 \
+  --config-value epitopes.scoring.derived_fields.percentile_score.worst=5.0
 ```
 
 Use `--config-text` when the right-hand side should be kept as a raw

@@ -85,3 +85,35 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     binding_affinity_cutoff: float = DEFAULT_BINDING_AFFINITY_CUTOFF
     scoring_mode: str = "affinity"
     percentile_rank_cutoff: float = DEFAULT_PERCENTILE_RANK_CUTOFF
+
+    def __post_init__(self):
+        if self.logistic_epitope_score_midpoint <= 0:
+            raise ValueError(
+                f"logistic_epitope_score_midpoint must be positive, "
+                f"got {self.logistic_epitope_score_midpoint}"
+            )
+        if self.logistic_epitope_score_width <= 0:
+            raise ValueError(
+                f"logistic_epitope_score_width must be positive, "
+                f"got {self.logistic_epitope_score_width}"
+            )
+        if self.min_epitope_score < 0:
+            raise ValueError(
+                f"min_epitope_score must be non-negative, "
+                f"got {self.min_epitope_score}"
+            )
+        if self.binding_affinity_cutoff <= 0:
+            raise ValueError(
+                f"binding_affinity_cutoff must be positive, "
+                f"got {self.binding_affinity_cutoff}"
+            )
+        if self.scoring_mode not in ("affinity", "percentile_rank"):
+            raise ValueError(
+                f"scoring_mode must be 'affinity' or 'percentile_rank', "
+                f"got '{self.scoring_mode}'"
+            )
+        if self.percentile_rank_cutoff <= 0 or self.percentile_rank_cutoff > 100:
+            raise ValueError(
+                f"percentile_rank_cutoff must be in (0, 100], "
+                f"got {self.percentile_rank_cutoff}"
+            )
