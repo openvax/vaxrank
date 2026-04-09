@@ -26,9 +26,9 @@ import threading
 from platformdirs import user_cache_dir
 from tqdm import tqdm
 
-logger = logging.getLogger(__name__)
-
 from .config.defaults import DEFAULT_MAX_KMER_LENGTH, DEFAULT_MIN_KMER_LENGTH
+
+logger = logging.getLogger(__name__)
 
 # In-memory cache for loaded kmer sets to avoid repeated disk reads
 # Key: (species, release, min_len, max_len) -> set of kmers
