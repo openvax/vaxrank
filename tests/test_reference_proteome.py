@@ -19,7 +19,6 @@ import pickle
 import tempfile
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from vaxrank.reference_proteome import (
     ReferenceProteome,
@@ -615,38 +614,18 @@ def test_from_genome_with_exclude_gene_ids():
     assert ref.contains("KLMNOPQR")      # G2 still there
 
 
-def test_from_genome_with_pirlygenes_cta():
-    t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="ENSG00000001")
-    t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="ENSG00000002")
+def test_from_genome_with_exclude_cta_genes():
+    t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="ENSG00000006047")
+    t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="ENSG00000099999")
     genome = create_mock_genome([t1, t2])
     genome.transcript_ids_of_gene_id.return_value = ["T1"]
 
-    with patch(
-        "pirlygenes.gene_sets_cancer.CTA_gene_ids",
-        return_value={"ENSG00000001"},
-    ):
-        ref = ReferenceProteome.from_genome(
-            genome, exclude_pirlygenes_cta=True,
-            min_kmer_length=8, max_kmer_length=8)
+    ref = ReferenceProteome.from_genome(
+        genome, exclude_cta_genes=True,
+        min_kmer_length=8, max_kmer_length=8)
 
     assert not ref.contains("ABCDEFGH")  # CTA gene excluded
     assert ref.contains("KLMNOPQR")
-
-
-def test_from_genome_pirlygenes_not_installed():
-    genome = create_mock_genome([])
-    import builtins
-    real_import = builtins.__import__
-
-    def mock_import(name, *args, **kwargs):
-        if "pirlygenes" in name:
-            raise ImportError("No module named 'pirlygenes'")
-        return real_import(name, *args, **kwargs)
-
-    with patch("builtins.__import__", side_effect=mock_import):
-        with pytest.raises(ImportError, match="pirlygenes is not installed"):
-            ReferenceProteome.from_genome(
-                genome, exclude_pirlygenes_cta=True)
 
 
 def test_from_genome_with_exclude_fasta(tmp_path):
