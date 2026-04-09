@@ -40,6 +40,7 @@ from mhctools.cli import (
 from .arg_parser import parse_vaxrank_args, check_args
 from .epitope_config_args import epitope_config_from_args
 from .vaccine_config_args import vaccine_config_from_args
+from ..config import load_merged_vaxrank_config
 
 from ..core_logic import run_vaxrank
 from ..epitope_io import (
@@ -250,8 +251,9 @@ def main(args_list=None):
 
 
 def run_vaxrank_from_parsed_args(args):
-    epitope_config = epitope_config_from_args(args)
-    vaccine_config = vaccine_config_from_args(args)
+    merged_config = load_merged_vaxrank_config(args)
+    epitope_config = epitope_config_from_args(args, merged_config=merged_config)
+    vaccine_config = vaccine_config_from_args(args, merged_config=merged_config)
 
     # Sync args with merged config values so downstream consumers (Isovar,
     # reports, etc.) see the effective configuration.

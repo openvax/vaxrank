@@ -67,11 +67,20 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
 
     
 
-def vaccine_config_from_args(args : argparse.Namespace) -> VaccineConfig:
+def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> VaccineConfig:
     """
-    Extract config path and overrides from argument namespace
+    Extract config path and overrides from argument namespace.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+    merged_config : dict, optional
+        Pre-loaded merged config dict.  When supplied the YAML file is
+        not re-read, avoiding duplicate I/O when both epitope and
+        vaccine configs are built from the same args.
     """
-    merged_config = load_merged_vaxrank_config(args)
+    if merged_config is None:
+        merged_config = load_merged_vaxrank_config(args)
     vaccine_config_kwargs = extract_vaccine_config_kwargs(merged_config)
 
     if args.vaccine_peptide_length is not None:

@@ -189,12 +189,6 @@ def vaccine_peptides_for_variant(
         # failed their filters or don't have an RNA-derived protein sequence
         return []
 
-    # Use config values if provided, otherwise use explicit parameters
-    if vaccine_config is not None:
-        vaccine_peptide_length = vaccine_config.vaccine_peptide_length
-        max_vaccine_peptides_per_variant = vaccine_config.max_vaccine_peptides_per_variant
-        num_mutant_epitopes_to_keep = vaccine_config.num_mutant_epitopes_to_keep
-
     variant = isovar_result.variant
     long_protein_fragment = MutantProteinFragment.from_isovar_result(isovar_result)
 
@@ -270,14 +264,15 @@ def vaccine_peptides_from_epitopes(
         "percentile_rank_cutoff": epitope_config.percentile_rank_cutoff,
     }
     if vaccine_config is None:
-        vaccine_config = VaccineConfig()
-    else:
-        max_vaccine_peptides_per_variant = vaccine_config.max_vaccine_peptides_per_variant
-        num_mutant_epitopes_to_keep = vaccine_config.num_mutant_epitopes_to_keep
+        vaccine_config = VaccineConfig(
+            vaccine_peptide_length=vaccine_peptide_length,
+            max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
+            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+        )
     candidate_vaccine_peptides = []
 
     for offset, candidate_fragment in long_protein_fragment.sorted_subsequences(
-        subsequence_length=vaccine_peptide_length
+        subsequence_length=vaccine_config.vaccine_peptide_length
     ):
 
         subsequence_epitope_predictions = slice_epitope_predictions(
@@ -301,7 +296,7 @@ def vaccine_peptides_from_epitopes(
         candidate_vaccine_peptide = VaccinePeptide(
             mutant_protein_fragment=candidate_fragment,
             epitope_predictions=subsequence_epitope_predictions,
-            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+            num_mutant_epitopes_to_keep=vaccine_config.num_mutant_epitopes_to_keep,
             epitope_score_params=epitope_score_params,
         )
 
@@ -347,7 +342,7 @@ def vaccine_peptides_from_epitopes(
             vaccine_peptide.combined_score,
         )
 
-    return filtered_candidate_vaccine_peptides[:max_vaccine_peptides_per_variant]
+    return filtered_candidate_vaccine_peptides[:vaccine_config.max_vaccine_peptides_per_variant]
 
 
 def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):

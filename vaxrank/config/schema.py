@@ -9,7 +9,7 @@ class VaxrankConfigSchema(
     msgspec.Struct,
     frozen=True,
     kw_only=True,
-    forbid_unknown_fields=False,
+    forbid_unknown_fields=True,
 ):
     schema_version: int = DEFAULT_SCHEMA_VERSION
     inputs: dict[str, Any] = msgspec.field(default_factory=dict)

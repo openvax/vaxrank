@@ -36,11 +36,20 @@ def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
             "percentile rank directly (lower rank = better)."))
     
 
-def epitope_config_from_args(args : argparse.Namespace) -> EpitopeConfig:
+def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> EpitopeConfig:
     """
-    Extract config path and overrides from argument namespace
+    Extract config path and overrides from argument namespace.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+    merged_config : dict, optional
+        Pre-loaded merged config dict.  When supplied the YAML file is
+        not re-read, avoiding duplicate I/O when both epitope and
+        vaccine configs are built from the same args.
     """
-    merged_config = load_merged_vaxrank_config(args)
+    if merged_config is None:
+        merged_config = load_merged_vaxrank_config(args)
     epitope_config_kwargs = extract_epitope_config_kwargs(merged_config)
 
     if args.min_epitope_score is not None:
