@@ -8,9 +8,73 @@
 
 # vaxrank
 
-Selection of mutated protein fragments for therapeutic personalized cancer vaccines.
+Vaxrank is the vaccine peptide ranking component of the
+[OpenVax](https://www.openvax.org/) pipeline for designing personalized
+cancer vaccines.  Given a patient's somatic mutations, tumor RNA sequencing
+data, and HLA type, Vaxrank selects and ranks the mutant peptides most
+likely to elicit a T-cell response, producing a report suitable for
+guiding vaccine manufacture.
 
-## Usage
+## Overview
+
+Personalized cancer vaccines (also called neoantigen vaccines) work by
+training the immune system to recognise peptides that arise from somatic
+mutations unique to a patient's tumor.  Designing such a vaccine requires
+a computational pipeline that bridges raw sequencing data and the
+peptide synthesiser:
+
+1. **Variant calling** — Whole-exome or whole-genome sequencing of the
+   tumor and matched normal identifies somatic mutations.  This is
+   typically done with tools such as MuTect or Strelka, upstream of
+   Vaxrank.
+2. **Mutant transcript assembly** — Tumor RNA-seq reads overlapping each
+   mutation are assembled by [Isovar](https://github.com/openvax/isovar)
+   to determine the true mutant protein sequence.  This step phases
+   nearby germline variants and captures any mutation-associated splicing
+   differences, producing a more accurate reading frame than DNA-only
+   prediction.
+3. **MHC binding prediction** — Candidate epitopes (short peptide
+   subsequences spanning the mutation) are scored for predicted binding
+   to the patient's HLA class I molecules using
+   [mhctools](https://github.com/openvax/mhctools), which wraps
+   predictors such as MHCflurry, NetMHCpan, and BigMHC.
+4. **Vaccine peptide selection** — Vaxrank assembles longer synthetic long
+   peptides (SLPs, typically 25-mers) around the mutation, scores them by
+   the number and strength of their predicted MHC-binding epitopes,
+   filters out peptides that appear in the reference proteome, annotates
+   known cancer hotspot mutations, and ranks candidates by a combined
+   immunogenicity and manufacturability score.
+
+Vaxrank outputs ranked reports in ASCII, HTML, PDF, and XLSX formats.
+Each report lists the top vaccine peptide candidates per variant, their
+predicted epitopes, and supporting evidence from the RNA data.
+
+## Clinical Use
+
+Vaxrank is the ranking engine behind the OpenVax neoantigen vaccine
+pipeline, which has been used in several clinical trials of personalized
+cancer vaccines at Mount Sinai:
+
+- **PGV001** ([NCT02721043](https://clinicaltrials.gov/study/NCT02721043)) —
+  A phase I study of personalised neoantigen vaccines in patients with
+  solid and haematologic malignancies.  All 11 treated patients developed
+  neoantigen-specific T-cell responses
+  ([Bortman et al., Cancer Discovery 2025](https://pubmed.ncbi.nlm.nih.gov/40094414/)).
+- **PGV001 + atezolizumab in urothelial cancer**
+  ([NCT03359239](https://clinicaltrials.gov/study/NCT03359239)) —
+  A phase I trial combining PGV001 with checkpoint inhibition.
+  The combination was safe and induced neoantigen-specific CD4+ and CD8+
+  T-cell responses in all evaluated patients
+  ([Galsky et al., Nature Cancer 2025](https://www.nature.com/articles/s43018-025-00966-7)).
+- **PGV001 + TTFields in newly diagnosed glioblastoma**
+  ([NCT03223103](https://clinicaltrials.gov/study/NCT03223103)) —
+  A phase I trial combining PGV001 with tumor treating fields and
+  standard-of-care temozolomide (paper in preparation).
+
+The computational pipeline used in these trials is described in
+[Kodysh & Rubinsteyn, Methods Mol. Biol. 2020](https://link.springer.com/protocol/10.1007/978-1-0716-0327-7_10).
+
+## Quick Start
 
 ```sh
 vaxrank \
@@ -25,10 +89,44 @@ vaxrank \
     --output-html-report vaccine-peptides.html
 ```
 
-### Using a YAML Configuration File
+Inputs:
+- `--vcf` — Somatic variants (VCF from any variant caller)
+- `--bam` — Tumor RNA-seq alignments (used by Isovar to assemble mutant transcripts)
+- `--mhc-alleles` — Patient HLA alleles (e.g. `HLA-A*02:01,HLA-B*07:02`)
+- `--mhc-predictor` — Which MHC binding predictor to use (see table below)
 
-You can specify common parameters in a YAML configuration file to avoid
-repeating them on every run:
+## Installation
+
+```
+pip install vaxrank
+```
+
+**Requirements:** Python 3.9+
+
+Vaxrank uses [PyEnsembl](https://github.com/openvax/pyensembl) for
+reference genome annotation.  Install an Ensembl release matching your
+reference genome:
+
+```sh
+# GRCh38
+pyensembl install --release 113 --species human
+# GRCh37 (legacy)
+pyensembl install --release 75 --species human
+```
+
+To generate PDF reports you also need
+[wkhtmltopdf](http://wkhtmltopdf.org/):
+
+```
+brew install --cask wkhtmltopdf
+```
+
+## Configuration
+
+### YAML config file
+
+Common parameters can be stored in a YAML file to avoid repeating them
+on every run:
 
 ```sh
 vaxrank --config my_config.yaml --vcf variants.vcf --bam tumor.bam
@@ -61,8 +159,10 @@ vaccine_peptides:
     max_kmer_hydropathy_high_priority: 2.5  # high-priority max-7mer GRAVY cap
 ```
 
-CLI arguments override values from the config file.  You can also use
-`--config-value` to override any config value without editing the file:
+### CLI overrides
+
+CLI arguments override YAML values.  You can also use `--config-value` to
+override individual keys without editing the file:
 
 ```sh
 vaxrank --config my_config.yaml \
@@ -73,49 +173,53 @@ vaxrank --config my_config.yaml \
 Use `--config-text` when the right-hand side should be kept as a raw
 string instead of being YAML-parsed.
 
-## Installation
+### Resolution order
 
-Vaxrank can be installed using [pip](https://packaging.python.org/installing/#use-pip-for-installing):
+Config values are resolved in order (later wins):
 
-```
-pip install vaxrank
-```
+1. Compiled-in defaults (see `vaxrank/config/defaults.py`)
+2. YAML config file (`--config`)
+3. `--config-value` / `--config-text` overrides
+4. Dedicated CLI flags (e.g. `--vaccine-peptide-length`)
 
-**Requirements:** Python 3.9+
+### Config reference
 
-Note: to generate PDF reports, you first need to install [wkhtmltopdf](http://wkhtmltopdf.org/), which you can do (on macOS) like so:
+#### `EpitopeConfig` — epitope scoring and filtering
 
-```
-brew install --cask wkhtmltopdf
-```
+| Field | Default | Description |
+|-------|---------|-------------|
+| `logistic_epitope_score_midpoint` | 350.0 | IC50 (nM) at which epitope score = 0.5 |
+| `logistic_epitope_score_width` | 150.0 | Steepness of logistic scoring curve |
+| `min_epitope_score` | 0.00001 | Epitopes scoring below this are dropped |
+| `binding_affinity_cutoff` | 5000.0 | IC50 >= this → score 0 |
+| `scoring_mode` | `"affinity"` | `"affinity"` (IC50-based) or `"percentile_rank"` |
+| `percentile_rank_cutoff` | 10.0 | Rank >= this → score 0 (percentile mode) |
 
-Vaxrank uses [PyEnsembl](https://github.com/openvax/pyensembl) for accessing information about the reference genome. You must install an Ensembl release corresponding to the reference genome associated with the mutations provided to Vaxrank.
+#### `VaccineConfig` — peptide assembly and manufacturability
 
-Example for GRCh38 (adjust release to match your reference):
-```
-pyensembl install --release 113 --species human
-```
+| Field | Default | Description |
+|-------|---------|-------------|
+| `preferred_peptide_length` | 25 | Preferred amino acids per vaccine peptide |
+| `min_peptide_length` | 25 | Minimum vaccine peptide length |
+| `max_peptide_length` | 25 | Maximum vaccine peptide length |
+| `padding_around_mutation` | 5 | Off-centre window positions to consider |
+| `max_vaccine_peptides_per_variant` | 1 | Peptides to keep per variant |
+| `num_mutant_epitopes_to_keep` | 1000 | Max epitope predictions per peptide (0 = all) |
+| `score_fraction_of_best` | 0.99 | Drop candidates scoring below this fraction of the best |
+| `max_c_terminal_hydropathy` | 1.5 | Max GRAVY score of the C-terminal 7-mer |
+| `min_kmer_hydropathy` | 0.0 | Minimum max-7mer GRAVY (floor) |
+| `max_kmer_hydropathy_low_priority` | 1.5 | Low-priority max-7mer GRAVY cap |
+| `max_kmer_hydropathy_high_priority` | 2.5 | High-priority max-7mer GRAVY cap |
 
-Example for GRCh37 (legacy):
-```
-pyensembl install --release 75 --species human
-```
+The four `*_hydropathy*` fields control the manufacturability tie-breaking
+in vaccine peptide ranking.  See `VaccinePeptide.peptide_synthesis_difficulty_score_tuple`
+for details on how each threshold is applied.
 
-If your variants were called from alignments against hg19 then you can still use GRCh37 but should ignore mitochondrial variants.
+## MHC Binding Predictors
 
-## Features
-
-### Reference Proteome Filtering
-
-Vaxrank filters out peptides that exist in the reference proteome to focus on truly novel mutant sequences. This uses a set-based kmer index for O(1) membership testing. The index is built once and cached locally for subsequent runs.
-
-### Cancer Hotspot Annotation
-
-Vaxrank annotates variants that occur at known cancer mutation hotspots using bundled data from [cancerhotspots.org](https://www.cancerhotspots.org/) (Chang et al. 2016, 2017). This helps identify clinically relevant mutations. The hotspot data includes ~2,700 recurrently mutated positions across cancer types.
-
-### MHC Binding Prediction
-
-Vaxrank integrates with MHC binding predictors via [mhctools](https://github.com/openvax/mhctools). Use `--mhc-predictor <name>` to select one:
+Vaxrank integrates with MHC binding predictors via
+[mhctools](https://github.com/openvax/mhctools).
+Use `--mhc-predictor <name>` to select one:
 
 | `--mhc-predictor` | Tool | MHC Class | Notes |
 |--------------------|------|-----------|-------|
@@ -158,11 +262,96 @@ Vaxrank integrates with MHC binding predictors via [mhctools](https://github.com
 | `smm-pmbec-iedb` | SMM-PMBEC via IEDB | I | Uses IEDB web API |
 | `random` | Random | -- | Returns random scores; for testing only |
 
-## Paper & Citation
+## How It Works
 
-The original Vaxrank paper describes an earlier version of the software. The current codebase has been substantially rewritten since publication (updated configuration system, reference proteome filtering, cancer hotspot annotation, expanded predictor support, etc.), but the core algorithm for selecting neoantigen vaccine peptides remains the same.
+### Pipeline
 
-[Vaxrank: A Computational Tool For Designing Personalized Cancer Vaccines](https://www.biorxiv.org/content/early/2017/05/27/142919) can be cited as:
+Vaxrank sits at the end of a data-processing chain.  Upstream tools
+handle alignment and variant calling; Vaxrank takes their outputs and
+produces vaccine peptide candidates:
+
+```
+Tumor DNA-seq ──► Variant Caller ──► VCF ─────────────────────────┐
+                                                                   ▼
+Tumor RNA-seq ──► Aligner ──► BAM ──► Isovar ──► Mutant protein   ├──► Vaxrank ──► Report
+                                      fragments                   │
+Patient HLA typing ────────────────────────────────────────────────┘
+```
+
+### Mutant transcript assembly (Isovar)
+
+For each somatic variant, [Isovar](https://github.com/openvax/isovar)
+extracts RNA-seq reads overlapping the mutant locus and assembles them
+into a mutant protein fragment.  This is more accurate than simply
+applying the DNA variant to the reference transcript because it:
+
+- **Phases** adjacent germline and somatic variants that fall on the same
+  read, producing the true amino acid sequence
+- **Captures splicing differences** such as intron retention events that
+  may alter the reading frame near the mutation
+- **Confirms expression** — variants with no supporting RNA reads are
+  filtered out
+
+### Epitope scoring
+
+Each mutant protein fragment is sliced into overlapping subsequences of
+epitope length (typically 8–15 amino acids).  These candidate epitopes
+are scored for predicted MHC binding affinity using the selected
+predictor.  Binding predictions are converted to a score between 0 and 1
+via a logistic function parameterised by the `EpitopeConfig` settings.
+
+### Vaccine peptide ranking
+
+Candidate vaccine peptides (longer SLPs, typically 25-mers) are
+constructed around each mutation.  Each candidate is scored by the
+combined immunogenicity of the epitopes it contains.  Candidates are
+then filtered and ranked by:
+
+1. **Epitope content** — total predicted immunogenicity score
+2. **Reference proteome filtering** — peptides matching the human
+   reference proteome are removed to ensure only truly novel sequences
+   are selected
+3. **Cancer hotspot annotation** — variants at known recurrently mutated
+   positions (bundled data from
+   [cancerhotspots.org](https://www.cancerhotspots.org/), ~2,700
+   mutations across cancer types) are flagged
+4. **Manufacturability** — tie-breaking by hydropathy-based synthesis
+   difficulty (C-terminal and 7-mer window GRAVY scores)
+
+### Key modules
+
+- `core_logic.py`: Main vaccine peptide selection algorithm
+- `epitope_logic.py`: Epitope scoring and filtering
+- `reference_proteome.py`: Set-based kmer index for reference proteome filtering (O(1) lookup, built once and cached)
+- `cancer_hotspots.py`: Cancer mutation hotspot annotation
+- `vaccine_peptide.py`: Vaccine peptide scoring and manufacturability
+- `report.py`: Report generation (ASCII, HTML, PDF, XLSX)
+
+## Papers & Citations
+
+**Vaxrank algorithm:**
+
+> Rubinsteyn, A., Hodes, I., Kodysh, J. & Hammerbacher, J.
+> [Vaxrank: A Computational Tool For Designing Personalized Cancer Vaccines.](https://doi.org/10.1101/142919)
+> *bioRxiv* (2017).
+
+**OpenVax pipeline (methods):**
+
+> Kodysh, J. & Rubinsteyn, A.
+> [OpenVax: An Open-Source Computational Pipeline for Cancer Neoantigen Prediction.](https://link.springer.com/protocol/10.1007/978-1-0716-0327-7_10)
+> *Methods Mol. Biol.* 2120, 147–160 (2020).
+
+**PGV001 clinical results:**
+
+> Bortman et al.
+> [PGV001, a Multi-Peptide Personalized Neoantigen Vaccine Platform: Phase I Study in Patients with Solid and Hematologic Malignancies in the Adjuvant Setting.](https://pubmed.ncbi.nlm.nih.gov/40094414/)
+> *Cancer Discovery* 15(5), 930–945 (2025).
+
+> Galsky et al.
+> [Atezolizumab plus personalized neoantigen vaccination in urothelial cancer: a phase 1 trial.](https://www.nature.com/articles/s43018-025-00966-7)
+> *Nature Cancer* (2025).
+
+BibTeX for the Vaxrank paper:
 
     @article {Rubinsteyn142919,
         author = {Rubinsteyn, Alex and Hodes, Isaac and Kodysh, Julia and Hammerbacher, Jeffrey},
@@ -170,12 +359,23 @@ The original Vaxrank paper describes an earlier version of the software. The cur
         year = {2017},
         doi = {10.1101/142919},
         publisher = {Cold Spring Harbor Laboratory},
-        abstract = {Therapeutic vaccines targeting mutant tumor antigens ({\textquotedblleft}neoantigens{\textquotedblright}) are an increasingly popular form of personalized cancer immunotherapy. Vaxrank is a computational tool for selecting neoantigen vaccine peptides from tumor mutations, tumor RNA data, and patient HLA type. Vaxrank is freely available at www.github.com/hammerlab/vaxrank under the Apache 2.0 open source license and can also be installed from the Python Package Index.},
         URL = {https://www.biorxiv.org/content/early/2017/05/27/142919},
-        eprint = {https://www.biorxiv.org/content/early/2017/05/27/142919.full.pdf},
         journal = {bioRxiv}
     }
 
+## Dependencies
+
+Vaxrank is built on the [OpenVax](https://github.com/openvax) ecosystem:
+
+- [pyensembl](https://github.com/openvax/pyensembl): Reference genome annotation
+- [varcode](https://github.com/openvax/varcode): Variant effect prediction from DNA
+- [isovar](https://github.com/openvax/isovar): RNA-based mutant transcript assembly and variant phasing
+- [mhctools](https://github.com/openvax/mhctools): Unified interface to MHC binding predictors
+
+Other key dependencies:
+- `msgspec`: Configuration serialization (YAML/JSON)
+- `pandas`, `numpy`: Data processing
+- `jinja2`, `pdfkit`: Report generation
 
 ## Development
 
@@ -201,72 +401,8 @@ Run linting and tests:
 
 The first run of the tests may take a while to build the reference proteome kmer index, but subsequent runs will use the cached index.
 
-## Architecture
+### Scripts
 
-### Configuration
-
-Vaxrank uses [msgspec](https://jcristharif.com/msgspec/) frozen Struct objects
-for configuration, with all defaults centralised in
-`vaxrank/config/defaults.py`.  Config values are resolved in order:
-
-1. Compiled-in defaults
-2. YAML config file (`--config`)
-3. `--config-value` / `--config-text` CLI overrides
-4. Dedicated CLI flags (e.g. `--vaccine-peptide-length`)
-
-#### `EpitopeConfig` — epitope scoring and filtering
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `logistic_epitope_score_midpoint` | 350.0 | IC50 (nM) at which epitope score = 0.5 |
-| `logistic_epitope_score_width` | 150.0 | Steepness of logistic scoring curve |
-| `min_epitope_score` | 0.00001 | Epitopes scoring below this are dropped |
-| `binding_affinity_cutoff` | 5000.0 | IC50 >= this → score 0 |
-| `scoring_mode` | `"affinity"` | `"affinity"` (IC50-based) or `"percentile_rank"` |
-| `percentile_rank_cutoff` | 10.0 | Rank >= this → score 0 (percentile mode) |
-
-#### `VaccineConfig` — peptide assembly and manufacturability
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `preferred_peptide_length` | 25 | Preferred amino acids per vaccine peptide |
-| `min_peptide_length` | 25 | Minimum vaccine peptide length |
-| `max_peptide_length` | 25 | Maximum vaccine peptide length |
-| `padding_around_mutation` | 5 | Off-centre window positions to consider |
-| `max_vaccine_peptides_per_variant` | 1 | Peptides to keep per variant |
-| `num_mutant_epitopes_to_keep` | 1000 | Max epitope predictions per peptide (0 = all) |
-| `score_fraction_of_best` | 0.99 | Drop candidates scoring below this fraction of the best |
-| `max_c_terminal_hydropathy` | 1.5 | Max GRAVY score of the C-terminal 7-mer |
-| `min_kmer_hydropathy` | 0.0 | Minimum max-7mer GRAVY (floor) |
-| `max_kmer_hydropathy_low_priority` | 1.5 | Low-priority max-7mer GRAVY cap |
-| `max_kmer_hydropathy_high_priority` | 2.5 | High-priority max-7mer GRAVY cap |
-
-The four `*_hydropathy*` fields control the manufacturability tie-breaking
-in vaccine peptide ranking.  See `VaccinePeptide.peptide_synthesis_difficulty_score_tuple`
-for details on how each threshold is applied.
-
-### Key Modules
-
-- `reference_proteome.py`: Set-based kmer index for checking if peptides exist in the reference proteome
-- `cancer_hotspots.py`: Lookup for known cancer mutation hotspots
-- `epitope_logic.py`: Epitope scoring and filtering logic
-- `core_logic.py`: Main vaccine peptide selection algorithm
-- `report.py`: Report generation (ASCII, HTML, PDF, XLSX)
-
-## Dependencies
-
-Key dependencies:
-- `pyensembl`: Reference genome annotation
-- `varcode`: Variant effect prediction
-- `isovar`: RNA-based variant calling
-- `mhctools`: MHC binding prediction
-- `msgspec`: Configuration serialization (YAML/JSON)
-- `pandas`, `numpy`: Data processing
-- `jinja2`, `pdfkit`: Report generation
-
-## Scripts
-
-Helper scripts included in the repo:
 - `develop.sh`: installs the package in editable mode and sets `PYTHONPATH` to the repo root.
 - `lint.sh`: runs ruff on `vaxrank` and `tests`.
 - `test.sh`: runs pytest with coverage.
