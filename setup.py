@@ -59,6 +59,7 @@ if __name__ == "__main__":
             "Programming Language :: Python",
             "Topic :: Scientific/Engineering :: Bio-Informatics",
         ],
+        python_requires=">=3.9",
         install_requires=requirements,
         long_description=readme_markdown,
         long_description_content_type="text/markdown",
