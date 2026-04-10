@@ -47,13 +47,13 @@ epitopes:
   top_epitopes_per_candidate: 1000          # 0 = keep all
 
 vaccine_peptides:
-  generation:
-    lengths: 25                             # amino acids per vaccine peptide
-    padding_around_mutation: 5              # off-centre windows to consider
-  keep:
-    per_mutation: 1                         # peptides to keep per variant
-    max_epitopes_per_candidate: 1000        # 0 = keep all
-    score_fraction_of_best: 0.99            # drop candidates scoring < 99% of best
+  preferred_length: 25                      # target amino acids per vaccine peptide
+  min_length: 25                            # minimum vaccine peptide length
+  max_length: 25                            # maximum vaccine peptide length
+  padding_around_mutation: 5                # off-centre windows to consider
+  per_mutation: 1                           # peptides to keep per variant
+  max_epitopes_per_candidate: 1000          # 0 = keep all
+  score_fraction_of_best: 0.99              # drop candidates scoring < 99% of best
   manufacturability:                        # GRAVY = mean hydropathy
     max_c_terminal_hydropathy: 1.5          # max GRAVY of C-terminal 7-mer
     min_kmer_hydropathy: 0.0                # min max-7mer GRAVY (floor)
@@ -66,7 +66,7 @@ CLI arguments override values from the config file.  You can also use
 
 ```sh
 vaxrank --config my_config.yaml \
-  --config-value vaccine_peptides.keep.score_fraction_of_best=0.95 \
+  --config-value vaccine_peptides.score_fraction_of_best=0.95 \
   --config-value epitopes.percentile_rank_cutoff=5.0
 ```
 
@@ -115,13 +115,44 @@ Vaxrank annotates variants that occur at known cancer mutation hotspots using bu
 
 ### MHC Binding Prediction
 
-Vaxrank integrates with multiple MHC binding predictors via [mhctools](https://github.com/openvax/mhctools), including:
-- NetMHC / NetMHCpan
-- MHCflurry (open source, installed by default)
+Vaxrank integrates with MHC binding predictors via [mhctools](https://github.com/openvax/mhctools). Use `--mhc-predictor <name>` to select one:
+
+| `--mhc-predictor` | Tool | MHC Class | Notes |
+|--------------------|------|-----------|-------|
+| `mhcflurry` | [MHCflurry](https://github.com/openvax/mhcflurry) | I | Open-source neural network; installed with mhctools |
+| `netmhc` | NetMHC | I | Auto-detects NetMHC3 or NetMHC4 |
+| `netmhc3` | NetMHC 3.x | I | Requires local install |
+| `netmhc4` | NetMHC 4.x | I | Requires local install |
+| `netmhcpan` | NetMHCpan | I | Auto-detects installed version |
+| `netmhcpan28` | NetMHCpan 2.8 | I | Requires local install |
+| `netmhcpan3` | NetMHCpan 3.x | I | Requires local install |
+| `netmhcpan4` | NetMHCpan 4.x | I | Default mode (EL + BA) |
+| `netmhcpan4-ba` | NetMHCpan 4.x | I | Binding affinity mode only |
+| `netmhcpan4-el` | NetMHCpan 4.x | I | Eluted ligand mode only |
+| `netmhcpan41` | NetMHCpan 4.1 | I | Default mode (EL + BA) |
+| `netmhcpan41-ba` | NetMHCpan 4.1 | I | Binding affinity mode only |
+| `netmhcpan41-el` | NetMHCpan 4.1 | I | Eluted ligand mode only |
+| `netmhccons` | NetMHCcons | I | Requires local install |
+| `netmhciipan` | NetMHCIIpan | II | Auto-detects installed version |
+| `netmhciipan3` | NetMHCIIpan 3.x | II | Requires local install |
+| `netmhciipan4` | NetMHCIIpan 4.x | II | Default mode (EL + BA) |
+| `netmhciipan4-ba` | NetMHCIIpan 4.x | II | Binding affinity mode only |
+| `netmhciipan4-el` | NetMHCIIpan 4.x | II | Eluted ligand mode only |
+| `mixmhcpred` | [MixMHCpred](https://github.com/GfellerLab/MixMHCpred) | I | Requires local install |
+| -- | [BigMHC](https://github.com/KarchinLab/bigmhc) EL | I | Presentation model; API-only (`from mhctools import BigMHC`) |
+| -- | [BigMHC](https://github.com/KarchinLab/bigmhc) IM | I | Immunogenicity model; API-only |
+| `netmhcpan-iedb` | NetMHCpan via IEDB | I | Uses IEDB web API |
+| `netmhccons-iedb` | NetMHCcons via IEDB | I | Uses IEDB web API |
+| `netmhciipan-iedb` | NetMHCIIpan via IEDB | II | Uses IEDB web API |
+| `smm-iedb` | SMM via IEDB | I | Uses IEDB web API |
+| `smm-pmbec-iedb` | SMM-PMBEC via IEDB | I | Uses IEDB web API |
+| `random` | Random | -- | Returns random scores; for testing only |
 
 ## Paper & Citation
 
-There is a Vaxrank paper on biorxiv called [Vaxrank: A Computational Tool For Designing Personalized Cancer Vaccines](https://www.biorxiv.org/content/early/2017/05/27/142919) which can be cited as:
+The original Vaxrank paper describes an earlier version of the software. The current codebase has been substantially rewritten since publication (updated configuration system, reference proteome filtering, cancer hotspot annotation, expanded predictor support, etc.), but the core algorithm for selecting neoantigen vaccine peptides remains the same.
+
+[Vaxrank: A Computational Tool For Designing Personalized Cancer Vaccines](https://www.biorxiv.org/content/early/2017/05/27/142919) can be cited as:
 
     @article {Rubinsteyn142919,
         author = {Rubinsteyn, Alex and Hodes, Isaac and Kodysh, Julia and Hammerbacher, Jeffrey},
@@ -188,7 +219,9 @@ for configuration, with all defaults centralised in
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `vaccine_peptide_length` | 25 | Amino acids per vaccine peptide |
+| `preferred_peptide_length` | 25 | Preferred amino acids per vaccine peptide |
+| `min_peptide_length` | 25 | Minimum vaccine peptide length |
+| `max_peptide_length` | 25 | Maximum vaccine peptide length |
 | `padding_around_mutation` | 5 | Off-centre window positions to consider |
 | `max_vaccine_peptides_per_variant` | 1 | Peptides to keep per variant |
 | `num_mutant_epitopes_to_keep` | 1000 | Max epitope predictions per peptide (0 = all) |

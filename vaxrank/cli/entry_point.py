@@ -257,7 +257,7 @@ def run_vaxrank_from_parsed_args(args):
 
     # Sync args with merged config values so downstream consumers (Isovar,
     # reports, etc.) see the effective configuration.
-    args.vaccine_peptide_length = vaccine_config.vaccine_peptide_length
+    args.vaccine_peptide_length = vaccine_config.preferred_peptide_length
     args.padding_around_mutation = vaccine_config.padding_around_mutation
     args.max_vaccine_peptides_per_variant = vaccine_config.max_vaccine_peptides_per_variant
     # Keep legacy key for backward compatibility in JSON/report args.

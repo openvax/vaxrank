@@ -159,9 +159,12 @@ _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
 
 # Declarative mapping: (dotted config path) -> (VaccineConfig kwarg name)
 _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
-    ("vaccine_peptides.generation.padding_around_mutation", "padding_around_mutation"),
-    ("vaccine_peptides.keep.per_mutation", "max_vaccine_peptides_per_variant"),
-    ("vaccine_peptides.keep.score_fraction_of_best", "score_fraction_of_best"),
+    ("vaccine_peptides.preferred_length", "preferred_peptide_length"),
+    ("vaccine_peptides.min_length", "min_peptide_length"),
+    ("vaccine_peptides.max_length", "max_peptide_length"),
+    ("vaccine_peptides.padding_around_mutation", "padding_around_mutation"),
+    ("vaccine_peptides.per_mutation", "max_vaccine_peptides_per_variant"),
+    ("vaccine_peptides.score_fraction_of_best", "score_fraction_of_best"),
     ("vaccine_peptides.manufacturability.max_c_terminal_hydropathy", "max_c_terminal_hydropathy"),
     ("vaccine_peptides.manufacturability.min_kmer_hydropathy", "min_kmer_hydropathy"),
     ("vaccine_peptides.manufacturability.max_kmer_hydropathy_low_priority", "max_kmer_hydropathy_low_priority"),
@@ -200,31 +203,24 @@ def extract_epitope_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
 def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     kwargs = _extract_via_mapping(config, _VACCINE_CONFIG_MAPPING)
 
-    # Handle lengths specially: list -> single value
-    lengths = _resolve_dotted(config, "vaccine_peptides.generation.lengths")
-    if lengths is not _MISSING:
-        if isinstance(lengths, list):
-            if len(lengths) != 1:
-                raise ValueError(
-                    "Current Vaxrank implementation supports a single vaccine peptide "
-                    "length. Provide exactly one value in "
-                    "vaccine_peptides.generation.lengths."
-                )
-            kwargs["vaccine_peptide_length"] = lengths[0]
-        else:
-            kwargs["vaccine_peptide_length"] = lengths
+    # When preferred_peptide_length is set but min/max are not,
+    # default them to match preferred so the range is consistent.
+    if "preferred_peptide_length" in kwargs:
+        pref = kwargs["preferred_peptide_length"]
+        kwargs.setdefault("min_peptide_length", pref)
+        kwargs.setdefault("max_peptide_length", pref)
 
     # Handle num_mutant_epitopes_to_keep from two possible locations;
     # error if both are set.
     from_vaccine = _resolve_dotted(
-        config, "vaccine_peptides.keep.max_epitopes_per_candidate"
+        config, "vaccine_peptides.max_epitopes_per_candidate"
     )
     from_epitopes = _resolve_dotted(
         config, "epitopes.top_epitopes_per_candidate"
     )
     if from_vaccine is not _MISSING and from_epitopes is not _MISSING:
         raise ValueError(
-            "Cannot set both vaccine_peptides.keep.max_epitopes_per_candidate "
+            "Cannot set both vaccine_peptides.max_epitopes_per_candidate "
             "and epitopes.top_epitopes_per_candidate. Use one or the other."
         )
     if from_vaccine is not _MISSING:

@@ -28,8 +28,8 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         default=None,
         type=int,
         help=(
-            "Number of amino acids in the vaccine peptides. "
-            f"(default: {default_vaccine_config.vaccine_peptide_length})"
+            "Preferred number of amino acids in the vaccine peptides. "
+            f"(default: {default_vaccine_config.preferred_peptide_length})"
         ))
 
     vaccine_peptide_group.add_argument(
@@ -84,7 +84,10 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
     vaccine_config_kwargs = extract_vaccine_config_kwargs(merged_config)
 
     if args.vaccine_peptide_length is not None:
-        vaccine_config_kwargs["vaccine_peptide_length"] = args.vaccine_peptide_length
+        vaccine_config_kwargs["preferred_peptide_length"] = args.vaccine_peptide_length
+        # When user specifies a single length via CLI, pin min/max to match
+        vaccine_config_kwargs["min_peptide_length"] = args.vaccine_peptide_length
+        vaccine_config_kwargs["max_peptide_length"] = args.vaccine_peptide_length
     if args.padding_around_mutation is not None:
         vaccine_config_kwargs["padding_around_mutation"] = args.padding_around_mutation
     max_vaccine_peptides_per_variant = getattr(

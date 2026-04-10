@@ -32,10 +32,12 @@ from .config.defaults import (
     DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_HIGH_PRIORITY,
     DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_LOW_PRIORITY,
     DEFAULT_MANUFACTURABILITY_MIN_KMER_HYDROPATHY,
+    DEFAULT_MAX_PEPTIDE_LENGTH,
     DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT,
+    DEFAULT_MIN_PEPTIDE_LENGTH,
     DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP,
     DEFAULT_PADDING_AROUND_MUTATION,
-    DEFAULT_VACCINE_PEPTIDE_LENGTH,
+    DEFAULT_PREFERRED_PEPTIDE_LENGTH,
     DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST,
 )
 
@@ -50,9 +52,16 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
 
     Attributes
     ----------
-    vaccine_peptide_length : int
-        Target length of vaccine peptides in amino acids. Longer peptides
-        allow for more epitope presentation but may be harder to synthesize.
+    preferred_peptide_length : int
+        Preferred length of vaccine peptides in amino acids.
+        Default: 25
+
+    min_peptide_length : int
+        Minimum acceptable vaccine peptide length in amino acids.
+        Default: 25
+
+    max_peptide_length : int
+        Maximum acceptable vaccine peptide length in amino acids.
         Default: 25
 
     padding_around_mutation : int
@@ -105,11 +114,11 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     Examples
     --------
     >>> config = VaccineConfig()
-    >>> config.vaccine_peptide_length
+    >>> config.preferred_peptide_length
     25
 
-    >>> long_peptide_config = VaccineConfig(vaccine_peptide_length=30)
-    >>> long_peptide_config.vaccine_peptide_length
+    >>> long_peptide_config = VaccineConfig(preferred_peptide_length=30)
+    >>> long_peptide_config.preferred_peptide_length
     30
 
     >>> multi_peptide_config = VaccineConfig(max_vaccine_peptides_per_variant=3)
@@ -117,7 +126,9 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     3
     """
 
-    vaccine_peptide_length: int = DEFAULT_VACCINE_PEPTIDE_LENGTH
+    preferred_peptide_length: int = DEFAULT_PREFERRED_PEPTIDE_LENGTH
+    min_peptide_length: int = DEFAULT_MIN_PEPTIDE_LENGTH
+    max_peptide_length: int = DEFAULT_MAX_PEPTIDE_LENGTH
     padding_around_mutation: int = DEFAULT_PADDING_AROUND_MUTATION
     max_vaccine_peptides_per_variant: int = DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT
     num_mutant_epitopes_to_keep: int = DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP
@@ -128,10 +139,33 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     max_kmer_hydropathy_high_priority: float = DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_HIGH_PRIORITY
 
     def __post_init__(self):
-        if self.vaccine_peptide_length < 1:
+        if self.preferred_peptide_length < 1:
             raise ValueError(
-                f"vaccine_peptide_length must be at least 1, "
-                f"got {self.vaccine_peptide_length}"
+                f"preferred_peptide_length must be at least 1, "
+                f"got {self.preferred_peptide_length}"
+            )
+        if self.min_peptide_length < 1:
+            raise ValueError(
+                f"min_peptide_length must be at least 1, "
+                f"got {self.min_peptide_length}"
+            )
+        if self.max_peptide_length < 1:
+            raise ValueError(
+                f"max_peptide_length must be at least 1, "
+                f"got {self.max_peptide_length}"
+            )
+        if self.min_peptide_length > self.max_peptide_length:
+            raise ValueError(
+                f"min_peptide_length ({self.min_peptide_length}) must be "
+                f"<= max_peptide_length ({self.max_peptide_length})"
+            )
+        if not (self.min_peptide_length
+                <= self.preferred_peptide_length
+                <= self.max_peptide_length):
+            raise ValueError(
+                f"preferred_peptide_length ({self.preferred_peptide_length}) must be "
+                f"between min_peptide_length ({self.min_peptide_length}) and "
+                f"max_peptide_length ({self.max_peptide_length})"
             )
         if self.padding_around_mutation < 0:
             raise ValueError(

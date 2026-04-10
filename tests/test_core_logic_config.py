@@ -113,7 +113,9 @@ def test_vaccine_peptides_for_variant_config_overrides_explicit_params():
     mock_predictor = MagicMock()
 
     vaccine_config = VaccineConfig(
-        vaccine_peptide_length=40,
+        preferred_peptide_length=40,
+        min_peptide_length=40,
+        max_peptide_length=40,
         max_vaccine_peptides_per_variant=5,
         num_mutant_epitopes_to_keep=500,
     )
@@ -209,10 +211,10 @@ def test_config_integration_epitope_config_affects_filtering():
 
 def test_config_integration_vaccine_config_affects_peptide_generation():
     """Test that VaccineConfig affects vaccine peptide generation"""
-    config_short = VaccineConfig(vaccine_peptide_length=20)
-    config_long = VaccineConfig(vaccine_peptide_length=35)
+    config_short = VaccineConfig(preferred_peptide_length=20, min_peptide_length=20, max_peptide_length=20)
+    config_long = VaccineConfig(preferred_peptide_length=35, min_peptide_length=35, max_peptide_length=35)
 
-    gt_(config_long.vaccine_peptide_length, config_short.vaccine_peptide_length)
+    gt_(config_long.preferred_peptide_length, config_short.preferred_peptide_length)
 
 
 def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
@@ -358,7 +360,7 @@ def test_config_defaults_match_historical_behavior():
     vaccine_config = VaccineConfig()
 
     # These were the historical defaults
-    eq_(vaccine_config.vaccine_peptide_length, 25)
+    eq_(vaccine_config.preferred_peptide_length, 25)
     eq_(vaccine_config.padding_around_mutation, 5)
     eq_(vaccine_config.max_vaccine_peptides_per_variant, 1)
 
@@ -397,9 +399,9 @@ def test_config_immutability_epitope_config_hashable():
 
 def test_config_immutability_vaccine_config_hashable():
     """Test that VaccineConfig can be used in sets/dicts"""
-    config1 = VaccineConfig(vaccine_peptide_length=25)
-    config2 = VaccineConfig(vaccine_peptide_length=25)
-    config3 = VaccineConfig(vaccine_peptide_length=30)
+    config1 = VaccineConfig(preferred_peptide_length=25)
+    config2 = VaccineConfig(preferred_peptide_length=25)
+    config3 = VaccineConfig(preferred_peptide_length=30, min_peptide_length=30, max_peptide_length=30)
 
     eq_(config1, config2)
     ok_(config1 != config3)
@@ -432,9 +434,9 @@ def test_config_edge_case_very_small_min_epitope_score():
 
 
 def test_config_edge_case_large_vaccine_peptide_length():
-    """Test that large vaccine_peptide_length is valid"""
-    config = VaccineConfig(vaccine_peptide_length=100)
-    eq_(config.vaccine_peptide_length, 100)
+    """Test that large preferred_peptide_length is valid"""
+    config = VaccineConfig(preferred_peptide_length=100, min_peptide_length=100, max_peptide_length=100)
+    eq_(config.preferred_peptide_length, 100)
 
 
 def test_config_edge_case_zero_vaccine_peptides_per_variant():
@@ -551,7 +553,7 @@ def test_config_edge_case_config_with_all_defaults():
 
     # Should be usable without any custom values
     ok_(epitope_config.min_epitope_score > 0)
-    ok_(vaccine_config.vaccine_peptide_length > 0)
+    ok_(vaccine_config.preferred_peptide_length > 0)
 
 
 # =============================================================================
@@ -568,7 +570,7 @@ def test_vaccine_config_override_warns_on_conflicting_explicit_params(caplog):
     mock_variant = MagicMock()
     mock_variant.short_description = "test"
 
-    vaccine_config = VaccineConfig(vaccine_peptide_length=40)
+    vaccine_config = VaccineConfig(preferred_peptide_length=40, min_peptide_length=40, max_peptide_length=40)
 
     with caplog.at_level(logging.WARNING, logger="vaxrank.core_logic"):
         vaccine_peptides_from_epitopes(
@@ -580,7 +582,7 @@ def test_vaccine_config_override_warns_on_conflicting_explicit_params(caplog):
         )
 
     assert "overrides explicit" in caplog.text
-    assert "vaccine_peptide_length" in caplog.text
+    assert "preferred_peptide_length" in caplog.text
 
 
 def test_vaccine_config_override_no_warning_when_default_params(caplog):
@@ -593,7 +595,7 @@ def test_vaccine_config_override_no_warning_when_default_params(caplog):
     mock_variant = MagicMock()
     mock_variant.short_description = "test"
 
-    vaccine_config = VaccineConfig(vaccine_peptide_length=40)
+    vaccine_config = VaccineConfig(preferred_peptide_length=40, min_peptide_length=40, max_peptide_length=40)
 
     with caplog.at_level(logging.WARNING, logger="vaxrank.core_logic"):
         vaccine_peptides_from_epitopes(

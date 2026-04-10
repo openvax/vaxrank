@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional
 
 import msgspec
 
@@ -16,27 +16,6 @@ class EpitopesConfigSchema(
     affinity_cutoff: Optional[float] = None
     percentile_rank_cutoff: Optional[float] = None
     top_epitopes_per_candidate: Optional[int] = None
-
-
-class VaccinePeptideGenerationConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    lengths: Optional[Union[list[int], int]] = None
-    padding_around_mutation: Optional[int] = None
-
-
-class VaccinePeptideKeepConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    per_mutation: Optional[int] = None
-    max_epitopes_per_candidate: Optional[int] = None
-    score_fraction_of_best: Optional[float] = None
 
 
 class ManufacturabilityConfigSchema(
@@ -57,8 +36,13 @@ class VaccinePeptidesConfigSchema(
     kw_only=True,
     forbid_unknown_fields=True,
 ):
-    generation: Optional[VaccinePeptideGenerationConfigSchema] = None
-    keep: Optional[VaccinePeptideKeepConfigSchema] = None
+    preferred_length: Optional[int] = None
+    min_length: Optional[int] = None
+    max_length: Optional[int] = None
+    padding_around_mutation: Optional[int] = None
+    per_mutation: Optional[int] = None
+    max_epitopes_per_candidate: Optional[int] = None
+    score_fraction_of_best: Optional[float] = None
     manufacturability: Optional[ManufacturabilityConfigSchema] = None
 
 

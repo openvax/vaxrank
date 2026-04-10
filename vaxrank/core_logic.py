@@ -265,15 +265,17 @@ def vaccine_peptides_from_epitopes(
     }
     if vaccine_config is None:
         vaccine_config = VaccineConfig(
-            vaccine_peptide_length=vaccine_peptide_length,
+            preferred_peptide_length=vaccine_peptide_length,
+            min_peptide_length=vaccine_peptide_length,
+            max_peptide_length=vaccine_peptide_length,
             max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         )
     else:
         _defaults = VaccineConfig()
         for param_name, explicit_val, config_val, default_val in [
-            ("vaccine_peptide_length", vaccine_peptide_length,
-             vaccine_config.vaccine_peptide_length, _defaults.vaccine_peptide_length),
+            ("preferred_peptide_length", vaccine_peptide_length,
+             vaccine_config.preferred_peptide_length, _defaults.preferred_peptide_length),
             ("max_vaccine_peptides_per_variant", max_vaccine_peptides_per_variant,
              vaccine_config.max_vaccine_peptides_per_variant, _defaults.max_vaccine_peptides_per_variant),
             ("num_mutant_epitopes_to_keep", num_mutant_epitopes_to_keep,
@@ -287,7 +289,7 @@ def vaccine_peptides_from_epitopes(
     candidate_vaccine_peptides = []
 
     for offset, candidate_fragment in long_protein_fragment.sorted_subsequences(
-        subsequence_length=vaccine_config.vaccine_peptide_length
+        subsequence_length=vaccine_config.preferred_peptide_length
     ):
 
         subsequence_epitope_predictions = slice_epitope_predictions(

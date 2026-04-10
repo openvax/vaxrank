@@ -146,7 +146,7 @@ def test_epitope_config_convert_from_dict():
 def test_vaccine_config_default_values():
     """Test that VaccineConfig has correct default values"""
     config = VaccineConfig()
-    eq_(config.vaccine_peptide_length, 25)
+    eq_(config.preferred_peptide_length, 25)
     eq_(config.padding_around_mutation, 5)
     eq_(config.max_vaccine_peptides_per_variant, 1)
     eq_(config.num_mutant_epitopes_to_keep, 1000)
@@ -156,13 +156,15 @@ def test_vaccine_config_default_values():
 def test_vaccine_config_custom_values():
     """Test creating VaccineConfig with custom values"""
     config = VaccineConfig(
-        vaccine_peptide_length=30,
+        preferred_peptide_length=30,
+        min_peptide_length=30,
+        max_peptide_length=30,
         padding_around_mutation=10,
         max_vaccine_peptides_per_variant=3,
         num_mutant_epitopes_to_keep=500,
         score_fraction_of_best=0.95,
     )
-    eq_(config.vaccine_peptide_length, 30)
+    eq_(config.preferred_peptide_length, 30)
     eq_(config.padding_around_mutation, 10)
     eq_(config.max_vaccine_peptides_per_variant, 3)
     eq_(config.num_mutant_epitopes_to_keep, 500)
@@ -171,8 +173,8 @@ def test_vaccine_config_custom_values():
 
 def test_vaccine_config_partial_custom_values():
     """Test creating VaccineConfig with only some custom values"""
-    config = VaccineConfig(vaccine_peptide_length=35)
-    eq_(config.vaccine_peptide_length, 35)
+    config = VaccineConfig(preferred_peptide_length=35, min_peptide_length=35, max_peptide_length=35)
+    eq_(config.preferred_peptide_length, 35)
     # Other values should be defaults
     eq_(config.padding_around_mutation, 5)
     eq_(config.max_vaccine_peptides_per_variant, 1)
@@ -181,25 +183,29 @@ def test_vaccine_config_partial_custom_values():
 def test_vaccine_config_msgspec_encode_decode():
     """Test that VaccineConfig can be encoded/decoded with msgspec"""
     config = VaccineConfig(
-        vaccine_peptide_length=30,
+        preferred_peptide_length=30,
+        min_peptide_length=30,
+        max_peptide_length=30,
         max_vaccine_peptides_per_variant=5,
     )
     json_bytes = msgspec.json.encode(config)
     decoded = msgspec.json.decode(json_bytes, type=VaccineConfig)
-    eq_(decoded.vaccine_peptide_length, 30)
+    eq_(decoded.preferred_peptide_length, 30)
     eq_(decoded.max_vaccine_peptides_per_variant, 5)
 
 
 def test_vaccine_config_yaml_decode():
     """Test decoding VaccineConfig from YAML"""
     yaml_content = """
-vaccine_peptide_length: 40
+preferred_peptide_length: 40
+min_peptide_length: 40
+max_peptide_length: 40
 padding_around_mutation: 8
 max_vaccine_peptides_per_variant: 2
 num_mutant_epitopes_to_keep: 2000
 """
     config = msgspec.yaml.decode(yaml_content, type=VaccineConfig)
-    eq_(config.vaccine_peptide_length, 40)
+    eq_(config.preferred_peptide_length, 40)
     eq_(config.padding_around_mutation, 8)
     eq_(config.max_vaccine_peptides_per_variant, 2)
     eq_(config.num_mutant_epitopes_to_keep, 2000)
@@ -208,21 +214,25 @@ num_mutant_epitopes_to_keep: 2000
 def test_vaccine_config_yaml_decode_partial():
     """Test decoding VaccineConfig from YAML with partial values"""
     yaml_content = """
-vaccine_peptide_length: 35
+preferred_peptide_length: 35
+min_peptide_length: 35
+max_peptide_length: 35
 """
     config = msgspec.yaml.decode(yaml_content, type=VaccineConfig)
-    eq_(config.vaccine_peptide_length, 35)
+    eq_(config.preferred_peptide_length, 35)
     eq_(config.padding_around_mutation, 5)  # default
 
 
 def test_vaccine_config_convert_from_dict():
     """Test converting a dict to VaccineConfig"""
     config_dict = {
-        "vaccine_peptide_length": 28,
+        "preferred_peptide_length": 28,
+        "min_peptide_length": 28,
+        "max_peptide_length": 28,
         "max_vaccine_peptides_per_variant": 4,
     }
     config = msgspec.convert(config_dict, VaccineConfig)
-    eq_(config.vaccine_peptide_length, 28)
+    eq_(config.preferred_peptide_length, 28)
     eq_(config.max_vaccine_peptides_per_variant, 4)
 
 
@@ -292,8 +302,7 @@ def test_epitope_config_from_args_yaml_without_epitopes_section():
     """Test YAML file without epitopes section uses defaults"""
     yaml_content = """
 vaccine_peptides:
-  generation:
-    lengths: 30
+  preferred_length: 30
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -369,7 +378,7 @@ def test_vaccine_config_from_args_no_config_file_no_cli_args():
         num_epitopes_per_vaccine_peptide=None,
     )
     config = vaccine_config_from_args(args)
-    eq_(config.vaccine_peptide_length, 25)
+    eq_(config.preferred_peptide_length, 25)
     eq_(config.padding_around_mutation, 5)
     eq_(config.max_vaccine_peptides_per_variant, 1)
     eq_(config.num_mutant_epitopes_to_keep, 1000)
@@ -385,7 +394,7 @@ def test_vaccine_config_from_args_cli_override_vaccine_peptide_length():
         num_epitopes_per_vaccine_peptide=None,
     )
     config = vaccine_config_from_args(args)
-    eq_(config.vaccine_peptide_length, 35)
+    eq_(config.preferred_peptide_length, 35)
 
 
 def test_vaccine_config_from_args_cli_override_all_values():
@@ -398,7 +407,7 @@ def test_vaccine_config_from_args_cli_override_all_values():
         num_epitopes_per_vaccine_peptide=500,
     )
     config = vaccine_config_from_args(args)
-    eq_(config.vaccine_peptide_length, 30)
+    eq_(config.preferred_peptide_length, 30)
     eq_(config.padding_around_mutation, 10)
     eq_(config.max_vaccine_peptides_per_variant, 5)
     eq_(config.num_mutant_epitopes_to_keep, 500)
@@ -421,12 +430,10 @@ def test_vaccine_config_from_args_yaml_config_file():
     """Test loading vaccine config from YAML file"""
     yaml_content = """
 vaccine_peptides:
-  generation:
-    lengths: 40
-    padding_around_mutation: 8
-  keep:
-    per_mutation: 3
-    max_epitopes_per_candidate: 2000
+  preferred_length: 40
+  padding_around_mutation: 8
+  per_mutation: 3
+  max_epitopes_per_candidate: 2000
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -441,7 +448,7 @@ vaccine_peptides:
             num_epitopes_per_vaccine_peptide=None,
         )
         config = vaccine_config_from_args(args)
-        eq_(config.vaccine_peptide_length, 40)
+        eq_(config.preferred_peptide_length, 40)
         eq_(config.padding_around_mutation, 8)
         eq_(config.max_vaccine_peptides_per_variant, 3)
         eq_(config.num_mutant_epitopes_to_keep, 2000)
@@ -453,10 +460,8 @@ def test_vaccine_config_from_args_cli_overrides_yaml():
     """Test that CLI arguments override YAML config values"""
     yaml_content = """
 vaccine_peptides:
-  generation:
-    lengths: 40
-  keep:
-    per_mutation: 3
+  preferred_length: 40
+  per_mutation: 3
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -471,7 +476,7 @@ vaccine_peptides:
             num_epitopes_per_vaccine_peptide=None,
         )
         config = vaccine_config_from_args(args)
-        eq_(config.vaccine_peptide_length, 50)  # CLI override
+        eq_(config.preferred_peptide_length, 50)  # CLI override
         eq_(config.max_vaccine_peptides_per_variant, 3)  # from YAML
     finally:
         os.unlink(config_path)
@@ -496,7 +501,7 @@ epitopes:
             num_epitopes_per_vaccine_peptide=None,
         )
         config = vaccine_config_from_args(args)
-        eq_(config.vaccine_peptide_length, 25)  # default
+        eq_(config.preferred_peptide_length, 25)  # default
     finally:
         os.unlink(config_path)
 
@@ -504,13 +509,11 @@ epitopes:
 def test_vaccine_config_from_args_nested_yaml_config_file():
     yaml_content = """
 vaccine_peptides:
-  generation:
-    lengths: [31]
-    padding_around_mutation: 9
-  keep:
-    per_mutation: 2
-    max_epitopes_per_candidate: 42
-    score_fraction_of_best: 0.95
+  preferred_length: 31
+  padding_around_mutation: 9
+  per_mutation: 2
+  max_epitopes_per_candidate: 42
+  score_fraction_of_best: 0.95
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -527,7 +530,7 @@ vaccine_peptides:
             config_expr_overrides=None,
         )
         config = vaccine_config_from_args(args)
-        eq_(config.vaccine_peptide_length, 31)
+        eq_(config.preferred_peptide_length, 31)
         eq_(config.padding_around_mutation, 9)
         eq_(config.max_vaccine_peptides_per_variant, 2)
         eq_(config.num_mutant_epitopes_to_keep, 42)
@@ -567,11 +570,41 @@ vaccine_peptides:
         os.unlink(config_path)
 
 
-def test_vaccine_config_from_args_multiple_lengths_not_supported():
+def test_vaccine_config_rejects_min_greater_than_max():
+    with pytest.raises(ValueError, match="min_peptide_length"):
+        VaccineConfig(
+            preferred_peptide_length=25,
+            min_peptide_length=30,
+            max_peptide_length=20,
+        )
+
+
+def test_vaccine_config_rejects_preferred_outside_range():
+    with pytest.raises(ValueError, match="preferred_peptide_length"):
+        VaccineConfig(
+            preferred_peptide_length=35,
+            min_peptide_length=20,
+            max_peptide_length=30,
+        )
+
+
+def test_vaccine_config_accepts_length_range():
+    """min < preferred < max should be valid."""
+    config = VaccineConfig(
+        preferred_peptide_length=25,
+        min_peptide_length=21,
+        max_peptide_length=29,
+    )
+    eq_(config.min_peptide_length, 21)
+    eq_(config.preferred_peptide_length, 25)
+    eq_(config.max_peptide_length, 29)
+
+
+def test_vaccine_config_yaml_preferred_length_only_defaults_min_max():
+    """Setting only preferred_length in YAML should auto-set min/max to match."""
     yaml_content = """
 vaccine_peptides:
-  generation:
-    lengths: [25, 31]
+  preferred_length: 30
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -584,20 +617,22 @@ vaccine_peptides:
             padding_around_mutation=None,
             max_vaccine_peptides_per_variant=None,
             num_epitopes_per_vaccine_peptide=None,
-            config_set_overrides=None,
-            config_expr_overrides=None,
         )
-        with pytest.raises(ValueError):
-            vaccine_config_from_args(args)
+        config = vaccine_config_from_args(args)
+        eq_(config.preferred_peptide_length, 30)
+        eq_(config.min_peptide_length, 30)
+        eq_(config.max_peptide_length, 30)
     finally:
         os.unlink(config_path)
 
 
-def test_vaccine_config_from_args_empty_lengths_rejected():
+def test_vaccine_config_yaml_explicit_length_range():
+    """All three length fields set explicitly in YAML."""
     yaml_content = """
 vaccine_peptides:
-  generation:
-    lengths: []
+  preferred_length: 25
+  min_length: 20
+  max_length: 35
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -610,11 +645,38 @@ vaccine_peptides:
             padding_around_mutation=None,
             max_vaccine_peptides_per_variant=None,
             num_epitopes_per_vaccine_peptide=None,
-            config_set_overrides=None,
-            config_expr_overrides=None,
         )
-        with pytest.raises(ValueError, match="exactly one value"):
-            vaccine_config_from_args(args)
+        config = vaccine_config_from_args(args)
+        eq_(config.preferred_peptide_length, 25)
+        eq_(config.min_peptide_length, 20)
+        eq_(config.max_peptide_length, 35)
+    finally:
+        os.unlink(config_path)
+
+
+def test_legacy_vaccine_config_key_with_flat_structure():
+    """Legacy top-level key 'vaccine_config' should work with new flat fields."""
+    yaml_content = """
+vaccine_config:
+  preferred_length: 28
+  per_mutation: 3
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        args = argparse.Namespace(
+            config=config_path,
+            vaccine_peptide_length=None,
+            padding_around_mutation=None,
+            max_vaccine_peptides_per_variant=None,
+            num_epitopes_per_vaccine_peptide=None,
+        )
+        with pytest.warns(DeprecationWarning, match="vaccine_config"):
+            config = vaccine_config_from_args(args)
+        eq_(config.preferred_peptide_length, 28)
+        eq_(config.max_vaccine_peptides_per_variant, 3)
     finally:
         os.unlink(config_path)
 
@@ -631,10 +693,8 @@ epitopes:
   logistic_midpoint: 400.0
 
 vaccine_peptides:
-  generation:
-    lengths: 30
-  keep:
-    per_mutation: 2
+  preferred_length: 30
+  per_mutation: 2
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -656,7 +716,7 @@ vaccine_peptides:
             num_epitopes_per_vaccine_peptide=None,
         )
         vaccine_config = vaccine_config_from_args(vaccine_args)
-        eq_(vaccine_config.vaccine_peptide_length, 30)
+        eq_(vaccine_config.preferred_peptide_length, 30)
         eq_(vaccine_config.max_vaccine_peptides_per_variant, 2)
     finally:
         os.unlink(config_path)
@@ -669,8 +729,7 @@ epitopes:
   min_score: 0.01
 
 vaccine_peptides:
-  generation:
-    lengths: 30
+  preferred_length: 30
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -691,7 +750,7 @@ vaccine_peptides:
             num_epitopes_per_vaccine_peptide=None,
         )
         vaccine_config = vaccine_config_from_args(vaccine_args)
-        eq_(vaccine_config.vaccine_peptide_length, 40)  # CLI
+        eq_(vaccine_config.preferred_peptide_length, 40)  # CLI
     finally:
         os.unlink(config_path)
 
@@ -908,13 +967,13 @@ def test_load_vaxrank_config_set_override():
         config=None,
         config_set_overrides=[
             "epitopes.logistic_midpoint=425.0",
-            "vaccine_peptides.generation.lengths=[31]",
+            "vaccine_peptides.preferred_length=31",
         ],
         config_expr_overrides=None,
     )
     config = load_vaxrank_config(args)
     eq_(config["epitopes"]["logistic_midpoint"], 425.0)
-    eq_(config["vaccine_peptides"]["generation"]["lengths"], [31])
+    eq_(config["vaccine_peptides"]["preferred_length"], 31)
 
 
 def test_load_vaxrank_config_expr_override():
@@ -955,8 +1014,7 @@ def test_load_vaxrank_config_legacy_vaccine_config_key_warns():
     """Legacy vaccine_config top-level key emits a deprecation warning."""
     yaml_content = """
 vaccine_config:
-  generation:
-    lengths: [25]
+  preferred_length: 25
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -965,7 +1023,7 @@ vaccine_config:
     try:
         with pytest.warns(DeprecationWarning, match="vaccine_config"):
             config = load_vaxrank_config(config_path=config_path)
-        assert config["vaccine_peptides"]["generation"]["lengths"] == [25]
+        assert config["vaccine_peptides"]["preferred_length"] == 25
     finally:
         os.unlink(config_path)
 
@@ -1044,13 +1102,13 @@ def test_epitope_config_rejects_percentile_rank_cutoff_over_100():
 
 
 def test_vaccine_config_rejects_zero_peptide_length():
-    with pytest.raises(ValueError, match="vaccine_peptide_length"):
-        VaccineConfig(vaccine_peptide_length=0)
+    with pytest.raises(ValueError, match="preferred_peptide_length"):
+        VaccineConfig(preferred_peptide_length=0)
 
 
 def test_vaccine_config_rejects_negative_peptide_length():
-    with pytest.raises(ValueError, match="vaccine_peptide_length"):
-        VaccineConfig(vaccine_peptide_length=-5)
+    with pytest.raises(ValueError, match="preferred_peptide_length"):
+        VaccineConfig(preferred_peptide_length=-5)
 
 
 def test_vaccine_config_rejects_negative_padding():
@@ -1100,8 +1158,7 @@ def test_validation_through_yaml_loading():
     """Invalid values via YAML should raise during config construction."""
     yaml_content = """
 vaccine_peptides:
-  generation:
-    lengths: -5
+  preferred_length: -5
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -1116,7 +1173,7 @@ vaccine_peptides:
             num_epitopes_per_vaccine_peptide=None,
         )
         # msgspec.convert wraps ValueError in ValidationError
-        with pytest.raises((ValueError, msgspec.ValidationError), match="vaccine_peptide_length"):
+        with pytest.raises((ValueError, msgspec.ValidationError), match="preferred_peptide_length"):
             vaccine_config_from_args(args)
     finally:
         os.unlink(config_path)
@@ -1132,7 +1189,7 @@ def test_extract_vaccine_config_kwargs_errors_on_conflicting_epitope_keep():
 
     config = {
         "epitopes": {"top_epitopes_per_candidate": 10},
-        "vaccine_peptides": {"keep": {"max_epitopes_per_candidate": 20}},
+        "vaccine_peptides": {"max_epitopes_per_candidate": 20},
     }
     with pytest.raises(ValueError, match="Cannot set both"):
         extract_vaccine_config_kwargs(config)
@@ -1149,7 +1206,7 @@ def test_extract_vaccine_config_kwargs_accepts_single_epitope_keep_path():
     eq_(kwargs_a["num_mutant_epitopes_to_keep"], 10)
 
     config_b = {
-        "vaccine_peptides": {"keep": {"max_epitopes_per_candidate": 20}},
+        "vaccine_peptides": {"max_epitopes_per_candidate": 20},
     }
     kwargs_b = extract_vaccine_config_kwargs(config_b)
     eq_(kwargs_b["num_mutant_epitopes_to_keep"], 20)
