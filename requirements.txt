@@ -7,9 +7,10 @@ mhctools>=3.5.0,<4.0.0
 topiary>=4.2.0,<5.0.0
 roman
 jinja2>=3.1
-pdfkit  # needs wkhtmltopdf: brew install Caskroom/cask/wkhtmltopdf
+weasyprint>=62.0
+pdfkit  # legacy: needs wkhtmltopdf, use --pdf-backend=pdfkit to enable
 openpyxl
-xvfbwrapper
+xvfbwrapper  # legacy: only needed with --pdf-backend=pdfkit on headless Linux
 astropy>=6.1
 platformdirs
 pysam>=0.23.0

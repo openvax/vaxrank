@@ -164,6 +164,13 @@ def add_output_args(arg_parser):
         help="Path to PDF vaccine peptide report")
 
     output_args_group.add_argument(
+        "--pdf-backend",
+        choices=["pdfkit", "weasyprint"],
+        default="pdfkit",
+        help="Library to use for PDF generation. 'weasyprint' is experimental "
+             "and does not require wkhtmltopdf (default: pdfkit)")
+
+    output_args_group.add_argument(
         "--output-json-file",
         default="",
         help="Path to JSON file containing results of vaccine peptide report")

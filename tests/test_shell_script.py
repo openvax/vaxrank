@@ -147,9 +147,13 @@ def test_html_report():
         assert len(lines) > 1
 
 
-def test_pdf_report():
-    with NamedTemporaryFile(mode="rb") as f:
-        pdf_args = cli_args_for_b16_seqdata + ["--output-pdf-report", f.name]
+@pytest.mark.parametrize("backend", ["weasyprint", "pdfkit"])
+def test_pdf_report(backend):
+    with NamedTemporaryFile(mode="rb", suffix=".pdf") as f:
+        pdf_args = cli_args_for_b16_seqdata + [
+            "--output-pdf-report", f.name,
+            "--pdf-backend", backend,
+        ]
         run_shell_script(pdf_args)
         assert getsize(f.name) > 1
 

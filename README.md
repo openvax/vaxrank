@@ -114,11 +114,19 @@ pyensembl install --release 113 --species human
 pyensembl install --release 75 --species human
 ```
 
-To generate PDF reports you also need
-[wkhtmltopdf](http://wkhtmltopdf.org/):
+PDF report generation uses [wkhtmltopdf](http://wkhtmltopdf.org/) by default:
 
 ```
 brew install --cask wkhtmltopdf
+```
+
+Alternatively, pass `--pdf-backend=weasyprint` to use
+[WeasyPrint](https://weasyprint.org/) (experimental), which has no external
+binary dependency:
+
+```
+pip install weasyprint
+# macOS also needs: brew install pango
 ```
 
 ## Configuration
@@ -377,7 +385,7 @@ Vaxrank is built on the [OpenVax](https://github.com/openvax) ecosystem:
 Other key dependencies:
 - `msgspec`: Configuration serialization (YAML/JSON)
 - `pandas`, `numpy`: Data processing
-- `jinja2`, `pdfkit`: Report generation
+- `jinja2`, `pdfkit`/`weasyprint`: Report generation
 
 ## Development
 
