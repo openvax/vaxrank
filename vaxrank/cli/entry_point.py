@@ -247,7 +247,8 @@ def main(args_list=None):
     if args.output_pdf_report:
         make_pdf_report(
             template_data=template_data,
-            pdf_report_path=args.output_pdf_report)
+            pdf_report_path=args.output_pdf_report,
+            backend=args.pdf_backend)
 
 
 def run_vaxrank_from_parsed_args(args):

@@ -20,7 +20,6 @@ import tempfile
 from astropy.io import ascii as asc
 import jinja2
 import pandas as pd
-import pdfkit
 import roman
 from varcode import load_vcf_fast
 
@@ -382,30 +381,47 @@ def make_html_report(
         _make_report(template_data, f, 'templates/template.html')
     logger.info('Wrote HTML report to %s', html_report_path)
 
+def _pdf_via_pdfkit(html_path, pdf_report_path):
+    import pdfkit
+
+    options = {
+        'zoom': 0.55,
+        'margin-top': '20mm'
+    }
+
+    if sys.platform in ('linux', 'linux2'):
+        # pdfkit uses wkhtmltopdf, which doesn't work on headless servers;
+        # recommended workaround is to use xvfb, as documented here:
+        # https://github.com/wkhtmltopdf/wkhtmltopdf/issues/2037#issuecomment-62019521
+        from xvfbwrapper import Xvfb
+        logger.info('Running pdfkit inside xvfb wrapper')
+        with Xvfb():
+            pdfkit.from_file(html_path, pdf_report_path, options=options)
+    else:
+        pdfkit.from_file(html_path, pdf_report_path, options=options)
+
+
+def _pdf_via_weasyprint(html_path, pdf_report_path):
+    import weasyprint
+    doc = weasyprint.HTML(filename=html_path)
+    doc.write_pdf(pdf_report_path)
+
+
 def make_pdf_report(
         template_data,
-        pdf_report_path):
+        pdf_report_path,
+        backend='pdfkit'):
     with tempfile.NamedTemporaryFile(mode='w', suffix='.html') as f:
         _make_report(template_data, f, 'templates/template.html')
         f.flush()
 
-        options = {
-            'zoom': 0.55,
-            'margin-top': '20mm'
-        }
-
-        if sys.platform in ('linux', 'linux2'):
-            # pdfkit uses wkhtmltopdf, which doesn't work on headless servers;
-            # recommended workaround is to use xvfb, as documented here:
-            # https://github.com/wkhtmltopdf/wkhtmltopdf/issues/2037#issuecomment-62019521
-            from xvfbwrapper import Xvfb
-            logger.info('Running pdfkit inside xvfb wrapper')
-            with Xvfb():
-                pdfkit.from_file(f.name, pdf_report_path, options=options)
-
+        if backend == 'pdfkit':
+            _pdf_via_pdfkit(f.name, pdf_report_path)
+        elif backend == 'weasyprint':
+            _pdf_via_weasyprint(f.name, pdf_report_path)
         else:
-            pdfkit.from_file(f.name, pdf_report_path, options=options)
-    logger.info('Wrote PDF report to %s', pdf_report_path)
+            raise ValueError("Unknown PDF backend: %s (choose 'pdfkit' or 'weasyprint')" % backend)
+    logger.info('Wrote PDF report to %s (backend=%s)', pdf_report_path, backend)
 
 def new_columns():
     columns = OrderedDict([

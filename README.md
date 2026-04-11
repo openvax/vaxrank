@@ -114,11 +114,19 @@ pyensembl install --release 113 --species human
 pyensembl install --release 75 --species human
 ```
 
-To generate PDF reports you also need
-[wkhtmltopdf](http://wkhtmltopdf.org/):
+PDF report generation uses [wkhtmltopdf](http://wkhtmltopdf.org/) by default:
 
 ```
 brew install --cask wkhtmltopdf
+```
+
+Alternatively, pass `--pdf-backend=weasyprint` to use
+[WeasyPrint](https://weasyprint.org/) (experimental), which has no external
+binary dependency:
+
+```
+pip install weasyprint
+# macOS also needs: brew install pango
 ```
 
 ## Configuration
@@ -264,19 +272,21 @@ Use `--mhc-predictor <name>` to select one:
 
 ## How It Works
 
-### Pipeline
+### Upstream inputs
 
-Vaxrank sits at the end of a data-processing chain.  Upstream tools
-handle alignment and variant calling; Vaxrank takes their outputs and
-produces vaccine peptide candidates:
+Vaxrank does not perform variant calling or read alignment itself.
+Those steps happen upstream, typically as part of a larger
+bioinformatics pipeline (e.g.
+[neoantigen-vaccine-pipeline](https://github.com/openvax/neoantigen-vaccine-pipeline)):
 
-```
-Tumor DNA-seq ──► Variant Caller ──► VCF ─────────────────────────┐
-                                                                   ▼
-Tumor RNA-seq ──► Aligner ──► BAM ──► Isovar ──► Mutant protein   ├──► Vaxrank ──► Report
-                                      fragments                   │
-Patient HLA typing ────────────────────────────────────────────────┘
-```
+1. Tumor and matched-normal DNA are sequenced and aligned; a variant
+   caller (MuTect, Strelka, etc.) produces a VCF of somatic mutations.
+2. Tumor RNA is sequenced and aligned to produce a BAM file.
+3. The patient's HLA class I alleles are typed (from sequencing data or
+   clinical records).
+
+Vaxrank takes these three inputs — the VCF, the tumor RNA BAM, and the
+HLA alleles — and produces a ranked list of vaccine peptide candidates.
 
 ### Mutant transcript assembly (Isovar)
 
@@ -375,7 +385,7 @@ Vaxrank is built on the [OpenVax](https://github.com/openvax) ecosystem:
 Other key dependencies:
 - `msgspec`: Configuration serialization (YAML/JSON)
 - `pandas`, `numpy`: Data processing
-- `jinja2`, `pdfkit`: Report generation
+- `jinja2`, `pdfkit`/`weasyprint`: Report generation
 
 ## Development
 
