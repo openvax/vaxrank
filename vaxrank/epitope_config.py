@@ -17,8 +17,8 @@ This module defines the EpitopeConfig class which controls how epitopes
 are scored based on MHC binding affinity and filtered for vaccine peptide
 selection.
 
-The epitope scoring uses a logistic function to transform IC50 binding
-affinity values into a normalized score between 0 and 1:
+The default epitope scoring uses a logistic function to transform IC50
+binding affinity values into a normalized score between 0 and 1:
 
     rescaled = (ic50 - midpoint) / width
     score = (1 / (1 + exp(rescaled))) / normalizer
@@ -32,7 +32,13 @@ Parameters:
 - width: Controls steepness of the scoring curve (default: 150)
 
 Lower IC50 values indicate stronger binding and result in higher scores.
+
+Users can override filtering and scoring with topiary DSL expressions via
+``filter_expr`` and ``score_expr``. When either is omitted the scalar
+fields above define the default via :mod:`vaxrank.epitope_dsl`.
 """
+
+from typing import Optional
 
 import msgspec
 
@@ -77,6 +83,19 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     percentile_rank_cutoff : float
         The percentile rank at or above which an epitope is treated as a
         non-binder in percentile-rank scoring mode.
+
+    filter_expr : str, optional
+        Topiary DSL string used to drop epitope rows wholesale, e.g.
+        ``"affinity <= 500 & affinity.rank <= 2.0"``. When omitted the
+        filter is synthesized from ``binding_affinity_cutoff`` /
+        ``percentile_rank_cutoff`` so default behavior is unchanged.
+
+    score_expr : str, optional
+        Topiary DSL string producing a per-peptide-allele score, e.g.
+        ``"affinity.logistic(350, 150)"``. When omitted the score node
+        is synthesized from the logistic / percentile-rank scalar fields
+        (preserving the ``1/(1+exp(-mid/width))`` normalizer that keeps
+        default scores byte-identical with pre-5.0 topiary behavior).
     """
 
     logistic_epitope_score_midpoint: float = DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT
@@ -85,6 +104,8 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     binding_affinity_cutoff: float = DEFAULT_BINDING_AFFINITY_CUTOFF
     scoring_mode: str = "affinity"
     percentile_rank_cutoff: float = DEFAULT_PERCENTILE_RANK_CUTOFF
+    filter_expr: Optional[str] = None
+    score_expr: Optional[str] = None
 
     def __post_init__(self):
         if self.logistic_epitope_score_midpoint <= 0:

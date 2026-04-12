@@ -99,6 +99,15 @@ class EpitopePrediction(Serializable):
         scoring_mode : str
             "affinity" (default): logistic transform of IC50
             "percentile_rank": inverted percentile rank (lower rank = higher score)
+
+        .. deprecated:: 2.1.0
+            ``predict_epitopes`` now filters and scores via the topiary 5.0.0
+            DSL (see :func:`vaxrank.epitope_dsl.build_score_node`). This
+            method remains for :class:`~vaxrank.vaccine_peptide.VaccinePeptide`
+            and report/IO paths that still score one prediction at a time;
+            it will be migrated and removed in a follow-up release. Configure
+            ``filter_expr`` / ``score_expr`` on ``EpitopeConfig`` for custom
+            DSL scoring.
         """
         if scoring_mode == "percentile_rank":
             if self.percentile_rank is None:

@@ -155,6 +155,8 @@ _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("epitopes.logistic_width", "logistic_epitope_score_width"),
     ("epitopes.affinity_cutoff", "binding_affinity_cutoff"),
     ("epitopes.percentile_rank_cutoff", "percentile_rank_cutoff"),
+    ("epitopes.filter_expr", "filter_expr"),
+    ("epitopes.score_expr", "score_expr"),
 ]
 
 # Declarative mapping: (dotted config path) -> (VaccineConfig kwarg name)
