@@ -9,6 +9,10 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       HAS_NETMHC_TOKEN: ${{ secrets.NETMHC_BUNDLE_ACCESS_TOKEN != '' }}
+      # Redirect caches to workspace-relative paths so actions/cache can tar
+      # them reliably (it has issues with paths outside $GITHUB_WORKSPACE).
+      PYENSEMBL_CACHE_DIR: ${{ github.workspace }}/.ci-cache/pyensembl
+      VAXRANK_REF_PEPTIDES_DIR: ${{ github.workspace }}/.ci-cache/vaxrank
     strategy:
       fail-fast: true
       matrix:
@@ -73,8 +77,8 @@ jobs:
       - name: Cache Ensembl genome data
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pyensembl
-          key: pyensembl-v1-human75-human93-mouse93-mouse102
+          path: .ci-cache/pyensembl
+          key: pyensembl-v2-human75-human93-mouse93-mouse102
       - name: Download Ensembl data
         run: |
           echo "Before installing Ensembl releases" && df -h
@@ -85,10 +89,10 @@ jobs:
       - name: Cache vaxrank reference proteome index
         uses: actions/cache@v4
         with:
-          path: ~/.cache/vaxrank
-          key: vaxrank-refproteome-v1-human75-human93-mouse93-mouse102-${{ hashFiles('vaxrank/reference_proteome.py', 'vaxrank/config/defaults.py') }}
+          path: .ci-cache/vaxrank
+          key: vaxrank-refproteome-v2-human75-human93-mouse93-mouse102-${{ hashFiles('vaxrank/reference_proteome.py', 'vaxrank/config/defaults.py') }}
           restore-keys: |
-            vaxrank-refproteome-v1-human75-human93-mouse93-mouse102-
+            vaxrank-refproteome-v2-human75-human93-mouse93-mouse102-
       - name: Test with pytest
         run: |
           # Configure netmhc-bundle paths when private bundle is available.
