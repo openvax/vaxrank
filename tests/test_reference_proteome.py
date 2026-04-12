@@ -468,10 +468,14 @@ def test_cache_dir_created():
         new_cache_dir = os.path.join(tmpdir, "new_cache")
         ok_(not os.path.exists(new_cache_dir))
 
-        with patch('vaxrank.reference_proteome.user_cache_dir', return_value=new_cache_dir):
-            result = get_cache_dir()
-            eq_(result, new_cache_dir)
-            ok_(os.path.exists(new_cache_dir))
+        # Ensure VAXRANK_REF_PEPTIDES_DIR is unset so the platformdirs
+        # fallback path is exercised (CI sets this env var for caching).
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("VAXRANK_REF_PEPTIDES_DIR", None)
+            with patch('vaxrank.reference_proteome.user_cache_dir', return_value=new_cache_dir):
+                result = get_cache_dir()
+                eq_(result, new_cache_dir)
+                ok_(os.path.exists(new_cache_dir))
 
 
 # =============================================================================
