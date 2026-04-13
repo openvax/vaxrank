@@ -138,3 +138,19 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
                 f"percentile_rank_cutoff must be in (0, 100], "
                 f"got {self.percentile_rank_cutoff}"
             )
+        if self.filter_expr is not None or self.score_expr is not None:
+            # Parse eagerly so malformed DSL strings fail at config load
+            # rather than mid-pipeline when predict_epitopes runs.
+            from topiary.ranking import parse as _topiary_parse
+            for name, expr in (
+                ("filter_expr", self.filter_expr),
+                ("score_expr", self.score_expr),
+            ):
+                if expr is None:
+                    continue
+                try:
+                    _topiary_parse(expr)
+                except Exception as exc:
+                    raise ValueError(
+                        f"Invalid {name} {expr!r}: {exc}"
+                    ) from exc

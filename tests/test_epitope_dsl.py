@@ -163,16 +163,101 @@ def test_custom_score_expr_is_parsed():
     assert float(scores.iloc[0]) == pytest.approx(expected, abs=1e-12)
 
 
-def test_invalid_filter_expr_raises_at_build_time():
-    cfg = EpitopeConfig(filter_expr="not a valid dsl expression")
-    with pytest.raises(Exception):
-        build_filter_node(cfg)
+def test_invalid_filter_expr_raises_at_config_construction():
+    # Eager validation: malformed expressions should fail at EpitopeConfig
+    # construction, not later when build_filter_node() is called. This
+    # means a bad YAML config fails at load, not mid-pipeline.
+    with pytest.raises(ValueError, match="Invalid filter_expr"):
+        EpitopeConfig(filter_expr="not a valid dsl expression")
+
+
+def test_invalid_score_expr_raises_at_config_construction():
+    with pytest.raises(ValueError, match="Invalid score_expr"):
+        EpitopeConfig(score_expr="this is not valid")
 
 
 def test_unknown_column_error_is_actionable():
-    cfg = EpitopeConfig(filter_expr="column('no_such_column') <= 1")
+    # column(IDENT) parses fine; the "column missing from df" error fires
+    # when apply_filter actually runs.
+    cfg = EpitopeConfig(filter_expr="column(no_such_column) <= 1")
     df = _predictions_df(
         [{"peptide": "AAAAAAAAA", "allele": "HLA-A*02:01", "affinity": 100.0}]
     )
     with pytest.raises(ValueError, match="no_such_column"):
         apply_filter(df, build_filter_node(cfg))
+
+
+def test_default_score_parity_across_alleles():
+    """Multi-allele score parity: one score per (peptide, allele) group tuple,
+    each matching legacy per-row scorer."""
+    cfg = EpitopeConfig()
+    rows = [
+        {"peptide": "AAAAAAAAA", "allele": "HLA-A*02:01", "affinity": 100.0},
+        {"peptide": "AAAAAAAAA", "allele": "HLA-B*07:02", "affinity": 750.0},
+        {"peptide": "BBBBBBBBB", "allele": "HLA-A*02:01", "affinity": 2000.0},
+        {"peptide": "BBBBBBBBB", "allele": "HLA-B*07:02", "affinity": 6000.0},
+    ]
+    df = _predictions_df(rows)
+    ctx = EvalContext(df)
+    scores = (
+        build_score_node(cfg).eval(ctx).reindex(ctx.group_index).fillna(0.0)
+    )
+    for row in df.to_dict("records"):
+        group_key = (
+            row["source_sequence_name"], row["peptide"],
+            row["peptide_offset"], row["allele"],
+        )
+        legacy = _legacy_score(row["affinity"], None, cfg)
+        assert float(scores[group_key]) == pytest.approx(legacy, abs=1e-12)
+
+
+def test_multi_method_default_score_raises_ambiguity_error():
+    """Topiary 5.0 explicitly rejects unqualified ``affinity`` when the df
+    contains multiple prediction_method_name values. The error points at
+    ``affinity['modelname']`` as the remedy. Vaxrank's default wraps a
+    single mhctools predictor so this case doesn't fire in practice, but
+    the behavior is part of the back-compat contract if a user passes a
+    pre-built multi-model TopiaryPredictor and doesn't set score_expr."""
+    cfg = EpitopeConfig()
+    df = _predictions_df(
+        [
+            {
+                "peptide": "AAAAAAAAA", "allele": "HLA-A*02:01",
+                "peptide_offset": 0, "affinity": 100.0,
+                "prediction_method_name": "netmhcpan",
+            },
+            {
+                "peptide": "AAAAAAAAA", "allele": "HLA-A*02:01",
+                "peptide_offset": 0, "affinity": 100.0,
+                "prediction_method_name": "mhcflurry",
+            },
+        ]
+    )
+    with pytest.raises(ValueError, match="Ambiguous"):
+        build_score_node(cfg).eval(EvalContext(df))
+
+
+def test_multi_method_resolves_with_qualified_affinity():
+    """Users with multiple methods can disambiguate via
+    ``score_expr="affinity['netmhcpan'].logistic(350, 150)"`` — verify the
+    qualified form picks out the right rows."""
+    cfg = EpitopeConfig(score_expr="affinity['netmhcpan'].logistic(350, 150)")
+    df = _predictions_df(
+        [
+            {
+                "peptide": "AAAAAAAAA", "allele": "HLA-A*02:01",
+                "peptide_offset": 0, "affinity": 100.0,
+                "prediction_method_name": "netmhcpan",
+            },
+            {
+                "peptide": "AAAAAAAAA", "allele": "HLA-A*02:01",
+                "peptide_offset": 0, "affinity": 50000.0,
+                "prediction_method_name": "mhcflurry",
+            },
+        ]
+    )
+    ctx = EvalContext(df)
+    scores = build_score_node(cfg).eval(ctx).reindex(ctx.group_index)
+    # Only the netmhcpan ic50=100 contributes; expected = raw sigmoid at ic50=100
+    expected = 1.0 / (1.0 + math.exp((100.0 - 350.0) / 150.0))
+    assert float(scores.iloc[0]) == pytest.approx(expected, abs=1e-12)

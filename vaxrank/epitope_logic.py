@@ -228,7 +228,8 @@ def predict_epitopes(
             peptide_start_offset,
             row["allele"],
         )
-        epitope_score = float(score_series.get(group_key, 0.0))
+        # reindex + fillna above guarantee every group tuple is in the series.
+        epitope_score = float(score_series[group_key])
 
         if epitope_score >= epitope_config.min_epitope_score:
             key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)
