@@ -25,29 +25,19 @@ Two entry points:
 When ``filter_expr`` / ``score_expr`` are set on the config, each is parsed
 via :func:`topiary.ranking.parse`. When absent the nodes are built directly
 from scalar fields (``binding_affinity_cutoff``, ``logistic_epitope_score_*``,
-``scoring_mode``, ``percentile_rank_cutoff``). The synthesized affinity-mode
-score node divides by ``1/(1+exp(-midpoint/width))`` so its output matches
+``scoring_mode``, ``percentile_rank_cutoff``). The default affinity-mode
+score uses topiary 5.1's :class:`LogisticNormalizedExpr` so the output is in
+``[0, 1]`` and matches the legacy
 :meth:`vaxrank.epitope_prediction.EpitopePrediction.logistic_epitope_score`
-byte-for-byte — topiary's ``LogisticExpr`` does not apply this normalizer.
+byte-for-byte.
 """
 
 from __future__ import annotations
-
-import math
 
 
 def _parse(expr):
     from topiary.ranking import parse
     return parse(expr)
-
-
-def _logistic_normalizer(midpoint: float, width: float) -> float:
-    """Value of ``1/(1+exp((x-midpoint)/width))`` at ``x = 0``.
-
-    Dividing the sigmoid by this constant rescales it so ``ic50 = 0`` maps to
-    ``1.0``, matching the legacy ``EpitopePrediction.logistic_epitope_score``.
-    """
-    return 1.0 / (1.0 + math.exp(-midpoint / width))
 
 
 def _default_score_node(cfg):
@@ -64,15 +54,14 @@ def _default_score_node(cfg):
 
     midpoint = cfg.logistic_epitope_score_midpoint
     width = cfg.logistic_epitope_score_width
-    normalizer = _logistic_normalizer(midpoint, width)
     cutoff_mask = Affinity < cfg.binding_affinity_cutoff
-    return cutoff_mask * (Affinity.logistic(midpoint, width) / normalizer)
+    return cutoff_mask * Affinity.logistic_normalized(midpoint, width)
 
 
 def build_filter_node(cfg):
     """Return the ``DSLNode`` used to filter predictions, or ``None`` for no-op.
 
-    There is no default filter — legacy vaxrank never hard-dropped rows; it
+    The default is no filter — legacy vaxrank never hard-dropped rows; it
     scored above-cutoff rows as 0 and then applied ``min_epitope_score`` as
     a gate. The default score node preserves that by multiplying by the
     cutoff mask. Users who want a hard pre-filter must set ``filter_expr``.

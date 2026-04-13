@@ -180,8 +180,8 @@ DataFrame columns, etc.).
 epitopes:
   # Drop rows wholesale before scoring
   filter_expr: "affinity <= 500 & affinity.rank <= 2.0"
-  # Compute a per-(peptide, allele) score (numeric DSL node)
-  score_expr:  "affinity.logistic(350, 150)"
+  # Compute a per-(peptide, allele) score in [0, 1] (binder-quality score)
+  score_expr:  "affinity.logistic_normalized(350, 150)"
 ```
 
 When `filter_expr` is omitted, no rows are dropped up-front; the default
@@ -190,13 +190,9 @@ When `filter_expr` is omitted, no rows are dropped up-front; the default
 and masked so `ic50 >= affinity_cutoff → 0`, reproducing the pre-5.0
 behavior byte-for-byte.
 
-> **Note:** a user-supplied `score_expr` of `affinity.logistic(m, w)` is
-> the *raw* topiary sigmoid (maximum ≈ 0.912 at default params), not the
-> normalized `[0, 1]` score the defaults produce. Divide by
-> `1/(1+exp(-m/w))` if you need the normalized form. Follow-up node
-> [openvax/topiary#116](https://github.com/openvax/topiary/issues/116)
-> adds a `logistic_normalized` sibling so the constant doesn't have to
-> live in config.
+Use `affinity.logistic_normalized(m, w)` for a `[0, 1]` binder-quality
+score (the topiary 5.1+ primitive); the plain `affinity.logistic(m, w)`
+is the raw sigmoid and caps below 1 (≈0.912 at default `m=350, w=150`).
 
 Invalid DSL strings are rejected at config load (not mid-pipeline), so
 typos in the YAML surface before any predictions run.

@@ -26,11 +26,7 @@ import pytest
 from topiary.ranking import EvalContext, apply_filter
 
 from vaxrank.epitope_config import EpitopeConfig
-from vaxrank.epitope_dsl import (
-    _logistic_normalizer,
-    build_filter_node,
-    build_score_node,
-)
+from vaxrank.epitope_dsl import build_filter_node, build_score_node
 from vaxrank.epitope_prediction import EpitopePrediction
 
 from .common import eq_
@@ -94,12 +90,6 @@ def _eval_score(cfg, ic50_values, percentile_rank_values=None):
     df = _predictions_df(rows)
     node = build_score_node(cfg)
     return node.eval(EvalContext(df)).reindex(EvalContext(df).group_index)
-
-
-def test_logistic_normalizer_matches_legacy_formula():
-    # Pre-5.0 vaxrank used 1/(1+exp(-midpoint/width)) as the normalizer so
-    # the score equals 1.0 at ic50=0. Verify the helper reproduces that.
-    eq_(_logistic_normalizer(350, 150), 1.0 / (1.0 + math.exp(-350 / 150)))
 
 
 def test_default_score_matches_legacy_affinity_mode():
