@@ -167,6 +167,36 @@ vaccine_peptides:
     max_kmer_hydropathy_high_priority: 2.5  # high-priority max-7mer GRAVY cap
 ```
 
+### Custom filtering and scoring with the topiary DSL
+
+For anything beyond the scalar logistic / percentile-rank defaults, set
+`epitopes.filter_expr` and/or `epitopes.score_expr` to a topiary DSL
+string. Both accept the full topiary 5.0 expression grammar (kind
+accessors like `affinity` / `presentation`, arithmetic, `&` / `|`,
+`.logistic(...)` / `.clip(...)` transforms, `column(col_name)` for raw
+DataFrame columns, etc.).
+
+```yaml
+epitopes:
+  # Drop rows wholesale before scoring
+  filter_expr: "affinity <= 500 & affinity.rank <= 2.0"
+  # Compute a per-(peptide, allele) score in [0, 1] (binder-quality score)
+  score_expr:  "affinity.logistic_normalized(350, 150)"
+```
+
+When `filter_expr` is omitted, no rows are dropped up-front; the default
+`score_expr` is synthesized from the scalar fields above
+(`binding_affinity_cutoff`, `logistic_midpoint`, `logistic_width`, etc.)
+and masked so `ic50 >= affinity_cutoff → 0`, reproducing the pre-5.0
+behavior byte-for-byte.
+
+Use `affinity.logistic_normalized(m, w)` for a `[0, 1]` binder-quality
+score (the topiary 5.1+ primitive); the plain `affinity.logistic(m, w)`
+is the raw sigmoid and caps below 1 (≈0.912 at default `m=350, w=150`).
+
+Invalid DSL strings are rejected at config load (not mid-pipeline), so
+typos in the YAML surface before any predictions run.
+
 ### CLI overrides
 
 CLI arguments override YAML values.  You can also use `--config-value` to
@@ -202,6 +232,8 @@ Config values are resolved in order (later wins):
 | `binding_affinity_cutoff` | 5000.0 | IC50 >= this → score 0 |
 | `scoring_mode` | `"affinity"` | `"affinity"` (IC50-based) or `"percentile_rank"` |
 | `percentile_rank_cutoff` | 10.0 | Rank >= this → score 0 (percentile mode) |
+| `filter_expr` | `None` | Topiary DSL string; drops rows where the expression is false. Parsed eagerly at config load. |
+| `score_expr` | `None` | Topiary DSL string; overrides the default per-`(peptide, allele)` score. |
 
 #### `VaccineConfig` — peptide assembly and manufacturability
 

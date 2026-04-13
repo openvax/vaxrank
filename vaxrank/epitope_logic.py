@@ -19,9 +19,11 @@ from typing import Optional
 import numpy as np
 from pyensembl import Genome
 from topiary import TopiaryPredictor
+from topiary.ranking import EvalContext, apply_filter
 
 from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
+from .epitope_dsl import build_filter_node, build_score_node
 from .epitope_prediction import EpitopePrediction
 from .mutant_protein_fragment import MutantProteinFragment
 from .reference_proteome import ReferenceProteome
@@ -98,6 +100,22 @@ def predict_epitopes(
 
     if predictions_df.empty:
         return results
+
+    # Apply the configured filter (default: affinity or percentile-rank cutoff)
+    # so that rows dropped by the filter are never scored or WT-predicted.
+    filter_node = build_filter_node(epitope_config)
+    if filter_node is not None:
+        predictions_df = apply_filter(predictions_df, filter_node)
+        if predictions_df.empty:
+            return results
+
+    # Evaluate the score expression once; indexed by
+    # (source_sequence_name, peptide, peptide_offset, allele) group tuple.
+    score_node = build_score_node(epitope_config)
+    score_ctx = EvalContext(predictions_df)
+    score_series = (
+        score_node.eval(score_ctx).reindex(score_ctx.group_index).fillna(0.0)
+    )
 
     # Compute WT epitopes for peptides that overlap the mutation
     wt_peptides = {}
@@ -204,12 +222,14 @@ def predict_epitopes(
             source_sequence=protein_fragment.amino_acids,
             offset=peptide_start_offset,
             occurs_in_reference=occurs_in_reference)
-        epitope_score = epitope_prediction.logistic_epitope_score(
-            midpoint=epitope_config.logistic_epitope_score_midpoint,
-            width=epitope_config.logistic_epitope_score_width,
-            ic50_cutoff=epitope_config.binding_affinity_cutoff,
-            scoring_mode=epitope_config.scoring_mode,
-            percentile_rank_cutoff=epitope_config.percentile_rank_cutoff)
+        group_key = (
+            row["source_sequence_name"],
+            peptide,
+            peptide_start_offset,
+            row["allele"],
+        )
+        # reindex + fillna above guarantee every group tuple is in the series.
+        epitope_score = float(score_series[group_key])
 
         if epitope_score >= epitope_config.min_epitope_score:
             key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)

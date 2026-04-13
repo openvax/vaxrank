@@ -16,6 +16,8 @@ class EpitopesConfigSchema(
     affinity_cutoff: Optional[float] = None
     percentile_rank_cutoff: Optional[float] = None
     top_epitopes_per_candidate: Optional[int] = None
+    filter_expr: Optional[str] = None
+    score_expr: Optional[str] = None
 
 
 class ManufacturabilityConfigSchema(

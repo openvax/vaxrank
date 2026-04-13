@@ -277,6 +277,32 @@ epitopes:
         os.unlink(config_path)
 
 
+def test_epitope_config_yaml_loads_dsl_expressions():
+    """filter_expr / score_expr round-trip from YAML to EpitopeConfig."""
+    yaml_content = """
+epitopes:
+  filter_expr: "affinity <= 500 & affinity.rank <= 2.0"
+  score_expr: "affinity.logistic(350, 150)"
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+    try:
+        args = argparse.Namespace(config=config_path, min_epitope_score=None)
+        config = epitope_config_from_args(args)
+        eq_(config.filter_expr, "affinity <= 500 & affinity.rank <= 2.0")
+        eq_(config.score_expr, "affinity.logistic(350, 150)")
+    finally:
+        os.unlink(config_path)
+
+
+def test_epitope_config_default_dsl_expressions_are_none():
+    """When not set in YAML, filter_expr / score_expr default to None."""
+    config = EpitopeConfig()
+    eq_(config.filter_expr, None)
+    eq_(config.score_expr, None)
+
+
 def test_epitope_config_from_args_cli_overrides_yaml():
     """Test that CLI arguments override YAML config values"""
     yaml_content = """
