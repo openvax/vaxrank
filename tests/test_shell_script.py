@@ -147,8 +147,36 @@ def test_html_report():
         assert len(lines) > 1
 
 
+def _skip_if_pdf_backend_unavailable(backend):
+    """Skip the test cleanly when the backend's native deps aren't loadable.
+
+    WeasyPrint renders via ctypes-loaded Pango/Cairo/HarfBuzz; pdfkit shells
+    out to ``wkhtmltopdf``. Neither is installable via pip alone. Skipping
+    here — instead of letting the CLI fail mid-render — keeps contributors
+    on fresh macOS arm64 / Linux-without-wkhtmltopdf from seeing a confusing
+    failure when the rest of the suite is green.
+    """
+    if backend == "weasyprint":
+        try:
+            import weasyprint
+            # Actually trigger the native-lib load; `import weasyprint`
+            # alone is lazy and won't surface a missing pango.
+            weasyprint.HTML(string="<p>x</p>").write_pdf()
+        except (ImportError, OSError) as exc:
+            pytest.skip(
+                f"WeasyPrint native libs not loadable ({exc}). "
+                f"On macOS arm64: `brew install pango` and "
+                f"`export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib`."
+            )
+    elif backend == "pdfkit":
+        import shutil
+        if shutil.which("wkhtmltopdf") is None:
+            pytest.skip("pdfkit backend requires `wkhtmltopdf` on PATH.")
+
+
 @pytest.mark.parametrize("backend", ["weasyprint", "pdfkit"])
 def test_pdf_report(backend):
+    _skip_if_pdf_backend_unavailable(backend)
     with NamedTemporaryFile(mode="rb", suffix=".pdf") as f:
         pdf_args = cli_args_for_b16_seqdata + [
             "--output-pdf-report", f.name,

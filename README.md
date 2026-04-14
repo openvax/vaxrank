@@ -129,6 +129,16 @@ pip install weasyprint
 # macOS also needs: brew install pango
 ```
 
+On Apple Silicon, WeasyPrint loads Pango via dyld, which doesn't search
+Homebrew's `/opt/homebrew/lib` by default. Add this to your shell profile:
+
+```sh
+export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH"
+```
+
+(Intel macOS doesn't need this — Homebrew's `/usr/local/lib` is in dyld's
+default fallback path.)
+
 ## Configuration
 
 ### YAML config file
