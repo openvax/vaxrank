@@ -69,13 +69,14 @@ class VaxrankResults(Serializable):
         # for report display
         counts_dict = {}
         counts_dict['num_total_variants'] = len(self.isovar_results)
-        counts_dict['num_coding_effect_variants'] = \
-            sum([v['is_coding_nonsynonymous'] for v in variant_properties])
-        counts_dict['num_variants_with_rna_support'] = \
-            sum([v['rna_support'] for v in variant_properties])
-
-        counts_dict['num_variants_with_vaccine_peptides'] =  \
-            sum([v['has_vaccine_peptide'] for v in variant_properties])
+        counts_dict['num_coding_effect_variants'] = sum(
+            v['is_coding_nonsynonymous'] for v in variant_properties)
+        counts_dict['num_variants_with_rna_support'] = sum(
+            v['is_coding_nonsynonymous'] and v['rna_support']
+            for v in variant_properties)
+        counts_dict['num_variants_with_vaccine_peptides'] = sum(
+            v['is_coding_nonsynonymous'] and v['rna_support'] and v['has_vaccine_peptide']
+            for v in variant_properties)
         return counts_dict
 
     def variant_properties(self, gene_pathway_check=None):
