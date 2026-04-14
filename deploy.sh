@@ -7,8 +7,9 @@ set -euo pipefail
 # which on Apple Silicon can't locate Homebrew's /opt/homebrew/lib unless
 # dyld's fallback search path is told about it. Re-export the var inside
 # the script so ./test.sh → pytest → weasyprint see it.
-if [[ "$(uname)" == "Darwin" && -d /opt/homebrew/lib ]]; then
-  export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}"
+if [[ "$(uname)" == "Darwin" && -d /opt/homebrew/lib \
+      && ":${DYLD_FALLBACK_LIBRARY_PATH:-}:" != *":/opt/homebrew/lib:"* ]]; then
+  export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 fi
 
 usage() {
