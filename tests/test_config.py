@@ -1067,8 +1067,9 @@ epitopes:
         config_path = f.name
 
     try:
-        with pytest.raises(ValueError, match="Cannot use both"):
-            load_vaxrank_config(config_path=config_path)
+        with pytest.warns(DeprecationWarning, match="epitope_config"):
+            with pytest.raises(ValueError, match="Cannot use both"):
+                load_vaxrank_config(config_path=config_path)
     finally:
         os.unlink(config_path)
 
