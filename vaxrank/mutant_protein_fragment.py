@@ -164,7 +164,7 @@ class MutantProteinFragment(Serializable):
         -------
         MutantProteinFragment or None
         """
-        from varcode.annotators.sequence_diff import apply_variant_to_transcript
+        from varcode.annotators.protein_diff import apply_variant_to_transcript
 
         effects = variant.effects()
         coding_effects = [
