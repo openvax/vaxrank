@@ -40,6 +40,7 @@ def run_vaxrank(
     num_mutant_epitopes_to_keep: int = 1000,
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
+    allow_dna_only_fallback: bool = False,
 ):
     """
     Parameters
@@ -67,6 +68,10 @@ def run_vaxrank(
 
     vaccine_config
         Configuration options for vaccine peptide selection, using defaults if not provided
+
+    allow_dna_only_fallback
+        When True, variants without RNA support will attempt to construct
+        vaccine peptides from DNA annotation using varcode's MutantTranscript.
     """
     variant_to_vaccine_peptides_dict = create_vaccine_peptides_dict(
         isovar_results=isovar_results,
@@ -76,6 +81,7 @@ def run_vaxrank(
         num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         epitope_config=epitope_config,
         vaccine_config=vaccine_config,
+        allow_dna_only_fallback=allow_dna_only_fallback,
     )
     ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
 
@@ -94,6 +100,7 @@ def create_vaccine_peptides_dict(
     num_mutant_epitopes_to_keep: int = 1000,
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
+    allow_dna_only_fallback: bool = False,
 ):
     """
     Parameters
@@ -137,6 +144,7 @@ def create_vaccine_peptides_dict(
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
             epitope_config=epitope_config,
             vaccine_config=vaccine_config,
+            allow_dna_only_fallback=allow_dna_only_fallback,
         )
 
         if any(x.contains_mutant_epitopes() for x in vaccine_peptides):
@@ -153,6 +161,7 @@ def vaccine_peptides_for_variant(
     num_mutant_epitopes_to_keep: int = 1000,
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
+    allow_dna_only_fallback: bool = False,
 ):
     """
     Parameters
@@ -184,13 +193,28 @@ def vaccine_peptides_for_variant(
     Sorted list of VaccinePeptide objects. If there are no suitable vaccine
     peptides (no strong MHC binder subsequences), returns an empty list.
     """
-    if not isovar_result.passes_all_filters:
-        # don't consider candidate vaccine peptides from variants which either
-        # failed their filters or don't have an RNA-derived protein sequence
-        return []
-
     variant = isovar_result.variant
-    long_protein_fragment = MutantProteinFragment.from_isovar_result(isovar_result)
+
+    if isovar_result.passes_all_filters:
+        long_protein_fragment = MutantProteinFragment.from_isovar_result(isovar_result)
+    elif allow_dna_only_fallback:
+        # Derive protein sequence length from vaccine config
+        vc = vaccine_config or VaccineConfig(
+            preferred_peptide_length=vaccine_peptide_length)
+        protein_sequence_length = (
+            vc.preferred_peptide_length + 2 * vc.padding_around_mutation)
+        long_protein_fragment = MutantProteinFragment.from_variant_dna(
+            variant, protein_sequence_length)
+        if long_protein_fragment is None:
+            logger.info(
+                "DNA-only fallback produced no protein fragment for %s",
+                variant.short_description)
+            return []
+        logger.info(
+            "Using DNA-only fallback for %s (no RNA support)",
+            variant.short_description)
+    else:
+        return []
 
     logger.info("Mutant protein fragment for %s: %s", variant, long_protein_fragment)
 

@@ -267,6 +267,14 @@ def run_vaxrank_from_parsed_args(args):
 
     mhc_predictor = mhc_binding_predictor_from_args(args)
 
+    prediction_cache = getattr(args, 'prediction_cache', None)
+    if prediction_cache:
+        from topiary import CachedPredictor
+        cached = CachedPredictor.from_topiary_output(
+            prediction_cache, fallback=mhc_predictor)
+        logger.info("Loaded prediction cache from %s", prediction_cache)
+        mhc_predictor = cached
+
     args.protein_sequence_length = (
             args.vaccine_peptide_length + 2 * args.padding_around_mutation
     )
@@ -296,7 +304,9 @@ def run_vaxrank_from_parsed_args(args):
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_variant,
         num_mutant_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
         epitope_config=epitope_config,
-        vaccine_config=vaccine_config)
+        vaccine_config=vaccine_config,
+        allow_dna_only_fallback=getattr(args, 'allow_dna_only_fallback', False),
+    )
 
     if getattr(args, 'output_epitopes', ''):
         # Collect all epitope predictions across all variants

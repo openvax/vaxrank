@@ -19,6 +19,37 @@ from serializable import Serializable
 logger = logging.getLogger(__name__)
 
 
+def _find_mutation_region(ref_protein, mut_protein):
+    """
+    Find the mutated region by diffing reference and mutant protein sequences.
+    Returns (start, end) offsets in the mutant protein (0-based, half-open).
+    """
+    min_len = min(len(ref_protein), len(mut_protein))
+
+    # Find first difference
+    start = min_len
+    for i in range(min_len):
+        if ref_protein[i] != mut_protein[i]:
+            start = i
+            break
+
+    # Find where sequences re-align from the right
+    ref_i = len(ref_protein)
+    mut_i = len(mut_protein)
+    while ref_i > start and mut_i > start:
+        if ref_protein[ref_i - 1] == mut_protein[mut_i - 1]:
+            ref_i -= 1
+            mut_i -= 1
+        else:
+            break
+
+    # Proteins differ only in length (e.g. stop-loss extension)
+    if start == min_len and len(ref_protein) != len(mut_protein):
+        return min_len, len(mut_protein)
+
+    return start, mut_i
+
+
 class MutantProteinFragment(Serializable):
     def __init__(
             self,
@@ -111,6 +142,93 @@ class MutantProteinFragment(Serializable):
             n_ref_reads=isovar_result.num_ref_fragments,
             n_alt_reads_supporting_protein_sequence=protein_sequence.num_supporting_fragments,
             supporting_reference_transcripts=protein_sequence.transcripts)
+
+    @classmethod
+    def from_variant_dna(cls, variant, protein_sequence_length):
+        """
+        Create a MutantProteinFragment from DNA annotation alone (no RNA),
+        using varcode's MutantTranscript.  Used as an opt-in fallback when
+        isovar has no RNA support for a variant.
+
+        Transcript selection: among protein-modifying effects, pick the one
+        with the longest mutant protein, breaking ties by lex-sorted
+        transcript ID.  (Effects are already priority-sorted by varcode.)
+
+        Parameters
+        ----------
+        variant : varcode.Variant
+        protein_sequence_length : int
+            Desired length of the protein fragment window around the mutation.
+
+        Returns
+        -------
+        MutantProteinFragment or None
+        """
+        from varcode.annotators.sequence_diff import apply_variant_to_transcript
+
+        effects = variant.effects()
+        coding_effects = [
+            e for e in effects
+            if hasattr(e, 'transcript') and e.modifies_protein_sequence
+        ]
+        if not coding_effects:
+            logger.debug(
+                "No protein-modifying effects for %s, skipping DNA fallback",
+                variant.short_description)
+            return None
+
+        # Among same-type effects (same priority tier), prefer longest protein
+        # then lex-sorted transcript ID.  variant.effects() is already sorted
+        # by priority, so the first element's type defines the top tier.
+        best_type = type(coding_effects[0])
+        same_tier = [e for e in coding_effects if type(e) is best_type]
+        same_tier.sort(key=lambda e: (
+            -len(e.transcript.protein_sequence or ''),
+            e.transcript.id,
+        ))
+        best_effect = same_tier[0]
+        transcript = best_effect.transcript
+
+        mt = apply_variant_to_transcript(variant, transcript)
+        if mt is None or mt.mutant_protein_sequence is None:
+            logger.debug(
+                "MutantTranscript construction failed for %s on %s",
+                variant.short_description, transcript.id)
+            return None
+
+        mut_protein = mt.mutant_protein_sequence
+        ref_protein = transcript.protein_sequence
+        if not ref_protein:
+            return None
+
+        # Locate the mutation in the protein
+        mut_start, mut_end = _find_mutation_region(ref_protein, mut_protein)
+        if mut_start >= len(mut_protein):
+            return None
+
+        # Extract a window of protein_sequence_length centered on the mutation
+        mutation_midpoint = (mut_start + mut_end) // 2
+        half_window = protein_sequence_length // 2
+        window_start = max(0, mutation_midpoint - half_window)
+        window_end = min(len(mut_protein), window_start + protein_sequence_length)
+        window_start = max(0, window_end - protein_sequence_length)
+
+        amino_acids = mut_protein[window_start:window_end]
+        local_mut_start = max(0, mut_start - window_start)
+        local_mut_end = min(len(amino_acids), mut_end - window_start)
+
+        return cls(
+            variant=variant,
+            gene_name=transcript.gene.name,
+            amino_acids=amino_acids,
+            mutant_amino_acid_start_offset=local_mut_start,
+            mutant_amino_acid_end_offset=local_mut_end,
+            n_overlapping_reads=0,
+            n_alt_reads=0,
+            n_ref_reads=0,
+            n_alt_reads_supporting_protein_sequence=0,
+            supporting_reference_transcripts=[transcript],
+        )
 
     def __len__(self):
         return len(self.amino_acids)

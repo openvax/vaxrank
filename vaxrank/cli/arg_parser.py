@@ -76,6 +76,7 @@ def make_vaxrank_arg_parser():
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
     add_epitope_prediction_args(arg_parser)
+    add_advanced_args(arg_parser)
     add_output_args(arg_parser)
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
@@ -133,6 +134,23 @@ def add_optional_output_args(arg_parser):
         help="Set to false to exclude report information for each vaccine peptide about "
              "strong binders that do not overlap the mutation")
     arg_parser.set_defaults(wt_epitopes=True)
+
+
+def add_advanced_args(arg_parser):
+    advanced_group = arg_parser.add_argument_group("Advanced options")
+    advanced_group.add_argument(
+        "--allow-dna-only-fallback",
+        action="store_true",
+        default=False,
+        help="When a variant has no RNA support, attempt to construct vaccine "
+             "peptides from DNA annotation alone using varcode's MutantTranscript. "
+             "These peptides will have zero supporting RNA reads.")
+    advanced_group.add_argument(
+        "--prediction-cache",
+        default=None,
+        help="Path to pre-computed MHC binding predictions (topiary TSV/Parquet "
+             "or CSV). Used as a lookup cache; peptides not in the cache fall "
+             "through to the live MHC predictor.")
 
 
 def add_output_args(arg_parser):

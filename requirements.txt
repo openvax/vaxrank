@@ -1,10 +1,10 @@
 numpy>=2.0.0,<3.0.0
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.0.0,<3.0.0
-varcode>=2.8.0,<3.0.0
-isovar>=1.4.3,<2.0.0
+varcode>=2.10.0,<3.0.0
+isovar>=1.4.7,<2.0.0
 mhctools>=3.13.1,<4.0.0
-topiary>=5.6.0,<6.0.0
+topiary>=5.8.0,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0
