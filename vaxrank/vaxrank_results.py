@@ -14,7 +14,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
-from .serialization import DataclassSerializable
+from serializable import DataclassSerializable
 
 
 @dataclass
