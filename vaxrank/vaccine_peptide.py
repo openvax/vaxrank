@@ -20,8 +20,7 @@ from .manufacturability import (
     ManufacturabilityScores,
     compute_manufacturability_tuple,
 )
-
-DEFAULT_COMBINED_SCORE_MODE = "sqrt_reads_times_epitope"
+from .vaccine_config import COMBINED_SCORE_MODES, DEFAULT_COMBINED_SCORE_MODE
 
 
 class VaccinePeptide(Serializable):
@@ -75,10 +74,11 @@ class VaccinePeptide(Serializable):
             releases).
 
         combined_score_mode : str or None
-            How to combine expression and epitope score into the final
-            ``combined_score``. One of ``sqrt_reads_times_epitope``
-            (default, legacy), ``reads_times_epitope``, or
-            ``epitope_only``.
+            How to fold expression into the final ``combined_score``. One
+            of ``sqrt_reads_times_epitope`` (default, legacy),
+            ``reads_times_epitope``, or ``epitope_only``. Does not affect
+            the ``expression_score`` property, which always reports
+            ``sqrt(n_alt_reads)``.
         """
         self.mutant_protein_fragment = mutant_protein_fragment
         self.epitope_predictions = epitope_predictions
@@ -91,9 +91,13 @@ class VaccinePeptide(Serializable):
             if manufacturability_rules is not None
             else None
         )
-        self.combined_score_mode = (
-            combined_score_mode or DEFAULT_COMBINED_SCORE_MODE
-        )
+        resolved_mode = combined_score_mode or DEFAULT_COMBINED_SCORE_MODE
+        if resolved_mode not in COMBINED_SCORE_MODES:
+            raise ValueError(
+                f"combined_score_mode must be one of {COMBINED_SCORE_MODES}, "
+                f"got '{resolved_mode}'"
+            )
+        self.combined_score_mode = resolved_mode
 
         sort_key = attrgetter(sort_predictions_by)
 
@@ -215,16 +219,20 @@ class VaccinePeptide(Serializable):
 
     @property
     def expression_score(self):
-        if self.combined_score_mode == "reads_times_epitope":
-            return float(self.mutant_protein_fragment.n_alt_reads)
-        if self.combined_score_mode == "epitope_only":
-            return 1.0
-        # Default: sqrt_reads_times_epitope (legacy)
+        # Honest expression metric regardless of combined_score_mode — this
+        # is what reports display as "Expression score". The mode changes
+        # how expression folds into `combined_score`, not the metric itself.
         return np.sqrt(self.mutant_protein_fragment.n_alt_reads)
 
     @property
     def combined_score(self):
-        return self.expression_score * self.mutant_epitope_score
+        epitope = self.mutant_epitope_score
+        if self.combined_score_mode == "reads_times_epitope":
+            return float(self.mutant_protein_fragment.n_alt_reads) * epitope
+        if self.combined_score_mode == "epitope_only":
+            return epitope
+        # Default: sqrt_reads_times_epitope (legacy)
+        return self.expression_score * epitope
 
     def to_dict(self):
         epitope_predictions = self.mutant_epitope_predictions + self.wildtype_epitope_predictions

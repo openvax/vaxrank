@@ -260,6 +260,11 @@ def extract_epitope_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
 def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     kwargs = _extract_via_mapping(config, _VACCINE_CONFIG_MAPPING)
 
+    # VaccineConfig declares manufacturability_rules as Optional[tuple[str, ...]];
+    # YAML gives us a list, so coerce.
+    if "manufacturability_rules" in kwargs and kwargs["manufacturability_rules"] is not None:
+        kwargs["manufacturability_rules"] = tuple(kwargs["manufacturability_rules"])
+
     # When preferred_peptide_length is set but min/max are not,
     # default them to match preferred so the range is consistent.
     if "preferred_peptide_length" in kwargs:

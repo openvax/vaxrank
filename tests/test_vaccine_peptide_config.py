@@ -14,11 +14,15 @@
 ``VaccinePeptide``. Separate from ``test_epitope_prediction.py`` because
 these don't require an MHC predictor."""
 
+import argparse
+import os
+import tempfile
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
+from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
 from vaxrank.manufacturability import DEFAULT_MANUFACTURABILITY_RULES
 from vaxrank.vaccine_peptide import VaccinePeptide
 
@@ -86,7 +90,8 @@ def test_combined_score_reads_times_epitope_mode():
         epitope_predictions=[_make_mutant_epitope()],
         combined_score_mode="reads_times_epitope",
     )
-    assert vp.expression_score == 9.0
+    # expression_score is an honest metric; mode only affects combined_score
+    assert vp.expression_score == pytest.approx(np.sqrt(9))
     assert vp.combined_score == pytest.approx(9.0 * vp.mutant_epitope_score)
 
 
@@ -97,8 +102,71 @@ def test_combined_score_epitope_only_mode():
         epitope_predictions=[_make_mutant_epitope()],
         combined_score_mode="epitope_only",
     )
-    assert vp.expression_score == 1.0
+    assert vp.expression_score == pytest.approx(np.sqrt(9))
     assert vp.combined_score == pytest.approx(vp.mutant_epitope_score)
+
+
+def test_vaccine_peptide_rejects_unknown_combined_score_mode():
+    with pytest.raises(ValueError, match="combined_score_mode"):
+        VaccinePeptide(
+            mutant_protein_fragment=_make_fragment(),
+            epitope_predictions=[_make_mutant_epitope()],
+            combined_score_mode="garbage",
+        )
+
+
+def test_end_to_end_yaml_rules_through_vaccine_config_to_peptide():
+    """YAML with manufacturability.rules loads through load_vaxrank_config,
+    then vaccine_config_from_args, producing a tuple on VaccineConfig.
+    A VaccinePeptide built with those rules gets a sort tuple of the
+    expected length."""
+    yaml_content = """
+manufacturability:
+  rules:
+    - cysteine_count
+    - cterm_hydropathy
+    - aspartate_proline
+vaccine_peptides:
+  combined_score_mode: epitope_only
+"""
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".yaml", delete=False
+    ) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        args = argparse.Namespace(
+            config=config_path,
+            vaccine_peptide_length=None,
+            padding_around_mutation=None,
+            max_vaccine_peptides_per_variant=None,
+            num_epitopes_per_vaccine_peptide=None,
+            config_set_overrides=None,
+            config_expr_overrides=None,
+        )
+        vc = vaccine_config_from_args(args)
+        # Type contract: VaccineConfig declares Optional[tuple[str, ...]]
+        assert vc.manufacturability_rules == (
+            "cysteine_count", "cterm_hydropathy", "aspartate_proline",
+        )
+        assert isinstance(vc.manufacturability_rules, tuple)
+        assert vc.combined_score_mode == "epitope_only"
+
+        vp = VaccinePeptide(
+            mutant_protein_fragment=_make_fragment(),
+            epitope_predictions=[_make_mutant_epitope()],
+            manufacturability_rules=vc.manufacturability_rules,
+            combined_score_mode=vc.combined_score_mode,
+        )
+        tup = vp.peptide_synthesis_difficulty_score_tuple(
+            rules=vp.manufacturability_rules,
+        )
+        assert len(tup) == 3
+        # combined_score under epitope_only is just the epitope score
+        assert vp.combined_score == pytest.approx(vp.mutant_epitope_score)
+    finally:
+        os.unlink(config_path)
 
 
 def test_vaccine_peptide_roundtrip_preserves_custom_config():
