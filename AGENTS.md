@@ -86,7 +86,7 @@ git tag "v${VERSION}" && git push --tags
 - **Allele parsing**: use `mhcgnomes`. Never `startswith("HLA-")` or other string hacks — alleles aren't always human.
 - **Epitope prediction**: go through `mhctools` / `topiary`, not MHCflurry directly.
 - **Filtering + ranking**: use the topiary DSL (integrated in 2.1.0). Don't add ad-hoc filters inside vaxrank that duplicate topiary predicates.
-- **Variants → peptides**: `varcode` for annotation (>=3.0.0 for `protein_diff`), `isovar` for RNA-backed variant peptides. There's a DNA-only fallback (2.3.0) and a prediction cache — use them, don't bypass.
+- **Variants → peptides**: `varcode` for annotation (>=4.0.0 — uses the `fast` annotator as the registry default), `isovar` for RNA-backed variant peptides. There's a DNA-only fallback (2.3.0) and a prediction cache — use them, don't bypass.
 - **Provenance**: carry gene name, gene ID, transcript, source species wherever peptides flow. Flanking context is not unique — a peptide can map to multiple source genes.
 - **Reports**: Jinja templates → WeasyPrint PDF / ASCII / Excel. Keep report logic in templates + small Python glue, not sprawling formatters.
 
