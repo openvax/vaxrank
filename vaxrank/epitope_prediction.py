@@ -10,8 +10,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+from typing import ClassVar, Optional
+
 import numpy as np
-from serializable import Serializable
+from serializable import DataclassSerializable
 
 from .config.defaults import (
     DEFAULT_BINDING_AFFINITY_CUTOFF,
@@ -21,10 +24,11 @@ from .config.defaults import (
 )
 
 
-class EpitopePrediction(Serializable):
-    # TODO: 
+@dataclass
+class EpitopePrediction(DataclassSerializable):
+    # TODO:
     #   - rename to CandidateEpitope
-    #   - add groups of predictions: 
+    #   - add groups of predictions:
     #      * mhc_affinity_ic50
     #      * mhc_affinity_score
     #      * mhc_affinity_percentile_rank
@@ -38,7 +42,7 @@ class EpitopePrediction(Serializable):
     #      * immunogenicity_score
     #      * immunogenicity_percentile_rank
     #  - also change wt_peptide_sequence to:
-    #      * closest_reference_peptide_sequence_in_any_protein 
+    #      * closest_reference_peptide_sequence_in_any_protein
     #      * closest_reference_peptide_sequence_in_same_protein
     #  - and calculate:
     #      * edit_distance_to_closest_reference_peptide_in_any_protein
@@ -46,42 +50,27 @@ class EpitopePrediction(Serializable):
     #      * edit_distance_to_closest_reference_peptide_in_any_protein_PMBEC
     #      * edit_distance_to_closest_reference_peptide_in_same_protein_PMBEC
     #  - how to avoid duplicating every prediction for MT vs. WT-any vs. WT-same?
-    def __init__(
-            self,
-            allele,
-            peptide_sequence,
-            wt_peptide_sequence,
-            ic50,
-            wt_ic50,
-            percentile_rank,
-            prediction_method_name,
-            overlaps_mutation,
-            source_sequence,
-            offset,
-            occurs_in_reference):
-        self.allele = allele
-        self.peptide_sequence = peptide_sequence
-        self.wt_peptide_sequence = wt_peptide_sequence
-        self.length = len(peptide_sequence)
-        self.ic50 = ic50
-        self.wt_ic50 = wt_ic50
-        self.percentile_rank = percentile_rank
-        self.prediction_method_name = prediction_method_name
-        self.overlaps_mutation = overlaps_mutation
-        self.source_sequence = source_sequence
-        self.offset = offset
-        self.occurs_in_reference = occurs_in_reference
+    allele: str
+    peptide_sequence: str
+    wt_peptide_sequence: str
+    ic50: float
+    wt_ic50: float
+    percentile_rank: float
+    prediction_method_name: str
+    overlaps_mutation: bool
+    source_sequence: str
+    offset: int
+    occurs_in_reference: bool
 
-    @classmethod
-    def from_dict(cls, d):
-        """
-        Deserialize EpitopePrediction from a dictionary of keywords.
-        """
-        d = d.copy()
-        if "length" in d:
-            # length argument removed in version 1.1.0
-            del d["length"]
-        return cls(**d)
+    # `length` used to be a constructor arg; since 1.1.0 it is derived from
+    # `peptide_sequence`. Drop it from any old JSON blobs we happen to load.
+    _SERIALIZABLE_KEYWORD_ALIASES: ClassVar[dict[str, Optional[str]]] = {
+        "length": None,
+    }
+
+    @property
+    def length(self) -> int:
+        return len(self.peptide_sequence)
 
     def logistic_epitope_score(
             self,

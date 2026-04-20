@@ -10,11 +10,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+from dataclasses import dataclass, field
 from operator import attrgetter
+from typing import Any, Optional
 
 import numpy as np
-from serializable import Serializable
+from serializable import DataclassSerializable
 
 from .manufacturability import (
     ManufacturabilityScores,
@@ -23,75 +24,81 @@ from .manufacturability import (
 from .vaccine_config import COMBINED_SCORE_MODES, DEFAULT_COMBINED_SCORE_MODE
 
 
-class VaccinePeptide(Serializable):
+@dataclass
+class VaccinePeptide(DataclassSerializable):
     """
     VaccinePeptide combines the sequence information of MutantProteinFragment
     with MHC binding predictions for subsequences of the protein fragment.
 
     The resulting lists of mutant and wildtype epitope predictions
     are sorted by affinity.
+
+    Parameters
+    ----------
+    mutant_protein_fragment : MutantProteinFragment
+
+    epitope_predictions : list of EpitopePrediction
+
+    num_mutant_epitopes_to_keep : int or None
+        If None or 0 then keep all mutant epitopes.
+
+    epitope_score_params : dict or None
+        Parameters passed to EpitopePrediction.logistic_epitope_score.
+
+    sort_predictions_by : str
+        Field of EpitopePrediction used for sorting epitope predictions
+        overlapping mutation in ascending order. Can be either 'ic50'
+        or 'percentile_rank'.
+
+    manufacturability_thresholds : dict or None
+        Hydropathy thresholds for peptide synthesis difficulty scoring.
+        Keys match the parameters of
+        ``peptide_synthesis_difficulty_score_tuple``. When None the
+        compiled-in defaults from ``config.defaults`` are used.
+
+    manufacturability_rules : sequence of str or None
+        Ordered list of manufacturability rule names to drive the
+        lexicographic sort tuple. Names must appear in
+        ``MANUFACTURABILITY_RULE_REGISTRY``. When None the legacy
+        10-rule default order is used (byte-identical with prior
+        releases).
+
+    combined_score_mode : str or None
+        How to fold expression into the final ``combined_score``. One
+        of ``sqrt_reads_times_epitope`` (default, legacy),
+        ``reads_times_epitope``, or ``epitope_only``. Does not affect
+        the ``expression_score`` property, which always reports
+        ``sqrt(n_alt_reads)``.
     """
 
-    def __init__(
-            self,
-            mutant_protein_fragment,
-            epitope_predictions,
-            num_mutant_epitopes_to_keep=None,
-            epitope_score_params=None,
-            sort_predictions_by='ic50',
-            manufacturability_thresholds=None,
-            manufacturability_rules=None,
-            combined_score_mode=None):
-        """
-        Parameters
-        ----------
-        mutant_protein_fragment : MutantProteinFragment
+    mutant_protein_fragment: Any
+    epitope_predictions: list
+    num_mutant_epitopes_to_keep: Optional[int] = None
+    epitope_score_params: Optional[dict] = None
+    sort_predictions_by: str = "ic50"
+    manufacturability_thresholds: Optional[dict] = None
+    manufacturability_rules: Optional[tuple] = None
+    combined_score_mode: Optional[str] = None
 
-        epitope_predictions : list of EpitopePrediction
+    # Derived attributes computed in __post_init__ — not part of the
+    # serialized form. `init=False` keeps them out of the generated
+    # __init__ signature; default=None gives them a sane pre-computed
+    # value for any pathway that inspects fields before __post_init__.
+    mutant_epitope_predictions: list = field(default_factory=list, init=False, repr=False)
+    wildtype_epitope_predictions: list = field(default_factory=list, init=False, repr=False)
+    wildtype_epitope_score: float = field(default=0.0, init=False, repr=False)
+    mutant_epitope_score: float = field(default=0.0, init=False, repr=False)
+    manufacturability_scores: Any = field(default=None, init=False, repr=False)
 
-        num_mutant_epitopes_to_keep : int or None
-            If None or 0 then keep all mutant epitopes.
+    def __post_init__(self):
+        # Normalize the optional collection/tuple fields.
+        self.epitope_score_params = self.epitope_score_params or {}
+        self.manufacturability_thresholds = self.manufacturability_thresholds or {}
+        if self.manufacturability_rules is not None:
+            self.manufacturability_rules = tuple(self.manufacturability_rules)
 
-        epitope_score_params : dict or None
-            Parameters passed to EpitopePrediction.logistic_epitope_score.
-
-        sort_predictions_by : str
-            Field of EpitopePrediction used for sorting epitope predictions
-            overlapping mutation in ascending order. Can be either 'ic50'
-            or 'percentile_rank'.
-
-        manufacturability_thresholds : dict or None
-            Hydropathy thresholds for peptide synthesis difficulty scoring.
-            Keys match the parameters of
-            ``peptide_synthesis_difficulty_score_tuple``.  When None the
-            compiled-in defaults from ``config.defaults`` are used.
-
-        manufacturability_rules : sequence of str or None
-            Ordered list of manufacturability rule names to drive the
-            lexicographic sort tuple. Names must appear in
-            ``MANUFACTURABILITY_RULE_REGISTRY``. When None the legacy
-            10-rule default order is used (byte-identical with prior
-            releases).
-
-        combined_score_mode : str or None
-            How to fold expression into the final ``combined_score``. One
-            of ``sqrt_reads_times_epitope`` (default, legacy),
-            ``reads_times_epitope``, or ``epitope_only``. Does not affect
-            the ``expression_score`` property, which always reports
-            ``sqrt(n_alt_reads)``.
-        """
-        self.mutant_protein_fragment = mutant_protein_fragment
-        self.epitope_predictions = epitope_predictions
-        self.num_mutant_epitopes_to_keep = num_mutant_epitopes_to_keep
-        self.epitope_score_params = epitope_score_params or {}
-        self.sort_predictions_by = sort_predictions_by
-        self.manufacturability_thresholds = manufacturability_thresholds or {}
-        self.manufacturability_rules = (
-            tuple(manufacturability_rules)
-            if manufacturability_rules is not None
-            else None
-        )
-        resolved_mode = combined_score_mode or DEFAULT_COMBINED_SCORE_MODE
+        # Validate combined_score_mode; resolve None to the legacy default.
+        resolved_mode = self.combined_score_mode or DEFAULT_COMBINED_SCORE_MODE
         if resolved_mode not in COMBINED_SCORE_MODES:
             raise ValueError(
                 f"combined_score_mode must be one of {COMBINED_SCORE_MODES}, "
@@ -99,36 +106,42 @@ class VaccinePeptide(Serializable):
             )
         self.combined_score_mode = resolved_mode
 
-        sort_key = attrgetter(sort_predictions_by)
+        sort_key = attrgetter(self.sort_predictions_by)
 
         # only keep the top k epitopes
-        self.mutant_epitope_predictions = sorted([
-            p for p in epitope_predictions
-            if p.overlaps_mutation and not p.occurs_in_reference
-        ], key=sort_key)
-        if num_mutant_epitopes_to_keep:
-            self.mutant_epitope_predictions = \
-                self.mutant_epitope_predictions[:num_mutant_epitopes_to_keep]
+        self.mutant_epitope_predictions = sorted(
+            [
+                p for p in self.epitope_predictions
+                if p.overlaps_mutation and not p.occurs_in_reference
+            ],
+            key=sort_key,
+        )
+        if self.num_mutant_epitopes_to_keep:
+            self.mutant_epitope_predictions = (
+                self.mutant_epitope_predictions[: self.num_mutant_epitopes_to_keep]
+            )
 
-        self.wildtype_epitope_predictions = sorted([
-            p for p in epitope_predictions
-            if not p.overlaps_mutation or p.occurs_in_reference
-        ], key=sort_key)
+        self.wildtype_epitope_predictions = sorted(
+            [
+                p for p in self.epitope_predictions
+                if not p.overlaps_mutation or p.occurs_in_reference
+            ],
+            key=sort_key,
+        )
 
         def epitope_score(prediction):
             return prediction.logistic_epitope_score(**self.epitope_score_params)
 
         self.wildtype_epitope_score = sum(
-            epitope_score(p)
-            for p in self.wildtype_epitope_predictions)
-        # only keep the top k epitopes for the purposes of the score
+            epitope_score(p) for p in self.wildtype_epitope_predictions
+        )
         self.mutant_epitope_score = sum(
-            epitope_score(p)
-            for p in self.mutant_epitope_predictions)
+            epitope_score(p) for p in self.mutant_epitope_predictions
+        )
 
-        self.manufacturability_scores = \
-            ManufacturabilityScores.from_amino_acids(
-                self.mutant_protein_fragment.amino_acids)
+        self.manufacturability_scores = ManufacturabilityScores.from_amino_acids(
+            self.mutant_protein_fragment.amino_acids
+        )
 
     def peptide_synthesis_difficulty_score_tuple(
             self,
@@ -235,7 +248,13 @@ class VaccinePeptide(Serializable):
         return self.expression_score * epitope
 
     def to_dict(self):
-        epitope_predictions = self.mutant_epitope_predictions + self.wildtype_epitope_predictions
+        # The persisted form combines the filtered mutant + wildtype lists
+        # back into a single `epitope_predictions` list. Also trims fields
+        # that match their defaults so the JSON stays small and older
+        # readers don't see keys they don't understand.
+        epitope_predictions = (
+            self.mutant_epitope_predictions + self.wildtype_epitope_predictions
+        )
         d = {
             "mutant_protein_fragment": self.mutant_protein_fragment,
             "epitope_predictions": epitope_predictions,
@@ -250,18 +269,3 @@ class VaccinePeptide(Serializable):
         if self.combined_score_mode != DEFAULT_COMBINED_SCORE_MODE:
             d["combined_score_mode"] = self.combined_score_mode
         return d
-
-    @classmethod
-    def from_dict(cls, d):
-        d = d.copy()
-        if "sort_predictions_by" not in d:
-            d["sort_predictions_by"] = "ic50"
-        if "epitope_score_params" not in d:
-            d["epitope_score_params"] = None
-        if "manufacturability_thresholds" not in d:
-            d["manufacturability_thresholds"] = None
-        if "manufacturability_rules" not in d:
-            d["manufacturability_rules"] = None
-        if "combined_score_mode" not in d:
-            d["combined_score_mode"] = None
-        return cls(**d)
