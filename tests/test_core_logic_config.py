@@ -240,6 +240,8 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
             num_mutant_epitopes_to_keep=None,
             epitope_score_params=None,
             manufacturability_thresholds=None,
+            manufacturability_rules=None,
+            combined_score_mode=None,
         ):
             self.mutant_protein_fragment = mutant_protein_fragment
             self.combined_score = 10.0 if mutant_protein_fragment.amino_acids == "AAAA" else 8.5

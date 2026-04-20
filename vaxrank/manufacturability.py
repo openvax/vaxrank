@@ -179,3 +179,115 @@ ManufacturabilityScores = combine_scoring_functions(
     # avoid Asp-Pro bonds
     aspartate_proline_bond_count,
 )
+
+
+# Registry of manufacturability rules used to build the lexicographic
+# sort tuple in VaccinePeptide. Each rule takes (scores, thresholds) and
+# returns one numeric value to minimize.
+#
+# Thresholds is a dict with keys:
+#   max_c_terminal_hydropathy, min_kmer_hydropathy,
+#   max_kmer_hydropathy_low_priority, max_kmer_hydropathy_high_priority
+
+
+def _cysteine_count_rule(scores, _thresholds):
+    return scores.cysteine_count
+
+
+def _cterm_hydropathy_rule(scores, thresholds):
+    return max(
+        0,
+        scores.cterm_7mer_gravy_score - thresholds["max_c_terminal_hydropathy"],
+    )
+
+
+def _max_hydropathy_high_rule(scores, thresholds):
+    return max(
+        0,
+        scores.max_7mer_gravy_score - thresholds["max_kmer_hydropathy_high_priority"],
+    )
+
+
+def _difficult_n_terminal_rule(scores, _thresholds):
+    return scores.difficult_n_terminal_residue
+
+
+def _c_terminal_cysteine_rule(scores, _thresholds):
+    return scores.c_terminal_cysteine
+
+
+def _c_terminal_proline_rule(scores, _thresholds):
+    return scores.c_terminal_proline
+
+
+def _n_terminal_asparagine_rule(scores, _thresholds):
+    return scores.n_terminal_asparagine
+
+
+def _aspartate_proline_rule(scores, _thresholds):
+    return scores.aspartate_proline_bond_count
+
+
+def _max_hydropathy_low_rule(scores, thresholds):
+    return max(
+        0,
+        scores.max_7mer_gravy_score - thresholds["max_kmer_hydropathy_low_priority"],
+    )
+
+
+def _min_hydropathy_rule(scores, thresholds):
+    return max(
+        0,
+        thresholds["min_kmer_hydropathy"] - scores.max_7mer_gravy_score,
+    )
+
+
+MANUFACTURABILITY_RULE_REGISTRY = {
+    "cysteine_count": _cysteine_count_rule,
+    "cterm_hydropathy": _cterm_hydropathy_rule,
+    "max_hydropathy_high": _max_hydropathy_high_rule,
+    "difficult_n_terminal": _difficult_n_terminal_rule,
+    "c_terminal_cysteine": _c_terminal_cysteine_rule,
+    "c_terminal_proline": _c_terminal_proline_rule,
+    "n_terminal_asparagine": _n_terminal_asparagine_rule,
+    "aspartate_proline": _aspartate_proline_rule,
+    "max_hydropathy_low": _max_hydropathy_low_rule,
+    "min_hydropathy": _min_hydropathy_rule,
+}
+
+# Legacy ordering preserved byte-for-byte: this is the exact tuple order
+# `peptide_synthesis_difficulty_score_tuple` produced before rules were
+# made configurable. Do not reorder without updating parity tests.
+DEFAULT_MANUFACTURABILITY_RULES = (
+    "cysteine_count",
+    "cterm_hydropathy",
+    "max_hydropathy_high",
+    "difficult_n_terminal",
+    "c_terminal_cysteine",
+    "c_terminal_proline",
+    "n_terminal_asparagine",
+    "aspartate_proline",
+    "max_hydropathy_low",
+    "min_hydropathy",
+)
+
+
+def compute_manufacturability_tuple(scores, thresholds, rules=None):
+    """Apply the ordered rule list against a ManufacturabilityScores instance.
+
+    ``rules`` defaults to ``DEFAULT_MANUFACTURABILITY_RULES`` (the legacy
+    order). Each entry must be a key in ``MANUFACTURABILITY_RULE_REGISTRY``.
+    """
+    if rules is None:
+        rules = DEFAULT_MANUFACTURABILITY_RULES
+    tuple_values = []
+    for rule_name in rules:
+        try:
+            fn = MANUFACTURABILITY_RULE_REGISTRY[rule_name]
+        except KeyError:
+            raise ValueError(
+                f"Unknown manufacturability rule '{rule_name}'. "
+                f"Available: {sorted(MANUFACTURABILITY_RULE_REGISTRY)}"
+            ) from None
+        tuple_values.append(fn(scores, thresholds))
+    return tuple(tuple_values)

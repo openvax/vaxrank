@@ -16,7 +16,12 @@ from operator import attrgetter
 import numpy as np
 from serializable import Serializable
 
-from .manufacturability import ManufacturabilityScores
+from .manufacturability import (
+    ManufacturabilityScores,
+    compute_manufacturability_tuple,
+)
+
+DEFAULT_COMBINED_SCORE_MODE = "sqrt_reads_times_epitope"
 
 
 class VaccinePeptide(Serializable):
@@ -35,7 +40,9 @@ class VaccinePeptide(Serializable):
             num_mutant_epitopes_to_keep=None,
             epitope_score_params=None,
             sort_predictions_by='ic50',
-            manufacturability_thresholds=None):
+            manufacturability_thresholds=None,
+            manufacturability_rules=None,
+            combined_score_mode=None):
         """
         Parameters
         ----------
@@ -59,6 +66,19 @@ class VaccinePeptide(Serializable):
             Keys match the parameters of
             ``peptide_synthesis_difficulty_score_tuple``.  When None the
             compiled-in defaults from ``config.defaults`` are used.
+
+        manufacturability_rules : sequence of str or None
+            Ordered list of manufacturability rule names to drive the
+            lexicographic sort tuple. Names must appear in
+            ``MANUFACTURABILITY_RULE_REGISTRY``. When None the legacy
+            10-rule default order is used (byte-identical with prior
+            releases).
+
+        combined_score_mode : str or None
+            How to combine expression and epitope score into the final
+            ``combined_score``. One of ``sqrt_reads_times_epitope``
+            (default, legacy), ``reads_times_epitope``, or
+            ``epitope_only``.
         """
         self.mutant_protein_fragment = mutant_protein_fragment
         self.epitope_predictions = epitope_predictions
@@ -66,6 +86,14 @@ class VaccinePeptide(Serializable):
         self.epitope_score_params = epitope_score_params or {}
         self.sort_predictions_by = sort_predictions_by
         self.manufacturability_thresholds = manufacturability_thresholds or {}
+        self.manufacturability_rules = (
+            tuple(manufacturability_rules)
+            if manufacturability_rules is not None
+            else None
+        )
+        self.combined_score_mode = (
+            combined_score_mode or DEFAULT_COMBINED_SCORE_MODE
+        )
 
         sort_key = attrgetter(sort_predictions_by)
 
@@ -103,73 +131,36 @@ class VaccinePeptide(Serializable):
             max_c_terminal_hydropathy=1.5,
             min_kmer_hydropathy=0.0,
             max_kmer_hydropathy_low_priority=1.5,
-            max_kmer_hydropathy_high_priority=2.5):
+            max_kmer_hydropathy_high_priority=2.5,
+            rules=None):
         """
         Generates a tuple of scores used for lexicographic sorting of vaccine
-        peptides.
+        peptides. Each entry corresponds to one rule in ``rules`` (defaults
+        to ``DEFAULT_MANUFACTURABILITY_RULES`` — the legacy 10-rule order).
 
-        The most important criterion for choosing a vaccine peptide is to
-        minimize the number of cysteines in the sequence (to prevent the
-        formation of disulfide bonds).
+        The most important default criterion is to minimize the number of
+        cysteines in the sequence (to prevent disulfide bonds), followed by
+        keeping C-terminal 7-mer GRAVY below 1.5 and no 7-mer window above
+        2.5 (Kyte & Doolittle 1982). Remaining tie-breakers target
+        problematic terminal residues, Asp-Pro bonds, and lower-priority
+        hydropathy bounds.
 
-        It is also important to keep the mean hydropathy of the C-terminal
-        residues below 1.5 and also to ensure that no window of amino acids
-        within the sequence has a mean hydropathy score > 2.5 (using
-        AA values from Table 2 of Kyte & Doolittle 1982).
-
-        If there are multiple vaccine peptides all of whose subsequence
-        windows satisfy the GRAVY (mean hydropathy) < 2.5 constraint then
-        let's optimize the terminal amino acids to exclude ones known to
-        make solid phase synthesis difficult.
-
-        If there are multiple vaccine peptides without difficult terminal
-        residues then try to eliminate N-terminal asparagine residues
-        (not as harmful) and asparagine-proline bonds
-        (known to dissociate easily). If all of these constraints
-        are satisfied, then attempt to keep the max k-mer hydropahy below
-        a lower constant (default GRAVY score 1.5) and above a minimum value
-        (default 0).
+        Users can reorder, disable, or subset these by passing a ``rules``
+        list (names from ``MANUFACTURABILITY_RULE_REGISTRY``) — typically
+        set once on the config and threaded through.
 
         (Sort criteria determined through conversations with manufacturer)
         """
-        cterm_7mer_gravy = self.manufacturability_scores.cterm_7mer_gravy_score
-        max_7mer_gravy = self.manufacturability_scores.max_7mer_gravy_score
-
-        # numbers we want to minimize, so a bigger number is worse
-        return (
-            # total number of Cys residues
-            self.manufacturability_scores.cysteine_count,
-
-            # C-terminal 7mer GRAVY score < 1.5
-            # (or user specified max GRAVY score for C terminus of peptide)
-            max(0, cterm_7mer_gravy - max_c_terminal_hydropathy),
-
-            # max 7mer GRAVY score < 2.5
-            # (or user specified higher priority maximum for GRAVY score)
-            max(0, max_7mer_gravy - max_kmer_hydropathy_high_priority),
-
-            # avoid N-terminal Gln, Glu, Cys
-            self.manufacturability_scores.difficult_n_terminal_residue,
-
-            #  avoid C-terminal Cys
-            self.manufacturability_scores.c_terminal_cysteine,
-
-            # avoid C-terminal Pro
-            self.manufacturability_scores.c_terminal_proline,
-
-            # avoid N-terminal Asn
-            self.manufacturability_scores.n_terminal_asparagine,
-
-            # avoid Asp-Pro bonds
-            self.manufacturability_scores.aspartate_proline_bond_count,
-
-            # max 7mer GRAVY score < 1.5
-            # (or user specified lower priority maximum for GRAVY score)
-            max(0, max_7mer_gravy - max_kmer_hydropathy_low_priority),
-
-            # max 7mer GRAVY score > 0
-            # (or user specified min GRAVY for 7mer windows in peptide)
-            max(0, min_kmer_hydropathy - max_7mer_gravy),
+        thresholds = {
+            "max_c_terminal_hydropathy": max_c_terminal_hydropathy,
+            "min_kmer_hydropathy": min_kmer_hydropathy,
+            "max_kmer_hydropathy_low_priority": max_kmer_hydropathy_low_priority,
+            "max_kmer_hydropathy_high_priority": max_kmer_hydropathy_high_priority,
+        }
+        return compute_manufacturability_tuple(
+            self.manufacturability_scores,
+            thresholds,
+            rules=rules,
         )
 
     def lexicographic_sort_key(self):
@@ -191,6 +182,7 @@ class VaccinePeptide(Serializable):
             -self.mutant_protein_fragment.n_alt_reads
         )
         manufacturability_score_tuple = self.peptide_synthesis_difficulty_score_tuple(
+            rules=self.manufacturability_rules,
             **self.manufacturability_thresholds)
         extra_score_tuple = (
             # Number of reads supporting the particular protein sequence
@@ -223,6 +215,11 @@ class VaccinePeptide(Serializable):
 
     @property
     def expression_score(self):
+        if self.combined_score_mode == "reads_times_epitope":
+            return float(self.mutant_protein_fragment.n_alt_reads)
+        if self.combined_score_mode == "epitope_only":
+            return 1.0
+        # Default: sqrt_reads_times_epitope (legacy)
         return np.sqrt(self.mutant_protein_fragment.n_alt_reads)
 
     @property
@@ -240,6 +237,10 @@ class VaccinePeptide(Serializable):
         }
         if self.manufacturability_thresholds:
             d["manufacturability_thresholds"] = self.manufacturability_thresholds
+        if self.manufacturability_rules is not None:
+            d["manufacturability_rules"] = list(self.manufacturability_rules)
+        if self.combined_score_mode != DEFAULT_COMBINED_SCORE_MODE:
+            d["combined_score_mode"] = self.combined_score_mode
         return d
 
     @classmethod
@@ -251,4 +252,8 @@ class VaccinePeptide(Serializable):
             d["epitope_score_params"] = None
         if "manufacturability_thresholds" not in d:
             d["manufacturability_thresholds"] = None
+        if "manufacturability_rules" not in d:
+            d["manufacturability_rules"] = None
+        if "combined_score_mode" not in d:
+            d["combined_score_mode"] = None
         return cls(**d)
