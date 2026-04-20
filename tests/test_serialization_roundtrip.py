@@ -18,9 +18,32 @@ only exercise these code paths when an MHC predictor is available."""
 import pickle
 
 import pytest
+from varcode import Variant
 
 from vaxrank.epitope_prediction import EpitopePrediction
+from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.vaccine_peptide import VaccinePeptide
+
+
+def _sample_variant():
+    # varcode.Variant with ensembl=None constructs without touching the
+    # Ensembl DB — enough for serialization roundtrips.
+    return Variant(contig="1", start=1000, ref="A", alt="G", ensembl=None)
+
+
+def _sample_fragment(amino_acids="MKVTHFYL" * 3, n_alt_reads=50):
+    return MutantProteinFragment(
+        variant=_sample_variant(),
+        gene_name="BRCA1",
+        amino_acids=amino_acids,
+        mutant_amino_acid_start_offset=4,
+        mutant_amino_acid_end_offset=5,
+        supporting_reference_transcripts=[],
+        n_overlapping_reads=100,
+        n_alt_reads=n_alt_reads,
+        n_ref_reads=50,
+        n_alt_reads_supporting_protein_sequence=n_alt_reads,
+    )
 
 
 def _sample_epitope(
@@ -109,6 +132,32 @@ def test_epitope_prediction_from_dict_drops_legacy_length_field():
     assert e.length == 8  # derived from peptide_sequence
 
 
+# ---- MutantProteinFragment --------------------------------------------
+
+
+def test_mutant_protein_fragment_json_roundtrip():
+    f = _sample_fragment()
+    restored = MutantProteinFragment.from_json(f.to_json())
+    assert restored == f
+
+
+def test_mutant_protein_fragment_pickle_roundtrip():
+    f = _sample_fragment()
+    assert pickle.loads(pickle.dumps(f)) == f
+
+
+def test_mutant_protein_fragment_computed_properties_after_roundtrip():
+    """@property methods (n_mutant_amino_acids, mutation_distance_from_edge,
+    n_other_reads) must still compute correctly after a JSON roundtrip —
+    guards against anyone accidentally making them stored fields."""
+    f = _sample_fragment()
+    restored = MutantProteinFragment.from_json(f.to_json())
+    assert restored.n_mutant_amino_acids == f.n_mutant_amino_acids
+    assert restored.mutation_distance_from_edge == f.mutation_distance_from_edge
+    assert restored.n_other_reads == f.n_other_reads
+    assert len(restored) == len(f)
+
+
 # ---- VaccinePeptide ----------------------------------------------------
 
 
@@ -168,3 +217,45 @@ def test_vaccine_peptide_tuple_coercion_on_rules():
     )
     assert vp.manufacturability_rules == ("cysteine_count", "cterm_hydropathy")
     assert isinstance(vp.manufacturability_rules, tuple)
+
+
+def test_vaccine_peptide_json_roundtrip_with_real_fragment():
+    """Full to_json / from_json with a real MutantProteinFragment and
+    EpitopePredictions. This is the path the CLI writes out — we want
+    __post_init__ to re-derive the mutant/wildtype split after load and
+    scores to re-compute consistently."""
+    mutant = _sample_epitope(peptide_sequence="SIINFEKL", ic50=500.0)
+    wildtype = _sample_epitope(
+        peptide_sequence="TESTWILD",
+        ic50=50.0,
+        overlaps_mutation=False,
+        occurs_in_reference=True,
+    )
+    vp = VaccinePeptide(
+        mutant_protein_fragment=_sample_fragment(),
+        epitope_predictions=[mutant, wildtype],
+        manufacturability_rules=("cysteine_count", "cterm_hydropathy"),
+        combined_score_mode="epitope_only",
+    )
+    restored = VaccinePeptide.from_json(vp.to_json())
+
+    # Wire-level invariants
+    assert restored.mutant_protein_fragment == vp.mutant_protein_fragment
+    assert restored.manufacturability_rules == vp.manufacturability_rules
+    assert restored.combined_score_mode == vp.combined_score_mode
+
+    # Derived state must match — __post_init__ re-ran on load
+    assert restored.mutant_epitope_predictions == vp.mutant_epitope_predictions
+    assert restored.wildtype_epitope_predictions == vp.wildtype_epitope_predictions
+    assert restored.mutant_epitope_score == pytest.approx(vp.mutant_epitope_score)
+    assert restored.combined_score == pytest.approx(vp.combined_score)
+
+
+def test_vaccine_peptide_pickle_roundtrip_with_real_fragment():
+    vp = VaccinePeptide(
+        mutant_protein_fragment=_sample_fragment(),
+        epitope_predictions=[_sample_epitope()],
+    )
+    restored = pickle.loads(pickle.dumps(vp))
+    assert restored.mutant_protein_fragment == vp.mutant_protein_fragment
+    assert restored.combined_score == pytest.approx(vp.combined_score)
