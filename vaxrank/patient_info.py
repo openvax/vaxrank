@@ -11,7 +11,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Optional
 
 from serializable import DataclassSerializable
 
@@ -20,7 +20,7 @@ from serializable import DataclassSerializable
 class PatientInfo(DataclassSerializable):
     patient_id: str
     vcf_paths: list[str] = field(default_factory=list)
-    bam_path: Any = None
+    bam_path: Optional[str] = None
     mhc_alleles: list[str] = field(default_factory=list)
     num_somatic_variants: int = 0
     num_coding_effect_variants: int = 0

@@ -11,7 +11,7 @@
 # limitations under the License.
 
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from serializable import DataclassSerializable
@@ -33,9 +33,9 @@ class VaxrankResults(DataclassSerializable):
     ranked_vaccine_peptides : list of tuple(varcode.Variant, list of VaccinePeptide)
     """
 
-    isovar_results: list[Any] = field(default_factory=list)
-    variant_to_vaccine_peptides_dict: dict[Any, Any] = field(default_factory=dict)
-    ranked_vaccine_peptides: list[Any] = field(default_factory=list)
+    isovar_results: list[Any]
+    variant_to_vaccine_peptides_dict: dict[Any, Any]
+    ranked_vaccine_peptides: list[Any]
 
     @property
     def variants(self):
