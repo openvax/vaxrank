@@ -40,8 +40,12 @@ def make_vaxrank_arg_parser():
     
     arg_parser.add_argument(
         "--config",
+        action="append",
         default=None,
-        help="Path to YAML file with options related to epitope prediction and vaccine design.")
+        help="Path to YAML config. May be repeated; later files deep-merge "
+             "over earlier ones. Each file may contain any of the top-level "
+             "sections 'epitopes', 'vaccine_peptides', and 'manufacturability' "
+             "— split them across files or keep them together.")
     add_config_override_args(arg_parser)
 
     arg_parser.add_argument(
@@ -300,7 +304,7 @@ def external_input_arg_parser():
     add_output_args(arg_parser)
     add_epitope_prediction_args(arg_parser)
     # config arg needed for epitope_config_from_args
-    arg_parser.add_argument("--config", default=None)
+    arg_parser.add_argument("--config", action="append", default=None)
     add_config_override_args(arg_parser)
     return arg_parser
 

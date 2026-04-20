@@ -10,7 +10,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from vaxrank.manufacturability import ManufacturabilityScores
+import pytest
+
+from vaxrank.manufacturability import (
+    DEFAULT_MANUFACTURABILITY_RULES,
+    MANUFACTURABILITY_RULE_REGISTRY,
+    ManufacturabilityScores,
+    compute_manufacturability_tuple,
+)
+
+
+DEFAULT_THRESHOLDS = {
+    "max_c_terminal_hydropathy": 1.5,
+    "min_kmer_hydropathy": 0.0,
+    "max_kmer_hydropathy_low_priority": 1.5,
+    "max_kmer_hydropathy_high_priority": 2.5,
+}
 
 def test_c_terminal_proline():
     scores = ManufacturabilityScores.from_amino_acids("A" * 6 + "P")
@@ -68,3 +83,60 @@ def max_7mer_gravy_score():
     # hydropathy of alanine is 1.8, histidine is -3.2
     # from Kyte & Doolittle 1982
     assert scores.max_7mer_gravy_score == 1.8
+
+
+def _legacy_manufacturability_tuple(scores, thresholds):
+    """Inline replica of the legacy 10-entry tuple — parity baseline."""
+    cterm_7mer_gravy = scores.cterm_7mer_gravy_score
+    max_7mer_gravy = scores.max_7mer_gravy_score
+    return (
+        scores.cysteine_count,
+        max(0, cterm_7mer_gravy - thresholds["max_c_terminal_hydropathy"]),
+        max(0, max_7mer_gravy - thresholds["max_kmer_hydropathy_high_priority"]),
+        scores.difficult_n_terminal_residue,
+        scores.c_terminal_cysteine,
+        scores.c_terminal_proline,
+        scores.n_terminal_asparagine,
+        scores.aspartate_proline_bond_count,
+        max(0, max_7mer_gravy - thresholds["max_kmer_hydropathy_low_priority"]),
+        max(0, thresholds["min_kmer_hydropathy"] - max_7mer_gravy),
+    )
+
+
+@pytest.mark.parametrize("seq", [
+    "A" * 25,
+    "C" * 7 + "A" * 18,
+    "Q" + "A" * 23 + "P",
+    "DP" + "A" * 21 + "NP",
+    "H" * 3 + "A" * 22,
+])
+def test_default_rules_match_legacy_tuple(seq):
+    scores = ManufacturabilityScores.from_amino_acids(seq)
+    legacy = _legacy_manufacturability_tuple(scores, DEFAULT_THRESHOLDS)
+    registry_tuple = compute_manufacturability_tuple(scores, DEFAULT_THRESHOLDS)
+    assert legacy == registry_tuple
+
+
+def test_rule_registry_covers_default_order():
+    # Every rule in the default order must be in the registry.
+    for rule_name in DEFAULT_MANUFACTURABILITY_RULES:
+        assert rule_name in MANUFACTURABILITY_RULE_REGISTRY
+
+
+def test_rule_registry_unknown_rule_raises():
+    scores = ManufacturabilityScores.from_amino_acids("A" * 25)
+    with pytest.raises(ValueError, match="Unknown manufacturability rule"):
+        compute_manufacturability_tuple(scores, DEFAULT_THRESHOLDS, rules=["bogus"])
+
+
+def test_rule_registry_reorders_and_filters():
+    scores = ManufacturabilityScores.from_amino_acids("C" * 3 + "A" * 22)
+    # Only two rules, reversed from default order.
+    result = compute_manufacturability_tuple(
+        scores,
+        DEFAULT_THRESHOLDS,
+        rules=["cterm_hydropathy", "cysteine_count"],
+    )
+    assert len(result) == 2
+    # cysteine_count should now be at index 1
+    assert result[1] == scores.cysteine_count

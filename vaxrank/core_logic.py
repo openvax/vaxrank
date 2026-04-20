@@ -345,6 +345,8 @@ def vaccine_peptides_from_epitopes(
                 "max_kmer_hydropathy_low_priority": vaccine_config.max_kmer_hydropathy_low_priority,
                 "max_kmer_hydropathy_high_priority": vaccine_config.max_kmer_hydropathy_high_priority,
             },
+            manufacturability_rules=vaccine_config.manufacturability_rules,
+            combined_score_mode=vaccine_config.combined_score_mode,
         )
 
         logger.debug(

@@ -11,33 +11,31 @@
 # limitations under the License.
 
 from collections import OrderedDict
+from dataclasses import dataclass
+from typing import Any
 
-from serializable import Serializable
+from serializable import DataclassSerializable
 
-class VaxrankResults(Serializable):
+
+@dataclass
+class VaxrankResults(DataclassSerializable):
     """
     Data class used to represent all results captured by running Vaxrank.
+
+    Parameters
+    ----------
+    isovar_results : list of isovar.IsovarResult
+        IsovarResult object for each variant without any filtering
+
+    variant_to_vaccine_peptides_dict : dict
+        Dictionary mapping variant to a list of possible vaccine peptides
+
+    ranked_vaccine_peptides : list of tuple(varcode.Variant, list of VaccinePeptide)
     """
-    def __init__(
-            self,
-            isovar_results,
-            variant_to_vaccine_peptides_dict,
-            ranked_vaccine_peptides):
-        """
-        Parameters
-        ----------
-        isovar_results : list of isovar.IsovarResult
-            IsovarResult object for each variant without any filtering
 
-        variant_to_vaccine_peptides_dict : dict
-            Dictionary mapping variant to a list of possible vaccine peptides
-
-        ranked_vaccine_peptides : list of tuple(varcode.Variant, list of VaccinePeptide)
-        """
-        self.isovar_results = isovar_results
-        self.variant_to_vaccine_peptides_dict = variant_to_vaccine_peptides_dict
-        self.ranked_vaccine_peptides = ranked_vaccine_peptides
-
+    isovar_results: list[Any]
+    variant_to_vaccine_peptides_dict: dict[Any, Any]
+    ranked_vaccine_peptides: list[Any]
 
     @property
     def variants(self):
@@ -65,8 +63,6 @@ class VaxrankResults(Serializable):
         """
         variant_properties = self.variant_properties()
 
-        # dictionary which will contain some overall variant counts
-        # for report display
         counts_dict = {}
         counts_dict['num_total_variants'] = len(self.isovar_results)
         counts_dict['num_coding_effect_variants'] = sum(

@@ -586,7 +586,8 @@ vaccine_peptides:
             config_set_overrides=None,
             config_expr_overrides=None,
         )
-        config = vaccine_config_from_args(args)
+        with pytest.warns(DeprecationWarning, match="vaccine_peptides.manufacturability"):
+            config = vaccine_config_from_args(args)
         eq_(config.max_c_terminal_hydropathy, 2.0)
         eq_(config.max_kmer_hydropathy_high_priority, 3.0)
         # Unset fields keep defaults
@@ -594,6 +595,159 @@ vaccine_peptides:
         eq_(config.max_kmer_hydropathy_low_priority, 1.5)
     finally:
         os.unlink(config_path)
+
+
+def test_vaccine_config_from_args_top_level_manufacturability():
+    yaml_content = """
+manufacturability:
+  max_c_terminal_hydropathy: 2.0
+  max_kmer_hydropathy_high_priority: 3.0
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        args = argparse.Namespace(
+            config=config_path,
+            vaccine_peptide_length=None,
+            padding_around_mutation=None,
+            max_vaccine_peptides_per_variant=None,
+            num_epitopes_per_vaccine_peptide=None,
+            config_set_overrides=None,
+            config_expr_overrides=None,
+        )
+        config = vaccine_config_from_args(args)
+        eq_(config.max_c_terminal_hydropathy, 2.0)
+        eq_(config.max_kmer_hydropathy_high_priority, 3.0)
+        eq_(config.min_kmer_hydropathy, 0.0)
+        eq_(config.max_kmer_hydropathy_low_priority, 1.5)
+    finally:
+        os.unlink(config_path)
+
+
+def test_manufacturability_both_locations_raises():
+    yaml_content = """
+manufacturability:
+  max_c_terminal_hydropathy: 2.0
+vaccine_peptides:
+  manufacturability:
+    max_c_terminal_hydropathy: 1.0
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+
+    try:
+        args = argparse.Namespace(
+            config=config_path,
+            vaccine_peptide_length=None,
+            padding_around_mutation=None,
+            max_vaccine_peptides_per_variant=None,
+            num_epitopes_per_vaccine_peptide=None,
+            config_set_overrides=None,
+            config_expr_overrides=None,
+        )
+        with pytest.raises(ValueError, match="both top-level 'manufacturability'"):
+            vaccine_config_from_args(args)
+    finally:
+        os.unlink(config_path)
+
+
+def test_multi_file_config_deep_merges():
+    """Later files override earlier ones; disjoint sections combine."""
+    epitopes_yaml = """
+epitopes:
+  min_score: 0.01
+  affinity_cutoff: 1000.0
+"""
+    vaccine_yaml = """
+vaccine_peptides:
+  preferred_length: 27
+  min_length: 27
+  max_length: 27
+"""
+    mfg_yaml = """
+manufacturability:
+  max_c_terminal_hydropathy: 2.5
+  rules: [cysteine_count, cterm_hydropathy]
+"""
+    paths = []
+    try:
+        for content in (epitopes_yaml, vaccine_yaml, mfg_yaml):
+            f = tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False)
+            f.write(content)
+            f.close()
+            paths.append(f.name)
+
+        merged = load_vaxrank_config(config_path=paths)
+        eq_(merged["epitopes"]["min_score"], 0.01)
+        eq_(merged["vaccine_peptides"]["preferred_length"], 27)
+        eq_(merged["manufacturability"]["max_c_terminal_hydropathy"], 2.5)
+        eq_(merged["manufacturability"]["rules"], ["cysteine_count", "cterm_hydropathy"])
+    finally:
+        for p in paths:
+            os.unlink(p)
+
+
+def test_multi_file_config_later_overrides_earlier():
+    base_yaml = """
+epitopes:
+  min_score: 0.01
+  affinity_cutoff: 1000.0
+"""
+    override_yaml = """
+epitopes:
+  affinity_cutoff: 500.0
+"""
+    paths = []
+    try:
+        for content in (base_yaml, override_yaml):
+            f = tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False)
+            f.write(content)
+            f.close()
+            paths.append(f.name)
+
+        merged = load_vaxrank_config(config_path=paths)
+        # base value preserved where override is silent
+        eq_(merged["epitopes"]["min_score"], 0.01)
+        # override wins where both set
+        eq_(merged["epitopes"]["affinity_cutoff"], 500.0)
+    finally:
+        for p in paths:
+            os.unlink(p)
+
+
+def test_manufacturability_rules_configurable():
+    yaml_content = """
+manufacturability:
+  rules:
+    - cterm_hydropathy
+    - cysteine_count
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+    try:
+        merged = load_vaxrank_config(config_path=config_path)
+        eq_(merged["manufacturability"]["rules"], ["cterm_hydropathy", "cysteine_count"])
+    finally:
+        os.unlink(config_path)
+
+
+def test_vaccine_config_rejects_unknown_manufacturability_rule():
+    with pytest.raises(ValueError, match="Unknown manufacturability rule"):
+        VaccineConfig(manufacturability_rules=("bogus_rule",))
+
+
+def test_vaccine_config_combined_score_mode():
+    config = VaccineConfig(combined_score_mode="reads_times_epitope")
+    eq_(config.combined_score_mode, "reads_times_epitope")
+
+
+def test_vaccine_config_rejects_bad_combined_score_mode():
+    with pytest.raises(ValueError, match="combined_score_mode"):
+        VaccineConfig(combined_score_mode="invalid_mode")
 
 
 def test_vaccine_config_rejects_min_greater_than_max():

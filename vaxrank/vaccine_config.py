@@ -25,6 +25,8 @@ The vaccine peptide selection considers:
 4. Total predicted immunogenicity score
 """
 
+from typing import Optional
+
 import msgspec
 
 from .config.defaults import (
@@ -40,6 +42,15 @@ from .config.defaults import (
     DEFAULT_PREFERRED_PEPTIDE_LENGTH,
     DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST,
 )
+from .manufacturability import MANUFACTURABILITY_RULE_REGISTRY
+
+
+COMBINED_SCORE_MODES = (
+    "sqrt_reads_times_epitope",
+    "reads_times_epitope",
+    "epitope_only",
+)
+DEFAULT_COMBINED_SCORE_MODE = "sqrt_reads_times_epitope"
 
 
 class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -137,6 +148,8 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     min_kmer_hydropathy: float = DEFAULT_MANUFACTURABILITY_MIN_KMER_HYDROPATHY
     max_kmer_hydropathy_low_priority: float = DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_LOW_PRIORITY
     max_kmer_hydropathy_high_priority: float = DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_HIGH_PRIORITY
+    manufacturability_rules: Optional[tuple[str, ...]] = None
+    combined_score_mode: str = DEFAULT_COMBINED_SCORE_MODE
 
     def __post_init__(self):
         if self.preferred_peptide_length < 1:
@@ -186,4 +199,16 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
             raise ValueError(
                 f"score_fraction_of_best must be in (0, 1], "
                 f"got {self.score_fraction_of_best}"
+            )
+        if self.manufacturability_rules is not None:
+            for rule_name in self.manufacturability_rules:
+                if rule_name not in MANUFACTURABILITY_RULE_REGISTRY:
+                    raise ValueError(
+                        f"Unknown manufacturability rule '{rule_name}'. "
+                        f"Available: {sorted(MANUFACTURABILITY_RULE_REGISTRY)}"
+                    )
+        if self.combined_score_mode not in COMBINED_SCORE_MODES:
+            raise ValueError(
+                f"combined_score_mode must be one of {COMBINED_SCORE_MODES}, "
+                f"got '{self.combined_score_mode}'"
             )

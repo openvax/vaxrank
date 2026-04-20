@@ -30,6 +30,7 @@ class ManufacturabilityConfigSchema(
     min_kmer_hydropathy: Optional[float] = None
     max_kmer_hydropathy_low_priority: Optional[float] = None
     max_kmer_hydropathy_high_priority: Optional[float] = None
+    rules: Optional[list[str]] = None
 
 
 class VaccinePeptidesConfigSchema(
@@ -45,6 +46,7 @@ class VaccinePeptidesConfigSchema(
     per_mutation: Optional[int] = None
     max_epitopes_per_candidate: Optional[int] = None
     score_fraction_of_best: Optional[float] = None
+    combined_score_mode: Optional[str] = None
     manufacturability: Optional[ManufacturabilityConfigSchema] = None
 
 
@@ -56,3 +58,4 @@ class VaxrankConfigSchema(
 ):
     epitopes: Optional[EpitopesConfigSchema] = None
     vaccine_peptides: Optional[VaccinePeptidesConfigSchema] = None
+    manufacturability: Optional[ManufacturabilityConfigSchema] = None
