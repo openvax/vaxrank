@@ -119,6 +119,17 @@ def n_terminal_asparagine(amino_acids):
     return amino_acids[0] == "N"
 
 
+def n_terminal_methionine(amino_acids):
+    """
+    Methionine at the N-terminus is prone to oxidation during synthesis,
+    purification, and storage (per manufacturer guidance, vaxrank#188).
+    Not bundled into the default lexicographic sort to preserve legacy
+    scoring parity — opt in via the ``manufacturability.rules`` config
+    key when this concern matters for your production run.
+    """
+    return amino_acids[0] == "M"
+
+
 def aspartate_proline_bond_count(amino_acids):
     """
     Count the number of Aspartate/Asp/D-Proline/Pro/P bonds.
@@ -176,6 +187,9 @@ ManufacturabilityScores = combine_scoring_functions(
     # avoid N-terminal Asn
     n_terminal_asparagine,
 
+    # avoid N-terminal Met (oxidation risk — opt-in rule, see #188)
+    n_terminal_methionine,
+
     # avoid Asp-Pro bonds
     aspartate_proline_bond_count,
 )
@@ -224,6 +238,10 @@ def _n_terminal_asparagine_rule(scores, _thresholds):
     return scores.n_terminal_asparagine
 
 
+def _n_terminal_methionine_rule(scores, _thresholds):
+    return scores.n_terminal_methionine
+
+
 def _aspartate_proline_rule(scores, _thresholds):
     return scores.aspartate_proline_bond_count
 
@@ -250,6 +268,7 @@ MANUFACTURABILITY_RULE_REGISTRY = {
     "c_terminal_cysteine": _c_terminal_cysteine_rule,
     "c_terminal_proline": _c_terminal_proline_rule,
     "n_terminal_asparagine": _n_terminal_asparagine_rule,
+    "n_terminal_methionine": _n_terminal_methionine_rule,
     "aspartate_proline": _aspartate_proline_rule,
     "max_hydropathy_low": _max_hydropathy_low_rule,
     "min_hydropathy": _min_hydropathy_rule,

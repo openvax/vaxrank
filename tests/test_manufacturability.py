@@ -140,3 +140,34 @@ def test_rule_registry_reorders_and_filters():
     assert len(result) == 2
     # cysteine_count should now be at index 1
     assert result[1] == scores.cysteine_count
+
+
+def test_n_terminal_methionine_flag():
+    """N-terminal Met flagged as True; other residues flagged False.
+    (Manufacturer concern — oxidation risk. See vaxrank#188.)"""
+    assert ManufacturabilityScores.from_amino_acids("M" + "A" * 6).n_terminal_methionine
+    assert not ManufacturabilityScores.from_amino_acids("A" * 7).n_terminal_methionine
+    # Internal M doesn't count
+    assert not ManufacturabilityScores.from_amino_acids("AMAAAAA").n_terminal_methionine
+
+
+def test_n_terminal_methionine_is_opt_in_not_in_default_rules():
+    """Legacy parity: n_terminal_methionine must NOT appear in the default
+    rule tuple. Users opt in through manufacturability.rules config."""
+    assert "n_terminal_methionine" not in DEFAULT_MANUFACTURABILITY_RULES
+    assert "n_terminal_methionine" in MANUFACTURABILITY_RULE_REGISTRY
+
+
+def test_n_terminal_methionine_rule_in_registry_drives_sort():
+    """Using the rule via the registry: N-term M peptide gets a worse
+    score than an otherwise-identical N-term A peptide."""
+    met_scores = ManufacturabilityScores.from_amino_acids("M" + "A" * 24)
+    ala_scores = ManufacturabilityScores.from_amino_acids("A" * 25)
+    met_tuple = compute_manufacturability_tuple(
+        met_scores, DEFAULT_THRESHOLDS, rules=["n_terminal_methionine"],
+    )
+    ala_tuple = compute_manufacturability_tuple(
+        ala_scores, DEFAULT_THRESHOLDS, rules=["n_terminal_methionine"],
+    )
+    # Lexicographic: smaller tuple = better, so methionine peptide sorts worse
+    assert met_tuple > ala_tuple
