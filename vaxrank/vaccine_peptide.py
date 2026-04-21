@@ -70,6 +70,14 @@ class VaccinePeptide(DataclassSerializable):
         ``reads_times_epitope``, or ``epitope_only``. Does not affect
         the ``expression_score`` property, which always reports
         ``sqrt(n_alt_reads)``.
+
+    ranking_rules : sequence of str or None
+        Ordered list of ranking rule names driving the lexicographic
+        sort tuple on ``lexicographic_sort_key``. Names must appear in
+        ``RANKING_RULE_REGISTRY``; the special sentinel
+        ``"manufacturability"`` expands to the peptide's manufacturability
+        sort tuple. When None the 7-entry default order is used
+        (byte-identical with prior releases).
     """
 
     mutant_protein_fragment: Any
@@ -80,6 +88,7 @@ class VaccinePeptide(DataclassSerializable):
     manufacturability_thresholds: Optional[dict] = None
     manufacturability_rules: Optional[tuple] = None
     combined_score_mode: Optional[str] = None
+    ranking_rules: Optional[tuple] = None
 
     # Derived attributes computed in __post_init__ — not part of the
     # serialized form. `init=False` keeps them out of the generated
@@ -97,6 +106,8 @@ class VaccinePeptide(DataclassSerializable):
         self.manufacturability_thresholds = self.manufacturability_thresholds or {}
         if self.manufacturability_rules is not None:
             self.manufacturability_rules = tuple(self.manufacturability_rules)
+        if self.ranking_rules is not None:
+            self.ranking_rules = tuple(self.ranking_rules)
 
         # Validate combined_score_mode; resolve None to the legacy default.
         resolved_mode = self.combined_score_mode or DEFAULT_COMBINED_SCORE_MODE
@@ -185,14 +196,15 @@ class VaccinePeptide(DataclassSerializable):
         """
         Build the tuple used to sort vaccine peptides lexicographically.
 
-        Rules come from ``DEFAULT_RANKING_RULES`` (see ``vaxrank.ranking``)
-        and expand the ``"manufacturability"`` sentinel in place using this
+        Rules come from ``self.ranking_rules`` if supplied, otherwise
+        ``DEFAULT_RANKING_RULES`` (see ``vaxrank.ranking``). The special
+        ``"manufacturability"`` sentinel expands in place using this
         peptide's own manufacturability rules + thresholds. The default
         order is byte-identical to what this method produced before the
         rules were extracted — the parity is pinned by
         ``tests/test_ranking.py::test_default_rules_match_legacy_tuple``.
         """
-        return compute_ranking_tuple(self)
+        return compute_ranking_tuple(self, rules=self.ranking_rules)
 
     def contains_mutant_epitopes(self):
         return len(self.mutant_epitope_predictions) > 0
@@ -235,4 +247,6 @@ class VaccinePeptide(DataclassSerializable):
             d["manufacturability_rules"] = list(self.manufacturability_rules)
         if self.combined_score_mode != DEFAULT_COMBINED_SCORE_MODE:
             d["combined_score_mode"] = self.combined_score_mode
+        if self.ranking_rules is not None:
+            d["ranking_rules"] = list(self.ranking_rules)
         return d
