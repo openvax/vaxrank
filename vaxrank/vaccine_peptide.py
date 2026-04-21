@@ -21,6 +21,7 @@ from .manufacturability import (
     ManufacturabilityScores,
     compute_manufacturability_tuple,
 )
+from .ranking import compute_ranking_tuple
 from .vaccine_config import COMBINED_SCORE_MODES, DEFAULT_COMBINED_SCORE_MODE
 
 
@@ -182,50 +183,16 @@ class VaccinePeptide(DataclassSerializable):
 
     def lexicographic_sort_key(self):
         """
-        Create tuple of scores so that candidates get sorted lexicographically
-        by multiple criteria. Make sure to make the wildtype epitope
-        score positive (since we want fewer wildtype epitopes) but the others
-        negative (since we want more of them).
+        Build the tuple used to sort vaccine peptides lexicographically.
+
+        Rules come from ``DEFAULT_RANKING_RULES`` (see ``vaxrank.ranking``)
+        and expand the ``"manufacturability"`` sentinel in place using this
+        peptide's own manufacturability rules + thresholds. The default
+        order is byte-identical to what this method produced before the
+        rules were extracted — the parity is pinned by
+        ``tests/test_ranking.py::test_default_rules_match_legacy_tuple``.
         """
-        # since we're sorting in decreasing order, numbers which we want
-        # to be larger must have their signs flipped
-        essential_score_tuple = (
-            # Sum of normalized MHC binding affinities of subsequences
-            # round to 5 digits to avoid floating point errors from
-            # serving as tie-breakers
-            -round(self.mutant_epitope_score, 6),
-
-            # Number of reads supporting the variant
-            -self.mutant_protein_fragment.n_alt_reads
-        )
-        manufacturability_score_tuple = self.peptide_synthesis_difficulty_score_tuple(
-            rules=self.manufacturability_rules,
-            **self.manufacturability_thresholds)
-        extra_score_tuple = (
-            # Number of reads supporting the particular protein sequence
-            # sequence we're using for this vaccine peptide. Currently
-            # all vaccine peptides are drawn from the same larger sequence
-            # so this score shouldn't change.
-            -self.mutant_protein_fragment.n_alt_reads_supporting_protein_sequence,
-
-            # Minimize the sum of non-mutant MHC binding scores,
-            # round to prevent floating point errors from serving as
-            # tie-breakers
-            round(self.wildtype_epitope_score, 6),
-
-            # All else being equal, we prefer to maximize the number of
-            # mutant amino acids
-            -self.mutant_protein_fragment.n_mutant_amino_acids,
-
-            # If nothing else can serve as a tie break then try to center
-            # the mutation in the vaccine peptide.
-            -self.mutant_protein_fragment.mutation_distance_from_edge
-        )
-        return (
-            essential_score_tuple +
-            manufacturability_score_tuple +
-            extra_score_tuple
-        )
+        return compute_ranking_tuple(self)
 
     def contains_mutant_epitopes(self):
         return len(self.mutant_epitope_predictions) > 0
