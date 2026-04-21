@@ -47,6 +47,7 @@ class VaccinePeptidesConfigSchema(
     max_epitopes_per_candidate: Optional[int] = None
     score_fraction_of_best: Optional[float] = None
     combined_score_mode: Optional[str] = None
+    ranking_rules: Optional[list[str]] = None
     manufacturability: Optional[ManufacturabilityConfigSchema] = None
 
 

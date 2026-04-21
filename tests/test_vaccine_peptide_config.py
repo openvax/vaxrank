@@ -193,3 +193,76 @@ def test_vaccine_peptide_roundtrip_omits_defaults():
     d = vp.to_dict()
     assert "manufacturability_rules" not in d
     assert "combined_score_mode" not in d
+    assert "ranking_rules" not in d
+
+
+def test_vaccine_peptide_ranking_rules_tuple_coercion():
+    """List of ranking rule names coerced to tuple (same contract as
+    manufacturability_rules)."""
+    vp = VaccinePeptide(
+        mutant_protein_fragment=_make_fragment(),
+        epitope_predictions=[_make_mutant_epitope()],
+        ranking_rules=["mutant_epitope_score", "n_alt_reads"],
+    )
+    assert vp.ranking_rules == ("mutant_epitope_score", "n_alt_reads")
+    assert isinstance(vp.ranking_rules, tuple)
+    # Sort tuple length reflects the custom 2-rule list.
+    assert len(vp.lexicographic_sort_key()) == 2
+
+
+def test_vaccine_peptide_custom_ranking_rules_in_to_dict():
+    vp = VaccinePeptide(
+        mutant_protein_fragment=_make_fragment(),
+        epitope_predictions=[_make_mutant_epitope()],
+        ranking_rules=["mutant_epitope_score"],
+    )
+    d = vp.to_dict()
+    assert d["ranking_rules"] == ["mutant_epitope_score"]
+
+
+def test_end_to_end_yaml_ranking_rules():
+    """YAML with vaccine_peptides.ranking_rules loads through the config
+    pipeline to a VaccineConfig tuple and threads into VaccinePeptide."""
+    yaml_content = """
+vaccine_peptides:
+  ranking_rules:
+    - mutant_epitope_score
+    - n_alt_reads
+    - manufacturability
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write(yaml_content)
+        config_path = f.name
+    try:
+        args = argparse.Namespace(
+            config=config_path,
+            vaccine_peptide_length=None,
+            padding_around_mutation=None,
+            max_vaccine_peptides_per_variant=None,
+            num_epitopes_per_vaccine_peptide=None,
+            config_set_overrides=None,
+            config_expr_overrides=None,
+        )
+        vc = vaccine_config_from_args(args)
+        assert vc.ranking_rules == (
+            "mutant_epitope_score", "n_alt_reads", "manufacturability",
+        )
+        assert isinstance(vc.ranking_rules, tuple)
+        # Custom rules drop the extra_score_tuple tiers (n_alt_reads_supporting,
+        # wildtype_epitope_score, n_mutant_amino_acids, mutation_distance_from_edge).
+        vp = VaccinePeptide(
+            mutant_protein_fragment=_make_fragment(),
+            epitope_predictions=[_make_mutant_epitope()],
+            ranking_rules=vc.ranking_rules,
+        )
+        # 2 essential + 10 manufacturability defaults = 12 entries
+        assert len(vp.lexicographic_sort_key()) == 12
+    finally:
+        os.unlink(config_path)
+
+
+def test_vaccine_config_rejects_unknown_ranking_rule():
+    from vaxrank.vaccine_config import VaccineConfig
+
+    with pytest.raises(ValueError, match="Unknown ranking rule"):
+        VaccineConfig(ranking_rules=("not_a_real_rule",))

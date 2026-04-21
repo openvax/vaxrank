@@ -221,6 +221,7 @@ _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.per_mutation", "max_vaccine_peptides_per_variant"),
     ("vaccine_peptides.score_fraction_of_best", "score_fraction_of_best"),
     ("vaccine_peptides.combined_score_mode", "combined_score_mode"),
+    ("vaccine_peptides.ranking_rules", "ranking_rules"),
     ("manufacturability.max_c_terminal_hydropathy", "max_c_terminal_hydropathy"),
     ("manufacturability.min_kmer_hydropathy", "min_kmer_hydropathy"),
     ("manufacturability.max_kmer_hydropathy_low_priority", "max_kmer_hydropathy_low_priority"),
@@ -260,10 +261,11 @@ def extract_epitope_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
 def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     kwargs = _extract_via_mapping(config, _VACCINE_CONFIG_MAPPING)
 
-    # VaccineConfig declares manufacturability_rules as Optional[tuple[str, ...]];
-    # YAML gives us a list, so coerce.
-    if "manufacturability_rules" in kwargs and kwargs["manufacturability_rules"] is not None:
-        kwargs["manufacturability_rules"] = tuple(kwargs["manufacturability_rules"])
+    # VaccineConfig declares *_rules fields as Optional[tuple[str, ...]];
+    # YAML gives us lists, so coerce.
+    for rules_key in ("manufacturability_rules", "ranking_rules"):
+        if rules_key in kwargs and kwargs[rules_key] is not None:
+            kwargs[rules_key] = tuple(kwargs[rules_key])
 
     # When preferred_peptide_length is set but min/max are not,
     # default them to match preferred so the range is consistent.
