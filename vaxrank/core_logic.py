@@ -347,6 +347,7 @@ def vaccine_peptides_from_epitopes(
             },
             manufacturability_rules=vaccine_config.manufacturability_rules,
             combined_score_mode=vaccine_config.combined_score_mode,
+            ranking_rules=vaccine_config.ranking_rules,
         )
 
         logger.debug(
