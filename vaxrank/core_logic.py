@@ -399,6 +399,13 @@ def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):
     This function returns a sorted list whose first element is a Variant and whose second
     element is a list of VaccinePeptide objects.
 
+    Variants are ranked by their top vaccine peptide using a three-level
+    tiebreak (see vaxrank#151): primarily by ``combined_score``, then by
+    ``n_alt_reads`` (RNA support), then by ``mutant_epitope_score`` (MHC
+    binding). The extra tiers matter when ``combined_score`` ties (common
+    when either factor is zero) so that the downstream report order is
+    stable and intuitively favors better-supported variants.
+
     Parameters
     ----------
     variant_to_vaccine_peptides_dict : dict
@@ -411,11 +418,14 @@ def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):
     def sort_key(variant_and_vaccine_peptides_pair):
         vaccine_peptides = variant_and_vaccine_peptides_pair[1]
         if len(vaccine_peptides) == 0:
-            return 0.0
-        else:
-            top_vaccine_peptide = vaccine_peptides[0]
-            return top_vaccine_peptide.combined_score
+            return (0.0, 0, 0.0)
+        top_vaccine_peptide = vaccine_peptides[0]
+        return (
+            top_vaccine_peptide.combined_score,
+            top_vaccine_peptide.mutant_protein_fragment.n_alt_reads,
+            top_vaccine_peptide.mutant_epitope_score,
+        )
 
-    # sort in descending order of combined (expression * mhc binding) scores
+    # sort in descending order by (combined_score, n_alt_reads, mutant_epitope_score)
     result_list.sort(key=sort_key, reverse=True)
     return result_list
