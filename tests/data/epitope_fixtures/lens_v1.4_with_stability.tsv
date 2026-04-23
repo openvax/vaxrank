@@ -1,0 +1,3 @@
+allele	peptide	netmhcpan_4.1b.aff_nm	netmhcpan_4.1b.perc_rank_el	netmhcpan_4.1b.perc_rank_ba	mhcflurry_2.1.1.aff	mhcflurry_2.1.1.pres_perc	netmhcstabpan_1.0.halflife_hours	netmhcstabpan_1.0.perc_rank_stab	antigen_source	gene_name	tpm	variant_coords
+HLA-A02:01	SVVGSSSSS	76.11	0.3	0.5	95.4	0.28	8.4	1.2	SNV	TP53	42.5	chr17:7675088:C:T
+HLA-B07:02	LATEKSRWS	120.50	0.4	0.3	180.2	0.35	3.1	2.8	SNV	BRAF	18.3	chr7:140753336:A:T

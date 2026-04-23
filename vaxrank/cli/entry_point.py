@@ -121,7 +121,9 @@ def _run_external_input_mode(args):
     if getattr(args, 'input_pvacseq', None):
         report_df, predictions = load_pvacseq(args.input_pvacseq)
     elif getattr(args, 'input_lens', None):
-        report_df, predictions = load_lens(args.input_lens)
+        report_df, predictions = load_lens(
+            args.input_lens,
+            predictor=getattr(args, 'lens_predictor', 'auto'))
     else:
         return False  # no external input
 

@@ -35,9 +35,190 @@ byte-for-byte.
 from __future__ import annotations
 
 
+# Method name -> topiary Kind for external-input predictions (LENS / pVACseq
+# import). Listed methods load through ``load_lens`` / ``load_pvacseq``;
+# anything not in this map is assumed to be a pMHC_affinity predictor.
+_METHOD_KIND_MAP = {
+    "mhcflurry": "pMHC_affinity",
+    "netmhcpan": "pMHC_affinity",
+    "netmhcstabpan": "pMHC_stability",
+    # pVACseq aggregates across predictors without naming one; treat it as
+    # a generic affinity predictor so default DSL nodes light up.
+    "pvacseq": "pMHC_affinity",
+}
+
+
 def _parse(expr):
     from topiary.ranking import parse
     return parse(expr)
+
+
+def _kind_for_method(method_name):
+    """Topiary Kind string for a prediction_method_name.
+
+    Unknown methods default to pMHC_affinity so that a plain
+    ``affinity.logistic(...)`` expression keeps working on external
+    inputs even when the method name isn't in our registry.
+    """
+    if not method_name:
+        return "pMHC_affinity"
+    lc = str(method_name).lower()
+    # Legacy LENS predictions were tagged "lens:<tool>"; strip that prefix.
+    if ":" in lc:
+        lc = lc.split(":", 1)[1]
+    return _METHOD_KIND_MAP.get(lc, "pMHC_affinity")
+
+
+def predictions_to_topiary_df(predictions):
+    """Convert a list of :class:`EpitopePrediction` into a topiary-shaped
+    long-format DataFrame suitable for
+    :class:`topiary.ranking.EvalContext` and
+    :func:`topiary.ranking.apply_filter` / :func:`.apply`.
+
+    Each EpitopePrediction becomes one row; when multiple predictions
+    share a (peptide, allele) pair (e.g. MHCflurry and netMHCpan rows
+    from a LENS file loaded with ``--lens-predictor=all``), DSL
+    expressions can select between them via
+    ``affinity['mhcflurry']`` / ``affinity['netmhcpan']``.
+    """
+    import pandas as pd
+
+    rows = []
+    for p in predictions:
+        tool = str(p.prediction_method_name or "")
+        if ":" in tool:
+            # Drop any legacy "lens:" prefix so method matching is by tool.
+            tool = tool.split(":", 1)[1]
+        rows.append({
+            "sample_name": "",
+            "source_sequence_name": p.source_sequence or p.peptide_sequence,
+            "peptide": p.peptide_sequence,
+            "peptide_offset": p.offset,
+            "peptide_length": len(p.peptide_sequence),
+            "allele": p.allele,
+            "n_flank": "",
+            "c_flank": "",
+            "prediction_method_name": tool,
+            "predictor_version": "",
+            "kind": _kind_for_method(tool),
+            "value": p.ic50,
+            "affinity": p.ic50,
+            "percentile_rank": p.percentile_rank,
+            "score": 0.0,
+        })
+    return pd.DataFrame(rows)
+
+
+def score_predictions(predictions, cfg):
+    """Score external-input predictions using the configured Topiary DSL.
+
+    Returns a ``pandas.Series`` of per-(peptide, allele) scores in the same
+    order as the unique (peptide, allele) pairs first appear in
+    ``predictions``. Callers merge this back onto their report DataFrame.
+
+    When ``cfg.score_expr`` / ``cfg.filter_expr`` are unset this applies
+    the same default node that the main pipeline uses, which matches the
+    legacy :meth:`EpitopePrediction.logistic_epitope_score` byte-for-byte.
+    """
+    from topiary.ranking import EvalContext, apply_filter
+
+    df = predictions_to_topiary_df(predictions)
+    if df.empty:
+        import pandas as pd
+        return pd.Series(dtype=float)
+
+    filter_node = build_filter_node(cfg)
+    if filter_node is not None:
+        df = apply_filter(df, filter_node)
+        if df.empty:
+            import pandas as pd
+            return pd.Series(dtype=float)
+
+    score_node = build_score_node(cfg)
+    ctx = EvalContext(df)
+    return (
+        score_node.eval(ctx)
+        .reindex(ctx.group_index)
+        .fillna(0.0)
+    )
+
+
+def collect_dsl_references(node):
+    """Walk a parsed DSL node and collect its external-data references.
+
+    Returns a dict with two keys:
+
+      ``columns`` - set of column names referenced via ``Column(...)``
+      ``kinds``   - set of (kind, method, version) tuples from ``Field`` nodes
+
+    ``method`` and ``version`` may be ``None`` when the formula used a
+    kind without qualification (``affinity.value``). The caller can use
+    this to verify the loaded data actually exposes every referenced
+    predictor before evaluation.
+    """
+    from topiary.ranking.nodes import Column, Field
+
+    columns = set()
+    kinds = set()
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if n is None:
+            continue
+        if isinstance(n, Column):
+            columns.add(n.col_name)
+        elif isinstance(n, Field):
+            kinds.add((n.kind, n.method, n.version))
+        child_iter = getattr(n, "child_nodes", None)
+        if callable(child_iter):
+            stack.extend(child_iter())
+    return {"columns": columns, "kinds": kinds}
+
+
+def validate_dsl_against_predictions(cfg, predictions):
+    """Error early when ``filter_expr`` / ``score_expr`` reference a
+    predictor or column that the loaded predictions don't expose.
+
+    Topiary's own ``apply_filter`` already validates Column references,
+    but silently evaluates to NaN when a Field's (kind, method) isn't
+    present — so users get "score is zero for everything" rather than
+    a clear error. This function catches that case up front.
+    """
+    from topiary.ranking import _kind_value
+
+    nodes = []
+    if cfg.filter_expr is not None:
+        nodes.append(_parse(cfg.filter_expr))
+    if cfg.score_expr is not None:
+        nodes.append(_parse(cfg.score_expr))
+    if not nodes:
+        return
+
+    df = predictions_to_topiary_df(predictions)
+    available_kinds = set(df["kind"].unique()) if not df.empty else set()
+    available_methods = (
+        set(df["prediction_method_name"].dropna().unique())
+        if not df.empty else set())
+
+    for node in nodes:
+        refs = collect_dsl_references(node)
+        for kind, method, version in refs["kinds"]:
+            kind_str = _kind_value(kind)
+            if kind_str not in available_kinds:
+                raise ValueError(
+                    f"DSL expression references kind {kind_str!r} but loaded "
+                    f"predictions only expose kinds {sorted(available_kinds)}. "
+                    f"Check filter_expr / score_expr against --lens-predictor "
+                    f"and the LENS file columns."
+                )
+            if method is not None and method not in available_methods:
+                raise ValueError(
+                    f"DSL expression references predictor {method!r} but "
+                    f"loaded predictions only expose methods "
+                    f"{sorted(available_methods)}. Either pass "
+                    f"--lens-predictor=all to emit every detected predictor "
+                    f"or remove the reference from filter_expr / score_expr."
+                )
 
 
 def _default_score_node(cfg):
