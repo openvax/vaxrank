@@ -195,9 +195,15 @@ def validate_dsl_against_predictions(cfg, predictions):
     available_methods = (
         set(df["prediction_method_name"].dropna().unique())
         if not df.empty else set())
-    available_versions = (
-        set(df["predictor_version"].dropna().unique())
-        if not df.empty else set())
+    # Drop the "no version known" sentinel so a formula pinning a specific
+    # version against predictions that don't carry any version errors out,
+    # and so the error message's version list matches what we actually
+    # checked against.
+    available_versions = set()
+    if not df.empty:
+        available_versions = {
+            v for v in df["predictor_version"].dropna().unique() if v
+        }
 
     for node in nodes:
         refs = collect_dsl_references(node)
@@ -221,7 +227,7 @@ def validate_dsl_against_predictions(cfg, predictions):
                 raise ValueError(
                     f"DSL expression references predictor version "
                     f"{version!r} but loaded predictions only expose "
-                    f"versions {sorted(v for v in available_versions if v)}. "
+                    f"versions {sorted(available_versions)}. "
                     f"Drop the version from the bracket expression or "
                     f"update the LENS file / loader."
                 )

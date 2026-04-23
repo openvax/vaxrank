@@ -218,6 +218,17 @@ def test_load_lens_explicit_netmhcpan_missing_raises():
         load_lens(path, predictor="netmhcpan")
 
 
+def test_load_lens_unknown_predictor_name_errors():
+    """--lens-predictor with a tool name not in the registry (or not in
+    the file) should produce a clear error listing what's actually
+    available."""
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    with pytest.raises(
+            ValueError,
+            match=r"does not contain predictor 'mhcnuggets'.*available.*mhcflurry.*netmhcpan"):
+        load_lens(path, predictor="mhcnuggets")
+
+
 def test_load_lens_missing_required_columns(tmp_path):
     bad_file = tmp_path / "bad.tsv"
     bad_file.write_text("gene_name\tpos\nTP53\t5\n")
@@ -245,6 +256,24 @@ def test_load_lens_detects_netmhcstabpan():
 
 
 # ── DSL integration for external inputs ──────────────────────────────────────
+
+def test_write_neoepitope_report_rejects_duplicate_rows(tmp_path):
+    """write_neoepitope_report merges scores by (peptide, allele); if a
+    loader ever produced a report_df with duplicates that merge would be
+    ambiguous, so we assert uniqueness upfront. This test constructs
+    duplicates explicitly to exercise the guard."""
+    import pandas as pd
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    report_df = pd.DataFrame([
+        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL'},
+        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL'},  # duplicate
+    ])
+    preds = [_make_prediction(peptide_sequence='SIINFEKL', allele='HLA-A*02:01')]
+    with pytest.raises(ValueError, match="duplicate .*peptide, allele"):
+        write_neoepitope_report(
+            report_df, preds, csv_report_path=str(tmp_path / "unused.csv"))
+
 
 def test_lens_dsl_combines_both_predictors(tmp_path):
     """A score_expr combining two predictors' affinities should average them."""
