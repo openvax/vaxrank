@@ -34,9 +34,11 @@ byte-for-byte.
 
 from __future__ import annotations
 
+import pandas as pd
+
 
 # Method name -> topiary Kind for external-input predictions (LENS / pVACseq
-# import). Listed methods load through ``load_lens`` / ``load_pvacseq``;
+# import). Listed methods come from ``load_lens`` / ``load_pvacseq``;
 # anything not in this map is assumed to be a pMHC_affinity predictor.
 _METHOD_KIND_MAP = {
     "mhcflurry": "pMHC_affinity",
@@ -62,33 +64,25 @@ def _kind_for_method(method_name):
     """
     if not method_name:
         return "pMHC_affinity"
-    lc = str(method_name).lower()
-    # Legacy LENS predictions were tagged "lens:<tool>"; strip that prefix.
-    if ":" in lc:
-        lc = lc.split(":", 1)[1]
-    return _METHOD_KIND_MAP.get(lc, "pMHC_affinity")
+    return _METHOD_KIND_MAP.get(str(method_name).lower(), "pMHC_affinity")
 
 
 def predictions_to_topiary_df(predictions):
-    """Convert a list of :class:`EpitopePrediction` into a topiary-shaped
-    long-format DataFrame suitable for
-    :class:`topiary.ranking.EvalContext` and
-    :func:`topiary.ranking.apply_filter` / :func:`.apply`.
+    """Convert a list of :class:`EpitopePrediction` into the topiary
+    long-format DataFrame consumed by :class:`topiary.ranking.EvalContext`
+    and :func:`topiary.ranking.apply_filter`.
 
-    Each EpitopePrediction becomes one row; when multiple predictions
+    Each ``EpitopePrediction`` becomes one row; when multiple predictions
     share a (peptide, allele) pair (e.g. MHCflurry and netMHCpan rows
     from a LENS file loaded with ``--lens-predictor=all``), DSL
     expressions can select between them via
-    ``affinity['mhcflurry']`` / ``affinity['netmhcpan']``.
+    ``affinity['mhcflurry']`` / ``affinity['netmhcpan']``, and when the
+    predictions carry ``predictor_version`` they can also disambiguate
+    by version via ``affinity['mhcflurry', '2.1.1']``.
     """
-    import pandas as pd
-
     rows = []
     for p in predictions:
         tool = str(p.prediction_method_name or "")
-        if ":" in tool:
-            # Drop any legacy "lens:" prefix so method matching is by tool.
-            tool = tool.split(":", 1)[1]
         rows.append({
             "sample_name": "",
             "source_sequence_name": p.source_sequence or p.peptide_sequence,
@@ -99,7 +93,7 @@ def predictions_to_topiary_df(predictions):
             "n_flank": "",
             "c_flank": "",
             "prediction_method_name": tool,
-            "predictor_version": "",
+            "predictor_version": p.predictor_version or "",
             "kind": _kind_for_method(tool),
             "value": p.ic50,
             "affinity": p.ic50,
@@ -112,9 +106,10 @@ def predictions_to_topiary_df(predictions):
 def score_predictions(predictions, cfg):
     """Score external-input predictions using the configured Topiary DSL.
 
-    Returns a ``pandas.Series`` of per-(peptide, allele) scores in the same
-    order as the unique (peptide, allele) pairs first appear in
-    ``predictions``. Callers merge this back onto their report DataFrame.
+    Returns a ``pandas.Series`` of per-(peptide, allele) scores indexed by
+    the group-key MultiIndex topiary uses internally
+    (``source_sequence_name, peptide, peptide_offset, allele``). Callers
+    merge this back onto their report DataFrame.
 
     When ``cfg.score_expr`` / ``cfg.filter_expr`` are unset this applies
     the same default node that the main pipeline uses, which matches the
@@ -124,14 +119,12 @@ def score_predictions(predictions, cfg):
 
     df = predictions_to_topiary_df(predictions)
     if df.empty:
-        import pandas as pd
         return pd.Series(dtype=float)
 
     filter_node = build_filter_node(cfg)
     if filter_node is not None:
         df = apply_filter(df, filter_node)
         if df.empty:
-            import pandas as pd
             return pd.Series(dtype=float)
 
     score_node = build_score_node(cfg)
@@ -152,9 +145,11 @@ def collect_dsl_references(node):
       ``kinds``   - set of (kind, method, version) tuples from ``Field`` nodes
 
     ``method`` and ``version`` may be ``None`` when the formula used a
-    kind without qualification (``affinity.value``). The caller can use
-    this to verify the loaded data actually exposes every referenced
-    predictor before evaluation.
+    kind without qualification (``affinity.value``). The Column set is
+    informational only: topiary's own ``apply_filter`` already validates
+    Column references at eval time. The kinds set is what this module's
+    :func:`validate_dsl_against_predictions` uses to catch missing
+    predictor refs *before* we produce silent NaN scores.
     """
     from topiary.ranking.nodes import Column, Field
 
@@ -177,15 +172,16 @@ def collect_dsl_references(node):
 
 def validate_dsl_against_predictions(cfg, predictions):
     """Error early when ``filter_expr`` / ``score_expr`` reference a
-    predictor or column that the loaded predictions don't expose.
+    predictor the loaded predictions don't expose.
 
-    Topiary's own ``apply_filter`` already validates Column references,
-    but silently evaluates to NaN when a Field's (kind, method) isn't
-    present — so users get "score is zero for everything" rather than
-    a clear error. This function catches that case up front.
+    Topiary's own ``apply_filter`` already validates ``Column(...)``
+    references, but when a Field's (kind, method) isn't present in the
+    data it silently evaluates to NaN — so users get "every score is
+    zero" rather than a clear error. This function catches that case
+    up front. The parsed node's ``Field.kind`` is already the
+    canonical string (``"pMHC_affinity"`` etc.) so we match it
+    directly against the values in the topiary DataFrame.
     """
-    from topiary.ranking import _kind_value
-
     nodes = []
     if cfg.filter_expr is not None:
         nodes.append(_parse(cfg.filter_expr))
@@ -199,14 +195,16 @@ def validate_dsl_against_predictions(cfg, predictions):
     available_methods = (
         set(df["prediction_method_name"].dropna().unique())
         if not df.empty else set())
+    available_versions = (
+        set(df["predictor_version"].dropna().unique())
+        if not df.empty else set())
 
     for node in nodes:
         refs = collect_dsl_references(node)
         for kind, method, version in refs["kinds"]:
-            kind_str = _kind_value(kind)
-            if kind_str not in available_kinds:
+            if kind not in available_kinds:
                 raise ValueError(
-                    f"DSL expression references kind {kind_str!r} but loaded "
+                    f"DSL expression references kind {kind!r} but loaded "
                     f"predictions only expose kinds {sorted(available_kinds)}. "
                     f"Check filter_expr / score_expr against --lens-predictor "
                     f"and the LENS file columns."
@@ -218,6 +216,14 @@ def validate_dsl_against_predictions(cfg, predictions):
                     f"{sorted(available_methods)}. Either pass "
                     f"--lens-predictor=all to emit every detected predictor "
                     f"or remove the reference from filter_expr / score_expr."
+                )
+            if version is not None and version not in available_versions:
+                raise ValueError(
+                    f"DSL expression references predictor version "
+                    f"{version!r} but loaded predictions only expose "
+                    f"versions {sorted(v for v in available_versions if v)}. "
+                    f"Drop the version from the bracket expression or "
+                    f"update the LENS file / loader."
                 )
 
 

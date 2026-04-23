@@ -61,6 +61,12 @@ class EpitopePrediction(DataclassSerializable):
     source_sequence: str
     offset: int
     occurs_in_reference: bool
+    # Populated by loaders that know the predictor's version (e.g. LENS
+    # loader sees "mhcflurry_2.1.1.*" columns). Empty string when unknown,
+    # in which case Topiary DSL formulas can't use version-qualified
+    # selection like affinity['mhcflurry', '2.1.1'] but plain
+    # affinity['mhcflurry'] still works.
+    predictor_version: str = ""
 
     # `length` used to be a constructor arg; since 1.1.0 it is derived from
     # `peptide_sequence`. Drop it from any old JSON blobs we happen to load.

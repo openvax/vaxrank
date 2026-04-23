@@ -21,6 +21,7 @@ Supports:
 
 import logging
 import re
+from dataclasses import dataclass
 
 import pandas as pd
 
@@ -43,6 +44,7 @@ VAXRANK_COLUMNS = [
     "source_sequence",
     "offset",
     "occurs_in_reference",
+    "predictor_version",
 ]
 
 
@@ -76,6 +78,7 @@ def predictions_to_dataframe(predictions):
             "source_sequence": p.source_sequence,
             "offset": p.offset,
             "occurs_in_reference": p.occurs_in_reference,
+            "predictor_version": p.predictor_version,
         })
     return pd.DataFrame(rows, columns=VAXRANK_COLUMNS)
 
@@ -115,6 +118,9 @@ def _dataframe_to_predictions(df):
         percentile_rank = row.get("percentile_rank")
         if pd.isna(percentile_rank):
             percentile_rank = None
+        predictor_version = row.get("predictor_version", "")
+        if pd.isna(predictor_version):
+            predictor_version = ""
         predictions.append(EpitopePrediction(
             allele=row["allele"],
             peptide_sequence=row["peptide_sequence"],
@@ -126,6 +132,7 @@ def _dataframe_to_predictions(df):
             overlaps_mutation=bool(row.get("overlaps_mutation", True)),
             source_sequence=row.get("source_sequence", ""),
             offset=int(row.get("offset", 0)),
+            predictor_version=str(predictor_version),
             occurs_in_reference=bool(row.get("occurs_in_reference", False)),
         ))
     return predictions
@@ -245,6 +252,32 @@ def load_pvacseq(path):
     return report_df, predictions
 
 
+# ── Shared cell-coercion helpers ─────────────────────────────────────────────
+
+def _safe_str(val):
+    """Coerce a cell to str, mapping NaN/None/'NA' to empty string."""
+    if val is None:
+        return ""
+    if isinstance(val, float) and pd.isna(val):
+        return ""
+    s = str(val)
+    if s == "NA":
+        return ""
+    return s
+
+
+def _safe_float(val):
+    """Convert to float, returning None for NaN/missing."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
+# ── LENS import ──────────────────────────────────────────────────────────────
+
 # LENS columns follow the convention "<tool>_<version>.<metric>", e.g.
 # "mhcflurry_2.1.1.aff", "netmhcpan_4.1b.perc_rank_el",
 # "netmhcstabpan_1.0.halflife_hours". We sniff which tools are present by
@@ -274,39 +307,21 @@ _LENS_PREDICTOR_REGISTRY = {
     },
 }
 
-# Free-standing agretopicity columns (not versioned): "<tool>_agretopicity"
-_LENS_AGRETOPICITY_COL = "{tool}_agretopicity"
-
-
+@dataclass(slots=True)
 class DetectedPredictor:
-    """A predictor detected in a LENS TSV.
+    """A predictor whose columns were found in a LENS TSV.
 
-    Attributes
-    ----------
-    tool : str            - registry key, e.g. "mhcflurry"
-    version : str         - version string parsed from the column name
-    kind : str            - topiary prediction Kind (e.g. "pMHC_affinity")
-    value_col : str       - LENS column for the predicted value (IC50 / hours)
-    percentile_col : str or None
-    agretopicity_col : str or None
+    ``value_col`` is the LENS column carrying the predicted value
+    (IC50 for affinity, half-life hours for stability). The other
+    ``*_col`` attributes are ``None`` when that signal isn't emitted
+    for the detected ``(tool, version)``.
     """
-    __slots__ = (
-        "tool", "version", "kind", "value_col",
-        "percentile_col", "agretopicity_col",
-    )
-
-    def __init__(self, tool, version, kind, value_col,
-                 percentile_col=None, agretopicity_col=None):
-        self.tool = tool
-        self.version = version
-        self.kind = kind
-        self.value_col = value_col
-        self.percentile_col = percentile_col
-        self.agretopicity_col = agretopicity_col
-
-    def __repr__(self):
-        return (f"DetectedPredictor(tool={self.tool!r}, version={self.version!r}, "
-                f"kind={self.kind!r})")
+    tool: str
+    version: str
+    kind: str
+    value_col: str
+    percentile_col: str | None = None
+    agretopicity_col: str | None = None
 
 
 def _detect_lens_predictors(columns):
@@ -339,7 +354,9 @@ def _detect_lens_predictors(columns):
             continue
         percentile_col = next(
             (metrics[m] for m in spec["percentile_cols"] if m in metrics), None)
-        agretopicity_col = _LENS_AGRETOPICITY_COL.format(tool=tool)
+        # Agretopicity columns aren't versioned (just "<tool>_agretopicity"),
+        # so we look them up directly on the full column set.
+        agretopicity_col = f"{tool}_agretopicity"
         if agretopicity_col not in columns:
             agretopicity_col = None
         detected.append(DetectedPredictor(
@@ -487,6 +504,7 @@ def load_lens(path, predictor="auto"):
                 source_sequence=pep_context,
                 offset=0,
                 occurs_in_reference=False,
+                predictor_version=d.version,
             ))
 
         if not row_preds:
@@ -561,27 +579,7 @@ def _build_lens_report_row(row, allele, peptide, detected, display_pred,
     return out
 
 
-def _safe_str(val):
-    """Coerce a cell to str, mapping NaN/None/'NA' to empty string."""
-    if val is None:
-        return ""
-    if isinstance(val, float) and pd.isna(val):
-        return ""
-    s = str(val)
-    if s == "NA":
-        return ""
-    return s
-
-
-def _safe_float(val):
-    """Convert to float, returning None for NaN/missing."""
-    if val is None or (isinstance(val, float) and pd.isna(val)):
-        return None
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return None
-
+# ── Shared report writer ─────────────────────────────────────────────────────
 
 def write_neoepitope_report(report_df, predictions, excel_report_path=None,
                             csv_report_path=None, epitope_config=None):
@@ -624,19 +622,32 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
 
     score_series = score_predictions(predictions, epitope_config)
 
+    peptide_col = 'Mutant peptide sequence'
+    allele_col = 'Allele'
+
+    # We merge scores back onto report_df by (peptide, allele). That key must
+    # be unique in report_df — LENS and pVACseq loaders both guarantee this,
+    # but asserting here catches any future loader that doesn't.
+    if len(report_df) > 0:
+        dup_mask = report_df.duplicated(subset=[peptide_col, allele_col])
+        if dup_mask.any():
+            raise ValueError(
+                "report_df has duplicate (peptide, allele) rows; scoring "
+                "cannot unambiguously attach a single score per row. "
+                "Offending rows: "
+                f"{report_df.loc[dup_mask, [peptide_col, allele_col]].to_dict('records')[:3]}"
+            )
+
     # score_series is indexed by (source_sequence_name, peptide,
     # peptide_offset, allele). We built the topiary DF with
     # source_sequence_name = peptide, peptide_offset = 0, so the effective
     # group key is (peptide, allele) — align back onto report_df using that.
     scores_by_key = {}
     for idx_tuple, score in score_series.items():
-        # idx_tuple = (source_seq_name, peptide, peptide_offset, allele)
         _, peptide, _, allele = idx_tuple
         scores_by_key[(peptide, allele)] = score
 
     report_df = report_df.copy()
-    peptide_col = 'Mutant peptide sequence'
-    allele_col = 'Allele'
     scores = [
         round(float(scores_by_key.get((row[peptide_col], row[allele_col]), 0.0)), 6)
         for _, row in report_df.iterrows()
