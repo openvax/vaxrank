@@ -367,7 +367,25 @@ def subset_topiary_df_for_eval(topiary_df, cfg):
         # OR when no bracketed refs exist — either way we need a single
         # method to resolve to.
         if kind in needs_disambiguation or not allowed:
-            allowed.add(_resolve_default_for_kind(kind, methods, user_defaults))
+            default = _resolve_default_for_kind(kind, methods, user_defaults)
+            # If the formula ALSO brackets methods for this Kind, and the
+            # default isn't one of them, the post-subset frame would hold
+            # multiple methods per group and topiary would raise
+            # "Ambiguous" at eval time with a message that doesn't point
+            # at the user's mistake. Preempt here.
+            if allowed and default not in allowed:
+                raise ValueError(
+                    f"DSL expression mixes bracketed and unqualified "
+                    f"references for kind {kind!r}: bracketed methods "
+                    f"{sorted(allowed)} and an unqualified Field (e.g. "
+                    f"``affinity.value``). With multiple models in the "
+                    f"data the unqualified reference resolves to the "
+                    f"default {default!r}, which isn't among the bracketed "
+                    f"methods — topiary can't evaluate this. Either "
+                    f"bracket every reference for {kind!r}, or drop the "
+                    f"bracketed ones and rely on default_methods[{kind!r}]."
+                )
+            allowed.add(default)
         chunks.append(group[group["prediction_method_name"].isin(allowed)])
 
     return pd.concat(chunks).reset_index(drop=True)

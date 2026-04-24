@@ -640,6 +640,50 @@ def test_filter_expr_drops_all_groups_yields_zero_scores(tmp_path):
     assert (result["vaxrank_score"] == 0).all()
 
 
+def test_mixed_bracketed_and_unqualified_same_kind_errors(tmp_path):
+    """A formula that mixes bracketed and unqualified refs for the same
+    Kind, where the default doesn't match any bracketed method, would
+    produce topiary's generic "Ambiguous" error at eval. We catch it
+    with a pointed message up front."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df, preds = load_lens(path)
+    cfg = EpitopeConfig(
+        # Brackets netmhcpan, also references affinity unqualified. Default
+        # (auto-picked) is mhcflurry, which isn't in the bracketed set.
+        score_expr="affinity['netmhcpan'].value + affinity.value",
+    )
+    with pytest.raises(ValueError,
+                       match="mixes bracketed and unqualified references"):
+        write_neoepitope_report(
+            report_df, preds, csv_report_path=str(tmp_path / "x.csv"),
+            epitope_config=cfg)
+
+
+def test_mixed_bracketed_and_unqualified_same_default_ok(tmp_path):
+    """The mixed case is ALLOWED when the default for the Kind happens
+    to be one of the bracketed methods — both refs resolve to the same
+    single method and the subsetter keeps exactly that one."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df, preds = load_lens(path)
+    cfg = EpitopeConfig(
+        score_expr="affinity['mhcflurry'].value + affinity.value",
+        default_methods={"pMHC_affinity": "mhcflurry"},
+    )
+    csv_path = tmp_path / "out.csv"
+    # No exception; both refs collapse to mhcflurry so the sum is 2× that.
+    write_neoepitope_report(
+        report_df, preds, csv_report_path=str(csv_path), epitope_config=cfg)
+    import pandas as pd
+    result = pd.read_csv(csv_path)
+    assert (result["vaxrank_score"] > 0).any()
+
+
 def test_pvacseq_single_method_per_group_has_no_ambiguity(tmp_path):
     """pVACseq emits at most one row per (peptide, allele). Even when
     different rows use different methods, each group is
