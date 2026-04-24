@@ -308,6 +308,371 @@ def test_default_methods_rejects_unknown_method(tmp_path):
             epitope_config=cfg)
 
 
+def test_default_methods_partial_qualification_mixed_kinds(tmp_path):
+    """score_expr brackets a method for one Kind but leaves another Kind
+    unqualified. The bracketed Kind keeps its explicit method; the other
+    Kind falls back to its default (auto-picked or user-specified)."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
+    report_df, preds = load_lens(path)
+    # Formula: affinity qualified (netmhcpan), stability unqualified.
+    # default_methods settles the stability kind.
+    cfg = EpitopeConfig(
+        score_expr=(
+            "affinity['netmhcpan'].logistic(350, 150) * 0.7 + "
+            "(stability.value / 24).clip(0, 1) * 0.3"
+        ),
+        default_methods={"pMHC_stability": "netmhcstabpan"},
+    )
+    csv_path = tmp_path / "out.csv"
+    write_neoepitope_report(
+        report_df, preds, csv_report_path=str(csv_path), epitope_config=cfg)
+    import pandas as pd
+    result = pd.read_csv(csv_path)
+    assert len(result) == 2
+    assert (result["vaxrank_score"] > 0).all()
+
+
+def test_default_methods_partial_qualification_auto_picks_stability(tmp_path):
+    """Same as above but without default_methods — auto-pick fills in
+    the stability default."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
+    report_df, preds = load_lens(path)
+    # Only one stability method (netmhcstabpan) in this fixture, so
+    # auto-pick is trivial but tests the path.
+    cfg = EpitopeConfig(
+        score_expr=(
+            "affinity['mhcflurry'].logistic(350, 150) * 0.7 + "
+            "(stability.value / 24).clip(0, 1) * 0.3"
+        ),
+    )
+    csv_path = tmp_path / "out.csv"
+    write_neoepitope_report(
+        report_df, preds, csv_report_path=str(csv_path), epitope_config=cfg)
+    import pandas as pd
+    result = pd.read_csv(csv_path)
+    assert (result["vaxrank_score"] > 0).all()
+
+
+def test_filter_expr_unqualified_on_multi_method_data(tmp_path):
+    """Unqualified filter_expr ('affinity <= X') on a file with multiple
+    affinity methods should resolve via the default method, not raise
+    "Ambiguous Kind"."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df, preds = load_lens(path)
+    # fixture's mhcflurry affinities: 95.4, 180.2, 310.5. Cut at 200 keeps
+    # 2 rows; with netmhcpan as the default, cut at 200 would keep rows
+    # with IC50 < 200 from netmhcpan: 76.11, 120.50 (2 rows).
+    cfg = EpitopeConfig(
+        filter_expr="affinity <= 200",
+        # auto-pick selects mhcflurry; test it evaluates without error
+    )
+    csv_path = tmp_path / "out.csv"
+    write_neoepitope_report(
+        report_df, preds, csv_report_path=str(csv_path), epitope_config=cfg)
+    import pandas as pd
+    result = pd.read_csv(csv_path)
+    # Filter drops rows whose mhcflurry affinity > 200 (only 95.4 passes),
+    # so the nonzero-score rows number ≤ 1. Other rows still land in the
+    # report with score 0.
+    nonzero = result[result["vaxrank_score"] > 0]
+    assert len(nonzero) <= len(result)
+    assert len(nonzero) >= 1
+
+
+def test_score_predictions_on_empty_predictions_list(tmp_path):
+    """An empty predictions list should produce an empty score Series
+    without blowing up."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import score_predictions
+    scores = score_predictions([], EpitopeConfig())
+    assert len(scores) == 0
+
+
+def test_subset_topiary_df_noop_on_single_method_data():
+    """A frame with only one method per Kind should pass through
+    subset_topiary_df_for_eval unchanged."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import (
+        predictions_to_topiary_df, subset_topiary_df_for_eval)
+
+    path = os.path.join(DATA_DIR, "lens_v1.9_mhcflurry_only.tsv")
+    _, preds = load_lens(path)
+    df = predictions_to_topiary_df(preds)
+    subset = subset_topiary_df_for_eval(df, EpitopeConfig())
+    # Same row count (reset_index changes the index but not the rows)
+    assert len(subset) == len(df)
+    assert set(subset["prediction_method_name"]) == set(df["prediction_method_name"])
+
+
+def test_subset_topiary_df_qualified_both_predictors_keeps_both():
+    """When the formula explicitly brackets both predictors, both stay
+    in the subsetted frame (no unnecessary default-method subsetting)."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import (
+        predictions_to_topiary_df, subset_topiary_df_for_eval)
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    _, preds = load_lens(path)
+    df = predictions_to_topiary_df(preds)
+    cfg = EpitopeConfig(score_expr=(
+        "affinity['mhcflurry'].logistic(350, 150) * 0.5 + "
+        "affinity['netmhcpan'].logistic(350, 150) * 0.5"))
+    subset = subset_topiary_df_for_eval(df, cfg)
+    # Both methods' rows survive
+    assert set(subset["prediction_method_name"]) == {"mhcflurry", "netmhcpan"}
+    assert len(subset) == len(df)
+
+
+def test_subset_topiary_df_qualified_one_predictor_drops_other():
+    """When the formula brackets only one predictor and no unqualified
+    reference exists, the other is dropped (not added via default)."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import (
+        predictions_to_topiary_df, subset_topiary_df_for_eval)
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    _, preds = load_lens(path)
+    df = predictions_to_topiary_df(preds)
+    cfg = EpitopeConfig(
+        score_expr="affinity['netmhcpan'].logistic(350, 150)")
+    subset = subset_topiary_df_for_eval(df, cfg)
+    assert set(subset["prediction_method_name"]) == {"netmhcpan"}
+
+
+def test_parse_is_cached():
+    """Repeated _parse calls for the same expression should hit the cache
+    rather than re-invoking topiary.ranking.parse."""
+    from vaxrank.epitope_dsl import _parse
+    cache_info_before = _parse.cache_info()
+    expr = "affinity['mhcflurry'].logistic(350, 150)"
+    _parse(expr)
+    _parse(expr)
+    _parse(expr)
+    info = _parse.cache_info()
+    # At least two cache hits from the three calls above
+    assert info.hits - cache_info_before.hits >= 2
+
+
+def test_default_methods_mixed_valid_and_invalid_fails_fast(tmp_path):
+    """If default_methods has one valid and one invalid entry, the invalid
+    one must fail fast even though other Kinds resolve cleanly."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
+    report_df, preds = load_lens(path)
+    cfg = EpitopeConfig(default_methods={
+        "pMHC_affinity": "mhcflurry",      # valid
+        "pMHC_stability": "doesnotexist",  # invalid
+    })
+    with pytest.raises(ValueError,
+                       match=r"default_methods\['pMHC_stability'\]='doesnotexist'"):
+        write_neoepitope_report(
+            report_df, preds, csv_report_path=str(tmp_path / "x.csv"),
+            epitope_config=cfg)
+
+
+def test_report_columns_unaffected_by_subsetting(tmp_path):
+    """Subsetting happens on the topiary frame used for DSL eval, NOT on
+    report_df — report output must still expose every detected
+    predictor's raw value column regardless of which one drives
+    scoring."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df, preds = load_lens(path)
+    cfg = EpitopeConfig(
+        score_expr="affinity['mhcflurry'].logistic(350, 150)")
+    csv_path = tmp_path / "out.csv"
+    write_neoepitope_report(
+        report_df.copy(), preds,
+        csv_report_path=str(csv_path), epitope_config=cfg)
+    import pandas as pd
+    result = pd.read_csv(csv_path)
+    # Even though only mhcflurry drives scoring, netmhcpan values are
+    # still reported alongside.
+    assert "mhcflurry value (nM)" in result.columns
+    assert "netmhcpan value (nM)" in result.columns
+    assert result["netmhcpan value (nM)"].notna().all()
+
+
+def test_predictor_version_in_epitope_prediction_from_lens():
+    """Every LENS-loaded EpitopePrediction should carry the sniffed
+    predictor version, so version-qualified DSL refs resolve."""
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    _, preds = load_lens(path)
+    by_method = {p.prediction_method_name: p.predictor_version for p in preds}
+    assert by_method["mhcflurry"] == "2.1.1"
+    assert by_method["netmhcpan"] == "4.1b"
+
+
+def test_dsl_version_mismatch_validation_error(tmp_path):
+    """A version-qualified formula against data without that version
+    raises a clear error (not silent NaN)."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df, preds = load_lens(path)
+    cfg = EpitopeConfig(
+        score_expr="affinity['mhcflurry', '0.0.0'].logistic(350, 150)")
+    with pytest.raises(ValueError, match="predictor version '0.0.0'"):
+        write_neoepitope_report(
+            report_df, preds, csv_report_path=str(tmp_path / "x.csv"),
+            epitope_config=cfg)
+
+
+def test_kinds_needing_method_disambiguation_captures_default_node():
+    """With no filter_expr / score_expr, pMHC_affinity is added to the
+    disambiguation set (because the synthesized default node implicitly
+    needs single-method rows)."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import kinds_needing_method_disambiguation
+    assert kinds_needing_method_disambiguation(
+        EpitopeConfig()) == {"pMHC_affinity"}
+
+
+def test_kinds_needing_method_disambiguation_adds_only_unqualified():
+    """With a fully bracketed score_expr, no Kinds need disambiguation."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import kinds_needing_method_disambiguation
+    cfg = EpitopeConfig(score_expr=(
+        "affinity['mhcflurry'].logistic(350, 150) * 0.5 + "
+        "affinity['netmhcpan'].logistic(350, 150) * 0.5"))
+    assert kinds_needing_method_disambiguation(cfg) == set()
+
+
+def test_kinds_needing_method_disambiguation_mixed():
+    """Unqualified kinds in expressions are collected; bracketed refs
+    are not."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import kinds_needing_method_disambiguation
+    cfg = EpitopeConfig(score_expr=(
+        "affinity['mhcflurry'].logistic(350, 150) + stability.value"))
+    assert kinds_needing_method_disambiguation(cfg) == {"pMHC_stability"}
+
+
+def test_validate_default_methods_empty_df_is_noop():
+    """validate_default_methods on an empty topiary frame returns cleanly
+    (we can't check methods we don't have)."""
+    import pandas as pd
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import validate_default_methods
+    cfg = EpitopeConfig(default_methods={"pMHC_affinity": "mhcflurry"})
+    validate_default_methods(cfg, pd.DataFrame())  # no raise
+
+
+def test_validate_default_methods_no_defaults_is_noop():
+    """With no default_methods, the validator is a no-op."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import (
+        predictions_to_topiary_df, validate_default_methods)
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    _, preds = load_lens(path)
+    df = predictions_to_topiary_df(preds)
+    validate_default_methods(EpitopeConfig(), df)  # no raise
+
+
+def test_validate_default_methods_catches_typo_on_single_method_kind(tmp_path):
+    """Even when a Kind has only one model in the data (so subsetting
+    wouldn't consult the default), validate_default_methods still
+    errors on a typo'd default."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import (
+        predictions_to_topiary_df, validate_default_methods)
+    # Single-model fixture (v1.9 mhcflurry-only).
+    path = os.path.join(DATA_DIR, "lens_v1.9_mhcflurry_only.tsv")
+    _, preds = load_lens(path)
+    df = predictions_to_topiary_df(preds)
+    cfg = EpitopeConfig(default_methods={"pMHC_affinity": "bogus"})
+    with pytest.raises(ValueError,
+                       match=r"default_methods\['pMHC_affinity'\]='bogus'"):
+        validate_default_methods(cfg, df)
+
+
+def test_filter_plus_score_expr_both_bracketed(tmp_path):
+    """filter_expr and score_expr both set, each with bracketed predictor
+    refs — the union of referenced methods should survive subsetting."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df, preds = load_lens(path)
+    cfg = EpitopeConfig(
+        filter_expr="affinity['netmhcpan'] <= 500",
+        score_expr="affinity['mhcflurry'].logistic(350, 150)",
+    )
+    csv_path = tmp_path / "out.csv"
+    write_neoepitope_report(
+        report_df, preds, csv_report_path=str(csv_path), epitope_config=cfg)
+    import pandas as pd
+    result = pd.read_csv(csv_path)
+    # Filter keeps rows whose netmhcpan IC50 <= 500 (all 3 in fixture:
+    # 76.11, 120.50, 250.00); score comes from mhcflurry.
+    assert (result["vaxrank_score"] > 0).any()
+
+
+def test_filter_expr_drops_all_groups_yields_zero_scores(tmp_path):
+    """A filter that matches no rows should produce a report with all
+    scores = 0 (not crash)."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df, preds = load_lens(path)
+    # No affinity < 0 anywhere.
+    cfg = EpitopeConfig(filter_expr="affinity <= 0")
+    csv_path = tmp_path / "out.csv"
+    write_neoepitope_report(
+        report_df, preds, csv_report_path=str(csv_path), epitope_config=cfg)
+    import pandas as pd
+    result = pd.read_csv(csv_path)
+    assert (result["vaxrank_score"] == 0).all()
+
+
+def test_pvacseq_single_method_per_group_has_no_ambiguity(tmp_path):
+    """pVACseq emits at most one row per (peptide, allele). Even when
+    different rows use different methods, each group is
+    unambiguous — the default node should score without error."""
+    from vaxrank.epitope_io import write_neoepitope_report
+    path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
+    report_df, preds = load_pvacseq(path)
+    csv_path = tmp_path / "out.csv"
+    # Default EpitopeConfig, no default_methods set.
+    write_neoepitope_report(
+        report_df, preds, csv_report_path=str(csv_path))
+    import pandas as pd
+    result = pd.read_csv(csv_path)
+    assert len(result) == 3
+    assert "vaxrank_score" in result.columns
+
+
+def test_unknown_column_in_lens_file_is_ignored(tmp_path):
+    """LENS files with extra columns that don't match the predictor
+    regex are simply ignored — loader shouldn't error."""
+    # Valid mhcflurry columns plus a novel experimental column.
+    path = tmp_path / "lens.tsv"
+    path.write_text(
+        "peptide\tallele\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.pres_perc\tfuture_tool_99.blarg.metric\t"
+        "random_non_matching_col\n"
+        "SIINFEKL\tHLA-A*02:01\t100.0\t0.5\t42\thello\n"
+    )
+    report_df, preds = load_lens(path)
+    assert len(preds) == 1
+    assert preds[0].prediction_method_name == "mhcflurry"
+
+
 def test_default_methods_auto_picked_when_unset(tmp_path, caplog):
     """When multiple models for a Kind are present and default_methods
     doesn't specify one, vaxrank auto-picks canonical and logs which."""

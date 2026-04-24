@@ -34,7 +34,13 @@ byte-for-byte.
 
 from __future__ import annotations
 
+import functools
+import logging
+
 import pandas as pd
+
+
+logger = logging.getLogger(__name__)
 
 
 # Method name -> topiary Kind for external-input predictions (LENS / pVACseq
@@ -50,7 +56,14 @@ _METHOD_KIND_MAP = {
 }
 
 
+@functools.lru_cache(maxsize=64)
 def _parse(expr):
+    """Parse a DSL string into a topiary node. Cached so the same config's
+    ``filter_expr`` / ``score_expr`` aren't re-parsed multiple times within
+    one :func:`write_neoepitope_report` call (validator + subsetter +
+    filter-node + score-node all need the AST). Parsed nodes are
+    immutable, so sharing is safe.
+    """
     from topiary.ranking import parse
     return parse(expr)
 
@@ -203,7 +216,7 @@ def qualified_methods_by_kind(cfg):
 
     Unqualified references (``affinity.value`` with no bracket) don't
     contribute to any set but do imply the Kind needs a default-method
-    resolution — see :func:`kinds_referenced_unqualified`.
+    resolution — see :func:`kinds_needing_method_disambiguation`.
     """
     out = {}
     for expr in (cfg.filter_expr, cfg.score_expr):
@@ -216,14 +229,25 @@ def qualified_methods_by_kind(cfg):
     return out
 
 
-def kinds_referenced_unqualified(cfg):
-    """Set of Kinds the DSL references without bracket selection.
+def kinds_needing_method_disambiguation(cfg):
+    """Kinds whose DSL evaluation depends on seeing a single method per
+    ``(source_sequence_name, peptide, peptide_offset, allele)`` group.
 
-    Each such Kind needs a default method when the data exposes
-    multiple models for it, otherwise topiary raises "Ambiguous" at
-    eval time. The default score / filter node (when the user hasn't
-    set ``score_expr`` / ``filter_expr``) also implicitly references
-    ``pMHC_affinity`` unqualified.
+    A Kind needs disambiguation when:
+
+    - the DSL references it unqualified (``affinity.value`` with no
+      bracket selection), OR
+    - ``filter_expr`` / ``score_expr`` are unset, because the synthesized
+      default node implicitly references ``pMHC_affinity`` via
+      :class:`~topiary.ranking.Affinity` (in affinity mode) or reads the
+      ``percentile_rank`` column (in percentile_rank mode) — both of
+      which break if the frame has multiple rows per group.
+
+    Note that :func:`subset_topiary_df_for_eval` *also* falls back to
+    the default method for any Kind whose bracket-referenced set is
+    empty — see the ``not allowed`` branch there. So this function is
+    not strictly "every Kind that gets a default"; it's "every Kind
+    for which we must force resolution even when bracket refs exist".
     """
     out = set()
     for expr in (cfg.filter_expr, cfg.score_expr):
@@ -233,10 +257,11 @@ def kinds_referenced_unqualified(cfg):
         for kind, method, _version in refs["kinds"]:
             if method is None:
                 out.add(kind)
-    # The synthesized default node always touches pMHC_affinity unqualified
-    # (``Affinity.logistic_normalized(...)`` in affinity mode), so even when
-    # the user provides no formulas we still need a default for that Kind.
     if cfg.filter_expr is None and cfg.score_expr is None:
+        # The default node implicitly needs single-method rows for
+        # pMHC_affinity (affinity mode uses unqualified Affinity;
+        # percentile_rank mode reads percentile_rank which differs per
+        # method even though it's a Column not a Field).
         out.add("pMHC_affinity")
     return out
 
@@ -262,44 +287,50 @@ def _auto_pick_canonical_method(methods):
     return sorted(methods)[0]
 
 
-def resolve_default_methods(cfg, topiary_df):
-    """Return the effective ``default_methods`` dict for each Kind with
-    multiple models present in ``topiary_df``.
+def _resolve_default_for_kind(kind, methods, user_defaults):
+    """Return the default method for a single Kind, user-overridable.
 
-    Merges ``cfg.default_methods`` (explicit user choice) with an
-    auto-picked canonical for Kinds the user didn't specify. Kinds with
-    only one method in the data are omitted (no disambiguation needed).
-    Only covers Kinds actually present in the DataFrame.
+    Raises if the user specified a default that isn't in the data.
+    Logs when we auto-pick a canonical.
     """
-    import logging
-    logger = logging.getLogger(__name__)
+    if kind in user_defaults:
+        choice = user_defaults[kind]
+        if choice not in methods:
+            raise ValueError(
+                f"default_methods[{kind!r}]={choice!r} but that method "
+                f"is not present in the loaded predictions "
+                f"(available: {sorted(methods)})")
+        return choice
+    picked = _auto_pick_canonical_method(methods)
+    logger.info(
+        "Kind %s has multiple methods %s and no default_methods entry; "
+        "auto-picking %r. Set default_methods[%r] in the epitope config "
+        "to override.", kind, sorted(methods), picked, kind)
+    return picked
 
+
+def validate_default_methods(cfg, topiary_df):
+    """Error if ``cfg.default_methods`` names a method that isn't in the data.
+
+    This runs even for Kinds with a single model (where the default
+    wouldn't actually be consulted during subsetting) so typos are
+    caught rather than silently ignored.
+    """
+    if not cfg.default_methods:
+        return
     if topiary_df.empty:
-        return dict(cfg.default_methods or {})
-
-    user_defaults = dict(cfg.default_methods or {})
-    resolved = {}
-    for kind, group in topiary_df.groupby("kind"):
-        methods = set(group["prediction_method_name"].dropna().unique())
-        if len(methods) <= 1:
-            continue
-        if kind in user_defaults:
-            if user_defaults[kind] not in methods:
-                raise ValueError(
-                    f"default_methods[{kind!r}]={user_defaults[kind]!r} "
-                    f"but that method is not present in the loaded "
-                    f"predictions (available: {sorted(methods)})")
-            resolved[kind] = user_defaults[kind]
-        else:
-            picked = _auto_pick_canonical_method(methods)
-            logger.info(
-                "Kind %s has multiple methods %s and no default_methods "
-                "entry; auto-picking %r as the default for unqualified "
-                "references. Set default_methods[%r] in your epitope "
-                "config to override.",
-                kind, sorted(methods), picked, kind)
-            resolved[kind] = picked
-    return resolved
+        return
+    methods_by_kind = (
+        topiary_df.groupby("kind")["prediction_method_name"]
+        .apply(lambda s: set(s.dropna().unique()))
+        .to_dict())
+    for kind, method in cfg.default_methods.items():
+        available = methods_by_kind.get(kind, set())
+        if method not in available:
+            raise ValueError(
+                f"default_methods[{kind!r}]={method!r} but that method "
+                f"is not present in the loaded predictions "
+                f"(available for {kind}: {sorted(available)})")
 
 
 def subset_topiary_df_for_eval(topiary_df, cfg):
@@ -307,20 +338,22 @@ def subset_topiary_df_for_eval(topiary_df, cfg):
 
     For each Kind with multiple models in the data, keep only rows
     whose method is (a) explicitly referenced by bracket in any DSL
-    expression, or (b) the resolved default method (user-specified or
-    auto-picked). Kinds with a single model pass through unchanged.
+    expression, or (b) the resolved default method (user-specified via
+    ``default_methods[kind]`` or auto-picked). Kinds with a single
+    model pass through unchanged.
 
-    This lets users write unqualified ``Affinity.logistic(...)`` and
-    have it resolve to the canonical affinity predictor while
-    bracketed references like ``Affinity['netmhcpan']`` still pick up
-    their specific rows.
+    Lets users write unqualified ``Affinity.logistic(...)`` and have it
+    resolve to the canonical affinity predictor while bracketed
+    references like ``Affinity['netmhcpan']`` still pick up their
+    specific rows. Raises if ``default_methods[kind]`` names a method
+    that isn't in the data.
     """
     if topiary_df.empty:
         return topiary_df
 
     qualified = qualified_methods_by_kind(cfg)
-    unqualified_kinds = kinds_referenced_unqualified(cfg)
-    resolved_defaults = resolve_default_methods(cfg, topiary_df)
+    needs_disambiguation = kinds_needing_method_disambiguation(cfg)
+    user_defaults = dict(cfg.default_methods or {})
 
     chunks = []
     for kind, group in topiary_df.groupby("kind", sort=False):
@@ -330,15 +363,13 @@ def subset_topiary_df_for_eval(topiary_df, cfg):
             continue
 
         allowed = set(qualified.get(kind, set())) & methods
-        # Unqualified refs (including the default node's implicit
-        # ``Affinity`` when no formulas are set) need a default method.
-        if kind in unqualified_kinds or not allowed:
-            default = resolved_defaults.get(kind)
-            if default is not None:
-                allowed.add(default)
+        # Add the resolved default when the Kind is referenced unqualified
+        # OR when no bracketed refs exist — either way we need a single
+        # method to resolve to.
+        if kind in needs_disambiguation or not allowed:
+            allowed.add(_resolve_default_for_kind(kind, methods, user_defaults))
         chunks.append(group[group["prediction_method_name"].isin(allowed)])
 
-    import pandas as pd
     return pd.concat(chunks).reset_index(drop=True)
 
 
