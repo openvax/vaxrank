@@ -257,6 +257,135 @@ def test_load_lens_detects_netmhcstabpan():
 
 # ── DSL integration for external inputs ──────────────────────────────────────
 
+# ── predictors_required_by_cfg auto-derivation ───────────────────────────────
+
+def test_predictors_required_by_cfg_empty_for_no_formula():
+    """No filter_expr / score_expr → empty set."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import predictors_required_by_cfg
+    assert predictors_required_by_cfg(EpitopeConfig()) == set()
+
+
+def test_predictors_required_by_cfg_empty_for_unqualified_formula():
+    """A formula that never brackets a predictor name → empty set."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import predictors_required_by_cfg
+    cfg = EpitopeConfig(score_expr="affinity.logistic(350, 150)")
+    assert predictors_required_by_cfg(cfg) == set()
+
+
+def test_predictors_required_by_cfg_picks_up_multiple():
+    """Formula referencing two predictors by bracket → set of both."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import predictors_required_by_cfg
+    cfg = EpitopeConfig(score_expr=(
+        "affinity['mhcflurry'].logistic(350, 150) * 0.5 + "
+        "affinity['netmhcpan'].logistic(350, 150) * 0.5"))
+    assert predictors_required_by_cfg(cfg) == {"mhcflurry", "netmhcpan"}
+
+
+def test_predictors_required_by_cfg_merges_filter_and_score():
+    """References from filter_expr and score_expr both count."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import predictors_required_by_cfg
+    cfg = EpitopeConfig(
+        filter_expr="affinity['mhcflurry'] <= 500",
+        score_expr="stability['netmhcstabpan'].value / 24",
+    )
+    assert predictors_required_by_cfg(cfg) == {"mhcflurry", "netmhcstabpan"}
+
+
+def test_lens_cli_auto_upgrades_to_all_when_formula_names_predictors(
+        tmp_path, monkeypatch):
+    """When --lens-predictor=auto and the DSL formula references specific
+    predictors, load_lens should receive 'all' so both predictors' rows
+    reach the DSL (otherwise the validator errors on the unselected
+    predictor). Verify via the CLI path."""
+    # Write a minimal epitope config with a blend formula.
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        'epitope:\n'
+        '  score_expr: "affinity[\'mhcflurry\'].logistic(350, 150) * 0.5 '
+        '+ affinity[\'netmhcpan\'].logistic(350, 150) * 0.5"\n'
+    )
+
+    from vaxrank.cli.entry_point import main
+    lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
+    csv_path = str(tmp_path / "out.csv")
+    # No explicit --lens-predictor; should auto-upgrade to all.
+    main([
+        "--input-lens", lens_path,
+        "--config", str(cfg_path),
+        "--output-csv", csv_path,
+    ])
+    import pandas as pd
+    result = pd.read_csv(csv_path)
+    # Both raw predictor columns should be present — proves 'all' emission
+    assert "mhcflurry value (nM)" in result.columns
+    assert "netmhcpan value (nM)" in result.columns
+    # And the blend formula produced nonzero scores
+    assert (result["vaxrank_score"] > 0).any()
+
+
+def test_pvacseq_lens_predictor_warns_but_still_runs(tmp_path, caplog):
+    """--lens-predictor alongside --input-pvacseq is ignored with a warning
+    rather than silently accepted, and the pVACseq pipeline still succeeds.
+
+    Exercises _run_external_input_mode directly rather than main() so
+    logging.config.fileConfig in main() doesn't blow away caplog's handler.
+    """
+    import argparse
+    import logging
+    from vaxrank.cli.entry_point import _run_external_input_mode
+
+    args = argparse.Namespace(
+        input_pvacseq=os.path.join(DATA_DIR, "pvacseq_example.tsv"),
+        input_lens=None,
+        lens_predictor="mhcflurry",
+        output_csv=str(tmp_path / "out.csv"),
+        output_neoepitope_report=None,
+        output_epitopes=None,
+        config=None,
+        config_set_overrides=None,
+        config_expr_overrides=None,
+    )
+    with caplog.at_level(logging.WARNING, logger="vaxrank.cli.entry_point"):
+        result_ok = _run_external_input_mode(args)
+    assert result_ok is True
+    assert any(
+        "ignored with --input-pvacseq" in rec.getMessage()
+        for rec in caplog.records), (
+        f"Expected warning; got: {[r.getMessage() for r in caplog.records]}")
+    import pandas as pd
+    df = pd.read_csv(args.output_csv)
+    assert len(df) == 3
+    assert "vaxrank_score" in df.columns
+
+
+# ── NaN handling in vaxrank-native roundtrip ─────────────────────────────────
+
+def test_load_predictions_empty_string_fields_become_empty_not_nan(tmp_path):
+    """CSV cells that read as NaN for string-typed fields should come back
+    as '' (not float NaN) so downstream comparisons work."""
+    from vaxrank.epitope_io import load_predictions
+    path = tmp_path / "preds.csv"
+    # Empty wt_peptide_sequence, source_sequence, prediction_method_name,
+    # predictor_version columns all present but blank.
+    path.write_text(
+        "allele,peptide_sequence,wt_peptide_sequence,ic50,wt_ic50,"
+        "percentile_rank,prediction_method_name,overlaps_mutation,"
+        "source_sequence,offset,occurs_in_reference,predictor_version\n"
+        "HLA-A*02:01,SIINFEKL,,50.0,,0.5,,True,,0,False,\n"
+    )
+    preds = load_predictions(path)
+    assert len(preds) == 1
+    p = preds[0]
+    assert p.wt_peptide_sequence == ""
+    assert p.source_sequence == ""
+    assert p.prediction_method_name == ""
+    assert p.predictor_version == ""
+
+
 def test_write_neoepitope_report_rejects_duplicate_rows(tmp_path):
     """write_neoepitope_report merges scores by (peptide, allele); if a
     loader ever produced a report_df with duplicates that merge would be

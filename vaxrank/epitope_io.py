@@ -110,6 +110,12 @@ def load_predictions(path):
 
 def _dataframe_to_predictions(df):
     """Convert a vaxrank-format DataFrame to a list of EpitopePrediction."""
+    def _str_or_empty(val):
+        """Empty-cell CSV reads as NaN by default; coerce to '' for str fields."""
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return ""
+        return str(val)
+
     predictions = []
     for _, row in df.iterrows():
         wt_ic50 = row.get("wt_ic50")
@@ -118,21 +124,18 @@ def _dataframe_to_predictions(df):
         percentile_rank = row.get("percentile_rank")
         if pd.isna(percentile_rank):
             percentile_rank = None
-        predictor_version = row.get("predictor_version", "")
-        if pd.isna(predictor_version):
-            predictor_version = ""
         predictions.append(EpitopePrediction(
             allele=row["allele"],
             peptide_sequence=row["peptide_sequence"],
-            wt_peptide_sequence=row.get("wt_peptide_sequence", ""),
+            wt_peptide_sequence=_str_or_empty(row.get("wt_peptide_sequence", "")),
             ic50=float(row["ic50"]),
             wt_ic50=float(wt_ic50) if wt_ic50 is not None else None,
             percentile_rank=float(percentile_rank) if percentile_rank is not None else None,
-            prediction_method_name=row.get("prediction_method_name", ""),
+            prediction_method_name=_str_or_empty(row.get("prediction_method_name", "")),
             overlaps_mutation=bool(row.get("overlaps_mutation", True)),
-            source_sequence=row.get("source_sequence", ""),
+            source_sequence=_str_or_empty(row.get("source_sequence", "")),
             offset=int(row.get("offset", 0)),
-            predictor_version=str(predictor_version),
+            predictor_version=_str_or_empty(row.get("predictor_version", "")),
             occurs_in_reference=bool(row.get("occurs_in_reference", False)),
         ))
     return predictions
@@ -609,6 +612,7 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
     """
     from .epitope_config import EpitopeConfig
     from .epitope_dsl import (
+        predictions_to_topiary_df,
         score_predictions,
         validate_dsl_against_predictions,
     )
@@ -616,18 +620,13 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
     if epitope_config is None:
         epitope_config = EpitopeConfig()
 
-    # Fail loud if filter_expr / score_expr references a predictor / column
-    # the loaded data doesn't expose.
-    validate_dsl_against_predictions(epitope_config, predictions)
-
-    score_series = score_predictions(predictions, epitope_config)
-
     peptide_col = 'Mutant peptide sequence'
     allele_col = 'Allele'
 
-    # We merge scores back onto report_df by (peptide, allele). That key must
-    # be unique in report_df — LENS and pVACseq loaders both guarantee this,
-    # but asserting here catches any future loader that doesn't.
+    # Fast O(n) sanity check first — we merge scores back onto report_df by
+    # (peptide, allele). That key must be unique. LENS and pVACseq loaders
+    # both guarantee this, but asserting here catches any future loader
+    # that doesn't, *before* we spend cycles on scoring.
     if len(report_df) > 0:
         dup_mask = report_df.duplicated(subset=[peptide_col, allele_col])
         if dup_mask.any():
@@ -637,6 +636,17 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
                 "Offending rows: "
                 f"{report_df.loc[dup_mask, [peptide_col, allele_col]].to_dict('records')[:3]}"
             )
+
+    # Build the topiary DataFrame once and share it between validator and
+    # scorer — these two pass over the same ~N rows and rebuilding is the
+    # dominant cost on large LENS files.
+    topiary_df = predictions_to_topiary_df(predictions)
+
+    validate_dsl_against_predictions(
+        epitope_config, predictions, topiary_df=topiary_df)
+
+    score_series = score_predictions(
+        predictions, epitope_config, topiary_df=topiary_df)
 
     # score_series is indexed by (source_sequence_name, peptide,
     # peptide_offset, allele). We built the topiary DF with

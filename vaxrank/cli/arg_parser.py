@@ -81,13 +81,16 @@ def make_vaxrank_arg_parser():
         "--lens-predictor",
         default="auto",
         help="Which predictor(s) from the LENS file to emit as "
-             "EpitopePrediction objects. 'auto' (default) picks a single "
-             "canonical predictor (mhcflurry > netmhcpan). 'all' emits one "
-             "prediction per (peptide, allele, detected predictor) so that "
-             "Topiary DSL formulas can combine them, e.g. "
-             "affinity['mhcflurry'] + affinity['netmhcpan']. A specific tool "
-             "name (mhcflurry, netmhcpan, netmhcstabpan) selects that one "
-             "and errors if absent. Only used with --input-lens.")
+             "EpitopePrediction objects. 'auto' (default) looks at "
+             "filter_expr / score_expr in the epitope config: if those "
+             "formulas reference specific predictors (e.g. "
+             "affinity['mhcflurry']), 'auto' emits every detected "
+             "predictor so the DSL can combine them; otherwise 'auto' "
+             "picks a single canonical predictor (mhcflurry > netmhcpan). "
+             "'all' always emits every detected predictor. A specific "
+             "tool name (mhcflurry, netmhcpan, netmhcstabpan) selects "
+             "only that one and errors if absent. Only used with "
+             "--input-lens.")
 
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)

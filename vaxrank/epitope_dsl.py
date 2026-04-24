@@ -103,7 +103,7 @@ def predictions_to_topiary_df(predictions):
     return pd.DataFrame(rows)
 
 
-def score_predictions(predictions, cfg):
+def score_predictions(predictions, cfg, *, topiary_df=None):
     """Score external-input predictions using the configured Topiary DSL.
 
     Returns a ``pandas.Series`` of per-(peptide, allele) scores indexed by
@@ -114,10 +114,16 @@ def score_predictions(predictions, cfg):
     When ``cfg.score_expr`` / ``cfg.filter_expr`` are unset this applies
     the same default node that the main pipeline uses, which matches the
     legacy :meth:`EpitopePrediction.logistic_epitope_score` byte-for-byte.
+
+    Pass ``topiary_df`` to reuse an already-built frame (see
+    :func:`predictions_to_topiary_df`) rather than rebuilding from
+    ``predictions``; callers that validate + score back-to-back should
+    build once and share.
     """
     from topiary.ranking import EvalContext, apply_filter
 
-    df = predictions_to_topiary_df(predictions)
+    df = (predictions_to_topiary_df(predictions)
+          if topiary_df is None else topiary_df)
     if df.empty:
         return pd.Series(dtype=float)
 
@@ -170,7 +176,27 @@ def collect_dsl_references(node):
     return {"columns": columns, "kinds": kinds}
 
 
-def validate_dsl_against_predictions(cfg, predictions):
+def predictors_required_by_cfg(cfg):
+    """Set of predictor method names referenced by ``filter_expr`` /
+    ``score_expr`` (e.g. ``{"mhcflurry", "netmhcpan"}`` for a formula using
+    ``affinity['mhcflurry']`` and ``affinity['netmhcpan']``).
+
+    Returns an empty set when no formulas are set or when every
+    ``Field`` reference is unqualified (``affinity.value`` with no
+    bracket selection). Callers can use this to decide, for example,
+    which LENS predictors to emit into the topiary frame: if the
+    formula names them, emit exactly those.
+    """
+    methods = set()
+    for expr in (cfg.filter_expr, cfg.score_expr):
+        if expr is None:
+            continue
+        refs = collect_dsl_references(_parse(expr))
+        methods |= {m for (_, m, _) in refs["kinds"] if m is not None}
+    return methods
+
+
+def validate_dsl_against_predictions(cfg, predictions, *, topiary_df=None):
     """Error early when ``filter_expr`` / ``score_expr`` reference a
     predictor the loaded predictions don't expose.
 
@@ -181,6 +207,9 @@ def validate_dsl_against_predictions(cfg, predictions):
     up front. The parsed node's ``Field.kind`` is already the
     canonical string (``"pMHC_affinity"`` etc.) so we match it
     directly against the values in the topiary DataFrame.
+
+    Pass ``topiary_df`` to reuse an already-built frame rather than
+    rebuilding it from ``predictions``.
     """
     nodes = []
     if cfg.filter_expr is not None:
@@ -190,7 +219,8 @@ def validate_dsl_against_predictions(cfg, predictions):
     if not nodes:
         return
 
-    df = predictions_to_topiary_df(predictions)
+    df = (predictions_to_topiary_df(predictions)
+          if topiary_df is None else topiary_df)
     available_kinds = set(df["kind"].unique()) if not df.empty else set()
     available_methods = (
         set(df["prediction_method_name"].dropna().unique())

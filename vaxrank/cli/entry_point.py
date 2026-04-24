@@ -118,12 +118,33 @@ def _run_external_input_mode(args):
     except Exception:
         epitope_config = EpitopeConfig()
 
+    lens_predictor_arg = getattr(args, 'lens_predictor', 'auto')
+
     if getattr(args, 'input_pvacseq', None):
+        if lens_predictor_arg != 'auto':
+            logger.warning(
+                "--lens-predictor=%s is ignored with --input-pvacseq "
+                "(pVACseq predictions carry a single method name).",
+                lens_predictor_arg)
         report_df, predictions = load_pvacseq(args.input_pvacseq)
     elif getattr(args, 'input_lens', None):
+        # "auto" is smart: if the DSL formula names specific predictors,
+        # emit those; otherwise pick a canonical single predictor.
+        effective_predictor = lens_predictor_arg
+        if effective_predictor == 'auto':
+            from ..epitope_dsl import predictors_required_by_cfg
+            needed = predictors_required_by_cfg(epitope_config)
+            if needed:
+                # Formula references specific predictors — emit all detected
+                # so the DSL has what it needs (set of detected predictors is
+                # tiny, typically 1–3).
+                effective_predictor = 'all'
+                logger.info(
+                    "filter_expr / score_expr references predictor(s) %s; "
+                    "auto-upgrading --lens-predictor from 'auto' to 'all'.",
+                    sorted(needed))
         report_df, predictions = load_lens(
-            args.input_lens,
-            predictor=getattr(args, 'lens_predictor', 'auto'))
+            args.input_lens, predictor=effective_predictor)
     else:
         return False  # no external input
 
