@@ -127,6 +127,10 @@ def score_predictions(predictions, cfg, *, topiary_df=None):
     if df.empty:
         return pd.Series(dtype=float)
 
+    # Resolve Kinds with multiple models down to a single default method
+    # per Kind (except where the DSL explicitly brackets other methods).
+    df = subset_topiary_df_for_eval(df, cfg)
+
     filter_node = build_filter_node(cfg)
     if filter_node is not None:
         df = apply_filter(df, filter_node)
@@ -183,17 +187,159 @@ def predictors_required_by_cfg(cfg):
 
     Returns an empty set when no formulas are set or when every
     ``Field`` reference is unqualified (``affinity.value`` with no
-    bracket selection). Callers can use this to decide, for example,
-    which LENS predictors to emit into the topiary frame: if the
-    formula names them, emit exactly those.
+    bracket selection).
     """
     methods = set()
+    for kind_to_methods in qualified_methods_by_kind(cfg).values():
+        methods |= kind_to_methods
+    return methods
+
+
+def qualified_methods_by_kind(cfg):
+    """Methods referenced via bracket selection, grouped by canonical Kind.
+
+    Example: ``{"pMHC_affinity": {"mhcflurry", "netmhcpan"},
+    "pMHC_stability": {"netmhcstabpan"}}`` for a formula that pins each.
+
+    Unqualified references (``affinity.value`` with no bracket) don't
+    contribute to any set but do imply the Kind needs a default-method
+    resolution — see :func:`kinds_referenced_unqualified`.
+    """
+    out = {}
     for expr in (cfg.filter_expr, cfg.score_expr):
         if expr is None:
             continue
         refs = collect_dsl_references(_parse(expr))
-        methods |= {m for (_, m, _) in refs["kinds"] if m is not None}
-    return methods
+        for kind, method, _version in refs["kinds"]:
+            if method is not None:
+                out.setdefault(kind, set()).add(method)
+    return out
+
+
+def kinds_referenced_unqualified(cfg):
+    """Set of Kinds the DSL references without bracket selection.
+
+    Each such Kind needs a default method when the data exposes
+    multiple models for it, otherwise topiary raises "Ambiguous" at
+    eval time. The default score / filter node (when the user hasn't
+    set ``score_expr`` / ``filter_expr``) also implicitly references
+    ``pMHC_affinity`` unqualified.
+    """
+    out = set()
+    for expr in (cfg.filter_expr, cfg.score_expr):
+        if expr is None:
+            continue
+        refs = collect_dsl_references(_parse(expr))
+        for kind, method, _version in refs["kinds"]:
+            if method is None:
+                out.add(kind)
+    # The synthesized default node always touches pMHC_affinity unqualified
+    # (``Affinity.logistic_normalized(...)`` in affinity mode), so even when
+    # the user provides no formulas we still need a default for that Kind.
+    if cfg.filter_expr is None and cfg.score_expr is None:
+        out.add("pMHC_affinity")
+    return out
+
+
+# Priority order for auto-picking a canonical method when the user hasn't
+# set ``default_methods[kind]`` and the data exposes multiple models for
+# that Kind. Listed by decreasing preference; any method not listed falls
+# back to alphabetical.
+_CANONICAL_METHOD_PREFERENCE = (
+    "mhcflurry",
+    "netmhcpan",
+    "netmhcstabpan",
+    "netmhcpan_el",
+    "netmhcpan_ba",
+)
+
+
+def _auto_pick_canonical_method(methods):
+    """Pick one method name from a non-empty set by priority order."""
+    for pref in _CANONICAL_METHOD_PREFERENCE:
+        if pref in methods:
+            return pref
+    return sorted(methods)[0]
+
+
+def resolve_default_methods(cfg, topiary_df):
+    """Return the effective ``default_methods`` dict for each Kind with
+    multiple models present in ``topiary_df``.
+
+    Merges ``cfg.default_methods`` (explicit user choice) with an
+    auto-picked canonical for Kinds the user didn't specify. Kinds with
+    only one method in the data are omitted (no disambiguation needed).
+    Only covers Kinds actually present in the DataFrame.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    if topiary_df.empty:
+        return dict(cfg.default_methods or {})
+
+    user_defaults = dict(cfg.default_methods or {})
+    resolved = {}
+    for kind, group in topiary_df.groupby("kind"):
+        methods = set(group["prediction_method_name"].dropna().unique())
+        if len(methods) <= 1:
+            continue
+        if kind in user_defaults:
+            if user_defaults[kind] not in methods:
+                raise ValueError(
+                    f"default_methods[{kind!r}]={user_defaults[kind]!r} "
+                    f"but that method is not present in the loaded "
+                    f"predictions (available: {sorted(methods)})")
+            resolved[kind] = user_defaults[kind]
+        else:
+            picked = _auto_pick_canonical_method(methods)
+            logger.info(
+                "Kind %s has multiple methods %s and no default_methods "
+                "entry; auto-picking %r as the default for unqualified "
+                "references. Set default_methods[%r] in your epitope "
+                "config to override.",
+                kind, sorted(methods), picked, kind)
+            resolved[kind] = picked
+    return resolved
+
+
+def subset_topiary_df_for_eval(topiary_df, cfg):
+    """Drop rows that would cause "Ambiguous Kind" errors at DSL eval.
+
+    For each Kind with multiple models in the data, keep only rows
+    whose method is (a) explicitly referenced by bracket in any DSL
+    expression, or (b) the resolved default method (user-specified or
+    auto-picked). Kinds with a single model pass through unchanged.
+
+    This lets users write unqualified ``Affinity.logistic(...)`` and
+    have it resolve to the canonical affinity predictor while
+    bracketed references like ``Affinity['netmhcpan']`` still pick up
+    their specific rows.
+    """
+    if topiary_df.empty:
+        return topiary_df
+
+    qualified = qualified_methods_by_kind(cfg)
+    unqualified_kinds = kinds_referenced_unqualified(cfg)
+    resolved_defaults = resolve_default_methods(cfg, topiary_df)
+
+    chunks = []
+    for kind, group in topiary_df.groupby("kind", sort=False):
+        methods = set(group["prediction_method_name"].dropna().unique())
+        if len(methods) <= 1:
+            chunks.append(group)
+            continue
+
+        allowed = set(qualified.get(kind, set())) & methods
+        # Unqualified refs (including the default node's implicit
+        # ``Affinity`` when no formulas are set) need a default method.
+        if kind in unqualified_kinds or not allowed:
+            default = resolved_defaults.get(kind)
+            if default is not None:
+                allowed.add(default)
+        chunks.append(group[group["prediction_method_name"].isin(allowed)])
+
+    import pandas as pd
+    return pd.concat(chunks).reset_index(drop=True)
 
 
 def validate_dsl_against_predictions(cfg, predictions, *, topiary_df=None):

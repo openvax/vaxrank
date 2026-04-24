@@ -375,20 +375,21 @@ def _detect_lens_predictors(columns):
     return detected
 
 
-def _pick_canonical_predictor(detected):
-    """For --lens-predictor=auto, pick a single pMHC_affinity predictor.
+def _pick_canonical_predictor(affinity_preds):
+    """Pick the canonical pMHC_affinity :class:`DetectedPredictor` from a list.
 
-    Preference order: mhcflurry (present across all LENS versions), then
-    netmhcpan, then any remaining affinity predictor alphabetically.
+    Used to populate the report's display columns when multiple affinity
+    predictors are present. Preference order: ``mhcflurry`` (present
+    across all LENS versions), then ``netmhcpan``, then alphabetical on
+    tool name for any remainder.
     """
-    affinity_preds = [d for d in detected if d.kind == "pMHC_affinity"]
     if not affinity_preds:
         return None
     for preferred in ("mhcflurry", "netmhcpan"):
         for d in affinity_preds:
             if d.tool == preferred:
                 return d
-    return affinity_preds[0]
+    return sorted(affinity_preds, key=lambda d: d.tool)[0]
 
 
 def _normalize_hla_allele(allele):
@@ -398,33 +399,30 @@ def _normalize_hla_allele(allele):
     return re.sub(r"^(HLA-[A-Z]{1,3})(\d)", r"\1*\2", allele)
 
 
-def load_lens(path, predictor="auto"):
+def load_lens(path):
     """
     Import a LENS report TSV and return a neoepitope report DataFrame
     plus EpitopePrediction objects.
 
     LENS column schemas vary across versions (v1.4, v1.5, v1.9+); we sniff
     which predictors a given file actually emits rather than requiring a
-    fixed schema.
+    fixed schema, and emit one ``EpitopePrediction`` per (peptide,
+    allele, detected predictor) so Topiary DSL expressions can combine
+    them via ``affinity['mhcflurry']`` / ``affinity['netmhcpan']`` or
+    use an unqualified ``affinity`` fallback via the epitope config's
+    ``default_methods`` setting.
 
     Parameters
     ----------
     path : str or Path
-    predictor : str
-        ``"auto"`` picks a single canonical predictor (mhcflurry > netmhcpan).
-        ``"all"`` emits one :class:`EpitopePrediction` per (peptide, allele,
-        detected predictor) so that Topiary DSL expressions can combine them
-        via ``affinity['mhcflurry']`` / ``affinity['netmhcpan']`` etc.
-        A specific tool name (e.g. ``"mhcflurry"``) uses only that predictor
-        and errors if absent.
 
     Returns
     -------
     pandas.DataFrame
         Report-ready DataFrame (one row per peptide × allele).
     list of EpitopePrediction
-        Per-predictor predictions. In ``all`` mode there are N predictions
-        per report row (N = number of detected predictors).
+        Per-predictor predictions; N per report row where N is the number
+        of detected predictors the file exposes.
     """
     # low_memory=False avoids mixed-dtype warnings — LENS reports have many
     # optional columns that are mostly NA for a given antigen type.
@@ -443,34 +441,19 @@ def load_lens(path, predictor="auto"):
             f"(expected columns like 'mhcflurry_<version>.aff' or "
             f"'netmhcpan_<version>.aff_nm')")
 
-    available_tools = sorted({d.tool for d in detected})
-
-    if predictor == "auto":
-        canonical = _pick_canonical_predictor(detected)
-        if canonical is None:
-            raise ValueError(
-                f"LENS file {path} has no pMHC affinity predictor "
-                f"(detected: {[d.tool for d in detected]})")
-        chosen = [canonical]
-    elif predictor == "all":
-        chosen = list(detected)
-    else:
-        chosen = [d for d in detected if d.tool == predictor]
-        if not chosen:
-            raise ValueError(
-                f"LENS file {path} does not contain predictor {predictor!r} "
-                f"(available: {available_tools})")
-
     logger.info(
-        "LENS file %s: detected=%s, emitting for %s",
-        path, [d.tool for d in detected], [d.tool for d in chosen])
+        "LENS file %s: detected predictors=%s",
+        path, [(d.tool, d.version) for d in detected])
 
-    # Use the first chosen pMHC_affinity predictor as the "display" one
-    # whose value lands in the report's Affinity / %ile columns. Stability
-    # predictors are never chosen for display; they ride along in the
-    # per-predictor extra columns.
-    display_pred = next(
-        (d for d in chosen if d.kind == "pMHC_affinity"), None)
+    # Report columns like 'Predicted mutant pMHC affinity' and '%ile rank'
+    # render a single predictor's value. Pick the canonical pMHC_affinity
+    # predictor for that display role (every per-tool raw value is also
+    # exposed in its own column further down). Stability / presentation
+    # predictors are never chosen for display.
+    affinity_preds = [d for d in detected if d.kind == "pMHC_affinity"]
+    display_pred = (
+        _pick_canonical_predictor(affinity_preds) if affinity_preds else None)
+    chosen = list(detected)
 
     predictions = []
     report_rows = []

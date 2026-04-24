@@ -77,21 +77,6 @@ def make_vaxrank_arg_parser():
              "When provided without --vcf/--bam, vaxrank scores and ranks the "
              "LENS predictions and writes the requested output reports.")
 
-    arg_parser.add_argument(
-        "--lens-predictor",
-        default="auto",
-        help="Which predictor(s) from the LENS file to emit as "
-             "EpitopePrediction objects. 'auto' (default) looks at "
-             "filter_expr / score_expr in the epitope config: if those "
-             "formulas reference specific predictors (e.g. "
-             "affinity['mhcflurry']), 'auto' emits every detected "
-             "predictor so the DSL can combine them; otherwise 'auto' "
-             "picks a single canonical predictor (mhcflurry > netmhcpan). "
-             "'all' always emits every detected predictor. A specific "
-             "tool name (mhcflurry, netmhcpan, netmhcstabpan) selects "
-             "only that one and errors if absent. Only used with "
-             "--input-lens.")
-
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
     add_epitope_prediction_args(arg_parser)
@@ -314,7 +299,6 @@ def external_input_arg_parser():
         version='Vaxrank %s' % (__version__,))
     arg_parser.add_argument("--input-pvacseq", default=None)
     arg_parser.add_argument("--input-lens", default=None)
-    arg_parser.add_argument("--lens-predictor", default="auto")
     arg_parser.add_argument(
         "--verbose", "-v", action="store_true", default=False)
     add_output_args(arg_parser)

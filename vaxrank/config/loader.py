@@ -210,6 +210,7 @@ _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("epitopes.percentile_rank_cutoff", "percentile_rank_cutoff"),
     ("epitopes.filter_expr", "filter_expr"),
     ("epitopes.score_expr", "score_expr"),
+    ("epitopes.default_methods", "default_methods"),
 ]
 
 # Declarative mapping: (dotted config path) -> (VaccineConfig kwarg name)

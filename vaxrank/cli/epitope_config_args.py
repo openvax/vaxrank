@@ -34,7 +34,37 @@ def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
             "How to score epitopes. 'affinity' (default) uses IC50 binding "
             "affinity with logistic scoring. 'percentile_rank' uses the "
             "percentile rank directly (lower rank = better)."))
-    
+
+    # Per-Kind default methods. Apply whenever an input exposes multiple
+    # models for a Kind (e.g. LENS with both mhcflurry and netmhcpan for
+    # pMHC_affinity) — the unqualified ``affinity`` / ``stability`` /
+    # ``presentation`` references in DSL formulas (and the synthesized
+    # default score node) resolve to these. Bracketed references like
+    # ``affinity['netmhcpan']`` still pick up their specific model. If
+    # omitted and the data has multiple models, vaxrank auto-picks a
+    # canonical method (mhcflurry > netmhcpan > alphabetical).
+    default_method_args = arg_parser.add_argument_group(
+        "Default predictor methods (for unqualified DSL references)")
+    default_method_args.add_argument(
+        "--default-affinity-predictor",
+        default=None,
+        metavar="METHOD",
+        help="Method name to use for unqualified pMHC_affinity DSL "
+             "references when multiple affinity models are present "
+             "(e.g. 'mhcflurry').")
+    default_method_args.add_argument(
+        "--default-stability-predictor",
+        default=None,
+        metavar="METHOD",
+        help="Method name to use for unqualified pMHC_stability DSL "
+             "references (e.g. 'netmhcstabpan').")
+    default_method_args.add_argument(
+        "--default-presentation-predictor",
+        default=None,
+        metavar="METHOD",
+        help="Method name to use for unqualified pMHC_presentation DSL "
+             "references.")
+
 
 def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> EpitopeConfig:
     """
@@ -56,5 +86,22 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
         epitope_config_kwargs["min_epitope_score"] = args.min_epitope_score
     if getattr(args, 'scoring_mode', None) is not None:
         epitope_config_kwargs["scoring_mode"] = args.scoring_mode
+
+    # Merge CLI --default-{affinity,stability,presentation}-predictor
+    # into default_methods. CLI values override YAML.
+    cli_defaults = {}
+    for cli_attr, kind in (
+        ("default_affinity_predictor", "pMHC_affinity"),
+        ("default_stability_predictor", "pMHC_stability"),
+        ("default_presentation_predictor", "pMHC_presentation"),
+    ):
+        val = getattr(args, cli_attr, None)
+        if val is not None:
+            cli_defaults[kind] = val
+    if cli_defaults:
+        merged = dict(epitope_config_kwargs.get("default_methods") or {})
+        merged.update(cli_defaults)
+        epitope_config_kwargs["default_methods"] = merged
+
     epitope_config = msgspec.convert(epitope_config_kwargs, EpitopeConfig)
     return epitope_config

@@ -38,7 +38,7 @@ Users can override filtering and scoring with topiary DSL expressions via
 fields above define the default via :mod:`vaxrank.epitope_dsl`.
 """
 
-from typing import Optional
+from typing import Dict, Optional
 
 import msgspec
 
@@ -96,6 +96,21 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
         is synthesized from the logistic / percentile-rank scalar fields
         (preserving the ``1/(1+exp(-mid/width))`` normalizer that keeps
         default scores byte-identical with pre-5.0 topiary behavior).
+
+    default_methods : dict[str, str], optional
+        Map from canonical topiary Kind (``"pMHC_affinity"``,
+        ``"pMHC_stability"``, ``"pMHC_presentation"``, ...) to the
+        predictor method name that should resolve unqualified DSL
+        references for that Kind. Required (or auto-populated from the
+        detected predictor set) whenever an input source exposes more
+        than one model for a Kind; otherwise topiary's ``Affinity``
+        (unqualified) cannot resolve and raises "Ambiguous" at eval
+        time. YAML example::
+
+            epitope:
+              default_methods:
+                pMHC_affinity: mhcflurry
+                pMHC_stability: netmhcstabpan
     """
 
     logistic_epitope_score_midpoint: float = DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT
@@ -106,6 +121,7 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     percentile_rank_cutoff: float = DEFAULT_PERCENTILE_RANK_CUTOFF
     filter_expr: Optional[str] = None
     score_expr: Optional[str] = None
+    default_methods: Optional[Dict[str, str]] = None
 
     def __post_init__(self):
         if self.logistic_epitope_score_midpoint <= 0:
