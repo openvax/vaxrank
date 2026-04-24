@@ -290,17 +290,12 @@ def _auto_pick_canonical_method(methods):
 def _resolve_default_for_kind(kind, methods, user_defaults):
     """Return the default method for a single Kind, user-overridable.
 
-    Raises if the user specified a default that isn't in the data.
-    Logs when we auto-pick a canonical.
+    Assumes ``user_defaults[kind]`` is already known to be present in the
+    data (caller must have run :func:`validate_default_methods`). Logs
+    when we auto-pick a canonical.
     """
     if kind in user_defaults:
-        choice = user_defaults[kind]
-        if choice not in methods:
-            raise ValueError(
-                f"default_methods[{kind!r}]={choice!r} but that method "
-                f"is not present in the loaded predictions "
-                f"(available: {sorted(methods)})")
-        return choice
+        return user_defaults[kind]
     picked = _auto_pick_canonical_method(methods)
     logger.info(
         "Kind %s has multiple methods %s and no default_methods entry; "
@@ -350,6 +345,11 @@ def subset_topiary_df_for_eval(topiary_df, cfg):
     """
     if topiary_df.empty:
         return topiary_df
+
+    # Fail fast on ``default_methods`` typos before the subsetting loop.
+    # Works for Kinds with any number of methods, so a typo is caught
+    # even when the Kind wouldn't otherwise need disambiguation.
+    validate_default_methods(cfg, topiary_df)
 
     qualified = qualified_methods_by_kind(cfg)
     needs_disambiguation = kinds_needing_method_disambiguation(cfg)

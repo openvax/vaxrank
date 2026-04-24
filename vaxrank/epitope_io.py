@@ -597,7 +597,6 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
     from .epitope_dsl import (
         predictions_to_topiary_df,
         score_predictions,
-        validate_default_methods,
         validate_dsl_against_predictions,
     )
 
@@ -623,12 +622,9 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
 
     # Build the topiary DataFrame once and share it between validator and
     # scorer — these two pass over the same ~N rows and rebuilding is the
-    # dominant cost on large LENS files.
+    # dominant cost on large LENS files. ``default_methods`` typos are
+    # caught inside :func:`subset_topiary_df_for_eval` during scoring.
     topiary_df = predictions_to_topiary_df(predictions)
-
-    # Fail fast on default_methods typos (even for Kinds with a single
-    # model today, where the default wouldn't otherwise be consulted).
-    validate_default_methods(epitope_config, topiary_df)
 
     validate_dsl_against_predictions(
         epitope_config, predictions, topiary_df=topiary_df)
