@@ -223,44 +223,6 @@ def test_load_lens_detects_netmhcstabpan():
 
 # ── DSL integration for external inputs ──────────────────────────────────────
 
-# ── predictors_required_by_cfg auto-derivation ───────────────────────────────
-
-def test_predictors_required_by_cfg_empty_for_no_formula():
-    """No filter_expr / score_expr → empty set."""
-    from vaxrank.epitope_config import EpitopeConfig
-    from vaxrank.epitope_dsl import predictors_required_by_cfg
-    assert predictors_required_by_cfg(EpitopeConfig()) == set()
-
-
-def test_predictors_required_by_cfg_empty_for_unqualified_formula():
-    """A formula that never brackets a predictor name → empty set."""
-    from vaxrank.epitope_config import EpitopeConfig
-    from vaxrank.epitope_dsl import predictors_required_by_cfg
-    cfg = EpitopeConfig(score_expr="affinity.logistic(350, 150)")
-    assert predictors_required_by_cfg(cfg) == set()
-
-
-def test_predictors_required_by_cfg_picks_up_multiple():
-    """Formula referencing two predictors by bracket → set of both."""
-    from vaxrank.epitope_config import EpitopeConfig
-    from vaxrank.epitope_dsl import predictors_required_by_cfg
-    cfg = EpitopeConfig(score_expr=(
-        "affinity['mhcflurry'].logistic(350, 150) * 0.5 + "
-        "affinity['netmhcpan'].logistic(350, 150) * 0.5"))
-    assert predictors_required_by_cfg(cfg) == {"mhcflurry", "netmhcpan"}
-
-
-def test_predictors_required_by_cfg_merges_filter_and_score():
-    """References from filter_expr and score_expr both count."""
-    from vaxrank.epitope_config import EpitopeConfig
-    from vaxrank.epitope_dsl import predictors_required_by_cfg
-    cfg = EpitopeConfig(
-        filter_expr="affinity['mhcflurry'] <= 500",
-        score_expr="stability['netmhcstabpan'].value / 24",
-    )
-    assert predictors_required_by_cfg(cfg) == {"mhcflurry", "netmhcstabpan"}
-
-
 def test_default_methods_resolves_multi_model_affinity(tmp_path):
     """When a file exposes multiple affinity models and no score_expr is
     set, cfg.default_methods picks which one the default DSL node scores
@@ -397,55 +359,61 @@ def test_score_predictions_on_empty_predictions_list(tmp_path):
     assert len(scores) == 0
 
 
-def test_subset_topiary_df_noop_on_single_method_data():
-    """A frame with only one method per Kind should pass through
-    subset_topiary_df_for_eval unchanged."""
+def test_resolve_default_methods_noop_on_single_method_data():
+    """Single-model Kinds need no default (topiary has only one choice);
+    resolve_default_methods omits them from the result."""
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_dsl import (
-        predictions_to_topiary_df, subset_topiary_df_for_eval)
+        predictions_to_topiary_df, resolve_default_methods)
 
     path = os.path.join(DATA_DIR, "lens_v1.9_mhcflurry_only.tsv")
     _, preds = load_lens(path)
     df = predictions_to_topiary_df(preds)
-    subset = subset_topiary_df_for_eval(df, EpitopeConfig())
-    # Same row count (reset_index changes the index but not the rows)
-    assert len(subset) == len(df)
-    assert set(subset["prediction_method_name"]) == set(df["prediction_method_name"])
+    assert resolve_default_methods(EpitopeConfig(), df) == {}
 
 
-def test_subset_topiary_df_qualified_both_predictors_keeps_both():
-    """When the formula explicitly brackets both predictors, both stay
-    in the subsetted frame (no unnecessary default-method subsetting)."""
+def test_resolve_default_methods_auto_picks_canonical():
+    """Multi-model Kind with no user override → auto-pick mhcflurry for
+    pMHC_affinity."""
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_dsl import (
-        predictions_to_topiary_df, subset_topiary_df_for_eval)
+        predictions_to_topiary_df, resolve_default_methods)
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     _, preds = load_lens(path)
     df = predictions_to_topiary_df(preds)
-    cfg = EpitopeConfig(score_expr=(
-        "affinity['mhcflurry'].logistic(350, 150) * 0.5 + "
-        "affinity['netmhcpan'].logistic(350, 150) * 0.5"))
-    subset = subset_topiary_df_for_eval(df, cfg)
-    # Both methods' rows survive
-    assert set(subset["prediction_method_name"]) == {"mhcflurry", "netmhcpan"}
-    assert len(subset) == len(df)
+    assert resolve_default_methods(EpitopeConfig(), df) == {
+        "pMHC_affinity": "mhcflurry"}
 
 
-def test_subset_topiary_df_qualified_one_predictor_drops_other():
-    """When the formula brackets only one predictor and no unqualified
-    reference exists, the other is dropped (not added via default)."""
+def test_resolve_default_methods_user_override_wins():
+    """Explicit cfg.default_methods beats auto-pick."""
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_dsl import (
-        predictions_to_topiary_df, subset_topiary_df_for_eval)
+        predictions_to_topiary_df, resolve_default_methods)
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     _, preds = load_lens(path)
     df = predictions_to_topiary_df(preds)
-    cfg = EpitopeConfig(
-        score_expr="affinity['netmhcpan'].logistic(350, 150)")
-    subset = subset_topiary_df_for_eval(df, cfg)
-    assert set(subset["prediction_method_name"]) == {"netmhcpan"}
+    cfg = EpitopeConfig(default_methods={"pMHC_affinity": "netmhcpan"})
+    assert resolve_default_methods(cfg, df) == {"pMHC_affinity": "netmhcpan"}
+
+
+def test_resolve_default_methods_stability_plus_affinity():
+    """Multi-method affinity + single-method stability: only affinity
+    needs a default."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import (
+        predictions_to_topiary_df, resolve_default_methods)
+
+    path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
+    _, preds = load_lens(path)
+    df = predictions_to_topiary_df(preds)
+    resolved = resolve_default_methods(EpitopeConfig(), df)
+    # pMHC_affinity has mhcflurry + netmhcpan → needs default
+    assert resolved.get("pMHC_affinity") == "mhcflurry"
+    # pMHC_stability has only netmhcstabpan → omitted
+    assert "pMHC_stability" not in resolved
 
 
 def test_parse_is_cached():
@@ -481,11 +449,10 @@ def test_default_methods_mixed_valid_and_invalid_fails_fast(tmp_path):
             epitope_config=cfg)
 
 
-def test_report_columns_unaffected_by_subsetting(tmp_path):
-    """Subsetting happens on the topiary frame used for DSL eval, NOT on
-    report_df — report output must still expose every detected
-    predictor's raw value column regardless of which one drives
-    scoring."""
+def test_report_columns_expose_all_detected_predictors(tmp_path):
+    """Scoring may target one predictor via ``default_methods`` or a
+    bracketed formula, but the report DataFrame must still expose every
+    detected predictor's raw value column."""
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_io import write_neoepitope_report
 
@@ -530,36 +497,6 @@ def test_dsl_version_mismatch_validation_error(tmp_path):
         write_neoepitope_report(
             report_df, preds, csv_report_path=str(tmp_path / "x.csv"),
             epitope_config=cfg)
-
-
-def test_kinds_needing_method_disambiguation_captures_default_node():
-    """With no filter_expr / score_expr, pMHC_affinity is added to the
-    disambiguation set (because the synthesized default node implicitly
-    needs single-method rows)."""
-    from vaxrank.epitope_config import EpitopeConfig
-    from vaxrank.epitope_dsl import kinds_needing_method_disambiguation
-    assert kinds_needing_method_disambiguation(
-        EpitopeConfig()) == {"pMHC_affinity"}
-
-
-def test_kinds_needing_method_disambiguation_adds_only_unqualified():
-    """With a fully bracketed score_expr, no Kinds need disambiguation."""
-    from vaxrank.epitope_config import EpitopeConfig
-    from vaxrank.epitope_dsl import kinds_needing_method_disambiguation
-    cfg = EpitopeConfig(score_expr=(
-        "affinity['mhcflurry'].logistic(350, 150) * 0.5 + "
-        "affinity['netmhcpan'].logistic(350, 150) * 0.5"))
-    assert kinds_needing_method_disambiguation(cfg) == set()
-
-
-def test_kinds_needing_method_disambiguation_mixed():
-    """Unqualified kinds in expressions are collected; bracketed refs
-    are not."""
-    from vaxrank.epitope_config import EpitopeConfig
-    from vaxrank.epitope_dsl import kinds_needing_method_disambiguation
-    cfg = EpitopeConfig(score_expr=(
-        "affinity['mhcflurry'].logistic(350, 150) + stability.value"))
-    assert kinds_needing_method_disambiguation(cfg) == {"pMHC_stability"}
 
 
 def test_validate_default_methods_empty_df_is_noop():
@@ -640,48 +577,30 @@ def test_filter_expr_drops_all_groups_yields_zero_scores(tmp_path):
     assert (result["vaxrank_score"] == 0).all()
 
 
-def test_mixed_bracketed_and_unqualified_same_kind_errors(tmp_path):
-    """A formula that mixes bracketed and unqualified refs for the same
-    Kind, where the default doesn't match any bracketed method, would
-    produce topiary's generic "Ambiguous" error at eval. We catch it
-    with a pointed message up front."""
+def test_mixed_bracketed_and_unqualified_evaluates_cleanly(tmp_path):
+    """Topiary 5.10's ``EvalContext(default_methods=...)`` handles
+    bracketed + unqualified refs to the same Kind: bracketed refs use
+    their specific method, unqualified refs use the default. Previously
+    vaxrank had to preempt this with its own error; now it just works."""
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, preds = load_lens(path)
+    # Brackets netmhcpan AND references affinity unqualified. Default
+    # auto-picks mhcflurry for unqualified refs. Result: netmhcpan_value +
+    # mhcflurry_value per row, evaluated cleanly.
     cfg = EpitopeConfig(
-        # Brackets netmhcpan, also references affinity unqualified. Default
-        # (auto-picked) is mhcflurry, which isn't in the bracketed set.
-        score_expr="affinity['netmhcpan'].value + affinity.value",
-    )
-    with pytest.raises(ValueError,
-                       match="mixes bracketed and unqualified references"):
-        write_neoepitope_report(
-            report_df, preds, csv_report_path=str(tmp_path / "x.csv"),
-            epitope_config=cfg)
-
-
-def test_mixed_bracketed_and_unqualified_same_default_ok(tmp_path):
-    """The mixed case is ALLOWED when the default for the Kind happens
-    to be one of the bracketed methods — both refs resolve to the same
-    single method and the subsetter keeps exactly that one."""
-    from vaxrank.epitope_config import EpitopeConfig
-    from vaxrank.epitope_io import write_neoepitope_report
-
-    path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
-    cfg = EpitopeConfig(
-        score_expr="affinity['mhcflurry'].value + affinity.value",
-        default_methods={"pMHC_affinity": "mhcflurry"},
-    )
+        score_expr="affinity['netmhcpan'].value + affinity.value")
     csv_path = tmp_path / "out.csv"
-    # No exception; both refs collapse to mhcflurry so the sum is 2× that.
     write_neoepitope_report(
         report_df, preds, csv_report_path=str(csv_path), epitope_config=cfg)
     import pandas as pd
     result = pd.read_csv(csv_path)
-    assert (result["vaxrank_score"] > 0).any()
+    assert len(result) == 3
+    # Verify the sum: for the SVVGSSSSS row, netmhcpan=76.11 + mhcflurry=95.4
+    svv = result[result["Mutant peptide sequence"] == "SVVGSSSSS"].iloc[0]
+    assert svv["vaxrank_score"] == pytest.approx(76.11 + 95.4)
 
 
 def test_pvacseq_single_method_per_group_has_no_ambiguity(tmp_path):
@@ -1046,9 +965,8 @@ def _assert_default_scores_match_legacy(cfg, path, tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     report_df, preds = load_lens(path)
-    # Auto-picked default for pMHC_affinity is mhcflurry — that's the
-    # subset whose rows survive subset_topiary_df_for_eval in the
-    # default-scoring code path.
+    # Auto-picked default for pMHC_affinity is mhcflurry — that's what
+    # resolves unqualified Affinity refs in topiary's EvalContext.
     default_preds = [p for p in preds if p.prediction_method_name == "mhcflurry"]
     legacy_scores = {
         (p.peptide_sequence, p.allele): round(p.logistic_epitope_score(

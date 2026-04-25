@@ -623,7 +623,7 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
     # Build the topiary DataFrame once and share it between validator and
     # scorer — these two pass over the same ~N rows and rebuilding is the
     # dominant cost on large LENS files. ``default_methods`` typos are
-    # caught inside :func:`subset_topiary_df_for_eval` during scoring.
+    # caught inside :func:`score_predictions` before eval.
     topiary_df = predictions_to_topiary_df(predictions)
 
     validate_dsl_against_predictions(

@@ -1,10 +1,13 @@
 numpy>=2.0.0,<3.0.0
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.6.4,<3.0.0
-varcode>=4.0.0,<5.0.0
+varcode>=4.17.0,<5.0.0
 isovar>=1.4.7,<2.0.0
 mhctools>=3.13.1,<4.0.0
-topiary>=5.8.0,<6.0.0
+# 5.10.0 adds EvalContext(default_methods=...) and apply_filter(default_methods=...)
+# which vaxrank uses to score multi-model inputs (e.g. LENS with mhcflurry +
+# netmhcpan) without pre-subsetting the frame.
+topiary>=5.10.0,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0

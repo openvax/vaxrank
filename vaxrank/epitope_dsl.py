@@ -30,6 +30,14 @@ score uses topiary 5.1's :class:`LogisticNormalizedExpr` so the output is in
 ``[0, 1]`` and matches the legacy
 :meth:`vaxrank.epitope_prediction.EpitopePrediction.logistic_epitope_score`
 byte-for-byte.
+
+Multi-model inputs (e.g. LENS with both MHCflurry and netMHCpan producing
+``pMHC_affinity``) are disambiguated via topiary 5.10's
+``EvalContext(default_methods=...)`` and
+``apply_filter(default_methods=...)``. Vaxrank computes the resolved
+``default_methods`` dict by merging ``cfg.default_methods`` with an
+auto-picked canonical (``mhcflurry`` > ``netmhcpan`` > alphabetical) for
+Kinds the user hasn't specified, and forwards it to topiary.
 """
 
 from __future__ import annotations
@@ -60,9 +68,9 @@ _METHOD_KIND_MAP = {
 def _parse(expr):
     """Parse a DSL string into a topiary node. Cached so the same config's
     ``filter_expr`` / ``score_expr`` aren't re-parsed multiple times within
-    one :func:`write_neoepitope_report` call (validator + subsetter +
-    filter-node + score-node all need the AST). Parsed nodes are
-    immutable, so sharing is safe.
+    one :func:`write_neoepitope_report` call (validator + build_filter_node
+    + build_score_node all need the AST). Parsed nodes are immutable, so
+    sharing is safe.
     """
     from topiary.ranking import parse
     return parse(expr)
@@ -87,11 +95,12 @@ def predictions_to_topiary_df(predictions):
 
     Each ``EpitopePrediction`` becomes one row; when multiple predictions
     share a (peptide, allele) pair (e.g. MHCflurry and netMHCpan rows
-    from a LENS file loaded with ``--lens-predictor=all``), DSL
-    expressions can select between them via
+    from a LENS file), DSL expressions can select between them via
     ``affinity['mhcflurry']`` / ``affinity['netmhcpan']``, and when the
     predictions carry ``predictor_version`` they can also disambiguate
-    by version via ``affinity['mhcflurry', '2.1.1']``.
+    by version via ``affinity['mhcflurry', '2.1.1']``. Unqualified refs
+    (``affinity.value``) resolve to the Kind's default method — see
+    :func:`resolve_default_methods`.
     """
     rows = []
     for p in predictions:
@@ -116,156 +125,6 @@ def predictions_to_topiary_df(predictions):
     return pd.DataFrame(rows)
 
 
-def score_predictions(predictions, cfg, *, topiary_df=None):
-    """Score external-input predictions using the configured Topiary DSL.
-
-    Returns a ``pandas.Series`` of per-(peptide, allele) scores indexed by
-    the group-key MultiIndex topiary uses internally
-    (``source_sequence_name, peptide, peptide_offset, allele``). Callers
-    merge this back onto their report DataFrame.
-
-    When ``cfg.score_expr`` / ``cfg.filter_expr`` are unset this applies
-    the same default node that the main pipeline uses, which matches the
-    legacy :meth:`EpitopePrediction.logistic_epitope_score` byte-for-byte.
-
-    Pass ``topiary_df`` to reuse an already-built frame (see
-    :func:`predictions_to_topiary_df`) rather than rebuilding from
-    ``predictions``; callers that validate + score back-to-back should
-    build once and share.
-    """
-    from topiary.ranking import EvalContext, apply_filter
-
-    df = (predictions_to_topiary_df(predictions)
-          if topiary_df is None else topiary_df)
-    if df.empty:
-        return pd.Series(dtype=float)
-
-    # Resolve Kinds with multiple models down to a single default method
-    # per Kind (except where the DSL explicitly brackets other methods).
-    df = subset_topiary_df_for_eval(df, cfg)
-
-    filter_node = build_filter_node(cfg)
-    if filter_node is not None:
-        df = apply_filter(df, filter_node)
-        if df.empty:
-            return pd.Series(dtype=float)
-
-    score_node = build_score_node(cfg)
-    ctx = EvalContext(df)
-    return (
-        score_node.eval(ctx)
-        .reindex(ctx.group_index)
-        .fillna(0.0)
-    )
-
-
-def collect_dsl_references(node):
-    """Walk a parsed DSL node and collect its external-data references.
-
-    Returns a dict with two keys:
-
-      ``columns`` - set of column names referenced via ``Column(...)``
-      ``kinds``   - set of (kind, method, version) tuples from ``Field`` nodes
-
-    ``method`` and ``version`` may be ``None`` when the formula used a
-    kind without qualification (``affinity.value``). The Column set is
-    informational only: topiary's own ``apply_filter`` already validates
-    Column references at eval time. The kinds set is what this module's
-    :func:`validate_dsl_against_predictions` uses to catch missing
-    predictor refs *before* we produce silent NaN scores.
-    """
-    from topiary.ranking.nodes import Column, Field
-
-    columns = set()
-    kinds = set()
-    stack = [node]
-    while stack:
-        n = stack.pop()
-        if n is None:
-            continue
-        if isinstance(n, Column):
-            columns.add(n.col_name)
-        elif isinstance(n, Field):
-            kinds.add((n.kind, n.method, n.version))
-        child_iter = getattr(n, "child_nodes", None)
-        if callable(child_iter):
-            stack.extend(child_iter())
-    return {"columns": columns, "kinds": kinds}
-
-
-def predictors_required_by_cfg(cfg):
-    """Set of predictor method names referenced by ``filter_expr`` /
-    ``score_expr`` (e.g. ``{"mhcflurry", "netmhcpan"}`` for a formula using
-    ``affinity['mhcflurry']`` and ``affinity['netmhcpan']``).
-
-    Returns an empty set when no formulas are set or when every
-    ``Field`` reference is unqualified (``affinity.value`` with no
-    bracket selection).
-    """
-    methods = set()
-    for kind_to_methods in qualified_methods_by_kind(cfg).values():
-        methods |= kind_to_methods
-    return methods
-
-
-def qualified_methods_by_kind(cfg):
-    """Methods referenced via bracket selection, grouped by canonical Kind.
-
-    Example: ``{"pMHC_affinity": {"mhcflurry", "netmhcpan"},
-    "pMHC_stability": {"netmhcstabpan"}}`` for a formula that pins each.
-
-    Unqualified references (``affinity.value`` with no bracket) don't
-    contribute to any set but do imply the Kind needs a default-method
-    resolution — see :func:`kinds_needing_method_disambiguation`.
-    """
-    out = {}
-    for expr in (cfg.filter_expr, cfg.score_expr):
-        if expr is None:
-            continue
-        refs = collect_dsl_references(_parse(expr))
-        for kind, method, _version in refs["kinds"]:
-            if method is not None:
-                out.setdefault(kind, set()).add(method)
-    return out
-
-
-def kinds_needing_method_disambiguation(cfg):
-    """Kinds whose DSL evaluation depends on seeing a single method per
-    ``(source_sequence_name, peptide, peptide_offset, allele)`` group.
-
-    A Kind needs disambiguation when:
-
-    - the DSL references it unqualified (``affinity.value`` with no
-      bracket selection), OR
-    - ``filter_expr`` / ``score_expr`` are unset, because the synthesized
-      default node implicitly references ``pMHC_affinity`` via
-      :class:`~topiary.ranking.Affinity` (in affinity mode) or reads the
-      ``percentile_rank`` column (in percentile_rank mode) — both of
-      which break if the frame has multiple rows per group.
-
-    Note that :func:`subset_topiary_df_for_eval` *also* falls back to
-    the default method for any Kind whose bracket-referenced set is
-    empty — see the ``not allowed`` branch there. So this function is
-    not strictly "every Kind that gets a default"; it's "every Kind
-    for which we must force resolution even when bracket refs exist".
-    """
-    out = set()
-    for expr in (cfg.filter_expr, cfg.score_expr):
-        if expr is None:
-            continue
-        refs = collect_dsl_references(_parse(expr))
-        for kind, method, _version in refs["kinds"]:
-            if method is None:
-                out.add(kind)
-    if cfg.filter_expr is None and cfg.score_expr is None:
-        # The default node implicitly needs single-method rows for
-        # pMHC_affinity (affinity mode uses unqualified Affinity;
-        # percentile_rank mode reads percentile_rank which differs per
-        # method even though it's a Column not a Field).
-        out.add("pMHC_affinity")
-    return out
-
-
 # Priority order for auto-picking a canonical method when the user hasn't
 # set ``default_methods[kind]`` and the data exposes multiple models for
 # that Kind. Listed by decreasing preference; any method not listed falls
@@ -287,29 +146,47 @@ def _auto_pick_canonical_method(methods):
     return sorted(methods)[0]
 
 
-def _resolve_default_for_kind(kind, methods, user_defaults):
-    """Return the default method for a single Kind, user-overridable.
+def resolve_default_methods(cfg, topiary_df):
+    """Return the ``default_methods`` dict to pass to topiary's
+    :class:`~topiary.ranking.EvalContext` / :func:`apply_filter`.
 
-    Assumes ``user_defaults[kind]`` is already known to be present in the
-    data (caller must have run :func:`validate_default_methods`). Logs
-    when we auto-pick a canonical.
+    For every Kind with multiple models in ``topiary_df``:
+
+    - if ``cfg.default_methods[kind]`` is set, use it;
+    - otherwise auto-pick the canonical method (``mhcflurry`` >
+      ``netmhcpan`` > ``netmhcstabpan`` > alphabetical) and log
+      INFO so the user can make it explicit.
+
+    Kinds with a single model are omitted (topiary doesn't need a
+    default for them). Assumes ``validate_default_methods`` has
+    already caught any typos in ``cfg.default_methods``.
     """
-    if kind in user_defaults:
-        return user_defaults[kind]
-    picked = _auto_pick_canonical_method(methods)
-    logger.info(
-        "Kind %s has multiple methods %s and no default_methods entry; "
-        "auto-picking %r. Set default_methods[%r] in the epitope config "
-        "to override.", kind, sorted(methods), picked, kind)
-    return picked
+    if topiary_df.empty:
+        return {}
+    user_defaults = dict(cfg.default_methods or {})
+    resolved = {}
+    for kind, group in topiary_df.groupby("kind", sort=False):
+        methods = set(group["prediction_method_name"].dropna().unique())
+        if len(methods) <= 1:
+            continue
+        if kind in user_defaults:
+            resolved[kind] = user_defaults[kind]
+        else:
+            picked = _auto_pick_canonical_method(methods)
+            logger.info(
+                "Kind %s has multiple methods %s and no default_methods "
+                "entry; auto-picking %r. Set default_methods[%r] in the "
+                "epitope config to override.",
+                kind, sorted(methods), picked, kind)
+            resolved[kind] = picked
+    return resolved
 
 
 def validate_default_methods(cfg, topiary_df):
     """Error if ``cfg.default_methods`` names a method that isn't in the data.
 
-    This runs even for Kinds with a single model (where the default
-    wouldn't actually be consulted during subsetting) so typos are
-    caught rather than silently ignored.
+    Runs even for Kinds with a single model (where the default isn't
+    actually consulted by topiary) so typos are caught eagerly.
     """
     if not cfg.default_methods:
         return
@@ -328,80 +205,97 @@ def validate_default_methods(cfg, topiary_df):
                 f"(available for {kind}: {sorted(available)})")
 
 
-def subset_topiary_df_for_eval(topiary_df, cfg):
-    """Drop rows that would cause "Ambiguous Kind" errors at DSL eval.
+def score_predictions(predictions, cfg, *, topiary_df=None):
+    """Score external-input predictions using the configured Topiary DSL.
 
-    For each Kind with multiple models in the data, keep only rows
-    whose method is (a) explicitly referenced by bracket in any DSL
-    expression, or (b) the resolved default method (user-specified via
-    ``default_methods[kind]`` or auto-picked). Kinds with a single
-    model pass through unchanged.
+    Returns a ``pandas.Series`` of per-(peptide, allele) scores indexed
+    by the group-key MultiIndex topiary uses internally
+    (``source_sequence_name, peptide, peptide_offset, allele``). Callers
+    merge this back onto their report DataFrame.
 
-    Lets users write unqualified ``Affinity.logistic(...)`` and have it
-    resolve to the canonical affinity predictor while bracketed
+    Multi-model data (e.g. both MHCflurry and netMHCpan for
+    ``pMHC_affinity``) is handled via topiary's
+    ``EvalContext(default_methods=...)`` and
+    ``apply_filter(default_methods=...)``: unqualified DSL references
+    resolve to the per-Kind default (user-specified via
+    ``cfg.default_methods`` or auto-picked canonical), while bracketed
     references like ``Affinity['netmhcpan']`` still pick up their
-    specific rows. Raises if ``default_methods[kind]`` names a method
-    that isn't in the data.
+    specific rows.
+
+    When ``cfg.score_expr`` / ``cfg.filter_expr`` are unset this applies
+    the same default node that the main pipeline uses, which matches the
+    legacy :meth:`EpitopePrediction.logistic_epitope_score` byte-for-byte.
+
+    Pass ``topiary_df`` to reuse an already-built frame (see
+    :func:`predictions_to_topiary_df`) rather than rebuilding from
+    ``predictions``.
     """
-    if topiary_df.empty:
-        return topiary_df
+    from topiary.ranking import EvalContext, apply_filter
 
-    # Fail fast on ``default_methods`` typos before the subsetting loop.
-    # Works for Kinds with any number of methods, so a typo is caught
-    # even when the Kind wouldn't otherwise need disambiguation.
-    validate_default_methods(cfg, topiary_df)
+    df = (predictions_to_topiary_df(predictions)
+          if topiary_df is None else topiary_df)
+    if df.empty:
+        return pd.Series(dtype=float)
 
-    qualified = qualified_methods_by_kind(cfg)
-    needs_disambiguation = kinds_needing_method_disambiguation(cfg)
-    user_defaults = dict(cfg.default_methods or {})
+    validate_default_methods(cfg, df)
+    resolved = resolve_default_methods(cfg, df)
 
-    chunks = []
-    for kind, group in topiary_df.groupby("kind", sort=False):
-        methods = set(group["prediction_method_name"].dropna().unique())
-        if len(methods) <= 1:
-            chunks.append(group)
+    filter_node = build_filter_node(cfg)
+    if filter_node is not None:
+        df = apply_filter(df, filter_node, default_methods=resolved)
+        if df.empty:
+            return pd.Series(dtype=float)
+
+    score_node = build_score_node(cfg)
+    ctx = EvalContext(df, default_methods=resolved)
+    return (
+        score_node.eval(ctx)
+        .reindex(ctx.group_index)
+        .fillna(0.0)
+    )
+
+
+def collect_dsl_references(node):
+    """Walk a parsed DSL node and collect its external-data references.
+
+    Returns a dict with two keys:
+
+      ``columns`` - set of column names referenced via ``Column(...)``
+      ``kinds``   - set of (kind, method, version) tuples from ``Field`` nodes
+
+    ``method`` and ``version`` may be ``None`` when the formula used a
+    kind without qualification (``affinity.value``). Column refs are
+    already validated by topiary's ``apply_filter``; vaxrank only uses
+    this to drive :func:`validate_dsl_against_predictions`.
+    """
+    from topiary.ranking.nodes import Column, Field
+
+    columns = set()
+    kinds = set()
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if n is None:
             continue
-
-        allowed = set(qualified.get(kind, set())) & methods
-        # Add the resolved default when the Kind is referenced unqualified
-        # OR when no bracketed refs exist — either way we need a single
-        # method to resolve to.
-        if kind in needs_disambiguation or not allowed:
-            default = _resolve_default_for_kind(kind, methods, user_defaults)
-            # If the formula ALSO brackets methods for this Kind, and the
-            # default isn't one of them, the post-subset frame would hold
-            # multiple methods per group and topiary would raise
-            # "Ambiguous" at eval time with a message that doesn't point
-            # at the user's mistake. Preempt here.
-            if allowed and default not in allowed:
-                raise ValueError(
-                    f"DSL expression mixes bracketed and unqualified "
-                    f"references for kind {kind!r}: bracketed methods "
-                    f"{sorted(allowed)} and an unqualified Field (e.g. "
-                    f"``affinity.value``). With multiple models in the "
-                    f"data the unqualified reference resolves to the "
-                    f"default {default!r}, which isn't among the bracketed "
-                    f"methods — topiary can't evaluate this. Either "
-                    f"bracket every reference for {kind!r}, or drop the "
-                    f"bracketed ones and rely on default_methods[{kind!r}]."
-                )
-            allowed.add(default)
-        chunks.append(group[group["prediction_method_name"].isin(allowed)])
-
-    return pd.concat(chunks).reset_index(drop=True)
+        if isinstance(n, Column):
+            columns.add(n.col_name)
+        elif isinstance(n, Field):
+            kinds.add((n.kind, n.method, n.version))
+        child_iter = getattr(n, "child_nodes", None)
+        if callable(child_iter):
+            stack.extend(child_iter())
+    return {"columns": columns, "kinds": kinds}
 
 
 def validate_dsl_against_predictions(cfg, predictions, *, topiary_df=None):
-    """Error early when ``filter_expr`` / ``score_expr`` reference a
+    """Error early when ``filter_expr`` / ``score_expr`` references a
     predictor the loaded predictions don't expose.
 
     Topiary's own ``apply_filter`` already validates ``Column(...)``
-    references, but when a Field's (kind, method) isn't present in the
-    data it silently evaluates to NaN — so users get "every score is
-    zero" rather than a clear error. This function catches that case
-    up front. The parsed node's ``Field.kind`` is already the
-    canonical string (``"pMHC_affinity"`` etc.) so we match it
-    directly against the values in the topiary DataFrame.
+    references, but when a ``Field``'s (kind, method, version) isn't
+    present in the data topiary can silently evaluate to NaN for that
+    sub-expression. This function catches that up front and points the
+    user at ``default_methods`` / ``--input-lens`` when appropriate.
 
     Pass ``topiary_df`` to reuse an already-built frame rather than
     rebuilding it from ``predictions``.
@@ -437,16 +331,16 @@ def validate_dsl_against_predictions(cfg, predictions, *, topiary_df=None):
                 raise ValueError(
                     f"DSL expression references kind {kind!r} but loaded "
                     f"predictions only expose kinds {sorted(available_kinds)}. "
-                    f"Check filter_expr / score_expr against --lens-predictor "
-                    f"and the LENS file columns."
+                    f"Check filter_expr / score_expr against the LENS "
+                    f"file columns or input source."
                 )
             if method is not None and method not in available_methods:
                 raise ValueError(
                     f"DSL expression references predictor {method!r} but "
                     f"loaded predictions only expose methods "
-                    f"{sorted(available_methods)}. Either pass "
-                    f"--lens-predictor=all to emit every detected predictor "
-                    f"or remove the reference from filter_expr / score_expr."
+                    f"{sorted(available_methods)}. Remove the bracket "
+                    f"reference or load a data source that exposes this "
+                    f"method."
                 )
             if version is not None and version not in available_versions:
                 raise ValueError(
