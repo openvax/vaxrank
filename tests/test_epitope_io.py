@@ -399,6 +399,67 @@ def test_resolve_default_methods_user_override_wins():
     assert resolve_default_methods(cfg, df) == {"pMHC_affinity": "netmhcpan"}
 
 
+def test_default_methods_works_on_synthetic_main_pipeline_frame(tmp_path):
+    """Multi-model resolution doesn't depend on LENS specifically — it's a
+    DataFrame-shape concern. A synthetic topiary frame mimicking what the
+    main VCF/BAM pipeline would produce if someone passed multiple models
+    (e.g. ``TopiaryPredictor(models=[mhcflurry, netmhcpan])``) must score
+    cleanly via ``default_methods``."""
+    import pandas as pd
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import score_predictions
+
+    # Build a minimal topiary-shaped frame with two models per group —
+    # exactly what we'd get from a multi-model TopiaryPredictor in the
+    # main pipeline, no LENS loader involved.
+    df = pd.DataFrame([
+        # group 1: SIINFEKL × HLA-A*02:01, two affinity predictors
+        {"sample_name": "", "source_sequence_name": "ovalbumin",
+         "peptide": "SIINFEKL", "peptide_offset": 5, "peptide_length": 8,
+         "allele": "HLA-A*02:01", "n_flank": "", "c_flank": "",
+         "prediction_method_name": "mhcflurry", "predictor_version": "2.1.1",
+         "kind": "pMHC_affinity", "value": 80.0, "affinity": 80.0,
+         "percentile_rank": 0.4, "score": 0.0},
+        {"sample_name": "", "source_sequence_name": "ovalbumin",
+         "peptide": "SIINFEKL", "peptide_offset": 5, "peptide_length": 8,
+         "allele": "HLA-A*02:01", "n_flank": "", "c_flank": "",
+         "prediction_method_name": "netmhcpan", "predictor_version": "4.1b",
+         "kind": "pMHC_affinity", "value": 120.0, "affinity": 120.0,
+         "percentile_rank": 0.7, "score": 0.0},
+        # group 2: another peptide+allele
+        {"sample_name": "", "source_sequence_name": "p53",
+         "peptide": "STPPPGTRV", "peptide_offset": 10, "peptide_length": 9,
+         "allele": "HLA-B*07:02", "n_flank": "", "c_flank": "",
+         "prediction_method_name": "mhcflurry", "predictor_version": "2.1.1",
+         "kind": "pMHC_affinity", "value": 250.0, "affinity": 250.0,
+         "percentile_rank": 1.5, "score": 0.0},
+        {"sample_name": "", "source_sequence_name": "p53",
+         "peptide": "STPPPGTRV", "peptide_offset": 10, "peptide_length": 9,
+         "allele": "HLA-B*07:02", "n_flank": "", "c_flank": "",
+         "prediction_method_name": "netmhcpan", "predictor_version": "4.1b",
+         "kind": "pMHC_affinity", "value": 400.0, "affinity": 400.0,
+         "percentile_rank": 2.5, "score": 0.0},
+    ])
+
+    # Default config (no formulas, no default_methods) — auto-pick should
+    # still drive scoring without raising "Ambiguous Kind".
+    cfg = EpitopeConfig()
+    scores = score_predictions([], cfg, topiary_df=df)
+    assert len(scores) == 2  # two unique (peptide, allele) groups
+    # Every score should be a finite float; auto-picked mhcflurry scores
+    # both groups against logistic_normalized(350, 150).
+    assert all(0 <= s <= 1 for s in scores.values)
+
+    # Explicit default = netmhcpan should give different (lower) scores
+    # since netmhcpan's IC50s are higher in this fake data.
+    cfg2 = EpitopeConfig(default_methods={"pMHC_affinity": "netmhcpan"})
+    scores2 = score_predictions([], cfg2, topiary_df=df)
+    for key in scores.index:
+        assert scores2[key] < scores[key], (
+            f"Expected netmhcpan score < mhcflurry score for {key}; "
+            f"got {scores2[key]} vs {scores[key]}")
+
+
 def test_resolve_default_methods_stability_plus_affinity():
     """Multi-method affinity + single-method stability: only affinity
     needs a default."""
