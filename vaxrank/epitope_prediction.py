@@ -61,6 +61,9 @@ class EpitopePrediction(DataclassSerializable):
     source_sequence: str
     offset: int
     occurs_in_reference: bool
+    # Empty when the loader doesn't know the predictor version; set by
+    # load_lens from column prefixes like "mhcflurry_2.1.1.aff".
+    predictor_version: str = ""
 
     # `length` used to be a constructor arg; since 1.1.0 it is derived from
     # `peptide_sequence`. Drop it from any old JSON blobs we happen to load.

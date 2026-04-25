@@ -59,7 +59,10 @@ if __name__ == "__main__":
             "Programming Language :: Python",
             "Topic :: Scientific/Engineering :: Bio-Informatics",
         ],
-        python_requires=">=3.9",
+        # 3.10+ for PEP 604 union syntax (``str | None``) and dataclass
+        # slots=True used in the LENS multi-predictor loader. CI already
+        # tests only 3.10-3.13 so this matches tested reality.
+        python_requires=">=3.10",
         install_requires=requirements,
         long_description=readme_markdown,
         long_description_content_type="text/markdown",
