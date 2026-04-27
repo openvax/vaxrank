@@ -58,6 +58,12 @@ epitopes:
   #   pMHC_stability: netmhcstabpan
   #   pMHC_presentation: mhcflurry
 
+  # Cap on epitope predictions retained per variant during processing
+  # (set 0 to keep everything; higher values cost more time). The same
+  # setting is also accepted as ``vaccine_peptides.max_epitopes_per_candidate``
+  # — pick one section, never both (vaxrank errors if both are set).
+  # top_epitopes_per_candidate: 1000
+
 
 vaccine_peptides:
   # ---- Length / position ----
@@ -68,9 +74,6 @@ vaccine_peptides:
 
   # ---- How many to keep per variant ----
   per_mutation: 1
-  # Cap on epitope predictions retained per variant during processing
-  # (set 0 to keep everything; higher values cost more time).
-  # top_epitopes_per_candidate: 1000
 
   # ---- Score / ranking ----
   # 'sqrt_reads_times_epitope' (default) | 'reads_times_epitope' | 'epitope_only'.
@@ -110,10 +113,9 @@ manufacturability:
 
   # Ordered list of synthesis-difficulty rules applied when the
   # 'manufacturability' sentinel is reached in vaccine_peptides.ranking_rules.
-  # Available rules: cysteine_count, cterm_hydropathy, max_hydropathy_high,
-  # difficult_n_terminal, c_terminal_cysteine, c_terminal_proline,
-  # n_terminal_asparagine, n_terminal_methionine, aspartate_proline,
-  # max_hydropathy_low, min_hydropathy.
+  # The order below matches the legacy hard-coded tie-break order
+  # (preserved byte-for-byte). 'n_terminal_methionine' is registered but
+  # not in the legacy default — uncomment to enable.
   rules:
     - cysteine_count
     - cterm_hydropathy
@@ -122,6 +124,7 @@ manufacturability:
     - c_terminal_cysteine
     - c_terminal_proline
     - n_terminal_asparagine
+    # - n_terminal_methionine
     - aspartate_proline
     - max_hydropathy_low
     - min_hydropathy

@@ -12,7 +12,9 @@
 
 
 
+import sys
 from argparse import SUPPRESS, Action, ArgumentParser
+from importlib.resources import files
 
 from isovar.cli import make_isovar_arg_parser
 from mhctools.cli import add_mhc_args
@@ -38,8 +40,6 @@ class _PrintDefaultConfigAction(Action):
             nargs=0, help=help)
 
     def __call__(self, parser, namespace, values, option_string=None):
-        import sys
-        from importlib.resources import files
         text = files("vaxrank.config").joinpath("default.yaml").read_text()
         sys.stdout.write(text)
         parser.exit()

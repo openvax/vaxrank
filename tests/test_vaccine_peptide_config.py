@@ -339,7 +339,7 @@ def test_bundled_default_yaml_is_present_and_parses():
     assert set(parsed) >= {"epitopes", "vaccine_peptides", "manufacturability"}
 
 
-def test_bundled_default_yaml_round_trips_to_default_configs():
+def test_bundled_default_yaml_round_trips_to_default_configs(tmp_path):
     """Loading the shipped default.yaml produces configs whose effective
     behavior matches plain EpitopeConfig() / VaccineConfig() defaults.
 
@@ -351,7 +351,6 @@ def test_bundled_default_yaml_round_trips_to_default_configs():
     """
     from importlib.resources import files
     import argparse
-    import tempfile
     from vaxrank.cli.epitope_config_args import epitope_config_from_args
     from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
     from vaxrank.epitope_config import EpitopeConfig
@@ -360,44 +359,140 @@ def test_bundled_default_yaml_round_trips_to_default_configs():
     from vaxrank.vaccine_config import VaccineConfig
 
     src = files("vaxrank.config").joinpath("default.yaml").read_text()
-    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
-        f.write(src)
-        path = f.name
-    try:
-        args = argparse.Namespace(
-            config=[path], config_set_overrides=None,
-            config_expr_overrides=None,
-            min_epitope_score=None, scoring_mode=None,
-            default_affinity_predictor=None,
-            default_stability_predictor=None,
-            default_presentation_predictor=None,
-            vaccine_peptide_length=None,
-            padding_around_mutation=None,
-            max_vaccine_peptides_per_mutation=None,
-            num_epitopes_per_vaccine_peptide=None,
+    path = tmp_path / "default.yaml"
+    path.write_text(src)
+
+    args = argparse.Namespace(
+        config=[str(path)], config_set_overrides=None,
+        config_expr_overrides=None,
+        min_epitope_score=None, scoring_mode=None,
+        default_affinity_predictor=None,
+        default_stability_predictor=None,
+        default_presentation_predictor=None,
+        vaccine_peptide_length=None,
+        padding_around_mutation=None,
+        max_vaccine_peptides_per_mutation=None,
+        num_epitopes_per_vaccine_peptide=None,
+    )
+    ec = epitope_config_from_args(args)
+    vc = vaccine_config_from_args(args)
+    # Epitope side has no list-typed fields, so == works.
+    assert ec == EpitopeConfig()
+    # Vaccine side: effective rule tuples should match the defaults.
+    assert vc.ranking_rules == DEFAULT_RANKING_RULES
+    assert vc.manufacturability_rules == DEFAULT_MANUFACTURABILITY_RULES
+    # All scalar fields match defaults too.
+    defaults = VaccineConfig()
+    for field in (
+        "preferred_peptide_length", "min_peptide_length",
+        "max_peptide_length", "padding_around_mutation",
+        "max_vaccine_peptides_per_variant", "num_mutant_epitopes_to_keep",
+        "score_fraction_of_best", "combined_score_mode",
+        "max_c_terminal_hydropathy", "min_kmer_hydropathy",
+        "max_kmer_hydropathy_low_priority", "max_kmer_hydropathy_high_priority",
+        "require_mutant_epitopes_in_variant",
+    ):
+        assert getattr(vc, field) == getattr(defaults, field), (
+            f"default.yaml drift: {field}")
+
+
+def test_default_yaml_uncommented_keys_match_schema():
+    """Every uncommented key under each top-level section in default.yaml
+    must be a recognized schema field. Catches drift like keys placed in
+    the wrong section or renamed without updating the YAML."""
+    from importlib.resources import files
+    import yaml
+    from vaxrank.config.schema import (
+        EpitopesConfigSchema,
+        ManufacturabilityConfigSchema,
+        VaccinePeptidesConfigSchema,
+    )
+
+    text = files("vaxrank.config").joinpath("default.yaml").read_text()
+    parsed = yaml.safe_load(text)
+
+    schema_for_section = {
+        "epitopes": EpitopesConfigSchema,
+        "vaccine_peptides": VaccinePeptidesConfigSchema,
+        "manufacturability": ManufacturabilityConfigSchema,
+    }
+    for section, schema_cls in schema_for_section.items():
+        assert section in parsed, f"Missing section in default.yaml: {section}"
+        section_dict = parsed[section] or {}
+        # Drop the nested manufacturability sub-object inside vaccine_peptides
+        # (handled separately above) so it doesn't trigger forbid_unknown_fields
+        # when it's actually a different schema.
+        if section == "vaccine_peptides":
+            section_dict = {k: v for k, v in section_dict.items()
+                            if k != "manufacturability"}
+        # forbid_unknown_fields=True on each schema means msgspec will raise
+        # if any key in section_dict is not a declared schema field.
+        import msgspec
+        msgspec.convert(section_dict, schema_cls)
+
+
+def test_default_yaml_commented_examples_are_valid():
+    """Commented-out example lines in default.yaml are advertised as 'just
+    uncomment to enable' starters. Walk every commented YAML key in the
+    shipped file and verify it's a recognized schema field in its
+    section. Catches the kind of bug where a future edit puts an
+    `epitopes`-only key under `vaccine_peptides`.
+    """
+    from importlib.resources import files
+    import re
+    from vaxrank.config.schema import (
+        EpitopesConfigSchema,
+        ManufacturabilityConfigSchema,
+        VaccinePeptidesConfigSchema,
+    )
+
+    text = files("vaxrank.config").joinpath("default.yaml").read_text()
+
+    schema_for_section = {
+        "epitopes": EpitopesConfigSchema,
+        "vaccine_peptides": VaccinePeptidesConfigSchema,
+        "manufacturability": ManufacturabilityConfigSchema,
+    }
+    section_fields = {
+        s: set(c.__struct_fields__) for s, c in schema_for_section.items()
+    }
+
+    section = None
+    # `# - foo` rule-list comments, `# foo: ...` field comments — capture
+    # both. Skip lines under a nested `manufacturability:` block inside
+    # vaccine_peptides (handled separately under its own section).
+    inside_nested_manuf = False
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        # Top-level section header
+        m = re.match(r"^([a-z_]+):\s*$", line)
+        if m and m.group(1) in schema_for_section:
+            section = m.group(1)
+            inside_nested_manuf = False
+            continue
+        if section is None:
+            continue
+        # Nested manufacturability inside vaccine_peptides
+        if section == "vaccine_peptides" and re.match(
+                r"^\s+manufacturability:\s*$", line):
+            inside_nested_manuf = True
+            continue
+        if inside_nested_manuf:
+            continue
+        # Match commented field lines: `  # field: value`
+        m = re.match(r"^\s*#\s*([a-z_]+):\s", line)
+        if not m:
+            continue
+        key = m.group(1)
+        # Skip rule-list entries (those are values, not field names).
+        # Heuristic: rule-list lines start with `# - ` not `# key:`.
+        # Field comments always have a colon AFTER the name and at least
+        # one char before the # (the indent).
+        assert key in section_fields[section], (
+            f"Commented example `{key}:` in section `{section}` is not a "
+            f"valid field (allowed: {sorted(section_fields[section])}). "
+            f"Either move the line to the right section or fix the key name."
         )
-        ec = epitope_config_from_args(args)
-        vc = vaccine_config_from_args(args)
-        # Epitope side has no list-typed fields, so == works.
-        assert ec == EpitopeConfig()
-        # Vaccine side: effective rule tuples should match the defaults.
-        assert vc.ranking_rules == DEFAULT_RANKING_RULES
-        assert vc.manufacturability_rules == DEFAULT_MANUFACTURABILITY_RULES
-        # All scalar fields match defaults too.
-        defaults = VaccineConfig()
-        for field in (
-            "preferred_peptide_length", "min_peptide_length",
-            "max_peptide_length", "padding_around_mutation",
-            "max_vaccine_peptides_per_variant", "num_mutant_epitopes_to_keep",
-            "score_fraction_of_best", "combined_score_mode",
-            "max_c_terminal_hydropathy", "min_kmer_hydropathy",
-            "max_kmer_hydropathy_low_priority", "max_kmer_hydropathy_high_priority",
-            "require_mutant_epitopes_in_variant",
-        ):
-            assert getattr(vc, field) == getattr(defaults, field), (
-                f"default.yaml drift: {field}")
-    finally:
-        os.unlink(path)
 
 
 def test_print_default_config_cli_dumps_yaml(capsys):
