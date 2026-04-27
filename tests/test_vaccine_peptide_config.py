@@ -479,8 +479,13 @@ def test_default_yaml_commented_examples_are_valid():
             continue
         if inside_nested_manuf:
             continue
-        # Match commented field lines: `  # field: value`
-        m = re.match(r"^\s*#\s*([a-z_]+):\s", line)
+        # Match top-level commented field lines: `  # field: value`.
+        # Require exactly one space between `#` and the field name so that
+        # deeper-nested commented values (`#   pMHC_affinity: mhcflurry`
+        # under a parent `# default_methods:`) are skipped — they're values
+        # of the parent dict, not section-level fields, and shouldn't be
+        # checked against the section's schema.
+        m = re.match(r"^\s*# ([a-z_]+):\s", line)
         if not m:
             continue
         key = m.group(1)
@@ -493,6 +498,34 @@ def test_default_yaml_commented_examples_are_valid():
             f"valid field (allowed: {sorted(section_fields[section])}). "
             f"Either move the line to the right section or fix the key name."
         )
+
+
+def test_default_yaml_default_methods_block_uncomments_cleanly():
+    """``epitopes.default_methods`` is the only nested-dict example in
+    default.yaml that ships commented out. Strip the leading ``# `` from
+    that block and confirm the result parses + validates against the
+    schema, so the documented "uncomment to enable" pattern actually
+    works for that block."""
+    from importlib.resources import files
+    import re
+    import yaml
+    import msgspec
+    from vaxrank.config.schema import VaxrankConfigSchema
+
+    text = files("vaxrank.config").joinpath("default.yaml").read_text()
+    activated = re.sub(
+        r"^(\s*)# (default_methods:|  pMHC_\w+:.*)$",
+        r"\1\2",
+        text, flags=re.MULTILINE,
+    )
+    parsed = yaml.safe_load(activated)
+    msgspec.convert(parsed, VaxrankConfigSchema)
+    assert (parsed["epitopes"]["default_methods"]["pMHC_affinity"]
+            == "mhcflurry")
+    assert (parsed["epitopes"]["default_methods"]["pMHC_stability"]
+            == "netmhcstabpan")
+    assert (parsed["epitopes"]["default_methods"]["pMHC_presentation"]
+            == "mhcflurry")
 
 
 def test_print_default_config_cli_dumps_yaml(capsys):
