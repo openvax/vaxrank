@@ -12,7 +12,7 @@
 
 
 
-from argparse import Action, ArgumentParser
+from argparse import SUPPRESS, Action, ArgumentParser
 
 from isovar.cli import make_isovar_arg_parser
 from mhctools.cli import add_mhc_args
@@ -24,10 +24,37 @@ from ..version import __version__
 
 
 
+class _PrintDefaultConfigAction(Action):
+    """Dump the bundled default YAML config and exit.
+
+    Useful as a starting point: ``vaxrank --print-default-config > my-config.yaml``
+    produces a fully-commented config file the user can edit and then pass
+    via ``--config my-config.yaml``.
+    """
+    def __init__(self, option_strings, dest=SUPPRESS, default=SUPPRESS,
+                 help=None):
+        super().__init__(
+            option_strings=option_strings, dest=dest, default=default,
+            nargs=0, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        import sys
+        from importlib.resources import files
+        text = files("vaxrank.config").joinpath("default.yaml").read_text()
+        sys.stdout.write(text)
+        parser.exit()
+
+
 def make_vaxrank_arg_parser():
     # create common parser with the --version flag
     parent_parser = ArgumentParser('parent', add_help=False)
     parent_parser.add_argument('--version', action='version', version='Vaxrank %s' % (__version__,))
+    parent_parser.add_argument(
+        '--print-default-config',
+        action=_PrintDefaultConfigAction,
+        help="Print the bundled default YAML config to stdout and exit. "
+             "Pipe to a file (`> my-config.yaml`) to start from a fully "
+             "documented config you can edit, then run with --config.")
 
     # inherit commandline options from Isovar
     arg_parser = make_isovar_arg_parser(

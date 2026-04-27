@@ -266,3 +266,149 @@ def test_vaccine_config_rejects_unknown_ranking_rule():
 
     with pytest.raises(ValueError, match="Unknown ranking rule"):
         VaccineConfig(ranking_rules=("not_a_real_rule",))
+
+
+# ── require_mutant_epitopes_in_variant ───────────────────────────────────────
+
+def test_vaccine_config_default_requires_mutant_epitopes():
+    """Legacy behavior preserved: default is to drop variants with no
+    mutant-overlapping epitopes."""
+    from vaxrank.vaccine_config import VaccineConfig
+    assert VaccineConfig().require_mutant_epitopes_in_variant is True
+
+
+def test_require_mutant_epitopes_yaml_override(tmp_path):
+    """vaccine_peptides.require_mutant_epitopes_in_variant: false in YAML
+    propagates into the config struct."""
+    import yaml
+    from vaxrank.config.loader import (
+        extract_vaccine_config_kwargs, load_vaxrank_config)
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.safe_dump({
+        "vaccine_peptides": {"require_mutant_epitopes_in_variant": False}
+    }))
+    import argparse
+    args = argparse.Namespace(config=[str(cfg_path)],
+                              config_set_overrides=None,
+                              config_expr_overrides=None)
+    merged = load_vaxrank_config(args)
+    kwargs = extract_vaccine_config_kwargs(merged)
+    assert kwargs["require_mutant_epitopes_in_variant"] is False
+
+
+def test_create_vaccine_peptides_dict_respects_require_mutant_epitopes():
+    """When require_mutant_epitopes_in_variant=False, variants with no
+    mutant-overlapping vaccine peptides should still appear in the
+    output dict (instead of being silently dropped)."""
+    from unittest.mock import MagicMock, patch
+    from vaxrank.core_logic import create_vaccine_peptides_dict
+    from vaxrank.vaccine_config import VaccineConfig
+
+    # Fake a single isovar result + a non-mutant-covering vaccine peptide.
+    iso = MagicMock()
+    iso.variant = "v1"
+    no_epi_peptide = MagicMock()
+    no_epi_peptide.contains_mutant_epitopes.return_value = False
+
+    with patch("vaxrank.core_logic.vaccine_peptides_for_variant",
+               return_value=[no_epi_peptide]):
+        # Default (require=True): variant dropped.
+        out_strict = create_vaccine_peptides_dict(
+            isovar_results=[iso], mhc_predictor=MagicMock(),
+            vaccine_config=VaccineConfig())
+        assert out_strict == {}
+
+        # require=False: variant kept.
+        out_lax = create_vaccine_peptides_dict(
+            isovar_results=[iso], mhc_predictor=MagicMock(),
+            vaccine_config=VaccineConfig(
+                require_mutant_epitopes_in_variant=False))
+        assert "v1" in out_lax
+
+
+# ── Bundled default.yaml ─────────────────────────────────────────────────────
+
+def test_bundled_default_yaml_is_present_and_parses():
+    """The shipped vaxrank/config/default.yaml must be installed and
+    parse as valid YAML."""
+    from importlib.resources import files
+    import yaml
+    text = files("vaxrank.config").joinpath("default.yaml").read_text()
+    parsed = yaml.safe_load(text)
+    # Top-level sections present
+    assert set(parsed) >= {"epitopes", "vaccine_peptides", "manufacturability"}
+
+
+def test_bundled_default_yaml_round_trips_to_default_configs():
+    """Loading the shipped default.yaml produces configs whose effective
+    behavior matches plain EpitopeConfig() / VaccineConfig() defaults.
+
+    Equality isn't quite ``==`` because the YAML lists ranking_rules /
+    manufacturability_rules explicitly (so users can see the names) while
+    the dataclasses default these to ``None`` (which the rule executor
+    interprets as DEFAULT_RANKING_RULES / DEFAULT_MANUFACTURABILITY_RULES).
+    Compare resolved tuples instead of raw struct equality.
+    """
+    from importlib.resources import files
+    import argparse
+    import tempfile
+    from vaxrank.cli.epitope_config_args import epitope_config_from_args
+    from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.manufacturability import DEFAULT_MANUFACTURABILITY_RULES
+    from vaxrank.ranking import DEFAULT_RANKING_RULES
+    from vaxrank.vaccine_config import VaccineConfig
+
+    src = files("vaxrank.config").joinpath("default.yaml").read_text()
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+        f.write(src)
+        path = f.name
+    try:
+        args = argparse.Namespace(
+            config=[path], config_set_overrides=None,
+            config_expr_overrides=None,
+            min_epitope_score=None, scoring_mode=None,
+            default_affinity_predictor=None,
+            default_stability_predictor=None,
+            default_presentation_predictor=None,
+            vaccine_peptide_length=None,
+            padding_around_mutation=None,
+            max_vaccine_peptides_per_mutation=None,
+            num_epitopes_per_vaccine_peptide=None,
+        )
+        ec = epitope_config_from_args(args)
+        vc = vaccine_config_from_args(args)
+        # Epitope side has no list-typed fields, so == works.
+        assert ec == EpitopeConfig()
+        # Vaccine side: effective rule tuples should match the defaults.
+        assert vc.ranking_rules == DEFAULT_RANKING_RULES
+        assert vc.manufacturability_rules == DEFAULT_MANUFACTURABILITY_RULES
+        # All scalar fields match defaults too.
+        defaults = VaccineConfig()
+        for field in (
+            "preferred_peptide_length", "min_peptide_length",
+            "max_peptide_length", "padding_around_mutation",
+            "max_vaccine_peptides_per_variant", "num_mutant_epitopes_to_keep",
+            "score_fraction_of_best", "combined_score_mode",
+            "max_c_terminal_hydropathy", "min_kmer_hydropathy",
+            "max_kmer_hydropathy_low_priority", "max_kmer_hydropathy_high_priority",
+            "require_mutant_epitopes_in_variant",
+        ):
+            assert getattr(vc, field) == getattr(defaults, field), (
+                f"default.yaml drift: {field}")
+    finally:
+        os.unlink(path)
+
+
+def test_print_default_config_cli_dumps_yaml(capsys):
+    """`vaxrank --print-default-config` should write the bundled YAML and
+    exit with code 0 before doing any real work."""
+    from vaxrank.cli.entry_point import main
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--print-default-config"])
+    assert excinfo.value.code == 0
+    captured = capsys.readouterr()
+    assert captured.out.startswith("# Vaxrank default configuration")
+    assert "epitopes:" in captured.out
+    assert "vaccine_peptides:" in captured.out
+    assert "manufacturability:" in captured.out

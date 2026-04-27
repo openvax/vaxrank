@@ -67,6 +67,7 @@ if __name__ == "__main__":
         long_description=readme_markdown,
         long_description_content_type="text/markdown",
         packages=find_packages(exclude=["tests", "tests.*"]),
-        package_data={"vaxrank": ["templates/*", "data/*", "logging.conf"]},
+        package_data={"vaxrank": [
+            "templates/*", "data/*", "logging.conf", "config/*.yaml"]},
         entry_points={"console_scripts": ["vaxrank = vaxrank.cli.entry_point:main"]},
     )
