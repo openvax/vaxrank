@@ -152,6 +152,13 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     manufacturability_rules: Optional[tuple[str, ...]] = None
     combined_score_mode: str = DEFAULT_COMBINED_SCORE_MODE
     ranking_rules: Optional[tuple[str, ...]] = None
+    # When True (default, legacy behavior), variants whose vaccine peptides
+    # contain no mutant-overlapping epitopes are dropped from the report
+    # entirely. Set False to keep every variant for which any vaccine
+    # peptide could be assembled, regardless of epitope coverage —
+    # useful when the report itself is downstream input for an
+    # independent epitope predictor.
+    require_mutant_epitopes_in_variant: bool = True
 
     def __post_init__(self):
         if self.preferred_peptide_length < 1:

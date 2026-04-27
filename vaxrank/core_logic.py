@@ -133,6 +133,10 @@ def create_vaccine_peptides_dict(
     Returns a dictionary of varcode.Variant objects to a list of
     VaccinePeptides.
     """
+    require_mutant_epitopes = (
+        vaccine_config.require_mutant_epitopes_in_variant
+        if vaccine_config is not None else True
+    )
     vaccine_peptides_dict = {}
     for isovar_result in isovar_results:
         variant = isovar_result.variant
@@ -147,8 +151,12 @@ def create_vaccine_peptides_dict(
             allow_dna_only_fallback=allow_dna_only_fallback,
         )
 
-        if any(x.contains_mutant_epitopes() for x in vaccine_peptides):
-            vaccine_peptides_dict[variant] = vaccine_peptides
+        if not vaccine_peptides:
+            continue
+        if require_mutant_epitopes and not any(
+                x.contains_mutant_epitopes() for x in vaccine_peptides):
+            continue
+        vaccine_peptides_dict[variant] = vaccine_peptides
 
     return vaccine_peptides_dict
 
