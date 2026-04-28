@@ -47,12 +47,14 @@ class TemplateDataCreator(object):
             reviewers,
             args_for_report,
             input_json_file,
-            cosmic_vcf_filename=None):
+            cosmic_vcf_filename=None,
+            dna_vaf_by_variant=None):
         """
         Construct a TemplateDataCreator object, from the output of the vaxrank pipeline.
         """
         self.ranked_variants_with_vaccine_peptides = ranked_variants_with_vaccine_peptides
         self.patient_info = patient_info
+        self.dna_vaf_by_variant = dna_vaf_by_variant or {}
 
         # filter output-related command-line args: we want to display everything else
         args_to_display_in_report = {
@@ -105,10 +107,14 @@ class TemplateDataCreator(object):
         mutant_protein_fragment = top_vaccine_peptide.mutant_protein_fragment
         top_score = _sanitize(top_vaccine_peptide.combined_score)
         igv_locus = "chr%s:%d" % (variant.contig, variant.start)
+        rna_vaf = mutant_protein_fragment.rna_vaf
+        dna_vaf = self.dna_vaf_by_variant.get(variant)
         variant_data = OrderedDict([
             ('IGV locus', igv_locus),
             ('Gene name', mutant_protein_fragment.gene_name),
             ('Top score', top_score),
+            ('DNA VAF', '%.3f' % dna_vaf if dna_vaf is not None else 'n/a'),
+            ('RNA VAF', '%.3f' % rna_vaf if rna_vaf is not None else 'n/a'),
             ('RNA reads supporting variant allele', mutant_protein_fragment.n_alt_reads),
             ('RNA reads supporting reference allele', mutant_protein_fragment.n_ref_reads),
             ('RNA reads supporting other alleles', mutant_protein_fragment.n_other_reads),

@@ -245,6 +245,17 @@ class MutantProteinFragment(DataclassSerializable):
         """
         return self.n_overlapping_reads - (self.n_ref_reads + self.n_alt_reads)
 
+    @property
+    def rna_vaf(self):
+        """
+        RNA variant allele frequency: alt / (alt + ref). Returns None when
+        no ref+alt reads were observed.
+        """
+        denom = self.n_alt_reads + self.n_ref_reads
+        if denom == 0:
+            return None
+        return self.n_alt_reads / denom
+
     def interval_overlaps_mutation(self, start_offset, end_offset):
         """
         Does the given start_offset:end_offset interval overlap the mutated

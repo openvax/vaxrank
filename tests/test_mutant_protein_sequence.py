@@ -120,6 +120,35 @@ def test_keep_top_k_epitopes():
             p.logistic_epitope_score() for p in vaccine_peptide.mutant_epitope_predictions)
         almost_eq_(mutant_epitope_score, vaccine_peptide.mutant_epitope_score)
 
+def test_rna_vaf_property():
+    from varcode import Variant
+    fragment = MutantProteinFragment(
+        variant=Variant('X', '8125624', 'C', 'A'),
+        gene_name='Wdr13',
+        amino_acids='KLQGHSAPVLDVIVNCDESLLASSD',
+        mutant_amino_acid_start_offset=12,
+        mutant_amino_acid_end_offset=13,
+        n_overlapping_reads=80,
+        n_alt_reads=25,
+        n_ref_reads=75,
+        n_alt_reads_supporting_protein_sequence=2,
+        supporting_reference_transcripts=[])
+    eq_(0.25, fragment.rna_vaf)
+
+    zero_fragment = MutantProteinFragment(
+        variant=Variant('X', '8125624', 'C', 'A'),
+        gene_name='Wdr13',
+        amino_acids='KLQGHSAPVLDVIVNCDESLLASSD',
+        mutant_amino_acid_start_offset=12,
+        mutant_amino_acid_end_offset=13,
+        n_overlapping_reads=0,
+        n_alt_reads=0,
+        n_ref_reads=0,
+        n_alt_reads_supporting_protein_sequence=0,
+        supporting_reference_transcripts=[])
+    assert zero_fragment.rna_vaf is None
+
+
 def test_mutant_protein_fragment_serialization():
     arg_parser = make_vaxrank_arg_parser()
     keep_k_epitopes = 3
