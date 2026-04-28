@@ -77,7 +77,7 @@ def test_slp_truncates_oversize_peptides():
     long_aa = "A" * 50
     [c] = assemble_peptide_constructs(
         [_variant_pair(long_aa, mut_start=24, mut_end=26)],
-        options=PeptideOptions(max_length_aa=25))
+        options=PeptideOptions(max_antigen_length_aa=25))
     assert c.sequence == "A" * 25
 
 
@@ -88,7 +88,7 @@ def test_slp_truncation_preserves_mutation():
     aa = "A" * 40 + "WHY" + "A" * 7  # mutation residues at 40-43
     [c] = assemble_peptide_constructs(
         [_variant_pair(aa, mut_start=40, mut_end=43)],
-        options=PeptideOptions(max_length_aa=30))
+        options=PeptideOptions(max_antigen_length_aa=30))
     assert len(c.sequence) == 30
     assert "WHY" in c.sequence
 
@@ -99,7 +99,7 @@ def test_slp_emits_full_fragment_when_mutation_exceeds_cap():
     aa = "A" * 5 + "M" * 25 + "A" * 10  # 40 aa, mutation spans 25 aa
     [c] = assemble_peptide_constructs(
         [_variant_pair(aa, mut_start=5, mut_end=30)],
-        options=PeptideOptions(max_length_aa=20))
+        options=PeptideOptions(max_antigen_length_aa=20))
     assert c.sequence == aa
 
 
@@ -135,7 +135,8 @@ def test_multi_epitope_concatenates_with_linker():
     [c] = assemble_peptide_constructs(
         pairs,
         options=PeptideOptions(mode='multi_epitope', linker='AAY',
-                               max_length_aa=100))
+                               max_antigen_length_aa=100,
+                               antigens_per_construct=2))
     assert c.sequence == "KLQGHAAYMNNVD"
     assert c.components['linker'] == 'AAY'
     assert c.components['linker_inert'] is False
@@ -149,18 +150,23 @@ def test_multi_epitope_2a_linker_marked_inert():
     [c] = assemble_peptide_constructs(
         pairs,
         options=PeptideOptions(mode='multi_epitope', linker='P2A',
-                               max_length_aa=200))
+                               max_antigen_length_aa=200,
+                               antigens_per_construct=2))
     assert "GSGATNFSLLKQAGDVEENPGP" in c.sequence
     assert c.components['linker_inert'] is True
 
 
 def test_multi_epitope_splits_on_max_length():
+    # 4 antigens at 20 aa each. With antigens_per_construct=2 and
+    # max_antigen_length_aa=20, each construct caps at ~45 aa (2*20 + 1*5).
+    # We'd need 2 constructs to fit all 4.
     pairs = [_variant_pair("A" * 20, start=i) for i in range(4)]
     constructs = assemble_peptide_constructs(
         pairs,
         options=PeptideOptions(mode='multi_epitope', linker='GS',
-                               max_length_aa=50))
-    # GS linker = 5 aa; antigen = 20 aa; 20 + 5 + 20 = 45 fits, +25 doesn't
+                               max_antigen_length_aa=20,
+                               antigens_per_construct=2,
+                               max_constructs=10))
     assert len(constructs) >= 2
 
 
@@ -172,7 +178,7 @@ def test_slp_manufacturability_recomputed_after_truncation():
     aa = "A" * 30 + "WHY" + "A" * 6 + "C"  # 40-aa, mutation at 30-33
     [c] = assemble_peptide_constructs(
         [_variant_pair(aa, mut_start=30, mut_end=33)],
-        options=PeptideOptions(max_length_aa=15))
+        options=PeptideOptions(max_antigen_length_aa=15))
     assert "C" not in c.sequence
     assert c.manufacturability['cysteine_count'] == 0
 
@@ -198,7 +204,8 @@ def test_multi_epitope_manufacturability_populated():
     [c] = assemble_peptide_constructs(
         pairs,
         options=PeptideOptions(mode='multi_epitope', linker='AAY',
-                               max_length_aa=100))
+                               max_antigen_length_aa=100,
+                               antigens_per_construct=2))
     assert c.manufacturability  # not empty
     assert c.manufacturability['cysteine_count'] == 1
 
@@ -280,3 +287,65 @@ def test_order_form_omits_displayed_sequence_when_no_modifications():
         assert 'displayed_sequence' not in rows[0]
         assert rows[0]['n_terminal_modification'] == 'Free'
         assert rows[0]['c_terminal_modification'] == 'Free'
+
+
+def test_candidates_per_slot_emits_alternates():
+    # When candidates_per_slot=2, each variant with multiple ranked
+    # peptides emits an "_alt1" alternate construct alongside the top.
+    fragment_a = SimpleNamespace(
+        amino_acids="KLQGHSAPVLD", gene_name='GENEA',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=11)
+    fragment_b = SimpleNamespace(
+        amino_acids="LQGHSAPVLDV", gene_name='GENEA',  # alternate window
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=11)
+    peptide_a = SimpleNamespace(
+        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[],
+        manufacturability_scores=None)
+    peptide_b = SimpleNamespace(
+        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[],
+        manufacturability_scores=None)
+    from varcode import Variant
+    pairs = [(Variant('1', 100, 'A', 'T'), [peptide_a, peptide_b])]
+    constructs = assemble_peptide_constructs(
+        pairs,
+        options=PeptideOptions(candidates_per_slot=2))
+    assert len(constructs) == 2
+    assert constructs[0].sequence == "KLQGHSAPVLD"
+    assert constructs[1].sequence == "LQGHSAPVLDV"
+    assert "_alt1" in constructs[1].antigen_names[0]
+
+
+def test_candidates_per_slot_default_is_one():
+    fragment_a = SimpleNamespace(
+        amino_acids="KLQGHSAPVLD", gene_name='GENE',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=11)
+    fragment_b = SimpleNamespace(
+        amino_acids="LQGHSAPVLDV", gene_name='GENE',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=11)
+    pa = SimpleNamespace(
+        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[],
+        manufacturability_scores=None)
+    pb = SimpleNamespace(
+        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[],
+        manufacturability_scores=None)
+    from varcode import Variant
+    pairs = [(Variant('1', 100, 'A', 'T'), [pa, pb])]
+    [c] = assemble_peptide_constructs(pairs, options=PeptideOptions())
+    assert c.sequence == "KLQGHSAPVLD"
+
+
+def test_max_constructs_caps_peptide_pool():
+    # Default max_constructs=20: anything beyond drops with a warning.
+    pairs = []
+    from varcode import Variant
+    for i in range(25):
+        fragment = SimpleNamespace(
+            amino_acids="KLQGHSAPVLD", gene_name='G%d' % i,
+            mutant_amino_acid_start_offset=0,
+            mutant_amino_acid_end_offset=11)
+        peptide = SimpleNamespace(
+            mutant_protein_fragment=fragment, mutant_epitope_predictions=[],
+            manufacturability_scores=None)
+        pairs.append((Variant('1', 100 + i, 'A', 'T'), [peptide]))
+    constructs = assemble_peptide_constructs(pairs, options=PeptideOptions())
+    assert len(constructs) == 20  # default

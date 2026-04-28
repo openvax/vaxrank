@@ -42,11 +42,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PeptideOptions:
-    """User-configurable peptide construct parameters."""
-    mode: str = "slp"               # 'slp' | 'minimal_epitope' | 'multi_epitope'
-    linker: str = "GS3"             # only used in multi_epitope mode
-    max_length_aa: int = 30         # SLP cap; multi-epitope cap (per construct)
-    max_antigens_per_construct: int = 10  # multi_epitope only
+    """User-configurable peptide construct parameters.
+
+    Defaults match the canonical PGV-001 personalized peptide vaccine
+    layout: ~20 synthetic long peptides per pool, one antigen per
+    peptide, 15-25 aa per peptide.
+    """
+    mode: str = "slp"            # 'slp' | 'minimal_epitope' | 'multi_epitope'
+    linker: str = "G4S3"         # only used in multi_epitope mode
+    min_antigen_length_aa: int = 15
+    max_antigen_length_aa: int = 25
+    antigens_per_construct: int = 1
+    max_constructs: int = 20
+    candidates_per_slot: int = 1
     n_terminal_acetylation: bool = False
     c_terminal_amidation: bool = False
 
@@ -61,37 +69,42 @@ class PeptideConstruct:
     manufacturability: dict = field(default_factory=dict)
 
 
-def _antigen_records(ranked_vaccine_peptides, mode, max_length_aa):
-    """Yield ``(name, amino_acids)`` per antigen, applying mode-specific
-    selection and (for SLP) a mutation-preserving length cap.
+def _antigen_records(ranked_vaccine_peptides, mode, max_antigen_length_aa,
+                     candidates_per_slot=1):
+    """Yield ``(name, amino_acids)`` per antigen.
+
+    ``candidates_per_slot`` controls how many alternate windows are
+    emitted per variant: 1 picks just the top-ranked vaccine peptide,
+    higher values walk through additional candidates the ranking
+    pipeline produced. Each alternate gets a ``_alt<k>`` suffix on its
+    base name for traceability.
     """
     for variant, peptides in ranked_vaccine_peptides:
         if not peptides:
             continue
-        peptide = peptides[0]
-        fragment = peptide.mutant_protein_fragment
-        base_name = "%s_%s_%s_%s_%s" % (
-            getattr(fragment, 'gene_name', None) or 'unknown',
-            variant.contig,
-            variant.start,
-            variant.ref or '.',
-            variant.alt or '.',
-        )
-        if mode == "minimal_epitope":
-            top = _top_mutant_epitope(peptide)
-            if top is None:
-                logger.info(
-                    "Skipping %s in minimal_epitope mode: no mutant epitope "
-                    "predictions available.", base_name)
-                continue
-            yield base_name + "_epitope", top.peptide_sequence
-        elif mode == "slp":
-            yield base_name, _slp_window(fragment, base_name, max_length_aa)
-        else:
-            # multi_epitope: emit per-antigen windows centered on the
-            # mutation so each piece preserves its epitope before
-            # concatenation. The packer enforces the per-construct cap.
-            yield base_name, _slp_window(fragment, base_name, max_length_aa)
+        for idx, peptide in enumerate(peptides[:max(1, candidates_per_slot)]):
+            fragment = peptide.mutant_protein_fragment
+            base_name = "%s_%s_%s_%s_%s" % (
+                getattr(fragment, 'gene_name', None) or 'unknown',
+                variant.contig,
+                variant.start,
+                variant.ref or '.',
+                variant.alt or '.',
+            )
+            if idx > 0:
+                base_name = "%s_alt%d" % (base_name, idx)
+            if mode == "minimal_epitope":
+                top = _top_mutant_epitope(peptide)
+                if top is None:
+                    logger.info(
+                        "Skipping %s in minimal_epitope mode: no mutant "
+                        "epitope predictions available.", base_name)
+                    continue
+                yield base_name + "_epitope", top.peptide_sequence
+            else:
+                # slp + multi_epitope: pick a mutation-centered window
+                yield base_name, _slp_window(
+                    fragment, base_name, max_antigen_length_aa)
 
 
 def _top_mutant_epitope(vaccine_peptide):
@@ -140,32 +153,53 @@ def _manufacturability_for(sequence):
 
 
 def _pack_multi_epitope(records, options, linker):
-    """Bin-pack antigens into multi-epitope constructs honoring AA caps."""
+    """Bin-pack antigens into multi-epitope constructs honoring AA caps.
+
+    The per-construct cap is ``antigens_per_construct * max_antigen_length_aa
+    + (antigens_per_construct - 1) * len(linker)`` — generous enough that a
+    typical 5-antigen / 25-aa-window construct fits without churn.
+    """
     linker_aa = linker.amino_acids
+    # Belt-and-suspenders length cap to catch pathologically long antigens.
+    max_construct_aa = (
+        options.antigens_per_construct * options.max_antigen_length_aa
+        + max(0, options.antigens_per_construct - 1) * len(linker_aa)
+    )
     constructs = []
     current = []
     current_aa = 0
     for name, aa in records:
+        if len(constructs) >= options.max_constructs:
+            logger.warning(
+                "Reached --peptide-max-constructs (%d); dropping remaining "
+                "antigens including %s.", options.max_constructs, name)
+            break
         antigen_aa = len(aa)
         linker_extra = len(linker_aa) if current else 0
         projected = current_aa + linker_extra + antigen_aa
         cap_hit = (
-            projected > options.max_length_aa
-            or len(current) >= options.max_antigens_per_construct
+            projected > max_construct_aa
+            or len(current) >= options.antigens_per_construct
         )
         if cap_hit and current:
             constructs.append(current)
             current = []
             current_aa = 0
             linker_extra = 0
-        if not current and antigen_aa > options.max_length_aa:
+            if len(constructs) >= options.max_constructs:
+                logger.warning(
+                    "Reached --peptide-max-constructs (%d); dropping "
+                    "remaining antigens including %s.",
+                    options.max_constructs, name)
+                break
+        if not current and antigen_aa > max_construct_aa:
             logger.warning(
-                "Antigen %s exceeds --peptide-max-length-aa (%d > %d) on "
-                "its own; emitting as-is.",
-                name, antigen_aa, options.max_length_aa)
+                "Antigen %s exceeds the multi_epitope construct cap "
+                "(%d > %d aa) on its own; emitting as-is.",
+                name, antigen_aa, max_construct_aa)
         current.append((name, aa))
         current_aa += linker_extra + antigen_aa
-    if current:
+    if current and len(constructs) < options.max_constructs:
         constructs.append(current)
     return constructs
 
@@ -189,7 +223,9 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
             "minimal_epitope, multi_epitope." % (options.mode,))
 
     records = list(_antigen_records(
-        ranked_vaccine_peptides, options.mode, options.max_length_aa))
+        ranked_vaccine_peptides, options.mode,
+        options.max_antigen_length_aa,
+        candidates_per_slot=options.candidates_per_slot))
     if not records:
         return []
 
@@ -201,9 +237,21 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
 
     constructs = []
     if options.mode in ("slp", "minimal_epitope"):
+        # One construct per (variant, candidate) record. Cap at max_constructs.
         for i, (name, sequence) in enumerate(records):
+            if len(constructs) >= options.max_constructs:
+                logger.info(
+                    "Reached --peptide-max-constructs (%d); dropping "
+                    "remaining %d candidate(s).",
+                    options.max_constructs, len(records) - i)
+                break
+            if len(sequence) < options.min_antigen_length_aa:
+                logger.warning(
+                    "Antigen %s emitted at %d aa, below "
+                    "--peptide-min-antigen-length-aa (%d).",
+                    name, len(sequence), options.min_antigen_length_aa)
             constructs.append(PeptideConstruct(
-                name="peptide_%03d" % (i + 1),
+                name="peptide_%03d" % (len(constructs) + 1),
                 sequence=sequence,
                 antigen_names=[name],
                 components=dict(base_components),
@@ -220,7 +268,7 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
             "symmetry; manifest annotates components.linker_inert=True.",
             options.linker)
     packed = _pack_multi_epitope(records, options, linker)
-    for i, group in enumerate(packed):
+    for group in packed:
         names = [n for n, _ in group]
         sequence = linker.amino_acids.join(aa for _, aa in group)
         components = dict(base_components)
@@ -229,7 +277,7 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
             'linker_inert': linker.inert_in_peptide_mode,
         })
         constructs.append(PeptideConstruct(
-            name="peptide_%03d" % (i + 1),
+            name="peptide_%03d" % (len(constructs) + 1),
             sequence=sequence,
             antigen_names=names,
             components=components,

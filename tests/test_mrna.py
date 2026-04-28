@@ -32,7 +32,7 @@ from vaxrank.mrna_library import (
     UTR_3P_HBB,
     UTR_5P_HBB,
 )
-from vaxrank.vaccine_library import LINKER_GS3
+from vaxrank.vaccine_library import LINKER_G4S3
 
 
 CODON_TABLE = {
@@ -110,7 +110,7 @@ def test_assembly_basic_construct():
     assert cds[:3] == 'ATG'
     assert cds[-3:] == 'TAA'
     protein = _translate(cds[:-3])
-    expected = SIGNAL_PEPTIDE_TPA + LINKER_GS3.amino_acids.join(['KLQGHSAPVLDVIVN', 'MNNVDEILGRWESPV'])
+    expected = SIGNAL_PEPTIDE_TPA + LINKER_G4S3.amino_acids.join(['KLQGHSAPVLDVIVN', 'MNNVDEILGRWESPV'])
     assert protein == expected
 
 
@@ -144,14 +144,15 @@ def test_assembly_with_mitd_appends_trafficking_domain():
     protein = _translate(cds[:-3])
     # No signal peptide selected and antigen doesn't start with M, so the
     # assembler prepends one to keep the CDS translatable.
-    expected = "M" + "KLQGHSAPVLDVIVN" + LINKER_GS3.amino_acids + MITD_HLA_A
+    expected = "M" + "KLQGHSAPVLDVIVN" + LINKER_G4S3.amino_acids + MITD_HLA_A
     assert protein == expected
 
 
 def test_assembly_splits_on_max_antigens():
     pairs = [_variant_pair("AAAA", start=i) for i in range(5)]
     options = MRNAOptions(signal_peptide=None, linker='GS',
-                          include_mitd=False, max_antigens_per_construct=2)
+                          include_mitd=False, antigens_per_construct=2,
+                          max_constructs=10, max_antigen_length_aa=4)
     constructs = assemble_mrna_constructs(pairs, options=options)
     assert [len(c.antigen_names) for c in constructs] == [2, 2, 1]
 
@@ -159,11 +160,25 @@ def test_assembly_splits_on_max_antigens():
 def test_assembly_splits_on_max_length():
     long_aa = "A" * 200
     pairs = [_variant_pair(long_aa, start=i) for i in range(4)]
-    options = MRNAOptions(signal_peptide=None, linker='GS',
-                          include_mitd=False, max_antigens_per_construct=10,
-                          max_length_nt=len(UTR_5P_HBB) + len(UTR_3P_HBB) + 3 + 600 * 2)
+    options = MRNAOptions(
+        signal_peptide=None, linker='GS', include_mitd=False,
+        antigens_per_construct=10, max_constructs=10,
+        max_antigen_length_aa=200,
+        max_length_nt=len(UTR_5P_HBB) + len(UTR_3P_HBB) + 3 + 600 * 2)
     constructs = assemble_mrna_constructs(pairs, options=options)
     assert len(constructs) > 1
+
+
+def test_assembly_max_constructs_caps_output():
+    # New default max_constructs=1: extra antigens spill into a second
+    # construct only when explicitly allowed.
+    pairs = [_variant_pair("A" * 30, start=i) for i in range(3)]
+    options = MRNAOptions(
+        signal_peptide=None, linker='GS', include_mitd=False,
+        antigens_per_construct=1, max_constructs=1,
+        max_antigen_length_aa=30)
+    [c] = assemble_mrna_constructs(pairs, options=options)
+    assert len(c.antigen_names) == 1
 
 
 def test_assembly_no_antigens_returns_empty():

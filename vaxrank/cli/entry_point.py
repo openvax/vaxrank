@@ -233,8 +233,11 @@ def main(args_list=None):
         peptide_options = PeptideOptions(
             mode=args.peptide_mode,
             linker=args.peptide_linker,
-            max_length_aa=args.peptide_max_length_aa,
-            max_antigens_per_construct=args.peptide_max_antigens,
+            min_antigen_length_aa=args.peptide_min_antigen_length_aa,
+            max_antigen_length_aa=args.peptide_max_antigen_length_aa,
+            antigens_per_construct=args.peptide_antigens_per_construct,
+            max_constructs=args.peptide_max_constructs,
+            candidates_per_slot=args.peptide_candidates_per_slot,
             n_terminal_acetylation=args.peptide_n_terminal_acetyl,
             c_terminal_amidation=args.peptide_c_terminal_amide,
         )
@@ -261,7 +264,11 @@ def main(args_list=None):
             utr_3p=args.mrna_3p_utr,
             codon_species=args.mrna_codon_species,
             codon_method=args.mrna_codon_method,
-            max_antigens_per_construct=args.mrna_max_antigens,
+            min_antigen_length_aa=args.mrna_min_antigen_length_aa,
+            max_antigen_length_aa=args.mrna_max_antigen_length_aa,
+            antigens_per_construct=args.mrna_antigens_per_construct,
+            max_constructs=args.mrna_max_constructs,
+            candidates_per_slot=args.mrna_candidates_per_slot,
             max_length_nt=args.mrna_max_length_nt,
         )
         constructs = assemble_mrna_constructs(

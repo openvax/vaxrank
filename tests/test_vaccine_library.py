@@ -36,12 +36,17 @@ def test_mrna_library_linkers_dict_returns_strings():
 
 
 def test_vaccine_library_exposes_linker_objects():
-    # The richer dataclass form lives in vaccine_library.
-    gs3 = vaccine_library.LINKERS["GS3"]
-    assert isinstance(gs3, vaccine_library.Linker)
-    assert gs3.amino_acids == "GGGGSGGGGSGGGGS"
-    assert gs3.dna is None
-    assert gs3.freeze_in_mrna is False
+    # The richer dataclass form lives in vaccine_library; the canonical
+    # name for the (G4S)3 linker is now "G4S3", with "GS3" as a back-compat
+    # alias resolved by get_linker.
+    g4s3 = vaccine_library.LINKERS["G4S3"]
+    assert isinstance(g4s3, vaccine_library.Linker)
+    assert g4s3.amino_acids == "GGGGSGGGGSGGGGS"
+    assert g4s3.dna is None
+    assert g4s3.freeze_in_mrna is False
+    # Aliases dereference to the canonical Linker object.
+    assert vaccine_library.get_linker("GS3") is g4s3
+    assert vaccine_library.get_linker("GS") is vaccine_library.LINKERS["G4S"]
 
 
 def test_vaccine_library_p2a_carries_blessed_dna():
@@ -148,3 +153,86 @@ def test_signal_peptides_include_tcr_additions():
     # they're discoverable through the existing SIGNAL_PEPTIDES dict.
     assert mrna_library.SIGNAL_PEPTIDES["CD8A"] == "MALPVTALLLPLALLLHAARP"
     assert mrna_library.SIGNAL_PEPTIDES["CD28"] == "MLRLLLALNLFPSIQVTG"
+
+
+# ---- expanded linker family + aliases -------------------------------------
+
+@pytest.mark.parametrize("name,aa", [
+    ("G2S", "GGS"),
+    ("G3S", "GGGS"),
+    ("G4S", "GGGGS"),
+    ("G5S", "GGGGGS"),
+    ("G4S2", "GGGGSGGGGS"),
+    ("G4S3", "GGGGSGGGGSGGGGS"),
+    ("G4S4", "GGGGSGGGGSGGGGSGGGGS"),
+])
+def test_gs_linker_family(name, aa):
+    linker = vaccine_library.LINKERS[name]
+    assert linker.amino_acids == aa
+    assert linker.dna is None  # not codon-frozen
+    assert linker.freeze_in_mrna is False
+
+
+@pytest.mark.parametrize("name,aa", [
+    ("EAAAK", "EAAAK"),
+    ("EAAAK2", "EAAAKEAAAK"),
+    ("EAAAK3", "EAAAKEAAAKEAAAK"),
+])
+def test_eaaak_linker_family(name, aa):
+    linker = vaccine_library.LINKERS[name]
+    assert linker.amino_acids == aa
+    assert "Arai" in linker.citation
+
+
+@pytest.mark.parametrize("name,aa", [
+    ("RKRR", "RKRR"),
+    ("RVKR", "RVKR"),
+    ("RKRKR", "RKRKR"),
+])
+def test_furin_linkers(name, aa):
+    linker = vaccine_library.LINKERS[name]
+    assert linker.amino_acids == aa
+    assert "furin" in linker.citation.lower() or "Thomas" in linker.citation
+
+
+def test_gs_aliases_resolve_to_canonical():
+    # 2.10.0 used "GS"/"GS3"; preserve as aliases of the canonical names.
+    assert vaccine_library.get_linker("GS").name == "G4S"
+    assert vaccine_library.get_linker("GS3").name == "G4S3"
+
+
+def test_all_linker_names_includes_aliases():
+    names = vaccine_library.all_linker_names()
+    assert "G4S3" in names
+    assert "GS3" in names  # alias still listed
+    assert "P2A" in names
+    assert "EAAAK2" in names
+    assert "RKRR" in names
+
+
+# ---- codon species normalization ------------------------------------------
+
+@pytest.mark.parametrize("user_input,expected", [
+    ("human", "h_sapiens"),
+    ("HUMAN", "h_sapiens"),
+    ("Homo sapiens", "h_sapiens"),
+    ("h. sapiens", "h_sapiens"),
+    ("h_sapiens", "h_sapiens"),
+    ("9606", "h_sapiens"),
+    ("mouse", "m_musculus"),
+    ("murine", "m_musculus"),
+    ("Mus musculus", "m_musculus"),
+    ("m. musculus", "m_musculus"),
+    ("10090", "m_musculus"),
+    ("yeast", "s_cerevisiae"),
+    ("E. coli", "e_coli"),
+])
+def test_normalize_codon_species(user_input, expected):
+    from vaxrank.mrna import normalize_codon_species
+    assert normalize_codon_species(user_input) == expected
+
+
+def test_normalize_codon_species_passes_through_unknown():
+    # If we don't recognize the input, leave it for DnaChisel to validate.
+    from vaxrank.mrna import normalize_codon_species
+    assert normalize_codon_species("foo_bar") == "foo_bar"

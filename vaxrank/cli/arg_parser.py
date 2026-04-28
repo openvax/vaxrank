@@ -291,7 +291,8 @@ def add_output_args(arg_parser):
 def add_mrna_output_args(group):
     """mRNA vaccine construct output (see vaxrank/mrna.py for assembly)."""
     from ..mrna_library import MITDS, SIGNAL_PEPTIDES, UTRS_3P, UTRS_5P
-    from ..vaccine_library import LINKERS
+    from ..vaccine_library import all_linker_names
+    linker_choices = all_linker_names()
     group.add_argument(
         "--output-mrna",
         default="",
@@ -310,11 +311,11 @@ def add_mrna_output_args(group):
              "to omit. Default: tPA." % ", ".join(sorted(SIGNAL_PEPTIDES)))
     group.add_argument(
         "--mrna-linker",
-        default="GS3",
+        default="G4S3",
         type=str.upper,
-        choices=sorted(LINKERS),
+        choices=linker_choices,
         help="Linker name from the shared library (case-insensitive). "
-             "Default: GS3.")
+             "Default: G4S3 (= legacy GS3 alias).")
     group.add_argument(
         "--mrna-include-mitd",
         action="store_true",
@@ -347,11 +348,36 @@ def add_mrna_output_args(group):
         choices=["use_best_codon", "match_codon_usage", "harmonize_rca"],
         help="DnaChisel codon-optimization method. Default: use_best_codon.")
     group.add_argument(
-        "--mrna-max-antigens",
-        default=10,
+        "--mrna-min-antigen-length-aa",
+        default=15,
         type=int,
-        help="Maximum number of antigens packed into a single mRNA construct. "
+        help="Minimum amino-acid window per antigen. Default: 15.")
+    group.add_argument(
+        "--mrna-max-antigen-length-aa",
+        default=20,
+        type=int,
+        help="Maximum amino-acid window per antigen. Default: 20 (shorter "
+             "than peptide SLPs because antigens get concatenated).")
+    group.add_argument(
+        "--mrna-antigens-per-construct",
+        default=5,
+        type=int,
+        help="Antigens packed into a single mRNA construct. Default: 5. "
              "Antigens beyond the cap spill into additional constructs.")
+    group.add_argument(
+        "--mrna-max-constructs",
+        default=1,
+        type=int,
+        help="Maximum number of mRNA constructs in the vaccine. Default: 1 "
+             "(one construct carrying all antigens). Higher values let "
+             "additional constructs absorb spillover.")
+    group.add_argument(
+        "--mrna-candidates-per-slot",
+        default=1,
+        type=int,
+        help="Alternative windows per variant slot in the mRNA construct. "
+             "Default: 1. Higher emits alternative constructs with the "
+             "same antigen lineup but different per-variant windows.")
     group.add_argument(
         "--mrna-max-length-nt",
         default=4000,
@@ -362,13 +388,14 @@ def add_mrna_output_args(group):
 
 def add_peptide_output_args(group):
     """Peptide vaccine construct output (see vaxrank/peptide.py)."""
-    from ..vaccine_library import LINKERS
+    from ..vaccine_library import all_linker_names
+    linker_choices = all_linker_names()
     group.add_argument(
         "--output-peptide",
         default="",
         help="Path to FASTA file of peptide vaccine constructs. Default mode "
-             "is one synthetic long peptide per ranked vaccine peptide; "
-             "see --peptide-mode.")
+             "is one synthetic long peptide per ranked variant; see "
+             "--peptide-mode.")
     group.add_argument(
         "--output-peptide-manifest",
         default="",
@@ -382,28 +409,47 @@ def add_peptide_output_args(group):
         "--peptide-mode",
         default="slp",
         choices=["slp", "minimal_epitope", "multi_epitope"],
-        help="slp (default): one long peptide per ranked vaccine peptide. "
-             "minimal_epitope: just the top mutant MHC ligand per peptide. "
+        help="slp (default): one synthetic long peptide per ranked variant. "
+             "minimal_epitope: just the top mutant MHC ligand per variant. "
              "multi_epitope: concatenate antigens with --peptide-linker.")
     group.add_argument(
         "--peptide-linker",
-        default="GS3",
+        default="G4S3",
         type=str.upper,
-        choices=sorted(LINKERS),
+        choices=linker_choices,
         help="Linker used in --peptide-mode=multi_epitope (case-insensitive). "
-             "Shared library with mRNA mode. Default: GS3.")
+             "Shared library with mRNA mode. Default: G4S3.")
     group.add_argument(
-        "--peptide-max-length-aa",
-        default=30,
+        "--peptide-min-antigen-length-aa",
+        default=15,
         type=int,
-        help="Per-construct amino-acid length cap. SLPs longer than this are "
-             "truncated; multi-epitope constructs spill into additional "
-             "constructs.")
+        help="Minimum amino-acid window per antigen. Default: 15.")
     group.add_argument(
-        "--peptide-max-antigens",
-        default=10,
+        "--peptide-max-antigen-length-aa",
+        default=25,
         type=int,
-        help="Maximum antigens per construct in multi_epitope mode.")
+        help="Maximum amino-acid window per antigen (SLP target). Default: 25.")
+    group.add_argument(
+        "--peptide-antigens-per-construct",
+        default=1,
+        type=int,
+        help="Antigens per construct. Default: 1 (one antigen per peptide, "
+             "the standard SLP layout). Higher values are only meaningful "
+             "in --peptide-mode=multi_epitope.")
+    group.add_argument(
+        "--peptide-max-constructs",
+        default=20,
+        type=int,
+        help="Maximum number of peptide constructs in the vaccine pool. "
+             "Default: 20 (the typical PGV-001 personalized peptide vaccine "
+             "pool size).")
+    group.add_argument(
+        "--peptide-candidates-per-slot",
+        default=1,
+        type=int,
+        help="Alternative windows per variant slot. Default: 1. Set higher "
+             "(e.g. 3) to emit alternates that the vaccine designer can "
+             "choose between at synthesis time.")
     group.add_argument(
         "--peptide-n-terminal-acetyl",
         action="store_true",

@@ -59,18 +59,96 @@ logger = logging.getLogger(__name__)
 STOP_CODON = "TAA"
 
 
+# Friendly → DnaChisel canonical mapping for codon-table species. Keys are
+# lowercased-stripped aliases; values are the species keys DnaChisel passes
+# to python_codon_tables.
+_SPECIES_ALIASES = {
+    # Human
+    "human": "h_sapiens",
+    "homo sapiens": "h_sapiens",
+    "h. sapiens": "h_sapiens",
+    "h.sapiens": "h_sapiens",
+    "h_sapiens": "h_sapiens",
+    "9606": "h_sapiens",
+    # Mouse
+    "mouse": "m_musculus",
+    "murine": "m_musculus",
+    "mus musculus": "m_musculus",
+    "m. musculus": "m_musculus",
+    "m.musculus": "m_musculus",
+    "m_musculus": "m_musculus",
+    "10090": "m_musculus",
+    # Fly
+    "fly": "d_melanogaster",
+    "drosophila": "d_melanogaster",
+    "drosophila melanogaster": "d_melanogaster",
+    "d. melanogaster": "d_melanogaster",
+    "d_melanogaster": "d_melanogaster",
+    # Yeast
+    "yeast": "s_cerevisiae",
+    "s. cerevisiae": "s_cerevisiae",
+    "saccharomyces cerevisiae": "s_cerevisiae",
+    "s_cerevisiae": "s_cerevisiae",
+    # Worm
+    "worm": "c_elegans",
+    "c. elegans": "c_elegans",
+    "caenorhabditis elegans": "c_elegans",
+    "c_elegans": "c_elegans",
+    # E. coli
+    "e. coli": "e_coli",
+    "e.coli": "e_coli",
+    "escherichia coli": "e_coli",
+    "e_coli": "e_coli",
+    # Chicken
+    "chicken": "g_gallus",
+    "g. gallus": "g_gallus",
+    "gallus gallus": "g_gallus",
+    "g_gallus": "g_gallus",
+    # B. subtilis
+    "b. subtilis": "b_subtilis",
+    "bacillus subtilis": "b_subtilis",
+    "b_subtilis": "b_subtilis",
+}
+
+
+def normalize_codon_species(name):
+    """Map a user-supplied species name to DnaChisel's canonical form.
+
+    Accepts common names (human, mouse), genus-species ("homo sapiens",
+    "mus musculus"), abbreviations ("h. sapiens", "m. musculus"), the
+    underscore-prefixed DnaChisel form ("h_sapiens"), and a few NCBI
+    taxids. Unknown names pass through unchanged (DnaChisel will raise
+    if it can't resolve them).
+    """
+    if not name:
+        return name
+    key = name.strip().lower()
+    return _SPECIES_ALIASES.get(key, name)
+
+
 @dataclass
 class MRNAOptions:
-    """User-configurable mRNA construct parameters."""
+    """User-configurable mRNA construct parameters.
+
+    Defaults reflect a typical neoantigen mRNA design: 5 antigen
+    windows of 15-20 aa each in a single construct, with a tPA signal
+    peptide and HBB UTRs. ``max_length_nt`` is a belt-and-suspenders
+    cap that triggers spillover into additional constructs only on
+    pathologically long inputs.
+    """
     signal_peptide: Optional[str] = "tPA"
-    linker: str = "GS3"
+    linker: str = "G4S3"
     include_mitd: bool = False
     mitd: str = "HLA_A"
     utr_5p: str = "HBB"
     utr_3p: str = "HBB"
     codon_species: str = "h_sapiens"
     codon_method: str = "use_best_codon"
-    max_antigens_per_construct: int = 10
+    min_antigen_length_aa: int = 15
+    max_antigen_length_aa: int = 20
+    antigens_per_construct: int = 5
+    max_constructs: int = 1
+    candidates_per_slot: int = 1
     max_length_nt: int = 4000
     avoid_patterns: tuple = ()
 
@@ -120,6 +198,7 @@ def codon_optimize(amino_acids, species="h_sapiens", method="use_best_codon",
     """
     if not amino_acids:
         return ""
+    species = normalize_codon_species(species)
     frozen_segments = sorted(frozen_segments)
     # Build the initial DNA by substituting blessed nt segments where
     # provided, otherwise back-translating freely. Track nt ranges to
@@ -165,21 +244,31 @@ def codon_optimize(amino_acids, species="h_sapiens", method="use_best_codon",
     return problem.sequence
 
 
-def _antigen_aa_sequences(ranked_vaccine_peptides):
-    """Yield ``(name, amino_acid_string)`` for each ranked vaccine peptide."""
+def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
+                          candidates_per_slot=1):
+    """Yield ``(name, amino_acid_string)`` per antigen, mutation-centered
+    and clipped to ``max_antigen_length_aa``.
+
+    ``candidates_per_slot`` walks through additional ranked candidates
+    per variant; alternates get a ``_alt<k>`` suffix on their name so
+    different constructs can be traced back.
+    """
+    from .peptide import _slp_window
     for variant, peptides in ranked_vaccine_peptides:
         if not peptides:
             continue
-        peptide = peptides[0]
-        fragment = peptide.mutant_protein_fragment
-        name = "%s_%s_%s_%s_%s" % (
-            fragment.gene_name or 'unknown',
-            variant.contig,
-            variant.start,
-            variant.ref or '.',
-            variant.alt or '.',
-        )
-        yield name, fragment.amino_acids
+        for idx, peptide in enumerate(peptides[:max(1, candidates_per_slot)]):
+            fragment = peptide.mutant_protein_fragment
+            name = "%s_%s_%s_%s_%s" % (
+                fragment.gene_name or 'unknown',
+                variant.contig,
+                variant.start,
+                variant.ref or '.',
+                variant.alt or '.',
+            )
+            if idx > 0:
+                name = "%s_alt%d" % (name, idx)
+            yield name, _slp_window(fragment, name, max_antigen_length_aa)
 
 
 def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
@@ -251,7 +340,7 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
         projected = fixed_overhead_nt + current_aa_nt + linker_nt + antigen_nt
         cap_hit = (
             projected > options.max_length_nt
-            or len(current) >= options.max_antigens_per_construct
+            or len(current) >= options.antigens_per_construct
         )
         if cap_hit and current:
             constructs.append(current)
@@ -259,6 +348,12 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
             current_aa_nt = 0
             antigen_nt = len(aa) * 3
             linker_nt = 0
+            if len(constructs) >= options.max_constructs:
+                logger.warning(
+                    "Reached --mrna-max-constructs (%d); dropping "
+                    "remaining antigens including %s.",
+                    options.max_constructs, name)
+                return constructs
         # A single antigen larger than the length cap is still emitted in
         # its own construct — splitting one antigen would corrupt the
         # epitope. Warn the user so they can adjust caps or drop it.
@@ -269,8 +364,12 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
                 name, fixed_overhead_nt + antigen_nt, options.max_length_nt)
         current.append((name, aa))
         current_aa_nt += linker_nt + antigen_nt
-    if current:
+    if current and len(constructs) < options.max_constructs:
         constructs.append(current)
+    elif current:
+        logger.warning(
+            "Dropped final %d antigen(s); --mrna-max-constructs (%d) reached.",
+            len(current), options.max_constructs)
     return constructs
 
 
@@ -305,7 +404,10 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
     utr_5p_dna = _resolve_named(UTRS_5P, options.utr_5p, "5' UTR")
     utr_3p_dna = _resolve_named(UTRS_3P, options.utr_3p, "3' UTR")
 
-    antigens = list(_antigen_aa_sequences(ranked_vaccine_peptides))
+    antigens = list(_antigen_aa_sequences(
+        ranked_vaccine_peptides,
+        max_antigen_length_aa=options.max_antigen_length_aa,
+        candidates_per_slot=options.candidates_per_slot))
     if not antigens:
         return []
 
