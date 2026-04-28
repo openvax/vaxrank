@@ -18,4 +18,5 @@ astropy>=6.1
 platformdirs
 pysam>=0.23.0
 msgspec>=0.18.6,<1.0.0
+dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
