@@ -236,3 +236,29 @@ def test_write_mrna_outputs_fasta_and_manifest():
         assert entry['length'] == len(constructs[0].sequence)
         assert 'components' in entry
         assert 'manufacturability' in entry
+
+
+def test_mrna_min_antigen_length_warning(caplog):
+    # mRNA also enforces min_antigen_length_aa via warning. Regression
+    # for the field being declared but unused (#246 review).
+    import logging
+    pairs = [_variant_pair("KLQGH", gene_name='G')]  # 5 aa
+    with caplog.at_level(logging.WARNING):
+        assemble_mrna_constructs(
+            pairs,
+            options=RNAConstructConfig(
+                signal_peptide=None, include_mitd=False,
+                min_antigen_length_aa=15))
+    assert any("below" in r.message and "mrna-min-antigen-length" in r.message
+               for r in caplog.records), \
+        "Expected a min-antigen-length warning for an undersized mRNA antigen"
+
+
+def test_select_antigen_window_used_by_both_modalities():
+    # The mutation-centered window helper lives in vaccine_library and
+    # is used by both peptide.py and mrna.py. Catch a regression where
+    # one modality forks its own copy of the logic.
+    from vaxrank import mrna, peptide
+    from vaxrank.vaccine_library import select_antigen_window
+    assert mrna.select_antigen_window is select_antigen_window
+    assert peptide.select_antigen_window is select_antigen_window

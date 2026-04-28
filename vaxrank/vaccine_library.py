@@ -10,7 +10,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared linker library for mRNA and peptide vaccine constructs.
+"""Shared assembly utilities used by both mRNA and peptide construct modes.
+
+Contains the linker library and the mutation-centered window selector
+that both ``vaxrank.mrna`` and ``vaxrank.peptide`` need.
 
 A linker is anything that goes between concatenated antigens. Some
 linkers are pure amino-acid spacers (GS-family, AAY, GPGPG, EAAAK,
@@ -33,8 +36,11 @@ form so that ``--peptide-linker GS3`` and ``--peptide-linker G4S3``
 both resolve to the same Linker object.
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -257,3 +263,36 @@ def get_linker(name):
             "Unknown linker '%s'. Available: %s" % (
                 name, ', '.join(all_linker_names())))
     return LINKERS[canonical]
+
+
+def select_antigen_window(fragment, base_name, max_length_aa):
+    """Return a sub-window of the vaccine peptide that preserves the mutation.
+
+    A naive ``amino_acids[:max_length_aa]`` truncation can drop the
+    mutated residues entirely when the mutation sits past the head of
+    the fragment. This helper centers a window of ``max_length_aa`` on
+    the mutation (using ``mutant_amino_acid_*_offset`` from the fragment).
+    If the mutation itself exceeds the cap (rare; long inframe
+    insertions), the full fragment is emitted unchanged with a warning.
+
+    Used by both ``vaxrank.peptide`` (SLP mode) and ``vaxrank.mrna``
+    (per-antigen window in concatenated constructs).
+    """
+    aa = fragment.amino_acids
+    if len(aa) <= max_length_aa:
+        return aa
+    mut_start = getattr(fragment, 'mutant_amino_acid_start_offset', 0)
+    mut_end = getattr(fragment, 'mutant_amino_acid_end_offset', len(aa))
+    mut_len = mut_end - mut_start
+    if mut_len > max_length_aa:
+        logger.warning(
+            "Mutation in %s spans %d aa, longer than the antigen-length "
+            "cap (%d); emitting full fragment without truncation.",
+            base_name, mut_len, max_length_aa)
+        return aa
+    midpoint = (mut_start + mut_end) // 2
+    half = max_length_aa // 2
+    start = max(0, midpoint - half)
+    end = min(len(aa), start + max_length_aa)
+    start = max(0, end - max_length_aa)
+    return aa[start:end]

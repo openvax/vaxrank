@@ -460,6 +460,22 @@ def add_peptide_output_args(group):
         action="store_true",
         default=False,
         help="Mark constructs for C-terminal amidation in the order form.")
+    group.add_argument(
+        "--peptide-scale-mg",
+        default=5.0,
+        type=float,
+        help="Synthesis scale in mg per peptide for the vendor order form. "
+             "Default: 5.0.")
+    group.add_argument(
+        "--peptide-purity-percent",
+        default=95.0,
+        type=float,
+        help="HPLC purity target (%%) for the vendor order form. Default: 95.0.")
+    group.add_argument(
+        "--peptide-counterion",
+        default="TFA",
+        help="Salt form / counterion for the vendor order form "
+             "(e.g. TFA, acetate, HCl, free). Default: TFA.")
 
 
 def add_supplemental_report_args(arg_parser):

@@ -51,7 +51,7 @@ from .mrna_library import (
     UTRS_3P,
     UTRS_5P,
 )
-from .vaccine_library import get_linker
+from .vaccine_library import get_linker, select_antigen_window
 
 logger = logging.getLogger(__name__)
 
@@ -245,15 +245,19 @@ def codon_optimize(amino_acids, species="h_sapiens", method="use_best_codon",
 
 
 def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
-                          candidates_per_slot=1):
+                          min_antigen_length_aa=0, candidates_per_slot=1):
     """Yield ``(name, amino_acid_string)`` per antigen, mutation-centered
     and clipped to ``max_antigen_length_aa``.
+
+    Warns when the emitted window falls below ``min_antigen_length_aa`` —
+    typically a sign that the underlying fragment is shorter than the
+    user's configured floor (e.g. a stop-loss extension that produced
+    only a few mutant residues).
 
     ``candidates_per_slot`` walks through additional ranked candidates
     per variant; alternates get a ``_alt<k>`` suffix on their name so
     different constructs can be traced back.
     """
-    from .peptide import _slp_window
     for variant, peptides in ranked_vaccine_peptides:
         if not peptides:
             continue
@@ -268,7 +272,14 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
             )
             if idx > 0:
                 name = "%s_alt%d" % (name, idx)
-            yield name, _slp_window(fragment, name, max_antigen_length_aa)
+            window = select_antigen_window(
+                fragment, name, max_antigen_length_aa)
+            if len(window) < min_antigen_length_aa:
+                logger.warning(
+                    "Antigen %s emitted at %d aa, below "
+                    "--mrna-min-antigen-length-aa (%d).",
+                    name, len(window), min_antigen_length_aa)
+            yield name, window
 
 
 def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
@@ -407,6 +418,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
     antigens = list(_antigen_aa_sequences(
         ranked_vaccine_peptides,
         max_antigen_length_aa=options.max_antigen_length_aa,
+        min_antigen_length_aa=options.min_antigen_length_aa,
         candidates_per_slot=options.candidates_per_slot))
     if not antigens:
         return []

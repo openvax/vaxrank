@@ -349,3 +349,79 @@ def test_max_constructs_caps_peptide_pool():
         pairs.append((Variant('1', 100 + i, 'A', 'T'), [peptide]))
     constructs = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
     assert len(constructs) == 20  # default
+
+
+# ---- review-gap regression tests ------------------------------------------
+
+def test_min_antigen_length_warning_when_emitted_below_floor(caplog):
+    # Source fragment is 10 aa; min_antigen_length_aa=15 means the
+    # emitted SLP will be too short. Vaxrank must warn rather than
+    # silently shipping an undersized peptide.
+    import logging
+    pairs = [_variant_pair("KLQGHSAPVL", gene_name='G')]  # 10 aa
+    with caplog.at_level(logging.WARNING):
+        constructs = assemble_peptide_constructs(
+            pairs, options=PeptideConstructConfig(min_antigen_length_aa=15))
+    assert len(constructs) == 1
+    assert any("below" in r.message and "min-antigen-length" in r.message
+               for r in caplog.records), \
+        "Expected a min-antigen-length warning for an undersized SLP"
+
+
+def test_multi_epitope_warns_on_dropped_antigens(caplog):
+    # 4 antigens, antigens_per_construct=2, max_constructs=1 → only
+    # the first 2 antigens fit; the last 2 must produce a drop warning
+    # so the user can see they're being silently dropped.
+    import logging
+    pairs = [_variant_pair("A" * 20, start=i) for i in range(4)]
+    with caplog.at_level(logging.WARNING):
+        constructs = assemble_peptide_constructs(
+            pairs,
+            options=PeptideConstructConfig(
+                mode='multi_epitope', linker='GS', antigens_per_construct=2,
+                max_constructs=1, max_antigen_length_aa=20))
+    assert len(constructs) == 1
+    assert len(constructs[0].antigen_names) == 2
+    drop_warnings = [
+        r for r in caplog.records
+        if "max-constructs" in r.message
+        and ("dropping" in r.message.lower() or "dropped" in r.message.lower())
+    ]
+    assert drop_warnings, \
+        "Expected a max-constructs drop warning. Got: %s" % (
+            [r.message for r in caplog.records],)
+
+
+def test_order_form_includes_scale_purity_counterion():
+    pairs = [_variant_pair("KLQGHSAPVLDVIVN")]
+    options = PeptideConstructConfig(
+        scale_mg=10.0, purity_percent=98.0, counterion='acetate')
+    constructs = assemble_peptide_constructs(pairs, options=options)
+    with tempfile.TemporaryDirectory() as tmp:
+        order_path = os.path.join(tmp, "order.csv")
+        write_peptide_outputs(
+            constructs, fasta_path=os.path.join(tmp, "out.fasta"),
+            order_form_path=order_path, options=options)
+        with open(order_path) as f:
+            rows = list(csv.DictReader(f))
+        row = rows[0]
+        assert float(row['scale_mg']) == 10.0
+        assert float(row['purity_percent']) == 98.0
+        assert row['counterion'] == 'acetate'
+
+
+def test_order_form_default_scale_purity_counterion():
+    pairs = [_variant_pair("KLQGHSAPVLDVIVN")]
+    constructs = assemble_peptide_constructs(
+        pairs, options=PeptideConstructConfig())
+    with tempfile.TemporaryDirectory() as tmp:
+        order_path = os.path.join(tmp, "order.csv")
+        write_peptide_outputs(
+            constructs, fasta_path=os.path.join(tmp, "out.fasta"),
+            order_form_path=order_path)
+        with open(order_path) as f:
+            rows = list(csv.DictReader(f))
+        row = rows[0]
+        assert float(row['scale_mg']) == 5.0
+        assert float(row['purity_percent']) == 95.0
+        assert row['counterion'] == 'TFA'

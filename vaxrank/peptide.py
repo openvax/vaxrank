@@ -35,7 +35,7 @@ import logging
 from dataclasses import dataclass, field
 
 from .manufacturability import ManufacturabilityScores
-from .vaccine_library import get_linker
+from .vaccine_library import get_linker, select_antigen_window
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,12 @@ class PeptideConstructConfig:
     Defaults match the canonical PGV-001 personalized peptide vaccine
     layout: ~20 synthetic long peptides per pool, one antigen per
     peptide, 15-25 aa per peptide.
+
+    The ``scale_mg`` / ``purity_percent`` / ``counterion`` fields drive
+    the vendor order form's per-construct columns. They're per-vaccine
+    constants in current practice (one purity target across the pool),
+    but are kept here so the writer can render them without a separate
+    config object.
     """
     mode: str = "slp"            # 'slp' | 'minimal_epitope' | 'multi_epitope'
     linker: str = "G4S3"         # only used in multi_epitope mode
@@ -57,6 +63,9 @@ class PeptideConstructConfig:
     candidates_per_slot: int = 1
     n_terminal_acetylation: bool = False
     c_terminal_amidation: bool = False
+    scale_mg: float = 5.0           # synthesis scale per peptide
+    purity_percent: float = 95.0    # HPLC purity target
+    counterion: str = "TFA"         # default salt form (TFA / acetate / HCl / free)
 
 
 @dataclass
@@ -103,7 +112,7 @@ def _antigen_records(ranked_vaccine_peptides, mode, max_antigen_length_aa,
                 yield base_name + "_epitope", top.peptide_sequence
             else:
                 # slp + multi_epitope: pick a mutation-centered window
-                yield base_name, _slp_window(
+                yield base_name, select_antigen_window(
                     fragment, base_name, max_antigen_length_aa)
 
 
@@ -114,36 +123,6 @@ def _top_mutant_epitope(vaccine_peptide):
         return None
     # mutant_epitope_predictions is already sorted by score in the pipeline
     return predictions[0]
-
-
-def _slp_window(fragment, base_name, max_length_aa):
-    """Return a sub-window of the vaccine peptide that preserves the mutation.
-
-    A naive ``amino_acids[:max_length_aa]`` truncation can drop the
-    mutated residues entirely when the mutation is past the head of the
-    fragment — see issue #245 review. Instead, center a window of size
-    ``max_length_aa`` on the mutation. If the mutation itself is longer
-    than the cap (rare; e.g. very long inframe insertions), emit the
-    full fragment unchanged with a warning.
-    """
-    aa = fragment.amino_acids
-    if len(aa) <= max_length_aa:
-        return aa
-    mut_start = getattr(fragment, 'mutant_amino_acid_start_offset', 0)
-    mut_end = getattr(fragment, 'mutant_amino_acid_end_offset', len(aa))
-    mut_len = mut_end - mut_start
-    if mut_len > max_length_aa:
-        logger.warning(
-            "Mutation in %s spans %d aa, longer than --peptide-max-length-aa "
-            "(%d); emitting full fragment without truncation.",
-            base_name, mut_len, max_length_aa)
-        return aa
-    midpoint = (mut_start + mut_end) // 2
-    half = max_length_aa // 2
-    start = max(0, midpoint - half)
-    end = min(len(aa), start + max_length_aa)
-    start = max(0, end - max_length_aa)
-    return aa[start:end]
 
 
 def _manufacturability_for(sequence):
@@ -201,6 +180,10 @@ def _pack_multi_epitope(records, options, linker):
         current_aa += linker_extra + antigen_aa
     if current and len(constructs) < options.max_constructs:
         constructs.append(current)
+    elif current:
+        logger.warning(
+            "Dropped final %d antigen(s); --peptide-max-constructs (%d) "
+            "reached.", len(current), options.max_constructs)
     return constructs
 
 
@@ -338,7 +321,8 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
                       'n_terminal_modification', 'c_terminal_modification']
             if has_mods:
                 header.append('displayed_sequence')
-            header += ['antigen_names', 'notes']
+            header += ['scale_mg', 'purity_percent', 'counterion',
+                       'antigen_names', 'notes']
             writer.writerow(header)
             n_term = 'Acetyl' if options.n_terminal_acetylation else 'Free'
             c_term = 'Amide' if options.c_terminal_amidation else 'Free'
@@ -355,5 +339,7 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
                         options.n_terminal_acetylation,
                         options.c_terminal_amidation,
                         c.sequence))
-                row += [';'.join(c.antigen_names), notes]
+                row += [options.scale_mg, options.purity_percent,
+                        options.counterion,
+                        ';'.join(c.antigen_names), notes]
                 writer.writerow(row)

@@ -236,3 +236,102 @@ def test_normalize_codon_species_passes_through_unknown():
     # If we don't recognize the input, leave it for DnaChisel to validate.
     from vaxrank.mrna import normalize_codon_species
     assert normalize_codon_species("foo_bar") == "foo_bar"
+
+
+def test_select_antigen_window_centers_on_mutation():
+    # Regression for the bug where SLP truncation took [:max_length]
+    # and could drop the mutation when it sat past the head of the
+    # fragment. The shared helper must center on mutant_amino_acid_*_offset.
+    from types import SimpleNamespace
+    from vaxrank.vaccine_library import select_antigen_window
+    fragment = SimpleNamespace(
+        amino_acids="A" * 40 + "WHY" + "A" * 7,  # mutation at 40-43
+        mutant_amino_acid_start_offset=40,
+        mutant_amino_acid_end_offset=43,
+    )
+    window = select_antigen_window(fragment, "test", 30)
+    assert len(window) == 30
+    assert "WHY" in window
+
+
+def test_select_antigen_window_short_fragment_passthrough():
+    from types import SimpleNamespace
+    from vaxrank.vaccine_library import select_antigen_window
+    fragment = SimpleNamespace(
+        amino_acids="KLQGHSAPVL",
+        mutant_amino_acid_start_offset=0,
+        mutant_amino_acid_end_offset=10,
+    )
+    assert select_antigen_window(fragment, "test", 30) == "KLQGHSAPVL"
+
+
+def test_select_antigen_window_warns_when_mutation_exceeds_cap(caplog):
+    import logging
+    from types import SimpleNamespace
+    from vaxrank.vaccine_library import select_antigen_window
+    fragment = SimpleNamespace(
+        amino_acids="A" * 5 + "M" * 25 + "A" * 10,  # 25 aa mutation
+        mutant_amino_acid_start_offset=5,
+        mutant_amino_acid_end_offset=30,
+    )
+    with caplog.at_level(logging.WARNING):
+        result = select_antigen_window(fragment, "test", 20)
+    # Untruncated since mutation > cap
+    assert result == fragment.amino_acids
+    assert any("longer than" in r.message for r in caplog.records)
+
+
+# ---- end-to-end: both modalities from the same ranked list ----------------
+
+def test_both_modalities_emit_compatible_manifests(tmp_path):
+    """Smoke test: a single ranked list produces both peptide and mRNA
+    constructs with manifest schemas that share the top-level keys
+    (modality, name, length, length_unit, antigen_names, components,
+    manufacturability). Catches divergence between the two writers.
+    """
+    import json
+    from types import SimpleNamespace
+    from varcode import Variant
+    from vaxrank.peptide import (
+        PeptideConstructConfig, assemble_peptide_constructs,
+        write_peptide_outputs)
+    from vaxrank.mrna import (
+        RNAConstructConfig, assemble_mrna_constructs, write_mrna_outputs)
+
+    fragment = SimpleNamespace(
+        amino_acids="KLQGHSAPVLDVIVN", gene_name='GENE',
+        mutant_amino_acid_start_offset=5, mutant_amino_acid_end_offset=10)
+    peptide = SimpleNamespace(
+        mutant_protein_fragment=fragment, mutant_epitope_predictions=[],
+        manufacturability_scores=None)
+    pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
+
+    p_constructs = assemble_peptide_constructs(
+        pairs, options=PeptideConstructConfig())
+    m_constructs = assemble_mrna_constructs(
+        pairs, options=RNAConstructConfig())
+
+    p_fasta = tmp_path / "peptide.fasta"
+    p_manifest = tmp_path / "peptide.json"
+    m_fasta = tmp_path / "mrna.fasta"
+    m_manifest = tmp_path / "mrna.json"
+    write_peptide_outputs(
+        p_constructs, str(p_fasta), str(p_manifest))
+    write_mrna_outputs(
+        m_constructs, str(m_fasta), str(m_manifest))
+
+    p_entry = json.loads(p_manifest.read_text())[0]
+    m_entry = json.loads(m_manifest.read_text())[0]
+
+    shared_keys = {
+        'modality', 'name', 'length', 'length_unit',
+        'antigen_names', 'components', 'manufacturability',
+    }
+    assert shared_keys <= set(p_entry), \
+        "peptide manifest missing keys: %s" % (shared_keys - set(p_entry),)
+    assert shared_keys <= set(m_entry), \
+        "mRNA manifest missing keys: %s" % (shared_keys - set(m_entry),)
+    assert p_entry['modality'] == 'peptide'
+    assert p_entry['length_unit'] == 'aa'
+    assert m_entry['modality'] == 'mrna'
+    assert m_entry['length_unit'] == 'nt'

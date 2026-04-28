@@ -240,6 +240,9 @@ def main(args_list=None):
             candidates_per_slot=args.peptide_candidates_per_slot,
             n_terminal_acetylation=args.peptide_n_terminal_acetyl,
             c_terminal_amidation=args.peptide_c_terminal_amide,
+            scale_mg=args.peptide_scale_mg,
+            purity_percent=args.peptide_purity_percent,
+            counterion=args.peptide_counterion,
         )
         peptide_constructs = assemble_peptide_constructs(
             ranked_variants_with_vaccine_peptides, options=peptide_options)
