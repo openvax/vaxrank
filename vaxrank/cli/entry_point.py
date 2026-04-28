@@ -59,6 +59,7 @@ from ..report import (
     TemplateDataCreator,
 )
 from ..patient_info import PatientInfo
+from ..mrna import MRNAOptions, assemble_mrna_constructs, write_mrna_outputs
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +215,30 @@ def main(args_list=None):
             ranked_variants_with_vaccine_peptides,
             num_epitopes_per_peptide=num_epitopes,
             excel_report_path=args.output_neoepitope_report)
+
+    if getattr(args, 'output_mrna', ''):
+        options = MRNAOptions(
+            signal_peptide=(args.mrna_signal_peptide or None),
+            linker=args.mrna_linker,
+            include_mitd=args.mrna_include_mitd,
+            mitd=args.mrna_mitd,
+            utr_5p=args.mrna_5p_utr,
+            utr_3p=args.mrna_3p_utr,
+            codon_species=args.mrna_codon_species,
+            codon_method=args.mrna_codon_method,
+            max_antigens_per_construct=args.mrna_max_antigens,
+            max_length_nt=args.mrna_max_length_nt,
+        )
+        constructs = assemble_mrna_constructs(
+            ranked_variants_with_vaccine_peptides, options=options)
+        write_mrna_outputs(
+            constructs,
+            fasta_path=args.output_mrna,
+            manifest_path=getattr(args, 'output_mrna_manifest', '') or None,
+        )
+        logger.info(
+            "Wrote %d mRNA construct(s) to %s",
+            len(constructs), args.output_mrna)
 
     ########################
     # Template-based reports
