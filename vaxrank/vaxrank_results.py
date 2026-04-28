@@ -75,13 +75,16 @@ class VaxrankResults(DataclassSerializable):
             for v in variant_properties)
         return counts_dict
 
-    def variant_properties(self, gene_pathway_check=None):
+    def variant_properties(self, gene_pathway_check=None, dna_vaf_by_variant=None):
         """
         Parameters
         ----------
         gene_pathway_check : GenePathwayCheck (optional)
             Used to look up whether a mutation or its affected gene are in some
             biologically important pathway.
+        dna_vaf_by_variant : dict[varcode.Variant, float] (optional)
+            DNA VAF values extracted from the source VCF's FORMAT/AF (or AD)
+            fields. Variants without a DNA VAF entry get ``None``.
 
         Returns
         -------
@@ -89,9 +92,16 @@ class VaxrankResults(DataclassSerializable):
         e.g. whether this variant is part of a pathway of interest,
         is a strong MHC binder, etc.
         """
+        dna_vaf_by_variant = dna_vaf_by_variant or {}
         variant_properties_list = []
         for isovar_result in self.isovar_results:
             variant = isovar_result.variant
+
+            rna_vaf = None
+            num_alt = getattr(isovar_result, 'num_alt_fragments', None)
+            num_ref = getattr(isovar_result, 'num_ref_fragments', None)
+            if num_alt is not None and num_ref is not None and (num_alt + num_ref) > 0:
+                rna_vaf = num_alt / (num_alt + num_ref)
 
             variant_dict = OrderedDict((
                 ('gene_name', isovar_result.top_gene_name),
@@ -103,6 +113,8 @@ class VaxrankResults(DataclassSerializable):
                     isovar_result.predicted_effect_modifies_protein_sequence),
                 ('rna_support',
                     isovar_result.has_mutant_protein_sequence_from_rna),
+                ('dna_vaf', dna_vaf_by_variant.get(variant)),
+                ('rna_vaf', rna_vaf),
             ))
 
             # TODO:

@@ -60,6 +60,7 @@ from ..report import (
 )
 from ..patient_info import PatientInfo
 from ..mrna import MRNAOptions, assemble_mrna_constructs, write_mrna_outputs
+from ..vaf import extract_dna_vaf_by_variant
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +256,8 @@ def main(args_list=None):
         reviewers=args.output_reviewed_by,
         args_for_report=args_for_report,
         input_json_file=input_json_file,
-        cosmic_vcf_filename=args.cosmic_vcf_filename)
+        cosmic_vcf_filename=args.cosmic_vcf_filename,
+        dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {})
 
     template_data = template_data_creator.compute_template_data()
 
@@ -379,6 +381,9 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     logger.info("Variants: %d loaded, %d after filtering invalid contigs",
                 len(all_variants), len(variants))
 
+    dna_vaf_by_variant = extract_dna_vaf_by_variant(
+        all_variants, tumor_sample_name=getattr(args, 'tumor_sample_name', None))
+
     vaxrank_results = run_vaxrank_from_parsed_args(args)
 
     variants_count_dict = vaxrank_results.variant_counts()
@@ -388,7 +393,8 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
 
     if args.output_passing_variants_csv:
         variant_metadata_dicts = vaxrank_results.variant_properties(
-            gene_pathway_check=GenePathwayCheck())
+            gene_pathway_check=GenePathwayCheck(),
+            dna_vaf_by_variant=dna_vaf_by_variant)
         df = pd.DataFrame(variant_metadata_dicts)
         df.to_csv(args.output_passing_variants_csv, index=False)
 
@@ -413,6 +419,7 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
         'variants': ranked_variants_with_vaccine_peptides_for_report,
         'patient_info': patient_info,
         'args': vars(args),
+        'dna_vaf_by_variant': dna_vaf_by_variant,
     }
     logger.info('About to save args: %s', data['args'])
 

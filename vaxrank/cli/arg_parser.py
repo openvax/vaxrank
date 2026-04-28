@@ -182,6 +182,12 @@ def add_advanced_args(arg_parser):
         help="Path to pre-computed MHC binding predictions (topiary TSV/Parquet "
              "or CSV). Used as a lookup cache; peptides not in the cache fall "
              "through to the live MHC predictor.")
+    advanced_group.add_argument(
+        "--tumor-sample-name",
+        default=None,
+        help="Name of the tumor sample column in the VCF FORMAT fields, used "
+             "to read DNA VAF (FORMAT/AF, falling back to AD). Required for "
+             "multi-sample VCFs; auto-picked when only one sample is present.")
 
 
 def add_output_args(arg_parser):
