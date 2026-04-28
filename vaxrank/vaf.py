@@ -48,13 +48,20 @@ def _vaf_from_ad(value, alt_allele_index):
 
     AD is conventionally [ref_depth, alt1_depth, alt2_depth, ...].
     ``alt_allele_index`` is the 0-based index into the alt-only list (so
-    AD index = alt_allele_index + 1). Returns None if depths are missing
-    or sum to zero.
+    AD index = alt_allele_index + 1). VAF is reported as
+    ``alt_K / sum(AD)`` (matches GATK's convention for FORMAT/AF —
+    fraction of total reads supporting this specific alt).
+
+    Returns None if AD is absent, contains a None entry (filtering
+    those out would shift indices and silently change the meaning of
+    ``alt_allele_index``), or sums to zero.
     """
     if not isinstance(value, (list, tuple)):
         return None
+    if any(x is None for x in value):
+        return None
     try:
-        depths = [int(x) for x in value if x is not None]
+        depths = [int(x) for x in value]
     except (TypeError, ValueError):
         return None
     if not depths or sum(depths) == 0:
@@ -65,12 +72,26 @@ def _vaf_from_ad(value, alt_allele_index):
     return depths[alt_idx] / sum(depths)
 
 
+# Sentinel returned when a tumor_sample_name was supplied but doesn't appear in
+# the VCF's FORMAT samples — distinct from "no usable sample" so the caller can
+# warn about typos rather than silently dropping every variant.
+_SAMPLE_NAME_NOT_FOUND = object()
+
+
 def _pick_tumor_sample(sample_info, tumor_sample_name):
-    """Pick the sample dict to read AF/AD from. ``None`` if ambiguous."""
+    """Pick the sample dict to read AF/AD from.
+
+    Returns ``None`` when no usable sample is found (no FORMAT data, or
+    a multi-sample VCF without ``--tumor-sample-name``). Returns
+    ``_SAMPLE_NAME_NOT_FOUND`` when a name was supplied but doesn't
+    appear in the FORMAT dict.
+    """
     if not sample_info:
         return None
     if tumor_sample_name:
-        return sample_info.get(tumor_sample_name)
+        if tumor_sample_name not in sample_info:
+            return _SAMPLE_NAME_NOT_FOUND
+        return sample_info[tumor_sample_name]
     if len(sample_info) == 1:
         return next(iter(sample_info.values()))
     return None
@@ -102,11 +123,18 @@ def extract_dna_vaf_by_variant(variant_collection, tumor_sample_name=None):
     dna_vaf = {}
     skipped_missing = 0
     skipped_ambiguous = 0
+    skipped_unmatched_name = 0
+    available_sample_names = set()
     for _source, per_variant in metadata.items():
         for variant, info in per_variant.items():
-            sample = _pick_tumor_sample(info.get('sample_info'), tumor_sample_name)
+            sample_info = info.get('sample_info') or {}
+            available_sample_names.update(sample_info)
+            sample = _pick_tumor_sample(sample_info, tumor_sample_name)
+            if sample is _SAMPLE_NAME_NOT_FOUND:
+                skipped_unmatched_name += 1
+                continue
             if sample is None:
-                if info.get('sample_info') and len(info['sample_info']) > 1:
+                if sample_info and len(sample_info) > 1:
                     skipped_ambiguous += 1
                 continue
             alt_idx = info.get('alt_allele_index', 0)
@@ -118,6 +146,14 @@ def extract_dna_vaf_by_variant(variant_collection, tumor_sample_name=None):
                 continue
             dna_vaf[variant] = vaf
 
+    if skipped_unmatched_name:
+        logger.warning(
+            "DNA VAF: --tumor-sample-name '%s' did not match any FORMAT "
+            "sample in the VCF; %d variant(s) skipped. Available samples: %s.",
+            tumor_sample_name,
+            skipped_unmatched_name,
+            ", ".join(sorted(available_sample_names)) or "(none)",
+        )
     if skipped_ambiguous:
         logger.warning(
             "DNA VAF: %d variant(s) skipped because the VCF has multiple "

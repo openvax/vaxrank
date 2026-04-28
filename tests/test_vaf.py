@@ -115,3 +115,29 @@ def test_dna_vaf_zero_depth_returns_none():
     coll = _stub_collection({'a.vcf': {v: _entry({'TUMOR': {'AD': [0, 0]}})}})
     out = extract_dna_vaf_by_variant(coll, tumor_sample_name='TUMOR')
     assert v not in out
+
+
+def test_dna_vaf_warns_when_tumor_sample_name_unmatched(caplog):
+    # User typo: VCF FORMAT has 'TUMOUR' but --tumor-sample-name was
+    # 'TUMOR'. Before the guard, dict.get() returned None silently and
+    # every variant dropped out without a hint.
+    import logging
+    v = object()
+    coll = _stub_collection({'a.vcf': {v: _entry({'TUMOUR': {'AF': 0.4}})}})
+    with caplog.at_level(logging.WARNING):
+        out = extract_dna_vaf_by_variant(coll, tumor_sample_name='TUMOR')
+    assert v not in out
+    assert any('TUMOR' in rec.message and 'TUMOUR' in rec.message
+               for rec in caplog.records), \
+        "Expected a warning that 'TUMOR' didn't match and listed 'TUMOUR'"
+
+
+def test_dna_vaf_ad_with_none_entry_returns_none():
+    # AD=[ref, None, alt2] would, with the prior `[x for x in v if x is
+    # not None]` filter, shift indices and silently report the wrong
+    # allele's VAF. The entry must be rejected instead.
+    v = object()
+    sample = {'TUMOR': {'AD': [50, None, 30]}}
+    coll = _stub_collection({'a.vcf': {v: _entry(sample, alt_allele_index=1)}})
+    out = extract_dna_vaf_by_variant(coll, tumor_sample_name='TUMOR')
+    assert v not in out

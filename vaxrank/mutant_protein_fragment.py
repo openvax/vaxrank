@@ -248,8 +248,18 @@ class MutantProteinFragment(DataclassSerializable):
     @property
     def rna_vaf(self):
         """
-        RNA variant allele frequency: alt / (alt + ref). Returns None when
-        no ref+alt reads were observed.
+        RNA variant allele frequency.
+
+        Computed as ``n_alt_reads / (n_alt_reads + n_ref_reads)`` —
+        ``n_other_reads`` (reads matching neither ref nor alt) is
+        excluded from the denominator so the value reports an
+        alt-vs-ref ratio rather than alt-out-of-total-overlapping.
+        Matches the convention used by
+        ``vaxrank_results.variant_properties`` for JSON/CSV output.
+        Differs from ``isovar.IsovarResult.fraction_alt_fragments``,
+        which divides by the total fragment count including "other".
+
+        Returns None when no ref+alt reads were observed.
         """
         denom = self.n_alt_reads + self.n_ref_reads
         if denom == 0:
