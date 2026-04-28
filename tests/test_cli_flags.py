@@ -142,3 +142,61 @@ def test_no_verbose_keeps_console_handlers_at_info(tmp_path):
     assert len(console_handlers) > 0
     for h in console_handlers:
         assert h.level == logging.INFO
+
+
+# ---- linker arg validation (#246) -------------------------------------------
+
+def test_peptide_linker_rejects_unknown(capsys):
+    """argparse should reject unknown --peptide-linker before assembly runs."""
+    parser = make_vaxrank_arg_parser()
+    try:
+        parser.parse_args([
+            "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+            "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+            "--output-csv", "out.csv",
+            "--peptide-linker", "NOTREAL",
+        ])
+    except SystemExit:
+        captured = capsys.readouterr()
+        assert "NOTREAL" in captured.err
+    else:
+        raise AssertionError("argparse did not reject --peptide-linker NOTREAL")
+
+
+def test_mrna_linker_rejects_unknown(capsys):
+    parser = make_vaxrank_arg_parser()
+    try:
+        parser.parse_args([
+            "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+            "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+            "--output-csv", "out.csv",
+            "--mrna-linker", "NOTREAL",
+        ])
+    except SystemExit:
+        captured = capsys.readouterr()
+        assert "NOTREAL" in captured.err
+    else:
+        raise AssertionError("argparse did not reject --mrna-linker NOTREAL")
+
+
+def test_peptide_linker_accepts_lowercase():
+    """`--peptide-linker p2a` should work the same as `P2A` via str.upper."""
+    parser = make_vaxrank_arg_parser()
+    args = parser.parse_args([
+        "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+        "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+        "--output-csv", "out.csv",
+        "--peptide-linker", "p2a",
+    ])
+    assert args.peptide_linker == "P2A"
+
+
+def test_mrna_linker_accepts_lowercase():
+    parser = make_vaxrank_arg_parser()
+    args = parser.parse_args([
+        "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+        "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+        "--output-csv", "out.csv",
+        "--mrna-linker", "gs3",
+    ])
+    assert args.mrna_linker == "GS3"

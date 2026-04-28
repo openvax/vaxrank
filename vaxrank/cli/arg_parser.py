@@ -60,8 +60,9 @@ def make_vaxrank_arg_parser():
     arg_parser = make_isovar_arg_parser(
         prog="vaxrank",
         description=(
-            "Select personalized vaccine peptides from cancer variants, "
-            "expression data, and patient HLA type."),
+            "Rank personalized cancer neoantigens from somatic variants, "
+            "tumor RNA, and patient HLA type, and emit them as analysis "
+            "reports, peptide constructs, or mRNA constructs."),
         parents=[parent_parser],
     )
     
@@ -118,8 +119,9 @@ def cached_run_arg_parser():
     arg_parser = ArgumentParser(
         prog="vaxrank",
         description=(
-            "Select personalized vaccine peptides from cancer variants, "
-            "expression data, and patient HLA type."),
+            "Rank personalized cancer neoantigens from somatic variants, "
+            "tumor RNA, and patient HLA type, and emit them as analysis "
+            "reports, peptide constructs, or mRNA constructs."),
     )
     arg_parser.add_argument(
         '--version',
@@ -288,7 +290,8 @@ def add_output_args(arg_parser):
 
 def add_mrna_output_args(group):
     """mRNA vaccine construct output (see vaxrank/mrna.py for assembly)."""
-    from ..mrna_library import LINKERS, MITDS, SIGNAL_PEPTIDES, UTRS_3P, UTRS_5P
+    from ..mrna_library import MITDS, SIGNAL_PEPTIDES, UTRS_3P, UTRS_5P
+    from ..vaccine_library import LINKERS
     group.add_argument(
         "--output-mrna",
         default="",
@@ -308,8 +311,10 @@ def add_mrna_output_args(group):
     group.add_argument(
         "--mrna-linker",
         default="GS3",
-        help="Linker name from the mRNA library (one of: %s). Default: GS3."
-             % ", ".join(sorted(LINKERS)))
+        type=str.upper,
+        choices=sorted(LINKERS),
+        help="Linker name from the shared library (case-insensitive). "
+             "Default: GS3.")
     group.add_argument(
         "--mrna-include-mitd",
         action="store_true",
@@ -383,8 +388,10 @@ def add_peptide_output_args(group):
     group.add_argument(
         "--peptide-linker",
         default="GS3",
-        help="Linker used in --peptide-mode=multi_epitope. Shared library "
-             "with mRNA mode (one of: %s)." % ", ".join(sorted(LINKERS)))
+        type=str.upper,
+        choices=sorted(LINKERS),
+        help="Linker used in --peptide-mode=multi_epitope (case-insensitive). "
+             "Shared library with mRNA mode. Default: GS3.")
     group.add_argument(
         "--peptide-max-length-aa",
         default=30,

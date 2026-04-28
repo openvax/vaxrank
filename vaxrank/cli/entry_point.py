@@ -174,15 +174,22 @@ def _resolve_ensembl_release(args):
 
 def main(args_list=None):
     """
-    Script to generate vaccine peptide predictions from somatic cancer variants,
-    patient HLA type, and tumor RNA-seq data.
+    Rank personalized cancer neoantigens from somatic variants, tumor
+    RNA, and patient HLA type. The ranked candidates can be emitted as
+    analysis reports, peptide vaccine constructs, or mRNA vaccine
+    constructs (or any combination).
 
-    Example usage:
-        vaxrank
-            --vcf somatic.vcf \
-            --bam rnaseq.bam \
-            --vaccine-peptide-length 25 \
-            --output-csv vaccine-peptides.csv
+    Example (analysis report + peptide pool + mRNA construct):
+
+        vaxrank \\
+            --vcf somatic.vcf \\
+            --bam rnaseq.bam \\
+            --mhc-predictor netmhc \\
+            --mhc-alleles HLA-A*02:01 \\
+            --vaccine-peptide-length 25 \\
+            --output-pdf-report report.pdf \\
+            --output-peptide vaccine-peptides.fasta \\
+            --output-mrna vaccine-mrna.fasta
     """
     if args_list is None:
         args_list = sys.argv[1:]

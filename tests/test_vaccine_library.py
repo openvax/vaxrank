@@ -53,6 +53,91 @@ def test_vaccine_library_p2a_carries_blessed_dna():
     assert p2a.inert_in_peptide_mode is True
 
 
+_STANDARD_CODON_TABLE = {
+    'GCA': 'A', 'GCC': 'A', 'GCG': 'A', 'GCT': 'A',
+    'TGC': 'C', 'TGT': 'C',
+    'GAC': 'D', 'GAT': 'D',
+    'GAA': 'E', 'GAG': 'E',
+    'TTC': 'F', 'TTT': 'F',
+    'GGA': 'G', 'GGC': 'G', 'GGG': 'G', 'GGT': 'G',
+    'CAC': 'H', 'CAT': 'H',
+    'ATA': 'I', 'ATC': 'I', 'ATT': 'I',
+    'AAA': 'K', 'AAG': 'K',
+    'CTA': 'L', 'CTC': 'L', 'CTG': 'L', 'CTT': 'L', 'TTA': 'L', 'TTG': 'L',
+    'ATG': 'M',
+    'AAC': 'N', 'AAT': 'N',
+    'CCA': 'P', 'CCC': 'P', 'CCG': 'P', 'CCT': 'P',
+    'CAA': 'Q', 'CAG': 'Q',
+    'AGA': 'R', 'AGG': 'R', 'CGA': 'R', 'CGC': 'R', 'CGG': 'R', 'CGT': 'R',
+    'AGC': 'S', 'AGT': 'S', 'TCA': 'S', 'TCC': 'S', 'TCG': 'S', 'TCT': 'S',
+    'ACA': 'T', 'ACC': 'T', 'ACG': 'T', 'ACT': 'T',
+    'GTA': 'V', 'GTC': 'V', 'GTG': 'V', 'GTT': 'V',
+    'TGG': 'W',
+    'TAC': 'Y', 'TAT': 'Y',
+}
+
+
+@pytest.mark.parametrize("name", ["P2A", "T2A", "F2A", "E2A"])
+def test_2a_blessed_dna_translates_to_aa(name):
+    """Each 2A entry's DNA must (a) be 3x its AA length and (b) translate
+    back to the same amino-acid string. A typo in any blessed DNA would
+    silently produce a non-functional 2A in mRNA constructs."""
+    linker = vaccine_library.LINKERS[name]
+    assert linker.dna is not None, "%s missing blessed DNA" % name
+    assert len(linker.dna) == len(linker.amino_acids) * 3, \
+        "%s DNA length mismatch" % name
+    translated = ''.join(
+        _STANDARD_CODON_TABLE[linker.dna[i:i + 3]]
+        for i in range(0, len(linker.dna), 3)
+    )
+    assert translated == linker.amino_acids, \
+        "%s DNA translates to '%s', expected '%s'" % (
+            name, translated, linker.amino_acids)
+
+
+@pytest.mark.parametrize("name", ["P2A", "T2A", "F2A", "E2A"])
+def test_2a_linker_flags(name):
+    linker = vaccine_library.LINKERS[name]
+    assert linker.freeze_in_mrna is True
+    assert linker.inert_in_peptide_mode is True
+
+
+def test_get_linker_is_case_sensitive():
+    # CLI normalizes case before reaching get_linker via type=str.upper, so
+    # the underlying function expects the canonical (uppercase) form.
+    with pytest.raises(ValueError):
+        vaccine_library.get_linker("p2a")
+
+
+def test_construct_name_format_consistent_across_modalities():
+    """mRNA constructs use 'seq_NNN'; peptide constructs use 'peptide_NNN'.
+    Same width and zero-padding so consumers can sort/parse uniformly.
+    """
+    import re
+    from types import SimpleNamespace
+    from varcode import Variant
+    from vaxrank.mrna import MRNAOptions, assemble_mrna_constructs
+    from vaxrank.peptide import PeptideOptions, assemble_peptide_constructs
+
+    fragment = SimpleNamespace(
+        amino_acids="KLQGHSAPVLDVIVN", gene_name='G',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=15)
+    peptide = SimpleNamespace(
+        mutant_protein_fragment=fragment, mutant_epitope_predictions=[],
+        manufacturability_scores=None)
+    pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
+
+    [m] = assemble_mrna_constructs(pairs, options=MRNAOptions())
+    [p] = assemble_peptide_constructs(pairs, options=PeptideOptions())
+
+    # Both should match <prefix>_NNN with the same numeric width.
+    pattern = re.compile(r"^(seq|peptide)_\d{3}$")
+    assert pattern.match(m.name), \
+        "mRNA construct name '%s' must match <prefix>_NNN" % m.name
+    assert pattern.match(p.name), \
+        "Peptide construct name '%s' must match <prefix>_NNN" % p.name
+
+
 def test_vaccine_library_get_linker_unknown_raises():
     with pytest.raises(ValueError):
         vaccine_library.get_linker("notalinker")

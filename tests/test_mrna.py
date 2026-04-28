@@ -209,14 +209,14 @@ def test_write_mrna_outputs_fasta_and_manifest():
         write_mrna_outputs(constructs, fasta_path, manifest_path)
         with open(fasta_path) as f:
             text = f.read()
-        assert text.startswith(">construct_01")
+        assert text.startswith(">seq_001")
         assert UTR_5P_HBB in text.replace('\n', '')
         with open(manifest_path) as f:
             manifest = json.load(f)
         entry = manifest[0]
         assert entry['modality'] == 'mrna'
         assert entry['length_unit'] == 'nt'
-        assert entry['name'] == 'construct_01'
+        assert entry['name'] == 'seq_001'
         assert entry['antigen_names'] == ['GENE_1_1000_A_T']
         assert entry['length'] == len(constructs[0].sequence)
         assert 'components' in entry

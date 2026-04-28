@@ -292,6 +292,14 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
                        'signal peptide')
         if options.signal_peptide else ""
     )
+    # Natural secretory signal peptides start with the initial M (it's the
+    # start codon's product). All bundled SIGNAL_PEPTIDES satisfy this; guard
+    # against future additions that don't, since otherwise the CDS would lack
+    # an ATG and the ribosome wouldn't initiate.
+    if signal_peptide_aa and not signal_peptide_aa.startswith("M"):
+        raise ValueError(
+            "Signal peptide '%s' does not start with M; the resulting CDS "
+            "would have no start codon." % options.signal_peptide)
     linker = get_linker(options.linker)
     mitd_aa = _resolve_named(MITDS, options.mitd, 'MITD') if options.include_mitd else ""
     utr_5p_dna = _resolve_named(UTRS_5P, options.utr_5p, "5' UTR")
@@ -320,7 +328,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
         )
         sequence = utr_5p_dna + coding_dna + STOP_CODON + utr_3p_dna
         constructs.append(MRNAConstruct(
-            name="construct_%02d" % (i + 1),
+            name="seq_%03d" % (i + 1),
             antigen_names=names,
             sequence=sequence,
             components={

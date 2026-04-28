@@ -238,8 +238,16 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
     return constructs
 
 
-def _modification_label(acetyl, amide):
-    return ("Ac-" if acetyl else "") + "{seq}" + ("-NH2" if amide else "")
+def _modification_label(acetyl, amide, sequence):
+    """Render the vendor-display string with N-/C-terminal modifications.
+
+    Returns ``None`` when neither modification is requested — the caller
+    omits the column entirely so the order form doesn't carry a redundant
+    duplicate of the bare sequence.
+    """
+    if not (acetyl or amide):
+        return None
+    return ("Ac-" if acetyl else "") + sequence + ("-NH2" if amide else "")
 
 
 def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
@@ -250,8 +258,7 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
     consume both modalities uniformly.
     """
     options = options or PeptideOptions()
-    label = _modification_label(
-        options.n_terminal_acetylation, options.c_terminal_amidation)
+    has_mods = options.n_terminal_acetylation or options.c_terminal_amidation
 
     with open(fasta_path, 'w') as f:
         for c in constructs:
@@ -279,11 +286,12 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
     if order_form_path:
         with open(order_form_path, 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow([
-                'name', 'sequence', 'length',
-                'n_terminal_modification', 'c_terminal_modification',
-                'displayed_sequence', 'antigen_names', 'notes',
-            ])
+            header = ['name', 'sequence', 'length',
+                      'n_terminal_modification', 'c_terminal_modification']
+            if has_mods:
+                header.append('displayed_sequence')
+            header += ['antigen_names', 'notes']
+            writer.writerow(header)
             n_term = 'Acetyl' if options.n_terminal_acetylation else 'Free'
             c_term = 'Amide' if options.c_terminal_amidation else 'Free'
             for c in constructs:
@@ -293,9 +301,11 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
                         "Construct contains a 2A linker; ribosomal "
                         "skipping is co-translational and does not "
                         "occur in synthesized peptides.")
-                writer.writerow([
-                    c.name, c.sequence, len(c.sequence),
-                    n_term, c_term,
-                    label.format(seq=c.sequence),
-                    ';'.join(c.antigen_names), notes,
-                ])
+                row = [c.name, c.sequence, len(c.sequence), n_term, c_term]
+                if has_mods:
+                    row.append(_modification_label(
+                        options.n_terminal_acetylation,
+                        options.c_terminal_amidation,
+                        c.sequence))
+                row += [';'.join(c.antigen_names), notes]
+                writer.writerow(row)

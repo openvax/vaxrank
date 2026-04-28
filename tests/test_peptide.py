@@ -258,3 +258,25 @@ def test_write_peptide_outputs_fasta_manifest_orderform():
         assert row['n_terminal_modification'] == 'Acetyl'
         assert row['c_terminal_modification'] == 'Amide'
         assert row['displayed_sequence'] == 'Ac-KLQGHSAPVLDVIVN-NH2'
+
+
+def test_order_form_omits_displayed_sequence_when_no_modifications():
+    """Without N-/C-terminal modifications, the displayed_sequence column
+    would be a verbatim duplicate of `sequence` — so it should be dropped
+    from the order form."""
+    pairs = [_variant_pair("KLQGHSAPVLDVIVN")]
+    options = PeptideOptions()  # no mods
+    constructs = assemble_peptide_constructs(pairs, options=options)
+    with tempfile.TemporaryDirectory() as tmp:
+        order_path = os.path.join(tmp, "order.csv")
+        write_peptide_outputs(
+            constructs,
+            fasta_path=os.path.join(tmp, "out.fasta"),
+            order_form_path=order_path,
+            options=options,
+        )
+        with open(order_path) as f:
+            rows = list(csv.DictReader(f))
+        assert 'displayed_sequence' not in rows[0]
+        assert rows[0]['n_terminal_modification'] == 'Free'
+        assert rows[0]['c_terminal_modification'] == 'Free'
