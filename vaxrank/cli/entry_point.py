@@ -59,9 +59,9 @@ from ..report import (
     TemplateDataCreator,
 )
 from ..patient_info import PatientInfo
-from ..mrna import MRNAOptions, assemble_mrna_constructs, write_mrna_outputs
+from ..mrna import MRNAConstructConfig, assemble_mrna_constructs, write_mrna_outputs
 from ..peptide import (
-    PeptideOptions,
+    PeptideConstructConfig,
     assemble_peptide_constructs,
     write_peptide_outputs,
 )
@@ -230,7 +230,7 @@ def main(args_list=None):
             excel_report_path=args.output_neoepitope_report)
 
     if getattr(args, 'output_peptide', ''):
-        peptide_options = PeptideOptions(
+        peptide_options = PeptideConstructConfig(
             mode=args.peptide_mode,
             linker=args.peptide_linker,
             min_antigen_length_aa=args.peptide_min_antigen_length_aa,
@@ -255,7 +255,7 @@ def main(args_list=None):
             len(peptide_constructs), args.output_peptide)
 
     if getattr(args, 'output_mrna', ''):
-        options = MRNAOptions(
+        options = MRNAConstructConfig(
             signal_peptide=(args.mrna_signal_peptide or None),
             linker=args.mrna_linker,
             include_mitd=args.mrna_include_mitd,

@@ -22,7 +22,7 @@ import pytest
 from varcode import Variant
 
 from vaxrank.peptide import (
-    PeptideOptions,
+    PeptideConstructConfig,
     assemble_peptide_constructs,
     write_peptide_outputs,
 )
@@ -63,7 +63,7 @@ def test_slp_mode_one_construct_per_peptide():
         _variant_pair("KLQGHSAPVLDVIVN", start=100, gene_name='GENEA'),
         _variant_pair("MNNVDEILGRWESPV", start=200, gene_name='GENEB'),
     ]
-    constructs = assemble_peptide_constructs(pairs, options=PeptideOptions())
+    constructs = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
     assert len(constructs) == 2
     assert constructs[0].sequence == "KLQGHSAPVLDVIVN"
     assert constructs[0].name == "peptide_001"
@@ -77,7 +77,7 @@ def test_slp_truncates_oversize_peptides():
     long_aa = "A" * 50
     [c] = assemble_peptide_constructs(
         [_variant_pair(long_aa, mut_start=24, mut_end=26)],
-        options=PeptideOptions(max_antigen_length_aa=25))
+        options=PeptideConstructConfig(max_antigen_length_aa=25))
     assert c.sequence == "A" * 25
 
 
@@ -88,7 +88,7 @@ def test_slp_truncation_preserves_mutation():
     aa = "A" * 40 + "WHY" + "A" * 7  # mutation residues at 40-43
     [c] = assemble_peptide_constructs(
         [_variant_pair(aa, mut_start=40, mut_end=43)],
-        options=PeptideOptions(max_antigen_length_aa=30))
+        options=PeptideConstructConfig(max_antigen_length_aa=30))
     assert len(c.sequence) == 30
     assert "WHY" in c.sequence
 
@@ -99,7 +99,7 @@ def test_slp_emits_full_fragment_when_mutation_exceeds_cap():
     aa = "A" * 5 + "M" * 25 + "A" * 10  # 40 aa, mutation spans 25 aa
     [c] = assemble_peptide_constructs(
         [_variant_pair(aa, mut_start=5, mut_end=30)],
-        options=PeptideOptions(max_antigen_length_aa=20))
+        options=PeptideConstructConfig(max_antigen_length_aa=20))
     assert c.sequence == aa
 
 
@@ -109,7 +109,7 @@ def test_minimal_epitope_uses_top_prediction():
         "KLQGHSAPVLDVIVNCDESLLAS", gene_name='GENEA',
         epitopes=[epitope])]
     [c] = assemble_peptide_constructs(
-        pairs, options=PeptideOptions(mode='minimal_epitope'))
+        pairs, options=PeptideConstructConfig(mode='minimal_epitope'))
     assert c.sequence == "KLAGHSPVL"
     assert c.antigen_names == ["GENEA_1_1000_A_T_epitope"]
 
@@ -122,7 +122,7 @@ def test_minimal_epitope_skips_peptides_without_predictions():
             epitopes=[SimpleNamespace(peptide_sequence="MNNVDEILG")]),
     ]
     constructs = assemble_peptide_constructs(
-        pairs, options=PeptideOptions(mode='minimal_epitope'))
+        pairs, options=PeptideConstructConfig(mode='minimal_epitope'))
     assert len(constructs) == 1
     assert constructs[0].sequence == "MNNVDEILG"
 
@@ -134,7 +134,7 @@ def test_multi_epitope_concatenates_with_linker():
     ]
     [c] = assemble_peptide_constructs(
         pairs,
-        options=PeptideOptions(mode='multi_epitope', linker='AAY',
+        options=PeptideConstructConfig(mode='multi_epitope', linker='AAY',
                                max_antigen_length_aa=100,
                                antigens_per_construct=2))
     assert c.sequence == "KLQGHAAYMNNVD"
@@ -149,7 +149,7 @@ def test_multi_epitope_2a_linker_marked_inert():
     ]
     [c] = assemble_peptide_constructs(
         pairs,
-        options=PeptideOptions(mode='multi_epitope', linker='P2A',
+        options=PeptideConstructConfig(mode='multi_epitope', linker='P2A',
                                max_antigen_length_aa=200,
                                antigens_per_construct=2))
     assert "GSGATNFSLLKQAGDVEENPGP" in c.sequence
@@ -163,7 +163,7 @@ def test_multi_epitope_splits_on_max_length():
     pairs = [_variant_pair("A" * 20, start=i) for i in range(4)]
     constructs = assemble_peptide_constructs(
         pairs,
-        options=PeptideOptions(mode='multi_epitope', linker='GS',
+        options=PeptideConstructConfig(mode='multi_epitope', linker='GS',
                                max_antigen_length_aa=20,
                                antigens_per_construct=2,
                                max_constructs=10))
@@ -178,7 +178,7 @@ def test_slp_manufacturability_recomputed_after_truncation():
     aa = "A" * 30 + "WHY" + "A" * 6 + "C"  # 40-aa, mutation at 30-33
     [c] = assemble_peptide_constructs(
         [_variant_pair(aa, mut_start=30, mut_end=33)],
-        options=PeptideOptions(max_antigen_length_aa=15))
+        options=PeptideConstructConfig(max_antigen_length_aa=15))
     assert "C" not in c.sequence
     assert c.manufacturability['cysteine_count'] == 0
 
@@ -192,7 +192,7 @@ def test_minimal_epitope_manufacturability_matches_emitted_sequence():
         "KAAAAAACCC",  # source has cysteines; emitted does not
         epitopes=[epitope])]
     [c] = assemble_peptide_constructs(
-        pairs, options=PeptideOptions(mode='minimal_epitope'))
+        pairs, options=PeptideConstructConfig(mode='minimal_epitope'))
     assert c.manufacturability['cysteine_count'] == 0
 
 
@@ -203,7 +203,7 @@ def test_multi_epitope_manufacturability_populated():
     ]
     [c] = assemble_peptide_constructs(
         pairs,
-        options=PeptideOptions(mode='multi_epitope', linker='AAY',
+        options=PeptideConstructConfig(mode='multi_epitope', linker='AAY',
                                max_antigen_length_aa=100,
                                antigens_per_construct=2))
     assert c.manufacturability  # not empty
@@ -214,11 +214,11 @@ def test_unknown_mode_raises():
     with pytest.raises(ValueError):
         assemble_peptide_constructs(
             [_variant_pair("KLQ")],
-            options=PeptideOptions(mode='nonsense'))
+            options=PeptideConstructConfig(mode='nonsense'))
 
 
 def test_no_antigens_returns_empty():
-    assert assemble_peptide_constructs([], options=PeptideOptions()) == []
+    assert assemble_peptide_constructs([], options=PeptideConstructConfig()) == []
 
 
 def test_write_peptide_outputs_fasta_manifest_orderform():
@@ -231,7 +231,7 @@ def test_write_peptide_outputs_fasta_manifest_orderform():
             n_terminal_asparagine=False, n_terminal_methionine=False,
             aspartate_proline_bond_count=0,
         ))]
-    options = PeptideOptions(n_terminal_acetylation=True,
+    options = PeptideConstructConfig(n_terminal_acetylation=True,
                              c_terminal_amidation=True)
     constructs = assemble_peptide_constructs(pairs, options=options)
     with tempfile.TemporaryDirectory() as tmp:
@@ -272,7 +272,7 @@ def test_order_form_omits_displayed_sequence_when_no_modifications():
     would be a verbatim duplicate of `sequence` — so it should be dropped
     from the order form."""
     pairs = [_variant_pair("KLQGHSAPVLDVIVN")]
-    options = PeptideOptions()  # no mods
+    options = PeptideConstructConfig()  # no mods
     constructs = assemble_peptide_constructs(pairs, options=options)
     with tempfile.TemporaryDirectory() as tmp:
         order_path = os.path.join(tmp, "order.csv")
@@ -308,7 +308,7 @@ def test_candidates_per_slot_emits_alternates():
     pairs = [(Variant('1', 100, 'A', 'T'), [peptide_a, peptide_b])]
     constructs = assemble_peptide_constructs(
         pairs,
-        options=PeptideOptions(candidates_per_slot=2))
+        options=PeptideConstructConfig(candidates_per_slot=2))
     assert len(constructs) == 2
     assert constructs[0].sequence == "KLQGHSAPVLD"
     assert constructs[1].sequence == "LQGHSAPVLDV"
@@ -330,7 +330,7 @@ def test_candidates_per_slot_default_is_one():
         manufacturability_scores=None)
     from varcode import Variant
     pairs = [(Variant('1', 100, 'A', 'T'), [pa, pb])]
-    [c] = assemble_peptide_constructs(pairs, options=PeptideOptions())
+    [c] = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
     assert c.sequence == "KLQGHSAPVLD"
 
 
@@ -347,5 +347,5 @@ def test_max_constructs_caps_peptide_pool():
             mutant_protein_fragment=fragment, mutant_epitope_predictions=[],
             manufacturability_scores=None)
         pairs.append((Variant('1', 100 + i, 'A', 'T'), [peptide]))
-    constructs = assemble_peptide_constructs(pairs, options=PeptideOptions())
+    constructs = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
     assert len(constructs) == 20  # default

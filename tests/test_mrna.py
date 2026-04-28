@@ -21,7 +21,7 @@ import pytest
 from varcode import Variant
 
 from vaxrank.mrna import (
-    MRNAOptions,
+    MRNAConstructConfig,
     assemble_mrna_constructs,
     codon_optimize,
     write_mrna_outputs,
@@ -97,7 +97,7 @@ def test_assembly_basic_construct():
         _variant_pair("KLQGHSAPVLDVIVN", contig='1', start=100, gene_name='GENEA'),
         _variant_pair("MNNVDEILGRWESPV", contig='2', start=200, gene_name='GENEB'),
     ]
-    options = MRNAOptions(signal_peptide='tPA', linker='GS3',
+    options = MRNAConstructConfig(signal_peptide='tPA', linker='GS3',
                           include_mitd=False)
     constructs = assemble_mrna_constructs(pairs, options=options)
     assert len(constructs) == 1
@@ -118,7 +118,7 @@ def test_assembly_prepends_atg_when_no_signal_peptide():
     # Antigens that don't naturally start with M should still produce a
     # translatable CDS — assembler prepends an M.
     pairs = [_variant_pair("KLQGHSAPVLDVIVN", gene_name='GENE')]
-    options = MRNAOptions(signal_peptide=None, linker='GS3', include_mitd=False)
+    options = MRNAConstructConfig(signal_peptide=None, linker='GS3', include_mitd=False)
     [c] = assemble_mrna_constructs(pairs, options=options)
     cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
     assert cds[:3] == 'ATG'
@@ -128,7 +128,7 @@ def test_assembly_prepends_atg_when_no_signal_peptide():
 
 def test_assembly_does_not_double_prepend_when_antigen_starts_with_m():
     pairs = [_variant_pair("MNNVDEILGRWESPV", gene_name='GENE')]
-    options = MRNAOptions(signal_peptide=None, linker='GS3', include_mitd=False)
+    options = MRNAConstructConfig(signal_peptide=None, linker='GS3', include_mitd=False)
     [c] = assemble_mrna_constructs(pairs, options=options)
     cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
     protein = _translate(cds[:-3])
@@ -137,7 +137,7 @@ def test_assembly_does_not_double_prepend_when_antigen_starts_with_m():
 
 def test_assembly_with_mitd_appends_trafficking_domain():
     pairs = [_variant_pair("KLQGHSAPVLDVIVN")]
-    options = MRNAOptions(signal_peptide=None, linker='GS3',
+    options = MRNAConstructConfig(signal_peptide=None, linker='GS3',
                           include_mitd=True, mitd='HLA_A')
     [c] = assemble_mrna_constructs(pairs, options=options)
     cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
@@ -150,7 +150,7 @@ def test_assembly_with_mitd_appends_trafficking_domain():
 
 def test_assembly_splits_on_max_antigens():
     pairs = [_variant_pair("AAAA", start=i) for i in range(5)]
-    options = MRNAOptions(signal_peptide=None, linker='GS',
+    options = MRNAConstructConfig(signal_peptide=None, linker='GS',
                           include_mitd=False, antigens_per_construct=2,
                           max_constructs=10, max_antigen_length_aa=4)
     constructs = assemble_mrna_constructs(pairs, options=options)
@@ -160,7 +160,7 @@ def test_assembly_splits_on_max_antigens():
 def test_assembly_splits_on_max_length():
     long_aa = "A" * 200
     pairs = [_variant_pair(long_aa, start=i) for i in range(4)]
-    options = MRNAOptions(
+    options = MRNAConstructConfig(
         signal_peptide=None, linker='GS', include_mitd=False,
         antigens_per_construct=10, max_constructs=10,
         max_antigen_length_aa=200,
@@ -173,7 +173,7 @@ def test_assembly_max_constructs_caps_output():
     # New default max_constructs=1: extra antigens spill into a second
     # construct only when explicitly allowed.
     pairs = [_variant_pair("A" * 30, start=i) for i in range(3)]
-    options = MRNAOptions(
+    options = MRNAConstructConfig(
         signal_peptide=None, linker='GS', include_mitd=False,
         antigens_per_construct=1, max_constructs=1,
         max_antigen_length_aa=30)
@@ -182,13 +182,13 @@ def test_assembly_max_constructs_caps_output():
 
 
 def test_assembly_no_antigens_returns_empty():
-    assert assemble_mrna_constructs([], options=MRNAOptions()) == []
+    assert assemble_mrna_constructs([], options=MRNAConstructConfig()) == []
 
 
 def test_unknown_signal_peptide_raises():
     pairs = [_variant_pair("KLQ")]
     with pytest.raises(ValueError):
-        assemble_mrna_constructs(pairs, options=MRNAOptions(signal_peptide='nope'))
+        assemble_mrna_constructs(pairs, options=MRNAConstructConfig(signal_peptide='nope'))
 
 
 def test_assembly_p2a_linker_preserves_blessed_dna():
@@ -199,7 +199,7 @@ def test_assembly_p2a_linker_preserves_blessed_dna():
         _variant_pair("KLQGHSAPVLDVIVN", contig='1', start=100, gene_name='GENEA'),
         _variant_pair("MNNVDEILGRWESPV", contig='2', start=200, gene_name='GENEB'),
     ]
-    options = MRNAOptions(signal_peptide='tPA', linker='P2A',
+    options = MRNAConstructConfig(signal_peptide='tPA', linker='P2A',
                           include_mitd=False)
     [c] = assemble_mrna_constructs(pairs, options=options)
     cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
@@ -217,7 +217,7 @@ def test_write_mrna_outputs_fasta_and_manifest():
     pairs = [_variant_pair("KLQGHSAP")]
     constructs = assemble_mrna_constructs(
         pairs,
-        options=MRNAOptions(signal_peptide=None, include_mitd=False))
+        options=MRNAConstructConfig(signal_peptide=None, include_mitd=False))
     with tempfile.TemporaryDirectory() as tmp:
         fasta_path = os.path.join(tmp, "out.fasta")
         manifest_path = os.path.join(tmp, "out.json")

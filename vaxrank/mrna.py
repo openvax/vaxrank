@@ -26,7 +26,7 @@ with M, the assembler prepends one to keep the CDS translatable.
 Each amino-acid block is back-translated and codon-optimized for the
 target species via DnaChisel (see ``codon_optimize``). When the
 combined antigen string would exceed ``max_length_nt`` or
-``max_antigens_per_construct``, antigens spill into additional
+``antigens_per_construct``, antigens spill into additional
 constructs returned in the same order.
 """
 
@@ -127,7 +127,7 @@ def normalize_codon_species(name):
 
 
 @dataclass
-class MRNAOptions:
+class MRNAConstructConfig:
     """User-configurable mRNA construct parameters.
 
     Defaults reflect a typical neoantigen mRNA design: 5 antigen
@@ -379,13 +379,13 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
     Parameters
     ----------
     ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
-    options : MRNAOptions or None
+    options : MRNAConstructConfig or None
 
     Returns
     -------
     list[MRNAConstruct]
     """
-    options = options or MRNAOptions()
+    options = options or MRNAConstructConfig()
     signal_peptide_aa = (
         _resolve_named(SIGNAL_PEPTIDES, options.signal_peptide,
                        'signal peptide')

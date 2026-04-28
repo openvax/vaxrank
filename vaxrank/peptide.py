@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class PeptideOptions:
+class PeptideConstructConfig:
     """User-configurable peptide construct parameters.
 
     Defaults match the canonical PGV-001 personalized peptide vaccine
@@ -210,13 +210,13 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
     Parameters
     ----------
     ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
-    options : PeptideOptions or None
+    options : PeptideConstructConfig or None
 
     Returns
     -------
     list[PeptideConstruct]
     """
-    options = options or PeptideOptions()
+    options = options or PeptideConstructConfig()
     if options.mode not in ("slp", "minimal_epitope", "multi_epitope"):
         raise ValueError(
             "Unknown peptide mode '%s'; expected one of slp, "
@@ -305,7 +305,7 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
     Manifest schema matches ``mrna.write_mrna_outputs`` so callers can
     consume both modalities uniformly.
     """
-    options = options or PeptideOptions()
+    options = options or PeptideConstructConfig()
     has_mods = options.n_terminal_acetylation or options.c_terminal_amidation
 
     with open(fasta_path, 'w') as f:
