@@ -54,15 +54,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest pytest-cov ruff
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      - name: Install pysam from source (Python 3.13 fix)
-        if: matrix.python-version == '3.13'
-        run: |
-          # pysam 0.23.x has Cython profiling enabled which breaks
-          # coverage on 3.13 (sys.monitoring bug). Fixed on master
-          # (commit 54f3d41) but not yet released. Remove this step
-          # once pysam >=0.24 is out.
-          pip install --no-binary pysam --force-reinstall \
-            git+https://github.com/pysam-developers/pysam.git
       - name: Install wkhtmltopdf
         run: |
           sudo apt-get install -y xfonts-base xfonts-75dpi
