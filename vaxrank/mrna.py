@@ -14,8 +14,14 @@
 
 A construct is laid out as:
 
-    5' UTR ─ ATG ─ [signal peptide]? ─ antigen1 ─ linker ─ ... ─ antigenN
+    5' UTR ─ [signal peptide]? ─ antigen1 ─ linker ─ ... ─ antigenN
            ─ [linker ─ MITD]? ─ stop ─ 3' UTR
+
+The CDS must begin with an ATG. Canonical signal peptides (HLA-A,
+tPA, IgK) all start with methionine, so when a signal peptide is
+selected the start codon is the M at its N-terminus. When the user
+opts out of a signal peptide and the first antigen does not start
+with M, the assembler prepends one to keep the CDS translatable.
 
 Each amino-acid block is back-translated and codon-optimized for the
 target species via DnaChisel (see ``codon_optimize``). When the
@@ -129,21 +135,32 @@ def _antigen_aa_sequences(ranked_vaccine_peptides):
             continue
         peptide = peptides[0]
         fragment = peptide.mutant_protein_fragment
-        name = "%s_%s_%s" % (
+        name = "%s_%s_%s_%s_%s" % (
             fragment.gene_name or 'unknown',
             variant.contig,
             variant.start,
+            variant.ref or '.',
+            variant.alt or '.',
         )
         yield name, fragment.amino_acids
 
 
 def _build_protein_string(antigen_aas, signal_peptide_aa, linker_aa,
                           mitd_aa):
-    """Concatenate signal peptide + antigens + linker/MITD into one protein."""
+    """Concatenate signal peptide + antigens + linker/MITD into one protein.
+
+    Ensures the result begins with M so the back-translated CDS has a
+    start codon. When a signal peptide is supplied, its N-terminal M
+    serves as the start; otherwise an M is prepended in front of the
+    first antigen if it doesn't already start with one.
+    """
     parts = []
     if signal_peptide_aa:
         parts.append(signal_peptide_aa)
-    parts.append(linker_aa.join(antigen_aas))
+    body = linker_aa.join(antigen_aas)
+    if not signal_peptide_aa and not body.startswith("M"):
+        body = "M" + body
+    parts.append(body)
     if mitd_aa:
         parts.append(linker_aa)
         parts.append(mitd_aa)
@@ -153,9 +170,14 @@ def _build_protein_string(antigen_aas, signal_peptide_aa, linker_aa,
 def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker_aa,
                      mitd_aa, utr_5p_dna, utr_3p_dna):
     """Greedy bin-packing of antigens into constructs honoring the caps."""
+    # When there is no signal peptide, the assembler prepends an ATG to the
+    # CDS body if the first antigen doesn't already start with M (see
+    # _build_protein_string). Reserve 3 nt up-front to keep packing honest.
+    start_codon_nt = 3 if not signal_peptide_aa else 0
     fixed_overhead_nt = (
         len(utr_5p_dna)
         + (len(signal_peptide_aa) * 3 if signal_peptide_aa else 0)
+        + start_codon_nt
         + ((len(linker_aa) + len(mitd_aa)) * 3 if mitd_aa else 0)
         + len(STOP_CODON)
         + len(utr_3p_dna)
@@ -164,7 +186,6 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker_aa,
     current = []
     current_aa_nt = 0
     for name, aa in antigen_pairs:
-        # protein cost of adding this antigen: aa*3, plus a linker if not first
         antigen_nt = len(aa) * 3
         linker_nt = len(linker_aa) * 3 if current else 0
         projected = fixed_overhead_nt + current_aa_nt + linker_nt + antigen_nt
@@ -178,6 +199,14 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker_aa,
             current_aa_nt = 0
             antigen_nt = len(aa) * 3
             linker_nt = 0
+        # A single antigen larger than the length cap is still emitted in
+        # its own construct — splitting one antigen would corrupt the
+        # epitope. Warn the user so they can adjust caps or drop it.
+        if not current and (fixed_overhead_nt + antigen_nt) > options.max_length_nt:
+            logger.warning(
+                "Antigen %s exceeds --mrna-max-length-nt (%d > %d) on its "
+                "own; emitting in a single-antigen construct anyway.",
+                name, fixed_overhead_nt + antigen_nt, options.max_length_nt)
         current.append((name, aa))
         current_aa_nt += linker_nt + antigen_nt
     if current:
@@ -242,14 +271,19 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
                 'codon_species': options.codon_species,
                 'codon_method': options.codon_method,
                 'protein': protein,
-                'length_nt': len(sequence),
             },
         ))
     return constructs
 
 
 def write_mrna_outputs(constructs, fasta_path, manifest_path=None):
-    """Write FASTA + optional JSON manifest describing each construct."""
+    """Write FASTA + optional JSON manifest describing each construct.
+
+    Manifest entries follow a shared schema (``modality``, ``name``,
+    ``length``, ``length_unit``, ``antigen_names``, ``components``,
+    ``manufacturability``) so the peptide-mode writer can produce a
+    structurally compatible manifest.
+    """
     with open(fasta_path, 'w') as f:
         for c in constructs:
             f.write(">%s antigens=%s length=%d\n" % (
@@ -260,10 +294,13 @@ def write_mrna_outputs(constructs, fasta_path, manifest_path=None):
     if manifest_path:
         manifest = [
             {
+                'modality': 'mrna',
                 'name': c.name,
+                'length': len(c.sequence),
+                'length_unit': 'nt',
                 'antigen_names': c.antigen_names,
-                'length_nt': len(c.sequence),
                 'components': c.components,
+                'manufacturability': {},  # nt-level metrics: see openvax/vaxrank#245
             }
             for c in constructs
         ]

@@ -102,15 +102,37 @@ def test_assembly_basic_construct():
     constructs = assemble_mrna_constructs(pairs, options=options)
     assert len(constructs) == 1
     c = constructs[0]
-    assert c.antigen_names == ['GENEA_1_100', 'GENEB_2_200']
+    assert c.antigen_names == ['GENEA_1_100_A_T', 'GENEB_2_200_A_T']
     assert c.sequence.startswith(UTR_5P_HBB)
     assert c.sequence.endswith(UTR_3P_HBB)
-    # CDS sits between UTRs and ends with a stop codon
+    # CDS sits between UTRs and ends with a stop codon and starts with ATG
     cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
+    assert cds[:3] == 'ATG'
     assert cds[-3:] == 'TAA'
     protein = _translate(cds[:-3])
     expected = SIGNAL_PEPTIDE_TPA + LINKER_GS3.join(['KLQGHSAPVLDVIVN', 'MNNVDEILGRWESPV'])
     assert protein == expected
+
+
+def test_assembly_prepends_atg_when_no_signal_peptide():
+    # Antigens that don't naturally start with M should still produce a
+    # translatable CDS — assembler prepends an M.
+    pairs = [_variant_pair("KLQGHSAPVLDVIVN", gene_name='GENE')]
+    options = MRNAOptions(signal_peptide=None, linker='GS3', include_mitd=False)
+    [c] = assemble_mrna_constructs(pairs, options=options)
+    cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
+    assert cds[:3] == 'ATG'
+    protein = _translate(cds[:-3])
+    assert protein == "MKLQGHSAPVLDVIVN"
+
+
+def test_assembly_does_not_double_prepend_when_antigen_starts_with_m():
+    pairs = [_variant_pair("MNNVDEILGRWESPV", gene_name='GENE')]
+    options = MRNAOptions(signal_peptide=None, linker='GS3', include_mitd=False)
+    [c] = assemble_mrna_constructs(pairs, options=options)
+    cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
+    protein = _translate(cds[:-3])
+    assert protein == "MNNVDEILGRWESPV"
 
 
 def test_assembly_with_mitd_appends_trafficking_domain():
@@ -120,7 +142,9 @@ def test_assembly_with_mitd_appends_trafficking_domain():
     [c] = assemble_mrna_constructs(pairs, options=options)
     cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
     protein = _translate(cds[:-3])
-    expected = "KLQGHSAPVLDVIVN" + LINKER_GS3 + MITD_HLA_A
+    # No signal peptide selected and antigen doesn't start with M, so the
+    # assembler prepends one to keep the CDS translatable.
+    expected = "M" + "KLQGHSAPVLDVIVN" + LINKER_GS3 + MITD_HLA_A
     assert protein == expected
 
 
@@ -167,5 +191,11 @@ def test_write_mrna_outputs_fasta_and_manifest():
         assert UTR_5P_HBB in text.replace('\n', '')
         with open(manifest_path) as f:
             manifest = json.load(f)
-        assert manifest[0]['name'] == 'construct_01'
-        assert manifest[0]['antigen_names'] == ['GENE_1_1000']
+        entry = manifest[0]
+        assert entry['modality'] == 'mrna'
+        assert entry['length_unit'] == 'nt'
+        assert entry['name'] == 'construct_01'
+        assert entry['antigen_names'] == ['GENE_1_1000_A_T']
+        assert entry['length'] == len(constructs[0].sequence)
+        assert 'components' in entry
+        assert 'manufacturability' in entry
