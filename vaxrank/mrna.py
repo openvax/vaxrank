@@ -36,20 +36,22 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from dnachisel import (
+    AvoidChanges,
     AvoidPattern,
     CodonOptimize,
     DnaOptimizationProblem,
     EnforceTranslation,
+    Location,
 )
 from dnachisel.biotools import reverse_translate
 
 from .mrna_library import (
-    LINKERS,
     MITDS,
     SIGNAL_PEPTIDES,
     UTRS_3P,
     UTRS_5P,
 )
+from .vaccine_library import get_linker
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +93,7 @@ def _resolve_named(table, name, kind):
 
 
 def codon_optimize(amino_acids, species="h_sapiens", method="use_best_codon",
-                   avoid_patterns=()):
+                   avoid_patterns=(), frozen_segments=()):
     """Back-translate and codon-optimize an amino-acid sequence to DNA.
 
     Parameters
@@ -105,6 +107,11 @@ def codon_optimize(amino_acids, species="h_sapiens", method="use_best_codon",
     avoid_patterns : iterable of str
         Patterns / restriction sites to avoid (passed to DnaChisel
         AvoidPattern constraints).
+    frozen_segments : iterable of (start_aa, end_aa, blessed_dna)
+        Amino-acid positions [start_aa, end_aa) whose DNA should match
+        ``blessed_dna`` exactly and not be touched by codon optimization.
+        Used to preserve published codon usage for 2A self-cleaving
+        peptides (see vaccine_library.LINKER_P2A et al.).
 
     Returns
     -------
@@ -113,10 +120,40 @@ def codon_optimize(amino_acids, species="h_sapiens", method="use_best_codon",
     """
     if not amino_acids:
         return ""
-    initial = reverse_translate(amino_acids)
+    frozen_segments = sorted(frozen_segments)
+    # Build the initial DNA by substituting blessed nt segments where
+    # provided, otherwise back-translating freely. Track nt ranges to
+    # later pin via AvoidChanges.
+    initial_parts = []
+    frozen_nt_ranges = []
+    cursor = 0
+    nt_offset = 0
+    for start_aa, end_aa, blessed_dna in frozen_segments:
+        if start_aa < cursor:
+            raise ValueError("frozen_segments must not overlap")
+        if (end_aa - start_aa) * 3 != len(blessed_dna):
+            raise ValueError(
+                "blessed DNA length %d does not match AA window %d:%d"
+                % (len(blessed_dna), start_aa, end_aa))
+        prefix_aa = amino_acids[cursor:start_aa]
+        if prefix_aa:
+            prefix_dna = reverse_translate(prefix_aa)
+            initial_parts.append(prefix_dna)
+            nt_offset += len(prefix_dna)
+        initial_parts.append(blessed_dna)
+        frozen_nt_ranges.append((nt_offset, nt_offset + len(blessed_dna)))
+        nt_offset += len(blessed_dna)
+        cursor = end_aa
+    suffix_aa = amino_acids[cursor:]
+    if suffix_aa:
+        initial_parts.append(reverse_translate(suffix_aa))
+    initial = "".join(initial_parts)
+
     constraints = [EnforceTranslation()]
     for pattern in avoid_patterns:
         constraints.append(AvoidPattern(pattern))
+    for start_nt, end_nt in frozen_nt_ranges:
+        constraints.append(AvoidChanges(location=Location(start_nt, end_nt)))
     problem = DnaOptimizationProblem(
         sequence=initial,
         constraints=constraints,
@@ -145,34 +182,57 @@ def _antigen_aa_sequences(ranked_vaccine_peptides):
         yield name, fragment.amino_acids
 
 
-def _build_protein_string(antigen_aas, signal_peptide_aa, linker_aa,
-                          mitd_aa):
+def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
+                                 mitd_aa):
     """Concatenate signal peptide + antigens + linker/MITD into one protein.
+
+    Returns ``(protein_str, frozen_segments)`` where ``frozen_segments``
+    is a list of ``(start_aa, end_aa, blessed_dna)`` tuples for linker
+    occurrences that should be codon-frozen during mRNA optimization
+    (i.e. ``Linker.freeze_in_mrna`` and ``Linker.dna`` set).
 
     Ensures the result begins with M so the back-translated CDS has a
     start codon. When a signal peptide is supplied, its N-terminal M
     serves as the start; otherwise an M is prepended in front of the
     first antigen if it doesn't already start with one.
     """
+    linker_aa = linker.amino_acids
+    freeze = bool(linker.freeze_in_mrna and linker.dna)
     parts = []
+    frozen = []
+    aa_offset = 0
     if signal_peptide_aa:
         parts.append(signal_peptide_aa)
-    body = linker_aa.join(antigen_aas)
-    if not signal_peptide_aa and not body.startswith("M"):
-        body = "M" + body
-    parts.append(body)
+        aa_offset += len(signal_peptide_aa)
+    if not signal_peptide_aa and antigen_aas and not antigen_aas[0].startswith("M"):
+        parts.append("M")
+        aa_offset += 1
+    for i, aa in enumerate(antigen_aas):
+        if i > 0:
+            if freeze:
+                frozen.append((aa_offset, aa_offset + len(linker_aa), linker.dna))
+            parts.append(linker_aa)
+            aa_offset += len(linker_aa)
+        parts.append(aa)
+        aa_offset += len(aa)
     if mitd_aa:
+        if freeze:
+            frozen.append((aa_offset, aa_offset + len(linker_aa), linker.dna))
         parts.append(linker_aa)
+        aa_offset += len(linker_aa)
         parts.append(mitd_aa)
-    return "".join(parts)
+        aa_offset += len(mitd_aa)
+    return "".join(parts), frozen
 
 
-def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker_aa,
+def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
                      mitd_aa, utr_5p_dna, utr_3p_dna):
     """Greedy bin-packing of antigens into constructs honoring the caps."""
+    linker_aa = linker.amino_acids
     # When there is no signal peptide, the assembler prepends an ATG to the
     # CDS body if the first antigen doesn't already start with M (see
-    # _build_protein_string). Reserve 3 nt up-front to keep packing honest.
+    # _build_protein_with_segments). Reserve 3 nt up-front to keep packing
+    # honest.
     start_codon_nt = 3 if not signal_peptide_aa else 0
     fixed_overhead_nt = (
         len(utr_5p_dna)
@@ -232,7 +292,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
                        'signal peptide')
         if options.signal_peptide else ""
     )
-    linker_aa = _resolve_named(LINKERS, options.linker, 'linker')
+    linker = get_linker(options.linker)
     mitd_aa = _resolve_named(MITDS, options.mitd, 'MITD') if options.include_mitd else ""
     utr_5p_dna = _resolve_named(UTRS_5P, options.utr_5p, "5' UTR")
     utr_3p_dna = _resolve_named(UTRS_3P, options.utr_3p, "3' UTR")
@@ -242,20 +302,21 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
         return []
 
     packed = _pack_constructs(
-        antigens, options, signal_peptide_aa, linker_aa, mitd_aa,
+        antigens, options, signal_peptide_aa, linker, mitd_aa,
         utr_5p_dna, utr_3p_dna)
 
     constructs = []
     for i, antigen_group in enumerate(packed):
         names = [n for n, _ in antigen_group]
         antigen_aas = [aa for _, aa in antigen_group]
-        protein = _build_protein_string(
-            antigen_aas, signal_peptide_aa, linker_aa, mitd_aa)
+        protein, frozen_segments = _build_protein_with_segments(
+            antigen_aas, signal_peptide_aa, linker, mitd_aa)
         coding_dna = codon_optimize(
             protein,
             species=options.codon_species,
             method=options.codon_method,
             avoid_patterns=options.avoid_patterns,
+            frozen_segments=frozen_segments,
         )
         sequence = utr_5p_dna + coding_dna + STOP_CODON + utr_3p_dna
         constructs.append(MRNAConstruct(

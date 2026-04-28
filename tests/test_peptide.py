@@ -1,0 +1,190 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Tests for peptide vaccine construct assembly."""
+
+import csv
+import json
+import os
+import tempfile
+from types import SimpleNamespace
+
+import pytest
+from varcode import Variant
+
+from vaxrank.peptide import (
+    PeptideOptions,
+    assemble_peptide_constructs,
+    write_peptide_outputs,
+)
+
+
+def _peptide_stub(amino_acids, gene_name='GENE',
+                  mutant_epitope_predictions=None,
+                  manufacturability_scores=None):
+    fragment = SimpleNamespace(amino_acids=amino_acids, gene_name=gene_name)
+    return SimpleNamespace(
+        mutant_protein_fragment=fragment,
+        mutant_epitope_predictions=mutant_epitope_predictions or [],
+        manufacturability_scores=manufacturability_scores,
+    )
+
+
+def _variant_pair(amino_acids, contig='1', start=1000, gene_name='GENE',
+                  epitopes=None, manufacturability=None):
+    variant = Variant(contig, start, 'A', 'T')
+    peptide = _peptide_stub(
+        amino_acids, gene_name=gene_name,
+        mutant_epitope_predictions=epitopes,
+        manufacturability_scores=manufacturability)
+    return (variant, [peptide])
+
+
+def test_slp_mode_one_construct_per_peptide():
+    pairs = [
+        _variant_pair("KLQGHSAPVLDVIVN", start=100, gene_name='GENEA'),
+        _variant_pair("MNNVDEILGRWESPV", start=200, gene_name='GENEB'),
+    ]
+    constructs = assemble_peptide_constructs(pairs, options=PeptideOptions())
+    assert len(constructs) == 2
+    assert constructs[0].sequence == "KLQGHSAPVLDVIVN"
+    assert constructs[0].name == "peptide_001"
+    assert constructs[0].antigen_names == ["GENEA_1_100_A_T"]
+    assert constructs[1].sequence == "MNNVDEILGRWESPV"
+    assert constructs[1].name == "peptide_002"
+    assert constructs[0].components['mode'] == 'slp'
+
+
+def test_slp_truncates_oversize_peptides():
+    long_aa = "A" * 50
+    [c] = assemble_peptide_constructs(
+        [_variant_pair(long_aa)],
+        options=PeptideOptions(max_length_aa=25))
+    assert c.sequence == "A" * 25
+
+
+def test_minimal_epitope_uses_top_prediction():
+    epitope = SimpleNamespace(peptide_sequence="KLAGHSPVL")
+    pairs = [_variant_pair(
+        "KLQGHSAPVLDVIVNCDESLLAS", gene_name='GENEA',
+        epitopes=[epitope])]
+    [c] = assemble_peptide_constructs(
+        pairs, options=PeptideOptions(mode='minimal_epitope'))
+    assert c.sequence == "KLAGHSPVL"
+    assert c.antigen_names == ["GENEA_1_1000_A_T_epitope"]
+
+
+def test_minimal_epitope_skips_peptides_without_predictions():
+    pairs = [
+        _variant_pair("KLQGHSAPVLDVIVN", gene_name='GENEA', epitopes=[]),
+        _variant_pair(
+            "MNNVDEILGRWESPV", start=200, gene_name='GENEB',
+            epitopes=[SimpleNamespace(peptide_sequence="MNNVDEILG")]),
+    ]
+    constructs = assemble_peptide_constructs(
+        pairs, options=PeptideOptions(mode='minimal_epitope'))
+    assert len(constructs) == 1
+    assert constructs[0].sequence == "MNNVDEILG"
+
+
+def test_multi_epitope_concatenates_with_linker():
+    pairs = [
+        _variant_pair("KLQGH", start=100, gene_name='GENEA'),
+        _variant_pair("MNNVD", start=200, gene_name='GENEB'),
+    ]
+    [c] = assemble_peptide_constructs(
+        pairs,
+        options=PeptideOptions(mode='multi_epitope', linker='AAY',
+                               max_length_aa=100))
+    assert c.sequence == "KLQGHAAYMNNVD"
+    assert c.components['linker'] == 'AAY'
+    assert c.components['linker_inert'] is False
+
+
+def test_multi_epitope_2a_linker_marked_inert():
+    pairs = [
+        _variant_pair("KLQGH", start=100, gene_name='GENEA'),
+        _variant_pair("MNNVD", start=200, gene_name='GENEB'),
+    ]
+    [c] = assemble_peptide_constructs(
+        pairs,
+        options=PeptideOptions(mode='multi_epitope', linker='P2A',
+                               max_length_aa=200))
+    assert "GSGATNFSLLKQAGDVEENPGP" in c.sequence
+    assert c.components['linker_inert'] is True
+
+
+def test_multi_epitope_splits_on_max_length():
+    pairs = [_variant_pair("A" * 20, start=i) for i in range(4)]
+    constructs = assemble_peptide_constructs(
+        pairs,
+        options=PeptideOptions(mode='multi_epitope', linker='GS',
+                               max_length_aa=50))
+    # GS linker = 5 aa; antigen = 20 aa; 20 + 5 + 20 = 45 fits, +25 doesn't
+    assert len(constructs) >= 2
+
+
+def test_unknown_mode_raises():
+    with pytest.raises(ValueError):
+        assemble_peptide_constructs(
+            [_variant_pair("KLQ")],
+            options=PeptideOptions(mode='nonsense'))
+
+
+def test_no_antigens_returns_empty():
+    assert assemble_peptide_constructs([], options=PeptideOptions()) == []
+
+
+def test_write_peptide_outputs_fasta_manifest_orderform():
+    pairs = [_variant_pair(
+        "KLQGHSAPVLDVIVN",
+        manufacturability=SimpleNamespace(
+            cterm_7mer_gravy_score=0.1, max_7mer_gravy_score=0.2,
+            difficult_n_terminal_residue=False, c_terminal_cysteine=False,
+            c_terminal_proline=False, cysteine_count=0,
+            n_terminal_asparagine=False, n_terminal_methionine=False,
+            aspartate_proline_bond_count=0,
+        ))]
+    options = PeptideOptions(n_terminal_acetylation=True,
+                             c_terminal_amidation=True)
+    constructs = assemble_peptide_constructs(pairs, options=options)
+    with tempfile.TemporaryDirectory() as tmp:
+        fasta_path = os.path.join(tmp, "out.fasta")
+        manifest_path = os.path.join(tmp, "out.json")
+        order_path = os.path.join(tmp, "order.csv")
+        write_peptide_outputs(
+            constructs,
+            fasta_path=fasta_path,
+            manifest_path=manifest_path,
+            order_form_path=order_path,
+            options=options,
+        )
+        with open(fasta_path) as f:
+            text = f.read()
+        assert ">peptide_001" in text
+        assert "KLQGHSAPVLDVIVN" in text
+
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        entry = manifest[0]
+        assert entry['modality'] == 'peptide'
+        assert entry['length_unit'] == 'aa'
+        assert entry['length'] == len("KLQGHSAPVLDVIVN")
+        assert 'cterm_7mer_gravy_score' in entry['manufacturability']
+
+        with open(order_path) as f:
+            rows = list(csv.DictReader(f))
+        row = rows[0]
+        assert row['name'] == 'peptide_001'
+        assert row['n_terminal_modification'] == 'Acetyl'
+        assert row['c_terminal_modification'] == 'Amide'
+        assert row['displayed_sequence'] == 'Ac-KLQGHSAPVLDVIVN-NH2'

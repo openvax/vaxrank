@@ -60,6 +60,11 @@ from ..report import (
 )
 from ..patient_info import PatientInfo
 from ..mrna import MRNAOptions, assemble_mrna_constructs, write_mrna_outputs
+from ..peptide import (
+    PeptideOptions,
+    assemble_peptide_constructs,
+    write_peptide_outputs,
+)
 from ..vaf import extract_dna_vaf_by_variant
 
 logger = logging.getLogger(__name__)
@@ -216,6 +221,28 @@ def main(args_list=None):
             ranked_variants_with_vaccine_peptides,
             num_epitopes_per_peptide=num_epitopes,
             excel_report_path=args.output_neoepitope_report)
+
+    if getattr(args, 'output_peptide', ''):
+        peptide_options = PeptideOptions(
+            mode=args.peptide_mode,
+            linker=args.peptide_linker,
+            max_length_aa=args.peptide_max_length_aa,
+            max_antigens_per_construct=args.peptide_max_antigens,
+            n_terminal_acetylation=args.peptide_n_terminal_acetyl,
+            c_terminal_amidation=args.peptide_c_terminal_amide,
+        )
+        peptide_constructs = assemble_peptide_constructs(
+            ranked_variants_with_vaccine_peptides, options=peptide_options)
+        write_peptide_outputs(
+            peptide_constructs,
+            fasta_path=args.output_peptide,
+            manifest_path=getattr(args, 'output_peptide_manifest', '') or None,
+            order_form_path=getattr(args, 'output_peptide_order_form', '') or None,
+            options=peptide_options,
+        )
+        logger.info(
+            "Wrote %d peptide construct(s) to %s",
+            len(peptide_constructs), args.output_peptide)
 
     if getattr(args, 'output_mrna', ''):
         options = MRNAOptions(

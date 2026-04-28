@@ -27,12 +27,12 @@ from vaxrank.mrna import (
     write_mrna_outputs,
 )
 from vaxrank.mrna_library import (
-    LINKER_GS3,
     MITD_HLA_A,
     SIGNAL_PEPTIDE_TPA,
     UTR_3P_HBB,
     UTR_5P_HBB,
 )
+from vaxrank.vaccine_library import LINKER_GS3
 
 
 CODON_TABLE = {
@@ -110,7 +110,7 @@ def test_assembly_basic_construct():
     assert cds[:3] == 'ATG'
     assert cds[-3:] == 'TAA'
     protein = _translate(cds[:-3])
-    expected = SIGNAL_PEPTIDE_TPA + LINKER_GS3.join(['KLQGHSAPVLDVIVN', 'MNNVDEILGRWESPV'])
+    expected = SIGNAL_PEPTIDE_TPA + LINKER_GS3.amino_acids.join(['KLQGHSAPVLDVIVN', 'MNNVDEILGRWESPV'])
     assert protein == expected
 
 
@@ -144,7 +144,7 @@ def test_assembly_with_mitd_appends_trafficking_domain():
     protein = _translate(cds[:-3])
     # No signal peptide selected and antigen doesn't start with M, so the
     # assembler prepends one to keep the CDS translatable.
-    expected = "M" + "KLQGHSAPVLDVIVN" + LINKER_GS3 + MITD_HLA_A
+    expected = "M" + "KLQGHSAPVLDVIVN" + LINKER_GS3.amino_acids + MITD_HLA_A
     assert protein == expected
 
 
@@ -174,6 +174,28 @@ def test_unknown_signal_peptide_raises():
     pairs = [_variant_pair("KLQ")]
     with pytest.raises(ValueError):
         assemble_mrna_constructs(pairs, options=MRNAOptions(signal_peptide='nope'))
+
+
+def test_assembly_p2a_linker_preserves_blessed_dna():
+    # When a 2A linker is selected, the blessed DNA from the literature
+    # must appear verbatim in the optimized CDS.
+    from vaxrank.vaccine_library import LINKER_P2A
+    pairs = [
+        _variant_pair("KLQGHSAPVLDVIVN", contig='1', start=100, gene_name='GENEA'),
+        _variant_pair("MNNVDEILGRWESPV", contig='2', start=200, gene_name='GENEB'),
+    ]
+    options = MRNAOptions(signal_peptide='tPA', linker='P2A',
+                          include_mitd=False)
+    [c] = assemble_mrna_constructs(pairs, options=options)
+    cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
+    assert LINKER_P2A.dna in cds
+    # And translation matches the AA-level expectation (signal + a1 + P2A + a2)
+    protein = _translate(cds[:-3])
+    expected = (
+        SIGNAL_PEPTIDE_TPA
+        + LINKER_P2A.amino_acids.join(['KLQGHSAPVLDVIVN', 'MNNVDEILGRWESPV'])
+    )
+    assert protein == expected
 
 
 def test_write_mrna_outputs_fasta_and_manifest():

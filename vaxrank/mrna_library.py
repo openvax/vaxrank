@@ -99,40 +99,6 @@ presentation. Used in BioNTech IVAC MUTANOME / FixVac trials
 """
 
 
-# -- Linkers -----------------------------------------------------------------
-
-LINKER_GS = "GGGGS"
-"""Single-repeat (G4S) flexible linker, 5 aa.
-
-Source: Huston et al., PNAS 85:5879, 1988
-(doi:10.1073/pnas.85.16.5879) — first description of the (Gly4Ser)n
-linker family connecting VH-VL in single-chain Fv. Reviewed in
-Chen et al., Adv Drug Deliv Rev 65:1357, 2013
-(doi:10.1016/j.addr.2012.09.039).
-"""
-
-LINKER_GS3 = "GGGGSGGGGSGGGGS"
-"""Triple-repeat (G4S)3 flexible linker, 15 aa. See LINKER_GS for source."""
-
-LINKER_AAY = "AAY"
-"""AAY flanking spacer used between MHC-I CTL epitopes, 3 aa.
-
-Source: Velders et al., J Immunol 166:5366, 2001
-(doi:10.4049/jimmunol.166.9.5366) — established that AAY supports
-proper proteasomal/TAP processing of joined CTL epitope strings in
-DNA-vaccine constructs.
-"""
-
-LINKER_GPGPG = "GPGPG"
-"""GPGPG spacer used between MHC-II / helper T-cell epitopes, 5 aa.
-
-Source: Livingston et al., J Immunol 168:5499, 2002
-(doi:10.4049/jimmunol.168.11.5499) — demonstrated that GPGPG breaks
-junctional HLA-DR epitopes while preserving each helper epitope
-when assembling multi-epitope constructs.
-"""
-
-
 # -- Lookup tables -----------------------------------------------------------
 
 UTRS_5P = {
@@ -153,9 +119,8 @@ MITDS = {
     "HLA_A": MITD_HLA_A,
 }
 
-LINKERS = {
-    "GS": LINKER_GS,
-    "GS3": LINKER_GS3,
-    "AAY": LINKER_AAY,
-    "GPGPG": LINKER_GPGPG,
-}
+
+# Linkers live in the shared vaccine_library module so peptide-mode
+# assembly can use the same vocabulary. Re-exported here as a
+# compatibility shim for callers that import from mrna_library.
+from .vaccine_library import LINKERS  # noqa: E402,F401
