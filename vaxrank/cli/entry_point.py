@@ -59,7 +59,7 @@ from ..report import (
     TemplateDataCreator,
 )
 from ..patient_info import PatientInfo
-from ..mrna import MRNAConstructConfig, assemble_mrna_constructs, write_mrna_outputs
+from ..mrna import RNAConstructConfig, assemble_mrna_constructs, write_mrna_outputs
 from ..peptide import (
     PeptideConstructConfig,
     assemble_peptide_constructs,
@@ -255,7 +255,7 @@ def main(args_list=None):
             len(peptide_constructs), args.output_peptide)
 
     if getattr(args, 'output_mrna', ''):
-        options = MRNAConstructConfig(
+        options = RNAConstructConfig(
             signal_peptide=(args.mrna_signal_peptide or None),
             linker=args.mrna_linker,
             include_mitd=args.mrna_include_mitd,

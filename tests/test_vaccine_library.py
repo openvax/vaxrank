@@ -121,7 +121,7 @@ def test_construct_name_format_consistent_across_modalities():
     import re
     from types import SimpleNamespace
     from varcode import Variant
-    from vaxrank.mrna import MRNAConstructConfig, assemble_mrna_constructs
+    from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
     from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
 
     fragment = SimpleNamespace(
@@ -132,7 +132,7 @@ def test_construct_name_format_consistent_across_modalities():
         manufacturability_scores=None)
     pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
 
-    [m] = assemble_mrna_constructs(pairs, options=MRNAConstructConfig())
+    [m] = assemble_mrna_constructs(pairs, options=RNAConstructConfig())
     [p] = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
 
     # Both should match <prefix>_NNN with the same numeric width.

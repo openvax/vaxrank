@@ -127,7 +127,7 @@ def normalize_codon_species(name):
 
 
 @dataclass
-class MRNAConstructConfig:
+class RNAConstructConfig:
     """User-configurable mRNA construct parameters.
 
     Defaults reflect a typical neoantigen mRNA design: 5 antigen
@@ -154,7 +154,7 @@ class MRNAConstructConfig:
 
 
 @dataclass
-class MRNAConstruct:
+class RNAConstruct:
     """A single assembled mRNA construct."""
     name: str
     antigen_names: list
@@ -379,13 +379,13 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
     Parameters
     ----------
     ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
-    options : MRNAConstructConfig or None
+    options : RNAConstructConfig or None
 
     Returns
     -------
-    list[MRNAConstruct]
+    list[RNAConstruct]
     """
-    options = options or MRNAConstructConfig()
+    options = options or RNAConstructConfig()
     signal_peptide_aa = (
         _resolve_named(SIGNAL_PEPTIDES, options.signal_peptide,
                        'signal peptide')
@@ -429,7 +429,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
             frozen_segments=frozen_segments,
         )
         sequence = utr_5p_dna + coding_dna + STOP_CODON + utr_3p_dna
-        constructs.append(MRNAConstruct(
+        constructs.append(RNAConstruct(
             name="seq_%03d" % (i + 1),
             antigen_names=names,
             sequence=sequence,
