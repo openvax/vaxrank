@@ -83,6 +83,22 @@ pVAC1 expression vectors and used in many DNA-vaccine constructs
 (Kou et al., Sci Rep 7:42408, 2017, doi:10.1038/srep42408).
 """
 
+SIGNAL_PEPTIDE_CD8A = "MALPVTALLLPLALLLHAARP"
+"""Human CD8A signal peptide, 21 aa.
+
+Source: UniProt P01732 (CD8A_HUMAN), signal peptide annotation
+residues 1-21. Common choice in TCR-engineering and cell-surface
+expression constructs.
+"""
+
+SIGNAL_PEPTIDE_CD28 = "MLRLLLALNLFPSIQVTG"
+"""Human CD28 signal peptide, 18 aa.
+
+Source: UniProt P10747 (CD28_HUMAN), signal peptide annotation
+residues 1-18. Pairs with CD8A in dual-chain TCR constructs to
+distinguish alpha/beta secretion signals.
+"""
+
 
 # -- MHC-I trafficking domain -----------------------------------------------
 
@@ -113,6 +129,8 @@ SIGNAL_PEPTIDES = {
     "HLA_A": SIGNAL_PEPTIDE_HLA_A,
     "tPA": SIGNAL_PEPTIDE_TPA,
     "IgK": SIGNAL_PEPTIDE_IGK,
+    "CD8A": SIGNAL_PEPTIDE_CD8A,
+    "CD28": SIGNAL_PEPTIDE_CD28,
 }
 
 MITDS = {
@@ -120,7 +138,22 @@ MITDS = {
 }
 
 
-# Linkers live in the shared vaccine_library module so peptide-mode
-# assembly can use the same vocabulary. Re-exported here as a
-# compatibility shim for callers that import from mrna_library.
-from .vaccine_library import LINKERS  # noqa: E402,F401
+# -- Linkers (string compatibility shim) -------------------------------------
+#
+# 2.10.0 exposed linker entries as plain amino-acid strings via this
+# module: ``from vaxrank.mrna_library import LINKER_GS3``. The richer
+# ``Linker`` dataclass (with optional blessed DNA, freeze flags, and
+# citations) lives in ``vaxrank.vaccine_library``; for callers that
+# imported the string form, we keep the originals here unchanged.
+
+LINKER_GS = "GGGGS"
+LINKER_GS3 = "GGGGSGGGGSGGGGS"
+LINKER_AAY = "AAY"
+LINKER_GPGPG = "GPGPG"
+
+LINKERS = {
+    "GS": LINKER_GS,
+    "GS3": LINKER_GS3,
+    "AAY": LINKER_AAY,
+    "GPGPG": LINKER_GPGPG,
+}

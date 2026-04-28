@@ -61,11 +61,9 @@ class PeptideConstruct:
     manufacturability: dict = field(default_factory=dict)
 
 
-def _antigen_records(ranked_vaccine_peptides, mode):
-    """Yield ``(name, amino_acids, manufacturability_dict)`` per antigen.
-
-    SLP / multi_epitope use the full mutant_protein_fragment.amino_acids;
-    minimal_epitope uses the top-scoring mutant epitope's peptide_sequence.
+def _antigen_records(ranked_vaccine_peptides, mode, max_length_aa):
+    """Yield ``(name, amino_acids)`` per antigen, applying mode-specific
+    selection and (for SLP) a mutation-preserving length cap.
     """
     for variant, peptides in ranked_vaccine_peptides:
         if not peptides:
@@ -73,13 +71,12 @@ def _antigen_records(ranked_vaccine_peptides, mode):
         peptide = peptides[0]
         fragment = peptide.mutant_protein_fragment
         base_name = "%s_%s_%s_%s_%s" % (
-            fragment.gene_name or 'unknown',
+            getattr(fragment, 'gene_name', None) or 'unknown',
             variant.contig,
             variant.start,
             variant.ref or '.',
             variant.alt or '.',
         )
-        manufacturability = _manufacturability_dict(peptide)
         if mode == "minimal_epitope":
             top = _top_mutant_epitope(peptide)
             if top is None:
@@ -87,9 +84,14 @@ def _antigen_records(ranked_vaccine_peptides, mode):
                     "Skipping %s in minimal_epitope mode: no mutant epitope "
                     "predictions available.", base_name)
                 continue
-            yield base_name + "_epitope", top.peptide_sequence, manufacturability
+            yield base_name + "_epitope", top.peptide_sequence
+        elif mode == "slp":
+            yield base_name, _slp_window(fragment, base_name, max_length_aa)
         else:
-            yield base_name, fragment.amino_acids, manufacturability
+            # multi_epitope: emit per-antigen windows centered on the
+            # mutation so each piece preserves its epitope before
+            # concatenation. The packer enforces the per-construct cap.
+            yield base_name, _slp_window(fragment, base_name, max_length_aa)
 
 
 def _top_mutant_epitope(vaccine_peptide):
@@ -101,18 +103,40 @@ def _top_mutant_epitope(vaccine_peptide):
     return predictions[0]
 
 
-def _manufacturability_dict(vaccine_peptide):
-    """Pluck ManufacturabilityScores fields onto a flat dict for the manifest."""
-    scores = getattr(vaccine_peptide, 'manufacturability_scores', None)
-    if scores is None:
-        return {}
-    return {field: getattr(scores, field) for field in ManufacturabilityScores._fields}
+def _slp_window(fragment, base_name, max_length_aa):
+    """Return a sub-window of the vaccine peptide that preserves the mutation.
+
+    A naive ``amino_acids[:max_length_aa]`` truncation can drop the
+    mutated residues entirely when the mutation is past the head of the
+    fragment — see issue #245 review. Instead, center a window of size
+    ``max_length_aa`` on the mutation. If the mutation itself is longer
+    than the cap (rare; e.g. very long inframe insertions), emit the
+    full fragment unchanged with a warning.
+    """
+    aa = fragment.amino_acids
+    if len(aa) <= max_length_aa:
+        return aa
+    mut_start = getattr(fragment, 'mutant_amino_acid_start_offset', 0)
+    mut_end = getattr(fragment, 'mutant_amino_acid_end_offset', len(aa))
+    mut_len = mut_end - mut_start
+    if mut_len > max_length_aa:
+        logger.warning(
+            "Mutation in %s spans %d aa, longer than --peptide-max-length-aa "
+            "(%d); emitting full fragment without truncation.",
+            base_name, mut_len, max_length_aa)
+        return aa
+    midpoint = (mut_start + mut_end) // 2
+    half = max_length_aa // 2
+    start = max(0, midpoint - half)
+    end = min(len(aa), start + max_length_aa)
+    start = max(0, end - max_length_aa)
+    return aa[start:end]
 
 
-def _truncate(amino_acids, max_length_aa):
-    if len(amino_acids) <= max_length_aa:
-        return amino_acids
-    return amino_acids[:max_length_aa]
+def _manufacturability_for(sequence):
+    """Recompute ManufacturabilityScores from the final emitted sequence."""
+    scores = ManufacturabilityScores.from_amino_acids(sequence)
+    return {f: getattr(scores, f) for f in ManufacturabilityScores._fields}
 
 
 def _pack_multi_epitope(records, options, linker):
@@ -121,7 +145,7 @@ def _pack_multi_epitope(records, options, linker):
     constructs = []
     current = []
     current_aa = 0
-    for name, aa, manuf in records:
+    for name, aa in records:
         antigen_aa = len(aa)
         linker_extra = len(linker_aa) if current else 0
         projected = current_aa + linker_extra + antigen_aa
@@ -139,7 +163,7 @@ def _pack_multi_epitope(records, options, linker):
                 "Antigen %s exceeds --peptide-max-length-aa (%d > %d) on "
                 "its own; emitting as-is.",
                 name, antigen_aa, options.max_length_aa)
-        current.append((name, aa, manuf))
+        current.append((name, aa))
         current_aa += linker_extra + antigen_aa
     if current:
         constructs.append(current)
@@ -164,7 +188,8 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
             "Unknown peptide mode '%s'; expected one of slp, "
             "minimal_epitope, multi_epitope." % (options.mode,))
 
-    records = list(_antigen_records(ranked_vaccine_peptides, options.mode))
+    records = list(_antigen_records(
+        ranked_vaccine_peptides, options.mode, options.max_length_aa))
     if not records:
         return []
 
@@ -176,14 +201,13 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
 
     constructs = []
     if options.mode in ("slp", "minimal_epitope"):
-        for i, (name, aa, manuf) in enumerate(records):
-            sequence = _truncate(aa, options.max_length_aa)
+        for i, (name, sequence) in enumerate(records):
             constructs.append(PeptideConstruct(
                 name="peptide_%03d" % (i + 1),
                 sequence=sequence,
                 antigen_names=[name],
                 components=dict(base_components),
-                manufacturability=manuf,
+                manufacturability=_manufacturability_for(sequence),
             ))
         return constructs
 
@@ -197,8 +221,8 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
             options.linker)
     packed = _pack_multi_epitope(records, options, linker)
     for i, group in enumerate(packed):
-        names = [n for n, _, _ in group]
-        sequence = linker.amino_acids.join(aa for _, aa, _ in group)
+        names = [n for n, _ in group]
+        sequence = linker.amino_acids.join(aa for _, aa in group)
         components = dict(base_components)
         components.update({
             'linker': options.linker,
@@ -209,7 +233,7 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
             sequence=sequence,
             antigen_names=names,
             components=components,
-            manufacturability={},  # construct-level scoring TBD
+            manufacturability=_manufacturability_for(sequence),
         ))
     return constructs
 

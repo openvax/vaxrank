@@ -30,8 +30,15 @@ from vaxrank.peptide import (
 
 def _peptide_stub(amino_acids, gene_name='GENE',
                   mutant_epitope_predictions=None,
-                  manufacturability_scores=None):
-    fragment = SimpleNamespace(amino_acids=amino_acids, gene_name=gene_name)
+                  manufacturability_scores=None,
+                  mut_start=None, mut_end=None):
+    fragment = SimpleNamespace(
+        amino_acids=amino_acids,
+        gene_name=gene_name,
+        mutant_amino_acid_start_offset=(0 if mut_start is None else mut_start),
+        mutant_amino_acid_end_offset=(
+            len(amino_acids) if mut_end is None else mut_end),
+    )
     return SimpleNamespace(
         mutant_protein_fragment=fragment,
         mutant_epitope_predictions=mutant_epitope_predictions or [],
@@ -40,12 +47,14 @@ def _peptide_stub(amino_acids, gene_name='GENE',
 
 
 def _variant_pair(amino_acids, contig='1', start=1000, gene_name='GENE',
-                  epitopes=None, manufacturability=None):
+                  epitopes=None, manufacturability=None,
+                  mut_start=None, mut_end=None):
     variant = Variant(contig, start, 'A', 'T')
     peptide = _peptide_stub(
         amino_acids, gene_name=gene_name,
         mutant_epitope_predictions=epitopes,
-        manufacturability_scores=manufacturability)
+        manufacturability_scores=manufacturability,
+        mut_start=mut_start, mut_end=mut_end)
     return (variant, [peptide])
 
 
@@ -67,9 +76,31 @@ def test_slp_mode_one_construct_per_peptide():
 def test_slp_truncates_oversize_peptides():
     long_aa = "A" * 50
     [c] = assemble_peptide_constructs(
-        [_variant_pair(long_aa)],
+        [_variant_pair(long_aa, mut_start=24, mut_end=26)],
         options=PeptideOptions(max_length_aa=25))
     assert c.sequence == "A" * 25
+
+
+def test_slp_truncation_preserves_mutation():
+    # 50-aa fragment with the mutation at offset 40:43; a naive [:30]
+    # truncation would drop the mutation entirely. The assembler must
+    # center the window on the mutation instead.
+    aa = "A" * 40 + "WHY" + "A" * 7  # mutation residues at 40-43
+    [c] = assemble_peptide_constructs(
+        [_variant_pair(aa, mut_start=40, mut_end=43)],
+        options=PeptideOptions(max_length_aa=30))
+    assert len(c.sequence) == 30
+    assert "WHY" in c.sequence
+
+
+def test_slp_emits_full_fragment_when_mutation_exceeds_cap():
+    # Inframe insertion longer than --peptide-max-length-aa: refuse
+    # to truncate (the mutation can't be retained otherwise).
+    aa = "A" * 5 + "M" * 25 + "A" * 10  # 40 aa, mutation spans 25 aa
+    [c] = assemble_peptide_constructs(
+        [_variant_pair(aa, mut_start=5, mut_end=30)],
+        options=PeptideOptions(max_length_aa=20))
+    assert c.sequence == aa
 
 
 def test_minimal_epitope_uses_top_prediction():
@@ -131,6 +162,45 @@ def test_multi_epitope_splits_on_max_length():
                                max_length_aa=50))
     # GS linker = 5 aa; antigen = 20 aa; 20 + 5 + 20 = 45 fits, +25 doesn't
     assert len(constructs) >= 2
+
+
+def test_slp_manufacturability_recomputed_after_truncation():
+    # Source fragment ends in C (would have cysteine_count=1); after
+    # truncation to a window that excludes the C, the construct's
+    # manufacturability must reflect the emitted sequence, not the
+    # source.
+    aa = "A" * 30 + "WHY" + "A" * 6 + "C"  # 40-aa, mutation at 30-33
+    [c] = assemble_peptide_constructs(
+        [_variant_pair(aa, mut_start=30, mut_end=33)],
+        options=PeptideOptions(max_length_aa=15))
+    assert "C" not in c.sequence
+    assert c.manufacturability['cysteine_count'] == 0
+
+
+def test_minimal_epitope_manufacturability_matches_emitted_sequence():
+    # The emitted sequence is the predicted epitope, not the full
+    # source vaccine peptide; manufacturability must follow the emitted
+    # sequence.
+    epitope = SimpleNamespace(peptide_sequence="KAAAAAA")  # no cysteines
+    pairs = [_variant_pair(
+        "KAAAAAACCC",  # source has cysteines; emitted does not
+        epitopes=[epitope])]
+    [c] = assemble_peptide_constructs(
+        pairs, options=PeptideOptions(mode='minimal_epitope'))
+    assert c.manufacturability['cysteine_count'] == 0
+
+
+def test_multi_epitope_manufacturability_populated():
+    pairs = [
+        _variant_pair("KLQGH", start=100, gene_name='GENEA'),
+        _variant_pair("MNNCD", start=200, gene_name='GENEB'),
+    ]
+    [c] = assemble_peptide_constructs(
+        pairs,
+        options=PeptideOptions(mode='multi_epitope', linker='AAY',
+                               max_length_aa=100))
+    assert c.manufacturability  # not empty
+    assert c.manufacturability['cysteine_count'] == 1
 
 
 def test_unknown_mode_raises():
