@@ -22,14 +22,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _parse_af(value):
-    """Parse a FORMAT 'AF' value, which may be a float, list, or string."""
+def _parse_af(value, alt_allele_index=0):
+    """Parse a FORMAT 'AF' value, which may be a float, list, or string.
+
+    For multiallelic records, AF is conventionally one value per ALT
+    allele; ``alt_allele_index`` (0-based into the alt-only list) selects
+    the right entry. Scalar values are returned as-is regardless of
+    ``alt_allele_index``.
+    """
     if value is None:
         return None
     if isinstance(value, (list, tuple)):
-        if not value:
+        if alt_allele_index < 0 or alt_allele_index >= len(value):
             return None
-        value = value[0]
+        value = value[alt_allele_index]
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -104,7 +110,7 @@ def extract_dna_vaf_by_variant(variant_collection, tumor_sample_name=None):
                     skipped_ambiguous += 1
                 continue
             alt_idx = info.get('alt_allele_index', 0)
-            vaf = _parse_af(sample.get('AF'))
+            vaf = _parse_af(sample.get('AF'), alt_idx)
             if vaf is None:
                 vaf = _vaf_from_ad(sample.get('AD'), alt_idx)
             if vaf is None:

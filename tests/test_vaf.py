@@ -83,6 +83,28 @@ def test_dna_vaf_handles_af_as_list():
     assert out[v] == 0.25
 
 
+def test_dna_vaf_af_uses_alt_allele_index():
+    # FORMAT/AF is one value per ALT allele on multiallelic records.
+    # A variant split from the second ALT must read the second entry,
+    # not always entry [0]. Regression for the bug where _parse_af
+    # always took value[0].
+    v = object()
+    sample = {'TUMOR': {'AF': [0.1, 0.4]}}
+    coll = _stub_collection({'a.vcf': {v: _entry(sample, alt_allele_index=1)}})
+    out = extract_dna_vaf_by_variant(coll, tumor_sample_name='TUMOR')
+    assert out[v] == 0.4
+
+
+def test_dna_vaf_af_index_out_of_range_falls_back_to_ad():
+    # If AF doesn't have an entry for this alt_allele_index but AD does,
+    # fall back to AD rather than mis-reporting the wrong allele's VAF.
+    v = object()
+    sample = {'TUMOR': {'AF': [0.1], 'AD': [60, 20, 20]}}
+    coll = _stub_collection({'a.vcf': {v: _entry(sample, alt_allele_index=1)}})
+    out = extract_dna_vaf_by_variant(coll, tumor_sample_name='TUMOR')
+    assert abs(out[v] - 0.20) < 1e-9
+
+
 def test_dna_vaf_empty_collection():
     coll = SimpleNamespace(source_to_metadata_dict={})
     assert extract_dna_vaf_by_variant(coll) == {}
