@@ -143,8 +143,16 @@ _FURIN_CITATION = (
     "Nat Rev Mol Cell Biol 3:753, 2002 (doi:10.1038/nrm934). "
     "The minimal motifs (RKRR / RVKR / RKRKR) appear in multi-cistronic "
     "expression and DNA-vaccine constructs as alternatives to 2A "
-    "ribosomal skipping; vaccine-specific use is preclinical only — no "
-    "published clinical mRNA vaccine trial has used furin sites."
+    "ribosomal skipping. Cho & Celis, Cancer Immunol Immunother "
+    "61:343, 2012 (PMC4019994) tested RVKR vs furin-resistant VRVV in "
+    "a preclinical melanoma DNA vaccine and observed equivalent CD8 "
+    "responses. As of 2025 NO published vaccine clinical trial of any "
+    "modality (mRNA, DNA, peptide, viral vector) uses an engineered "
+    "furin site as an inter-antigen linker; native furin sites in "
+    "single antigens (HIV gp160→gp120/gp41; SARS-CoV-2 spike S1/S2; "
+    "influenza HA0) are not the same thing. Furin-T2A cassettes are "
+    "common in CAR-T cell therapies but those are cell therapies, "
+    "not vaccines."
 )
 
 LINKER_FURIN_RKRR = Linker(
