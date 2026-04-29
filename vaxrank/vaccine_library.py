@@ -58,6 +58,11 @@ avoid ambiguity (e.g. ``G4S2`` = "GGGGSS", *not* "(G4S)2").
   is the empirically-tested form (Aguilar-Gurrieri 2023, the only
   published alanine-spacer bake-off); longer An are length
   extrapolations.
+- ``Gn`` — n glycines, no serine. Example: ``G4`` → "GGGG". Pure
+  polyglycine has biophysical characterization (Klement 2018) as the
+  most-flexible linker but NO published vaccine empirical use. The
+  citation flags this — prefer GS-family forms (G4S, (G4S)2, etc.)
+  for any expression-dependent platform.
 
 Repeat counts are capped at 100 to prevent accidental megasequences.
 """
@@ -94,16 +99,39 @@ _GS_CITATION = (
     "Huston et al., PNAS 85:5879, 1988 (doi:10.1073/pnas.85.16.5879) "
     "established the (Gly4Ser)n family for connecting VH-VL in scFv. "
     "Length variants (G2S/G3S/G5S and shorter/longer repeats) appear "
-    "throughout subsequent scFv / fusion-protein literature without a "
-    "single primary benchmark; reviewed in Chen et al., Adv Drug Deliv "
-    "Rev 65:1357, 2013 (doi:10.1016/j.addr.2012.09.039). "
+    "throughout subsequent scFv / fusion-protein literature; reviewed "
+    "in Chen et al., Adv Drug Deliv Rev 65:1357, 2013 "
+    "(doi:10.1016/j.addr.2012.09.039). Klement et al., Biochemistry "
+    "57:1378, 2018 (doi:10.1021/acs.biochem.7b00902) showed persistence "
+    "length scales with glycine fraction (more Gly = more flexible). "
     "Clinical mRNA neoantigen vaccine use: BioNTech IVAC MUTANOME / "
     "FixVac (Sahin et al., Nature 547:222, 2017, "
     "doi:10.1038/nature23003) and iNeST / autogene cevumeran (Rojas "
     "et al., Nature 618:144, 2023, doi:10.1038/s41586-023-06063-y) use "
     "a 10-aa Gly/Ser linker — i.e. (G4S)2 — between 25-27mer minigenes. "
     "This is the only linker family with published clinical mRNA "
-    "vaccine use as of 2025."
+    "vaccine use as of 2025. Caveats: empirical vaccine data on the "
+    "GS family is thin — Yang 2015 (PMC4514284) showed GGGS worked "
+    "while AAY failed in HIV DNA vaccines; Aguilar-Gurrieri 2023 "
+    "(doi:10.1007/s00262-023-03409-3) showed GGGS performed WORST for "
+    "MHC-I presentation among AAA / AAL / ADL / single-A / GGGS. No "
+    "published vaccine study has varied (G4S)n length and measured "
+    "immunogenicity; length effects are inherited from antibody / "
+    "scFv engineering."
+)
+
+_POLYG_CITATION = (
+    "Pure polyglycine (Gn, no serine) has biophysical characterization "
+    "as the most-flexible linker family (lowest persistence length; "
+    "Klement et al., Biochemistry 57:1378, 2018, "
+    "doi:10.1021/acs.biochem.7b00902 measured persistence length 4.5 Å "
+    "for full-Gly vs 6.2 Å for full-Ser). However, polyglycine has NO "
+    "published primary use as an inter-epitope spacer in any vaccine "
+    "modality (peptide, DNA, mRNA, viral vector) with an immunogenicity "
+    "readout. The choice trade-off vs (G4S)n: more flexibility but "
+    "lower solubility (no polar residue). Use at your own design risk; "
+    "consider AAA (Aguilar-Gurrieri 2023, the only empirically-tested "
+    "alanine-only spacer for vaccines) as an alternative."
 )
 
 # Single-unit GnSm entries only. Repeats use the compositional grammar:
@@ -370,6 +398,7 @@ ALIASES = {
 _PAREN_REPEAT_RE = re.compile(r"^\((?P<base>[A-Z][A-Z0-9]*)\)X?(?P<count>\d+)$")
 _X_REPEAT_RE = re.compile(r"^(?P<base>[A-Z][A-Z0-9]*)X(?P<count>\d+)$")
 _GNSM_RE = re.compile(r"^G(?P<g>\d+)S(?P<s>\d+)?$")
+_GN_RE = re.compile(r"^G(?P<n>\d+)$")
 _ANY_RE = re.compile(r"^A(?P<n>\d+)Y$")
 _AN_RE = re.compile(r"^A(?P<n>\d+)$")
 
@@ -416,7 +445,8 @@ def get_linker(name):
     the module docstring.
 
     Resolution order: aliases → static LINKERS → ``(BASE)N`` /
-    ``(BASE)xN`` → ``BASExN`` → ``GnSm`` (literal) → ``AnY`` → ``An``.
+    ``(BASE)xN`` → ``BASExN`` → ``GnSm`` (literal) → ``AnY`` → ``An``
+    → ``Gn``.
     Names are uppercased before lookup so ``g4s2``, ``G4Sx2``, and
     ``g4sx2`` all resolve identically. ValueError on miss.
     """
@@ -477,6 +507,19 @@ def get_linker(name):
             name=canonical,
             amino_acids="A" * n,
             citation=_ALANINE_CITATION,
+        )
+
+    # Gn — pure polyglycine, no serine. Biophysically the most
+    # flexible linker family but unstudied as an inter-epitope spacer
+    # in vaccines (see _POLYG_CITATION).
+    m = _GN_RE.match(canonical)
+    if m:
+        n = int(m.group("n"))
+        _check_repeat(n, "glycine count")
+        return Linker(
+            name=canonical,
+            amino_acids="G" * n,
+            citation=_POLYG_CITATION,
         )
 
     raise ValueError(

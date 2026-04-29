@@ -583,3 +583,44 @@ def test_any_citation_flags_no_primary_footing():
     assert ("no primary" in a3y.citation.lower()
             or "without empirical" in a3y.citation.lower()
             or "extrapolation" in a3y.citation.lower())
+
+
+# ---- polyglycine (Gn) family ----------------------------------------------
+
+@pytest.mark.parametrize("name,aa", [
+    ("G3", "GGG"),
+    ("G4", "GGGG"),
+    ("G5", "GGGGG"),
+    ("G8", "GGGGGGGG"),
+])
+def test_gn_polyglycine_grammar(name, aa):
+    linker = vaccine_library.get_linker(name)
+    assert linker.amino_acids == aa
+
+
+def test_gn_citation_flags_no_vaccine_use():
+    g4 = vaccine_library.get_linker("G4")
+    # Polyglycine has biophysical characterization but NO vaccine
+    # empirical use — citation must say so.
+    assert ("no published" in g4.citation.lower()
+            or "unstudied" in g4.citation.lower()
+            or "design risk" in g4.citation.lower())
+    # Klement 2018 biophysical reference is the only empirical anchor
+    assert "Klement" in g4.citation
+
+
+def test_gn_citation_recommends_alternatives():
+    g4 = vaccine_library.get_linker("G4")
+    # Citation should point users to GS-family or AAA as the better-
+    # characterized alternatives.
+    assert ("(G4S)" in g4.citation or "G4S" in g4.citation
+            or "AAA" in g4.citation)
+
+
+def test_gnsm_takes_precedence_over_gn():
+    # 'G4S' has an S so it must match the GnSm regex, not the Gn regex.
+    # Confirm the resolution order is correct.
+    g4s = vaccine_library.get_linker("G4S")
+    assert g4s.amino_acids == "GGGGS"
+    g4 = vaccine_library.get_linker("G4")
+    assert g4.amino_acids == "GGGG"
