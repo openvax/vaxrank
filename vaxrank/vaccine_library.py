@@ -34,9 +34,27 @@ Do not introduce new entries without one.
 Aliases (``ALIASES``) map informal historical names to the canonical
 form so that ``--peptide-linker GS3`` and ``--peptide-linker G4S3``
 both resolve to the same Linker object.
+
+## Compositional grammar
+
+In addition to named entries, ``get_linker`` accepts compositional
+forms parsed at lookup time:
+
+- ``(BASE)N`` — repeat any base linker N times. Example: ``(G2S)3``
+  → "GGSGGSGGS". 2A entries (codon-frozen) are rejected — repeating
+  a 2A linker would not produce additional ribosomal-skipping events.
+- ``GnSm`` — n glycines followed by 1 serine, that unit repeated m
+  times. Example: ``G2S3`` → "GGSGGSGGS"; ``G6S`` → "GGGGGGS".
+- ``AnY`` — n alanines followed by tyrosine. Example: ``A3Y`` →
+  "AAAY". Mechanistically extrapolates from AAY (= A2Y, Velders 2001)
+  without independent primary validation; the synthesized Linker's
+  ``citation`` field flags this.
+
+Repeat counts are capped at 100 to prevent accidental megasequences.
 """
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -119,14 +137,28 @@ LINKER_FURIN_RKRKR = Linker(
 
 # -- MHC-epitope spacers ----------------------------------------------------
 
+_AAY_CITATION = (
+    "Velders et al., J Immunol 166:5366, 2001 "
+    "(doi:10.4049/jimmunol.166.9.5366) — established that AAY supports "
+    "proper proteasomal/TAP processing of joined CTL epitope strings "
+    "in DNA-vaccine constructs. The mechanism is the C-terminal Y as a "
+    "P1 proteasome cleavage anchor with neutral aliphatic spacing "
+    "upstream."
+)
+
+_ANY_CITATION = (
+    "Generalization of AAY (Velders et al., J Immunol 166:5366, 2001, "
+    "doi:10.4049/jimmunol.166.9.5366). The C-terminal Y proteasome "
+    "P1 anchor is preserved; longer N-terminal A-stretches (AAAY, "
+    "A4Y, ...) extend the neutral-spacer region without independent "
+    "primary-literature validation. Use AAY (= A2Y) as the canonical "
+    "form; longer variants are mechanistic extrapolations."
+)
+
 LINKER_AAY = Linker(
     name="AAY",
     amino_acids="AAY",
-    citation=(
-        "Velders et al., J Immunol 166:5366, 2001 "
-        "(doi:10.4049/jimmunol.166.9.5366) — established that AAY supports "
-        "proper proteasomal/TAP processing of joined CTL epitope strings "
-        "in DNA-vaccine constructs."),
+    citation=_AAY_CITATION,
 )
 
 LINKER_GPGPG = Linker(
@@ -250,19 +282,95 @@ ALIASES = {
 }
 
 
+# Compositional-name parsers (see module docstring for grammar).
+_PAREN_REPEAT_RE = re.compile(r"^\((?P<base>[A-Z][A-Z0-9]*)\)(?P<count>\d+)$")
+_GNSM_RE = re.compile(r"^G(?P<g>\d+)S(?P<m>\d+)?$")
+_ANY_RE = re.compile(r"^A(?P<n>\d+)Y$")
+
+_MAX_REPEAT = 100  # safety cap so '(G4S)1000000' can't materialize a megasequence
+
+
 def all_linker_names():
     """Canonical names + aliases. Use as argparse ``choices=`` value."""
     return sorted(set(LINKERS) | set(ALIASES))
 
 
-def get_linker(name):
-    """Resolve a linker by name (after de-aliasing); raise ValueError on miss."""
-    canonical = ALIASES.get(name, name)
-    if canonical not in LINKERS:
+def _check_repeat(count, what):
+    if count < 1 or count > _MAX_REPEAT:
         raise ValueError(
-            "Unknown linker '%s'. Available: %s" % (
-                name, ', '.join(all_linker_names())))
-    return LINKERS[canonical]
+            "Linker %s must be between 1 and %d (got %d)" % (
+                what, _MAX_REPEAT, count))
+
+
+def _make_repeat_of(base_name, count, canonical_name):
+    """Build a synthetic Linker by repeating ``base_name`` ``count`` times.
+
+    Refuses to repeat 2A linkers (codon-frozen, positional skipping
+    mechanism — repeating wouldn't add cleavage events) or any other
+    Linker carrying a blessed DNA sequence.
+    """
+    base = get_linker(base_name)
+    if base.dna:
+        raise ValueError(
+            "Linker '%s' has a codon-frozen DNA sequence (e.g. 2A "
+            "skipping is positional); repeating it would not produce "
+            "additional functional events. Use the base linker once "
+            "or pick a different family." % base_name)
+    return Linker(
+        name=canonical_name,
+        amino_acids=base.amino_acids * count,
+        freeze_in_mrna=False,
+        inert_in_peptide_mode=base.inert_in_peptide_mode,
+        citation=base.citation,
+    )
+
+
+def get_linker(name):
+    """Resolve a linker by name; supports the compositional grammar in
+    the module docstring.
+
+    Resolution order: aliases → static LINKERS → ``(BASE)N`` → ``GnSm``
+    → ``AnY``. ValueError on miss.
+    """
+    canonical = ALIASES.get(name, name)
+    if canonical in LINKERS:
+        return LINKERS[canonical]
+
+    m = _PAREN_REPEAT_RE.match(canonical)
+    if m:
+        count = int(m.group("count"))
+        _check_repeat(count, "repeat count")
+        return _make_repeat_of(m.group("base"), count, canonical)
+
+    m = _GNSM_RE.match(canonical)
+    if m:
+        g = int(m.group("g"))
+        m_count = int(m.group("m")) if m.group("m") else 1
+        _check_repeat(g, "glycine count")
+        _check_repeat(m_count, "repeat count")
+        return Linker(
+            name=canonical,
+            amino_acids=("G" * g + "S") * m_count,
+            citation=_GS_CITATION,
+        )
+
+    m = _ANY_RE.match(canonical)
+    if m:
+        n = int(m.group("n"))
+        _check_repeat(n, "alanine count")
+        # Use AAY's citation for the canonical n=2 case; for longer
+        # variants, the synthesized citation explains the extrapolation.
+        citation = _AAY_CITATION if n == 2 else _ANY_CITATION
+        return Linker(
+            name=canonical,
+            amino_acids="A" * n + "Y",
+            citation=citation,
+        )
+
+    raise ValueError(
+        "Unknown linker '%s'. Available named entries: %s. "
+        "Or use compositional forms: (BASE)N, GnSm, AnY." % (
+            name, ', '.join(all_linker_names())))
 
 
 def iter_named_antigens(ranked_vaccine_peptides, candidates_per_slot=1):

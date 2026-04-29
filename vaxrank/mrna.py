@@ -141,7 +141,7 @@ class RNAConstructConfig:
     pathologically long inputs.
     """
     signal_peptide: Optional[str] = "tPA"
-    linker: str = "G4S3"
+    linker: str = "G4S2"  # BioNTech FixVac canonical (Sahin 2017, Kreiter 2008)
     include_mitd: bool = False
     mitd: str = "HLA_A"
     utr_5p: str = "HBB"

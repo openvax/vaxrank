@@ -13,7 +13,7 @@
 
 
 import sys
-from argparse import SUPPRESS, Action, ArgumentParser
+from argparse import SUPPRESS, Action, ArgumentParser, ArgumentTypeError
 from importlib.resources import files
 
 from isovar.cli import make_isovar_arg_parser
@@ -23,6 +23,22 @@ from mhctools.cli import add_mhc_args
 from .epitope_config_args import add_epitope_prediction_args
 from .vaccine_config_args import add_vaccine_peptide_args
 from ..version import __version__
+
+
+def _linker_arg(value):
+    """argparse type=callable for --*-linker flags.
+
+    Uppercases the input, then validates via vaccine_library.get_linker
+    so the compositional grammar ((BASE)N / GnSm / AnY) resolves at
+    parse time. Returns the canonical input string for downstream use.
+    """
+    from ..vaccine_library import get_linker
+    upper = value.upper()
+    try:
+        get_linker(upper)
+    except ValueError as e:
+        raise ArgumentTypeError(str(e))
+    return upper
 
 
 
@@ -291,8 +307,6 @@ def add_output_args(arg_parser):
 def add_mrna_output_args(group):
     """mRNA vaccine construct output (see vaxrank/mrna.py for assembly)."""
     from ..mrna_library import MITDS, SIGNAL_PEPTIDES, UTRS_3P, UTRS_5P
-    from ..vaccine_library import all_linker_names
-    linker_choices = all_linker_names()
     group.add_argument(
         "--output-mrna",
         default="",
@@ -311,11 +325,13 @@ def add_mrna_output_args(group):
              "to omit. Default: tPA." % ", ".join(sorted(SIGNAL_PEPTIDES)))
     group.add_argument(
         "--mrna-linker",
-        default="G4S3",
-        type=str.upper,
-        choices=linker_choices,
-        help="Linker name from the shared library (case-insensitive). "
-             "Default: G4S3 (= legacy GS3 alias).")
+        default="G4S2",
+        type=_linker_arg,
+        help="Linker name from the shared vocabulary (case-insensitive). "
+             "Accepts named entries (G4S, G4S2, G4S3, AAY, P2A, ...), "
+             "the compositional forms (BASE)N / GnSm / AnY (e.g. (G2S)3, "
+             "G6S, A3Y), and the legacy GS / GS3 aliases. "
+             "Default: G4S2 (BioNTech FixVac canonical).")
     group.add_argument(
         "--mrna-include-mitd",
         action="store_true",
@@ -388,8 +404,6 @@ def add_mrna_output_args(group):
 
 def add_peptide_output_args(group):
     """Peptide vaccine construct output (see vaxrank/peptide.py)."""
-    from ..vaccine_library import all_linker_names
-    linker_choices = all_linker_names()
     group.add_argument(
         "--output-peptide",
         default="",
@@ -415,10 +429,10 @@ def add_peptide_output_args(group):
     group.add_argument(
         "--peptide-linker",
         default="G4S3",
-        type=str.upper,
-        choices=linker_choices,
+        type=_linker_arg,
         help="Linker used in --peptide-mode=multi_epitope (case-insensitive). "
-             "Shared library with mRNA mode. Default: G4S3.")
+             "Accepts named entries, compositional forms ((BASE)N / GnSm / "
+             "AnY), and aliases. Shared with mRNA mode. Default: G4S3.")
     group.add_argument(
         "--peptide-min-antigen-length-aa",
         default=15,

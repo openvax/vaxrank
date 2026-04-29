@@ -434,3 +434,79 @@ def test_peptide_and_mrna_names_match_for_same_input():
     [p] = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
     [m] = assemble_mrna_constructs(pairs, options=RNAConstructConfig())
     assert p.antigen_names == m.antigen_names
+
+
+# ---- compositional grammar (#247 prep) ------------------------------------
+
+def test_paren_repeat_grammar_g2s():
+    linker = vaccine_library.get_linker("(G2S)3")
+    assert linker.amino_acids == "GGSGGSGGS"
+    assert linker.name == "(G2S)3"
+    # Inherits citation from base (G2S → GS family)
+    assert "Huston" in linker.citation
+
+
+def test_paren_repeat_grammar_aay():
+    linker = vaccine_library.get_linker("(AAY)2")
+    assert linker.amino_acids == "AAYAAY"
+    assert "Velders" in linker.citation
+
+
+def test_paren_repeat_rejects_2a():
+    # 2A skipping is positional; repeating it doesn't add cleavage events.
+    with pytest.raises(ValueError, match="codon-frozen"):
+        vaccine_library.get_linker("(P2A)2")
+
+
+def test_paren_repeat_caps_count():
+    with pytest.raises(ValueError, match="repeat count"):
+        vaccine_library.get_linker("(G4S)1000")
+
+
+def test_gnsm_grammar():
+    # G6S = 6 glycines + 1 serine, single unit
+    assert vaccine_library.get_linker("G6S").amino_acids == "GGGGGGS"
+    # G2S5 = (GG + S) * 5
+    assert vaccine_library.get_linker("G2S5").amino_acids == "GGSGGSGGSGGSGGS"
+    # Static G4S3 still wins over the regex
+    assert vaccine_library.get_linker("G4S3").amino_acids == "GGGGSGGGGSGGGGS"
+
+
+def test_any_grammar():
+    # A2Y = canonical AAY (resolves to static entry first via its
+    # canonical name rather than the regex; the regex fires for n != 2)
+    a3 = vaccine_library.get_linker("A3Y")
+    assert a3.amino_acids == "AAAY"
+    assert a3.name == "A3Y"
+    a4 = vaccine_library.get_linker("A4Y")
+    assert a4.amino_acids == "AAAAY"
+    a8 = vaccine_library.get_linker("A8Y")
+    assert a8.amino_acids == "A" * 8 + "Y"
+
+
+def test_any_citation_flags_extrapolation():
+    # A3Y onwards: citation must explicitly note the extrapolation.
+    a3 = vaccine_library.get_linker("A3Y")
+    assert ("extrapolation" in a3.citation.lower()
+            or "less standardized" in a3.citation.lower()
+            or "without independent" in a3.citation.lower())
+
+
+def test_paren_and_compact_forms_match_for_g_family():
+    # (G2S)3 should produce the same amino_acids as G2S3.
+    a = vaccine_library.get_linker("(G2S)3").amino_acids
+    b = vaccine_library.get_linker("G2S3").amino_acids
+    assert a == b == "GGSGGSGGS"
+
+
+def test_unknown_compositional_form_raises():
+    # Random gibberish doesn't match any of the regexes.
+    with pytest.raises(ValueError, match="Unknown linker"):
+        vaccine_library.get_linker("ZZZ123")
+
+
+def test_grammar_rejects_zero_count():
+    with pytest.raises(ValueError):
+        vaccine_library.get_linker("(G4S)0")
+    with pytest.raises(ValueError):
+        vaccine_library.get_linker("A0Y")
