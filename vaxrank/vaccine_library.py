@@ -51,9 +51,13 @@ avoid ambiguity (e.g. ``G4S2`` = "GGGGSS", *not* "(G4S)2").
   "GGGGSS"; ``G6S`` = "GGGGGGS". Use ``(G4S)2`` for the (Gly4Ser)2
   repeat from Huston 1988 / Chen 2013.
 - ``AnY`` — n alanines followed by tyrosine. Example: ``A3Y`` →
-  "AAAY". Mechanistically extrapolates from AAY (= A2Y, Velders 2001)
-  without independent primary validation; the synthesized Linker's
-  ``citation`` field flags this.
+  "AAAY". AAY (= A2Y) is the conventional form (Wang 2004 / Velders
+  2001); n>2 has no primary-literature footing — pure mechanistic
+  extrapolation. The synthesized Linker's ``citation`` flags this.
+- ``An`` — n alanines, no tyrosine. Example: ``A4`` → "AAAA". AAA
+  is the empirically-tested form (Aguilar-Gurrieri 2023, the only
+  published alanine-spacer bake-off); longer An are length
+  extrapolations.
 
 Repeat counts are capped at 100 to prevent accidental megasequences.
 """
@@ -140,33 +144,59 @@ LINKER_FURIN_RKRKR = Linker(
 # -- MHC-epitope spacers ----------------------------------------------------
 
 _AAY_CITATION = (
-    "Velders et al., J Immunol 166:5366, 2001 "
-    "(doi:10.4049/jimmunol.166.9.5366) — established AAY as a flanking "
-    "spacer in CTL epitope strings; mechanism is C-terminal Y as a P1 "
-    "proteasome cleavage anchor with neutral aliphatic spacing upstream. "
-    "Note: Velders 2001 compared spacer vs no-spacer, NOT AAY vs other "
-    "linkers. The strongest empirical comparison to date is "
-    "Aguilar-Gurrieri et al., Cancer Immunol Immunother 72:2113, 2023 "
-    "(doi:10.1007/s00262-023-03409-3), which showed alanine-based "
-    "spacers (AAA, AAL, ADL) outperform GGGS for MHC-I/SIINFEKL "
-    "surface presentation in vitro — but did NOT test AAY itself."
+    "AAY appears in Wang et al., Vaccine 22:3622, 2004 (PMID 15320877) "
+    "as the chosen polyepitope spacer in a TB DNA vaccine; Velders et al., "
+    "J Immunol 166:5366, 2001 (doi:10.4049/jimmunol.166.9.5366) is often "
+    "cited as the foundational AAY paper but compared spacer-vs-no-spacer, "
+    "not AAY vs other linkers. Subsequent immunoinformatics designs "
+    "uniformly adopted AAY by convention rather than empirical comparison. "
+    "Caveat: Yang et al., Hum Vaccin Immunother 11:795, 2015 (PMC4514284) "
+    "is widely cited as supporting AAY but actually reports the AAY-linked "
+    "construct (pJW4303-MEG3) failing to induce detectable immune "
+    "responses while GS-linked constructs worked. The strongest empirical "
+    "alanine-spacer data is Aguilar-Gurrieri et al., Cancer Immunol "
+    "Immunother 72:2113, 2023 (doi:10.1007/s00262-023-03409-3), which "
+    "tested AAA / AAL / ADL / single-A / GGGS for MHC-I presentation — "
+    "AAA won, AAY itself was NOT tested. The mechanistic claim that Y "
+    "is THE P1 proteasome anchor is oversold: Toes et al., J Exp Med "
+    "194:1, 2001 (PMC2193442) shows L > F at P1 with Y in the same "
+    "hydrophobic cluster but not specifically preferred."
 )
 
 _ANY_CITATION = (
-    "Generalization of AAY (Velders et al., J Immunol 166:5366, 2001, "
-    "doi:10.4049/jimmunol.166.9.5366). The C-terminal Y proteasome "
-    "P1 anchor is preserved; longer N-terminal A-stretches (AAAY, "
-    "A4Y, ...) extend the neutral-spacer region without independent "
-    "primary-literature validation. AAA-only (no Y) is supported by "
+    "AnY variants beyond A2Y (= AAY) have NO primary-literature support. "
+    "AAAY / A4Y / A5Y appear in immunoinformatics design papers but no "
+    "primary publication uses these as deliberately-chosen spacers with "
+    "empirical validation. They are mechanistic extrapolations combining "
+    "(a) Aguilar-Gurrieri et al. 2023 (doi:10.1007/s00262-023-03409-3) "
+    "showing polyalanine spacers outperform GGGS for MHC-I presentation, "
+    "untested at length n>3, with (b) the conventional but oversold claim "
+    "that Y is the canonical P1 proteasome anchor (Toes et al. 2001, "
+    "PMC2193442 actually shows L > F > Y). For an empirical alanine "
+    "linker with published data, use AAA (LINKER_AAA in this library)."
+)
+
+_ALANINE_CITATION = (
     "Aguilar-Gurrieri et al., Cancer Immunol Immunother 72:2113, 2023 "
-    "(doi:10.1007/s00262-023-03409-3) for MHC-I presentation in vitro. "
-    "AnY variants beyond A2Y (= AAY) are mechanistic extrapolations."
+    "(doi:10.1007/s00262-023-03409-3, PMC10264286) — tested AAA / AAL / "
+    "ADL / single-A / GGGS as inter-epitope spacers in a 13-neoantigen + "
+    "SIINFEKL polypeptide construct. AAA gave the strongest H-2Kb/SIINFEKL "
+    "surface presentation by 25-D1.16 staining; GGGS was worst. Sole "
+    "published empirical bake-off of alanine-based spacers as of 2025. "
+    "Did NOT test AAY, AAF, AAW, or longer An (AAAA, AAAAA). Single-A "
+    "underperformed AAA, suggesting a length floor; no upper-bound data."
 )
 
 LINKER_AAY = Linker(
     name="AAY",
     amino_acids="AAY",
     citation=_AAY_CITATION,
+)
+
+LINKER_AAA = Linker(
+    name="AAA",
+    amino_acids="AAA",
+    citation=_ALANINE_CITATION,
 )
 
 LINKER_GPGPG = Linker(
@@ -271,6 +301,7 @@ LINKERS = {
     LINKER_FURIN_RVKR.name: LINKER_FURIN_RVKR,
     LINKER_FURIN_RKRKR.name: LINKER_FURIN_RKRKR,
     LINKER_AAY.name: LINKER_AAY,
+    LINKER_AAA.name: LINKER_AAA,
     LINKER_GPGPG.name: LINKER_GPGPG,
     LINKER_P2A.name: LINKER_P2A,
     LINKER_T2A.name: LINKER_T2A,
@@ -294,6 +325,7 @@ _PAREN_REPEAT_RE = re.compile(r"^\((?P<base>[A-Z][A-Z0-9]*)\)X?(?P<count>\d+)$")
 _X_REPEAT_RE = re.compile(r"^(?P<base>[A-Z][A-Z0-9]*)X(?P<count>\d+)$")
 _GNSM_RE = re.compile(r"^G(?P<g>\d+)S(?P<s>\d+)?$")
 _ANY_RE = re.compile(r"^A(?P<n>\d+)Y$")
+_AN_RE = re.compile(r"^A(?P<n>\d+)$")
 
 _MAX_REPEAT = 100  # safety cap so '(G4S)1000000' can't materialize a megasequence
 
@@ -338,7 +370,7 @@ def get_linker(name):
     the module docstring.
 
     Resolution order: aliases → static LINKERS → ``(BASE)N`` /
-    ``(BASE)xN`` → ``BASExN`` → ``GnSm`` (literal) → ``AnY``.
+    ``(BASE)xN`` → ``BASExN`` → ``GnSm`` (literal) → ``AnY`` → ``An``.
     Names are uppercased before lookup so ``g4s2``, ``G4Sx2``, and
     ``g4sx2`` all resolve identically. ValueError on miss.
     """
@@ -386,6 +418,19 @@ def get_linker(name):
             name=canonical,
             amino_acids="A" * n + "Y",
             citation=citation,
+        )
+
+    # An — polyalanine, no Y. AAA is the empirically-tested form
+    # (Aguilar-Gurrieri 2023); longer variants (AAAA, AAAAA) are
+    # length extrapolations.
+    m = _AN_RE.match(canonical)
+    if m:
+        n = int(m.group("n"))
+        _check_repeat(n, "alanine count")
+        return Linker(
+            name=canonical,
+            amino_acids="A" * n,
+            citation=_ALANINE_CITATION,
         )
 
     raise ValueError(

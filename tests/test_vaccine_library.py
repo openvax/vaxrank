@@ -538,3 +538,42 @@ def test_grammar_rejects_zero_count():
         vaccine_library.get_linker("(G4S)0")
     with pytest.raises(ValueError):
         vaccine_library.get_linker("A0Y")
+
+
+# ---- alanine family (post-Aguilar-Gurrieri 2023 literature pass) ----------
+
+def test_aaa_static_entry_with_aguilar_gurrieri_citation():
+    aaa = vaccine_library.LINKERS["AAA"]
+    assert aaa.amino_acids == "AAA"
+    assert "Aguilar-Gurrieri" in aaa.citation
+    assert "2023" in aaa.citation
+
+
+def test_an_grammar_polyalanine():
+    # An (no Y) parses as polyalanine.
+    assert vaccine_library.get_linker("A4").amino_acids == "AAAA"
+    assert vaccine_library.get_linker("A5").amino_acids == "AAAAA"
+    # AAA is the static entry; A3 parses to the same sequence via grammar.
+    assert vaccine_library.get_linker("A3").amino_acids == "AAA"
+
+
+def test_an_citation_uses_alanine_source():
+    a4 = vaccine_library.get_linker("A4")
+    assert "Aguilar-Gurrieri" in a4.citation
+
+
+def test_aay_citation_flags_yang_2015_contradiction():
+    aay = vaccine_library.LINKERS["AAY"]
+    # Yang 2015 is widely cited as supporting AAY but actually showed it
+    # failing. Citation must surface this so users aren't misled.
+    assert "Yang" in aay.citation
+    assert ("failing" in aay.citation.lower()
+            or "failed" in aay.citation.lower())
+
+
+def test_any_citation_flags_no_primary_footing():
+    a3y = vaccine_library.get_linker("A3Y")
+    # AAAY has no primary-literature footing — citation must say so.
+    assert ("no primary" in a3y.citation.lower()
+            or "without empirical" in a3y.citation.lower()
+            or "extrapolation" in a3y.citation.lower())
