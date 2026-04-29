@@ -375,13 +375,19 @@ def add_mrna_output_args(group):
         help="DnaChisel codon-optimization method. Default: use_best_codon.")
     group.add_argument(
         "--mrna-junction-aware",
+        dest="mrna_junction_aware",
         action="store_true",
-        default=False,
+        default=True,
         help="Enable per-junction linker swap to minimize predicted MHC "
-             "presentation of chimeric k-mers (vaxrank issue #247). "
-             "Requires --mhc-predictor + --mhc-alleles to be set. The "
-             "default linker is used as a fallback if no candidate "
-             "outperforms it.")
+             "presentation of chimeric k-mers (issue #247). On by default; "
+             "requires --mhc-predictor + --mhc-alleles. The default linker "
+             "is used as a fallback if no candidate outperforms it.")
+    group.add_argument(
+        "--mrna-no-junction-aware",
+        dest="mrna_junction_aware",
+        action="store_false",
+        help="Disable junction-aware linker swap. The shared linker is "
+             "used at every junction without optimization.")
     group.add_argument(
         "--mrna-junction-candidates",
         default="",

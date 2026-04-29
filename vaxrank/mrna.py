@@ -164,12 +164,15 @@ class RNAConstructConfig:
     candidates_per_slot: int = 1
     max_length_nt: int = 4000
     avoid_patterns: tuple = ()
-    # Junction-aware linker swap (issue #247). When enabled, the
-    # ``linker`` field above is the *fallback* if no candidate
-    # outperforms it; otherwise each junction picks its own linker
-    # from ``junction_swap_candidates`` to minimize predicted MHC
-    # presentation of chimeric k-mers spanning the junction.
-    junction_aware: bool = False
+    # Junction-aware linker swap (issue #247). On by default. When
+    # enabled, the ``linker`` field above is the *fallback* if no
+    # candidate outperforms it; otherwise each junction picks its
+    # own linker from ``junction_swap_candidates`` to minimize
+    # predicted MHC presentation of chimeric k-mers spanning the
+    # junction. If the caller doesn't pass an mhc_predictor + alleles
+    # to ``assemble_mrna_constructs``, the optimizer is skipped with
+    # a warning and the shared linker is used at every junction.
+    junction_aware: bool = True
     junction_swap_candidates: tuple = ()  # empty → use library default
     junction_kmer_lengths: tuple = (8, 9, 10, 11)
     junction_rank_strong: float = 0.5
@@ -292,7 +295,8 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
 
 
 def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
-                                 mitd_aa, per_junction_linkers=None):
+                                 mitd_aa, per_junction_linkers=None,
+                                 pre_mitd_linker=None):
     """Concatenate signal peptide + antigens + linker/MITD into one protein.
 
     Returns ``(protein_str, frozen_segments)`` where ``frozen_segments``
@@ -307,9 +311,9 @@ def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
 
     When ``per_junction_linkers`` is provided (length must equal
     ``len(antigen_aas) - 1``), each inter-antigen junction uses its
-    own Linker instead of the shared ``linker``. The pre-MITD junction
-    still uses ``linker`` since MITD is a single trailing element. This
-    is the path taken by the junction-aware swap optimizer (#247).
+    own Linker instead of the shared ``linker``. ``pre_mitd_linker``
+    similarly overrides the shared linker for the last-antigen ↔ MITD
+    junction. Both come from the junction-aware swap optimizer (#247).
     """
     if per_junction_linkers is not None and antigen_aas:
         expected = max(0, len(antigen_aas) - 1)
@@ -341,11 +345,12 @@ def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
         parts.append(aa)
         aa_offset += len(aa)
     if mitd_aa:
-        # MITD link uses the shared `linker` regardless of per-junction
-        # choices — there's only one MITD-side junction.
-        linker_aa = linker.amino_acids
-        if linker.freeze_in_mrna and linker.dna:
-            frozen.append((aa_offset, aa_offset + len(linker_aa), linker.dna))
+        # Pre-MITD linker: use override if supplied (junction-aware swap
+        # path), else fall back to the shared `linker`.
+        mitd_link = pre_mitd_linker if pre_mitd_linker is not None else linker
+        linker_aa = mitd_link.amino_acids
+        if mitd_link.freeze_in_mrna and mitd_link.dna:
+            frozen.append((aa_offset, aa_offset + len(linker_aa), mitd_link.dna))
         parts.append(linker_aa)
         aa_offset += len(linker_aa)
         parts.append(mitd_aa)
@@ -355,7 +360,16 @@ def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
 
 def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
                      mitd_aa, utr_5p_dna, utr_3p_dna):
-    """Greedy bin-packing of antigens into constructs honoring the caps."""
+    """Greedy bin-packing of antigens into constructs honoring the caps.
+
+    Packing uses the *shared* linker length to estimate construct size.
+    The junction-aware swap (#247) can pick different linkers per
+    junction at assembly time; for the candidate set
+    JUNCTION_SWAP_CANDIDATES (3-10 aa range) the per-junction swing is
+    at most ~7 aa = 21 nt per junction relative to the (G4S)2 default,
+    well within the headroom of a 4000-nt cap. Reach for a tighter
+    estimate only if max_length_nt becomes binding.
+    """
     linker_aa = linker.amino_acids
     # When there is no signal peptide, the assembler prepends an ATG to the
     # CDS body if the first antigen doesn't already start with M (see
@@ -472,71 +486,86 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
         antigen_aas = [aa for _, aa in antigen_group]
 
         per_junction_linkers = None
+        pre_mitd_linker = None  # overrides shared linker for the MITD junction
         junction_swap_meta = None
-        if options.junction_aware and len(antigen_aas) > 1:
+        n_junctions = max(0, len(antigen_aas) - 1)
+        if options.junction_aware and (n_junctions > 0 or mitd_aa):
             if mhc_predictor is None or not mhc_alleles:
-                raise ValueError(
-                    "junction_aware=True requires mhc_predictor and "
-                    "mhc_alleles to be provided to assemble_mrna_constructs.")
-            from .junction_swap import (
-                JUNCTION_SWAP_CANDIDATES,
-                optimize_junction_linkers,
-            )
-            cand_names = (
-                tuple(options.junction_swap_candidates)
-                or JUNCTION_SWAP_CANDIDATES
-            )
-            swap = optimize_junction_linkers(
-                antigen_aas=antigen_aas,
-                alleles=mhc_alleles,
-                predictor=mhc_predictor,
-                candidate_names=cand_names,
-                k_lengths=tuple(options.junction_kmer_lengths),
-                reference_proteome=reference_proteome,
-                rank_strong=options.junction_rank_strong,
-                rank_mild=options.junction_rank_mild,
-            )
-            # Compare the swap's burden against the default linker's burden.
-            # If the default beats every candidate (or ties), keep it; we
-            # only swap when there's an actual reduction.
-            default_swap = optimize_junction_linkers(
-                antigen_aas=antigen_aas,
-                alleles=mhc_alleles,
-                predictor=mhc_predictor,
-                candidate_names=(options.linker,),
-                k_lengths=tuple(options.junction_kmer_lengths),
-                reference_proteome=reference_proteome,
-                rank_strong=options.junction_rank_strong,
-                rank_mild=options.junction_rank_mild,
-            )
-            if (swap.strong_burden, swap.burden) < (
-                    default_swap.strong_burden, default_swap.burden):
-                per_junction_linkers = swap.chosen_linker_per_junction
+                logger.warning(
+                    "junction_aware=True but no mhc_predictor / "
+                    "mhc_alleles supplied; falling back to the shared "
+                    "linker at every junction. Pass mhc_predictor + "
+                    "mhc_alleles to assemble_mrna_constructs (or run "
+                    "via the CLI which auto-wires them) to enable the "
+                    "swap optimizer.")
                 junction_swap_meta = {
-                    'enabled': True,
-                    'chosen': swap.linker_names(),
-                    'burden_strong': swap.strong_burden,
-                    'burden_mild': swap.burden,
-                    'default_burden_strong': default_swap.strong_burden,
-                    'default_burden_mild': default_swap.burden,
+                    'enabled': False,
+                    'note': "no predictor / alleles available",
                 }
-                logger.info(
-                    "Construct %d: junction-aware swap reduced strong "
-                    "burden %d → %d, mild burden %d → %d",
-                    i + 1, default_swap.strong_burden, swap.strong_burden,
-                    default_swap.burden, swap.burden)
             else:
-                junction_swap_meta = {
-                    'enabled': True,
-                    'chosen': [options.linker] * (len(antigen_aas) - 1),
-                    'burden_strong': default_swap.strong_burden,
-                    'burden_mild': default_swap.burden,
-                    'note': "default linker beat or tied all candidates",
-                }
+                from .junction_swap import (
+                    JUNCTION_SWAP_CANDIDATES,
+                    optimize_junction_linkers,
+                )
+                cand_names = (
+                    tuple(options.junction_swap_candidates)
+                    or JUNCTION_SWAP_CANDIDATES
+                )
+                swap = optimize_junction_linkers(
+                    antigen_aas=antigen_aas,
+                    alleles=mhc_alleles,
+                    predictor=mhc_predictor,
+                    candidate_names=cand_names,
+                    k_lengths=tuple(options.junction_kmer_lengths),
+                    reference_proteome=reference_proteome,
+                    rank_strong=options.junction_rank_strong,
+                    rank_mild=options.junction_rank_mild,
+                    mitd_aa=mitd_aa or None,
+                    default_linker_name=options.linker,
+                )
+                # `swap.default_*_burden` is set when default_linker_name
+                # is supplied; only swap when a candidate strictly beats
+                # the default.
+                default_strong = getattr(swap, 'default_strong_burden', None)
+                default_mild = getattr(swap, 'default_burden', None)
+                if (default_strong is not None
+                        and (swap.strong_burden, swap.burden)
+                        < (default_strong, default_mild)):
+                    chosen_list = swap.chosen_linker_per_junction
+                    # Last entry corresponds to MITD junction when mitd_aa
+                    # was provided; split it off.
+                    if mitd_aa and len(chosen_list) == n_junctions + 1:
+                        per_junction_linkers = chosen_list[:n_junctions]
+                        pre_mitd_linker = chosen_list[-1]
+                    else:
+                        per_junction_linkers = chosen_list
+                    junction_swap_meta = {
+                        'enabled': True,
+                        'chosen': swap.linker_names(),
+                        'burden_strong': swap.strong_burden,
+                        'burden_mild': swap.burden,
+                        'default_burden_strong': default_strong,
+                        'default_burden_mild': default_mild,
+                    }
+                    logger.info(
+                        "Construct %d: junction-aware swap reduced strong "
+                        "burden %d → %d, mild burden %d → %d",
+                        i + 1, default_strong, swap.strong_burden,
+                        default_mild, swap.burden)
+                else:
+                    n_total_junctions = n_junctions + (1 if mitd_aa else 0)
+                    junction_swap_meta = {
+                        'enabled': True,
+                        'chosen': [options.linker] * n_total_junctions,
+                        'burden_strong': default_strong or 0,
+                        'burden_mild': default_mild or 0,
+                        'note': "default linker beat or tied all candidates",
+                    }
 
         protein, frozen_segments = _build_protein_with_segments(
             antigen_aas, signal_peptide_aa, linker, mitd_aa,
-            per_junction_linkers=per_junction_linkers)
+            per_junction_linkers=per_junction_linkers,
+            pre_mitd_linker=pre_mitd_linker)
         coding_dna = codon_optimize(
             protein,
             species=options.codon_species,

@@ -283,8 +283,20 @@ def main(args_list=None):
             junction_rank_mild=args.mrna_junction_rank_mild,
         )
         if options.junction_aware:
-            mhc_predictor = mhc_binding_predictor_from_args(args)
-            mhc_alleles = mhc_alleles_from_args(args)
+            try:
+                mhc_predictor = mhc_binding_predictor_from_args(args)
+                mhc_alleles = mhc_alleles_from_args(args)
+            except Exception as e:
+                # Predictor / alleles aren't configured; the optimizer
+                # will warn and fall back. Don't fail the whole run.
+                logger.warning(
+                    "Could not load MHC predictor / alleles for "
+                    "junction-aware linker swap (%s). The optimizer will "
+                    "fall back to the shared linker at every junction. "
+                    "Set --mhc-predictor + --mhc-alleles to enable it.",
+                    e)
+                mhc_predictor = None
+                mhc_alleles = None
         else:
             mhc_predictor = None
             mhc_alleles = None

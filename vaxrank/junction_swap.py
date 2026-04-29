@@ -107,8 +107,15 @@ def junction_kmers(left_aa, linker_aa, right_aa, k_lengths,
     return out
 
 
-def _score_kmers(kmers, alleles, predictor):
-    """Run the predictor and return rows of (kmer, allele, rank)."""
+def _score_kmers(kmers, alleles, predictor, _warned=[False]):
+    """Run the predictor and return rows of (kmer, allele, rank).
+
+    Warns once per process if the predictor doesn't expose
+    ``percentile_rank`` — mhcflurry-presentation does, but some
+    mhctools wrappers (NetMHC binding-affinity-only modes,
+    RandomBindingPredictor) don't, in which case the optimizer
+    sees no chimeric k-mers and silently picks the first candidate.
+    """
     if not kmers:
         return []
     # Predictor API: mhctools.BasePredictor returns BindingPrediction
@@ -116,13 +123,25 @@ def _score_kmers(kmers, alleles, predictor):
     predictions = predictor.predict_peptides(kmers)
     rows = []
     allele_set = set(alleles) if alleles else None
+    n_seen = 0
+    n_with_rank = 0
     for p in predictions:
         if allele_set and p.allele not in allele_set:
             continue
+        n_seen += 1
         rank = getattr(p, 'percentile_rank', None)
         if rank is None:
             continue
+        n_with_rank += 1
         rows.append((p.peptide, p.allele, float(rank)))
+    if n_seen and not n_with_rank and not _warned[0]:
+        logger.warning(
+            "Junction-swap predictor returned %d predictions but none had "
+            "a usable percentile_rank field; the optimizer cannot rank "
+            "chimeric k-mers and will fall back to the first candidate. "
+            "Use mhcflurry-presentation or a predictor that exposes "
+            "percentile rank.", n_seen)
+        _warned[0] = True
     return rows
 
 
@@ -135,6 +154,11 @@ def _burden_key(rows, rank_strong=RANK_STRONG, rank_mild=RANK_MILD):
       2. Fewer rank ≤ rank_mild hits
       3. Higher worst-case rank (push the worst hit's rank as high as
          possible — i.e. minimize negated worst-rank)
+
+    The 100.0 default for empty-rows is the upper bound of the
+    mhcflurry-presentation percentile rank (0..100); a linker with
+    no detectable presentation should sort better than any linker
+    with a hit.
     """
     strong = sum(1 for r in rows if r[2] <= rank_strong)
     mild = sum(1 for r in rows if r[2] <= rank_mild)
@@ -147,7 +171,9 @@ def optimize_junction_linkers(
         candidate_names=JUNCTION_SWAP_CANDIDATES,
         k_lengths=(8, 9, 10, 11),
         reference_proteome=None,
-        rank_strong=RANK_STRONG, rank_mild=RANK_MILD):
+        rank_strong=RANK_STRONG, rank_mild=RANK_MILD,
+        mitd_aa=None,
+        default_linker_name=None):
     """Pick the candidate linker at each junction that minimizes
     predicted MHC presentation of chimeric k-mers.
 
@@ -155,7 +181,7 @@ def optimize_junction_linkers(
     ----------
     antigen_aas : list[str]
         Antigen amino-acid sequences in the order they'll be
-        concatenated. There are ``len(antigen_aas) - 1`` junctions.
+        concatenated.
     alleles : list[str]
         Patient HLA alleles, e.g. ``['HLA-A*02:01', 'HLA-B*07:02']``.
     predictor : mhctools.BasePredictor
@@ -172,33 +198,78 @@ def optimize_junction_linkers(
         ``in``-checkable set or set-of-kmers index. When provided,
         chimeric k-mers that already occur in the patient's reference
         proteome are dropped (already tolerated, not new presentation).
+    mitd_aa : optional, str
+        When provided, also optimize the last-antigen ↔ MITD junction.
+        The result's ``chosen_linker_per_junction`` will have
+        ``len(antigen_aas)`` entries (one per inter-antigen junction
+        plus one for the pre-MITD junction). Without ``mitd_aa``, the
+        result has ``len(antigen_aas) - 1`` entries.
+    default_linker_name : optional, str
+        If supplied, the optimizer also tracks the burden of using
+        the default linker at every junction so the caller can
+        decide whether to swap. The default's burden is returned in
+        ``JunctionSwapResult.default_burden`` /
+        ``default_strong_burden`` (added when this argument is set).
+        Including the default in ``candidate_names`` is sufficient if
+        it's already there — this argument lets callers track the
+        baseline without duplicating predictor calls.
 
     Returns
     -------
     JunctionSwapResult
     """
-    if len(antigen_aas) <= 1:
+    if len(antigen_aas) == 0:
+        return JunctionSwapResult(
+            chosen_linker_per_junction=[],
+            burden=0, strong_burden=0, chimeric_predictions=[])
+
+    # Build the "junctions" list: (left_aa, right_aa) tuples. For pure
+    # inter-antigen junctions there are len(antigens)-1 entries. With
+    # mitd_aa, append one more for the last-antigen → MITD junction.
+    junctions = []
+    for j in range(len(antigen_aas) - 1):
+        junctions.append((antigen_aas[j], antigen_aas[j + 1]))
+    if mitd_aa and antigen_aas:
+        junctions.append((antigen_aas[-1], mitd_aa))
+
+    if not junctions:
         return JunctionSwapResult(
             chosen_linker_per_junction=[],
             burden=0, strong_burden=0, chimeric_predictions=[])
 
     candidates = [get_linker(n) for n in candidate_names]
+    default_idx_in_candidates = None
+    if default_linker_name is not None:
+        target = default_linker_name.upper()
+        for idx, c in enumerate(candidates):
+            if c.name.upper() == target:
+                default_idx_in_candidates = idx
+                break
+        if default_idx_in_candidates is None:
+            # Default isn't in the candidate set; add it so we can
+            # measure its burden in the same sweep.
+            candidates.append(get_linker(default_linker_name))
+            default_idx_in_candidates = len(candidates) - 1
 
     chosen = []
     all_predictions = []
     total_burden = 0
     total_strong = 0
+    default_total_burden = 0
+    default_total_strong = 0
 
-    for j in range(len(antigen_aas) - 1):
-        left_aa = antigen_aas[j]
-        right_aa = antigen_aas[j + 1]
+    for j, (left_aa, right_aa) in enumerate(junctions):
         best = None
+        per_cand_keys = []
+        per_cand_rows = []
         for cand in candidates:
             kmers = junction_kmers(
                 left_aa, cand.amino_acids, right_aa, k_lengths,
                 reference_proteome=reference_proteome)
             rows = _score_kmers(kmers, alleles, predictor)
             key = _burden_key(rows, rank_strong, rank_mild)
+            per_cand_keys.append(key)
+            per_cand_rows.append(rows)
             if best is None or key < best[0]:
                 best = (key, cand, rows)
         key, cand, rows = best
@@ -210,13 +281,23 @@ def optimize_junction_linkers(
             all_predictions.append(JunctionPrediction(
                 junction_index=j, linker_name=cand.name,
                 kmer=kmer, allele=allele, rank=rank))
+        if default_idx_in_candidates is not None:
+            d_key = per_cand_keys[default_idx_in_candidates]
+            default_total_strong += d_key[0]
+            default_total_burden += d_key[1]
         logger.info(
             "Junction %d: chose linker %s (strong=%d, mild=%d).",
             j, cand.name, strong, mild)
 
-    return JunctionSwapResult(
+    result = JunctionSwapResult(
         chosen_linker_per_junction=chosen,
         burden=total_burden,
         strong_burden=total_strong,
         chimeric_predictions=all_predictions,
     )
+    if default_linker_name is not None:
+        # Attach the default's burden so the caller can decide whether
+        # to swap without a second predictor sweep.
+        result.default_burden = default_total_burden
+        result.default_strong_burden = default_total_strong
+    return result

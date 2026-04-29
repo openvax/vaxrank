@@ -177,3 +177,173 @@ def test_optimize_filters_reference_proteome_kmers():
         reference_proteome={g4s_kmers[0]})  # mark as already-tolerated
     # Strong burden should be 0 because the only strong hit was filtered.
     assert result.strong_burden == 0
+
+
+# ---- end-to-end integration with assemble_mrna_constructs ----------------
+
+def test_assemble_with_junction_aware_uses_chosen_linkers():
+    """End-to-end: assemble_mrna_constructs(junction_aware=True, ...) must
+    actually emit a construct whose protein has the per-junction
+    chosen linkers between the right antigens, AND the manifest must
+    record the swap.
+    """
+    from varcode import Variant
+    from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
+
+    # Two antigens; default (G4S)2 produces a strong hit, AAA does not.
+    a1 = "KLQGHSAPVL"
+    a2 = "DVIVNCDESLLAS"
+    g4s2_kmers = junction_kmers(a1, "GGGGSGGGGS", a2, k_lengths=(9,))
+    rank_table = {(g4s2_kmers[0], "HLA-A*02:01"): 0.05}
+    predictor = StubPredictor(rank_table=rank_table)
+
+    fragment_a = SimpleNamespace(
+        amino_acids=a1, gene_name='GENEA',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(a1))
+    fragment_b = SimpleNamespace(
+        amino_acids=a2, gene_name='GENEB',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(a2))
+    pep_a = SimpleNamespace(
+        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[])
+    pep_b = SimpleNamespace(
+        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[])
+    pairs = [
+        (Variant('1', 100, 'A', 'T'), [pep_a]),
+        (Variant('2', 200, 'A', 'T'), [pep_b]),
+    ]
+
+    options = RNAConstructConfig(
+        signal_peptide=None, include_mitd=False,
+        junction_aware=True, junction_swap_candidates=("(G4S)2", "AAA"),
+        junction_kmer_lengths=(9,),
+        antigens_per_construct=2, max_constructs=1,
+        max_antigen_length_aa=20,
+        utr_3p='HBB',
+    )
+    [c] = assemble_mrna_constructs(
+        pairs, options=options,
+        mhc_predictor=predictor, mhc_alleles=["HLA-A*02:01"])
+
+    # The protein must contain AAA (chosen) between the two antigens.
+    protein = c.components['protein']
+    # Strip the prepended start M.
+    body = protein[1:] if protein.startswith("M") else protein
+    assert body == a1 + "AAA" + a2, \
+        "Protein should join %s + AAA + %s, got %r" % (a1, a2, body)
+    # Manifest annotation must report the swap.
+    assert 'junction_swap' in c.components
+    swap_meta = c.components['junction_swap']
+    assert swap_meta['enabled'] is True
+    assert swap_meta['chosen'] == ['AAA']
+    assert swap_meta['burden_strong'] == 0
+    assert swap_meta['default_burden_strong'] >= 1
+
+
+def test_assemble_with_junction_aware_falls_back_when_predictor_missing(caplog):
+    """junction_aware=True without a predictor warns and uses the
+    shared linker — no exception."""
+    import logging
+    from varcode import Variant
+    from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
+
+    fragment_a = SimpleNamespace(
+        amino_acids="KLQGH", gene_name='G',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
+    fragment_b = SimpleNamespace(
+        amino_acids="MNNVD", gene_name='G',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
+    pep_a = SimpleNamespace(
+        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[])
+    pep_b = SimpleNamespace(
+        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[])
+    pairs = [
+        (Variant('1', 100, 'A', 'T'), [pep_a]),
+        (Variant('2', 200, 'A', 'T'), [pep_b]),
+    ]
+
+    options = RNAConstructConfig(
+        signal_peptide=None, include_mitd=False,
+        junction_aware=True,
+        antigens_per_construct=2, max_constructs=1,
+        max_antigen_length_aa=10,
+        utr_3p='HBB',
+    )
+    with caplog.at_level(logging.WARNING):
+        [c] = assemble_mrna_constructs(pairs, options=options)
+    # Should have warned and fallen back.
+    assert any("falling back" in r.message.lower()
+               for r in caplog.records), \
+        "Expected a fallback warning when predictor is missing"
+    assert c.components['junction_swap']['enabled'] is False
+
+
+def test_assemble_default_kept_when_candidates_dont_help():
+    """When no candidate beats the default, the construct keeps the
+    default linker and the manifest annotates this."""
+    from varcode import Variant
+    from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
+
+    # Predictor returns no hits for any kmer → all candidates tie at
+    # zero burden → default wins (no strict improvement).
+    predictor = StubPredictor(rank_table={})
+
+    fragment_a = SimpleNamespace(
+        amino_acids="KLQGH", gene_name='G',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
+    fragment_b = SimpleNamespace(
+        amino_acids="MNNVD", gene_name='G',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
+    pep_a = SimpleNamespace(
+        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[])
+    pep_b = SimpleNamespace(
+        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[])
+    pairs = [
+        (Variant('1', 100, 'A', 'T'), [pep_a]),
+        (Variant('2', 200, 'A', 'T'), [pep_b]),
+    ]
+
+    options = RNAConstructConfig(
+        signal_peptide=None, include_mitd=False,
+        junction_aware=True, junction_swap_candidates=("(G4S)2", "AAA"),
+        junction_kmer_lengths=(9,),
+        antigens_per_construct=2, max_constructs=1,
+        max_antigen_length_aa=10,
+        utr_3p='HBB',
+        linker="(G4S)2",
+    )
+    [c] = assemble_mrna_constructs(
+        pairs, options=options,
+        mhc_predictor=predictor, mhc_alleles=["HLA-A*02:01"])
+    swap_meta = c.components['junction_swap']
+    assert swap_meta['enabled'] is True
+    assert "default" in swap_meta.get('note', '').lower()
+
+
+def test_optimize_includes_mitd_junction_when_provided():
+    # With mitd_aa supplied, the optimizer returns one extra entry
+    # for the antigen-N → MITD junction.
+    antigens = ["KLQGH", "MNNVD"]
+    predictor = StubPredictor()
+    result = optimize_junction_linkers(
+        antigens, alleles=["HLA-A*02:01"], predictor=predictor,
+        candidate_names=("(G4S)2",),
+        k_lengths=(9,),
+        mitd_aa="IVGIIAGLVLLG")
+    # Two antigens + MITD = 2 inter-antigen junctions worth + 1 MITD = total
+    # = (len(antigens) - 1) + 1 = 2
+    assert len(result.chosen_linker_per_junction) == 2
+
+
+def test_optimize_default_linker_burden_tracked_in_sweep():
+    # When default_linker_name is supplied, the result must expose
+    # default_strong_burden and default_burden so the caller can
+    # decide whether to swap without a second sweep.
+    antigens = ["KLQGH", "MNNVD"]
+    predictor = StubPredictor()
+    result = optimize_junction_linkers(
+        antigens, alleles=["HLA-A*02:01"], predictor=predictor,
+        candidate_names=("(G4S)2", "AAA"),
+        k_lengths=(9,),
+        default_linker_name="(G4S)2")
+    assert hasattr(result, 'default_strong_burden')
+    assert hasattr(result, 'default_burden')
