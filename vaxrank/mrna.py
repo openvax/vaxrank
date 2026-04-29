@@ -51,7 +51,11 @@ from .mrna_library import (
     UTRS_3P,
     UTRS_5P,
 )
-from .vaccine_library import get_linker, select_antigen_window
+from .vaccine_library import (
+    get_linker,
+    iter_named_antigens,
+    select_antigen_window,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -254,32 +258,18 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
     user's configured floor (e.g. a stop-loss extension that produced
     only a few mutant residues).
 
-    ``candidates_per_slot`` walks through additional ranked candidates
-    per variant; alternates get a ``_alt<k>`` suffix on their name so
-    different constructs can be traced back.
+    Naming + alt-suffix logic comes from ``iter_named_antigens`` so the
+    antigen names match the peptide-modality output.
     """
-    for variant, peptides in ranked_vaccine_peptides:
-        if not peptides:
-            continue
-        for idx, peptide in enumerate(peptides[:max(1, candidates_per_slot)]):
-            fragment = peptide.mutant_protein_fragment
-            name = "%s_%s_%s_%s_%s" % (
-                fragment.gene_name or 'unknown',
-                variant.contig,
-                variant.start,
-                variant.ref or '.',
-                variant.alt or '.',
-            )
-            if idx > 0:
-                name = "%s_alt%d" % (name, idx)
-            window = select_antigen_window(
-                fragment, name, max_antigen_length_aa)
-            if len(window) < min_antigen_length_aa:
-                logger.warning(
-                    "Antigen %s emitted at %d aa, below "
-                    "--mrna-min-antigen-length-aa (%d).",
-                    name, len(window), min_antigen_length_aa)
-            yield name, window
+    for name, fragment, _peptide in iter_named_antigens(
+            ranked_vaccine_peptides, candidates_per_slot=candidates_per_slot):
+        window = select_antigen_window(fragment, name, max_antigen_length_aa)
+        if len(window) < min_antigen_length_aa:
+            logger.warning(
+                "Antigen %s emitted at %d aa, below "
+                "--mrna-min-antigen-length-aa (%d).",
+                name, len(window), min_antigen_length_aa)
+        yield name, window
 
 
 def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,

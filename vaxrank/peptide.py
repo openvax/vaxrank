@@ -35,7 +35,11 @@ import logging
 from dataclasses import dataclass, field
 
 from .manufacturability import ManufacturabilityScores
-from .vaccine_library import get_linker, select_antigen_window
+from .vaccine_library import (
+    get_linker,
+    iter_named_antigens,
+    select_antigen_window,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,38 +86,24 @@ def _antigen_records(ranked_vaccine_peptides, mode, max_antigen_length_aa,
                      candidates_per_slot=1):
     """Yield ``(name, amino_acids)`` per antigen.
 
-    ``candidates_per_slot`` controls how many alternate windows are
-    emitted per variant: 1 picks just the top-ranked vaccine peptide,
-    higher values walk through additional candidates the ranking
-    pipeline produced. Each alternate gets a ``_alt<k>`` suffix on its
-    base name for traceability.
+    Mode dispatch only — naming + alt-suffix logic comes from
+    ``iter_named_antigens``, shared with mRNA assembly so the antigen
+    names match across modalities.
     """
-    for variant, peptides in ranked_vaccine_peptides:
-        if not peptides:
-            continue
-        for idx, peptide in enumerate(peptides[:max(1, candidates_per_slot)]):
-            fragment = peptide.mutant_protein_fragment
-            base_name = "%s_%s_%s_%s_%s" % (
-                getattr(fragment, 'gene_name', None) or 'unknown',
-                variant.contig,
-                variant.start,
-                variant.ref or '.',
-                variant.alt or '.',
-            )
-            if idx > 0:
-                base_name = "%s_alt%d" % (base_name, idx)
-            if mode == "minimal_epitope":
-                top = _top_mutant_epitope(peptide)
-                if top is None:
-                    logger.info(
-                        "Skipping %s in minimal_epitope mode: no mutant "
-                        "epitope predictions available.", base_name)
-                    continue
-                yield base_name + "_epitope", top.peptide_sequence
-            else:
-                # slp + multi_epitope: pick a mutation-centered window
-                yield base_name, select_antigen_window(
-                    fragment, base_name, max_antigen_length_aa)
+    for base_name, fragment, peptide in iter_named_antigens(
+            ranked_vaccine_peptides, candidates_per_slot=candidates_per_slot):
+        if mode == "minimal_epitope":
+            top = _top_mutant_epitope(peptide)
+            if top is None:
+                logger.info(
+                    "Skipping %s in minimal_epitope mode: no mutant "
+                    "epitope predictions available.", base_name)
+                continue
+            yield base_name + "_epitope", top.peptide_sequence
+        else:
+            # slp + multi_epitope: pick a mutation-centered window
+            yield base_name, select_antigen_window(
+                fragment, base_name, max_antigen_length_aa)
 
 
 def _top_mutant_epitope(vaccine_peptide):

@@ -335,3 +335,102 @@ def test_both_modalities_emit_compatible_manifests(tmp_path):
     assert p_entry['length_unit'] == 'aa'
     assert m_entry['modality'] == 'mrna'
     assert m_entry['length_unit'] == 'nt'
+
+
+# ---- iter_named_antigens shared helper (#248) -----------------------------
+
+def test_iter_named_antigens_naming_format():
+    from types import SimpleNamespace
+    from varcode import Variant
+    from vaxrank.vaccine_library import iter_named_antigens
+
+    fragment = SimpleNamespace(
+        amino_acids="KLQGH", gene_name='GENE',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
+    peptide = SimpleNamespace(
+        mutant_protein_fragment=fragment, mutant_epitope_predictions=[])
+    pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
+    [(name, frag, pep)] = list(iter_named_antigens(pairs))
+    assert name == "GENE_1_1000_A_T"
+    assert frag is fragment
+    assert pep is peptide
+
+
+def test_iter_named_antigens_alt_suffix():
+    from types import SimpleNamespace
+    from varcode import Variant
+    from vaxrank.vaccine_library import iter_named_antigens
+
+    def _peptide(aa):
+        f = SimpleNamespace(
+            amino_acids=aa, gene_name='G',
+            mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(aa))
+        return SimpleNamespace(mutant_protein_fragment=f)
+
+    pairs = [(Variant('1', 100, 'A', 'T'), [_peptide("ABC"), _peptide("DEF"), _peptide("GHI")])]
+    names = [n for n, _, _ in iter_named_antigens(pairs, candidates_per_slot=3)]
+    assert names == ["G_1_100_A_T", "G_1_100_A_T_alt1", "G_1_100_A_T_alt2"]
+
+
+def test_iter_named_antigens_skips_empty_peptide_lists():
+    from varcode import Variant
+    from vaxrank.vaccine_library import iter_named_antigens
+    pairs = [(Variant('1', 100, 'A', 'T'), [])]
+    assert list(iter_named_antigens(pairs)) == []
+
+
+def test_iter_named_antigens_handles_missing_gene_name():
+    from types import SimpleNamespace
+    from varcode import Variant
+    from vaxrank.vaccine_library import iter_named_antigens
+    fragment = SimpleNamespace(
+        amino_acids="KLQ", gene_name=None,
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=3)
+    peptide = SimpleNamespace(mutant_protein_fragment=fragment)
+    pairs = [(Variant('1', 100, 'A', 'T'), [peptide])]
+    [(name, _, _)] = list(iter_named_antigens(pairs))
+    assert name == "unknown_1_100_A_T"
+
+
+def test_iter_named_antigens_caps_at_candidates_per_slot():
+    from types import SimpleNamespace
+    from varcode import Variant
+    from vaxrank.vaccine_library import iter_named_antigens
+
+    def _peptide(aa):
+        f = SimpleNamespace(
+            amino_acids=aa, gene_name='G',
+            mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(aa))
+        return SimpleNamespace(mutant_protein_fragment=f)
+
+    pairs = [(Variant('1', 100, 'A', 'T'),
+              [_peptide("ABC"), _peptide("DEF"), _peptide("GHI")])]
+    # candidates_per_slot=2 → only top 2 walked
+    out = list(iter_named_antigens(pairs, candidates_per_slot=2))
+    assert len(out) == 2
+
+
+def test_peptide_and_mrna_names_match_for_same_input():
+    """mRNA and peptide modes use the shared iter_named_antigens helper,
+    so the antigen names in their respective manifests are identical
+    for any given ranked input. Catches a regression where one modality
+    forks its own naming convention.
+    """
+    from types import SimpleNamespace
+    from varcode import Variant
+    from vaxrank.peptide import (
+        PeptideConstructConfig, assemble_peptide_constructs)
+    from vaxrank.mrna import (
+        RNAConstructConfig, assemble_mrna_constructs)
+
+    fragment = SimpleNamespace(
+        amino_acids="KLQGHSAPVLDVIVN", gene_name='GENE',
+        mutant_amino_acid_start_offset=5, mutant_amino_acid_end_offset=10)
+    peptide = SimpleNamespace(
+        mutant_protein_fragment=fragment, mutant_epitope_predictions=[],
+        manufacturability_scores=None)
+    pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
+
+    [p] = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
+    [m] = assemble_mrna_constructs(pairs, options=RNAConstructConfig())
+    assert p.antigen_names == m.antigen_names
