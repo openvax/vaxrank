@@ -258,6 +258,10 @@ def main(args_list=None):
             len(peptide_constructs), args.output_peptide)
 
     if getattr(args, 'output_mrna', ''):
+        junction_candidates = tuple(
+            s.strip() for s in (args.mrna_junction_candidates or "").split(",")
+            if s.strip()
+        )
         options = RNAConstructConfig(
             signal_peptide=(args.mrna_signal_peptide or None),
             linker=args.mrna_linker,
@@ -273,9 +277,20 @@ def main(args_list=None):
             max_constructs=args.mrna_max_constructs,
             candidates_per_slot=args.mrna_candidates_per_slot,
             max_length_nt=args.mrna_max_length_nt,
+            junction_aware=args.mrna_junction_aware,
+            junction_swap_candidates=junction_candidates,
+            junction_rank_strong=args.mrna_junction_rank_strong,
+            junction_rank_mild=args.mrna_junction_rank_mild,
         )
+        if options.junction_aware:
+            mhc_predictor = mhc_binding_predictor_from_args(args)
+            mhc_alleles = mhc_alleles_from_args(args)
+        else:
+            mhc_predictor = None
+            mhc_alleles = None
         constructs = assemble_mrna_constructs(
-            ranked_variants_with_vaccine_peptides, options=options)
+            ranked_variants_with_vaccine_peptides, options=options,
+            mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles)
         write_mrna_outputs(
             constructs,
             fasta_path=args.output_mrna,

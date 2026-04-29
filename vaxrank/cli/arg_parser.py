@@ -374,6 +374,35 @@ def add_mrna_output_args(group):
         choices=["use_best_codon", "match_codon_usage", "harmonize_rca"],
         help="DnaChisel codon-optimization method. Default: use_best_codon.")
     group.add_argument(
+        "--mrna-junction-aware",
+        action="store_true",
+        default=False,
+        help="Enable per-junction linker swap to minimize predicted MHC "
+             "presentation of chimeric k-mers (vaxrank issue #247). "
+             "Requires --mhc-predictor + --mhc-alleles to be set. The "
+             "default linker is used as a fallback if no candidate "
+             "outperforms it.")
+    group.add_argument(
+        "--mrna-junction-candidates",
+        default="",
+        help="Comma-separated linker names to try at each junction "
+             "(e.g. 'G3S,G4S,(G3S)2,(G4S)2,AAA'). Empty = use the "
+             "library default JUNCTION_SWAP_CANDIDATES.")
+    group.add_argument(
+        "--mrna-junction-rank-strong",
+        default=0.5,
+        type=float,
+        help="Presentation rank below which a chimeric k-mer counts as "
+             "a strong-binder hit (primary minimization target). "
+             "Default: 0.5%%.")
+    group.add_argument(
+        "--mrna-junction-rank-mild",
+        default=2.0,
+        type=float,
+        help="Presentation rank below which a chimeric k-mer counts as "
+             "a mild-binder hit (secondary minimization target). "
+             "Default: 2.0%%.")
+    group.add_argument(
         "--mrna-min-antigen-length-aa",
         default=15,
         type=int,

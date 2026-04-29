@@ -392,6 +392,14 @@ ALIASES = {
 }
 
 
+# Default candidate set for the junction-aware linker swap algorithm
+# (see vaxrank.junction_swap). All five resolve via the compositional
+# grammar; mechanistically diverse (length variants of GS-family +
+# alanine spacer) without straying into 2A / EAAAK / furin which have
+# different mechanisms or no clinical track record.
+JUNCTION_SWAP_CANDIDATES = ("G3S", "G4S", "(G3S)2", "(G4S)2", "AAA")
+
+
 # Compositional-name parsers (see module docstring for grammar).
 # Repeats require explicit parens or 'x' separator; bare digit suffixes
 # parse literally (G4S2 = "GGGGSS", not "(G4S)2").
