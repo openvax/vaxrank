@@ -562,13 +562,19 @@ def test_an_citation_uses_alanine_source():
     assert "Aguilar-Gurrieri" in a4.citation
 
 
-def test_aay_citation_flags_yang_2015_contradiction():
+def test_aay_citation_flags_yang_2015_warning():
     aay = vaccine_library.LINKERS["AAY"]
-    # Yang 2015 is widely cited as supporting AAY but actually showed it
-    # failing. Citation must surface this so users aren't misled.
+    # Yang 2015 saw AAY constructs produce no detectable Western signal,
+    # no antibody response, and 20x lower ELISpot in HIV-1 DNA vaccines.
+    # Citation must surface this warning AND clarify that the same
+    # failure mode applies to mRNA (same translation/proteasome path).
     assert "Yang" in aay.citation
-    assert ("failing" in aay.citation.lower()
-            or "failed" in aay.citation.lower())
+    assert "2015" in aay.citation
+    assert ("no detectable" in aay.citation.lower()
+            or "warning" in aay.citation.lower()
+            or "failure mode" in aay.citation.lower())
+    # mRNA caveat: must clarify Yang 2015 applies to mRNA too.
+    assert "mrna" in aay.citation.lower()
 
 
 def test_any_citation_flags_no_primary_footing():
