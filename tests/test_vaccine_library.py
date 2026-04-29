@@ -36,17 +36,19 @@ def test_mrna_library_linkers_dict_returns_strings():
 
 
 def test_vaccine_library_exposes_linker_objects():
-    # The richer dataclass form lives in vaccine_library; the canonical
-    # name for the (G4S)3 linker is now "G4S3", with "GS3" as a back-compat
-    # alias resolved by get_linker.
-    g4s3 = vaccine_library.LINKERS["G4S3"]
-    assert isinstance(g4s3, vaccine_library.Linker)
+    # The richer dataclass form lives in vaccine_library. Single-unit
+    # linkers (G4S, AAY, EAAAK, ...) live in LINKERS; repeats are
+    # parsed compositionally from (G4S)3 / G4Sx3 etc.
+    g4s = vaccine_library.LINKERS["G4S"]
+    assert isinstance(g4s, vaccine_library.Linker)
+    assert g4s.amino_acids == "GGGGS"
+    assert g4s.dna is None
+    assert g4s.freeze_in_mrna is False
+    # GS alias still resolves to the static G4S entry.
+    assert vaccine_library.get_linker("GS") is g4s
+    # GS3 alias forwards to the compositional form (G4S)3.
+    g4s3 = vaccine_library.get_linker("GS3")
     assert g4s3.amino_acids == "GGGGSGGGGSGGGGS"
-    assert g4s3.dna is None
-    assert g4s3.freeze_in_mrna is False
-    # Aliases dereference to the canonical Linker object.
-    assert vaccine_library.get_linker("GS3") is g4s3
-    assert vaccine_library.get_linker("GS") is vaccine_library.LINKERS["G4S"]
 
 
 def test_vaccine_library_p2a_carries_blessed_dna():
@@ -107,11 +109,12 @@ def test_2a_linker_flags(name):
     assert linker.inert_in_peptide_mode is True
 
 
-def test_get_linker_is_case_sensitive():
-    # CLI normalizes case before reaching get_linker via type=str.upper, so
-    # the underlying function expects the canonical (uppercase) form.
-    with pytest.raises(ValueError):
-        vaccine_library.get_linker("p2a")
+def test_get_linker_is_case_insensitive():
+    # 2.13: get_linker uppercases the input itself so 'p2a', 'P2A',
+    # 'g4sx2', 'G4Sx2' all resolve identically.
+    assert vaccine_library.get_linker("p2a") is vaccine_library.LINKERS["P2A"]
+    assert vaccine_library.get_linker("g4s") is vaccine_library.LINKERS["G4S"]
+    assert vaccine_library.get_linker("g4sx2").amino_acids == "GGGGSGGGGS"
 
 
 def test_construct_name_format_consistent_across_modalities():
@@ -162,26 +165,44 @@ def test_signal_peptides_include_tcr_additions():
     ("G3S", "GGGS"),
     ("G4S", "GGGGS"),
     ("G5S", "GGGGGS"),
-    ("G4S2", "GGGGSGGGGS"),
-    ("G4S3", "GGGGSGGGGSGGGGS"),
-    ("G4S4", "GGGGSGGGGSGGGGSGGGGS"),
 ])
-def test_gs_linker_family(name, aa):
+def test_gs_linker_family_static(name, aa):
+    """Single-unit GnSm entries live in LINKERS. Repeats use the
+    compositional grammar (see test_paren_repeat_grammar_g4s)."""
     linker = vaccine_library.LINKERS[name]
     assert linker.amino_acids == aa
-    assert linker.dna is None  # not codon-frozen
+    assert linker.dna is None
     assert linker.freeze_in_mrna is False
 
 
 @pytest.mark.parametrize("name,aa", [
-    ("EAAAK", "EAAAK"),
-    ("EAAAK2", "EAAAKEAAAK"),
-    ("EAAAK3", "EAAAKEAAAKEAAAK"),
+    ("(G4S)2", "GGGGSGGGGS"),
+    ("(G4S)3", "GGGGSGGGGSGGGGS"),
+    ("(G4S)4", "GGGGSGGGGSGGGGSGGGGS"),
+    ("G4Sx2", "GGGGSGGGGS"),
+    ("G4Sx3", "GGGGSGGGGSGGGGS"),
+    ("(G4S)X3", "GGGGSGGGGSGGGGS"),  # caps X also accepted
 ])
-def test_eaaak_linker_family(name, aa):
-    linker = vaccine_library.LINKERS[name]
+def test_gs_linker_repeats_via_grammar(name, aa):
+    linker = vaccine_library.get_linker(name)
     assert linker.amino_acids == aa
-    assert "Arai" in linker.citation
+
+
+def test_gs_compact_form_now_literal():
+    # 2.13 breaking change: bare 'G4S2' is no longer (G4S)2 — it parses
+    # as the literal "GGGGSS" (4 glycines + 2 serines). This avoids
+    # ambiguity with the (G4S)2 / G4Sx2 repeat forms.
+    assert vaccine_library.get_linker("G4S2").amino_acids == "GGGGSS"
+    assert vaccine_library.get_linker("G4S3").amino_acids == "GGGGSSS"
+
+
+def test_eaaak_static_only():
+    eaaak = vaccine_library.LINKERS["EAAAK"]
+    assert eaaak.amino_acids == "EAAAK"
+    assert "Arai" in eaaak.citation
+    # Repeats use the compositional grammar.
+    assert vaccine_library.get_linker("(EAAAK)3").amino_acids == "EAAAK" * 3
+    assert vaccine_library.get_linker("EAAAKx2").amino_acids == "EAAAK" * 2
 
 
 @pytest.mark.parametrize("name,aa", [
@@ -195,19 +216,23 @@ def test_furin_linkers(name, aa):
     assert "furin" in linker.citation.lower() or "Thomas" in linker.citation
 
 
-def test_gs_aliases_resolve_to_canonical():
-    # 2.10.0 used "GS"/"GS3"; preserve as aliases of the canonical names.
-    assert vaccine_library.get_linker("GS").name == "G4S"
-    assert vaccine_library.get_linker("GS3").name == "G4S3"
+def test_gs_aliases_resolve():
+    # 'GS' → static G4S; 'GS3' → compositional (G4S)3. Both 2.10.0 names
+    # still resolve to a Linker with the original 2.10.0 amino-acid string.
+    assert vaccine_library.get_linker("GS").amino_acids == "GGGGS"
+    assert vaccine_library.get_linker("GS3").amino_acids == "GGGGSGGGGS" + "GGGGS"
 
 
-def test_all_linker_names_includes_aliases():
+def test_all_linker_names_lists_static_and_aliases():
     names = vaccine_library.all_linker_names()
-    assert "G4S3" in names
+    assert "G4S" in names
     assert "GS3" in names  # alias still listed
     assert "P2A" in names
-    assert "EAAAK2" in names
     assert "RKRR" in names
+    # G4S3, G4S2, G4S4, EAAAK2, EAAAK3 are NOT static — they're parsed
+    # compositionally and don't appear in the listing.
+    assert "G4S3" not in names
+    assert "EAAAK2" not in names
 
 
 # ---- codon species normalization ------------------------------------------
@@ -463,13 +488,12 @@ def test_paren_repeat_caps_count():
         vaccine_library.get_linker("(G4S)1000")
 
 
-def test_gnsm_grammar():
-    # G6S = 6 glycines + 1 serine, single unit
+def test_gnsm_grammar_literal():
+    # GnSm parses literally: n glycines + m serines, single unit.
+    # Repeats require explicit parens or the 'x' separator.
     assert vaccine_library.get_linker("G6S").amino_acids == "GGGGGGS"
-    # G2S5 = (GG + S) * 5
-    assert vaccine_library.get_linker("G2S5").amino_acids == "GGSGGSGGSGGSGGS"
-    # Static G4S3 still wins over the regex
-    assert vaccine_library.get_linker("G4S3").amino_acids == "GGGGSGGGGSGGGGS"
+    assert vaccine_library.get_linker("G2S5").amino_acids == "GG" + "SSSSS"
+    assert vaccine_library.get_linker("G4S3").amino_acids == "GGGG" + "SSS"
 
 
 def test_any_grammar():
@@ -492,11 +516,15 @@ def test_any_citation_flags_extrapolation():
             or "without independent" in a3.citation.lower())
 
 
-def test_paren_and_compact_forms_match_for_g_family():
-    # (G2S)3 should produce the same amino_acids as G2S3.
-    a = vaccine_library.get_linker("(G2S)3").amino_acids
-    b = vaccine_library.get_linker("G2S3").amino_acids
-    assert a == b == "GGSGGSGGS"
+def test_paren_and_compact_forms_now_differ_for_g_family():
+    # 2.13 breaking change: bare 'G2S3' is the LITERAL "GGSSS" (2 G's
+    # + 3 S's), not the (G2S)3 repeat. The two forms now mean different
+    # things by design — see module docstring.
+    paren = vaccine_library.get_linker("(G2S)3").amino_acids
+    compact = vaccine_library.get_linker("G2S3").amino_acids
+    assert paren == "GGSGGSGGS"
+    assert compact == "GGSSS"
+    assert paren != compact
 
 
 def test_unknown_compositional_form_raises():

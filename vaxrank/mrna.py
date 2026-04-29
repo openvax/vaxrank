@@ -134,22 +134,31 @@ def normalize_codon_species(name):
 class RNAConstructConfig:
     """User-configurable mRNA construct parameters.
 
-    Defaults reflect a typical neoantigen mRNA design: 5 antigen
-    windows of 15-20 aa each in a single construct, with a tPA signal
-    peptide and HBB UTRs. ``max_length_nt`` is a belt-and-suspenders
-    cap that triggers spillover into additional constructs only on
-    pathologically long inputs.
+    Defaults reproduce the BioNTech IVAC MUTANOME / FixVac design as
+    published in Sahin et al., Nature 547:222, 2017 (doi:10.1038/nature23003)
+    and originally engineered in Kreiter et al., J Immunol 180:309, 2008
+    (doi:10.4049/jimmunol.180.1.309):
+
+    - HLA-B signal peptide + HLA-B MITD (consistent self-pairing)
+    - 5 antigens per construct, 25-aa windows
+    - (G4S)2 inter-antigen linker
+    - HBB 5' UTR + tandem 2× HBB 3' UTR (FI element / "2hBg")
+    - Single construct per vaccine
+
+    ``max_length_nt`` is a belt-and-suspenders cap that triggers
+    spillover into additional constructs only on pathologically long
+    inputs.
     """
-    signal_peptide: Optional[str] = "tPA"
-    linker: str = "G4S2"  # BioNTech FixVac canonical (Sahin 2017, Kreiter 2008)
-    include_mitd: bool = False
-    mitd: str = "HLA_A"
+    signal_peptide: Optional[str] = "HLA_B"
+    linker: str = "(G4S)2"
+    include_mitd: bool = True
+    mitd: str = "HLA_B"
     utr_5p: str = "HBB"
-    utr_3p: str = "HBB"
+    utr_3p: str = "HBB_FI"  # tandem 2× HBB
     codon_species: str = "h_sapiens"
     codon_method: str = "use_best_codon"
     min_antigen_length_aa: int = 15
-    max_antigen_length_aa: int = 20
+    max_antigen_length_aa: int = 25  # Sahin 2017 used 27mers; 25 is typical
     antigens_per_construct: int = 5
     max_constructs: int = 1
     candidates_per_slot: int = 1

@@ -38,13 +38,18 @@ both resolve to the same Linker object.
 ## Compositional grammar
 
 In addition to named entries, ``get_linker`` accepts compositional
-forms parsed at lookup time:
+forms parsed at lookup time. **Repeats require explicit parens or
+an ``x`` separator** — bare digit suffixes are parsed literally to
+avoid ambiguity (e.g. ``G4S2`` = "GGGGSS", *not* "(G4S)2").
 
-- ``(BASE)N`` — repeat any base linker N times. Example: ``(G2S)3``
-  → "GGSGGSGGS". 2A entries (codon-frozen) are rejected — repeating
-  a 2A linker would not produce additional ribosomal-skipping events.
-- ``GnSm`` — n glycines followed by 1 serine, that unit repeated m
-  times. Example: ``G2S3`` → "GGSGGSGGS"; ``G6S`` → "GGGGGGS".
+- **Repeat forms** — ``(BASE)N``, ``(BASE)xN``, ``BASExN``. Examples:
+  ``(G4S)2``, ``(G4S)x2``, and ``G4Sx2`` all → "GGGGSGGGGS".
+  2A entries (codon-frozen) are rejected — repeating a 2A linker
+  would not produce additional ribosomal-skipping events.
+- ``GnSm`` — n glycines followed by m serines, **as a literal single
+  unit, not a repeat**. Examples: ``G4S`` = "GGGGS"; ``G4S2`` =
+  "GGGGSS"; ``G6S`` = "GGGGGGS". Use ``(G4S)2`` for the (Gly4Ser)2
+  repeat from Huston 1988 / Chen 2013.
 - ``AnY`` — n alanines followed by tyrosine. Example: ``A3Y`` →
   "AAAY". Mechanistically extrapolates from AAY (= A2Y, Velders 2001)
   without independent primary validation; the synthesized Linker's
@@ -89,13 +94,13 @@ _GS_CITATION = (
     "(doi:10.1016/j.addr.2012.09.039)."
 )
 
+# Single-unit GnSm entries only. Repeats use the compositional grammar:
+# (G4S)2, (G4S)x2, or G4Sx2 — never bare 'G4S2' (which now parses as
+# the literal "GGGGSS"; see module docstring).
 LINKER_G2S = Linker(name="G2S", amino_acids="GGS", citation=_GS_CITATION)
 LINKER_G3S = Linker(name="G3S", amino_acids="GGGS", citation=_GS_CITATION)
 LINKER_G4S = Linker(name="G4S", amino_acids="GGGGS", citation=_GS_CITATION)
 LINKER_G5S = Linker(name="G5S", amino_acids="GGGGGS", citation=_GS_CITATION)
-LINKER_G4S2 = Linker(name="G4S2", amino_acids="GGGGS" * 2, citation=_GS_CITATION)
-LINKER_G4S3 = Linker(name="G4S3", amino_acids="GGGGS" * 3, citation=_GS_CITATION)
-LINKER_G4S4 = Linker(name="G4S4", amino_acids="GGGGS" * 4, citation=_GS_CITATION)
 
 
 # -- Rigid alpha-helical linkers --------------------------------------------
@@ -106,11 +111,8 @@ _EAAAK_CITATION = (
     "antigen domains need separation rather than flex."
 )
 
+# Single-unit only; repeats use (EAAAK)n / (EAAAK)xn / EAAAKxn.
 LINKER_EAAAK = Linker(name="EAAAK", amino_acids="EAAAK", citation=_EAAAK_CITATION)
-LINKER_EAAAK2 = Linker(
-    name="EAAAK2", amino_acids="EAAAK" * 2, citation=_EAAAK_CITATION)
-LINKER_EAAAK3 = Linker(
-    name="EAAAK3", amino_acids="EAAAK" * 3, citation=_EAAAK_CITATION)
 
 
 # -- Furin cleavage sites ----------------------------------------------------
@@ -139,11 +141,15 @@ LINKER_FURIN_RKRKR = Linker(
 
 _AAY_CITATION = (
     "Velders et al., J Immunol 166:5366, 2001 "
-    "(doi:10.4049/jimmunol.166.9.5366) — established that AAY supports "
-    "proper proteasomal/TAP processing of joined CTL epitope strings "
-    "in DNA-vaccine constructs. The mechanism is the C-terminal Y as a "
-    "P1 proteasome cleavage anchor with neutral aliphatic spacing "
-    "upstream."
+    "(doi:10.4049/jimmunol.166.9.5366) — established AAY as a flanking "
+    "spacer in CTL epitope strings; mechanism is C-terminal Y as a P1 "
+    "proteasome cleavage anchor with neutral aliphatic spacing upstream. "
+    "Note: Velders 2001 compared spacer vs no-spacer, NOT AAY vs other "
+    "linkers. The strongest empirical comparison to date is "
+    "Aguilar-Gurrieri et al., Cancer Immunol Immunother 72:2113, 2023 "
+    "(doi:10.1007/s00262-023-03409-3), which showed alanine-based "
+    "spacers (AAA, AAL, ADL) outperform GGGS for MHC-I/SIINFEKL "
+    "surface presentation in vitro — but did NOT test AAY itself."
 )
 
 _ANY_CITATION = (
@@ -151,8 +157,10 @@ _ANY_CITATION = (
     "doi:10.4049/jimmunol.166.9.5366). The C-terminal Y proteasome "
     "P1 anchor is preserved; longer N-terminal A-stretches (AAAY, "
     "A4Y, ...) extend the neutral-spacer region without independent "
-    "primary-literature validation. Use AAY (= A2Y) as the canonical "
-    "form; longer variants are mechanistic extrapolations."
+    "primary-literature validation. AAA-only (no Y) is supported by "
+    "Aguilar-Gurrieri et al., Cancer Immunol Immunother 72:2113, 2023 "
+    "(doi:10.1007/s00262-023-03409-3) for MHC-I presentation in vitro. "
+    "AnY variants beyond A2Y (= AAY) are mechanistic extrapolations."
 )
 
 LINKER_AAY = Linker(
@@ -258,12 +266,7 @@ LINKERS = {
     LINKER_G3S.name: LINKER_G3S,
     LINKER_G4S.name: LINKER_G4S,
     LINKER_G5S.name: LINKER_G5S,
-    LINKER_G4S2.name: LINKER_G4S2,
-    LINKER_G4S3.name: LINKER_G4S3,
-    LINKER_G4S4.name: LINKER_G4S4,
     LINKER_EAAAK.name: LINKER_EAAAK,
-    LINKER_EAAAK2.name: LINKER_EAAAK2,
-    LINKER_EAAAK3.name: LINKER_EAAAK3,
     LINKER_FURIN_RKRR.name: LINKER_FURIN_RKRR,
     LINKER_FURIN_RVKR.name: LINKER_FURIN_RVKR,
     LINKER_FURIN_RKRKR.name: LINKER_FURIN_RKRKR,
@@ -275,16 +278,21 @@ LINKERS = {
     LINKER_E2A.name: LINKER_E2A,
 }
 
-# Historical or convenience names → canonical name.
+# Historical or convenience names → canonical form. The right-hand side
+# is fed back through get_linker, so it can be a static name or a
+# compositional form.
 ALIASES = {
-    "GS": "G4S",         # 2.10.0 default; matches G4S in standard nomenclature
-    "GS3": "G4S3",       # 2.10.0 default; matches (G4S)3
+    "GS": "G4S",          # 2.10.0 default
+    "GS3": "(G4S)3",      # 2.10.0 default; was the (G4S)3 repeat
 }
 
 
 # Compositional-name parsers (see module docstring for grammar).
-_PAREN_REPEAT_RE = re.compile(r"^\((?P<base>[A-Z][A-Z0-9]*)\)(?P<count>\d+)$")
-_GNSM_RE = re.compile(r"^G(?P<g>\d+)S(?P<m>\d+)?$")
+# Repeats require explicit parens or 'x' separator; bare digit suffixes
+# parse literally (G4S2 = "GGGGSS", not "(G4S)2").
+_PAREN_REPEAT_RE = re.compile(r"^\((?P<base>[A-Z][A-Z0-9]*)\)X?(?P<count>\d+)$")
+_X_REPEAT_RE = re.compile(r"^(?P<base>[A-Z][A-Z0-9]*)X(?P<count>\d+)$")
+_GNSM_RE = re.compile(r"^G(?P<g>\d+)S(?P<s>\d+)?$")
 _ANY_RE = re.compile(r"^A(?P<n>\d+)Y$")
 
 _MAX_REPEAT = 100  # safety cap so '(G4S)1000000' can't materialize a megasequence
@@ -329,31 +337,44 @@ def get_linker(name):
     """Resolve a linker by name; supports the compositional grammar in
     the module docstring.
 
-    Resolution order: aliases → static LINKERS → ``(BASE)N`` → ``GnSm``
-    → ``AnY``. ValueError on miss.
+    Resolution order: aliases → static LINKERS → ``(BASE)N`` /
+    ``(BASE)xN`` → ``BASExN`` → ``GnSm`` (literal) → ``AnY``.
+    Names are uppercased before lookup so ``g4s2``, ``G4Sx2``, and
+    ``g4sx2`` all resolve identically. ValueError on miss.
     """
+    name = name.upper()
     canonical = ALIASES.get(name, name)
     if canonical in LINKERS:
         return LINKERS[canonical]
 
+    # (BASE)N or (BASE)xN — explicit repeat with parens
     m = _PAREN_REPEAT_RE.match(canonical)
     if m:
         count = int(m.group("count"))
         _check_repeat(count, "repeat count")
         return _make_repeat_of(m.group("base"), count, canonical)
 
+    # BASExN — explicit repeat with x separator
+    m = _X_REPEAT_RE.match(canonical)
+    if m:
+        count = int(m.group("count"))
+        _check_repeat(count, "repeat count")
+        return _make_repeat_of(m.group("base"), count, canonical)
+
+    # GnSm — n glycines + m serines, literal single unit
     m = _GNSM_RE.match(canonical)
     if m:
         g = int(m.group("g"))
-        m_count = int(m.group("m")) if m.group("m") else 1
+        s = int(m.group("s")) if m.group("s") else 1
         _check_repeat(g, "glycine count")
-        _check_repeat(m_count, "repeat count")
+        _check_repeat(s, "serine count")
         return Linker(
             name=canonical,
-            amino_acids=("G" * g + "S") * m_count,
+            amino_acids="G" * g + "S" * s,
             citation=_GS_CITATION,
         )
 
+    # AnY — n alanines + tyrosine
     m = _ANY_RE.match(canonical)
     if m:
         n = int(m.group("n"))
@@ -369,7 +390,8 @@ def get_linker(name):
 
     raise ValueError(
         "Unknown linker '%s'. Available named entries: %s. "
-        "Or use compositional forms: (BASE)N, GnSm, AnY." % (
+        "Compositional forms: (BASE)N or BASExN for repeats, GnSm for "
+        "literal n-glycines + m-serines, AnY for n-alanines + Y." % (
             name, ', '.join(all_linker_names())))
 
 

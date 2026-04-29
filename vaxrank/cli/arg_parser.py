@@ -320,28 +320,37 @@ def add_mrna_output_args(group):
              "(component names, length, contained antigens).")
     group.add_argument(
         "--mrna-signal-peptide",
-        default="tPA",
+        default="HLA_B",
         help="Signal peptide name from the mRNA library (one of: %s) or '' "
-             "to omit. Default: tPA." % ", ".join(sorted(SIGNAL_PEPTIDES)))
+             "to omit. Default: HLA_B (BioNTech FixVac canonical, "
+             "Sahin 2017)." % ", ".join(sorted(SIGNAL_PEPTIDES)))
     group.add_argument(
         "--mrna-linker",
-        default="G4S2",
+        default="(G4S)2",
         type=_linker_arg,
         help="Linker name from the shared vocabulary (case-insensitive). "
-             "Accepts named entries (G4S, G4S2, G4S3, AAY, P2A, ...), "
-             "the compositional forms (BASE)N / GnSm / AnY (e.g. (G2S)3, "
-             "G6S, A3Y), and the legacy GS / GS3 aliases. "
-             "Default: G4S2 (BioNTech FixVac canonical).")
+             "Accepts named entries (G4S, AAY, EAAAK, P2A, ...) and "
+             "compositional forms: (BASE)N / (BASE)xN / BASExN for repeats, "
+             "GnSm for n-glycines + m-serines literal, AnY for n-alanines + Y. "
+             "Examples: (G4S)2, G4Sx2, A3Y, G6S. "
+             "Default: (G4S)2 (BioNTech FixVac canonical, Sahin 2017).")
     group.add_argument(
         "--mrna-include-mitd",
         action="store_true",
-        default=False,
+        default=True,
         help="Append the MHC-I trafficking domain (MITD) at the C-terminus to "
-             "route antigens through the endolysosomal compartment.")
+             "route antigens through the endolysosomal compartment. "
+             "On by default to match BioNTech FixVac (Sahin 2017).")
+    group.add_argument(
+        "--mrna-no-mitd",
+        action="store_false",
+        dest="mrna_include_mitd",
+        help="Disable MITD inclusion (rare for neoantigen vaccines).")
     group.add_argument(
         "--mrna-mitd",
-        default="HLA_A",
-        help="MITD name when --mrna-include-mitd is set (one of: %s)."
+        default="HLA_B",
+        help="MITD name when --mrna-include-mitd is set (one of: %s). "
+             "Default: HLA_B (BioNTech FixVac canonical)."
              % ", ".join(sorted(MITDS)))
     group.add_argument(
         "--mrna-5p-utr",
@@ -350,8 +359,9 @@ def add_mrna_output_args(group):
              % ", ".join(sorted(UTRS_5P)))
     group.add_argument(
         "--mrna-3p-utr",
-        default="HBB",
-        help="3' UTR name (one of: %s). Default: HBB."
+        default="HBB_FI",
+        help="3' UTR name (one of: %s). Default: HBB_FI (tandem 2× HBB / "
+             "FI element, BioNTech FixVac canonical)."
              % ", ".join(sorted(UTRS_3P)))
     group.add_argument(
         "--mrna-codon-species",
@@ -370,10 +380,11 @@ def add_mrna_output_args(group):
         help="Minimum amino-acid window per antigen. Default: 15.")
     group.add_argument(
         "--mrna-max-antigen-length-aa",
-        default=20,
+        default=25,
         type=int,
-        help="Maximum amino-acid window per antigen. Default: 20 (shorter "
-             "than peptide SLPs because antigens get concatenated).")
+        help="Maximum amino-acid window per antigen. Default: 25 "
+             "(BioNTech FixVac uses 27mers; 25 is the typical neoantigen "
+             "vaccine SLP target).")
     group.add_argument(
         "--mrna-antigens-per-construct",
         default=5,
