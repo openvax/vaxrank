@@ -8,12 +8,13 @@
 
 # vaxrank
 
-Vaxrank is the vaccine peptide ranking component of the
+Vaxrank is the neoantigen ranking component of the
 [OpenVax](https://www.openvax.org/) pipeline for designing personalized
 cancer vaccines.  Given a patient's somatic mutations, tumor RNA sequencing
-data, and HLA type, Vaxrank selects and ranks the mutant peptides most
-likely to elicit a T-cell response, producing a report suitable for
-guiding vaccine manufacture.
+data, and HLA type, Vaxrank selects and ranks the mutant antigens most
+likely to elicit a T-cell response and emits them in whichever vaccine
+modality the user wants — peptide pools, mRNA constructs, or analysis
+reports for review.
 
 ## Overview
 
@@ -44,10 +45,42 @@ peptide synthesiser:
    filters out peptides that appear in the reference proteome, annotates
    known cancer hotspot mutations, and ranks candidates by a combined
    immunogenicity and manufacturability score.
+5. **Construct emission** — the ranked candidates are written out in the
+   modality the trial calls for: a peptide pool ready for synthesis, an
+   mRNA construct ready for IVT, or analysis reports for clinical review.
 
-Vaxrank outputs ranked reports in ASCII, HTML, PDF, and XLSX formats.
-Each report lists the top vaccine peptide candidates per variant, their
-predicted epitopes, and supporting evidence from the RNA data.
+## Output modes
+
+Vaxrank emits the ranked candidates in any combination of the four
+modalities below; pass the corresponding `--output-*` flags to enable
+each.
+
+| Modality | What you get | Flags |
+|---|---|---|
+| **Analysis reports** (default) | Per-variant tables of vaccine peptide candidates, predicted epitopes, and manufacturability scores in ASCII / HTML / PDF / XLSX / JSON | `--output-ascii-report`, `--output-html-report`, `--output-pdf-report`, `--output-xlsx-report`, `--output-csv`, `--output-json-file` |
+| **Peptide constructs** | FASTA + JSON manifest + vendor order-form CSV. Three sub-modes: `slp` (one synthetic long peptide per ranked vaccine peptide, default), `minimal_epitope` (top mutant MHC ligand only), `multi_epitope` (concatenate antigens with a linker). | `--output-peptide`, `--output-peptide-manifest`, `--output-peptide-order-form`, `--peptide-mode`, `--peptide-linker`, `--peptide-max-length-aa`, `--peptide-n-terminal-acetyl`, `--peptide-c-terminal-amide` |
+| **mRNA constructs** | FASTA + JSON manifest with full codon-optimized CDS, configurable 5' / 3' UTRs, signal peptide, optional MITC trafficking domain, and a shared linker library. Codon optimization uses [DnaChisel](https://github.com/Edinburgh-Genome-Foundry/DnaChisel); 2A self-cleaving peptides preserve their published codon usage automatically. | `--output-mrna`, `--output-mrna-manifest`, `--mrna-signal-peptide`, `--mrna-linker`, `--mrna-include-mitd`, `--mrna-5p-utr`, `--mrna-3p-utr`, `--mrna-codon-species`, `--mrna-max-length-nt` |
+| **Neoepitope CSV** | Compact per-epitope rows; can also be the *input* when running vaxrank on pre-computed pVACseq / LENS predictions | `--output-neoepitope-report`, `--input-pvacseq`, `--input-lens` |
+
+The peptide and mRNA construct manifests share a schema (`modality`,
+`name`, `length`, `length_unit`, `antigen_names`, `components`,
+`manufacturability`) so downstream tooling can read either one
+uniformly.
+
+### Shared linker library
+
+Both modalities consume the same set of linker names so a single
+construct design can be ported between peptide and mRNA backbones.
+Available entries:
+
+| Name | Type | Use |
+|---|---|---|
+| `GS`, `GS3` | flexible (Gly4Ser)n | Generic spacing between fused antigens (Huston *PNAS* 1988) |
+| `AAY` | proteasome-friendly | Between MHC-I CTL epitopes (Velders *J Immunol* 2001) |
+| `GPGPG` | helper-T spacer | Between MHC-II epitopes (Livingston *J Immunol* 2002) |
+| `P2A`, `T2A`, `F2A`, `E2A` | self-cleaving 2A | Co-translational ribosomal skipping for mRNA constructs (Donnelly *J Gen Virol* 2001; Kim *PLoS ONE* 2011). In peptide mode these are functionally inert and the manifest annotates them as such. |
+
+All sequences carry primary-source citations in `vaxrank/vaccine_library.py`.
 
 ## Clinical Use
 
@@ -377,7 +410,11 @@ then filtered and ranked by:
 - `reference_proteome.py`: Set-based kmer index for reference proteome filtering (O(1) lookup, built once and cached)
 - `cancer_hotspots.py`: Cancer mutation hotspot annotation
 - `vaccine_peptide.py`: Vaccine peptide scoring and manufacturability
-- `report.py`: Report generation (ASCII, HTML, PDF, XLSX)
+- `report.py`: Analysis-report generation (ASCII, HTML, PDF, XLSX, CSV, JSON)
+- `peptide.py`: Peptide construct assembly + FASTA / manifest / vendor order-form writers
+- `mrna.py`: mRNA construct assembly (DnaChisel codon optimization, 2A handling) + FASTA / manifest writers
+- `vaccine_library.py`: Shared linker vocabulary (GS-family, AAY, GPGPG, P2A/T2A/F2A/E2A) with citations
+- `mrna_library.py`: mRNA-specific elements (5'/3' UTRs, signal peptides, MITD)
 
 ## Papers & Citations
 

@@ -83,6 +83,22 @@ pVAC1 expression vectors and used in many DNA-vaccine constructs
 (Kou et al., Sci Rep 7:42408, 2017, doi:10.1038/srep42408).
 """
 
+SIGNAL_PEPTIDE_CD8A = "MALPVTALLLPLALLLHAARP"
+"""Human CD8A signal peptide, 21 aa.
+
+Source: UniProt P01732 (CD8A_HUMAN), signal peptide annotation
+residues 1-21. Common choice in TCR-engineering and cell-surface
+expression constructs.
+"""
+
+SIGNAL_PEPTIDE_CD28 = "MLRLLLALNLFPSIQVTG"
+"""Human CD28 signal peptide, 18 aa.
+
+Source: UniProt P10747 (CD28_HUMAN), signal peptide annotation
+residues 1-18. Pairs with CD8A in dual-chain TCR constructs to
+distinguish alpha/beta secretion signals.
+"""
+
 
 # -- MHC-I trafficking domain -----------------------------------------------
 
@@ -96,40 +112,6 @@ Originally described in Kreiter et al., J Immunol 180:309, 2008
 endolysosomal compartment to enhance MHC class I and class II
 presentation. Used in BioNTech IVAC MUTANOME / FixVac trials
 (Sahin et al., Nature 547:222, 2017, doi:10.1038/nature23003).
-"""
-
-
-# -- Linkers -----------------------------------------------------------------
-
-LINKER_GS = "GGGGS"
-"""Single-repeat (G4S) flexible linker, 5 aa.
-
-Source: Huston et al., PNAS 85:5879, 1988
-(doi:10.1073/pnas.85.16.5879) — first description of the (Gly4Ser)n
-linker family connecting VH-VL in single-chain Fv. Reviewed in
-Chen et al., Adv Drug Deliv Rev 65:1357, 2013
-(doi:10.1016/j.addr.2012.09.039).
-"""
-
-LINKER_GS3 = "GGGGSGGGGSGGGGS"
-"""Triple-repeat (G4S)3 flexible linker, 15 aa. See LINKER_GS for source."""
-
-LINKER_AAY = "AAY"
-"""AAY flanking spacer used between MHC-I CTL epitopes, 3 aa.
-
-Source: Velders et al., J Immunol 166:5366, 2001
-(doi:10.4049/jimmunol.166.9.5366) — established that AAY supports
-proper proteasomal/TAP processing of joined CTL epitope strings in
-DNA-vaccine constructs.
-"""
-
-LINKER_GPGPG = "GPGPG"
-"""GPGPG spacer used between MHC-II / helper T-cell epitopes, 5 aa.
-
-Source: Livingston et al., J Immunol 168:5499, 2002
-(doi:10.4049/jimmunol.168.11.5499) — demonstrated that GPGPG breaks
-junctional HLA-DR epitopes while preserving each helper epitope
-when assembling multi-epitope constructs.
 """
 
 
@@ -147,11 +129,27 @@ SIGNAL_PEPTIDES = {
     "HLA_A": SIGNAL_PEPTIDE_HLA_A,
     "tPA": SIGNAL_PEPTIDE_TPA,
     "IgK": SIGNAL_PEPTIDE_IGK,
+    "CD8A": SIGNAL_PEPTIDE_CD8A,
+    "CD28": SIGNAL_PEPTIDE_CD28,
 }
 
 MITDS = {
     "HLA_A": MITD_HLA_A,
 }
+
+
+# -- Linkers (string compatibility shim) -------------------------------------
+#
+# 2.10.0 exposed linker entries as plain amino-acid strings via this
+# module: ``from vaxrank.mrna_library import LINKER_GS3``. The richer
+# ``Linker`` dataclass (with optional blessed DNA, freeze flags, and
+# citations) lives in ``vaxrank.vaccine_library``; for callers that
+# imported the string form, we keep the originals here unchanged.
+
+LINKER_GS = "GGGGS"
+LINKER_GS3 = "GGGGSGGGGSGGGGS"
+LINKER_AAY = "AAY"
+LINKER_GPGPG = "GPGPG"
 
 LINKERS = {
     "GS": LINKER_GS,

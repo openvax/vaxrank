@@ -59,7 +59,12 @@ from ..report import (
     TemplateDataCreator,
 )
 from ..patient_info import PatientInfo
-from ..mrna import MRNAOptions, assemble_mrna_constructs, write_mrna_outputs
+from ..mrna import RNAConstructConfig, assemble_mrna_constructs, write_mrna_outputs
+from ..peptide import (
+    PeptideConstructConfig,
+    assemble_peptide_constructs,
+    write_peptide_outputs,
+)
 from ..vaf import extract_dna_vaf_by_variant
 
 logger = logging.getLogger(__name__)
@@ -169,15 +174,22 @@ def _resolve_ensembl_release(args):
 
 def main(args_list=None):
     """
-    Script to generate vaccine peptide predictions from somatic cancer variants,
-    patient HLA type, and tumor RNA-seq data.
+    Rank personalized cancer neoantigens from somatic variants, tumor
+    RNA, and patient HLA type. The ranked candidates can be emitted as
+    analysis reports, peptide vaccine constructs, or mRNA vaccine
+    constructs (or any combination).
 
-    Example usage:
-        vaxrank
-            --vcf somatic.vcf \
-            --bam rnaseq.bam \
-            --vaccine-peptide-length 25 \
-            --output-csv vaccine-peptides.csv
+    Example (analysis report + peptide pool + mRNA construct):
+
+        vaxrank \\
+            --vcf somatic.vcf \\
+            --bam rnaseq.bam \\
+            --mhc-predictor netmhc \\
+            --mhc-alleles HLA-A*02:01 \\
+            --vaccine-peptide-length 25 \\
+            --output-pdf-report report.pdf \\
+            --output-peptide vaccine-peptides.fasta \\
+            --output-mrna vaccine-mrna.fasta
     """
     if args_list is None:
         args_list = sys.argv[1:]
@@ -217,8 +229,36 @@ def main(args_list=None):
             num_epitopes_per_peptide=num_epitopes,
             excel_report_path=args.output_neoepitope_report)
 
+    if getattr(args, 'output_peptide', ''):
+        peptide_options = PeptideConstructConfig(
+            mode=args.peptide_mode,
+            linker=args.peptide_linker,
+            min_antigen_length_aa=args.peptide_min_antigen_length_aa,
+            max_antigen_length_aa=args.peptide_max_antigen_length_aa,
+            antigens_per_construct=args.peptide_antigens_per_construct,
+            max_constructs=args.peptide_max_constructs,
+            candidates_per_slot=args.peptide_candidates_per_slot,
+            n_terminal_acetylation=args.peptide_n_terminal_acetyl,
+            c_terminal_amidation=args.peptide_c_terminal_amide,
+            scale_mg=args.peptide_scale_mg,
+            purity_percent=args.peptide_purity_percent,
+            counterion=args.peptide_counterion,
+        )
+        peptide_constructs = assemble_peptide_constructs(
+            ranked_variants_with_vaccine_peptides, options=peptide_options)
+        write_peptide_outputs(
+            peptide_constructs,
+            fasta_path=args.output_peptide,
+            manifest_path=getattr(args, 'output_peptide_manifest', '') or None,
+            order_form_path=getattr(args, 'output_peptide_order_form', '') or None,
+            options=peptide_options,
+        )
+        logger.info(
+            "Wrote %d peptide construct(s) to %s",
+            len(peptide_constructs), args.output_peptide)
+
     if getattr(args, 'output_mrna', ''):
-        options = MRNAOptions(
+        options = RNAConstructConfig(
             signal_peptide=(args.mrna_signal_peptide or None),
             linker=args.mrna_linker,
             include_mitd=args.mrna_include_mitd,
@@ -227,7 +267,11 @@ def main(args_list=None):
             utr_3p=args.mrna_3p_utr,
             codon_species=args.mrna_codon_species,
             codon_method=args.mrna_codon_method,
-            max_antigens_per_construct=args.mrna_max_antigens,
+            min_antigen_length_aa=args.mrna_min_antigen_length_aa,
+            max_antigen_length_aa=args.mrna_max_antigen_length_aa,
+            antigens_per_construct=args.mrna_antigens_per_construct,
+            max_constructs=args.mrna_max_constructs,
+            candidates_per_slot=args.mrna_candidates_per_slot,
             max_length_nt=args.mrna_max_length_nt,
         )
         constructs = assemble_mrna_constructs(

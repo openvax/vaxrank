@@ -21,18 +21,18 @@ import pytest
 from varcode import Variant
 
 from vaxrank.mrna import (
-    MRNAOptions,
+    RNAConstructConfig,
     assemble_mrna_constructs,
     codon_optimize,
     write_mrna_outputs,
 )
 from vaxrank.mrna_library import (
-    LINKER_GS3,
     MITD_HLA_A,
     SIGNAL_PEPTIDE_TPA,
     UTR_3P_HBB,
     UTR_5P_HBB,
 )
+from vaxrank.vaccine_library import LINKER_G4S3
 
 
 CODON_TABLE = {
@@ -97,7 +97,7 @@ def test_assembly_basic_construct():
         _variant_pair("KLQGHSAPVLDVIVN", contig='1', start=100, gene_name='GENEA'),
         _variant_pair("MNNVDEILGRWESPV", contig='2', start=200, gene_name='GENEB'),
     ]
-    options = MRNAOptions(signal_peptide='tPA', linker='GS3',
+    options = RNAConstructConfig(signal_peptide='tPA', linker='GS3',
                           include_mitd=False)
     constructs = assemble_mrna_constructs(pairs, options=options)
     assert len(constructs) == 1
@@ -110,7 +110,7 @@ def test_assembly_basic_construct():
     assert cds[:3] == 'ATG'
     assert cds[-3:] == 'TAA'
     protein = _translate(cds[:-3])
-    expected = SIGNAL_PEPTIDE_TPA + LINKER_GS3.join(['KLQGHSAPVLDVIVN', 'MNNVDEILGRWESPV'])
+    expected = SIGNAL_PEPTIDE_TPA + LINKER_G4S3.amino_acids.join(['KLQGHSAPVLDVIVN', 'MNNVDEILGRWESPV'])
     assert protein == expected
 
 
@@ -118,7 +118,7 @@ def test_assembly_prepends_atg_when_no_signal_peptide():
     # Antigens that don't naturally start with M should still produce a
     # translatable CDS — assembler prepends an M.
     pairs = [_variant_pair("KLQGHSAPVLDVIVN", gene_name='GENE')]
-    options = MRNAOptions(signal_peptide=None, linker='GS3', include_mitd=False)
+    options = RNAConstructConfig(signal_peptide=None, linker='GS3', include_mitd=False)
     [c] = assemble_mrna_constructs(pairs, options=options)
     cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
     assert cds[:3] == 'ATG'
@@ -128,7 +128,7 @@ def test_assembly_prepends_atg_when_no_signal_peptide():
 
 def test_assembly_does_not_double_prepend_when_antigen_starts_with_m():
     pairs = [_variant_pair("MNNVDEILGRWESPV", gene_name='GENE')]
-    options = MRNAOptions(signal_peptide=None, linker='GS3', include_mitd=False)
+    options = RNAConstructConfig(signal_peptide=None, linker='GS3', include_mitd=False)
     [c] = assemble_mrna_constructs(pairs, options=options)
     cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
     protein = _translate(cds[:-3])
@@ -137,21 +137,22 @@ def test_assembly_does_not_double_prepend_when_antigen_starts_with_m():
 
 def test_assembly_with_mitd_appends_trafficking_domain():
     pairs = [_variant_pair("KLQGHSAPVLDVIVN")]
-    options = MRNAOptions(signal_peptide=None, linker='GS3',
+    options = RNAConstructConfig(signal_peptide=None, linker='GS3',
                           include_mitd=True, mitd='HLA_A')
     [c] = assemble_mrna_constructs(pairs, options=options)
     cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
     protein = _translate(cds[:-3])
     # No signal peptide selected and antigen doesn't start with M, so the
     # assembler prepends one to keep the CDS translatable.
-    expected = "M" + "KLQGHSAPVLDVIVN" + LINKER_GS3 + MITD_HLA_A
+    expected = "M" + "KLQGHSAPVLDVIVN" + LINKER_G4S3.amino_acids + MITD_HLA_A
     assert protein == expected
 
 
 def test_assembly_splits_on_max_antigens():
     pairs = [_variant_pair("AAAA", start=i) for i in range(5)]
-    options = MRNAOptions(signal_peptide=None, linker='GS',
-                          include_mitd=False, max_antigens_per_construct=2)
+    options = RNAConstructConfig(signal_peptide=None, linker='GS',
+                          include_mitd=False, antigens_per_construct=2,
+                          max_constructs=10, max_antigen_length_aa=4)
     constructs = assemble_mrna_constructs(pairs, options=options)
     assert [len(c.antigen_names) for c in constructs] == [2, 2, 1]
 
@@ -159,43 +160,105 @@ def test_assembly_splits_on_max_antigens():
 def test_assembly_splits_on_max_length():
     long_aa = "A" * 200
     pairs = [_variant_pair(long_aa, start=i) for i in range(4)]
-    options = MRNAOptions(signal_peptide=None, linker='GS',
-                          include_mitd=False, max_antigens_per_construct=10,
-                          max_length_nt=len(UTR_5P_HBB) + len(UTR_3P_HBB) + 3 + 600 * 2)
+    options = RNAConstructConfig(
+        signal_peptide=None, linker='GS', include_mitd=False,
+        antigens_per_construct=10, max_constructs=10,
+        max_antigen_length_aa=200,
+        max_length_nt=len(UTR_5P_HBB) + len(UTR_3P_HBB) + 3 + 600 * 2)
     constructs = assemble_mrna_constructs(pairs, options=options)
     assert len(constructs) > 1
 
 
+def test_assembly_max_constructs_caps_output():
+    # New default max_constructs=1: extra antigens spill into a second
+    # construct only when explicitly allowed.
+    pairs = [_variant_pair("A" * 30, start=i) for i in range(3)]
+    options = RNAConstructConfig(
+        signal_peptide=None, linker='GS', include_mitd=False,
+        antigens_per_construct=1, max_constructs=1,
+        max_antigen_length_aa=30)
+    [c] = assemble_mrna_constructs(pairs, options=options)
+    assert len(c.antigen_names) == 1
+
+
 def test_assembly_no_antigens_returns_empty():
-    assert assemble_mrna_constructs([], options=MRNAOptions()) == []
+    assert assemble_mrna_constructs([], options=RNAConstructConfig()) == []
 
 
 def test_unknown_signal_peptide_raises():
     pairs = [_variant_pair("KLQ")]
     with pytest.raises(ValueError):
-        assemble_mrna_constructs(pairs, options=MRNAOptions(signal_peptide='nope'))
+        assemble_mrna_constructs(pairs, options=RNAConstructConfig(signal_peptide='nope'))
+
+
+def test_assembly_p2a_linker_preserves_blessed_dna():
+    # When a 2A linker is selected, the blessed DNA from the literature
+    # must appear verbatim in the optimized CDS.
+    from vaxrank.vaccine_library import LINKER_P2A
+    pairs = [
+        _variant_pair("KLQGHSAPVLDVIVN", contig='1', start=100, gene_name='GENEA'),
+        _variant_pair("MNNVDEILGRWESPV", contig='2', start=200, gene_name='GENEB'),
+    ]
+    options = RNAConstructConfig(signal_peptide='tPA', linker='P2A',
+                          include_mitd=False)
+    [c] = assemble_mrna_constructs(pairs, options=options)
+    cds = c.sequence[len(UTR_5P_HBB):-len(UTR_3P_HBB)]
+    assert LINKER_P2A.dna in cds
+    # And translation matches the AA-level expectation (signal + a1 + P2A + a2)
+    protein = _translate(cds[:-3])
+    expected = (
+        SIGNAL_PEPTIDE_TPA
+        + LINKER_P2A.amino_acids.join(['KLQGHSAPVLDVIVN', 'MNNVDEILGRWESPV'])
+    )
+    assert protein == expected
 
 
 def test_write_mrna_outputs_fasta_and_manifest():
     pairs = [_variant_pair("KLQGHSAP")]
     constructs = assemble_mrna_constructs(
         pairs,
-        options=MRNAOptions(signal_peptide=None, include_mitd=False))
+        options=RNAConstructConfig(signal_peptide=None, include_mitd=False))
     with tempfile.TemporaryDirectory() as tmp:
         fasta_path = os.path.join(tmp, "out.fasta")
         manifest_path = os.path.join(tmp, "out.json")
         write_mrna_outputs(constructs, fasta_path, manifest_path)
         with open(fasta_path) as f:
             text = f.read()
-        assert text.startswith(">construct_01")
+        assert text.startswith(">seq_001")
         assert UTR_5P_HBB in text.replace('\n', '')
         with open(manifest_path) as f:
             manifest = json.load(f)
         entry = manifest[0]
         assert entry['modality'] == 'mrna'
         assert entry['length_unit'] == 'nt'
-        assert entry['name'] == 'construct_01'
+        assert entry['name'] == 'seq_001'
         assert entry['antigen_names'] == ['GENE_1_1000_A_T']
         assert entry['length'] == len(constructs[0].sequence)
         assert 'components' in entry
         assert 'manufacturability' in entry
+
+
+def test_mrna_min_antigen_length_warning(caplog):
+    # mRNA also enforces min_antigen_length_aa via warning. Regression
+    # for the field being declared but unused (#246 review).
+    import logging
+    pairs = [_variant_pair("KLQGH", gene_name='G')]  # 5 aa
+    with caplog.at_level(logging.WARNING):
+        assemble_mrna_constructs(
+            pairs,
+            options=RNAConstructConfig(
+                signal_peptide=None, include_mitd=False,
+                min_antigen_length_aa=15))
+    assert any("below" in r.message and "mrna-min-antigen-length" in r.message
+               for r in caplog.records), \
+        "Expected a min-antigen-length warning for an undersized mRNA antigen"
+
+
+def test_select_antigen_window_used_by_both_modalities():
+    # The mutation-centered window helper lives in vaccine_library and
+    # is used by both peptide.py and mrna.py. Catch a regression where
+    # one modality forks its own copy of the logic.
+    from vaxrank import mrna, peptide
+    from vaxrank.vaccine_library import select_antigen_window
+    assert mrna.select_antigen_window is select_antigen_window
+    assert peptide.select_antigen_window is select_antigen_window
