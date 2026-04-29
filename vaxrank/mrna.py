@@ -164,15 +164,15 @@ class RNAConstructConfig:
     candidates_per_slot: int = 1
     max_length_nt: int = 4000
     avoid_patterns: tuple = ()
-    # Junction-aware linker swap (issue #247). On by default. When
-    # enabled, the ``linker`` field above is the *fallback* if no
+    # Per-junction linker optimization (issue #247). On by default.
+    # When enabled, the ``linker`` field above is the *fallback* if no
     # candidate outperforms it; otherwise each junction picks its
     # own linker from ``junction_swap_candidates`` to minimize
     # predicted MHC presentation of chimeric k-mers spanning the
     # junction. If the caller doesn't pass an mhc_predictor + alleles
     # to ``assemble_mrna_constructs``, the optimizer is skipped with
     # a warning and the shared linker is used at every junction.
-    junction_aware: bool = True
+    optimize_junction_linkers: bool = True
     junction_swap_candidates: tuple = ()  # empty → use library default
     junction_kmer_lengths: tuple = (8, 9, 10, 11)
     junction_rank_strong: float = 0.5
@@ -313,7 +313,7 @@ def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
     ``len(antigen_aas) - 1``), each inter-antigen junction uses its
     own Linker instead of the shared ``linker``. ``pre_mitd_linker``
     similarly overrides the shared linker for the last-antigen ↔ MITD
-    junction. Both come from the junction-aware swap optimizer (#247).
+    junction. Both come from the per-junction linker optimizer (#247).
     """
     if per_junction_linkers is not None and antigen_aas:
         expected = max(0, len(antigen_aas) - 1)
@@ -345,8 +345,8 @@ def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
         parts.append(aa)
         aa_offset += len(aa)
     if mitd_aa:
-        # Pre-MITD linker: use override if supplied (junction-aware swap
-        # path), else fall back to the shared `linker`.
+        # Pre-MITD linker: use override if supplied (per-junction
+        # optimizer path), else fall back to the shared `linker`.
         mitd_link = pre_mitd_linker if pre_mitd_linker is not None else linker
         linker_aa = mitd_link.amino_acids
         if mitd_link.freeze_in_mrna and mitd_link.dna:
@@ -363,8 +363,8 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
     """Greedy bin-packing of antigens into constructs honoring the caps.
 
     Packing uses the *shared* linker length to estimate construct size.
-    The junction-aware swap (#247) can pick different linkers per
-    junction at assembly time; for the candidate set
+    The per-junction linker optimizer (#247) can pick different linkers
+    per junction at assembly time; for the candidate set
     JUNCTION_SWAP_CANDIDATES (3-10 aa range) the per-junction swing is
     at most ~7 aa = 21 nt per junction relative to the (G4S)2 default,
     well within the headroom of a 4000-nt cap. Reach for a tighter
@@ -436,10 +436,11 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
     options : RNAConstructConfig or None
     mhc_predictor : optional, mhctools.BasePredictor
-        Required when ``options.junction_aware`` is True. Used by the
-        per-junction linker swap optimizer to score chimeric k-mers.
+        Required when ``options.optimize_junction_linkers`` is True.
+        Used by the per-junction linker optimizer to score chimeric k-mers.
     mhc_alleles : optional, list[str]
-        Patient HLA allele names. Required when ``junction_aware`` is True.
+        Patient HLA allele names. Required when
+        ``optimize_junction_linkers`` is True.
     reference_proteome : optional
         Container that answers ``kmer in reference_proteome``. Junction
         k-mers found in the reference proteome are filtered out before
@@ -489,15 +490,15 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
         pre_mitd_linker = None  # overrides shared linker for the MITD junction
         junction_swap_meta = None
         n_junctions = max(0, len(antigen_aas) - 1)
-        if options.junction_aware and (n_junctions > 0 or mitd_aa):
+        if options.optimize_junction_linkers and (n_junctions > 0 or mitd_aa):
             if mhc_predictor is None or not mhc_alleles:
                 logger.warning(
-                    "junction_aware=True but no mhc_predictor / "
+                    "optimize_junction_linkers=True but no mhc_predictor / "
                     "mhc_alleles supplied; falling back to the shared "
                     "linker at every junction. Pass mhc_predictor + "
                     "mhc_alleles to assemble_mrna_constructs (or run "
                     "via the CLI which auto-wires them) to enable the "
-                    "swap optimizer.")
+                    "optimizer.")
                 junction_swap_meta = {
                     'enabled': False,
                     'note': "no predictor / alleles available",
@@ -548,8 +549,8 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                         'default_burden_mild': default_mild,
                     }
                     logger.info(
-                        "Construct %d: junction-aware swap reduced strong "
-                        "burden %d → %d, mild burden %d → %d",
+                        "Construct %d: per-junction linker optimizer "
+                        "reduced strong burden %d → %d, mild burden %d → %d",
                         i + 1, default_strong, swap.strong_burden,
                         default_mild, swap.burden)
                 else:

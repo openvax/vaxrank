@@ -392,7 +392,7 @@ ALIASES = {
 }
 
 
-# Default candidate set for the junction-aware linker swap algorithm
+# Default candidate set for the per-junction linker optimizer
 # (see vaxrank.junction_swap). All five resolve via the compositional
 # grammar; mechanistically diverse (length variants of GS-family +
 # alanine spacer) without straying into 2A / EAAAK / furin which have

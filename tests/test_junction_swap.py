@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for junction-aware linker swap (vaxrank issue #247)."""
+"""Tests for per-junction linker optimization (vaxrank issue #247)."""
 
 from types import SimpleNamespace
 
@@ -181,11 +181,11 @@ def test_optimize_filters_reference_proteome_kmers():
 
 # ---- end-to-end integration with assemble_mrna_constructs ----------------
 
-def test_assemble_with_junction_aware_uses_chosen_linkers():
-    """End-to-end: assemble_mrna_constructs(junction_aware=True, ...) must
-    actually emit a construct whose protein has the per-junction
-    chosen linkers between the right antigens, AND the manifest must
-    record the swap.
+def test_assemble_with_optimizer_uses_chosen_linkers():
+    """End-to-end: assemble_mrna_constructs(optimize_junction_linkers=True,
+    ...) must actually emit a construct whose protein has the
+    per-junction chosen linkers between the right antigens, AND the
+    manifest must record the swap.
     """
     from varcode import Variant
     from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
@@ -214,7 +214,7 @@ def test_assemble_with_junction_aware_uses_chosen_linkers():
 
     options = RNAConstructConfig(
         signal_peptide=None, include_mitd=False,
-        junction_aware=True, junction_swap_candidates=("(G4S)2", "AAA"),
+        optimize_junction_linkers=True, junction_swap_candidates=("(G4S)2", "AAA"),
         junction_kmer_lengths=(9,),
         antigens_per_construct=2, max_constructs=1,
         max_antigen_length_aa=20,
@@ -239,9 +239,9 @@ def test_assemble_with_junction_aware_uses_chosen_linkers():
     assert swap_meta['default_burden_strong'] >= 1
 
 
-def test_assemble_with_junction_aware_falls_back_when_predictor_missing(caplog):
-    """junction_aware=True without a predictor warns and uses the
-    shared linker — no exception."""
+def test_assemble_with_optimizer_falls_back_when_predictor_missing(caplog):
+    """optimize_junction_linkers=True without a predictor warns and uses
+    the shared linker — no exception."""
     import logging
     from varcode import Variant
     from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
@@ -263,7 +263,7 @@ def test_assemble_with_junction_aware_falls_back_when_predictor_missing(caplog):
 
     options = RNAConstructConfig(
         signal_peptide=None, include_mitd=False,
-        junction_aware=True,
+        optimize_junction_linkers=True,
         antigens_per_construct=2, max_constructs=1,
         max_antigen_length_aa=10,
         utr_3p='HBB',
@@ -304,7 +304,7 @@ def test_assemble_default_kept_when_candidates_dont_help():
 
     options = RNAConstructConfig(
         signal_peptide=None, include_mitd=False,
-        junction_aware=True, junction_swap_candidates=("(G4S)2", "AAA"),
+        optimize_junction_linkers=True, junction_swap_candidates=("(G4S)2", "AAA"),
         junction_kmer_lengths=(9,),
         antigens_per_construct=2, max_constructs=1,
         max_antigen_length_aa=10,
