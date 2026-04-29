@@ -265,6 +265,39 @@ def get_linker(name):
     return LINKERS[canonical]
 
 
+def iter_named_antigens(ranked_vaccine_peptides, candidates_per_slot=1):
+    """Yield ``(name, fragment, vaccine_peptide)`` per ranked candidate.
+
+    Both peptide and mRNA assembly walk the same ranked list and need
+    the same per-candidate name (``gene_chr_pos_ref_alt`` with an
+    ``_alt<k>`` suffix on alternates). Centralizing the loop here keeps
+    that naming consistent across modalities.
+
+    Parameters
+    ----------
+    ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
+    candidates_per_slot : int
+        How many ranked alternates to walk per variant. The first
+        candidate gets the bare name; subsequent candidates get
+        ``_alt1``, ``_alt2``, etc.
+    """
+    for variant, peptides in ranked_vaccine_peptides:
+        if not peptides:
+            continue
+        for idx, peptide in enumerate(peptides[:max(1, candidates_per_slot)]):
+            fragment = peptide.mutant_protein_fragment
+            base_name = "%s_%s_%s_%s_%s" % (
+                getattr(fragment, 'gene_name', None) or 'unknown',
+                variant.contig,
+                variant.start,
+                variant.ref or '.',
+                variant.alt or '.',
+            )
+            if idx > 0:
+                base_name = "%s_alt%d" % (base_name, idx)
+            yield base_name, fragment, peptide
+
+
 def select_antigen_window(fragment, base_name, max_length_aa):
     """Return a sub-window of the vaccine peptide that preserves the mutation.
 
