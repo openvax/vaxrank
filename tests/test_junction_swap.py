@@ -347,3 +347,238 @@ def test_optimize_default_linker_burden_tracked_in_sweep():
         default_linker_name="(G4S)2")
     assert hasattr(result, 'default_strong_burden')
     assert hasattr(result, 'default_burden')
+
+
+# ---- review-fix coverage -----------------------------------------------------
+
+def test_score_kmers_warn_no_rank_fires_only_once(caplog):
+    """A predictor that returns predictions without percentile_rank
+    should produce exactly one warning per process — not one per
+    junction × candidate."""
+    import logging
+
+    from vaxrank.junction_swap import (
+        _reset_score_kmers_warnings,
+        _score_kmers,
+    )
+
+    class NoRankPredictor:
+        def predict_peptides(self, peptides):
+            return [SimpleNamespace(peptide=p, allele="HLA-A*02:01")
+                    for p in peptides]
+
+    _reset_score_kmers_warnings()
+    with caplog.at_level(logging.WARNING):
+        for _ in range(5):
+            _score_kmers(["KLQGHSAPV"], ["HLA-A*02:01"], NoRankPredictor())
+    no_rank_warnings = [r for r in caplog.records
+                        if "usable percentile_rank" in r.message]
+    assert len(no_rank_warnings) == 1, (
+        "Expected exactly one no-rank warning across 5 calls, got %d"
+        % len(no_rank_warnings))
+
+
+def test_score_kmers_warns_when_allele_filter_drops_all(caplog):
+    """If the predictor returns only alleles outside the patient set,
+    warn once (the optimizer would otherwise silently pick the first
+    candidate)."""
+    import logging
+
+    from vaxrank.junction_swap import (
+        _reset_score_kmers_warnings,
+        _score_kmers,
+    )
+
+    class WrongAllelePredictor:
+        def predict_peptides(self, peptides):
+            # Returns only HLA-B*07:02 predictions; caller asks for A*02:01
+            return [SimpleNamespace(
+                peptide=p, allele="HLA-B*07:02", percentile_rank=10.0)
+                for p in peptides]
+
+    _reset_score_kmers_warnings()
+    with caplog.at_level(logging.WARNING):
+        rows = _score_kmers(
+            ["KLQGHSAPV"], ["HLA-A*02:01"], WrongAllelePredictor())
+        # Second call must NOT re-emit the warning
+        _score_kmers(
+            ["KLQGHSAPV"], ["HLA-A*02:01"], WrongAllelePredictor())
+    assert rows == [], "All predictions filtered out → no rows"
+    filter_warnings = [r for r in caplog.records
+                       if "allele filter dropped all" in r.message]
+    assert len(filter_warnings) == 1, (
+        "Expected exactly one allele-filter warning, got %d"
+        % len(filter_warnings))
+
+
+def test_assemble_manifest_chosen_uses_canonical_linker_names():
+    """Manifest's `junction_swap.chosen` field must contain canonical
+    Linker.name strings in BOTH branches: the swap-improved branch
+    and the default-tied branch. Downstream consumers shouldn't see
+    a mix of user-input linker strings and canonical names."""
+    from varcode import Variant
+
+    from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
+    from vaxrank.vaccine_library import get_linker
+
+    fragment_a = SimpleNamespace(
+        amino_acids="KLQGH", gene_name='G',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
+    fragment_b = SimpleNamespace(
+        amino_acids="MNNVD", gene_name='G',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
+    pep_a = SimpleNamespace(
+        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[])
+    pep_b = SimpleNamespace(
+        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[])
+    pairs = [
+        (Variant('1', 100, 'A', 'T'), [pep_a]),
+        (Variant('2', 200, 'A', 'T'), [pep_b]),
+    ]
+
+    # Default-tied branch: predictor returns no hits → all candidates
+    # tie at zero burden → default wins.
+    options = RNAConstructConfig(
+        signal_peptide=None, include_mitd=False,
+        optimize_linkers=True,
+        junction_swap_candidates=("(G4S)2", "AAA"),
+        junction_kmer_lengths=(9,),
+        antigens_per_construct=2, max_constructs=1,
+        max_antigen_length_aa=10,
+        utr_3p='HBB',
+        # Pass the linker in lowercase so the manifest can't accidentally
+        # echo the user's input string. The canonical name from
+        # get_linker should be returned instead.
+        linker="(g4s)2",
+    )
+    [c] = assemble_mrna_constructs(
+        pairs, options=options,
+        mhc_predictor=StubPredictor(rank_table={}),
+        mhc_alleles=["HLA-A*02:01"])
+    chosen = c.components['junction_swap']['chosen']
+    canonical = get_linker("(g4s)2").name
+    assert all(name == canonical for name in chosen), (
+        "Manifest 'chosen' should contain canonical Linker.name "
+        "(%r), got %r" % (canonical, chosen))
+
+    # Swap-improved branch: AAA must beat (G4S)2.
+    a1 = "KLQGHSAPVL"
+    a2 = "DVIVNCDESLLAS"
+    g4s2_kmers = junction_kmers(a1, "GGGGSGGGGS", a2, k_lengths=(9,))
+    rank_table = {(g4s2_kmers[0], "HLA-A*02:01"): 0.05}
+    pairs2 = [
+        (Variant('1', 100, 'A', 'T'),
+         [SimpleNamespace(
+             mutant_protein_fragment=SimpleNamespace(
+                 amino_acids=a1, gene_name='G',
+                 mutant_amino_acid_start_offset=0,
+                 mutant_amino_acid_end_offset=len(a1)),
+             mutant_epitope_predictions=[])]),
+        (Variant('2', 200, 'A', 'T'),
+         [SimpleNamespace(
+             mutant_protein_fragment=SimpleNamespace(
+                 amino_acids=a2, gene_name='G',
+                 mutant_amino_acid_start_offset=0,
+                 mutant_amino_acid_end_offset=len(a2)),
+             mutant_epitope_predictions=[])]),
+    ]
+    options2 = RNAConstructConfig(
+        signal_peptide=None, include_mitd=False,
+        optimize_linkers=True,
+        junction_swap_candidates=("(G4S)2", "AAA"),
+        junction_kmer_lengths=(9,),
+        antigens_per_construct=2, max_constructs=1,
+        max_antigen_length_aa=20,
+        utr_3p='HBB',
+        linker="(g4s)2",
+    )
+    [c2] = assemble_mrna_constructs(
+        pairs2, options=options2,
+        mhc_predictor=StubPredictor(rank_table=rank_table),
+        mhc_alleles=["HLA-A*02:01"])
+    chosen2 = c2.components['junction_swap']['chosen']
+    # Names must already be canonical (as resolved by get_linker), no
+    # raw user strings.
+    for name in chosen2:
+        assert name == get_linker(name).name, (
+            "Manifest 'chosen' entry %r is not the canonical name" % name)
+
+
+def test_packing_linker_aa_uses_max_candidate_length():
+    """The bin-packer must size junctions against the longest possible
+    per-junction substitution, not just the shared linker. Otherwise
+    a short shared linker + long candidate could overflow the cap at
+    swap time."""
+    from vaxrank.mrna import RNAConstructConfig, _packing_linker_aa
+    from vaxrank.vaccine_library import get_linker
+
+    # Shared linker is short (G2S = 3 aa). Candidate set includes
+    # (G4S)2 (10 aa). Optimizer is on. The packer should bill against
+    # the 10-aa candidate, not the 3-aa shared linker.
+    options = RNAConstructConfig(
+        optimize_linkers=True,
+        junction_swap_candidates=("G2S", "(G4S)2"),
+    )
+    shared = get_linker("G2S")
+    packing_aa = _packing_linker_aa(options, shared)
+    assert len(packing_aa) == 10, (
+        "Packer should use max(shared=3, longest_candidate=10) = 10, "
+        "got len=%d (%r)" % (len(packing_aa), packing_aa))
+
+    # When optimizer is off, packer uses the shared linker.
+    options_off = RNAConstructConfig(
+        optimize_linkers=False,
+        junction_swap_candidates=("G2S", "(G4S)2"),
+    )
+    packing_aa_off = _packing_linker_aa(options_off, shared)
+    assert packing_aa_off == "GGS", (
+        "With optimizer off, packer should use shared linker "
+        "as-is, got %r" % packing_aa_off)
+
+
+def test_packing_uses_longest_candidate_for_size_cap():
+    """End-to-end: when optimize_linkers + a long candidate would push
+    the construct past max_length_nt, the packer must split *before*
+    the optimizer runs (not after, when it's too late)."""
+    from varcode import Variant
+
+    from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
+
+    # Three small antigens. Set max_length_nt tight enough that picking
+    # a 10-aa linker (= 30 nt) at every junction overruns, but a 3-aa
+    # linker fits — the packer must side with the 10-aa worst case.
+    pairs = []
+    for k in range(3):
+        frag = SimpleNamespace(
+            amino_acids="KLQGHSAPVL", gene_name='G%d' % k,
+            mutant_amino_acid_start_offset=0,
+            mutant_amino_acid_end_offset=10)
+        pep = SimpleNamespace(
+            mutant_protein_fragment=frag, mutant_epitope_predictions=[])
+        pairs.append((Variant(str(k + 1), 100 + k, 'A', 'T'), [pep]))
+
+    # Budget: HBB UTRs (~50 + 132 nt) + start codon 3 nt + 3 antigens
+    # × 30 nt + STOP 3 nt + 2 junctions × N nt = ~218 + 60 + 2N.
+    # Pick max_length_nt so 2 × 30 nt linker (worst-case) overruns
+    # and 2 × 9 nt (shared = G2S) would not.
+    options = RNAConstructConfig(
+        signal_peptide=None, include_mitd=False,
+        optimize_linkers=True,
+        junction_swap_candidates=("G2S", "(G4S)2"),
+        linker="G2S",
+        antigens_per_construct=10,  # pure length-cap test
+        max_constructs=10,
+        max_antigen_length_aa=10,
+        utr_3p='HBB',
+        max_length_nt=295,  # tight: fits with 9-nt linker, not 30-nt
+    )
+    constructs = assemble_mrna_constructs(
+        pairs, options=options,
+        mhc_predictor=StubPredictor(rank_table={}),
+        mhc_alleles=["HLA-A*02:01"])
+    # The conservative packer should split rather than emit a single
+    # 3-antigen construct that the optimizer could later overrun.
+    assert len(constructs) >= 2, (
+        "Conservative packer should split when a long candidate "
+        "linker would overrun max_length_nt; got %d construct(s)"
+        % len(constructs))

@@ -287,14 +287,19 @@ def main(args_list=None):
                 mhc_predictor = mhc_binding_predictor_from_args(args)
                 mhc_alleles = mhc_alleles_from_args(args)
             except Exception as e:
-                # Predictor / alleles aren't configured; the optimizer
-                # will warn and fall back. Don't fail the whole run.
+                # Predictor / alleles aren't configured (or instantiation
+                # failed in mhctools / mhcflurry). The optimizer will warn
+                # and fall back; don't fail the whole vaxrank run. Log
+                # with traceback so genuine bugs in predictor loading are
+                # still visible (visible at DEBUG level).
                 logger.warning(
                     "Could not load MHC predictor / alleles for "
                     "per-junction linker optimization (%s). The optimizer "
                     "will fall back to the shared linker at every junction. "
                     "Set --mhc-predictor + --mhc-alleles to enable it.",
                     e)
+                logger.debug(
+                    "Predictor / alleles load traceback:", exc_info=True)
                 mhc_predictor = None
                 mhc_alleles = None
         else:

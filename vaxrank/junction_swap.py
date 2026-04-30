@@ -107,14 +107,18 @@ def junction_kmers(left_aa, linker_aa, right_aa, k_lengths,
     return out
 
 
-def _score_kmers(kmers, alleles, predictor, _warned=[False]):
+def _score_kmers(kmers, alleles, predictor):
     """Run the predictor and return rows of (kmer, allele, rank).
 
-    Warns once per process if the predictor doesn't expose
-    ``percentile_rank`` — mhcflurry-presentation does, but some
-    mhctools wrappers (NetMHC binding-affinity-only modes,
-    RandomBindingPredictor) don't, in which case the optimizer
-    sees no chimeric k-mers and silently picks the first candidate.
+    Warns once per process when:
+      - the predictor returned predictions but none had a usable
+        ``percentile_rank`` (e.g. binding-affinity-only mhctools
+        wrappers like RandomBindingPredictor), or
+      - the predictor returned predictions but the allele filter
+        dropped all of them (the optimizer would silently pick the
+        first candidate).
+    Each branch warns at most once per process; reset by calling
+    ``_reset_score_kmers_warnings()`` (test-only).
     """
     if not kmers:
         return []
@@ -123,9 +127,11 @@ def _score_kmers(kmers, alleles, predictor, _warned=[False]):
     predictions = predictor.predict_peptides(kmers)
     rows = []
     allele_set = set(alleles) if alleles else None
+    n_total = 0
     n_seen = 0
     n_with_rank = 0
     for p in predictions:
+        n_total += 1
         if allele_set and p.allele not in allele_set:
             continue
         n_seen += 1
@@ -134,15 +140,33 @@ def _score_kmers(kmers, alleles, predictor, _warned=[False]):
             continue
         n_with_rank += 1
         rows.append((p.peptide, p.allele, float(rank)))
-    if n_seen and not n_with_rank and not _warned[0]:
+    if n_seen and not n_with_rank and not _score_kmers.warned_no_rank:
         logger.warning(
             "Junction-swap predictor returned %d predictions but none had "
             "a usable percentile_rank field; the optimizer cannot rank "
             "chimeric k-mers and will fall back to the first candidate. "
             "Use mhcflurry-presentation or a predictor that exposes "
             "percentile rank.", n_seen)
-        _warned[0] = True
+        _score_kmers.warned_no_rank = True
+    if n_total and not n_seen and not _score_kmers.warned_allele_filter:
+        logger.warning(
+            "Junction-swap predictor returned %d predictions but the "
+            "allele filter dropped all of them; the optimizer cannot "
+            "rank chimeric k-mers and will fall back to the first "
+            "candidate. Check that the predictor's configured alleles "
+            "include the patient HLA set.", n_total)
+        _score_kmers.warned_allele_filter = True
     return rows
+
+
+_score_kmers.warned_no_rank = False
+_score_kmers.warned_allele_filter = False
+
+
+def _reset_score_kmers_warnings():
+    """Test-only: reset the warn-once flags on _score_kmers."""
+    _score_kmers.warned_no_rank = False
+    _score_kmers.warned_allele_filter = False
 
 
 def _burden_key(rows, rank_strong=RANK_STRONG, rank_mild=RANK_MILD):
@@ -261,7 +285,6 @@ def optimize_linkers(
     for j, (left_aa, right_aa) in enumerate(junctions):
         best = None
         per_cand_keys = []
-        per_cand_rows = []
         for cand in candidates:
             kmers = junction_kmers(
                 left_aa, cand.amino_acids, right_aa, k_lengths,
@@ -269,7 +292,6 @@ def optimize_linkers(
             rows = _score_kmers(kmers, alleles, predictor)
             key = _burden_key(rows, rank_strong, rank_mild)
             per_cand_keys.append(key)
-            per_cand_rows.append(rows)
             if best is None or key < best[0]:
                 best = (key, cand, rows)
         key, cand, rows = best

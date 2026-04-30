@@ -358,19 +358,41 @@ def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
     return "".join(parts), frozen
 
 
+def _packing_linker_aa(options, linker):
+    """Linker AA string the packer should bill against, sized to the
+    longest possible per-junction substitution.
+
+    When ``optimize_linkers`` is on, the per-junction optimizer can
+    swap in any candidate from ``junction_swap_candidates`` (or the
+    library default ``JUNCTION_SWAP_CANDIDATES`` when the option tuple
+    is empty). Use the longest of {shared linker, candidates} so the
+    bin-packer is conservative against later substitution.
+    """
+    shared = linker.amino_acids
+    if not options.optimize_linkers:
+        return shared
+    from .junction_swap import JUNCTION_SWAP_CANDIDATES
+    cand_names = (
+        tuple(options.junction_swap_candidates) or JUNCTION_SWAP_CANDIDATES
+    )
+    longest = shared
+    for n in cand_names:
+        cand = get_linker(n).amino_acids
+        if len(cand) > len(longest):
+            longest = cand
+    return longest
+
+
 def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
                      mitd_aa, utr_5p_dna, utr_3p_dna):
     """Greedy bin-packing of antigens into constructs honoring the caps.
 
-    Packing uses the *shared* linker length to estimate construct size.
-    The per-junction linker optimizer (#247) can pick different linkers
-    per junction at assembly time; for the candidate set
-    JUNCTION_SWAP_CANDIDATES (3-10 aa range) the per-junction swing is
-    at most ~7 aa = 21 nt per junction relative to the (G4S)2 default,
-    well within the headroom of a 4000-nt cap. Reach for a tighter
-    estimate only if max_length_nt becomes binding.
+    Packing uses ``max(shared_linker, longest_candidate)`` for size
+    estimation when the per-junction optimizer (#247) is on, so the
+    swap step at assembly time can never exceed the cap by picking a
+    candidate longer than the shared linker.
     """
-    linker_aa = linker.amino_acids
+    linker_aa = _packing_linker_aa(options, linker)
     # When there is no signal peptide, the assembler prepends an ATG to the
     # CDS body if the first antigen doesn't already start with M (see
     # _build_protein_with_segments). Reserve 3 nt up-front to keep packing
@@ -524,13 +546,17 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                     mitd_aa=mitd_aa or None,
                     default_linker_name=options.linker,
                 )
-                # `swap.default_*_burden` is set when default_linker_name
-                # is supplied; only swap when a candidate strictly beats
-                # the default.
-                default_strong = getattr(swap, 'default_strong_burden', None)
-                default_mild = getattr(swap, 'default_burden', None)
-                if (default_strong is not None
-                        and (swap.strong_burden, swap.burden)
+                # `swap.default_*_burden` is always set when
+                # default_linker_name is supplied (which it always is on
+                # this code path); we asserted above that the optimizer
+                # ran with a default. Read directly.
+                default_strong = swap.default_strong_burden
+                default_mild = swap.default_burden
+                # Canonical name for the shared/default linker so the
+                # manifest's `chosen` field is uniform across branches.
+                default_name = linker.name
+                n_total_junctions = n_junctions + (1 if mitd_aa else 0)
+                if ((swap.strong_burden, swap.burden)
                         < (default_strong, default_mild)):
                     chosen_list = swap.chosen_linker_per_junction
                     # Last entry corresponds to MITD junction when mitd_aa
@@ -554,12 +580,11 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                         i + 1, default_strong, swap.strong_burden,
                         default_mild, swap.burden)
                 else:
-                    n_total_junctions = n_junctions + (1 if mitd_aa else 0)
                     junction_swap_meta = {
                         'enabled': True,
-                        'chosen': [options.linker] * n_total_junctions,
-                        'burden_strong': default_strong or 0,
-                        'burden_mild': default_mild or 0,
+                        'chosen': [default_name] * n_total_junctions,
+                        'burden_strong': default_strong,
+                        'burden_mild': default_mild,
                         'note': "default linker beat or tied all candidates",
                     }
 
