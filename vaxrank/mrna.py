@@ -30,8 +30,10 @@ combined antigen string would exceed ``max_length_nt`` or
 constructs returned in the same order.
 """
 
+import csv
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -317,9 +319,8 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
 
 
 def _build_protein_with_segments(antigen_aas, antigen_names, signal_peptide_aa,
-                                 signal_peptide_name, linker, linker_name,
-                                 mitd_aa, mitd_name,
-                                 per_junction_linkers=None,
+                                 signal_peptide_name, linker, mitd_aa,
+                                 mitd_name, per_junction_linkers=None,
                                  pre_mitd_linker=None):
     """Concatenate signal peptide + antigens + linker/MITD into one protein.
 
@@ -376,7 +377,7 @@ def _build_protein_with_segments(antigen_aas, antigen_names, signal_peptide_aa,
     if signal_peptide_aa:
         _emit('signal_peptide', signal_peptide_name, signal_peptide_aa)
     if not signal_peptide_aa and antigen_aas and not antigen_aas[0].startswith("M"):
-        _emit('start_codon', None, "M")
+        _emit('start_codon', 'start_codon', "M")
     for i, aa in enumerate(antigen_aas):
         if i > 0:
             if per_junction_linkers is not None:
@@ -657,7 +658,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
 
         protein, frozen_segments, aa_segments = _build_protein_with_segments(
             antigen_aas, names, signal_peptide_aa, options.signal_peptide,
-            linker, options.linker, mitd_aa,
+            linker, mitd_aa,
             options.mitd if options.include_mitd else None,
             per_junction_linkers=per_junction_linkers,
             pre_mitd_linker=pre_mitd_linker)
@@ -701,34 +702,32 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                 ls['junction_index'] = seg.get('junction_index')
                 linker_segments.append(ls)
 
-        elements = {}
-        if signal_peptide_aa:
-            sp_seg = next(
-                s for s in aa_segments if s['kind'] == 'signal_peptide')
-            elements['signal_peptide'] = {
-                'name': options.signal_peptide,
-                'aa': signal_peptide_aa,
-                'nt': coding_dna[sp_seg['start_aa'] * 3:sp_seg['end_aa'] * 3],
-                'length_aa': len(signal_peptide_aa),
-                'length_nt': len(signal_peptide_aa) * 3,
+        # Helper: build the per-element record for a given segment kind.
+        def _seg_record(kind, declared_name):
+            seg = next((s for s in aa_segments if s['kind'] == kind), None)
+            if seg is None:
+                return None
+            nt = coding_dna[seg['start_aa'] * 3:seg['end_aa'] * 3]
+            return {
+                'name': declared_name,
+                'aa': seg['aa'],
+                'nt': nt,
+                'length_aa': len(seg['aa']),
+                'length_nt': len(nt),
             }
-        else:
-            elements['signal_peptide'] = None
+
+        elements = {}
         elements['utr_5p'] = {
             'name': options.utr_5p, 'nt': utr_5p_dna,
             'length_nt': len(utr_5p_dna),
         }
+        elements['signal_peptide'] = (
+            _seg_record('signal_peptide', options.signal_peptide)
+            if signal_peptide_aa else None
+        )
         elements['linkers_per_junction'] = linker_segments
         elements['mitd'] = (
-            {
-                'name': options.mitd, 'aa': mitd_aa,
-                'nt': coding_dna[
-                    next(s for s in aa_segments
-                         if s['kind'] == 'mitd')['start_aa'] * 3:],
-                'length_aa': len(mitd_aa),
-                'length_nt': len(mitd_aa) * 3,
-            }
-            if mitd_aa else None
+            _seg_record('mitd', options.mitd) if mitd_aa else None
         )
         elements['stop_codon'] = STOP_CODON
         elements['utr_3p'] = {
@@ -787,8 +786,31 @@ def _wrap_fasta(seq, line_width=80):
     return "\n".join(seq[i:i + line_width] for i in range(0, len(seq), line_width))
 
 
+_FASTA_LIKE_SUFFIXES = (".fasta", ".fa", ".fna", ".ffn", ".fas")
+
+
+def _validate_output_dir(output_dir):
+    """Reject paths that look like the pre-2.14 single-FASTA target.
+
+    The old API took a FASTA file path here; the new API takes a
+    directory. Silently creating ``out.fasta/`` when the user meant a
+    file is a sharp footgun, so block it loudly.
+    """
+    if os.path.isfile(output_dir):
+        raise ValueError(
+            "--output-mrna is now a *directory* (writes cds.fasta / "
+            "no_polyA.fasta / full.fasta into it); got an existing file "
+            "%r. Pass a directory path instead." % output_dir)
+    if any(output_dir.lower().endswith(s) for s in _FASTA_LIKE_SUFFIXES):
+        raise ValueError(
+            "--output-mrna is now a *directory* (writes cds.fasta / "
+            "no_polyA.fasta / full.fasta into it); got %r which looks "
+            "like a FASTA file path. Pass a directory path instead "
+            "(e.g. drop the .fasta suffix)." % output_dir)
+
+
 def write_mrna_outputs(constructs, output_dir, manifest_path=None,
-                       csv_path=None):
+                       csv_path=None, csv_include_full_rows=True):
     """Write three FASTAs (cds / full / no_polyA) + optional manifest + CSV.
 
     Output layout (issue #252):
@@ -797,16 +819,28 @@ def write_mrna_outputs(constructs, output_dir, manifest_path=None,
       <output_dir>/full.fasta       — no_polyA + polyA tail
 
     All three contain one record per construct, matched by ``name``.
+    When ``poly_a_length=0``, full.fasta and no_polyA.fasta are
+    identical by construction; an info-level log line notes this.
 
     ``manifest_path`` (optional): JSON manifest with the structured
     per-element view (``elements``, ``antigens``, all sequence variants).
     ``csv_path`` (optional): long-format CSV — one row per (construct,
     element) — exposing AA + nt for every layer for spreadsheet
     inspection.
-    """
-    import csv as _csv
-    import os
+    ``csv_include_full_rows``: emit summary rows for cds / no_polyA /
+    full (each carrying the full-length nt). Default True. Set False
+    when the per-element rows are all you want — keeps cells narrow
+    enough for spreadsheet column views.
 
+    Manifest schema notes
+    ---------------------
+    Some ``elements`` keys are **None when the corresponding component
+    is disabled**: ``signal_peptide`` is None when no signal peptide is
+    selected, ``mitd`` is None when ``include_mitd=False``. Downstream
+    readers must null-check both. ``elements['linkers_per_junction']``
+    is always a list (possibly empty for a single-antigen construct).
+    """
+    _validate_output_dir(output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
     fasta_specs = [
@@ -823,6 +857,11 @@ def write_mrna_outputs(constructs, output_dir, manifest_path=None,
                     c.name, ','.join(c.antigen_names), len(seq)))
                 f.write(_wrap_fasta(seq))
                 f.write("\n")
+
+    if constructs and constructs[0].full_nt == constructs[0].no_polya_nt:
+        logger.info(
+            "poly_a_length=0: full.fasta and no_polyA.fasta are identical "
+            "(no polyA tail appended).")
 
     if manifest_path:
         manifest = [
@@ -853,67 +892,78 @@ def write_mrna_outputs(constructs, output_dir, manifest_path=None,
             json.dump(manifest, f, indent=2)
 
     if csv_path:
-        # Long format: one row per (construct, element). AA + nt are
-        # both populated when applicable; missing fields stay empty.
+        # Long format: one row per (construct, element). The `index`
+        # column is integer-only (junction position for linkers,
+        # antigen position for antigens, blank otherwise). Free-form
+        # qualifiers (e.g. 'mitd', 'pre_mitd', 'segmented') go in the
+        # `index_label` / `note` columns so spreadsheet sorts on
+        # `index` stay numeric.
         with open(csv_path, 'w', newline='') as f:
-            w = _csv.writer(f)
+            w = csv.writer(f)
             w.writerow([
-                'construct', 'element_kind', 'index', 'name',
+                'construct', 'element_kind', 'index', 'index_label', 'name',
                 'aa', 'nt', 'length_aa', 'length_nt', 'note',
             ])
             for c in constructs:
                 el = c.elements
                 # 5' UTR
                 u5 = el.get('utr_5p') or {}
-                w.writerow([c.name, 'utr_5p', '', u5.get('name', ''),
+                w.writerow([c.name, 'utr_5p', '', '', u5.get('name', ''),
                             '', u5.get('nt', ''), '', u5.get('length_nt', ''),
                             ''])
                 # signal peptide
                 sp = el.get('signal_peptide')
                 if sp:
-                    w.writerow([c.name, 'signal_peptide', '', sp['name'],
+                    w.writerow([c.name, 'signal_peptide', '', '', sp['name'],
                                 sp['aa'], sp['nt'],
                                 sp['length_aa'], sp['length_nt'], ''])
-                # antigens (interleaved with linkers below for visual
-                # in-order inspection — write antigens first then
-                # linkers separately, since the index column qualifies)
+                # antigens
                 for j, a in enumerate(c.antigens):
-                    w.writerow([c.name, 'antigen', j, a['name'],
+                    w.writerow([c.name, 'antigen', j, '', a['name'],
                                 a['aa'], a['nt'],
                                 a['length_aa'], a['length_nt'], ''])
-                # linkers (per junction; junction_index disambiguates
-                # inter-antigen vs pre-MITD)
+                # linkers per junction; the pre-MITD linker uses an
+                # empty integer index + 'mitd' label so spreadsheet
+                # sorts on 'index' stay numeric.
                 for ls in el.get('linkers_per_junction', []):
-                    note = ('pre_mitd' if ls.get('junction_index') == 'mitd'
-                            else '')
-                    w.writerow([c.name, 'linker', ls.get('junction_index', ''),
+                    ji = ls.get('junction_index')
+                    if ji == 'mitd':
+                        idx_int = ''
+                        idx_label = 'mitd'
+                        note = 'pre_mitd'
+                    else:
+                        idx_int = ji if isinstance(ji, int) else ''
+                        idx_label = ''
+                        note = ''
+                    w.writerow([c.name, 'linker', idx_int, idx_label,
                                 ls['name'], ls['aa'], ls['nt'],
                                 ls['length_aa'], ls['length_nt'], note])
                 # MITD
                 m = el.get('mitd')
                 if m:
-                    w.writerow([c.name, 'mitd', '', m['name'],
+                    w.writerow([c.name, 'mitd', '', '', m['name'],
                                 m['aa'], m['nt'],
                                 m['length_aa'], m['length_nt'], ''])
                 # stop codon
-                w.writerow([c.name, 'stop_codon', '', '', '',
+                w.writerow([c.name, 'stop_codon', '', '', '', '',
                             el.get('stop_codon', ''), '', 3, ''])
                 # 3' UTR
                 u3 = el.get('utr_3p') or {}
-                w.writerow([c.name, 'utr_3p', '', u3.get('name', ''),
+                w.writerow([c.name, 'utr_3p', '', '', u3.get('name', ''),
                             '', u3.get('nt', ''), '', u3.get('length_nt', ''),
                             ''])
                 # polyA
                 pa = el.get('poly_a') or {}
                 pa_note = ('segmented' if pa.get('segmented') else 'unsegmented')
-                w.writerow([c.name, 'poly_a', '', '', '',
+                w.writerow([c.name, 'poly_a', '', '', '', '',
                             pa.get('nt', ''), '', pa.get('length_nt', ''),
                             pa_note])
-                # full assembled views — no element name, just whole-seq
-                # length references for convenience.
-                w.writerow([c.name, 'cds', '', '', c.cds_aa, c.cds_nt,
-                            len(c.cds_aa), len(c.cds_nt), ''])
-                w.writerow([c.name, 'no_polyA', '', '', '', c.no_polya_nt,
-                            '', len(c.no_polya_nt), ''])
-                w.writerow([c.name, 'full', '', '', '', c.full_nt,
-                            '', len(c.full_nt), ''])
+                # full assembled views — opt-out via csv_include_full_rows.
+                if csv_include_full_rows:
+                    w.writerow([c.name, 'cds', '', '', '', c.cds_aa, c.cds_nt,
+                                len(c.cds_aa), len(c.cds_nt), ''])
+                    w.writerow([c.name, 'no_polyA', '', '', '', '',
+                                c.no_polya_nt,
+                                '', len(c.no_polya_nt), ''])
+                    w.writerow([c.name, 'full', '', '', '', '', c.full_nt,
+                                '', len(c.full_nt), ''])

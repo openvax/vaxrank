@@ -479,3 +479,229 @@ def test_polya_segmented_appears_in_full_fasta_and_csv():
     assert len(poly_rows) == 1
     assert poly_rows[0]['nt'] == expected_tail
     assert poly_rows[0]['note'] == 'segmented'
+
+
+# ---- Review-fix coverage (PR #253 second-pass) ---------------------------
+
+def test_output_dir_rejects_existing_file(tmp_path):
+    """Old API took a FASTA file path; new API takes a directory.
+    Pointing --output-mrna at an existing file must raise loudly."""
+    pairs = [_variant_pair("KLQGHSAP")]
+    constructs = assemble_mrna_constructs(
+        pairs, options=RNAConstructConfig(
+            signal_peptide=None, include_mitd=False,
+            utr_3p='HBB', poly_a_length=0))
+    existing_file = tmp_path / "out.fasta"
+    existing_file.write_text("placeholder")
+    import pytest as _pytest
+    with _pytest.raises(ValueError, match="directory"):
+        write_mrna_outputs(constructs, str(existing_file))
+
+
+def test_output_dir_rejects_fasta_suffix(tmp_path):
+    """Even if the path doesn't exist, .fasta / .fa suffixes are blocked
+    so 'vaxrank --output-mrna out.fasta' fails clearly instead of
+    silently creating a directory called out.fasta/."""
+    pairs = [_variant_pair("KLQGHSAP")]
+    constructs = assemble_mrna_constructs(
+        pairs, options=RNAConstructConfig(
+            signal_peptide=None, include_mitd=False,
+            utr_3p='HBB', poly_a_length=0))
+    import pytest as _pytest
+    for bad in ("out.fasta", "out.fa", "OUT.FASTA"):
+        path = tmp_path / bad
+        with _pytest.raises(ValueError, match="directory"):
+            write_mrna_outputs(constructs, str(path))
+
+
+def test_output_dir_idempotent_makedirs(tmp_path):
+    """Writing twice into the same dir must succeed; second write
+    overwrites the FASTAs in-place (no error from existing dir)."""
+    pairs = [_variant_pair("KLQGHSAP")]
+    constructs = assemble_mrna_constructs(
+        pairs, options=RNAConstructConfig(
+            signal_peptide=None, include_mitd=False,
+            utr_3p='HBB', poly_a_length=0))
+    out_dir = str(tmp_path / "mrna")
+    write_mrna_outputs(constructs, out_dir)
+    write_mrna_outputs(constructs, out_dir)
+    assert os.path.isfile(os.path.join(out_dir, "cds.fasta"))
+
+
+def test_csv_pre_mitd_linker_uses_index_label_not_index(tmp_path):
+    """Pre-MITD linker rows put 'mitd' in index_label, not in the
+    integer-typed index column. Spreadsheet sorts on `index` stay
+    numeric."""
+    import csv as _csv
+    pairs = [_variant_pair("KLQGHSAPVL", gene_name='GENEA'),
+             _variant_pair("MNNVDEILGRWESPV", contig='2', start=200,
+                           gene_name='GENEB')]
+    options = RNAConstructConfig(
+        signal_peptide=None, linker='G4S',
+        optimize_linkers=False,
+        include_mitd=True, mitd='HLA_A',
+        utr_3p='HBB', poly_a_length=0,
+        antigens_per_construct=2,
+        max_antigen_length_aa=20)
+    constructs = assemble_mrna_constructs(pairs, options=options)
+    csv_path = tmp_path / "manifest.csv"
+    out_dir = tmp_path / "out"
+    write_mrna_outputs(constructs, str(out_dir), csv_path=str(csv_path))
+    with open(csv_path) as f:
+        rows = list(_csv.DictReader(f))
+    linker_rows = [r for r in rows if r['element_kind'] == 'linker']
+    assert linker_rows, "Expected linker rows in CSV"
+    pre_mitd = [r for r in linker_rows if r['index_label'] == 'mitd']
+    inter = [r for r in linker_rows if r['index_label'] != 'mitd']
+    assert len(pre_mitd) == 1, (
+        "Expected exactly one pre-MITD linker row, got %d" % len(pre_mitd))
+    assert pre_mitd[0]['index'] == '', (
+        "Pre-MITD linker must leave the integer index blank "
+        "(label-only); got %r" % pre_mitd[0]['index'])
+    assert pre_mitd[0]['note'] == 'pre_mitd'
+    # Inter-antigen linkers have integer indices, not labels.
+    for r in inter:
+        assert r['index'].isdigit(), (
+            "Inter-antigen linker index must be numeric, got %r"
+            % r['index'])
+        assert r['index_label'] == ''
+
+
+def test_csv_lean_mode_omits_full_rows(tmp_path):
+    """csv_include_full_rows=False suppresses the cds / no_polyA /
+    full summary rows so the CSV's widest cells are per-element."""
+    import csv as _csv
+    pairs = [_variant_pair("KLQGHSAP")]
+    constructs = assemble_mrna_constructs(
+        pairs, options=RNAConstructConfig(
+            signal_peptide=None, include_mitd=False,
+            utr_3p='HBB', poly_a_length=10))
+    csv_path = tmp_path / "manifest.csv"
+    out_dir = tmp_path / "out"
+    write_mrna_outputs(
+        constructs, str(out_dir),
+        csv_path=str(csv_path), csv_include_full_rows=False)
+    with open(csv_path) as f:
+        rows = list(_csv.DictReader(f))
+    kinds = {r['element_kind'] for r in rows}
+    # full-rows are suppressed
+    assert 'cds' not in kinds
+    assert 'no_polyA' not in kinds
+    assert 'full' not in kinds
+    # per-element rows remain
+    assert 'utr_5p' in kinds
+    assert 'utr_3p' in kinds
+    assert 'poly_a' in kinds
+
+
+def test_dropped_dead_linker_name_param():
+    """_build_protein_with_segments no longer takes a linker_name arg.
+    Pin the signature so a future regression that re-adds the dead
+    parameter is caught immediately."""
+    import inspect
+    from vaxrank.mrna import _build_protein_with_segments
+    sig = inspect.signature(_build_protein_with_segments)
+    assert 'linker_name' not in sig.parameters, (
+        "linker_name was a dead parameter and should remain removed; "
+        "got params %s" % list(sig.parameters))
+    # signal_peptide_name and mitd_name are *used* and must stay.
+    assert 'signal_peptide_name' in sig.parameters
+    assert 'mitd_name' in sig.parameters
+
+
+def test_start_codon_segment_has_named_kind():
+    """The pre-2.14 code emitted name=None for the prepended start
+    codon segment. Pin that we now use 'start_codon' as the name."""
+    from vaxrank.mrna import _build_protein_with_segments
+    from vaxrank.vaccine_library import get_linker
+    linker = get_linker("G4S")
+    # No signal peptide and antigen doesn't start with M → assembler
+    # prepends a start codon segment.
+    _, _, segments = _build_protein_with_segments(
+        antigen_aas=["KLQGH"], antigen_names=["A"],
+        signal_peptide_aa="", signal_peptide_name=None,
+        linker=linker, mitd_aa="", mitd_name=None)
+    start = next(s for s in segments if s['kind'] == 'start_codon')
+    assert start['name'] == 'start_codon', (
+        "start_codon segment name must not be None; got %r"
+        % start['name'])
+
+
+def test_mitd_nt_slice_is_bounded(tmp_path):
+    """MITD nt slice must use [start_aa*3:end_aa*3], not an open-ended
+    [start_aa*3:] slice. Pin by checking that nt length = aa length × 3
+    exactly (open-ended slice would equal the rest of coding_dna,
+    which today happens to match but is fragile)."""
+    pairs = [_variant_pair("KLQGHSAPVL")]
+    options = RNAConstructConfig(
+        signal_peptide=None, linker='G4S',
+        optimize_linkers=False,
+        include_mitd=True, mitd='HLA_A',
+        utr_3p='HBB', poly_a_length=0,
+        antigens_per_construct=1,
+        max_antigen_length_aa=15)
+    [c] = assemble_mrna_constructs(pairs, options=options)
+    m = c.elements['mitd']
+    assert m is not None
+    # Strict invariant: nt length matches AA length × 3 exactly.
+    assert m['length_nt'] == m['length_aa'] * 3
+    assert len(m['nt']) == m['length_aa'] * 3
+
+
+def test_junction_swap_meta_appears_in_elements_when_optimizer_runs():
+    """When the junction-aware optimizer runs (predictor + alleles
+    supplied), elements['junction_swap'] is populated. Without
+    predictor, elements['junction_swap'] reflects the fallback."""
+    from types import SimpleNamespace
+    from vaxrank.junction_swap import junction_kmers
+    from varcode import Variant
+
+    # Two antigens; predictor scores a strong hit on (G4S)2 only,
+    # so AAA should win.
+    a1, a2 = "KLQGHSAPVL", "DVIVNCDESLLAS"
+    g4s2_kmers = junction_kmers(a1, "GGGGSGGGGS", a2, k_lengths=(9,))
+    rank_table = {(g4s2_kmers[0], "HLA-A*02:01"): 0.05}
+
+    class StubPredictor:
+        def __init__(self, table): self.table = table
+        def predict_peptides(self, peptides):
+            out = []
+            for p in peptides:
+                out.append(SimpleNamespace(
+                    peptide=p, allele="HLA-A*02:01",
+                    percentile_rank=self.table.get(
+                        (p, "HLA-A*02:01"), 99.0)))
+            return out
+
+    fragment_a = SimpleNamespace(
+        amino_acids=a1, gene_name='GENEA',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(a1))
+    fragment_b = SimpleNamespace(
+        amino_acids=a2, gene_name='GENEB',
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(a2))
+    pep_a = SimpleNamespace(
+        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[])
+    pep_b = SimpleNamespace(
+        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[])
+    pairs = [
+        (Variant('1', 100, 'A', 'T'), [pep_a]),
+        (Variant('2', 200, 'A', 'T'), [pep_b]),
+    ]
+
+    options = RNAConstructConfig(
+        signal_peptide=None, include_mitd=False,
+        optimize_linkers=True,
+        junction_swap_candidates=("(G4S)2", "AAA"),
+        junction_kmer_lengths=(9,),
+        antigens_per_construct=2, max_constructs=1,
+        max_antigen_length_aa=20,
+        utr_3p='HBB', poly_a_length=0,
+    )
+    [c] = assemble_mrna_constructs(
+        pairs, options=options,
+        mhc_predictor=StubPredictor(rank_table),
+        mhc_alleles=["HLA-A*02:01"])
+    # The structured elements dict must carry junction_swap
+    assert 'junction_swap' in c.elements
+    assert c.elements['junction_swap']['enabled'] is True
+    assert 'AAA' in c.elements['junction_swap']['chosen']

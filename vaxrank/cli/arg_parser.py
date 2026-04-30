@@ -212,6 +212,19 @@ def add_output_args(arg_parser):
     output_args_group = arg_parser.add_argument_group("Output options")
 
     output_args_group.add_argument(
+        "--vaccine-modality",
+        default="auto",
+        choices=["auto", "peptide", "mrna", "both", "none"],
+        help="Which vaccine-design modalities to run. The shared upstream "
+             "epitope-prediction + window-selection logic is identical for "
+             "all modalities; this is the *sharp switch* for downstream "
+             "design output. 'auto' (default) infers from --output-peptide "
+             "and --output-mrna: pass either, both, or neither. 'peptide' / "
+             "'mrna' / 'both' explicitly select; 'none' suppresses both "
+             "even if --output-peptide / --output-mrna are set (useful for "
+             "report-only runs).")
+
+    output_args_group.add_argument(
         "--output-patient-id",
         default="",
         help="Patient ID to use in report")
@@ -326,8 +339,17 @@ def add_mrna_output_args(group):
         default="",
         help="Optional path to a long-format CSV. One row per "
              "(construct, element); columns: construct, element_kind, "
-             "index, name, aa, nt, length_aa, length_nt, note. Lets you "
-             "open a vaccine in a spreadsheet and inspect every layer.")
+             "index, index_label, name, aa, nt, length_aa, length_nt, "
+             "note. Lets you open a vaccine in a spreadsheet and inspect "
+             "every layer.")
+    group.add_argument(
+        "--output-mrna-csv-no-full-rows",
+        dest="output_mrna_csv_full_rows",
+        action="store_false",
+        default=True,
+        help="Suppress the per-construct cds / no_polyA / full summary "
+             "rows in the CSV (the rows with the longest nt cells). "
+             "Per-element rows are unaffected.")
     group.add_argument(
         "--mrna-signal-peptide",
         default="HLA_B",
