@@ -85,6 +85,72 @@ peptide synthesiser:
    `--input-lens` or `--input-pvacseq`; the ranking and dispatch steps
    are identical.
 
+## Vaccine designs
+
+Vaxrank's vaccine design space is two **orthogonal axes** (shared
+across vaccine types) plus the type itself:
+
+| Axis | Values | What it controls |
+|---|---|---|
+| `--vaccine-type` | `peptide` / `mrna` (multi-valued) | The platform |
+| `--antigen-content` | `mutation_spanning` / `minimal_epitope` | What each antigen *is* |
+| `--antigens-per-construct` | `1` / `N` | How many antigens to concatenate per construct |
+
+Combined, the matrix yields 8 distinct designs — 4 per vaccine type:
+
+| Type | Content | Per-construct | Design name | Reference |
+|---|---|---|---|---|
+| peptide | mutation_spanning | 1 | **SLP** (default) | PGV-001 (Bortman 2025) |
+| peptide | mutation_spanning | N | Multi-SLP / multi-epitope long peptide | |
+| peptide | minimal_epitope | 1 | Minimal-ligand peptide | |
+| peptide | minimal_epitope | N | Concatenated minimal-ligand peptide | |
+| mrna | mutation_spanning | N | **BioNTech FixVac / iNeST** (default for mRNA) | Sahin 2017 / Rojas 2023 |
+| mrna | mutation_spanning | 1 | Single-antigen mRNA | |
+| mrna | minimal_epitope | N | "String of beads" mRNA | Velten 2018 |
+| mrna | minimal_epitope | 1 | Single-ligand mRNA | |
+
+A third knob, `--epitopes-per-antigen`, controls how many top MHC
+ligands to take *per ranked vaccine peptide* when content is
+`minimal_epitope`. The default `1` is the legacy "single top ligand"
+semantics; >1 packs multiple top ligands from the same variant as
+separate antigens.
+
+```sh
+# Default: SLP peptide pool
+vaxrank --vcf v.vcf --bam r.bam --output-peptide pool.fasta
+
+# Multi-epitope concatenated peptide
+vaxrank --vcf v.vcf --bam r.bam \
+        --output-peptide pool.fasta \
+        --peptide-antigens-per-construct 5 --peptide-linker AAY
+
+# Minimal-epitope peptide (single ligand per construct)
+vaxrank --vcf v.vcf --bam r.bam \
+        --output-peptide pool.fasta \
+        --antigen-content minimal_epitope
+
+# BioNTech FixVac canonical mRNA (default for --vaccine-type mrna)
+vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-mrna out/
+
+# String-of-beads mRNA (concatenated minimal epitopes)
+vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-mrna out/ \
+        --mrna-antigen-content minimal_epitope --mrna-antigens-per-construct 8 \
+        --mrna-linker AAY
+
+# Top-2 ligands per variant in a string-of-beads mRNA
+vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-mrna out/ \
+        --mrna-antigen-content minimal_epitope \
+        --mrna-epitopes-per-antigen 2 --mrna-antigens-per-construct 16
+
+# Both modalities at once
+vaxrank --vcf v.vcf --bam r.bam --vaccine-type peptide mrna \
+        --output-peptide pool.fasta --output-mrna mrna_out/
+```
+
+The legacy `--peptide-mode {slp, minimal_epitope, multi_epitope}`
+flag still works as a shorthand (slp ≡ mutation_spanning + 1, etc.)
+but the orthogonal axes are preferred for new designs.
+
 ## Vaccine types and output modes
 
 Vaccine-type selection is controlled by `--vaccine-type` (multi-valued,

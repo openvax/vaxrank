@@ -220,9 +220,32 @@ def add_output_args(arg_parser):
         help="Which vaccine type(s) to design. Multi-valued so future "
              "types (DNA, etc.) plug in as additional choices. "
              "Default: peptide. Examples: '--vaccine-type peptide', "
-             "'--vaccine-type mrna', '--vaccine-type peptide mrna' (both). "
-             "'peptide' is an umbrella; the SLP / minimal-epitope / "
-             "multi-epitope sub-mode lives in --peptide-mode.")
+             "'--vaccine-type mrna', '--vaccine-type peptide mrna' (both).")
+
+    # Shared antigen-design axes — apply to BOTH peptide and mRNA
+    # unless overridden by the per-type flag (--peptide-* / --mrna-*).
+    # The two orthogonal axes:
+    #   antigen_content: what each antigen *is*
+    #   antigens_per_construct: how many to concatenate per construct
+    output_args_group.add_argument(
+        "--antigen-content",
+        default=None,
+        choices=["mutation_spanning", "minimal_epitope"],
+        help="Default antigen content for both peptide and mRNA "
+             "vaccines: 'mutation_spanning' (centered SLP-style window "
+             "of --max-antigen-length-aa, default) or 'minimal_epitope' "
+             "(top mutant MHC ligand(s), ~9 aa each). Per-type flags "
+             "(--peptide-antigen-content / --mrna-antigen-content) "
+             "override.")
+    output_args_group.add_argument(
+        "--epitopes-per-antigen",
+        default=None,
+        type=int,
+        help="When --antigen-content=minimal_epitope, take this many "
+             "top score-sorted ligands per ranked vaccine peptide as "
+             "separate antigens. Default: 1 (the legacy single-top "
+             "ligand semantics). Set >1 to pack multiple top ligands "
+             "from the same variant.")
 
     output_args_group.add_argument(
         "--output-patient-id",
@@ -487,6 +510,21 @@ def add_mrna_output_args(group):
         help="Antigens packed into a single mRNA construct. Default: 5. "
              "Antigens beyond the cap spill into additional constructs.")
     group.add_argument(
+        "--mrna-antigen-content",
+        default=None,
+        choices=["mutation_spanning", "minimal_epitope"],
+        help="Override --antigen-content for mRNA. 'mutation_spanning' "
+             "(default if --antigen-content unset) emits 25-aa SLP-style "
+             "windows; 'minimal_epitope' emits top MHC ligands as "
+             "antigens — concatenated minimal-epitope mRNA "
+             "(\"string of beads\") is a first-class design.")
+    group.add_argument(
+        "--mrna-epitopes-per-antigen",
+        default=None,
+        type=int,
+        help="Override --epitopes-per-antigen for mRNA. Only used when "
+             "antigen content is 'minimal_epitope'.")
+    group.add_argument(
         "--mrna-max-constructs",
         default=1,
         type=int,
@@ -529,9 +567,24 @@ def add_peptide_output_args(group):
         "--peptide-mode",
         default="slp",
         choices=["slp", "minimal_epitope", "multi_epitope"],
-        help="slp (default): one synthetic long peptide per ranked variant. "
-             "minimal_epitope: just the top mutant MHC ligand per variant. "
-             "multi_epitope: concatenate antigens with --peptide-linker.")
+        help="Back-compat shorthand for the orthogonal axes "
+             "(--antigen-content + --peptide-antigens-per-construct). "
+             "slp (default): mutation_spanning, 1 per construct. "
+             "minimal_epitope: minimal_epitope, 1 per construct. "
+             "multi_epitope: mutation_spanning, N per construct (set N "
+             "via --peptide-antigens-per-construct). Prefer the new "
+             "axis flags for new designs.")
+    group.add_argument(
+        "--peptide-antigen-content",
+        default=None,
+        choices=["mutation_spanning", "minimal_epitope"],
+        help="Override --antigen-content for peptide vaccines. When "
+             "set, overrides whatever --peptide-mode would derive.")
+    group.add_argument(
+        "--peptide-epitopes-per-antigen",
+        default=None,
+        type=int,
+        help="Override --epitopes-per-antigen for peptide vaccines.")
     group.add_argument(
         "--peptide-linker",
         default="G4S3",

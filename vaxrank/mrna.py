@@ -57,6 +57,7 @@ from .vaccine_library import (
     get_linker,
     iter_named_antigens,
     select_antigen_window,
+    top_mutant_epitopes,
 )
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,14 @@ class RNAConstructConfig:
     utr_3p: str = "HBB_FI"  # tandem 2× HBB
     codon_species: str = "h_sapiens"
     codon_method: str = "use_best_codon"
+    # Antigen-design axes — shared semantics with PeptideConstructConfig.
+    # ``antigen_content`` ∈ {'mutation_spanning', 'minimal_epitope'};
+    # the latter packs top MHC ligands as antigens instead of
+    # mutation-centered windows. ``epitopes_per_antigen`` only matters
+    # for ``minimal_epitope`` content (legacy 1-per-VP semantics by
+    # default; >1 packs multiple top ligands from the same variant).
+    antigen_content: str = "mutation_spanning"
+    epitopes_per_antigen: int = 1
     min_antigen_length_aa: int = 15
     max_antigen_length_aa: int = 25  # Sahin 2017 used 27mers; 25 is typical
     antigens_per_construct: int = 5
@@ -295,27 +304,55 @@ def codon_optimize(amino_acids, species="h_sapiens", method="use_best_codon",
 
 
 def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
-                          min_antigen_length_aa=0, candidates_per_slot=1):
-    """Yield ``(name, amino_acid_string)`` per antigen, mutation-centered
-    and clipped to ``max_antigen_length_aa``.
+                          min_antigen_length_aa=0, candidates_per_slot=1,
+                          antigen_content="mutation_spanning",
+                          epitopes_per_antigen=1):
+    """Yield ``(name, amino_acid_string)`` per antigen.
 
-    Warns when the emitted window falls below ``min_antigen_length_aa`` —
-    typically a sign that the underlying fragment is shorter than the
-    user's configured floor (e.g. a stop-loss extension that produced
-    only a few mutant residues).
+    Dispatches on ``antigen_content`` (shared semantics with
+    ``peptide._antigen_records``):
 
-    Naming + alt-suffix logic comes from ``iter_named_antigens`` so the
-    antigen names match the peptide-modality output.
+    - ``'mutation_spanning'``: emit a mutation-centered window of up
+      to ``max_antigen_length_aa`` per VaccinePeptide (canonical mRNA
+      antigen — BioNTech FixVac-style 25mer).
+    - ``'minimal_epitope'``: emit the top ``epitopes_per_antigen``
+      MHC ligands per VaccinePeptide as separate (short) antigens.
+      Concatenated minimal-epitope mRNA constructs (≈ Velten 2021's
+      "string-of-beads" design) become first-class.
+
+    Warns when a mutation_spanning window falls below
+    ``min_antigen_length_aa`` (typically a stop-loss / frameshift
+    fragment shorter than the floor); for minimal_epitope content,
+    skip-with-info when no epitope predictions are available.
+
+    Naming + alt-suffix logic comes from ``iter_named_antigens`` so
+    the antigen names match the peptide-modality output.
     """
-    for name, fragment, _peptide in iter_named_antigens(
+    if antigen_content not in ('mutation_spanning', 'minimal_epitope'):
+        raise ValueError(
+            "antigen_content must be 'mutation_spanning' or "
+            "'minimal_epitope'; got %r" % antigen_content)
+    for name, fragment, peptide in iter_named_antigens(
             ranked_vaccine_peptides, candidates_per_slot=candidates_per_slot):
-        window = select_antigen_window(fragment, name, max_antigen_length_aa)
-        if len(window) < min_antigen_length_aa:
-            logger.warning(
-                "Antigen %s emitted at %d aa, below "
-                "--mrna-min-antigen-length-aa (%d).",
-                name, len(window), min_antigen_length_aa)
-        yield name, window
+        if antigen_content == "minimal_epitope":
+            tops = top_mutant_epitopes(peptide, n=epitopes_per_antigen)
+            if not tops:
+                logger.info(
+                    "Skipping %s in minimal_epitope mode: no mutant "
+                    "epitope predictions available.", name)
+                continue
+            for k, ep in enumerate(tops):
+                suffix = "_epitope" if len(tops) == 1 else "_epitope%d" % (k + 1)
+                yield name + suffix, ep.peptide_sequence
+        else:
+            window = select_antigen_window(
+                fragment, name, max_antigen_length_aa)
+            if len(window) < min_antigen_length_aa:
+                logger.warning(
+                    "Antigen %s emitted at %d aa, below "
+                    "--mrna-min-antigen-length-aa (%d).",
+                    name, len(window), min_antigen_length_aa)
+            yield name, window
 
 
 def _build_protein_with_segments(antigen_aas, antigen_names, signal_peptide_aa,
@@ -563,7 +600,9 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
         ranked_vaccine_peptides,
         max_antigen_length_aa=options.max_antigen_length_aa,
         min_antigen_length_aa=options.min_antigen_length_aa,
-        candidates_per_slot=options.candidates_per_slot))
+        candidates_per_slot=options.candidates_per_slot,
+        antigen_content=options.antigen_content,
+        epitopes_per_antigen=options.epitopes_per_antigen))
     if not antigens:
         return []
 
