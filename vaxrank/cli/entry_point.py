@@ -116,6 +116,35 @@ def _has_external_input(args):
         or getattr(args, 'input_lens', None))
 
 
+def _annotate_predictions_with_processing(ranked_vaccine_peptides, lens_predictions):
+    """Run pepsickle credibility tagging across all EpitopePrediction
+    records. Pulls them from BOTH the ranked-vaccine-peptides
+    intermediate (one VP per variant; each VP has its own predictions)
+    AND the LENS/pVACseq predictions list (which is the union).
+
+    Annotation is in-place on the EpitopePrediction objects, so the
+    same prediction reachable from either source gets a single
+    annotation.
+    """
+    from ..processing import annotate_processing
+    all_predictions = []
+    seen = set()
+    for _, peptides in (ranked_vaccine_peptides or []):
+        for vp in peptides or []:
+            for p in (
+                    getattr(vp, 'mutant_epitope_predictions', None) or []):
+                if id(p) not in seen:
+                    seen.add(id(p))
+                    all_predictions.append(p)
+    for p in (lens_predictions or []):
+        if id(p) not in seen:
+            seen.add(id(p))
+            all_predictions.append(p)
+    if not all_predictions:
+        return 0
+    return annotate_processing(all_predictions)
+
+
 def _epitope_config_from_args_safe(args):
     from ..epitope_config import EpitopeConfig
     try:
@@ -486,6 +515,15 @@ def main(args_list=None):
         patient_info = data['patient_info']
         args_for_report = data['args']
         source = 'pipeline'
+
+    # Issue #249: annotate epitope predictions with pepsickle proteasome-
+    # cleavage credibility. Mutates EpitopePredictions in place; doesn't
+    # affect ranking — purely additional information surfaced in the
+    # per-epitope report tables. On by default; opt-out via
+    # --no-processing-aware-annotation.
+    if getattr(args, 'processing_aware_annotation', True):
+        _annotate_predictions_with_processing(
+            ranked_variants_with_vaccine_peptides, predictions)
 
     _emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
 

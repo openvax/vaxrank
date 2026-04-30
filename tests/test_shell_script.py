@@ -33,6 +33,10 @@ cli_args_for_b16_seqdata = [
     "--mhc-alleles", "H2-Kb,H2-Db",
     "--padding-around-mutation", "5",
     "--count-mismatches-after-variant",
+    # Pepsickle credibility tagging is on by default for production
+    # CLI runs; loading it here under pytest+coverage segfaults
+    # torch in this env. Opt out for the b16 smoke tests.
+    "--no-processing-aware-annotation",
 ]
 
 cli_args_for_b16_seqdata_real_predictor = [
@@ -43,7 +47,8 @@ cli_args_for_b16_seqdata_real_predictor = [
     "--mhc-alleles", "H2-Kb,H2-Db",
     "--mhc-epitope-lengths", "8",
     "--padding-around-mutation", "5",
-    "--count-mismatches-after-variant"
+    "--count-mismatches-after-variant",
+    "--no-processing-aware-annotation",
 ]
 
 

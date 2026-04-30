@@ -743,22 +743,33 @@ def test_load_predictions_empty_string_fields_become_empty_not_nan(tmp_path):
     assert p.predictor_version == ""
 
 
-def test_write_neoepitope_report_rejects_duplicate_rows(tmp_path):
-    """write_neoepitope_report merges scores by (peptide, allele); if a
-    loader ever produced a report_df with duplicates that merge would be
-    ambiguous, so we assert uniqueness upfront. This test constructs
-    duplicates explicitly to exercise the guard."""
+def test_write_neoepitope_report_broadcasts_score_across_duplicate_rows(tmp_path):
+    """Real-world LENS / pVACseq files emit the same (peptide, allele)
+    pair from multiple sources (alternative transcripts, homologous
+    regions, multiple variants). The writer broadcasts the same score
+    across each duplicate row instead of raising — per-source provenance
+    lives in other columns."""
     import pandas as pd
     from vaxrank.epitope_io import write_neoepitope_report
 
     report_df = pd.DataFrame([
-        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL'},
-        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL'},  # duplicate
+        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL',
+         'Genomic variant': 'chr1:100', 'Gene name': 'GENEA'},
+        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL',
+         'Genomic variant': 'chr2:200', 'Gene name': 'GENEB'},  # same (pep, allele)
     ])
     preds = [_make_prediction(peptide_sequence='SIINFEKL', allele='HLA-A*02:01')]
-    with pytest.raises(ValueError, match="duplicate .*peptide, allele"):
-        write_neoepitope_report(
-            report_df, preds, csv_report_path=str(tmp_path / "unused.csv"))
+    csv_path = tmp_path / "out.csv"
+    write_neoepitope_report(report_df, preds, csv_report_path=str(csv_path))
+    result = pd.read_csv(csv_path)
+    # Both source rows preserved with their per-source provenance
+    assert len(result) == 2
+    assert sorted(result['Genomic variant'].tolist()) == ['chr1:100', 'chr2:200']
+    # Same vaxrank_score broadcast to both
+    scores = result['vaxrank_score'].unique()
+    assert len(scores) == 1, (
+        "Expected the same score on both duplicate-(peptide, allele) "
+        "rows; got %r" % scores.tolist())
 
 
 def test_lens_dsl_combines_both_predictors(tmp_path):
@@ -1133,6 +1144,9 @@ def test_pvacseq_cli_csv_output(tmp_path):
     main([
         "--input-pvacseq", pvacseq_path,
         "--output-csv", csv_path,
+        # Pepsickle (loaded lazily for credibility tagging) crashes
+        # pytest/torch in this env; opt out for the CLI smoke test.
+        "--no-processing-aware-annotation",
     ])
     assert os.path.exists(csv_path)
     import pandas as pd
@@ -1149,6 +1163,7 @@ def test_lens_cli_csv_output(tmp_path):
     main([
         "--input-lens", lens_path,
         "--output-csv", csv_path,
+        "--no-processing-aware-annotation",
     ])
     assert os.path.exists(csv_path)
     import pandas as pd

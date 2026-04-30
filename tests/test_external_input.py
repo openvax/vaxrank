@@ -49,6 +49,65 @@ def test_parse_variant_coords_malformed_returns_none():
     assert _parse_variant_coords(None) is None
 
 
+def test_parse_variant_coords_2_part_chr_pos_form():
+    """Real LENS v1.9 reports emit ``chr1:26780312`` (2-part: chr+pos
+    only, no ref/alt). Pre-fix this returned None and 3000+ warnings
+    fired on a real LENS run. Now: parses with placeholder ref/alt that
+    satisfy varcode's nucleotide validator."""
+    v = _parse_variant_coords("chr1:26780312")
+    assert v is not None
+    assert v.contig == "chr1"
+    assert v.start == 26780312
+    # ref/alt are placeholder nucleotides; the (chr, pos) tuple is
+    # what downstream construct assembly keys off, not the alleles.
+    assert v.ref in ("A", "C", "G", "T")
+    assert v.alt in ("A", "C", "G", "T")
+    assert v.ref != v.alt
+
+
+def test_parse_variant_coords_3_part_with_ref_only():
+    v = _parse_variant_coords("chr1:26780312:C")
+    assert v is not None
+    assert v.ref == "C"
+    # alt placeholder, not equal to ref
+    assert v.alt != "C"
+
+
+def test_parse_variant_coords_nan_string():
+    """Pandas often reads empty TSV cells as the literal string 'nan'
+    (not NaN). Treat both as 'genuinely empty' → None, no warning
+    (caller skips silently for non-SNV antigen rows)."""
+    assert _parse_variant_coords("nan") is None
+    assert _parse_variant_coords("NaN") is None
+    assert _parse_variant_coords("") is None
+    assert _parse_variant_coords("   ") is None
+
+
+def test_parse_variant_coords_n_nucleotide_rejected():
+    """varcode rejects 'N' as a nucleotide; the parser substitutes
+    safe placeholders instead of returning None."""
+    v = _parse_variant_coords("chr1:1234:N:N")
+    assert v is not None
+    assert v.ref != "N"
+    assert v.alt != "N"
+
+
+def test_real_lens_v19_subset_produces_ranked_entries():
+    """Regression test for the real-LENS-v1.9 path. The subset fixture
+    came from a Hugo IPRES Pt10 dump and tripped both #259 (variant_coords
+    parser) and #260 (duplicate-row handling). Pin that the path now
+    produces a non-empty ranked list end-to-end."""
+    path = os.path.join(
+        DATA_DIR, "real_lens_subsets", "lens_v1.9_real_subset.tsv")
+    report_df, predictions = load_lens(path)
+    ranked = ranked_from_lens_predictions(predictions, path)
+    # The fixture has at least one parseable variant_coords row.
+    # Pre-fix: 0. Now: > 0.
+    assert len(ranked) > 0, (
+        "Expected real LENS v1.9 fixture to produce a non-empty ranked "
+        "list after the variant_coords parser fix")
+
+
 def test_mut_offsets_in_context_finds_peptide():
     # AASVVGSSSSSGTR contains SVVGSSSSS at offset 2, length 9
     start, end = _mut_offsets_in_context("SVVGSSSSS", "AASVVGSSSSSGTR")

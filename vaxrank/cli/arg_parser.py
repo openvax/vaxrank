@@ -247,6 +247,26 @@ def add_output_args(arg_parser):
              "ligand semantics). Set >1 to pack multiple top ligands "
              "from the same variant.")
 
+    # Issue #249: pepsickle proteasome-cleavage credibility annotations.
+    # On by default; doesn't change vaccine ranking — purely surfaces
+    # cleavage credibility on each predicted MHC ligand for clinical
+    # review.
+    output_args_group.add_argument(
+        "--processing-aware-annotation",
+        dest="processing_aware_annotation",
+        action="store_true",
+        default=True,
+        help="Annotate each predicted MHC ligand with pepsickle's "
+             "proteasome-cleavage credibility scores (c_term_cleavage_prob, "
+             "max_internal_cut_prob, processing_score). On by default. "
+             "Doesn't change vaccine ranking — adds info for review.")
+    output_args_group.add_argument(
+        "--no-processing-aware-annotation",
+        dest="processing_aware_annotation",
+        action="store_false",
+        help="Disable pepsickle credibility annotation (e.g. when "
+             "pepsickle isn't installed and the warning is noisy).")
+
     output_args_group.add_argument(
         "--output-patient-id",
         default="",

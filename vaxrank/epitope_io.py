@@ -606,19 +606,22 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
     peptide_col = 'Mutant peptide sequence'
     allele_col = 'Allele'
 
-    # Fast O(n) sanity check first — we merge scores back onto report_df by
-    # (peptide, allele). That key must be unique. LENS and pVACseq loaders
-    # both guarantee this, but asserting here catches any future loader
-    # that doesn't, *before* we spend cycles on scoring.
+    # The score-merge below keys by (peptide, allele) and broadcasts the
+    # score back across every matching report_df row. Real-world LENS
+    # files emit the same (peptide, allele) pair from multiple sources
+    # (alternative transcripts, homologous regions, multiple variants)
+    # — that's expected, not an error. Each row retains its own source
+    # provenance (variant_coords, gene_name, transcript) and gets the
+    # same score, which is the correct behavior for a per-row report.
     if len(report_df) > 0:
-        dup_mask = report_df.duplicated(subset=[peptide_col, allele_col])
-        if dup_mask.any():
-            raise ValueError(
-                "report_df has duplicate (peptide, allele) rows; scoring "
-                "cannot unambiguously attach a single score per row. "
-                "Offending rows: "
-                f"{report_df.loc[dup_mask, [peptide_col, allele_col]].to_dict('records')[:3]}"
-            )
+        dup_count = int(report_df.duplicated(
+            subset=[peptide_col, allele_col]).sum())
+        if dup_count:
+            logger.info(
+                "report_df has %d duplicate (peptide, allele) row(s) "
+                "from multi-source LENS / pVACseq input; the same score "
+                "broadcasts across each duplicate. Per-source provenance "
+                "is preserved by the other columns.", dup_count)
 
     # Build the topiary DataFrame once and share it between validator and
     # scorer — these two pass over the same ~N rows and rebuilding is the

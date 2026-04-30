@@ -210,6 +210,16 @@ class TemplateDataCreator(object):
     def _epitope_data(self, epitope_prediction):
         """
         Returns an OrderedDict with epitope data from the given prediction.
+
+        When the prediction has been annotated with pepsickle credibility
+        scores (issue #249), three extra columns are appended:
+        ``C-term cut`` (probability the proteasome cuts cleanly at the
+        ligand's C-terminus), ``Max internal cut`` (peak cleavage
+        probability strictly inside the ligand — high means the ligand
+        is likely destroyed before MHC), and ``Processing score``
+        (composite ``c_term × (1 − max_internal)``). The columns appear
+        only when annotation succeeded so unannotated reports keep
+        their original 6-column shape.
         """
         # if the WT peptide is too short, it's possible that we're missing a prediction for it
         if epitope_prediction.wt_ic50 is not None:
@@ -224,6 +234,15 @@ class TemplateDataCreator(object):
             ('WT sequence', epitope_prediction.wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
         ])
+        c_term = getattr(epitope_prediction, 'c_term_cleavage_prob', None)
+        max_int = getattr(epitope_prediction, 'max_internal_cut_prob', None)
+        proc = getattr(epitope_prediction, 'processing_score', None)
+        if c_term is not None:
+            epitope_data['C-term cut'] = '%.2f' % c_term
+            epitope_data['Max internal cut'] = (
+                '%.2f' % max_int if max_int is not None else '—')
+            epitope_data['Processing score'] = (
+                '%.2f' % proc if proc is not None else '—')
         return epitope_data
 
     def _query_cosmic(self, variant):

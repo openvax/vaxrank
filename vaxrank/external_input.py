@@ -53,22 +53,57 @@ _PVACSEQ_RANK_COLS = ('%ile MT', 'Best Percentile MT')
 logger = logging.getLogger(__name__)
 
 
-def _parse_variant_coords(coords, genome=None):
-    """Parse ``chr:pos:ref:alt`` (LENS) into a ``varcode.Variant``.
+def _parse_variant_coords(coords, genome=None, ref_alt_fallback=("A", "C")):
+    """Parse a LENS ``variant_coords`` cell into a ``varcode.Variant``.
 
-    Returns None if the string is malformed.
+    Real LENS files emit several forms; we accept whichever is present:
+
+      - ``chr1:26780312:C:T``  (4-part: chr, pos, ref, alt — test fixtures)
+      - ``chr1:26780312:C``    (3-part: chr, pos, ref — alt missing)
+      - ``chr1:26780312``      (2-part: chr, pos only — dominant in real
+                                 LENS v1.9 reports; ref / alt fall back to
+                                 ``ref_alt_fallback`` since varcode rejects
+                                 N or empty nucleotides. ``A``/``C``
+                                 placeholders satisfy varcode's validator
+                                 without claiming a specific genotype;
+                                 downstream construct assembly keys off
+                                 the (chr, pos) tuple, not the alleles)
+
+    Returns ``None`` for empty / NaN / malformed input. NaN is a normal
+    artifact of non-SNV antigen rows (splice, fusion, intron retention)
+    where ``variant_coords`` is genuinely empty — callers should treat
+    None as "skip silently," not as a warning condition.
     """
     from varcode import Variant
-    if not isinstance(coords, str) or coords.count(":") < 3:
+    if coords is None or not isinstance(coords, str):
         return None
-    parts = coords.split(":")
-    contig, pos, ref, alt = parts[0], parts[1], parts[2], parts[3]
+    s = coords.strip()
+    if not s or s.lower() == 'nan':
+        return None
+    parts = s.split(":")
+    if len(parts) < 2:
+        return None
+    contig = parts[0]
     try:
-        start = int(pos)
-    except ValueError:
+        start = int(parts[1])
+    except (ValueError, IndexError):
         return None
-    return Variant(contig=contig, start=start, ref=ref, alt=alt,
-                   genome=genome, normalize_contig_names=False)
+    # varcode rejects 'N' and empty strings as nucleotides. Use safe
+    # placeholders when LENS doesn't supply ref/alt.
+    ref = parts[2] if (
+        len(parts) >= 3 and parts[2] and parts[2] != 'N'
+    ) else ref_alt_fallback[0]
+    alt = parts[3] if (
+        len(parts) >= 4 and parts[3] and parts[3] != 'N'
+    ) else ref_alt_fallback[1]
+    if ref == alt:  # varcode rejects no-op variants
+        alt = 'C' if ref == 'A' else 'A'
+    try:
+        return Variant(
+            contig=contig, start=start, ref=ref, alt=alt,
+            genome=genome, normalize_contig_names=False)
+    except Exception:
+        return None
 
 
 def _mut_offsets_in_context(peptide, pep_context):
@@ -203,17 +238,31 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
     # Group rows by variant. LENS uses lowercase snake_case columns.
     rows = df.to_dict('records')
     groups = {}
+    n_skipped_empty_coords = 0
     for r in rows:
         coords = r.get('variant_coords')
-        if not coords:
+        if coords is None or (
+                isinstance(coords, float) and pd.isna(coords)) or (
+                isinstance(coords, str) and (
+                    not coords.strip() or coords.strip().lower() == 'nan')):
+            # Non-SNV antigen rows (splice, fusion, intron retention)
+            # genuinely lack genome coords — silent skip.
+            n_skipped_empty_coords += 1
             continue
         groups.setdefault(coords, []).append(r)
+    if n_skipped_empty_coords:
+        logger.info(
+            "Skipped %d LENS row(s) with empty variant_coords (typical "
+            "for non-SNV antigen sources: splice / fusion / intron "
+            "retention).", n_skipped_empty_coords)
 
     ranked = []
+    n_unparseable = 0
     for coords, group_rows in groups.items():
         variant = _parse_variant_coords(coords, genome=genome)
         if variant is None:
-            logger.warning(
+            n_unparseable += 1
+            logger.debug(
                 "Could not parse LENS variant_coords %r; skipping.", coords)
             continue
         rep = _pick_representative(group_rows, affinity_cols, rank_cols)
@@ -276,6 +325,12 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         )
         ranked.append((variant, [vp]))
+
+    if n_unparseable:
+        logger.warning(
+            "Skipped %d LENS variant_coords value(s) that didn't parse "
+            "as chr:pos[:ref:alt]; see DEBUG log for the offenders.",
+            n_unparseable)
 
     # Order by mutant_epitope_score descending so the top candidates
     # win greedy bin-packing in the construct assemblers. Ties broken
