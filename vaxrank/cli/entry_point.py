@@ -281,6 +281,10 @@ def main(args_list=None):
             junction_swap_candidates=junction_candidates,
             junction_rank_strong=args.mrna_junction_rank_strong,
             junction_rank_mild=args.mrna_junction_rank_mild,
+            poly_a_length=args.mrna_poly_a_length,
+            poly_a_segmented=args.mrna_poly_a_segmented,
+            poly_a_first_segment=args.mrna_poly_a_first_segment,
+            poly_a_segment_linker=args.mrna_poly_a_segment_linker,
         )
         if options.optimize_linkers:
             try:
@@ -310,11 +314,12 @@ def main(args_list=None):
             mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles)
         write_mrna_outputs(
             constructs,
-            fasta_path=args.output_mrna,
+            output_dir=args.output_mrna,
             manifest_path=getattr(args, 'output_mrna_manifest', '') or None,
+            csv_path=getattr(args, 'output_mrna_csv', '') or None,
         )
         logger.info(
-            "Wrote %d mRNA construct(s) to %s",
+            "Wrote %d mRNA construct(s) to %s/{cds,no_polyA,full}.fasta",
             len(constructs), args.output_mrna)
 
     ########################

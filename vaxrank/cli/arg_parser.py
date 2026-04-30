@@ -310,14 +310,24 @@ def add_mrna_output_args(group):
     group.add_argument(
         "--output-mrna",
         default="",
-        help="Path to FASTA file of assembled mRNA vaccine constructs. "
-             "When set, vaxrank emits one or more mRNA constructs containing "
-             "the top vaccine peptides as concatenated antigens.")
+        help="Output *directory* for assembled mRNA vaccine constructs. "
+             "When set, vaxrank writes three FASTA files into the directory: "
+             "cds.fasta (start codon → stop codon), no_polyA.fasta "
+             "(5' UTR + CDS + 3' UTR), and full.fasta (no_polyA + polyA tail). "
+             "Each FASTA has one record per construct.")
     group.add_argument(
         "--output-mrna-manifest",
         default="",
-        help="Optional path to a JSON manifest describing each mRNA construct "
-             "(component names, length, contained antigens).")
+        help="Optional path to a JSON manifest with the structured "
+             "per-element view of each mRNA construct (every layer with "
+             "AA + nt where applicable, all sequence variants, lengths).")
+    group.add_argument(
+        "--output-mrna-csv",
+        default="",
+        help="Optional path to a long-format CSV. One row per "
+             "(construct, element); columns: construct, element_kind, "
+             "index, name, aa, nt, length_aa, length_nt, note. Lets you "
+             "open a vaccine in a spreadsheet and inspect every layer.")
     group.add_argument(
         "--mrna-signal-peptide",
         default="HLA_B",
@@ -363,6 +373,33 @@ def add_mrna_output_args(group):
         help="3' UTR name (one of: %s). Default: HBB_FI (tandem 2× HBB / "
              "FI element, BioNTech FixVac canonical)."
              % ", ".join(sorted(UTRS_3P)))
+    group.add_argument(
+        "--mrna-poly-a-length",
+        default=120,
+        type=int,
+        help="PolyA tail length in nt. Default: 120 (BioNTech FixVac / "
+             "BNT122 per Sahin 2017). Set 0 to omit the polyA tail "
+             "(full.fasta will then equal no_polyA.fasta).")
+    group.add_argument(
+        "--mrna-poly-a-segmented",
+        action="store_true",
+        default=False,
+        help="Split the polyA into two segments separated by a 10-nt "
+             "linker (BNT162b2 architecture: A30 + GCATATGACT + A70 per "
+             "Xia 2021, PMC8310186). Increases mRNA stability by "
+             "reducing template recombination during in vitro "
+             "transcription.")
+    group.add_argument(
+        "--mrna-poly-a-first-segment",
+        default=30,
+        type=int,
+        help="Length (nt) of the first polyA segment when "
+             "--mrna-poly-a-segmented is set. Default: 30.")
+    group.add_argument(
+        "--mrna-poly-a-segment-linker",
+        default="GCATATGACT",
+        help="Linker sequence between segmented polyA segments. "
+             "Default: GCATATGACT (BNT162b2 canonical).")
     group.add_argument(
         "--mrna-codon-species",
         default="h_sapiens",

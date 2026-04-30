@@ -177,15 +177,37 @@ class RNAConstructConfig:
     junction_kmer_lengths: tuple = (8, 9, 10, 11)
     junction_rank_strong: float = 0.5
     junction_rank_mild: float = 2.0
+    # PolyA tail (issue #252). Default A120 matches BioNTech IVAC
+    # MUTANOME / FixVac (Sahin 2017). When ``poly_a_segmented`` is
+    # True, the tail is split as A_first + linker + A_rest, mirroring
+    # BNT162b2 (A30 + GCATATGACT + A70 per Xia 2021, PMC8310186).
+    poly_a_length: int = 120
+    poly_a_segmented: bool = False
+    poly_a_first_segment: int = 30
+    poly_a_segment_linker: str = "GCATATGACT"
 
 
 @dataclass
 class RNAConstruct:
-    """A single assembled mRNA construct."""
+    """A single assembled mRNA construct.
+
+    ``sequence`` is the full nt sequence including polyA tail (kept as
+    the canonical "the construct" string for back-compat callers).
+    The structured per-element manifest is exposed via ``elements``,
+    ``antigens``, and the explicit ``cds_nt`` / ``no_polya_nt`` /
+    ``full_nt`` views.
+    """
     name: str
     antigen_names: list
     sequence: str
     components: dict = field(default_factory=dict)
+    cds_aa: str = ""
+    cds_nt: str = ""        # protein-coding DNA *including* stop codon
+    no_polya_nt: str = ""   # 5' UTR + cds_nt + 3' UTR
+    full_nt: str = ""       # no_polya_nt + polyA tail
+    poly_a_nt: str = ""
+    elements: dict = field(default_factory=dict)
+    antigens: list = field(default_factory=list)
 
 
 def _resolve_named(table, name, kind):
@@ -294,15 +316,22 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
         yield name, window
 
 
-def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
-                                 mitd_aa, per_junction_linkers=None,
+def _build_protein_with_segments(antigen_aas, antigen_names, signal_peptide_aa,
+                                 signal_peptide_name, linker, linker_name,
+                                 mitd_aa, mitd_name,
+                                 per_junction_linkers=None,
                                  pre_mitd_linker=None):
     """Concatenate signal peptide + antigens + linker/MITD into one protein.
 
-    Returns ``(protein_str, frozen_segments)`` where ``frozen_segments``
-    is a list of ``(start_aa, end_aa, blessed_dna)`` tuples for linker
-    occurrences that should be codon-frozen during mRNA optimization
-    (i.e. ``Linker.freeze_in_mrna`` and ``Linker.dna`` set).
+    Returns ``(protein_str, frozen_segments, aa_segments)`` where:
+      - ``frozen_segments`` is a list of ``(start_aa, end_aa, blessed_dna)``
+        for linkers that should be codon-frozen during mRNA optimization
+        (``Linker.freeze_in_mrna`` and ``Linker.dna`` set).
+      - ``aa_segments`` is a list of ``dict``s, one per CDS element, with
+        keys ``kind`` ('signal_peptide' / 'antigen' / 'linker' / 'mitd' /
+        'start_codon'), ``name``, ``start_aa``, ``end_aa``, ``aa``. The
+        caller slices the back-translated DNA at ``[start*3:end*3]`` to
+        recover per-element nt.
 
     Ensures the result begins with M so the back-translated CDS has a
     start codon. When a signal peptide is supplied, its N-terminal M
@@ -321,16 +350,33 @@ def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
             raise ValueError(
                 "per_junction_linkers length %d != antigens-1 (%d)" % (
                     len(per_junction_linkers), expected))
+    if antigen_names is None:
+        antigen_names = ["antigen_%d" % i for i in range(len(antigen_aas))]
 
     parts = []
     frozen = []
+    segments = []
     aa_offset = 0
+
+    def _emit(kind, name, aa, junction_index=None):
+        nonlocal aa_offset
+        seg = {
+            'kind': kind,
+            'name': name,
+            'aa': aa,
+            'start_aa': aa_offset,
+            'end_aa': aa_offset + len(aa),
+        }
+        if junction_index is not None:
+            seg['junction_index'] = junction_index
+        segments.append(seg)
+        parts.append(aa)
+        aa_offset += len(aa)
+
     if signal_peptide_aa:
-        parts.append(signal_peptide_aa)
-        aa_offset += len(signal_peptide_aa)
+        _emit('signal_peptide', signal_peptide_name, signal_peptide_aa)
     if not signal_peptide_aa and antigen_aas and not antigen_aas[0].startswith("M"):
-        parts.append("M")
-        aa_offset += 1
+        _emit('start_codon', None, "M")
     for i, aa in enumerate(antigen_aas):
         if i > 0:
             if per_junction_linkers is not None:
@@ -339,23 +385,44 @@ def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
                 this_linker = linker
             this_aa = this_linker.amino_acids
             if this_linker.freeze_in_mrna and this_linker.dna:
-                frozen.append((aa_offset, aa_offset + len(this_aa), this_linker.dna))
-            parts.append(this_aa)
-            aa_offset += len(this_aa)
-        parts.append(aa)
-        aa_offset += len(aa)
+                frozen.append(
+                    (aa_offset, aa_offset + len(this_aa), this_linker.dna))
+            _emit('linker', this_linker.name, this_aa, junction_index=i - 1)
+        _emit('antigen', antigen_names[i], aa)
     if mitd_aa:
         # Pre-MITD linker: use override if supplied (per-junction
         # optimizer path), else fall back to the shared `linker`.
         mitd_link = pre_mitd_linker if pre_mitd_linker is not None else linker
         linker_aa = mitd_link.amino_acids
         if mitd_link.freeze_in_mrna and mitd_link.dna:
-            frozen.append((aa_offset, aa_offset + len(linker_aa), mitd_link.dna))
-        parts.append(linker_aa)
-        aa_offset += len(linker_aa)
-        parts.append(mitd_aa)
-        aa_offset += len(mitd_aa)
-    return "".join(parts), frozen
+            frozen.append(
+                (aa_offset, aa_offset + len(linker_aa), mitd_link.dna))
+        # Tag the pre-MITD linker with junction_index = "mitd" sentinel so
+        # the manifest can distinguish it from inter-antigen junctions.
+        _emit('linker', mitd_link.name, linker_aa, junction_index='mitd')
+        _emit('mitd', mitd_name, mitd_aa)
+    return "".join(parts), frozen, segments
+
+
+def build_poly_a(options):
+    """Build the polyA tail nt string from RNAConstructConfig.
+
+    Non-segmented: ``A`` * poly_a_length (matches Sahin 2017 BNT122).
+    Segmented: ``A`` * first_segment + segment_linker + ``A`` * rest,
+    where rest = max(0, poly_a_length - poly_a_first_segment). The
+    segment linker's bases are NOT counted toward poly_a_length —
+    the configured length is the total adenosine count, mirroring
+    Xia 2021's description of BNT162b2 (A30 + GCAUAUGACU + A70 =
+    100 A's split by 10-nt linker).
+    """
+    if options.poly_a_length < 0:
+        raise ValueError(
+            "poly_a_length must be >= 0 (got %d)" % options.poly_a_length)
+    if not options.poly_a_segmented:
+        return "A" * options.poly_a_length
+    first = max(0, min(options.poly_a_first_segment, options.poly_a_length))
+    rest = options.poly_a_length - first
+    return "A" * first + options.poly_a_segment_linker + "A" * rest
 
 
 def _packing_linker_aa(options, linker):
@@ -588,8 +655,10 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                         'note': "default linker beat or tied all candidates",
                     }
 
-        protein, frozen_segments = _build_protein_with_segments(
-            antigen_aas, signal_peptide_aa, linker, mitd_aa,
+        protein, frozen_segments, aa_segments = _build_protein_with_segments(
+            antigen_aas, names, signal_peptide_aa, options.signal_peptide,
+            linker, options.linker, mitd_aa,
+            options.mitd if options.include_mitd else None,
             per_junction_linkers=per_junction_linkers,
             pre_mitd_linker=pre_mitd_linker)
         coding_dna = codon_optimize(
@@ -599,7 +668,92 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             avoid_patterns=options.avoid_patterns,
             frozen_segments=frozen_segments,
         )
-        sequence = utr_5p_dna + coding_dna + STOP_CODON + utr_3p_dna
+        # Three sequence views: cds_nt = back-translated protein + STOP;
+        # no_polya_nt = 5' UTR + cds_nt + 3' UTR; full_nt = no_polya_nt
+        # + polyA tail. ``sequence`` keeps full_nt for back-compat with
+        # callers that read it as the canonical "the construct" string.
+        cds_nt = coding_dna + STOP_CODON
+        no_polya_nt = utr_5p_dna + cds_nt + utr_3p_dna
+        poly_a_nt = build_poly_a(options)
+        full_nt = no_polya_nt + poly_a_nt
+
+        # Per-element manifest with both AA and nt forms. Antigens are
+        # listed separately (one entry per packed antigen). Linkers per
+        # junction are also listed separately so the manifest preserves
+        # per-junction-swap information.
+        antigens_meta = []
+        linker_segments = []
+        for seg in aa_segments:
+            nt_slice = coding_dna[seg['start_aa'] * 3:seg['end_aa'] * 3]
+            seg_record = {
+                'name': seg['name'],
+                'aa': seg['aa'],
+                'nt': nt_slice,
+                'length_aa': len(seg['aa']),
+                'length_nt': len(nt_slice),
+                'start_aa': seg['start_aa'],
+                'end_aa': seg['end_aa'],
+            }
+            if seg['kind'] == 'antigen':
+                antigens_meta.append(seg_record)
+            elif seg['kind'] == 'linker':
+                ls = dict(seg_record)
+                ls['junction_index'] = seg.get('junction_index')
+                linker_segments.append(ls)
+
+        elements = {}
+        if signal_peptide_aa:
+            sp_seg = next(
+                s for s in aa_segments if s['kind'] == 'signal_peptide')
+            elements['signal_peptide'] = {
+                'name': options.signal_peptide,
+                'aa': signal_peptide_aa,
+                'nt': coding_dna[sp_seg['start_aa'] * 3:sp_seg['end_aa'] * 3],
+                'length_aa': len(signal_peptide_aa),
+                'length_nt': len(signal_peptide_aa) * 3,
+            }
+        else:
+            elements['signal_peptide'] = None
+        elements['utr_5p'] = {
+            'name': options.utr_5p, 'nt': utr_5p_dna,
+            'length_nt': len(utr_5p_dna),
+        }
+        elements['linkers_per_junction'] = linker_segments
+        elements['mitd'] = (
+            {
+                'name': options.mitd, 'aa': mitd_aa,
+                'nt': coding_dna[
+                    next(s for s in aa_segments
+                         if s['kind'] == 'mitd')['start_aa'] * 3:],
+                'length_aa': len(mitd_aa),
+                'length_nt': len(mitd_aa) * 3,
+            }
+            if mitd_aa else None
+        )
+        elements['stop_codon'] = STOP_CODON
+        elements['utr_3p'] = {
+            'name': options.utr_3p, 'nt': utr_3p_dna,
+            'length_nt': len(utr_3p_dna),
+        }
+        elements['poly_a'] = {
+            'length_nt': options.poly_a_length,
+            'segmented': options.poly_a_segmented,
+            'segment_linker': (
+                options.poly_a_segment_linker
+                if options.poly_a_segmented else None),
+            'first_segment_nt': (
+                options.poly_a_first_segment
+                if options.poly_a_segmented else None),
+            'nt': poly_a_nt,
+        }
+        elements['codon_species'] = options.codon_species
+        elements['codon_method'] = options.codon_method
+        if junction_swap_meta is not None:
+            elements['junction_swap'] = junction_swap_meta
+
+        # Back-compat ``components`` dict: same fields the 2.12.x
+        # manifest carried, so existing readers don't break. The
+        # richer per-element view lives on RNAConstruct.elements.
         components = {
             'utr_5p': options.utr_5p,
             'signal_peptide': options.signal_peptide,
@@ -612,42 +766,154 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
         }
         if junction_swap_meta is not None:
             components['junction_swap'] = junction_swap_meta
+
         constructs.append(RNAConstruct(
             name="seq_%03d" % (i + 1),
             antigen_names=names,
-            sequence=sequence,
+            sequence=full_nt,
             components=components,
+            cds_aa=protein,
+            cds_nt=cds_nt,
+            no_polya_nt=no_polya_nt,
+            full_nt=full_nt,
+            poly_a_nt=poly_a_nt,
+            elements=elements,
+            antigens=antigens_meta,
         ))
     return constructs
 
 
-def write_mrna_outputs(constructs, fasta_path, manifest_path=None):
-    """Write FASTA + optional JSON manifest describing each construct.
+def _wrap_fasta(seq, line_width=80):
+    return "\n".join(seq[i:i + line_width] for i in range(0, len(seq), line_width))
 
-    Manifest entries follow a shared schema (``modality``, ``name``,
-    ``length``, ``length_unit``, ``antigen_names``, ``components``,
-    ``manufacturability``) so the peptide-mode writer can produce a
-    structurally compatible manifest.
+
+def write_mrna_outputs(constructs, output_dir, manifest_path=None,
+                       csv_path=None):
+    """Write three FASTAs (cds / full / no_polyA) + optional manifest + CSV.
+
+    Output layout (issue #252):
+      <output_dir>/cds.fasta        — coding DNA (start codon → stop codon)
+      <output_dir>/no_polyA.fasta   — 5' UTR + CDS + 3' UTR
+      <output_dir>/full.fasta       — no_polyA + polyA tail
+
+    All three contain one record per construct, matched by ``name``.
+
+    ``manifest_path`` (optional): JSON manifest with the structured
+    per-element view (``elements``, ``antigens``, all sequence variants).
+    ``csv_path`` (optional): long-format CSV — one row per (construct,
+    element) — exposing AA + nt for every layer for spreadsheet
+    inspection.
     """
-    with open(fasta_path, 'w') as f:
-        for c in constructs:
-            f.write(">%s antigens=%s length=%d\n" % (
-                c.name, ','.join(c.antigen_names), len(c.sequence)))
-            for i in range(0, len(c.sequence), 80):
-                f.write(c.sequence[i:i + 80] + "\n")
+    import csv as _csv
+    import os
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    fasta_specs = [
+        ('cds.fasta', 'cds_nt'),
+        ('no_polyA.fasta', 'no_polya_nt'),
+        ('full.fasta', 'full_nt'),
+    ]
+    for filename, attr in fasta_specs:
+        path = os.path.join(output_dir, filename)
+        with open(path, 'w') as f:
+            for c in constructs:
+                seq = getattr(c, attr)
+                f.write(">%s antigens=%s length=%d\n" % (
+                    c.name, ','.join(c.antigen_names), len(seq)))
+                f.write(_wrap_fasta(seq))
+                f.write("\n")
 
     if manifest_path:
         manifest = [
             {
                 'modality': 'mrna',
                 'name': c.name,
-                'length': len(c.sequence),
+                'length': len(c.full_nt),  # canonical "the construct" length
                 'length_unit': 'nt',
                 'antigen_names': c.antigen_names,
-                'components': c.components,
-                'manufacturability': {},  # nt-level metrics: see openvax/vaxrank#245
+                'lengths': {
+                    'cds_aa': len(c.cds_aa),
+                    'cds_nt': len(c.cds_nt),
+                    'no_polya_nt': len(c.no_polya_nt),
+                    'full_nt': len(c.full_nt),
+                    'poly_a_nt': len(c.poly_a_nt),
+                },
+                'cds': {'aa': c.cds_aa, 'nt': c.cds_nt},
+                'no_polya_nt': c.no_polya_nt,
+                'full_nt': c.full_nt,
+                'antigens': c.antigens,
+                'elements': c.elements,
+                'components': c.components,  # legacy 2.12 schema for back-compat
+                'manufacturability': {},
             }
             for c in constructs
         ]
         with open(manifest_path, 'w') as f:
             json.dump(manifest, f, indent=2)
+
+    if csv_path:
+        # Long format: one row per (construct, element). AA + nt are
+        # both populated when applicable; missing fields stay empty.
+        with open(csv_path, 'w', newline='') as f:
+            w = _csv.writer(f)
+            w.writerow([
+                'construct', 'element_kind', 'index', 'name',
+                'aa', 'nt', 'length_aa', 'length_nt', 'note',
+            ])
+            for c in constructs:
+                el = c.elements
+                # 5' UTR
+                u5 = el.get('utr_5p') or {}
+                w.writerow([c.name, 'utr_5p', '', u5.get('name', ''),
+                            '', u5.get('nt', ''), '', u5.get('length_nt', ''),
+                            ''])
+                # signal peptide
+                sp = el.get('signal_peptide')
+                if sp:
+                    w.writerow([c.name, 'signal_peptide', '', sp['name'],
+                                sp['aa'], sp['nt'],
+                                sp['length_aa'], sp['length_nt'], ''])
+                # antigens (interleaved with linkers below for visual
+                # in-order inspection — write antigens first then
+                # linkers separately, since the index column qualifies)
+                for j, a in enumerate(c.antigens):
+                    w.writerow([c.name, 'antigen', j, a['name'],
+                                a['aa'], a['nt'],
+                                a['length_aa'], a['length_nt'], ''])
+                # linkers (per junction; junction_index disambiguates
+                # inter-antigen vs pre-MITD)
+                for ls in el.get('linkers_per_junction', []):
+                    note = ('pre_mitd' if ls.get('junction_index') == 'mitd'
+                            else '')
+                    w.writerow([c.name, 'linker', ls.get('junction_index', ''),
+                                ls['name'], ls['aa'], ls['nt'],
+                                ls['length_aa'], ls['length_nt'], note])
+                # MITD
+                m = el.get('mitd')
+                if m:
+                    w.writerow([c.name, 'mitd', '', m['name'],
+                                m['aa'], m['nt'],
+                                m['length_aa'], m['length_nt'], ''])
+                # stop codon
+                w.writerow([c.name, 'stop_codon', '', '', '',
+                            el.get('stop_codon', ''), '', 3, ''])
+                # 3' UTR
+                u3 = el.get('utr_3p') or {}
+                w.writerow([c.name, 'utr_3p', '', u3.get('name', ''),
+                            '', u3.get('nt', ''), '', u3.get('length_nt', ''),
+                            ''])
+                # polyA
+                pa = el.get('poly_a') or {}
+                pa_note = ('segmented' if pa.get('segmented') else 'unsegmented')
+                w.writerow([c.name, 'poly_a', '', '', '',
+                            pa.get('nt', ''), '', pa.get('length_nt', ''),
+                            pa_note])
+                # full assembled views — no element name, just whole-seq
+                # length references for convenience.
+                w.writerow([c.name, 'cds', '', '', c.cds_aa, c.cds_nt,
+                            len(c.cds_aa), len(c.cds_nt), ''])
+                w.writerow([c.name, 'no_polyA', '', '', '', c.no_polya_nt,
+                            '', len(c.no_polya_nt), ''])
+                w.writerow([c.name, 'full', '', '', '', c.full_nt,
+                            '', len(c.full_nt), ''])

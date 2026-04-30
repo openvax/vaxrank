@@ -338,12 +338,12 @@ def test_both_modalities_emit_compatible_manifests(tmp_path):
 
     p_fasta = tmp_path / "peptide.fasta"
     p_manifest = tmp_path / "peptide.json"
-    m_fasta = tmp_path / "mrna.fasta"
+    m_dir = tmp_path / "mrna"
     m_manifest = tmp_path / "mrna.json"
     write_peptide_outputs(
         p_constructs, str(p_fasta), str(p_manifest))
     write_mrna_outputs(
-        m_constructs, str(m_fasta), str(m_manifest))
+        m_constructs, str(m_dir), str(m_manifest))
 
     p_entry = json.loads(p_manifest.read_text())[0]
     m_entry = json.loads(m_manifest.read_text())[0]
