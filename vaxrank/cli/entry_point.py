@@ -258,6 +258,10 @@ def main(args_list=None):
             len(peptide_constructs), args.output_peptide)
 
     if getattr(args, 'output_mrna', ''):
+        junction_candidates = tuple(
+            s.strip() for s in (args.mrna_junction_candidates or "").split(",")
+            if s.strip()
+        )
         options = RNAConstructConfig(
             signal_peptide=(args.mrna_signal_peptide or None),
             linker=args.mrna_linker,
@@ -273,9 +277,37 @@ def main(args_list=None):
             max_constructs=args.mrna_max_constructs,
             candidates_per_slot=args.mrna_candidates_per_slot,
             max_length_nt=args.mrna_max_length_nt,
+            optimize_linkers=args.mrna_optimize_linkers,
+            junction_swap_candidates=junction_candidates,
+            junction_rank_strong=args.mrna_junction_rank_strong,
+            junction_rank_mild=args.mrna_junction_rank_mild,
         )
+        if options.optimize_linkers:
+            try:
+                mhc_predictor = mhc_binding_predictor_from_args(args)
+                mhc_alleles = mhc_alleles_from_args(args)
+            except Exception as e:
+                # Predictor / alleles aren't configured (or instantiation
+                # failed in mhctools / mhcflurry). The optimizer will warn
+                # and fall back; don't fail the whole vaxrank run. Log
+                # with traceback so genuine bugs in predictor loading are
+                # still visible (visible at DEBUG level).
+                logger.warning(
+                    "Could not load MHC predictor / alleles for "
+                    "per-junction linker optimization (%s). The optimizer "
+                    "will fall back to the shared linker at every junction. "
+                    "Set --mhc-predictor + --mhc-alleles to enable it.",
+                    e)
+                logger.debug(
+                    "Predictor / alleles load traceback:", exc_info=True)
+                mhc_predictor = None
+                mhc_alleles = None
+        else:
+            mhc_predictor = None
+            mhc_alleles = None
         constructs = assemble_mrna_constructs(
-            ranked_variants_with_vaccine_peptides, options=options)
+            ranked_variants_with_vaccine_peptides, options=options,
+            mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles)
         write_mrna_outputs(
             constructs,
             fasta_path=args.output_mrna,

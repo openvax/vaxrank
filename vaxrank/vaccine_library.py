@@ -34,9 +34,41 @@ Do not introduce new entries without one.
 Aliases (``ALIASES``) map informal historical names to the canonical
 form so that ``--peptide-linker GS3`` and ``--peptide-linker G4S3``
 both resolve to the same Linker object.
+
+## Compositional grammar
+
+In addition to named entries, ``get_linker`` accepts compositional
+forms parsed at lookup time. **Repeats require explicit parens or
+an ``x`` separator** — bare digit suffixes are parsed literally to
+avoid ambiguity (e.g. ``G4S2`` = "GGGGSS", *not* "(G4S)2").
+
+- **Repeat forms** — ``(BASE)N``, ``(BASE)xN``, ``BASExN``. Examples:
+  ``(G4S)2``, ``(G4S)x2``, and ``G4Sx2`` all → "GGGGSGGGGS".
+  2A entries (codon-frozen) are rejected — repeating a 2A linker
+  would not produce additional ribosomal-skipping events.
+- ``GnSm`` — n glycines followed by m serines, **as a literal single
+  unit, not a repeat**. Examples: ``G4S`` = "GGGGS"; ``G4S2`` =
+  "GGGGSS"; ``G6S`` = "GGGGGGS". Use ``(G4S)2`` for the (Gly4Ser)2
+  repeat from Huston 1988 / Chen 2013.
+- ``AnY`` — n alanines followed by tyrosine. Example: ``A3Y`` →
+  "AAAY". AAY (= A2Y) is the conventional form (Wang 2004 / Velders
+  2001); n>2 has no primary-literature footing — pure mechanistic
+  extrapolation. The synthesized Linker's ``citation`` flags this.
+- ``An`` — n alanines, no tyrosine. Example: ``A4`` → "AAAA". AAA
+  is the empirically-tested form (Aguilar-Gurrieri 2023, the only
+  published alanine-spacer bake-off); longer An are length
+  extrapolations.
+- ``Gn`` — n glycines, no serine. Example: ``G4`` → "GGGG". Pure
+  polyglycine has biophysical characterization (Klement 2018) as the
+  most-flexible linker but NO published vaccine empirical use. The
+  citation flags this — prefer GS-family forms (G4S, (G4S)2, etc.)
+  for any expression-dependent platform.
+
+Repeat counts are capped at 100 to prevent accidental megasequences.
 """
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -64,20 +96,51 @@ class Linker:
 # different stiffness/length trade-offs.
 
 _GS_CITATION = (
-    "Huston et al., PNAS 85:5879, 1988 (doi:10.1073/pnas.85.16.5879) — "
-    "(Gly4Ser)n linker family, originally connecting VH-VL in scFv. "
-    "Length variants (G2S/G3S/G5S, repeats up to (G4S)4) reviewed in "
-    "Chen et al., Adv Drug Deliv Rev 65:1357, 2013 "
-    "(doi:10.1016/j.addr.2012.09.039)."
+    "Huston et al., PNAS 85:5879, 1988 (doi:10.1073/pnas.85.16.5879) "
+    "established the (Gly4Ser)n family for connecting VH-VL in scFv. "
+    "Length variants (G2S/G3S/G5S and shorter/longer repeats) appear "
+    "throughout subsequent scFv / fusion-protein literature; reviewed "
+    "in Chen et al., Adv Drug Deliv Rev 65:1357, 2013 "
+    "(doi:10.1016/j.addr.2012.09.039). Klement et al., Biochemistry "
+    "57:1378, 2018 (doi:10.1021/acs.biochem.7b00902) showed persistence "
+    "length scales with glycine fraction (more Gly = more flexible). "
+    "Clinical mRNA neoantigen vaccine use: BioNTech IVAC MUTANOME / "
+    "FixVac (Sahin et al., Nature 547:222, 2017, "
+    "doi:10.1038/nature23003) and iNeST / autogene cevumeran (Rojas "
+    "et al., Nature 618:144, 2023, doi:10.1038/s41586-023-06063-y) use "
+    "a 10-aa Gly/Ser linker — i.e. (G4S)2 — between 25-27mer minigenes. "
+    "This is the only linker family with published clinical mRNA "
+    "vaccine use as of 2025. Caveats: empirical vaccine data on the "
+    "GS family is thin — Yang 2015 (PMC4514284) showed GGGS worked "
+    "while AAY failed in HIV DNA vaccines; Aguilar-Gurrieri 2023 "
+    "(doi:10.1007/s00262-023-03409-3) showed GGGS performed WORST for "
+    "MHC-I presentation among AAA / AAL / ADL / single-A / GGGS. No "
+    "published vaccine study has varied (G4S)n length and measured "
+    "immunogenicity; length effects are inherited from antibody / "
+    "scFv engineering."
 )
 
+_POLYG_CITATION = (
+    "Pure polyglycine (Gn, no serine) has biophysical characterization "
+    "as the most-flexible linker family (lowest persistence length; "
+    "Klement et al., Biochemistry 57:1378, 2018, "
+    "doi:10.1021/acs.biochem.7b00902 measured persistence length 4.5 Å "
+    "for full-Gly vs 6.2 Å for full-Ser). However, polyglycine has NO "
+    "published primary use as an inter-epitope spacer in any vaccine "
+    "modality (peptide, DNA, mRNA, viral vector) with an immunogenicity "
+    "readout. The choice trade-off vs (G4S)n: more flexibility but "
+    "lower solubility (no polar residue). Use at your own design risk; "
+    "consider AAA (Aguilar-Gurrieri 2023, the only empirically-tested "
+    "alanine-only spacer for vaccines) as an alternative."
+)
+
+# Single-unit GnSm entries only. Repeats use the compositional grammar:
+# (G4S)2, (G4S)x2, or G4Sx2 — never bare 'G4S2' (which now parses as
+# the literal "GGGGSS"; see module docstring).
 LINKER_G2S = Linker(name="G2S", amino_acids="GGS", citation=_GS_CITATION)
 LINKER_G3S = Linker(name="G3S", amino_acids="GGGS", citation=_GS_CITATION)
 LINKER_G4S = Linker(name="G4S", amino_acids="GGGGS", citation=_GS_CITATION)
 LINKER_G5S = Linker(name="G5S", amino_acids="GGGGGS", citation=_GS_CITATION)
-LINKER_G4S2 = Linker(name="G4S2", amino_acids="GGGGS" * 2, citation=_GS_CITATION)
-LINKER_G4S3 = Linker(name="G4S3", amino_acids="GGGGS" * 3, citation=_GS_CITATION)
-LINKER_G4S4 = Linker(name="G4S4", amino_acids="GGGGS" * 4, citation=_GS_CITATION)
 
 
 # -- Rigid alpha-helical linkers --------------------------------------------
@@ -88,11 +151,8 @@ _EAAAK_CITATION = (
     "antigen domains need separation rather than flex."
 )
 
+# Single-unit only; repeats use (EAAAK)n / (EAAAK)xn / EAAAKxn.
 LINKER_EAAAK = Linker(name="EAAAK", amino_acids="EAAAK", citation=_EAAAK_CITATION)
-LINKER_EAAAK2 = Linker(
-    name="EAAAK2", amino_acids="EAAAK" * 2, citation=_EAAAK_CITATION)
-LINKER_EAAAK3 = Linker(
-    name="EAAAK3", amino_acids="EAAAK" * 3, citation=_EAAAK_CITATION)
 
 
 # -- Furin cleavage sites ----------------------------------------------------
@@ -103,10 +163,24 @@ LINKER_EAAAK3 = Linker(
 # below are well-characterized minimal forms.
 
 _FURIN_CITATION = (
-    "Thomas G., Nat Rev Mol Cell Biol 3:753, 2002 (doi:10.1038/nrm934) — "
-    "Furin cleavage at R-X-(K/R)-R motifs in the trans-Golgi network. "
-    "The minimal R-X-K-R motifs (RKRR / RVKR / RKRKR) are commonly used "
-    "to liberate concatenated antigens in multi-cistronic constructs."
+    "Furin cleaves at the consensus motif R-X-(K/R)-R in the trans-Golgi "
+    "network. Primary establishment of the consensus: Hosaka et al., "
+    "J Biol Chem 266:12127, 1991 (PMID 1907971) — 'Arg-X-Lys/Arg-Arg "
+    "motif as a signal for precursor cleavage catalyzed by furin within "
+    "the constitutive secretory pathway'. Reviewed in Thomas G., "
+    "Nat Rev Mol Cell Biol 3:753, 2002 (doi:10.1038/nrm934). "
+    "The minimal motifs (RKRR / RVKR / RKRKR) appear in multi-cistronic "
+    "expression and DNA-vaccine constructs as alternatives to 2A "
+    "ribosomal skipping. Cho & Celis, Cancer Immunol Immunother "
+    "61:343, 2012 (PMC4019994) tested RVKR vs furin-resistant VRVV in "
+    "a preclinical melanoma DNA vaccine and observed equivalent CD8 "
+    "responses. As of 2025 NO published vaccine clinical trial of any "
+    "modality (mRNA, DNA, peptide, viral vector) uses an engineered "
+    "furin site as an inter-antigen linker; native furin sites in "
+    "single antigens (HIV gp160→gp120/gp41; SARS-CoV-2 spike S1/S2; "
+    "influenza HA0) are not the same thing. Furin-T2A cassettes are "
+    "common in CAR-T cell therapies but those are cell therapies, "
+    "not vaccines."
 )
 
 LINKER_FURIN_RKRR = Linker(
@@ -119,14 +193,84 @@ LINKER_FURIN_RKRKR = Linker(
 
 # -- MHC-epitope spacers ----------------------------------------------------
 
+_AAY_CITATION = (
+    "Empirical mechanistic foundation: Livingston et al., Vaccine "
+    "19:4652-4660, 2001 (PMID 11535313, doi:10.1016/S0264-410X(01)00233-X) "
+    "— the Sette/Epimmune group built a 94-epitope flanking-residue "
+    "database and demonstrated that small/amide/basic residues at C+1 "
+    "(immediately after the CTL epitope) modulate processing and "
+    "immunogenicity; Ala and Tyr at C+1 gave the best CTL responses in "
+    "HLA-transgenic mice. This is the foundational basis for AAY (Ala "
+    "at P-2/P-1, Tyr at C+1). Velders et al., J Immunol 166:5366, 2001 "
+    "(doi:10.4049/jimmunol.166.9.5366) showed spacer-vs-no-spacer in HPV16 "
+    "DNA vaccines but did not compare AAY against other linkers. Wang et "
+    "al., Vaccine 22:3622, 2004 (PMID 15320877) used AAY in a TB DNA "
+    "vaccine. Subsequent immunoinformatics designs adopted AAY by "
+    "convention rather than head-to-head comparison. Cho & Celis, "
+    "Cancer Immunol Immunother 61:343, 2012 (PMC4019994) explicitly "
+    "noted AAY remained empirically unvalidated against alternatives. "
+    "Important caveat: Yang et al., Hum Vaccin Immunother 11:795, 2015 "
+    "(PMC4514284) tested AAY vs GGGS in HIV-1 multi-epitope DNA vaccines "
+    "(MEG3 vs MEG2; one construct each, n=1 per linker, identical "
+    "epitope order). MEG3 (AAY) produced no detectable Western blot "
+    "signal in 293T, no IgG response, and ~20× lower ELISpot than the "
+    "GGGS constructs. Authors propose two mechanisms: (a) AAY changed "
+    "predicted structure (less flex, more alpha-helix) impairing "
+    "expression, (b) proteasomal cleavage at AAY happened too rapidly "
+    "during translation. Hypothesis (b) is paradoxical — fast proteasomal "
+    "release is precisely what AAY is designed for and should ENHANCE "
+    "MHC presentation, so (a) is more consistent with the observed low "
+    "ELISpot. Either mechanism would apply equally to mRNA constructs "
+    "(same translation, same proteasome, same MHC pathway as DNA "
+    "vaccines); only synthesized peptide vaccines (no expression "
+    "dependency) sidestep these failure modes. No equivalent AAY-vs-GS "
+    "head-to-head has been published in an mRNA-vaccine context, so "
+    "Yang 2015's result should be treated as a real warning about AAY "
+    "in any expression-dependent platform — not just DNA. The strongest "
+    "empirical alanine-spacer data is "
+    "Aguilar-Gurrieri et al., Cancer Immunol Immunother 72:2113, 2023 "
+    "(doi:10.1007/s00262-023-03409-3), which tested AAA / AAL / ADL / "
+    "single-A / GGGS for MHC-I presentation in a polypeptide context — "
+    "AAA won, AAY itself was NOT tested. The mechanistic claim that Y "
+    "is THE P1 proteasome anchor is oversold: Toes et al., J Exp Med "
+    "194:1, 2001 (PMC2193442) shows L > F at P1 with Y in the same "
+    "hydrophobic cluster but not specifically preferred."
+)
+
+_ANY_CITATION = (
+    "AnY variants beyond A2Y (= AAY) have NO primary-literature support. "
+    "AAAY / A4Y / A5Y appear in immunoinformatics design papers but no "
+    "primary publication uses these as deliberately-chosen spacers with "
+    "empirical validation. They are mechanistic extrapolations combining "
+    "(a) Aguilar-Gurrieri et al. 2023 (doi:10.1007/s00262-023-03409-3) "
+    "showing polyalanine spacers outperform GGGS for MHC-I presentation, "
+    "untested at length n>3, with (b) the conventional but oversold claim "
+    "that Y is the canonical P1 proteasome anchor (Toes et al. 2001, "
+    "PMC2193442 actually shows L > F > Y). For an empirical alanine "
+    "linker with published data, use AAA (LINKER_AAA in this library)."
+)
+
+_ALANINE_CITATION = (
+    "Aguilar-Gurrieri et al., Cancer Immunol Immunother 72:2113, 2023 "
+    "(doi:10.1007/s00262-023-03409-3, PMC10264286) — tested AAA / AAL / "
+    "ADL / single-A / GGGS as inter-epitope spacers in a 13-neoantigen + "
+    "SIINFEKL polypeptide construct. AAA gave the strongest H-2Kb/SIINFEKL "
+    "surface presentation by 25-D1.16 staining; GGGS was worst. Sole "
+    "published empirical bake-off of alanine-based spacers as of 2025. "
+    "Did NOT test AAY, AAF, AAW, or longer An (AAAA, AAAAA). Single-A "
+    "underperformed AAA, suggesting a length floor; no upper-bound data."
+)
+
 LINKER_AAY = Linker(
     name="AAY",
     amino_acids="AAY",
-    citation=(
-        "Velders et al., J Immunol 166:5366, 2001 "
-        "(doi:10.4049/jimmunol.166.9.5366) — established that AAY supports "
-        "proper proteasomal/TAP processing of joined CTL epitope strings "
-        "in DNA-vaccine constructs."),
+    citation=_AAY_CITATION,
+)
+
+LINKER_AAA = Linker(
+    name="AAA",
+    amino_acids="AAA",
+    citation=_ALANINE_CITATION,
 )
 
 LINKER_GPGPG = Linker(
@@ -226,16 +370,12 @@ LINKERS = {
     LINKER_G3S.name: LINKER_G3S,
     LINKER_G4S.name: LINKER_G4S,
     LINKER_G5S.name: LINKER_G5S,
-    LINKER_G4S2.name: LINKER_G4S2,
-    LINKER_G4S3.name: LINKER_G4S3,
-    LINKER_G4S4.name: LINKER_G4S4,
     LINKER_EAAAK.name: LINKER_EAAAK,
-    LINKER_EAAAK2.name: LINKER_EAAAK2,
-    LINKER_EAAAK3.name: LINKER_EAAAK3,
     LINKER_FURIN_RKRR.name: LINKER_FURIN_RKRR,
     LINKER_FURIN_RVKR.name: LINKER_FURIN_RVKR,
     LINKER_FURIN_RKRKR.name: LINKER_FURIN_RKRKR,
     LINKER_AAY.name: LINKER_AAY,
+    LINKER_AAA.name: LINKER_AAA,
     LINKER_GPGPG.name: LINKER_GPGPG,
     LINKER_P2A.name: LINKER_P2A,
     LINKER_T2A.name: LINKER_T2A,
@@ -243,11 +383,34 @@ LINKERS = {
     LINKER_E2A.name: LINKER_E2A,
 }
 
-# Historical or convenience names → canonical name.
+# Historical or convenience names → canonical form. The right-hand side
+# is fed back through get_linker, so it can be a static name or a
+# compositional form.
 ALIASES = {
-    "GS": "G4S",         # 2.10.0 default; matches G4S in standard nomenclature
-    "GS3": "G4S3",       # 2.10.0 default; matches (G4S)3
+    "GS": "G4S",          # 2.10.0 default
+    "GS3": "(G4S)3",      # 2.10.0 default; was the (G4S)3 repeat
 }
+
+
+# Default candidate set for the per-junction linker optimizer
+# (see vaxrank.junction_swap). All five resolve via the compositional
+# grammar; mechanistically diverse (length variants of GS-family +
+# alanine spacer) without straying into 2A / EAAAK / furin which have
+# different mechanisms or no clinical track record.
+JUNCTION_SWAP_CANDIDATES = ("G3S", "G4S", "(G3S)2", "(G4S)2", "AAA")
+
+
+# Compositional-name parsers (see module docstring for grammar).
+# Repeats require explicit parens or 'x' separator; bare digit suffixes
+# parse literally (G4S2 = "GGGGSS", not "(G4S)2").
+_PAREN_REPEAT_RE = re.compile(r"^\((?P<base>[A-Z][A-Z0-9]*)\)X?(?P<count>\d+)$")
+_X_REPEAT_RE = re.compile(r"^(?P<base>[A-Z][A-Z0-9]*)X(?P<count>\d+)$")
+_GNSM_RE = re.compile(r"^G(?P<g>\d+)S(?P<s>\d+)?$")
+_GN_RE = re.compile(r"^G(?P<n>\d+)$")
+_ANY_RE = re.compile(r"^A(?P<n>\d+)Y$")
+_AN_RE = re.compile(r"^A(?P<n>\d+)$")
+
+_MAX_REPEAT = 100  # safety cap so '(G4S)1000000' can't materialize a megasequence
 
 
 def all_linker_names():
@@ -255,14 +418,123 @@ def all_linker_names():
     return sorted(set(LINKERS) | set(ALIASES))
 
 
-def get_linker(name):
-    """Resolve a linker by name (after de-aliasing); raise ValueError on miss."""
-    canonical = ALIASES.get(name, name)
-    if canonical not in LINKERS:
+def _check_repeat(count, what):
+    if count < 1 or count > _MAX_REPEAT:
         raise ValueError(
-            "Unknown linker '%s'. Available: %s" % (
-                name, ', '.join(all_linker_names())))
-    return LINKERS[canonical]
+            "Linker %s must be between 1 and %d (got %d)" % (
+                what, _MAX_REPEAT, count))
+
+
+def _make_repeat_of(base_name, count, canonical_name):
+    """Build a synthetic Linker by repeating ``base_name`` ``count`` times.
+
+    Refuses to repeat 2A linkers (codon-frozen, positional skipping
+    mechanism — repeating wouldn't add cleavage events) or any other
+    Linker carrying a blessed DNA sequence.
+    """
+    base = get_linker(base_name)
+    if base.dna:
+        raise ValueError(
+            "Linker '%s' has a codon-frozen DNA sequence (e.g. 2A "
+            "skipping is positional); repeating it would not produce "
+            "additional functional events. Use the base linker once "
+            "or pick a different family." % base_name)
+    return Linker(
+        name=canonical_name,
+        amino_acids=base.amino_acids * count,
+        freeze_in_mrna=False,
+        inert_in_peptide_mode=base.inert_in_peptide_mode,
+        citation=base.citation,
+    )
+
+
+def get_linker(name):
+    """Resolve a linker by name; supports the compositional grammar in
+    the module docstring.
+
+    Resolution order: aliases → static LINKERS → ``(BASE)N`` /
+    ``(BASE)xN`` → ``BASExN`` → ``GnSm`` (literal) → ``AnY`` → ``An``
+    → ``Gn``.
+    Names are uppercased before lookup so ``g4s2``, ``G4Sx2``, and
+    ``g4sx2`` all resolve identically. ValueError on miss.
+    """
+    name = name.upper()
+    canonical = ALIASES.get(name, name)
+    if canonical in LINKERS:
+        return LINKERS[canonical]
+
+    # (BASE)N or (BASE)xN — explicit repeat with parens
+    m = _PAREN_REPEAT_RE.match(canonical)
+    if m:
+        count = int(m.group("count"))
+        _check_repeat(count, "repeat count")
+        return _make_repeat_of(m.group("base"), count, canonical)
+
+    # BASExN — explicit repeat with x separator
+    m = _X_REPEAT_RE.match(canonical)
+    if m:
+        count = int(m.group("count"))
+        _check_repeat(count, "repeat count")
+        return _make_repeat_of(m.group("base"), count, canonical)
+
+    # GnSm — n glycines + m serines, literal single unit
+    m = _GNSM_RE.match(canonical)
+    if m:
+        g = int(m.group("g"))
+        s = int(m.group("s")) if m.group("s") else 1
+        _check_repeat(g, "glycine count")
+        _check_repeat(s, "serine count")
+        return Linker(
+            name=canonical,
+            amino_acids="G" * g + "S" * s,
+            citation=_GS_CITATION,
+        )
+
+    # AnY — n alanines + tyrosine
+    m = _ANY_RE.match(canonical)
+    if m:
+        n = int(m.group("n"))
+        _check_repeat(n, "alanine count")
+        # Use AAY's citation for the canonical n=2 case; for longer
+        # variants, the synthesized citation explains the extrapolation.
+        citation = _AAY_CITATION if n == 2 else _ANY_CITATION
+        return Linker(
+            name=canonical,
+            amino_acids="A" * n + "Y",
+            citation=citation,
+        )
+
+    # An — polyalanine, no Y. AAA is the empirically-tested form
+    # (Aguilar-Gurrieri 2023); longer variants (AAAA, AAAAA) are
+    # length extrapolations.
+    m = _AN_RE.match(canonical)
+    if m:
+        n = int(m.group("n"))
+        _check_repeat(n, "alanine count")
+        return Linker(
+            name=canonical,
+            amino_acids="A" * n,
+            citation=_ALANINE_CITATION,
+        )
+
+    # Gn — pure polyglycine, no serine. Biophysically the most
+    # flexible linker family but unstudied as an inter-epitope spacer
+    # in vaccines (see _POLYG_CITATION).
+    m = _GN_RE.match(canonical)
+    if m:
+        n = int(m.group("n"))
+        _check_repeat(n, "glycine count")
+        return Linker(
+            name=canonical,
+            amino_acids="G" * n,
+            citation=_POLYG_CITATION,
+        )
+
+    raise ValueError(
+        "Unknown linker '%s'. Available named entries: %s. "
+        "Compositional forms: (BASE)N or BASExN for repeats, GnSm for "
+        "literal n-glycines + m-serines, AnY for n-alanines + Y." % (
+            name, ', '.join(all_linker_names())))
 
 
 def iter_named_antigens(ranked_vaccine_peptides, candidates_per_slot=1):

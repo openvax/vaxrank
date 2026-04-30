@@ -13,7 +13,7 @@
 
 
 import sys
-from argparse import SUPPRESS, Action, ArgumentParser
+from argparse import SUPPRESS, Action, ArgumentParser, ArgumentTypeError
 from importlib.resources import files
 
 from isovar.cli import make_isovar_arg_parser
@@ -23,6 +23,22 @@ from mhctools.cli import add_mhc_args
 from .epitope_config_args import add_epitope_prediction_args
 from .vaccine_config_args import add_vaccine_peptide_args
 from ..version import __version__
+
+
+def _linker_arg(value):
+    """argparse type=callable for --*-linker flags.
+
+    Uppercases the input, then validates via vaccine_library.get_linker
+    so the compositional grammar ((BASE)N / GnSm / AnY) resolves at
+    parse time. Returns the canonical input string for downstream use.
+    """
+    from ..vaccine_library import get_linker
+    upper = value.upper()
+    try:
+        get_linker(upper)
+    except ValueError as e:
+        raise ArgumentTypeError(str(e))
+    return upper
 
 
 
@@ -291,8 +307,6 @@ def add_output_args(arg_parser):
 def add_mrna_output_args(group):
     """mRNA vaccine construct output (see vaxrank/mrna.py for assembly)."""
     from ..mrna_library import MITDS, SIGNAL_PEPTIDES, UTRS_3P, UTRS_5P
-    from ..vaccine_library import all_linker_names
-    linker_choices = all_linker_names()
     group.add_argument(
         "--output-mrna",
         default="",
@@ -306,26 +320,37 @@ def add_mrna_output_args(group):
              "(component names, length, contained antigens).")
     group.add_argument(
         "--mrna-signal-peptide",
-        default="tPA",
+        default="HLA_B",
         help="Signal peptide name from the mRNA library (one of: %s) or '' "
-             "to omit. Default: tPA." % ", ".join(sorted(SIGNAL_PEPTIDES)))
+             "to omit. Default: HLA_B (BioNTech FixVac canonical, "
+             "Sahin 2017)." % ", ".join(sorted(SIGNAL_PEPTIDES)))
     group.add_argument(
         "--mrna-linker",
-        default="G4S3",
-        type=str.upper,
-        choices=linker_choices,
-        help="Linker name from the shared library (case-insensitive). "
-             "Default: G4S3 (= legacy GS3 alias).")
+        default="(G4S)2",
+        type=_linker_arg,
+        help="Linker name from the shared vocabulary (case-insensitive). "
+             "Accepts named entries (G4S, AAY, EAAAK, P2A, ...) and "
+             "compositional forms: (BASE)N / (BASE)xN / BASExN for repeats, "
+             "GnSm for n-glycines + m-serines literal, AnY for n-alanines + Y. "
+             "Examples: (G4S)2, G4Sx2, A3Y, G6S. "
+             "Default: (G4S)2 (BioNTech FixVac canonical, Sahin 2017).")
     group.add_argument(
         "--mrna-include-mitd",
         action="store_true",
-        default=False,
+        default=True,
         help="Append the MHC-I trafficking domain (MITD) at the C-terminus to "
-             "route antigens through the endolysosomal compartment.")
+             "route antigens through the endolysosomal compartment. "
+             "On by default to match BioNTech FixVac (Sahin 2017).")
+    group.add_argument(
+        "--mrna-no-mitd",
+        action="store_false",
+        dest="mrna_include_mitd",
+        help="Disable MITD inclusion (rare for neoantigen vaccines).")
     group.add_argument(
         "--mrna-mitd",
-        default="HLA_A",
-        help="MITD name when --mrna-include-mitd is set (one of: %s)."
+        default="HLA_B",
+        help="MITD name when --mrna-include-mitd is set (one of: %s). "
+             "Default: HLA_B (BioNTech FixVac canonical)."
              % ", ".join(sorted(MITDS)))
     group.add_argument(
         "--mrna-5p-utr",
@@ -334,8 +359,9 @@ def add_mrna_output_args(group):
              % ", ".join(sorted(UTRS_5P)))
     group.add_argument(
         "--mrna-3p-utr",
-        default="HBB",
-        help="3' UTR name (one of: %s). Default: HBB."
+        default="HBB_FI",
+        help="3' UTR name (one of: %s). Default: HBB_FI (tandem 2× HBB / "
+             "FI element, BioNTech FixVac canonical)."
              % ", ".join(sorted(UTRS_3P)))
     group.add_argument(
         "--mrna-codon-species",
@@ -348,16 +374,53 @@ def add_mrna_output_args(group):
         choices=["use_best_codon", "match_codon_usage", "harmonize_rca"],
         help="DnaChisel codon-optimization method. Default: use_best_codon.")
     group.add_argument(
+        "--mrna-optimize-linkers",
+        dest="mrna_optimize_linkers",
+        action="store_true",
+        default=True,
+        help="Enable per-junction linker optimization to minimize predicted "
+             "MHC presentation of chimeric k-mers spanning antigen junctions "
+             "(issue #247). On by default; requires --mhc-predictor + "
+             "--mhc-alleles. The default linker is used as a fallback if no "
+             "candidate outperforms it.")
+    group.add_argument(
+        "--mrna-no-optimize-linkers",
+        dest="mrna_optimize_linkers",
+        action="store_false",
+        help="Disable per-junction linker optimization. The shared linker "
+             "is used at every junction without optimization.")
+    group.add_argument(
+        "--mrna-junction-candidates",
+        default="",
+        help="Comma-separated linker names to try at each junction "
+             "(e.g. 'G3S,G4S,(G3S)2,(G4S)2,AAA'). Empty = use the "
+             "library default JUNCTION_SWAP_CANDIDATES.")
+    group.add_argument(
+        "--mrna-junction-rank-strong",
+        default=0.5,
+        type=float,
+        help="Presentation rank below which a chimeric k-mer counts as "
+             "a strong-binder hit (primary minimization target). "
+             "Default: 0.5%%.")
+    group.add_argument(
+        "--mrna-junction-rank-mild",
+        default=2.0,
+        type=float,
+        help="Presentation rank below which a chimeric k-mer counts as "
+             "a mild-binder hit (secondary minimization target). "
+             "Default: 2.0%%.")
+    group.add_argument(
         "--mrna-min-antigen-length-aa",
         default=15,
         type=int,
         help="Minimum amino-acid window per antigen. Default: 15.")
     group.add_argument(
         "--mrna-max-antigen-length-aa",
-        default=20,
+        default=25,
         type=int,
-        help="Maximum amino-acid window per antigen. Default: 20 (shorter "
-             "than peptide SLPs because antigens get concatenated).")
+        help="Maximum amino-acid window per antigen. Default: 25 "
+             "(BioNTech FixVac uses 27mers; 25 is the typical neoantigen "
+             "vaccine SLP target).")
     group.add_argument(
         "--mrna-antigens-per-construct",
         default=5,
@@ -388,8 +451,6 @@ def add_mrna_output_args(group):
 
 def add_peptide_output_args(group):
     """Peptide vaccine construct output (see vaxrank/peptide.py)."""
-    from ..vaccine_library import all_linker_names
-    linker_choices = all_linker_names()
     group.add_argument(
         "--output-peptide",
         default="",
@@ -415,10 +476,10 @@ def add_peptide_output_args(group):
     group.add_argument(
         "--peptide-linker",
         default="G4S3",
-        type=str.upper,
-        choices=linker_choices,
+        type=_linker_arg,
         help="Linker used in --peptide-mode=multi_epitope (case-insensitive). "
-             "Shared library with mRNA mode. Default: G4S3.")
+             "Accepts named entries, compositional forms ((BASE)N / GnSm / "
+             "AnY), and aliases. Shared with mRNA mode. Default: G4S3.")
     group.add_argument(
         "--peptide-min-antigen-length-aa",
         default=15,

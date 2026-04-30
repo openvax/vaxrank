@@ -36,17 +36,19 @@ def test_mrna_library_linkers_dict_returns_strings():
 
 
 def test_vaccine_library_exposes_linker_objects():
-    # The richer dataclass form lives in vaccine_library; the canonical
-    # name for the (G4S)3 linker is now "G4S3", with "GS3" as a back-compat
-    # alias resolved by get_linker.
-    g4s3 = vaccine_library.LINKERS["G4S3"]
-    assert isinstance(g4s3, vaccine_library.Linker)
+    # The richer dataclass form lives in vaccine_library. Single-unit
+    # linkers (G4S, AAY, EAAAK, ...) live in LINKERS; repeats are
+    # parsed compositionally from (G4S)3 / G4Sx3 etc.
+    g4s = vaccine_library.LINKERS["G4S"]
+    assert isinstance(g4s, vaccine_library.Linker)
+    assert g4s.amino_acids == "GGGGS"
+    assert g4s.dna is None
+    assert g4s.freeze_in_mrna is False
+    # GS alias still resolves to the static G4S entry.
+    assert vaccine_library.get_linker("GS") is g4s
+    # GS3 alias forwards to the compositional form (G4S)3.
+    g4s3 = vaccine_library.get_linker("GS3")
     assert g4s3.amino_acids == "GGGGSGGGGSGGGGS"
-    assert g4s3.dna is None
-    assert g4s3.freeze_in_mrna is False
-    # Aliases dereference to the canonical Linker object.
-    assert vaccine_library.get_linker("GS3") is g4s3
-    assert vaccine_library.get_linker("GS") is vaccine_library.LINKERS["G4S"]
 
 
 def test_vaccine_library_p2a_carries_blessed_dna():
@@ -107,11 +109,12 @@ def test_2a_linker_flags(name):
     assert linker.inert_in_peptide_mode is True
 
 
-def test_get_linker_is_case_sensitive():
-    # CLI normalizes case before reaching get_linker via type=str.upper, so
-    # the underlying function expects the canonical (uppercase) form.
-    with pytest.raises(ValueError):
-        vaccine_library.get_linker("p2a")
+def test_get_linker_is_case_insensitive():
+    # 2.13: get_linker uppercases the input itself so 'p2a', 'P2A',
+    # 'g4sx2', 'G4Sx2' all resolve identically.
+    assert vaccine_library.get_linker("p2a") is vaccine_library.LINKERS["P2A"]
+    assert vaccine_library.get_linker("g4s") is vaccine_library.LINKERS["G4S"]
+    assert vaccine_library.get_linker("g4sx2").amino_acids == "GGGGSGGGGS"
 
 
 def test_construct_name_format_consistent_across_modalities():
@@ -162,26 +165,44 @@ def test_signal_peptides_include_tcr_additions():
     ("G3S", "GGGS"),
     ("G4S", "GGGGS"),
     ("G5S", "GGGGGS"),
-    ("G4S2", "GGGGSGGGGS"),
-    ("G4S3", "GGGGSGGGGSGGGGS"),
-    ("G4S4", "GGGGSGGGGSGGGGSGGGGS"),
 ])
-def test_gs_linker_family(name, aa):
+def test_gs_linker_family_static(name, aa):
+    """Single-unit GnSm entries live in LINKERS. Repeats use the
+    compositional grammar (see test_paren_repeat_grammar_g4s)."""
     linker = vaccine_library.LINKERS[name]
     assert linker.amino_acids == aa
-    assert linker.dna is None  # not codon-frozen
+    assert linker.dna is None
     assert linker.freeze_in_mrna is False
 
 
 @pytest.mark.parametrize("name,aa", [
-    ("EAAAK", "EAAAK"),
-    ("EAAAK2", "EAAAKEAAAK"),
-    ("EAAAK3", "EAAAKEAAAKEAAAK"),
+    ("(G4S)2", "GGGGSGGGGS"),
+    ("(G4S)3", "GGGGSGGGGSGGGGS"),
+    ("(G4S)4", "GGGGSGGGGSGGGGSGGGGS"),
+    ("G4Sx2", "GGGGSGGGGS"),
+    ("G4Sx3", "GGGGSGGGGSGGGGS"),
+    ("(G4S)X3", "GGGGSGGGGSGGGGS"),  # caps X also accepted
 ])
-def test_eaaak_linker_family(name, aa):
-    linker = vaccine_library.LINKERS[name]
+def test_gs_linker_repeats_via_grammar(name, aa):
+    linker = vaccine_library.get_linker(name)
     assert linker.amino_acids == aa
-    assert "Arai" in linker.citation
+
+
+def test_gs_compact_form_now_literal():
+    # 2.13 breaking change: bare 'G4S2' is no longer (G4S)2 — it parses
+    # as the literal "GGGGSS" (4 glycines + 2 serines). This avoids
+    # ambiguity with the (G4S)2 / G4Sx2 repeat forms.
+    assert vaccine_library.get_linker("G4S2").amino_acids == "GGGGSS"
+    assert vaccine_library.get_linker("G4S3").amino_acids == "GGGGSSS"
+
+
+def test_eaaak_static_only():
+    eaaak = vaccine_library.LINKERS["EAAAK"]
+    assert eaaak.amino_acids == "EAAAK"
+    assert "Arai" in eaaak.citation
+    # Repeats use the compositional grammar.
+    assert vaccine_library.get_linker("(EAAAK)3").amino_acids == "EAAAK" * 3
+    assert vaccine_library.get_linker("EAAAKx2").amino_acids == "EAAAK" * 2
 
 
 @pytest.mark.parametrize("name,aa", [
@@ -195,19 +216,23 @@ def test_furin_linkers(name, aa):
     assert "furin" in linker.citation.lower() or "Thomas" in linker.citation
 
 
-def test_gs_aliases_resolve_to_canonical():
-    # 2.10.0 used "GS"/"GS3"; preserve as aliases of the canonical names.
-    assert vaccine_library.get_linker("GS").name == "G4S"
-    assert vaccine_library.get_linker("GS3").name == "G4S3"
+def test_gs_aliases_resolve():
+    # 'GS' → static G4S; 'GS3' → compositional (G4S)3. Both 2.10.0 names
+    # still resolve to a Linker with the original 2.10.0 amino-acid string.
+    assert vaccine_library.get_linker("GS").amino_acids == "GGGGS"
+    assert vaccine_library.get_linker("GS3").amino_acids == "GGGGSGGGGS" + "GGGGS"
 
 
-def test_all_linker_names_includes_aliases():
+def test_all_linker_names_lists_static_and_aliases():
     names = vaccine_library.all_linker_names()
-    assert "G4S3" in names
+    assert "G4S" in names
     assert "GS3" in names  # alias still listed
     assert "P2A" in names
-    assert "EAAAK2" in names
     assert "RKRR" in names
+    # G4S3, G4S2, G4S4, EAAAK2, EAAAK3 are NOT static — they're parsed
+    # compositionally and don't appear in the listing.
+    assert "G4S3" not in names
+    assert "EAAAK2" not in names
 
 
 # ---- codon species normalization ------------------------------------------
@@ -434,3 +459,168 @@ def test_peptide_and_mrna_names_match_for_same_input():
     [p] = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
     [m] = assemble_mrna_constructs(pairs, options=RNAConstructConfig())
     assert p.antigen_names == m.antigen_names
+
+
+# ---- compositional grammar (#247 prep) ------------------------------------
+
+def test_paren_repeat_grammar_g2s():
+    linker = vaccine_library.get_linker("(G2S)3")
+    assert linker.amino_acids == "GGSGGSGGS"
+    assert linker.name == "(G2S)3"
+    # Inherits citation from base (G2S → GS family)
+    assert "Huston" in linker.citation
+
+
+def test_paren_repeat_grammar_aay():
+    linker = vaccine_library.get_linker("(AAY)2")
+    assert linker.amino_acids == "AAYAAY"
+    assert "Velders" in linker.citation
+
+
+def test_paren_repeat_rejects_2a():
+    # 2A skipping is positional; repeating it doesn't add cleavage events.
+    with pytest.raises(ValueError, match="codon-frozen"):
+        vaccine_library.get_linker("(P2A)2")
+
+
+def test_paren_repeat_caps_count():
+    with pytest.raises(ValueError, match="repeat count"):
+        vaccine_library.get_linker("(G4S)1000")
+
+
+def test_gnsm_grammar_literal():
+    # GnSm parses literally: n glycines + m serines, single unit.
+    # Repeats require explicit parens or the 'x' separator.
+    assert vaccine_library.get_linker("G6S").amino_acids == "GGGGGGS"
+    assert vaccine_library.get_linker("G2S5").amino_acids == "GG" + "SSSSS"
+    assert vaccine_library.get_linker("G4S3").amino_acids == "GGGG" + "SSS"
+
+
+def test_any_grammar():
+    # A2Y = canonical AAY (resolves to static entry first via its
+    # canonical name rather than the regex; the regex fires for n != 2)
+    a3 = vaccine_library.get_linker("A3Y")
+    assert a3.amino_acids == "AAAY"
+    assert a3.name == "A3Y"
+    a4 = vaccine_library.get_linker("A4Y")
+    assert a4.amino_acids == "AAAAY"
+    a8 = vaccine_library.get_linker("A8Y")
+    assert a8.amino_acids == "A" * 8 + "Y"
+
+
+def test_any_citation_flags_extrapolation():
+    # A3Y onwards: citation must explicitly note the extrapolation.
+    a3 = vaccine_library.get_linker("A3Y")
+    assert ("extrapolation" in a3.citation.lower()
+            or "less standardized" in a3.citation.lower()
+            or "without independent" in a3.citation.lower())
+
+
+def test_paren_and_compact_forms_now_differ_for_g_family():
+    # 2.13 breaking change: bare 'G2S3' is the LITERAL "GGSSS" (2 G's
+    # + 3 S's), not the (G2S)3 repeat. The two forms now mean different
+    # things by design — see module docstring.
+    paren = vaccine_library.get_linker("(G2S)3").amino_acids
+    compact = vaccine_library.get_linker("G2S3").amino_acids
+    assert paren == "GGSGGSGGS"
+    assert compact == "GGSSS"
+    assert paren != compact
+
+
+def test_unknown_compositional_form_raises():
+    # Random gibberish doesn't match any of the regexes.
+    with pytest.raises(ValueError, match="Unknown linker"):
+        vaccine_library.get_linker("ZZZ123")
+
+
+def test_grammar_rejects_zero_count():
+    with pytest.raises(ValueError):
+        vaccine_library.get_linker("(G4S)0")
+    with pytest.raises(ValueError):
+        vaccine_library.get_linker("A0Y")
+
+
+# ---- alanine family (post-Aguilar-Gurrieri 2023 literature pass) ----------
+
+def test_aaa_static_entry_with_aguilar_gurrieri_citation():
+    aaa = vaccine_library.LINKERS["AAA"]
+    assert aaa.amino_acids == "AAA"
+    assert "Aguilar-Gurrieri" in aaa.citation
+    assert "2023" in aaa.citation
+
+
+def test_an_grammar_polyalanine():
+    # An (no Y) parses as polyalanine.
+    assert vaccine_library.get_linker("A4").amino_acids == "AAAA"
+    assert vaccine_library.get_linker("A5").amino_acids == "AAAAA"
+    # AAA is the static entry; A3 parses to the same sequence via grammar.
+    assert vaccine_library.get_linker("A3").amino_acids == "AAA"
+
+
+def test_an_citation_uses_alanine_source():
+    a4 = vaccine_library.get_linker("A4")
+    assert "Aguilar-Gurrieri" in a4.citation
+
+
+def test_aay_citation_flags_yang_2015_warning():
+    aay = vaccine_library.LINKERS["AAY"]
+    # Yang 2015 saw AAY constructs produce no detectable Western signal,
+    # no antibody response, and 20x lower ELISpot in HIV-1 DNA vaccines.
+    # Citation must surface this warning AND clarify that the same
+    # failure mode applies to mRNA (same translation/proteasome path).
+    assert "Yang" in aay.citation
+    assert "2015" in aay.citation
+    assert ("no detectable" in aay.citation.lower()
+            or "warning" in aay.citation.lower()
+            or "failure mode" in aay.citation.lower())
+    # mRNA caveat: must clarify Yang 2015 applies to mRNA too.
+    assert "mrna" in aay.citation.lower()
+
+
+def test_any_citation_flags_no_primary_footing():
+    a3y = vaccine_library.get_linker("A3Y")
+    # AAAY has no primary-literature footing — citation must say so.
+    assert ("no primary" in a3y.citation.lower()
+            or "without empirical" in a3y.citation.lower()
+            or "extrapolation" in a3y.citation.lower())
+
+
+# ---- polyglycine (Gn) family ----------------------------------------------
+
+@pytest.mark.parametrize("name,aa", [
+    ("G3", "GGG"),
+    ("G4", "GGGG"),
+    ("G5", "GGGGG"),
+    ("G8", "GGGGGGGG"),
+])
+def test_gn_polyglycine_grammar(name, aa):
+    linker = vaccine_library.get_linker(name)
+    assert linker.amino_acids == aa
+
+
+def test_gn_citation_flags_no_vaccine_use():
+    g4 = vaccine_library.get_linker("G4")
+    # Polyglycine has biophysical characterization but NO vaccine
+    # empirical use — citation must say so.
+    assert ("no published" in g4.citation.lower()
+            or "unstudied" in g4.citation.lower()
+            or "design risk" in g4.citation.lower())
+    # Klement 2018 biophysical reference is the only empirical anchor
+    assert "Klement" in g4.citation
+
+
+def test_gn_citation_recommends_alternatives():
+    g4 = vaccine_library.get_linker("G4")
+    # Citation should point users to GS-family or AAA as the better-
+    # characterized alternatives.
+    assert ("(G4S)" in g4.citation or "G4S" in g4.citation
+            or "AAA" in g4.citation)
+
+
+def test_gnsm_takes_precedence_over_gn():
+    # 'G4S' has an S so it must match the GnSm regex, not the Gn regex.
+    # Confirm the resolution order is correct.
+    g4s = vaccine_library.get_linker("G4S")
+    assert g4s.amino_acids == "GGGGS"
+    g4 = vaccine_library.get_linker("G4")
+    assert g4.amino_acids == "GGGG"

@@ -134,27 +134,49 @@ def normalize_codon_species(name):
 class RNAConstructConfig:
     """User-configurable mRNA construct parameters.
 
-    Defaults reflect a typical neoantigen mRNA design: 5 antigen
-    windows of 15-20 aa each in a single construct, with a tPA signal
-    peptide and HBB UTRs. ``max_length_nt`` is a belt-and-suspenders
-    cap that triggers spillover into additional constructs only on
-    pathologically long inputs.
+    Defaults reproduce the BioNTech IVAC MUTANOME / FixVac design as
+    published in Sahin et al., Nature 547:222, 2017 (doi:10.1038/nature23003)
+    and originally engineered in Kreiter et al., J Immunol 180:309, 2008
+    (doi:10.4049/jimmunol.180.1.309):
+
+    - HLA-B signal peptide + HLA-B MITD (consistent self-pairing)
+    - 5 antigens per construct, 25-aa windows
+    - (G4S)2 inter-antigen linker
+    - HBB 5' UTR + tandem 2× HBB 3' UTR (FI element / "2hBg")
+    - Single construct per vaccine
+
+    ``max_length_nt`` is a belt-and-suspenders cap that triggers
+    spillover into additional constructs only on pathologically long
+    inputs.
     """
-    signal_peptide: Optional[str] = "tPA"
-    linker: str = "G4S3"
-    include_mitd: bool = False
-    mitd: str = "HLA_A"
+    signal_peptide: Optional[str] = "HLA_B"
+    linker: str = "(G4S)2"
+    include_mitd: bool = True
+    mitd: str = "HLA_B"
     utr_5p: str = "HBB"
-    utr_3p: str = "HBB"
+    utr_3p: str = "HBB_FI"  # tandem 2× HBB
     codon_species: str = "h_sapiens"
     codon_method: str = "use_best_codon"
     min_antigen_length_aa: int = 15
-    max_antigen_length_aa: int = 20
+    max_antigen_length_aa: int = 25  # Sahin 2017 used 27mers; 25 is typical
     antigens_per_construct: int = 5
     max_constructs: int = 1
     candidates_per_slot: int = 1
     max_length_nt: int = 4000
     avoid_patterns: tuple = ()
+    # Per-junction linker optimization (issue #247). On by default.
+    # When enabled, the ``linker`` field above is the *fallback* if no
+    # candidate outperforms it; otherwise each junction picks its
+    # own linker from ``junction_swap_candidates`` to minimize
+    # predicted MHC presentation of chimeric k-mers spanning the
+    # junction. If the caller doesn't pass an mhc_predictor + alleles
+    # to ``assemble_mrna_constructs``, the optimizer is skipped with
+    # a warning and the shared linker is used at every junction.
+    optimize_linkers: bool = True
+    junction_swap_candidates: tuple = ()  # empty → use library default
+    junction_kmer_lengths: tuple = (8, 9, 10, 11)
+    junction_rank_strong: float = 0.5
+    junction_rank_mild: float = 2.0
 
 
 @dataclass
@@ -273,7 +295,8 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
 
 
 def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
-                                 mitd_aa):
+                                 mitd_aa, per_junction_linkers=None,
+                                 pre_mitd_linker=None):
     """Concatenate signal peptide + antigens + linker/MITD into one protein.
 
     Returns ``(protein_str, frozen_segments)`` where ``frozen_segments``
@@ -285,9 +308,20 @@ def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
     start codon. When a signal peptide is supplied, its N-terminal M
     serves as the start; otherwise an M is prepended in front of the
     first antigen if it doesn't already start with one.
+
+    When ``per_junction_linkers`` is provided (length must equal
+    ``len(antigen_aas) - 1``), each inter-antigen junction uses its
+    own Linker instead of the shared ``linker``. ``pre_mitd_linker``
+    similarly overrides the shared linker for the last-antigen ↔ MITD
+    junction. Both come from the per-junction linker optimizer (#247).
     """
-    linker_aa = linker.amino_acids
-    freeze = bool(linker.freeze_in_mrna and linker.dna)
+    if per_junction_linkers is not None and antigen_aas:
+        expected = max(0, len(antigen_aas) - 1)
+        if len(per_junction_linkers) != expected:
+            raise ValueError(
+                "per_junction_linkers length %d != antigens-1 (%d)" % (
+                    len(per_junction_linkers), expected))
+
     parts = []
     frozen = []
     aa_offset = 0
@@ -299,15 +333,24 @@ def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
         aa_offset += 1
     for i, aa in enumerate(antigen_aas):
         if i > 0:
-            if freeze:
-                frozen.append((aa_offset, aa_offset + len(linker_aa), linker.dna))
-            parts.append(linker_aa)
-            aa_offset += len(linker_aa)
+            if per_junction_linkers is not None:
+                this_linker = per_junction_linkers[i - 1]
+            else:
+                this_linker = linker
+            this_aa = this_linker.amino_acids
+            if this_linker.freeze_in_mrna and this_linker.dna:
+                frozen.append((aa_offset, aa_offset + len(this_aa), this_linker.dna))
+            parts.append(this_aa)
+            aa_offset += len(this_aa)
         parts.append(aa)
         aa_offset += len(aa)
     if mitd_aa:
-        if freeze:
-            frozen.append((aa_offset, aa_offset + len(linker_aa), linker.dna))
+        # Pre-MITD linker: use override if supplied (per-junction
+        # optimizer path), else fall back to the shared `linker`.
+        mitd_link = pre_mitd_linker if pre_mitd_linker is not None else linker
+        linker_aa = mitd_link.amino_acids
+        if mitd_link.freeze_in_mrna and mitd_link.dna:
+            frozen.append((aa_offset, aa_offset + len(linker_aa), mitd_link.dna))
         parts.append(linker_aa)
         aa_offset += len(linker_aa)
         parts.append(mitd_aa)
@@ -315,10 +358,41 @@ def _build_protein_with_segments(antigen_aas, signal_peptide_aa, linker,
     return "".join(parts), frozen
 
 
+def _packing_linker_aa(options, linker):
+    """Linker AA string the packer should bill against, sized to the
+    longest possible per-junction substitution.
+
+    When ``optimize_linkers`` is on, the per-junction optimizer can
+    swap in any candidate from ``junction_swap_candidates`` (or the
+    library default ``JUNCTION_SWAP_CANDIDATES`` when the option tuple
+    is empty). Use the longest of {shared linker, candidates} so the
+    bin-packer is conservative against later substitution.
+    """
+    shared = linker.amino_acids
+    if not options.optimize_linkers:
+        return shared
+    from .junction_swap import JUNCTION_SWAP_CANDIDATES
+    cand_names = (
+        tuple(options.junction_swap_candidates) or JUNCTION_SWAP_CANDIDATES
+    )
+    longest = shared
+    for n in cand_names:
+        cand = get_linker(n).amino_acids
+        if len(cand) > len(longest):
+            longest = cand
+    return longest
+
+
 def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
                      mitd_aa, utr_5p_dna, utr_3p_dna):
-    """Greedy bin-packing of antigens into constructs honoring the caps."""
-    linker_aa = linker.amino_acids
+    """Greedy bin-packing of antigens into constructs honoring the caps.
+
+    Packing uses ``max(shared_linker, longest_candidate)`` for size
+    estimation when the per-junction optimizer (#247) is on, so the
+    swap step at assembly time can never exceed the cap by picking a
+    candidate longer than the shared linker.
+    """
+    linker_aa = _packing_linker_aa(options, linker)
     # When there is no signal peptide, the assembler prepends an ATG to the
     # CDS body if the first antigen doesn't already start with M (see
     # _build_protein_with_segments). Reserve 3 nt up-front to keep packing
@@ -374,13 +448,25 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
     return constructs
 
 
-def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
+def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
+                             mhc_predictor=None, mhc_alleles=None,
+                             reference_proteome=None):
     """Assemble mRNA constructs from ranked vaccine peptides.
 
     Parameters
     ----------
     ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
     options : RNAConstructConfig or None
+    mhc_predictor : optional, mhctools.BasePredictor
+        Required when ``options.optimize_linkers`` is True.
+        Used by the per-junction linker optimizer to score chimeric k-mers.
+    mhc_alleles : optional, list[str]
+        Patient HLA allele names. Required when
+        ``optimize_linkers`` is True.
+    reference_proteome : optional
+        Container that answers ``kmer in reference_proteome``. Junction
+        k-mers found in the reference proteome are filtered out before
+        scoring (already-tolerated, not new presentation).
 
     Returns
     -------
@@ -421,8 +507,91 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
     for i, antigen_group in enumerate(packed):
         names = [n for n, _ in antigen_group]
         antigen_aas = [aa for _, aa in antigen_group]
+
+        per_junction_linkers = None
+        pre_mitd_linker = None  # overrides shared linker for the MITD junction
+        junction_swap_meta = None
+        n_junctions = max(0, len(antigen_aas) - 1)
+        if options.optimize_linkers and (n_junctions > 0 or mitd_aa):
+            if mhc_predictor is None or not mhc_alleles:
+                logger.warning(
+                    "optimize_linkers=True but no mhc_predictor / "
+                    "mhc_alleles supplied; falling back to the shared "
+                    "linker at every junction. Pass mhc_predictor + "
+                    "mhc_alleles to assemble_mrna_constructs (or run "
+                    "via the CLI which auto-wires them) to enable the "
+                    "optimizer.")
+                junction_swap_meta = {
+                    'enabled': False,
+                    'note': "no predictor / alleles available",
+                }
+            else:
+                from .junction_swap import (
+                    JUNCTION_SWAP_CANDIDATES,
+                    optimize_linkers,
+                )
+                cand_names = (
+                    tuple(options.junction_swap_candidates)
+                    or JUNCTION_SWAP_CANDIDATES
+                )
+                swap = optimize_linkers(
+                    antigen_aas=antigen_aas,
+                    alleles=mhc_alleles,
+                    predictor=mhc_predictor,
+                    candidate_names=cand_names,
+                    k_lengths=tuple(options.junction_kmer_lengths),
+                    reference_proteome=reference_proteome,
+                    rank_strong=options.junction_rank_strong,
+                    rank_mild=options.junction_rank_mild,
+                    mitd_aa=mitd_aa or None,
+                    default_linker_name=options.linker,
+                )
+                # `swap.default_*_burden` is always set when
+                # default_linker_name is supplied (which it always is on
+                # this code path); we asserted above that the optimizer
+                # ran with a default. Read directly.
+                default_strong = swap.default_strong_burden
+                default_mild = swap.default_burden
+                # Canonical name for the shared/default linker so the
+                # manifest's `chosen` field is uniform across branches.
+                default_name = linker.name
+                n_total_junctions = n_junctions + (1 if mitd_aa else 0)
+                if ((swap.strong_burden, swap.burden)
+                        < (default_strong, default_mild)):
+                    chosen_list = swap.chosen_linker_per_junction
+                    # Last entry corresponds to MITD junction when mitd_aa
+                    # was provided; split it off.
+                    if mitd_aa and len(chosen_list) == n_junctions + 1:
+                        per_junction_linkers = chosen_list[:n_junctions]
+                        pre_mitd_linker = chosen_list[-1]
+                    else:
+                        per_junction_linkers = chosen_list
+                    junction_swap_meta = {
+                        'enabled': True,
+                        'chosen': swap.linker_names(),
+                        'burden_strong': swap.strong_burden,
+                        'burden_mild': swap.burden,
+                        'default_burden_strong': default_strong,
+                        'default_burden_mild': default_mild,
+                    }
+                    logger.info(
+                        "Construct %d: per-junction linker optimizer "
+                        "reduced strong burden %d → %d, mild burden %d → %d",
+                        i + 1, default_strong, swap.strong_burden,
+                        default_mild, swap.burden)
+                else:
+                    junction_swap_meta = {
+                        'enabled': True,
+                        'chosen': [default_name] * n_total_junctions,
+                        'burden_strong': default_strong,
+                        'burden_mild': default_mild,
+                        'note': "default linker beat or tied all candidates",
+                    }
+
         protein, frozen_segments = _build_protein_with_segments(
-            antigen_aas, signal_peptide_aa, linker, mitd_aa)
+            antigen_aas, signal_peptide_aa, linker, mitd_aa,
+            per_junction_linkers=per_junction_linkers,
+            pre_mitd_linker=pre_mitd_linker)
         coding_dna = codon_optimize(
             protein,
             species=options.codon_species,
@@ -431,20 +600,23 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None):
             frozen_segments=frozen_segments,
         )
         sequence = utr_5p_dna + coding_dna + STOP_CODON + utr_3p_dna
+        components = {
+            'utr_5p': options.utr_5p,
+            'signal_peptide': options.signal_peptide,
+            'linker': options.linker,
+            'mitd': options.mitd if options.include_mitd else None,
+            'utr_3p': options.utr_3p,
+            'codon_species': options.codon_species,
+            'codon_method': options.codon_method,
+            'protein': protein,
+        }
+        if junction_swap_meta is not None:
+            components['junction_swap'] = junction_swap_meta
         constructs.append(RNAConstruct(
             name="seq_%03d" % (i + 1),
             antigen_names=names,
             sequence=sequence,
-            components={
-                'utr_5p': options.utr_5p,
-                'signal_peptide': options.signal_peptide,
-                'linker': options.linker,
-                'mitd': options.mitd if options.include_mitd else None,
-                'utr_3p': options.utr_3p,
-                'codon_species': options.codon_species,
-                'codon_method': options.codon_method,
-                'protein': protein,
-            },
+            components=components,
         ))
     return constructs
 
