@@ -138,45 +138,101 @@ def test_lens_drives_peptide_construct_assembly_end_to_end():
         "got %d" % len(constructs))
 
 
-def test_resolve_modality_from_args():
-    """--vaccine-modality and the auto inference rules."""
+def test_resolve_modality_auto_infers_from_output_flags():
+    """The 'auto' sentinel reads which output paths are populated."""
     from types import SimpleNamespace
     from vaxrank.cli.entry_point import _resolve_modality
 
-    # auto: derives from output flags
-    args = SimpleNamespace(
-        vaccine_modality='auto',
-        output_peptide='out.fasta', output_mrna='')
-    assert _resolve_modality(args) == (True, False)
-    args = SimpleNamespace(
-        vaccine_modality='auto',
-        output_peptide='', output_mrna='out_dir')
-    assert _resolve_modality(args) == (False, True)
-    args = SimpleNamespace(
-        vaccine_modality='auto',
-        output_peptide='p.fa', output_mrna='m_dir')
-    assert _resolve_modality(args) == (True, True)
-    args = SimpleNamespace(
-        vaccine_modality='auto',
-        output_peptide='', output_mrna='')
-    assert _resolve_modality(args) == (False, False)
+    cases = [
+        (['auto'], 'out.fasta', '', {'peptide'}),
+        (['auto'], '', 'out_dir', {'mrna'}),
+        (['auto'], 'p.fa', 'm_dir', {'peptide', 'mrna'}),
+        (['auto'], '', '', set()),
+    ]
+    for modality, op, om, expected in cases:
+        args = SimpleNamespace(
+            vaccine_modality=modality, output_peptide=op, output_mrna=om)
+        assert _resolve_modality(args) == expected, (
+            "modality=%r output_peptide=%r output_mrna=%r "
+            "expected %r got %r" % (
+                modality, op, om, expected, _resolve_modality(args)))
 
-    # explicit overrides infer-from-flags
+
+def test_resolve_modality_explicit_lists():
+    """Concrete modality lists override 'auto' inference. Listed
+    modalities are returned as a set; output flags are not consulted."""
+    from types import SimpleNamespace
+    from vaxrank.cli.entry_point import _resolve_modality
+
+    cases = [
+        (['peptide'], 'p.fa', 'm_dir', {'peptide'}),
+        (['mrna'], 'p.fa', 'm_dir', {'mrna'}),
+        (['peptide', 'mrna'], '', '', {'peptide', 'mrna'}),
+        (['mrna', 'peptide'], '', '', {'peptide', 'mrna'}),  # order-free
+        # duplicates collapse
+        (['mrna', 'mrna'], '', '', {'mrna'}),
+    ]
+    for modality, op, om, expected in cases:
+        args = SimpleNamespace(
+            vaccine_modality=modality, output_peptide=op, output_mrna=om)
+        assert _resolve_modality(args) == expected
+
+
+def test_resolve_modality_none_sentinel():
+    """'none' suppresses construct writers even if output paths set."""
+    from types import SimpleNamespace
+    from vaxrank.cli.entry_point import _resolve_modality
+
     args = SimpleNamespace(
-        vaccine_modality='peptide', output_peptide='p.fa',
-        output_mrna='m_dir')
-    assert _resolve_modality(args) == (True, False)
+        vaccine_modality=['none'],
+        output_peptide='p.fa', output_mrna='m_dir')
+    assert _resolve_modality(args) == set()
+
+
+def test_resolve_modality_rejects_sentinel_mixed_with_concrete():
+    """auto/none must be passed alone; mixing with mrna/peptide is a
+    user error."""
+    import pytest as _pytest
+    from types import SimpleNamespace
+    from vaxrank.cli.entry_point import _resolve_modality
+
     args = SimpleNamespace(
-        vaccine_modality='mrna', output_peptide='p.fa',
-        output_mrna='m_dir')
-    assert _resolve_modality(args) == (False, True)
+        vaccine_modality=['auto', 'mrna'],
+        output_peptide='', output_mrna='m_dir')
+    with _pytest.raises(ValueError, match="sentinel"):
+        _resolve_modality(args)
+
     args = SimpleNamespace(
-        vaccine_modality='both', output_peptide='', output_mrna='')
-    assert _resolve_modality(args) == (True, True)
+        vaccine_modality=['none', 'peptide'],
+        output_peptide='', output_mrna='')
+    with _pytest.raises(ValueError, match="sentinel"):
+        _resolve_modality(args)
+
+
+def test_resolve_modality_rejects_unknown_modality():
+    """Adding 'dna' before its writer ships should fail clearly so
+    users don't get a silent no-op."""
+    import pytest as _pytest
+    from types import SimpleNamespace
+    from vaxrank.cli.entry_point import _resolve_modality
+
     args = SimpleNamespace(
-        vaccine_modality='none', output_peptide='p.fa',
-        output_mrna='m_dir')
-    assert _resolve_modality(args) == (False, False)
+        vaccine_modality=['dna'],
+        output_peptide='', output_mrna='')
+    with _pytest.raises(ValueError, match="Unknown vaccine modality"):
+        _resolve_modality(args)
+
+
+def test_resolve_modality_bare_string_tolerated():
+    """argparse always yields a list, but a downstream caller might
+    pass a bare string. Coerce instead of crashing."""
+    from types import SimpleNamespace
+    from vaxrank.cli.entry_point import _resolve_modality
+
+    args = SimpleNamespace(
+        vaccine_modality='mrna',
+        output_peptide='', output_mrna='m_dir')
+    assert _resolve_modality(args) == {'mrna'}
 
 
 def test_lens_with_vaccine_modality_mrna_writes_three_fastas(tmp_path):
@@ -224,8 +280,8 @@ def test_lens_with_vaccine_modality_mrna_writes_three_fastas(tmp_path):
         mrna_poly_a_segmented=False,
         mrna_poly_a_first_segment=30,
         mrna_poly_a_segment_linker='GCATATGACT',
-        # modality switch
-        vaccine_modality='mrna',
+        # modality switch (multi-valued; pass a list)
+        vaccine_modality=['mrna'],
     )
     _emit_outputs(args, ranked, source='external')
     assert os.path.isfile(os.path.join(out_dir, "cds.fasta"))
@@ -275,7 +331,7 @@ def test_modality_none_skips_constructs_even_if_output_paths_set(tmp_path):
         mrna_poly_a_length=20, mrna_poly_a_segmented=False,
         mrna_poly_a_first_segment=30,
         mrna_poly_a_segment_linker='GCATATGACT',
-        vaccine_modality='none',
+        vaccine_modality=['none'],
     )
     _emit_outputs(args, ranked, source='external')
     assert not os.path.exists(out_dir), \

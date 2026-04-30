@@ -213,16 +213,21 @@ def add_output_args(arg_parser):
 
     output_args_group.add_argument(
         "--vaccine-modality",
-        default="auto",
-        choices=["auto", "peptide", "mrna", "both", "none"],
-        help="Which vaccine-design modalities to run. The shared upstream "
-             "epitope-prediction + window-selection logic is identical for "
-             "all modalities; this is the *sharp switch* for downstream "
-             "design output. 'auto' (default) infers from --output-peptide "
-             "and --output-mrna: pass either, both, or neither. 'peptide' / "
-             "'mrna' / 'both' explicitly select; 'none' suppresses both "
-             "even if --output-peptide / --output-mrna are set (useful for "
-             "report-only runs).")
+        nargs='+',
+        default=["auto"],
+        choices=["auto", "none", "peptide", "mrna"],
+        metavar="MODALITY",
+        help="Which vaccine-design modalities to run. Multi-valued so future "
+             "modalities (DNA, mRNA-LNP variants, etc.) plug in as additional "
+             "choices without an API change. Examples: "
+             "'--vaccine-modality auto' (default; infer from output flags), "
+             "'--vaccine-modality mrna', "
+             "'--vaccine-modality peptide mrna' (both), "
+             "'--vaccine-modality none' (report-only run, suppresses "
+             "construct writers even if --output-peptide / --output-mrna "
+             "are set). 'auto' / 'none' are sentinels — must be passed alone. "
+             "'peptide' is an umbrella; the SLP / minimal-epitope / "
+             "multi-epitope sub-mode lives in --peptide-mode.")
 
     output_args_group.add_argument(
         "--output-patient-id",

@@ -124,30 +124,63 @@ def _epitope_config_from_args_safe(args):
         return EpitopeConfig()
 
 
+_KNOWN_MODALITIES = {'peptide', 'mrna'}
+# Future modalities plug in here as their writers land:
+# _KNOWN_MODALITIES |= {'dna', ...}
+_MODALITY_SENTINELS = {'auto', 'none'}
+
+
 def _resolve_modality(args):
     """Decide which vaccine-design modalities to run.
 
-    Resolution: explicit ``--vaccine-modality {peptide,mrna,both,none,
-    auto}`` wins. ``auto`` (default) derives from which output flags
-    were set: ``--output-peptide`` enables peptide, ``--output-mrna``
-    enables mRNA. Independent — both can be on at once.
+    The ``--vaccine-modality`` flag is multi-valued. Returns the
+    set of active modality names — e.g. ``{'mrna'}``,
+    ``{'peptide', 'mrna'}``, or ``set()`` for a report-only run.
 
-    Returns a (run_peptide, run_mrna) bool pair.
+    Sentinels:
+      - ``auto`` (default) infers from ``--output-peptide`` /
+        ``--output-mrna``. Must be passed alone.
+      - ``none`` suppresses construct writers even if output paths
+        are set. Must be passed alone.
+
+    Mixing a sentinel with a concrete modality raises ``ValueError``
+    with a clear message.
     """
-    explicit = getattr(args, 'vaccine_modality', 'auto')
-    if explicit == 'peptide':
-        return True, False
-    if explicit == 'mrna':
-        return False, True
-    if explicit == 'both':
-        return True, True
-    if explicit == 'none':
-        return False, False
-    # 'auto' — derive from output flags.
-    return (
-        bool(getattr(args, 'output_peptide', '')),
-        bool(getattr(args, 'output_mrna', '')),
-    )
+    raw = getattr(args, 'vaccine_modality', ['auto']) or ['auto']
+    # argparse with nargs='+' always yields a list; tolerate a bare
+    # string in case a downstream caller bypassed the parser.
+    if isinstance(raw, str):
+        raw = [raw]
+    selected = list(raw)
+    sentinels = [m for m in selected if m in _MODALITY_SENTINELS]
+    concrete = [m for m in selected if m in _KNOWN_MODALITIES]
+    unknown = [m for m in selected
+               if m not in _MODALITY_SENTINELS and m not in _KNOWN_MODALITIES]
+    if unknown:
+        raise ValueError(
+            "Unknown vaccine modality %r. Known: %s; sentinels: %s." % (
+                unknown,
+                sorted(_KNOWN_MODALITIES),
+                sorted(_MODALITY_SENTINELS)))
+    if sentinels and concrete:
+        raise ValueError(
+            "--vaccine-modality sentinel %r cannot be combined with "
+            "concrete modalities %r — pass the sentinel alone or list "
+            "concrete modalities." % (sentinels, concrete))
+    if sentinels and len(sentinels) > 1:
+        raise ValueError(
+            "--vaccine-modality accepts at most one sentinel "
+            "(auto/none); got %r." % sentinels)
+    if 'none' in sentinels:
+        return set()
+    if 'auto' in sentinels or not selected:
+        out = set()
+        if getattr(args, 'output_peptide', ''):
+            out.add('peptide')
+        if getattr(args, 'output_mrna', ''):
+            out.add('mrna')
+        return out
+    return set(concrete)
 
 
 def _emit_neoepitope_report_external(args, report_df, predictions):
@@ -262,6 +295,16 @@ def _emit_mrna_constructs(args, ranked):
         len(constructs), args.output_mrna)
 
 
+# Per-modality dispatcher table. Each entry: modality name → (
+#   output-flag attribute on args, writer callable taking (args, ranked)
+# ). Adding a new modality (e.g. 'dna') is a one-line registration here
+# plus the writer module — no changes to _emit_outputs needed.
+_MODALITY_DISPATCH = {
+    'peptide': ('output_peptide', _emit_peptide_constructs),
+    'mrna': ('output_mrna', _emit_mrna_constructs),
+}
+
+
 def _emit_outputs(args, ranked, source):
     """Single fan-out point for everything downstream of ranking.
 
@@ -269,41 +312,58 @@ def _emit_outputs(args, ranked, source):
     intermediate; ``source`` is 'pipeline' (VCF/BAM) or 'external'
     (LENS/pVACseq) — used only for messaging today, but keeps the
     branch point explicit for future modality-specific gating.
+
+    The set of active modalities comes from ``_resolve_modality`` and
+    drives the per-modality dispatch table at the top of this module.
+    Modality-specific code lives only inside the per-writer helpers.
     """
-    run_peptide, run_mrna = _resolve_modality(args)
+    active = _resolve_modality(args)
 
     # Reports run for both sources; CSV / XLSX rank reports are not
-    # modality-specific.
-    if args.output_csv or args.output_xlsx_report:
+    # modality-specific. On the external-input path, the LENS-native
+    # per-(peptide, allele) report (already written by
+    # _emit_neoepitope_report_external) and this rank-report would
+    # collide on --output-csv — so skip make_csv_report there.
+    if (args.output_csv or args.output_xlsx_report) and source != 'external':
         make_csv_report(
             ranked,
             excel_report_path=args.output_xlsx_report,
             csv_report_path=args.output_csv)
+    elif (args.output_csv or args.output_xlsx_report) and source == 'external':
+        # On external input, --output-csv was consumed by the
+        # neoepitope-report writer; --output-xlsx-report is currently
+        # unused. Document and skip.
+        if args.output_xlsx_report:
+            logger.info(
+                "--output-xlsx-report ignored on external-input path "
+                "(use --output-neoepitope-report for the LENS / pVACseq "
+                "XLSX format).")
 
-    if args.output_neoepitope_report:
+    if args.output_neoepitope_report and source == 'pipeline':
         num_epitopes = getattr(args, 'num_epitopes_per_vaccine_peptide', None)
         make_minimal_neoepitope_report(
             ranked,
             num_epitopes_per_peptide=num_epitopes,
             excel_report_path=args.output_neoepitope_report)
 
-    if run_peptide and getattr(args, 'output_peptide', ''):
-        _emit_peptide_constructs(args, ranked)
-    elif run_peptide and not getattr(args, 'output_peptide', ''):
-        logger.warning(
-            "--vaccine-modality requested peptide output but "
-            "--output-peptide is empty; skipping peptide constructs.")
-
-    if run_mrna and getattr(args, 'output_mrna', ''):
-        _emit_mrna_constructs(args, ranked)
-    elif run_mrna and not getattr(args, 'output_mrna', ''):
-        logger.warning(
-            "--vaccine-modality requested mRNA output but --output-mrna "
-            "is empty; skipping mRNA constructs.")
+    for modality in sorted(active):
+        if modality not in _MODALITY_DISPATCH:
+            logger.warning(
+                "vaccine modality %r recognized but has no writer "
+                "registered (future-modality stub); skipping.", modality)
+            continue
+        attr, writer = _MODALITY_DISPATCH[modality]
+        if getattr(args, attr, ''):
+            writer(args, ranked)
+        else:
+            logger.warning(
+                "--vaccine-modality requested %s but --%s is empty; "
+                "skipping %s constructs.",
+                modality, attr.replace('_', '-'), modality)
 
     logger.info(
-        "Vaccine modality dispatch [%s]: peptide=%s mrna=%s",
-        source, run_peptide, run_mrna)
+        "Vaccine modality dispatch [%s]: active=%s",
+        source, sorted(active) or ['(none)'])
 
 
 def configure_logging(args):
