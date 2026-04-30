@@ -124,63 +124,32 @@ def _epitope_config_from_args_safe(args):
         return EpitopeConfig()
 
 
-_KNOWN_MODALITIES = {'peptide', 'mrna'}
-# Future modalities plug in here as their writers land:
-# _KNOWN_MODALITIES |= {'dna', ...}
-_MODALITY_SENTINELS = {'auto', 'none'}
+_KNOWN_VACCINE_TYPES = {'peptide', 'mrna'}
+# Future vaccine types plug in here as their writers land:
+# _KNOWN_VACCINE_TYPES |= {'dna', ...}
 
 
-def _resolve_modality(args):
-    """Decide which vaccine-design modalities to run.
+def _resolve_vaccine_types(args):
+    """Return the set of vaccine types to design.
 
-    The ``--vaccine-modality`` flag is multi-valued. Returns the
-    set of active modality names — e.g. ``{'mrna'}``,
-    ``{'peptide', 'mrna'}``, or ``set()`` for a report-only run.
-
-    Sentinels:
-      - ``auto`` (default) infers from ``--output-peptide`` /
-        ``--output-mrna``. Must be passed alone.
-      - ``none`` suppresses construct writers even if output paths
-        are set. Must be passed alone.
-
-    Mixing a sentinel with a concrete modality raises ``ValueError``
-    with a clear message.
+    ``--vaccine-type`` is multi-valued; default ``['peptide']``.
+    Vaxrank always ranks (no "ranking-off" sentinel); whether each
+    type's writer fires also depends on its output path being set.
+    Unknown types raise ``ValueError`` so adding 'dna' before its
+    writer ships fails clearly.
     """
-    raw = getattr(args, 'vaccine_modality', ['auto']) or ['auto']
+    raw = getattr(args, 'vaccine_type', ['peptide']) or ['peptide']
     # argparse with nargs='+' always yields a list; tolerate a bare
     # string in case a downstream caller bypassed the parser.
     if isinstance(raw, str):
         raw = [raw]
-    selected = list(raw)
-    sentinels = [m for m in selected if m in _MODALITY_SENTINELS]
-    concrete = [m for m in selected if m in _KNOWN_MODALITIES]
-    unknown = [m for m in selected
-               if m not in _MODALITY_SENTINELS and m not in _KNOWN_MODALITIES]
+    types = set(raw)
+    unknown = types - _KNOWN_VACCINE_TYPES
     if unknown:
         raise ValueError(
-            "Unknown vaccine modality %r. Known: %s; sentinels: %s." % (
-                unknown,
-                sorted(_KNOWN_MODALITIES),
-                sorted(_MODALITY_SENTINELS)))
-    if sentinels and concrete:
-        raise ValueError(
-            "--vaccine-modality sentinel %r cannot be combined with "
-            "concrete modalities %r — pass the sentinel alone or list "
-            "concrete modalities." % (sentinels, concrete))
-    if sentinels and len(sentinels) > 1:
-        raise ValueError(
-            "--vaccine-modality accepts at most one sentinel "
-            "(auto/none); got %r." % sentinels)
-    if 'none' in sentinels:
-        return set()
-    if 'auto' in sentinels or not selected:
-        out = set()
-        if getattr(args, 'output_peptide', ''):
-            out.add('peptide')
-        if getattr(args, 'output_mrna', ''):
-            out.add('mrna')
-        return out
-    return set(concrete)
+            "Unknown vaccine type %r. Known: %s." % (
+                sorted(unknown), sorted(_KNOWN_VACCINE_TYPES)))
+    return types
 
 
 def _emit_neoepitope_report_external(args, report_df, predictions):
@@ -295,11 +264,11 @@ def _emit_mrna_constructs(args, ranked):
         len(constructs), args.output_mrna)
 
 
-# Per-modality dispatcher table. Each entry: modality name → (
+# Per-type dispatch table. Each entry: vaccine-type name → (
 #   output-flag attribute on args, writer callable taking (args, ranked)
-# ). Adding a new modality (e.g. 'dna') is a one-line registration here
-# plus the writer module — no changes to _emit_outputs needed.
-_MODALITY_DISPATCH = {
+# ). Adding a new vaccine type (e.g. 'dna') is a one-line registration
+# here plus the writer module — no changes to _emit_outputs needed.
+_VACCINE_TYPE_DISPATCH = {
     'peptide': ('output_peptide', _emit_peptide_constructs),
     'mrna': ('output_mrna', _emit_mrna_constructs),
 }
@@ -310,34 +279,29 @@ def _emit_outputs(args, ranked, source):
 
     ``ranked`` is the shared ``[(Variant, [VaccinePeptide])]``
     intermediate; ``source`` is 'pipeline' (VCF/BAM) or 'external'
-    (LENS/pVACseq) — used only for messaging today, but keeps the
-    branch point explicit for future modality-specific gating.
+    (LENS/pVACseq).
 
-    The set of active modalities comes from ``_resolve_modality`` and
-    drives the per-modality dispatch table at the top of this module.
-    Modality-specific code lives only inside the per-writer helpers.
+    Active vaccine types come from ``_resolve_vaccine_types``. A type
+    fires only if both: (a) it's in the active set, and (b) its
+    ``--output-<type>`` path is set. Vaxrank-without-an-output-path is
+    a valid (ranking-only) run.
     """
-    active = _resolve_modality(args)
+    active = _resolve_vaccine_types(args)
 
-    # Reports run for both sources; CSV / XLSX rank reports are not
-    # modality-specific. On the external-input path, the LENS-native
-    # per-(peptide, allele) report (already written by
-    # _emit_neoepitope_report_external) and this rank-report would
-    # collide on --output-csv — so skip make_csv_report there.
+    # Rank reports run for both sources; on the external-input path
+    # the LENS-native per-(peptide, allele) report already consumed
+    # ``--output-csv`` (via _emit_neoepitope_report_external) so the
+    # rank-report writer would collide — skip it there.
     if (args.output_csv or args.output_xlsx_report) and source != 'external':
         make_csv_report(
             ranked,
             excel_report_path=args.output_xlsx_report,
             csv_report_path=args.output_csv)
-    elif (args.output_csv or args.output_xlsx_report) and source == 'external':
-        # On external input, --output-csv was consumed by the
-        # neoepitope-report writer; --output-xlsx-report is currently
-        # unused. Document and skip.
-        if args.output_xlsx_report:
-            logger.info(
-                "--output-xlsx-report ignored on external-input path "
-                "(use --output-neoepitope-report for the LENS / pVACseq "
-                "XLSX format).")
+    elif args.output_xlsx_report and source == 'external':
+        logger.info(
+            "--output-xlsx-report ignored on external-input path "
+            "(use --output-neoepitope-report for the LENS / pVACseq "
+            "XLSX format).")
 
     if args.output_neoepitope_report and source == 'pipeline':
         num_epitopes = getattr(args, 'num_epitopes_per_vaccine_peptide', None)
@@ -346,24 +310,35 @@ def _emit_outputs(args, ranked, source):
             num_epitopes_per_peptide=num_epitopes,
             excel_report_path=args.output_neoepitope_report)
 
-    for modality in sorted(active):
-        if modality not in _MODALITY_DISPATCH:
+    fired = []
+    for vtype in sorted(active):
+        if vtype not in _VACCINE_TYPE_DISPATCH:
             logger.warning(
-                "vaccine modality %r recognized but has no writer "
-                "registered (future-modality stub); skipping.", modality)
+                "vaccine type %r recognized but has no writer "
+                "registered (future-type stub); skipping.", vtype)
             continue
-        attr, writer = _MODALITY_DISPATCH[modality]
+        attr, writer = _VACCINE_TYPE_DISPATCH[vtype]
         if getattr(args, attr, ''):
             writer(args, ranked)
-        else:
+            fired.append(vtype)
+        # No output path → ranking-only for that type. Silent (vs.
+        # warning) because peptide is the default vaccine type and
+        # we don't want to spam users who only want a report run.
+
+    # Warn if user provided an output path for a type they didn't ask
+    # for — usually a typo / forgotten --vaccine-type flag.
+    for vtype, (attr, _) in _VACCINE_TYPE_DISPATCH.items():
+        if vtype not in active and getattr(args, attr, ''):
             logger.warning(
-                "--vaccine-modality requested %s but --%s is empty; "
-                "skipping %s constructs.",
-                modality, attr.replace('_', '-'), modality)
+                "--%s is set but '%s' is not in --vaccine-type %s; "
+                "no %s constructs will be written. Add '%s' to "
+                "--vaccine-type to enable.",
+                attr.replace('_', '-'), vtype, sorted(active),
+                vtype, vtype)
 
     logger.info(
-        "Vaccine modality dispatch [%s]: active=%s",
-        source, sorted(active) or ['(none)'])
+        "Vaccine-type dispatch [%s]: active=%s wrote=%s",
+        source, sorted(active), fired or ['(none)'])
 
 
 def configure_logging(args):
@@ -390,12 +365,22 @@ def _resolve_ensembl_release(args):
 
 def main(args_list=None):
     """
-    Rank personalized cancer neoantigens from somatic variants, tumor
-    RNA, and patient HLA type. The ranked candidates can be emitted as
-    analysis reports, peptide vaccine constructs, or mRNA vaccine
-    constructs (or any combination).
+    Rank personalized cancer neoantigens from somatic variants + tumor
+    RNA (or a pre-computed LENS / pVACseq report) and emit the ranked
+    candidates as one or more vaccine types plus optional analysis
+    reports.
 
-    Example (analysis report + peptide pool + mRNA construct):
+    Inputs (one of):
+      - --vcf + --bam: full pipeline (variant calling → Isovar
+        transcript assembly → MHC prediction → ranking)
+      - --input-lens / --input-pvacseq: external neoepitope report,
+        skipping the predict-from-genome stages
+
+    Vaccine-type dispatch is driven by ``--vaccine-type`` (multi-valued;
+    default 'peptide'). Each type's writer fires only if its
+    ``--output-<type>`` path is also set.
+
+    Example (full pipeline; reports + peptide pool + mRNA constructs):
 
         vaxrank \\
             --vcf somatic.vcf \\
@@ -403,9 +388,18 @@ def main(args_list=None):
             --mhc-predictor netmhc \\
             --mhc-alleles HLA-A*02:01 \\
             --vaccine-peptide-length 25 \\
+            --vaccine-type peptide mrna \\
             --output-pdf-report report.pdf \\
             --output-peptide vaccine-peptides.fasta \\
-            --output-mrna vaccine-mrna.fasta
+            --output-mrna vaccine-mrna_dir/
+
+    Example (LENS-driven mRNA design):
+
+        vaxrank \\
+            --input-lens patient.lens.tsv \\
+            --vaccine-type mrna \\
+            --output-mrna mrna_dir/ \\
+            --output-mrna-csv layers.csv
     """
     if args_list is None:
         args_list = sys.argv[1:]

@@ -65,6 +65,30 @@ def test_mut_offsets_in_context_falls_back_to_full_window():
     assert end == len("AASVVGSSSSSGTR")
 
 
+def test_lens_picks_strongest_binder_when_multiple_rows_per_variant():
+    """Multi-row LENS fixture: one variant has three peptides at very
+    different IC50s. The representative pick must be the strongest
+    binder (lowest IC50), not the file-order first row.
+
+    Pre-fix: ``_pick_representative`` looked for non-existent columns
+    (``ic50``, ``percentile_rank``) and tied every row at (2, 0.0),
+    so it returned the alphabetically-first allele's row regardless
+    of binding strength. This test pins the fix.
+    """
+    path = os.path.join(DATA_DIR, "lens_multi_row_per_variant.tsv")
+    report_df, predictions = load_lens(path)
+    ranked = ranked_from_lens_predictions(predictions, path)
+    assert len(ranked) == 1, (
+        "Fixture has one variant with 3 peptides; got %d entries" % len(ranked))
+    _, peptides = ranked[0]
+    fragment = peptides[0].mutant_protein_fragment
+    # Strongest binder is STRNGLVLLL (mhcflurry IC50 = 18.0). Its
+    # pep_context is "AASTRNGLVLLLGTR".
+    assert "STRNGLVLLL" in fragment.amino_acids, (
+        "Expected pep_context to come from the strongest binder row "
+        "(STRNGLVLLL, IC50=18); got %r" % fragment.amino_acids)
+
+
 def test_lens_to_ranked_vaccine_peptides_round_trip():
     """Loading the LENS fixture and converting to ranked vaccine peptides
     should produce one entry per unique variant, each carrying the
@@ -138,101 +162,88 @@ def test_lens_drives_peptide_construct_assembly_end_to_end():
         "got %d" % len(constructs))
 
 
-def test_resolve_modality_auto_infers_from_output_flags():
-    """The 'auto' sentinel reads which output paths are populated."""
+def test_resolve_vaccine_types_default_is_peptide():
+    """Vaxrank is a vaccine-ranking library: there's always ranking
+    to do. The default vaccine type is peptide; ``--vaccine-type`` is
+    multi-valued so future types (DNA, etc.) plug in cleanly."""
     from types import SimpleNamespace
-    from vaxrank.cli.entry_point import _resolve_modality
+    from vaxrank.cli.entry_point import _resolve_vaccine_types
+
+    args = SimpleNamespace(vaccine_type=['peptide'])
+    assert _resolve_vaccine_types(args) == {'peptide'}
+
+    # Default applied when attr is missing or empty
+    args = SimpleNamespace()
+    assert _resolve_vaccine_types(args) == {'peptide'}
+    args = SimpleNamespace(vaccine_type=[])
+    assert _resolve_vaccine_types(args) == {'peptide'}
+
+
+def test_resolve_vaccine_types_explicit_lists():
+    """Multi-valued list returned as a set; order-free; duplicates
+    collapse."""
+    from types import SimpleNamespace
+    from vaxrank.cli.entry_point import _resolve_vaccine_types
 
     cases = [
-        (['auto'], 'out.fasta', '', {'peptide'}),
-        (['auto'], '', 'out_dir', {'mrna'}),
-        (['auto'], 'p.fa', 'm_dir', {'peptide', 'mrna'}),
-        (['auto'], '', '', set()),
+        (['peptide'], {'peptide'}),
+        (['mrna'], {'mrna'}),
+        (['peptide', 'mrna'], {'peptide', 'mrna'}),
+        (['mrna', 'peptide'], {'peptide', 'mrna'}),
+        (['mrna', 'mrna'], {'mrna'}),
     ]
-    for modality, op, om, expected in cases:
-        args = SimpleNamespace(
-            vaccine_modality=modality, output_peptide=op, output_mrna=om)
-        assert _resolve_modality(args) == expected, (
-            "modality=%r output_peptide=%r output_mrna=%r "
-            "expected %r got %r" % (
-                modality, op, om, expected, _resolve_modality(args)))
+    for vtypes, expected in cases:
+        args = SimpleNamespace(vaccine_type=vtypes)
+        assert _resolve_vaccine_types(args) == expected
 
 
-def test_resolve_modality_explicit_lists():
-    """Concrete modality lists override 'auto' inference. Listed
-    modalities are returned as a set; output flags are not consulted."""
-    from types import SimpleNamespace
-    from vaxrank.cli.entry_point import _resolve_modality
-
-    cases = [
-        (['peptide'], 'p.fa', 'm_dir', {'peptide'}),
-        (['mrna'], 'p.fa', 'm_dir', {'mrna'}),
-        (['peptide', 'mrna'], '', '', {'peptide', 'mrna'}),
-        (['mrna', 'peptide'], '', '', {'peptide', 'mrna'}),  # order-free
-        # duplicates collapse
-        (['mrna', 'mrna'], '', '', {'mrna'}),
-    ]
-    for modality, op, om, expected in cases:
-        args = SimpleNamespace(
-            vaccine_modality=modality, output_peptide=op, output_mrna=om)
-        assert _resolve_modality(args) == expected
-
-
-def test_resolve_modality_none_sentinel():
-    """'none' suppresses construct writers even if output paths set."""
-    from types import SimpleNamespace
-    from vaxrank.cli.entry_point import _resolve_modality
-
-    args = SimpleNamespace(
-        vaccine_modality=['none'],
-        output_peptide='p.fa', output_mrna='m_dir')
-    assert _resolve_modality(args) == set()
-
-
-def test_resolve_modality_rejects_sentinel_mixed_with_concrete():
-    """auto/none must be passed alone; mixing with mrna/peptide is a
-    user error."""
+def test_resolve_vaccine_types_rejects_unknown():
+    """'dna' or any unknown type must raise; users shouldn't get
+    silent no-ops while writing CLI scripts that pre-declare future
+    types."""
     import pytest as _pytest
     from types import SimpleNamespace
-    from vaxrank.cli.entry_point import _resolve_modality
+    from vaxrank.cli.entry_point import _resolve_vaccine_types
 
-    args = SimpleNamespace(
-        vaccine_modality=['auto', 'mrna'],
-        output_peptide='', output_mrna='m_dir')
-    with _pytest.raises(ValueError, match="sentinel"):
-        _resolve_modality(args)
-
-    args = SimpleNamespace(
-        vaccine_modality=['none', 'peptide'],
-        output_peptide='', output_mrna='')
-    with _pytest.raises(ValueError, match="sentinel"):
-        _resolve_modality(args)
+    args = SimpleNamespace(vaccine_type=['dna'])
+    with _pytest.raises(ValueError, match="Unknown vaccine type"):
+        _resolve_vaccine_types(args)
 
 
-def test_resolve_modality_rejects_unknown_modality():
-    """Adding 'dna' before its writer ships should fail clearly so
-    users don't get a silent no-op."""
-    import pytest as _pytest
-    from types import SimpleNamespace
-    from vaxrank.cli.entry_point import _resolve_modality
-
-    args = SimpleNamespace(
-        vaccine_modality=['dna'],
-        output_peptide='', output_mrna='')
-    with _pytest.raises(ValueError, match="Unknown vaccine modality"):
-        _resolve_modality(args)
-
-
-def test_resolve_modality_bare_string_tolerated():
+def test_resolve_vaccine_types_bare_string_tolerated():
     """argparse always yields a list, but a downstream caller might
     pass a bare string. Coerce instead of crashing."""
     from types import SimpleNamespace
-    from vaxrank.cli.entry_point import _resolve_modality
+    from vaxrank.cli.entry_point import _resolve_vaccine_types
+
+    args = SimpleNamespace(vaccine_type='mrna')
+    assert _resolve_vaccine_types(args) == {'mrna'}
+
+
+def test_emit_outputs_warns_when_output_path_lacks_matching_type(
+        caplog, tmp_path):
+    """If user passes --output-mrna but doesn't add 'mrna' to
+    --vaccine-type, we should warn loudly so they don't think mRNA
+    is being written."""
+    import logging
+    from types import SimpleNamespace
+    from vaxrank.cli.entry_point import _emit_outputs
 
     args = SimpleNamespace(
-        vaccine_modality='mrna',
-        output_peptide='', output_mrna='m_dir')
-    assert _resolve_modality(args) == {'mrna'}
+        vaccine_type=['peptide'],
+        output_peptide='',
+        output_mrna=str(tmp_path / "mrna_out"),
+        output_csv='', output_xlsx_report='',
+        output_neoepitope_report='',
+    )
+    with caplog.at_level(logging.WARNING):
+        _emit_outputs(args, ranked=[], source='external')
+    assert any(
+        "--output-mrna" in r.message
+        and "not in --vaccine-type" in r.message
+        for r in caplog.records), \
+        "Expected mismatch warning when --output-mrna is set but "\
+        "vaccine-type=['peptide']"
 
 
 def test_lens_with_vaccine_modality_mrna_writes_three_fastas(tmp_path):
@@ -280,8 +291,8 @@ def test_lens_with_vaccine_modality_mrna_writes_three_fastas(tmp_path):
         mrna_poly_a_segmented=False,
         mrna_poly_a_first_segment=30,
         mrna_poly_a_segment_linker='GCATATGACT',
-        # modality switch (multi-valued; pass a list)
-        vaccine_modality=['mrna'],
+        # vaccine-type switch (multi-valued; pass a list)
+        vaccine_type=['mrna'],
     )
     _emit_outputs(args, ranked, source='external')
     assert os.path.isfile(os.path.join(out_dir, "cds.fasta"))
@@ -299,9 +310,10 @@ def test_lens_with_vaccine_modality_mrna_writes_three_fastas(tmp_path):
     assert full_body.endswith("A" * 20)
 
 
-def test_modality_none_skips_constructs_even_if_output_paths_set(tmp_path):
-    """--vaccine-modality=none suppresses construct writers even if
-    --output-peptide / --output-mrna are passed."""
+def test_output_path_without_matching_type_does_not_write(tmp_path):
+    """Default vaccine-type=['peptide']. Passing --output-mrna without
+    'mrna' in vaccine-type should NOT write mRNA constructs (the
+    paired warning is covered separately)."""
     from types import SimpleNamespace
 
     from vaxrank.cli.entry_point import _emit_outputs
@@ -314,7 +326,7 @@ def test_modality_none_skips_constructs_even_if_output_paths_set(tmp_path):
     args = SimpleNamespace(
         output_csv='', output_xlsx_report='',
         output_neoepitope_report='',
-        output_peptide='',
+        output_peptide='',  # peptide writer also no-ops (no path)
         output_mrna=out_dir,
         output_mrna_manifest='', output_mrna_csv='',
         output_mrna_csv_full_rows=True,
@@ -331,8 +343,9 @@ def test_modality_none_skips_constructs_even_if_output_paths_set(tmp_path):
         mrna_poly_a_length=20, mrna_poly_a_segmented=False,
         mrna_poly_a_first_segment=30,
         mrna_poly_a_segment_linker='GCATATGACT',
-        vaccine_modality=['none'],
+        vaccine_type=['peptide'],
     )
     _emit_outputs(args, ranked, source='external')
     assert not os.path.exists(out_dir), \
-        "modality=none should suppress mRNA writer; output dir was created"
+        "vaccine-type didn't include 'mrna'; mRNA writer should "\
+        "not have run, but output dir was created"

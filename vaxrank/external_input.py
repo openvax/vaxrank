@@ -41,8 +41,14 @@ import logging
 
 import pandas as pd
 
+from .epitope_io import _detect_lens_predictors, _normalize_hla_allele
 from .mutant_protein_fragment import MutantProteinFragment
 from .vaccine_peptide import VaccinePeptide
+
+# pVACseq aggregate-report scoring column priority. Sniffed against
+# the row dict; the first column present + non-NaN wins.
+_PVACSEQ_IC50_COLS = ('IC50 MT', 'Best IC50 Score MT')
+_PVACSEQ_RANK_COLS = ('%ile MT', 'Best Percentile MT')
 
 logger = logging.getLogger(__name__)
 
@@ -81,23 +87,42 @@ def _mut_offsets_in_context(peptide, pep_context):
     return idx, idx + len(peptide)
 
 
-def _pick_representative(group_rows):
+def _row_score(row, ic50_cols, rank_cols):
+    """Numeric score for a row: smallest IC50 (strongest binder) wins,
+    falling back to smallest percentile rank when IC50 is missing.
+
+    ``ic50_cols`` / ``rank_cols`` are tuples of column names tried in
+    priority order; the first non-NaN match is used. Returns a sortable
+    ``(tier, value)`` tuple where tier 0 = real IC50, tier 1 = rank,
+    tier 2 = no signal (rows tie at 0.0).
+    """
+    for col in ic50_cols:
+        v = row.get(col)
+        if v is not None and pd.notna(v):
+            try:
+                return (0, float(v))
+            except (TypeError, ValueError):
+                continue
+    for col in rank_cols:
+        v = row.get(col)
+        if v is not None and pd.notna(v):
+            try:
+                return (1, float(v))
+            except (TypeError, ValueError):
+                continue
+    return (2, 0.0)
+
+
+def _pick_representative(group_rows, ic50_cols, rank_cols):
     """Pick the row whose peptide will represent this variant in the
     construct pipeline.
 
-    Strategy: smallest IC50 (= strongest predicted binder). If the
-    LENS file doesn't carry IC50 (mhcflurry-presentation only), fall
-    back to lowest percentile rank.
+    Strategy: smallest IC50 (= strongest predicted binder). If no
+    IC50 column is present, fall back to smallest percentile rank.
+
+    Returns the strongest-binder row from ``group_rows``.
     """
-    def _key(r):
-        ic50 = r.get('ic50')
-        if ic50 is not None and pd.notna(ic50):
-            return (0, float(ic50))
-        rank = r.get('percentile_rank')
-        if rank is not None and pd.notna(rank):
-            return (1, float(rank))
-        return (2, 0.0)
-    return sorted(group_rows, key=_key)[0]
+    return min(group_rows, key=lambda r: _row_score(r, ic50_cols, rank_cols))
 
 
 def _coerce_n_alt_reads(tpm):
@@ -145,6 +170,18 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
     if df.empty:
         return []
 
+    # Auto-detect which LENS predictor columns are present so the
+    # representative-row pick reads real values. Without this, every
+    # row scored 0.0 and stable-sort returned the file-order first
+    # row (typically the alphabetically-first allele) instead of the
+    # strongest binder.
+    detected = _detect_lens_predictors(df.columns)
+    affinity_cols = tuple(
+        d.value_col for d in detected if d.kind == 'pMHC_affinity')
+    rank_cols = tuple(
+        d.percentile_col for d in detected
+        if d.percentile_col and d.kind == 'pMHC_affinity')
+
     # Index predictions by (peptide, allele) so we can attach all
     # per-predictor predictions to each candidate vaccine peptide.
     by_key = {}
@@ -167,7 +204,7 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             logger.warning(
                 "Could not parse LENS variant_coords %r; skipping.", coords)
             continue
-        rep = _pick_representative(group_rows)
+        rep = _pick_representative(group_rows, affinity_cols, rank_cols)
         peptide = rep.get('peptide') or ""
         pep_context = rep.get('pep_context') or ""
         if not pep_context:
@@ -201,12 +238,10 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
         seen_keys = set()
         for r in group_rows:
             pep = r.get('peptide') or ""
-            allele_raw = r.get('allele') or ""
             # load_lens normalizes 'HLA-A02:01' → 'HLA-A*02:01';
             # match the same form here so the (peptide, allele)
             # lookup hits.
-            from .epitope_io import _normalize_hla_allele
-            allele = _normalize_hla_allele(str(allele_raw))
+            allele = _normalize_hla_allele(str(r.get('allele') or ""))
             key = (pep, allele)
             if key in seen_keys:
                 continue
@@ -271,7 +306,8 @@ def ranked_from_pvacseq_predictions(predictions, report_df, genome=None,
     ranked = []
     from varcode import Variant
     for vid, group_rows in groups.items():
-        rep = _pick_representative(group_rows)
+        rep = _pick_representative(
+            group_rows, _PVACSEQ_IC50_COLS, _PVACSEQ_RANK_COLS)
         best_pep = rep.get('Best Peptide') or rep.get('peptide') or ""
         gene = rep.get('Gene') or 'unknown'
         # pVACseq IDs look like "1.123.A.T" or similar; try to parse

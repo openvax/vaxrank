@@ -212,20 +212,15 @@ def add_output_args(arg_parser):
     output_args_group = arg_parser.add_argument_group("Output options")
 
     output_args_group.add_argument(
-        "--vaccine-modality",
+        "--vaccine-type",
         nargs='+',
-        default=["auto"],
-        choices=["auto", "none", "peptide", "mrna"],
-        metavar="MODALITY",
-        help="Which vaccine-design modalities to run. Multi-valued so future "
-             "modalities (DNA, mRNA-LNP variants, etc.) plug in as additional "
-             "choices without an API change. Examples: "
-             "'--vaccine-modality auto' (default; infer from output flags), "
-             "'--vaccine-modality mrna', "
-             "'--vaccine-modality peptide mrna' (both), "
-             "'--vaccine-modality none' (report-only run, suppresses "
-             "construct writers even if --output-peptide / --output-mrna "
-             "are set). 'auto' / 'none' are sentinels — must be passed alone. "
+        default=["peptide"],
+        choices=["peptide", "mrna"],
+        metavar="TYPE",
+        help="Which vaccine type(s) to design. Multi-valued so future "
+             "types (DNA, etc.) plug in as additional choices. "
+             "Default: peptide. Examples: '--vaccine-type peptide', "
+             "'--vaccine-type mrna', '--vaccine-type peptide mrna' (both). "
              "'peptide' is an umbrella; the SLP / minimal-epitope / "
              "multi-epitope sub-mode lives in --peptide-mode.")
 
