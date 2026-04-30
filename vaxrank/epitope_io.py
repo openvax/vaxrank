@@ -327,7 +327,7 @@ class DetectedPredictor:
     agretopicity_col: str | None = None
 
 
-def _detect_lens_predictors(columns):
+def detect_lens_predictors(columns):
     """Return a list of :class:`DetectedPredictor` for every known tool present.
 
     Unknown tools (not in ``_LENS_PREDICTOR_REGISTRY``) are ignored; we'd have
@@ -392,7 +392,7 @@ def _pick_canonical_predictor(affinity_preds):
     return sorted(affinity_preds, key=lambda d: d.tool)[0]
 
 
-def _normalize_hla_allele(allele):
+def normalize_hla_allele(allele):
     """LENS emits alleles as 'HLA-A01:01'; vaxrank output uses 'HLA-A*01:01'."""
     if not allele:
         return allele
@@ -434,7 +434,7 @@ def load_lens(path):
         raise ValueError(
             f"LENS file {path} missing required columns: {missing}")
 
-    detected = _detect_lens_predictors(df.columns)
+    detected = detect_lens_predictors(df.columns)
     if not detected:
         raise ValueError(
             f"LENS file {path} has no recognized predictor columns "
@@ -465,7 +465,7 @@ def load_lens(path):
         allele_raw = row.get("allele", "")
         if pd.isna(allele_raw) or not allele_raw:
             continue
-        allele = _normalize_hla_allele(str(allele_raw))
+        allele = normalize_hla_allele(str(allele_raw))
 
         # Build one EpitopePrediction per chosen predictor for this row.
         # Predictions with no usable value for this row are skipped.
