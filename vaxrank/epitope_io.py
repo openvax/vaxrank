@@ -619,9 +619,9 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
         if dup_count:
             logger.info(
                 "report_df has %d duplicate (peptide, allele) row(s) "
-                "from multi-source LENS / pVACseq input; the same score "
-                "broadcasts across each duplicate. Per-source provenance "
-                "is preserved by the other columns.", dup_count)
+                "from multi-source input; the same score broadcasts "
+                "across each duplicate. Per-source provenance is "
+                "preserved by the other columns.", dup_count)
 
     # Build the topiary DataFrame once and share it between validator and
     # scorer — these two pass over the same ~N rows and rebuilding is the

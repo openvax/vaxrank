@@ -35,26 +35,30 @@ DATA_DIR = os.path.join(
 
 
 def test_parse_variant_coords_typical_lens_form():
-    v = _parse_variant_coords("chr17:7675088:C:T")
+    v, alleles_real = _parse_variant_coords("chr17:7675088:C:T")
     assert v is not None
     assert v.contig == "chr17"
     assert v.start == 7675088
     assert v.ref == "C"
     assert v.alt == "T"
+    assert alleles_real is True
 
 
 def test_parse_variant_coords_malformed_returns_none():
-    assert _parse_variant_coords("garbage") is None
-    assert _parse_variant_coords("chr1:notapos:A:T") is None
-    assert _parse_variant_coords(None) is None
+    for bad in ("garbage", "chr1:notapos:A:T", None):
+        v, alleles_real = _parse_variant_coords(bad)
+        assert v is None
+        assert alleles_real is False
 
 
 def test_parse_variant_coords_2_part_chr_pos_form():
     """Real LENS v1.9 reports emit ``chr1:26780312`` (2-part: chr+pos
     only, no ref/alt). Pre-fix this returned None and 3000+ warnings
     fired on a real LENS run. Now: parses with placeholder ref/alt that
-    satisfy varcode's nucleotide validator."""
-    v = _parse_variant_coords("chr1:26780312")
+    satisfy varcode's nucleotide validator. The alleles_real flag
+    tells callers the genotype is fictional — must NOT feed to varcode
+    effect annotation."""
+    v, alleles_real = _parse_variant_coords("chr1:26780312")
     assert v is not None
     assert v.contig == "chr1"
     assert v.start == 26780312
@@ -63,33 +67,40 @@ def test_parse_variant_coords_2_part_chr_pos_form():
     assert v.ref in ("A", "C", "G", "T")
     assert v.alt in ("A", "C", "G", "T")
     assert v.ref != v.alt
+    assert alleles_real is False, (
+        "2-part chr:pos has placeholder ref/alt; alleles_real must "
+        "be False so callers know not to interpret the genotype")
 
 
 def test_parse_variant_coords_3_part_with_ref_only():
-    v = _parse_variant_coords("chr1:26780312:C")
+    v, alleles_real = _parse_variant_coords("chr1:26780312:C")
     assert v is not None
     assert v.ref == "C"
     # alt placeholder, not equal to ref
     assert v.alt != "C"
+    assert alleles_real is False  # alt is fictional
 
 
 def test_parse_variant_coords_nan_string():
     """Pandas often reads empty TSV cells as the literal string 'nan'
     (not NaN). Treat both as 'genuinely empty' → None, no warning
     (caller skips silently for non-SNV antigen rows)."""
-    assert _parse_variant_coords("nan") is None
-    assert _parse_variant_coords("NaN") is None
-    assert _parse_variant_coords("") is None
-    assert _parse_variant_coords("   ") is None
+    for bad in ("nan", "NaN", "", "   "):
+        v, alleles_real = _parse_variant_coords(bad)
+        assert v is None
+        assert alleles_real is False
 
 
 def test_parse_variant_coords_n_nucleotide_rejected():
     """varcode rejects 'N' as a nucleotide; the parser substitutes
-    safe placeholders instead of returning None."""
-    v = _parse_variant_coords("chr1:1234:N:N")
+    safe placeholders instead of returning None — and flags
+    alleles_real=False so callers don't mistake the placeholders
+    for real biology."""
+    v, alleles_real = _parse_variant_coords("chr1:1234:N:N")
     assert v is not None
     assert v.ref != "N"
     assert v.alt != "N"
+    assert alleles_real is False
 
 
 def test_real_lens_v19_subset_produces_ranked_entries():

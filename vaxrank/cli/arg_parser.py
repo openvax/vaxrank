@@ -266,6 +266,21 @@ def add_output_args(arg_parser):
         action="store_false",
         help="Disable pepsickle credibility annotation (e.g. when "
              "pepsickle isn't installed and the warning is noisy).")
+    output_args_group.add_argument(
+        "--pepsickle-human-only",
+        action="store_true",
+        default=False,
+        help="Use pepsickle's human-only-trained model (default: "
+             "off, all-mammal). Pass when running on human samples "
+             "exclusively.")
+    output_args_group.add_argument(
+        "--pepsickle-threshold",
+        type=float,
+        default=0.5,
+        help="Cleavage probability threshold used internally by "
+             "pepsickle (default 0.5). Doesn't affect the continuous "
+             "scores attached to each ligand, only pepsickle's "
+             "internal binarization.")
 
     output_args_group.add_argument(
         "--output-patient-id",

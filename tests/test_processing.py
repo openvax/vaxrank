@@ -231,28 +231,28 @@ def test_annotate_processing_empty_input_returns_zero():
 
 def test_epitope_data_surfaces_processing_columns_when_annotated():
     """report.TemplateDataCreator._epitope_data adds three extra
-    columns (C-term cut, Max internal cut, Processing score) when the
-    EpitopePrediction has been annotated. Non-annotated predictions
-    keep the original 6-column shape — so old reports don't change."""
+    columns (C-term cut, Max internal cut, Processing score) when
+    ``include_processing=True``. Default ``include_processing=False``
+    keeps the original 6-column shape so unannotated reports
+    don't change."""
     from collections import OrderedDict
 
     source = "AAAAKLMNPVAAAA"
     pred = _ep("KLMNPV", source, offset=4)
 
-    # Sanity: before annotation, shape is the legacy 6 columns.
     from vaxrank.report import TemplateDataCreator
-    # We don't need a fully constructed creator — only the method.
     creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    # Default: 6-column legacy shape.
     pre = creator._epitope_data(pred)
     assert isinstance(pre, OrderedDict)
     assert 'C-term cut' not in pre
     assert 'Processing score' not in pre
 
-    # After annotation, the three new columns appear.
+    # After annotation, ``include_processing=True`` surfaces the columns.
     annotate_processing(
         [pred],
         predictor=StubPepsickle({source: [0.1] * 9 + [0.85] + [0.0] * 4}))
-    post = creator._epitope_data(pred)
+    post = creator._epitope_data(pred, include_processing=True)
     assert 'C-term cut' in post
     assert 'Max internal cut' in post
     assert 'Processing score' in post
@@ -276,3 +276,148 @@ def test_processing_aware_annotation_opt_out():
         '--no-processing-aware-annotation',
     ])
     assert args.processing_aware_annotation is False
+
+
+def test_pepsickle_cli_param_passthrough():
+    """--pepsickle-human-only and --pepsickle-threshold flags get
+    threaded through to the predictor constructor."""
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    args = parse_vaxrank_args([
+        '--input-lens', '/dev/null',
+        '--pepsickle-human-only',
+        '--pepsickle-threshold', '0.7',
+    ])
+    assert args.pepsickle_human_only is True
+    assert args.pepsickle_threshold == 0.7
+
+
+# ---- Review-fix coverage: report header consistency, peptide re-location
+
+def test_epitope_data_header_consistent_when_some_predictions_unannotated():
+    """Mixed annotated/unannotated predictions in the same VP epitope
+    list must produce consistent column keys when ``include_processing``
+    is True. Pre-fix: header (from first epitope) had 6 keys but later
+    annotated rows had 9 — table malformed. Now: caller passes
+    ``include_processing=True`` for any list with ANY annotated
+    prediction; every row gets all 9 keys with '—' for unannotated."""
+    from vaxrank.report import TemplateDataCreator
+
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    source = "AAAAKLMNPVAAAA"
+    annotated = _ep("KLMNPV", source, offset=4)
+    unannotated = _ep("AAAAA", source, offset=0)
+    annotate_processing(
+        [annotated],
+        predictor=StubPepsickle(
+            {source: [0.1] * 9 + [0.85] + [0.0] * 4}))
+    # Verify mixed state: only one of the two has the field set
+    assert annotated.c_term_cleavage_prob is not None
+    assert unannotated.c_term_cleavage_prob is None
+
+    # When the caller turns include_processing on, BOTH rows have
+    # the same key set — table renders cleanly.
+    row_a = creator._epitope_data(annotated, include_processing=True)
+    row_u = creator._epitope_data(unannotated, include_processing=True)
+    assert list(row_a.keys()) == list(row_u.keys()), (
+        "Annotated and unannotated rows should share identical "
+        "column keys when include_processing=True; got "
+        "annotated=%s vs unannotated=%s" % (
+            list(row_a.keys()), list(row_u.keys())))
+    # Unannotated row uses the '—' placeholder
+    assert row_u['C-term cut'] == '—'
+    assert row_u['Max internal cut'] == '—'
+    assert row_u['Processing score'] == '—'
+
+
+def test_re_location_picks_closest_to_declared_offset():
+    """When the peptide appears more than once in the source (a
+    repeated motif), re-location should pick the occurrence closest
+    to the declared offset rather than always the first."""
+    # Source has 'AAAAA' at offsets 0 and 8. Declared offset says
+    # the peptide is the second occurrence; re-location should snap
+    # to position 8, not position 0.
+    source = "AAAAA" + "BBB" + "AAAAA"  # length 13
+    pred = _ep("AAAAA", source, offset=7)  # off-by-one near the second occurrence
+    # probs distinguish position 0 (low cleavage) from position 12 (high)
+    probs = [0.0, 0.0, 0.0, 0.0, 0.0,
+             0.0, 0.0, 0.0,
+             0.0, 0.0, 0.0, 0.0, 0.95]  # cleavage at last position only
+    annotate_processing(
+        [pred], predictor=StubPepsickle({source: probs}))
+    # If re-location snapped to position 0 (first occurrence), c_term
+    # would be probs[4] = 0.0; if it correctly snapped to position 8,
+    # c_term = probs[12] = 0.95.
+    assert pred.c_term_cleavage_prob == 0.95, (
+        "Re-location should pick the closest occurrence to declared "
+        "offset (8 → 12), not the first occurrence (0 → 4); got "
+        "c_term=%s" % pred.c_term_cleavage_prob)
+
+
+def test_re_location_warns_on_large_offset_drift(caplog):
+    """If re-location moves the offset by more than 3 positions, the
+    upstream loader's offset accounting is probably wrong — warn."""
+    import logging
+    source = "PADDING_PADDING_KLMNPV_PADDING"
+    # Declared offset is way off — peptide is at index 16, not 2.
+    pred = _ep("KLMNPV", source, offset=2)
+    with caplog.at_level(logging.WARNING):
+        annotate_processing(
+            [pred],
+            predictor=StubPepsickle({source: [0.5] * len(source)}))
+    assert any(
+        "re-located" in r.message and "positions" in r.message
+        for r in caplog.records), \
+        "Expected a 're-located by N positions' warning for >3aa drift"
+
+
+def test_dedup_by_content_when_duplicate_objects():
+    """The CLI annotation dispatcher dedups by both id() AND a
+    content key (peptide, allele, source, offset). A future loader
+    that copies an EpitopePrediction into a VP would produce two
+    distinct objects with the same content; only one should be
+    annotated."""
+    from vaxrank.cli.entry_point import (
+        _annotate_predictions_with_processing,
+    )
+    from types import SimpleNamespace
+
+    # Two distinct EpitopePrediction objects with identical content.
+    source = "AAAAKLMNPVAAAA"
+    pred_a = _ep("KLMNPV", source, offset=4)
+    pred_b = _ep("KLMNPV", source, offset=4)  # different object, same content
+    assert id(pred_a) != id(pred_b)
+
+    # Wire pred_a into a VP and pred_b into the lens-style flat list.
+    # Pre-fix the id-based dedup would let both through; the content
+    # dedup catches it.
+    fragment = SimpleNamespace(amino_acids=source, gene_name='G')
+    vp = SimpleNamespace(
+        mutant_protein_fragment=fragment,
+        mutant_epitope_predictions=[pred_a])
+    ranked = [(SimpleNamespace(), [vp])]
+    lens_predictions = [pred_b]
+
+    # Use a counting stub to verify only one annotation pass.
+    stub = StubPepsickle({source: [0.1] * 14})
+    # Inject the stub by monkeypatching annotate_processing's lazy load.
+    # Simpler: call annotate_processing directly with the deduped list
+    # the dispatcher would build. Verify the list contains exactly one
+    # of the two duplicate predictions.
+    import vaxrank.processing as proc_mod
+    orig = proc_mod.annotate_processing
+    captured = {}
+    def _capture(pred_list, predictor=None, human_only=False, threshold=0.5):
+        captured['list'] = list(pred_list)
+        return orig(pred_list, predictor=stub)
+    proc_mod.annotate_processing = _capture
+    try:
+        _annotate_predictions_with_processing(ranked, lens_predictions)
+    finally:
+        proc_mod.annotate_processing = orig
+
+    assert 'list' in captured
+    deduped = captured['list']
+    assert len(deduped) == 1, (
+        "Content-key dedup should collapse two distinct objects with "
+        "identical (peptide, allele, source, offset) to one; got %d"
+        % len(deduped))

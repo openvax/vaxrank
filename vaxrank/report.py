@@ -207,19 +207,22 @@ class TemplateDataCreator(object):
         ])
         return manufacturability_data
 
-    def _epitope_data(self, epitope_prediction):
-        """
-        Returns an OrderedDict with epitope data from the given prediction.
+    def _epitope_data(self, epitope_prediction, include_processing=False):
+        """Returns an OrderedDict with epitope data from the given prediction.
 
-        When the prediction has been annotated with pepsickle credibility
-        scores (issue #249), three extra columns are appended:
-        ``C-term cut`` (probability the proteasome cuts cleanly at the
-        ligand's C-terminus), ``Max internal cut`` (peak cleavage
-        probability strictly inside the ligand — high means the ligand
-        is likely destroyed before MHC), and ``Processing score``
-        (composite ``c_term × (1 − max_internal)``). The columns appear
-        only when annotation succeeded so unannotated reports keep
-        their original 6-column shape.
+        ``include_processing``: when True, always emit the three
+        pepsickle credibility columns (``C-term cut``, ``Max internal
+        cut``, ``Processing score``), using ``'—'`` as the placeholder
+        for predictions that weren't annotated. The caller decides
+        per-list (per-VaccinePeptide) whether *any* prediction in
+        the list is annotated; if so, every row gets the columns so
+        the rendered table has consistent headers and column widths.
+
+        When False (default), the legacy 6-column dict is returned
+        unchanged — reports that don't run pepsickle keep their
+        original shape.
+
+        Issue #249.
         """
         # if the WT peptide is too short, it's possible that we're missing a prediction for it
         if epitope_prediction.wt_ic50 is not None:
@@ -234,11 +237,12 @@ class TemplateDataCreator(object):
             ('WT sequence', epitope_prediction.wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
         ])
-        c_term = getattr(epitope_prediction, 'c_term_cleavage_prob', None)
-        max_int = getattr(epitope_prediction, 'max_internal_cut_prob', None)
-        proc = getattr(epitope_prediction, 'processing_score', None)
-        if c_term is not None:
-            epitope_data['C-term cut'] = '%.2f' % c_term
+        if include_processing:
+            c_term = getattr(epitope_prediction, 'c_term_cleavage_prob', None)
+            max_int = getattr(epitope_prediction, 'max_internal_cut_prob', None)
+            proc = getattr(epitope_prediction, 'processing_score', None)
+            epitope_data['C-term cut'] = (
+                '%.2f' % c_term if c_term is not None else '—')
             epitope_data['Max internal cut'] = (
                 '%.2f' % max_int if max_int is not None else '—')
             epitope_data['Processing score'] = (
@@ -320,10 +324,24 @@ class TemplateDataCreator(object):
                 peptide_data = self._peptide_data(vaccine_peptide, predicted_effect.transcript_name)
                 manufacturability_data = self._manufacturability_data(vaccine_peptide)
 
+                # Issue #249: pepsickle credibility columns are added
+                # to every row in this VP's per-epitope table iff *any*
+                # mutant prediction in the list was annotated. This
+                # keeps the rendered HTML/PDF/ASCII table headers
+                # consistent with the rows even when some predictions
+                # failed annotation (per-source pepsickle errors are
+                # graceful, so mixed annotated/unannotated lists are
+                # possible).
+                any_processing = any(
+                    getattr(p, 'c_term_cleavage_prob', None) is not None
+                    for p in vaccine_peptide.mutant_epitope_predictions)
+
                 epitopes = []
                 wt_epitopes = []
                 for mutant_epitope_prediction in vaccine_peptide.mutant_epitope_predictions:
-                    epitopes.append(self._epitope_data(mutant_epitope_prediction))
+                    epitopes.append(self._epitope_data(
+                        mutant_epitope_prediction,
+                        include_processing=any_processing))
 
                 for wt_epitope_prediction in vaccine_peptide.wildtype_epitope_predictions:
                     epitope_data = self._epitope_data(wt_epitope_prediction)

@@ -116,33 +116,63 @@ def _has_external_input(args):
         or getattr(args, 'input_lens', None))
 
 
-def _annotate_predictions_with_processing(ranked_vaccine_peptides, lens_predictions):
+def _annotate_predictions_with_processing(ranked_vaccine_peptides,
+                                          lens_predictions,
+                                          human_only=False,
+                                          threshold=0.5):
     """Run pepsickle credibility tagging across all EpitopePrediction
     records. Pulls them from BOTH the ranked-vaccine-peptides
     intermediate (one VP per variant; each VP has its own predictions)
     AND the LENS/pVACseq predictions list (which is the union).
 
-    Annotation is in-place on the EpitopePrediction objects, so the
-    same prediction reachable from either source gets a single
-    annotation.
+    Annotation is in-place on the EpitopePrediction objects.
+
+    Dedup strategy: identity (``id()``) wins when the two paths share
+    the same Python object, but a future external-input loader that
+    *copies* a prediction into the VP would break that assumption.
+    To stay correct in both cases, we *also* dedup on the content
+    tuple ``(peptide_sequence, allele, source_sequence, offset)``
+    so a prediction reachable as two distinct objects with the same
+    semantic identity still gets annotated only once. Both checks
+    are O(1).
     """
     from ..processing import annotate_processing
     all_predictions = []
-    seen = set()
+    seen_ids = set()
+    seen_keys = set()
+
+    def _key(p):
+        return (
+            getattr(p, 'peptide_sequence', '') or '',
+            getattr(p, 'allele', '') or '',
+            getattr(p, 'source_sequence', '') or '',
+            getattr(p, 'offset', 0) or 0,
+        )
+
+    def _maybe_add(p):
+        pid = id(p)
+        if pid in seen_ids:
+            return
+        seen_ids.add(pid)
+        # Content-key dedup: skip if a *different* object with the
+        # same (peptide, allele, source, offset) already in flight.
+        k = _key(p)
+        if k in seen_keys:
+            return
+        seen_keys.add(k)
+        all_predictions.append(p)
+
     for _, peptides in (ranked_vaccine_peptides or []):
         for vp in peptides or []:
             for p in (
                     getattr(vp, 'mutant_epitope_predictions', None) or []):
-                if id(p) not in seen:
-                    seen.add(id(p))
-                    all_predictions.append(p)
+                _maybe_add(p)
     for p in (lens_predictions or []):
-        if id(p) not in seen:
-            seen.add(id(p))
-            all_predictions.append(p)
+        _maybe_add(p)
     if not all_predictions:
         return 0
-    return annotate_processing(all_predictions)
+    return annotate_processing(
+        all_predictions, human_only=human_only, threshold=threshold)
 
 
 def _epitope_config_from_args_safe(args):
@@ -523,7 +553,9 @@ def main(args_list=None):
     # --no-processing-aware-annotation.
     if getattr(args, 'processing_aware_annotation', True):
         _annotate_predictions_with_processing(
-            ranked_variants_with_vaccine_peptides, predictions)
+            ranked_variants_with_vaccine_peptides, predictions,
+            human_only=getattr(args, 'pepsickle_human_only', False),
+            threshold=getattr(args, 'pepsickle_threshold', 0.5))
 
     _emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
 

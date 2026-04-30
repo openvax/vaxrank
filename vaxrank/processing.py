@@ -65,6 +65,29 @@ def _per_position_processing(seq_probs, start, length):
     return c_term, max_internal
 
 
+def _closest_occurrence(source, peptide, declared_offset):
+    """Return the offset of ``peptide`` in ``source`` closest to
+    ``declared_offset`` (or None if not found).
+
+    Prefer the closest match so repeated peptides — homopolymer
+    tracts, short ligands appearing in multiple loops — don't snap
+    to position 0 when the upstream loader recorded the offset of a
+    later occurrence.
+    """
+    if not peptide or not source:
+        return None
+    best = None
+    best_drift = None
+    pos = source.find(peptide)
+    while pos >= 0:
+        drift = abs(pos - declared_offset)
+        if best_drift is None or drift < best_drift:
+            best = pos
+            best_drift = drift
+        pos = source.find(peptide, pos + 1)
+    return best
+
+
 def _composite_processing_score(c_term, max_internal):
     """Composite credibility: ``c_term * (1 - max_internal)``.
 
@@ -79,9 +102,20 @@ def _composite_processing_score(c_term, max_internal):
     return float(c_term) * (1.0 - float(max_internal))
 
 
-def _load_default_predictor():
+def _load_default_predictor(human_only=False, threshold=0.5):
     """Load pepsickle on demand. Returns None if unavailable so the
     caller can degrade gracefully instead of failing the whole run.
+
+    Parameters mirror :class:`mhctools.Pepsickle`:
+      - ``human_only``: use the human-only-trained model (default
+        False = all-mammal).
+      - ``threshold``: cleavage probability cutoff used internally
+        by pepsickle (default 0.5).
+
+    On import / instantiation failure, the warning includes a debug
+    traceback (``logger.debug(exc_info=True)``) so genuine bugs in
+    the install — bad CUDA libs, torch version mismatch — are
+    visible at DEBUG without spamming WARNING-level output.
     """
     try:
         from mhctools import Pepsickle
@@ -90,17 +124,20 @@ def _load_default_predictor():
             "Could not import mhctools.Pepsickle (%s); skipping "
             "proteasome-cleavage credibility tagging. Install "
             "pepsickle (`pip install pepsickle`) to enable.", e)
+        logger.debug("Pepsickle import traceback:", exc_info=True)
         return None
     try:
-        return Pepsickle()
+        return Pepsickle(human_only=human_only, threshold=threshold)
     except Exception as e:
         logger.warning(
             "Could not instantiate Pepsickle (%s); skipping "
             "proteasome-cleavage credibility tagging.", e)
+        logger.debug("Pepsickle instantiation traceback:", exc_info=True)
         return None
 
 
-def annotate_processing(predictions, predictor=None):
+def annotate_processing(predictions, predictor=None,
+                        human_only=False, threshold=0.5):
     """Attach pepsickle credibility scores to each EpitopePrediction.
 
     Groups predictions by ``source_sequence`` and runs the proteasome
@@ -123,6 +160,10 @@ def annotate_processing(predictions, predictor=None):
         method, or ``None``. When ``None``, ``mhctools.Pepsickle`` is
         loaded lazily; if pepsickle isn't installed we log a warning
         and return without modifying any prediction.
+    human_only, threshold : forwarded to the default Pepsickle
+        constructor when ``predictor is None``. Ignored when the
+        caller passes a pre-built predictor (the caller is responsible
+        for configuring it).
 
     Returns
     -------
@@ -134,7 +175,8 @@ def annotate_processing(predictions, predictor=None):
         return 0
 
     if predictor is None:
-        predictor = _load_default_predictor()
+        predictor = _load_default_predictor(
+            human_only=human_only, threshold=threshold)
         if predictor is None:
             return 0
 
@@ -170,20 +212,34 @@ def annotate_processing(predictions, predictor=None):
             peptide = p.peptide_sequence or ''
             if not peptide:
                 continue
-            # Trust the declared offset first; fall back to a string
-            # search in the source. Either path can be wrong if the
-            # source was truncated relative to the original protein,
-            # so re-locate when the declared offset doesn't match.
-            offset = getattr(p, 'offset', None) or 0
+            declared_offset = getattr(p, 'offset', None) or 0
             length = len(peptide)
-            if (offset + length > len(source) or
-                    source[offset:offset + length] != peptide):
-                # Re-find by substring search; keeps the annotation
-                # robust against off-by-one offset drift.
-                idx = source.find(peptide)
-                if idx < 0:
+            # Trust the declared offset first.
+            if (declared_offset + length <= len(source) and
+                    source[declared_offset:declared_offset + length]
+                    == peptide):
+                offset = declared_offset
+            else:
+                # Re-locate by substring search, biased toward the
+                # declared offset: prefer the closest occurrence so
+                # repeated peptides (homopolymer tracts, short
+                # ligands) don't silently snap to position 0.
+                offset = _closest_occurrence(
+                    source, peptide, declared_offset)
+                if offset is None:
                     continue
-                offset = idx
+                drift = abs(offset - declared_offset)
+                if drift > 3:
+                    # >3aa drift suggests the offset metadata is
+                    # genuinely wrong (vs. a 1-off typo). Warn so
+                    # the upstream loader can be flagged.
+                    logger.warning(
+                        "Peptide %r re-located in source by %d "
+                        "positions (declared offset=%d, found=%d). "
+                        "Annotation proceeds with the located "
+                        "position; check the upstream loader's "
+                        "offset accounting.",
+                        peptide, drift, declared_offset, offset)
             c_term, max_internal = _per_position_processing(
                 seq_probs, offset, length)
             if c_term is None:

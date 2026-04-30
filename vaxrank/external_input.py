@@ -54,56 +54,69 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_variant_coords(coords, genome=None, ref_alt_fallback=("A", "C")):
-    """Parse a LENS ``variant_coords`` cell into a ``varcode.Variant``.
+    """Parse a LENS ``variant_coords`` cell into a ``(Variant, alleles_real)``
+    pair, where ``alleles_real`` is True iff ref + alt came from the
+    LENS row (vs. placeholder fallback).
 
     Real LENS files emit several forms; we accept whichever is present:
 
-      - ``chr1:26780312:C:T``  (4-part: chr, pos, ref, alt — test fixtures)
-      - ``chr1:26780312:C``    (3-part: chr, pos, ref — alt missing)
+      - ``chr1:26780312:C:T``  (4-part: chr, pos, ref, alt — test fixtures
+                                 + occasional real rows. ``alleles_real=True``)
+      - ``chr1:26780312:C``    (3-part: chr, pos, ref. alt is placeholder.
+                                 ``alleles_real=False``)
       - ``chr1:26780312``      (2-part: chr, pos only — dominant in real
-                                 LENS v1.9 reports; ref / alt fall back to
-                                 ``ref_alt_fallback`` since varcode rejects
-                                 N or empty nucleotides. ``A``/``C``
-                                 placeholders satisfy varcode's validator
-                                 without claiming a specific genotype;
-                                 downstream construct assembly keys off
-                                 the (chr, pos) tuple, not the alleles)
+                                 LENS v1.9 reports; both ref and alt are
+                                 placeholders. ``alleles_real=False``)
 
-    Returns ``None`` for empty / NaN / malformed input. NaN is a normal
-    artifact of non-SNV antigen rows (splice, fusion, intron retention)
-    where ``variant_coords`` is genuinely empty — callers should treat
-    None as "skip silently," not as a warning condition.
+    Placeholder nucleotides (``A``/``C`` by default) satisfy varcode's
+    validator without claiming a specific genotype. Downstream construct
+    assembly keys off the (chr, pos) tuple, not the alleles. **Important**:
+    when ``alleles_real=False`` the resulting ``Variant`` should NOT be
+    fed to varcode effect annotation or any code path that interprets
+    ref/alt as biology — the genotype is fictional. Callers that need
+    real ref/alt (e.g. reannotating against a transcript) should drop
+    rows where ``alleles_real`` is False and ask the upstream LENS run
+    for a more complete report.
+
+    Returns ``(None, False)`` for empty / NaN / malformed input. NaN
+    is a normal artifact of non-SNV antigen rows (splice, fusion,
+    intron retention) where ``variant_coords`` is genuinely empty —
+    callers should treat None as "skip silently," not as a warning
+    condition.
     """
     from varcode import Variant
     if coords is None or not isinstance(coords, str):
-        return None
+        return None, False
     s = coords.strip()
     if not s or s.lower() == 'nan':
-        return None
+        return None, False
     parts = s.split(":")
     if len(parts) < 2:
-        return None
+        return None, False
     contig = parts[0]
     try:
         start = int(parts[1])
     except (ValueError, IndexError):
-        return None
-    # varcode rejects 'N' and empty strings as nucleotides. Use safe
-    # placeholders when LENS doesn't supply ref/alt.
-    ref = parts[2] if (
-        len(parts) >= 3 and parts[2] and parts[2] != 'N'
-    ) else ref_alt_fallback[0]
-    alt = parts[3] if (
-        len(parts) >= 4 and parts[3] and parts[3] != 'N'
-    ) else ref_alt_fallback[1]
+        return None, False
+    # varcode rejects 'N' and empty strings as nucleotides. Track
+    # whether ref AND alt came from the LENS row so downstream code
+    # can detect the placeholder case.
+    ref_real = (
+        len(parts) >= 3 and parts[2] and parts[2] != 'N')
+    alt_real = (
+        len(parts) >= 4 and parts[3] and parts[3] != 'N')
+    ref = parts[2] if ref_real else ref_alt_fallback[0]
+    alt = parts[3] if alt_real else ref_alt_fallback[1]
     if ref == alt:  # varcode rejects no-op variants
         alt = 'C' if ref == 'A' else 'A'
+        alt_real = False
     try:
-        return Variant(
+        v = Variant(
             contig=contig, start=start, ref=ref, alt=alt,
             genome=genome, normalize_contig_names=False)
     except Exception:
-        return None
+        return None, False
+    return v, (ref_real and alt_real)
 
 
 def _mut_offsets_in_context(peptide, pep_context):
@@ -258,13 +271,16 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
 
     ranked = []
     n_unparseable = 0
+    n_placeholder_alleles = 0
     for coords, group_rows in groups.items():
-        variant = _parse_variant_coords(coords, genome=genome)
+        variant, alleles_real = _parse_variant_coords(coords, genome=genome)
         if variant is None:
             n_unparseable += 1
             logger.debug(
                 "Could not parse LENS variant_coords %r; skipping.", coords)
             continue
+        if not alleles_real:
+            n_placeholder_alleles += 1
         rep = _pick_representative(group_rows, affinity_cols, rank_cols)
         peptide = rep.get('peptide') or ""
         pep_context = rep.get('pep_context') or ""
@@ -331,6 +347,14 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             "Skipped %d LENS variant_coords value(s) that didn't parse "
             "as chr:pos[:ref:alt]; see DEBUG log for the offenders.",
             n_unparseable)
+    if n_placeholder_alleles:
+        logger.info(
+            "%d LENS variant(s) used placeholder ref/alt nucleotides "
+            "because the source row only carried chr:pos. The synthesized "
+            "MutantProteinFragment.variant.ref / .alt are placeholders "
+            "(not real biology) and must NOT be fed to varcode-effect "
+            "annotation. Construct assembly only uses (chr, pos) and is "
+            "unaffected.", n_placeholder_alleles)
 
     # Order by mutant_epitope_score descending so the top candidates
     # win greedy bin-packing in the construct assemblers. Ties broken
