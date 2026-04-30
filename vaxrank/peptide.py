@@ -39,6 +39,7 @@ from .vaccine_library import (
     get_linker,
     iter_named_antigens,
     select_antigen_window,
+    top_mutant_epitopes,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,18 +49,52 @@ logger = logging.getLogger(__name__)
 class PeptideConstructConfig:
     """User-configurable peptide construct parameters.
 
+    Two orthogonal axes drive the vaccine design (shared with
+    ``RNAConstructConfig``):
+
+    - ``antigen_content`` ∈ ``{'mutation_spanning', 'minimal_epitope'}``
+      — what each antigen *is*. ``mutation_spanning`` extracts a
+      mutation-centered window of up to ``max_antigen_length_aa``
+      (the SLP/long-peptide content). ``minimal_epitope`` extracts
+      the top ``epitopes_per_antigen`` MHC ligands per VaccinePeptide
+      and emits each as its own short antigen.
+    - ``antigens_per_construct`` — how many antigens to *concatenate*
+      into one construct (with the configured ``linker``).
+
+    The four corners of the matrix:
+
+      content=mutation_spanning, per_construct=1   → SLP (one peptide
+                                                     per ranked vaccine
+                                                     peptide; PGV-001
+                                                     canonical)
+      content=mutation_spanning, per_construct=N   → Multi-SLP /
+                                                     "multi-epitope long"
+                                                     concatenation
+      content=minimal_epitope,  per_construct=1   → Minimal-epitope
+                                                     peptide (one short
+                                                     ligand per variant)
+      content=minimal_epitope,  per_construct=N   → Concatenated
+                                                     minimal-ligand
+                                                     pool
+
     Defaults match the canonical PGV-001 personalized peptide vaccine
     layout: ~20 synthetic long peptides per pool, one antigen per
     peptide, 15-25 aa per peptide.
 
-    The ``scale_mg`` / ``purity_percent`` / ``counterion`` fields drive
-    the vendor order form's per-construct columns. They're per-vaccine
-    constants in current practice (one purity target across the pool),
-    but are kept here so the writer can render them without a separate
+    Legacy ``mode`` field (``slp`` / ``minimal_epitope`` /
+    ``multi_epitope``) is preserved as a back-compat shorthand; when
+    set non-default it derives ``antigen_content`` and
+    ``antigens_per_construct`` in ``__post_init__``.
+
+    ``scale_mg`` / ``purity_percent`` / ``counterion`` drive the
+    vendor order form's per-construct columns; per-vaccine constants
+    today, kept here so the writer can render them without a separate
     config object.
     """
-    mode: str = "slp"            # 'slp' | 'minimal_epitope' | 'multi_epitope'
-    linker: str = "G4S3"         # only used in multi_epitope mode
+    mode: str = "slp"            # legacy alias; see __post_init__
+    antigen_content: str = "mutation_spanning"  # 'mutation_spanning' | 'minimal_epitope'
+    epitopes_per_antigen: int = 1               # for minimal_epitope content
+    linker: str = "G4S3"         # only used when antigens_per_construct > 1
     min_antigen_length_aa: int = 15
     max_antigen_length_aa: int = 25
     antigens_per_construct: int = 1
@@ -70,6 +105,34 @@ class PeptideConstructConfig:
     scale_mg: float = 5.0           # synthesis scale per peptide
     purity_percent: float = 95.0    # HPLC purity target
     counterion: str = "TFA"         # default salt form (TFA / acetate / HCl / free)
+
+    def __post_init__(self):
+        # Derive the orthogonal axes from the legacy ``mode`` shorthand
+        # when the user passed it (or the default 'slp' was kept). The
+        # rule: if the user already set ``antigen_content`` /
+        # ``antigens_per_construct`` non-default, those win — mode is
+        # only consulted when it would change the dataclass default.
+        if self.mode == "slp":
+            # default; nothing to derive (mutation_spanning + per_construct=1)
+            pass
+        elif self.mode == "minimal_epitope":
+            self.antigen_content = "minimal_epitope"
+            # antigens_per_construct stays at user-set value (default 1)
+        elif self.mode == "multi_epitope":
+            # mutation_spanning content (legacy semantics);
+            # antigens_per_construct must already be > 1 for this to
+            # do anything different from slp — left to the user.
+            self.antigen_content = "mutation_spanning"
+        else:
+            raise ValueError(
+                "PeptideConstructConfig.mode must be one of "
+                "{'slp', 'minimal_epitope', 'multi_epitope'}; got %r" %
+                self.mode)
+        if self.antigen_content not in (
+                'mutation_spanning', 'minimal_epitope'):
+            raise ValueError(
+                "antigen_content must be 'mutation_spanning' or "
+                "'minimal_epitope'; got %r" % self.antigen_content)
 
 
 @dataclass
@@ -82,37 +145,41 @@ class PeptideConstruct:
     manufacturability: dict = field(default_factory=dict)
 
 
-def _antigen_records(ranked_vaccine_peptides, mode, max_antigen_length_aa,
+def _antigen_records(ranked_vaccine_peptides, antigen_content,
+                     max_antigen_length_aa, epitopes_per_antigen=1,
                      candidates_per_slot=1):
     """Yield ``(name, amino_acids)`` per antigen.
 
-    Mode dispatch only — naming + alt-suffix logic comes from
-    ``iter_named_antigens``, shared with mRNA assembly so the antigen
-    names match across modalities.
+    Dispatch on ``antigen_content``:
+      - ``'mutation_spanning'``: emit one mutation-centered window per
+        VaccinePeptide (or per ``candidates_per_slot`` alternates).
+      - ``'minimal_epitope'``: emit the top
+        ``epitopes_per_antigen`` MHC ligands per VaccinePeptide as
+        independent antigens. ``epitopes_per_antigen=1`` (default) is
+        the legacy "single top ligand" semantics; >1 packs multiple
+        ligands from the same variant.
+
+    Naming + alt-suffix logic comes from ``iter_named_antigens``,
+    shared with mRNA assembly so antigen names match across types.
     """
     for base_name, fragment, peptide in iter_named_antigens(
             ranked_vaccine_peptides, candidates_per_slot=candidates_per_slot):
-        if mode == "minimal_epitope":
-            top = _top_mutant_epitope(peptide)
-            if top is None:
+        if antigen_content == "minimal_epitope":
+            tops = top_mutant_epitopes(peptide, n=epitopes_per_antigen)
+            if not tops:
                 logger.info(
                     "Skipping %s in minimal_epitope mode: no mutant "
                     "epitope predictions available.", base_name)
                 continue
-            yield base_name + "_epitope", top.peptide_sequence
+            for k, ep in enumerate(tops):
+                # When epitopes_per_antigen=1 keep the legacy
+                # ``<name>_epitope`` suffix; for >1 disambiguate.
+                suffix = "_epitope" if len(tops) == 1 else "_epitope%d" % (k + 1)
+                yield base_name + suffix, ep.peptide_sequence
         else:
-            # slp + multi_epitope: pick a mutation-centered window
+            # mutation_spanning: pick a mutation-centered window
             yield base_name, select_antigen_window(
                 fragment, base_name, max_antigen_length_aa)
-
-
-def _top_mutant_epitope(vaccine_peptide):
-    """Pick the highest-scoring mutant epitope; None if none available."""
-    predictions = getattr(vaccine_peptide, 'mutant_epitope_predictions', None) or []
-    if not predictions:
-        return None
-    # mutant_epitope_predictions is already sorted by score in the pipeline
-    return predictions[0]
 
 
 def _manufacturability_for(sequence):
@@ -190,27 +257,31 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
     list[PeptideConstruct]
     """
     options = options or PeptideConstructConfig()
-    if options.mode not in ("slp", "minimal_epitope", "multi_epitope"):
-        raise ValueError(
-            "Unknown peptide mode '%s'; expected one of slp, "
-            "minimal_epitope, multi_epitope." % (options.mode,))
 
     records = list(_antigen_records(
-        ranked_vaccine_peptides, options.mode,
+        ranked_vaccine_peptides, options.antigen_content,
         options.max_antigen_length_aa,
+        epitopes_per_antigen=options.epitopes_per_antigen,
         candidates_per_slot=options.candidates_per_slot))
     if not records:
         return []
 
+    # ``mode`` retained in the manifest for back-compat; ``antigen_content``
+    # + ``antigens_per_construct`` are the orthogonal axes that actually
+    # drive dispatch.
     base_components = {
         'mode': options.mode,
+        'antigen_content': options.antigen_content,
+        'antigens_per_construct': options.antigens_per_construct,
         'n_terminal_acetylation': options.n_terminal_acetylation,
         'c_terminal_amidation': options.c_terminal_amidation,
     }
 
     constructs = []
-    if options.mode in ("slp", "minimal_epitope"):
-        # One construct per (variant, candidate) record. Cap at max_constructs.
+    if options.antigens_per_construct <= 1:
+        # One construct per (variant, candidate) record. Covers both
+        # SLP (mutation_spanning, 1 per construct) and minimal-epitope
+        # (one short ligand per variant) designs.
         for i, (name, sequence) in enumerate(records):
             if len(constructs) >= options.max_constructs:
                 logger.info(
@@ -232,7 +303,10 @@ def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
             ))
         return constructs
 
-    # multi_epitope
+    # antigens_per_construct > 1: bin-pack into multi-antigen
+    # constructs. Works for both content types — concatenated SLPs
+    # (the legacy ``multi_epitope`` design) and concatenated minimal
+    # ligands (a new combination unlocked by the orthogonal axes).
     linker = get_linker(options.linker)
     if linker.inert_in_peptide_mode:
         logger.warning(

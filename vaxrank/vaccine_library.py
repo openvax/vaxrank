@@ -601,3 +601,34 @@ def select_antigen_window(fragment, base_name, max_length_aa):
     end = min(len(aa), start + max_length_aa)
     start = max(0, end - max_length_aa)
     return aa[start:end]
+
+
+def mutant_epitopes_sorted(vaccine_peptide):
+    """All mutant epitopes on a VaccinePeptide, score-sorted (best first).
+
+    Returns the full list (possibly empty). The pipeline already sorts
+    ``mutant_epitope_predictions`` by score, so this is a thin wrapper
+    that exposes the slice point to callers.
+
+    Used by both peptide and mRNA vaccine assembly when
+    ``antigen_content='minimal_epitope'`` — the antigen is one or more
+    short MHC ligands instead of a mutation-spanning long window. The
+    caller chooses how many to take (typically via
+    ``epitopes_per_antigen``); designs that pack multiple top ligands
+    from the same variant are first-class, not an afterthought.
+    """
+    return list(
+        getattr(vaccine_peptide, 'mutant_epitope_predictions', None) or [])
+
+
+def top_mutant_epitopes(vaccine_peptide, n=1):
+    """Top ``n`` score-sorted mutant epitopes on a VaccinePeptide.
+
+    Returns a list of length ``min(n, len(predictions))`` — possibly
+    empty when no predictions exist. ``n=1`` (the default) gives the
+    legacy "single top ligand" semantics; pass a larger ``n`` to get
+    multiple top ligands from the same variant.
+    """
+    if n <= 0:
+        return []
+    return mutant_epitopes_sorted(vaccine_peptide)[:n]

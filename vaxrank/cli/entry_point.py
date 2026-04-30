@@ -172,9 +172,32 @@ def _emit_neoepitope_report_external(args, report_df, predictions):
         save_predictions(predictions, args.output_epitopes)
 
 
+def _resolve_axis(args, per_type_attr, shared_attr, fallback):
+    """Resolve a shared antigen-design axis with per-type override.
+
+    Resolution: per-type explicit > shared > fallback. Per-type and
+    shared values of None mean "unset" (defer to the next layer).
+    """
+    per = getattr(args, per_type_attr, None)
+    if per is not None:
+        return per
+    shared = getattr(args, shared_attr, None)
+    if shared is not None:
+        return shared
+    return fallback
+
+
 def _emit_peptide_constructs(args, ranked):
     """Build + write peptide-vaccine constructs. Modality-specific."""
-    peptide_options = PeptideConstructConfig(
+    # Resolve the orthogonal antigen-design axes:
+    # per-type override > shared default > config default. The legacy
+    # --peptide-mode is consumed by PeptideConstructConfig.__post_init__
+    # when no explicit axis flag is set.
+    antigen_content = _resolve_axis(
+        args, 'peptide_antigen_content', 'antigen_content', None)
+    epitopes_per_antigen = _resolve_axis(
+        args, 'peptide_epitopes_per_antigen', 'epitopes_per_antigen', 1)
+    config_kwargs = dict(
         mode=args.peptide_mode,
         linker=args.peptide_linker,
         min_antigen_length_aa=args.peptide_min_antigen_length_aa,
@@ -187,7 +210,11 @@ def _emit_peptide_constructs(args, ranked):
         scale_mg=args.peptide_scale_mg,
         purity_percent=args.peptide_purity_percent,
         counterion=args.peptide_counterion,
+        epitopes_per_antigen=epitopes_per_antigen,
     )
+    if antigen_content is not None:
+        config_kwargs['antigen_content'] = antigen_content
+    peptide_options = PeptideConstructConfig(**config_kwargs)
     constructs = assemble_peptide_constructs(ranked, options=peptide_options)
     write_peptide_outputs(
         constructs,
@@ -207,6 +234,10 @@ def _emit_mrna_constructs(args, ranked):
         s.strip() for s in (args.mrna_junction_candidates or "").split(",")
         if s.strip()
     )
+    antigen_content = _resolve_axis(
+        args, 'mrna_antigen_content', 'antigen_content', 'mutation_spanning')
+    epitopes_per_antigen = _resolve_axis(
+        args, 'mrna_epitopes_per_antigen', 'epitopes_per_antigen', 1)
     options = RNAConstructConfig(
         signal_peptide=(args.mrna_signal_peptide or None),
         linker=args.mrna_linker,
@@ -216,6 +247,8 @@ def _emit_mrna_constructs(args, ranked):
         utr_3p=args.mrna_3p_utr,
         codon_species=args.mrna_codon_species,
         codon_method=args.mrna_codon_method,
+        antigen_content=antigen_content,
+        epitopes_per_antigen=epitopes_per_antigen,
         min_antigen_length_aa=args.mrna_min_antigen_length_aa,
         max_antigen_length_aa=args.mrna_max_antigen_length_aa,
         antigens_per_construct=args.mrna_antigens_per_construct,
