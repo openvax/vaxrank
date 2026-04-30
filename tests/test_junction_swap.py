@@ -17,7 +17,7 @@ from types import SimpleNamespace
 from vaxrank.junction_swap import (
     JunctionSwapResult,
     junction_kmers,
-    optimize_junction_linkers,
+    optimize_linkers,
 )
 
 
@@ -81,7 +81,7 @@ def test_optimize_picks_zero_burden_linker_when_one_exists():
     rank_table = {(strong_kmer, "HLA-A*02:01"): 0.1}
     predictor = StubPredictor(rank_table=rank_table)
 
-    result = optimize_junction_linkers(
+    result = optimize_linkers(
         antigens, alleles=["HLA-A*02:01"], predictor=predictor,
         candidate_names=("(G4S)2", "AAA"),
         k_lengths=(9,))
@@ -98,7 +98,7 @@ def test_optimize_keeps_default_when_all_candidates_equal():
     # tie at zero burden; the loop returns the first candidate scanned.
     antigens = ["KLQGH", "MNNVD"]
     predictor = StubPredictor(rank_table={})  # all default rank 99
-    result = optimize_junction_linkers(
+    result = optimize_linkers(
         antigens, alleles=["HLA-A*02:01"], predictor=predictor,
         candidate_names=("(G4S)2", "AAA"),
         k_lengths=(9,))
@@ -108,7 +108,7 @@ def test_optimize_keeps_default_when_all_candidates_equal():
 
 def test_optimize_handles_single_antigen():
     # No junctions → empty result.
-    result = optimize_junction_linkers(
+    result = optimize_linkers(
         ["KLQGH"], alleles=["HLA-A*02:01"], predictor=StubPredictor(),
         candidate_names=("(G4S)2",))
     assert result.chosen_linker_per_junction == []
@@ -127,7 +127,7 @@ def test_optimize_records_per_junction_choices():
         (aaa_j2[0], "HLA-A*02:01"): 0.05,   # bad for AAA at j=1
     }
     predictor = StubPredictor(rank_table=rank_table)
-    result = optimize_junction_linkers(
+    result = optimize_linkers(
         antigens, alleles=["HLA-A*02:01"], predictor=predictor,
         candidate_names=("(G4S)2", "AAA"),
         k_lengths=(9,))
@@ -154,7 +154,7 @@ def test_optimize_minimizes_strong_first_then_mild():
     # AAA: 1 strong (rank 0.3), no others mild
     rank_table[(aaa_kmers[0], "HLA-A*02:01")] = 0.3
     predictor = StubPredictor(rank_table=rank_table)
-    result = optimize_junction_linkers(
+    result = optimize_linkers(
         antigens, alleles=["HLA-A*02:01"], predictor=predictor,
         candidate_names=("G4S", "AAA"),
         k_lengths=(9,))
@@ -170,7 +170,7 @@ def test_optimize_filters_reference_proteome_kmers():
     g4s_kmers = junction_kmers(antigens[0], "GGGGS", antigens[1], (9,))
     rank_table = {(g4s_kmers[0], "HLA-A*02:01"): 0.05}  # would be strong
     predictor = StubPredictor(rank_table=rank_table)
-    result = optimize_junction_linkers(
+    result = optimize_linkers(
         antigens, alleles=["HLA-A*02:01"], predictor=predictor,
         candidate_names=("G4S",),
         k_lengths=(9,),
@@ -182,7 +182,7 @@ def test_optimize_filters_reference_proteome_kmers():
 # ---- end-to-end integration with assemble_mrna_constructs ----------------
 
 def test_assemble_with_optimizer_uses_chosen_linkers():
-    """End-to-end: assemble_mrna_constructs(optimize_junction_linkers=True,
+    """End-to-end: assemble_mrna_constructs(optimize_linkers=True,
     ...) must actually emit a construct whose protein has the
     per-junction chosen linkers between the right antigens, AND the
     manifest must record the swap.
@@ -214,7 +214,7 @@ def test_assemble_with_optimizer_uses_chosen_linkers():
 
     options = RNAConstructConfig(
         signal_peptide=None, include_mitd=False,
-        optimize_junction_linkers=True, junction_swap_candidates=("(G4S)2", "AAA"),
+        optimize_linkers=True, junction_swap_candidates=("(G4S)2", "AAA"),
         junction_kmer_lengths=(9,),
         antigens_per_construct=2, max_constructs=1,
         max_antigen_length_aa=20,
@@ -240,7 +240,7 @@ def test_assemble_with_optimizer_uses_chosen_linkers():
 
 
 def test_assemble_with_optimizer_falls_back_when_predictor_missing(caplog):
-    """optimize_junction_linkers=True without a predictor warns and uses
+    """optimize_linkers=True without a predictor warns and uses
     the shared linker — no exception."""
     import logging
     from varcode import Variant
@@ -263,7 +263,7 @@ def test_assemble_with_optimizer_falls_back_when_predictor_missing(caplog):
 
     options = RNAConstructConfig(
         signal_peptide=None, include_mitd=False,
-        optimize_junction_linkers=True,
+        optimize_linkers=True,
         antigens_per_construct=2, max_constructs=1,
         max_antigen_length_aa=10,
         utr_3p='HBB',
@@ -304,7 +304,7 @@ def test_assemble_default_kept_when_candidates_dont_help():
 
     options = RNAConstructConfig(
         signal_peptide=None, include_mitd=False,
-        optimize_junction_linkers=True, junction_swap_candidates=("(G4S)2", "AAA"),
+        optimize_linkers=True, junction_swap_candidates=("(G4S)2", "AAA"),
         junction_kmer_lengths=(9,),
         antigens_per_construct=2, max_constructs=1,
         max_antigen_length_aa=10,
@@ -324,7 +324,7 @@ def test_optimize_includes_mitd_junction_when_provided():
     # for the antigen-N → MITD junction.
     antigens = ["KLQGH", "MNNVD"]
     predictor = StubPredictor()
-    result = optimize_junction_linkers(
+    result = optimize_linkers(
         antigens, alleles=["HLA-A*02:01"], predictor=predictor,
         candidate_names=("(G4S)2",),
         k_lengths=(9,),
@@ -340,7 +340,7 @@ def test_optimize_default_linker_burden_tracked_in_sweep():
     # decide whether to swap without a second sweep.
     antigens = ["KLQGH", "MNNVD"]
     predictor = StubPredictor()
-    result = optimize_junction_linkers(
+    result = optimize_linkers(
         antigens, alleles=["HLA-A*02:01"], predictor=predictor,
         candidate_names=("(G4S)2", "AAA"),
         k_lengths=(9,),

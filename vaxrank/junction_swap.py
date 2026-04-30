@@ -166,7 +166,7 @@ def _burden_key(rows, rank_strong=RANK_STRONG, rank_mild=RANK_MILD):
     return (strong, mild, -worst)
 
 
-def optimize_junction_linkers(
+def optimize_linkers(
         antigen_aas, alleles, predictor,
         candidate_names=JUNCTION_SWAP_CANDIDATES,
         k_lengths=(8, 9, 10, 11),

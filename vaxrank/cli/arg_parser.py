@@ -374,8 +374,8 @@ def add_mrna_output_args(group):
         choices=["use_best_codon", "match_codon_usage", "harmonize_rca"],
         help="DnaChisel codon-optimization method. Default: use_best_codon.")
     group.add_argument(
-        "--mrna-optimize-junction-linkers",
-        dest="mrna_optimize_junction_linkers",
+        "--mrna-optimize-linkers",
+        dest="mrna_optimize_linkers",
         action="store_true",
         default=True,
         help="Enable per-junction linker optimization to minimize predicted "
@@ -384,8 +384,8 @@ def add_mrna_output_args(group):
              "--mhc-alleles. The default linker is used as a fallback if no "
              "candidate outperforms it.")
     group.add_argument(
-        "--mrna-no-optimize-junction-linkers",
-        dest="mrna_optimize_junction_linkers",
+        "--mrna-no-optimize-linkers",
+        dest="mrna_optimize_linkers",
         action="store_false",
         help="Disable per-junction linker optimization. The shared linker "
              "is used at every junction without optimization.")

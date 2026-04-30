@@ -172,7 +172,7 @@ class RNAConstructConfig:
     # junction. If the caller doesn't pass an mhc_predictor + alleles
     # to ``assemble_mrna_constructs``, the optimizer is skipped with
     # a warning and the shared linker is used at every junction.
-    optimize_junction_linkers: bool = True
+    optimize_linkers: bool = True
     junction_swap_candidates: tuple = ()  # empty → use library default
     junction_kmer_lengths: tuple = (8, 9, 10, 11)
     junction_rank_strong: float = 0.5
@@ -436,11 +436,11 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
     options : RNAConstructConfig or None
     mhc_predictor : optional, mhctools.BasePredictor
-        Required when ``options.optimize_junction_linkers`` is True.
+        Required when ``options.optimize_linkers`` is True.
         Used by the per-junction linker optimizer to score chimeric k-mers.
     mhc_alleles : optional, list[str]
         Patient HLA allele names. Required when
-        ``optimize_junction_linkers`` is True.
+        ``optimize_linkers`` is True.
     reference_proteome : optional
         Container that answers ``kmer in reference_proteome``. Junction
         k-mers found in the reference proteome are filtered out before
@@ -490,10 +490,10 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
         pre_mitd_linker = None  # overrides shared linker for the MITD junction
         junction_swap_meta = None
         n_junctions = max(0, len(antigen_aas) - 1)
-        if options.optimize_junction_linkers and (n_junctions > 0 or mitd_aa):
+        if options.optimize_linkers and (n_junctions > 0 or mitd_aa):
             if mhc_predictor is None or not mhc_alleles:
                 logger.warning(
-                    "optimize_junction_linkers=True but no mhc_predictor / "
+                    "optimize_linkers=True but no mhc_predictor / "
                     "mhc_alleles supplied; falling back to the shared "
                     "linker at every junction. Pass mhc_predictor + "
                     "mhc_alleles to assemble_mrna_constructs (or run "
@@ -506,13 +506,13 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             else:
                 from .junction_swap import (
                     JUNCTION_SWAP_CANDIDATES,
-                    optimize_junction_linkers,
+                    optimize_linkers,
                 )
                 cand_names = (
                     tuple(options.junction_swap_candidates)
                     or JUNCTION_SWAP_CANDIDATES
                 )
-                swap = optimize_junction_linkers(
+                swap = optimize_linkers(
                     antigen_aas=antigen_aas,
                     alleles=mhc_alleles,
                     predictor=mhc_predictor,

@@ -277,12 +277,12 @@ def main(args_list=None):
             max_constructs=args.mrna_max_constructs,
             candidates_per_slot=args.mrna_candidates_per_slot,
             max_length_nt=args.mrna_max_length_nt,
-            optimize_junction_linkers=args.mrna_optimize_junction_linkers,
+            optimize_linkers=args.mrna_optimize_linkers,
             junction_swap_candidates=junction_candidates,
             junction_rank_strong=args.mrna_junction_rank_strong,
             junction_rank_mild=args.mrna_junction_rank_mild,
         )
-        if options.optimize_junction_linkers:
+        if options.optimize_linkers:
             try:
                 mhc_predictor = mhc_binding_predictor_from_args(args)
                 mhc_alleles = mhc_alleles_from_args(args)
