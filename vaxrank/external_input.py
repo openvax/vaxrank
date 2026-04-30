@@ -41,7 +41,7 @@ import logging
 
 import pandas as pd
 
-from .epitope_io import _detect_lens_predictors, _normalize_hla_allele
+from .epitope_io import detect_lens_predictors, normalize_hla_allele
 from .mutant_protein_fragment import MutantProteinFragment
 from .vaccine_peptide import VaccinePeptide
 
@@ -175,12 +175,24 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
     # row scored 0.0 and stable-sort returned the file-order first
     # row (typically the alphabetically-first allele) instead of the
     # strongest binder.
-    detected = _detect_lens_predictors(df.columns)
+    detected = detect_lens_predictors(df.columns)
     affinity_cols = tuple(
         d.value_col for d in detected if d.kind == 'pMHC_affinity')
     rank_cols = tuple(
         d.percentile_col for d in detected
         if d.percentile_col and d.kind == 'pMHC_affinity')
+    if not affinity_cols and not rank_cols:
+        # No pMHC_affinity predictor detected — typically a
+        # presentation-only LENS file. _row_score will tie every row
+        # at (2, 0.0) and the file-order first row "wins". Warn so
+        # the user knows the representative pick is arbitrary.
+        kinds = sorted({d.kind for d in detected}) or ['(none)']
+        logger.warning(
+            "LENS file has no pMHC_affinity scoring columns "
+            "(detected kinds: %s); per-variant representative-peptide "
+            "pick will fall back to file order. Consider running with "
+            "a predictor that emits pMHC affinity (e.g. mhcflurry, "
+            "netmhcpan-ba).", kinds)
 
     # Index predictions by (peptide, allele) so we can attach all
     # per-predictor predictions to each candidate vaccine peptide.
@@ -241,7 +253,7 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             # load_lens normalizes 'HLA-A02:01' → 'HLA-A*02:01';
             # match the same form here so the (peptide, allele)
             # lookup hits.
-            allele = _normalize_hla_allele(str(r.get('allele') or ""))
+            allele = normalize_hla_allele(str(r.get('allele') or ""))
             key = (pep, allele)
             if key in seen_keys:
                 continue
@@ -276,57 +288,101 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
     return ranked
 
 
-def ranked_from_pvacseq_predictions(predictions, report_df, genome=None,
+def _parse_pvacseq_id(vid):
+    """Parse a pVACseq aggregate ``ID`` field into a varcode.Variant.
+
+    Common forms in the wild:
+      - ``chr1-100000-100001-A-T`` (5-part dashed: contig-start-end-ref-alt)
+      - ``chr1-100000-A-T`` (4-part dashed)
+      - ``1.123.A.T`` (4-part dotted, legacy)
+
+    Returns ``(contig, start, ref, alt)`` tuple or ``None`` if the
+    string doesn't match any recognized form.
+    """
+    if not vid:
+        return None
+    s = str(vid)
+    # Try dashed first (modern pVACseq aggregate output).
+    if '-' in s:
+        parts = s.split('-')
+        if len(parts) == 5:  # contig-start-end-ref-alt
+            try:
+                return parts[0], int(parts[1]), parts[3], parts[4]
+            except ValueError:
+                return None
+        if len(parts) == 4:  # contig-start-ref-alt
+            try:
+                return parts[0], int(parts[1]), parts[2], parts[3]
+            except ValueError:
+                return None
+    # Dotted (legacy)
+    parts = s.split('.')
+    if len(parts) == 4:
+        try:
+            return parts[0], int(parts[1]), parts[2], parts[3]
+        except ValueError:
+            return None
+    return None
+
+
+def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
+                                    genome=None,
                                     num_mutant_epitopes_to_keep=None):
     """pVACseq variant of :func:`ranked_from_lens_predictions`.
 
-    pVACseq aggregate reports (the format ``load_pvacseq`` parses)
-    don't carry an SLP-context column in the same shape; we use
-    ``Best Peptide`` as the antigen sequence and treat the peptide
-    itself as the mutation span. mRNA construct generation from
-    pVACseq input therefore produces shorter antigen windows than
-    the LENS path.
+    Re-reads the raw aggregate TSV (the per-(peptide, allele)
+    ``report_df`` returned by ``load_pvacseq`` carries display columns
+    rather than the original ``ID`` / ``Best Peptide`` / ``IC50 MT``).
+
+    Uses ``Best Peptide`` as the antigen sequence and treats the
+    peptide itself as the mutation span (no SLP-context column).
+    mRNA construct generation from pVACseq input therefore produces
+    shorter antigen windows than the LENS path.
     """
-    if report_df is None or report_df.empty:
+    if not pvacseq_tsv_path:
+        return []
+    df = pd.read_csv(pvacseq_tsv_path, sep="\t", low_memory=False)
+    if df.empty:
         return []
 
     by_key = {}
     for p in predictions:
         by_key.setdefault((p.peptide_sequence, p.allele), []).append(p)
 
-    rows = report_df.to_dict('records')
+    rows = df.to_dict('records')
     groups = {}
     for r in rows:
-        # pVACseq aggregate uses 'ID' as a stable per-variant key.
         key = r.get('ID') or r.get('Index')
-        if key is None:
+        if key is None or pd.isna(key):
             continue
         groups.setdefault(key, []).append(r)
 
     ranked = []
     from varcode import Variant
+    n_skipped = 0
     for vid, group_rows in groups.items():
         rep = _pick_representative(
             group_rows, _PVACSEQ_IC50_COLS, _PVACSEQ_RANK_COLS)
         best_pep = rep.get('Best Peptide') or rep.get('peptide') or ""
         gene = rep.get('Gene') or 'unknown'
-        # pVACseq IDs look like "1.123.A.T" or similar; try to parse
-        # for variant location, else fall back to a placeholder.
-        contig, pos, ref, alt = '?', 0, 'N', 'N'
-        try:
-            parts = str(vid).split('.')
-            if len(parts) == 4:
-                contig, pos_s, ref, alt = parts
-                pos = int(pos_s)
-        except (TypeError, ValueError):
-            pass
+
+        parsed = _parse_pvacseq_id(vid)
+        if parsed is None:
+            n_skipped += 1
+            logger.debug(
+                "Could not parse pVACseq ID %r as a Variant; skipping.",
+                vid)
+            continue
+        contig, pos, ref, alt = parsed
         try:
             variant = Variant(
                 contig=contig, start=pos, ref=ref, alt=alt,
                 genome=genome, normalize_contig_names=False)
         except Exception:
-            logger.warning("Could not parse pVACseq ID %r as a Variant; "
-                           "skipping.", vid)
+            n_skipped += 1
+            logger.debug(
+                "Variant construction failed for pVACseq ID %r; skipping.",
+                vid, exc_info=True)
             continue
 
         fragment = MutantProteinFragment(
@@ -342,7 +398,8 @@ def ranked_from_pvacseq_predictions(predictions, report_df, genome=None,
         seen_keys = set()
         for r in group_rows:
             pep = r.get('Best Peptide') or r.get('peptide') or ""
-            allele = r.get('Allele') or r.get('allele') or ""
+            allele_raw = r.get('Allele') or r.get('allele') or ""
+            allele = normalize_hla_allele(str(allele_raw))
             key = (pep, allele)
             if key in seen_keys:
                 continue
@@ -358,6 +415,11 @@ def ranked_from_pvacseq_predictions(predictions, report_df, genome=None,
             epitope_predictions=epitope_preds,
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         )]))
+
+    if n_skipped:
+        logger.warning(
+            "Skipped %d pVACseq row group(s) with unparseable IDs; "
+            "see DEBUG log for details.", n_skipped)
 
     ranked.sort(
         key=lambda pair: (
@@ -382,7 +444,7 @@ def load_external_ranked(args):
     if getattr(args, 'input_pvacseq', None):
         report_df, predictions = load_pvacseq(args.input_pvacseq)
         ranked = ranked_from_pvacseq_predictions(
-            predictions, report_df,
+            predictions, args.input_pvacseq,
             genome=getattr(args, 'genome', None))
         return ranked, report_df, predictions
     return None

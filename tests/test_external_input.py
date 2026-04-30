@@ -162,6 +162,167 @@ def test_lens_drives_peptide_construct_assembly_end_to_end():
         "got %d" % len(constructs))
 
 
+# ---- pVACseq path coverage ----------------------------------------------
+
+def test_pvacseq_to_ranked_vaccine_peptides_round_trip():
+    """Smoke test for the pVACseq path: fixture has 3 unique variants
+    (TP53/BRAF/KRAS) with dashed-form IDs (chr-start-end-ref-alt).
+    The path was previously degenerate — _PVACSEQ_IC50_COLS was
+    untested and the ID parser only handled dotted form, producing
+    an empty ranked list end-to-end.
+    """
+    from vaxrank.epitope_io import load_pvacseq
+    from vaxrank.external_input import ranked_from_pvacseq_predictions
+
+    path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
+    report_df, predictions = load_pvacseq(path)
+    ranked = ranked_from_pvacseq_predictions(predictions, path)
+    assert len(ranked) == 3, (
+        "pVACseq fixture has 3 unique variants; got %d" % len(ranked))
+    genes = sorted(
+        peps[0].mutant_protein_fragment.gene_name for _, peps in ranked)
+    assert genes == ['BRAF', 'KRAS', 'TP53']
+    # IDs are dashed-form (chr1-100000-100001-A-T), parsed correctly
+    contigs = sorted(v.contig for v, _ in ranked)
+    assert contigs == ['chr1', 'chr2', 'chr3']
+
+
+def test_pvacseq_id_parser_handles_dashed_and_dotted():
+    """The parser accepts both modern (chr1-100000-100001-A-T) and
+    legacy (1.123.A.T) ID forms, plus the 4-part dashed variant
+    (chr1-100000-A-T) without an explicit end position."""
+    from vaxrank.external_input import _parse_pvacseq_id
+
+    assert _parse_pvacseq_id("chr1-100000-100001-A-T") == ("chr1", 100000, "A", "T")
+    assert _parse_pvacseq_id("chr1-100000-A-T") == ("chr1", 100000, "A", "T")
+    assert _parse_pvacseq_id("1.123.A.T") == ("1", 123, "A", "T")
+    # Garbage / wrong shape returns None instead of raising
+    assert _parse_pvacseq_id("garbage") is None
+    assert _parse_pvacseq_id("chr1-notapos-A-T") is None
+    assert _parse_pvacseq_id(None) is None
+    assert _parse_pvacseq_id("") is None
+
+
+def test_pvacseq_drives_mrna_construct_assembly_end_to_end():
+    """End-to-end: pVACseq report → ranked → mRNA constructs (mirror
+    of the LENS end-to-end test). Pre-fix this produced zero
+    constructs because the ranked list was empty."""
+    from vaxrank.epitope_io import load_pvacseq
+    from vaxrank.external_input import ranked_from_pvacseq_predictions
+    from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
+
+    path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
+    _, predictions = load_pvacseq(path)
+    ranked = ranked_from_pvacseq_predictions(predictions, path)
+    assert ranked
+
+    options = RNAConstructConfig(
+        signal_peptide=None, include_mitd=False,
+        utr_3p='HBB', poly_a_length=10,
+        antigens_per_construct=3, max_constructs=1,
+        max_antigen_length_aa=12, min_antigen_length_aa=5,
+        optimize_linkers=False)
+    constructs = assemble_mrna_constructs(ranked, options=options)
+    assert len(constructs) == 1
+    c = constructs[0]
+    assert len(c.antigen_names) == 3
+    assert c.cds_nt.endswith("TAA")
+
+
+# ---- LENS scoring-column edge cases --------------------------------------
+
+def test_lens_warns_when_no_affinity_columns_detected(tmp_path, caplog):
+    """When no pMHC_affinity predictor is detected, the
+    representative-peptide pick is degenerate (every row ties at
+    (2, 0.0); file-order first row "wins"). Pin that we warn
+    instead of silently picking arbitrarily.
+
+    Today this can be triggered by a stability-only LENS file
+    (netmhcstabpan present without mhcflurry/netmhcpan). It can also
+    fire if LENS ever adds tools whose ``kind`` is something other
+    than ``pMHC_affinity`` (presentation-only, cleavage,
+    immunogenicity, etc.) and the registry classifies them
+    accordingly. The warning is kind-agnostic — it reports the
+    detected kinds in its message.
+    """
+    import logging
+    from vaxrank.epitope_io import load_lens
+    from vaxrank.external_input import ranked_from_lens_predictions
+
+    # Stability-only fixture (the only "no affinity" case the
+    # current registry can produce). If new predictor kinds are added
+    # to _LENS_PREDICTOR_REGISTRY, add fixtures here covering them.
+    no_aff = tmp_path / "no_affinity.tsv"
+    no_aff.write_text(
+        "allele\tpeptide\tnetmhcstabpan_1.0.halflife_hours\t"
+        "netmhcstabpan_1.0.perc_rank_stab\tantigen_source\tmut_aa_pos\t"
+        "variant_coords\tgene_name\ttpm\tpep_context\n"
+        "HLA-A02:01\tSVVGSSSSS\t12.5\t0.5\tSNV\t245\t"
+        "chr17:7675088:C:T\tTP53\t42.5\tAASVVGSSSSSGTR\n")
+
+    _, predictions = load_lens(str(no_aff))
+    with caplog.at_level(logging.WARNING):
+        ranked = ranked_from_lens_predictions(predictions, str(no_aff))
+    # Still produces output (the file-order representative)
+    assert len(ranked) == 1
+    # Warning was emitted, mentions the detected non-affinity kinds
+    msg = next(
+        (r.message for r in caplog.records
+         if "no pMHC_affinity scoring columns" in r.message), None)
+    assert msg is not None, \
+        "Expected a warn-once for LENS input lacking affinity predictors"
+    assert "pMHC_stability" in msg, \
+        "Warning should report the detected non-affinity kinds; got %r" % msg
+
+
+# ---- _emit_outputs observability -----------------------------------------
+
+def test_emit_outputs_logs_active_and_fired_dispatch(caplog, tmp_path):
+    """The dispatch summary log line is part of the contract — pins
+    which vaccine types were considered active and which actually fired.
+    """
+    import logging
+    from types import SimpleNamespace
+    from vaxrank.cli.entry_point import _emit_outputs
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df, predictions = load_lens(path)
+    ranked = ranked_from_lens_predictions(predictions, path)
+
+    out_dir = str(tmp_path / "mrna_out")
+    args = SimpleNamespace(
+        output_csv='', output_xlsx_report='',
+        output_neoepitope_report='',
+        output_peptide='',
+        output_mrna=out_dir,
+        output_mrna_manifest='', output_mrna_csv='',
+        output_mrna_csv_full_rows=True,
+        mrna_signal_peptide=None, mrna_linker='(G4S)2',
+        mrna_include_mitd=False, mrna_mitd='HLA_A',
+        mrna_5p_utr='HBB', mrna_3p_utr='HBB',
+        mrna_codon_species='h_sapiens',
+        mrna_codon_method='use_best_codon',
+        mrna_min_antigen_length_aa=5, mrna_max_antigen_length_aa=14,
+        mrna_antigens_per_construct=3, mrna_max_constructs=1,
+        mrna_candidates_per_slot=1, mrna_max_length_nt=4000,
+        mrna_optimize_linkers=False, mrna_junction_candidates='',
+        mrna_junction_rank_strong=0.5, mrna_junction_rank_mild=2.0,
+        mrna_poly_a_length=20, mrna_poly_a_segmented=False,
+        mrna_poly_a_first_segment=30,
+        mrna_poly_a_segment_linker='GCATATGACT',
+        vaccine_type=['mrna'],
+    )
+    with caplog.at_level(logging.INFO):
+        _emit_outputs(args, ranked, source='external')
+    msgs = [r.message for r in caplog.records]
+    dispatch = [m for m in msgs if 'Vaccine-type dispatch' in m]
+    assert len(dispatch) == 1
+    line = dispatch[0]
+    assert "[external]" in line
+    assert "active=['mrna']" in line
+    assert "wrote=['mrna']" in line
+
+
 def test_resolve_vaccine_types_default_is_peptide():
     """Vaxrank is a vaccine-ranking library: there's always ranking
     to do. The default vaccine type is peptide; ``--vaccine-type`` is
@@ -246,7 +407,7 @@ def test_emit_outputs_warns_when_output_path_lacks_matching_type(
         "vaccine-type=['peptide']"
 
 
-def test_lens_with_vaccine_modality_mrna_writes_three_fastas(tmp_path):
+def test_lens_with_vaccine_type_mrna_writes_three_fastas(tmp_path):
     """End-to-end: --input-lens + --output-mrna writes three FASTAs.
     Closes the pre-#253 short-circuit gap that made this fail."""
     from types import SimpleNamespace
