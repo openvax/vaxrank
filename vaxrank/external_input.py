@@ -57,70 +57,111 @@ _PVACSEQ_RANK_COLS = ('%ile MT', 'Best Percentile MT')
 logger = logging.getLogger(__name__)
 
 
-def _parse_variant_coords(coords, genome=None, ref_alt_fallback=("A", "C")):
-    """Parse a LENS ``variant_coords`` cell into a ``(Variant, alleles_real)``
-    pair, where ``alleles_real`` is True iff ref + alt came from the
-    LENS row (vs. placeholder fallback).
+def _parse_variant_coords(coords):
+    """Parse a LENS ``variant_coords`` string into ``(contig, pos)``
+    or ``None`` if the cell is empty / malformed.
 
-    Real LENS files emit several forms; we accept whichever is present:
+    Real LENS files emit several shapes:
+      - ``chr1:26780312``         (2-part: chr + pos — LENS v1.9 dominant)
+      - ``chr1:26780312:C``       (3-part: chr + pos + ref)
+      - ``chr1:26780312:C:T``     (4-part: chr + pos + ref + alt)
 
-      - ``chr1:26780312:C:T``  (4-part: chr, pos, ref, alt — test fixtures
-                                 + occasional real rows. ``alleles_real=True``)
-      - ``chr1:26780312:C``    (3-part: chr, pos, ref. alt is placeholder.
-                                 ``alleles_real=False``)
-      - ``chr1:26780312``      (2-part: chr, pos only — dominant in real
-                                 LENS v1.9 reports; both ref and alt are
-                                 placeholders. ``alleles_real=False``)
+    This helper *only* extracts the (chr, pos) tuple. Ref/alt are
+    looked up from the dedicated per-antigen-source columns
+    (``snv_ref_allele`` / ``snv_alt_allele`` for SNVs,
+    ``indel_ref_allele`` / ``indel_alt_allele`` for indels) by
+    :func:`_variant_from_lens_row`, which builds the actual
+    ``Variant``.
 
-    Placeholder nucleotides (``A``/``C`` by default) satisfy varcode's
-    validator without claiming a specific genotype. Downstream construct
-    assembly keys off the (chr, pos) tuple, not the alleles. **Important**:
-    when ``alleles_real=False`` the resulting ``Variant`` should NOT be
-    fed to varcode effect annotation or any code path that interprets
-    ref/alt as biology — the genotype is fictional. Callers that need
-    real ref/alt (e.g. reannotating against a transcript) should drop
-    rows where ``alleles_real`` is False and ask the upstream LENS run
-    for a more complete report.
-
-    Returns ``(None, False)`` for empty / NaN / malformed input. NaN
-    is a normal artifact of non-SNV antigen rows (splice, fusion,
-    intron retention) where ``variant_coords`` is genuinely empty —
-    callers should treat None as "skip silently," not as a warning
-    condition.
+    NaN / empty / 'nan' returns ``None`` — non-SNV antigen rows
+    (CTA / ERV / SPLICE / FUSION) genuinely don't carry genome
+    coords here; LENS records their provenance in ``splice_coords``
+    / ``fusion_*`` / ``erv_orf_id`` / etc.
     """
-    from varcode import Variant
     if coords is None or not isinstance(coords, str):
-        return None, False
+        return None
     s = coords.strip()
     if not s or s.lower() == 'nan':
-        return None, False
+        return None
     parts = s.split(":")
     if len(parts) < 2:
-        return None, False
+        return None
     contig = parts[0]
     try:
-        start = int(parts[1])
+        return contig, int(parts[1])
     except (ValueError, IndexError):
-        return None, False
-    # varcode rejects 'N' and empty strings as nucleotides. Track
-    # whether ref AND alt came from the LENS row so downstream code
-    # can detect the placeholder case.
-    ref_real = (
-        len(parts) >= 3 and parts[2] and parts[2] != 'N')
-    alt_real = (
-        len(parts) >= 4 and parts[3] and parts[3] != 'N')
-    ref = parts[2] if ref_real else ref_alt_fallback[0]
-    alt = parts[3] if alt_real else ref_alt_fallback[1]
-    if ref == alt:  # varcode rejects no-op variants
-        alt = 'C' if ref == 'A' else 'A'
-        alt_real = False
+        return None
+
+
+def _strip_lens_allele(value):
+    """LENS records alt alleles as bracketed strings: ``'[T]'``,
+    ``'[CA]'``. Strip the brackets and return the inner sequence;
+    return None for missing / NaN / empty."""
+    if value is None:
+        return None
+    if isinstance(value, float) and pd.isna(value):
+        return None
+    s = str(value).strip()
+    if not s or s.lower() == 'nan':
+        return None
+    # Strip leading '[' and trailing ']' if present
+    if s.startswith('['):
+        s = s[1:]
+    if s.endswith(']'):
+        s = s[:-1]
+    s = s.strip()
+    return s or None
+
+
+def _variant_from_lens_row(row, genome=None):
+    """Build a ``varcode.Variant`` from a LENS row using real ref/alt.
+
+    LENS dedicates per-antigen-source columns for ref/alt:
+      - SNV rows:   ``snv_ref_allele``, ``snv_alt_allele``
+      - INDEL rows: ``indel_ref_allele``, ``indel_alt_allele``
+
+    Both alt columns use bracket notation (``[T]``, ``[CA]``).
+    ``variant_coords`` carries only ``chr:pos``; we glue the real
+    alleles in here so downstream consumers (varcode-effect
+    annotation, etc.) get a real biological genotype rather than a
+    placeholder.
+
+    Returns ``None`` when the row lacks parseable coords + alleles
+    — non-SNV / non-INDEL rows (CTA / ERV / SPLICE / FUSION) have
+    NaN ``variant_coords`` and are skipped upstream.
+    """
+    from varcode import Variant
+    coords_parsed = _parse_variant_coords(row.get('variant_coords'))
+    if coords_parsed is None:
+        return None
+    contig, pos = coords_parsed
+    antigen_source = (row.get('antigen_source') or '').upper()
+    if antigen_source == 'SNV':
+        ref = _strip_lens_allele(row.get('snv_ref_allele'))
+        alt = _strip_lens_allele(row.get('snv_alt_allele'))
+    elif antigen_source == 'INDEL':
+        ref = _strip_lens_allele(row.get('indel_ref_allele'))
+        alt = _strip_lens_allele(row.get('indel_alt_allele'))
+    else:
+        # SPLICE / FUSION / CTA-SELF / ERV rows have neither variant
+        # coords (NaN handled above) nor SNV/INDEL alleles. Caller
+        # shouldn't reach here for those, but defend.
+        return None
+    if not ref or not alt:
+        logger.debug(
+            "LENS row at %s:%d (%s) missing ref/alt alleles "
+            "(ref=%r alt=%r); skipping.",
+            contig, pos, antigen_source, ref, alt)
+        return None
     try:
-        v = Variant(
-            contig=contig, start=start, ref=ref, alt=alt,
+        return Variant(
+            contig=contig, start=pos, ref=ref, alt=alt,
             genome=genome, normalize_contig_names=False)
     except Exception:
-        return None, False
-    return v, (ref_real and alt_real)
+        logger.debug(
+            "varcode rejected LENS row at %s:%d ref=%r alt=%r; skipping.",
+            contig, pos, ref, alt, exc_info=True)
+        return None
 
 
 def _mut_offsets_in_context(peptide, pep_context):
@@ -275,17 +316,20 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
 
     ranked = []
     n_unparseable = 0
-    n_placeholder_alleles = 0
     for coords, group_rows in groups.items():
-        variant, alleles_real = _parse_variant_coords(coords, genome=genome)
+        rep = _pick_representative(group_rows, affinity_cols, rank_cols)
+        # Build the Variant from REAL ref/alt columns
+        # (snv_ref_allele/snv_alt_allele or indel_ref_allele/indel_alt_allele
+        # depending on antigen_source). variant_coords gives only chr:pos in
+        # LENS v1.9; the alleles live in dedicated columns.
+        variant = _variant_from_lens_row(rep, genome=genome)
         if variant is None:
             n_unparseable += 1
             logger.debug(
-                "Could not parse LENS variant_coords %r; skipping.", coords)
+                "Could not build Variant from LENS row at coords=%r "
+                "(antigen_source=%r); skipping.",
+                coords, rep.get('antigen_source'))
             continue
-        if not alleles_real:
-            n_placeholder_alleles += 1
-        rep = _pick_representative(group_rows, affinity_cols, rank_cols)
         peptide = rep.get('peptide') or ""
         pep_context = rep.get('pep_context') or ""
         if not pep_context:
@@ -333,7 +377,10 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             n_alt_reads=n_alt,
             n_ref_reads=0,
             n_alt_reads_supporting_protein_sequence=n_alt,
-            placeholder_alleles=not alleles_real,
+            # Real LENS ref/alt columns are now consulted directly,
+            # so the synthesized Variant carries a real biological
+            # genotype — placeholder_alleles is False.
+            placeholder_alleles=False,
         )
 
         # Collect all predictions for any peptide associated with this
@@ -372,17 +419,10 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
 
     if n_unparseable:
         logger.warning(
-            "Skipped %d LENS variant_coords value(s) that didn't parse "
-            "as chr:pos[:ref:alt]; see DEBUG log for the offenders.",
-            n_unparseable)
-    if n_placeholder_alleles:
-        logger.info(
-            "%d LENS variant(s) used placeholder ref/alt nucleotides "
-            "because the source row only carried chr:pos. The synthesized "
-            "MutantProteinFragment.variant.ref / .alt are placeholders "
-            "(not real biology) and must NOT be fed to varcode-effect "
-            "annotation. Construct assembly only uses (chr, pos) and is "
-            "unaffected.", n_placeholder_alleles)
+            "Skipped %d LENS variant(s): variant_coords couldn't be "
+            "parsed as chr:pos OR the row's snv_*_allele / "
+            "indel_*_allele columns were missing. See DEBUG log for "
+            "the offenders.", n_unparseable)
 
     # Order by mutant_epitope_score descending so the top candidates
     # win greedy bin-packing in the construct assemblers. Ties broken

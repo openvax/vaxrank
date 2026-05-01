@@ -37,73 +37,99 @@ DATA_DIR = os.path.join(
     os.path.dirname(__file__), "data", "epitope_fixtures")
 
 
-def test_parse_variant_coords_typical_lens_form():
-    v, alleles_real = _parse_variant_coords("chr17:7675088:C:T")
-    assert v is not None
-    assert v.contig == "chr17"
-    assert v.start == 7675088
-    assert v.ref == "C"
-    assert v.alt == "T"
-    assert alleles_real is True
+def test_parse_variant_coords_extracts_chr_pos():
+    """``_parse_variant_coords`` extracts only (contig, pos). Ref/alt
+    come from the dedicated per-antigen-source columns
+    (snv_ref_allele / snv_alt_allele etc.), looked up by
+    ``_variant_from_lens_row``."""
+    assert _parse_variant_coords("chr17:7675088:C:T") == ("chr17", 7675088)
+    assert _parse_variant_coords("chr1:26780312") == ("chr1", 26780312)
+    assert _parse_variant_coords("chr1:26780312:C") == ("chr1", 26780312)
 
 
-def test_parse_variant_coords_malformed_returns_none():
-    for bad in ("garbage", "chr1:notapos:A:T", None):
-        v, alleles_real = _parse_variant_coords(bad)
-        assert v is None
-        assert alleles_real is False
+def test_parse_variant_coords_returns_none_on_missing_or_malformed():
+    for bad in ("garbage", "chr1:notapos:A:T", None, "", "   ",
+                "nan", "NaN"):
+        assert _parse_variant_coords(bad) is None
 
 
-def test_parse_variant_coords_2_part_chr_pos_form():
-    """Real LENS v1.9 reports emit ``chr1:26780312`` (2-part: chr+pos
-    only, no ref/alt). Pre-fix this returned None and 3000+ warnings
-    fired on a real LENS run. Now: parses with placeholder ref/alt that
-    satisfy varcode's nucleotide validator. The alleles_real flag
-    tells callers the genotype is fictional — must NOT feed to varcode
-    effect annotation."""
-    v, alleles_real = _parse_variant_coords("chr1:26780312")
+def test_strip_lens_allele_handles_bracket_form():
+    """LENS records alt alleles as bracketed strings: '[T]', '[CA]'.
+    The helper strips brackets and returns the inner sequence."""
+    from vaxrank.external_input import _strip_lens_allele
+    assert _strip_lens_allele("[T]") == "T"
+    assert _strip_lens_allele("[CA]") == "CA"
+    assert _strip_lens_allele("T") == "T"   # already unbracketed
+    assert _strip_lens_allele("") is None
+    assert _strip_lens_allele(None) is None
+    assert _strip_lens_allele("nan") is None
+
+
+def test_variant_from_lens_row_uses_real_snv_alleles():
+    """SNV rows: ref/alt come from snv_ref_allele / snv_alt_allele.
+    No placeholder genotype. The synthesized Variant carries the real
+    biology so it can be fed to varcode-effect annotation safely."""
+    from vaxrank.external_input import _variant_from_lens_row
+    row = {
+        'variant_coords': 'chr1:1624824',
+        'antigen_source': 'SNV',
+        'snv_ref_allele': 'C',
+        'snv_alt_allele': '[T]',  # LENS's bracketed format
+    }
+    v = _variant_from_lens_row(row)
     assert v is not None
     assert v.contig == "chr1"
-    assert v.start == 26780312
-    # ref/alt are placeholder nucleotides; the (chr, pos) tuple is
-    # what downstream construct assembly keys off, not the alleles.
-    assert v.ref in ("A", "C", "G", "T")
-    assert v.alt in ("A", "C", "G", "T")
-    assert v.ref != v.alt
-    assert alleles_real is False, (
-        "2-part chr:pos has placeholder ref/alt; alleles_real must "
-        "be False so callers know not to interpret the genotype")
-
-
-def test_parse_variant_coords_3_part_with_ref_only():
-    v, alleles_real = _parse_variant_coords("chr1:26780312:C")
-    assert v is not None
+    assert v.start == 1624824
     assert v.ref == "C"
-    # alt placeholder, not equal to ref
-    assert v.alt != "C"
-    assert alleles_real is False  # alt is fictional
+    assert v.alt == "T"
 
 
-def test_parse_variant_coords_nan_string():
-    """Pandas often reads empty TSV cells as the literal string 'nan'
-    (not NaN). Treat both as 'genuinely empty' → None, no warning
-    (caller skips silently for non-SNV antigen rows)."""
-    for bad in ("nan", "NaN", "", "   "):
-        v, alleles_real = _parse_variant_coords(bad)
-        assert v is None
-        assert alleles_real is False
-
-
-def test_parse_variant_coords_n_nucleotide_rejected():
-    """varcode rejects 'N' as a nucleotide; the parser substitutes
-    safe placeholders instead of returning None — and flags
-    alleles_real=False so callers don't mistake the placeholders
-    for real biology."""
-    v, alleles_real = _parse_variant_coords("chr1:1234:N:N")
+def test_variant_from_lens_row_uses_real_indel_alleles():
+    """INDEL rows: ref/alt come from indel_ref_allele / indel_alt_allele.
+    varcode normalizes indels (strips shared prefix), so ``CA → C``
+    becomes ref='A' alt='' at start+1 — that's the canonical
+    representation a downstream caller would expect."""
+    from vaxrank.external_input import _variant_from_lens_row
+    row = {
+        'variant_coords': 'chr3:150742445',
+        'antigen_source': 'INDEL',
+        'indel_ref_allele': 'CA',
+        'indel_alt_allele': '[C]',
+    }
+    v = _variant_from_lens_row(row)
     assert v is not None
-    assert v.ref != "N"
-    assert v.alt != "N"
-    assert alleles_real is False
+    # varcode's canonical indel representation: shared prefix
+    # stripped, position advanced to the differing base.
+    assert v.contig == "chr3"
+    assert v.start == 150742446
+    assert v.ref == "A"
+    assert v.alt == ""
+
+
+def test_variant_from_lens_row_skips_non_snv_indel():
+    """SPLICE / FUSION / CTA-SELF / ERV rows don't have variant_coords
+    populated (NaN); the row-level helper returns None for these,
+    and the caller skips them earlier on the empty-coords path."""
+    from vaxrank.external_input import _variant_from_lens_row
+    for src in ('SPLICE', 'FUSION', 'CTA/SELF', 'ERV'):
+        row = {
+            'variant_coords': None,
+            'antigen_source': src,
+        }
+        assert _variant_from_lens_row(row) is None
+
+
+def test_variant_from_lens_row_skips_when_alleles_missing():
+    """If the SNV row's allele columns are missing/NaN, return None
+    rather than fabricate a placeholder."""
+    from vaxrank.external_input import _variant_from_lens_row
+    row = {
+        'variant_coords': 'chr1:1000',
+        'antigen_source': 'SNV',
+        'snv_ref_allele': None,
+        'snv_alt_allele': None,
+    }
+    assert _variant_from_lens_row(row) is None
 
 
 def test_real_lens_v19_subset_produces_ranked_entries():
@@ -425,9 +451,10 @@ def test_lens_warns_when_no_affinity_columns_detected(tmp_path, caplog):
     no_aff.write_text(
         "allele\tpeptide\tnetmhcstabpan_1.0.halflife_hours\t"
         "netmhcstabpan_1.0.perc_rank_stab\tantigen_source\tmut_aa_pos\t"
-        "variant_coords\tgene_name\ttpm\tpep_context\n"
+        "variant_coords\tsnv_ref_allele\tsnv_alt_allele\t"
+        "gene_name\ttpm\tpep_context\n"
         "HLA-A02:01\tSVVGSSSSS\t12.5\t0.5\tSNV\t245\t"
-        "chr17:7675088:C:T\tTP53\t42.5\tAASVVGSSSSSGTR\n")
+        "chr17:7675088\tC\t[T]\tTP53\t42.5\tAASVVGSSSSSGTR\n")
 
     _, predictions = load_lens(str(no_aff))
     with caplog.at_level(logging.WARNING):
