@@ -20,8 +20,11 @@ loaders produce, then a shared dispatch (``_emit_outputs``) into
 modality-specific construct writers.
 """
 
+import glob
 import json
 import os
+
+import pytest
 
 from vaxrank.epitope_io import load_lens
 from vaxrank.external_input import (
@@ -117,6 +120,93 @@ def test_real_lens_v19_subset_produces_ranked_entries():
     assert len(ranked) > 0, (
         "Expected real LENS v1.9 fixture to produce a non-empty ranked "
         "list after the variant_coords parser fix")
+
+
+# ---- Parametrized end-to-end coverage of every real LENS fixture --------
+
+_REAL_LENS_FIXTURES = sorted(glob.glob(
+    os.path.join(DATA_DIR, "real_lens_subsets", "*.tsv")))
+
+
+@pytest.mark.parametrize("fixture_path", _REAL_LENS_FIXTURES)
+def test_real_lens_fixture_runs_end_to_end_via_cli(fixture_path, tmp_path):
+    """Drive the full CLI ``main()`` against every LENS fixture in
+    ``tests/data/epitope_fixtures/real_lens_subsets/``. Any new LENS
+    field-format quirk we encounter in the wild gets added as a
+    fixture in that directory and this test surfaces breakage
+    automatically — no more "shouldn't have to run these manually."
+
+    Pepsickle is opted out (``--no-processing-aware-annotation``)
+    because torch loads under pytest+coverage segfault in this dev
+    env. Production CLI runs with these fixtures still get pepsickle
+    on by default.
+    """
+    from vaxrank.cli.entry_point import main
+    csv_path = tmp_path / "out.csv"
+    xlsx_path = tmp_path / "out.xlsx"
+    main([
+        "--input-lens", fixture_path,
+        "--output-csv", str(csv_path),
+        "--output-neoepitope-report", str(xlsx_path),
+        "--no-processing-aware-annotation",
+    ])
+    # Both outputs landed; the path didn't crash on any LENS quirk.
+    assert csv_path.exists(), f"CSV not written for {fixture_path}"
+    assert xlsx_path.exists(), f"XLSX not written for {fixture_path}"
+
+
+def test_real_lens_fixtures_present():
+    """Pin that the fixture directory has the expected coverage:
+    one fixture per known LENS version + one with stop-codon
+    edge cases. Adding a new file in real_lens_subsets/ implicitly
+    grows the parametrized end-to-end test above."""
+    names = sorted(os.path.basename(p) for p in _REAL_LENS_FIXTURES)
+    assert "lens_v1.4_real_subset.tsv" in names
+    assert "lens_v1.5_real_subset.tsv" in names
+    assert "lens_v1.9_real_subset.tsv" in names
+    assert "lens_v1.9_with_stop_codons.tsv" in names, (
+        "Expected the stop-codon edge-case fixture; this fixture "
+        "exercises rows where pep_context contains '*' (stop codon "
+        "mid-context, e.g. stop-loss / readthrough variants).")
+
+
+def test_lens_pep_context_with_stop_codon_truncates():
+    """Real LENS files emit ``*`` in pep_context for stop-loss /
+    readthrough variants. Pre-fix this crashed manufacturability
+    scoring with KeyError: '*'. Now: truncate at first stop, drop
+    the row if the neoepitope itself was past the stop."""
+    path = os.path.join(
+        DATA_DIR, "real_lens_subsets",
+        "lens_v1.9_with_stop_codons.tsv")
+    report_df, predictions = load_lens(path)
+    ranked = ranked_from_lens_predictions(predictions, path)
+    # No fragment carries a '*' or a non-standard residue.
+    for _, peptides in ranked:
+        for vp in peptides:
+            assert '*' not in vp.mutant_protein_fragment.amino_acids
+
+
+def test_truncate_at_stop_codon_helper():
+    """Translation stops at the first ``*`` — any AA after is
+    non-existent in the cell."""
+    from vaxrank.vaccine_library import truncate_at_stop_codon
+    assert truncate_at_stop_codon("AAVK*GTRPL") == "AAVK"
+    assert truncate_at_stop_codon("KLQGHSAPVL") == "KLQGHSAPVL"  # no stop
+    assert truncate_at_stop_codon("") == ""
+    assert truncate_at_stop_codon("*") == ""  # all stop
+    assert truncate_at_stop_codon("AB*CD*EF") == "AB"  # only first stop
+
+
+def test_has_only_standard_amino_acids_helper():
+    """The 20 canonical AAs pass; non-standard residues (selenocysteine
+    U, pyrrolysine O, ambiguous X / B / Z / J, stop *) fail."""
+    from vaxrank.vaccine_library import has_only_standard_amino_acids
+    assert has_only_standard_amino_acids("KLQGHSAPVL")
+    assert has_only_standard_amino_acids("")
+    for non_standard in ("U", "O", "X", "B", "Z", "J", "*"):
+        assert not has_only_standard_amino_acids(
+            "KLQ" + non_standard + "VL"), \
+            f"Should reject {non_standard!r}"
 
 
 def test_mut_offsets_in_context_finds_peptide():
@@ -260,17 +350,26 @@ def test_pvacseq_to_ranked_vaccine_peptides_round_trip():
 def test_pvacseq_id_parser_handles_dashed_and_dotted():
     """The parser accepts both modern (chr1-100000-100001-A-T) and
     legacy (1.123.A.T) ID forms, plus the 4-part dashed variant
-    (chr1-100000-A-T) without an explicit end position."""
+    (chr1-100000-A-T) without an explicit end position. Returns
+    ``(Variant, alleles_real)`` matching the LENS-path shape;
+    pVACseq IDs always carry real ref/alt so alleles_real is True."""
     from vaxrank.external_input import _parse_pvacseq_id
 
-    assert _parse_pvacseq_id("chr1-100000-100001-A-T") == ("chr1", 100000, "A", "T")
-    assert _parse_pvacseq_id("chr1-100000-A-T") == ("chr1", 100000, "A", "T")
-    assert _parse_pvacseq_id("1.123.A.T") == ("1", 123, "A", "T")
-    # Garbage / wrong shape returns None instead of raising
-    assert _parse_pvacseq_id("garbage") is None
-    assert _parse_pvacseq_id("chr1-notapos-A-T") is None
-    assert _parse_pvacseq_id(None) is None
-    assert _parse_pvacseq_id("") is None
+    for vid, expected in [
+        ("chr1-100000-100001-A-T", ("chr1", 100000, "A", "T")),
+        ("chr1-100000-A-T", ("chr1", 100000, "A", "T")),
+        ("1.123.A.T", ("1", 123, "A", "T")),
+    ]:
+        v, alleles_real = _parse_pvacseq_id(vid)
+        assert v is not None
+        assert (v.contig, v.start, v.ref, v.alt) == expected
+        assert alleles_real is True, (
+            "pVACseq IDs carry real ref/alt; alleles_real must be True")
+    # Garbage / wrong shape returns (None, False) instead of raising
+    for bad in ("garbage", "chr1-notapos-A-T", None, ""):
+        v, alleles_real = _parse_pvacseq_id(bad)
+        assert v is None
+        assert alleles_real is False
 
 
 def test_pvacseq_drives_mrna_construct_assembly_end_to_end():

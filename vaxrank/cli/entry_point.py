@@ -154,6 +154,13 @@ def _annotate_predictions_with_processing(ranked_vaccine_peptides,
         if pid in seen_ids:
             return
         seen_ids.add(pid)
+        # Empty / missing peptide_sequence: degenerate record. Don't
+        # apply content-key dedup (every empty-peptide record would
+        # collapse to one bucket); just pass it through and let the
+        # annotation skip it on its own.
+        if not getattr(p, 'peptide_sequence', None):
+            all_predictions.append(p)
+            return
         # Content-key dedup: skip if a *different* object with the
         # same (peptide, allele, source, offset) already in flight.
         k = _key(p)

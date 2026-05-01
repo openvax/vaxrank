@@ -179,6 +179,16 @@ def annotate_processing(predictions, predictor=None,
             human_only=human_only, threshold=threshold)
         if predictor is None:
             return 0
+    elif human_only or threshold != 0.5:
+        # Caller passed a pre-built predictor *and* non-default
+        # processing params. The params are ignored (the caller
+        # configured the predictor itself); warn so they don't
+        # think their CLI flags applied.
+        logger.warning(
+            "annotate_processing: human_only=%r / threshold=%r "
+            "ignored because a pre-built predictor was supplied. "
+            "Configure the predictor instance directly when passing "
+            "your own.", human_only, threshold)
 
     # Group by source sequence so we run the predictor once per unique
     # SLP / fragment / construct, not once per peptide.
@@ -229,17 +239,20 @@ def annotate_processing(predictions, predictor=None,
                 if offset is None:
                     continue
                 drift = abs(offset - declared_offset)
-                if drift > 3:
-                    # >3aa drift suggests the offset metadata is
-                    # genuinely wrong (vs. a 1-off typo). Warn so
-                    # the upstream loader can be flagged.
+                # Threshold scales with source length: 3aa absolute
+                # for typical SLP sources (~25 aa), 5% for full-
+                # protein sources (1000+ aa) where a small absolute
+                # drift is normal due to transcript-isoform mismatch.
+                drift_threshold = max(3, int(len(source) * 0.05))
+                if drift > drift_threshold:
                     logger.warning(
-                        "Peptide %r re-located in source by %d "
-                        "positions (declared offset=%d, found=%d). "
-                        "Annotation proceeds with the located "
-                        "position; check the upstream loader's "
+                        "Peptide %r re-located in source (len=%d) by "
+                        "%d positions (declared offset=%d, found=%d, "
+                        "threshold=%d). Annotation proceeds with the "
+                        "located position; check the upstream loader's "
                         "offset accounting.",
-                        peptide, drift, declared_offset, offset)
+                        peptide, len(source), drift, declared_offset,
+                        offset, drift_threshold)
             c_term, max_internal = _per_position_processing(
                 seq_probs, offset, length)
             if c_term is None:

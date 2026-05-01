@@ -103,6 +103,18 @@ class MutantProteinFragment(DataclassSerializable):
     n_ref_reads: int
     n_alt_reads_supporting_protein_sequence: int
 
+    # True when ``variant.ref`` / ``variant.alt`` are placeholder
+    # nucleotides synthesized by the loader because the upstream
+    # source (e.g. a 2-part LENS ``chr:pos`` row) didn't supply real
+    # alleles. Downstream code that interprets ref/alt as biology —
+    # varcode effect annotation, isovar reannotation, anything that
+    # touches the variant's transcript context — MUST detect this
+    # flag and skip or refuse rather than silently produce nonsense.
+    # Construct assembly only uses (chr, pos) and the AA fragment, so
+    # is unaffected. Defaults False since the VCF/BAM pipeline always
+    # supplies real alleles.
+    placeholder_alleles: bool = False
+
     @classmethod
     def from_isovar_result(cls, isovar_result):
         """

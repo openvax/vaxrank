@@ -370,16 +370,23 @@ def test_re_location_warns_on_large_offset_drift(caplog):
         "Expected a 're-located by N positions' warning for >3aa drift"
 
 
-def test_dedup_by_content_when_duplicate_objects():
+def test_dedup_by_content_when_duplicate_objects(monkeypatch):
     """The CLI annotation dispatcher dedups by both id() AND a
     content key (peptide, allele, source, offset). A future loader
     that copies an EpitopePrediction into a VP would produce two
     distinct objects with the same content; only one should be
-    annotated."""
+    annotated. Uses pytest's monkeypatch fixture so cleanup is
+    automatic even if the test fails."""
+    from types import SimpleNamespace
+
     from vaxrank.cli.entry_point import (
         _annotate_predictions_with_processing,
     )
-    from types import SimpleNamespace
+    import vaxrank.processing as proc_mod
+
+    # Capture the real function BEFORE patching so the wrapper can
+    # call into it without recursing through the patched name.
+    real_annotate = proc_mod.annotate_processing
 
     # Two distinct EpitopePrediction objects with identical content.
     source = "AAAAKLMNPVAAAA"
@@ -387,9 +394,6 @@ def test_dedup_by_content_when_duplicate_objects():
     pred_b = _ep("KLMNPV", source, offset=4)  # different object, same content
     assert id(pred_a) != id(pred_b)
 
-    # Wire pred_a into a VP and pred_b into the lens-style flat list.
-    # Pre-fix the id-based dedup would let both through; the content
-    # dedup catches it.
     fragment = SimpleNamespace(amino_acids=source, gene_name='G')
     vp = SimpleNamespace(
         mutant_protein_fragment=fragment,
@@ -397,23 +401,15 @@ def test_dedup_by_content_when_duplicate_objects():
     ranked = [(SimpleNamespace(), [vp])]
     lens_predictions = [pred_b]
 
-    # Use a counting stub to verify only one annotation pass.
-    stub = StubPepsickle({source: [0.1] * 14})
-    # Inject the stub by monkeypatching annotate_processing's lazy load.
-    # Simpler: call annotate_processing directly with the deduped list
-    # the dispatcher would build. Verify the list contains exactly one
-    # of the two duplicate predictions.
-    import vaxrank.processing as proc_mod
-    orig = proc_mod.annotate_processing
     captured = {}
+    stub = StubPepsickle({source: [0.1] * 14})
+
     def _capture(pred_list, predictor=None, human_only=False, threshold=0.5):
         captured['list'] = list(pred_list)
-        return orig(pred_list, predictor=stub)
-    proc_mod.annotate_processing = _capture
-    try:
-        _annotate_predictions_with_processing(ranked, lens_predictions)
-    finally:
-        proc_mod.annotate_processing = orig
+        return real_annotate(pred_list, predictor=stub)
+
+    monkeypatch.setattr(proc_mod, 'annotate_processing', _capture)
+    _annotate_predictions_with_processing(ranked, lens_predictions)
 
     assert 'list' in captured
     deduped = captured['list']
@@ -421,3 +417,40 @@ def test_dedup_by_content_when_duplicate_objects():
         "Content-key dedup should collapse two distinct objects with "
         "identical (peptide, allele, source, offset) to one; got %d"
         % len(deduped))
+
+
+def test_annotate_processing_warns_when_predictor_and_params_supplied(caplog):
+    """If the caller passes a pre-built predictor *and* sets human_only
+    or threshold, the params are ignored. Warn so users don't
+    silently lose CLI flags they thought were applied."""
+    import logging
+    pred = _ep("KLMNPV", "AAAAKLMNPVAAAA", offset=4)
+    stub = StubPepsickle({"AAAAKLMNPVAAAA": [0.1] * 14})
+    with caplog.at_level(logging.WARNING):
+        annotate_processing(
+            [pred], predictor=stub,
+            human_only=True, threshold=0.7)
+    assert any(
+        "ignored because a pre-built predictor was supplied"
+        in r.message for r in caplog.records), \
+        "Expected a warn when predictor is supplied + non-default params"
+
+
+def test_drift_threshold_scales_with_source_length(caplog):
+    """For long sources, the absolute drift threshold (3) is too
+    tight — 5% of length is more permissive. A 5aa drift on a
+    1000-aa source should NOT warn."""
+    import logging
+    # 200-aa source; 5% = 10aa threshold. Drift = 8aa → no warning.
+    long_source = ("A" * 50) + "KLMNPV" + ("A" * 144)
+    pred = _ep("KLMNPV", long_source, offset=42)  # declared 42, real 50 → drift 8
+    with caplog.at_level(logging.WARNING):
+        annotate_processing(
+            [pred],
+            predictor=StubPepsickle({long_source: [0.1] * 200}))
+    # 8aa drift on 200-aa source: 5% threshold = 10, so no warning.
+    assert not any(
+        "re-located" in r.message and "positions" in r.message
+        for r in caplog.records), (
+        "8aa drift on 200-aa source should be below 5%% threshold and "
+        "not emit a warning")

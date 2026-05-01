@@ -43,6 +43,10 @@ import pandas as pd
 
 from .epitope_io import detect_lens_predictors, normalize_hla_allele
 from .mutant_protein_fragment import MutantProteinFragment
+from .vaccine_library import (
+    has_only_standard_amino_acids,
+    truncate_at_stop_codon,
+)
 from .vaccine_peptide import VaccinePeptide
 
 # pVACseq aggregate-report scoring column priority. Sniffed against
@@ -289,6 +293,29 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             # neoepitope itself as the antigen. The construct will be
             # short but valid.
             pep_context = peptide
+        # Translation halts at the first stop codon — anything after
+        # ``*`` doesn't exist as protein. Truncate so manufacturability
+        # / hydropathy / codon-optimization see only real residues.
+        pep_context = truncate_at_stop_codon(str(pep_context))
+        peptide = truncate_at_stop_codon(str(peptide))
+        # If the neoepitope itself was past the stop, we can't make a
+        # vaccine peptide out of it — drop the row.
+        if not pep_context or not peptide:
+            n_skipped_post_stop = locals().get('n_skipped_post_stop', 0) + 1
+            logger.debug(
+                "Dropped LENS row for variant %r: peptide / pep_context "
+                "empty after stop-codon truncation.", coords)
+            continue
+        # Some LENS files emit non-standard residues (selenocysteine
+        # 'U', pyrrolysine 'O', ambiguous 'X' / 'B' / 'Z' / 'J').
+        # Vaxrank's manufacturability / hydropathy code is keyed off
+        # the 20 canonical AAs, so drop the row rather than crash.
+        if not has_only_standard_amino_acids(pep_context):
+            logger.warning(
+                "Dropped LENS row for variant %r: pep_context %r "
+                "contains non-standard residues (allowed: 20 canonical "
+                "AAs).", coords, pep_context)
+            continue
         gene_name = rep.get('gene_name') or 'unknown'
         tpm = rep.get('tpm')
 
@@ -306,6 +333,7 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             n_alt_reads=n_alt,
             n_ref_reads=0,
             n_alt_reads_supporting_protein_sequence=n_alt,
+            placeholder_alleles=not alleles_real,
         )
 
         # Collect all predictions for any peptide associated with this
@@ -367,41 +395,53 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
     return ranked
 
 
-def _parse_pvacseq_id(vid):
-    """Parse a pVACseq aggregate ``ID`` field into a varcode.Variant.
+def _parse_pvacseq_id(vid, genome=None):
+    """Parse a pVACseq aggregate ``ID`` field into a
+    ``(varcode.Variant, alleles_real)`` pair, matching the
+    :func:`_parse_variant_coords` shape used on the LENS path.
 
     Common forms in the wild:
       - ``chr1-100000-100001-A-T`` (5-part dashed: contig-start-end-ref-alt)
       - ``chr1-100000-A-T`` (4-part dashed)
       - ``1.123.A.T`` (4-part dotted, legacy)
 
-    Returns ``(contig, start, ref, alt)`` tuple or ``None`` if the
-    string doesn't match any recognized form.
+    All recognized forms supply real ref + alt nucleotides, so
+    ``alleles_real`` is always ``True`` on success. Returns
+    ``(None, False)`` for unrecognized input.
+
+    The shape symmetry with :func:`_parse_variant_coords` lets future
+    code that handles both LENS and pVACseq paths uniformly read a
+    single ``alleles_real`` flag without case analysis.
     """
+    from varcode import Variant
     if not vid:
-        return None
+        return None, False
     s = str(vid)
-    # Try dashed first (modern pVACseq aggregate output).
+    contig = pos_s = ref = alt = None
     if '-' in s:
         parts = s.split('-')
         if len(parts) == 5:  # contig-start-end-ref-alt
-            try:
-                return parts[0], int(parts[1]), parts[3], parts[4]
-            except ValueError:
-                return None
-        if len(parts) == 4:  # contig-start-ref-alt
-            try:
-                return parts[0], int(parts[1]), parts[2], parts[3]
-            except ValueError:
-                return None
-    # Dotted (legacy)
-    parts = s.split('.')
-    if len(parts) == 4:
-        try:
-            return parts[0], int(parts[1]), parts[2], parts[3]
-        except ValueError:
-            return None
-    return None
+            contig, pos_s, _, ref, alt = parts
+        elif len(parts) == 4:  # contig-start-ref-alt
+            contig, pos_s, ref, alt = parts
+    if contig is None:
+        # Dotted (legacy)
+        parts = s.split('.')
+        if len(parts) == 4:
+            contig, pos_s, ref, alt = parts
+    if contig is None:
+        return None, False
+    try:
+        pos = int(pos_s)
+    except (ValueError, TypeError):
+        return None, False
+    try:
+        v = Variant(
+            contig=contig, start=pos, ref=ref, alt=alt,
+            genome=genome, normalize_contig_names=False)
+    except Exception:
+        return None, False
+    return v, True
 
 
 def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
@@ -437,7 +477,6 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
         groups.setdefault(key, []).append(r)
 
     ranked = []
-    from varcode import Variant
     n_skipped = 0
     for vid, group_rows in groups.items():
         rep = _pick_representative(
@@ -445,23 +484,12 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
         best_pep = rep.get('Best Peptide') or rep.get('peptide') or ""
         gene = rep.get('Gene') or 'unknown'
 
-        parsed = _parse_pvacseq_id(vid)
-        if parsed is None:
+        variant, alleles_real = _parse_pvacseq_id(vid, genome=genome)
+        if variant is None:
             n_skipped += 1
             logger.debug(
                 "Could not parse pVACseq ID %r as a Variant; skipping.",
                 vid)
-            continue
-        contig, pos, ref, alt = parsed
-        try:
-            variant = Variant(
-                contig=contig, start=pos, ref=ref, alt=alt,
-                genome=genome, normalize_contig_names=False)
-        except Exception:
-            n_skipped += 1
-            logger.debug(
-                "Variant construction failed for pVACseq ID %r; skipping.",
-                vid, exc_info=True)
             continue
 
         fragment = MutantProteinFragment(

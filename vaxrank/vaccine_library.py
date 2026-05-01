@@ -621,6 +621,42 @@ def mutant_epitopes_sorted(vaccine_peptide):
         getattr(vaccine_peptide, 'mutant_epitope_predictions', None) or [])
 
 
+_STANDARD_AMINO_ACIDS = set("ACDEFGHIKLMNPQRSTVWY")
+
+
+def truncate_at_stop_codon(amino_acids):
+    """Truncate an amino-acid string at the first ``*`` (stop codon).
+
+    Translation halts at the stop, so any AA after a ``*`` doesn't
+    exist in the cell. Stop-loss / readthrough variants are the
+    rare exception where downstream residues become real, but for
+    those the upstream loader / Isovar should emit a fragment that
+    stops at the new C-terminus rather than embedding the original
+    stop in the middle of the sequence. So: truncate at the first
+    ``*`` unconditionally.
+
+    Returns the substring up to (but not including) the first ``*``.
+    Strings without ``*`` are returned unchanged.
+    """
+    if not amino_acids:
+        return amino_acids
+    idx = amino_acids.find('*')
+    if idx < 0:
+        return amino_acids
+    return amino_acids[:idx]
+
+
+def has_only_standard_amino_acids(amino_acids):
+    """True iff every character of ``amino_acids`` is one of the 20
+    standard amino acid letters. Used as a sanity gate before passing
+    sequences to manufacturability / hydropathy / codon-optimization
+    code that key off a 20-letter alphabet.
+    """
+    if not amino_acids:
+        return True
+    return all(aa in _STANDARD_AMINO_ACIDS for aa in amino_acids)
+
+
 def top_mutant_epitopes(vaccine_peptide, n=1):
     """Top ``n`` score-sorted mutant epitopes on a VaccinePeptide.
 

@@ -570,6 +570,48 @@ then filtered and ranked by:
 4. **Manufacturability** — tie-breaking by hydropathy-based synthesis
    difficulty (C-terminal and 7-mer window GRAVY scores)
 
+### Data model
+
+Vaxrank's central data unit is the **VaccinePeptide** (VP) — one ranked
+candidate of "this is a vaccine peptide we should consider for this
+variant." A VP bundles:
+
+- a **`MutantProteinFragment`** — the SLP-style amino-acid sequence
+  with mutation positions, gene name, source variant, and the
+  ranking-driving expression metrics (`n_alt_reads`, etc.);
+- a list of **`EpitopePrediction`** records — per-(k-mer, HLA-allele)
+  MHC binding predictions, sorted into a mutant set (overlapping the
+  mutation, drives ranking) and a wildtype set (cross-reactivity
+  candidates).
+
+The pipeline output is a list of `(varcode.Variant, [VaccinePeptide, ...])`
+tuples — each variant has 1 or more VPs depending on
+`max_vaccine_peptides_per_variant`:
+
+```
+ranked_variants_with_vaccine_peptides = [
+    (Variant_A, [VP_A1, VP_A2, ...]),    # multiple windows around variant A's mutation
+    (Variant_B, [VP_B1]),                 # single SLP for variant B
+    ...
+]
+```
+
+For each variant, vaxrank can emit multiple alternate constructs:
+
+- `--vaccine-peptide-length` + `--padding-around-mutation` — control
+  how the SLP window slides over the mutation site.
+- `max_vaccine_peptides_per_variant` (config) — controls how many
+  alternate windows per variant make it into the ranked output.
+- `--peptide-candidates-per-slot` / `--mrna-candidates-per-slot`
+  (CLI) — controls how many VP alternates per variant slot the
+  *construct assembler* renders into FASTAs.
+
+Reports render one section per variant; within a section, each VP gets
+its own per-epitope sub-table — column counts can differ per VP
+(e.g. when pepsickle credibility tagging succeeded for one VP and
+failed for another, only the successful VP's table shows the
+processing columns).
+
 ### Key modules
 
 **Shared upstream:**
