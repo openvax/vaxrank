@@ -467,6 +467,13 @@ def load_lens(path):
             continue
         allele = normalize_hla_allele(str(allele_raw))
 
+        # mhcflurry_agretopicity = MT_IC50 / WT_IC50 in LENS's
+        # convention (small values ≪ 1 = mutation strengthened
+        # binding). WT_IC50 = MT_IC50 / agretopicity is the only
+        # way to recover wildtype affinity from a LENS row, since
+        # LENS doesn't emit a WT IC50 column directly. Compute
+        # once per row (shared across detected predictors).
+        agretopicity = _safe_float(row.get("mhcflurry_agretopicity"))
         # Build one EpitopePrediction per chosen predictor for this row.
         # Predictions with no usable value for this row are skipped.
         row_preds = []
@@ -489,6 +496,13 @@ def load_lens(path):
                 pep_context.find(str(peptide))
                 if pep_context and str(peptide) in pep_context
                 else 0)
+            # Derive WT IC50 from agretopicity, only for the
+            # mhcflurry-affinity predictor (the value matches that
+            # tool's IC50 scale). Other predictors leave wt_ic50=None.
+            wt_ic50 = None
+            if (d.tool == "mhcflurry" and d.kind == "pMHC_affinity"
+                    and agretopicity is not None and agretopicity > 0):
+                wt_ic50 = value / agretopicity
             row_preds.append(EpitopePrediction(
                 allele=allele,
                 peptide_sequence=str(peptide),
@@ -497,7 +511,7 @@ def load_lens(path):
                 # (the field is typed str, not Optional[str]).
                 wt_peptide_sequence="",
                 ic50=value,
-                wt_ic50=None,
+                wt_ic50=wt_ic50,
                 percentile_rank=percentile_rank,
                 prediction_method_name=d.tool,
                 # LENS pre-curates rows as neoepitopes (each row is a

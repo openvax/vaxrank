@@ -156,7 +156,9 @@ def test_load_lens_emits_one_prediction_per_detected_predictor():
     assert p.percentile_rank == pytest.approx(0.28)  # mhcflurry pres_perc
     assert p.predictor_version == "2.1.1"
     assert p.wt_peptide_sequence == ""
-    assert p.wt_ic50 is None
+    # wt_ic50 is now derived from mhcflurry_agretopicity (= MT/WT ratio).
+    # Fixture row: mhcflurry IC50 = 95.4, agretopicity = 0.020 → WT ≈ 4770.
+    assert p.wt_ic50 == pytest.approx(95.4 / 0.020)
     assert p.overlaps_mutation is True
     assert p.source_sequence == "AASVVGSSSSSGTR"
 
