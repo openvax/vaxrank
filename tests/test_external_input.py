@@ -242,13 +242,16 @@ def test_mut_offsets_in_context_finds_peptide():
     assert end == 11
 
 
-def test_mut_offsets_in_context_falls_back_to_full_window():
-    # When the peptide isn't found in the context, the whole window is
-    # treated as the mutation span (so window-centering doesn't crop
-    # it out).
+def test_mut_offsets_in_context_returns_none_when_not_found():
+    """When the peptide isn't a substring of pep_context, return
+    ``(None, None)`` so the caller drops the row instead of falsely
+    claiming the entire context is the mutation span."""
     start, end = _mut_offsets_in_context("XYZXYZ", "AASVVGSSSSSGTR")
-    assert start == 0
-    assert end == len("AASVVGSSSSSGTR")
+    assert start is None
+    assert end is None
+    # Empty inputs also return None
+    assert _mut_offsets_in_context("", "AAVK") == (None, None)
+    assert _mut_offsets_in_context("AAVK", "") == (None, None)
 
 
 def test_lens_picks_strongest_binder_when_multiple_rows_per_variant():

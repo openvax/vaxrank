@@ -478,17 +478,39 @@ def load_lens(path):
                 _safe_float(row.get(d.percentile_col))
                 if d.percentile_col else None)
             pep_context = _safe_str(row.get("pep_context"))
+            # Locate the neoepitope inside its surrounding context.
+            # LENS centers the peptide within pep_context but doesn't
+            # emit the offset directly; substring search recovers it.
+            # When the peptide isn't a substring (e.g. the row's
+            # pep_context is empty), offset stays at 0 — downstream
+            # code (vaxrank.processing) re-locates by substring search
+            # too and reports drift, so this is recoverable.
+            offset = (
+                pep_context.find(str(peptide))
+                if pep_context and str(peptide) in pep_context
+                else 0)
             row_preds.append(EpitopePrediction(
                 allele=allele,
                 peptide_sequence=str(peptide),
+                # LENS doesn't carry a wildtype peptide column. Empty
+                # string is the codebase convention for "not known"
+                # (the field is typed str, not Optional[str]).
                 wt_peptide_sequence="",
                 ic50=value,
                 wt_ic50=None,
                 percentile_rank=percentile_rank,
                 prediction_method_name=d.tool,
+                # LENS pre-curates rows as neoepitopes (each row is a
+                # mutant-derived peptide), so overlaps_mutation is
+                # structurally true. Not invented — implied by the
+                # fact that the row exists in a LENS report.
                 overlaps_mutation=True,
                 source_sequence=pep_context,
-                offset=0,
+                offset=offset,
+                # LENS pre-filters rows against the patient reference
+                # proteome (or upstream tools do); rows that survive
+                # are by definition not in reference. Same structural
+                # assumption as overlaps_mutation.
                 occurs_in_reference=False,
                 predictor_version=d.version,
             ))

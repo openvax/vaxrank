@@ -168,15 +168,17 @@ def _mut_offsets_in_context(peptide, pep_context):
     """Locate the neoepitope inside its surrounding context.
 
     Returns ``(start, end)`` AA offsets of the peptide within
-    ``pep_context``. If the peptide can't be located, the whole
-    context is treated as the mutation span (conservative — keeps the
-    centering helper from cropping out the mutation).
+    ``pep_context``. Returns ``(None, None)`` when the peptide can't
+    be located — the caller should drop the row rather than fabricate
+    a mutation span. Previously this defaulted to "the whole context
+    is the mutation," which falsely told downstream code that every
+    residue was mutated.
     """
     if not pep_context or not peptide:
-        return 0, len(pep_context or "")
+        return None, None
     idx = pep_context.find(peptide)
     if idx < 0:
-        return 0, len(pep_context)
+        return None, None
     return idx, idx + len(peptide)
 
 
@@ -218,16 +220,51 @@ def _pick_representative(group_rows, ic50_cols, rank_cols):
     return min(group_rows, key=lambda r: _row_score(r, ic50_cols, rank_cols))
 
 
-def _coerce_n_alt_reads(tpm):
-    """LENS doesn't carry alt-read count directly. Use ``ceil(tpm)`` as
-    a stand-in so combined-score ranking has a non-degenerate
-    expression term. Falls back to 1 when tpm is missing/NaN."""
-    if tpm is None or pd.isna(tpm):
-        return 1
+def _coerce_int(value, default=0):
+    """Coerce a value (possibly NaN / None / str) to int.
+
+    Returns ``default`` when the value is genuinely missing — pandas
+    NaN, None, or a non-numeric string. Used to read RNA-read-count
+    columns from LENS / pVACseq cleanly: when LENS omits the column
+    or the row has no RNA support, we want 0 (honest "no signal"),
+    not a fabricated stand-in.
+    """
+    if value is None:
+        return default
     try:
-        return max(1, int(round(float(tpm))))
+        if pd.isna(value):
+            return default
     except (TypeError, ValueError):
-        return 1
+        pass
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _read_counts_from_lens_row(row):
+    """Extract real RNA-read counts from a LENS row.
+
+    LENS columns:
+      - ``rna_reads_covering_genomic_origin``           → total reads at locus
+      - ``rna_reads_covering_genomic_origin_with_peptide_cds`` → reads
+        whose CDS produces this neoepitope (the alt-supporting count)
+      - ``vaf``                                          → variant allele
+        frequency (used only as a sanity check, not as a stand-in)
+
+    Returns ``(n_overlapping_reads, n_alt_reads, n_ref_reads,
+    n_alt_reads_supporting_protein_sequence)``. Missing columns yield
+    0 — honest "no read signal" rather than a fabricated 1.
+    """
+    n_total = _coerce_int(
+        row.get('rna_reads_covering_genomic_origin'), default=0)
+    n_alt_cds = _coerce_int(
+        row.get('rna_reads_covering_genomic_origin_with_peptide_cds'),
+        default=0)
+    n_alt_reads = n_alt_cds
+    n_ref_reads = max(0, n_total - n_alt_reads)
+    n_alt_supporting_protein = n_alt_cds
+    return n_total, n_alt_reads, n_ref_reads, n_alt_supporting_protein
 
 
 def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
@@ -360,25 +397,56 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
                 "contains non-standard residues (allowed: 20 canonical "
                 "AAs).", coords, pep_context)
             continue
-        gene_name = rep.get('gene_name') or 'unknown'
-        tpm = rep.get('tpm')
+        # Preserve LENS's own gene name; fall back to empty string
+        # (the codebase convention for "not known") rather than
+        # invent "unknown". Empty propagates through
+        # iter_named_antigens which already handles it.
+        gene_name_raw = rep.get('gene_name')
+        gene_name = (
+            str(gene_name_raw) if gene_name_raw and not (
+                isinstance(gene_name_raw, float) and pd.isna(gene_name_raw))
+            else "")
 
         start_off, end_off = _mut_offsets_in_context(peptide, pep_context)
-        n_alt = _coerce_n_alt_reads(tpm)
+        if start_off is None:
+            logger.debug(
+                "Could not locate peptide %r in pep_context %r for "
+                "variant %r; skipping (mutation span unknown).",
+                peptide, pep_context, coords)
+            continue
+
+        # Real RNA-read counts from LENS columns. Missing → 0
+        # (honest "no signal"); never fabricate from TPM.
+        (n_total, n_alt_reads, n_ref_reads,
+         n_alt_supporting_protein) = _read_counts_from_lens_row(rep)
+
+        # Pull real transcript IDs when available so future varcode-
+        # effect annotation has the actual transcript context.
+        tid = rep.get('transcript_id')
+        all_tids = rep.get('all_transcript_ids_encoding_peptide')
+        transcripts = []
+        if tid and not (isinstance(tid, float) and pd.isna(tid)):
+            transcripts.append(str(tid))
+        if (all_tids and isinstance(all_tids, str)
+                and all_tids.lower() != 'nan'):
+            for t in all_tids.split(','):
+                t = t.strip()
+                if t and t not in transcripts:
+                    transcripts.append(t)
 
         fragment = MutantProteinFragment(
             variant=variant,
-            gene_name=str(gene_name),
+            gene_name=gene_name,
             amino_acids=str(pep_context),
             mutant_amino_acid_start_offset=start_off,
             mutant_amino_acid_end_offset=end_off,
-            supporting_reference_transcripts=[],
-            n_overlapping_reads=n_alt,
-            n_alt_reads=n_alt,
-            n_ref_reads=0,
-            n_alt_reads_supporting_protein_sequence=n_alt,
-            # Real LENS ref/alt columns are now consulted directly,
-            # so the synthesized Variant carries a real biological
+            supporting_reference_transcripts=transcripts,
+            n_overlapping_reads=n_total,
+            n_alt_reads=n_alt_reads,
+            n_ref_reads=n_ref_reads,
+            n_alt_reads_supporting_protein_sequence=n_alt_supporting_protein,
+            # Real LENS ref/alt columns are consulted directly, so
+            # the synthesized Variant carries a real biological
             # genotype — placeholder_alleles is False.
             placeholder_alleles=False,
         )
@@ -522,7 +590,13 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
         rep = _pick_representative(
             group_rows, _PVACSEQ_IC50_COLS, _PVACSEQ_RANK_COLS)
         best_pep = rep.get('Best Peptide') or rep.get('peptide') or ""
-        gene = rep.get('Gene') or 'unknown'
+        # Preserve pVACseq's own gene name; empty string when missing
+        # (codebase convention for "not known"). No 'unknown' invention.
+        gene_raw = rep.get('Gene')
+        gene = (
+            str(gene_raw) if gene_raw and not (
+                isinstance(gene_raw, float) and pd.isna(gene_raw))
+            else "")
 
         variant, alleles_real = _parse_pvacseq_id(vid, genome=genome)
         if variant is None:
@@ -532,14 +606,37 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
                 vid)
             continue
 
+        # Real RNA-read counts from pVACseq aggregate columns.
+        # ``RNA Depth`` = total coverage at the variant position.
+        # ``RNA VAF`` = variant allele frequency (alt / total).
+        # n_alt_reads = round(depth × vaf); ref = depth − alt. Missing
+        # values yield 0 — honest "no read signal," never fabricated.
+        n_total = _coerce_int(rep.get('RNA Depth'), default=0)
+        rna_vaf = rep.get('RNA VAF')
+        try:
+            vaf = float(rna_vaf) if rna_vaf is not None and not (
+                isinstance(rna_vaf, float) and pd.isna(rna_vaf)) else 0.0
+        except (TypeError, ValueError):
+            vaf = 0.0
+        n_alt_reads = int(round(n_total * vaf)) if n_total > 0 else 0
+        n_ref_reads = max(0, n_total - n_alt_reads)
+
+        # pVACseq aggregate's "Best Peptide" is the minimal-epitope
+        # neoantigen, not an SLP context. The whole peptide IS the
+        # mutation span (the aggregate doesn't split mutant vs.
+        # flanking residues), so claiming offsets [0, len(best_pep))
+        # is structurally honest — a transcript-aware loader could
+        # narrow this further but the aggregate doesn't carry the
+        # data to do so.
         fragment = MutantProteinFragment(
-            variant=variant, gene_name=str(gene),
+            variant=variant, gene_name=gene,
             amino_acids=str(best_pep),
             mutant_amino_acid_start_offset=0,
             mutant_amino_acid_end_offset=len(best_pep),
             supporting_reference_transcripts=[],
-            n_overlapping_reads=1, n_alt_reads=1,
-            n_ref_reads=0, n_alt_reads_supporting_protein_sequence=1,
+            n_overlapping_reads=n_total, n_alt_reads=n_alt_reads,
+            n_ref_reads=n_ref_reads,
+            n_alt_reads_supporting_protein_sequence=n_alt_reads,
         )
         epitope_preds = []
         seen_keys = set()
