@@ -255,24 +255,20 @@ def add_output_args(arg_parser):
         "--processing-aware-annotation",
         dest="processing_aware_annotation",
         action="store_true",
-        default=False,
+        default=True,
         help="Annotate each predicted MHC ligand with pepsickle's "
              "proteasome-cleavage credibility scores (c_term_cleavage_prob, "
-             "max_internal_cut_prob, processing_score). OFF by default "
-             "because pepsickle pulls in torch, and torch's libomp on "
-             "macOS clashes with the libomp linked by pandas / numpy / "
-             "pyarrow — the second runtime to load segfaults the process. "
-             "Opt in when your environment has a single OpenMP runtime "
-             "(typical Linux installs are fine; macOS may need MKL_*  "
-             "env-var workarounds). Doesn't change vaccine ranking — "
-             "adds info for review.")
+             "max_internal_cut_prob, processing_score). On by default. "
+             "Pepsickle runs in an isolated subprocess (issue #266) so "
+             "torch's libomp doesn't clash with the parent's pandas / "
+             "numpy / pyarrow OpenMP runtime. Doesn't change vaccine "
+             "ranking — adds info for review.")
     output_args_group.add_argument(
         "--no-processing-aware-annotation",
         dest="processing_aware_annotation",
         action="store_false",
-        help="Explicitly disable pepsickle credibility annotation. "
-             "(Default is already off; this flag is for symmetry / "
-             "scripting.)")
+        help="Disable pepsickle credibility annotation (e.g. when "
+             "pepsickle isn't installed or you want a faster run).")
     output_args_group.add_argument(
         "--pepsickle-human-only",
         action="store_true",

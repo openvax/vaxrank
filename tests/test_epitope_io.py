@@ -1146,9 +1146,6 @@ def test_pvacseq_cli_csv_output(tmp_path):
     main([
         "--input-pvacseq", pvacseq_path,
         "--output-csv", csv_path,
-        # Pepsickle (loaded lazily for credibility tagging) crashes
-        # pytest/torch in this env; opt out for the CLI smoke test.
-        "--no-processing-aware-annotation",
     ])
     assert os.path.exists(csv_path)
     import pandas as pd
@@ -1165,7 +1162,6 @@ def test_lens_cli_csv_output(tmp_path):
     main([
         "--input-lens", lens_path,
         "--output-csv", csv_path,
-        "--no-processing-aware-annotation",
     ])
     assert os.path.exists(csv_path)
     import pandas as pd

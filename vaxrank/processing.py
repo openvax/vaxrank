@@ -12,21 +12,26 @@
 
 """Proteasomal cleavage credibility tagging for MHC ligand predictions.
 
-mhcflurry-presentation already includes an antigen-processing prior
-conditioned on flanking residues, so a per-peptide "presentation
-score" implicitly captures whether *this specific peptide* (8-15 aa
-for MHC-I) would be cleaved out and presented. What it can't tell us
-is whether the proteasome would cut *inside* the ligand and destroy
-it before MHC, or whether the C-terminal cut at the ligand's
-boundary is clean.
+For each predicted MHC ligand, attach three scores:
 
-Pepsickle (Weeder et al., Bioinformatics 2021, doi:10.1093/bioinformatics/btab628)
-predicts per-position cleavage probabilities. We use it to
-**credibility-tag** existing MHC ligand predictions: each
-``EpitopePrediction`` gains three optional fields exposing the per-
-position pepsickle signal at the ligand's location in its source
-sequence. The annotations don't change ranking by default — they're
-extra context for clinical review and downstream filtering.
+  c_term_cleavage_prob    pepsickle's probability the proteasome cuts
+                          at the ligand's C-terminus (clean release)
+  max_internal_cut_prob   peak cleavage probability strictly inside
+                          the ligand (high → ligand is destroyed
+                          before reaching MHC)
+  processing_score        composite ``c_term * (1 - max_internal)``;
+                          1.0 = ideal release, 0.0 = no clean release
+                          OR near-certain destruction
+
+The annotations are purely additive — vaccine ranking is unaffected.
+Reports surface the three columns when at least one prediction in
+the per-VaccinePeptide list has been annotated.
+
+Pepsickle (Weeder et al., Bioinformatics 2021) runs in an isolated
+subprocess (issue #266: torch's libomp clashes with the parent's
+pandas/numpy/pyarrow OpenMP runtime on macOS, segfaulting the
+process). The subprocess imports only torch + pepsickle, no pandas;
+single libomp loads, no clash. Linux installs work either way.
 
 Issue: openvax/vaxrank#249.
 """
@@ -36,44 +41,61 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# ----------------------------------------------------------------------------
+# Per-peptide arithmetic on a precomputed per-position cleavage array
+# ----------------------------------------------------------------------------
+
 def _per_position_processing(seq_probs, start, length):
-    """Compute (c_term, max_internal) cleavage probabilities for a
-    peptide at offset ``start`` within ``seq_probs``.
+    """Slice a per-position cleavage array down to one peptide's
+    ``(c_term_cleavage_prob, max_internal_cut_prob)``.
 
-    seq_probs is the per-position cleavage probability array for the
-    *source sequence* — pepsickle returns one float per residue,
-    representing "would the proteasome cut C-terminally to this
-    residue?". For a peptide spanning ``[start, start+length)``:
+    ``seq_probs[i]`` is "would the proteasome cut C-terminally to
+    residue *i*?". For a peptide spanning ``[start, start+length)``:
+      - C-terminal cut = ``seq_probs[start+length-1]`` (release at end)
+      - Max internal cut = ``max(seq_probs[start : start+length-1])``
+        (positions strictly inside the peptide; destruction)
 
-      - C-terminal cut probability = seq_probs[start + length - 1]
-      - Max internal cut probability = max of seq_probs[start ..
-        start+length-2] (positions strictly inside the peptide;
-        last position is the C-term cut, not an internal one)
-
-    Returns ``(c_term, max_internal)`` as floats in [0, 1].
+    Returns ``(c_term, max_internal)`` floats in [0, 1], or
+    ``(None, None)`` if the peptide is out of range. Single-residue
+    peptides have no "inside" — max_internal is 0.0.
     """
     if length < 1 or start < 0 or start + length > len(seq_probs):
-        # Out-of-range request — return a "no signal" tuple.
         return None, None
     c_term = float(seq_probs[start + length - 1])
     if length >= 2:
-        internal_window = seq_probs[start:start + length - 1]
-        max_internal = float(max(internal_window))
+        max_internal = float(max(seq_probs[start:start + length - 1]))
     else:
-        # Single-residue peptide has no "inside" — degenerate but
-        # don't crash.
         max_internal = 0.0
     return c_term, max_internal
 
 
-def _closest_occurrence(source, peptide, declared_offset):
-    """Return the offset of ``peptide`` in ``source`` closest to
-    ``declared_offset`` (or None if not found).
+def _composite_processing_score(c_term, max_internal):
+    """``c_term * (1 - max_internal)``. Range [0, 1].
 
-    Prefer the closest match so repeated peptides — homopolymer
-    tracts, short ligands appearing in multiple loops — don't snap
-    to position 0 when the upstream loader recorded the offset of a
-    later occurrence.
+    1.0 = clean cut at end + no internal cut.
+    0.0 = no clean release, or near-certain internal destruction.
+
+    ``1 - max_internal`` is a conservative approximation for "no
+    internal cut anywhere"; the strictly correct expression is the
+    joint product ``Π(1 - p_i)`` over all internal positions.
+    Proteasomes cut roughly once per substrate molecule, so the
+    single highest-probability cut dominates and this heuristic is
+    a reasonable proxy. Same formula at any peptide length.
+
+    Returns ``None`` when either input is None.
+    """
+    if c_term is None or max_internal is None:
+        return None
+    return float(c_term) * (1.0 - float(max_internal))
+
+
+def _closest_occurrence(source, peptide, declared_offset):
+    """Offset of ``peptide`` in ``source`` closest to ``declared_offset``,
+    or ``None`` if not found.
+
+    Bias toward the declared offset so repeated peptides (homopolymer
+    tracts, short ligands appearing in multiple loops) don't snap to
+    position 0 when the upstream loader recorded a later occurrence.
     """
     if not peptide or not source:
         return None
@@ -83,113 +105,139 @@ def _closest_occurrence(source, peptide, declared_offset):
     while pos >= 0:
         drift = abs(pos - declared_offset)
         if best_drift is None or drift < best_drift:
-            best = pos
-            best_drift = drift
+            best, best_drift = pos, drift
         pos = source.find(peptide, pos + 1)
     return best
 
 
-def _composite_processing_score(c_term, max_internal):
-    """Composite credibility: ``c_term * (1 - max_internal)``.
+# ----------------------------------------------------------------------------
+# Pepsickle invocation
+# ----------------------------------------------------------------------------
 
-    Range [0, 1]: 1.0 = ideal release (probable clean cut at C-term,
-    no internal-cut risk); 0.0 = either no clean C-term cut or a
-    near-certain internal cut destroys the ligand.
-
-    Note on ``1 - max_internal``: this is a *conservative
-    approximation* for "no internal cut anywhere." The strictly
-    correct expression would be the joint probability
-    ``Π(1 - p_i)`` over all internal positions. Using ``max``
-    undercounts destruction risk when multiple positions have
-    moderate cut probabilities. In practice proteasomes cut roughly
-    once per substrate molecule, so the single highest-probability
-    cut dominates and the heuristic is a reasonable proxy. Same
-    formula applies to any peptide length the underlying MHC
-    predictor emits (8-15 aa for MHC-I); pepsickle's per-position
-    scoring is length-agnostic.
-
-    Returns ``None`` when either input is None (not annotated).
-    """
-    if c_term is None or max_internal is None:
-        return None
-    return float(c_term) * (1.0 - float(max_internal))
-
-
-def _load_default_predictor(human_only=False, threshold=0.5):
-    """Load pepsickle on demand. Returns None if unavailable so the
-    caller can degrade gracefully instead of failing the whole run.
-
-    Parameters mirror :class:`mhctools.Pepsickle`:
-      - ``human_only``: use the human-only-trained model (default
-        False = all-mammal).
-      - ``threshold``: cleavage probability cutoff used internally
-        by pepsickle (default 0.5).
-
-    On import / instantiation failure, the warning includes a debug
-    traceback (``logger.debug(exc_info=True)``) so genuine bugs in
-    the install — bad CUDA libs, torch version mismatch — are
-    visible at DEBUG without spamming WARNING-level output.
-
-    macOS OpenMP workaround: pepsickle pulls in torch, which on
-    macOS ships its own ``libomp``. pandas / numpy / pyarrow may
-    have already loaded a different libomp earlier in the process,
-    in which case OpenMP detects the duplicate runtime and aborts
-    with exit-15 (SIGABRT) — a segfault Python can't catch. Setting
-    ``KMP_DUPLICATE_LIB_OK=TRUE`` is the LLVM-documented workaround
-    (https://openmp.llvm.org/) and is safe for pepsickle's pure-
-    inference torch usage (no concurrent threading). We set it here
-    via ``os.environ.setdefault`` so a user who explicitly set the
-    var is unaffected.
-    """
-    import os
-    os.environ.setdefault('KMP_DUPLICATE_LIB_OK', 'TRUE')
+# Subprocess script: reads {sequences, human_only, threshold} JSON
+# from stdin, writes {sequence: [cleavage_probs]} JSON to stdout.
+# Lives in a *clean* Python interpreter (only torch+pepsickle+json),
+# so torch's libomp doesn't clash with the parent's pandas/numpy
+# libomp on macOS. Issue #266.
+_SUBPROCESS_SCRIPT = r"""
+import sys, json
+data = json.loads(sys.stdin.read())
+try:
+    from mhctools import Pepsickle
+except Exception as e:
+    sys.stderr.write("import_error: %s\n" % e)
+    sys.exit(2)
+try:
+    p = Pepsickle(human_only=data["human_only"], threshold=data["threshold"])
+except Exception as e:
+    sys.stderr.write("instantiate_error: %s\n" % e)
+    sys.exit(3)
+out = {}
+for seq in data["sequences"]:
     try:
-        from mhctools import Pepsickle
+        out[seq] = [float(x) for x in p.cleavage_probs(seq)]
+    except Exception as e:
+        sys.stderr.write("inference_error %r: %s\n" % (seq[:40], e))
+sys.stdout.write(json.dumps(out))
+"""
+
+
+def _cleavage_probs_via_subprocess(sequences, human_only=False, threshold=0.5,
+                                   timeout=600):
+    """Score ``sequences`` in a fresh Python subprocess and return
+    ``{sequence: [per-position cleavage probabilities]}``.
+
+    Subprocess isolation is the fix for issue #266 (macOS libomp
+    duplication between torch and pandas). Returns ``{}`` and logs
+    a warning on any subprocess-level failure (pepsickle missing,
+    timeout, unparseable output) — never raises, so a vaxrank run
+    continues without annotations.
+
+    Per-source inference failures are silently dropped from the
+    returned dict; the caller treats missing keys as "no signal."
+
+    Parameters
+    ----------
+    sequences : iterable of str
+        Source sequences to score. Deduplicated before sending.
+    human_only, threshold : forwarded to ``mhctools.Pepsickle``.
+    timeout : seconds before SIGTERM. Default 600 — pepsickle is
+        ~1s/source on CPU, so even thousands of sources finish well
+        within this cap.
+    """
+    import json
+    import subprocess
+    import sys
+
+    seqs = sorted({s for s in sequences if s})
+    if not seqs:
+        return {}
+    payload = json.dumps({
+        'sequences': seqs,
+        'human_only': bool(human_only),
+        'threshold': float(threshold),
+    })
+    try:
+        result = subprocess.run(
+            [sys.executable, '-c', _SUBPROCESS_SCRIPT],
+            input=payload, capture_output=True, text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning(
+            "Pepsickle subprocess timed out after %ds (%d sources); "
+            "skipping proteasome-cleavage annotation.",
+            timeout, len(seqs))
+        return {}
     except Exception as e:
         logger.warning(
-            "Could not import mhctools.Pepsickle (%s); skipping "
-            "proteasome-cleavage credibility tagging. Install "
-            "pepsickle (`pip install pepsickle`) to enable.", e)
-        logger.debug("Pepsickle import traceback:", exc_info=True)
-        return None
-    try:
-        return Pepsickle(human_only=human_only, threshold=threshold)
-    except Exception as e:
+            "Failed to launch pepsickle subprocess (%s); skipping "
+            "proteasome-cleavage annotation.", e)
+        logger.debug("Subprocess launch traceback:", exc_info=True)
+        return {}
+    if result.returncode != 0:
+        first_err = (result.stderr or "").strip().split("\n")[0]
         logger.warning(
-            "Could not instantiate Pepsickle (%s); skipping "
-            "proteasome-cleavage credibility tagging.", e)
-        logger.debug("Pepsickle instantiation traceback:", exc_info=True)
-        return None
+            "Pepsickle subprocess exited with code %d (%s); skipping "
+            "proteasome-cleavage annotation. Common causes: pepsickle "
+            "not installed (`pip install pepsickle`), or torch model "
+            "load failure.", result.returncode, first_err[:200])
+        return {}
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        logger.warning(
+            "Pepsickle subprocess produced unparseable output (%s); "
+            "skipping. First 200 chars of stdout: %r",
+            e, (result.stdout or "")[:200])
+        return {}
 
+
+# ----------------------------------------------------------------------------
+# Public entry point
+# ----------------------------------------------------------------------------
 
 def annotate_processing(predictions, predictor=None,
                         human_only=False, threshold=0.5):
-    """Attach pepsickle credibility scores to each EpitopePrediction.
-
-    Groups predictions by ``source_sequence`` and runs the proteasome
-    predictor *once per unique source*; the per-position cleavage
-    array is then sliced for each peptide based on its ``offset`` /
-    ``peptide_sequence`` length.
-
-    Predictions that lack a usable source sequence (empty string,
-    too short to contain the peptide, or peptide not findable at the
-    declared offset) are passed through unchanged — the credibility
-    fields stay None.
+    """Attach pepsickle credibility scores to each EpitopePrediction
+    in place.
 
     Parameters
     ----------
     predictions : iterable of EpitopePrediction
-        Mutated in place; each gets ``c_term_cleavage_prob`` /
-        ``max_internal_cut_prob`` / ``processing_score`` set when the
-        annotation succeeds.
-    predictor : object with a ``cleavage_probs(sequence) -> list[float]``
-        method, or ``None``. When ``None``, ``mhctools.Pepsickle`` is
-        loaded lazily; if pepsickle isn't installed we log a warning
-        and return without modifying any prediction.
-    human_only, threshold : forwarded to the default Pepsickle
-        constructor when ``predictor is None``. Ignored when the
-        caller passes a pre-built predictor (the caller is responsible
-        for configuring it).
+        Mutated in place: each gets ``c_term_cleavage_prob`` /
+        ``max_internal_cut_prob`` / ``processing_score`` populated when
+        annotation succeeds. Predictions with no usable source
+        sequence are passed through unchanged.
+    predictor : optional, object with a ``cleavage_probs(sequence) ->
+        list[float]`` method
+        Test seam. When None (default), pepsickle runs in a fresh
+        subprocess (see :func:`_cleavage_probs_via_subprocess`) to
+        avoid the macOS libomp clash. Tests inject an in-process
+        stub.
+    human_only, threshold : forwarded to pepsickle on the subprocess
+        path. Ignored when ``predictor`` is supplied (caller is
+        responsible for configuring their own predictor).
 
     Returns
     -------
@@ -200,87 +248,47 @@ def annotate_processing(predictions, predictor=None,
     if not predictions_list:
         return 0
 
-    if predictor is None:
-        predictor = _load_default_predictor(
-            human_only=human_only, threshold=threshold)
-        if predictor is None:
-            return 0
-    elif human_only or threshold != 0.5:
-        # Caller passed a pre-built predictor *and* non-default
-        # processing params. The params are ignored (the caller
-        # configured the predictor itself); warn so they don't
-        # think their CLI flags applied.
-        logger.warning(
-            "annotate_processing: human_only=%r / threshold=%r "
-            "ignored because a pre-built predictor was supplied. "
-            "Configure the predictor instance directly when passing "
-            "your own.", human_only, threshold)
-
-    # Group by source sequence so we run the predictor once per unique
-    # SLP / fragment / construct, not once per peptide.
+    # Group by source so we score each unique sequence exactly once.
     by_source = {}
     for p in predictions_list:
         source = getattr(p, 'source_sequence', None) or ''
         if not source:
             continue
         by_source.setdefault(source, []).append(p)
-
     if not by_source:
         return 0
 
+    # Resolve cleavage probabilities for every unique source.
+    if predictor is None:
+        probs_by_source = _cleavage_probs_via_subprocess(
+            by_source.keys(),
+            human_only=human_only, threshold=threshold)
+    else:
+        probs_by_source = {}
+        for source in by_source:
+            try:
+                probs_by_source[source] = predictor.cleavage_probs(source)
+            except Exception as e:
+                logger.warning(
+                    "Predictor failed for source (len=%d, prefix=%r): "
+                    "%s — skipping its %d predictions.",
+                    len(source), source[:20], e, len(by_source[source]))
+
+    # Apply per-peptide annotations using the precomputed arrays.
     n_annotated = 0
     for source, preds in by_source.items():
-        try:
-            seq_probs = predictor.cleavage_probs(source)
-        except Exception as e:
-            logger.warning(
-                "pepsickle prediction failed for source sequence "
-                "(len=%d, prefix=%r); skipping its %d predictions. "
-                "Error: %s", len(source), source[:20], len(preds), e)
-            continue
+        seq_probs = probs_by_source.get(source)
         if not seq_probs or len(seq_probs) < len(source):
-            logger.debug(
-                "pepsickle returned %d probs for source of length %d; "
-                "shape mismatch — skipping.",
-                len(seq_probs) if seq_probs else 0, len(source))
             continue
         for p in preds:
             peptide = p.peptide_sequence or ''
             if not peptide:
                 continue
-            declared_offset = getattr(p, 'offset', None) or 0
-            length = len(peptide)
-            # Trust the declared offset first.
-            if (declared_offset + length <= len(source) and
-                    source[declared_offset:declared_offset + length]
-                    == peptide):
-                offset = declared_offset
-            else:
-                # Re-locate by substring search, biased toward the
-                # declared offset: prefer the closest occurrence so
-                # repeated peptides (homopolymer tracts, short
-                # ligands) don't silently snap to position 0.
-                offset = _closest_occurrence(
-                    source, peptide, declared_offset)
-                if offset is None:
-                    continue
-                drift = abs(offset - declared_offset)
-                # Threshold scales with source length: 3aa absolute
-                # for typical SLP sources (~25 aa), 5% for full-
-                # protein sources (1000+ aa) where a small absolute
-                # drift is normal due to transcript-isoform mismatch.
-                drift_threshold = max(3, int(len(source) * 0.05))
-                if drift > drift_threshold:
-                    logger.warning(
-                        "Peptide %r re-located in source (len=%d) by "
-                        "%d positions (declared offset=%d, found=%d, "
-                        "threshold=%d). Annotation proceeds with the "
-                        "located position; check the upstream loader's "
-                        "offset accounting.",
-                        peptide, len(source), drift, declared_offset,
-                        offset, drift_threshold)
+            offset = _resolve_peptide_offset(source, peptide, p)
+            if offset is None:
+                continue
             c_term, max_internal = _per_position_processing(
-                seq_probs, offset, length)
+                seq_probs, offset, len(peptide))
             if c_term is None:
                 continue
             p.c_term_cleavage_prob = c_term
@@ -292,6 +300,38 @@ def annotate_processing(predictions, predictor=None,
     if n_annotated:
         logger.info(
             "Pepsickle credibility tagging: annotated %d / %d "
-            "EpitopePrediction(s) (%d unique source sequences).",
+            "EpitopePrediction(s) across %d unique source sequence(s).",
             n_annotated, len(predictions_list), len(by_source))
     return n_annotated
+
+
+def _resolve_peptide_offset(source, peptide, prediction):
+    """Locate the peptide's offset within its source.
+
+    Trust the prediction's declared ``offset`` first; re-locate via
+    closest-substring search when the declared offset doesn't match.
+    Warn when re-location moves the offset by more than the
+    drift threshold (3aa absolute, 5% of source length, whichever is
+    larger) — that's a sign the upstream loader's offset accounting
+    is broken, not a 0/1-based indexing typo.
+
+    Returns the offset (int) or None when the peptide isn't in the source.
+    """
+    declared = getattr(prediction, 'offset', None) or 0
+    length = len(peptide)
+    if (declared + length <= len(source)
+            and source[declared:declared + length] == peptide):
+        return declared
+    found = _closest_occurrence(source, peptide, declared)
+    if found is None:
+        return None
+    drift = abs(found - declared)
+    threshold = max(3, int(len(source) * 0.05))
+    if drift > threshold:
+        logger.warning(
+            "Peptide %r re-located in source (len=%d) by %d positions "
+            "(declared=%d, found=%d, threshold=%d). Annotation proceeds "
+            "with the located position; check the upstream loader's "
+            "offset accounting.",
+            peptide, len(source), drift, declared, found, threshold)
+    return found

@@ -260,14 +260,12 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
 
 # ---- entry_point integration --------------------------------------------
 
-def test_processing_aware_annotation_default_off():
-    """The CLI defaults --processing-aware-annotation=False because
-    pepsickle's torch dependency segfaults under macOS libomp
-    duplication. Off-by-default; users on Linux (or properly-
-    configured macOS) can opt in."""
+def test_processing_aware_annotation_default_on():
+    """On by default — pepsickle runs in an isolated subprocess so the
+    macOS libomp clash with pandas/numpy doesn't crash the parent."""
     from vaxrank.cli.arg_parser import parse_vaxrank_args
     args = parse_vaxrank_args(['--input-lens', '/dev/null'])
-    assert args.processing_aware_annotation is False
+    assert args.processing_aware_annotation is True
 
 
 def test_processing_aware_annotation_opt_out():
@@ -418,23 +416,6 @@ def test_dedup_by_content_when_duplicate_objects(monkeypatch):
         "Content-key dedup should collapse two distinct objects with "
         "identical (peptide, allele, source, offset) to one; got %d"
         % len(deduped))
-
-
-def test_annotate_processing_warns_when_predictor_and_params_supplied(caplog):
-    """If the caller passes a pre-built predictor *and* sets human_only
-    or threshold, the params are ignored. Warn so users don't
-    silently lose CLI flags they thought were applied."""
-    import logging
-    pred = _ep("KLMNPV", "AAAAKLMNPVAAAA", offset=4)
-    stub = StubPepsickle({"AAAAKLMNPVAAAA": [0.1] * 14})
-    with caplog.at_level(logging.WARNING):
-        annotate_processing(
-            [pred], predictor=stub,
-            human_only=True, threshold=0.7)
-    assert any(
-        "ignored because a pre-built predictor was supplied"
-        in r.message for r in caplog.records), \
-        "Expected a warn when predictor is supplied + non-default params"
 
 
 def test_drift_threshold_scales_with_source_length(caplog):

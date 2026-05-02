@@ -161,11 +161,6 @@ def test_real_lens_fixture_runs_end_to_end_via_cli(fixture_path, tmp_path):
     field-format quirk we encounter in the wild gets added as a
     fixture in that directory and this test surfaces breakage
     automatically — no more "shouldn't have to run these manually."
-
-    Pepsickle is opted out (``--no-processing-aware-annotation``)
-    because torch loads under pytest+coverage segfault in this dev
-    env. Production CLI runs with these fixtures still get pepsickle
-    on by default.
     """
     from vaxrank.cli.entry_point import main
     csv_path = tmp_path / "out.csv"
@@ -174,7 +169,6 @@ def test_real_lens_fixture_runs_end_to_end_via_cli(fixture_path, tmp_path):
         "--input-lens", fixture_path,
         "--output-csv", str(csv_path),
         "--output-neoepitope-report", str(xlsx_path),
-        "--no-processing-aware-annotation",
     ])
     # Both outputs landed; the path didn't crash on any LENS quirk.
     assert csv_path.exists(), f"CSV not written for {fixture_path}"
