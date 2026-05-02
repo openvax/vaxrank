@@ -702,32 +702,51 @@ def add_supplemental_report_args(arg_parser):
         help="Local path to COSMIC vcf")
 
 
+_PRIMARY_OUTPUT_FLAGS = (
+    # (CLI flag, args attribute, one-line purpose)
+    ("--output-csv",                    "output_csv",
+        "ranked vaccine peptides as CSV"),
+    ("--output-xlsx-report",            "output_xlsx_report",
+        "ranked vaccine peptides as XLSX"),
+    ("--output-ascii-report",           "output_ascii_report",
+        "ASCII summary report"),
+    ("--output-html-report",            "output_html_report",
+        "HTML summary report"),
+    ("--output-pdf-report",             "output_pdf_report",
+        "PDF summary report"),
+    ("--output-neoepitope-report",      "output_neoepitope_report",
+        "per-(peptide, allele) neoepitope XLSX"),
+    ("--output-json-file",              "output_json_file",
+        "machine-readable JSON of ranked vaccine peptides"),
+    ("--output-passing-variants-csv",   "output_passing_variants_csv",
+        "filter-passing variants as CSV"),
+    ("--output-isovar-csv",             "output_isovar_csv",
+        "Isovar transcript-assembly intermediate CSV"),
+    ("--output-epitopes",               "output_epitopes",
+        "raw epitope predictions"),
+    ("--output-mrna",                   "output_mrna",
+        "mRNA vaccine constructs (directory)"),
+    ("--output-peptide",                "output_peptide",
+        "synthetic-peptide vaccine constructs (FASTA)"),
+)
+
+
 def check_args(args):
-    if not (args.output_csv or
-            args.output_ascii_report or
-            args.output_html_report or
-            args.output_pdf_report or
-            args.output_json_file or
-            args.output_xlsx_report or
-            args.output_neoepitope_report or
-            args.output_passing_variants_csv or
-            args.output_isovar_csv or
-            args.output_epitopes or
-            args.output_mrna or
-            args.output_peptide):
+    """Fail fast when no primary --output-* flag is set.
+
+    Every output path is opt-in via its own flag; there is no default
+    destination. Without this guard a user can run a long pipeline (or
+    a LENS / pVACseq import) and end up with nothing on disk — exactly
+    the surprise we want to prevent.
+    """
+    if not any(getattr(args, attr, '') for _, attr, _ in _PRIMARY_OUTPUT_FLAGS):
+        flag_lines = "\n".join(
+            "  %-32s %s" % (flag, purpose)
+            for flag, _, purpose in _PRIMARY_OUTPUT_FLAGS)
         raise ValueError(
-            "Must specify at least one of: --output-csv, "
-            "--output-xlsx-report, "
-            "--output-ascii-report, "
-            "--output-html-report, "
-            "--output-pdf-report, "
-            "--output-neoepitope-report, "
-            "--output-json-file, "
-            "--output-passing-variants-csv, "
-            "--output-isovar-csv, "
-            "--output-epitopes, "
-            "--output-mrna, "
-            "--output-peptide")
+            "No output path specified. Pass at least one of the "
+            "following --output-* flags so vaxrank knows where to "
+            "write results:\n%s" % flag_lines)
 
 
 def external_input_arg_parser():

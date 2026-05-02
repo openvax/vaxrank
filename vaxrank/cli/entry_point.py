@@ -508,6 +508,13 @@ def main(args_list=None):
     _resolve_ensembl_release(args)
     logger.info(args)
 
+    # Fail fast when no output path is set, *before* loading inputs or
+    # running predictions. Otherwise a long --input-lens run silently
+    # produces nothing on disk (every output is opt-in via its own
+    # --output-* flag, with no default destination). Applies to both
+    # the VCF/BAM pipeline path and the external-input path.
+    check_args(args)
+
     # Architecture (post-#252):
     #
     #   INPUT
@@ -546,7 +553,6 @@ def main(args_list=None):
         _emit_neoepitope_report_external(args, report_df, predictions)
         source = 'external'
     else:
-        check_args(args)
         data = ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
         ranked_variants_with_vaccine_peptides = data['variants']
         patient_info = data['patient_info']

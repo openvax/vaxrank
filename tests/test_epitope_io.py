@@ -1167,3 +1167,15 @@ def test_lens_cli_csv_output(tmp_path):
     import pandas as pd
     df = pd.read_csv(csv_path)
     assert len(df) == 3
+
+
+def test_lens_cli_errors_when_no_output_flag_set():
+    """Running ``vaxrank --input-lens FILE`` with no --output-* flag
+    must fail fast — every output is opt-in via its own flag and the
+    earlier behavior (run to completion, write nothing, log a quiet
+    "wrote=['(none)']") is exactly the surprise the guard prevents."""
+    import pytest
+    from vaxrank.cli.entry_point import main
+    lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
+    with pytest.raises(ValueError, match="No output path specified"):
+        main(["--input-lens", lens_path])
