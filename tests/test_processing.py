@@ -25,8 +25,7 @@ Pins:
 
 from vaxrank.epitope_prediction import EpitopePrediction
 from vaxrank.processing import (
-    _composite_processing_score,
-    _per_position_processing,
+    _component_probs,
     annotate_processing,
 )
 
@@ -63,50 +62,20 @@ class StubPepsickle:
         return self.probs_by_source.get(sequence, [0.0] * len(sequence))
 
 
-# ---- Helpers (unit-level) -------------------------------------------------
+# ---- Local guard around mhctools helpers ---------------------------------
+#
+# The component extraction (``c_term_prob`` / ``max_internal_prob``) and the
+# composite ``c_term * (1 - max(internal))`` formula live in mhctools and are
+# tested there. The only vaxrank-side concern is the out-of-range guard, so
+# that's all we exercise locally.
 
-def test_per_position_processing_basic():
-    # Source: 10-mer; peptide at offset 2, length 5 (positions 2..6).
-    # Last position of the peptide is index 6.
-    # Internal positions are 2..5 (4 positions strictly inside).
-    seq_probs = [0.01, 0.05, 0.10, 0.50, 0.90, 0.20, 0.95, 0.30, 0.40, 0.05]
-    c_term, max_internal = _per_position_processing(
-        seq_probs, start=2, length=5)
-    assert c_term == 0.95
-    assert max_internal == 0.90  # peak of [0.10, 0.50, 0.90, 0.20]
-
-
-def test_per_position_processing_out_of_range():
-    seq_probs = [0.1, 0.2, 0.3]
-    # Peptide extends past source — return None tuple.
-    c_term, max_internal = _per_position_processing(
-        seq_probs, start=2, length=5)
+def test_component_probs_out_of_range_returns_none_tuple():
+    """Peptide span extending past the source returns ``(None, None)``
+    so the caller can drop the row instead of raising IndexError from
+    the mhctools slice helpers."""
+    c_term, max_internal = _component_probs([0.1, 0.2, 0.3], start=2, length=5)
     assert c_term is None
     assert max_internal is None
-
-
-def test_per_position_processing_single_residue():
-    """Degenerate: a 1-residue peptide has no internal positions.
-    Returns max_internal=0.0 (no signal) and c_term from the single
-    position."""
-    c_term, max_internal = _per_position_processing(
-        [0.1, 0.7, 0.3], start=1, length=1)
-    assert c_term == 0.7
-    assert max_internal == 0.0
-
-
-def test_composite_processing_score():
-    # c_term=1.0, max_internal=0.0 → 1.0 (ideal)
-    assert _composite_processing_score(1.0, 0.0) == 1.0
-    # c_term=0.9, max_internal=0.5 → 0.45
-    assert abs(_composite_processing_score(0.9, 0.5) - 0.45) < 1e-9
-    # c_term=0.0 → 0 regardless of internal
-    assert _composite_processing_score(0.0, 0.0) == 0.0
-    # max_internal=1.0 → 0 (ligand always destroyed)
-    assert _composite_processing_score(0.9, 1.0) == 0.0
-    # None inputs → None
-    assert _composite_processing_score(None, 0.5) is None
-    assert _composite_processing_score(0.5, None) is None
 
 
 # ---- Annotation (integration with EpitopePrediction) ---------------------

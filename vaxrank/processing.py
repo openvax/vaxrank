@@ -32,16 +32,34 @@ The annotations are purely additive — vaccine ranking is unaffected.
 Reports surface the three columns when at least one prediction in
 the per-VaccinePeptide list has been annotated.
 
-Pepsickle (Weeder et al., Bioinformatics 2021) runs in an isolated
-subprocess (issue #266: torch's libomp clashes with the parent's
-pandas/numpy/pyarrow OpenMP runtime on macOS, segfaulting the
-process). The subprocess imports only torch + pepsickle, no pandas;
-single libomp loads, no clash. Linux installs work either way.
+Per-peptide arithmetic (component extraction + composite scoring)
+delegates to ``mhctools.processing_predictor`` rather than being
+hand-rolled here: ``ProcessingPredictor.c_term_prob`` /
+``max_internal_prob`` are the canonical slice helpers, and
+``score_cterm_anti_max_internal`` is the canonical
+``c_term * (1 - max(internal))`` formula. Keeping a single
+implementation in mhctools means a future scoring fix or
+length-edge-case tweak there flows here automatically; see
+openvax/vaxrank#267.
+
+Pepsickle (Weeder et al., Bioinformatics 2021) inference still runs
+in an isolated subprocess (issue #266: torch's libomp clashes with
+the parent's pandas/numpy/pyarrow OpenMP runtime on macOS,
+segfaulting the process). The subprocess imports only torch +
+pepsickle, no pandas; single libomp loads, no clash. Linux installs
+work either way. mhctools issue openvax/mhctools#200 tracks pushing
+that subprocess workaround down to mhctools so other consumers
+benefit too.
 
 Issue: openvax/vaxrank#249.
 """
 
 import logging
+
+from mhctools.processing_predictor import (
+    ProcessingPredictor,
+    score_cterm_anti_max_internal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,49 +67,26 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------------
 # Per-peptide arithmetic on a precomputed per-position cleavage array
 # ----------------------------------------------------------------------------
+#
+# The component extractors and the composite ``c_term * (1 - max_internal)``
+# formula live in ``mhctools.processing_predictor``; we just import them.
+# Locally we only need to defend against out-of-range slicing (peptide
+# extending past the source) — ``ProcessingPredictor.c_term_prob`` would
+# IndexError, so we range-check first and return ``(None, None)`` to mean
+# "no signal" upstream.
 
-def _per_position_processing(seq_probs, start, length):
-    """Slice a per-position cleavage array down to one peptide's
-    ``(pepsickle_c_term_cleavage_prob, pepsickle_max_internal_cut_prob)``.
-
-    ``seq_probs[i]`` is "would the proteasome cut C-terminally to
-    residue *i*?". For a peptide spanning ``[start, start+length)``:
-      - C-terminal cut = ``seq_probs[start+length-1]`` (release at end)
-      - Max internal cut = ``max(seq_probs[start : start+length-1])``
-        (positions strictly inside the peptide; destruction)
-
-    Returns ``(c_term, max_internal)`` floats in [0, 1], or
-    ``(None, None)`` if the peptide is out of range. Single-residue
-    peptides have no "inside" — max_internal is 0.0.
+def _component_probs(seq_probs, start, length):
+    """Return ``(c_term, max_internal)`` for a peptide at
+    ``seq_probs[start:start+length]``, or ``(None, None)`` when the
+    span doesn't fit. Both components come straight from the public
+    mhctools helpers — we just guard the array bounds.
     """
     if length < 1 or start < 0 or start + length > len(seq_probs):
         return None, None
-    c_term = float(seq_probs[start + length - 1])
-    if length >= 2:
-        max_internal = float(max(seq_probs[start:start + length - 1]))
-    else:
-        max_internal = 0.0
+    c_term = float(ProcessingPredictor.c_term_prob(seq_probs, start, length))
+    max_internal = float(
+        ProcessingPredictor.max_internal_prob(seq_probs, start, length))
     return c_term, max_internal
-
-
-def _composite_processing_score(c_term, max_internal):
-    """``c_term * (1 - max_internal)``. Range [0, 1].
-
-    1.0 = clean cut at end + no internal cut.
-    0.0 = no clean release, or near-certain internal destruction.
-
-    ``1 - max_internal`` is a conservative approximation for "no
-    internal cut anywhere"; the strictly correct expression is the
-    joint product ``Π(1 - p_i)`` over all internal positions.
-    Proteasomes cut roughly once per substrate molecule, so the
-    single highest-probability cut dominates and this heuristic is
-    a reasonable proxy. Same formula at any peptide length.
-
-    Returns ``None`` when either input is None.
-    """
-    if c_term is None or max_internal is None:
-        return None
-    return float(c_term) * (1.0 - float(max_internal))
 
 
 def _closest_occurrence(source, peptide, declared_offset):
@@ -293,14 +288,20 @@ def annotate_processing(predictions, predictor=None,
             offset = _resolve_peptide_offset(source, peptide, p)
             if offset is None:
                 continue
-            c_term, max_internal = _per_position_processing(
+            c_term, max_internal = _component_probs(
                 seq_probs, offset, len(peptide))
             if c_term is None:
                 continue
             p.pepsickle_c_term_cleavage_prob = c_term
             p.pepsickle_max_internal_cut_prob = max_internal
-            p.pepsickle_processing_score = _composite_processing_score(
-                c_term, max_internal)
+            # ``score_cterm_anti_max_internal`` is mhctools' canonical
+            # ``c_term * (1 - max(internal))`` — equivalent to the
+            # default scoring on ``ProteasomePredictor``. Pass the raw
+            # internal slice so the helper computes max() itself,
+            # matching how mhctools scores its own predictions.
+            internal_slice = seq_probs[offset:offset + len(peptide) - 1]
+            p.pepsickle_processing_score = score_cterm_anti_max_internal(
+                c_term, None, internal_slice)
             n_annotated += 1
 
     if n_annotated:
