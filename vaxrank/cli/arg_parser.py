@@ -257,8 +257,10 @@ def add_output_args(arg_parser):
         action="store_true",
         default=True,
         help="Annotate each predicted MHC ligand with pepsickle's "
-             "proteasome-cleavage credibility scores (c_term_cleavage_prob, "
-             "max_internal_cut_prob, processing_score). On by default. "
+             "proteasome-cleavage credibility scores "
+             "(pepsickle_c_term_cleavage_prob, "
+             "pepsickle_max_internal_cut_prob, "
+             "pepsickle_processing_score). On by default. "
              "Pepsickle runs in an isolated subprocess (issue #266) so "
              "torch's libomp doesn't clash with the parent's pandas / "
              "numpy / pyarrow OpenMP runtime. Doesn't change vaccine "

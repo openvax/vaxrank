@@ -19,7 +19,7 @@ Pins:
 - Re-locates peptides in the source sequence when declared offset is
   off by one (off-by-one drift in offsets is common in upstream
   loaders).
-- Composite ``processing_score`` = c_term × (1 − max_internal).
+- Composite ``pepsickle_processing_score`` = c_term × (1 − max_internal).
 - Single pepsickle pass per unique source sequence (not per peptide).
 """
 
@@ -125,11 +125,11 @@ def test_annotate_processing_attaches_continuous_scores():
         [pred], predictor=StubPepsickle({source: probs}))
     assert n == 1
     # C-term = probs at index 9 = 0.85 (clean release)
-    assert abs(pred.c_term_cleavage_prob - 0.85) < 1e-9
+    assert abs(pred.pepsickle_c_term_cleavage_prob - 0.85) < 1e-9
     # max internal = max of probs[4..8] = max(0.10, 0.20, 0.05, 0.50, 0.30) = 0.50
-    assert abs(pred.max_internal_cut_prob - 0.50) < 1e-9
+    assert abs(pred.pepsickle_max_internal_cut_prob - 0.50) < 1e-9
     # processing = 0.85 * (1 - 0.50) = 0.425
-    assert abs(pred.processing_score - 0.425) < 1e-9
+    assert abs(pred.pepsickle_processing_score - 0.425) < 1e-9
 
 
 def test_annotate_processing_one_pass_per_unique_source():
@@ -161,7 +161,7 @@ def test_annotate_processing_skips_predictions_without_source():
     n = annotate_processing(
         [pred], predictor=StubPepsickle({}))
     assert n == 0
-    assert pred.c_term_cleavage_prob is None
+    assert pred.pepsickle_c_term_cleavage_prob is None
 
 
 def test_annotate_processing_relocates_peptide_when_offset_off():
@@ -179,7 +179,7 @@ def test_annotate_processing_relocates_peptide_when_offset_off():
         [pred], predictor=StubPepsickle({source: probs}))
     assert n == 1
     # C-term should pick up probs[8] = 0.95 (re-located, not probs[1+5]=0.05)
-    assert abs(pred.c_term_cleavage_prob - 0.95) < 1e-9
+    assert abs(pred.pepsickle_c_term_cleavage_prob - 0.95) < 1e-9
 
 
 def test_annotate_processing_does_not_touch_ranking_score():
@@ -194,7 +194,7 @@ def test_annotate_processing_does_not_touch_ranking_score():
         [pred],
         predictor=StubPepsickle({source: [0.1] * len(source)}))
     # Annotation fields are now set
-    assert pred.c_term_cleavage_prob is not None
+    assert pred.pepsickle_c_term_cleavage_prob is not None
     # Ranking-driving fields untouched
     assert pred.ic50 == pre_ic50
     assert pred.percentile_rank == pre_rank
@@ -218,8 +218,8 @@ def test_annotate_processing_predictor_failure_degrades_gracefully():
         [pred_ok, pred_fail], predictor=FlakyPredictor())
     # Only the OK one annotated; the failing source skipped, no crash.
     assert n == 1
-    assert pred_ok.c_term_cleavage_prob is not None
-    assert pred_fail.c_term_cleavage_prob is None
+    assert pred_ok.pepsickle_c_term_cleavage_prob is not None
+    assert pred_fail.pepsickle_c_term_cleavage_prob is None
 
 
 def test_annotate_processing_empty_input_returns_zero():
@@ -231,10 +231,12 @@ def test_annotate_processing_empty_input_returns_zero():
 
 def test_epitope_data_surfaces_processing_columns_when_annotated():
     """report.TemplateDataCreator._epitope_data adds three extra
-    columns (C-term cut, Max internal cut, Processing score) when
-    ``include_processing=True``. Default ``include_processing=False``
-    keeps the original 6-column shape so unannotated reports
-    don't change."""
+    columns (Pepsickle C-term cut, Pepsickle max internal cut,
+    Pepsickle processing score) when ``include_processing=True``.
+    Default ``include_processing=False`` keeps the original 6-column
+    shape so unannotated reports don't change. Predictor name is in
+    the column header so a future per-position predictor (NetChop, …)
+    can land alongside without ambiguity."""
     from collections import OrderedDict
 
     source = "AAAAKLMNPVAAAA"
@@ -245,17 +247,17 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
     # Default: 6-column legacy shape.
     pre = creator._epitope_data(pred)
     assert isinstance(pre, OrderedDict)
-    assert 'C-term cut' not in pre
-    assert 'Processing score' not in pre
+    assert 'Pepsickle C-term cut' not in pre
+    assert 'Pepsickle processing score' not in pre
 
     # After annotation, ``include_processing=True`` surfaces the columns.
     annotate_processing(
         [pred],
         predictor=StubPepsickle({source: [0.1] * 9 + [0.85] + [0.0] * 4}))
     post = creator._epitope_data(pred, include_processing=True)
-    assert 'C-term cut' in post
-    assert 'Max internal cut' in post
-    assert 'Processing score' in post
+    assert 'Pepsickle C-term cut' in post
+    assert 'Pepsickle max internal cut' in post
+    assert 'Pepsickle processing score' in post
 
 
 # ---- entry_point integration --------------------------------------------
@@ -310,8 +312,8 @@ def test_epitope_data_header_consistent_when_some_predictions_unannotated():
         predictor=StubPepsickle(
             {source: [0.1] * 9 + [0.85] + [0.0] * 4}))
     # Verify mixed state: only one of the two has the field set
-    assert annotated.c_term_cleavage_prob is not None
-    assert unannotated.c_term_cleavage_prob is None
+    assert annotated.pepsickle_c_term_cleavage_prob is not None
+    assert unannotated.pepsickle_c_term_cleavage_prob is None
 
     # When the caller turns include_processing on, BOTH rows have
     # the same key set — table renders cleanly.
@@ -323,9 +325,9 @@ def test_epitope_data_header_consistent_when_some_predictions_unannotated():
         "annotated=%s vs unannotated=%s" % (
             list(row_a.keys()), list(row_u.keys())))
     # Unannotated row uses the '—' placeholder
-    assert row_u['C-term cut'] == '—'
-    assert row_u['Max internal cut'] == '—'
-    assert row_u['Processing score'] == '—'
+    assert row_u['Pepsickle C-term cut'] == '—'
+    assert row_u['Pepsickle max internal cut'] == '—'
+    assert row_u['Pepsickle processing score'] == '—'
 
 
 def test_re_location_picks_closest_to_declared_offset():
@@ -346,10 +348,10 @@ def test_re_location_picks_closest_to_declared_offset():
     # If re-location snapped to position 0 (first occurrence), c_term
     # would be probs[4] = 0.0; if it correctly snapped to position 8,
     # c_term = probs[12] = 0.95.
-    assert pred.c_term_cleavage_prob == 0.95, (
+    assert pred.pepsickle_c_term_cleavage_prob == 0.95, (
         "Re-location should pick the closest occurrence to declared "
         "offset (8 → 12), not the first occurrence (0 → 4); got "
-        "c_term=%s" % pred.c_term_cleavage_prob)
+        "c_term=%s" % pred.pepsickle_c_term_cleavage_prob)
 
 
 def test_re_location_warns_on_large_offset_drift(caplog):

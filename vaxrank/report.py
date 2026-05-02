@@ -238,14 +238,17 @@ class TemplateDataCreator(object):
             ('WT IC50', wt_ic50_str),
         ])
         if include_processing:
-            c_term = getattr(epitope_prediction, 'c_term_cleavage_prob', None)
-            max_int = getattr(epitope_prediction, 'max_internal_cut_prob', None)
-            proc = getattr(epitope_prediction, 'processing_score', None)
-            epitope_data['C-term cut'] = (
+            c_term = getattr(
+                epitope_prediction, 'pepsickle_c_term_cleavage_prob', None)
+            max_int = getattr(
+                epitope_prediction, 'pepsickle_max_internal_cut_prob', None)
+            proc = getattr(
+                epitope_prediction, 'pepsickle_processing_score', None)
+            epitope_data['Pepsickle C-term cut'] = (
                 '%.2f' % c_term if c_term is not None else '—')
-            epitope_data['Max internal cut'] = (
+            epitope_data['Pepsickle max internal cut'] = (
                 '%.2f' % max_int if max_int is not None else '—')
-            epitope_data['Processing score'] = (
+            epitope_data['Pepsickle processing score'] = (
                 '%.2f' % proc if proc is not None else '—')
         return epitope_data
 
@@ -333,7 +336,8 @@ class TemplateDataCreator(object):
                 # graceful, so mixed annotated/unannotated lists are
                 # possible).
                 any_processing = any(
-                    getattr(p, 'c_term_cleavage_prob', None) is not None
+                    getattr(p, 'pepsickle_c_term_cleavage_prob', None)
+                    is not None
                     for p in vaccine_peptide.mutant_epitope_predictions)
 
                 epitopes = []

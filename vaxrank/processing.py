@@ -12,16 +12,21 @@
 
 """Proteasomal cleavage credibility tagging for MHC ligand predictions.
 
-For each predicted MHC ligand, attach three scores:
+For each predicted MHC ligand, attach three scores. All three carry
+the ``pepsickle_`` prefix so the predictor is unambiguous in CSVs,
+log lines, and report columns; a future per-position cleavage
+predictor (NetChop, PAProC, …) can land alongside without colliding.
 
-  c_term_cleavage_prob    pepsickle's probability the proteasome cuts
-                          at the ligand's C-terminus (clean release)
-  max_internal_cut_prob   peak cleavage probability strictly inside
-                          the ligand (high → ligand is destroyed
-                          before reaching MHC)
-  processing_score        composite ``c_term * (1 - max_internal)``;
-                          1.0 = ideal release, 0.0 = no clean release
-                          OR near-certain destruction
+  pepsickle_c_term_cleavage_prob    pepsickle's probability the
+                                    proteasome cuts at the ligand's
+                                    C-terminus (clean release)
+  pepsickle_max_internal_cut_prob   peak cleavage probability strictly
+                                    inside the ligand (high → ligand
+                                    is destroyed before reaching MHC)
+  pepsickle_processing_score        composite ``c_term * (1 - max_internal)``;
+                                    1.0 = ideal release, 0.0 = no
+                                    clean release OR near-certain
+                                    destruction
 
 The annotations are purely additive — vaccine ranking is unaffected.
 Reports surface the three columns when at least one prediction in
@@ -47,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 def _per_position_processing(seq_probs, start, length):
     """Slice a per-position cleavage array down to one peptide's
-    ``(c_term_cleavage_prob, max_internal_cut_prob)``.
+    ``(pepsickle_c_term_cleavage_prob, pepsickle_max_internal_cut_prob)``.
 
     ``seq_probs[i]`` is "would the proteasome cut C-terminally to
     residue *i*?". For a peptide spanning ``[start, start+length)``:
@@ -225,10 +230,11 @@ def annotate_processing(predictions, predictor=None,
     Parameters
     ----------
     predictions : iterable of EpitopePrediction
-        Mutated in place: each gets ``c_term_cleavage_prob`` /
-        ``max_internal_cut_prob`` / ``processing_score`` populated when
-        annotation succeeds. Predictions with no usable source
-        sequence are passed through unchanged.
+        Mutated in place: each gets ``pepsickle_c_term_cleavage_prob``
+        / ``pepsickle_max_internal_cut_prob`` /
+        ``pepsickle_processing_score`` populated when annotation
+        succeeds. Predictions with no usable source sequence are
+        passed through unchanged.
     predictor : optional, object with a ``cleavage_probs(sequence) ->
         list[float]`` method
         Test seam. When None (default), pepsickle runs in a fresh
@@ -291,9 +297,9 @@ def annotate_processing(predictions, predictor=None,
                 seq_probs, offset, len(peptide))
             if c_term is None:
                 continue
-            p.c_term_cleavage_prob = c_term
-            p.max_internal_cut_prob = max_internal
-            p.processing_score = _composite_processing_score(
+            p.pepsickle_c_term_cleavage_prob = c_term
+            p.pepsickle_max_internal_cut_prob = max_internal
+            p.pepsickle_processing_score = _composite_processing_score(
                 c_term, max_internal)
             n_annotated += 1
 
