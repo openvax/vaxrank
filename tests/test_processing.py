@@ -260,13 +260,14 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
 
 # ---- entry_point integration --------------------------------------------
 
-def test_processing_aware_annotation_default_on():
-    """The CLI defaults --processing-aware-annotation=True. Pin the
-    default so a future flip to off-by-default surfaces here."""
+def test_processing_aware_annotation_default_off():
+    """The CLI defaults --processing-aware-annotation=False because
+    pepsickle's torch dependency segfaults under macOS libomp
+    duplication. Off-by-default; users on Linux (or properly-
+    configured macOS) can opt in."""
     from vaxrank.cli.arg_parser import parse_vaxrank_args
-    # Parse a minimal arg set; we only need the namespace for the flag.
     args = parse_vaxrank_args(['--input-lens', '/dev/null'])
-    assert args.processing_aware_annotation is True
+    assert args.processing_aware_annotation is False
 
 
 def test_processing_aware_annotation_opt_out():

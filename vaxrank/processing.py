@@ -13,11 +13,12 @@
 """Proteasomal cleavage credibility tagging for MHC ligand predictions.
 
 mhcflurry-presentation already includes an antigen-processing prior
-conditioned on flanking residues, so a per-k-mer "presentation score"
-implicitly captures whether *this specific 9-mer* would be cleaved
-out and presented. What it can't tell us is whether the proteasome
-would cut *inside* the ligand and destroy it before MHC, or whether
-the C-terminal cut at the ligand's boundary is clean.
+conditioned on flanking residues, so a per-peptide "presentation
+score" implicitly captures whether *this specific peptide* (8-15 aa
+for MHC-I) would be cleaved out and presented. What it can't tell us
+is whether the proteasome would cut *inside* the ligand and destroy
+it before MHC, or whether the C-terminal cut at the ligand's
+boundary is clean.
 
 Pepsickle (Weeder et al., Bioinformatics 2021, doi:10.1093/bioinformatics/btab628)
 predicts per-position cleavage probabilities. We use it to
@@ -95,6 +96,18 @@ def _composite_processing_score(c_term, max_internal):
     no internal-cut risk); 0.0 = either no clean C-term cut or a
     near-certain internal cut destroys the ligand.
 
+    Note on ``1 - max_internal``: this is a *conservative
+    approximation* for "no internal cut anywhere." The strictly
+    correct expression would be the joint probability
+    ``Π(1 - p_i)`` over all internal positions. Using ``max``
+    undercounts destruction risk when multiple positions have
+    moderate cut probabilities. In practice proteasomes cut roughly
+    once per substrate molecule, so the single highest-probability
+    cut dominates and the heuristic is a reasonable proxy. Same
+    formula applies to any peptide length the underlying MHC
+    predictor emits (8-15 aa for MHC-I); pepsickle's per-position
+    scoring is length-agnostic.
+
     Returns ``None`` when either input is None (not annotated).
     """
     if c_term is None or max_internal is None:
@@ -116,7 +129,20 @@ def _load_default_predictor(human_only=False, threshold=0.5):
     traceback (``logger.debug(exc_info=True)``) so genuine bugs in
     the install — bad CUDA libs, torch version mismatch — are
     visible at DEBUG without spamming WARNING-level output.
+
+    macOS OpenMP workaround: pepsickle pulls in torch, which on
+    macOS ships its own ``libomp``. pandas / numpy / pyarrow may
+    have already loaded a different libomp earlier in the process,
+    in which case OpenMP detects the duplicate runtime and aborts
+    with exit-15 (SIGABRT) — a segfault Python can't catch. Setting
+    ``KMP_DUPLICATE_LIB_OK=TRUE`` is the LLVM-documented workaround
+    (https://openmp.llvm.org/) and is safe for pepsickle's pure-
+    inference torch usage (no concurrent threading). We set it here
+    via ``os.environ.setdefault`` so a user who explicitly set the
+    var is unaffected.
     """
+    import os
+    os.environ.setdefault('KMP_DUPLICATE_LIB_OK', 'TRUE')
     try:
         from mhctools import Pepsickle
     except Exception as e:
