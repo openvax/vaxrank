@@ -492,6 +492,51 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             "indel_*_allele columns were missing. See DEBUG log for "
             "the offenders.", n_unparseable)
 
+    # Per-load summary of missing essential / important per-row data.
+    # Essential = blocked the row (already counted as "skipped" above
+    # or in load_lens itself). Important-but-recoverable = warns so
+    # users know what's degraded.
+    n_no_pep_context = sum(
+        1 for r in rows
+        if not (r.get('pep_context') and not (
+            isinstance(r.get('pep_context'), float) and pd.isna(r.get('pep_context')))))
+    n_no_gene_name = sum(
+        1 for r in rows
+        if not (r.get('gene_name') and not (
+            isinstance(r.get('gene_name'), float) and pd.isna(r.get('gene_name')))))
+    n_no_transcript = sum(
+        1 for r in rows
+        if not (r.get('transcript_id') and not (
+            isinstance(r.get('transcript_id'), float)
+            and pd.isna(r.get('transcript_id')))))
+    n_no_reads = sum(
+        1 for r in rows
+        if (r.get('rna_reads_covering_genomic_origin') is None
+            or (isinstance(r.get('rna_reads_covering_genomic_origin'), float)
+                and pd.isna(r.get('rna_reads_covering_genomic_origin')))))
+    if n_no_pep_context:
+        logger.warning(
+            "%d / %d LENS row(s) lack pep_context — antigens for those "
+            "rows degenerate to the bare neoepitope (no SLP context). "
+            "Vaccine windows will be ~9 aa instead of ~25 aa.",
+            n_no_pep_context, len(rows))
+    if n_no_gene_name:
+        logger.info(
+            "%d / %d LENS row(s) lack gene_name (typical for ERV / "
+            "non-genic antigens).", n_no_gene_name, len(rows))
+    if n_no_transcript:
+        logger.info(
+            "%d / %d LENS row(s) lack transcript_id; downstream "
+            "varcode-effect annotation won't have a transcript context "
+            "for these.", n_no_transcript, len(rows))
+    if n_no_reads:
+        logger.warning(
+            "%d / %d LENS row(s) lack RNA-read counts "
+            "(rna_reads_covering_genomic_origin). Combined-score "
+            "ranking will collapse to epitope-only for those rows; "
+            "consider --combined-score-mode=epitope_only if RNA data "
+            "is consistently absent.", n_no_reads, len(rows))
+
     # Order by mutant_epitope_score descending so the top candidates
     # win greedy bin-packing in the construct assemblers. Ties broken
     # alphabetically by variant coordinates for determinism.
