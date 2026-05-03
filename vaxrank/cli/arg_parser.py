@@ -213,14 +213,60 @@ def add_output_args(arg_parser):
 
     output_args_group.add_argument(
         "--vaccine-type",
-        nargs='+',
-        default=["peptide"],
+        default="peptide",
         choices=["peptide", "mrna"],
         metavar="TYPE",
-        help="Which vaccine type(s) to design. Multi-valued so future "
-             "types (DNA, etc.) plug in as additional choices. "
-             "Default: peptide. Examples: '--vaccine-type peptide', "
-             "'--vaccine-type mrna', '--vaccine-type peptide mrna' (both).")
+        help="Which vaccine type to design. One mode per run. The "
+             "vaccine output destination goes in --vaccine-output; "
+             "type-specific companion files in --vaccine-manifest, "
+             "--vaccine-order-form (peptide), --vaccine-csv (mrna). "
+             "Default: peptide.")
+
+    # Unified vaccine output (replaces the old --output-peptide /
+    # --output-mrna pair). The destination is interpreted by the
+    # active --vaccine-type:
+    #   peptide → FASTA file at PATH
+    #   mrna    → directory at PATH (writes cds.fasta / no_polyA.fasta
+    #             / full.fasta into it)
+    output_args_group.add_argument(
+        "--vaccine-output",
+        default="",
+        metavar="PATH",
+        help="Destination for the assembled vaccine constructs. "
+             "For --vaccine-type=peptide this is a FASTA file path; "
+             "for --vaccine-type=mrna it is a directory that vaxrank "
+             "writes cds.fasta, no_polyA.fasta, and full.fasta into. "
+             "Required when designing a vaccine; omit for "
+             "ranking-only / report-only runs.")
+    output_args_group.add_argument(
+        "--vaccine-manifest",
+        default="",
+        metavar="PATH",
+        help="Optional JSON manifest path describing the assembled "
+             "vaccine. Same schema for peptide and mRNA so downstream "
+             "tools can consume either uniformly.")
+    output_args_group.add_argument(
+        "--vaccine-order-form",
+        default="",
+        metavar="PATH",
+        help="Peptide-only. CSV order form ready to send to a peptide "
+             "vendor. Errors fast if --vaccine-type is not 'peptide'.")
+    output_args_group.add_argument(
+        "--vaccine-csv",
+        default="",
+        metavar="PATH",
+        help="mRNA-only. Long-format CSV: one row per (construct, "
+             "element) with construct / element_kind / index / "
+             "index_label / name / aa / nt / length_aa / length_nt / "
+             "note. Errors fast if --vaccine-type is not 'mrna'.")
+    output_args_group.add_argument(
+        "--vaccine-csv-no-full-rows",
+        dest="vaccine_csv_full_rows",
+        action="store_false",
+        default=True,
+        help="mRNA-only. Suppress the per-construct cds / no_polyA / "
+             "full summary rows in --vaccine-csv (the rows with the "
+             "longest nt cells). Per-element rows are unaffected.")
 
     # Shared antigen-design axes — apply to BOTH peptide and mRNA
     # unless overridden by the per-type flag (--peptide-* / --mrna-*).
@@ -381,38 +427,14 @@ def add_output_args(arg_parser):
 
 
 def add_mrna_output_args(group):
-    """mRNA vaccine construct output (see vaxrank/mrna.py for assembly)."""
+    """mRNA-vaccine design knobs (see vaxrank/mrna.py for assembly).
+
+    Output destinations are unified under ``--vaccine-output`` /
+    ``--vaccine-manifest`` / ``--vaccine-csv`` (see
+    ``add_output_args``); only mrna-specific design parameters live
+    here.
+    """
     from ..mrna_library import MITDS, SIGNAL_PEPTIDES, UTRS_3P, UTRS_5P
-    group.add_argument(
-        "--output-mrna",
-        default="",
-        help="Output *directory* for assembled mRNA vaccine constructs. "
-             "When set, vaxrank writes three FASTA files into the directory: "
-             "cds.fasta (start codon → stop codon), no_polyA.fasta "
-             "(5' UTR + CDS + 3' UTR), and full.fasta (no_polyA + polyA tail). "
-             "Each FASTA has one record per construct.")
-    group.add_argument(
-        "--output-mrna-manifest",
-        default="",
-        help="Optional path to a JSON manifest with the structured "
-             "per-element view of each mRNA construct (every layer with "
-             "AA + nt where applicable, all sequence variants, lengths).")
-    group.add_argument(
-        "--output-mrna-csv",
-        default="",
-        help="Optional path to a long-format CSV. One row per "
-             "(construct, element); columns: construct, element_kind, "
-             "index, index_label, name, aa, nt, length_aa, length_nt, "
-             "note. Lets you open a vaccine in a spreadsheet and inspect "
-             "every layer.")
-    group.add_argument(
-        "--output-mrna-csv-no-full-rows",
-        dest="output_mrna_csv_full_rows",
-        action="store_false",
-        default=True,
-        help="Suppress the per-construct cds / no_polyA / full summary "
-             "rows in the CSV (the rows with the longest nt cells). "
-             "Per-element rows are unaffected.")
     group.add_argument(
         "--mrna-signal-peptide",
         default="HLA_B",
@@ -587,22 +609,13 @@ def add_mrna_output_args(group):
 
 
 def add_peptide_output_args(group):
-    """Peptide vaccine construct output (see vaxrank/peptide.py)."""
-    group.add_argument(
-        "--output-peptide",
-        default="",
-        help="Path to FASTA file of peptide vaccine constructs. Default mode "
-             "is one synthetic long peptide per ranked variant; see "
-             "--peptide-mode.")
-    group.add_argument(
-        "--output-peptide-manifest",
-        default="",
-        help="Optional JSON manifest describing each peptide construct "
-             "(matches the mRNA manifest schema for symmetric consumption).")
-    group.add_argument(
-        "--output-peptide-order-form",
-        default="",
-        help="Optional CSV order form ready to send to a peptide vendor.")
+    """Peptide-vaccine design knobs (see vaxrank/peptide.py).
+
+    Output destinations are unified under ``--vaccine-output`` /
+    ``--vaccine-manifest`` / ``--vaccine-order-form`` (see
+    ``add_output_args``); only peptide-specific design parameters
+    live here.
+    """
     group.add_argument(
         "--peptide-mode",
         default="slp",
@@ -724,10 +737,9 @@ _PRIMARY_OUTPUT_FLAGS = (
         "Isovar transcript-assembly intermediate CSV"),
     ("--output-epitopes",               "output_epitopes",
         "raw epitope predictions"),
-    ("--output-mrna",                   "output_mrna",
-        "mRNA vaccine constructs (directory)"),
-    ("--output-peptide",                "output_peptide",
-        "synthetic-peptide vaccine constructs (FASTA)"),
+    ("--vaccine-output",                "vaccine_output",
+        "assembled vaccine constructs "
+        "(FASTA for --vaccine-type=peptide, directory for mrna)"),
 )
 
 
@@ -780,6 +792,21 @@ def check_args(args):
                 "--output-neoepitope-report / --output-json-file "
                 "instead."
                 % (", ".join(flag for flag, _ in pipeline_only), verb))
+
+    # Reject companion flags meant for the other vaccine type — fail
+    # fast rather than silently ignoring the file the user expected
+    # to see written.
+    vaccine_type = getattr(args, 'vaccine_type', 'peptide')
+    if vaccine_type == 'mrna' and getattr(args, 'vaccine_order_form', ''):
+        raise ValueError(
+            "--vaccine-order-form is peptide-only (vendor synthesis "
+            "form); --vaccine-type is 'mrna'. Drop --vaccine-order-form "
+            "or switch --vaccine-type to 'peptide'.")
+    if vaccine_type == 'peptide' and getattr(args, 'vaccine_csv', ''):
+        raise ValueError(
+            "--vaccine-csv is mrna-only (per-element layer table); "
+            "--vaccine-type is 'peptide'. Drop --vaccine-csv or "
+            "switch --vaccine-type to 'mrna'.")
 
 
 def external_input_arg_parser():

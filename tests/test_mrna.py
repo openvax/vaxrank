@@ -485,7 +485,8 @@ def test_polya_segmented_appears_in_full_fasta_and_csv():
 
 def test_output_dir_rejects_existing_file(tmp_path):
     """Old API took a FASTA file path; new API takes a directory.
-    Pointing --output-mrna at an existing file must raise loudly."""
+    Pointing --vaccine-output at an existing file must raise loudly
+    when --vaccine-type=mrna."""
     pairs = [_variant_pair("KLQGHSAP")]
     constructs = assemble_mrna_constructs(
         pairs, options=RNAConstructConfig(
@@ -500,8 +501,8 @@ def test_output_dir_rejects_existing_file(tmp_path):
 
 def test_output_dir_rejects_fasta_suffix(tmp_path):
     """Even if the path doesn't exist, .fasta / .fa suffixes are blocked
-    so 'vaxrank --output-mrna out.fasta' fails clearly instead of
-    silently creating a directory called out.fasta/."""
+    so 'vaxrank --vaccine-type=mrna --vaccine-output out.fasta' fails
+    clearly instead of silently creating a directory called out.fasta/."""
     pairs = [_variant_pair("KLQGHSAP")]
     constructs = assemble_mrna_constructs(
         pairs, options=RNAConstructConfig(
