@@ -746,7 +746,8 @@ def check_args(args):
     IDs as strings and no variant counts, so requesting those reports
     on the external path used to silently no-op. Reject the
     combination here with an explicit error pointing to the outputs
-    that *are* reachable from external input.
+    that *are* reachable from external input. Tracked in
+    openvax/vaxrank#268.
     """
     if not any(getattr(args, attr, '') for _, attr, _ in _PRIMARY_OUTPUT_FLAGS):
         flag_lines = "\n".join(
