@@ -126,15 +126,21 @@ def _resolve_transcripts(transcript_ids, genome):
     ``Transcript`` objects.
 
     ``genome`` is a ``pyensembl.EnsemblRelease`` (or any object with
-    ``transcript_by_id``). Versioned IDs like ``ENST00000312960.4``
-    work — pyensembl strips the suffix internally. Unresolvable IDs
-    are dropped silently (logged at DEBUG); a release-mismatch
-    between the LENS file and the locally installed pyensembl
-    release is the most common cause and shouldn't crash a run.
+    ``transcript_by_id``). Versioned IDs (``ENST00000312960.4``) are
+    stripped to bare IDs before lookup since pyensembl 2.x doesn't
+    auto-strip them — passing the versioned form raises "Transcript
+    not found." Unresolvable IDs are dropped (logged at DEBUG so the
+    caller can summarize aggregate failures at INFO level rather
+    than spamming per-row).
 
-    Returns ``[]`` when ``genome`` is None — that's the "no genome
-    plumbed through" case (e.g. unit tests bypassing the CLI), and
-    downstream code already tolerates an empty transcript list.
+    Returns ``[]`` when ``genome`` is None — the "no genome plumbed
+    through" case (e.g. unit tests bypassing the CLI, or external
+    input paths run without ``--ensembl-release``). Downstream code
+    tolerates an empty transcript list.
+
+    Only catches the specific exceptions pyensembl raises for
+    not-found IDs (``ValueError``, ``KeyError``); other exceptions
+    propagate so genuine bugs aren't swallowed.
     """
     if genome is None or not transcript_ids:
         return []
@@ -148,7 +154,7 @@ def _resolve_transcripts(transcript_ids, genome):
         bare = tid.split('.', 1)[0]
         try:
             resolved.append(genome.transcript_by_id(bare))
-        except Exception as e:
+        except (ValueError, KeyError) as e:
             logger.debug(
                 "Could not resolve transcript_id %r against the "
                 "configured pyensembl release (%s); dropping.", tid, e)
@@ -395,6 +401,13 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
 
     ranked = []
     n_unparseable = 0
+    # Aggregate transcript-resolution stats so we summarize once at
+    # the end instead of spamming a log line per row. ``n_with_ids`` is
+    # variants that *had* at least one transcript_id in the LENS file;
+    # ``n_resolved`` is the subset where pyensembl actually returned a
+    # Transcript. The gap is almost always a release mismatch.
+    n_with_ids = 0
+    n_resolved = 0
     for coords, group_rows in groups.items():
         rep = _pick_representative(group_rows, affinity_cols, rank_cols)
         # Build the Variant from REAL ref/alt columns
@@ -480,6 +493,10 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
                 if t and t not in transcript_ids:
                     transcript_ids.append(t)
         transcripts = _resolve_transcripts(transcript_ids, genome)
+        if transcript_ids:
+            n_with_ids += 1
+            if transcripts:
+                n_resolved += 1
 
         fragment = MutantProteinFragment(
             variant=variant,
@@ -584,6 +601,23 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             "consider --combined-score-mode=epitope_only if RNA data "
             "is consistently absent.", n_no_reads, len(rows))
 
+    # Transcript-resolution summary. Three failure modes worth surfacing
+    # at INFO/WARN level — the per-row debug logs in
+    # :func:`_resolve_transcripts` capture the individual IDs.
+    if n_with_ids and genome is None:
+        logger.warning(
+            "%d variant(s) had transcript_id(s) in LENS but no "
+            "pyensembl genome was configured; ASCII / HTML / PDF "
+            "report effect annotations will be empty. Pass "
+            "--ensembl-release to populate them.", n_with_ids)
+    elif n_with_ids and n_resolved < n_with_ids:
+        n_unresolved = n_with_ids - n_resolved
+        logger.warning(
+            "%d / %d variant(s) had transcript IDs that didn't resolve "
+            "against the configured pyensembl release. Most often this "
+            "is a release mismatch — pass --ensembl-release N to match "
+            "the build LENS used.", n_unresolved, n_with_ids)
+
     # Order by mutant_epitope_score descending so the top candidates
     # win greedy bin-packing in the construct assemblers. Ties broken
     # alphabetically by variant coordinates for determinism.
@@ -678,6 +712,9 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
 
     ranked = []
     n_skipped = 0
+    # Aggregate transcript-resolution stats (see LENS path for rationale).
+    n_with_ids = 0
+    n_resolved = 0
     for vid, group_rows in groups.items():
         rep = _pick_representative(
             group_rows, _PVACSEQ_IC50_COLS, _PVACSEQ_RANK_COLS)
@@ -731,6 +768,10 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
             if best_tid and not (isinstance(best_tid, float) and pd.isna(best_tid))
             else [])
         transcripts = _resolve_transcripts(transcript_ids, genome)
+        if transcript_ids:
+            n_with_ids += 1
+            if transcripts:
+                n_resolved += 1
         fragment = MutantProteinFragment(
             variant=variant, gene_name=gene,
             amino_acids=str(best_pep),
@@ -768,6 +809,21 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
             "Skipped %d pVACseq row group(s) with unparseable IDs; "
             "see DEBUG log for details.", n_skipped)
 
+    if n_with_ids and genome is None:
+        logger.warning(
+            "%d variant(s) had Best Transcript IDs in pVACseq but no "
+            "pyensembl genome was configured; ASCII / HTML / PDF "
+            "report effect annotations will be empty. Pass "
+            "--ensembl-release to populate them.", n_with_ids)
+    elif n_with_ids and n_resolved < n_with_ids:
+        n_unresolved = n_with_ids - n_resolved
+        logger.warning(
+            "%d / %d variant(s) had Best Transcript IDs that didn't "
+            "resolve against the configured pyensembl release. Most "
+            "often this is a release mismatch — pass --ensembl-release "
+            "N to match the build pVACseq used.",
+            n_unresolved, n_with_ids)
+
     ranked.sort(
         key=lambda pair: (
             -pair[1][0].mutant_epitope_score if pair[1] else 0.0,
@@ -793,13 +849,18 @@ def _patient_info_from_external(ranked, source_path, patient_id):
         same definition as the pipeline path
     """
     from .patient_info import PatientInfo
-    variants = [v for v, _ in ranked]
-    n_total = len(variants)
     n_with_transcript = 0
     n_with_rna = 0
-    for variant, vps in ranked:
+    n_with_peptides = 0
+    for _variant, vps in ranked:
         if not vps:
             continue
+        n_with_peptides += 1
+        # ``vps[0]`` is sufficient on the LENS / pVACseq paths because
+        # both loaders emit exactly one VaccinePeptide per variant
+        # (the ``MutantProteinFragment`` is built from the
+        # representative row's pep_context). If a future loader emits
+        # multiple VPs per variant, this should iterate ``vps``.
         frag = vps[0].mutant_protein_fragment
         if frag.supporting_reference_transcripts:
             n_with_transcript += 1
@@ -809,10 +870,10 @@ def _patient_info_from_external(ranked, source_path, patient_id):
         patient_id=patient_id or '',
         vcf_paths=[source_path] if source_path else [],
         bam_path=None,
-        num_somatic_variants=n_total,
+        num_somatic_variants=len(ranked),
         num_coding_effect_variants=n_with_transcript,
         num_variants_with_rna_support=n_with_rna,
-        num_variants_with_vaccine_peptides=sum(1 for _, vps in ranked if vps),
+        num_variants_with_vaccine_peptides=n_with_peptides,
     )
 
 

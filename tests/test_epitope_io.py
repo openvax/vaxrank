@@ -1169,6 +1169,20 @@ def test_lens_cli_csv_output(tmp_path):
     assert len(df) == 3
 
 
+def test_external_arg_parser_accepts_ensembl_release():
+    """``--ensembl-release N`` is reachable from the external-input
+    parser (regression: the flag was originally pipeline-only,
+    leaving LENS-driven template reports without a way to resolve
+    transcript IDs)."""
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    args = parse_vaxrank_args([
+        '--input-lens', '/dev/null',
+        '--output-csv', '/dev/null',
+        '--ensembl-release', '75',
+    ])
+    assert args.ensembl_release == 75
+
+
 def test_lens_cli_writes_ascii_report():
     """ASCII / HTML / PDF template reports work on the external
     (LENS / pVACseq) path now that transcript IDs resolve and a

@@ -358,14 +358,22 @@ class MutantProteinFragment(DataclassSerializable):
         set ``--ensembl-release`` to match LENS / pVACseq's
         reference). Callers (template-report renderers) tolerate
         ``None`` rather than crash.
+
+        Only catches the specific exceptions varcode raises for
+        ref/alt mismatches (``ReferenceMismatchError``) and missing /
+        invalid transcript data (``ValueError``, ``KeyError``); other
+        exceptions propagate so genuine bugs aren't swallowed.
         """
         if not self.supporting_reference_transcripts:
             return None
+        # Imported here to keep the module-load cost down and avoid a
+        # circular-ish import (varcode is heavy).
+        from varcode.errors import ReferenceMismatchError
         effects = []
         for t in self.supporting_reference_transcripts:
             try:
                 effects.append(self.variant.effect_on_transcript(t))
-            except Exception as e:
+            except (ReferenceMismatchError, ValueError, KeyError) as e:
                 logger.debug(
                     "varcode.effect_on_transcript failed for %s on %s: "
                     "%s — skipping that transcript.",

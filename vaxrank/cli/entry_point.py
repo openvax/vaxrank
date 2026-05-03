@@ -190,23 +190,22 @@ def _epitope_config_from_args_safe(args):
         return EpitopeConfig()
 
 
-_KNOWN_VACCINE_TYPES = {'peptide', 'mrna'}
-# Future vaccine types plug in here as their writers land:
-# _KNOWN_VACCINE_TYPES |= {'dna', ...}
-
-
 def _resolve_vaccine_type(args):
     """Return the active vaccine type (single value).
 
     ``--vaccine-type`` is single-valued (one mode per run; default
     ``peptide``). Argparse already validates the choice, but tolerate
     a missing attribute for callers that bypass the parser in tests.
+
+    Known types come from ``_VACCINE_TYPE_DISPATCH`` so adding a new
+    vaccine writer is a single registration there — no second
+    set/list to keep in sync.
     """
     vtype = getattr(args, 'vaccine_type', 'peptide') or 'peptide'
-    if vtype not in _KNOWN_VACCINE_TYPES:
+    if vtype not in _VACCINE_TYPE_DISPATCH:
         raise ValueError(
             "Unknown vaccine type %r. Known: %s." % (
-                vtype, sorted(_KNOWN_VACCINE_TYPES)))
+                vtype, sorted(_VACCINE_TYPE_DISPATCH)))
     return vtype
 
 

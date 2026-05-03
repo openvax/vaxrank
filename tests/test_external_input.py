@@ -70,6 +70,59 @@ def test_strip_lens_allele_handles_bracket_form():
     assert _strip_lens_allele("nan") is None
 
 
+# ---- _resolve_transcripts ------------------------------------------------
+
+class _StubGenome:
+    """Minimal stand-in for pyensembl.EnsemblRelease used by tests.
+
+    ``transcript_by_id(bare_id)`` returns the configured Transcript
+    object for that ID, or raises ``ValueError`` (the same shape
+    pyensembl 2.x raises for unknown IDs). Lets the resolution helper
+    exercise both paths without pulling in a real release.
+    """
+    def __init__(self, mapping):
+        self._mapping = mapping
+        self.lookups = []
+
+    def transcript_by_id(self, tid):
+        self.lookups.append(tid)
+        if tid in self._mapping:
+            return self._mapping[tid]
+        raise ValueError("Transcript not found: %s" % tid)
+
+
+def test_resolve_transcripts_strips_version_suffix():
+    """LENS IDs carry version suffixes (``ENST00000312960.4``); pyensembl
+    2.x doesn't strip them. The helper must, or every LENS lookup fails."""
+    from vaxrank.external_input import _resolve_transcripts
+    sentinel = object()
+    g = _StubGenome({'ENST00000312960': sentinel})
+    out = _resolve_transcripts(['ENST00000312960.4'], g)
+    assert out == [sentinel]
+    assert g.lookups == ['ENST00000312960']  # bare form was sent
+
+
+def test_resolve_transcripts_drops_unresolvable_ids():
+    """A release-mismatch yields some IDs the configured release
+    doesn't know. Drop quietly (DEBUG-logged) rather than crash; the
+    caller's aggregate WARN summarizes the count."""
+    from vaxrank.external_input import _resolve_transcripts
+    known = object()
+    g = _StubGenome({'ENST00000000001': known})
+    out = _resolve_transcripts(
+        ['ENST00000000001.1', 'ENST99999999999.7', ''],
+        g)
+    assert out == [known]
+
+
+def test_resolve_transcripts_returns_empty_when_no_genome():
+    """No --ensembl-release set → genome=None; resolution is a no-op
+    and downstream code falls back to the empty-transcript path."""
+    from vaxrank.external_input import _resolve_transcripts
+    assert _resolve_transcripts(['ENST00000000001'], None) == []
+    assert _resolve_transcripts([], None) == []
+
+
 def test_variant_from_lens_row_uses_real_snv_alleles():
     """SNV rows: ref/alt come from snv_ref_allele / snv_alt_allele.
     No placeholder genotype. The synthesized Variant carries the real
@@ -278,6 +331,106 @@ def test_lens_picks_strongest_binder_when_multiple_rows_per_variant():
     assert "STRNGLVLLL" in fragment.amino_acids, (
         "Expected pep_context to come from the strongest binder row "
         "(STRNGLVLLL, IC50=18); got %r" % fragment.amino_acids)
+
+
+# ---- _patient_info_from_external ----------------------------------------
+
+def test_patient_info_from_external_proxy_counts():
+    """The synthesized PatientInfo's variant counts come from the
+    ranked output, not from VCF/BAM. Pin each count's definition so a
+    later loader change can't silently shift the rendered template
+    report headers."""
+    from vaxrank.external_input import _patient_info_from_external
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df, predictions = load_lens(path)
+    ranked = ranked_from_lens_predictions(predictions, path)
+    info = _patient_info_from_external(ranked, path, patient_id='Pt-X')
+    assert info.patient_id == 'Pt-X'
+    assert info.vcf_paths == [path]
+    assert info.bam_path is None
+    # All ranked variants are counted as somatic (LENS antigen-only
+    # files don't carry pre-pipeline silent variants).
+    assert info.num_somatic_variants == len(ranked)
+    # Without --ensembl-release the test fixture won't resolve
+    # transcripts; coding-effect count drops to 0.
+    assert info.num_coding_effect_variants == 0
+    # ``num_variants_with_vaccine_peptides`` matches the populated
+    # ranked entries (any with vps).
+    assert info.num_variants_with_vaccine_peptides == sum(
+        1 for _, vps in ranked if vps)
+
+
+def test_patient_info_from_external_empty_ranked():
+    """No ranked variants → all counts zero, no crash."""
+    from vaxrank.external_input import _patient_info_from_external
+    info = _patient_info_from_external([], '/tmp/empty.tsv', patient_id='')
+    assert info.num_somatic_variants == 0
+    assert info.num_coding_effect_variants == 0
+    assert info.num_variants_with_rna_support == 0
+    assert info.num_variants_with_vaccine_peptides == 0
+
+
+# ---- predicted_effect None tolerance ------------------------------------
+
+def test_predicted_effect_returns_none_with_no_transcripts():
+    """``MutantProteinFragment.predicted_effect`` returns None — not
+    raises — when no transcripts resolved. Template renderer relies
+    on this for ERV / non-genic antigens and release-mismatch rows."""
+    from varcode import Variant
+    from vaxrank.mutant_protein_fragment import MutantProteinFragment
+    frag = MutantProteinFragment(
+        variant=Variant(contig='1', start=100, ref='A', alt='G'),
+        gene_name='TEST',
+        amino_acids='MASSEQUENCE',
+        mutant_amino_acid_start_offset=0,
+        mutant_amino_acid_end_offset=11,
+        supporting_reference_transcripts=[],
+        n_overlapping_reads=0, n_alt_reads=0, n_ref_reads=0,
+        n_alt_reads_supporting_protein_sequence=0,
+    )
+    assert frag.predicted_effect() is None
+
+
+def test_predicted_effect_returns_none_when_varcode_rejects_all_transcripts():
+    """``ReferenceMismatchError`` from varcode means LENS / pVACseq
+    was called against a different reference than the configured
+    pyensembl release. predicted_effect() must return None for this
+    case so report rendering keeps going (with "—" placeholders)."""
+    from varcode import Variant
+    from varcode.errors import ReferenceMismatchError
+    from vaxrank.mutant_protein_fragment import MutantProteinFragment
+
+    real_variant = Variant(contig='1', start=100, ref='A', alt='G')
+
+    class _StubVariant:
+        contig = '1'
+        start = 100
+        ref = 'A'
+        alt = 'G'
+        def __str__(self):
+            return 'StubVariant'
+        def effect_on_transcript(self, t):
+            raise ReferenceMismatchError(
+                variant=real_variant,
+                transcript=t,
+                expected_ref='A',
+                observed_ref='C')
+
+    class _StubTranscript:
+        transcript_id = 'ENST_STUB'
+
+    frag = MutantProteinFragment(
+        variant=_StubVariant(),
+        gene_name='TEST',
+        amino_acids='MASSEQUENCE',
+        mutant_amino_acid_start_offset=0,
+        mutant_amino_acid_end_offset=11,
+        supporting_reference_transcripts=[_StubTranscript()],
+        n_overlapping_reads=0, n_alt_reads=0, n_ref_reads=0,
+        n_alt_reads_supporting_protein_sequence=0,
+    )
+    assert frag.predicted_effect() is None
 
 
 def test_lens_to_ranked_vaccine_peptides_round_trip():

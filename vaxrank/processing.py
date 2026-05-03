@@ -156,6 +156,15 @@ def _cleavage_probs_via_subprocess(sequences, human_only=False, threshold=0.5,
     Per-source inference failures are silently dropped from the
     returned dict; the caller treats missing keys as "no signal."
 
+    Cost note: each call spawns a Python interpreter and imports
+    torch (~1–2s startup on CPU). All sequences are batched into one
+    subprocess invocation per ``annotate_processing`` call — fine for
+    a single CLI run on thousands of sources (Pt02: ~3s total) but
+    expensive in a tight loop. Once mhctools ships built-in
+    subprocess isolation (openvax/mhctools#200) this collapses into
+    ``Pepsickle(..., isolate_subprocess=True)`` and amortizes
+    differently.
+
     Parameters
     ----------
     sequences : iterable of str
