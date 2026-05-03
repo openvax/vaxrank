@@ -1179,3 +1179,17 @@ def test_lens_cli_errors_when_no_output_flag_set():
     lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
     with pytest.raises(ValueError, match="No output path specified"):
         main(["--input-lens", lens_path])
+
+
+def test_lens_cli_errors_when_paired_with_pipeline_only_report():
+    """Template reports (ASCII / HTML / PDF) need pyensembl Transcript
+    objects + variant-counting metadata that only the --vcf + --bam
+    pipeline produces. Pairing them with --input-lens used to silently
+    no-op; now we reject the combination with a message pointing to
+    the outputs that ARE reachable from LENS / pVACseq input."""
+    import pytest
+    from vaxrank.cli.entry_point import main
+    lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
+    with pytest.raises(ValueError, match="not reachable from --input-lens"):
+        main(["--input-lens", lens_path,
+              "--output-ascii-report", "/tmp/should-not-be-written.txt"])

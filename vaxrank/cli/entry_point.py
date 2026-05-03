@@ -575,6 +575,14 @@ def main(args_list=None):
     ########################
     # Template-based reports (PDF / HTML / ASCII) — pipeline path only
     ########################
+    # The template builder needs pyensembl ``Transcript`` objects (via
+    # ``variant.effect_on_transcript``) and the variant-counting metadata
+    # (somatic / coding / RNA-supported) the pipeline path computes
+    # from VCF + BAM. LENS / pVACseq inputs carry transcript IDs as
+    # strings and no variant counts, so the template reports aren't
+    # reachable from those inputs. ``check_args`` rejects the
+    # combination up front so the user gets a clear error rather than
+    # a silent no-op or a deep AttributeError.
     if source != 'pipeline':
         return
 

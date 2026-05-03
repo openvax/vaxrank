@@ -732,12 +732,21 @@ _PRIMARY_OUTPUT_FLAGS = (
 
 
 def check_args(args):
-    """Fail fast when no primary --output-* flag is set.
+    """Fail fast when no primary --output-* flag is set, or when the
+    user pairs LENS / pVACseq input with a pipeline-only output.
 
     Every output path is opt-in via its own flag; there is no default
     destination. Without this guard a user can run a long pipeline (or
     a LENS / pVACseq import) and end up with nothing on disk — exactly
     the surprise we want to prevent.
+
+    Template reports (ASCII / HTML / PDF) need pyensembl ``Transcript``
+    objects and the variant-counting metadata the pipeline path
+    computes from VCF + BAM. LENS / pVACseq inputs carry transcript
+    IDs as strings and no variant counts, so requesting those reports
+    on the external path used to silently no-op. Reject the
+    combination here with an explicit error pointing to the outputs
+    that *are* reachable from external input.
     """
     if not any(getattr(args, attr, '') for _, attr, _ in _PRIMARY_OUTPUT_FLAGS):
         flag_lines = "\n".join(
@@ -747,6 +756,29 @@ def check_args(args):
             "No output path specified. Pass at least one of the "
             "following --output-* flags so vaxrank knows where to "
             "write results:\n%s" % flag_lines)
+
+    is_external = bool(
+        getattr(args, 'input_lens', None) or
+        getattr(args, 'input_pvacseq', None))
+    if is_external:
+        pipeline_only = [
+            (flag, attr) for flag, attr in (
+                ("--output-ascii-report", "output_ascii_report"),
+                ("--output-html-report",  "output_html_report"),
+                ("--output-pdf-report",   "output_pdf_report"),
+            )
+            if getattr(args, attr, '')]
+        if pipeline_only:
+            verb = "is" if len(pipeline_only) == 1 else "are"
+            raise ValueError(
+                "%s %s not reachable from --input-lens / "
+                "--input-pvacseq input — those reports need full "
+                "transcript objects and variant-call metadata that "
+                "only the --vcf + --bam pipeline produces. Use "
+                "--output-csv / --output-xlsx-report / "
+                "--output-neoepitope-report / --output-json-file "
+                "instead."
+                % (", ".join(flag for flag, _ in pipeline_only), verb))
 
 
 def external_input_arg_parser():
