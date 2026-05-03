@@ -38,13 +38,18 @@ DATA_DIR = os.path.join(
 
 
 def test_parse_variant_coords_extracts_chr_pos():
-    """``_parse_variant_coords`` extracts only (contig, pos). Ref/alt
+    """``_parse_variant_coords`` extracts only (contig, pos), stripping
+    the ``chr`` prefix LENS emits — pyensembl uses bare contigs, and
+    keeping the prefix breaks ``variant.effect_on_transcript`` and
+    renders the variant short_description as ``chrchr3 …``. Ref/alt
     come from the dedicated per-antigen-source columns
     (snv_ref_allele / snv_alt_allele etc.), looked up by
     ``_variant_from_lens_row``."""
-    assert _parse_variant_coords("chr17:7675088:C:T") == ("chr17", 7675088)
-    assert _parse_variant_coords("chr1:26780312") == ("chr1", 26780312)
-    assert _parse_variant_coords("chr1:26780312:C") == ("chr1", 26780312)
+    assert _parse_variant_coords("chr17:7675088:C:T") == ("17", 7675088)
+    assert _parse_variant_coords("chr1:26780312") == ("1", 26780312)
+    assert _parse_variant_coords("chr1:26780312:C") == ("1", 26780312)
+    # Already-bare contig pass-through:
+    assert _parse_variant_coords("17:7675088") == ("17", 7675088)
 
 
 def test_parse_variant_coords_returns_none_on_missing_or_malformed():
@@ -78,7 +83,9 @@ def test_variant_from_lens_row_uses_real_snv_alleles():
     }
     v = _variant_from_lens_row(row)
     assert v is not None
-    assert v.contig == "chr1"
+    # ``chr`` prefix stripped during parse so pyensembl-style lookups
+    # work; see ``_parse_variant_coords``.
+    assert v.contig == "1"
     assert v.start == 1624824
     assert v.ref == "C"
     assert v.alt == "T"
@@ -99,8 +106,9 @@ def test_variant_from_lens_row_uses_real_indel_alleles():
     v = _variant_from_lens_row(row)
     assert v is not None
     # varcode's canonical indel representation: shared prefix
-    # stripped, position advanced to the differing base.
-    assert v.contig == "chr3"
+    # stripped, position advanced to the differing base. Contig
+    # also has its ``chr`` prefix stripped for pyensembl compatibility.
+    assert v.contig == "3"
     assert v.start == 150742446
     assert v.ref == "A"
     assert v.alt == ""

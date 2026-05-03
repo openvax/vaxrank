@@ -515,13 +515,19 @@ def main(args_list=None):
     args_for_report = args
     report_df = None
     predictions = None
+    # ``data`` is the pipeline path's intermediate metadata bundle
+    # (variants + patient_info + dna_vaf_by_variant). The external
+    # path doesn't produce one, so default to an empty dict so the
+    # shared template-report block can ``data.get(...)`` either way.
+    data = {}
 
     if _has_external_input(args):
         loaded = load_external_ranked(args)
         if loaded is None:
             ranked_variants_with_vaccine_peptides = []
         else:
-            ranked_variants_with_vaccine_peptides, report_df, predictions = loaded
+            (ranked_variants_with_vaccine_peptides, report_df,
+             predictions, patient_info) = loaded
         if not ranked_variants_with_vaccine_peptides:
             logger.warning(
                 "External input produced no ranked vaccine peptides; "
@@ -530,6 +536,10 @@ def main(args_list=None):
         # Per-(peptide, allele) CSV / XLSX report is unique to the
         # external-input path; emit it before the shared dispatch.
         _emit_neoepitope_report_external(args, report_df, predictions)
+        # Template reports want a dict here, not a Namespace —
+        # ``vars(args)`` matches the pipeline path's
+        # ``data['args']`` shape.
+        args_for_report = vars(args)
         source = 'external'
     else:
         data = ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
@@ -552,32 +562,30 @@ def main(args_list=None):
     _emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
 
     ########################
-    # Template-based reports (PDF / HTML / ASCII) — pipeline path only
+    # Template-based reports (PDF / HTML / ASCII)
     ########################
-    # The template builder needs pyensembl ``Transcript`` objects (via
-    # ``variant.effect_on_transcript``) and the variant-counting metadata
-    # (somatic / coding / RNA-supported) the pipeline path computes
-    # from VCF + BAM. LENS / pVACseq inputs carry transcript IDs as
-    # strings and no variant counts, so the template reports aren't
-    # reachable from those inputs. ``check_args`` rejects the
-    # combination up front so the user gets a clear error rather than
-    # a silent no-op or a deep AttributeError.
-    if source != 'pipeline':
-        return
-
+    # Run on both pipeline and external (LENS / pVACseq) paths.
+    # ``external_input.load_external_ranked`` resolves transcript IDs
+    # to pyensembl ``Transcript`` objects and synthesizes a
+    # ``PatientInfo`` with proxy variant counts so the template
+    # builder has the same shape inputs either way. Antigens whose
+    # transcript IDs can't be resolved (release mismatch, ERV, …)
+    # render with "—" placeholders rather than crashing — see
+    # ``TemplateDataCreator._effect_data``.
     if not (args.output_ascii_report or args.output_html_report or args.output_pdf_report):
         return
 
-    input_json_file = args.input_json_file if hasattr(args, 'input_json_file') else None
     template_data_creator = TemplateDataCreator(
         ranked_variants_with_vaccine_peptides=ranked_variants_with_vaccine_peptides,
         patient_info=patient_info,
-        final_review=args.output_final_review,
-        reviewers=args.output_reviewed_by,
+        final_review=getattr(args, 'output_final_review', '') or '',
+        reviewers=getattr(args, 'output_reviewed_by', '') or '',
         args_for_report=args_for_report,
-        input_json_file=input_json_file,
-        cosmic_vcf_filename=args.cosmic_vcf_filename,
-        dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {})
+        input_json_file=getattr(args, 'input_json_file', None),
+        cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
+        dna_vaf_by_variant=(
+            data.get('dna_vaf_by_variant') if source == 'pipeline'
+            else {}) or {})
 
     template_data = template_data_creator.compute_template_data()
 

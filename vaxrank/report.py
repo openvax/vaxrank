@@ -122,16 +122,27 @@ class TemplateDataCreator(object):
         return variant_data
 
     def _effect_data(self, predicted_effect):
+        """OrderedDict with info about the given varcode effect.
+
+        ``predicted_effect`` may be ``None`` on external-input paths
+        when the transcript IDs in the source file (LENS / pVACseq)
+        couldn't be resolved against the configured pyensembl release.
+        Render those rows with ``"—"`` placeholders rather than
+        crash.
         """
-        Returns an OrderedDict with info about the given predicted effect.
-        """
-        effect_data = OrderedDict([
+        if predicted_effect is None:
+            return OrderedDict([
+                ('Effect type', '—'),
+                ('Transcript name', '—'),
+                ('Transcript ID', '—'),
+                ('Effect description', '—'),
+            ])
+        return OrderedDict([
             ('Effect type', predicted_effect.__class__.__name__),
             ('Transcript name', predicted_effect.transcript_name),
             ('Transcript ID', predicted_effect.transcript_id),
             ('Effect description', predicted_effect.short_description),
         ])
-        return effect_data
 
     def _peptide_header_display_data(self, vaccine_peptide, rank):
         """
@@ -271,7 +282,11 @@ class TemplateDataCreator(object):
         Check if variant is a known cancer hotspot and return link if so.
 
         Uses bundled cancer hotspots data from Chang et al. 2016/2017.
+        Returns ``None`` when ``predicted_effect`` is None (no
+        transcript context — common on external-input paths).
         """
+        if predicted_effect is None:
+            return None
         amino_acids = predicted_effect.short_description
         hotspot_url = get_hotspot_url(gene_name, amino_acids)
         if hotspot_url:
@@ -324,7 +339,10 @@ class TemplateDataCreator(object):
                     continue
 
                 header_display_data = self._peptide_header_display_data(vaccine_peptide, j)
-                peptide_data = self._peptide_data(vaccine_peptide, predicted_effect.transcript_name)
+                transcript_name = (
+                    predicted_effect.transcript_name
+                    if predicted_effect is not None else '—')
+                peptide_data = self._peptide_data(vaccine_peptide, transcript_name)
                 manufacturability_data = self._manufacturability_data(vaccine_peptide)
 
                 # Issue #249: pepsickle credibility columns are added

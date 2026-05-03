@@ -345,12 +345,34 @@ class MutantProteinFragment(DataclassSerializable):
         return subsequences
 
     def predicted_effect(self):
-        effects = [
-            self.variant.effect_on_transcript(t) for t in
-            self.supporting_reference_transcripts
-        ]
-        predicted_effect = top_priority_effect(effects)
-        return predicted_effect
+        """Top-priority varcode effect across the supporting transcripts.
+
+        Returns ``None`` when no Transcript objects are available —
+        common on external-input paths (LENS / pVACseq) where a
+        transcript ID didn't resolve in the configured pyensembl
+        release, or for ERV / non-genic antigens that carry no
+        transcript context at all. Also returns ``None`` when varcode
+        rejects every transcript (e.g. ``ReferenceMismatchError`` —
+        the variant was called against a different genome build than
+        the configured pyensembl release; common when the user hasn't
+        set ``--ensembl-release`` to match LENS / pVACseq's
+        reference). Callers (template-report renderers) tolerate
+        ``None`` rather than crash.
+        """
+        if not self.supporting_reference_transcripts:
+            return None
+        effects = []
+        for t in self.supporting_reference_transcripts:
+            try:
+                effects.append(self.variant.effect_on_transcript(t))
+            except Exception as e:
+                logger.debug(
+                    "varcode.effect_on_transcript failed for %s on %s: "
+                    "%s — skipping that transcript.",
+                    self.variant, t, e)
+        if not effects:
+            return None
+        return top_priority_effect(effects)
 
     def global_start_pos(self):
         # position of mutation start relative to the full amino acid sequence

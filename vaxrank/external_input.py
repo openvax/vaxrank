@@ -87,6 +87,14 @@ def _parse_variant_coords(coords):
     if len(parts) < 2:
         return None
     contig = parts[0]
+    # Strip the ``chr`` prefix LENS emits — pyensembl's Ensembl-style
+    # references use bare contigs (``3`` not ``chr3``), and varcode's
+    # default contig normalization is bypassed downstream
+    # (``normalize_contig_names=False``). Keeping the prefix means
+    # ``variant.effect_on_transcript`` finds no transcripts and the
+    # variant.short_description renders as ``chrchr3 …``.
+    if contig.lower().startswith('chr'):
+        contig = contig[3:]
     try:
         return contig, int(parts[1])
     except (ValueError, IndexError):
@@ -111,6 +119,40 @@ def _strip_lens_allele(value):
         s = s[:-1]
     s = s.strip()
     return s or None
+
+
+def _resolve_transcripts(transcript_ids, genome):
+    """Resolve a list of Ensembl transcript-ID strings to pyensembl
+    ``Transcript`` objects.
+
+    ``genome`` is a ``pyensembl.EnsemblRelease`` (or any object with
+    ``transcript_by_id``). Versioned IDs like ``ENST00000312960.4``
+    work — pyensembl strips the suffix internally. Unresolvable IDs
+    are dropped silently (logged at DEBUG); a release-mismatch
+    between the LENS file and the locally installed pyensembl
+    release is the most common cause and shouldn't crash a run.
+
+    Returns ``[]`` when ``genome`` is None — that's the "no genome
+    plumbed through" case (e.g. unit tests bypassing the CLI), and
+    downstream code already tolerates an empty transcript list.
+    """
+    if genome is None or not transcript_ids:
+        return []
+    resolved = []
+    for tid in transcript_ids:
+        if not tid:
+            continue
+        # pyensembl 2.x doesn't strip Ensembl version suffixes
+        # (``ENST00000312960.4`` errors as "not found"); strip
+        # ourselves so LENS IDs that carry the suffix still resolve.
+        bare = tid.split('.', 1)[0]
+        try:
+            resolved.append(genome.transcript_by_id(bare))
+        except Exception as e:
+            logger.debug(
+                "Could not resolve transcript_id %r against the "
+                "configured pyensembl release (%s); dropping.", tid, e)
+    return resolved
 
 
 def _variant_from_lens_row(row, genome=None):
@@ -420,19 +462,24 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
         (n_total, n_alt_reads, n_ref_reads,
          n_alt_supporting_protein) = _read_counts_from_lens_row(rep)
 
-        # Pull real transcript IDs when available so future varcode-
-        # effect annotation has the actual transcript context.
+        # Pull real transcript IDs when available, then resolve to
+        # pyensembl ``Transcript`` objects so downstream
+        # ``predicted_effect()`` (used by template reports) has real
+        # varcode context. When ``genome`` is None or an ID can't be
+        # resolved, the resolved list shrinks accordingly — the
+        # report renderer tolerates the empty case.
         tid = rep.get('transcript_id')
         all_tids = rep.get('all_transcript_ids_encoding_peptide')
-        transcripts = []
+        transcript_ids = []
         if tid and not (isinstance(tid, float) and pd.isna(tid)):
-            transcripts.append(str(tid))
+            transcript_ids.append(str(tid))
         if (all_tids and isinstance(all_tids, str)
                 and all_tids.lower() != 'nan'):
             for t in all_tids.split(','):
                 t = t.strip()
-                if t and t not in transcripts:
-                    transcripts.append(t)
+                if t and t not in transcript_ids:
+                    transcript_ids.append(t)
+        transcripts = _resolve_transcripts(transcript_ids, genome)
 
         fragment = MutantProteinFragment(
             variant=variant,
@@ -673,12 +720,23 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
         # is structurally honest — a transcript-aware loader could
         # narrow this further but the aggregate doesn't carry the
         # data to do so.
+        # pVACseq's aggregate carries one ``Best Transcript`` column
+        # per row (the transcript backing the chosen Best Peptide).
+        # Resolve to a pyensembl ``Transcript`` so template reports
+        # have real effect context; falls back to [] when the genome
+        # isn't plumbed through or the ID can't be resolved.
+        best_tid = rep.get('Best Transcript')
+        transcript_ids = (
+            [str(best_tid)]
+            if best_tid and not (isinstance(best_tid, float) and pd.isna(best_tid))
+            else [])
+        transcripts = _resolve_transcripts(transcript_ids, genome)
         fragment = MutantProteinFragment(
             variant=variant, gene_name=gene,
             amino_acids=str(best_pep),
             mutant_amino_acid_start_offset=0,
             mutant_amino_acid_end_offset=len(best_pep),
-            supporting_reference_transcripts=[],
+            supporting_reference_transcripts=transcripts,
             n_overlapping_reads=n_total, n_alt_reads=n_alt_reads,
             n_ref_reads=n_ref_reads,
             n_alt_reads_supporting_protein_sequence=n_alt_reads,
@@ -718,22 +776,71 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
     return ranked
 
 
+def _patient_info_from_external(ranked, source_path, patient_id):
+    """Build a :class:`PatientInfo` from external-input data.
+
+    Counts are derived from the ranked output:
+      - ``num_somatic_variants`` = unique variants the input file
+        produced antigens for (LENS / pVACseq are antigen-only files,
+        so this is "variants that survived their pipeline"; silent
+        / non-antigenic somatic calls aren't recoverable here)
+      - ``num_coding_effect_variants`` = unique variants whose
+        representative fragment resolved at least one Transcript
+        (the rest are ERV / non-genic / unresolvable IDs)
+      - ``num_variants_with_rna_support`` = unique variants with at
+        least one row carrying a non-zero RNA-read count
+      - ``num_variants_with_vaccine_peptides`` = ``len(ranked)``,
+        same definition as the pipeline path
+    """
+    from .patient_info import PatientInfo
+    variants = [v for v, _ in ranked]
+    n_total = len(variants)
+    n_with_transcript = 0
+    n_with_rna = 0
+    for variant, vps in ranked:
+        if not vps:
+            continue
+        frag = vps[0].mutant_protein_fragment
+        if frag.supporting_reference_transcripts:
+            n_with_transcript += 1
+        if (frag.n_alt_reads or 0) > 0 or (frag.n_overlapping_reads or 0) > 0:
+            n_with_rna += 1
+    return PatientInfo(
+        patient_id=patient_id or '',
+        vcf_paths=[source_path] if source_path else [],
+        bam_path=None,
+        num_somatic_variants=n_total,
+        num_coding_effect_variants=n_with_transcript,
+        num_variants_with_rna_support=n_with_rna,
+        num_variants_with_vaccine_peptides=sum(1 for _, vps in ranked if vps),
+    )
+
+
 def load_external_ranked(args):
     """Dispatch helper: load LENS / pVACseq based on args, return
-    ``(ranked, report_df, predictions)`` or ``None`` if neither flag
-    is set.
+    ``(ranked, report_df, predictions, patient_info)`` or ``None`` if
+    neither flag is set.
+
+    ``patient_info`` carries the variant-count metadata template
+    reports (ASCII / HTML / PDF) need; counts are proxies derived
+    from the ranked output (see ``_patient_info_from_external``).
     """
     from .epitope_io import load_lens, load_pvacseq
+    patient_id = getattr(args, 'output_patient_id', '') or ''
     if getattr(args, 'input_lens', None):
         report_df, predictions = load_lens(args.input_lens)
         ranked = ranked_from_lens_predictions(
             predictions, args.input_lens,
             genome=getattr(args, 'genome', None))
-        return ranked, report_df, predictions
+        patient_info = _patient_info_from_external(
+            ranked, args.input_lens, patient_id)
+        return ranked, report_df, predictions, patient_info
     if getattr(args, 'input_pvacseq', None):
         report_df, predictions = load_pvacseq(args.input_pvacseq)
         ranked = ranked_from_pvacseq_predictions(
             predictions, args.input_pvacseq,
             genome=getattr(args, 'genome', None))
-        return ranked, report_df, predictions
+        patient_info = _patient_info_from_external(
+            ranked, args.input_pvacseq, patient_id)
+        return ranked, report_df, predictions, patient_info
     return None

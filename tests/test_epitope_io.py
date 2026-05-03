@@ -1169,6 +1169,31 @@ def test_lens_cli_csv_output(tmp_path):
     assert len(df) == 3
 
 
+def test_lens_cli_writes_ascii_report():
+    """ASCII / HTML / PDF template reports work on the external
+    (LENS / pVACseq) path now that transcript IDs resolve and a
+    ``PatientInfo`` is synthesized from the loaded antigens
+    (closes #268). Writes to a tempfile and asserts the patient-info
+    section + at least one variant block rendered."""
+    import tempfile
+    from vaxrank.cli.entry_point import main
+    lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
+    with tempfile.TemporaryDirectory() as td:
+        out = os.path.join(td, "report.txt")
+        main([
+            "--input-lens", lens_path,
+            "--output-ascii-report", out,
+        ])
+        assert os.path.exists(out), "ASCII report not written"
+        with open(out) as f:
+            text = f.read()
+    # Patient-info header populated from the synthesized PatientInfo
+    assert "Total number of somatic variants:" in text
+    # At least one variant block — exact count depends on the fixture
+    # but we want the loop to have run, not be silently empty.
+    assert "Vaccine Peptides:" in text
+
+
 def test_lens_cli_errors_when_no_output_flag_set():
     """Running ``vaxrank --input-lens FILE`` with no --output-* flag
     must fail fast — every output is opt-in via its own flag and the
@@ -1181,15 +1206,3 @@ def test_lens_cli_errors_when_no_output_flag_set():
         main(["--input-lens", lens_path])
 
 
-def test_lens_cli_errors_when_paired_with_pipeline_only_report():
-    """Template reports (ASCII / HTML / PDF) need pyensembl Transcript
-    objects + variant-counting metadata that only the --vcf + --bam
-    pipeline produces. Pairing them with --input-lens used to silently
-    no-op; now we reject the combination with a message pointing to
-    the outputs that ARE reachable from LENS / pVACseq input."""
-    import pytest
-    from vaxrank.cli.entry_point import main
-    lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
-    with pytest.raises(ValueError, match="not reachable from --input-lens"):
-        main(["--input-lens", lens_path,
-              "--output-ascii-report", "/tmp/should-not-be-written.txt"])

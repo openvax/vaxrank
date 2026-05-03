@@ -744,22 +744,13 @@ _PRIMARY_OUTPUT_FLAGS = (
 
 
 def check_args(args):
-    """Fail fast when no primary --output-* flag is set, or when the
-    user pairs LENS / pVACseq input with a pipeline-only output.
+    """Fail fast when no primary --output-* flag is set, or when
+    type-specific companion flags don't match --vaccine-type.
 
     Every output path is opt-in via its own flag; there is no default
     destination. Without this guard a user can run a long pipeline (or
     a LENS / pVACseq import) and end up with nothing on disk — exactly
     the surprise we want to prevent.
-
-    Template reports (ASCII / HTML / PDF) need pyensembl ``Transcript``
-    objects and the variant-counting metadata the pipeline path
-    computes from VCF + BAM. LENS / pVACseq inputs carry transcript
-    IDs as strings and no variant counts, so requesting those reports
-    on the external path used to silently no-op. Reject the
-    combination here with an explicit error pointing to the outputs
-    that *are* reachable from external input. Tracked in
-    openvax/vaxrank#268.
     """
     if not any(getattr(args, attr, '') for _, attr, _ in _PRIMARY_OUTPUT_FLAGS):
         flag_lines = "\n".join(
@@ -769,29 +760,6 @@ def check_args(args):
             "No output path specified. Pass at least one of the "
             "following --output-* flags so vaxrank knows where to "
             "write results:\n%s" % flag_lines)
-
-    is_external = bool(
-        getattr(args, 'input_lens', None) or
-        getattr(args, 'input_pvacseq', None))
-    if is_external:
-        pipeline_only = [
-            (flag, attr) for flag, attr in (
-                ("--output-ascii-report", "output_ascii_report"),
-                ("--output-html-report",  "output_html_report"),
-                ("--output-pdf-report",   "output_pdf_report"),
-            )
-            if getattr(args, attr, '')]
-        if pipeline_only:
-            verb = "is" if len(pipeline_only) == 1 else "are"
-            raise ValueError(
-                "%s %s not reachable from --input-lens / "
-                "--input-pvacseq input — those reports need full "
-                "transcript objects and variant-call metadata that "
-                "only the --vcf + --bam pipeline produces. Use "
-                "--output-csv / --output-xlsx-report / "
-                "--output-neoepitope-report / --output-json-file "
-                "instead."
-                % (", ".join(flag for flag, _ in pipeline_only), verb))
 
     # Reject companion flags meant for the other vaccine type — fail
     # fast rather than silently ignoring the file the user expected
@@ -825,7 +793,25 @@ def external_input_arg_parser():
     arg_parser.add_argument("--input-lens", default=None)
     arg_parser.add_argument(
         "--verbose", "-v", action="store_true", default=False)
+    # ``--ensembl-release`` lets external-input runs resolve LENS /
+    # pVACseq transcript_id strings to pyensembl ``Transcript`` objects
+    # so template reports (ASCII / HTML / PDF) can render variant
+    # effects. Without it, those reports fall back to a less detailed
+    # rendering (no transcript-name / effect-description columns).
+    arg_parser.add_argument(
+        "--ensembl-release",
+        default=None,
+        type=int,
+        help="Ensembl release for resolving transcript IDs (e.g. 75, 102). "
+             "By default pyensembl picks the most recent locally installed "
+             "release. Match the release LENS / pVACseq used.")
     add_output_args(arg_parser)
+    # Template reports (ASCII / HTML / PDF) work on this path too once
+    # transcripts are resolved (#268). The supplemental + optional groups
+    # contribute the namespace shape ``TemplateDataCreator`` expects
+    # (manufacturability / wt_epitopes / cosmic_vcf_filename).
+    add_optional_output_args(arg_parser)
+    add_supplemental_report_args(arg_parser)
     add_epitope_prediction_args(arg_parser)
     # config arg needed for epitope_config_from_args
     arg_parser.add_argument("--config", action="append", default=None)
