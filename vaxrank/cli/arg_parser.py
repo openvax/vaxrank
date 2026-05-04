@@ -758,8 +758,8 @@ def check_args(args):
             for flag, _, purpose in _PRIMARY_OUTPUT_FLAGS)
         raise ValueError(
             "No output path specified. Pass at least one of the "
-            "following --output-* flags so vaxrank knows where to "
-            "write results:\n%s" % flag_lines)
+            "following flags so vaxrank knows where to write "
+            "results:\n%s" % flag_lines)
 
     # Reject companion flags meant for the other vaccine type — fail
     # fast rather than silently ignoring the file the user expected

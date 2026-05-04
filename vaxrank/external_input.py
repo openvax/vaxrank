@@ -669,6 +669,13 @@ def _parse_pvacseq_id(vid, genome=None):
         pos = int(pos_s)
     except (ValueError, TypeError):
         return None, False
+    # Strip the ``chr`` prefix pVACseq emits, same rationale as LENS:
+    # pyensembl uses bare contigs and ``normalize_contig_names=False``
+    # below means varcode won't strip for us. Keeping the prefix
+    # silently breaks downstream ``variant.effect_on_transcript``
+    # lookups against the configured pyensembl release.
+    if contig.lower().startswith('chr'):
+        contig = contig[3:]
     try:
         v = Variant(
             contig=contig, start=pos, ref=ref, alt=alt,

@@ -526,9 +526,10 @@ def test_pvacseq_to_ranked_vaccine_peptides_round_trip():
     genes = sorted(
         peps[0].mutant_protein_fragment.gene_name for _, peps in ranked)
     assert genes == ['BRAF', 'KRAS', 'TP53']
-    # IDs are dashed-form (chr1-100000-100001-A-T), parsed correctly
+    # IDs are dashed-form (chr1-100000-100001-A-T); the parser strips
+    # the ``chr`` prefix so pyensembl-style downstream lookups work.
     contigs = sorted(v.contig for v, _ in ranked)
-    assert contigs == ['chr1', 'chr2', 'chr3']
+    assert contigs == ['1', '2', '3']
 
 
 def test_pvacseq_id_parser_handles_dashed_and_dotted():
@@ -536,12 +537,16 @@ def test_pvacseq_id_parser_handles_dashed_and_dotted():
     legacy (1.123.A.T) ID forms, plus the 4-part dashed variant
     (chr1-100000-A-T) without an explicit end position. Returns
     ``(Variant, alleles_real)`` matching the LENS-path shape;
-    pVACseq IDs always carry real ref/alt so alleles_real is True."""
+    pVACseq IDs always carry real ref/alt so alleles_real is True.
+
+    The parser strips ``chr`` prefixes so pyensembl-style downstream
+    lookups (``variant.effect_on_transcript``) work — same rationale
+    as ``_parse_variant_coords`` on the LENS path."""
     from vaxrank.external_input import _parse_pvacseq_id
 
     for vid, expected in [
-        ("chr1-100000-100001-A-T", ("chr1", 100000, "A", "T")),
-        ("chr1-100000-A-T", ("chr1", 100000, "A", "T")),
+        ("chr1-100000-100001-A-T", ("1", 100000, "A", "T")),
+        ("chr1-100000-A-T", ("1", 100000, "A", "T")),
         ("1.123.A.T", ("1", 123, "A", "T")),
     ]:
         v, alleles_real = _parse_pvacseq_id(vid)
