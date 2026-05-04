@@ -729,15 +729,24 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     ranked_variants_with_vaccine_peptides = vaxrank_results.ranked_vaccine_peptides
     ranked_variants_with_vaccine_peptides_for_report = \
         ranked_variants_with_vaccine_peptides[:args.max_mutations_in_report]
+    pipeline_inputs = [
+        ('VCF (somatic variants)', '; '.join(variants.sources))
+    ] if variants.sources else []
+    if args.bam:
+        pipeline_inputs.append(('BAM (RNAseq reads)', args.bam))
     patient_info = PatientInfo(
         patient_id=args.output_patient_id,
-        vcf_paths=variants.sources,
+        # Legacy fields kept for any downstream JSON consumers that
+        # haven't migrated to ``inputs``; new code should read
+        # ``inputs`` exclusively. Both paths now populate ``inputs``.
+        vcf_paths=list(variants.sources),
         bam_path=args.bam,
         mhc_alleles=mhc_alleles,
         num_somatic_variants=variants_count_dict['num_total_variants'],
         num_coding_effect_variants=variants_count_dict['num_coding_effect_variants'],
         num_variants_with_rna_support=variants_count_dict['num_variants_with_rna_support'],
-        num_variants_with_vaccine_peptides=variants_count_dict['num_variants_with_vaccine_peptides']
+        num_variants_with_vaccine_peptides=variants_count_dict['num_variants_with_vaccine_peptides'],
+        inputs=pipeline_inputs,
     )
     # return variants, patient info, and command-line args
     data = {

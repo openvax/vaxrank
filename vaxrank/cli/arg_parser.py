@@ -830,8 +830,7 @@ def _require_ensembl_release_for_template_reports(args):
                     " The LENS file's origin_descriptor looks like "
                     "%s; you have these %s releases installed: %s. "
                     "Try --ensembl-release %d (or whichever matches "
-                    "the build LENS used — origin_descriptor doesn't "
-                    "pin a specific release)."
+                    "the build LENS used)."
                     % (build, build, installed, installed[-1]))
             elif build in _BUILD_TO_CANONICAL_RELEASE:
                 # GRCh37 has a canonical "last release" (75); GRCh38
@@ -849,8 +848,7 @@ def _require_ensembl_release_for_template_reports(args):
                     "%s, but no %s releases are installed in your "
                     "pyensembl cache. Install one with `pyensembl "
                     "install --release N --reference-name %s` "
-                    "(N must match the build LENS used; "
-                    "origin_descriptor doesn't pin a specific release)."
+                    "(N must match the build LENS used)."
                     % (build, build, build))
     raise ValueError(
         "Template report(s) requested with --input-lens / "

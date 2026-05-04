@@ -1039,7 +1039,8 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
 
 
 def _patient_info_from_external(ranked, source_path, patient_id,
-                                input_label='External report'):
+                                input_label='External report',
+                                predictions=None):
     """Build a :class:`PatientInfo` from external-input data.
 
     Counts are derived from the ranked output:
@@ -1073,6 +1074,21 @@ def _patient_info_from_external(ranked, source_path, patient_id,
             n_with_transcript += 1
         if (frag.n_alt_reads or 0) > 0 or (frag.n_overlapping_reads or 0) > 0:
             n_with_rna += 1
+    # MHC alleles aren't carried as a separate header in LENS /
+    # pVACseq files — they're implicit in the per-row predictions.
+    # Infer the unique set from the predictions and mark "(inferred)"
+    # so the user knows it came from the file content rather than a
+    # header / explicit ``--mhc-alleles`` arg.
+    mhc_alleles = []
+    if predictions:
+        seen = set()
+        for p in predictions:
+            allele = getattr(p, 'allele', '') or ''
+            if allele and allele not in seen:
+                seen.add(allele)
+                mhc_alleles.append(allele)
+        if mhc_alleles:
+            mhc_alleles = sorted(mhc_alleles) + ['(inferred from report)']
     return PatientInfo(
         patient_id=patient_id or '',
         # Leave the legacy vcf_paths empty — the external path's
@@ -1081,6 +1097,7 @@ def _patient_info_from_external(ranked, source_path, patient_id,
         # picks up ``inputs`` instead.
         vcf_paths=[],
         bam_path=None,
+        mhc_alleles=mhc_alleles,
         num_somatic_variants=len(ranked),
         num_coding_effect_variants=n_with_transcript,
         num_variants_with_rna_support=n_with_rna,
@@ -1109,7 +1126,8 @@ def load_external_ranked(args):
             vaccine_peptide_length=vaccine_peptide_length)
         patient_info = _patient_info_from_external(
             ranked, args.input_lens, patient_id,
-            input_label='LENS report')
+            input_label='LENS report',
+            predictions=predictions)
         return (ranked, report_df, predictions, patient_info,
                 dna_vaf_by_variant)
     if getattr(args, 'input_pvacseq', None):
@@ -1119,7 +1137,8 @@ def load_external_ranked(args):
             genome=getattr(args, 'genome', None))
         patient_info = _patient_info_from_external(
             ranked, args.input_pvacseq, patient_id,
-            input_label='pVACseq report')
+            input_label='pVACseq report',
+            predictions=predictions)
         return (ranked, report_df, predictions, patient_info,
                 dna_vaf_by_variant)
     return None
