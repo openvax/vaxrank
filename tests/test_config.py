@@ -1391,3 +1391,118 @@ def test_extract_vaccine_config_kwargs_accepts_single_epitope_keep_path():
     }
     kwargs_b = extract_vaccine_config_kwargs(config_b)
     eq_(kwargs_b["num_mutant_epitopes_to_keep"], 20)
+
+
+# ----- vaccine_constructs section ---------------------------------------
+
+def test_extract_construct_kwargs_shared_only():
+    """``vaccine_constructs.shared`` knobs apply to every modality
+    that doesn't override them."""
+    from vaxrank.config.loader import extract_construct_kwargs
+    config = {
+        'vaccine_constructs': {
+            'shared': {
+                'min_antigen_length_aa': 13,
+                'max_antigen_length_aa': 21,
+                'antigen_content': 'minimal_epitope',
+            },
+        },
+    }
+    pep = extract_construct_kwargs(config, 'peptide')
+    mrna = extract_construct_kwargs(config, 'mrna')
+    assert pep == mrna == {
+        'min_antigen_length_aa': 13,
+        'max_antigen_length_aa': 21,
+        'antigen_content': 'minimal_epitope',
+    }
+
+
+def test_extract_construct_kwargs_modality_overrides_shared():
+    """Modality-specific values override shared values for that
+    modality only; the other modality keeps the shared default."""
+    from vaxrank.config.loader import extract_construct_kwargs
+    config = {
+        'vaccine_constructs': {
+            'shared': {'max_antigen_length_aa': 25},
+            'peptide': {'max_antigen_length_aa': 27, 'mode': 'slp'},
+            'mrna': {'antigens_per_construct': 8},
+        },
+    }
+    pep = extract_construct_kwargs(config, 'peptide')
+    mrna = extract_construct_kwargs(config, 'mrna')
+    # Peptide overrode max_antigen_length_aa; mRNA inherits shared value
+    assert pep['max_antigen_length_aa'] == 27
+    assert pep['mode'] == 'slp'
+    assert mrna['max_antigen_length_aa'] == 25
+    assert mrna['antigens_per_construct'] == 8
+    # Knobs only specified on the other modality don't leak across
+    assert 'mode' not in mrna
+    assert 'antigens_per_construct' not in pep
+
+
+def test_extract_construct_kwargs_drops_none_entries():
+    """Explicit ``null`` in YAML maps to ``None`` in Python; the
+    extractor drops those so callers can treat 'absent' and 'null'
+    identically."""
+    from vaxrank.config.loader import extract_construct_kwargs
+    config = {
+        'vaccine_constructs': {
+            'shared': {'antigen_content': None},
+            'peptide': {'mode': 'minimal_epitope', 'linker': None},
+        },
+    }
+    out = extract_construct_kwargs(config, 'peptide')
+    assert out == {'mode': 'minimal_epitope'}
+
+
+def test_extract_construct_kwargs_empty_when_section_absent():
+    """No ``vaccine_constructs`` section → no kwargs (writers fall
+    back to CLI / built-in defaults)."""
+    from vaxrank.config.loader import extract_construct_kwargs
+    assert extract_construct_kwargs({}, 'peptide') == {}
+    assert extract_construct_kwargs({'epitopes': {}}, 'mrna') == {}
+
+
+def test_construct_config_overrides_cli_default(tmp_path):
+    """End-to-end: a YAML config sets ``vaccine_constructs.peptide.linker``
+    and the peptide writer picks it up because the CLI flag is at its
+    parser default. The CLI flag still wins when explicitly passed."""
+    cfg = tmp_path / "vc.yaml"
+    cfg.write_text("""
+vaccine_constructs:
+  shared:
+    max_antigen_length_aa: 19
+  peptide:
+    linker: AAY
+""")
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    from vaxrank.cli.entry_point import (
+        _coalesce_from_config, _construct_config_for_modality,
+    )
+    args = parse_vaxrank_args([
+        '--input-lens', '/dev/null',
+        '--output-csv', '/dev/null',
+        '--config', str(cfg),
+    ])
+    yaml_kwargs = _construct_config_for_modality(args, 'peptide')
+    # Shared knob picked up through the merge
+    assert yaml_kwargs['max_antigen_length_aa'] == 19
+    # Peptide-specific knob picked up through the merge
+    assert yaml_kwargs['linker'] == 'AAY'
+
+    # CLI default → YAML wins
+    linker = _coalesce_from_config(
+        args, 'peptide_linker', yaml_kwargs, 'linker')
+    assert linker == 'AAY'
+
+    # Now run with an explicit CLI override; CLI wins
+    args2 = parse_vaxrank_args([
+        '--input-lens', '/dev/null',
+        '--output-csv', '/dev/null',
+        '--config', str(cfg),
+        '--peptide-linker', 'EAAAK',
+    ])
+    yaml_kwargs2 = _construct_config_for_modality(args2, 'peptide')
+    linker2 = _coalesce_from_config(
+        args2, 'peptide_linker', yaml_kwargs2, 'linker')
+    assert linker2 == 'EAAAK'

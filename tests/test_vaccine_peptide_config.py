@@ -457,18 +457,35 @@ def test_default_yaml_commented_examples_are_valid():
         s: set(c.__struct_fields__) for s, c in schema_for_section.items()
     }
 
+    # Sections with a nested per-modality structure (shared / peptide /
+    # mrna). The flat-schema check below can't validate those — schema
+    # validation at YAML-load time covers them — so skip the body of
+    # those sections here.
+    nested_sections = {"vaccine_constructs"}
+
     section = None
     # `# - foo` rule-list comments, `# foo: ...` field comments — capture
     # both. Skip lines under a nested `manufacturability:` block inside
     # vaccine_peptides (handled separately under its own section).
     inside_nested_manuf = False
+    in_nested_section = False
     for raw in text.splitlines():
         line = raw.rstrip()
-        # Top-level section header
-        m = re.match(r"^([a-z_]+):\s*$", line)
+        # Top-level section header (uncommented OR commented-out wholly)
+        m = re.match(r"^#?\s*([a-z_]+):\s*$", line) if line.startswith("#") \
+            else re.match(r"^([a-z_]+):\s*$", line)
+        if m and m.group(1) in nested_sections:
+            in_nested_section = True
+            section = None
+            continue
         if m and m.group(1) in schema_for_section:
             section = m.group(1)
             inside_nested_manuf = False
+            in_nested_section = False
+            continue
+        if in_nested_section:
+            # Skip the entire body of a nested section (validated by the
+            # schema at YAML-load time, not by this flat-field walk).
             continue
         if section is None:
             continue

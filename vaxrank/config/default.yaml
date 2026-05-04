@@ -10,11 +10,15 @@
 #
 #     vaxrank --print-default-config > my-config.yaml
 #
-# The three sections below correspond to the three frozen-config dataclasses
-# vaxrank uses internally:
-#   epitopes        -> vaxrank.epitope_config.EpitopeConfig
-#   vaccine_peptides -> vaxrank.vaccine_config.VaccineConfig (peptide assembly)
-#   manufacturability -> vaxrank.vaccine_config.VaccineConfig (synthesis rules)
+# The four sections below correspond to vaxrank's frozen config groups:
+#   epitopes           -> EpitopeConfig (filter / score MHC ligand predictions)
+#   vaccine_peptides   -> VaccineConfig (per-variant antigen-window selection,
+#                                        ranking; applies to BOTH peptide AND
+#                                        mRNA — name kept for back-compat)
+#   manufacturability  -> VaccineConfig (peptide-synthesis difficulty rules)
+#   vaccine_constructs -> per-modality construct-assembly knobs with a
+#                         `shared` subsection for cross-modality defaults
+#                         (CLI flags continue to work and override config)
 
 
 epitopes:
@@ -128,3 +132,64 @@ manufacturability:
     - aspartate_proline
     - max_hydropathy_low
     - min_hydropathy
+
+
+# ----------------------------------------------------------------------
+# vaccine_constructs (per-modality construct-assembly knobs).
+#
+# Default --vaccine-type is 'peptide mrna' (both modalities at once).
+# A single config can drive both: put cross-modality defaults under
+# `shared:` and only repeat a knob in `peptide:` / `mrna:` when that
+# modality should differ.
+#
+# Resolution order (highest precedence first):
+#
+#   explicit CLI flag  >  per-modality config  >  shared config  >  built-in default
+#
+# Every key here is optional; everything below is commented out so the
+# default config is a no-op (matches "no --config" behavior). Uncomment
+# and edit what you want to change.
+# ----------------------------------------------------------------------
+# vaccine_constructs:
+#   shared:
+#     # Knobs that default the same way across modalities. Length
+#     # bounds in particular usually move together.
+#     min_antigen_length_aa: 15
+#     max_antigen_length_aa: 25
+#     candidates_per_slot: 1
+#     antigen_content: mutation_spanning   # 'mutation_spanning' | 'minimal_epitope'
+#     epitopes_per_antigen: 1
+#
+#   peptide:
+#     # Peptide-only / where peptide differs from mrna defaults.
+#     mode: slp                            # slp | minimal_epitope | multi_epitope
+#     linker: G4S3                         # multi_epitope linker
+#     antigens_per_construct: 1            # SLP default; 5+ for multi_epitope
+#     max_constructs: 20                   # PGV-001 pool size
+#     n_terminal_acetyl: false             # marked in vendor order form
+#     c_terminal_amide: false
+#     scale_mg: 5.0
+#     purity_percent: 95.0
+#     counterion: TFA
+#
+#   mrna:
+#     # mRNA-only / where mrna differs from peptide defaults.
+#     linker: (G4S)2                       # BioNTech FixVac canonical
+#     antigens_per_construct: 5            # FixVac canonical
+#     max_constructs: 1
+#     max_length_nt: 4000
+#     signal_peptide: HLA_B
+#     include_mitd: true
+#     mitd: HLA_B
+#     utr_5p: HBB
+#     utr_3p: HBB_FI
+#     poly_a_length: 120
+#     poly_a_segmented: false              # set true for BNT162b2-style A30+linker+A70
+#     poly_a_first_segment: 30
+#     poly_a_segment_linker: GCATATGACT
+#     codon_species: h_sapiens
+#     codon_method: use_best_codon         # | match_codon_usage | harmonize_rca
+#     optimize_linkers: true               # per-junction linker optimization
+#     junction_candidates: ""              # comma-separated; "" = library default
+#     junction_rank_strong: 0.5            # %rank below = strong-binder hit
+#     junction_rank_mild: 2.0

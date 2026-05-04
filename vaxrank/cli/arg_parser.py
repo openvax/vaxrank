@@ -1002,7 +1002,16 @@ def choose_arg_parser(args_list):
 
 def parse_vaxrank_args(args_list):
     arg_parser = choose_arg_parser(args_list)
-    return arg_parser.parse_args(args_list)
+    parsed = arg_parser.parse_args(args_list)
+    # Snapshot of parser defaults so downstream code can detect
+    # "user explicitly passed this flag" by ``args.X !=
+    # args._parser_defaults['X']``. Used by the construct-kwargs
+    # resolver to give CLI flags precedence over YAML config values.
+    parsed._parser_defaults = {
+        a.dest: a.default for a in arg_parser._actions
+        if a.dest and a.dest != 'help'
+    }
+    return parsed
 class _ConfigOverrideAction(Action):
     def __init__(self, option_strings, dest, **kwargs):
         self.override_kind = kwargs.pop("override_kind")

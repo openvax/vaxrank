@@ -226,6 +226,47 @@ def _resolve_vaccine_types(args):
     return types
 
 
+def _coalesce_from_config(args, cli_attr, config_kwargs, config_key):
+    """Resolve a single construct knob across CLI flag, YAML config,
+    and built-in default. Precedence (highest first):
+
+      1. CLI flag was explicitly passed (``args.X`` differs from the
+         parser default snapshot in ``args._parser_defaults``).
+      2. YAML config has a value for the key.
+      3. Built-in default (the parser default; what ``args.X``
+         already holds).
+
+    Lets a YAML ``vaccine_constructs.peptide.linker: AAY`` take
+    effect when the user runs ``vaxrank --config ...`` without
+    repeating ``--peptide-linker AAY`` on the CLI, while still
+    allowing the CLI to override the YAML.
+    """
+    cli_val = getattr(args, cli_attr, None)
+    parser_defaults = getattr(args, '_parser_defaults', None) or {}
+    cli_default = parser_defaults.get(cli_attr, cli_val)
+    if cli_val != cli_default:
+        return cli_val   # user supplied; CLI wins
+    if config_key in config_kwargs:
+        return config_kwargs[config_key]
+    return cli_val       # built-in default
+
+
+def _construct_config_for_modality(args, modality):
+    """Return ``extract_construct_kwargs(merged_config, modality)``
+    or ``{}`` if the YAML config can't be loaded (e.g. tests that
+    bypass the CLI). Matches the ``epitope_config_from_args_safe``
+    pattern used elsewhere."""
+    try:
+        from ..config.loader import load_vaxrank_config, extract_construct_kwargs
+        merged = load_vaxrank_config(args)
+        return extract_construct_kwargs(merged, modality)
+    except Exception as e:
+        logger.debug(
+            "vaccine_constructs config not loaded for %s (%s); "
+            "using CLI defaults only.", modality, e)
+        return {}
+
+
 def _vaccine_target_dir(output_dir, vaccine_type, all_active_types):
     """Where this writer should put its files.
 
@@ -277,27 +318,43 @@ def _resolve_axis(args, per_type_attr, shared_attr, fallback):
 
 def _emit_peptide_constructs(args, ranked, target_dir):
     """Build + write peptide-vaccine constructs. Modality-specific."""
+    # YAML overrides for any knob not explicitly passed on the CLI.
+    yaml_kwargs = _construct_config_for_modality(args, 'peptide')
+
+    def cfg(cli_attr, yaml_key):
+        return _coalesce_from_config(args, cli_attr, yaml_kwargs, yaml_key)
+
     # Resolve the orthogonal antigen-design axes:
     # per-type override > shared default > config default. The legacy
     # --peptide-mode is consumed by PeptideConstructConfig.__post_init__
     # when no explicit axis flag is set.
     antigen_content = _resolve_axis(
         args, 'peptide_antigen_content', 'antigen_content', None)
+    if antigen_content is None:
+        antigen_content = yaml_kwargs.get('antigen_content')
     epitopes_per_antigen = _resolve_axis(
-        args, 'peptide_epitopes_per_antigen', 'epitopes_per_antigen', 1)
+        args, 'peptide_epitopes_per_antigen', 'epitopes_per_antigen', None)
+    if epitopes_per_antigen is None:
+        epitopes_per_antigen = yaml_kwargs.get('epitopes_per_antigen', 1)
     config_kwargs = dict(
-        mode=args.peptide_mode,
-        linker=args.peptide_linker,
-        min_antigen_length_aa=args.peptide_min_antigen_length_aa,
-        max_antigen_length_aa=args.peptide_max_antigen_length_aa,
-        antigens_per_construct=args.peptide_antigens_per_construct,
-        max_constructs=args.peptide_max_constructs,
-        candidates_per_slot=args.peptide_candidates_per_slot,
-        n_terminal_acetylation=args.peptide_n_terminal_acetyl,
-        c_terminal_amidation=args.peptide_c_terminal_amide,
-        scale_mg=args.peptide_scale_mg,
-        purity_percent=args.peptide_purity_percent,
-        counterion=args.peptide_counterion,
+        mode=cfg('peptide_mode', 'mode'),
+        linker=cfg('peptide_linker', 'linker'),
+        min_antigen_length_aa=cfg(
+            'peptide_min_antigen_length_aa', 'min_antigen_length_aa'),
+        max_antigen_length_aa=cfg(
+            'peptide_max_antigen_length_aa', 'max_antigen_length_aa'),
+        antigens_per_construct=cfg(
+            'peptide_antigens_per_construct', 'antigens_per_construct'),
+        max_constructs=cfg('peptide_max_constructs', 'max_constructs'),
+        candidates_per_slot=cfg(
+            'peptide_candidates_per_slot', 'candidates_per_slot'),
+        n_terminal_acetylation=cfg(
+            'peptide_n_terminal_acetyl', 'n_terminal_acetyl'),
+        c_terminal_amidation=cfg(
+            'peptide_c_terminal_amide', 'c_terminal_amide'),
+        scale_mg=cfg('peptide_scale_mg', 'scale_mg'),
+        purity_percent=cfg('peptide_purity_percent', 'purity_percent'),
+        counterion=cfg('peptide_counterion', 'counterion'),
         epitopes_per_antigen=epitopes_per_antigen,
     )
     if antigen_content is not None:
@@ -326,39 +383,59 @@ def _emit_peptide_constructs(args, ranked, target_dir):
 
 def _emit_mrna_constructs(args, ranked, target_dir):
     """Build + write mRNA-vaccine constructs. Modality-specific."""
+    yaml_kwargs = _construct_config_for_modality(args, 'mrna')
+
+    def cfg(cli_attr, yaml_key):
+        return _coalesce_from_config(args, cli_attr, yaml_kwargs, yaml_key)
+
+    junction_candidates_raw = cfg(
+        'mrna_junction_candidates', 'junction_candidates') or ''
     junction_candidates = tuple(
-        s.strip() for s in (args.mrna_junction_candidates or "").split(",")
+        s.strip() for s in junction_candidates_raw.split(",")
         if s.strip()
     )
     antigen_content = _resolve_axis(
-        args, 'mrna_antigen_content', 'antigen_content', 'mutation_spanning')
+        args, 'mrna_antigen_content', 'antigen_content', None)
+    if antigen_content is None:
+        antigen_content = yaml_kwargs.get(
+            'antigen_content', 'mutation_spanning')
     epitopes_per_antigen = _resolve_axis(
-        args, 'mrna_epitopes_per_antigen', 'epitopes_per_antigen', 1)
+        args, 'mrna_epitopes_per_antigen', 'epitopes_per_antigen', None)
+    if epitopes_per_antigen is None:
+        epitopes_per_antigen = yaml_kwargs.get('epitopes_per_antigen', 1)
     options = RNAConstructConfig(
-        signal_peptide=(args.mrna_signal_peptide or None),
-        linker=args.mrna_linker,
-        include_mitd=args.mrna_include_mitd,
-        mitd=args.mrna_mitd,
-        utr_5p=args.mrna_5p_utr,
-        utr_3p=args.mrna_3p_utr,
-        codon_species=args.mrna_codon_species,
-        codon_method=args.mrna_codon_method,
+        signal_peptide=(cfg('mrna_signal_peptide', 'signal_peptide') or None),
+        linker=cfg('mrna_linker', 'linker'),
+        include_mitd=cfg('mrna_include_mitd', 'include_mitd'),
+        mitd=cfg('mrna_mitd', 'mitd'),
+        utr_5p=cfg('mrna_5p_utr', 'utr_5p'),
+        utr_3p=cfg('mrna_3p_utr', 'utr_3p'),
+        codon_species=cfg('mrna_codon_species', 'codon_species'),
+        codon_method=cfg('mrna_codon_method', 'codon_method'),
         antigen_content=antigen_content,
         epitopes_per_antigen=epitopes_per_antigen,
-        min_antigen_length_aa=args.mrna_min_antigen_length_aa,
-        max_antigen_length_aa=args.mrna_max_antigen_length_aa,
-        antigens_per_construct=args.mrna_antigens_per_construct,
-        max_constructs=args.mrna_max_constructs,
-        candidates_per_slot=args.mrna_candidates_per_slot,
-        max_length_nt=args.mrna_max_length_nt,
-        optimize_linkers=args.mrna_optimize_linkers,
+        min_antigen_length_aa=cfg(
+            'mrna_min_antigen_length_aa', 'min_antigen_length_aa'),
+        max_antigen_length_aa=cfg(
+            'mrna_max_antigen_length_aa', 'max_antigen_length_aa'),
+        antigens_per_construct=cfg(
+            'mrna_antigens_per_construct', 'antigens_per_construct'),
+        max_constructs=cfg('mrna_max_constructs', 'max_constructs'),
+        candidates_per_slot=cfg(
+            'mrna_candidates_per_slot', 'candidates_per_slot'),
+        max_length_nt=cfg('mrna_max_length_nt', 'max_length_nt'),
+        optimize_linkers=cfg('mrna_optimize_linkers', 'optimize_linkers'),
         junction_swap_candidates=junction_candidates,
-        junction_rank_strong=args.mrna_junction_rank_strong,
-        junction_rank_mild=args.mrna_junction_rank_mild,
-        poly_a_length=args.mrna_poly_a_length,
-        poly_a_segmented=args.mrna_poly_a_segmented,
-        poly_a_first_segment=args.mrna_poly_a_first_segment,
-        poly_a_segment_linker=args.mrna_poly_a_segment_linker,
+        junction_rank_strong=cfg(
+            'mrna_junction_rank_strong', 'junction_rank_strong'),
+        junction_rank_mild=cfg(
+            'mrna_junction_rank_mild', 'junction_rank_mild'),
+        poly_a_length=cfg('mrna_poly_a_length', 'poly_a_length'),
+        poly_a_segmented=cfg('mrna_poly_a_segmented', 'poly_a_segmented'),
+        poly_a_first_segment=cfg(
+            'mrna_poly_a_first_segment', 'poly_a_first_segment'),
+        poly_a_segment_linker=cfg(
+            'mrna_poly_a_segment_linker', 'poly_a_segment_linker'),
     )
     if options.optimize_linkers:
         try:
