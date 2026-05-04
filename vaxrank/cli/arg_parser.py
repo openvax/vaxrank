@@ -156,17 +156,30 @@ def cached_run_arg_parser():
 
 # Lets the user specify whether they want to see particular sections in the report.
 def add_optional_output_args(arg_parser):
+    # Manufacturability defaults to None so we can resolve it later
+    # against ``--vaccine-type``: peptide-mode runs include the
+    # GRAVY / Cys-content / N-terminal-Q manufacturability section
+    # by default (it's relevant to peptide synthesis); mRNA-mode
+    # runs exclude it (those features don't apply to mRNA
+    # constructs). Users can still force either way explicitly.
     manufacturability_args = arg_parser.add_mutually_exclusive_group(required=False)
     manufacturability_args.add_argument(
         "--include-manufacturability-in-report",
         dest="manufacturability",
-        action="store_true")
+        action="store_true",
+        help="Force-include the peptide manufacturability section "
+             "(GRAVY scores, Cys content, N-terminal Q/E/C, etc.) "
+             "in template reports. Default depends on --vaccine-type: "
+             "on for peptide, off for mrna.")
 
     manufacturability_args.add_argument(
         "--no-manufacturability-in-report",
         dest="manufacturability",
-        action="store_false")
-    arg_parser.set_defaults(manufacturability=True)
+        action="store_false",
+        help="Force-exclude the peptide manufacturability section "
+             "from template reports. See "
+             "--include-manufacturability-in-report for the default.")
+    arg_parser.set_defaults(manufacturability=None)
 
     wt_epitope_args = arg_parser.add_mutually_exclusive_group(required=False)
     wt_epitope_args.add_argument(

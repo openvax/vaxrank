@@ -19,7 +19,8 @@ Pins:
 - Re-locates peptides in the source sequence when declared offset is
   off by one (off-by-one drift in offsets is common in upstream
   loaders).
-- Composite ``pepsickle_processing_score`` = c_term × (1 − max_internal).
+- Composite ``pepsickle_processing_score`` = sqrt(c_term × (1 − max_internal))
+  (geometric mean of the two factors).
 - Single pepsickle pass per unique source sequence (not per peptide).
 """
 
@@ -97,8 +98,12 @@ def test_annotate_processing_attaches_continuous_scores():
     assert abs(pred.pepsickle_c_term_cleavage_prob - 0.85) < 1e-9
     # max internal = max of probs[4..8] = max(0.10, 0.20, 0.05, 0.50, 0.30) = 0.50
     assert abs(pred.pepsickle_max_internal_cut_prob - 0.50) < 1e-9
-    # processing = 0.85 * (1 - 0.50) = 0.425
-    assert abs(pred.pepsickle_processing_score - 0.425) < 1e-9
+    # processing = sqrt(0.85 * (1 - 0.50)) = sqrt(0.425) ≈ 0.6519
+    # (geometric mean of c_term and (1 - max_internal); see
+    # ``vaxrank.processing`` for the rationale).
+    import math
+    assert abs(pred.pepsickle_processing_score
+               - math.sqrt(0.85 * 0.50)) < 1e-9
 
 
 def test_annotate_processing_one_pass_per_unique_source():
@@ -228,8 +233,8 @@ def test_load_default_predictor_returns_none_when_mhctools_missing(
 
 def test_epitope_data_surfaces_processing_columns_when_annotated():
     """report.TemplateDataCreator._epitope_data adds three extra
-    columns (Pepsickle C-term cut, Pepsickle max internal cut,
-    Pepsickle processing score) when ``include_processing=True``.
+    columns (Processing: C-term, Processing: max internal,
+    Processing: combined) when ``include_processing=True``.
     Default ``include_processing=False`` keeps the original 6-column
     shape so unannotated reports don't change. Predictor name is in
     the column header so a future per-position predictor (NetChop, …)
@@ -244,17 +249,17 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
     # Default: 6-column legacy shape.
     pre = creator._epitope_data(pred)
     assert isinstance(pre, OrderedDict)
-    assert 'Pepsickle C-term cut' not in pre
-    assert 'Pepsickle processing score' not in pre
+    assert 'Processing: C-term' not in pre
+    assert 'Processing: combined' not in pre
 
     # After annotation, ``include_processing=True`` surfaces the columns.
     annotate_processing(
         [pred],
         predictor=StubPepsickle({source: [0.1] * 9 + [0.85] + [0.0] * 4}))
     post = creator._epitope_data(pred, include_processing=True)
-    assert 'Pepsickle C-term cut' in post
-    assert 'Pepsickle max internal cut' in post
-    assert 'Pepsickle processing score' in post
+    assert 'Processing: C-term' in post
+    assert 'Processing: max internal' in post
+    assert 'Processing: combined' in post
 
 
 # ---- entry_point integration --------------------------------------------
@@ -322,9 +327,9 @@ def test_epitope_data_header_consistent_when_some_predictions_unannotated():
         "annotated=%s vs unannotated=%s" % (
             list(row_a.keys()), list(row_u.keys())))
     # Unannotated row uses the '—' placeholder
-    assert row_u['Pepsickle C-term cut'] == '—'
-    assert row_u['Pepsickle max internal cut'] == '—'
-    assert row_u['Pepsickle processing score'] == '—'
+    assert row_u['Processing: C-term'] == '—'
+    assert row_u['Processing: max internal'] == '—'
+    assert row_u['Processing: combined'] == '—'
 
 
 def test_re_location_picks_closest_to_declared_offset():

@@ -106,6 +106,14 @@ class TemplateDataCreator(object):
                     self.patient_info.bam_path)
 
         patient_info['MHC alleles'] = ' '.join(self.patient_info.mhc_alleles)
+        # Name the processing-credibility predictor explicitly so the
+        # ``Processing: …`` columns in the per-VP epitope tables can
+        # use predictor-agnostic header names without losing
+        # provenance. Today there's only one (pepsickle, see
+        # ``vaxrank.processing``); a future per-position predictor
+        # plugged in via the same EpitopePrediction fields would
+        # show its own name here.
+        patient_info['Processing predictor'] = 'pepsickle'
         patient_info['Total number of somatic variants'] = (
             self.patient_info.num_somatic_variants)
         patient_info['Somatic variants with predicted coding effects'] = (
@@ -261,24 +269,44 @@ class TemplateDataCreator(object):
             wt_ic50_str = 'No prediction'
         epitope_data = OrderedDict([
             ('Sequence', epitope_prediction.peptide_sequence),
+            # ``Predictor`` names which MHC affinity tool produced
+            # ``IC50`` / ``Score`` / ``WT IC50`` for this row —
+            # mhcflurry / netmhcpan / mhcflurry-presentation / etc.
+            # Pipeline runs are usually single-predictor; LENS files
+            # are sometimes multi-predictor (e.g. mhcflurry +
+            # netmhcpan), so making the source explicit per row is
+            # the only honest answer.
+            ('Predictor', epitope_prediction.prediction_method_name or '—'),
             ('IC50', '%.2f nM' % epitope_prediction.ic50),
-            ('Score', _sanitize(epitope_prediction.logistic_epitope_score())),
+            # ``Score`` is the logistic transform of IC50 (range
+            # [0, 1]; higher = stronger predicted binder). It is NOT
+            # mhcflurry's presentation_score / EL — vaxrank derives
+            # it locally so the column is comparable across
+            # predictors.
+            ('Score (affinity, logistic IC50)',
+                _sanitize(epitope_prediction.logistic_epitope_score())),
             ('Allele', epitope_prediction.allele.replace('HLA-', '')),
             ('WT sequence', epitope_prediction.wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
         ])
         if include_processing:
+            # Column headers are predictor-agnostic ("Processing: …")
+            # so a future per-position predictor (NetChop, PAProC)
+            # can render through the same table without renaming.
+            # The active predictor is named in the patient-info
+            # header (``Processing predictor: pepsickle``) so the
+            # reader can trace which model produced the values.
             c_term = getattr(
                 epitope_prediction, 'pepsickle_c_term_cleavage_prob', None)
             max_int = getattr(
                 epitope_prediction, 'pepsickle_max_internal_cut_prob', None)
             proc = getattr(
                 epitope_prediction, 'pepsickle_processing_score', None)
-            epitope_data['Pepsickle C-term cut'] = (
+            epitope_data['Processing: C-term'] = (
                 '%.2f' % c_term if c_term is not None else '—')
-            epitope_data['Pepsickle max internal cut'] = (
+            epitope_data['Processing: max internal'] = (
                 '%.2f' % max_int if max_int is not None else '—')
-            epitope_data['Pepsickle processing score'] = (
+            epitope_data['Processing: combined'] = (
                 '%.2f' % proc if proc is not None else '—')
         return epitope_data
 

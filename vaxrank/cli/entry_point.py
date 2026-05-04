@@ -484,6 +484,15 @@ def main(args_list=None):
     args = parse_vaxrank_args(args_list)
     configure_logging(args)
     _resolve_ensembl_release(args)
+    # Manufacturability default depends on --vaccine-type: peptide
+    # vaccines synthesise to short SLPs whose GRAVY / Cys content /
+    # N-terminal Q matter for HPLC-purifiable yield, so the section is
+    # on by default. mRNA constructs are translated *in vivo* and
+    # those peptide-synthesis flags don't apply, so the section is
+    # off by default. Users can force either via the explicit flags.
+    if getattr(args, 'manufacturability', None) is None:
+        args.manufacturability = (
+            getattr(args, 'vaccine_type', 'peptide') == 'peptide')
     logger.info(args)
 
     # Fail fast when no output path is set, *before* loading inputs or

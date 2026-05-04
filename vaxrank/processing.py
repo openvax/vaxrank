@@ -23,24 +23,30 @@ predictor (NetChop, PAProC, …) can land alongside without colliding.
   pepsickle_max_internal_cut_prob   peak cleavage probability strictly
                                     inside the ligand (high → ligand
                                     is destroyed before reaching MHC)
-  pepsickle_processing_score        composite ``c_term * (1 - max_internal)``;
+  pepsickle_processing_score        composite ``sqrt(c_term *
+                                    (1 - max_internal))`` — the
+                                    geometric mean of the two factors;
                                     1.0 = ideal release, 0.0 = no
                                     clean release OR near-certain
-                                    destruction
+                                    destruction. Geometric mean
+                                    rather than the raw product so
+                                    a balanced (0.6, 0.6) row scores
+                                    ~0.6 instead of 0.36.
 
 The annotations are purely additive — vaccine ranking is unaffected.
 Reports surface the three columns when at least one prediction in
 the per-VaccinePeptide list has been annotated.
 
-Per-peptide arithmetic (component extraction + composite scoring)
-delegates to ``mhctools.processing_predictor`` rather than being
-hand-rolled here: ``ProcessingPredictor.c_term_prob`` /
-``max_internal_prob`` are the canonical slice helpers, and
-``score_cterm_anti_max_internal`` is the canonical
-``c_term * (1 - max(internal))`` formula. Keeping a single
-implementation in mhctools means a future scoring fix or
-length-edge-case tweak there flows here automatically; see
-openvax/vaxrank#267.
+Component extractors come from ``mhctools.processing_predictor``
+(``ProcessingPredictor.c_term_prob`` / ``max_internal_prob``), so
+the slicing semantics live in one place. The composite-score
+formula is local: vaxrank uses the geometric mean of the two
+factors rather than the raw product mhctools defaults to (which
+is also offered there as ``score_cterm_anti_max_internal``).
+Geometric mean is a gentler penalty when both factors are
+mid-range, and matches how downstream readers interpret the
+score as a "credibility tag" rather than a strict joint
+probability.
 
 Pepsickle (Weeder et al., Bioinformatics 2021) inference runs in an
 isolated subprocess to avoid the macOS libomp clash between torch and
@@ -55,10 +61,7 @@ Issue: openvax/vaxrank#249.
 
 import logging
 
-from mhctools.processing_predictor import (
-    ProcessingPredictor,
-    score_cterm_anti_max_internal,
-)
+from mhctools.processing_predictor import ProcessingPredictor
 
 logger = logging.getLogger(__name__)
 
@@ -267,14 +270,18 @@ def annotate_processing(predictions, predictor=None,
                 continue
             p.pepsickle_c_term_cleavage_prob = c_term
             p.pepsickle_max_internal_cut_prob = max_internal
-            # ``score_cterm_anti_max_internal`` is mhctools' canonical
-            # ``c_term * (1 - max(internal))`` — equivalent to the
-            # default scoring on ``ProteasomePredictor``. Pass the raw
-            # internal slice so the helper computes max() itself,
-            # matching how mhctools scores its own predictions.
-            internal_slice = seq_probs[offset:offset + len(peptide) - 1]
-            p.pepsickle_processing_score = score_cterm_anti_max_internal(
-                c_term, None, internal_slice)
+            # Composite score is the **geometric mean** of the two
+            # factors — ``sqrt(c_term * (1 - max_internal))``. Range
+            # [0, 1]; 1 = ideal release, 0 = no clean release OR
+            # near-certain internal destruction. Geometric mean
+            # penalizes both factors symmetrically and is more
+            # forgiving than the raw product when one factor is
+            # mid-range, which better matches the "credibility tag"
+            # reading: a peptide with c_term=0.6 and (1 -
+            # max_internal)=0.6 should score ~0.6, not 0.36.
+            import math
+            anti_max = max(0.0, 1.0 - max_internal)
+            p.pepsickle_processing_score = math.sqrt(c_term * anti_max)
             n_annotated += 1
 
     if n_annotated:
