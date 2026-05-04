@@ -709,19 +709,21 @@ def test_lens_warns_when_no_affinity_columns_detected(tmp_path, caplog):
 
 # ---- _emit_outputs observability -----------------------------------------
 
-def _mrna_args(out_dir, manifest='', csv=''):
+def _mrna_args(output_dir, vaccine_type='mrna'):
     """Build a minimal SimpleNamespace for ``_emit_outputs`` mRNA tests.
-    Centralizes the mrna-design knobs so individual tests stay short."""
+    Centralizes the mrna-design knobs so individual tests stay short.
+
+    ``vaccine_type`` may be a single string or a list (multi-mode).
+    ``--output-dir`` always a directory; per-modality subdirs appear
+    automatically when more than one type is active."""
     from types import SimpleNamespace
+    types = vaccine_type if isinstance(vaccine_type, list) else [vaccine_type]
     return SimpleNamespace(
         output_csv='', output_xlsx_report='',
         output_neoepitope_report='',
-        vaccine_type='mrna',
-        vaccine_output=out_dir,
-        vaccine_manifest=manifest,
-        vaccine_order_form='',
-        vaccine_csv=csv,
-        vaccine_csv_full_rows=True,
+        vaccine_type=types,
+        output_dir=output_dir,
+        mrna_csv_full_rows=True,
         mrna_signal_peptide=None, mrna_linker='(G4S)2',
         mrna_include_mitd=False, mrna_mitd='HLA_A',
         mrna_5p_utr='HBB', mrna_3p_utr='HBB',
@@ -740,7 +742,7 @@ def _mrna_args(out_dir, manifest='', csv=''):
 
 def test_emit_outputs_logs_active_and_fired_dispatch(caplog, tmp_path):
     """The dispatch summary log line is part of the contract — pins
-    the active vaccine type and whether the writer fired."""
+    the active vaccine type(s) and which writers fired."""
     import logging
     from vaxrank.cli.entry_point import _emit_outputs
 
@@ -748,7 +750,7 @@ def test_emit_outputs_logs_active_and_fired_dispatch(caplog, tmp_path):
     report_df, predictions = load_lens(path)
     ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
 
-    out_dir = str(tmp_path / "mrna_out")
+    out_dir = str(tmp_path / "out")
     args = _mrna_args(out_dir)
     with caplog.at_level(logging.INFO):
         _emit_outputs(args, ranked, source='external')
@@ -757,44 +759,71 @@ def test_emit_outputs_logs_active_and_fired_dispatch(caplog, tmp_path):
     assert len(dispatch) == 1
     line = dispatch[0]
     assert "[external]" in line
-    assert "type=mrna" in line
-    assert "wrote=mrna" in line
+    assert "['mrna']" in line  # active types and fired list both ['mrna']
 
 
-def test_resolve_vaccine_type_default_and_unknown():
-    """``--vaccine-type`` is single-valued (one mode per run; default
-    'peptide'). Unknown values raise so future types stub-declared in
-    user scripts fail loudly instead of silently no-opping."""
+def test_resolve_vaccine_types_default_and_unknown():
+    """``--vaccine-type`` is multi-valued (default ``['peptide']``).
+    Unknown values raise so future types stub-declared in user
+    scripts fail loudly instead of silently no-opping."""
     import pytest as _pytest
     from types import SimpleNamespace
-    from vaxrank.cli.entry_point import _resolve_vaccine_type
+    from vaxrank.cli.entry_point import _resolve_vaccine_types
 
-    assert _resolve_vaccine_type(SimpleNamespace()) == 'peptide'
-    assert _resolve_vaccine_type(SimpleNamespace(vaccine_type='peptide')) == 'peptide'
-    assert _resolve_vaccine_type(SimpleNamespace(vaccine_type='mrna')) == 'mrna'
-    assert _resolve_vaccine_type(SimpleNamespace(vaccine_type='')) == 'peptide'
-
+    # Defaults
+    assert _resolve_vaccine_types(SimpleNamespace()) == ['peptide']
+    assert _resolve_vaccine_types(
+        SimpleNamespace(vaccine_type=None)) == ['peptide']
+    # Single-string form (caller bypassing argparse)
+    assert _resolve_vaccine_types(
+        SimpleNamespace(vaccine_type='mrna')) == ['mrna']
+    # Multi-mode + dedup
+    assert _resolve_vaccine_types(
+        SimpleNamespace(vaccine_type=['peptide', 'mrna'])
+    ) == ['peptide', 'mrna']
+    assert _resolve_vaccine_types(
+        SimpleNamespace(vaccine_type=['mrna', 'peptide', 'mrna'])
+    ) == ['mrna', 'peptide']  # first-occurrence order preserved
+    # Unknown
     with _pytest.raises(ValueError, match="Unknown vaccine type"):
-        _resolve_vaccine_type(SimpleNamespace(vaccine_type='dna'))
+        _resolve_vaccine_types(SimpleNamespace(vaccine_type=['dna']))
+
+
+def test_vaccine_target_dir_layout(tmp_path):
+    """Single-mode → files land directly in --output-dir; multi-mode
+    → per-modality subdirs (so peptide's manifest.json doesn't
+    overwrite mrna's)."""
+    from vaxrank.cli.entry_point import _vaccine_target_dir
+    base = str(tmp_path / "out")
+    # Single-mode flat
+    assert _vaccine_target_dir(base, 'peptide', ['peptide']) == base
+    # Multi-mode subdirs
+    assert _vaccine_target_dir(base, 'peptide', ['peptide', 'mrna']) == \
+        os.path.join(base, 'peptide')
+    assert _vaccine_target_dir(base, 'mrna', ['peptide', 'mrna']) == \
+        os.path.join(base, 'mrna')
+    # No --output-dir → no writer fires
+    assert _vaccine_target_dir('', 'peptide', ['peptide']) is None
 
 
 def test_lens_with_vaccine_type_mrna_writes_three_fastas(tmp_path):
     """End-to-end: --input-lens + --vaccine-type=mrna +
-    --vaccine-output=DIR writes three FASTAs and a manifest."""
+    --output-dir=DIR writes three FASTAs + manifest + layers.csv
+    directly into DIR (single-mode flat layout)."""
     from vaxrank.cli.entry_point import _emit_outputs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, predictions = load_lens(path)
     ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
 
-    out_dir = str(tmp_path / "mrna_out")
-    manifest_path = str(tmp_path / "manifest.json")
-    args = _mrna_args(out_dir, manifest=manifest_path)
+    out_dir = str(tmp_path / "out")
+    args = _mrna_args(out_dir)
     _emit_outputs(args, ranked, source='external')
     assert os.path.isfile(os.path.join(out_dir, "cds.fasta"))
     assert os.path.isfile(os.path.join(out_dir, "no_polyA.fasta"))
     assert os.path.isfile(os.path.join(out_dir, "full.fasta"))
-    with open(manifest_path) as f:
+    assert os.path.isfile(os.path.join(out_dir, "manifest.json"))
+    with open(os.path.join(out_dir, "manifest.json")) as f:
         manifest = json.load(f)
     assert len(manifest) == 1
     assert manifest[0]['modality'] == 'mrna'
@@ -806,18 +835,55 @@ def test_lens_with_vaccine_type_mrna_writes_three_fastas(tmp_path):
     assert full_body.endswith("A" * 20)
 
 
-def test_emit_outputs_skips_writer_when_no_vaccine_output(tmp_path):
-    """No --vaccine-output → writer no-ops (ranking-only run); the
-    dispatch log records ``wrote=(none)`` and no files appear."""
+def test_lens_with_multi_vaccine_type_uses_subdirs(tmp_path):
+    """Multi-mode (peptide + mrna) writes into per-modality subdirs
+    so canonical filenames don't collide on manifest.json."""
     from vaxrank.cli.entry_point import _emit_outputs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, predictions = load_lens(path)
     ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
 
-    out_dir = str(tmp_path / "mrna_out")
+    out_dir = str(tmp_path / "out")
+    args = _mrna_args(out_dir, vaccine_type=['peptide', 'mrna'])
+    # Need peptide knobs too for the peptide writer.
+    args.peptide_mode = 'slp'
+    args.peptide_antigen_content = None
+    args.peptide_epitopes_per_antigen = None
+    args.peptide_linker = 'G4S3'
+    args.peptide_min_antigen_length_aa = 5
+    args.peptide_max_antigen_length_aa = 14
+    args.peptide_antigens_per_construct = 1
+    args.peptide_max_constructs = 5
+    args.peptide_candidates_per_slot = 1
+    args.peptide_n_terminal_acetyl = False
+    args.peptide_c_terminal_amide = False
+    args.peptide_scale_mg = 5.0
+    args.peptide_purity_percent = 95.0
+    args.peptide_counterion = 'TFA'
+    args.antigen_content = None
+    args.epitopes_per_antigen = None
+    _emit_outputs(args, ranked, source='external')
+    # mRNA outputs in DIR/mrna/
+    assert os.path.isfile(os.path.join(out_dir, "mrna", "cds.fasta"))
+    assert os.path.isfile(os.path.join(out_dir, "mrna", "manifest.json"))
+    # Peptide outputs in DIR/peptide/ — canonical filenames don't
+    # collide with mrna's manifest.json
+    assert os.path.isfile(os.path.join(out_dir, "peptide", "vaccine.fasta"))
+    assert os.path.isfile(os.path.join(out_dir, "peptide", "manifest.json"))
+
+
+def test_emit_outputs_skips_writer_when_no_output_dir(tmp_path):
+    """No --output-dir → writer no-ops (ranking-only run)."""
+    from vaxrank.cli.entry_point import _emit_outputs
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df, predictions = load_lens(path)
+    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+
+    out_dir = str(tmp_path / "out")
     args = _mrna_args(out_dir)
-    args.vaccine_output = ''  # no destination → no writer fires
+    args.output_dir = ''  # no destination → no writer fires
     _emit_outputs(args, ranked, source='external')
     assert not os.path.exists(out_dir), \
-        "Without --vaccine-output, no writer should have fired"
+        "Without --output-dir, no writer should have fired"

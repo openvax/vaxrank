@@ -14,7 +14,7 @@
 
 import logging
 import logging.config
-
+import os
 import sys
 from importlib.resources import files
 
@@ -190,23 +190,48 @@ def _epitope_config_from_args_safe(args):
         return EpitopeConfig()
 
 
-def _resolve_vaccine_type(args):
-    """Return the active vaccine type (single value).
+def _resolve_vaccine_types(args):
+    """Return the ordered, deduplicated list of active vaccine types.
 
-    ``--vaccine-type`` is single-valued (one mode per run; default
-    ``peptide``). Argparse already validates the choice, but tolerate
-    a missing attribute for callers that bypass the parser in tests.
+    ``--vaccine-type`` is multi-valued (default ``['peptide']``).
+    Argparse validates each entry against the choice set; we
+    deduplicate while preserving first-occurrence order so the
+    rendered output (and any logged dispatch line) is stable.
 
     Known types come from ``_VACCINE_TYPE_DISPATCH`` so adding a new
-    vaccine writer is a single registration there — no second
-    set/list to keep in sync.
+    vaccine writer is a single registration there. Tolerate a bare
+    string (one of the choices) for callers that bypass argparse in
+    tests.
     """
-    vtype = getattr(args, 'vaccine_type', 'peptide') or 'peptide'
-    if vtype not in _VACCINE_TYPE_DISPATCH:
-        raise ValueError(
-            "Unknown vaccine type %r. Known: %s." % (
-                vtype, sorted(_VACCINE_TYPE_DISPATCH)))
-    return vtype
+    raw = getattr(args, 'vaccine_type', None) or ['peptide']
+    if isinstance(raw, str):
+        raw = [raw]
+    seen = set()
+    types = []
+    for t in raw:
+        if t in seen:
+            continue
+        seen.add(t)
+        if t not in _VACCINE_TYPE_DISPATCH:
+            raise ValueError(
+                "Unknown vaccine type %r. Known: %s." % (
+                    t, sorted(_VACCINE_TYPE_DISPATCH)))
+        types.append(t)
+    return types
+
+
+def _vaccine_target_dir(output_dir, vaccine_type, all_active_types):
+    """Where this writer should put its files.
+
+    Single-mode runs (one type) write directly into ``output_dir``.
+    Multi-mode runs (2+ types) get per-modality subdirs so peptide
+    and mRNA outputs don't collide on filenames like ``manifest.json``.
+    """
+    if not output_dir:
+        return None
+    if len(all_active_types) > 1:
+        return os.path.join(output_dir, vaccine_type)
+    return output_dir
 
 
 def _emit_neoepitope_report_external(args, report_df, predictions):
@@ -244,7 +269,7 @@ def _resolve_axis(args, per_type_attr, shared_attr, fallback):
     return fallback
 
 
-def _emit_peptide_constructs(args, ranked):
+def _emit_peptide_constructs(args, ranked, target_dir):
     """Build + write peptide-vaccine constructs. Modality-specific."""
     # Resolve the orthogonal antigen-design axes:
     # per-type override > shared default > config default. The legacy
@@ -273,20 +298,27 @@ def _emit_peptide_constructs(args, ranked):
         config_kwargs['antigen_content'] = antigen_content
     peptide_options = PeptideConstructConfig(**config_kwargs)
     constructs = assemble_peptide_constructs(ranked, options=peptide_options)
-    fasta_path = args.vaccine_output
+    # Canonical filenames inside the per-modality target directory:
+    # vaccine.fasta + manifest.json + order_form.csv. Single-mode
+    # runs land directly in args.output_dir; multi-mode runs land in
+    # args.output_dir/peptide/.
+    os.makedirs(target_dir, exist_ok=True)
+    fasta_path = os.path.join(target_dir, 'vaccine.fasta')
+    manifest_path = os.path.join(target_dir, 'manifest.json')
+    order_form_path = os.path.join(target_dir, 'order_form.csv')
     write_peptide_outputs(
         constructs,
         fasta_path=fasta_path,
-        manifest_path=getattr(args, 'vaccine_manifest', '') or None,
-        order_form_path=getattr(args, 'vaccine_order_form', '') or None,
+        manifest_path=manifest_path,
+        order_form_path=order_form_path,
         options=peptide_options,
     )
     logger.info(
         "Wrote %d peptide construct(s) to %s",
-        len(constructs), fasta_path)
+        len(constructs), target_dir)
 
 
-def _emit_mrna_constructs(args, ranked):
+def _emit_mrna_constructs(args, ranked, target_dir):
     """Build + write mRNA-vaccine constructs. Modality-specific."""
     junction_candidates = tuple(
         s.strip() for s in (args.mrna_junction_candidates or "").split(",")
@@ -342,24 +374,29 @@ def _emit_mrna_constructs(args, ranked):
     constructs = assemble_mrna_constructs(
         ranked, options=options,
         mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles)
-    output_dir = args.vaccine_output
+    # Canonical filenames inside the per-modality target directory:
+    # cds.fasta + no_polyA.fasta + full.fasta + manifest.json +
+    # layers.csv. The cds/no_polyA/full FASTAs are written by
+    # ``write_mrna_outputs`` directly into ``target_dir``.
+    os.makedirs(target_dir, exist_ok=True)
     write_mrna_outputs(
         constructs,
-        output_dir=output_dir,
-        manifest_path=getattr(args, 'vaccine_manifest', '') or None,
-        csv_path=getattr(args, 'vaccine_csv', '') or None,
+        output_dir=target_dir,
+        manifest_path=os.path.join(target_dir, 'manifest.json'),
+        csv_path=os.path.join(target_dir, 'layers.csv'),
         csv_include_full_rows=getattr(
-            args, 'vaccine_csv_full_rows', True),
+            args, 'mrna_csv_full_rows', True),
     )
     logger.info(
         "Wrote %d mRNA construct(s) to %s/{cds,no_polyA,full}.fasta",
-        len(constructs), output_dir)
+        len(constructs), target_dir)
 
 
-# Single dispatch table: vaccine-type → writer. One mode per run, so
-# this is selected (not iterated) by ``_emit_outputs``. Adding a new
-# vaccine type means adding the writer and registering it here, plus
-# extending the ``--vaccine-type`` choices in arg_parser.
+# Multi-mode dispatch table: vaccine-type → writer.
+# ``_emit_outputs`` iterates over the active types from
+# ``_resolve_vaccine_types`` and fires each writer with its own
+# target dir. Adding a new vaccine type means registering it here +
+# extending ``--vaccine-type`` choices in arg_parser.
 _VACCINE_TYPE_DISPATCH = {
     'peptide': _emit_peptide_constructs,
     'mrna': _emit_mrna_constructs,
@@ -373,12 +410,14 @@ def _emit_outputs(args, ranked, source):
     intermediate; ``source`` is 'pipeline' (VCF/BAM) or 'external'
     (LENS/pVACseq).
 
-    The active vaccine type is single-valued (``--vaccine-type``);
-    its writer fires only when ``--vaccine-output`` is set.
-    Ranking-only / report-only runs are valid — the writer just
-    no-ops without an output path.
+    Active vaccine types come from ``_resolve_vaccine_types``
+    (``--vaccine-type`` is multi-valued). Each writer fires when
+    ``--output-dir`` is set; single-mode runs land directly in
+    ``--output-dir``, multi-mode runs land in per-modality subdirs
+    so their canonical filenames (manifest.json, vaccine.fasta, …)
+    don't collide.
     """
-    vaccine_type = _resolve_vaccine_type(args)
+    vaccine_types = _resolve_vaccine_types(args)
 
     # Rank reports run for both sources; on the external-input path
     # the LENS-native per-(peptide, allele) report already consumed
@@ -402,21 +441,27 @@ def _emit_outputs(args, ranked, source):
             num_epitopes_per_peptide=num_epitopes,
             excel_report_path=args.output_neoepitope_report)
 
-    writer = _VACCINE_TYPE_DISPATCH.get(vaccine_type)
-    fired = '(none)'
-    if writer is None:
-        logger.warning(
-            "vaccine type %r recognized but has no writer "
-            "registered (future-type stub); skipping.", vaccine_type)
-    elif getattr(args, 'vaccine_output', ''):
-        writer(args, ranked)
-        fired = vaccine_type
-    # No --vaccine-output → ranking-only for this type. Silent (vs.
-    # warning) because users running only reports shouldn't be nagged.
+    output_dir = getattr(args, 'output_dir', '') or ''
+    fired = []
+    for vtype in vaccine_types:
+        writer = _VACCINE_TYPE_DISPATCH.get(vtype)
+        if writer is None:
+            logger.warning(
+                "vaccine type %r recognized but has no writer "
+                "registered (future-type stub); skipping.", vtype)
+            continue
+        if not output_dir:
+            # No --output-dir → ranking-only for every type. Silent
+            # (vs. warning) so users running only reports aren't
+            # nagged.
+            continue
+        target_dir = _vaccine_target_dir(output_dir, vtype, vaccine_types)
+        writer(args, ranked, target_dir)
+        fired.append(vtype)
 
     logger.info(
-        "Vaccine-type dispatch [%s]: type=%s wrote=%s",
-        source, vaccine_type, fired)
+        "Vaccine-type dispatch [%s]: types=%s wrote=%s",
+        source, vaccine_types, fired or ['(none)'])
 
 
 def configure_logging(args):
@@ -454,9 +499,10 @@ def main(args_list=None):
       - --input-lens / --input-pvacseq: external neoepitope report,
         skipping the predict-from-genome stages
 
-    Vaccine-type dispatch is single-valued (``--vaccine-type``;
-    default ``peptide``); the writer fires only when
-    ``--vaccine-output`` is also set.
+    Vaccine-type dispatch is multi-valued (``--vaccine-type``;
+    default ``[peptide]``). Each active type's writer fires when
+    ``--output-dir`` is set. Single-mode runs land directly in the
+    directory; multi-mode runs land in per-modality subdirs.
 
     Example (full pipeline, peptide vaccine):
 
@@ -468,15 +514,22 @@ def main(args_list=None):
             --vaccine-peptide-length 25 \\
             --vaccine-type peptide \\
             --output-pdf-report report.pdf \\
-            --vaccine-output vaccine-peptides.fasta
+            --output-dir vaccine_out/
+
+        # Writes vaccine_out/{vaccine.fasta,manifest.json,order_form.csv}
+
+    Example (both modalities at once):
+
+        vaxrank ... --vaccine-type peptide mrna --output-dir vaccine_out/
+
+        # Writes vaccine_out/peptide/... and vaccine_out/mrna/...
 
     Example (LENS-driven mRNA design):
 
         vaxrank \\
             --input-lens patient.lens.tsv \\
             --vaccine-type mrna \\
-            --vaccine-output mrna_dir/ \\
-            --vaccine-csv layers.csv
+            --output-dir mrna_out/
     """
     if args_list is None:
         args_list = sys.argv[1:]
@@ -484,15 +537,17 @@ def main(args_list=None):
     args = parse_vaxrank_args(args_list)
     configure_logging(args)
     _resolve_ensembl_release(args)
-    # Manufacturability default depends on --vaccine-type: peptide
-    # vaccines synthesise to short SLPs whose GRAVY / Cys content /
-    # N-terminal Q matter for HPLC-purifiable yield, so the section is
-    # on by default. mRNA constructs are translated *in vivo* and
-    # those peptide-synthesis flags don't apply, so the section is
-    # off by default. Users can force either via the explicit flags.
+    # Manufacturability default depends on whether peptide is one of
+    # the active vaccine types: those metrics (GRAVY / Cys content /
+    # N-terminal Q / Asp-Pro bonds) apply to peptide synthesis but
+    # not to mRNA constructs (translated in vivo). Show the section
+    # when peptide is being designed; hide it when only mRNA. Users
+    # can force either way via the explicit flags.
     if getattr(args, 'manufacturability', None) is None:
-        args.manufacturability = (
-            getattr(args, 'vaccine_type', 'peptide') == 'peptide')
+        active_types = getattr(args, 'vaccine_type', ['peptide']) or ['peptide']
+        if isinstance(active_types, str):
+            active_types = [active_types]
+        args.manufacturability = 'peptide' in active_types
     logger.info(args)
 
     # Fail fast when no output path is set, *before* loading inputs or

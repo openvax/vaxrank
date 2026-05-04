@@ -57,10 +57,13 @@ class TemplateDataCreator(object):
         self.dna_vaf_by_variant = dna_vaf_by_variant or {}
 
         # ``vaccine_type`` is rendered in the patient-info block so
-        # the reader can tell at a glance what's being designed
-        # (peptide / mrna / future modalities). Stored on the
-        # instance to keep ``_patient_info()``'s signature unchanged.
-        self.vaccine_type = args_for_report.get('vaccine_type') or 'peptide'
+        # the reader can tell at a glance what's being designed.
+        # Multi-valued (default ``['peptide']``); render as a
+        # comma-list so multi-mode runs (peptide+mrna) read cleanly.
+        raw_types = args_for_report.get('vaccine_type') or ['peptide']
+        if isinstance(raw_types, str):
+            raw_types = [raw_types]
+        self.vaccine_type = ', '.join(raw_types)
 
         # filter output-related command-line args: we want to display everything else
         args_to_display_in_report = {

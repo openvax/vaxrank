@@ -228,60 +228,53 @@ def add_output_args(arg_parser):
 
     output_args_group.add_argument(
         "--vaccine-type",
-        default="peptide",
+        nargs='+',
+        default=["peptide"],
         choices=["peptide", "mrna"],
         metavar="TYPE",
-        help="Which vaccine type to design. One mode per run. The "
-             "vaccine output destination goes in --vaccine-output; "
-             "type-specific companion files in --vaccine-manifest, "
-             "--vaccine-order-form (peptide), --vaccine-csv (mrna). "
-             "Default: peptide.")
+        help="Which vaccine type(s) to design. One or more of "
+             "{peptide, mrna}; default: peptide. "
+             "Single-mode runs write directly into --output-dir. "
+             "Multi-mode runs write into per-modality subdirs "
+             "(--output-dir/peptide/, --output-dir/mrna/, …) so the "
+             "same flag set works regardless of how many modalities "
+             "are active. Future modalities (DNA, …) plug in here.")
 
-    # Unified vaccine output (replaces the old --output-peptide /
-    # --output-mrna pair). The destination is interpreted by the
-    # active --vaccine-type:
-    #   peptide → FASTA file at PATH
-    #   mrna    → directory at PATH (writes cds.fasta / no_polyA.fasta
-    #             / full.fasta into it)
+    # Unified output directory. ``--output-dir`` is always a
+    # directory; vaxrank chooses canonical filenames inside it.
+    # Single-mode: files go directly in DIR. Multi-mode: per-type
+    # subdirs (DIR/peptide/, DIR/mrna/, …).
+    #
+    # Canonical filenames per type:
+    #   peptide/  vaccine.fasta, manifest.json, order_form.csv
+    #   mrna/     cds.fasta, no_polyA.fasta, full.fasta,
+    #             manifest.json, layers.csv
+    #
+    # No file-extension-based mode switching: ``--output-dir`` is
+    # never a file path. Tradeoff: single-file output ergonomics
+    # gone; gain: one rule for every modality count and a clean
+    # directory layout for hand-off.
     output_args_group.add_argument(
-        "--vaccine-output",
+        "--output-dir",
         default="",
-        metavar="PATH",
-        help="Destination for the assembled vaccine constructs. "
-             "For --vaccine-type=peptide this is a FASTA file path; "
-             "for --vaccine-type=mrna it is a directory that vaxrank "
-             "writes cds.fasta, no_polyA.fasta, and full.fasta into. "
+        metavar="DIR",
+        help="Destination directory for the assembled vaccine "
+             "constructs. Single-mode runs (one --vaccine-type) write "
+             "files directly into DIR; multi-mode runs write to "
+             "per-modality subdirs (DIR/peptide/, DIR/mrna/, …). "
              "Required when designing a vaccine; omit for "
-             "ranking-only / report-only runs.")
+             "ranking-only / report-only runs. Vaxrank picks "
+             "canonical filenames inside (vaccine.fasta / cds.fasta / "
+             "manifest.json / order_form.csv / layers.csv).")
     output_args_group.add_argument(
-        "--vaccine-manifest",
-        default="",
-        metavar="PATH",
-        help="Optional JSON manifest path describing the assembled "
-             "vaccine. Same schema for peptide and mRNA so downstream "
-             "tools can consume either uniformly.")
-    output_args_group.add_argument(
-        "--vaccine-order-form",
-        default="",
-        metavar="PATH",
-        help="Peptide-only. CSV order form ready to send to a peptide "
-             "vendor. Errors fast if --vaccine-type is not 'peptide'.")
-    output_args_group.add_argument(
-        "--vaccine-csv",
-        default="",
-        metavar="PATH",
-        help="mRNA-only. Long-format CSV: one row per (construct, "
-             "element) with construct / element_kind / index / "
-             "index_label / name / aa / nt / length_aa / length_nt / "
-             "note. Errors fast if --vaccine-type is not 'mrna'.")
-    output_args_group.add_argument(
-        "--vaccine-csv-no-full-rows",
-        dest="vaccine_csv_full_rows",
+        "--mrna-csv-no-full-rows",
+        dest="mrna_csv_full_rows",
         action="store_false",
         default=True,
         help="mRNA-only. Suppress the per-construct cds / no_polyA / "
-             "full summary rows in --vaccine-csv (the rows with the "
-             "longest nt cells). Per-element rows are unaffected.")
+             "full summary rows in the mRNA layers.csv (the rows "
+             "with the longest nt cells). Per-element rows are "
+             "unaffected.")
 
     # Shared antigen-design axes — apply to BOTH peptide and mRNA
     # unless overridden by the per-type flag (--peptide-* / --mrna-*).
@@ -458,10 +451,11 @@ def add_output_args(arg_parser):
 def add_mrna_output_args(group):
     """mRNA-vaccine design knobs (see vaxrank/mrna.py for assembly).
 
-    Output destinations are unified under ``--vaccine-output`` /
-    ``--vaccine-manifest`` / ``--vaccine-csv`` (see
-    ``add_output_args``); only mrna-specific design parameters live
-    here.
+    Output destinations are unified under ``--output-dir`` (see
+    ``add_output_args``); the mRNA writer picks canonical filenames
+    inside it (cds.fasta / no_polyA.fasta / full.fasta /
+    manifest.json / layers.csv). Only mrna-specific design
+    parameters live here.
     """
     from ..mrna_library import MITDS, SIGNAL_PEPTIDES, UTRS_3P, UTRS_5P
     group.add_argument(
@@ -640,8 +634,7 @@ def add_mrna_output_args(group):
 def add_peptide_output_args(group):
     """Peptide-vaccine design knobs (see vaxrank/peptide.py).
 
-    Output destinations are unified under ``--vaccine-output`` /
-    ``--vaccine-manifest`` / ``--vaccine-order-form`` (see
+    Output destinations are unified under ``--output-dir`` (see
     ``add_output_args``); only peptide-specific design parameters
     live here.
     """
@@ -766,9 +759,9 @@ _PRIMARY_OUTPUT_FLAGS = (
         "Isovar transcript-assembly intermediate CSV"),
     ("--output-epitopes",               "output_epitopes",
         "raw epitope predictions"),
-    ("--vaccine-output",                "vaccine_output",
-        "assembled vaccine constructs "
-        "(FASTA for --vaccine-type=peptide, directory for mrna)"),
+    ("--output-dir",                    "output_dir",
+        "directory for assembled vaccine constructs "
+        "(per-modality subdirs when --vaccine-type has 2+ entries)"),
 )
 
 
@@ -789,21 +782,6 @@ def check_args(args):
             "No output path specified. Pass at least one of the "
             "following flags so vaxrank knows where to write "
             "results:\n%s" % flag_lines)
-
-    # Reject companion flags meant for the other vaccine type — fail
-    # fast rather than silently ignoring the file the user expected
-    # to see written.
-    vaccine_type = getattr(args, 'vaccine_type', 'peptide')
-    if vaccine_type == 'mrna' and getattr(args, 'vaccine_order_form', ''):
-        raise ValueError(
-            "--vaccine-order-form is peptide-only (vendor synthesis "
-            "form); --vaccine-type is 'mrna'. Drop --vaccine-order-form "
-            "or switch --vaccine-type to 'peptide'.")
-    if vaccine_type == 'peptide' and getattr(args, 'vaccine_csv', ''):
-        raise ValueError(
-            "--vaccine-csv is mrna-only (per-element layer table); "
-            "--vaccine-type is 'peptide'. Drop --vaccine-csv or "
-            "switch --vaccine-type to 'mrna'.")
 
     # External input + template-report flag without ``--ensembl-release``
     # would render reports with empty effect annotations (transcript

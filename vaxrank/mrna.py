@@ -837,12 +837,12 @@ def _validate_output_dir(output_dir):
     """
     if os.path.isfile(output_dir):
         raise ValueError(
-            "--vaccine-output is a *directory* for --vaccine-type=mrna (writes cds.fasta / "
+            "--output-dir for --vaccine-type=mrna is a *directory* (writes cds.fasta / "
             "no_polyA.fasta / full.fasta into it); got an existing file "
             "%r. Pass a directory path instead." % output_dir)
     if any(output_dir.lower().endswith(s) for s in _FASTA_LIKE_SUFFIXES):
         raise ValueError(
-            "--vaccine-output is a *directory* for --vaccine-type=mrna (writes cds.fasta / "
+            "--output-dir for --vaccine-type=mrna is a *directory* (writes cds.fasta / "
             "no_polyA.fasta / full.fasta into it); got %r which looks "
             "like a FASTA file path. Pass a directory path instead "
             "(e.g. drop the .fasta suffix)." % output_dir)
