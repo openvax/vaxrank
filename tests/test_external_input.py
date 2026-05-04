@@ -709,13 +709,11 @@ def test_lens_warns_when_no_affinity_columns_detected(tmp_path, caplog):
 
 # ---- _emit_outputs observability -----------------------------------------
 
-def _mrna_args(output_dir, vaccine_type='mrna'):
-    """Build a minimal SimpleNamespace for ``_emit_outputs`` mRNA tests.
-    Centralizes the mrna-design knobs so individual tests stay short.
-
-    ``vaccine_type`` may be a single string or a list (multi-mode).
-    ``--output-dir`` always a directory; per-modality subdirs appear
-    automatically when more than one type is active."""
+def _vaccine_args(output_dir, vaccine_type='mrna'):
+    """Build a SimpleNamespace covering both peptide and mrna design
+    knobs so tests can pass any ``vaccine_type`` (single or list) and
+    have all required attrs present. Centralizes defaults — when a
+    knob's CLI default changes, only this helper needs to follow."""
     from types import SimpleNamespace
     types = vaccine_type if isinstance(vaccine_type, list) else [vaccine_type]
     return SimpleNamespace(
@@ -723,6 +721,9 @@ def _mrna_args(output_dir, vaccine_type='mrna'):
         output_neoepitope_report='',
         vaccine_type=types,
         output_dir=output_dir,
+        # Shared antigen-design axes (resolved per modality at writer time)
+        antigen_content=None, epitopes_per_antigen=None,
+        # mRNA knobs
         mrna_csv_full_rows=True,
         mrna_signal_peptide=None, mrna_linker='(G4S)2',
         mrna_include_mitd=False, mrna_mitd='HLA_A',
@@ -737,7 +738,26 @@ def _mrna_args(output_dir, vaccine_type='mrna'):
         mrna_poly_a_length=20, mrna_poly_a_segmented=False,
         mrna_poly_a_first_segment=30,
         mrna_poly_a_segment_linker='GCATATGACT',
+        mrna_antigen_content=None, mrna_epitopes_per_antigen=None,
+        # Peptide knobs
+        peptide_mode='slp',
+        peptide_antigen_content=None, peptide_epitopes_per_antigen=None,
+        peptide_linker='G4S3',
+        peptide_min_antigen_length_aa=5,
+        peptide_max_antigen_length_aa=14,
+        peptide_antigens_per_construct=1,
+        peptide_max_constructs=5,
+        peptide_candidates_per_slot=1,
+        peptide_n_terminal_acetyl=False,
+        peptide_c_terminal_amide=False,
+        peptide_scale_mg=5.0,
+        peptide_purity_percent=95.0,
+        peptide_counterion='TFA',
     )
+
+
+# Backward-compat alias for tests that already say ``_mrna_args``.
+_mrna_args = _vaccine_args
 
 
 def test_emit_outputs_logs_active_and_fired_dispatch(caplog, tmp_path):
@@ -763,20 +783,24 @@ def test_emit_outputs_logs_active_and_fired_dispatch(caplog, tmp_path):
 
 
 def test_resolve_vaccine_types_default_and_unknown():
-    """``--vaccine-type`` is multi-valued (default ``['peptide']``).
-    Unknown values raise so future types stub-declared in user
-    scripts fail loudly instead of silently no-opping."""
+    """``--vaccine-type`` is multi-valued (default
+    ``['peptide', 'mrna']`` — both modalities). Unknown values
+    raise so future types stub-declared in user scripts fail loudly
+    instead of silently no-opping."""
     import pytest as _pytest
     from types import SimpleNamespace
     from vaxrank.cli.entry_point import _resolve_vaccine_types
 
-    # Defaults
-    assert _resolve_vaccine_types(SimpleNamespace()) == ['peptide']
+    # Defaults: both modalities active when --vaccine-type isn't set
+    assert _resolve_vaccine_types(SimpleNamespace()) == ['peptide', 'mrna']
     assert _resolve_vaccine_types(
-        SimpleNamespace(vaccine_type=None)) == ['peptide']
+        SimpleNamespace(vaccine_type=None)) == ['peptide', 'mrna']
     # Single-string form (caller bypassing argparse)
     assert _resolve_vaccine_types(
         SimpleNamespace(vaccine_type='mrna')) == ['mrna']
+    # Single-element list narrows to that one type
+    assert _resolve_vaccine_types(
+        SimpleNamespace(vaccine_type=['peptide'])) == ['peptide']
     # Multi-mode + dedup
     assert _resolve_vaccine_types(
         SimpleNamespace(vaccine_type=['peptide', 'mrna'])
@@ -845,24 +869,7 @@ def test_lens_with_multi_vaccine_type_uses_subdirs(tmp_path):
     ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
 
     out_dir = str(tmp_path / "out")
-    args = _mrna_args(out_dir, vaccine_type=['peptide', 'mrna'])
-    # Need peptide knobs too for the peptide writer.
-    args.peptide_mode = 'slp'
-    args.peptide_antigen_content = None
-    args.peptide_epitopes_per_antigen = None
-    args.peptide_linker = 'G4S3'
-    args.peptide_min_antigen_length_aa = 5
-    args.peptide_max_antigen_length_aa = 14
-    args.peptide_antigens_per_construct = 1
-    args.peptide_max_constructs = 5
-    args.peptide_candidates_per_slot = 1
-    args.peptide_n_terminal_acetyl = False
-    args.peptide_c_terminal_amide = False
-    args.peptide_scale_mg = 5.0
-    args.peptide_purity_percent = 95.0
-    args.peptide_counterion = 'TFA'
-    args.antigen_content = None
-    args.epitopes_per_antigen = None
+    args = _vaccine_args(out_dir, vaccine_type=['peptide', 'mrna'])
     _emit_outputs(args, ranked, source='external')
     # mRNA outputs in DIR/mrna/
     assert os.path.isfile(os.path.join(out_dir, "mrna", "cds.fasta"))

@@ -190,20 +190,26 @@ def _epitope_config_from_args_safe(args):
         return EpitopeConfig()
 
 
+_DEFAULT_VACCINE_TYPES = ['peptide', 'mrna']
+
+
 def _resolve_vaccine_types(args):
     """Return the ordered, deduplicated list of active vaccine types.
 
-    ``--vaccine-type`` is multi-valued (default ``['peptide']``).
-    Argparse validates each entry against the choice set; we
-    deduplicate while preserving first-occurrence order so the
-    rendered output (and any logged dispatch line) is stable.
+    ``--vaccine-type`` is multi-valued (default
+    ``['peptide', 'mrna']`` — both modalities by default since they
+    share ranking and pepsickle annotation work and only differ in
+    construct assembly). Argparse validates each entry against the
+    choice set; we deduplicate while preserving first-occurrence
+    order so the rendered output (and any logged dispatch line) is
+    stable.
 
     Known types come from ``_VACCINE_TYPE_DISPATCH`` so adding a new
     vaccine writer is a single registration there. Tolerate a bare
     string (one of the choices) for callers that bypass argparse in
     tests.
     """
-    raw = getattr(args, 'vaccine_type', None) or ['peptide']
+    raw = getattr(args, 'vaccine_type', None) or _DEFAULT_VACCINE_TYPES
     if isinstance(raw, str):
         raw = [raw]
     seen = set()
@@ -451,17 +457,29 @@ def _emit_outputs(args, ranked, source):
                 "registered (future-type stub); skipping.", vtype)
             continue
         if not output_dir:
-            # No --output-dir → ranking-only for every type. Silent
-            # (vs. warning) so users running only reports aren't
-            # nagged.
+            # No --output-dir → ranking-only for every type. With the
+            # default ``vaccine_type=['peptide', 'mrna']`` this is
+            # the common report-only path; logging here would just
+            # be noise on top of the dispatch line below. The user
+            # sees ``wrote=[]`` and can act on it.
             continue
         target_dir = _vaccine_target_dir(output_dir, vtype, vaccine_types)
-        writer(args, ranked, target_dir)
-        fired.append(vtype)
+        # Wrap each writer in try/except so a failure in one modality
+        # (e.g. mrna assembly hits a corner case) doesn't abort the
+        # other modality silently in multi-mode. Log + continue.
+        try:
+            writer(args, ranked, target_dir)
+            fired.append(vtype)
+        except Exception as e:
+            logger.error(
+                "Writer for --vaccine-type=%s failed: %s. "
+                "Other modalities (if any) will still be attempted.",
+                vtype, e)
+            logger.debug("Writer traceback:", exc_info=True)
 
     logger.info(
         "Vaccine-type dispatch [%s]: types=%s wrote=%s",
-        source, vaccine_types, fired or ['(none)'])
+        source, vaccine_types, fired)
 
 
 def configure_logging(args):
@@ -542,12 +560,11 @@ def main(args_list=None):
     # N-terminal Q / Asp-Pro bonds) apply to peptide synthesis but
     # not to mRNA constructs (translated in vivo). Show the section
     # when peptide is being designed; hide it when only mRNA. Users
-    # can force either way via the explicit flags.
+    # can force either way via the explicit flags. Reuse
+    # ``_resolve_vaccine_types`` so the shape-tolerance and dedup
+    # logic lives in exactly one place.
     if getattr(args, 'manufacturability', None) is None:
-        active_types = getattr(args, 'vaccine_type', ['peptide']) or ['peptide']
-        if isinstance(active_types, str):
-            active_types = [active_types]
-        args.manufacturability = 'peptide' in active_types
+        args.manufacturability = 'peptide' in _resolve_vaccine_types(args)
     logger.info(args)
 
     # Fail fast when no output path is set, *before* loading inputs or

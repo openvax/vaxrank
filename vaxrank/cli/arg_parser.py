@@ -229,13 +229,14 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--vaccine-type",
         nargs='+',
-        default=["peptide"],
+        default=["peptide", "mrna"],
         choices=["peptide", "mrna"],
         metavar="TYPE",
         help="Which vaccine type(s) to design. One or more of "
-             "{peptide, mrna}; default: peptide. "
-             "Single-mode runs write directly into --output-dir. "
-             "Multi-mode runs write into per-modality subdirs "
+             "{peptide, mrna}. Default: 'peptide mrna' (both); pass "
+             "a subset to design just one. Single-mode runs (one "
+             "type) write directly into --output-dir. Multi-mode "
+             "runs (≥2) write into per-modality subdirs "
              "(--output-dir/peptide/, --output-dir/mrna/, …) so the "
              "same flag set works regardless of how many modalities "
              "are active. Future modalities (DNA, …) plug in here.")
@@ -349,10 +350,13 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-csv",
         default="",
-        help="Path to CSV containing the ranked antigen set "
-             "(per-variant columns: gene, mutation, antigen sequence, "
-             "scores). Antigen-centric — content is the same across "
-             "all --vaccine-type modes.")
+        help="Path to CSV with ranked antigens. Format depends on "
+             "input source: pipeline (--vcf + --bam) emits "
+             "per-variant rows (gene, mutation, antigen sequence, "
+             "scores); LENS / pVACseq emit per-(peptide, allele) "
+             "rows (the upstream tool's native granularity). "
+             "Antigen-centric in both cases; content does not "
+             "change with --vaccine-type.")
 
     output_args_group.add_argument(
         "--output-ascii-report",
@@ -783,6 +787,13 @@ def check_args(args):
             "following flags so vaxrank knows where to write "
             "results:\n%s" % flag_lines)
 
+    # ``--output-dir`` is contractually a directory; the file-path
+    # form was removed when single-file outputs went away. Reject
+    # paths that point at an existing file or look like a FASTA
+    # (``out.fasta``) so the user sees the mismatch immediately
+    # rather than burning ranking time and crashing in the writer.
+    _reject_output_dir_misuse(args)
+
     # External input + template-report flag without ``--ensembl-release``
     # would render reports with empty effect annotations (transcript
     # IDs from LENS / pVACseq won't resolve). Reject pre-flight with a
@@ -790,6 +801,46 @@ def check_args(args):
     # the user's time and silently degrade quality, so make this a
     # hard error rather than a warning.
     _require_ensembl_release_for_template_reports(args)
+
+
+# Suffixes that look like a single-file output but ``--output-dir``
+# always wants a directory; same set ``mrna.py`` enforces locally for
+# its own writer, hoisted here so both writers get the check.
+_OUTPUT_DIR_REJECTED_SUFFIXES = (
+    '.fasta', '.fa', '.fna', '.ffn', '.fas',
+    '.json', '.csv', '.tsv', '.txt', '.zip', '.tar')
+
+
+def _reject_output_dir_misuse(args):
+    """Catch the "user passed a file path to --output-dir" case
+    early. Three rejection categories:
+
+    1. The path already exists and is a file (vaxrank would
+       ``os.makedirs(path)`` and crash deep in the writer).
+    2. The path doesn't exist but ends in a suffix that strongly
+       suggests a single-file target — ``out.fasta``, ``out.json``,
+       etc. Better to refuse than create a directory called
+       ``out.fasta/``.
+    3. (Multi-mode-only) the path resolves to a sub-path of an
+       existing modality subdir — handled by the writers.
+    """
+    import os
+    output_dir = getattr(args, 'output_dir', '') or ''
+    if not output_dir:
+        return
+    if os.path.isfile(output_dir):
+        raise ValueError(
+            "--output-dir points at an existing file (%r); the flag "
+            "wants a directory. Pass a directory path or a path that "
+            "doesn't exist yet." % output_dir)
+    if any(output_dir.lower().endswith(s)
+           for s in _OUTPUT_DIR_REJECTED_SUFFIXES):
+        raise ValueError(
+            "--output-dir is %r, which looks like a single-file "
+            "target. Vaxrank picks canonical filenames inside the "
+            "directory (vaccine.fasta / cds.fasta / manifest.json / "
+            "etc.); pass a directory path instead (e.g. drop the "
+            "suffix)." % output_dir)
 
 
 def _require_ensembl_release_for_template_reports(args):

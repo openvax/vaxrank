@@ -264,6 +264,59 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
 
 # ---- entry_point integration --------------------------------------------
 
+def test_manufacturability_default_on_for_peptide_only(monkeypatch):
+    """Default manufacturability rendering depends on whether
+    'peptide' is in the active --vaccine-type set: ON for runs that
+    design peptides (synthesis-relevant metrics), OFF for mrna-only
+    (those metrics don't apply to in-vivo translation)."""
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    # Resolve mimics what main() does at startup. Test by parsing
+    # args + invoking the same resolver block.
+    cases = [
+        (['peptide'], True),
+        (['mrna'], False),
+        (['peptide', 'mrna'], True),
+        (['mrna', 'peptide'], True),
+    ]
+    for vaccine_type, expected in cases:
+        args = parse_vaxrank_args([
+            '--input-lens', '/dev/null',
+            '--output-csv', '/dev/null',
+            '--vaccine-type', *vaccine_type,
+        ])
+        # main() resolves args.manufacturability based on
+        # _resolve_vaccine_types(args). Run that resolution here.
+        from vaxrank.cli.entry_point import _resolve_vaccine_types
+        if args.manufacturability is None:
+            args.manufacturability = (
+                'peptide' in _resolve_vaccine_types(args))
+        assert args.manufacturability is expected, (
+            "vaccine_type=%s: expected manufacturability=%s, got %s"
+            % (vaccine_type, expected, args.manufacturability))
+
+
+def test_manufacturability_explicit_flag_overrides_default():
+    """User-supplied --include-manufacturability-in-report /
+    --no-manufacturability-in-report wins over the modality-based
+    default in either direction."""
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    args = parse_vaxrank_args([
+        '--input-lens', '/dev/null', '--output-csv', '/dev/null',
+        '--vaccine-type', 'mrna',
+        '--include-manufacturability-in-report',
+    ])
+    # explicit True survives the resolver
+    assert args.manufacturability is True
+
+    args = parse_vaxrank_args([
+        '--input-lens', '/dev/null', '--output-csv', '/dev/null',
+        '--vaccine-type', 'peptide',
+        '--no-manufacturability-in-report',
+    ])
+    # explicit False survives the resolver
+    assert args.manufacturability is False
+
+
 def test_processing_aware_annotation_default_on():
     """On by default — pepsickle runs in an isolated subprocess so the
     macOS libomp clash with pandas/numpy doesn't crash the parent."""
