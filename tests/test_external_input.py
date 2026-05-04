@@ -269,7 +269,7 @@ def test_real_lens_v19_subset_produces_ranked_entries():
     path = os.path.join(
         DATA_DIR, "real_lens_subsets", "lens_v1.9_real_subset.tsv")
     report_df, predictions = load_lens(path)
-    ranked = ranked_from_lens_predictions(predictions, path)
+    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
     # The fixture has at least one parseable variant_coords row.
     # Pre-fix: 0. Now: > 0.
     assert len(ranked) > 0, (
@@ -328,7 +328,7 @@ def test_lens_pep_context_with_stop_codon_truncates():
         DATA_DIR, "real_lens_subsets",
         "lens_v1.9_with_stop_codons.tsv")
     report_df, predictions = load_lens(path)
-    ranked = ranked_from_lens_predictions(predictions, path)
+    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
     # No fragment carries a '*' or a non-standard residue.
     for _, peptides in ranked:
         for vp in peptides:
@@ -389,7 +389,7 @@ def test_lens_picks_strongest_binder_when_multiple_rows_per_variant():
     """
     path = os.path.join(DATA_DIR, "lens_multi_row_per_variant.tsv")
     report_df, predictions = load_lens(path)
-    ranked = ranked_from_lens_predictions(predictions, path)
+    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
     assert len(ranked) == 1, (
         "Fixture has one variant with 3 peptides; got %d entries" % len(ranked))
     _, peptides = ranked[0]
@@ -412,10 +412,15 @@ def test_patient_info_from_external_proxy_counts():
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, predictions = load_lens(path)
-    ranked = ranked_from_lens_predictions(predictions, path)
-    info = _patient_info_from_external(ranked, path, patient_id='Pt-X')
+    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    info = _patient_info_from_external(
+        ranked, path, patient_id='Pt-X', input_label='LENS report')
     assert info.patient_id == 'Pt-X'
-    assert info.vcf_paths == [path]
+    # PatientInfo on the external path no longer overloads
+    # ``vcf_paths`` (LENS files aren't VCFs); the explicit
+    # ``inputs`` list carries the path with an accurate label.
+    assert info.vcf_paths == []
+    assert info.inputs == [('LENS report', path)]
     assert info.bam_path is None
     # All ranked variants are counted as somatic (LENS antigen-only
     # files don't carry pre-pipeline silent variants).
@@ -507,7 +512,7 @@ def test_lens_to_ranked_vaccine_peptides_round_trip():
     pep_context as the antigen fragment."""
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, predictions = load_lens(path)
-    ranked = ranked_from_lens_predictions(predictions, path)
+    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
     assert len(ranked) == 3, (
         "LENS fixture has 3 unique variants; got %d" % len(ranked))
     # Each ranked entry: (Variant, [VaccinePeptide])
@@ -533,7 +538,7 @@ def test_lens_drives_mrna_construct_assembly_end_to_end():
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, predictions = load_lens(path)
-    ranked = ranked_from_lens_predictions(predictions, path)
+    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
     assert ranked, "Expected non-empty ranked list from LENS fixture"
 
     options = RNAConstructConfig(
@@ -565,7 +570,7 @@ def test_lens_drives_peptide_construct_assembly_end_to_end():
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, predictions = load_lens(path)
-    ranked = ranked_from_lens_predictions(predictions, path)
+    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
 
     options = PeptideConstructConfig(mode='slp')
     constructs = assemble_peptide_constructs(ranked, options=options)
@@ -588,7 +593,7 @@ def test_pvacseq_to_ranked_vaccine_peptides_round_trip():
 
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
     report_df, predictions = load_pvacseq(path)
-    ranked = ranked_from_pvacseq_predictions(predictions, path)
+    ranked, _dna_vaf = ranked_from_pvacseq_predictions(predictions, path)
     assert len(ranked) == 3, (
         "pVACseq fixture has 3 unique variants; got %d" % len(ranked))
     genes = sorted(
@@ -639,7 +644,7 @@ def test_pvacseq_drives_mrna_construct_assembly_end_to_end():
 
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
     _, predictions = load_pvacseq(path)
-    ranked = ranked_from_pvacseq_predictions(predictions, path)
+    ranked, _dna_vaf = ranked_from_pvacseq_predictions(predictions, path)
     assert ranked
 
     options = RNAConstructConfig(
@@ -689,7 +694,7 @@ def test_lens_warns_when_no_affinity_columns_detected(tmp_path, caplog):
 
     _, predictions = load_lens(str(no_aff))
     with caplog.at_level(logging.WARNING):
-        ranked = ranked_from_lens_predictions(predictions, str(no_aff))
+        ranked, _dna_vaf = ranked_from_lens_predictions(predictions, str(no_aff))
     # Still produces output (the file-order representative)
     assert len(ranked) == 1
     # Warning was emitted, mentions the detected non-affinity kinds
@@ -741,7 +746,7 @@ def test_emit_outputs_logs_active_and_fired_dispatch(caplog, tmp_path):
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, predictions = load_lens(path)
-    ranked = ranked_from_lens_predictions(predictions, path)
+    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
 
     out_dir = str(tmp_path / "mrna_out")
     args = _mrna_args(out_dir)
@@ -780,7 +785,7 @@ def test_lens_with_vaccine_type_mrna_writes_three_fastas(tmp_path):
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, predictions = load_lens(path)
-    ranked = ranked_from_lens_predictions(predictions, path)
+    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
 
     out_dir = str(tmp_path / "mrna_out")
     manifest_path = str(tmp_path / "manifest.json")
@@ -808,7 +813,7 @@ def test_emit_outputs_skips_writer_when_no_vaccine_output(tmp_path):
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, predictions = load_lens(path)
-    ranked = ranked_from_lens_predictions(predictions, path)
+    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
 
     out_dir = str(tmp_path / "mrna_out")
     args = _mrna_args(out_dir)

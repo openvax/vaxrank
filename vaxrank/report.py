@@ -83,21 +83,40 @@ class TemplateDataCreator(object):
     def _patient_info(self):
         """
         Returns an OrderedDict with patient info.
+
+        Inputs section: prefer the explicit ``inputs`` list when
+        populated (LENS / pVACseq external paths set this directly so
+        the file is labelled accurately); fall back to the legacy
+        ``vcf_paths`` + ``bam_path`` fields for the VCF/BAM pipeline
+        path and for backward-compatible loading of older
+        serialized PatientInfo JSON.
         """
-        patient_info = OrderedDict([
-            ('Patient ID', self.patient_info.patient_id),
-            ('VCF (somatic variants) path(s)', '; '.join(self.patient_info.vcf_paths)),
-            ('BAM (RNAseq reads) path', self.patient_info.bam_path),
-            ('MHC alleles', ' '.join(self.patient_info.mhc_alleles)),
-            ('Total number of somatic variants', self.patient_info.num_somatic_variants),
-            ('Somatic variants with predicted coding effects',
-                self.patient_info.num_coding_effect_variants),
-            ('Somatic variants with predicted coding effects and RNA support',
-                self.patient_info.num_variants_with_rna_support),
-            ('Somatic variants with predicted coding effects, RNA support and predicted MHC '
-                'ligands',
-                self.patient_info.num_variants_with_vaccine_peptides),
-        ])
+        patient_info = OrderedDict()
+        patient_info['Patient ID'] = self.patient_info.patient_id
+
+        if self.patient_info.inputs:
+            for label, path in self.patient_info.inputs:
+                patient_info[label] = path
+        else:
+            if self.patient_info.vcf_paths:
+                patient_info['VCF (somatic variants) path(s)'] = (
+                    '; '.join(self.patient_info.vcf_paths))
+            if self.patient_info.bam_path:
+                patient_info['BAM (RNAseq reads) path'] = (
+                    self.patient_info.bam_path)
+
+        patient_info['MHC alleles'] = ' '.join(self.patient_info.mhc_alleles)
+        patient_info['Total number of somatic variants'] = (
+            self.patient_info.num_somatic_variants)
+        patient_info['Somatic variants with predicted coding effects'] = (
+            self.patient_info.num_coding_effect_variants)
+        patient_info[
+            'Somatic variants with predicted coding effects and RNA support'
+        ] = self.patient_info.num_variants_with_rna_support
+        patient_info[
+            'Somatic variants with predicted coding effects, RNA support and '
+            'predicted MHC ligands'
+        ] = self.patient_info.num_variants_with_vaccine_peptides
         return patient_info
 
     def _variant_data(self, variant, top_vaccine_peptide):

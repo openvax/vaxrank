@@ -526,7 +526,10 @@ def main(args_list=None):
             ranked_variants_with_vaccine_peptides = []
         else:
             (ranked_variants_with_vaccine_peptides, report_df,
-             predictions, patient_info) = loaded
+             predictions, patient_info, external_dna_vaf) = loaded
+            # Mirror the pipeline path's ``data['dna_vaf_by_variant']``
+            # so the shared template-report block picks it up.
+            data['dna_vaf_by_variant'] = external_dna_vaf
         if not ranked_variants_with_vaccine_peptides:
             logger.warning(
                 "External input produced no ranked vaccine peptides; "
@@ -582,9 +585,7 @@ def main(args_list=None):
         args_for_report=args_for_report,
         input_json_file=getattr(args, 'input_json_file', None),
         cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
-        dna_vaf_by_variant=(
-            data.get('dna_vaf_by_variant') if source == 'pipeline'
-            else {}) or {})
+        dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {})
 
     template_data = template_data_creator.compute_template_data()
 

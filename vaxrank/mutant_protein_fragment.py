@@ -115,6 +115,47 @@ class MutantProteinFragment(DataclassSerializable):
     # supplies real alleles.
     placeholder_alleles: bool = False
 
+    @staticmethod
+    def slp_window_around_mutation(
+            protein_aa, mut_start, mut_end, target_length):
+        """Center a ``target_length``-aa SLP window on the mutation span.
+
+        Returns ``(windowed_aa, new_mut_start, new_mut_end)``. When
+        ``protein_aa`` is already at-or-below ``target_length``,
+        returns the inputs unchanged. Mutation spans wider than the
+        target are anchored on the mutation start and the trailing
+        flank is truncated.
+
+        The pipeline path (Isovar / varcode) gets correctly-sized
+        fragments by construction — they're built from a 25mer-wide
+        RNA-derived translation. External-input paths inherit
+        whatever protein-context length the upstream tool chose
+        (LENS's ``pep_context`` is sometimes a 100+aa protein
+        prefix), so they call this helper to land on a fragment of
+        the same canonical size. Both paths produce a
+        ``MutantProteinFragment`` of the same shape afterwards.
+        """
+        if not protein_aa or target_length <= 0:
+            return protein_aa, mut_start, mut_end
+        if len(protein_aa) <= target_length:
+            return protein_aa, mut_start, mut_end
+        mut_len = max(1, mut_end - mut_start)
+        if mut_len >= target_length:
+            win_start = max(0, mut_start)
+            win_end = min(len(protein_aa), win_start + target_length)
+        else:
+            mut_mid = (mut_start + mut_end) // 2
+            half = target_length // 2
+            win_start = max(0, mut_mid - half)
+            win_end = win_start + target_length
+            if win_end > len(protein_aa):
+                win_end = len(protein_aa)
+                win_start = max(0, win_end - target_length)
+        windowed = protein_aa[win_start:win_end]
+        new_start = max(0, mut_start - win_start)
+        new_end = min(len(windowed), mut_end - win_start)
+        return windowed, new_start, new_end
+
     @classmethod
     def from_isovar_result(cls, isovar_result):
         """

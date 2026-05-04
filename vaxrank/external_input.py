@@ -396,7 +396,8 @@ def _read_counts_from_lens_row(row):
 
 
 def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
-                                 num_mutant_epitopes_to_keep=None):
+                                 num_mutant_epitopes_to_keep=None,
+                                 vaccine_peptide_length=25):
     """Group LENS predictions by variant; emit ranked vaccine peptides.
 
     Parameters
@@ -514,6 +515,13 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
     # Transcript. The gap is almost always a release mismatch.
     n_with_ids = 0
     n_resolved = 0
+    # ``vaf`` column carries DNA VAF in LENS v1.9 (sits between
+    # ``mhcflurry_agretopicity`` and ``totcopynum`` / ``multiplicity``
+    # / ``ccf`` — all DNA-clonal annotations; values track DNA VAF
+    # rather than reads-derived RNA VAF on real Pt02 data, e.g.
+    # 0.141 vs computed 0.138). Plumb to ``dna_vaf_by_variant`` so
+    # the report's "DNA VAF" field gets populated instead of "n/a".
+    dna_vaf_by_variant = {}
     for coords, group_rows in groups.items():
         rep = _pick_representative(group_rows, affinity_cols, rank_cols)
         # Build the Variant from REAL ref/alt columns
@@ -576,6 +584,20 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
                 peptide, pep_context, coords)
             continue
 
+        # Window pep_context down to the canonical SLP fragment size
+        # (--vaccine-peptide-length, default 25). LENS sometimes
+        # emits the entire protein prefix here, which would render
+        # as a 100+aa "vaccine peptide" — not what
+        # ``MutantProteinFragment`` represents elsewhere in vaxrank.
+        # The pipeline path gets correctly-sized fragments from
+        # Isovar by construction; the same operation lives on
+        # ``MutantProteinFragment.slp_window_around_mutation`` so
+        # both paths share one definition of "an SLP-windowed
+        # protein fragment around a mutation."
+        pep_context, start_off, end_off = (
+            MutantProteinFragment.slp_window_around_mutation(
+                pep_context, start_off, end_off, vaccine_peptide_length))
+
         # Real RNA-read counts from LENS columns. Missing → 0
         # (honest "no signal"); never fabricate from TPM.
         (n_total, n_alt_reads, n_ref_reads,
@@ -623,20 +645,40 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
 
         # Collect all predictions for any peptide associated with this
         # variant (not just the representative) so reports / scoring
-        # see the full landscape.
+        # see the full landscape. Real LENS files often have
+        # *multiple* rows per (peptide, allele) when the same peptide
+        # is encoded by several transcripts (~5% of Pt02 rows).
+        # ``by_key.get(key)`` then returns N identical predictions
+        # for that (peptide, allele) — left uncollapsed they render
+        # as duplicate rows in the per-VP epitope table. Dedup by
+        # content (peptide, allele, ic50, percentile_rank,
+        # prediction_method_name) so each (peptide, allele) shows
+        # exactly once per predictor in the rendered table.
         epitope_preds = []
-        seen_keys = set()
+        seen_lookup_keys = set()
+        seen_content_keys = set()
         for r in group_rows:
             pep = r.get('peptide') or ""
             # load_lens normalizes 'HLA-A02:01' → 'HLA-A*02:01';
             # match the same form here so the (peptide, allele)
             # lookup hits.
             allele = normalize_hla_allele(str(r.get('allele') or ""))
-            key = (pep, allele)
-            if key in seen_keys:
+            lookup_key = (pep, allele)
+            if lookup_key in seen_lookup_keys:
                 continue
-            seen_keys.add(key)
-            epitope_preds.extend(by_key.get(key, []))
+            seen_lookup_keys.add(lookup_key)
+            for pred in by_key.get(lookup_key, []):
+                content_key = (
+                    pred.peptide_sequence,
+                    pred.allele,
+                    pred.ic50,
+                    pred.percentile_rank,
+                    pred.prediction_method_name,
+                )
+                if content_key in seen_content_keys:
+                    continue
+                seen_content_keys.add(content_key)
+                epitope_preds.append(pred)
 
         # Make sure at least one prediction overlaps the mutation so
         # the VaccinePeptide isn't pruned to zero mutant epitopes.
@@ -654,6 +696,17 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         )
         ranked.append((variant, [vp]))
+
+        # Capture DNA VAF for the report's "DNA VAF" field. Take from
+        # the representative row; LENS dedupes by variant so the
+        # value is consistent across the group.
+        vaf_raw = rep.get('vaf')
+        if vaf_raw is not None and not (
+                isinstance(vaf_raw, float) and pd.isna(vaf_raw)):
+            try:
+                dna_vaf_by_variant[variant] = float(vaf_raw)
+            except (TypeError, ValueError):
+                pass
 
     if n_unparseable:
         logger.warning(
@@ -763,7 +816,7 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             -pair[1][0].mutant_epitope_score if pair[1] else 0.0,
             str(pair[0]),
         ))
-    return ranked
+    return ranked, dna_vaf_by_variant
 
 
 def _parse_pvacseq_id(vid, genome=None):
@@ -859,6 +912,10 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
     # Aggregate transcript-resolution stats (see LENS path for rationale).
     n_with_ids = 0
     n_resolved = 0
+    # pVACseq carries an explicit ``DNA VAF`` column (separate from
+    # the ``RNA VAF`` we already consume for read counts). Plumb it
+    # through to the report's DNA-VAF field.
+    dna_vaf_by_variant = {}
     for vid, group_rows in groups.items():
         rep = _pick_representative(
             group_rows, _PVACSEQ_IC50_COLS, _PVACSEQ_RANK_COLS)
@@ -948,6 +1005,14 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         )]))
 
+        dna_vaf_raw = rep.get('DNA VAF')
+        if dna_vaf_raw is not None and not (
+                isinstance(dna_vaf_raw, float) and pd.isna(dna_vaf_raw)):
+            try:
+                dna_vaf_by_variant[variant] = float(dna_vaf_raw)
+            except (TypeError, ValueError):
+                pass
+
     if n_skipped:
         logger.warning(
             "Skipped %d pVACseq row group(s) with unparseable IDs; "
@@ -970,10 +1035,11 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
             -pair[1][0].mutant_epitope_score if pair[1] else 0.0,
             str(pair[0]),
         ))
-    return ranked
+    return ranked, dna_vaf_by_variant
 
 
-def _patient_info_from_external(ranked, source_path, patient_id):
+def _patient_info_from_external(ranked, source_path, patient_id,
+                                input_label='External report'):
     """Build a :class:`PatientInfo` from external-input data.
 
     Counts are derived from the ranked output:
@@ -1009,12 +1075,17 @@ def _patient_info_from_external(ranked, source_path, patient_id):
             n_with_rna += 1
     return PatientInfo(
         patient_id=patient_id or '',
-        vcf_paths=[source_path] if source_path else [],
+        # Leave the legacy vcf_paths empty — the external path's
+        # input is *not* a VCF and labelling it as such was
+        # actively misleading. The Inputs block in template reports
+        # picks up ``inputs`` instead.
+        vcf_paths=[],
         bam_path=None,
         num_somatic_variants=len(ranked),
         num_coding_effect_variants=n_with_transcript,
         num_variants_with_rna_support=n_with_rna,
         num_variants_with_vaccine_peptides=n_with_peptides,
+        inputs=([(input_label, source_path)] if source_path else []),
     )
 
 
@@ -1029,20 +1100,26 @@ def load_external_ranked(args):
     """
     from .epitope_io import load_lens, load_pvacseq
     patient_id = getattr(args, 'output_patient_id', '') or ''
+    vaccine_peptide_length = getattr(args, 'vaccine_peptide_length', None) or 25
     if getattr(args, 'input_lens', None):
         report_df, predictions = load_lens(args.input_lens)
-        ranked = ranked_from_lens_predictions(
+        ranked, dna_vaf_by_variant = ranked_from_lens_predictions(
             predictions, args.input_lens,
-            genome=getattr(args, 'genome', None))
+            genome=getattr(args, 'genome', None),
+            vaccine_peptide_length=vaccine_peptide_length)
         patient_info = _patient_info_from_external(
-            ranked, args.input_lens, patient_id)
-        return ranked, report_df, predictions, patient_info
+            ranked, args.input_lens, patient_id,
+            input_label='LENS report')
+        return (ranked, report_df, predictions, patient_info,
+                dna_vaf_by_variant)
     if getattr(args, 'input_pvacseq', None):
         report_df, predictions = load_pvacseq(args.input_pvacseq)
-        ranked = ranked_from_pvacseq_predictions(
+        ranked, dna_vaf_by_variant = ranked_from_pvacseq_predictions(
             predictions, args.input_pvacseq,
             genome=getattr(args, 'genome', None))
         patient_info = _patient_info_from_external(
-            ranked, args.input_pvacseq, patient_id)
-        return ranked, report_df, predictions, patient_info
+            ranked, args.input_pvacseq, patient_id,
+            input_label='pVACseq report')
+        return (ranked, report_df, predictions, patient_info,
+                dna_vaf_by_variant)
     return None
