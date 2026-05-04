@@ -196,6 +196,83 @@ def test_annotate_processing_empty_input_returns_zero():
     assert n == 0
 
 
+# ---- Subprocess entry point ---------------------------------------------
+#
+# The subprocess module is the bridge between vaxrank's parent
+# process and a fresh interpreter that runs ``mhctools.Pepsickle``
+# (issue #266: torch's libomp clashes with parent pandas / numpy on
+# macOS). Until openvax/mhctools#200 ships isolated invocation
+# upstream, this module owns the I/O contract and we want a real
+# unit test for it that doesn't require pepsickle to be installed —
+# patch ``mhctools.Pepsickle`` so we exercise the JSON in/out plumbing
+# without launching torch.
+
+def test_pepsickle_subprocess_main_io_contract(monkeypatch):
+    """``_pepsickle_subprocess.main`` reads JSON from stdin, calls
+    ``mhctools.Pepsickle`` for each sequence, writes JSON to stdout.
+    The test patches mhctools to avoid needing pepsickle installed —
+    we're verifying the I/O wrapper, not torch."""
+    import io
+    import sys
+    from vaxrank import _pepsickle_subprocess
+
+    class _StubPepsickleClass:
+        last_kwargs = None
+        def __init__(self, **kw):
+            _StubPepsickleClass.last_kwargs = kw
+        def cleavage_probs(self, seq):
+            return [0.1] * len(seq)
+
+    # Inject a fake mhctools module so ``from mhctools import Pepsickle``
+    # inside main() succeeds without a real install.
+    fake_mhctools = type(sys)('mhctools')
+    fake_mhctools.Pepsickle = _StubPepsickleClass
+    monkeypatch.setitem(sys.modules, 'mhctools', fake_mhctools)
+
+    stdin = io.StringIO(
+        '{"sequences": ["MASS", "PEPT"], "human_only": true, "threshold": 0.7}')
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    rc = _pepsickle_subprocess.main(stdin=stdin, stdout=stdout, stderr=stderr)
+    assert rc == 0
+    import json
+    out = json.loads(stdout.getvalue())
+    assert set(out.keys()) == {'MASS', 'PEPT'}
+    assert all(isinstance(v, list) and all(isinstance(x, float) for x in v)
+               for v in out.values())
+    # Pepsickle ctor received the plumbed-through CLI options
+    assert _StubPepsickleClass.last_kwargs == {
+        'human_only': True, 'threshold': 0.7}
+
+
+def test_pepsickle_subprocess_main_returns_2_when_mhctools_missing(
+        monkeypatch):
+    """Exit code 2 means "import_error: mhctools / pepsickle not
+    installed" — the parent's subprocess wrapper logs a clear
+    "pepsickle not installed" warning and degrades gracefully."""
+    import io
+    import sys
+    import builtins
+    from vaxrank import _pepsickle_subprocess
+
+    real_import = builtins.__import__
+
+    def _fail_on_mhctools(name, *args, **kwargs):
+        if name == 'mhctools' or name.startswith('mhctools.'):
+            raise ImportError("simulated: no module named 'mhctools'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, '__import__', _fail_on_mhctools)
+    monkeypatch.delitem(sys.modules, 'mhctools', raising=False)
+
+    stdin = io.StringIO('{"sequences": ["MASS"]}')
+    stderr = io.StringIO()
+    rc = _pepsickle_subprocess.main(
+        stdin=stdin, stdout=io.StringIO(), stderr=stderr)
+    assert rc == 2
+    assert 'import_error' in stderr.getvalue()
+
+
 # ---- Report integration --------------------------------------------------
 
 def test_epitope_data_surfaces_processing_columns_when_annotated():

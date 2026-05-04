@@ -161,6 +161,46 @@ def _resolve_transcripts(transcript_ids, genome):
     return resolved
 
 
+def infer_genome_build_from_lens(lens_path, max_rows=500):
+    """Peek at a LENS file's ``origin_descriptor`` column for build
+    markers and return ``'GRCh38'`` / ``'GRCh37'`` / None.
+
+    LENS encodes the genome build inside ERV-row ``origin_descriptor``
+    values like ``Hsap38.chr2.156963765.156964472.-`` (build 38) or
+    ``Hsap37.chr1.…`` (build 37). SNV / INDEL rows use the
+    ``ENSGxxxxx.N:GENE`` form which doesn't encode the build directly.
+
+    We sample the first ``max_rows`` and return the first build seen.
+    Returns ``None`` when the column is missing or no Hsap37/Hsap38
+    marker appears in the sample (often the case on synthetic test
+    fixtures with only SNV rows).
+    """
+    try:
+        df = pd.read_csv(
+            lens_path, sep='\t', usecols=['origin_descriptor'],
+            nrows=max_rows, low_memory=False)
+    except (ValueError, FileNotFoundError):
+        return None
+    for desc in df['origin_descriptor'].dropna():
+        s = str(desc)
+        if 'Hsap38' in s:
+            return 'GRCh38'
+        if 'Hsap37' in s:
+            return 'GRCh37'
+    return None
+
+
+# Map build → reasonable default Ensembl release. Conservative
+# pinning: 75 is the canonical GRCh37 release; 102 is a stable
+# mid-2020 GRCh38 release. Users on different installations should
+# pass --ensembl-release explicitly; this mapping is only consulted
+# for the pre-flight hint, not for silent auto-selection.
+_BUILD_TO_DEFAULT_RELEASE = {
+    'GRCh37': 75,
+    'GRCh38': 102,
+}
+
+
 def _variant_from_lens_row(row, genome=None):
     """Build a ``varcode.Variant`` from a LENS row using real ref/alt.
 

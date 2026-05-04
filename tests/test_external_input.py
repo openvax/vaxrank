@@ -115,6 +115,49 @@ def test_resolve_transcripts_drops_unresolvable_ids():
     assert out == [known]
 
 
+def test_infer_genome_build_from_lens_grch38(tmp_path):
+    """Hsap38 markers in ``origin_descriptor`` (LENS ERV-row format)
+    identify the build as GRCh38."""
+    import pandas as pd
+    from vaxrank.external_input import infer_genome_build_from_lens
+    p = tmp_path / "lens.tsv"
+    df = pd.DataFrame({
+        'origin_descriptor': [
+            'ENSG00000004399.13:PLXND1',
+            'Hsap38.chr2.156963765.156964472.-',
+        ],
+    })
+    df.to_csv(p, sep='\t', index=False)
+    assert infer_genome_build_from_lens(str(p)) == 'GRCh38'
+
+
+def test_infer_genome_build_from_lens_grch37(tmp_path):
+    import pandas as pd
+    from vaxrank.external_input import infer_genome_build_from_lens
+    p = tmp_path / "lens.tsv"
+    df = pd.DataFrame({
+        'origin_descriptor': ['Hsap37.chrX.111111.222222.+'],
+    })
+    df.to_csv(p, sep='\t', index=False)
+    assert infer_genome_build_from_lens(str(p)) == 'GRCh37'
+
+
+def test_infer_genome_build_from_lens_unknown_returns_none(tmp_path):
+    """No Hsap markers (SNV-only file) → None; caller falls back to
+    a generic warning rather than guessing wrong."""
+    import pandas as pd
+    from vaxrank.external_input import infer_genome_build_from_lens
+    p = tmp_path / "lens.tsv"
+    df = pd.DataFrame({
+        'origin_descriptor': [
+            'ENSG00000004399.13:PLXND1',
+            'ENSG00000005339.15:CREBBP',
+        ],
+    })
+    df.to_csv(p, sep='\t', index=False)
+    assert infer_genome_build_from_lens(str(p)) is None
+
+
 def test_resolve_transcripts_returns_empty_when_no_genome():
     """No --ensembl-release set → genome=None; resolution is a no-op
     and downstream code falls back to the empty-transcript path."""

@@ -1183,6 +1183,24 @@ def test_external_arg_parser_accepts_ensembl_release():
     assert args.ensembl_release == 75
 
 
+def test_external_path_resolves_genome_from_ensembl_release():
+    """End-to-end plumbing: parse + ``_resolve_ensembl_release`` on
+    an external-input args namespace must leave ``args.genome`` as a
+    real ``pyensembl.EnsemblRelease`` so transcript resolution can
+    use it."""
+    import pyensembl
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    from vaxrank.cli.entry_point import _resolve_ensembl_release
+    args = parse_vaxrank_args([
+        '--input-lens', '/dev/null',
+        '--output-csv', '/dev/null',
+        '--ensembl-release', '75',
+    ])
+    _resolve_ensembl_release(args)
+    assert isinstance(args.genome, pyensembl.EnsemblRelease)
+    assert args.genome.release == 75
+
+
 def test_lens_cli_writes_ascii_report():
     """ASCII / HTML / PDF template reports work on the external
     (LENS / pVACseq) path now that transcript IDs resolve and a

@@ -114,32 +114,15 @@ def _closest_occurrence(source, peptide, declared_offset):
 # Pepsickle invocation
 # ----------------------------------------------------------------------------
 
-# Subprocess script: reads {sequences, human_only, threshold} JSON
-# from stdin, writes {sequence: [cleavage_probs]} JSON to stdout.
-# Lives in a *clean* Python interpreter (only torch+pepsickle+json),
-# so torch's libomp doesn't clash with the parent's pandas/numpy
-# libomp on macOS. Issue #266.
-_SUBPROCESS_SCRIPT = r"""
-import sys, json
-data = json.loads(sys.stdin.read())
-try:
-    from mhctools import Pepsickle
-except Exception as e:
-    sys.stderr.write("import_error: %s\n" % e)
-    sys.exit(2)
-try:
-    p = Pepsickle(human_only=data["human_only"], threshold=data["threshold"])
-except Exception as e:
-    sys.stderr.write("instantiate_error: %s\n" % e)
-    sys.exit(3)
-out = {}
-for seq in data["sequences"]:
-    try:
-        out[seq] = [float(x) for x in p.cleavage_probs(seq)]
-    except Exception as e:
-        sys.stderr.write("inference_error %r: %s\n" % (seq[:40], e))
-sys.stdout.write(json.dumps(out))
-"""
+# Subprocess entry point lives in ``vaxrank/_pepsickle_subprocess.py``
+# so it's importable and unit-testable. The body delegates all
+# scoring to ``mhctools.Pepsickle`` — this wrapper exists only to
+# launch a fresh interpreter that doesn't share the parent's
+# pandas/numpy/pyarrow libomp with torch's libomp on macOS
+# (issue #266). Once openvax/mhctools#200 ships, mhctools.Pepsickle
+# itself will offer ``isolate_subprocess=True`` and this whole
+# wrapper goes away.
+_SUBPROCESS_MODULE = "vaxrank._pepsickle_subprocess"
 
 
 def _cleavage_probs_via_subprocess(sequences, human_only=False, threshold=0.5,
@@ -188,7 +171,7 @@ def _cleavage_probs_via_subprocess(sequences, human_only=False, threshold=0.5,
     })
     try:
         result = subprocess.run(
-            [sys.executable, '-c', _SUBPROCESS_SCRIPT],
+            [sys.executable, '-m', _SUBPROCESS_MODULE],
             input=payload, capture_output=True, text=True,
             timeout=timeout,
         )

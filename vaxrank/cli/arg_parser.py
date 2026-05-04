@@ -776,6 +776,57 @@ def check_args(args):
             "--vaccine-type is 'peptide'. Drop --vaccine-csv or "
             "switch --vaccine-type to 'mrna'.")
 
+    # Pre-flight hint: external input + template-report flag without
+    # ``--ensembl-release`` will produce reports with empty effect
+    # annotations (transcript IDs from LENS / pVACseq won't resolve).
+    # Catch this at startup with a build hint inferred from the file
+    # rather than waiting for the load to emit a mid-run WARN. Skip
+    # for runs that don't request template reports — they don't need
+    # transcripts.
+    _warn_if_external_inputs_missing_ensembl_release(args)
+
+
+def _warn_if_external_inputs_missing_ensembl_release(args):
+    import logging
+    logger = logging.getLogger('vaxrank.cli.arg_parser')
+    needs_transcripts = any(
+        getattr(args, attr, '') for attr in (
+            'output_ascii_report',
+            'output_html_report',
+            'output_pdf_report',
+        )
+    )
+    if not needs_transcripts:
+        return
+    if getattr(args, 'ensembl_release', None) is not None:
+        return
+    lens_path = getattr(args, 'input_lens', None)
+    pvacseq_path = getattr(args, 'input_pvacseq', None)
+    if not (lens_path or pvacseq_path):
+        return
+    # Try to infer the build from the LENS file so the hint can name
+    # a plausible release. pVACseq aggregates don't carry a build
+    # marker we can read here.
+    hint = ""
+    if lens_path:
+        from ..external_input import (
+            infer_genome_build_from_lens, _BUILD_TO_DEFAULT_RELEASE)
+        try:
+            build = infer_genome_build_from_lens(lens_path)
+        except Exception:
+            build = None
+        if build:
+            release = _BUILD_TO_DEFAULT_RELEASE.get(build)
+            hint = (
+                " The LENS file's ``origin_descriptor`` looks like "
+                "%s; try ``--ensembl-release %d`` (or a release "
+                "matching the build LENS used)." % (build, release))
+    logger.warning(
+        "Template report(s) requested with --input-lens / "
+        "--input-pvacseq but no --ensembl-release set. Transcript "
+        "effect annotations will be empty (rendered as '—').%s",
+        hint or " Pass --ensembl-release N to populate them.")
+
 
 def external_input_arg_parser():
     """Parser for --input-pvacseq / --input-lens mode (no BAM/VCF required)."""
