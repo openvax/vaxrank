@@ -19,7 +19,7 @@ Package version info
         {{ key }}: {{ val }}
         {% endfor %}
 
-        Vaccine Peptides:
+        Vaccine antigens:
         {% for p in v.peptides %}
                 {{ p.header_display_data.num }}. {{ p.header_display_data.aa_before_mutation }}_{{ p.header_display_data.aa_mutant }}_{{ p.header_display_data.aa_after_mutation }} (score = {{ v.variant_data["Top score"] }})
                   {% for key, val in p.peptide_data.items() %}
@@ -44,5 +44,5 @@ Package version info
         {% endfor %}
 {% endfor %}
 {% else %}
-No variants with sufficient vaccine peptides were found.
+No variants with sufficient ranked antigens were found.
 {% endif %}

@@ -146,7 +146,9 @@ def cached_run_arg_parser():
     arg_parser.add_argument(
         "--input-json-file",
         default="",
-        help="Path to JSON file containing results of vaccine peptide report")
+        help="Path to JSON file containing the cached vaxrank results "
+             "(same shape as --output-json-file). Used to re-render "
+             "reports without re-running the full pipeline.")
     add_output_args(arg_parser)
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
@@ -354,22 +356,31 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-csv",
         default="",
-        help="Name of CSV file which contains predicted sequences")
+        help="Path to CSV containing the ranked antigen set "
+             "(per-variant columns: gene, mutation, antigen sequence, "
+             "scores). Antigen-centric — content is the same across "
+             "all --vaccine-type modes.")
 
     output_args_group.add_argument(
         "--output-ascii-report",
         default="",
-        help="Path to ASCII vaccine peptide report")
+        help="Path to ASCII summary report — ranked antigens with "
+             "their predicted MHC ligands, manufacturability metrics "
+             "(peptide-mode only by default), and processing-credibility "
+             "scores. Antigen-centric: content adapts to --vaccine-type "
+             "but the same flag works for all modes.")
 
     output_args_group.add_argument(
         "--output-html-report",
         default="",
-        help="Path to HTML vaccine peptide report")
+        help="Path to HTML summary report (same content as "
+             "--output-ascii-report, rendered to HTML).")
 
     output_args_group.add_argument(
         "--output-pdf-report",
         default="",
-        help="Path to PDF vaccine peptide report")
+        help="Path to PDF summary report (same content as "
+             "--output-ascii-report, rendered to PDF).")
 
     output_args_group.add_argument(
         "--pdf-backend",
@@ -381,19 +392,24 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-json-file",
         default="",
-        help="Path to JSON file containing results of vaccine peptide report")
+        help="Path to JSON dump of the ranked antigen set + "
+             "command-line state. Same structure regardless of "
+             "--vaccine-type.")
 
     output_args_group.add_argument(
         "--output-xlsx-report",
         default="",
-        help="Path to XLSX vaccine peptide report worksheet, one sheet per variant. This is meant "
-             "for use by the vaccine manufacturer.")
+        help="Path to XLSX summary report (one sheet per variant). "
+             "Antigen-centric; intended for hand-off to a vaccine "
+             "manufacturer / reviewer regardless of modality.")
 
     output_args_group.add_argument(
         "--output-neoepitope-report",
         default="",
-        help="Path to XLSX neoepitope report, containing information focusing on short peptide "
-             "sequences.")
+        help="Path to per-(peptide, allele) neoepitope XLSX. "
+             "Focused on the predicted minimal MHC ligands; available "
+             "from any --vaccine-type and from the LENS / pVACseq "
+             "external paths.")
 
     output_args_group.add_argument(
         "--output-reviewed-by",

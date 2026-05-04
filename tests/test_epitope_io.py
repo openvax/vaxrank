@@ -1228,7 +1228,7 @@ def test_lens_cli_writes_ascii_report():
     assert "Total number of somatic variants:" in text
     # At least one variant block — exact count depends on the fixture
     # but we want the loop to have run, not be silently empty.
-    assert "Vaccine Peptides:" in text
+    assert "Vaccine antigens:" in text
 
 
 def test_lens_cli_errors_when_template_report_missing_ensembl_release():

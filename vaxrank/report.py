@@ -56,6 +56,12 @@ class TemplateDataCreator(object):
         self.patient_info = patient_info
         self.dna_vaf_by_variant = dna_vaf_by_variant or {}
 
+        # ``vaccine_type`` is rendered in the patient-info block so
+        # the reader can tell at a glance what's being designed
+        # (peptide / mrna / future modalities). Stored on the
+        # instance to keep ``_patient_info()``'s signature unchanged.
+        self.vaccine_type = args_for_report.get('vaccine_type') or 'peptide'
+
         # filter output-related command-line args: we want to display everything else
         args_to_display_in_report = {
             k: v for k, v in args_for_report.items() if not k.startswith("output")
@@ -93,6 +99,12 @@ class TemplateDataCreator(object):
         """
         patient_info = OrderedDict()
         patient_info['Patient ID'] = self.patient_info.patient_id
+        # Modality is part of the report's identity — what the user
+        # is actually designing. Generic up here; modality-specific
+        # construct details (signal peptide, UTRs, etc. for mRNA;
+        # synthesis flags for peptide) belong in a per-construct
+        # section rendered next to the assembled FASTA / directory.
+        patient_info['Vaccine type'] = self.vaccine_type
 
         if self.patient_info.inputs:
             for label, path in self.patient_info.inputs:
