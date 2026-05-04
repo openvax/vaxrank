@@ -541,18 +541,24 @@ def _emit_outputs(args, ranked, source):
             # sees ``wrote=[]`` and can act on it.
             continue
         target_dir = _vaccine_target_dir(output_dir, vtype, vaccine_types)
-        # Wrap each writer in try/except so a failure in one modality
-        # (e.g. mrna assembly hits a corner case) doesn't abort the
-        # other modality silently in multi-mode. Log + continue.
+        # Multi-mode is "all-or-nothing": any writer failure aborts
+        # the whole run. Partial output is worse than no output —
+        # ending up with a peptide vaccine on disk but no mRNA
+        # vaccine (or vice versa) is the kind of half-state that
+        # quietly ships to a downstream reviewer. Annotate the log
+        # before we let the exception propagate so the operator
+        # knows which modality crashed.
         try:
             writer(args, ranked, target_dir)
-            fired.append(vtype)
-        except Exception as e:
+        except Exception:
             logger.error(
-                "Writer for --vaccine-type=%s failed: %s. "
-                "Other modalities (if any) will still be attempted.",
-                vtype, e)
-            logger.debug("Writer traceback:", exc_info=True)
+                "Writer for --vaccine-type=%s failed; aborting the "
+                "run. Already-written modalities (if any): %s. "
+                "Re-run after fixing the issue, or pass a single "
+                "--vaccine-type if you want partial output.",
+                vtype, fired)
+            raise
+        fired.append(vtype)
 
     logger.info(
         "Vaccine-type dispatch [%s]: types=%s wrote=%s",
