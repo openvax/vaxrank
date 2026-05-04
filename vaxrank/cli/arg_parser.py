@@ -803,21 +803,55 @@ def _require_ensembl_release_for_template_reports(args):
         return
     # Try to infer the build from the LENS file so the hint can name
     # a plausible release. pVACseq aggregates don't carry a build
-    # marker we can read here.
+    # marker we can read here. Be honest about uncertainty:
+    # ``origin_descriptor`` only pins the build (GRCh37 vs GRCh38),
+    # not the Ensembl release — a build spans many releases. We
+    # suggest something the user *already has installed* via the
+    # pyensembl cache, falling back to the canonical build-final
+    # release (GRCh37 → 75) when nothing is installed.
     hint = " Pass --ensembl-release N to populate them."
     if lens_path:
         from ..external_input import (
-            infer_genome_build_from_lens, _BUILD_TO_DEFAULT_RELEASE)
+            infer_genome_build_from_lens,
+            installed_ensembl_releases_for_build,
+            _BUILD_TO_CANONICAL_RELEASE)
         try:
             build = infer_genome_build_from_lens(lens_path)
         except Exception:
             build = None
         if build:
-            release = _BUILD_TO_DEFAULT_RELEASE.get(build)
-            hint = (
-                " The LENS file's ``origin_descriptor`` looks like "
-                "%s; try --ensembl-release %d (or a release matching "
-                "the build LENS used)." % (build, release))
+            installed = installed_ensembl_releases_for_build(build)
+            if installed:
+                # Suggest the latest installed release for this build
+                # — it's a real candidate the user can use without
+                # downloading anything. Show the full list so they
+                # know what else is available.
+                hint = (
+                    " The LENS file's origin_descriptor looks like "
+                    "%s; you have these %s releases installed: %s. "
+                    "Try --ensembl-release %d (or whichever matches "
+                    "the build LENS used — origin_descriptor doesn't "
+                    "pin a specific release)."
+                    % (build, build, installed, installed[-1]))
+            elif build in _BUILD_TO_CANONICAL_RELEASE:
+                # GRCh37 has a canonical "last release" (75); GRCh38
+                # doesn't — we don't pick a number out of thin air.
+                rel = _BUILD_TO_CANONICAL_RELEASE[build]
+                hint = (
+                    " The LENS file's origin_descriptor looks like "
+                    "%s; the canonical final %s release is %d. "
+                    "Install with `pyensembl install --release %d "
+                    "--reference-name %s`."
+                    % (build, build, rel, rel, build))
+            else:
+                hint = (
+                    " The LENS file's origin_descriptor looks like "
+                    "%s, but no %s releases are installed in your "
+                    "pyensembl cache. Install one with `pyensembl "
+                    "install --release N --reference-name %s` "
+                    "(N must match the build LENS used; "
+                    "origin_descriptor doesn't pin a specific release)."
+                    % (build, build, build))
     raise ValueError(
         "Template report(s) requested with --input-lens / "
         "--input-pvacseq but no --ensembl-release set. Transcript "

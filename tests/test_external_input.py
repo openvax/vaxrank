@@ -142,6 +142,31 @@ def test_infer_genome_build_from_lens_grch37(tmp_path):
     assert infer_genome_build_from_lens(str(p)) == 'GRCh37'
 
 
+def test_installed_ensembl_releases_walks_pyensembl_cache(
+        tmp_path, monkeypatch):
+    """``installed_ensembl_releases_for_build`` lists release numbers
+    by walking the pyensembl cache directory layout
+    (``<cache>/pyensembl/<build>/ensembl<N>``). Important so the
+    pre-flight ``--ensembl-release`` hint suggests releases the user
+    actually has installed, not arbitrary numbers."""
+    import platformdirs
+    from vaxrank.external_input import installed_ensembl_releases_for_build
+
+    fake_cache = tmp_path / 'pyensembl'
+    (fake_cache / 'GRCh38' / 'ensembl100').mkdir(parents=True)
+    (fake_cache / 'GRCh38' / 'ensembl112').mkdir(parents=True)
+    (fake_cache / 'GRCh37' / 'ensembl75').mkdir(parents=True)
+    (fake_cache / 'GRCh38' / 'not_an_ensembl_dir').mkdir(parents=True)
+
+    monkeypatch.setattr(
+        platformdirs, 'user_cache_dir',
+        lambda app: str(fake_cache) if app == 'pyensembl' else '')
+
+    assert installed_ensembl_releases_for_build('GRCh38') == [100, 112]
+    assert installed_ensembl_releases_for_build('GRCh37') == [75]
+    assert installed_ensembl_releases_for_build('Unknown_Build_42') == []
+
+
 def test_infer_genome_build_from_lens_unknown_returns_none(tmp_path):
     """No Hsap markers (SNV-only file) → None; caller falls back to
     a generic warning rather than guessing wrong."""

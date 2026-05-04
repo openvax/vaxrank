@@ -195,10 +195,50 @@ def infer_genome_build_from_lens(lens_path, max_rows=500):
 # mid-2020 GRCh38 release. Users on different installations should
 # pass --ensembl-release explicitly; this mapping is only consulted
 # for the pre-flight hint, not for silent auto-selection.
-_BUILD_TO_DEFAULT_RELEASE = {
+# Canonical "last release for this build" — only GRCh37 has one of
+# these (release 75 was the final GRCh37 mainline release; everything
+# after switched to GRCh38). For GRCh38 we don't pick a default
+# number; instead we look at what the user actually has installed.
+_BUILD_TO_CANONICAL_RELEASE = {
     'GRCh37': 75,
-    'GRCh38': 102,
 }
+
+
+def installed_ensembl_releases_for_build(build):
+    """Return the sorted list of Ensembl release numbers the user has
+    *already downloaded* for ``build`` (e.g. 'GRCh38' / 'GRCh37'),
+    derived from the pyensembl cache directory layout.
+
+    pyensembl caches under ``<platformdirs>/pyensembl/<build>/ensembl<N>``
+    so a directory listing is the authoritative answer to "what
+    releases can the user pass to --ensembl-release without paying a
+    download." Returns ``[]`` when the cache directory doesn't exist.
+
+    Used to make ``--ensembl-release`` suggestions concrete:
+    ``origin_descriptor`` only tells us the build (GRCh37 vs GRCh38),
+    not the release — and a build spans many releases (GRCh38 covers
+    Ensembl 76 through current ~113+). Suggesting an arbitrary number
+    misleads the user; suggesting one they already have is honest.
+    """
+    import os
+    import glob
+    import re
+    try:
+        import platformdirs
+        cache_root = platformdirs.user_cache_dir('pyensembl')
+    except ImportError:
+        # Fall back to the conventional macOS / XDG path so we still
+        # work without platformdirs in the import graph.
+        cache_root = os.path.expanduser('~/Library/Caches/pyensembl')
+        if not os.path.isdir(cache_root):
+            cache_root = os.path.expanduser('~/.cache/pyensembl')
+    pattern = os.path.join(cache_root, build, 'ensembl*')
+    releases = []
+    for path in glob.glob(pattern):
+        m = re.search(r'ensembl(\d+)$', path)
+        if m and os.path.isdir(path):
+            releases.append(int(m.group(1)))
+    return sorted(set(releases))
 
 
 def _variant_from_lens_row(row, genome=None):
