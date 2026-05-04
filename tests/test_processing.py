@@ -368,6 +368,32 @@ def test_re_location_warns_on_large_offset_drift(caplog):
         "Expected a 're-located by N positions' warning for >3aa drift"
 
 
+def test_warns_when_peptide_not_in_pep_context(caplog):
+    """LENS rows occasionally carry a ``peptide`` that isn't a
+    substring of its ``pep_context`` (peptide and pep_context built
+    from different isoforms / annotation snapshots — see Pt02
+    analysis, 8/2113 rows). Vaxrank skips those rows rather than
+    fabricate an offset, and emits a single aggregate WARN at the
+    end of ``annotate_processing`` with one example so the user can
+    file an upstream LENS bug."""
+    import logging
+    # ``KLMXPV`` is one residue off from ``KLMNPV`` so it can't be
+    # located in the source by substring or close-match search.
+    source = "AAAAKLMNPVAAAA"
+    pred = _ep("KLMXPV", source, offset=4)
+    with caplog.at_level(logging.WARNING):
+        n = annotate_processing(
+            [pred],
+            predictor=StubPepsickle({source: [0.5] * len(source)}))
+    assert n == 0
+    skipped = [r for r in caplog.records
+               if 'not a substring' in r.message]
+    assert len(skipped) == 1, (
+        "Expected exactly one aggregate skip-WARN; got %d" % len(skipped))
+    assert "'KLMXPV'" in skipped[0].message
+    assert source in skipped[0].message
+
+
 def test_dedup_by_content_when_duplicate_objects(monkeypatch):
     """The CLI annotation dispatcher dedups by both id() AND a
     content key (peptide, allele, source, offset). A future loader

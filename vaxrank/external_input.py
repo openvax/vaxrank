@@ -422,22 +422,48 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
     rows = df.to_dict('records')
     groups = {}
     n_skipped_empty_coords = 0
+    # When a row has no variant_coords, the only sensible explanation
+    # is a non-SNV / non-INDEL antigen kind (splice / fusion / ERV /
+    # CTA-self / intron-retention). Verify that hypothesis instead of
+    # asserting it — if any SNV / INDEL rows are missing coords, that's
+    # an upstream bug worth surfacing distinctly.
+    skipped_kinds = {}  # antigen_source value → count
     for r in rows:
         coords = r.get('variant_coords')
         if coords is None or (
                 isinstance(coords, float) and pd.isna(coords)) or (
                 isinstance(coords, str) and (
                     not coords.strip() or coords.strip().lower() == 'nan')):
-            # Non-SNV antigen rows (splice, fusion, intron retention)
-            # genuinely lack genome coords — silent skip.
             n_skipped_empty_coords += 1
+            kind = r.get('antigen_source')
+            kind_key = (
+                str(kind).strip() if kind is not None and not (
+                    isinstance(kind, float) and pd.isna(kind))
+                else '(missing)')
+            skipped_kinds[kind_key] = skipped_kinds.get(kind_key, 0) + 1
             continue
         groups.setdefault(coords, []).append(r)
     if n_skipped_empty_coords:
+        breakdown = ', '.join(
+            "%s=%d" % (k, v) for k, v in sorted(
+                skipped_kinds.items(), key=lambda kv: -kv[1]))
         logger.info(
-            "Skipped %d LENS row(s) with empty variant_coords (typical "
-            "for non-SNV antigen sources: splice / fusion / intron "
-            "retention).", n_skipped_empty_coords)
+            "Skipped %d LENS row(s) with empty variant_coords; "
+            "antigen_source breakdown: %s.",
+            n_skipped_empty_coords, breakdown)
+        # SNV / INDEL rows are *expected* to carry coords; flag them
+        # separately so the user can chase upstream rather than assume
+        # "typical".
+        unexpected = {k: v for k, v in skipped_kinds.items()
+                      if k.upper() in ('SNV', 'INDEL')}
+        if unexpected:
+            logger.warning(
+                "%d LENS row(s) declared antigen_source=%s but had "
+                "empty variant_coords (SNV / INDEL antigens are "
+                "expected to carry genome coords). This is likely an "
+                "upstream LENS bug.",
+                sum(unexpected.values()),
+                '/'.join(sorted(unexpected)))
 
     ranked = []
     n_unparseable = 0
@@ -604,35 +630,68 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
         1 for r in rows
         if not (r.get('pep_context') and not (
             isinstance(r.get('pep_context'), float) and pd.isna(r.get('pep_context')))))
-    n_no_gene_name = sum(
-        1 for r in rows
-        if not (r.get('gene_name') and not (
-            isinstance(r.get('gene_name'), float) and pd.isna(r.get('gene_name')))))
-    n_no_transcript = sum(
-        1 for r in rows
-        if not (r.get('transcript_id') and not (
-            isinstance(r.get('transcript_id'), float)
-            and pd.isna(r.get('transcript_id')))))
+    def _is_missing(v):
+        return v is None or v == '' or (
+            isinstance(v, float) and pd.isna(v)) or (
+            isinstance(v, str) and v.strip().lower() == 'nan')
+
+    def _kind(r):
+        k = r.get('antigen_source')
+        return ('(missing)' if _is_missing(k) else str(k).strip())
+
+    def _kind_breakdown(rows_subset):
+        b = {}
+        for r in rows_subset:
+            k = _kind(r)
+            b[k] = b.get(k, 0) + 1
+        return ', '.join(
+            "%s=%d" % (k, v) for k, v in sorted(
+                b.items(), key=lambda kv: -kv[1]))
+
+    rows_no_gene_name = [r for r in rows if _is_missing(r.get('gene_name'))]
+    rows_no_transcript = [r for r in rows if _is_missing(r.get('transcript_id'))]
+    n_no_gene_name = len(rows_no_gene_name)
+    n_no_transcript = len(rows_no_transcript)
     n_no_reads = sum(
         1 for r in rows
-        if (r.get('rna_reads_covering_genomic_origin') is None
-            or (isinstance(r.get('rna_reads_covering_genomic_origin'), float)
-                and pd.isna(r.get('rna_reads_covering_genomic_origin')))))
+        if _is_missing(r.get('rna_reads_covering_genomic_origin')))
     if n_no_pep_context:
         logger.warning(
             "%d / %d LENS row(s) lack pep_context — antigens for those "
             "rows degenerate to the bare neoepitope (no SLP context). "
             "Vaccine windows will be ~9 aa instead of ~25 aa.",
             n_no_pep_context, len(rows))
+    # ``gene_name`` and ``transcript_id`` are expected to be empty for
+    # ERV / CTA-SELF / SPLICE / FUSION antigens (no canonical gene model
+    # to point at). Show the actual antigen_source breakdown rather
+    # than asserting "typical for X" — and warn separately if any SNV
+    # / INDEL rows lack these (which would be an upstream bug).
+    _SNV_OR_INDEL_KINDS = {'SNV', 'INDEL'}
     if n_no_gene_name:
         logger.info(
-            "%d / %d LENS row(s) lack gene_name (typical for ERV / "
-            "non-genic antigens).", n_no_gene_name, len(rows))
+            "%d / %d LENS row(s) lack gene_name; antigen_source "
+            "breakdown: %s.",
+            n_no_gene_name, len(rows), _kind_breakdown(rows_no_gene_name))
+        anomalous = [r for r in rows_no_gene_name
+                     if _kind(r).upper() in _SNV_OR_INDEL_KINDS]
+        if anomalous:
+            logger.warning(
+                "%d SNV / INDEL row(s) lack gene_name — those antigen "
+                "kinds are expected to carry one. Likely upstream "
+                "LENS bug.", len(anomalous))
     if n_no_transcript:
         logger.info(
-            "%d / %d LENS row(s) lack transcript_id; downstream "
-            "varcode-effect annotation won't have a transcript context "
-            "for these.", n_no_transcript, len(rows))
+            "%d / %d LENS row(s) lack transcript_id; antigen_source "
+            "breakdown: %s. Downstream varcode-effect annotation won't "
+            "have a transcript context for these.",
+            n_no_transcript, len(rows), _kind_breakdown(rows_no_transcript))
+        anomalous = [r for r in rows_no_transcript
+                     if _kind(r).upper() in _SNV_OR_INDEL_KINDS]
+        if anomalous:
+            logger.warning(
+                "%d SNV / INDEL row(s) lack transcript_id — those "
+                "antigen kinds are expected to carry one. Likely "
+                "upstream LENS bug.", len(anomalous))
     if n_no_reads:
         logger.warning(
             "%d / %d LENS row(s) lack RNA-read counts "
@@ -641,16 +700,14 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             "consider --combined-score-mode=epitope_only if RNA data "
             "is consistently absent.", n_no_reads, len(rows))
 
-    # Transcript-resolution summary. Three failure modes worth surfacing
-    # at INFO/WARN level — the per-row debug logs in
-    # :func:`_resolve_transcripts` capture the individual IDs.
-    if n_with_ids and genome is None:
-        logger.warning(
-            "%d variant(s) had transcript_id(s) in LENS but no "
-            "pyensembl genome was configured; ASCII / HTML / PDF "
-            "report effect annotations will be empty. Pass "
-            "--ensembl-release to populate them.", n_with_ids)
-    elif n_with_ids and n_resolved < n_with_ids:
+    # Transcript-resolution summary. The "no genome configured" case
+    # is now caught pre-flight in ``arg_parser.check_args`` for any
+    # run that requests template reports; if we still hit it here
+    # we're in a "loaded but reports will be empty" path that's
+    # acceptable (e.g., a CSV-only run — no transcript effects
+    # rendered anywhere). Only the release-mismatch case is worth
+    # logging here.
+    if n_with_ids and n_resolved < n_with_ids:
         n_unresolved = n_with_ids - n_resolved
         logger.warning(
             "%d / %d variant(s) had transcript IDs that didn't resolve "
@@ -856,13 +913,10 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
             "Skipped %d pVACseq row group(s) with unparseable IDs; "
             "see DEBUG log for details.", n_skipped)
 
-    if n_with_ids and genome is None:
-        logger.warning(
-            "%d variant(s) had Best Transcript IDs in pVACseq but no "
-            "pyensembl genome was configured; ASCII / HTML / PDF "
-            "report effect annotations will be empty. Pass "
-            "--ensembl-release to populate them.", n_with_ids)
-    elif n_with_ids and n_resolved < n_with_ids:
+    # The "no genome configured" case is now caught pre-flight in
+    # ``arg_parser.check_args`` for runs that request template
+    # reports; only the release-mismatch case is worth logging here.
+    if n_with_ids and n_resolved < n_with_ids:
         n_unresolved = n_with_ids - n_resolved
         logger.warning(
             "%d / %d variant(s) had Best Transcript IDs that didn't "

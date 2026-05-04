@@ -202,18 +202,51 @@ def annotate_processing(predictions, predictor=None,
         if predictor is None:
             return 0
 
+    # Batch every unique source into ONE predictor call when the
+    # predictor exposes ``cleavage_probs_many`` (mhctools 3.13.3+).
+    # The per-source path used to spawn a fresh subprocess per
+    # sequence — ~1-2s startup × N sources turned a 30s run into 15
+    # minutes on Pt02. Stub predictors in tests only implement
+    # ``cleavage_probs``; fall back to the per-source loop for those.
+    sources = list(by_source)
     probs_by_source = {}
-    for source in by_source:
+    cleavage_probs_many = getattr(predictor, 'cleavage_probs_many', None)
+    if cleavage_probs_many is not None:
+        logger.info(
+            "Pepsickle: scoring %d unique source sequence(s) in a "
+            "single isolated-subprocess batch...", len(sources))
         try:
-            probs_by_source[source] = predictor.cleavage_probs(source)
+            probs_by_source = dict(cleavage_probs_many(sources))
         except Exception as e:
             logger.warning(
-                "Predictor failed for source (len=%d, prefix=%r): "
-                "%s — skipping its %d predictions.",
-                len(source), source[:20], e, len(by_source[source]))
+                "Batch predictor call failed (%s); skipping "
+                "proteasome-cleavage annotation. Run with "
+                "--no-processing-aware-annotation to suppress.", e)
+            logger.debug("Batch predictor traceback:", exc_info=True)
+            probs_by_source = {}
+    else:
+        for source in sources:
+            try:
+                probs_by_source[source] = predictor.cleavage_probs(source)
+            except Exception as e:
+                logger.warning(
+                    "Predictor failed for source (len=%d, prefix=%r): "
+                    "%s — skipping its %d predictions.",
+                    len(source), source[:20], e, len(by_source[source]))
 
     # Apply per-peptide annotations using the precomputed arrays.
     n_annotated = 0
+    # Track peptides that aren't substrings of their pep_context source
+    # — likely a LENS upstream issue where the ``peptide`` column was
+    # built from a different isoform / annotation than ``pep_context``
+    # (see Pt02 analysis: the peptide column matches the canonical
+    # mutant translation, but pep_context carries an extra residue
+    # change that doesn't exist in the canonical reference protein).
+    # Skip such rows rather than fabricate an offset; aggregate the
+    # count and emit a single WARN at the end with one example for
+    # upstream-bug filing.
+    n_skipped_peptide_not_in_context = 0
+    skipped_examples = []
     for source, preds in by_source.items():
         seq_probs = probs_by_source.get(source)
         if not seq_probs or len(seq_probs) < len(source):
@@ -224,6 +257,9 @@ def annotate_processing(predictions, predictor=None,
                 continue
             offset = _resolve_peptide_offset(source, peptide, p)
             if offset is None:
+                n_skipped_peptide_not_in_context += 1
+                if len(skipped_examples) < 3:
+                    skipped_examples.append((peptide, source))
                 continue
             c_term, max_internal = _component_probs(
                 seq_probs, offset, len(peptide))
@@ -246,6 +282,20 @@ def annotate_processing(predictions, predictor=None,
             "Pepsickle credibility tagging: annotated %d / %d "
             "EpitopePrediction(s) across %d unique source sequence(s).",
             n_annotated, len(predictions_list), len(by_source))
+    if n_skipped_peptide_not_in_context:
+        # Show the first example with full context so the user can
+        # paste it into an upstream LENS bug report.
+        ex_peptide, ex_source = skipped_examples[0]
+        logger.warning(
+            "Pepsickle credibility tagging: skipped %d / %d "
+            "EpitopePrediction(s) because the peptide is not a "
+            "substring of its pep_context source — likely a LENS "
+            "issue where peptide and pep_context were built from "
+            "different isoforms / annotation snapshots. Example: "
+            "peptide=%r not found in pep_context=%r. File upstream "
+            "if this rate is non-trivial.",
+            n_skipped_peptide_not_in_context, len(predictions_list),
+            ex_peptide, ex_source)
     return n_annotated
 
 

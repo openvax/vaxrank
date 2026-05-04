@@ -1215,6 +1215,11 @@ def test_lens_cli_writes_ascii_report():
         main([
             "--input-lens", lens_path,
             "--output-ascii-report", out,
+            # Required by ``check_args`` pre-flight when external
+            # input is paired with template reports — the release
+            # value doesn't have to resolve every transcript here,
+            # just be present so the run isn't rejected up front.
+            "--ensembl-release", "75",
         ])
         assert os.path.exists(out), "ASCII report not written"
         with open(out) as f:
@@ -1224,6 +1229,20 @@ def test_lens_cli_writes_ascii_report():
     # At least one variant block — exact count depends on the fixture
     # but we want the loop to have run, not be silently empty.
     assert "Vaccine Peptides:" in text
+
+
+def test_lens_cli_errors_when_template_report_missing_ensembl_release():
+    """Pre-flight check: external input + template-report flag with
+    no --ensembl-release must fail fast (was a late warning that
+    silently degraded reports to empty effect annotations)."""
+    import pytest
+    from vaxrank.cli.entry_point import main
+    lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
+    with pytest.raises(ValueError, match="--ensembl-release"):
+        main([
+            "--input-lens", lens_path,
+            "--output-ascii-report", "/tmp/should-not-be-written.txt",
+        ])
 
 
 def test_lens_cli_errors_when_no_output_flag_set():
