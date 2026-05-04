@@ -42,14 +42,13 @@ implementation in mhctools means a future scoring fix or
 length-edge-case tweak there flows here automatically; see
 openvax/vaxrank#267.
 
-Pepsickle (Weeder et al., Bioinformatics 2021) inference still runs
-in an isolated subprocess (issue #266: torch's libomp clashes with
-the parent's pandas/numpy/pyarrow OpenMP runtime on macOS,
-segfaulting the process). The subprocess imports only torch +
-pepsickle, no pandas; single libomp loads, no clash. Linux installs
-work either way. mhctools issue openvax/mhctools#200 tracks pushing
-that subprocess workaround down to mhctools so other consumers
-benefit too.
+Pepsickle (Weeder et al., Bioinformatics 2021) inference runs in an
+isolated subprocess to avoid the macOS libomp clash between torch and
+the parent's pandas/numpy/pyarrow OpenMP runtime (issue #266). As of
+mhctools 3.13.3 (openvax/mhctools#201) that isolation is built in:
+``Pepsickle(isolate_subprocess=True)`` does the right thing,
+batching unique sequences per call. Vaxrank used to ship its own
+launcher + subprocess module here; now it just sets the kwarg.
 
 Issue: openvax/vaxrank#249.
 """
@@ -111,98 +110,38 @@ def _closest_occurrence(source, peptide, declared_offset):
 
 
 # ----------------------------------------------------------------------------
-# Pepsickle invocation
+# Pepsickle invocation (delegates to mhctools' built-in subprocess isolation)
 # ----------------------------------------------------------------------------
 
-# Subprocess entry point lives in ``vaxrank/_pepsickle_subprocess.py``
-# so it's importable and unit-testable. The body delegates all
-# scoring to ``mhctools.Pepsickle`` — this wrapper exists only to
-# launch a fresh interpreter that doesn't share the parent's
-# pandas/numpy/pyarrow libomp with torch's libomp on macOS
-# (issue #266). Once openvax/mhctools#200 ships, mhctools.Pepsickle
-# itself will offer ``isolate_subprocess=True`` and this whole
-# wrapper goes away.
-_SUBPROCESS_MODULE = "vaxrank._pepsickle_subprocess"
+def _load_default_predictor(human_only=False, threshold=0.5):
+    """Construct an ``mhctools.Pepsickle`` with subprocess isolation
+    on, or return ``None`` if mhctools / pepsickle isn't installed.
 
-
-def _cleavage_probs_via_subprocess(sequences, human_only=False, threshold=0.5,
-                                   timeout=600):
-    """Score ``sequences`` in a fresh Python subprocess and return
-    ``{sequence: [per-position cleavage probabilities]}``.
-
-    Subprocess isolation is the fix for issue #266 (macOS libomp
-    duplication between torch and pandas). Returns ``{}`` and logs
-    a warning on any subprocess-level failure (pepsickle missing,
-    timeout, unparseable output) — never raises, so a vaxrank run
-    continues without annotations.
-
-    Per-source inference failures are silently dropped from the
-    returned dict; the caller treats missing keys as "no signal."
-
-    Cost note: each call spawns a Python interpreter and imports
-    torch (~1–2s startup on CPU). All sequences are batched into one
-    subprocess invocation per ``annotate_processing`` call — fine for
-    a single CLI run on thousands of sources (Pt02: ~3s total) but
-    expensive in a tight loop. Once mhctools ships built-in
-    subprocess isolation (openvax/mhctools#200) this collapses into
-    ``Pepsickle(..., isolate_subprocess=True)`` and amortizes
-    differently.
-
-    Parameters
-    ----------
-    sequences : iterable of str
-        Source sequences to score. Deduplicated before sending.
-    human_only, threshold : forwarded to ``mhctools.Pepsickle``.
-    timeout : seconds before SIGTERM. Default 600 — pepsickle is
-        ~1s/source on CPU, so even thousands of sources finish well
-        within this cap.
+    ``isolate_subprocess=True`` (mhctools 3.13.3+) routes
+    ``cleavage_probs`` calls through a fresh interpreter so torch's
+    libomp doesn't clash with the parent's pandas / numpy / pyarrow
+    libomp on macOS (issue #266).
     """
-    import json
-    import subprocess
-    import sys
-
-    seqs = sorted({s for s in sequences if s})
-    if not seqs:
-        return {}
-    payload = json.dumps({
-        'sequences': seqs,
-        'human_only': bool(human_only),
-        'threshold': float(threshold),
-    })
     try:
-        result = subprocess.run(
-            [sys.executable, '-m', _SUBPROCESS_MODULE],
-            input=payload, capture_output=True, text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
+        from mhctools import Pepsickle
+    except ImportError as e:
         logger.warning(
-            "Pepsickle subprocess timed out after %ds (%d sources); "
-            "skipping proteasome-cleavage annotation.",
-            timeout, len(seqs))
-        return {}
+            "mhctools.Pepsickle is not importable (%s); skipping "
+            "proteasome-cleavage annotation. Install with `pip install "
+            "mhctools[pepsickle]` or pass --no-processing-aware-annotation.",
+            e)
+        return None
+    try:
+        return Pepsickle(
+            human_only=bool(human_only),
+            threshold=float(threshold),
+            isolate_subprocess=True)
     except Exception as e:
         logger.warning(
-            "Failed to launch pepsickle subprocess (%s); skipping "
+            "Failed to construct mhctools.Pepsickle (%s); skipping "
             "proteasome-cleavage annotation.", e)
-        logger.debug("Subprocess launch traceback:", exc_info=True)
-        return {}
-    if result.returncode != 0:
-        first_err = (result.stderr or "").strip().split("\n")[0]
-        logger.warning(
-            "Pepsickle subprocess exited with code %d (%s); skipping "
-            "proteasome-cleavage annotation. Common causes: pepsickle "
-            "not installed (`pip install pepsickle`), or torch model "
-            "load failure.", result.returncode, first_err[:200])
-        return {}
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError as e:
-        logger.warning(
-            "Pepsickle subprocess produced unparseable output (%s); "
-            "skipping. First 200 chars of stdout: %r",
-            e, (result.stdout or "")[:200])
-        return {}
+        logger.debug("Pepsickle construction traceback:", exc_info=True)
+        return None
 
 
 # ----------------------------------------------------------------------------
@@ -224,13 +163,15 @@ def annotate_processing(predictions, predictor=None,
         passed through unchanged.
     predictor : optional, object with a ``cleavage_probs(sequence) ->
         list[float]`` method
-        Test seam. When None (default), pepsickle runs in a fresh
-        subprocess (see :func:`_cleavage_probs_via_subprocess`) to
-        avoid the macOS libomp clash. Tests inject an in-process
-        stub.
-    human_only, threshold : forwarded to pepsickle on the subprocess
-        path. Ignored when ``predictor`` is supplied (caller is
-        responsible for configuring their own predictor).
+        Test seam. When None (default), constructs
+        ``mhctools.Pepsickle(isolate_subprocess=True)`` so torch's
+        libomp doesn't clash with pandas / numpy on macOS. Tests
+        inject an in-process stub to avoid the subprocess startup
+        cost.
+    human_only, threshold : forwarded to ``mhctools.Pepsickle`` when
+        constructing the default predictor. Ignored when ``predictor``
+        is supplied (caller is responsible for configuring their own
+        predictor).
 
     Returns
     -------
@@ -251,21 +192,25 @@ def annotate_processing(predictions, predictor=None,
     if not by_source:
         return 0
 
-    # Resolve cleavage probabilities for every unique source.
+    # Resolve the predictor, then ask it for per-position cleavage
+    # probabilities on each unique source sequence. The default path
+    # uses mhctools' built-in subprocess isolation; the test-seam
+    # path uses whatever object the caller passed in.
     if predictor is None:
-        probs_by_source = _cleavage_probs_via_subprocess(
-            by_source.keys(),
+        predictor = _load_default_predictor(
             human_only=human_only, threshold=threshold)
-    else:
-        probs_by_source = {}
-        for source in by_source:
-            try:
-                probs_by_source[source] = predictor.cleavage_probs(source)
-            except Exception as e:
-                logger.warning(
-                    "Predictor failed for source (len=%d, prefix=%r): "
-                    "%s — skipping its %d predictions.",
-                    len(source), source[:20], e, len(by_source[source]))
+        if predictor is None:
+            return 0
+
+    probs_by_source = {}
+    for source in by_source:
+        try:
+            probs_by_source[source] = predictor.cleavage_probs(source)
+        except Exception as e:
+            logger.warning(
+                "Predictor failed for source (len=%d, prefix=%r): "
+                "%s — skipping its %d predictions.",
+                len(source), source[:20], e, len(by_source[source]))
 
     # Apply per-peptide annotations using the precomputed arrays.
     n_annotated = 0
