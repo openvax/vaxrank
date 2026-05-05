@@ -64,30 +64,70 @@ def _args_with_inferred_alleles(alleles=None):
         _inferred_mhc_alleles_from_lens=list(alleles or []))
 
 
-def test_resolve_mhc_logs_inferred_alleles_then_predictor_missing():
-    """LENS-path: args lacks ``--mhc-alleles`` but the loader stashed
-    inferred alleles. The function still returns ``(None, None)``
-    because the optimizer needs *both* predictor and alleles — but
-    the ``inferred from report`` INFO surfaces, and the targeted
-    "predictor missing, alleles inferred" hint fires."""
-    from vaxrank.cli.entry_point import _resolve_mhc_for_linker_optimizer
+def test_resolve_mhc_defaults_to_mhcflurry_when_predictor_missing(monkeypatch):
+    """LENS-path: args lacks ``--mhc-predictor`` but the loader
+    stashed inferred alleles. Vaxrank should fall back to mhcflurry
+    as a credible default rather than refusing to optimize.
+
+    We don't actually instantiate mhcflurry here — loading it in
+    the test process triggers the macOS libomp clash that issue
+    #266 fixed for pepsickle (mhcflurry has the same constraint).
+    Instead, we patch ``mhctools.MHCflurry`` to a sentinel and
+    verify the function calls it with the inferred alleles + emits
+    the "defaulting to mhcflurry" INFO line."""
+    import mhctools
+    from vaxrank.cli import entry_point as ep
+
+    captured = {}
+
+    class _SentinelPredictor:
+        pass
+
+    def _stub_ctor(alleles, **kw):
+        captured['alleles'] = alleles
+        captured['kwargs'] = kw
+        return _SentinelPredictor()
+
+    monkeypatch.setattr(mhctools, 'MHCflurry', _stub_ctor)
     args = _args_with_inferred_alleles(['HLA-A*02:01', 'HLA-B*07:02'])
     with _capture_logger('vaxrank.cli.entry_point') as records:
-        predictor, alleles = _resolve_mhc_for_linker_optimizer(args)
+        predictor, alleles = ep._resolve_mhc_for_linker_optimizer(args)
+    assert isinstance(predictor, _SentinelPredictor)
+    assert alleles == ['HLA-A*02:01', 'HLA-B*07:02']
+    assert captured['alleles'] == ['HLA-A*02:01', 'HLA-B*07:02']
+    msgs = [r.getMessage() for r in records]
+    assert any('inferred from the LENS / pVACseq report' in m for m in msgs)
+    assert any('defaulting to mhcflurry' in m for m in msgs), \
+        "Expected the 'defaulting to mhcflurry' INFO line; got %r" % msgs
+
+
+def test_resolve_mhc_warns_when_mhcflurry_default_unavailable(monkeypatch):
+    """When the mhcflurry default can't load (not installed, weights
+    missing, …), the function returns ``(None, None)`` and surfaces
+    the targeted "predictor missing, alleles available" warning so
+    the operator knows what to fix.
+
+    Patches ``mhctools.MHCflurry`` itself to raise — replacing the
+    sys.modules entry would crater anything else that imports
+    mhctools concurrently.
+    """
+    import mhctools
+    from vaxrank.cli import entry_point as ep
+
+    def _broken_ctor(*_a, **_kw):
+        raise OSError("simulated: mhcflurry weights not available")
+    monkeypatch.setattr(mhctools, 'MHCflurry', _broken_ctor)
+
+    args = _args_with_inferred_alleles(['HLA-A*02:01'])
+    with _capture_logger('vaxrank.cli.entry_point') as records:
+        predictor, alleles = ep._resolve_mhc_for_linker_optimizer(args)
     assert predictor is None
-    # Function returns (None, None) because predictor is unset; alleles
-    # alone can't drive chimeric-k-mer scoring.
     assert alleles is None
     msgs = [r.getMessage() for r in records]
-    assert any('inferred from the LENS / pVACseq report' in m for m in msgs), \
-        "Expected the 'alleles inferred' INFO line; got %r" % msgs
-    pred_missing = [
-        r for r in records
-        if r.levelno == logging.WARNING
-        and 'alleles are available' in r.getMessage()
-    ]
-    assert pred_missing, \
-        "Expected the 'predictor missing, alleles available' hint"
+    assert any(
+        'alleles are available' in m and 'no MHC predictor' in m
+        for m in msgs), \
+        "Expected the 'predictor missing, alleles available' WARNING; got %r" % msgs
 
 
 def test_resolve_mhc_no_inputs_at_all():
@@ -233,6 +273,65 @@ def test_log_args_summary_verbose_shows_defaults():
     # Defaults visible with ``(default)`` annotation.
     assert 'peptide_mode' in msg
     assert '(default)' in msg
+
+
+# -- _auto_populate_output_paths_from_dir -----------------------------
+
+
+def test_auto_populate_pipeline_path_fills_csv_and_json():
+    """Pipeline run (no LENS / pVACseq input) with just
+    ``--output-dir`` set should auto-fill canonical CSV + JSON
+    paths inside the directory."""
+    from vaxrank.cli.entry_point import _auto_populate_output_paths_from_dir
+    args = SimpleNamespace(
+        output_dir='/tmp/run',
+        input_lens=None, input_pvacseq=None,
+        output_csv='', output_json_file='')
+    _auto_populate_output_paths_from_dir(args)
+    assert args.output_csv == '/tmp/run/ranked_vaccine_peptides.csv'
+    assert args.output_json_file == '/tmp/run/ranked_vaccine_peptides.json'
+
+
+def test_auto_populate_lens_path_fills_neoepitope_csv():
+    """LENS path's natural rank report is per-(peptide, allele) —
+    the auto-fill picks ``neoepitope_predictions.csv`` instead of
+    ``ranked_vaccine_peptides.csv`` so the filename matches the
+    content. JSON dump is skipped (the LENS path doesn't build the
+    rich in-memory result that --output-json-file serializes)."""
+    from vaxrank.cli.entry_point import _auto_populate_output_paths_from_dir
+    args = SimpleNamespace(
+        output_dir='/tmp/lens-run',
+        input_lens='/path/to/lens.tsv', input_pvacseq=None,
+        output_csv='', output_json_file='')
+    _auto_populate_output_paths_from_dir(args)
+    assert args.output_csv == '/tmp/lens-run/neoepitope_predictions.csv'
+    assert args.output_json_file == ''
+
+
+def test_auto_populate_explicit_paths_win():
+    """When the user explicitly passes ``--output-csv`` /
+    ``--output-json-file``, the auto-fill must not overwrite them."""
+    from vaxrank.cli.entry_point import _auto_populate_output_paths_from_dir
+    args = SimpleNamespace(
+        output_dir='/tmp/run',
+        input_lens=None, input_pvacseq=None,
+        output_csv='/elsewhere/custom.csv',
+        output_json_file='/elsewhere/custom.json')
+    _auto_populate_output_paths_from_dir(args)
+    assert args.output_csv == '/elsewhere/custom.csv'
+    assert args.output_json_file == '/elsewhere/custom.json'
+
+
+def test_auto_populate_no_output_dir_is_a_noop():
+    """Without ``--output-dir`` the helper does nothing — the
+    operator-passed flags determine output destinations as before."""
+    from vaxrank.cli.entry_point import _auto_populate_output_paths_from_dir
+    args = SimpleNamespace(
+        output_dir='', input_lens=None, input_pvacseq=None,
+        output_csv='', output_json_file='')
+    _auto_populate_output_paths_from_dir(args)
+    assert args.output_csv == ''
+    assert args.output_json_file == ''
 
 
 # -- LENS antigen-source breakdown ordering ---------------------------
