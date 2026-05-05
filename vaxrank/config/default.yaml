@@ -16,10 +16,11 @@
 #                                        ranking; applies to BOTH peptide AND
 #                                        mRNA — name kept for back-compat)
 #   manufacturability  -> VaccineConfig (peptide-synthesis difficulty rules)
-#   vaccine_constructs -> per-modality construct-assembly knobs with a
-#                         `defaults` subsection for values applied to
-#                         every modality that doesn't override them
-#                         (CLI flags continue to work and override config)
+#   vaccine_constructs -> per-modality construct-assembly knobs;
+#                         cross-modality values at the section top
+#                         level, modality-specific values under
+#                         `peptide:` / `mrna:` subsections (CLI flags
+#                         continue to work and override config)
 
 
 epitopes:
@@ -189,7 +190,7 @@ manufacturability:
 #     # Peptide-only knobs. Cross-modality knobs from above are
 #     # available here too if you need a peptide-specific value.
 #     mode: slp                            # slp | minimal_epitope | multi_epitope
-#     linker: G4S3                         # multi_epitope linker
+#     linker: G4Sx3                        # multi_epitope linker; (G4S)3 = GGGGSGGGGSGGGGS
 #     antigens_per_construct: 1            # SLP default; 5+ for multi_epitope
 #     max_constructs: 20                   # PGV-001 pool size
 #     n_terminal_acetyl: false             # marked in vendor order form
@@ -201,7 +202,7 @@ manufacturability:
 #   mrna:
 #     # mRNA-only knobs. Cross-modality knobs from above are
 #     # available here too if you need an mrna-specific value.
-#     linker: (G4S)2                       # BioNTech FixVac canonical
+#     linker: G4Sx2                        # (G4S)2 = GGGGSGGGGS, BioNTech FixVac canonical
 #     antigens_per_construct: 5            # FixVac canonical
 #     max_constructs: 1
 #     max_length_nt: 4000
