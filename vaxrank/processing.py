@@ -290,17 +290,14 @@ def annotate_processing(predictions, predictor=None,
             "EpitopePrediction(s) across %d unique source sequence(s).",
             n_annotated, len(predictions_list), len(by_source))
     if n_skipped_peptide_not_in_context:
-        # Show the first example with full context so the user can
-        # paste it into an upstream LENS bug report.
         ex_peptide, ex_source = skipped_examples[0]
         logger.warning(
             "Pepsickle credibility tagging: skipped %d / %d "
             "EpitopePrediction(s) because the peptide is not a "
-            "substring of its pep_context source — likely a LENS "
-            "issue where peptide and pep_context were built from "
-            "different isoforms / annotation snapshots. Example: "
-            "peptide=%r not found in pep_context=%r. File upstream "
-            "if this rate is non-trivial.",
+            "substring of its pep_context source — peptide and "
+            "pep_context were built from different isoforms / "
+            "annotation snapshots. Example: peptide=%r not found "
+            "in pep_context=%r.",
             n_skipped_peptide_not_in_context, len(predictions_list),
             ex_peptide, ex_source)
     return n_annotated

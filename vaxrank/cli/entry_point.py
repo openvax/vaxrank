@@ -389,6 +389,225 @@ def _emit_peptide_constructs(args, ranked, target_dir):
         len(constructs), target_dir)
 
 
+_ARG_GROUPS = (
+    ("Inputs", (
+        'vcf', 'bam', 'input_lens', 'input_pvacseq',
+        'ensembl_release', 'genome', 'tumor_sample_name',
+        'input_json_file',
+    )),
+    ("MHC", (
+        'mhc_predictor', 'mhc_alleles', 'mhc_alleles_file',
+        'mhc_epitope_lengths',
+    )),
+    ("Vaccine design", (
+        'vaccine_type', 'vaccine_peptide_length',
+        'padding_around_mutation', 'antigen_content',
+        'epitopes_per_antigen',
+    )),
+    ("Peptide", (
+        'peptide_mode', 'peptide_linker',
+        'peptide_min_antigen_length_aa', 'peptide_max_antigen_length_aa',
+        'peptide_antigens_per_construct', 'peptide_max_constructs',
+        'peptide_candidates_per_slot', 'peptide_n_terminal_acetyl',
+        'peptide_c_terminal_amide', 'peptide_scale_mg',
+        'peptide_purity_percent', 'peptide_counterion',
+        'peptide_antigen_content', 'peptide_epitopes_per_antigen',
+    )),
+    ("mRNA", (
+        'mrna_signal_peptide', 'mrna_linker', 'mrna_include_mitd',
+        'mrna_mitd', 'mrna_5p_utr', 'mrna_3p_utr',
+        'mrna_min_antigen_length_aa', 'mrna_max_antigen_length_aa',
+        'mrna_antigens_per_construct', 'mrna_max_constructs',
+        'mrna_candidates_per_slot', 'mrna_max_length_nt',
+        'mrna_codon_species', 'mrna_codon_method',
+        'mrna_optimize_linkers', 'mrna_junction_candidates',
+        'mrna_junction_rank_strong', 'mrna_junction_rank_mild',
+        'mrna_poly_a_length', 'mrna_poly_a_segmented',
+        'mrna_poly_a_first_segment', 'mrna_poly_a_segment_linker',
+        'mrna_csv_full_rows', 'mrna_antigen_content',
+        'mrna_epitopes_per_antigen',
+    )),
+    ("Processing-aware annotation", (
+        'processing_aware_annotation', 'pepsickle_human_only',
+        'pepsickle_threshold',
+    )),
+    ("Outputs", (
+        'output_dir', 'output_csv', 'output_xlsx_report',
+        'output_ascii_report', 'output_html_report',
+        'output_pdf_report', 'output_neoepitope_report',
+        'output_json_file', 'output_passing_variants_csv',
+        'output_isovar_csv', 'output_epitopes',
+        'output_patient_id', 'output_reviewed_by',
+        'output_final_review', 'pdf_backend', 'log_path',
+    )),
+    ("Reports", (
+        'manufacturability', 'wt_epitopes', 'cosmic_vcf_filename',
+        'max_mutations_in_report',
+    )),
+    ("Config", (
+        'config', 'config_set_overrides', 'config_expr_overrides',
+    )),
+)
+
+
+def _log_args_summary(args):
+    """Pretty-print the resolved args. Replaces ``logger.info(args)``
+    which was a single flat ``Namespace(...)`` dump that scrolled past
+    100 keys without grouping. We log:
+
+    * Section header per :data:`_ARG_GROUPS` group (only sections
+      with at least one set value).
+    * Within each section: ``key = value`` rows for keys whose value
+      *differs* from the parser default OR is a non-empty string —
+      the parser-defaults snapshot in ``args._parser_defaults``
+      lets us hide everything boring.
+    * A single ``(N defaults hidden — pass --verbose to see all)``
+      footer per section so the user knows the noise is suppressed,
+      not lost.
+
+    With ``--verbose`` (or DEBUG), every key prints (including
+    defaults). On the LENS path, args carries auto-inferred state
+    (``_inferred_mhc_alleles_from_lens``); those underscore-prefixed
+    keys are surfaced separately so the operator can see what was
+    auto-wired.
+    """
+    parser_defaults = getattr(args, '_parser_defaults', None) or {}
+    namespace = vars(args).copy()
+    namespace.pop('_parser_defaults', None)
+
+    verbose = bool(getattr(args, 'verbose', False))
+
+    grouped: dict[str, list[tuple[str, object]]] = {}
+    consumed: set[str] = set()
+    for section_name, keys in _ARG_GROUPS:
+        rows = []
+        for k in keys:
+            if k not in namespace:
+                continue
+            consumed.add(k)
+            v = namespace[k]
+            default = parser_defaults.get(k, _MISSING_SENTINEL)
+            is_default = (default is not _MISSING_SENTINEL and v == default)
+            if is_default and not verbose:
+                continue
+            rows.append((k, v, is_default))
+        if rows:
+            grouped[section_name] = rows
+    # Anything not claimed by a known section goes under "Other".
+    other_rows = []
+    for k, v in sorted(namespace.items()):
+        if k in consumed or k.startswith('_'):
+            continue
+        default = parser_defaults.get(k, _MISSING_SENTINEL)
+        is_default = (default is not _MISSING_SENTINEL and v == default)
+        if is_default and not verbose:
+            continue
+        other_rows.append((k, v, is_default))
+    if other_rows:
+        grouped['Other'] = other_rows
+
+    inferred_rows = [
+        (k, v) for k, v in sorted(vars(args).items())
+        if k.startswith('_') and k != '_parser_defaults' and v
+    ]
+
+    lines = ["Vaxrank run configuration:"]
+    for section, rows in grouped.items():
+        lines.append("  [%s]" % section)
+        for k, v, is_default in rows:
+            marker = " (default)" if is_default and verbose else ""
+            lines.append("    %-32s = %r%s" % (k, v, marker))
+        if not verbose:
+            hidden = sum(
+                1 for kk in dict(_ARG_GROUPS).get(section, ())
+                if kk in namespace
+                and namespace[kk] == parser_defaults.get(kk, _MISSING_SENTINEL)
+            )
+            if hidden:
+                lines.append(
+                    "    (%d default(s) hidden — pass --verbose for all)"
+                    % hidden)
+    if inferred_rows:
+        lines.append("  [auto-inferred]")
+        for k, v in inferred_rows:
+            lines.append("    %-32s = %r" % (k, v))
+    logger.info("\n".join(lines))
+
+
+_MISSING_SENTINEL = object()
+
+
+def _resolve_mhc_for_linker_optimizer(args):
+    """Find a usable (predictor, alleles) pair for the per-junction
+    linker optimizer.
+
+    Resolution:
+
+    1. Pipeline path (``--mhc-predictor`` + ``--mhc-alleles`` on the
+       CLI): build both from ``args``.
+    2. External path (LENS / pVACseq): the report carries the
+       alleles; the LENS loader stashes them on
+       ``args._inferred_mhc_alleles_from_lens``. Predictor still
+       has to come from ``--mhc-predictor`` (LENS bundles
+       pre-computed scores, not the predictor binary). When alleles
+       are inferred but the predictor isn't set, log a targeted
+       hint instead of the generic "missing both" warning.
+    3. Anything missing → optimizer falls back to the shared
+       linker at every junction.
+
+    Returns ``(predictor, alleles)`` with ``None`` for either piece
+    that's unavailable. Callers must handle ``None`` either side.
+    """
+    predictor = None
+    alleles = None
+    predictor_err = None
+    alleles_err = None
+    try:
+        predictor = mhc_binding_predictor_from_args(args)
+    except Exception as e:
+        predictor_err = e
+    try:
+        alleles = mhc_alleles_from_args(args)
+    except Exception as e:
+        alleles_err = e
+    inferred = getattr(args, '_inferred_mhc_alleles_from_lens', None) or None
+    if alleles is None and inferred:
+        alleles = inferred
+        logger.info(
+            "Per-junction linker optimization: using %d MHC allele(s) "
+            "inferred from the LENS / pVACseq report (%s).",
+            len(alleles), ", ".join(sorted(set(alleles))[:5])
+            + ("…" if len(set(alleles)) > 5 else ""))
+    if predictor is None or alleles is None:
+        # Targeted hints based on what's missing. Operator-friendly:
+        # the previous code lumped both failure modes into one
+        # message and pointed at both flags every time.
+        if alleles is None and predictor is None:
+            logger.warning(
+                "Per-junction linker optimization disabled: no MHC "
+                "alleles or predictor available. Pass --mhc-alleles "
+                "+ --mhc-predictor (pipeline path), or rely on "
+                "LENS / pVACseq inference + --mhc-predictor "
+                "(external path).")
+        elif predictor is None:
+            logger.warning(
+                "Per-junction linker optimization disabled: alleles "
+                "are available%s but no MHC predictor is set. Pass "
+                "--mhc-predictor (e.g. mhcflurry) to enable junction "
+                "scoring.",
+                " (inferred from report)" if inferred else "")
+        else:
+            logger.warning(
+                "Per-junction linker optimization disabled: predictor "
+                "loaded but no --mhc-alleles set.")
+        if predictor_err is not None:
+            logger.debug("MHC predictor load failed: %r", predictor_err)
+        if alleles_err is not None and inferred is None:
+            logger.debug("MHC alleles load failed: %r", alleles_err)
+        return (None, None)
+    return (predictor, alleles)
+
+
 def _emit_mrna_constructs(args, ranked, target_dir):
     """Build + write mRNA-vaccine constructs. Modality-specific."""
     yaml_kwargs = _construct_config_for_modality(args, 'mrna')
@@ -446,19 +665,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
             'mrna_poly_a_segment_linker', 'poly_a_segment_linker'),
     )
     if options.optimize_linkers:
-        try:
-            mhc_predictor = mhc_binding_predictor_from_args(args)
-            mhc_alleles = mhc_alleles_from_args(args)
-        except Exception as e:
-            logger.warning(
-                "Could not load MHC predictor / alleles for "
-                "per-junction linker optimization (%s). The optimizer "
-                "will fall back to the shared linker at every junction. "
-                "Set --mhc-predictor + --mhc-alleles to enable it.", e)
-            logger.debug(
-                "Predictor / alleles load traceback:", exc_info=True)
-            mhc_predictor = None
-            mhc_alleles = None
+        mhc_predictor, mhc_alleles = _resolve_mhc_for_linker_optimizer(args)
     else:
         mhc_predictor = None
         mhc_alleles = None
@@ -670,7 +877,7 @@ def main(args_list=None):
     # logic lives in exactly one place.
     if getattr(args, 'manufacturability', None) is None:
         args.manufacturability = 'peptide' in _resolve_vaccine_types(args)
-    logger.info(args)
+    _log_args_summary(args)
 
     # Fail fast when no output path is set, *before* loading inputs or
     # running predictions. Otherwise a long --input-lens run silently
@@ -721,6 +928,21 @@ def main(args_list=None):
                 "External input produced no ranked vaccine peptides; "
                 "writing only the per-(peptide, allele) neoepitope "
                 "report (if requested).")
+        # Stash MHC alleles inferred from the LENS / pVACseq report
+        # so the per-junction linker optimizer (which runs from
+        # ``_emit_mrna_constructs``) can pick them up without
+        # ``--mhc-alleles`` being on the CLI. The external arg
+        # parser doesn't include the mhctools args, so the predictor
+        # still has to come from ``--mhc-predictor`` if set —
+        # ``_resolve_mhc_for_linker_optimizer`` produces a targeted
+        # message when alleles are inferred but predictor is missing.
+        if patient_info is not None:
+            args._inferred_mhc_alleles_from_lens = [
+                a for a in (patient_info.mhc_alleles or [])
+                if a and not a.startswith('(')  # skip the
+                # ``(inferred from report)`` provenance marker added
+                # in ``_patient_info_from_external``.
+            ]
         # Per-(peptide, allele) CSV / XLSX report is unique to the
         # external-input path; emit it before the shared dispatch.
         _emit_neoepitope_report_external(args, report_df, predictions)

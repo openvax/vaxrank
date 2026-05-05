@@ -312,36 +312,42 @@ def test_mrna_fasta_uses_semicolon_antigen_separator():
     assert "GENEA_1_100_A_T,GENEB_2_200_A_T" not in header
 
 
-def test_mrna_max_constructs_warning_reports_dropped_count(caplog):
+def test_mrna_max_constructs_logs_topk_selection_at_info(caplog):
     """When ``--mrna-max-constructs`` caps off the input list, the
-    warning needs to name how many antigens were dropped — naming
-    only the first one (``including X``) leaves the operator unable
-    to tell whether they lost 1 or 379. Pin the dropped-count
-    format so the user-facing diagnostic is useful."""
+    log line must (a) be INFO not WARNING (top-k selection is the
+    whole point of vaxrank, not an error), and (b) name the kept
+    count + total-ranked count so the operator can tell what fraction
+    landed in the vaccine."""
     import logging
     # Build 6 antigens against a cap of 1 construct × 2 antigens =
-    # 2 placed, 4 dropped.
+    # 2 selected, 4 not selected.
     pairs = [
         _variant_pair("KLQGHSAPVLDVIVN", contig=str(i + 1),
                       start=1000 + i, gene_name="GENE%d" % i)
         for i in range(6)
     ]
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.INFO):
         assemble_mrna_constructs(
             pairs,
             options=RNAConstructConfig(
                 signal_peptide=None, include_mitd=False,
                 utr_3p='HBB', poly_a_length=0,
                 antigens_per_construct=2, max_constructs=1))
-    cap_msgs = [
-        r.getMessage() for r in caplog.records
-        if "max-constructs" in r.getMessage()
+    # The cap event surfaces at INFO, never WARNING.
+    cap_records = [
+        r for r in caplog.records
+        if 'mRNA assembly' in r.getMessage()
+        and '--mrna-max-constructs' in r.getMessage()
     ]
-    assert cap_msgs, "Expected a --mrna-max-constructs cap warning"
-    msg = cap_msgs[0]
-    # 4 / 6 dropped; first dropped name appears too.
-    assert "4" in msg
+    assert cap_records, \
+        "Expected an mRNA assembly top-k log line at the cap"
+    assert all(r.levelno == logging.INFO for r in cap_records), \
+        "Cap event must be INFO, not WARNING (top-k selection is the goal)"
+    msg = cap_records[0].getMessage()
+    # Selected 2 of 6 ranked antigens.
+    assert "2" in msg
     assert "6" in msg
+    # The next-best (not-selected) antigen is named for traceability.
     assert "GENE2" in msg
 
 

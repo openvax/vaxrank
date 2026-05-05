@@ -619,11 +619,12 @@ def add_mrna_output_args(group):
              "antigen content is 'minimal_epitope'.")
     group.add_argument(
         "--mrna-max-constructs",
-        default=1,
+        default=2,
         type=int,
-        help="Maximum number of mRNA constructs in the vaccine. Default: 1 "
-             "(one construct carrying all antigens). Higher values let "
-             "additional constructs absorb spillover.")
+        help="Maximum number of mRNA constructs in the vaccine. "
+             "Default: 2 (BioNTech FixVac canonical: 2× pentatope, "
+             "10 antigens at 5/construct, Sahin 2017). Set to 1 for "
+             "a single construct; raise for broader coverage.")
     group.add_argument(
         "--mrna-candidates-per-slot",
         default=1,

@@ -171,7 +171,10 @@ class RNAConstructConfig:
     min_antigen_length_aa: int = 15
     max_antigen_length_aa: int = 25  # Sahin 2017 used 27mers; 25 is typical
     antigens_per_construct: int = 5
-    max_constructs: int = 1
+    # BioNTech FixVac canonical: 2× pentatope = 10 antigens at
+    # 5 antigens/construct (Sahin 2017). Set to 1 for a single
+    # construct; raise for broader coverage.
+    max_constructs: int = 2
     candidates_per_slot: int = 1
     max_length_nt: int = 4000
     avoid_patterns: tuple = ()
@@ -547,29 +550,32 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
             antigen_nt = len(aa) * 3
             linker_nt = 0
             if len(constructs) >= options.max_constructs:
-                # Count dropped antigens so the operator can tell
-                # whether they lost 1 or 379. ``total_antigens`` is
-                # known when the caller passes a list (the normal
-                # path); on a generator we fall back to "remaining"
-                # without a total.
-                remaining = (
-                    total_antigens - i if total_antigens is not None
-                    else None)
-                if remaining is not None:
-                    logger.warning(
-                        "Reached --mrna-max-constructs (%d); "
-                        "dropping %d / %d ranked antigen(s) past the "
-                        "cap (first dropped: %s). Bump "
-                        "--mrna-max-constructs to spill into more "
-                        "constructs.",
-                        options.max_constructs, remaining,
-                        total_antigens, name)
+                # Top-k selection log. Ranking N candidates and
+                # keeping the top k (the chosen 5 antigens × 1
+                # construct here) is *the whole point* — not a
+                # warning, not "spill" / "drop" panic language.
+                # Operators who want a different cut control it via
+                # ``--mrna-max-constructs`` /
+                # ``--mrna-antigens-per-construct``. ``total_antigens``
+                # is None on a generator caller; the count line is
+                # the only thing that requires it.
+                kept = sum(len(c) for c in constructs)
+                if total_antigens is not None:
+                    logger.info(
+                        "mRNA assembly: selected top %d / %d "
+                        "ranked antigen(s) into %d construct(s) at "
+                        "--mrna-max-constructs=%d. Lower-ranked "
+                        "antigens past the cap (e.g. %s) are "
+                        "available in --output-csv / "
+                        "--output-json-file for downstream review.",
+                        kept, total_antigens, len(constructs),
+                        options.max_constructs, name)
                 else:
-                    logger.warning(
-                        "Reached --mrna-max-constructs (%d); "
-                        "dropping remaining antigens (first: %s). "
-                        "Bump --mrna-max-constructs to spill into "
-                        "more constructs.",
+                    logger.info(
+                        "mRNA assembly: selected top %d ranked "
+                        "antigen(s) into %d construct(s) at "
+                        "--mrna-max-constructs=%d (next-best: %s).",
+                        kept, len(constructs),
                         options.max_constructs, name)
                 return constructs
         # A single antigen larger than the length cap is still emitted in
