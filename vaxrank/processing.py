@@ -12,18 +12,18 @@
 
 """Proteasomal cleavage credibility tagging for MHC ligand predictions.
 
-For each predicted MHC ligand, attach three scores. All three carry
-the ``pepsickle_`` prefix so the predictor is unambiguous in CSVs,
-log lines, and report columns; a future per-position cleavage
-predictor (NetChop, PAProC, …) can land alongside without colliding.
+For each predicted MHC ligand, build a
+:class:`vaxrank.processing_prediction.ProcessingPrediction` record
+keyed on ``(peptide, source_sequence, predictor_name)``. Each carries
+three scores:
 
-  pepsickle_c_term_cleavage_prob    pepsickle's probability the
+  c_term_cleavage_prob              pepsickle's probability the
                                     proteasome cuts at the ligand's
                                     C-terminus (clean release)
-  pepsickle_max_internal_cut_prob   peak cleavage probability strictly
+  max_internal_cut_prob             peak cleavage probability strictly
                                     inside the ligand (high → ligand
                                     is destroyed before reaching MHC)
-  pepsickle_processing_score        composite ``sqrt(c_term *
+  processing_score                  composite ``sqrt(c_term *
                                     (1 - max_internal))`` — the
                                     geometric mean of the two factors;
                                     1.0 = ideal release, 0.0 = no
@@ -32,6 +32,17 @@ predictor (NetChop, PAProC, …) can land alongside without colliding.
                                     rather than the raw product so
                                     a balanced (0.6, 0.6) row scores
                                     ~0.6 instead of 0.36.
+
+``ProcessingPrediction`` is the canonical record post-2.22 (see
+:mod:`vaxrank.processing_prediction`). Pre-2.22 vaxrank annotated
+``EpitopePrediction`` objects in place with ``pepsickle_*`` fields
+— that conflated MHC-binding and processing predictions, which are
+on different axes (binding has an allele dimension; processing
+doesn't). The legacy in-place mutation is preserved for one
+deprecation cycle so existing report writers keep rendering;
+:func:`annotate_processing` returns a map of
+``(peptide, source, predictor_name) -> ProcessingPrediction`` that
+new readers can join into at render time.
 
 The annotations are purely additive — vaccine ranking is unaffected.
 Reports surface the three columns when at least one prediction in
@@ -63,7 +74,15 @@ import logging
 
 from mhctools.processing_predictor import ProcessingPredictor
 
+from .processing_prediction import ProcessingPrediction
+
 logger = logging.getLogger(__name__)
+
+
+# Lowercase predictor identifier used in the ProcessingPrediction
+# join key. Future per-position cleavage predictors (NetChop,
+# PAProC, …) get their own constant.
+_PEPSICKLE_PREDICTOR_NAME = 'pepsickle'
 
 
 # ----------------------------------------------------------------------------
@@ -153,17 +172,21 @@ def _load_default_predictor(human_only=False, threshold=0.5):
 
 def annotate_processing(predictions, predictor=None,
                         human_only=False, threshold=0.5):
-    """Attach pepsickle credibility scores to each EpitopePrediction
-    in place.
+    """Build a map of pepsickle ``ProcessingPrediction`` records for
+    the given EpitopePredictions, and (for one deprecation cycle)
+    also annotate each EpitopePrediction in place with the legacy
+    ``pepsickle_*`` fields.
 
     Parameters
     ----------
     predictions : iterable of EpitopePrediction
-        Mutated in place: each gets ``pepsickle_c_term_cleavage_prob``
-        / ``pepsickle_max_internal_cut_prob`` /
+        Each prediction is processed against its ``source_sequence``.
+        Legacy in-place mutation: each gets
+        ``pepsickle_c_term_cleavage_prob`` /
+        ``pepsickle_max_internal_cut_prob`` /
         ``pepsickle_processing_score`` populated when annotation
-        succeeds. Predictions with no usable source sequence are
-        passed through unchanged.
+        succeeds. Predictions with no usable source sequence pass
+        through unchanged.
     predictor : optional, object with a ``cleavage_probs(sequence) ->
         list[float]`` method
         Test seam. When None (default), constructs
@@ -178,12 +201,20 @@ def annotate_processing(predictions, predictor=None,
 
     Returns
     -------
-    int
-        Number of predictions successfully annotated.
+    tuple
+        ``(n_annotated, processing_predictions_by_key)``.
+
+        * ``n_annotated`` (int): number of predictions successfully
+          annotated. Same number as before for back-compat.
+        * ``processing_predictions_by_key`` (dict): keyed on
+          ``(peptide_sequence, source_sequence, predictor_name)`` —
+          the canonical post-2.22 record (see :mod:`vaxrank.processing_prediction`).
+          Empty dict when nothing was annotated.
     """
     predictions_list = list(predictions)
+    processing_predictions: dict[tuple, ProcessingPrediction] = {}
     if not predictions_list:
-        return 0
+        return 0, processing_predictions
 
     # Group by source so we score each unique sequence exactly once.
     by_source = {}
@@ -193,7 +224,7 @@ def annotate_processing(predictions, predictor=None,
             continue
         by_source.setdefault(source, []).append(p)
     if not by_source:
-        return 0
+        return 0, processing_predictions
 
     # Resolve the predictor, then ask it for per-position cleavage
     # probabilities on each unique source sequence. The default path
@@ -203,7 +234,7 @@ def annotate_processing(predictions, predictor=None,
         predictor = _load_default_predictor(
             human_only=human_only, threshold=threshold)
         if predictor is None:
-            return 0
+            return 0, processing_predictions
 
     # Batch every unique source into ONE predictor call when the
     # predictor exposes ``cleavage_probs_many`` (mhctools 3.13.3+).
@@ -268,8 +299,6 @@ def annotate_processing(predictions, predictor=None,
                 seq_probs, offset, len(peptide))
             if c_term is None:
                 continue
-            p.pepsickle_c_term_cleavage_prob = c_term
-            p.pepsickle_max_internal_cut_prob = max_internal
             # Composite score is the **geometric mean** of the two
             # factors — ``sqrt(c_term * (1 - max_internal))``. Range
             # [0, 1]; 1 = ideal release, 0 = no clean release OR
@@ -281,7 +310,27 @@ def annotate_processing(predictions, predictor=None,
             # max_internal)=0.6 should score ~0.6, not 0.36.
             import math
             anti_max = max(0.0, 1.0 - max_internal)
-            p.pepsickle_processing_score = math.sqrt(c_term * anti_max)
+            processing_score = math.sqrt(c_term * anti_max)
+            # Build the canonical ProcessingPrediction record (the
+            # post-2.22 source of truth — keyed on
+            # ``(peptide, source, predictor_name)`` so future
+            # per-position cleavage predictors land alongside).
+            pp = ProcessingPrediction(
+                peptide_sequence=peptide,
+                source_sequence=source,
+                predictor_name=_PEPSICKLE_PREDICTOR_NAME,
+                predictor_version=getattr(
+                    predictor, 'version', None),
+                c_term_cleavage_prob=c_term,
+                max_internal_cut_prob=max_internal,
+                processing_score=processing_score,
+            )
+            processing_predictions[pp.key()] = pp
+            # Legacy in-place mutation (deprecated; kept for one
+            # cycle so existing report writers keep rendering).
+            p.pepsickle_c_term_cleavage_prob = c_term
+            p.pepsickle_max_internal_cut_prob = max_internal
+            p.pepsickle_processing_score = processing_score
             n_annotated += 1
 
     if n_annotated:
@@ -300,7 +349,7 @@ def annotate_processing(predictions, predictor=None,
             "in pep_context=%r.",
             n_skipped_peptide_not_in_context, len(predictions_list),
             ex_peptide, ex_source)
-    return n_annotated
+    return n_annotated, processing_predictions
 
 
 def _resolve_peptide_offset(source, peptide, prediction):

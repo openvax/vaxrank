@@ -91,7 +91,7 @@ def test_annotate_processing_attaches_continuous_scores():
              0.10, 0.20, 0.05, 0.50, 0.30, 0.85,   # peptide positions 4-9
              0.0, 0.0, 0.0, 0.0]
     pred = _ep("KLMNPV", source, offset=4)
-    n = annotate_processing(
+    n, _ = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
     assert n == 1
     # C-term = probs at index 9 = 0.85 (clean release)
@@ -104,6 +104,35 @@ def test_annotate_processing_attaches_continuous_scores():
     import math
     assert abs(pred.pepsickle_processing_score
                - math.sqrt(0.85 * 0.50)) < 1e-9
+
+
+def test_annotate_processing_returns_processing_prediction_map():
+    """Post-2.22 ``annotate_processing`` returns a tuple of
+    ``(n_annotated, processing_predictions_by_key)`` — the map is
+    the canonical record (decoupled from EpitopePrediction).
+    Each entry is a ``ProcessingPrediction`` keyed on
+    ``(peptide, source, predictor_name)``."""
+    from vaxrank.processing_prediction import ProcessingPrediction
+    source = "AAAAKLMNPVAAAA"
+    probs = [0.0] * 4 + [0.10, 0.20, 0.05, 0.50, 0.30, 0.85] + [0.0] * 4
+    pred = _ep("KLMNPV", source, offset=4)
+    n, by_key = annotate_processing(
+        [pred], predictor=StubPepsickle({source: probs}))
+    assert n == 1
+    # Map carries one ProcessingPrediction keyed on
+    # (peptide, source, 'pepsickle').
+    assert len(by_key) == 1
+    key = ('KLMNPV', source, 'pepsickle')
+    assert key in by_key
+    pp = by_key[key]
+    assert isinstance(pp, ProcessingPrediction)
+    assert pp.peptide_sequence == 'KLMNPV'
+    assert pp.source_sequence == source
+    assert pp.predictor_name == 'pepsickle'
+    assert abs(pp.c_term_cleavage_prob - 0.85) < 1e-9
+    assert abs(pp.max_internal_cut_prob - 0.50) < 1e-9
+    # Same processing_score as the in-place mutation.
+    assert pp.processing_score == pred.pepsickle_processing_score
 
 
 def test_annotate_processing_one_pass_per_unique_source():
@@ -132,7 +161,7 @@ def test_annotate_processing_skips_predictions_without_source():
     """Predictions with empty source_sequence are passed through
     untouched (annotation requires a source to slice probs against)."""
     pred = _ep("KLMNPV", source="", offset=0)
-    n = annotate_processing(
+    n, _ = annotate_processing(
         [pred], predictor=StubPepsickle({}))
     assert n == 0
     assert pred.pepsickle_c_term_cleavage_prob is None
@@ -149,7 +178,7 @@ def test_annotate_processing_relocates_peptide_when_offset_off():
     probs = [0.0, 0.0, 0.0,   # 0-2
              0.10, 0.20, 0.05, 0.50, 0.30, 0.95,   # peptide at 3-8
              0.0, 0.0, 0.0]
-    n = annotate_processing(
+    n, _ = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
     assert n == 1
     # C-term should pick up probs[8] = 0.95 (re-located, not probs[1+5]=0.05)
@@ -188,7 +217,7 @@ def test_annotate_processing_predictor_failure_degrades_gracefully():
             return [0.5] * len(sequence)
     pred_ok = _ep("AAAAA", "AAAAAAAAAA", offset=2)
     pred_fail = _ep("FFFFF", "FFAILFFFFFF", offset=0)
-    n = annotate_processing(
+    n, _ = annotate_processing(
         [pred_ok, pred_fail], predictor=FlakyPredictor())
     # Only the OK one annotated; the failing source skipped, no crash.
     assert n == 1
@@ -197,7 +226,7 @@ def test_annotate_processing_predictor_failure_degrades_gracefully():
 
 
 def test_annotate_processing_empty_input_returns_zero():
-    n = annotate_processing([], predictor=StubPepsickle({}))
+    n, _ = annotate_processing([], predictor=StubPepsickle({}))
     assert n == 0
 
 
@@ -440,7 +469,7 @@ def test_warns_when_peptide_not_in_pep_context(caplog):
     source = "AAAAKLMNPVAAAA"
     pred = _ep("KLMXPV", source, offset=4)
     with caplog.at_level(logging.WARNING):
-        n = annotate_processing(
+        n, _ = annotate_processing(
             [pred],
             predictor=StubPepsickle({source: [0.5] * len(source)}))
     assert n == 0

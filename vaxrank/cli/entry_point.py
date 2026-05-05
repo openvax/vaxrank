@@ -179,7 +179,7 @@ def _annotate_predictions_with_processing(ranked_vaccine_peptides,
     for p in (lens_predictions or []):
         _maybe_add(p)
     if not all_predictions:
-        return 0
+        return 0, {}
     return annotate_processing(
         all_predictions, human_only=human_only, threshold=threshold)
 
