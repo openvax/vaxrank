@@ -591,6 +591,29 @@ def _resolve_mhc_for_linker_optimizer(args):
             "inferred from the LENS / pVACseq report (%s).",
             len(alleles), ", ".join(sorted(set(alleles))[:5])
             + ("…" if len(set(alleles)) > 5 else ""))
+    # When alleles are available but no predictor was supplied,
+    # fall back to mhcflurry as a credible default. Rationale:
+    # mhcflurry is pip-installable, the same tool LENS frequently
+    # uses, and the optimizer needs *some* live MHC predictor to
+    # score chimeric k-mers — refusing to optimize because the
+    # operator didn't pick one is worse than optimizing against a
+    # reasonable default. Operator can override with
+    # ``--mhc-predictor`` to pick something else (netmhcpan, …).
+    if predictor is None and alleles is not None:
+        try:
+            from mhctools import MHCflurry
+            predictor = MHCflurry(alleles=alleles)
+            logger.info(
+                "Per-junction linker optimization: --mhc-predictor "
+                "not set; defaulting to mhcflurry (presentation "
+                "score) for the chimeric-k-mer ranking. Pass "
+                "--mhc-predictor to override.")
+        except (ImportError, ValueError, KeyError, OSError) as e:
+            # mhcflurry not installed, or its weights aren't on
+            # disk. Stay with predictor=None and let the warning
+            # block below fire.
+            logger.debug("mhcflurry default-load failed: %r", e)
+            predictor_err = predictor_err or e
     if predictor is None or alleles is None:
         # Targeted hints based on what's missing. Operator-friendly:
         # the previous code lumped both failure modes into one
@@ -807,6 +830,59 @@ def _emit_outputs(args, ranked, source):
         source, vaccine_types, fired)
 
 
+_AUTO_OUTPUT_FILENAMES = {
+    # Pipeline path → ranked-peptides CSV / JSON.
+    'pipeline': {
+        'output_csv': 'ranked_vaccine_peptides.csv',
+        'output_json_file': 'ranked_vaccine_peptides.json',
+    },
+    # External path → per-(peptide, allele) neoepitope CSV; no
+    # JSON dump (the LENS / pVACseq path doesn't build the rich
+    # in-memory result that ``--output-json-file`` serializes).
+    'external': {
+        'output_csv': 'neoepitope_predictions.csv',
+    },
+}
+
+
+def _auto_populate_output_paths_from_dir(args):
+    """When ``--output-dir`` is set and the per-format output flags
+    are not, default them to canonical filenames inside the
+    directory. Lets ``--output-dir DIR`` produce the full bundle
+    (FASTAs + manifest + ranked-peptides CSV + JSON) without making
+    the operator list every flag.
+
+    Source-aware filename pick: pipeline (VCF/BAM) writes
+    ``ranked_vaccine_peptides.{csv,json}``; LENS / pVACseq writes
+    ``neoepitope_predictions.csv`` (the per-(peptide, allele) report
+    that's the LENS path's natural rank-report shape).
+
+    Explicit ``--output-csv`` / ``--output-json-file`` always win;
+    we only fill when the attribute is empty / None.
+    """
+    output_dir = getattr(args, 'output_dir', '') or ''
+    if not output_dir:
+        return
+    source = (
+        'external'
+        if (getattr(args, 'input_lens', None)
+            or getattr(args, 'input_pvacseq', None))
+        else 'pipeline')
+    auto_paths = _AUTO_OUTPUT_FILENAMES[source]
+    filled = []
+    for attr, filename in auto_paths.items():
+        if not getattr(args, attr, ''):
+            path = os.path.join(output_dir, filename)
+            setattr(args, attr, path)
+            filled.append((attr, path))
+    if filled:
+        logger.info(
+            "Auto-populating output paths inside --output-dir (%s): %s. "
+            "Pass the explicit flag to override.",
+            output_dir,
+            ", ".join("%s -> %s" % (a, p) for a, p in filled))
+
+
 def configure_logging(args):
     logging.config.fileConfig(
         str(files('vaxrank').joinpath('logging.conf')),
@@ -890,6 +966,13 @@ def main(args_list=None):
     # logic lives in exactly one place.
     if getattr(args, 'manufacturability', None) is None:
         args.manufacturability = 'peptide' in _resolve_vaccine_types(args)
+    # When ``--output-dir`` is set, auto-fill the canonical
+    # CSV / JSON output paths inside the directory so a user
+    # who passes just ``--output-dir mydir/`` gets the full
+    # bundle (FASTAs + manifest + ranked-peptides CSV +
+    # JSON dump) without listing every flag. Explicit
+    # ``--output-csv`` / ``--output-json-file`` paths win.
+    _auto_populate_output_paths_from_dir(args)
     _log_args_summary(args)
 
     # Fail fast when no output path is set, *before* loading inputs or
