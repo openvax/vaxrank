@@ -185,3 +185,54 @@ def test_dsl_default_methods_path_is_off_by_default():
     vp = _make_vp(combined_score_mode='sqrt_reads_times_epitope')
     assert vp._combined_score_expr_ast is None
     assert vp.combined_score == pytest.approx(math.sqrt(10) * 2.5)
+
+
+def test_dsl_parses_documented_default_yaml_examples():
+    """The commented examples in ``vaxrank/config/default.yaml`` must
+    parse and evaluate cleanly — drift between the documented
+    snippets and the grammar is the easiest way for a config-knob
+    doc to silently rot. Pin all four of the equivalences listed
+    under ``vaccine_peptides.combined_score_expr`` in default.yaml,
+    plus the documented ``log1p(...)`` example."""
+    from vaxrank.combined_score_dsl import (
+        parse_combined_score_expr, evaluate_combined_score)
+    documented = [
+        # The three legacy-mode equivalences.
+        'mutant_epitope_score',
+        'n_alt_reads * mutant_epitope_score',
+        'expression_score * mutant_epitope_score',
+        # The richer commented example.
+        'log1p(n_alt_reads) * mutant_epitope_score',
+    ]
+    vp = _make_vp(
+        n_alt_reads=10, mutant_epitope_score=2.0,
+        n_alt_reads_supporting_protein_sequence=4)
+    for expr in documented:
+        tree = parse_combined_score_expr(expr)
+        # Must produce a finite float — pinning that the bindings
+        # used by the documented snippets are actually exposed by
+        # the evaluator.
+        result = evaluate_combined_score(tree, vp)
+        assert math.isfinite(result), (
+            "Documented example %r evaluated to non-finite: %r"
+            % (expr, result))
+
+
+def test_dsl_eval_error_truncates_bindings_in_user_message():
+    """Evaluation-time errors should surface a *preview* of the
+    bindings, not the full dict — the full dict is logged at DEBUG.
+    Keeps multi-VP failure stacks readable."""
+    from vaxrank.combined_score_dsl import (
+        parse_combined_score_expr, evaluate_combined_score)
+    vp = _make_vp()
+    tree = parse_combined_score_expr('log(-1)')  # math domain error
+    with pytest.raises(ValueError) as excinfo:
+        evaluate_combined_score(tree, vp)
+    msg = str(excinfo.value)
+    # Preview header is present; "more)" suffix covers the
+    # truncated remainder.
+    assert 'preview' in msg.lower()
+    assert 'more)' in msg
+    # And the message stays compact: under ~400 chars even though
+    # there are 8 bindings of varying width.
+    assert len(msg) < 400, "error message too long: %r" % msg

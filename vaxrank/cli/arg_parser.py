@@ -822,9 +822,20 @@ def check_args(args):
 # Suffixes that look like a single-file output but ``--output-dir``
 # always wants a directory; same set ``mrna.py`` enforces locally for
 # its own writer, hoisted here so both writers get the check.
+#
+# Scoped narrowly to FASTA-family extensions and archive containers:
+# those are the formats this tree actually emits or that a user is
+# reasonably likely to mistake for a vaccine output. Tabular suffixes
+# (``.json`` / ``.csv`` / ``.tsv`` / ``.txt``) are deliberately *not*
+# included — those happen to be common directory names too (e.g.
+# ``runs/csv/`` for batch job outputs), and rejecting them
+# unconditionally trips users who picked a sensible directory name.
+# Mistakes in the tabular space surface as soon as the writer tries
+# to ``os.makedirs`` an existing file (caught by the ``isfile`` check
+# above).
 _OUTPUT_DIR_REJECTED_SUFFIXES = (
     '.fasta', '.fa', '.fna', '.ffn', '.fas',
-    '.json', '.csv', '.tsv', '.txt', '.zip', '.tar')
+    '.zip', '.tar')
 
 
 def _reject_output_dir_misuse(args):

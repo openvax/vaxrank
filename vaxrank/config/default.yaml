@@ -77,6 +77,25 @@ epitopes:
   #   "affinity.logistic_normalized(350, 150)"
   #   "affinity[mhcflurry].logistic_normalized(350, 150) * 0.5
   #     + affinity[netmhcpan].logistic_normalized(350, 150) * 0.5"
+  #
+  # NOTE on multi-model blends: averaging *transformed* scores is
+  # NOT the same thing as transforming an *averaged* affinity, because
+  # the logistic is non-linear. Both are reasonable; pick the one
+  # that matches your intent.
+  #
+  #   transform-then-average (defensive, picks the "weakest credible
+  #   binder" out of the panel; one bad model can drag the score down):
+  #     "affinity[mhcflurry].logistic_normalized(350, 150) * 0.5
+  #      + affinity[netmhcpan].logistic_normalized(350, 150) * 0.5"
+  #
+  #   average-then-transform (smooths the inputs first; one bad
+  #   model is partially absorbed by the other):
+  #     "((affinity[mhcflurry] + affinity[netmhcpan]) / 2)
+  #        .logistic_normalized(350, 150)"
+  #
+  # The two diverge most where the panel disagrees (e.g. one model
+  # at 50 nM, the other at 5000 nM) — the regime where this knob
+  # actually matters.
   # score_expr: null
 
   # ---- Default predictor methods (only matters with multi-model inputs) ----
@@ -147,6 +166,16 @@ vaccine_peptides:
   require_mutant_epitopes_in_variant: true
 
 
+# Peptide-only. Manufacturability rules describe synthesis-difficulty
+# of solid-phase peptide chemistry (GRAVY hydropathy, Cys content,
+# difficult N-termini, Asp-Pro bonds, …) and don't apply to mRNA
+# constructs (translated in vivo). Vaxrank still evaluates these
+# rules whenever ``vaccine_peptides.ranking_rules`` references the
+# ``manufacturability`` sentinel — they affect tie-breaking — but
+# the section is skipped from peptide-only reports automatically
+# when ``--vaccine-type`` is mRNA-only. Kept at the top level (not
+# under ``vaccine_constructs.peptide``) for back-compat with users
+# whose existing configs reference it here.
 manufacturability:
   # ---- Numeric thresholds (passed to the rule functions) ----
   max_c_terminal_hydropathy: 1.5

@@ -254,13 +254,21 @@ def _coalesce_from_config(args, cli_attr, config_kwargs, config_key):
 def _construct_config_for_modality(args, modality):
     """Return ``extract_construct_kwargs(merged_config, modality)``
     or ``{}`` if the YAML config can't be loaded (e.g. tests that
-    bypass the CLI). Matches the ``epitope_config_from_args_safe``
-    pattern used elsewhere."""
+    bypass the CLI and don't supply a --config attribute, or a path
+    that doesn't exist). Matches the ``epitope_config_from_args_safe``
+    pattern used elsewhere.
+
+    We deliberately catch ONLY the I/O / shape errors that mean
+    "no config to load." ``msgspec.ValidationError`` (raised when a
+    config file *does* exist but has typos / wrong types) is allowed
+    to propagate — those are user mistakes that should fail loudly at
+    the CLI surface, not be swallowed into a silent ``{}``.
+    """
     try:
         from ..config.loader import load_vaxrank_config, extract_construct_kwargs
         merged = load_vaxrank_config(args)
         return extract_construct_kwargs(merged, modality)
-    except Exception as e:
+    except (FileNotFoundError, OSError, AttributeError) as e:
         logger.debug(
             "vaccine_constructs config not loaded for %s (%s); "
             "using CLI defaults only.", modality, e)
@@ -545,18 +553,28 @@ def _emit_outputs(args, ranked, source):
         # the whole run. Partial output is worse than no output —
         # ending up with a peptide vaccine on disk but no mRNA
         # vaccine (or vice versa) is the kind of half-state that
-        # quietly ships to a downstream reviewer. Annotate the log
-        # before we let the exception propagate so the operator
-        # knows which modality crashed.
+        # quietly ships to a downstream reviewer. Name the
+        # successfully-written modalities AND the in-progress one
+        # before we let the exception propagate, since the failed
+        # writer may have left partial files behind in ``target_dir``
+        # that the operator needs to find and clean up.
         try:
             writer(args, ranked, target_dir)
         except Exception:
+            written = [
+                (t, _vaccine_target_dir(output_dir, t, vaccine_types))
+                for t in fired
+            ]
+            written_desc = (
+                ", ".join("%s -> %s" % (t, d) for t, d in written)
+                if written else "(none)")
             logger.error(
                 "Writer for --vaccine-type=%s failed; aborting the "
-                "run. Already-written modalities (if any): %s. "
+                "run. Fully written modalities: %s. Possibly-partial "
+                "output in: %s -> %s (inspect and remove if needed). "
                 "Re-run after fixing the issue, or pass a single "
                 "--vaccine-type if you want partial output.",
-                vtype, fired)
+                vtype, written_desc, vtype, target_dir)
             raise
         fired.append(vtype)
 

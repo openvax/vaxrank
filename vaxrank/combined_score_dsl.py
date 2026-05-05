@@ -80,7 +80,11 @@ these expressions:
 """
 
 import ast
+import logging
 import math
+
+
+logger = logging.getLogger(__name__)
 
 
 # Functions exposed to the expression namespace. All real-valued and
@@ -99,6 +103,18 @@ _FUNCTIONS = {
 # AST node types the parser permits. Every other node type raises at
 # parse time so the user gets the rejection at config-load, not at
 # scoring time.
+#
+# Trust boundary: ``combined_score_expr`` reaches us from a YAML
+# config the operator wrote — same channel as ``epitopes.score_expr``
+# and the rest of the vaxrank knobs. We are NOT defending against a
+# hostile user trying to wedge the process; the threat model is
+# "operator typo / pasted-in expression that happens to be expensive
+# to evaluate." Power and ``pow()`` are both allowed because they're
+# legitimately useful for score expressions; an operator who writes
+# ``2 ** (10 ** 9)`` will eat their own CPU and notice. If/when the
+# DSL ever takes input from an untrusted channel (e.g. a web form),
+# revisit: drop ``ast.Pow``, drop ``pow``, and add a per-node count
+# / arithmetic-magnitude cap. Until then the simplicity wins.
 _ALLOWED_NODES = (
     ast.Expression,
     ast.BinOp, ast.UnaryOp, ast.Constant, ast.Name, ast.Call,
@@ -213,8 +229,23 @@ def evaluate_combined_score(expr_or_tree, vaccine_peptide):
             namespace,
         ))
     except Exception as e:
+        # Truncate the bindings preview in the user-facing message —
+        # the full dump goes to DEBUG. Eight bindings today, but
+        # someone may add more (e.g. wildtype / synonymous reads),
+        # and per-VP exceptions can fan out across the whole ranked
+        # list — a long error stack is easier to read with a 3-key
+        # preview.
+        keys = sorted(bindings)
+        preview_keys = keys[:3]
+        preview = {k: bindings[k] for k in preview_keys}
+        suffix = (
+            ", ... (%d more)" % (len(keys) - len(preview_keys))
+            if len(keys) > len(preview_keys) else "")
+        logger.debug(
+            "combined_score_expr %r evaluation failure; full "
+            "bindings: %s", expr_text, bindings)
         raise ValueError(
             "combined_score_expr %r failed during evaluation: %s. "
-            "Bindings used: %s." % (
-                expr_text, e,
-                {k: v for k, v in bindings.items()})) from e
+            "Bindings preview: %s%s (set vaxrank logging to DEBUG "
+            "for the full bindings dict)." % (
+                expr_text, e, preview, suffix)) from e
