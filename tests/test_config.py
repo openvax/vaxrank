@@ -1395,13 +1395,13 @@ def test_extract_vaccine_config_kwargs_accepts_single_epitope_keep_path():
 
 # ----- vaccine_constructs section ---------------------------------------
 
-def test_extract_construct_kwargs_shared_only():
-    """``vaccine_constructs.shared`` knobs apply to every modality
+def test_extract_construct_kwargs_defaults_only():
+    """``vaccine_constructs.defaults`` knobs apply to every modality
     that doesn't override them."""
     from vaxrank.config.loader import extract_construct_kwargs
     config = {
         'vaccine_constructs': {
-            'shared': {
+            'defaults': {
                 'min_antigen_length_aa': 13,
                 'max_antigen_length_aa': 21,
                 'antigen_content': 'minimal_epitope',
@@ -1417,20 +1417,20 @@ def test_extract_construct_kwargs_shared_only():
     }
 
 
-def test_extract_construct_kwargs_modality_overrides_shared():
-    """Modality-specific values override shared values for that
-    modality only; the other modality keeps the shared default."""
+def test_extract_construct_kwargs_modality_overrides_defaults():
+    """Modality-specific values override defaults for that modality
+    only; the other modality keeps the default value."""
     from vaxrank.config.loader import extract_construct_kwargs
     config = {
         'vaccine_constructs': {
-            'shared': {'max_antigen_length_aa': 25},
+            'defaults': {'max_antigen_length_aa': 25},
             'peptide': {'max_antigen_length_aa': 27, 'mode': 'slp'},
             'mrna': {'antigens_per_construct': 8},
         },
     }
     pep = extract_construct_kwargs(config, 'peptide')
     mrna = extract_construct_kwargs(config, 'mrna')
-    # Peptide overrode max_antigen_length_aa; mRNA inherits shared value
+    # Peptide overrode max_antigen_length_aa; mRNA inherits the default
     assert pep['max_antigen_length_aa'] == 27
     assert pep['mode'] == 'slp'
     assert mrna['max_antigen_length_aa'] == 25
@@ -1447,7 +1447,7 @@ def test_extract_construct_kwargs_drops_none_entries():
     from vaxrank.config.loader import extract_construct_kwargs
     config = {
         'vaccine_constructs': {
-            'shared': {'antigen_content': None},
+            'defaults': {'antigen_content': None},
             'peptide': {'mode': 'minimal_epitope', 'linker': None},
         },
     }
@@ -1470,7 +1470,7 @@ def test_construct_config_overrides_cli_default(tmp_path):
     cfg = tmp_path / "vc.yaml"
     cfg.write_text("""
 vaccine_constructs:
-  shared:
+  defaults:
     max_antigen_length_aa: 19
   peptide:
     linker: AAY
@@ -1485,7 +1485,7 @@ vaccine_constructs:
         '--config', str(cfg),
     ])
     yaml_kwargs = _construct_config_for_modality(args, 'peptide')
-    # Shared knob picked up through the merge
+    # Cross-modality default picked up through the merge
     assert yaml_kwargs['max_antigen_length_aa'] == 19
     # Peptide-specific knob picked up through the merge
     assert yaml_kwargs['linker'] == 'AAY'

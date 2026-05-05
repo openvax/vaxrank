@@ -53,18 +53,20 @@ class VaccinePeptidesConfigSchema(
     manufacturability: Optional[ManufacturabilityConfigSchema] = None
 
 
-class _SharedConstructConfigSchema(
+class _DefaultConstructConfigSchema(
     msgspec.Struct,
     frozen=True,
     kw_only=True,
     forbid_unknown_fields=True,
 ):
-    """Construct-assembly knobs shared between peptide and mRNA.
+    """Default construct-assembly knobs that apply to every modality
+    that doesn't override them.
 
     Modality-specific subsections (``peptide``, ``mrna``) override
     these. Knobs whose defaults differ between modalities (linker,
     ``antigens_per_construct``, ``max_constructs``) live in the
-    per-modality subsections, not here.
+    per-modality subsections only — putting them here would
+    misleadingly suggest a single-default-for-both.
     """
     min_antigen_length_aa: Optional[int] = None
     max_antigen_length_aa: Optional[int] = None
@@ -80,8 +82,8 @@ class _PeptideConstructConfigSchema(
     forbid_unknown_fields=True,
 ):
     """Peptide-specific construct-assembly knobs. Any knob also in
-    ``shared`` overrides the shared value when set here."""
-    # Shared knobs (override of vaccine_constructs.shared)
+    ``defaults`` overrides the default value when set here."""
+    # Cross-modality knobs (override of vaccine_constructs.defaults)
     min_antigen_length_aa: Optional[int] = None
     max_antigen_length_aa: Optional[int] = None
     candidates_per_slot: Optional[int] = None
@@ -106,8 +108,8 @@ class _MrnaConstructConfigSchema(
     forbid_unknown_fields=True,
 ):
     """mRNA-specific construct-assembly knobs. Any knob also in
-    ``shared`` overrides the shared value when set here."""
-    # Shared knobs (override of vaccine_constructs.shared)
+    ``defaults`` overrides the default value when set here."""
+    # Cross-modality knobs (override of vaccine_constructs.defaults)
     min_antigen_length_aa: Optional[int] = None
     max_antigen_length_aa: Optional[int] = None
     candidates_per_slot: Optional[int] = None
@@ -146,19 +148,19 @@ class VaccineConstructsConfigSchema(
     Layout:
 
         vaccine_constructs:
-          shared:    # cross-modality defaults (length bounds, antigen_content, …)
+          defaults:  # values applied to every modality not overriding them
           peptide:   # peptide-specific overrides (mode, linker, n-term acetyl, …)
           mrna:      # mRNA-specific overrides (signal_peptide, UTRs, polyA, …)
 
     Resolution order (highest precedence first):
 
-        explicit CLI flag  >  per-modality config  >  shared config  >  built-in default
+        explicit CLI flag  >  per-modality config  >  defaults config  >  built-in default
 
     A user can drive both modalities from one config file, and only
-    needs to repeat a knob in a modality subsection when they want
-    that modality to differ from the shared default.
+    needs to repeat a knob in a modality subsection when that
+    modality should differ from the default.
     """
-    shared: Optional[_SharedConstructConfigSchema] = None
+    defaults: Optional[_DefaultConstructConfigSchema] = None
     peptide: Optional[_PeptideConstructConfigSchema] = None
     mrna: Optional[_MrnaConstructConfigSchema] = None
 

@@ -266,18 +266,18 @@ def extract_construct_kwargs(
     modality: str,
 ) -> dict[str, Any]:
     """Resolve construct-assembly kwargs for ``modality`` ('peptide'
-    or 'mrna') by merging ``vaccine_constructs.shared`` with
+    or 'mrna') by merging ``vaccine_constructs.defaults`` with
     ``vaccine_constructs.<modality>``. Modality-specific values
-    override shared values; ``None`` entries are dropped so callers
-    can use ``dict.get(name, fallback)`` cleanly.
+    override defaults; ``None`` entries are dropped so callers can
+    use ``dict.get(name, fallback)`` cleanly.
 
     Empty dict when the section is absent — same shape as before so
     code paths that don't use the new section behave identically.
     """
     out: dict[str, Any] = {}
-    shared = _resolve_dotted(config, 'vaccine_constructs.shared')
-    if isinstance(shared, dict):
-        out.update({k: v for k, v in shared.items() if v is not None})
+    defaults = _resolve_dotted(config, 'vaccine_constructs.defaults')
+    if isinstance(defaults, dict):
+        out.update({k: v for k, v in defaults.items() if v is not None})
     modal = _resolve_dotted(config, 'vaccine_constructs.%s' % modality)
     if isinstance(modal, dict):
         out.update({k: v for k, v in modal.items() if v is not None})

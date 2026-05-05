@@ -17,7 +17,8 @@
 #                                        mRNA — name kept for back-compat)
 #   manufacturability  -> VaccineConfig (peptide-synthesis difficulty rules)
 #   vaccine_constructs -> per-modality construct-assembly knobs with a
-#                         `shared` subsection for cross-modality defaults
+#                         `defaults` subsection for values applied to
+#                         every modality that doesn't override them
 #                         (CLI flags continue to work and override config)
 
 
@@ -139,21 +140,21 @@ manufacturability:
 #
 # Default --vaccine-type is 'peptide mrna' (both modalities at once).
 # A single config can drive both: put cross-modality defaults under
-# `shared:` and only repeat a knob in `peptide:` / `mrna:` when that
+# `defaults:` and only repeat a knob in `peptide:` / `mrna:` when that
 # modality should differ.
 #
 # Resolution order (highest precedence first):
 #
-#   explicit CLI flag  >  per-modality config  >  shared config  >  built-in default
+#   explicit CLI flag  >  per-modality config  >  defaults config  >  built-in default
 #
 # Every key here is optional; everything below is commented out so the
 # default config is a no-op (matches "no --config" behavior). Uncomment
 # and edit what you want to change.
 # ----------------------------------------------------------------------
 # vaccine_constructs:
-#   shared:
-#     # Knobs that default the same way across modalities. Length
-#     # bounds in particular usually move together.
+#   defaults:
+#     # Values applied to every modality that doesn't override them.
+#     # Length bounds in particular usually move together.
 #     min_antigen_length_aa: 15
 #     max_antigen_length_aa: 25
 #     candidates_per_slot: 1
