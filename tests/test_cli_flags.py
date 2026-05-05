@@ -200,3 +200,48 @@ def test_mrna_linker_accepts_lowercase():
         "--mrna-linker", "gs3",
     ])
     assert args.mrna_linker == "GS3"
+
+
+def test_peptide_mode_is_case_insensitive():
+    """``--peptide-mode SLP`` / ``Slp`` / ``slp`` all parse to the
+    same canonical lowercase ``'slp'`` so users don't get bitten by
+    case mismatch in YAML configs or scripts."""
+    parser = make_vaxrank_arg_parser()
+    for raw in ['slp', 'SLP', 'Slp', 'sLP']:
+        args = parser.parse_args([
+            "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+            "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+            "--output-csv", "out.csv",
+            "--peptide-mode", raw,
+        ])
+        assert args.peptide_mode == "slp"
+
+
+def test_peptide_construct_config_normalizes_uppercase_mode():
+    """YAML configs bypass argparse, so the normalization must also
+    happen in ``PeptideConstructConfig.__post_init__``."""
+    from vaxrank.peptide import PeptideConstructConfig
+    cfg = PeptideConstructConfig(mode='SLP', antigens_per_construct=1)
+    assert cfg.mode == 'slp'
+    cfg2 = PeptideConstructConfig(
+        mode='Minimal_Epitope', antigens_per_construct=1)
+    assert cfg2.mode == 'minimal_epitope'
+    assert cfg2.antigen_content == 'minimal_epitope'
+
+
+def test_default_peptide_linker_resolves_to_canonical_g4s3():
+    """Default ``--peptide-linker GS3`` resolves to the canonical
+    15aa flexible linker GGGGSGGGGSGGGGS — not the literal 7aa
+    ``GGGGSSS`` that the bare ``G4S3`` form parses as via the
+    GnSm grammar."""
+    from vaxrank.vaccine_library import get_linker
+    parser = make_vaxrank_arg_parser()
+    args = parser.parse_args([
+        "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+        "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+        "--output-csv", "out.csv",
+    ])
+    assert args.peptide_linker == "GS3"
+    linker = get_linker(args.peptide_linker)
+    assert linker.amino_acids == "GGGGSGGGGSGGGGS"
+    assert len(linker.amino_acids) == 15

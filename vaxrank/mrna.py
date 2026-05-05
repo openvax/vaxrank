@@ -221,12 +221,28 @@ class RNAConstruct:
     antigens: list = field(default_factory=list)
 
 
+def _normalize_lookup_key(name):
+    """Strip case + dash/underscore differences for table lookups.
+    Lets users write ``HLA-B`` / ``hla_b`` / ``HLAB`` / ``HLA_B`` for
+    a key the library spells ``HLA_B``."""
+    return str(name).replace('-', '').replace('_', '').lower()
+
+
 def _resolve_named(table, name, kind):
-    if name not in table:
-        raise ValueError(
-            "Unknown %s '%s'. Available: %s" % (
-                kind, name, ', '.join(sorted(table))))
-    return table[name]
+    """Resolve ``name`` against ``table`` with case + separator
+    tolerance. Common biological identifiers (HLA-B, tPA, IgK) are
+    written with mixed case and dashes in the literature; the table
+    keys use a consistent ``HLA_B`` / ``tPA`` form, but lookups
+    accept any sensible spelling."""
+    if name in table:
+        return table[name]
+    needle = _normalize_lookup_key(name)
+    for k, v in table.items():
+        if _normalize_lookup_key(k) == needle:
+            return v
+    raise ValueError(
+        "Unknown %s '%s'. Available: %s" % (
+            kind, name, ', '.join(sorted(table))))
 
 
 def codon_optimize(amino_acids, species="h_sapiens", method="use_best_codon",

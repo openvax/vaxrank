@@ -645,6 +645,9 @@ def add_peptide_output_args(group):
     group.add_argument(
         "--peptide-mode",
         default="slp",
+        # ``type=str.lower`` so SLP / Slp / slp all reach the choice
+        # comparison as the lowercase canonical form.
+        type=str.lower,
         choices=["slp", "minimal_epitope", "multi_epitope"],
         help="Back-compat shorthand for the orthogonal axes "
              "(--antigen-content + --peptide-antigens-per-construct). "
@@ -666,11 +669,18 @@ def add_peptide_output_args(group):
         help="Override --epitopes-per-antigen for peptide vaccines.")
     group.add_argument(
         "--peptide-linker",
-        default="G4S3",
+        # Default is the alias ``GS3`` which expands to ``(G4S)3 =
+        # GGGGSGGGGSGGGGS`` (the canonical 15aa flexible linker
+        # used in multi-epitope SLP / FixVac mRNA designs). The
+        # bare form ``G4S3`` parses as the 7aa literal ``GGGGSSS``
+        # via the GnSm grammar — different sequence, used only
+        # when the literal is actually wanted.
+        default="GS3",
         type=_linker_arg,
         help="Linker used in --peptide-mode=multi_epitope (case-insensitive). "
              "Accepts named entries, compositional forms ((BASE)N / GnSm / "
-             "AnY), and aliases. Shared with mRNA mode. Default: G4S3.")
+             "AnY), and aliases. Shared with mRNA mode. Default: GS3 = "
+             "(G4S)3 = GGGGSGGGGSGGGGS.")
     group.add_argument(
         "--peptide-min-antigen-length-aa",
         default=15,

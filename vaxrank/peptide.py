@@ -107,6 +107,13 @@ class PeptideConstructConfig:
     counterion: str = "TFA"         # default salt form (TFA / acetate / HCl / free)
 
     def __post_init__(self):
+        # Normalize ``mode`` to lowercase so YAML configs that say
+        # ``SLP`` / ``Slp`` / ``slp`` all resolve identically.
+        # Argparse already lowercases via ``type=str.lower`` for the
+        # CLI; this catches the YAML-config path and any direct
+        # construction.
+        if isinstance(self.mode, str):
+            self.mode = self.mode.lower()
         # Derive the orthogonal axes from the legacy ``mode`` shorthand
         # when the user passed it (or the default 'slp' was kept). The
         # rule: if the user already set ``antigen_content`` /
