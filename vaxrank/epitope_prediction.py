@@ -65,6 +65,25 @@ class EpitopePrediction(DataclassSerializable):
     # load_lens from column prefixes like "mhcflurry_2.1.1.aff".
     predictor_version: str = ""
 
+    # Pepsickle credibility annotations (issue #249). Populated by
+    # ``vaxrank.processing.annotate_processing`` when proteasome
+    # cleavage prediction is enabled. None means "not annotated";
+    # numeric values are in [0, 1]. The ``pepsickle_`` prefix names
+    # the predictor explicitly so a future per-position cleavage
+    # predictor (NetChop, PAProC, …) can land alongside without name
+    # collision. Per-position cleavage probability at the C-terminus
+    # of this peptide (probability the proteasome cuts between this
+    # peptide's last residue and its C+1 flank); higher = clean
+    # release.
+    pepsickle_c_term_cleavage_prob: Optional[float] = None
+    # Peak cleavage probability strictly inside the peptide (positions
+    # 0..N-2). Higher = ligand more likely to be destroyed before
+    # reaching MHC.
+    pepsickle_max_internal_cut_prob: Optional[float] = None
+    # Composite: c_term * (1 - max_internal). 1.0 = ideal release;
+    # near 0 = no clean C-term cut OR high internal-cut probability.
+    pepsickle_processing_score: Optional[float] = None
+
     # `length` used to be a constructor arg; since 1.1.0 it is derived from
     # `peptide_sequence`. Drop it from any old JSON blobs we happen to load.
     _SERIALIZABLE_KEYWORD_ALIASES: ClassVar[dict[str, Optional[str]]] = {

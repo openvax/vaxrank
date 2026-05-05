@@ -8,7 +8,12 @@ Guide for coding agents working in this repo. Read this before touching code.
 
 1. **Never commit to `main`.** Always `git checkout -b <feature-branch>` before editing. Land via PR.
 2. **Every PR bumps the version.** Even doc-only PRs — at minimum a patch bump in `vaxrank/version.py`. `deploy.sh <version>` does the bump + commit + push for you.
-3. **"Done" means merged AND deployed to PyPI** — never stop at merge. After a PR merges to `main`, run `./deploy.sh` from a clean main. If you skip deploy, the task is not done.
+3. **Always deploy when you merge a PR.** Merging without deploying is never done — every merge is followed by `./deploy.sh` from a clean `main`. No "wait for the next PR," no "deploy later." The exact sequence after `gh pr merge`:
+   ```
+   git checkout main && git pull
+   ./deploy.sh                  # uses current version in vaxrank/version.py
+   ```
+   `./deploy.sh` runs lint + tests + build + `twine upload` + tag + push. If lint or tests fail on a clean `main`, fix the root cause; never bypass. Verify the new version is live on PyPI (`pip index versions vaxrank`) before declaring the task complete.
 4. **File problems as issues, don't silently work around them.** If you hit a bug — here or in a dependency (openvax/pirl-unc: varcode, isovar, mhctools, topiary, mhcgnomes, pepdata, etc.) — open a GitHub issue on the correct repo. Link it from the PR.
 5. **After a PR ships, look for the next block of work.** Read open issues across the relevant openvax repos, group by dependency + urgency. Prefer *foundational* changes that unblock multiple downstream improvements. If nothing foundational is pending, pick the smallest independent improvements and do them in a row.
 

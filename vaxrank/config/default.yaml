@@ -10,42 +10,92 @@
 #
 #     vaxrank --print-default-config > my-config.yaml
 #
-# The three sections below correspond to the three frozen-config dataclasses
-# vaxrank uses internally:
-#   epitopes        -> vaxrank.epitope_config.EpitopeConfig
-#   vaccine_peptides -> vaxrank.vaccine_config.VaccineConfig (peptide assembly)
-#   manufacturability -> vaxrank.vaccine_config.VaccineConfig (synthesis rules)
+# The four sections below correspond to vaxrank's frozen config groups:
+#   epitopes           -> EpitopeConfig (filter / score MHC ligand predictions)
+#   vaccine_peptides   -> VaccineConfig (per-variant antigen-window selection,
+#                                        ranking; applies to BOTH peptide AND
+#                                        mRNA — name kept for back-compat)
+#   manufacturability  -> VaccineConfig (peptide-synthesis difficulty rules)
+#   vaccine_constructs -> per-modality construct-assembly knobs;
+#                         cross-modality values at the section top
+#                         level, modality-specific values under
+#                         `peptide:` / `mrna:` subsections (CLI flags
+#                         continue to work and override config)
 
 
 epitopes:
   # ---- Scalar scoring knobs ----
+  #
+  # NOTE: these knobs feed the *implicit default* score expression
+  # (a logistic transform of IC50 or percentile rank). When you set
+  # ``score_expr`` below, that expression replaces the default
+  # wholesale and the scalars below are ignored. Same for
+  # ``filter_expr`` superseding ``affinity_cutoff`` /
+  # ``percentile_rank_cutoff``.
+  #
   # IC50 (nM) at which the logistic epitope score equals 0.5.
   logistic_midpoint: 350.0
   # Width parameter controlling the steepness of the logistic curve.
   logistic_width: 150.0
   # Drop epitopes whose normalized score falls below this threshold.
   min_score: 0.00001
-  # Maximum IC50 (nM) considered. Above this, default scoring drives to 0.
+  # Maximum IC50 (nM) considered. Above this, default scoring drives
+  # to 0. Ignored when ``filter_expr`` is set.
   affinity_cutoff: 5000.0
   # Percentile-rank cutoff (used in scoring_mode: percentile_rank).
+  # Ignored when ``filter_expr`` is set.
   percentile_rank_cutoff: 10.0
-  # 'affinity' (default) | 'percentile_rank'.
+  # 'affinity' (default) | 'percentile_rank'. Picks which axis the
+  # *implicit default* logistic uses; ignored when ``score_expr`` is set.
   scoring_mode: affinity
 
   # ---- Topiary DSL (optional, overrides scalar knobs above when set) ----
+  #
+  # Method-scoped access has several quote-free forms that all parse
+  # identically — pick whichever reads best for you:
+  #
+  #   affinity[mhcflurry]       (bare identifier in brackets)
+  #   ba[mhcflurry]             (alias: ba == affinity, "binding affinity")
+  #   affinity['mhcflurry']     (string literal in brackets — explicit)
+  #   mhcflurry_affinity        (underscore-joined, method-prefixed)
+  #   mhcflurry_ba              (combine both: ba alias + method prefix)
+  #
+  # Versioned predictors take a second bracket arg:
+  #
+  #   affinity[netmhcpan, "4.1b"].value
+  #
   # filter_expr is a boolean DSL string evaluated against the topiary
   # DataFrame: it drops rows wholesale before scoring. Examples:
   #   "affinity <= 500"
   #   "affinity <= 500 & percentile_rank <= 2"
-  #   "affinity['mhcflurry'] <= 500 | affinity['netmhcpan'] <= 500"
+  #   "affinity[mhcflurry] <= 500 | affinity[netmhcpan] <= 500"
   # filter_expr: null
 
   # score_expr is a numeric DSL string producing one score per
   # (peptide, allele) group. When unset, vaxrank synthesizes the default
   # logistic node from the scalar knobs above. Examples:
   #   "affinity.logistic_normalized(350, 150)"
-  #   "affinity['mhcflurry'].logistic(350, 150) * 0.5
-  #     + affinity['netmhcpan'].logistic(350, 150) * 0.5"
+  #   "affinity[mhcflurry].logistic_normalized(350, 150) * 0.5
+  #     + affinity[netmhcpan].logistic_normalized(350, 150) * 0.5"
+  #
+  # NOTE on multi-model blends: averaging *transformed* scores is
+  # NOT the same thing as transforming an *averaged* affinity, because
+  # the logistic is non-linear. Both are reasonable; pick the one
+  # that matches your intent.
+  #
+  #   transform-then-average (defensive, picks the "weakest credible
+  #   binder" out of the panel; one bad model can drag the score down):
+  #     "affinity[mhcflurry].logistic_normalized(350, 150) * 0.5
+  #      + affinity[netmhcpan].logistic_normalized(350, 150) * 0.5"
+  #
+  #   average-then-transform (smooths the inputs first; one bad
+  #   model is partially absorbed by the other):
+  #     "((affinity[mhcflurry] + affinity[netmhcpan]) / 2)
+  #        .logistic_normalized(350, 150)"
+  #
+  # The two diverge most where the panel disagrees (e.g. one model
+  # at 50 nM, the other at 5000 nM) — the regime where this knob
+  # actually matters.
   # score_expr: null
 
   # ---- Default predictor methods (only matters with multi-model inputs) ----
@@ -78,6 +128,18 @@ vaccine_peptides:
   # ---- Score / ranking ----
   # 'sqrt_reads_times_epitope' (default) | 'reads_times_epitope' | 'epitope_only'.
   combined_score_mode: sqrt_reads_times_epitope
+
+  # Optional DSL expression evaluated per VaccinePeptide; supersedes
+  # combined_score_mode when set. Bindings: mutant_epitope_score,
+  # wildtype_epitope_score, expression_score, n_alt_reads,
+  # n_ref_reads, n_overlapping_reads,
+  # n_alt_reads_supporting_protein_sequence, n_mutant_amino_acids.
+  # Functions: sqrt, log, log1p, exp, min, max, abs, pow.
+  # The three legacy modes are equivalent to:
+  #   epitope_only             ≡ "mutant_epitope_score"
+  #   reads_times_epitope      ≡ "n_alt_reads * mutant_epitope_score"
+  #   sqrt_reads_times_epitope ≡ "expression_score * mutant_epitope_score"
+  # combined_score_expr: "log1p(n_alt_reads) * mutant_epitope_score"
   # Keep candidates whose score is at least this fraction of the best
   # before lexicographic tie-breaking.
   score_fraction_of_best: 0.99
@@ -104,6 +166,16 @@ vaccine_peptides:
   require_mutant_epitopes_in_variant: true
 
 
+# Peptide-only. Manufacturability rules describe synthesis-difficulty
+# of solid-phase peptide chemistry (GRAVY hydropathy, Cys content,
+# difficult N-termini, Asp-Pro bonds, …) and don't apply to mRNA
+# constructs (translated in vivo). Vaxrank still evaluates these
+# rules whenever ``vaccine_peptides.ranking_rules`` references the
+# ``manufacturability`` sentinel — they affect tie-breaking — but
+# the section is skipped from peptide-only reports automatically
+# when ``--vaccine-type`` is mRNA-only. Kept at the top level (not
+# under ``vaccine_constructs.peptide``) for back-compat with users
+# whose existing configs reference it here.
 manufacturability:
   # ---- Numeric thresholds (passed to the rule functions) ----
   max_c_terminal_hydropathy: 1.5
@@ -128,3 +200,67 @@ manufacturability:
     - aspartate_proline
     - max_hydropathy_low
     - min_hydropathy
+
+
+# ----------------------------------------------------------------------
+# vaccine_constructs (per-modality construct-assembly knobs).
+#
+# Default --vaccine-type is 'peptide mrna' (both modalities at once).
+# Cross-modality knobs go directly under `vaccine_constructs:`; the
+# `peptide:` and `mrna:` subsections only need entries when a
+# modality should DIFFER from the cross-modality value or when a knob
+# is modality-only (signal_peptide, mode, n_terminal_acetyl, …).
+#
+# Resolution order (highest precedence first):
+#
+#   explicit CLI flag  >  per-modality config  >  cross-modality config  >  built-in default
+#
+# Every key here is optional; everything below is commented out so the
+# default config is a no-op (matches "no --config" behavior). Uncomment
+# and edit what you want to change.
+# ----------------------------------------------------------------------
+# vaccine_constructs:
+#   # Cross-modality knobs at the section top level. Apply to every
+#   # active --vaccine-type unless overridden in the modality
+#   # subsection below.
+#   min_antigen_length_aa: 15
+#   max_antigen_length_aa: 25
+#   candidates_per_slot: 1
+#   antigen_content: mutation_spanning   # 'mutation_spanning' | 'minimal_epitope'
+#   epitopes_per_antigen: 1
+#
+#   peptide:
+#     # Peptide-only knobs. Cross-modality knobs from above are
+#     # available here too if you need a peptide-specific value.
+#     mode: slp                            # slp | minimal_epitope | multi_epitope
+#     linker: G4Sx3                        # multi_epitope linker; (G4S)3 = GGGGSGGGGSGGGGS
+#     antigens_per_construct: 1            # SLP default; 5+ for multi_epitope
+#     max_constructs: 20                   # PGV-001 pool size
+#     n_terminal_acetyl: false             # marked in vendor order form
+#     c_terminal_amide: false
+#     scale_mg: 5.0
+#     purity_percent: 95.0
+#     counterion: TFA
+#
+#   mrna:
+#     # mRNA-only knobs. Cross-modality knobs from above are
+#     # available here too if you need an mrna-specific value.
+#     linker: G4Sx2                        # (G4S)2 = GGGGSGGGGS, BioNTech FixVac canonical
+#     antigens_per_construct: 5            # FixVac canonical
+#     max_constructs: 1
+#     max_length_nt: 4000
+#     signal_peptide: HLA_B
+#     include_mitd: true
+#     mitd: HLA_B
+#     utr_5p: HBB
+#     utr_3p: HBB_FI
+#     poly_a_length: 120
+#     poly_a_segmented: false              # set true for BNT162b2-style A30+linker+A70
+#     poly_a_first_segment: 30
+#     poly_a_segment_linker: GCATATGACT
+#     codon_species: h_sapiens
+#     codon_method: use_best_codon         # | match_codon_usage | harmonize_rca
+#     optimize_linkers: true               # per-junction linker optimization
+#     junction_candidates: ""              # comma-separated; "" = library default
+#     junction_rank_strong: 0.5            # %rank below = strong-binder hit
+#     junction_rank_mild: 2.0

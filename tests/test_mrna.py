@@ -86,6 +86,31 @@ def _variant_pair(amino_acids, contig='1', start=1000, gene_name='GENE'):
     return (variant, [_peptide_stub(amino_acids, gene_name=gene_name)])
 
 
+def test_resolve_named_accepts_dashes_and_case_variants():
+    """Library keys are written ``HLA_B`` / ``tPA`` / ``IgK`` etc.,
+    but users in the field write ``HLA-B`` / ``hla-b`` / ``HLAB``.
+    ``_resolve_named`` strips dashes and underscores and lowercases
+    so all of those resolve to the same entry."""
+    from vaxrank.mrna_library import SIGNAL_PEPTIDES, MITDS, UTRS_5P
+    from vaxrank.mrna import _resolve_named
+
+    canonical = _resolve_named(SIGNAL_PEPTIDES, 'HLA_B', 'signal_peptide')
+    for variant in ['HLA-B', 'hla_b', 'hla-b', 'HLAB', 'hlab']:
+        assert _resolve_named(
+            SIGNAL_PEPTIDES, variant, 'signal_peptide') == canonical, variant
+    # MITD
+    a_canonical = _resolve_named(MITDS, 'HLA_A', 'mitd')
+    assert _resolve_named(MITDS, 'HLA-A', 'mitd') == a_canonical
+    assert _resolve_named(MITDS, 'hla-a', 'mitd') == a_canonical
+    # UTR
+    hbb = _resolve_named(UTRS_5P, 'HBB', '5p_utr')
+    assert _resolve_named(UTRS_5P, 'hbb', '5p_utr') == hbb
+    # Unknown still raises
+    import pytest
+    with pytest.raises(ValueError, match="Unknown signal_peptide"):
+        _resolve_named(SIGNAL_PEPTIDES, 'NOT_A_REAL_KEY', 'signal_peptide')
+
+
 def test_codon_optimize_preserves_translation():
     aa = "MGSLLPVTLLT"
     dna = codon_optimize(aa, species='h_sapiens', method='use_best_codon')
@@ -485,7 +510,8 @@ def test_polya_segmented_appears_in_full_fasta_and_csv():
 
 def test_output_dir_rejects_existing_file(tmp_path):
     """Old API took a FASTA file path; new API takes a directory.
-    Pointing --output-mrna at an existing file must raise loudly."""
+    Pointing --output-dir at an existing file must raise loudly
+    when --vaccine-type includes mrna."""
     pairs = [_variant_pair("KLQGHSAP")]
     constructs = assemble_mrna_constructs(
         pairs, options=RNAConstructConfig(
@@ -500,8 +526,8 @@ def test_output_dir_rejects_existing_file(tmp_path):
 
 def test_output_dir_rejects_fasta_suffix(tmp_path):
     """Even if the path doesn't exist, .fasta / .fa suffixes are blocked
-    so 'vaxrank --output-mrna out.fasta' fails clearly instead of
-    silently creating a directory called out.fasta/."""
+    so 'vaxrank --vaccine-type=mrna --output-dir out.fasta' fails
+    clearly instead of silently creating a directory called out.fasta/."""
     pairs = [_variant_pair("KLQGHSAP")]
     constructs = assemble_mrna_constructs(
         pairs, options=RNAConstructConfig(

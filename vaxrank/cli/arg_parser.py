@@ -146,7 +146,9 @@ def cached_run_arg_parser():
     arg_parser.add_argument(
         "--input-json-file",
         default="",
-        help="Path to JSON file containing results of vaccine peptide report")
+        help="Path to JSON file containing the cached vaxrank results "
+             "(same shape as --output-json-file). Used to re-render "
+             "reports without re-running the full pipeline.")
     add_output_args(arg_parser)
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
@@ -156,17 +158,30 @@ def cached_run_arg_parser():
 
 # Lets the user specify whether they want to see particular sections in the report.
 def add_optional_output_args(arg_parser):
+    # Manufacturability defaults to None so we can resolve it later
+    # against ``--vaccine-type``: peptide-mode runs include the
+    # GRAVY / Cys-content / N-terminal-Q manufacturability section
+    # by default (it's relevant to peptide synthesis); mRNA-mode
+    # runs exclude it (those features don't apply to mRNA
+    # constructs). Users can still force either way explicitly.
     manufacturability_args = arg_parser.add_mutually_exclusive_group(required=False)
     manufacturability_args.add_argument(
         "--include-manufacturability-in-report",
         dest="manufacturability",
-        action="store_true")
+        action="store_true",
+        help="Force-include the peptide manufacturability section "
+             "(GRAVY scores, Cys content, N-terminal Q/E/C, etc.) "
+             "in template reports. Default depends on --vaccine-type: "
+             "on for peptide, off for mrna.")
 
     manufacturability_args.add_argument(
         "--no-manufacturability-in-report",
         dest="manufacturability",
-        action="store_false")
-    arg_parser.set_defaults(manufacturability=True)
+        action="store_false",
+        help="Force-exclude the peptide manufacturability section "
+             "from template reports. See "
+             "--include-manufacturability-in-report for the default.")
+    arg_parser.set_defaults(manufacturability=None)
 
     wt_epitope_args = arg_parser.add_mutually_exclusive_group(required=False)
     wt_epitope_args.add_argument(
@@ -214,13 +229,53 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--vaccine-type",
         nargs='+',
-        default=["peptide"],
+        default=["peptide", "mrna"],
         choices=["peptide", "mrna"],
         metavar="TYPE",
-        help="Which vaccine type(s) to design. Multi-valued so future "
-             "types (DNA, etc.) plug in as additional choices. "
-             "Default: peptide. Examples: '--vaccine-type peptide', "
-             "'--vaccine-type mrna', '--vaccine-type peptide mrna' (both).")
+        help="Which vaccine type(s) to design. One or more of "
+             "{peptide, mrna}. Default: 'peptide mrna' (both); pass "
+             "a subset to design just one. Single-mode runs (one "
+             "type) write directly into --output-dir. Multi-mode "
+             "runs (≥2) write into per-modality subdirs "
+             "(--output-dir/peptide/, --output-dir/mrna/, …) so the "
+             "same flag set works regardless of how many modalities "
+             "are active. Future modalities (DNA, …) plug in here.")
+
+    # Unified output directory. ``--output-dir`` is always a
+    # directory; vaxrank chooses canonical filenames inside it.
+    # Single-mode: files go directly in DIR. Multi-mode: per-type
+    # subdirs (DIR/peptide/, DIR/mrna/, …).
+    #
+    # Canonical filenames per type:
+    #   peptide/  vaccine.fasta, manifest.json, order_form.csv
+    #   mrna/     cds.fasta, no_polyA.fasta, full.fasta,
+    #             manifest.json, layers.csv
+    #
+    # No file-extension-based mode switching: ``--output-dir`` is
+    # never a file path. Tradeoff: single-file output ergonomics
+    # gone; gain: one rule for every modality count and a clean
+    # directory layout for hand-off.
+    output_args_group.add_argument(
+        "--output-dir",
+        default="",
+        metavar="DIR",
+        help="Destination directory for the assembled vaccine "
+             "constructs. Single-mode runs (one --vaccine-type) write "
+             "files directly into DIR; multi-mode runs write to "
+             "per-modality subdirs (DIR/peptide/, DIR/mrna/, …). "
+             "Required when designing a vaccine; omit for "
+             "ranking-only / report-only runs. Vaxrank picks "
+             "canonical filenames inside (vaccine.fasta / cds.fasta / "
+             "manifest.json / order_form.csv / layers.csv).")
+    output_args_group.add_argument(
+        "--mrna-csv-no-full-rows",
+        dest="mrna_csv_full_rows",
+        action="store_false",
+        default=True,
+        help="mRNA-only. Suppress the per-construct cds / no_polyA / "
+             "full summary rows in the mRNA layers.csv (the rows "
+             "with the longest nt cells). Per-element rows are "
+             "unaffected.")
 
     # Shared antigen-design axes — apply to BOTH peptide and mRNA
     # unless overridden by the per-type flag (--peptide-* / --mrna-*).
@@ -247,6 +302,46 @@ def add_output_args(arg_parser):
              "ligand semantics). Set >1 to pack multiple top ligands "
              "from the same variant.")
 
+    # Issue #249: pepsickle proteasome-cleavage credibility annotations.
+    # On by default; doesn't change vaccine ranking — purely surfaces
+    # cleavage credibility on each predicted MHC ligand for clinical
+    # review.
+    output_args_group.add_argument(
+        "--processing-aware-annotation",
+        dest="processing_aware_annotation",
+        action="store_true",
+        default=True,
+        help="Annotate each predicted MHC ligand with pepsickle's "
+             "proteasome-cleavage credibility scores "
+             "(pepsickle_c_term_cleavage_prob, "
+             "pepsickle_max_internal_cut_prob, "
+             "pepsickle_processing_score). On by default. "
+             "Pepsickle runs in an isolated subprocess (issue #266) so "
+             "torch's libomp doesn't clash with the parent's pandas / "
+             "numpy / pyarrow OpenMP runtime. Doesn't change vaccine "
+             "ranking — adds info for review.")
+    output_args_group.add_argument(
+        "--no-processing-aware-annotation",
+        dest="processing_aware_annotation",
+        action="store_false",
+        help="Disable pepsickle credibility annotation (e.g. when "
+             "pepsickle isn't installed or you want a faster run).")
+    output_args_group.add_argument(
+        "--pepsickle-human-only",
+        action="store_true",
+        default=False,
+        help="Use pepsickle's human-only-trained model (default: "
+             "off, all-mammal). Pass when running on human samples "
+             "exclusively.")
+    output_args_group.add_argument(
+        "--pepsickle-threshold",
+        type=float,
+        default=0.5,
+        help="Cleavage probability threshold used internally by "
+             "pepsickle (default 0.5). Doesn't affect the continuous "
+             "scores attached to each ligand, only pepsickle's "
+             "internal binarization.")
+
     output_args_group.add_argument(
         "--output-patient-id",
         default="",
@@ -255,22 +350,34 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-csv",
         default="",
-        help="Name of CSV file which contains predicted sequences")
+        help="Path to CSV with ranked antigens. Format depends on "
+             "input source: pipeline (--vcf + --bam) emits "
+             "per-variant rows (gene, mutation, antigen sequence, "
+             "scores); LENS / pVACseq emit per-(peptide, allele) "
+             "rows (the upstream tool's native granularity). "
+             "Antigen-centric in both cases; content does not "
+             "change with --vaccine-type.")
 
     output_args_group.add_argument(
         "--output-ascii-report",
         default="",
-        help="Path to ASCII vaccine peptide report")
+        help="Path to ASCII summary report — ranked antigens with "
+             "their predicted MHC ligands, manufacturability metrics "
+             "(peptide-mode only by default), and processing-credibility "
+             "scores. Antigen-centric: content adapts to --vaccine-type "
+             "but the same flag works for all modes.")
 
     output_args_group.add_argument(
         "--output-html-report",
         default="",
-        help="Path to HTML vaccine peptide report")
+        help="Path to HTML summary report (same content as "
+             "--output-ascii-report, rendered to HTML).")
 
     output_args_group.add_argument(
         "--output-pdf-report",
         default="",
-        help="Path to PDF vaccine peptide report")
+        help="Path to PDF summary report (same content as "
+             "--output-ascii-report, rendered to PDF).")
 
     output_args_group.add_argument(
         "--pdf-backend",
@@ -282,19 +389,24 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-json-file",
         default="",
-        help="Path to JSON file containing results of vaccine peptide report")
+        help="Path to JSON dump of the ranked antigen set + "
+             "command-line state. Same structure regardless of "
+             "--vaccine-type.")
 
     output_args_group.add_argument(
         "--output-xlsx-report",
         default="",
-        help="Path to XLSX vaccine peptide report worksheet, one sheet per variant. This is meant "
-             "for use by the vaccine manufacturer.")
+        help="Path to XLSX summary report (one sheet per variant). "
+             "Antigen-centric; intended for hand-off to a vaccine "
+             "manufacturer / reviewer regardless of modality.")
 
     output_args_group.add_argument(
         "--output-neoepitope-report",
         default="",
-        help="Path to XLSX neoepitope report, containing information focusing on short peptide "
-             "sequences.")
+        help="Path to per-(peptide, allele) neoepitope XLSX. "
+             "Focused on the predicted minimal MHC ligands; available "
+             "from any --vaccine-type and from the LENS / pVACseq "
+             "external paths.")
 
     output_args_group.add_argument(
         "--output-reviewed-by",
@@ -341,38 +453,15 @@ def add_output_args(arg_parser):
 
 
 def add_mrna_output_args(group):
-    """mRNA vaccine construct output (see vaxrank/mrna.py for assembly)."""
+    """mRNA-vaccine design knobs (see vaxrank/mrna.py for assembly).
+
+    Output destinations are unified under ``--output-dir`` (see
+    ``add_output_args``); the mRNA writer picks canonical filenames
+    inside it (cds.fasta / no_polyA.fasta / full.fasta /
+    manifest.json / layers.csv). Only mrna-specific design
+    parameters live here.
+    """
     from ..mrna_library import MITDS, SIGNAL_PEPTIDES, UTRS_3P, UTRS_5P
-    group.add_argument(
-        "--output-mrna",
-        default="",
-        help="Output *directory* for assembled mRNA vaccine constructs. "
-             "When set, vaxrank writes three FASTA files into the directory: "
-             "cds.fasta (start codon → stop codon), no_polyA.fasta "
-             "(5' UTR + CDS + 3' UTR), and full.fasta (no_polyA + polyA tail). "
-             "Each FASTA has one record per construct.")
-    group.add_argument(
-        "--output-mrna-manifest",
-        default="",
-        help="Optional path to a JSON manifest with the structured "
-             "per-element view of each mRNA construct (every layer with "
-             "AA + nt where applicable, all sequence variants, lengths).")
-    group.add_argument(
-        "--output-mrna-csv",
-        default="",
-        help="Optional path to a long-format CSV. One row per "
-             "(construct, element); columns: construct, element_kind, "
-             "index, index_label, name, aa, nt, length_aa, length_nt, "
-             "note. Lets you open a vaccine in a spreadsheet and inspect "
-             "every layer.")
-    group.add_argument(
-        "--output-mrna-csv-no-full-rows",
-        dest="output_mrna_csv_full_rows",
-        action="store_false",
-        default=True,
-        help="Suppress the per-construct cds / no_polyA / full summary "
-             "rows in the CSV (the rows with the longest nt cells). "
-             "Per-element rows are unaffected.")
     group.add_argument(
         "--mrna-signal-peptide",
         default="HLA_B",
@@ -381,14 +470,18 @@ def add_mrna_output_args(group):
              "Sahin 2017)." % ", ".join(sorted(SIGNAL_PEPTIDES)))
     group.add_argument(
         "--mrna-linker",
-        default="(G4S)2",
+        # ``G4Sx2`` is self-documenting; ``(G4S)2`` parses to the
+        # same string but the parens require shell escaping. Avoid
+        # the ambiguous bare ``GS2`` shorthand — see --peptide-linker.
+        default="G4Sx2",
         type=_linker_arg,
         help="Linker name from the shared vocabulary (case-insensitive). "
              "Accepts named entries (G4S, AAY, EAAAK, P2A, ...) and "
              "compositional forms: (BASE)N / (BASE)xN / BASExN for repeats, "
              "GnSm for n-glycines + m-serines literal, AnY for n-alanines + Y. "
-             "Examples: (G4S)2, G4Sx2, A3Y, G6S. "
-             "Default: (G4S)2 (BioNTech FixVac canonical, Sahin 2017).")
+             "Examples: G4Sx2, (G4S)2, A3Y, G6S. "
+             "Default: G4Sx2 = (G4S)2 = GGGGSGGGGS (BioNTech FixVac "
+             "canonical, Sahin 2017).")
     group.add_argument(
         "--mrna-include-mitd",
         action="store_true",
@@ -547,25 +640,18 @@ def add_mrna_output_args(group):
 
 
 def add_peptide_output_args(group):
-    """Peptide vaccine construct output (see vaxrank/peptide.py)."""
-    group.add_argument(
-        "--output-peptide",
-        default="",
-        help="Path to FASTA file of peptide vaccine constructs. Default mode "
-             "is one synthetic long peptide per ranked variant; see "
-             "--peptide-mode.")
-    group.add_argument(
-        "--output-peptide-manifest",
-        default="",
-        help="Optional JSON manifest describing each peptide construct "
-             "(matches the mRNA manifest schema for symmetric consumption).")
-    group.add_argument(
-        "--output-peptide-order-form",
-        default="",
-        help="Optional CSV order form ready to send to a peptide vendor.")
+    """Peptide-vaccine design knobs (see vaxrank/peptide.py).
+
+    Output destinations are unified under ``--output-dir`` (see
+    ``add_output_args``); only peptide-specific design parameters
+    live here.
+    """
     group.add_argument(
         "--peptide-mode",
         default="slp",
+        # ``type=str.lower`` so SLP / Slp / slp all reach the choice
+        # comparison as the lowercase canonical form.
+        type=str.lower,
         choices=["slp", "minimal_epitope", "multi_epitope"],
         help="Back-compat shorthand for the orthogonal axes "
              "(--antigen-content + --peptide-antigens-per-construct). "
@@ -587,11 +673,20 @@ def add_peptide_output_args(group):
         help="Override --epitopes-per-antigen for peptide vaccines.")
     group.add_argument(
         "--peptide-linker",
-        default="G4S3",
+        # ``G4Sx3`` is self-documenting: "G4S repeated 3x" =
+        # GGGGSGGGGSGGGGS. The shorter alias ``GS3`` and the bare
+        # form ``G4S3`` both also parse, but G4S3 means literally
+        # ``GGGGSSS`` (4 G + 3 S, GnSm form) and GS3 reads as
+        # ambiguous "G + S + 3"; G4Sx3 leaves no doubt about which
+        # was meant.
+        default="G4Sx3",
         type=_linker_arg,
         help="Linker used in --peptide-mode=multi_epitope (case-insensitive). "
-             "Accepts named entries, compositional forms ((BASE)N / GnSm / "
-             "AnY), and aliases. Shared with mRNA mode. Default: G4S3.")
+             "Accepts named entries (P2A, AAY, EAAAK, …), compositional "
+             "forms ((BASE)N or BASExN for repeats, GnSm for n-glycines + "
+             "m-serines literal, AnY for n-alanines + Y), and aliases. "
+             "Shared with mRNA mode. Default: G4Sx3 = (G4S)3 = "
+             "GGGGSGGGGSGGGGS (15 aa, BioNTech FixVac canonical).")
     group.add_argument(
         "--peptide-min-antigen-length-aa",
         default=15,
@@ -662,32 +757,191 @@ def add_supplemental_report_args(arg_parser):
         help="Local path to COSMIC vcf")
 
 
+_PRIMARY_OUTPUT_FLAGS = (
+    # (CLI flag, args attribute, one-line purpose)
+    ("--output-csv",                    "output_csv",
+        "ranked vaccine peptides as CSV"),
+    ("--output-xlsx-report",            "output_xlsx_report",
+        "ranked vaccine peptides as XLSX"),
+    ("--output-ascii-report",           "output_ascii_report",
+        "ASCII summary report"),
+    ("--output-html-report",            "output_html_report",
+        "HTML summary report"),
+    ("--output-pdf-report",             "output_pdf_report",
+        "PDF summary report"),
+    ("--output-neoepitope-report",      "output_neoepitope_report",
+        "per-(peptide, allele) neoepitope XLSX"),
+    ("--output-json-file",              "output_json_file",
+        "machine-readable JSON of ranked vaccine peptides"),
+    ("--output-passing-variants-csv",   "output_passing_variants_csv",
+        "filter-passing variants as CSV"),
+    ("--output-isovar-csv",             "output_isovar_csv",
+        "Isovar transcript-assembly intermediate CSV"),
+    ("--output-epitopes",               "output_epitopes",
+        "raw epitope predictions"),
+    ("--output-dir",                    "output_dir",
+        "directory for assembled vaccine constructs "
+        "(per-modality subdirs when --vaccine-type has 2+ entries)"),
+)
+
+
 def check_args(args):
-    if not (args.output_csv or
-            args.output_ascii_report or
-            args.output_html_report or
-            args.output_pdf_report or
-            args.output_json_file or
-            args.output_xlsx_report or
-            args.output_neoepitope_report or
-            args.output_passing_variants_csv or
-            args.output_isovar_csv or
-            args.output_epitopes or
-            args.output_mrna or
-            args.output_peptide):
+    """Fail fast when no primary --output-* flag is set, or when
+    type-specific companion flags don't match --vaccine-type.
+
+    Every output path is opt-in via its own flag; there is no default
+    destination. Without this guard a user can run a long pipeline (or
+    a LENS / pVACseq import) and end up with nothing on disk — exactly
+    the surprise we want to prevent.
+    """
+    if not any(getattr(args, attr, '') for _, attr, _ in _PRIMARY_OUTPUT_FLAGS):
+        flag_lines = "\n".join(
+            "  %-32s %s" % (flag, purpose)
+            for flag, _, purpose in _PRIMARY_OUTPUT_FLAGS)
         raise ValueError(
-            "Must specify at least one of: --output-csv, "
-            "--output-xlsx-report, "
-            "--output-ascii-report, "
-            "--output-html-report, "
-            "--output-pdf-report, "
-            "--output-neoepitope-report, "
-            "--output-json-file, "
-            "--output-passing-variants-csv, "
-            "--output-isovar-csv, "
-            "--output-epitopes, "
-            "--output-mrna, "
-            "--output-peptide")
+            "No output path specified. Pass at least one of the "
+            "following flags so vaxrank knows where to write "
+            "results:\n%s" % flag_lines)
+
+    # ``--output-dir`` is contractually a directory; the file-path
+    # form was removed when single-file outputs went away. Reject
+    # paths that point at an existing file or look like a FASTA
+    # (``out.fasta``) so the user sees the mismatch immediately
+    # rather than burning ranking time and crashing in the writer.
+    _reject_output_dir_misuse(args)
+
+    # External input + template-report flag without ``--ensembl-release``
+    # would render reports with empty effect annotations (transcript
+    # IDs from LENS / pVACseq won't resolve). Reject pre-flight with a
+    # build hint inferred from the file — empty-effect reports waste
+    # the user's time and silently degrade quality, so make this a
+    # hard error rather than a warning.
+    _require_ensembl_release_for_template_reports(args)
+
+
+# Suffixes that look like a single-file output but ``--output-dir``
+# always wants a directory; same set ``mrna.py`` enforces locally for
+# its own writer, hoisted here so both writers get the check.
+#
+# Scoped narrowly to FASTA-family extensions and archive containers:
+# those are the formats this tree actually emits or that a user is
+# reasonably likely to mistake for a vaccine output. Tabular suffixes
+# (``.json`` / ``.csv`` / ``.tsv`` / ``.txt``) are deliberately *not*
+# included — those happen to be common directory names too (e.g.
+# ``runs/csv/`` for batch job outputs), and rejecting them
+# unconditionally trips users who picked a sensible directory name.
+# Mistakes in the tabular space surface as soon as the writer tries
+# to ``os.makedirs`` an existing file (caught by the ``isfile`` check
+# above).
+_OUTPUT_DIR_REJECTED_SUFFIXES = (
+    '.fasta', '.fa', '.fna', '.ffn', '.fas',
+    '.zip', '.tar')
+
+
+def _reject_output_dir_misuse(args):
+    """Catch the "user passed a file path to --output-dir" case
+    early. Three rejection categories:
+
+    1. The path already exists and is a file (vaxrank would
+       ``os.makedirs(path)`` and crash deep in the writer).
+    2. The path doesn't exist but ends in a suffix that strongly
+       suggests a single-file target — ``out.fasta``, ``out.zip``,
+       etc. (See ``_OUTPUT_DIR_REJECTED_SUFFIXES`` for the exact
+       list — kept narrow so common directory names like
+       ``runs/csv/`` aren't rejected.) Better to refuse than create
+       a directory called ``out.fasta/``.
+    3. (Multi-mode-only) the path resolves to a sub-path of an
+       existing modality subdir — handled by the writers.
+    """
+    import os
+    output_dir = getattr(args, 'output_dir', '') or ''
+    if not output_dir:
+        return
+    if os.path.isfile(output_dir):
+        raise ValueError(
+            "--output-dir points at an existing file (%r); the flag "
+            "wants a directory. Pass a directory path or a path that "
+            "doesn't exist yet." % output_dir)
+    if any(output_dir.lower().endswith(s)
+           for s in _OUTPUT_DIR_REJECTED_SUFFIXES):
+        raise ValueError(
+            "--output-dir is %r, which looks like a single-file "
+            "target. Vaxrank picks canonical filenames inside the "
+            "directory (vaccine.fasta / cds.fasta / manifest.json / "
+            "etc.); pass a directory path instead (e.g. drop the "
+            "suffix)." % output_dir)
+
+
+def _require_ensembl_release_for_template_reports(args):
+    needs_transcripts = any(
+        getattr(args, attr, '') for attr in (
+            'output_ascii_report',
+            'output_html_report',
+            'output_pdf_report',
+        )
+    )
+    if not needs_transcripts:
+        return
+    if getattr(args, 'ensembl_release', None) is not None:
+        return
+    lens_path = getattr(args, 'input_lens', None)
+    pvacseq_path = getattr(args, 'input_pvacseq', None)
+    if not (lens_path or pvacseq_path):
+        return
+    # Try to infer the build from the LENS file so the hint can name
+    # a plausible release. pVACseq aggregates don't carry a build
+    # marker we can read here. Be honest about uncertainty:
+    # ``origin_descriptor`` only pins the build (GRCh37 vs GRCh38),
+    # not the Ensembl release — a build spans many releases. We
+    # suggest something the user *already has installed* via the
+    # pyensembl cache, falling back to the canonical build-final
+    # release (GRCh37 → 75) when nothing is installed.
+    hint = " Pass --ensembl-release N to populate them."
+    if lens_path:
+        from ..external_input import (
+            infer_genome_build_from_lens,
+            installed_ensembl_releases_for_build,
+            _BUILD_TO_CANONICAL_RELEASE)
+        try:
+            build = infer_genome_build_from_lens(lens_path)
+        except Exception:
+            build = None
+        if build:
+            installed = installed_ensembl_releases_for_build(build)
+            if installed:
+                # Suggest the latest installed release for this build
+                # — it's a real candidate the user can use without
+                # downloading anything. Show the full list so they
+                # know what else is available.
+                hint = (
+                    " The LENS file's origin_descriptor looks like "
+                    "%s; you have these %s releases installed: %s. "
+                    "Try --ensembl-release %d (or whichever matches "
+                    "the build LENS used)."
+                    % (build, build, installed, installed[-1]))
+            elif build in _BUILD_TO_CANONICAL_RELEASE:
+                # GRCh37 has a canonical "last release" (75); GRCh38
+                # doesn't — we don't pick a number out of thin air.
+                rel = _BUILD_TO_CANONICAL_RELEASE[build]
+                hint = (
+                    " The LENS file's origin_descriptor looks like "
+                    "%s; the canonical final %s release is %d. "
+                    "Install with `pyensembl install --release %d "
+                    "--reference-name %s`."
+                    % (build, build, rel, rel, build))
+            else:
+                hint = (
+                    " The LENS file's origin_descriptor looks like "
+                    "%s, but no %s releases are installed in your "
+                    "pyensembl cache. Install one with `pyensembl "
+                    "install --release N --reference-name %s` "
+                    "(N must match the build LENS used)."
+                    % (build, build, build))
+    raise ValueError(
+        "Template report(s) requested with --input-lens / "
+        "--input-pvacseq but no --ensembl-release set. Transcript "
+        "effect annotations would be empty (rendered as '—'), so "
+        "vaxrank refuses to write a degraded report.%s" % hint)
 
 
 def external_input_arg_parser():
@@ -706,7 +960,25 @@ def external_input_arg_parser():
     arg_parser.add_argument("--input-lens", default=None)
     arg_parser.add_argument(
         "--verbose", "-v", action="store_true", default=False)
+    # ``--ensembl-release`` lets external-input runs resolve LENS /
+    # pVACseq transcript_id strings to pyensembl ``Transcript`` objects
+    # so template reports (ASCII / HTML / PDF) can render variant
+    # effects. Without it, those reports fall back to a less detailed
+    # rendering (no transcript-name / effect-description columns).
+    arg_parser.add_argument(
+        "--ensembl-release",
+        default=None,
+        type=int,
+        help="Ensembl release for resolving transcript IDs (e.g. 75, 102). "
+             "By default pyensembl picks the most recent locally installed "
+             "release. Match the release LENS / pVACseq used.")
     add_output_args(arg_parser)
+    # Template reports (ASCII / HTML / PDF) work on this path too once
+    # transcripts are resolved (#268). The supplemental + optional groups
+    # contribute the namespace shape ``TemplateDataCreator`` expects
+    # (manufacturability / wt_epitopes / cosmic_vcf_filename).
+    add_optional_output_args(arg_parser)
+    add_supplemental_report_args(arg_parser)
     add_epitope_prediction_args(arg_parser)
     # config arg needed for epitope_config_from_args
     arg_parser.add_argument("--config", action="append", default=None)
@@ -759,7 +1031,31 @@ def choose_arg_parser(args_list):
 
 def parse_vaxrank_args(args_list):
     arg_parser = choose_arg_parser(args_list)
-    return arg_parser.parse_args(args_list)
+    parsed = arg_parser.parse_args(args_list)
+    # Snapshot of parser defaults so downstream code can detect
+    # "user explicitly passed this flag" by ``args.X !=
+    # args._parser_defaults['X']``. Used by the construct-kwargs
+    # resolver to give CLI flags precedence over YAML config values.
+    #
+    # Apply ``action.type`` to string defaults the same way argparse
+    # does at parse time — otherwise the snapshot stores the raw
+    # default (e.g. ``'G4Sx3'``) while ``args.peptide_linker`` holds
+    # the type-converted form (``'G4SX3'`` after _linker_arg
+    # uppercases), and the equality check falsely flags the
+    # unmodified default as user-supplied.
+    defaults = {}
+    for a in arg_parser._actions:
+        if not a.dest or a.dest == 'help':
+            continue
+        val = a.default
+        if isinstance(val, str) and a.type and callable(a.type):
+            try:
+                val = a.type(val)
+            except Exception:
+                pass
+        defaults[a.dest] = val
+    parsed._parser_defaults = defaults
+    return parsed
 class _ConfigOverrideAction(Action):
     def __init__(self, option_strings, dest, **kwargs):
         self.override_kind = kwargs.pop("override_kind")

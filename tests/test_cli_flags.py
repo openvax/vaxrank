@@ -200,3 +200,67 @@ def test_mrna_linker_accepts_lowercase():
         "--mrna-linker", "gs3",
     ])
     assert args.mrna_linker == "GS3"
+
+
+def test_peptide_mode_is_case_insensitive():
+    """``--peptide-mode SLP`` / ``Slp`` / ``slp`` all parse to the
+    same canonical lowercase ``'slp'`` so users don't get bitten by
+    case mismatch in YAML configs or scripts."""
+    parser = make_vaxrank_arg_parser()
+    for raw in ['slp', 'SLP', 'Slp', 'sLP']:
+        args = parser.parse_args([
+            "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+            "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+            "--output-csv", "out.csv",
+            "--peptide-mode", raw,
+        ])
+        assert args.peptide_mode == "slp"
+
+
+def test_peptide_construct_config_normalizes_uppercase_mode():
+    """YAML configs bypass argparse, so the normalization must also
+    happen in ``PeptideConstructConfig.__post_init__``."""
+    from vaxrank.peptide import PeptideConstructConfig
+    cfg = PeptideConstructConfig(mode='SLP', antigens_per_construct=1)
+    assert cfg.mode == 'slp'
+    cfg2 = PeptideConstructConfig(
+        mode='Minimal_Epitope', antigens_per_construct=1)
+    assert cfg2.mode == 'minimal_epitope'
+    assert cfg2.antigen_content == 'minimal_epitope'
+
+
+def test_default_peptide_linker_is_unambiguous_and_canonical():
+    """Default ``--peptide-linker G4Sx3`` is the self-documenting
+    "(G4S) repeated 3x" form — resolves to GGGGSGGGGSGGGGS (15 aa,
+    canonical FixVac flexible linker). The bare ``G4S3`` parses as
+    a different 7aa literal (4 G + 3 S, GnSm grammar) and the
+    legacy ``GS3`` reads ambiguously as "G + S + 3," so neither is
+    used as the default."""
+    from vaxrank.vaccine_library import get_linker
+    parser = make_vaxrank_arg_parser()
+    args = parser.parse_args([
+        "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+        "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+        "--output-csv", "out.csv",
+    ])
+    assert args.peptide_linker == "G4SX3"   # _linker_arg uppercases
+    linker = get_linker(args.peptide_linker)
+    assert linker.amino_acids == "GGGGSGGGGSGGGGS"
+    assert len(linker.amino_acids) == 15
+
+
+def test_default_mrna_linker_is_unambiguous_and_canonical():
+    """Default ``--mrna-linker G4Sx2`` resolves to GGGGSGGGGS (10 aa,
+    canonical FixVac mRNA inter-antigen linker). Same self-
+    documenting compositional form as the peptide-side default."""
+    from vaxrank.vaccine_library import get_linker
+    parser = make_vaxrank_arg_parser()
+    args = parser.parse_args([
+        "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+        "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+        "--output-csv", "out.csv",
+    ])
+    assert args.mrna_linker == "G4SX2"
+    linker = get_linker(args.mrna_linker)
+    assert linker.amino_acids == "GGGGSGGGGS"
+    assert len(linker.amino_acids) == 10

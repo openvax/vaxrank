@@ -151,6 +151,10 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     max_kmer_hydropathy_high_priority: float = DEFAULT_MANUFACTURABILITY_MAX_KMER_HYDROPATHY_HIGH_PRIORITY
     manufacturability_rules: Optional[tuple[str, ...]] = None
     combined_score_mode: str = DEFAULT_COMBINED_SCORE_MODE
+    # Optional DSL expression that supersedes ``combined_score_mode``
+    # when set. See :mod:`vaxrank.combined_score_dsl` for grammar +
+    # bindings. ``None`` keeps the enum-mode behavior.
+    combined_score_expr: Optional[str] = None
     ranking_rules: Optional[tuple[str, ...]] = None
     # When True (default, legacy behavior), variants whose vaccine peptides
     # contain no mutant-overlapping epitopes are dropped from the report

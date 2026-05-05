@@ -43,7 +43,7 @@ cli_args_for_b16_seqdata_real_predictor = [
     "--mhc-alleles", "H2-Kb,H2-Db",
     "--mhc-epitope-lengths", "8",
     "--padding-around-mutation", "5",
-    "--count-mismatches-after-variant"
+    "--count-mismatches-after-variant",
 ]
 
 

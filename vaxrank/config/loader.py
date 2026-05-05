@@ -222,6 +222,7 @@ _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.per_mutation", "max_vaccine_peptides_per_variant"),
     ("vaccine_peptides.score_fraction_of_best", "score_fraction_of_best"),
     ("vaccine_peptides.combined_score_mode", "combined_score_mode"),
+    ("vaccine_peptides.combined_score_expr", "combined_score_expr"),
     ("vaccine_peptides.ranking_rules", "ranking_rules"),
     ("vaccine_peptides.require_mutant_epitopes_in_variant",
      "require_mutant_epitopes_in_variant"),
@@ -259,6 +260,42 @@ def _extract_via_mapping(
 
 def extract_epitope_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     return _extract_via_mapping(config, _EPITOPE_CONFIG_MAPPING)
+
+
+_VACCINE_CONSTRUCTS_SUBSECTIONS = {'peptide', 'mrna'}
+
+
+def extract_construct_kwargs(
+    config: dict[str, Any],
+    modality: str,
+) -> dict[str, Any]:
+    """Resolve construct-assembly kwargs for ``modality`` ('peptide'
+    or 'mrna') by merging cross-modality values at the
+    ``vaccine_constructs`` top level with the modality-specific
+    subsection. Modality values override cross-modality values;
+    ``None`` entries are dropped so callers can use
+    ``dict.get(name, fallback)`` cleanly.
+
+    Empty dict when the section is absent — same shape as before so
+    code paths that don't use the new section behave identically.
+    """
+    out: dict[str, Any] = {}
+    section = _resolve_dotted(config, 'vaccine_constructs')
+    if not isinstance(section, dict):
+        return out
+    # Top-level entries that aren't subsection names are
+    # cross-modality knobs; merge first so modality-specific
+    # overrides land on top.
+    for k, v in section.items():
+        if k in _VACCINE_CONSTRUCTS_SUBSECTIONS:
+            continue
+        if v is None:
+            continue
+        out[k] = v
+    modal = section.get(modality)
+    if isinstance(modal, dict):
+        out.update({k: v for k, v in modal.items() if v is not None})
+    return out
 
 
 def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:

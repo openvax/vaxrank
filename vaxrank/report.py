@@ -56,6 +56,15 @@ class TemplateDataCreator(object):
         self.patient_info = patient_info
         self.dna_vaf_by_variant = dna_vaf_by_variant or {}
 
+        # ``vaccine_type`` is rendered in the patient-info block so
+        # the reader can tell at a glance what's being designed.
+        # Multi-valued (default ``['peptide']``); render as a
+        # comma-list so multi-mode runs (peptide+mrna) read cleanly.
+        raw_types = args_for_report.get('vaccine_type') or ['peptide']
+        if isinstance(raw_types, str):
+            raw_types = [raw_types]
+        self.vaccine_type = ', '.join(raw_types)
+
         # filter output-related command-line args: we want to display everything else
         args_to_display_in_report = {
             k: v for k, v in args_for_report.items() if not k.startswith("output")
@@ -83,21 +92,54 @@ class TemplateDataCreator(object):
     def _patient_info(self):
         """
         Returns an OrderedDict with patient info.
+
+        Inputs section: prefer the explicit ``inputs`` list when
+        populated (LENS / pVACseq external paths set this directly so
+        the file is labelled accurately); fall back to the legacy
+        ``vcf_paths`` + ``bam_path`` fields for the VCF/BAM pipeline
+        path and for backward-compatible loading of older
+        serialized PatientInfo JSON.
         """
-        patient_info = OrderedDict([
-            ('Patient ID', self.patient_info.patient_id),
-            ('VCF (somatic variants) path(s)', '; '.join(self.patient_info.vcf_paths)),
-            ('BAM (RNAseq reads) path', self.patient_info.bam_path),
-            ('MHC alleles', ' '.join(self.patient_info.mhc_alleles)),
-            ('Total number of somatic variants', self.patient_info.num_somatic_variants),
-            ('Somatic variants with predicted coding effects',
-                self.patient_info.num_coding_effect_variants),
-            ('Somatic variants with predicted coding effects and RNA support',
-                self.patient_info.num_variants_with_rna_support),
-            ('Somatic variants with predicted coding effects, RNA support and predicted MHC '
-                'ligands',
-                self.patient_info.num_variants_with_vaccine_peptides),
-        ])
+        patient_info = OrderedDict()
+        patient_info['Patient ID'] = self.patient_info.patient_id
+        # Modality is part of the report's identity — what the user
+        # is actually designing. Generic up here; modality-specific
+        # construct details (signal peptide, UTRs, etc. for mRNA;
+        # synthesis flags for peptide) belong in a per-construct
+        # section rendered next to the assembled FASTA / directory.
+        patient_info['Vaccine type'] = self.vaccine_type
+
+        if self.patient_info.inputs:
+            for label, path in self.patient_info.inputs:
+                patient_info[label] = path
+        else:
+            if self.patient_info.vcf_paths:
+                patient_info['VCF (somatic variants) path(s)'] = (
+                    '; '.join(self.patient_info.vcf_paths))
+            if self.patient_info.bam_path:
+                patient_info['BAM (RNAseq reads) path'] = (
+                    self.patient_info.bam_path)
+
+        patient_info['MHC alleles'] = ' '.join(self.patient_info.mhc_alleles)
+        # Name the processing-credibility predictor explicitly so the
+        # ``Processing: …`` columns in the per-VP epitope tables can
+        # use predictor-agnostic header names without losing
+        # provenance. Today there's only one (pepsickle, see
+        # ``vaxrank.processing``); a future per-position predictor
+        # plugged in via the same EpitopePrediction fields would
+        # show its own name here.
+        patient_info['Processing predictor'] = 'pepsickle'
+        patient_info['Total number of somatic variants'] = (
+            self.patient_info.num_somatic_variants)
+        patient_info['Somatic variants with predicted coding effects'] = (
+            self.patient_info.num_coding_effect_variants)
+        patient_info[
+            'Somatic variants with predicted coding effects and RNA support'
+        ] = self.patient_info.num_variants_with_rna_support
+        patient_info[
+            'Somatic variants with predicted coding effects, RNA support and '
+            'predicted MHC ligands'
+        ] = self.patient_info.num_variants_with_vaccine_peptides
         return patient_info
 
     def _variant_data(self, variant, top_vaccine_peptide):
@@ -122,16 +164,27 @@ class TemplateDataCreator(object):
         return variant_data
 
     def _effect_data(self, predicted_effect):
+        """OrderedDict with info about the given varcode effect.
+
+        ``predicted_effect`` may be ``None`` on external-input paths
+        when the transcript IDs in the source file (LENS / pVACseq)
+        couldn't be resolved against the configured pyensembl release.
+        Render those rows with ``"—"`` placeholders rather than
+        crash.
         """
-        Returns an OrderedDict with info about the given predicted effect.
-        """
-        effect_data = OrderedDict([
+        if predicted_effect is None:
+            return OrderedDict([
+                ('Effect type', '—'),
+                ('Transcript name', '—'),
+                ('Transcript ID', '—'),
+                ('Effect description', '—'),
+            ])
+        return OrderedDict([
             ('Effect type', predicted_effect.__class__.__name__),
             ('Transcript name', predicted_effect.transcript_name),
             ('Transcript ID', predicted_effect.transcript_id),
             ('Effect description', predicted_effect.short_description),
         ])
-        return effect_data
 
     def _peptide_header_display_data(self, vaccine_peptide, rank):
         """
@@ -207,9 +260,22 @@ class TemplateDataCreator(object):
         ])
         return manufacturability_data
 
-    def _epitope_data(self, epitope_prediction):
-        """
-        Returns an OrderedDict with epitope data from the given prediction.
+    def _epitope_data(self, epitope_prediction, include_processing=False):
+        """Returns an OrderedDict with epitope data from the given prediction.
+
+        ``include_processing``: when True, always emit the three
+        pepsickle credibility columns (``C-term cut``, ``Max internal
+        cut``, ``Processing score``), using ``'—'`` as the placeholder
+        for predictions that weren't annotated. The caller decides
+        per-list (per-VaccinePeptide) whether *any* prediction in
+        the list is annotated; if so, every row gets the columns so
+        the rendered table has consistent headers and column widths.
+
+        When False (default), the legacy 6-column dict is returned
+        unchanged — reports that don't run pepsickle keep their
+        original shape.
+
+        Issue #249.
         """
         # if the WT peptide is too short, it's possible that we're missing a prediction for it
         if epitope_prediction.wt_ic50 is not None:
@@ -218,12 +284,45 @@ class TemplateDataCreator(object):
             wt_ic50_str = 'No prediction'
         epitope_data = OrderedDict([
             ('Sequence', epitope_prediction.peptide_sequence),
+            # ``Predictor`` names which MHC affinity tool produced
+            # ``IC50`` / ``Score`` / ``WT IC50`` for this row —
+            # mhcflurry / netmhcpan / mhcflurry-presentation / etc.
+            # Pipeline runs are usually single-predictor; LENS files
+            # are sometimes multi-predictor (e.g. mhcflurry +
+            # netmhcpan), so making the source explicit per row is
+            # the only honest answer.
+            ('Predictor', epitope_prediction.prediction_method_name or '—'),
             ('IC50', '%.2f nM' % epitope_prediction.ic50),
-            ('Score', _sanitize(epitope_prediction.logistic_epitope_score())),
+            # ``Score`` is the logistic transform of IC50 (range
+            # [0, 1]; higher = stronger predicted binder). It is NOT
+            # mhcflurry's presentation_score / EL — vaxrank derives
+            # it locally so the column is comparable across
+            # predictors.
+            ('Score (affinity, logistic IC50)',
+                _sanitize(epitope_prediction.logistic_epitope_score())),
             ('Allele', epitope_prediction.allele.replace('HLA-', '')),
             ('WT sequence', epitope_prediction.wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
         ])
+        if include_processing:
+            # Column headers are predictor-agnostic ("Processing: …")
+            # so a future per-position predictor (NetChop, PAProC)
+            # can render through the same table without renaming.
+            # The active predictor is named in the patient-info
+            # header (``Processing predictor: pepsickle``) so the
+            # reader can trace which model produced the values.
+            c_term = getattr(
+                epitope_prediction, 'pepsickle_c_term_cleavage_prob', None)
+            max_int = getattr(
+                epitope_prediction, 'pepsickle_max_internal_cut_prob', None)
+            proc = getattr(
+                epitope_prediction, 'pepsickle_processing_score', None)
+            epitope_data['Processing: C-term'] = (
+                '%.2f' % c_term if c_term is not None else '—')
+            epitope_data['Processing: max internal'] = (
+                '%.2f' % max_int if max_int is not None else '—')
+            epitope_data['Processing: combined'] = (
+                '%.2f' % proc if proc is not None else '—')
         return epitope_data
 
     def _query_cosmic(self, variant):
@@ -245,7 +344,11 @@ class TemplateDataCreator(object):
         Check if variant is a known cancer hotspot and return link if so.
 
         Uses bundled cancer hotspots data from Chang et al. 2016/2017.
+        Returns ``None`` when ``predicted_effect`` is None (no
+        transcript context — common on external-input paths).
         """
+        if predicted_effect is None:
+            return None
         amino_acids = predicted_effect.short_description
         hotspot_url = get_hotspot_url(gene_name, amino_acids)
         if hotspot_url:
@@ -298,13 +401,31 @@ class TemplateDataCreator(object):
                     continue
 
                 header_display_data = self._peptide_header_display_data(vaccine_peptide, j)
-                peptide_data = self._peptide_data(vaccine_peptide, predicted_effect.transcript_name)
+                transcript_name = (
+                    predicted_effect.transcript_name
+                    if predicted_effect is not None else '—')
+                peptide_data = self._peptide_data(vaccine_peptide, transcript_name)
                 manufacturability_data = self._manufacturability_data(vaccine_peptide)
+
+                # Issue #249: pepsickle credibility columns are added
+                # to every row in this VP's per-epitope table iff *any*
+                # mutant prediction in the list was annotated. This
+                # keeps the rendered HTML/PDF/ASCII table headers
+                # consistent with the rows even when some predictions
+                # failed annotation (per-source pepsickle errors are
+                # graceful, so mixed annotated/unannotated lists are
+                # possible).
+                any_processing = any(
+                    getattr(p, 'pepsickle_c_term_cleavage_prob', None)
+                    is not None
+                    for p in vaccine_peptide.mutant_epitope_predictions)
 
                 epitopes = []
                 wt_epitopes = []
                 for mutant_epitope_prediction in vaccine_peptide.mutant_epitope_predictions:
-                    epitopes.append(self._epitope_data(mutant_epitope_prediction))
+                    epitopes.append(self._epitope_data(
+                        mutant_epitope_prediction,
+                        include_processing=any_processing))
 
                 for wt_epitope_prediction in vaccine_peptide.wildtype_epitope_predictions:
                     epitope_data = self._epitope_data(wt_epitope_prediction)

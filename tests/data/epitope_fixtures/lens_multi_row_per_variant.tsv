@@ -1,4 +1,4 @@
-allele	peptide	netmhcpan_4.1b.score_el	netmhcpan_4.1b.perc_rank_el	netmhcpan_4.1b.score_ba	netmhcpan_4.1b.perc_rank_ba	netmhcpan_4.1b.aff_nm	mhcflurry_2.1.1.aff	mhcflurry_2.1.1.aff_perc	mhcflurry_2.1.1.pres_score	mhcflurry_2.1.1.pres_perc	antigen_source	mut_aa_pos	variant_coords	gene_name	tpm	netmhcpan_agretopicity	mhcflurry_agretopicity	pep_context
-HLA-A02:01	WEAKLLLLL	0.20	8.0	0.15	7.5	5000.00	4500.0	5.0	0.10	8.0	SNV	245	chr17:7675088:C:T	TP53	42.5	0.500	0.520	AAWEAKLLLLLGTR
-HLA-B07:02	STRNGLVLLL	0.95	0.1	0.92	0.2	22.50	18.0	0.05	0.95	0.05	SNV	245	chr17:7675088:C:T	TP53	42.5	0.005	0.004	AASTRNGLVLLLGTR
-HLA-A02:01	MIDDLEEEEE	0.60	2.5	0.55	2.8	500.00	450.0	1.5	0.40	2.5	SNV	245	chr17:7675088:C:T	TP53	42.5	0.050	0.060	AAMIDDLEEEEEGTR
+allele	peptide	netmhcpan_4.1b.score_el	netmhcpan_4.1b.perc_rank_el	netmhcpan_4.1b.score_ba	netmhcpan_4.1b.perc_rank_ba	netmhcpan_4.1b.aff_nm	mhcflurry_2.1.1.aff	mhcflurry_2.1.1.aff_perc	mhcflurry_2.1.1.pres_score	mhcflurry_2.1.1.pres_perc	antigen_source	mut_aa_pos	variant_coords	gene_name	tpm	netmhcpan_agretopicity	mhcflurry_agretopicity	pep_context	snv_ref_allele	snv_alt_allele	indel_ref_allele	indel_alt_allele
+HLA-A02:01	WEAKLLLLL	0.2	8.0	0.15	7.5	5000.0	4500.0	5.0	0.1	8.0	SNV	245	chr17:7675088:C:T	TP53	42.5	0.5	0.52	AAWEAKLLLLLGTR	C	[T]		
+HLA-B07:02	STRNGLVLLL	0.95	0.1	0.92	0.2	22.5	18.0	0.05	0.95	0.05	SNV	245	chr17:7675088:C:T	TP53	42.5	0.005	0.004	AASTRNGLVLLLGTR	C	[T]		
+HLA-A02:01	MIDDLEEEEE	0.6	2.5	0.55	2.8	500.0	450.0	1.5	0.4	2.5	SNV	245	chr17:7675088:C:T	TP53	42.5	0.05	0.06	AAMIDDLEEEEEGTR	C	[T]		

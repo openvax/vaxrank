@@ -156,7 +156,9 @@ def test_load_lens_emits_one_prediction_per_detected_predictor():
     assert p.percentile_rank == pytest.approx(0.28)  # mhcflurry pres_perc
     assert p.predictor_version == "2.1.1"
     assert p.wt_peptide_sequence == ""
-    assert p.wt_ic50 is None
+    # wt_ic50 is now derived from mhcflurry_agretopicity (= MT/WT ratio).
+    # Fixture row: mhcflurry IC50 = 95.4, agretopicity = 0.020 → WT ≈ 4770.
+    assert p.wt_ic50 == pytest.approx(95.4 / 0.020)
     assert p.overlaps_mutation is True
     assert p.source_sequence == "AASVVGSSSSSGTR"
 
@@ -743,22 +745,33 @@ def test_load_predictions_empty_string_fields_become_empty_not_nan(tmp_path):
     assert p.predictor_version == ""
 
 
-def test_write_neoepitope_report_rejects_duplicate_rows(tmp_path):
-    """write_neoepitope_report merges scores by (peptide, allele); if a
-    loader ever produced a report_df with duplicates that merge would be
-    ambiguous, so we assert uniqueness upfront. This test constructs
-    duplicates explicitly to exercise the guard."""
+def test_write_neoepitope_report_broadcasts_score_across_duplicate_rows(tmp_path):
+    """Real-world LENS / pVACseq files emit the same (peptide, allele)
+    pair from multiple sources (alternative transcripts, homologous
+    regions, multiple variants). The writer broadcasts the same score
+    across each duplicate row instead of raising — per-source provenance
+    lives in other columns."""
     import pandas as pd
     from vaxrank.epitope_io import write_neoepitope_report
 
     report_df = pd.DataFrame([
-        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL'},
-        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL'},  # duplicate
+        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL',
+         'Genomic variant': 'chr1:100', 'Gene name': 'GENEA'},
+        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL',
+         'Genomic variant': 'chr2:200', 'Gene name': 'GENEB'},  # same (pep, allele)
     ])
     preds = [_make_prediction(peptide_sequence='SIINFEKL', allele='HLA-A*02:01')]
-    with pytest.raises(ValueError, match="duplicate .*peptide, allele"):
-        write_neoepitope_report(
-            report_df, preds, csv_report_path=str(tmp_path / "unused.csv"))
+    csv_path = tmp_path / "out.csv"
+    write_neoepitope_report(report_df, preds, csv_report_path=str(csv_path))
+    result = pd.read_csv(csv_path)
+    # Both source rows preserved with their per-source provenance
+    assert len(result) == 2
+    assert sorted(result['Genomic variant'].tolist()) == ['chr1:100', 'chr2:200']
+    # Same vaxrank_score broadcast to both
+    scores = result['vaxrank_score'].unique()
+    assert len(scores) == 1, (
+        "Expected the same score on both duplicate-(peptide, allele) "
+        "rows; got %r" % scores.tolist())
 
 
 def test_lens_dsl_combines_both_predictors(tmp_path):
@@ -1154,3 +1167,93 @@ def test_lens_cli_csv_output(tmp_path):
     import pandas as pd
     df = pd.read_csv(csv_path)
     assert len(df) == 3
+
+
+def test_external_arg_parser_accepts_ensembl_release():
+    """``--ensembl-release N`` is reachable from the external-input
+    parser (regression: the flag was originally pipeline-only,
+    leaving LENS-driven template reports without a way to resolve
+    transcript IDs)."""
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    args = parse_vaxrank_args([
+        '--input-lens', '/dev/null',
+        '--output-csv', '/dev/null',
+        '--ensembl-release', '75',
+    ])
+    assert args.ensembl_release == 75
+
+
+def test_external_path_resolves_genome_from_ensembl_release():
+    """End-to-end plumbing: parse + ``_resolve_ensembl_release`` on
+    an external-input args namespace must leave ``args.genome`` as a
+    real ``pyensembl.EnsemblRelease`` so transcript resolution can
+    use it."""
+    import pyensembl
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    from vaxrank.cli.entry_point import _resolve_ensembl_release
+    args = parse_vaxrank_args([
+        '--input-lens', '/dev/null',
+        '--output-csv', '/dev/null',
+        '--ensembl-release', '75',
+    ])
+    _resolve_ensembl_release(args)
+    assert isinstance(args.genome, pyensembl.EnsemblRelease)
+    assert args.genome.release == 75
+
+
+def test_lens_cli_writes_ascii_report():
+    """ASCII / HTML / PDF template reports work on the external
+    (LENS / pVACseq) path now that transcript IDs resolve and a
+    ``PatientInfo`` is synthesized from the loaded antigens
+    (closes #268). Writes to a tempfile and asserts the patient-info
+    section + at least one variant block rendered."""
+    import tempfile
+    from vaxrank.cli.entry_point import main
+    lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
+    with tempfile.TemporaryDirectory() as td:
+        out = os.path.join(td, "report.txt")
+        main([
+            "--input-lens", lens_path,
+            "--output-ascii-report", out,
+            # Required by ``check_args`` pre-flight when external
+            # input is paired with template reports — the release
+            # value doesn't have to resolve every transcript here,
+            # just be present so the run isn't rejected up front.
+            "--ensembl-release", "75",
+        ])
+        assert os.path.exists(out), "ASCII report not written"
+        with open(out) as f:
+            text = f.read()
+    # Patient-info header populated from the synthesized PatientInfo
+    assert "Total number of somatic variants:" in text
+    # At least one variant block — exact count depends on the fixture
+    # but we want the loop to have run, not be silently empty.
+    assert "Vaccine antigens:" in text
+
+
+def test_lens_cli_errors_when_template_report_missing_ensembl_release():
+    """Pre-flight check: external input + template-report flag with
+    no --ensembl-release must fail fast (was a late warning that
+    silently degraded reports to empty effect annotations)."""
+    import pytest
+    from vaxrank.cli.entry_point import main
+    lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
+    with pytest.raises(ValueError, match="--ensembl-release"):
+        main([
+            "--input-lens", lens_path,
+            "--output-ascii-report", "/tmp/should-not-be-written.txt",
+        ])
+
+
+def test_lens_cli_errors_when_no_output_flag_set():
+    """Running ``vaxrank --input-lens FILE`` with no --output-* flag
+    must fail fast — every output is opt-in via its own flag and the
+    earlier behavior (run to completion, write nothing, log a quiet
+    "wrote=['(none)']") is exactly the surprise the guard prevents."""
+    import pytest
+    from vaxrank.cli.entry_point import main
+    lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
+    with pytest.raises(ValueError, match="No output path specified"):
+        main(["--input-lens", lens_path])
+
+

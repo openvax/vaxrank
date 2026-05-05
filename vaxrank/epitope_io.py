@@ -467,6 +467,13 @@ def load_lens(path):
             continue
         allele = normalize_hla_allele(str(allele_raw))
 
+        # mhcflurry_agretopicity = MT_IC50 / WT_IC50 in LENS's
+        # convention (small values ≪ 1 = mutation strengthened
+        # binding). WT_IC50 = MT_IC50 / agretopicity is the only
+        # way to recover wildtype affinity from a LENS row, since
+        # LENS doesn't emit a WT IC50 column directly. Compute
+        # once per row (shared across detected predictors).
+        agretopicity = _safe_float(row.get("mhcflurry_agretopicity"))
         # Build one EpitopePrediction per chosen predictor for this row.
         # Predictions with no usable value for this row are skipped.
         row_preds = []
@@ -478,17 +485,46 @@ def load_lens(path):
                 _safe_float(row.get(d.percentile_col))
                 if d.percentile_col else None)
             pep_context = _safe_str(row.get("pep_context"))
+            # Locate the neoepitope inside its surrounding context.
+            # LENS centers the peptide within pep_context but doesn't
+            # emit the offset directly; substring search recovers it.
+            # When the peptide isn't a substring (e.g. the row's
+            # pep_context is empty), offset stays at 0 — downstream
+            # code (vaxrank.processing) re-locates by substring search
+            # too and reports drift, so this is recoverable.
+            offset = (
+                pep_context.find(str(peptide))
+                if pep_context and str(peptide) in pep_context
+                else 0)
+            # Derive WT IC50 from agretopicity, only for the
+            # mhcflurry-affinity predictor (the value matches that
+            # tool's IC50 scale). Other predictors leave wt_ic50=None.
+            wt_ic50 = None
+            if (d.tool == "mhcflurry" and d.kind == "pMHC_affinity"
+                    and agretopicity is not None and agretopicity > 0):
+                wt_ic50 = value / agretopicity
             row_preds.append(EpitopePrediction(
                 allele=allele,
                 peptide_sequence=str(peptide),
+                # LENS doesn't carry a wildtype peptide column. Empty
+                # string is the codebase convention for "not known"
+                # (the field is typed str, not Optional[str]).
                 wt_peptide_sequence="",
                 ic50=value,
-                wt_ic50=None,
+                wt_ic50=wt_ic50,
                 percentile_rank=percentile_rank,
                 prediction_method_name=d.tool,
+                # LENS pre-curates rows as neoepitopes (each row is a
+                # mutant-derived peptide), so overlaps_mutation is
+                # structurally true. Not invented — implied by the
+                # fact that the row exists in a LENS report.
                 overlaps_mutation=True,
                 source_sequence=pep_context,
-                offset=0,
+                offset=offset,
+                # LENS pre-filters rows against the patient reference
+                # proteome (or upstream tools do); rows that survive
+                # are by definition not in reference. Same structural
+                # assumption as overlaps_mutation.
                 occurs_in_reference=False,
                 predictor_version=d.version,
             ))
@@ -606,19 +642,22 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
     peptide_col = 'Mutant peptide sequence'
     allele_col = 'Allele'
 
-    # Fast O(n) sanity check first — we merge scores back onto report_df by
-    # (peptide, allele). That key must be unique. LENS and pVACseq loaders
-    # both guarantee this, but asserting here catches any future loader
-    # that doesn't, *before* we spend cycles on scoring.
+    # The score-merge below keys by (peptide, allele) and broadcasts the
+    # score back across every matching report_df row. Real-world LENS
+    # files emit the same (peptide, allele) pair from multiple sources
+    # (alternative transcripts, homologous regions, multiple variants)
+    # — that's expected, not an error. Each row retains its own source
+    # provenance (variant_coords, gene_name, transcript) and gets the
+    # same score, which is the correct behavior for a per-row report.
     if len(report_df) > 0:
-        dup_mask = report_df.duplicated(subset=[peptide_col, allele_col])
-        if dup_mask.any():
-            raise ValueError(
-                "report_df has duplicate (peptide, allele) rows; scoring "
-                "cannot unambiguously attach a single score per row. "
-                "Offending rows: "
-                f"{report_df.loc[dup_mask, [peptide_col, allele_col]].to_dict('records')[:3]}"
-            )
+        dup_count = int(report_df.duplicated(
+            subset=[peptide_col, allele_col]).sum())
+        if dup_count:
+            logger.info(
+                "report_df has %d duplicate (peptide, allele) row(s) "
+                "from multi-source input; the same score broadcasts "
+                "across each duplicate. Per-source provenance is "
+                "preserved by the other columns.", dup_count)
 
     # Build the topiary DataFrame once and share it between validator and
     # scorer — these two pass over the same ~N rows and rebuilding is the

@@ -1,4 +1,4 @@
-allele	peptide	netmhcpan_4.1b.score_el	netmhcpan_4.1b.perc_rank_el	netmhcpan_4.1b.score_ba	netmhcpan_4.1b.perc_rank_ba	netmhcpan_4.1b.aff_nm	mhcflurry_2.1.1.aff	mhcflurry_2.1.1.aff_perc	mhcflurry_2.1.1.pres_score	mhcflurry_2.1.1.pres_perc	antigen_source	mut_aa_pos	variant_coords	gene_name	tpm	netmhcpan_agretopicity	mhcflurry_agretopicity	pep_context
-HLA-A02:01	SVVGSSSSS	0.92	0.3	0.85	0.5	76.11	95.4	0.45	0.85	0.28	SNV	245	chr17:7675088:C:T	TP53	42.5	0.017	0.020	AASVVGSSSSSGTR
-HLA-B07:02	LATEKSRWS	0.88	0.4	0.78	0.3	120.50	180.2	0.60	0.79	0.35	SNV	600	chr7:140753336:A:T	BRAF	18.3	0.014	0.018	LLATEKSRWSGGH
-HLA-A02:01	VVVGADGVG	0.70	0.8	0.65	1.2	250.00	310.5	1.05	0.72	0.90	SNV	12	chr12:25245350:C:A	KRAS	35.8	0.038	0.042	MTEYKLVVVGADGVGKSALT
+allele	peptide	netmhcpan_4.1b.score_el	netmhcpan_4.1b.perc_rank_el	netmhcpan_4.1b.score_ba	netmhcpan_4.1b.perc_rank_ba	netmhcpan_4.1b.aff_nm	mhcflurry_2.1.1.aff	mhcflurry_2.1.1.aff_perc	mhcflurry_2.1.1.pres_score	mhcflurry_2.1.1.pres_perc	antigen_source	mut_aa_pos	variant_coords	gene_name	tpm	netmhcpan_agretopicity	mhcflurry_agretopicity	pep_context	snv_ref_allele	snv_alt_allele	indel_ref_allele	indel_alt_allele
+HLA-A02:01	SVVGSSSSS	0.92	0.3	0.85	0.5	76.11	95.4	0.45	0.85	0.28	SNV	245	chr17:7675088:C:T	TP53	42.5	0.017	0.02	AASVVGSSSSSGTR	C	[T]		
+HLA-B07:02	LATEKSRWS	0.88	0.4	0.78	0.3	120.5	180.2	0.6	0.79	0.35	SNV	600	chr7:140753336:A:T	BRAF	18.3	0.014	0.018	LLATEKSRWSGGH	A	[T]		
+HLA-A02:01	VVVGADGVG	0.7	0.8	0.65	1.2	250.0	310.5	1.05	0.72	0.9	SNV	12	chr12:25245350:C:A	KRAS	35.8	0.038	0.042	MTEYKLVVVGADGVGKSALT	C	[A]		

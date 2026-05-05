@@ -26,3 +26,11 @@ class PatientInfo(DataclassSerializable):
     num_coding_effect_variants: int = 0
     num_variants_with_rna_support: int = 0
     num_variants_with_vaccine_peptides: int = 0
+    # Generic inputs description: ordered ``[(label, path), ...]``
+    # rendered verbatim in the report's Inputs block. Lets the
+    # external (LENS / pVACseq) path label its file as "LENS report"
+    # / "pVACseq report" rather than misleadingly as "VCF (somatic
+    # variants)" via ``vcf_paths``. When empty the renderer falls
+    # back to the legacy ``vcf_paths`` / ``bam_path`` fields for
+    # backward compatibility with previously-saved JSON.
+    inputs: list[tuple[str, str]] = field(default_factory=list)

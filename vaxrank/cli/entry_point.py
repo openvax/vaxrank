@@ -14,7 +14,7 @@
 
 import logging
 import logging.config
-
+import os
 import sys
 from importlib.resources import files
 
@@ -116,6 +116,72 @@ def _has_external_input(args):
         or getattr(args, 'input_lens', None))
 
 
+def _annotate_predictions_with_processing(ranked_vaccine_peptides,
+                                          lens_predictions,
+                                          human_only=False,
+                                          threshold=0.5):
+    """Run pepsickle credibility tagging across all EpitopePrediction
+    records. Pulls them from BOTH the ranked-vaccine-peptides
+    intermediate (one VP per variant; each VP has its own predictions)
+    AND the LENS/pVACseq predictions list (which is the union).
+
+    Annotation is in-place on the EpitopePrediction objects.
+
+    Dedup strategy: identity (``id()``) wins when the two paths share
+    the same Python object, but a future external-input loader that
+    *copies* a prediction into the VP would break that assumption.
+    To stay correct in both cases, we *also* dedup on the content
+    tuple ``(peptide_sequence, allele, source_sequence, offset)``
+    so a prediction reachable as two distinct objects with the same
+    semantic identity still gets annotated only once. Both checks
+    are O(1).
+    """
+    from ..processing import annotate_processing
+    all_predictions = []
+    seen_ids = set()
+    seen_keys = set()
+
+    def _key(p):
+        return (
+            getattr(p, 'peptide_sequence', '') or '',
+            getattr(p, 'allele', '') or '',
+            getattr(p, 'source_sequence', '') or '',
+            getattr(p, 'offset', 0) or 0,
+        )
+
+    def _maybe_add(p):
+        pid = id(p)
+        if pid in seen_ids:
+            return
+        seen_ids.add(pid)
+        # Empty / missing peptide_sequence: degenerate record. Don't
+        # apply content-key dedup (every empty-peptide record would
+        # collapse to one bucket); just pass it through and let the
+        # annotation skip it on its own.
+        if not getattr(p, 'peptide_sequence', None):
+            all_predictions.append(p)
+            return
+        # Content-key dedup: skip if a *different* object with the
+        # same (peptide, allele, source, offset) already in flight.
+        k = _key(p)
+        if k in seen_keys:
+            return
+        seen_keys.add(k)
+        all_predictions.append(p)
+
+    for _, peptides in (ranked_vaccine_peptides or []):
+        for vp in peptides or []:
+            for p in (
+                    getattr(vp, 'mutant_epitope_predictions', None) or []):
+                _maybe_add(p)
+    for p in (lens_predictions or []):
+        _maybe_add(p)
+    if not all_predictions:
+        return 0
+    return annotate_processing(
+        all_predictions, human_only=human_only, threshold=threshold)
+
+
 def _epitope_config_from_args_safe(args):
     from ..epitope_config import EpitopeConfig
     try:
@@ -124,32 +190,103 @@ def _epitope_config_from_args_safe(args):
         return EpitopeConfig()
 
 
-_KNOWN_VACCINE_TYPES = {'peptide', 'mrna'}
-# Future vaccine types plug in here as their writers land:
-# _KNOWN_VACCINE_TYPES |= {'dna', ...}
+_DEFAULT_VACCINE_TYPES = ['peptide', 'mrna']
 
 
 def _resolve_vaccine_types(args):
-    """Return the set of vaccine types to design.
+    """Return the ordered, deduplicated list of active vaccine types.
 
-    ``--vaccine-type`` is multi-valued; default ``['peptide']``.
-    Vaxrank always ranks (no "ranking-off" sentinel); whether each
-    type's writer fires also depends on its output path being set.
-    Unknown types raise ``ValueError`` so adding 'dna' before its
-    writer ships fails clearly.
+    ``--vaccine-type`` is multi-valued (default
+    ``['peptide', 'mrna']`` — both modalities by default since they
+    share ranking and pepsickle annotation work and only differ in
+    construct assembly). Argparse validates each entry against the
+    choice set; we deduplicate while preserving first-occurrence
+    order so the rendered output (and any logged dispatch line) is
+    stable.
+
+    Known types come from ``_VACCINE_TYPE_DISPATCH`` so adding a new
+    vaccine writer is a single registration there. Tolerate a bare
+    string (one of the choices) for callers that bypass argparse in
+    tests.
     """
-    raw = getattr(args, 'vaccine_type', ['peptide']) or ['peptide']
-    # argparse with nargs='+' always yields a list; tolerate a bare
-    # string in case a downstream caller bypassed the parser.
+    raw = getattr(args, 'vaccine_type', None) or _DEFAULT_VACCINE_TYPES
     if isinstance(raw, str):
         raw = [raw]
-    types = set(raw)
-    unknown = types - _KNOWN_VACCINE_TYPES
-    if unknown:
-        raise ValueError(
-            "Unknown vaccine type %r. Known: %s." % (
-                sorted(unknown), sorted(_KNOWN_VACCINE_TYPES)))
+    seen = set()
+    types = []
+    for t in raw:
+        if t in seen:
+            continue
+        seen.add(t)
+        if t not in _VACCINE_TYPE_DISPATCH:
+            raise ValueError(
+                "Unknown vaccine type %r. Known: %s." % (
+                    t, sorted(_VACCINE_TYPE_DISPATCH)))
+        types.append(t)
     return types
+
+
+def _coalesce_from_config(args, cli_attr, config_kwargs, config_key):
+    """Resolve a single construct knob across CLI flag, YAML config,
+    and built-in default. Precedence (highest first):
+
+      1. CLI flag was explicitly passed (``args.X`` differs from the
+         parser default snapshot in ``args._parser_defaults``).
+      2. YAML config has a value for the key.
+      3. Built-in default (the parser default; what ``args.X``
+         already holds).
+
+    Lets a YAML ``vaccine_constructs.peptide.linker: AAY`` take
+    effect when the user runs ``vaxrank --config ...`` without
+    repeating ``--peptide-linker AAY`` on the CLI, while still
+    allowing the CLI to override the YAML.
+    """
+    cli_val = getattr(args, cli_attr, None)
+    parser_defaults = getattr(args, '_parser_defaults', None) or {}
+    cli_default = parser_defaults.get(cli_attr, cli_val)
+    if cli_val != cli_default:
+        return cli_val   # user supplied; CLI wins
+    if config_key in config_kwargs:
+        return config_kwargs[config_key]
+    return cli_val       # built-in default
+
+
+def _construct_config_for_modality(args, modality):
+    """Return ``extract_construct_kwargs(merged_config, modality)``
+    or ``{}`` if the YAML config can't be loaded (e.g. tests that
+    bypass the CLI and don't supply a --config attribute, or a path
+    that doesn't exist). Matches the ``epitope_config_from_args_safe``
+    pattern used elsewhere.
+
+    We deliberately catch ONLY the I/O / shape errors that mean
+    "no config to load." ``msgspec.ValidationError`` (raised when a
+    config file *does* exist but has typos / wrong types) is allowed
+    to propagate — those are user mistakes that should fail loudly at
+    the CLI surface, not be swallowed into a silent ``{}``.
+    """
+    try:
+        from ..config.loader import load_vaxrank_config, extract_construct_kwargs
+        merged = load_vaxrank_config(args)
+        return extract_construct_kwargs(merged, modality)
+    except (FileNotFoundError, OSError, AttributeError) as e:
+        logger.debug(
+            "vaccine_constructs config not loaded for %s (%s); "
+            "using CLI defaults only.", modality, e)
+        return {}
+
+
+def _vaccine_target_dir(output_dir, vaccine_type, all_active_types):
+    """Where this writer should put its files.
+
+    Single-mode runs (one type) write directly into ``output_dir``.
+    Multi-mode runs (2+ types) get per-modality subdirs so peptide
+    and mRNA outputs don't collide on filenames like ``manifest.json``.
+    """
+    if not output_dir:
+        return None
+    if len(all_active_types) > 1:
+        return os.path.join(output_dir, vaccine_type)
+    return output_dir
 
 
 def _emit_neoepitope_report_external(args, report_df, predictions):
@@ -187,82 +324,126 @@ def _resolve_axis(args, per_type_attr, shared_attr, fallback):
     return fallback
 
 
-def _emit_peptide_constructs(args, ranked):
+def _emit_peptide_constructs(args, ranked, target_dir):
     """Build + write peptide-vaccine constructs. Modality-specific."""
+    # YAML overrides for any knob not explicitly passed on the CLI.
+    yaml_kwargs = _construct_config_for_modality(args, 'peptide')
+
+    def cfg(cli_attr, yaml_key):
+        return _coalesce_from_config(args, cli_attr, yaml_kwargs, yaml_key)
+
     # Resolve the orthogonal antigen-design axes:
     # per-type override > shared default > config default. The legacy
     # --peptide-mode is consumed by PeptideConstructConfig.__post_init__
     # when no explicit axis flag is set.
     antigen_content = _resolve_axis(
         args, 'peptide_antigen_content', 'antigen_content', None)
+    if antigen_content is None:
+        antigen_content = yaml_kwargs.get('antigen_content')
     epitopes_per_antigen = _resolve_axis(
-        args, 'peptide_epitopes_per_antigen', 'epitopes_per_antigen', 1)
+        args, 'peptide_epitopes_per_antigen', 'epitopes_per_antigen', None)
+    if epitopes_per_antigen is None:
+        epitopes_per_antigen = yaml_kwargs.get('epitopes_per_antigen', 1)
     config_kwargs = dict(
-        mode=args.peptide_mode,
-        linker=args.peptide_linker,
-        min_antigen_length_aa=args.peptide_min_antigen_length_aa,
-        max_antigen_length_aa=args.peptide_max_antigen_length_aa,
-        antigens_per_construct=args.peptide_antigens_per_construct,
-        max_constructs=args.peptide_max_constructs,
-        candidates_per_slot=args.peptide_candidates_per_slot,
-        n_terminal_acetylation=args.peptide_n_terminal_acetyl,
-        c_terminal_amidation=args.peptide_c_terminal_amide,
-        scale_mg=args.peptide_scale_mg,
-        purity_percent=args.peptide_purity_percent,
-        counterion=args.peptide_counterion,
+        mode=cfg('peptide_mode', 'mode'),
+        linker=cfg('peptide_linker', 'linker'),
+        min_antigen_length_aa=cfg(
+            'peptide_min_antigen_length_aa', 'min_antigen_length_aa'),
+        max_antigen_length_aa=cfg(
+            'peptide_max_antigen_length_aa', 'max_antigen_length_aa'),
+        antigens_per_construct=cfg(
+            'peptide_antigens_per_construct', 'antigens_per_construct'),
+        max_constructs=cfg('peptide_max_constructs', 'max_constructs'),
+        candidates_per_slot=cfg(
+            'peptide_candidates_per_slot', 'candidates_per_slot'),
+        n_terminal_acetylation=cfg(
+            'peptide_n_terminal_acetyl', 'n_terminal_acetyl'),
+        c_terminal_amidation=cfg(
+            'peptide_c_terminal_amide', 'c_terminal_amide'),
+        scale_mg=cfg('peptide_scale_mg', 'scale_mg'),
+        purity_percent=cfg('peptide_purity_percent', 'purity_percent'),
+        counterion=cfg('peptide_counterion', 'counterion'),
         epitopes_per_antigen=epitopes_per_antigen,
     )
     if antigen_content is not None:
         config_kwargs['antigen_content'] = antigen_content
     peptide_options = PeptideConstructConfig(**config_kwargs)
     constructs = assemble_peptide_constructs(ranked, options=peptide_options)
+    # Canonical filenames inside the per-modality target directory:
+    # vaccine.fasta + manifest.json + order_form.csv. Single-mode
+    # runs land directly in args.output_dir; multi-mode runs land in
+    # args.output_dir/peptide/.
+    os.makedirs(target_dir, exist_ok=True)
+    fasta_path = os.path.join(target_dir, 'vaccine.fasta')
+    manifest_path = os.path.join(target_dir, 'manifest.json')
+    order_form_path = os.path.join(target_dir, 'order_form.csv')
     write_peptide_outputs(
         constructs,
-        fasta_path=args.output_peptide,
-        manifest_path=getattr(args, 'output_peptide_manifest', '') or None,
-        order_form_path=getattr(args, 'output_peptide_order_form', '') or None,
+        fasta_path=fasta_path,
+        manifest_path=manifest_path,
+        order_form_path=order_form_path,
         options=peptide_options,
     )
     logger.info(
         "Wrote %d peptide construct(s) to %s",
-        len(constructs), args.output_peptide)
+        len(constructs), target_dir)
 
 
-def _emit_mrna_constructs(args, ranked):
+def _emit_mrna_constructs(args, ranked, target_dir):
     """Build + write mRNA-vaccine constructs. Modality-specific."""
+    yaml_kwargs = _construct_config_for_modality(args, 'mrna')
+
+    def cfg(cli_attr, yaml_key):
+        return _coalesce_from_config(args, cli_attr, yaml_kwargs, yaml_key)
+
+    junction_candidates_raw = cfg(
+        'mrna_junction_candidates', 'junction_candidates') or ''
     junction_candidates = tuple(
-        s.strip() for s in (args.mrna_junction_candidates or "").split(",")
+        s.strip() for s in junction_candidates_raw.split(",")
         if s.strip()
     )
     antigen_content = _resolve_axis(
-        args, 'mrna_antigen_content', 'antigen_content', 'mutation_spanning')
+        args, 'mrna_antigen_content', 'antigen_content', None)
+    if antigen_content is None:
+        antigen_content = yaml_kwargs.get(
+            'antigen_content', 'mutation_spanning')
     epitopes_per_antigen = _resolve_axis(
-        args, 'mrna_epitopes_per_antigen', 'epitopes_per_antigen', 1)
+        args, 'mrna_epitopes_per_antigen', 'epitopes_per_antigen', None)
+    if epitopes_per_antigen is None:
+        epitopes_per_antigen = yaml_kwargs.get('epitopes_per_antigen', 1)
     options = RNAConstructConfig(
-        signal_peptide=(args.mrna_signal_peptide or None),
-        linker=args.mrna_linker,
-        include_mitd=args.mrna_include_mitd,
-        mitd=args.mrna_mitd,
-        utr_5p=args.mrna_5p_utr,
-        utr_3p=args.mrna_3p_utr,
-        codon_species=args.mrna_codon_species,
-        codon_method=args.mrna_codon_method,
+        signal_peptide=(cfg('mrna_signal_peptide', 'signal_peptide') or None),
+        linker=cfg('mrna_linker', 'linker'),
+        include_mitd=cfg('mrna_include_mitd', 'include_mitd'),
+        mitd=cfg('mrna_mitd', 'mitd'),
+        utr_5p=cfg('mrna_5p_utr', 'utr_5p'),
+        utr_3p=cfg('mrna_3p_utr', 'utr_3p'),
+        codon_species=cfg('mrna_codon_species', 'codon_species'),
+        codon_method=cfg('mrna_codon_method', 'codon_method'),
         antigen_content=antigen_content,
         epitopes_per_antigen=epitopes_per_antigen,
-        min_antigen_length_aa=args.mrna_min_antigen_length_aa,
-        max_antigen_length_aa=args.mrna_max_antigen_length_aa,
-        antigens_per_construct=args.mrna_antigens_per_construct,
-        max_constructs=args.mrna_max_constructs,
-        candidates_per_slot=args.mrna_candidates_per_slot,
-        max_length_nt=args.mrna_max_length_nt,
-        optimize_linkers=args.mrna_optimize_linkers,
+        min_antigen_length_aa=cfg(
+            'mrna_min_antigen_length_aa', 'min_antigen_length_aa'),
+        max_antigen_length_aa=cfg(
+            'mrna_max_antigen_length_aa', 'max_antigen_length_aa'),
+        antigens_per_construct=cfg(
+            'mrna_antigens_per_construct', 'antigens_per_construct'),
+        max_constructs=cfg('mrna_max_constructs', 'max_constructs'),
+        candidates_per_slot=cfg(
+            'mrna_candidates_per_slot', 'candidates_per_slot'),
+        max_length_nt=cfg('mrna_max_length_nt', 'max_length_nt'),
+        optimize_linkers=cfg('mrna_optimize_linkers', 'optimize_linkers'),
         junction_swap_candidates=junction_candidates,
-        junction_rank_strong=args.mrna_junction_rank_strong,
-        junction_rank_mild=args.mrna_junction_rank_mild,
-        poly_a_length=args.mrna_poly_a_length,
-        poly_a_segmented=args.mrna_poly_a_segmented,
-        poly_a_first_segment=args.mrna_poly_a_first_segment,
-        poly_a_segment_linker=args.mrna_poly_a_segment_linker,
+        junction_rank_strong=cfg(
+            'mrna_junction_rank_strong', 'junction_rank_strong'),
+        junction_rank_mild=cfg(
+            'mrna_junction_rank_mild', 'junction_rank_mild'),
+        poly_a_length=cfg('mrna_poly_a_length', 'poly_a_length'),
+        poly_a_segmented=cfg('mrna_poly_a_segmented', 'poly_a_segmented'),
+        poly_a_first_segment=cfg(
+            'mrna_poly_a_first_segment', 'poly_a_first_segment'),
+        poly_a_segment_linker=cfg(
+            'mrna_poly_a_segment_linker', 'poly_a_segment_linker'),
     )
     if options.optimize_linkers:
         try:
@@ -284,26 +465,32 @@ def _emit_mrna_constructs(args, ranked):
     constructs = assemble_mrna_constructs(
         ranked, options=options,
         mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles)
+    # Canonical filenames inside the per-modality target directory:
+    # cds.fasta + no_polyA.fasta + full.fasta + manifest.json +
+    # layers.csv. The cds/no_polyA/full FASTAs are written by
+    # ``write_mrna_outputs`` directly into ``target_dir``.
+    os.makedirs(target_dir, exist_ok=True)
     write_mrna_outputs(
         constructs,
-        output_dir=args.output_mrna,
-        manifest_path=getattr(args, 'output_mrna_manifest', '') or None,
-        csv_path=getattr(args, 'output_mrna_csv', '') or None,
+        output_dir=target_dir,
+        manifest_path=os.path.join(target_dir, 'manifest.json'),
+        csv_path=os.path.join(target_dir, 'layers.csv'),
         csv_include_full_rows=getattr(
-            args, 'output_mrna_csv_full_rows', True),
+            args, 'mrna_csv_full_rows', True),
     )
     logger.info(
         "Wrote %d mRNA construct(s) to %s/{cds,no_polyA,full}.fasta",
-        len(constructs), args.output_mrna)
+        len(constructs), target_dir)
 
 
-# Per-type dispatch table. Each entry: vaccine-type name → (
-#   output-flag attribute on args, writer callable taking (args, ranked)
-# ). Adding a new vaccine type (e.g. 'dna') is a one-line registration
-# here plus the writer module — no changes to _emit_outputs needed.
+# Multi-mode dispatch table: vaccine-type → writer.
+# ``_emit_outputs`` iterates over the active types from
+# ``_resolve_vaccine_types`` and fires each writer with its own
+# target dir. Adding a new vaccine type means registering it here +
+# extending ``--vaccine-type`` choices in arg_parser.
 _VACCINE_TYPE_DISPATCH = {
-    'peptide': ('output_peptide', _emit_peptide_constructs),
-    'mrna': ('output_mrna', _emit_mrna_constructs),
+    'peptide': _emit_peptide_constructs,
+    'mrna': _emit_mrna_constructs,
 }
 
 
@@ -314,12 +501,14 @@ def _emit_outputs(args, ranked, source):
     intermediate; ``source`` is 'pipeline' (VCF/BAM) or 'external'
     (LENS/pVACseq).
 
-    Active vaccine types come from ``_resolve_vaccine_types``. A type
-    fires only if both: (a) it's in the active set, and (b) its
-    ``--output-<type>`` path is set. Vaxrank-without-an-output-path is
-    a valid (ranking-only) run.
+    Active vaccine types come from ``_resolve_vaccine_types``
+    (``--vaccine-type`` is multi-valued). Each writer fires when
+    ``--output-dir`` is set; single-mode runs land directly in
+    ``--output-dir``, multi-mode runs land in per-modality subdirs
+    so their canonical filenames (manifest.json, vaccine.fasta, …)
+    don't collide.
     """
-    active = _resolve_vaccine_types(args)
+    vaccine_types = _resolve_vaccine_types(args)
 
     # Rank reports run for both sources; on the external-input path
     # the LENS-native per-(peptide, allele) report already consumed
@@ -343,35 +532,55 @@ def _emit_outputs(args, ranked, source):
             num_epitopes_per_peptide=num_epitopes,
             excel_report_path=args.output_neoepitope_report)
 
+    output_dir = getattr(args, 'output_dir', '') or ''
     fired = []
-    for vtype in sorted(active):
-        if vtype not in _VACCINE_TYPE_DISPATCH:
+    for vtype in vaccine_types:
+        writer = _VACCINE_TYPE_DISPATCH.get(vtype)
+        if writer is None:
             logger.warning(
                 "vaccine type %r recognized but has no writer "
                 "registered (future-type stub); skipping.", vtype)
             continue
-        attr, writer = _VACCINE_TYPE_DISPATCH[vtype]
-        if getattr(args, attr, ''):
-            writer(args, ranked)
-            fired.append(vtype)
-        # No output path → ranking-only for that type. Silent (vs.
-        # warning) because peptide is the default vaccine type and
-        # we don't want to spam users who only want a report run.
-
-    # Warn if user provided an output path for a type they didn't ask
-    # for — usually a typo / forgotten --vaccine-type flag.
-    for vtype, (attr, _) in _VACCINE_TYPE_DISPATCH.items():
-        if vtype not in active and getattr(args, attr, ''):
-            logger.warning(
-                "--%s is set but '%s' is not in --vaccine-type %s; "
-                "no %s constructs will be written. Add '%s' to "
-                "--vaccine-type to enable.",
-                attr.replace('_', '-'), vtype, sorted(active),
-                vtype, vtype)
+        if not output_dir:
+            # No --output-dir → ranking-only for every type. With the
+            # default ``vaccine_type=['peptide', 'mrna']`` this is
+            # the common report-only path; logging here would just
+            # be noise on top of the dispatch line below. The user
+            # sees ``wrote=[]`` and can act on it.
+            continue
+        target_dir = _vaccine_target_dir(output_dir, vtype, vaccine_types)
+        # Multi-mode is "all-or-nothing": any writer failure aborts
+        # the whole run. Partial output is worse than no output —
+        # ending up with a peptide vaccine on disk but no mRNA
+        # vaccine (or vice versa) is the kind of half-state that
+        # quietly ships to a downstream reviewer. Name the
+        # successfully-written modalities AND the in-progress one
+        # before we let the exception propagate, since the failed
+        # writer may have left partial files behind in ``target_dir``
+        # that the operator needs to find and clean up.
+        try:
+            writer(args, ranked, target_dir)
+        except Exception:
+            written = [
+                (t, _vaccine_target_dir(output_dir, t, vaccine_types))
+                for t in fired
+            ]
+            written_desc = (
+                ", ".join("%s -> %s" % (t, d) for t, d in written)
+                if written else "(none)")
+            logger.error(
+                "Writer for --vaccine-type=%s failed; aborting the "
+                "run. Fully written modalities: %s. Possibly-partial "
+                "output in: %s -> %s (inspect and remove if needed). "
+                "Re-run after fixing the issue, or pass a single "
+                "--vaccine-type if you want partial output.",
+                vtype, written_desc, vtype, target_dir)
+            raise
+        fired.append(vtype)
 
     logger.info(
-        "Vaccine-type dispatch [%s]: active=%s wrote=%s",
-        source, sorted(active), fired or ['(none)'])
+        "Vaccine-type dispatch [%s]: types=%s wrote=%s",
+        source, vaccine_types, fired)
 
 
 def configure_logging(args):
@@ -409,11 +618,12 @@ def main(args_list=None):
       - --input-lens / --input-pvacseq: external neoepitope report,
         skipping the predict-from-genome stages
 
-    Vaccine-type dispatch is driven by ``--vaccine-type`` (multi-valued;
-    default 'peptide'). Each type's writer fires only if its
-    ``--output-<type>`` path is also set.
+    Vaccine-type dispatch is multi-valued (``--vaccine-type``;
+    default ``[peptide]``). Each active type's writer fires when
+    ``--output-dir`` is set. Single-mode runs land directly in the
+    directory; multi-mode runs land in per-modality subdirs.
 
-    Example (full pipeline; reports + peptide pool + mRNA constructs):
+    Example (full pipeline, peptide vaccine):
 
         vaxrank \\
             --vcf somatic.vcf \\
@@ -421,18 +631,24 @@ def main(args_list=None):
             --mhc-predictor netmhc \\
             --mhc-alleles HLA-A*02:01 \\
             --vaccine-peptide-length 25 \\
-            --vaccine-type peptide mrna \\
+            --vaccine-type peptide \\
             --output-pdf-report report.pdf \\
-            --output-peptide vaccine-peptides.fasta \\
-            --output-mrna vaccine-mrna_dir/
+            --output-dir vaccine_out/
+
+        # Writes vaccine_out/{vaccine.fasta,manifest.json,order_form.csv}
+
+    Example (both modalities at once):
+
+        vaxrank ... --vaccine-type peptide mrna --output-dir vaccine_out/
+
+        # Writes vaccine_out/peptide/... and vaccine_out/mrna/...
 
     Example (LENS-driven mRNA design):
 
         vaxrank \\
             --input-lens patient.lens.tsv \\
             --vaccine-type mrna \\
-            --output-mrna mrna_dir/ \\
-            --output-mrna-csv layers.csv
+            --output-dir mrna_out/
     """
     if args_list is None:
         args_list = sys.argv[1:]
@@ -440,7 +656,24 @@ def main(args_list=None):
     args = parse_vaxrank_args(args_list)
     configure_logging(args)
     _resolve_ensembl_release(args)
+    # Manufacturability default depends on whether peptide is one of
+    # the active vaccine types: those metrics (GRAVY / Cys content /
+    # N-terminal Q / Asp-Pro bonds) apply to peptide synthesis but
+    # not to mRNA constructs (translated in vivo). Show the section
+    # when peptide is being designed; hide it when only mRNA. Users
+    # can force either way via the explicit flags. Reuse
+    # ``_resolve_vaccine_types`` so the shape-tolerance and dedup
+    # logic lives in exactly one place.
+    if getattr(args, 'manufacturability', None) is None:
+        args.manufacturability = 'peptide' in _resolve_vaccine_types(args)
     logger.info(args)
+
+    # Fail fast when no output path is set, *before* loading inputs or
+    # running predictions. Otherwise a long --input-lens run silently
+    # produces nothing on disk (every output is opt-in via its own
+    # --output-* flag, with no default destination). Applies to both
+    # the VCF/BAM pipeline path and the external-input path.
+    check_args(args)
 
     # Architecture (post-#252):
     #
@@ -463,13 +696,22 @@ def main(args_list=None):
     args_for_report = args
     report_df = None
     predictions = None
+    # ``data`` is the pipeline path's intermediate metadata bundle
+    # (variants + patient_info + dna_vaf_by_variant). The external
+    # path doesn't produce one, so default to an empty dict so the
+    # shared template-report block can ``data.get(...)`` either way.
+    data = {}
 
     if _has_external_input(args):
         loaded = load_external_ranked(args)
         if loaded is None:
             ranked_variants_with_vaccine_peptides = []
         else:
-            ranked_variants_with_vaccine_peptides, report_df, predictions = loaded
+            (ranked_variants_with_vaccine_peptides, report_df,
+             predictions, patient_info, external_dna_vaf) = loaded
+            # Mirror the pipeline path's ``data['dna_vaf_by_variant']``
+            # so the shared template-report block picks it up.
+            data['dna_vaf_by_variant'] = external_dna_vaf
         if not ranked_variants_with_vaccine_peptides:
             logger.warning(
                 "External input produced no ranked vaccine peptides; "
@@ -478,35 +720,53 @@ def main(args_list=None):
         # Per-(peptide, allele) CSV / XLSX report is unique to the
         # external-input path; emit it before the shared dispatch.
         _emit_neoepitope_report_external(args, report_df, predictions)
+        # Template reports want a dict here, not a Namespace —
+        # ``vars(args)`` matches the pipeline path's
+        # ``data['args']`` shape.
+        args_for_report = vars(args)
         source = 'external'
     else:
-        check_args(args)
         data = ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
         ranked_variants_with_vaccine_peptides = data['variants']
         patient_info = data['patient_info']
         args_for_report = data['args']
         source = 'pipeline'
 
+    # Issue #249: annotate epitope predictions with pepsickle proteasome-
+    # cleavage credibility. Mutates EpitopePredictions in place; doesn't
+    # affect ranking — purely additional information surfaced in the
+    # per-epitope report tables. On by default; opt-out via
+    # --no-processing-aware-annotation.
+    if getattr(args, 'processing_aware_annotation', True):
+        _annotate_predictions_with_processing(
+            ranked_variants_with_vaccine_peptides, predictions,
+            human_only=getattr(args, 'pepsickle_human_only', False),
+            threshold=getattr(args, 'pepsickle_threshold', 0.5))
+
     _emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
 
     ########################
-    # Template-based reports (PDF / HTML / ASCII) — pipeline path only
+    # Template-based reports (PDF / HTML / ASCII)
     ########################
-    if source != 'pipeline':
-        return
-
+    # Run on both pipeline and external (LENS / pVACseq) paths.
+    # ``external_input.load_external_ranked`` resolves transcript IDs
+    # to pyensembl ``Transcript`` objects and synthesizes a
+    # ``PatientInfo`` with proxy variant counts so the template
+    # builder has the same shape inputs either way. Antigens whose
+    # transcript IDs can't be resolved (release mismatch, ERV, …)
+    # render with "—" placeholders rather than crashing — see
+    # ``TemplateDataCreator._effect_data``.
     if not (args.output_ascii_report or args.output_html_report or args.output_pdf_report):
         return
 
-    input_json_file = args.input_json_file if hasattr(args, 'input_json_file') else None
     template_data_creator = TemplateDataCreator(
         ranked_variants_with_vaccine_peptides=ranked_variants_with_vaccine_peptides,
         patient_info=patient_info,
-        final_review=args.output_final_review,
-        reviewers=args.output_reviewed_by,
+        final_review=getattr(args, 'output_final_review', '') or '',
+        reviewers=getattr(args, 'output_reviewed_by', '') or '',
         args_for_report=args_for_report,
-        input_json_file=input_json_file,
-        cosmic_vcf_filename=args.cosmic_vcf_filename,
+        input_json_file=getattr(args, 'input_json_file', None),
+        cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
         dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {})
 
     template_data = template_data_creator.compute_template_data()
@@ -651,15 +911,24 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     ranked_variants_with_vaccine_peptides = vaxrank_results.ranked_vaccine_peptides
     ranked_variants_with_vaccine_peptides_for_report = \
         ranked_variants_with_vaccine_peptides[:args.max_mutations_in_report]
+    pipeline_inputs = [
+        ('VCF (somatic variants)', '; '.join(variants.sources))
+    ] if variants.sources else []
+    if args.bam:
+        pipeline_inputs.append(('BAM (RNAseq reads)', args.bam))
     patient_info = PatientInfo(
         patient_id=args.output_patient_id,
-        vcf_paths=variants.sources,
+        # Legacy fields kept for any downstream JSON consumers that
+        # haven't migrated to ``inputs``; new code should read
+        # ``inputs`` exclusively. Both paths now populate ``inputs``.
+        vcf_paths=list(variants.sources),
         bam_path=args.bam,
         mhc_alleles=mhc_alleles,
         num_somatic_variants=variants_count_dict['num_total_variants'],
         num_coding_effect_variants=variants_count_dict['num_coding_effect_variants'],
         num_variants_with_rna_support=variants_count_dict['num_variants_with_rna_support'],
-        num_variants_with_vaccine_peptides=variants_count_dict['num_variants_with_vaccine_peptides']
+        num_variants_with_vaccine_peptides=variants_count_dict['num_variants_with_vaccine_peptides'],
+        inputs=pipeline_inputs,
     )
     # return variants, patient info, and command-line args
     data = {
