@@ -648,7 +648,11 @@ vaccine_peptides:
             config_set_overrides=None,
             config_expr_overrides=None,
         )
-        with pytest.raises(ValueError, match="both top-level 'manufacturability'"):
+        # Post-2.19 the legacy layout migration sees both
+        # ``vaccine_peptides.manufacturability`` and top-level
+        # ``manufacturability`` as conflicting; the migration
+        # refuses to guess which the user meant.
+        with pytest.raises(ValueError, match="(?:Both are deprecated|peptide\\.manufacturability|vaccine_peptides.manufacturability)"):
             vaccine_config_from_args(args)
     finally:
         os.unlink(config_path)
@@ -683,8 +687,11 @@ manufacturability:
         merged = load_vaxrank_config(config_path=paths)
         eq_(merged["epitopes"]["min_score"], 0.01)
         eq_(merged["vaccine_peptides"]["preferred_length"], 27)
-        eq_(merged["manufacturability"]["max_c_terminal_hydropathy"], 2.5)
-        eq_(merged["manufacturability"]["rules"], ["cysteine_count", "cterm_hydropathy"])
+        # Post-2.19: top-level ``manufacturability`` migrates to
+        # ``peptide.manufacturability``.
+        eq_(merged["peptide"]["manufacturability"]["max_c_terminal_hydropathy"], 2.5)
+        eq_(merged["peptide"]["manufacturability"]["rules"],
+            ["cysteine_count", "cterm_hydropathy"])
     finally:
         for p in paths:
             os.unlink(p)
@@ -730,7 +737,10 @@ manufacturability:
         config_path = f.name
     try:
         merged = load_vaxrank_config(config_path=config_path)
-        eq_(merged["manufacturability"]["rules"], ["cterm_hydropathy", "cysteine_count"])
+        # Post-2.19: top-level ``manufacturability`` migrates to
+        # ``peptide.manufacturability``.
+        eq_(merged["peptide"]["manufacturability"]["rules"],
+            ["cterm_hydropathy", "cysteine_count"])
     finally:
         os.unlink(config_path)
 
@@ -1393,14 +1403,14 @@ def test_extract_vaccine_config_kwargs_accepts_single_epitope_keep_path():
     eq_(kwargs_b["num_mutant_epitopes_to_keep"], 20)
 
 
-# ----- vaccine_constructs section ---------------------------------------
+# ----- per-modality config section --------------------------------------
 
-def test_extract_construct_kwargs_cross_modality_only():
-    """Cross-modality knobs at ``vaccine_constructs`` top level apply
-    to every modality that doesn't override them."""
+def test_extract_construct_kwargs_antigen_design_from_vaccine_peptides():
+    """Antigen-design knobs live in ``vaccine_peptides:`` (post-2.19)
+    and thread into every modality's construct kwargs."""
     from vaxrank.config.loader import extract_construct_kwargs
     config = {
-        'vaccine_constructs': {
+        'vaccine_peptides': {
             'min_antigen_length_aa': 13,
             'max_antigen_length_aa': 21,
             'antigen_content': 'minimal_epitope',
@@ -1415,27 +1425,26 @@ def test_extract_construct_kwargs_cross_modality_only():
     }
 
 
-def test_extract_construct_kwargs_modality_overrides_cross_modality():
-    """Modality-specific values override cross-modality top-level
-    values for that modality only; the other modality keeps the
-    cross-modality value."""
+def test_extract_construct_kwargs_modality_overrides_antigen_design():
+    """Modality-specific values in top-level ``peptide:`` / ``mrna:``
+    override the antigen-design knobs from ``vaccine_peptides:`` for
+    that modality only."""
     from vaxrank.config.loader import extract_construct_kwargs
     config = {
-        'vaccine_constructs': {
+        'vaccine_peptides': {
             'max_antigen_length_aa': 25,
-            'peptide': {'max_antigen_length_aa': 27, 'mode': 'slp'},
-            'mrna': {'antigens_per_construct': 8},
         },
+        'peptide': {'mode': 'slp'},
+        'mrna': {'antigens_per_construct': 8},
     }
     pep = extract_construct_kwargs(config, 'peptide')
     mrna = extract_construct_kwargs(config, 'mrna')
-    # Peptide overrode max_antigen_length_aa; mRNA inherits the
-    # cross-modality value
-    assert pep['max_antigen_length_aa'] == 27
+    # Both inherit the cross-modality length cap; modality-specific
+    # knobs only apply to their own modality.
+    assert pep['max_antigen_length_aa'] == 25
     assert pep['mode'] == 'slp'
     assert mrna['max_antigen_length_aa'] == 25
     assert mrna['antigens_per_construct'] == 8
-    # Knobs only specified on the other modality don't leak across
     assert 'mode' not in mrna
     assert 'antigens_per_construct' not in pep
 
@@ -1446,33 +1455,121 @@ def test_extract_construct_kwargs_drops_none_entries():
     identically."""
     from vaxrank.config.loader import extract_construct_kwargs
     config = {
-        'vaccine_constructs': {
+        'vaccine_peptides': {
             'antigen_content': None,
-            'peptide': {'mode': 'minimal_epitope', 'linker': None},
         },
+        'peptide': {'mode': 'minimal_epitope', 'linker': None},
     }
     out = extract_construct_kwargs(config, 'peptide')
     assert out == {'mode': 'minimal_epitope'}
 
 
 def test_extract_construct_kwargs_empty_when_section_absent():
-    """No ``vaccine_constructs`` section → no kwargs (writers fall
+    """No ``peptide:`` / ``mrna:`` section → no kwargs (writers fall
     back to CLI / built-in defaults)."""
     from vaxrank.config.loader import extract_construct_kwargs
     assert extract_construct_kwargs({}, 'peptide') == {}
     assert extract_construct_kwargs({'epitopes': {}}, 'mrna') == {}
 
 
-def test_construct_config_overrides_cli_default(tmp_path):
-    """End-to-end: a YAML config sets ``vaccine_constructs.peptide.linker``
-    and the peptide writer picks it up because the CLI flag is at its
-    parser default. The CLI flag still wins when explicitly passed."""
-    cfg = tmp_path / "vc.yaml"
+def test_extract_construct_kwargs_skips_manufacturability_subsection():
+    """The ``manufacturability`` sub-section under ``peptide:`` is
+    consumed by the VaccineConfig path (until the in-code split
+    lands), not by the construct-config kwargs. Make sure
+    ``extract_construct_kwargs`` doesn't accidentally pass it
+    through to the construct-config constructor."""
+    from vaxrank.config.loader import extract_construct_kwargs
+    config = {
+        'peptide': {
+            'mode': 'slp',
+            'manufacturability': {'rules': ['cysteine_count']},
+        },
+    }
+    out = extract_construct_kwargs(config, 'peptide')
+    assert 'manufacturability' not in out
+    assert out == {'mode': 'slp'}
+
+
+def test_post_2_19_layout_loads_without_warnings(tmp_path):
+    """The new top-level shape (no ``vaccine_constructs:`` wrapper,
+    ``manufacturability:`` under ``peptide:``, antigen-design knobs
+    in ``vaccine_peptides:``) loads with zero deprecation warnings —
+    that's the contract a new user gets when copying the bundled
+    default.yaml as a starting point.
+    """
+    import warnings
+    from vaxrank.config.loader import load_vaxrank_config
+    cfg = tmp_path / "new.yaml"
+    cfg.write_text("""
+vaccine_peptides:
+  preferred_length: 25
+  max_antigen_length_aa: 25
+  antigen_content: mutation_spanning
+peptide:
+  linker: G4Sx3
+  max_constructs: 20
+  manufacturability:
+    rules:
+      - cysteine_count
+      - cterm_hydropathy
+mrna:
+  signal_peptide: HLA_B
+  linker: G4Sx2
+  max_constructs: 2
+""")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        merged = load_vaxrank_config(config_path=str(cfg))
+    deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    assert not deprecations, (
+        "New layout must load without deprecation warnings; got: %s"
+        % [str(w.message) for w in deprecations])
+    # And the merged dict has the values where the new schema puts them.
+    assert merged['vaccine_peptides']['max_antigen_length_aa'] == 25
+    assert merged['peptide']['manufacturability']['rules'] == \
+        ['cysteine_count', 'cterm_hydropathy']
+    assert merged['mrna']['max_constructs'] == 2
+
+
+def test_legacy_vaccine_constructs_migrates_with_warning(tmp_path):
+    """Pre-2.19 ``vaccine_constructs:`` wrapper still loads, with a
+    DeprecationWarning, and the loader hoists the entries to the
+    new top-level shape."""
+    import warnings
+    from vaxrank.config.loader import load_vaxrank_config
+    cfg = tmp_path / "legacy.yaml"
     cfg.write_text("""
 vaccine_constructs:
   max_antigen_length_aa: 19
   peptide:
     linker: AAY
+  mrna:
+    signal_peptide: HLA_B
+""")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        merged = load_vaxrank_config(config_path=str(cfg))
+    assert any(
+        'vaccine_constructs' in str(w.message)
+        for w in caught), \
+        "Expected a deprecation warning for legacy 'vaccine_constructs:'"
+    # Antigen-design knob hoisted into vaccine_peptides:
+    assert merged['vaccine_peptides']['max_antigen_length_aa'] == 19
+    # Modality entries hoisted to top-level
+    assert merged['peptide']['linker'] == 'AAY'
+    assert merged['mrna']['signal_peptide'] == 'HLA_B'
+
+
+def test_construct_config_overrides_cli_default(tmp_path):
+    """End-to-end: a YAML config sets ``peptide.linker`` and the
+    peptide writer picks it up because the CLI flag is at its
+    parser default. The CLI flag still wins when explicitly passed."""
+    cfg = tmp_path / "vc.yaml"
+    cfg.write_text("""
+vaccine_peptides:
+  max_antigen_length_aa: 19
+peptide:
+  linker: AAY
 """)
     from vaxrank.cli.arg_parser import parse_vaxrank_args
     from vaxrank.cli.entry_point import (

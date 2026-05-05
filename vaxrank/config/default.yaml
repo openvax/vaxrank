@@ -10,37 +10,45 @@
 #
 #     vaxrank --print-default-config > my-config.yaml
 #
-# Top-level sections (modality-agnostic unless noted):
+# Top-level sections:
 #
-#   epitopes           Filter / score MHC ligand predictions
-#                      (logistic IC50 / percentile-rank knobs, the
-#                      topiary DSL ``filter_expr`` / ``score_expr``,
-#                      and ``default_methods`` for multi-predictor
-#                      inputs).
+#   epitopes           (modality-agnostic) Filter / score MHC ligand
+#                      predictions: logistic IC50 / percentile-rank
+#                      knobs, the topiary DSL
+#                      ``filter_expr`` / ``score_expr``, and
+#                      ``default_methods`` for multi-predictor inputs.
 #
-#   vaccine_peptides   Per-variant antigen-window selection + the
-#                      *ranking* of those windows (length, padding,
-#                      ``combined_score_mode`` / ``combined_score_expr``,
-#                      ``ranking_rules``, ``score_fraction_of_best``).
-#                      Modality-agnostic — every active --vaccine-type
-#                      reads from here. (Section name kept for
-#                      back-compat with pre-mRNA configs.)
+#   vaccine_peptides   (modality-agnostic) Per-variant antigen-window
+#                      selection + the *ranking* of those windows:
+#                      length, padding, ``combined_score_mode`` /
+#                      ``combined_score_expr``, ``ranking_rules``,
+#                      ``score_fraction_of_best``, and the
+#                      antigen-design knobs that apply to every
+#                      modality (``antigen_content``,
+#                      ``epitopes_per_antigen``, ``candidates_per_slot``,
+#                      ``min_antigen_length_aa``, ``max_antigen_length_aa``).
+#                      Section name kept for back-compat with
+#                      pre-mRNA configs.
 #
-#   manufacturability  Peptide-synthesis difficulty rules + thresholds.
-#                      Used as a tie-break when ``vaccine_peptides.ranking_rules``
-#                      references the ``manufacturability`` sentinel.
-#                      Auto-skipped from peptide-only report sections
-#                      when --vaccine-type doesn't include 'peptide'.
+#   peptide            Peptide-vaccine assembly + a peptide-only
+#                      ``manufacturability`` sub-section
+#                      (synthesis-difficulty rules + thresholds).
 #
-#   vaccine_constructs Per-modality construct-assembly knobs.
-#                      Cross-modality values at the section top level;
-#                      modality-specific values under ``peptide:`` /
-#                      ``mrna:`` subsections.
+#   mrna               mRNA-vaccine assembly.
+#
+# Adding a new modality (e.g. ``dna:``) is a new top-level section
+# that pairs with a registry entry in ``vaxrank/modalities.py``.
 #
 # Resolution order (highest precedence first) for any single value:
 #
-#   explicit CLI flag  >  per-modality config  >  cross-modality config
-#                      >  built-in default
+#   explicit CLI flag  >  per-modality section  >
+#       (antigen-design knobs only) vaccine_peptides  >
+#       built-in default
+#
+# Pre-2.19 layouts (``vaccine_constructs:`` wrapper, top-level
+# ``manufacturability:``, ``vaccine_peptides.manufacturability:``)
+# still load with a one-cycle DeprecationWarning — see the loader
+# migrations in ``vaxrank/config/loader.py::_migrate_legacy_layout``.
 
 
 epitopes:
@@ -186,101 +194,93 @@ vaccine_peptides:
   require_mutant_epitopes_in_variant: true
 
 
-# Peptide-only. Manufacturability rules describe synthesis-difficulty
-# of solid-phase peptide chemistry (GRAVY hydropathy, Cys content,
-# difficult N-termini, Asp-Pro bonds, …) and don't apply to mRNA
-# constructs (translated in vivo). Vaxrank still evaluates these
-# rules whenever ``vaccine_peptides.ranking_rules`` references the
-# ``manufacturability`` sentinel — they affect tie-breaking — but
-# the section is skipped from peptide-only reports automatically
-# when ``--vaccine-type`` is mRNA-only. Kept at the top level (not
-# under ``vaccine_constructs.peptide``) for back-compat with users
-# whose existing configs reference it here.
-manufacturability:
-  # ---- Numeric thresholds (passed to the rule functions) ----
-  max_c_terminal_hydropathy: 1.5
-  min_kmer_hydropathy: 0.0
-  max_kmer_hydropathy_low_priority: 1.5
-  max_kmer_hydropathy_high_priority: 2.5
-
-  # Ordered list of synthesis-difficulty rules applied when the
-  # 'manufacturability' sentinel is reached in vaccine_peptides.ranking_rules.
-  # The order below matches the legacy hard-coded tie-break order
-  # (preserved byte-for-byte). 'n_terminal_methionine' is registered but
-  # not in the legacy default — uncomment to enable.
-  rules:
-    - cysteine_count
-    - cterm_hydropathy
-    - max_hydropathy_high
-    - difficult_n_terminal
-    - c_terminal_cysteine
-    - c_terminal_proline
-    - n_terminal_asparagine
-    # - n_terminal_methionine
-    - aspartate_proline
-    - max_hydropathy_low
-    - min_hydropathy
-
-
 # ----------------------------------------------------------------------
-# vaccine_constructs (per-modality construct-assembly knobs).
+# Per-modality construct-assembly sections.
 #
 # Default --vaccine-type is 'peptide mrna' (both modalities at once).
-# Cross-modality knobs go directly under `vaccine_constructs:`; the
-# `peptide:` and `mrna:` subsections only need entries when a
-# modality should DIFFER from the cross-modality value or when a knob
-# is modality-only (signal_peptide, mode, n_terminal_acetyl, …).
+# Add a section per active modality. Antigen-design knobs (length
+# bounds, antigen_content, epitopes_per_antigen, candidates_per_slot)
+# live in ``vaccine_peptides:`` above and apply to every modality
+# unless overridden inside the modality section.
 #
-# Resolution order (highest precedence first):
+# The peptide section also carries a ``manufacturability:``
+# sub-section — solid-phase peptide synthesis rules don't apply to
+# in-vivo-translated mRNA, so they're scoped to peptide.
+# ``vaccine_peptides.ranking_rules``'s ``manufacturability``
+# sentinel still expands using the rules + thresholds in
+# ``peptide.manufacturability`` (a no-op tie-break when peptide
+# isn't an active modality).
 #
-#   explicit CLI flag  >  per-modality config  >  cross-modality config  >  built-in default
-#
-# Every key here is optional; everything below is commented out so the
-# default config is a no-op (matches "no --config" behavior). Uncomment
-# and edit what you want to change.
+# Every key below is optional; the modality sub-trees ship
+# uncommented because they reflect the in-code default values, but
+# you can collapse a section to ``peptide: {}`` / ``mrna: {}``
+# (or omit it entirely) if you'd rather inherit from the built-in
+# defaults.
 # ----------------------------------------------------------------------
-# vaccine_constructs:
-#   # Cross-modality knobs at the section top level. Apply to every
-#   # active --vaccine-type unless overridden in the modality
-#   # subsection below.
-#   min_antigen_length_aa: 15
-#   max_antigen_length_aa: 25
-#   candidates_per_slot: 1
-#   antigen_content: mutation_spanning   # 'mutation_spanning' | 'minimal_epitope'
-#   epitopes_per_antigen: 1
-#
-#   peptide:
-#     # Peptide-only knobs. Cross-modality knobs from above are
-#     # available here too if you need a peptide-specific value.
-#     mode: slp                            # slp | minimal_epitope | multi_epitope
-#     linker: G4Sx3                        # multi_epitope linker; (G4S)3 = GGGGSGGGGSGGGGS
-#     antigens_per_construct: 1            # SLP default; 5+ for multi_epitope
-#     max_constructs: 20                   # PGV-001 pool size
-#     n_terminal_acetyl: false             # marked in vendor order form
-#     c_terminal_amide: false
-#     scale_mg: 5.0
-#     purity_percent: 95.0
-#     counterion: TFA
-#
-#   mrna:
-#     # mRNA-only knobs. Cross-modality knobs from above are
-#     # available here too if you need an mrna-specific value.
-#     linker: G4Sx2                        # (G4S)2 = GGGGSGGGGS, BioNTech FixVac canonical
-#     antigens_per_construct: 5            # FixVac canonical
-#     max_constructs: 1
-#     max_length_nt: 4000
-#     signal_peptide: HLA_B
-#     include_mitd: true
-#     mitd: HLA_B
-#     utr_5p: HBB
-#     utr_3p: HBB_FI
-#     poly_a_length: 120
-#     poly_a_segmented: false              # set true for BNT162b2-style A30+linker+A70
-#     poly_a_first_segment: 30
-#     poly_a_segment_linker: GCATATGACT
-#     codon_species: h_sapiens
-#     codon_method: use_best_codon         # | match_codon_usage | harmonize_rca
-#     optimize_linkers: true               # per-junction linker optimization
-#     junction_candidates: ""              # comma-separated; "" = library default
-#     junction_rank_strong: 0.5            # %rank below = strong-binder hit
-#     junction_rank_mild: 2.0
+
+peptide:
+  # Peptide-vaccine assembly knobs. Cross-modality antigen-design
+  # values live in ``vaccine_peptides:`` and apply here too unless
+  # overridden in this section.
+  mode: slp                            # slp | minimal_epitope | multi_epitope
+  linker: G4Sx3                        # multi_epitope linker; (G4S)3 = GGGGSGGGGSGGGGS
+  antigens_per_construct: 1            # SLP default; 5+ for multi_epitope
+  max_constructs: 20                   # PGV-001 pool size
+  n_terminal_acetyl: false             # marked in vendor order form
+  c_terminal_amide: false
+  scale_mg: 5.0
+  purity_percent: 95.0
+  counterion: TFA
+
+  # Peptide-only synthesis-difficulty rules + thresholds. Used as a
+  # tie-break when ``vaccine_peptides.ranking_rules`` references the
+  # ``manufacturability`` sentinel; auto-skipped from
+  # peptide-only report sections when --vaccine-type doesn't
+  # include 'peptide'.
+  manufacturability:
+    # ---- Numeric thresholds (passed to the rule functions) ----
+    max_c_terminal_hydropathy: 1.5
+    min_kmer_hydropathy: 0.0
+    max_kmer_hydropathy_low_priority: 1.5
+    max_kmer_hydropathy_high_priority: 2.5
+
+    # Ordered list of synthesis-difficulty rules. The order below
+    # matches the legacy hard-coded tie-break order (preserved
+    # byte-for-byte). 'n_terminal_methionine' is registered but not
+    # in the legacy default — uncomment to enable.
+    rules:
+      - cysteine_count
+      - cterm_hydropathy
+      - max_hydropathy_high
+      - difficult_n_terminal
+      - c_terminal_cysteine
+      - c_terminal_proline
+      - n_terminal_asparagine
+      # - n_terminal_methionine
+      - aspartate_proline
+      - max_hydropathy_low
+      - min_hydropathy
+
+
+mrna:
+  # mRNA-vaccine assembly knobs. BioNTech FixVac (Sahin 2017) is
+  # the canonical reference for these defaults.
+  linker: G4Sx2                        # (G4S)2 = GGGGSGGGGS
+  antigens_per_construct: 5            # FixVac canonical
+  max_constructs: 2                    # FixVac 2x pentatope = 10 antigens
+  max_length_nt: 4000
+  signal_peptide: HLA_B
+  include_mitd: true
+  mitd: HLA_B
+  utr_5p: HBB
+  utr_3p: HBB_FI
+  poly_a_length: 120
+  poly_a_segmented: false              # set true for BNT162b2-style A30+linker+A70
+  poly_a_first_segment: 30
+  poly_a_segment_linker: GCATATGACT
+  codon_species: h_sapiens
+  codon_method: use_best_codon         # | match_codon_usage | harmonize_rca
+  optimize_linkers: true               # per-junction linker optimization
+  junction_candidates: ""              # comma-separated; "" = library default
+  junction_rank_strong: 0.5            # %rank below = strong-binder hit
+  junction_rank_mild: 2.0
