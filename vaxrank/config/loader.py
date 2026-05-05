@@ -6,7 +6,11 @@ from typing import Any
 import msgspec
 
 from .schema import VaxrankConfigSchema
+from ..modalities import known_modalities
 
+# Top-level YAML keys that have been renamed across versions. Each
+# entry deprecates the OLD key and routes its value to the NEW key,
+# erroring if both are set in the same config.
 _LEGACY_KEY_MAP = {
     "epitope_config": "epitopes",
     "vaccine_config": "vaccine_peptides",
@@ -113,29 +117,124 @@ def _set_nested_value(target: dict[str, Any], path: str, value: Any) -> None:
     current[keys[-1]] = value
 
 
-def _promote_nested_manufacturability(raw: dict[str, Any]) -> None:
-    """Emit a deprecation warning and lift `vaccine_peptides.manufacturability`
-    to top-level `manufacturability`. Errors if both are set."""
-    vaccine_section = raw.get("vaccine_peptides")
-    if not isinstance(vaccine_section, dict):
-        return
-    nested = vaccine_section.get("manufacturability")
-    if nested is None:
-        return
-    if raw.get("manufacturability") is not None:
-        raise ValueError(
-            "Cannot set both top-level 'manufacturability' and "
-            "'vaccine_peptides.manufacturability'. The nested form is "
-            "deprecated — use the top-level section."
+# Antigen-design knobs that, post-2.19, live under ``vaccine_peptides:``
+# but pre-2.19 lived at the ``vaccine_constructs:`` top level. Used by
+# the back-compat migration AND by ``extract_construct_kwargs`` to
+# thread these into the per-modality construct kwargs (so the
+# construct assemblers receive them at the same place they always have).
+_ANTIGEN_DESIGN_KNOBS = (
+    "antigen_content",
+    "epitopes_per_antigen",
+    "candidates_per_slot",
+    "min_antigen_length_aa",
+    "max_antigen_length_aa",
+)
+
+
+def _migrate_legacy_layout(raw: dict[str, Any]) -> None:
+    """Translate the pre-2.19 YAML layout into the post-2.19 shape
+    in-place, with one ``DeprecationWarning`` per migrated section.
+    Errors when both layouts are mixed for the same logical section.
+
+    Migrations:
+
+    * ``vaccine_peptides.manufacturability`` →
+      ``peptide.manufacturability`` (was previously renamed to
+      top-level ``manufacturability``; pre-2.19 it had also lived
+      under vaccine_peptides).
+    * top-level ``manufacturability`` → ``peptide.manufacturability``.
+    * ``vaccine_constructs.<modality>`` → top-level ``<modality>:``.
+    * ``vaccine_constructs.<antigen-design knob>`` →
+      ``vaccine_peptides.<knob>`` (e.g. ``antigen_content``,
+      ``epitopes_per_antigen``, ``candidates_per_slot``,
+      ``min_antigen_length_aa``, ``max_antigen_length_aa``).
+    """
+    # 1. ``vaccine_peptides.manufacturability`` → top-level for the
+    # next stage to migrate further.
+    vp = raw.get("vaccine_peptides")
+    if isinstance(vp, dict) and vp.get("manufacturability") is not None:
+        if raw.get("manufacturability") is not None:
+            raise ValueError(
+                "Cannot set both 'vaccine_peptides.manufacturability' and "
+                "top-level 'manufacturability'. Both are deprecated — pick "
+                "one and prefer 'peptide.manufacturability'.")
+        warnings.warn(
+            "Config key 'vaccine_peptides.manufacturability' is deprecated; "
+            "move it to 'peptide.manufacturability'. Auto-migrating.",
+            DeprecationWarning,
+            stacklevel=4,
         )
-    warnings.warn(
-        "Config key 'vaccine_peptides.manufacturability' is deprecated; "
-        "move it to the top-level 'manufacturability' section. Support for "
-        "the nested form will be removed in a future release.",
-        DeprecationWarning,
-        stacklevel=3,
-    )
-    raw["manufacturability"] = vaccine_section.pop("manufacturability")
+        raw["manufacturability"] = vp.pop("manufacturability")
+
+    # 2. top-level ``manufacturability`` → ``peptide.manufacturability``.
+    if raw.get("manufacturability") is not None:
+        peptide_section = raw.setdefault("peptide", {})
+        if not isinstance(peptide_section, dict):
+            raise TypeError(
+                "Config key 'peptide' must be a mapping; got %r"
+                % type(peptide_section).__name__)
+        if peptide_section.get("manufacturability") is not None:
+            raise ValueError(
+                "Cannot set both top-level 'manufacturability' and "
+                "'peptide.manufacturability'. Top-level form is "
+                "deprecated — keep just 'peptide.manufacturability'.")
+        warnings.warn(
+            "Config key 'manufacturability' (top-level) is deprecated; "
+            "move it under 'peptide.manufacturability'. Manufacturability "
+            "rules describe peptide-synthesis difficulty and don't apply "
+            "to mRNA constructs. Auto-migrating.",
+            DeprecationWarning,
+            stacklevel=4,
+        )
+        peptide_section["manufacturability"] = raw.pop("manufacturability")
+
+    # 3. ``vaccine_constructs:`` wrapper → top-level modality
+    # sections + antigen-design knobs into ``vaccine_peptides:``.
+    vc = raw.pop("vaccine_constructs", None)
+    if isinstance(vc, dict) and vc:
+        warnings.warn(
+            "Config key 'vaccine_constructs' is deprecated. Move "
+            "modality-specific entries to top-level 'peptide:' / "
+            "'mrna:' sections; move antigen-design knobs "
+            "(antigen_content, epitopes_per_antigen, "
+            "candidates_per_slot, min/max_antigen_length_aa) under "
+            "'vaccine_peptides:'. Auto-migrating.",
+            DeprecationWarning,
+            stacklevel=4,
+        )
+        modalities = set(known_modalities())
+        for key, value in vc.items():
+            if key in modalities:
+                target = raw.setdefault(key, {})
+                if not isinstance(target, dict):
+                    raise TypeError(
+                        "Config key %r must be a mapping; got %r"
+                        % (key, type(target).__name__))
+                if not isinstance(value, dict):
+                    raise TypeError(
+                        "vaccine_constructs.%s must be a mapping; got %r"
+                        % (key, type(value).__name__))
+                # Modality value at the new top level wins on
+                # collision — the user's explicit new-layout entry
+                # is more specific than the legacy wrapper.
+                for k, v in value.items():
+                    target.setdefault(k, v)
+            elif key in _ANTIGEN_DESIGN_KNOBS:
+                vp_section = raw.setdefault("vaccine_peptides", {})
+                if not isinstance(vp_section, dict):
+                    raise TypeError(
+                        "Config key 'vaccine_peptides' must be a "
+                        "mapping; got %r" % type(vp_section).__name__)
+                vp_section.setdefault(key, value)
+            else:
+                # Unknown key under the legacy wrapper — let msgspec
+                # surface it as a forbid_unknown_fields error rather
+                # than guess where it goes.
+                raise ValueError(
+                    "Unknown legacy 'vaccine_constructs.%s'; remove "
+                    "it or move under one of the known modality "
+                    "sections (%s)." % (
+                        key, ", ".join(sorted(modalities))))
 
 
 def load_vaxrank_config(
@@ -173,7 +272,7 @@ def load_vaxrank_config(
                 )
             raw[new_key] = raw.pop(legacy_key)
 
-    _promote_nested_manufacturability(raw)
+    _migrate_legacy_layout(raw)
 
     if ordered_overrides is not None:
         for kind, override in ordered_overrides:
@@ -200,7 +299,7 @@ def load_vaxrank_config(
 
 _MISSING = object()
 
-# Declarative mapping: (dotted config path) -> (EpitopeConfig kwarg name)
+# Declarative mapping: (dotted config path) → (EpitopeConfig kwarg name)
 _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("epitopes.min_score", "min_epitope_score"),
     ("epitopes.scoring_mode", "scoring_mode"),
@@ -213,7 +312,15 @@ _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("epitopes.default_methods", "default_methods"),
 ]
 
-# Declarative mapping: (dotted config path) -> (VaccineConfig kwarg name)
+# Declarative mapping: (dotted config path) → (VaccineConfig kwarg name)
+#
+# The ``manufacturability_*`` kwargs still live on
+# :class:`vaxrank.vaccine_config.VaccineConfig` for now. Phase 2 of
+# the post-2.19 refactor extracts them into a dedicated
+# ``ManufacturabilityConfig`` struct attached to
+# ``PeptideConstructConfig``; until then the loader reads from the
+# new YAML location (``peptide.manufacturability.*``) and routes to
+# the existing VaccineConfig fields.
 _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.preferred_length", "preferred_peptide_length"),
     ("vaccine_peptides.min_length", "min_peptide_length"),
@@ -226,11 +333,15 @@ _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.ranking_rules", "ranking_rules"),
     ("vaccine_peptides.require_mutant_epitopes_in_variant",
      "require_mutant_epitopes_in_variant"),
-    ("manufacturability.max_c_terminal_hydropathy", "max_c_terminal_hydropathy"),
-    ("manufacturability.min_kmer_hydropathy", "min_kmer_hydropathy"),
-    ("manufacturability.max_kmer_hydropathy_low_priority", "max_kmer_hydropathy_low_priority"),
-    ("manufacturability.max_kmer_hydropathy_high_priority", "max_kmer_hydropathy_high_priority"),
-    ("manufacturability.rules", "manufacturability_rules"),
+    ("peptide.manufacturability.max_c_terminal_hydropathy",
+     "max_c_terminal_hydropathy"),
+    ("peptide.manufacturability.min_kmer_hydropathy",
+     "min_kmer_hydropathy"),
+    ("peptide.manufacturability.max_kmer_hydropathy_low_priority",
+     "max_kmer_hydropathy_low_priority"),
+    ("peptide.manufacturability.max_kmer_hydropathy_high_priority",
+     "max_kmer_hydropathy_high_priority"),
+    ("peptide.manufacturability.rules", "manufacturability_rules"),
 ]
 
 
@@ -262,39 +373,42 @@ def extract_epitope_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     return _extract_via_mapping(config, _EPITOPE_CONFIG_MAPPING)
 
 
-_VACCINE_CONSTRUCTS_SUBSECTIONS = {'peptide', 'mrna'}
-
-
 def extract_construct_kwargs(
     config: dict[str, Any],
     modality: str,
 ) -> dict[str, Any]:
-    """Resolve construct-assembly kwargs for ``modality`` ('peptide'
-    or 'mrna') by merging cross-modality values at the
-    ``vaccine_constructs`` top level with the modality-specific
-    subsection. Modality values override cross-modality values;
-    ``None`` entries are dropped so callers can use
-    ``dict.get(name, fallback)`` cleanly.
+    """Resolve construct-assembly kwargs for ``modality`` ('peptide',
+    'mrna', or any other registered modality) by reading the
+    top-level modality section, then layering on the antigen-design
+    knobs from ``vaccine_peptides:`` (so each modality picks them up
+    unless it overrides them in its own section).
 
-    Empty dict when the section is absent — same shape as before so
-    code paths that don't use the new section behave identically.
+    Empty dict when no inputs apply — same shape as before so code
+    paths that don't use the per-modality section behave identically.
     """
     out: dict[str, Any] = {}
-    section = _resolve_dotted(config, 'vaccine_constructs')
-    if not isinstance(section, dict):
-        return out
-    # Top-level entries that aren't subsection names are
-    # cross-modality knobs; merge first so modality-specific
-    # overrides land on top.
-    for k, v in section.items():
-        if k in _VACCINE_CONSTRUCTS_SUBSECTIONS:
-            continue
-        if v is None:
-            continue
-        out[k] = v
-    modal = section.get(modality)
-    if isinstance(modal, dict):
-        out.update({k: v for k, v in modal.items() if v is not None})
+    # Antigen-design knobs from vaccine_peptides: thread into every
+    # modality. Modality-specific overrides in ``<modality>:`` win.
+    vp = _resolve_dotted(config, 'vaccine_peptides')
+    if isinstance(vp, dict):
+        for k in _ANTIGEN_DESIGN_KNOBS:
+            v = vp.get(k)
+            if v is not None:
+                out[k] = v
+    section = _resolve_dotted(config, modality)
+    if isinstance(section, dict):
+        for k, v in section.items():
+            # ``manufacturability`` is a sub-section in the YAML
+            # schema; it never goes into the construct-config kwargs
+            # (those are flat). The per-modality manufacturability
+            # config rides through ``_VACCINE_CONFIG_MAPPING`` for
+            # now (will move onto PeptideConstructConfig once the
+            # in-code split lands).
+            if k == 'manufacturability':
+                continue
+            if v is None:
+                continue
+            out[k] = v
     return out
 
 

@@ -1,3 +1,28 @@
+"""msgspec schemas for the vaxrank YAML config.
+
+Top-level shape (post-2.19):
+
+    epitopes:               # filter / score MHC ligand predictions
+    vaccine_peptides:       # rank + antigen-window selection
+                            # (modality-agnostic; absorbs the
+                            # antigen-design knobs that used to
+                            # live at the ``vaccine_constructs:``
+                            # top level — antigen_content,
+                            # epitopes_per_antigen,
+                            # candidates_per_slot,
+                            # min/max_antigen_length_aa)
+    peptide:                # peptide-vaccine assembly +
+                            # ``manufacturability`` sub-section
+    mrna:                   # mRNA-vaccine assembly
+    # future: dna:, ...
+
+The pre-2.19 layout (``vaccine_constructs:`` wrapper, top-level
+``manufacturability:``, ``vaccine_peptides.manufacturability:``) is
+still accepted by the loader for one deprecation cycle — see
+:func:`vaxrank.config.loader._migrate_legacy_layout`. The schema
+itself is the new shape.
+"""
+
 from typing import Optional
 
 import msgspec
@@ -27,6 +52,12 @@ class ManufacturabilityConfigSchema(
     kw_only=True,
     forbid_unknown_fields=True,
 ):
+    """Peptide-synthesis difficulty rules + thresholds.
+
+    Lives under ``peptide.manufacturability:`` in the YAML (was
+    top-level ``manufacturability:`` pre-2.19; the loader still
+    accepts the old location with a deprecation warning).
+    """
     max_c_terminal_hydropathy: Optional[float] = None
     min_kmer_hydropathy: Optional[float] = None
     max_kmer_hydropathy_low_priority: Optional[float] = None
@@ -40,6 +71,19 @@ class VaccinePeptidesConfigSchema(
     kw_only=True,
     forbid_unknown_fields=True,
 ):
+    """Modality-agnostic ranking + antigen-window selection.
+
+    Absorbs the antigen-design knobs (``antigen_content``,
+    ``epitopes_per_antigen``, ``candidates_per_slot``,
+    ``min_antigen_length_aa`` / ``max_antigen_length_aa``) that
+    lived at the ``vaccine_constructs:`` top level pre-2.19 — those
+    are antigen *design*, consumed by every modality's writer, so
+    they belong here next to the rest of the antigen-design knobs
+    rather than bolted onto a "constructs" wrapper.
+
+    Section name kept as ``vaccine_peptides`` for back-compat with
+    pre-mRNA configs even though the contents are modality-agnostic.
+    """
     preferred_length: Optional[int] = None
     min_length: Optional[int] = None
     max_length: Optional[int] = None
@@ -51,29 +95,29 @@ class VaccinePeptidesConfigSchema(
     combined_score_expr: Optional[str] = None
     ranking_rules: Optional[list[str]] = None
     require_mutant_epitopes_in_variant: Optional[bool] = None
-    manufacturability: Optional[ManufacturabilityConfigSchema] = None
+    # Antigen-design knobs hoisted from ``vaccine_constructs:`` top
+    # level (post-2.19).
+    antigen_content: Optional[str] = None
+    epitopes_per_antigen: Optional[int] = None
+    candidates_per_slot: Optional[int] = None
+    min_antigen_length_aa: Optional[int] = None
+    max_antigen_length_aa: Optional[int] = None
 
 
-class _PeptideConstructConfigSchema(
+class PeptideConstructConfigSchema(
     msgspec.Struct,
     frozen=True,
     kw_only=True,
     forbid_unknown_fields=True,
 ):
-    """Peptide-specific construct-assembly overrides.
+    """Top-level ``peptide:`` section — peptide-vaccine assembly +
+    peptide-only manufacturability.
 
-    Any cross-modality knob also valid at ``vaccine_constructs``
-    top-level (length bounds, antigen_content, …) can be set here
-    to override that value for peptide only.
+    Pre-2.19 this lived under ``vaccine_constructs.peptide:``; the
+    wrapper got dropped because the cross-modality knobs that used
+    to justify it (``antigen_content`` etc.) actually belong with
+    the antigen-design knobs in ``vaccine_peptides:``.
     """
-    # Cross-modality knobs (override of values set at the section
-    # top level).
-    min_antigen_length_aa: Optional[int] = None
-    max_antigen_length_aa: Optional[int] = None
-    candidates_per_slot: Optional[int] = None
-    antigen_content: Optional[str] = None
-    epitopes_per_antigen: Optional[int] = None
-    # Peptide-only
     mode: Optional[str] = None
     linker: Optional[str] = None
     antigens_per_construct: Optional[int] = None
@@ -83,28 +127,23 @@ class _PeptideConstructConfigSchema(
     scale_mg: Optional[float] = None
     purity_percent: Optional[float] = None
     counterion: Optional[str] = None
+    manufacturability: Optional[ManufacturabilityConfigSchema] = None
 
 
-class _MrnaConstructConfigSchema(
+class MrnaConstructConfigSchema(
     msgspec.Struct,
     frozen=True,
     kw_only=True,
     forbid_unknown_fields=True,
 ):
-    """mRNA-specific construct-assembly overrides.
+    """Top-level ``mrna:`` section — mRNA-vaccine assembly.
 
-    Any cross-modality knob also valid at ``vaccine_constructs``
-    top-level (length bounds, antigen_content, …) can be set here
-    to override that value for mRNA only.
+    No manufacturability sub-section: solid-phase peptide synthesis
+    rules don't apply to in-vivo-translated mRNA. If mRNA grows its
+    own assembly-difficulty rules (codon-optimization friction, IVT
+    yield, …), add them as a parallel sub-section under a different
+    name.
     """
-    # Cross-modality knobs (override of values set at the section
-    # top level).
-    min_antigen_length_aa: Optional[int] = None
-    max_antigen_length_aa: Optional[int] = None
-    candidates_per_slot: Optional[int] = None
-    antigen_content: Optional[str] = None
-    epitopes_per_antigen: Optional[int] = None
-    # mRNA-only
     linker: Optional[str] = None
     antigens_per_construct: Optional[int] = None
     max_constructs: Optional[int] = None
@@ -126,53 +165,6 @@ class _MrnaConstructConfigSchema(
     junction_rank_mild: Optional[float] = None
 
 
-class VaccineConstructsConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    """Construct-assembly section of the YAML config.
-
-    Layout:
-
-        vaccine_constructs:
-          # cross-modality knobs at the section top level (apply
-          # to every active modality unless overridden):
-          min_antigen_length_aa: 15
-          max_antigen_length_aa: 25
-          ...
-          # modality-specific overrides:
-          peptide:
-            mode: slp
-            linker: G4S3
-            ...
-          mrna:
-            signal_peptide: HLA_B
-            linker: (G4S)2
-            ...
-
-    Resolution order (highest precedence first):
-
-        explicit CLI flag  >  per-modality config  >  cross-modality config  >  built-in default
-
-    A user can drive both modalities from one config file, and only
-    needs to repeat a knob in a modality subsection when that
-    modality should differ from the cross-modality value.
-    """
-    # Cross-modality knobs accepted at the section top level. A knob
-    # also set inside ``peptide:`` / ``mrna:`` overrides this value
-    # for that modality.
-    min_antigen_length_aa: Optional[int] = None
-    max_antigen_length_aa: Optional[int] = None
-    candidates_per_slot: Optional[int] = None
-    antigen_content: Optional[str] = None
-    epitopes_per_antigen: Optional[int] = None
-    # Modality-specific overrides + modality-only knobs.
-    peptide: Optional[_PeptideConstructConfigSchema] = None
-    mrna: Optional[_MrnaConstructConfigSchema] = None
-
-
 class VaxrankConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -181,5 +173,5 @@ class VaxrankConfigSchema(
 ):
     epitopes: Optional[EpitopesConfigSchema] = None
     vaccine_peptides: Optional[VaccinePeptidesConfigSchema] = None
-    manufacturability: Optional[ManufacturabilityConfigSchema] = None
-    vaccine_constructs: Optional[VaccineConstructsConfigSchema] = None
+    peptide: Optional[PeptideConstructConfigSchema] = None
+    mrna: Optional[MrnaConstructConfigSchema] = None

@@ -335,8 +335,10 @@ def test_bundled_default_yaml_is_present_and_parses():
     import yaml
     text = files("vaxrank.config").joinpath("default.yaml").read_text()
     parsed = yaml.safe_load(text)
-    # Top-level sections present
-    assert set(parsed) >= {"epitopes", "vaccine_peptides", "manufacturability"}
+    # Top-level sections present (post-2.19 layout: peptide /
+    # mrna at top level; manufacturability nests under peptide).
+    assert set(parsed) >= {"epitopes", "vaccine_peptides", "peptide", "mrna"}
+    assert "manufacturability" in parsed["peptide"]
 
 
 def test_bundled_default_yaml_round_trips_to_default_configs(tmp_path):
@@ -397,122 +399,62 @@ def test_bundled_default_yaml_round_trips_to_default_configs(tmp_path):
 
 
 def test_default_yaml_uncommented_keys_match_schema():
-    """Every uncommented key under each top-level section in default.yaml
-    must be a recognized schema field. Catches drift like keys placed in
-    the wrong section or renamed without updating the YAML."""
+    """The shipped default.yaml must validate against
+    ``VaxrankConfigSchema`` end-to-end. ``forbid_unknown_fields=True``
+    on each sub-schema catches drift like a key placed in the wrong
+    section or renamed without updating the YAML."""
     from importlib.resources import files
     import yaml
-    from vaxrank.config.schema import (
-        EpitopesConfigSchema,
-        ManufacturabilityConfigSchema,
-        VaccinePeptidesConfigSchema,
-    )
+    import msgspec
+    from vaxrank.config.schema import VaxrankConfigSchema
 
     text = files("vaxrank.config").joinpath("default.yaml").read_text()
     parsed = yaml.safe_load(text)
-
-    schema_for_section = {
-        "epitopes": EpitopesConfigSchema,
-        "vaccine_peptides": VaccinePeptidesConfigSchema,
-        "manufacturability": ManufacturabilityConfigSchema,
-    }
-    for section, schema_cls in schema_for_section.items():
-        assert section in parsed, f"Missing section in default.yaml: {section}"
-        section_dict = parsed[section] or {}
-        # Drop the nested manufacturability sub-object inside vaccine_peptides
-        # (handled separately above) so it doesn't trigger forbid_unknown_fields
-        # when it's actually a different schema.
-        if section == "vaccine_peptides":
-            section_dict = {k: v for k, v in section_dict.items()
-                            if k != "manufacturability"}
-        # forbid_unknown_fields=True on each schema means msgspec will raise
-        # if any key in section_dict is not a declared schema field.
-        import msgspec
-        msgspec.convert(section_dict, schema_cls)
+    msgspec.convert(parsed, VaxrankConfigSchema)
 
 
 def test_default_yaml_commented_examples_are_valid():
-    """Commented-out example lines in default.yaml are advertised as 'just
-    uncomment to enable' starters. Walk every commented YAML key in the
-    shipped file and verify it's a recognized schema field in its
-    section. Catches the kind of bug where a future edit puts an
-    `epitopes`-only key under `vaccine_peptides`.
+    """Commented-out example lines under ``epitopes:`` in default.yaml
+    are advertised as 'just uncomment to enable' starters. Walk every
+    commented field name under that section and verify it's a
+    recognized schema field. Catches drift like a key renamed in the
+    schema but left dangling in the YAML.
+
+    Scope is intentionally narrow: only ``epitopes:`` carries
+    commented-out scalar examples in default.yaml; the
+    ``vaccine_peptides:`` / ``peptide:`` / ``mrna:`` sections ship
+    fully uncommented and are validated by
+    ``test_default_yaml_uncommented_keys_match_schema`` above.
     """
     from importlib.resources import files
     import re
-    from vaxrank.config.schema import (
-        EpitopesConfigSchema,
-        ManufacturabilityConfigSchema,
-        VaccinePeptidesConfigSchema,
-    )
+    from vaxrank.config.schema import EpitopesConfigSchema
 
     text = files("vaxrank.config").joinpath("default.yaml").read_text()
-
-    schema_for_section = {
-        "epitopes": EpitopesConfigSchema,
-        "vaccine_peptides": VaccinePeptidesConfigSchema,
-        "manufacturability": ManufacturabilityConfigSchema,
-    }
-    section_fields = {
-        s: set(c.__struct_fields__) for s, c in schema_for_section.items()
-    }
-
-    # Sections with a nested per-modality structure (shared / peptide /
-    # mrna). The flat-schema check below can't validate those — schema
-    # validation at YAML-load time covers them — so skip the body of
-    # those sections here.
-    nested_sections = {"vaccine_constructs"}
+    epitopes_fields = set(EpitopesConfigSchema.__struct_fields__)
 
     section = None
-    # `# - foo` rule-list comments, `# foo: ...` field comments — capture
-    # both. Skip lines under a nested `manufacturability:` block inside
-    # vaccine_peptides (handled separately under its own section).
-    inside_nested_manuf = False
-    in_nested_section = False
     for raw in text.splitlines():
         line = raw.rstrip()
-        # Top-level section header (uncommented OR commented-out wholly)
-        m = re.match(r"^#?\s*([a-z_]+):\s*$", line) if line.startswith("#") \
-            else re.match(r"^([a-z_]+):\s*$", line)
-        if m and m.group(1) in nested_sections:
-            in_nested_section = True
-            section = None
-            continue
-        if m and m.group(1) in schema_for_section:
+        m = re.match(r"^([a-z_]+):\s*$", line)
+        if m:
             section = m.group(1)
-            inside_nested_manuf = False
-            in_nested_section = False
             continue
-        if in_nested_section:
-            # Skip the entire body of a nested section (validated by the
-            # schema at YAML-load time, not by this flat-field walk).
-            continue
-        if section is None:
-            continue
-        # Nested manufacturability inside vaccine_peptides
-        if section == "vaccine_peptides" and re.match(
-                r"^\s+manufacturability:\s*$", line):
-            inside_nested_manuf = True
-            continue
-        if inside_nested_manuf:
+        if section != "epitopes":
             continue
         # Match top-level commented field lines: `  # field: value`.
-        # Require exactly one space between `#` and the field name so that
-        # deeper-nested commented values (`#   pMHC_affinity: mhcflurry`
-        # under a parent `# default_methods:`) are skipped — they're values
-        # of the parent dict, not section-level fields, and shouldn't be
-        # checked against the section's schema.
+        # Require exactly one space between `#` and the field name so
+        # that deeper-nested commented values
+        # (`#   pMHC_affinity: mhcflurry` under a parent
+        # `# default_methods:`) are skipped — they're values of the
+        # parent dict, not section-level fields.
         m = re.match(r"^\s*# ([a-z_]+):\s", line)
         if not m:
             continue
         key = m.group(1)
-        # Skip rule-list entries (those are values, not field names).
-        # Heuristic: rule-list lines start with `# - ` not `# key:`.
-        # Field comments always have a colon AFTER the name and at least
-        # one char before the # (the indent).
-        assert key in section_fields[section], (
-            f"Commented example `{key}:` in section `{section}` is not a "
-            f"valid field (allowed: {sorted(section_fields[section])}). "
+        assert key in epitopes_fields, (
+            f"Commented example `{key}:` in section `epitopes` is not a "
+            f"valid field (allowed: {sorted(epitopes_fields)}). "
             f"Either move the line to the right section or fix the key name."
         )
 
