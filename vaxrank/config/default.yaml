@@ -50,19 +50,32 @@ epitopes:
   scoring_mode: affinity
 
   # ---- Topiary DSL (optional, overrides scalar knobs above when set) ----
+  #
+  # Method-scoped access has several quote-free forms that all parse
+  # identically — pick whichever reads best for you:
+  #
+  #   affinity[mhcflurry]       (bare identifier in brackets)
+  #   affinity['mhcflurry']     (string literal in brackets — explicit)
+  #   mhcflurry_affinity        (underscore-joined, method-prefixed)
+  #   mhcflurry_ba              (alias: ba == affinity)
+  #
+  # Versioned predictors take a second bracket arg:
+  #
+  #   affinity[netmhcpan, "4.1b"].value
+  #
   # filter_expr is a boolean DSL string evaluated against the topiary
   # DataFrame: it drops rows wholesale before scoring. Examples:
   #   "affinity <= 500"
   #   "affinity <= 500 & percentile_rank <= 2"
-  #   "affinity['mhcflurry'] <= 500 | affinity['netmhcpan'] <= 500"
+  #   "affinity[mhcflurry] <= 500 | affinity[netmhcpan] <= 500"
   # filter_expr: null
 
   # score_expr is a numeric DSL string producing one score per
   # (peptide, allele) group. When unset, vaxrank synthesizes the default
   # logistic node from the scalar knobs above. Examples:
   #   "affinity.logistic_normalized(350, 150)"
-  #   "affinity['mhcflurry'].logistic(350, 150) * 0.5
-  #     + affinity['netmhcpan'].logistic(350, 150) * 0.5"
+  #   "affinity[mhcflurry].logistic_normalized(350, 150) * 0.5
+  #     + affinity[netmhcpan].logistic_normalized(350, 150) * 0.5"
   # score_expr: null
 
   # ---- Default predictor methods (only matters with multi-model inputs) ----
