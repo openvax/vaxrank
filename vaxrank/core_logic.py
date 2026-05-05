@@ -24,6 +24,7 @@ from topiary import TopiaryPredictor
 
 from .epitope_config import EpitopeConfig
 from .vaccine_config import VaccineConfig
+from .manufacturability_config import ManufacturabilityConfig
 from .epitope_logic import slice_epitope_predictions, predict_epitopes
 from .mutant_protein_fragment import MutantProteinFragment
 from .vaccine_peptide import VaccinePeptide
@@ -40,6 +41,7 @@ def run_vaxrank(
     num_mutant_epitopes_to_keep: int = 1000,
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
+    manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
 ):
     """
@@ -81,6 +83,7 @@ def run_vaxrank(
         num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         epitope_config=epitope_config,
         vaccine_config=vaccine_config,
+        manufacturability_config=manufacturability_config,
         allow_dna_only_fallback=allow_dna_only_fallback,
     )
     ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
@@ -100,6 +103,7 @@ def create_vaccine_peptides_dict(
     num_mutant_epitopes_to_keep: int = 1000,
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
+    manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
 ):
     """
@@ -148,6 +152,7 @@ def create_vaccine_peptides_dict(
             num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
             epitope_config=epitope_config,
             vaccine_config=vaccine_config,
+            manufacturability_config=manufacturability_config,
             allow_dna_only_fallback=allow_dna_only_fallback,
         )
 
@@ -169,6 +174,7 @@ def vaccine_peptides_for_variant(
     num_mutant_epitopes_to_keep: int = 1000,
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
+    manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
 ):
     """
@@ -242,6 +248,7 @@ def vaccine_peptides_for_variant(
         num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
         epitope_config=epitope_config,
         vaccine_config=vaccine_config,
+        manufacturability_config=manufacturability_config,
     )
 
 
@@ -254,6 +261,7 @@ def vaccine_peptides_from_epitopes(
     num_mutant_epitopes_to_keep: int = 1000,
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
+    manufacturability_config: Optional[ManufacturabilityConfig] = None,
 ):
     """
     Generate vaccine peptide candidates from epitope predictions.
@@ -342,18 +350,20 @@ def vaccine_peptides_from_epitopes(
             for p in subsequence_epitope_predictions
         )
 
+        # Manufacturability config is peptide-only (post-2.20). When
+        # peptide isn't an active modality the caller passes None and
+        # we fall back to ``ManufacturabilityConfig()`` defaults; the
+        # ``manufacturability`` sentinel inside ``ranking_rules`` is
+        # then a tie-break against those defaults rather than against
+        # user-overridden thresholds.
+        mfg = manufacturability_config or ManufacturabilityConfig()
         candidate_vaccine_peptide = VaccinePeptide(
             mutant_protein_fragment=candidate_fragment,
             epitope_predictions=subsequence_epitope_predictions,
             num_mutant_epitopes_to_keep=vaccine_config.num_mutant_epitopes_to_keep,
             epitope_score_params=epitope_score_params,
-            manufacturability_thresholds={
-                "max_c_terminal_hydropathy": vaccine_config.max_c_terminal_hydropathy,
-                "min_kmer_hydropathy": vaccine_config.min_kmer_hydropathy,
-                "max_kmer_hydropathy_low_priority": vaccine_config.max_kmer_hydropathy_low_priority,
-                "max_kmer_hydropathy_high_priority": vaccine_config.max_kmer_hydropathy_high_priority,
-            },
-            manufacturability_rules=vaccine_config.manufacturability_rules,
+            manufacturability_thresholds=mfg.thresholds_dict(),
+            manufacturability_rules=mfg.rules,
             combined_score_mode=vaccine_config.combined_score_mode,
             combined_score_expr=vaccine_config.combined_score_expr,
             ranking_rules=vaccine_config.ranking_rules,

@@ -14,7 +14,12 @@ import argparse
 
 import msgspec
 
-from ..config.loader import extract_vaccine_config_kwargs, load_vaxrank_config
+from ..config.loader import (
+    extract_manufacturability_config_kwargs,
+    extract_vaccine_config_kwargs,
+    load_vaxrank_config,
+)
+from ..manufacturability_config import ManufacturabilityConfig
 from ..vaccine_config import VaccineConfig
 
 
@@ -104,3 +109,16 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
 
     vaccine_config = msgspec.convert(vaccine_config_kwargs, VaccineConfig)
     return vaccine_config
+
+
+def manufacturability_config_from_args(
+        args: argparse.Namespace, merged_config=None) -> ManufacturabilityConfig:
+    """Build a ``ManufacturabilityConfig`` from the YAML
+    ``peptide.manufacturability`` sub-section. Always returns a real
+    config (``ManufacturabilityConfig()`` defaults if the YAML
+    sub-section is absent) — the ranker treats it as the source of
+    peptide-synthesis difficulty thresholds + rules."""
+    if merged_config is None:
+        merged_config = load_vaxrank_config(args)
+    kwargs = extract_manufacturability_config_kwargs(merged_config)
+    return msgspec.convert(kwargs, ManufacturabilityConfig)

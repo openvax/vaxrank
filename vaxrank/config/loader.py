@@ -314,13 +314,11 @@ _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
 
 # Declarative mapping: (dotted config path) → (VaccineConfig kwarg name)
 #
-# The ``manufacturability_*`` kwargs still live on
-# :class:`vaxrank.vaccine_config.VaccineConfig` for now. Phase 2 of
-# the post-2.19 refactor extracts them into a dedicated
-# ``ManufacturabilityConfig`` struct attached to
-# ``PeptideConstructConfig``; until then the loader reads from the
-# new YAML location (``peptide.manufacturability.*``) and routes to
-# the existing VaccineConfig fields.
+# Post-2.20 manufacturability lives on its own struct
+# (:class:`vaxrank.manufacturability_config.ManufacturabilityConfig`)
+# threaded into the ranker as a separate parameter — see
+# ``_MANUFACTURABILITY_CONFIG_MAPPING`` below. ``VaccineConfig``
+# carries only modality-agnostic ranking knobs.
 _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.preferred_length", "preferred_peptide_length"),
     ("vaccine_peptides.min_length", "min_peptide_length"),
@@ -333,6 +331,11 @@ _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.ranking_rules", "ranking_rules"),
     ("vaccine_peptides.require_mutant_epitopes_in_variant",
      "require_mutant_epitopes_in_variant"),
+]
+
+
+# Declarative mapping: (dotted config path) → (ManufacturabilityConfig kwarg name)
+_MANUFACTURABILITY_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("peptide.manufacturability.max_c_terminal_hydropathy",
      "max_c_terminal_hydropathy"),
     ("peptide.manufacturability.min_kmer_hydropathy",
@@ -341,7 +344,7 @@ _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
      "max_kmer_hydropathy_low_priority"),
     ("peptide.manufacturability.max_kmer_hydropathy_high_priority",
      "max_kmer_hydropathy_high_priority"),
-    ("peptide.manufacturability.rules", "manufacturability_rules"),
+    ("peptide.manufacturability.rules", "rules"),
 ]
 
 
@@ -412,14 +415,29 @@ def extract_construct_kwargs(
     return out
 
 
+def extract_manufacturability_config_kwargs(
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Extract ManufacturabilityConfig kwargs from the YAML
+    ``peptide.manufacturability`` sub-section. Returns an empty dict
+    when the sub-section is absent — caller should use
+    ``ManufacturabilityConfig()`` defaults in that case."""
+    kwargs = _extract_via_mapping(
+        config, _MANUFACTURABILITY_CONFIG_MAPPING)
+    if "rules" in kwargs and kwargs["rules"] is not None:
+        kwargs["rules"] = tuple(kwargs["rules"])
+    return kwargs
+
+
 def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     kwargs = _extract_via_mapping(config, _VACCINE_CONFIG_MAPPING)
 
-    # VaccineConfig declares *_rules fields as Optional[tuple[str, ...]];
-    # YAML gives us lists, so coerce.
-    for rules_key in ("manufacturability_rules", "ranking_rules"):
-        if rules_key in kwargs and kwargs[rules_key] is not None:
-            kwargs[rules_key] = tuple(kwargs[rules_key])
+    # VaccineConfig declares ranking_rules as Optional[tuple[str, ...]];
+    # YAML gives us a list, so coerce. Manufacturability rules live
+    # on ManufacturabilityConfig now (post-2.20) and are coerced in
+    # ``extract_manufacturability_config_kwargs``.
+    if "ranking_rules" in kwargs and kwargs["ranking_rules"] is not None:
+        kwargs["ranking_rules"] = tuple(kwargs["ranking_rules"])
 
     # When preferred_peptide_length is set but min/max are not,
     # default them to match preferred so the range is consistent.
