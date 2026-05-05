@@ -467,14 +467,18 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles)
     # Canonical filenames inside the per-modality target directory:
     # cds.fasta + no_polyA.fasta + full.fasta + manifest.json +
-    # layers.csv. The cds/no_polyA/full FASTAs are written by
-    # ``write_mrna_outputs`` directly into ``target_dir``.
+    # mrna-sequence-parts.csv. The cds/no_polyA/full FASTAs are
+    # written by ``write_mrna_outputs`` directly into ``target_dir``.
+    # The CSV name was ``layers.csv`` through 2.17 — too cryptic
+    # next to ``cds.fasta`` / ``full.fasta``; renamed to spell out
+    # what the rows describe (per-element decomposition of each
+    # mRNA construct).
     os.makedirs(target_dir, exist_ok=True)
     write_mrna_outputs(
         constructs,
         output_dir=target_dir,
         manifest_path=os.path.join(target_dir, 'manifest.json'),
-        csv_path=os.path.join(target_dir, 'layers.csv'),
+        csv_path=os.path.join(target_dir, 'mrna-sequence-parts.csv'),
         csv_include_full_rows=getattr(
             args, 'mrna_csv_full_rows', True),
     )

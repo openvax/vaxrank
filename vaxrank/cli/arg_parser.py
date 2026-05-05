@@ -249,7 +249,7 @@ def add_output_args(arg_parser):
     # Canonical filenames per type:
     #   peptide/  vaccine.fasta, manifest.json, order_form.csv
     #   mrna/     cds.fasta, no_polyA.fasta, full.fasta,
-    #             manifest.json, layers.csv
+    #             manifest.json, mrna-sequence-parts.csv
     #
     # No file-extension-based mode switching: ``--output-dir`` is
     # never a file path. Tradeoff: single-file output ergonomics
@@ -266,14 +266,14 @@ def add_output_args(arg_parser):
              "Required when designing a vaccine; omit for "
              "ranking-only / report-only runs. Vaxrank picks "
              "canonical filenames inside (vaccine.fasta / cds.fasta / "
-             "manifest.json / order_form.csv / layers.csv).")
+             "manifest.json / order_form.csv / mrna-sequence-parts.csv).")
     output_args_group.add_argument(
         "--mrna-csv-no-full-rows",
         dest="mrna_csv_full_rows",
         action="store_false",
         default=True,
         help="mRNA-only. Suppress the per-construct cds / no_polyA / "
-             "full summary rows in the mRNA layers.csv (the rows "
+             "full summary rows in the mRNA mrna-sequence-parts.csv (the rows "
              "with the longest nt cells). Per-element rows are "
              "unaffected.")
 
@@ -458,7 +458,7 @@ def add_mrna_output_args(group):
     Output destinations are unified under ``--output-dir`` (see
     ``add_output_args``); the mRNA writer picks canonical filenames
     inside it (cds.fasta / no_polyA.fasta / full.fasta /
-    manifest.json / layers.csv). Only mrna-specific design
+    manifest.json / mrna-sequence-parts.csv). Only mrna-specific design
     parameters live here.
     """
     from ..mrna_library import MITDS, SIGNAL_PEPTIDES, UTRS_3P, UTRS_5P

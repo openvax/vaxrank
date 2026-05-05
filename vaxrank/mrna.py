@@ -530,7 +530,9 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
     constructs = []
     current = []
     current_aa_nt = 0
-    for name, aa in antigen_pairs:
+    total_antigens = (
+        len(antigen_pairs) if hasattr(antigen_pairs, '__len__') else None)
+    for i, (name, aa) in enumerate(antigen_pairs):
         antigen_nt = len(aa) * 3
         linker_nt = len(linker_aa) * 3 if current else 0
         projected = fixed_overhead_nt + current_aa_nt + linker_nt + antigen_nt
@@ -545,10 +547,30 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
             antigen_nt = len(aa) * 3
             linker_nt = 0
             if len(constructs) >= options.max_constructs:
-                logger.warning(
-                    "Reached --mrna-max-constructs (%d); dropping "
-                    "remaining antigens including %s.",
-                    options.max_constructs, name)
+                # Count dropped antigens so the operator can tell
+                # whether they lost 1 or 379. ``total_antigens`` is
+                # known when the caller passes a list (the normal
+                # path); on a generator we fall back to "remaining"
+                # without a total.
+                remaining = (
+                    total_antigens - i if total_antigens is not None
+                    else None)
+                if remaining is not None:
+                    logger.warning(
+                        "Reached --mrna-max-constructs (%d); "
+                        "dropping %d / %d ranked antigen(s) past the "
+                        "cap (first dropped: %s). Bump "
+                        "--mrna-max-constructs to spill into more "
+                        "constructs.",
+                        options.max_constructs, remaining,
+                        total_antigens, name)
+                else:
+                    logger.warning(
+                        "Reached --mrna-max-constructs (%d); "
+                        "dropping remaining antigens (first: %s). "
+                        "Bump --mrna-max-constructs to spill into "
+                        "more constructs.",
+                        options.max_constructs, name)
                 return constructs
         # A single antigen larger than the length cap is still emitted in
         # its own construct — splitting one antigen would corrupt the
@@ -822,7 +844,12 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             components['junction_swap'] = junction_swap_meta
 
         constructs.append(RNAConstruct(
-            name="seq_%03d" % (i + 1),
+            # Modality-stamped namespace (was bare ``seq_NNN``):
+            # users mix peptide + mRNA outputs in the same downstream
+            # pipeline and a bare ``seq_001`` collides with peptide
+            # construct names. Mirrors the peptide writer's
+            # ``peptide_NNN`` scheme.
+            name="mrna_%03d" % (i + 1),
             antigen_names=names,
             sequence=full_nt,
             components=components,
@@ -908,8 +935,13 @@ def write_mrna_outputs(constructs, output_dir, manifest_path=None,
         with open(path, 'w') as f:
             for c in constructs:
                 seq = getattr(c, attr)
+                # Use ';' as the antigen separator: GenBank
+                # convention for compound description fields, and
+                # avoids the trap where downstream tools split the
+                # FASTA description on ',' (treating each antigen
+                # name as a separate token).
                 f.write(">%s antigens=%s length=%d\n" % (
-                    c.name, ','.join(c.antigen_names), len(seq)))
+                    c.name, ';'.join(c.antigen_names), len(seq)))
                 f.write(_wrap_fasta(seq))
                 f.write("\n")
 

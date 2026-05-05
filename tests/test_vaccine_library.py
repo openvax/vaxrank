@@ -118,8 +118,10 @@ def test_get_linker_is_case_insensitive():
 
 
 def test_construct_name_format_consistent_across_modalities():
-    """mRNA constructs use 'seq_NNN'; peptide constructs use 'peptide_NNN'.
-    Same width and zero-padding so consumers can sort/parse uniformly.
+    """mRNA constructs use 'mrna_NNN'; peptide constructs use 'peptide_NNN'.
+    Same width and zero-padding so consumers can sort/parse uniformly,
+    and both names announce their modality so mixed-output downstream
+    pipelines don't collide on bare ``seq_NNN``.
     """
     import re
     from types import SimpleNamespace
@@ -139,7 +141,7 @@ def test_construct_name_format_consistent_across_modalities():
     [p] = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
 
     # Both should match <prefix>_NNN with the same numeric width.
-    pattern = re.compile(r"^(seq|peptide)_\d{3}$")
+    pattern = re.compile(r"^(mrna|peptide)_\d{3}$")
     assert pattern.match(m.name), \
         "mRNA construct name '%s' must match <prefix>_NNN" % m.name
     assert pattern.match(p.name), \

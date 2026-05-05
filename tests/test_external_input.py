@@ -832,7 +832,7 @@ def test_vaccine_target_dir_layout(tmp_path):
 
 def test_lens_with_vaccine_type_mrna_writes_three_fastas(tmp_path):
     """End-to-end: --input-lens + --vaccine-type=mrna +
-    --output-dir=DIR writes three FASTAs + manifest + layers.csv
+    --output-dir=DIR writes three FASTAs + manifest + mrna-sequence-parts.csv
     directly into DIR (single-mode flat layout)."""
     from vaxrank.cli.entry_point import _emit_outputs
 
