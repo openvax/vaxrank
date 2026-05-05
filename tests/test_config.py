@@ -39,6 +39,7 @@ from vaxrank.cli.epitope_config_args import (
     add_epitope_prediction_args,
 )
 from vaxrank.cli.vaccine_config_args import (
+    manufacturability_config_from_args,
     vaccine_config_from_args,
     add_vaccine_peptide_args,
 )
@@ -565,7 +566,10 @@ vaccine_peptides:
         os.unlink(config_path)
 
 
-def test_vaccine_config_from_args_nested_manufacturability():
+def test_manufacturability_config_from_legacy_nested_yaml():
+    """Pre-2.19 ``vaccine_peptides.manufacturability`` migrates
+    through both legacy stages (vaccine_peptides → top-level →
+    peptide.manufacturability) and lands on ManufacturabilityConfig."""
     yaml_content = """
 vaccine_peptides:
   manufacturability:
@@ -586,18 +590,21 @@ vaccine_peptides:
             config_set_overrides=None,
             config_expr_overrides=None,
         )
-        with pytest.warns(DeprecationWarning, match="vaccine_peptides.manufacturability"):
-            config = vaccine_config_from_args(args)
-        eq_(config.max_c_terminal_hydropathy, 2.0)
-        eq_(config.max_kmer_hydropathy_high_priority, 3.0)
-        # Unset fields keep defaults
-        eq_(config.min_kmer_hydropathy, 0.0)
-        eq_(config.max_kmer_hydropathy_low_priority, 1.5)
+        with pytest.warns(DeprecationWarning,
+                          match="vaccine_peptides.manufacturability"):
+            mfg = manufacturability_config_from_args(args)
+        eq_(mfg.max_c_terminal_hydropathy, 2.0)
+        eq_(mfg.max_kmer_hydropathy_high_priority, 3.0)
+        # Unset fields keep ManufacturabilityConfig defaults.
+        eq_(mfg.min_kmer_hydropathy, 0.0)
+        eq_(mfg.max_kmer_hydropathy_low_priority, 1.5)
     finally:
         os.unlink(config_path)
 
 
-def test_vaccine_config_from_args_top_level_manufacturability():
+def test_manufacturability_config_from_legacy_top_level_yaml():
+    """Pre-2.20 top-level ``manufacturability:`` migrates to
+    ``peptide.manufacturability:`` and lands on ManufacturabilityConfig."""
     yaml_content = """
 manufacturability:
   max_c_terminal_hydropathy: 2.0
@@ -617,11 +624,11 @@ manufacturability:
             config_set_overrides=None,
             config_expr_overrides=None,
         )
-        config = vaccine_config_from_args(args)
-        eq_(config.max_c_terminal_hydropathy, 2.0)
-        eq_(config.max_kmer_hydropathy_high_priority, 3.0)
-        eq_(config.min_kmer_hydropathy, 0.0)
-        eq_(config.max_kmer_hydropathy_low_priority, 1.5)
+        mfg = manufacturability_config_from_args(args)
+        eq_(mfg.max_c_terminal_hydropathy, 2.0)
+        eq_(mfg.max_kmer_hydropathy_high_priority, 3.0)
+        eq_(mfg.min_kmer_hydropathy, 0.0)
+        eq_(mfg.max_kmer_hydropathy_low_priority, 1.5)
     finally:
         os.unlink(config_path)
 
@@ -745,9 +752,13 @@ manufacturability:
         os.unlink(config_path)
 
 
-def test_vaccine_config_rejects_unknown_manufacturability_rule():
+def test_manufacturability_config_rejects_unknown_rule():
+    """Post-2.20: manufacturability rules live on
+    ManufacturabilityConfig, which validates them at construction
+    time (was on VaccineConfig pre-2.20)."""
+    from vaxrank.manufacturability_config import ManufacturabilityConfig
     with pytest.raises(ValueError, match="Unknown manufacturability rule"):
-        VaccineConfig(manufacturability_rules=("bogus_rule",))
+        ManufacturabilityConfig(rules=("bogus_rule",))
 
 
 def test_vaccine_config_combined_score_mode():

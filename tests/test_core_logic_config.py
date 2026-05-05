@@ -489,8 +489,12 @@ def test_vaccine_peptide_zero_epitope_limit_keeps_all():
     eq_(len(vaccine_peptide.mutant_epitope_predictions), 2)
 
 
-def test_manufacturability_thresholds_flow_from_vaccine_config():
-    """Manufacturability thresholds from VaccineConfig reach VaccinePeptide."""
+def test_manufacturability_thresholds_flow_from_manufacturability_config():
+    """Manufacturability thresholds from ManufacturabilityConfig (post-2.20)
+    reach VaccinePeptide via the explicit ``manufacturability_config``
+    parameter to ``vaccine_peptides_from_epitopes``."""
+    from vaxrank.manufacturability_config import ManufacturabilityConfig
+
     class DummyFragment:
         def __init__(self, amino_acids):
             self.amino_acids = amino_acids
@@ -528,7 +532,9 @@ def test_manufacturability_thresholds_flow_from_vaccine_config():
         occurs_in_reference=False,
     )
 
-    vaccine_config = VaccineConfig(max_kmer_hydropathy_high_priority=3.0)
+    vaccine_config = VaccineConfig()
+    manufacturability_config = ManufacturabilityConfig(
+        max_kmer_hydropathy_high_priority=3.0)
 
     peptides = vaccine_peptides_from_epitopes(
         variant=MagicMock(),
@@ -536,14 +542,17 @@ def test_manufacturability_thresholds_flow_from_vaccine_config():
         epitope_predictions=[prediction],
         vaccine_peptide_length=len(fragment),
         vaccine_config=vaccine_config,
+        manufacturability_config=manufacturability_config,
     )
     eq_(len(peptides), 1)
     eq_(peptides[0].manufacturability_thresholds["max_kmer_hydropathy_high_priority"], 3.0)
 
 
-def test_vaccine_config_manufacturability_defaults():
-    """VaccineConfig has manufacturability fields with correct defaults."""
-    config = VaccineConfig()
+def test_manufacturability_config_defaults():
+    """ManufacturabilityConfig has the legacy default values
+    (post-2.20: these moved off VaccineConfig)."""
+    from vaxrank.manufacturability_config import ManufacturabilityConfig
+    config = ManufacturabilityConfig()
     eq_(config.max_c_terminal_hydropathy, 1.5)
     eq_(config.min_kmer_hydropathy, 0.0)
     eq_(config.max_kmer_hydropathy_low_priority, 1.5)

@@ -115,17 +115,22 @@ def test_vaccine_peptide_rejects_unknown_combined_score_mode():
         )
 
 
-def test_end_to_end_yaml_rules_through_vaccine_config_to_peptide():
-    """YAML with manufacturability.rules loads through load_vaxrank_config,
-    then vaccine_config_from_args, producing a tuple on VaccineConfig.
-    A VaccinePeptide built with those rules gets a sort tuple of the
-    expected length."""
+def test_end_to_end_yaml_rules_through_manufacturability_config_to_peptide():
+    """YAML with peptide.manufacturability.rules loads through
+    load_vaxrank_config, then manufacturability_config_from_args,
+    producing a tuple on ManufacturabilityConfig. A VaccinePeptide
+    built with those rules gets a sort tuple of the expected
+    length. Post-2.20: manufacturability lives on its own struct,
+    not on VaccineConfig."""
+    from vaxrank.cli.vaccine_config_args import (
+        manufacturability_config_from_args)
     yaml_content = """
-manufacturability:
-  rules:
-    - cysteine_count
-    - cterm_hydropathy
-    - aspartate_proline
+peptide:
+  manufacturability:
+    rules:
+      - cysteine_count
+      - cterm_hydropathy
+      - aspartate_proline
 vaccine_peptides:
   combined_score_mode: epitope_only
 """
@@ -145,18 +150,18 @@ vaccine_peptides:
             config_set_overrides=None,
             config_expr_overrides=None,
         )
+        mfg = manufacturability_config_from_args(args)
         vc = vaccine_config_from_args(args)
-        # Type contract: VaccineConfig declares Optional[tuple[str, ...]]
-        assert vc.manufacturability_rules == (
+        assert mfg.rules == (
             "cysteine_count", "cterm_hydropathy", "aspartate_proline",
         )
-        assert isinstance(vc.manufacturability_rules, tuple)
+        assert isinstance(mfg.rules, tuple)
         assert vc.combined_score_mode == "epitope_only"
 
         vp = VaccinePeptide(
             mutant_protein_fragment=_make_fragment(),
             epitope_predictions=[_make_mutant_epitope()],
-            manufacturability_rules=vc.manufacturability_rules,
+            manufacturability_rules=mfg.rules,
             combined_score_mode=vc.combined_score_mode,
         )
         tup = vp.peptide_synthesis_difficulty_score_tuple(
@@ -354,9 +359,11 @@ def test_bundled_default_yaml_round_trips_to_default_configs(tmp_path):
     from importlib.resources import files
     import argparse
     from vaxrank.cli.epitope_config_args import epitope_config_from_args
-    from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
+    from vaxrank.cli.vaccine_config_args import (
+        manufacturability_config_from_args, vaccine_config_from_args)
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.manufacturability import DEFAULT_MANUFACTURABILITY_RULES
+    from vaxrank.manufacturability_config import ManufacturabilityConfig
     from vaxrank.ranking import DEFAULT_RANKING_RULES
     from vaxrank.vaccine_config import VaccineConfig
 
@@ -378,24 +385,33 @@ def test_bundled_default_yaml_round_trips_to_default_configs(tmp_path):
     )
     ec = epitope_config_from_args(args)
     vc = vaccine_config_from_args(args)
+    mfg = manufacturability_config_from_args(args)
     # Epitope side has no list-typed fields, so == works.
     assert ec == EpitopeConfig()
-    # Vaccine side: effective rule tuples should match the defaults.
+    # Vaccine side: ranking_rules tuple matches the default.
     assert vc.ranking_rules == DEFAULT_RANKING_RULES
-    assert vc.manufacturability_rules == DEFAULT_MANUFACTURABILITY_RULES
-    # All scalar fields match defaults too.
-    defaults = VaccineConfig()
+    # Manufacturability rules now live on ManufacturabilityConfig.
+    assert mfg.rules == DEFAULT_MANUFACTURABILITY_RULES
+    # Vaccine scalar fields match defaults.
+    vc_defaults = VaccineConfig()
     for field in (
         "preferred_peptide_length", "min_peptide_length",
         "max_peptide_length", "padding_around_mutation",
         "max_vaccine_peptides_per_variant", "num_mutant_epitopes_to_keep",
         "score_fraction_of_best", "combined_score_mode",
-        "max_c_terminal_hydropathy", "min_kmer_hydropathy",
-        "max_kmer_hydropathy_low_priority", "max_kmer_hydropathy_high_priority",
         "require_mutant_epitopes_in_variant",
     ):
-        assert getattr(vc, field) == getattr(defaults, field), (
-            f"default.yaml drift: {field}")
+        assert getattr(vc, field) == getattr(vc_defaults, field), (
+            f"default.yaml VaccineConfig drift: {field}")
+    # Manufacturability scalar fields match defaults.
+    mfg_defaults = ManufacturabilityConfig()
+    for field in (
+        "max_c_terminal_hydropathy", "min_kmer_hydropathy",
+        "max_kmer_hydropathy_low_priority",
+        "max_kmer_hydropathy_high_priority",
+    ):
+        assert getattr(mfg, field) == getattr(mfg_defaults, field), (
+            f"default.yaml ManufacturabilityConfig drift: {field}")
 
 
 def test_default_yaml_uncommented_keys_match_schema():

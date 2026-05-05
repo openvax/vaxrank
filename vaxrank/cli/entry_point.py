@@ -39,7 +39,9 @@ from mhctools.cli import (
 
 from .arg_parser import parse_vaxrank_args, check_args
 from .epitope_config_args import epitope_config_from_args
-from .vaccine_config_args import vaccine_config_from_args
+from .vaccine_config_args import (
+    manufacturability_config_from_args, vaccine_config_from_args,
+)
 from ..config import load_vaxrank_config
 
 from ..core_logic import run_vaxrank
@@ -1113,6 +1115,17 @@ def run_vaxrank_from_parsed_args(args):
     merged_config = load_vaxrank_config(args)
     epitope_config = epitope_config_from_args(args, merged_config=merged_config)
     vaccine_config = vaccine_config_from_args(args, merged_config=merged_config)
+    # Manufacturability config rides separately. We pass it to the
+    # ranker only when peptide is an active vaccine modality —
+    # otherwise the ``manufacturability`` sentinel inside
+    # ``vaccine_peptides.ranking_rules`` should be a no-op tie-break
+    # against ManufacturabilityConfig() defaults rather than against
+    # user-overridden thresholds that don't apply to mRNA.
+    if 'peptide' in _resolve_vaccine_types(args):
+        manufacturability_config = manufacturability_config_from_args(
+            args, merged_config=merged_config)
+    else:
+        manufacturability_config = None
 
     # Sync args with merged config values so downstream consumers (Isovar,
     # reports, etc.) see the effective configuration.
@@ -1163,6 +1176,7 @@ def run_vaxrank_from_parsed_args(args):
         num_mutant_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
         epitope_config=epitope_config,
         vaccine_config=vaccine_config,
+        manufacturability_config=manufacturability_config,
         allow_dna_only_fallback=getattr(args, 'allow_dna_only_fallback', False),
     )
 
