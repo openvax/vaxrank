@@ -261,24 +261,37 @@ def extract_epitope_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     return _extract_via_mapping(config, _EPITOPE_CONFIG_MAPPING)
 
 
+_VACCINE_CONSTRUCTS_SUBSECTIONS = {'peptide', 'mrna'}
+
+
 def extract_construct_kwargs(
     config: dict[str, Any],
     modality: str,
 ) -> dict[str, Any]:
     """Resolve construct-assembly kwargs for ``modality`` ('peptide'
-    or 'mrna') by merging ``vaccine_constructs.defaults`` with
-    ``vaccine_constructs.<modality>``. Modality-specific values
-    override defaults; ``None`` entries are dropped so callers can
-    use ``dict.get(name, fallback)`` cleanly.
+    or 'mrna') by merging cross-modality values at the
+    ``vaccine_constructs`` top level with the modality-specific
+    subsection. Modality values override cross-modality values;
+    ``None`` entries are dropped so callers can use
+    ``dict.get(name, fallback)`` cleanly.
 
     Empty dict when the section is absent — same shape as before so
     code paths that don't use the new section behave identically.
     """
     out: dict[str, Any] = {}
-    defaults = _resolve_dotted(config, 'vaccine_constructs.defaults')
-    if isinstance(defaults, dict):
-        out.update({k: v for k, v in defaults.items() if v is not None})
-    modal = _resolve_dotted(config, 'vaccine_constructs.%s' % modality)
+    section = _resolve_dotted(config, 'vaccine_constructs')
+    if not isinstance(section, dict):
+        return out
+    # Top-level entries that aren't subsection names are
+    # cross-modality knobs; merge first so modality-specific
+    # overrides land on top.
+    for k, v in section.items():
+        if k in _VACCINE_CONSTRUCTS_SUBSECTIONS:
+            continue
+        if v is None:
+            continue
+        out[k] = v
+    modal = section.get(modality)
     if isinstance(modal, dict):
         out.update({k: v for k, v in modal.items() if v is not None})
     return out

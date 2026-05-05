@@ -139,30 +139,32 @@ manufacturability:
 # vaccine_constructs (per-modality construct-assembly knobs).
 #
 # Default --vaccine-type is 'peptide mrna' (both modalities at once).
-# A single config can drive both: put cross-modality defaults under
-# `defaults:` and only repeat a knob in `peptide:` / `mrna:` when that
-# modality should differ.
+# Cross-modality knobs go directly under `vaccine_constructs:`; the
+# `peptide:` and `mrna:` subsections only need entries when a
+# modality should DIFFER from the cross-modality value or when a knob
+# is modality-only (signal_peptide, mode, n_terminal_acetyl, …).
 #
 # Resolution order (highest precedence first):
 #
-#   explicit CLI flag  >  per-modality config  >  defaults config  >  built-in default
+#   explicit CLI flag  >  per-modality config  >  cross-modality config  >  built-in default
 #
 # Every key here is optional; everything below is commented out so the
 # default config is a no-op (matches "no --config" behavior). Uncomment
 # and edit what you want to change.
 # ----------------------------------------------------------------------
 # vaccine_constructs:
-#   defaults:
-#     # Values applied to every modality that doesn't override them.
-#     # Length bounds in particular usually move together.
-#     min_antigen_length_aa: 15
-#     max_antigen_length_aa: 25
-#     candidates_per_slot: 1
-#     antigen_content: mutation_spanning   # 'mutation_spanning' | 'minimal_epitope'
-#     epitopes_per_antigen: 1
+#   # Cross-modality knobs at the section top level. Apply to every
+#   # active --vaccine-type unless overridden in the modality
+#   # subsection below.
+#   min_antigen_length_aa: 15
+#   max_antigen_length_aa: 25
+#   candidates_per_slot: 1
+#   antigen_content: mutation_spanning   # 'mutation_spanning' | 'minimal_epitope'
+#   epitopes_per_antigen: 1
 #
 #   peptide:
-#     # Peptide-only / where peptide differs from mrna defaults.
+#     # Peptide-only knobs. Cross-modality knobs from above are
+#     # available here too if you need a peptide-specific value.
 #     mode: slp                            # slp | minimal_epitope | multi_epitope
 #     linker: G4S3                         # multi_epitope linker
 #     antigens_per_construct: 1            # SLP default; 5+ for multi_epitope
@@ -174,7 +176,8 @@ manufacturability:
 #     counterion: TFA
 #
 #   mrna:
-#     # mRNA-only / where mrna differs from peptide defaults.
+#     # mRNA-only knobs. Cross-modality knobs from above are
+#     # available here too if you need an mrna-specific value.
 #     linker: (G4S)2                       # BioNTech FixVac canonical
 #     antigens_per_construct: 5            # FixVac canonical
 #     max_constructs: 1

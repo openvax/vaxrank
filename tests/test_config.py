@@ -1395,17 +1395,15 @@ def test_extract_vaccine_config_kwargs_accepts_single_epitope_keep_path():
 
 # ----- vaccine_constructs section ---------------------------------------
 
-def test_extract_construct_kwargs_defaults_only():
-    """``vaccine_constructs.defaults`` knobs apply to every modality
-    that doesn't override them."""
+def test_extract_construct_kwargs_cross_modality_only():
+    """Cross-modality knobs at ``vaccine_constructs`` top level apply
+    to every modality that doesn't override them."""
     from vaxrank.config.loader import extract_construct_kwargs
     config = {
         'vaccine_constructs': {
-            'defaults': {
-                'min_antigen_length_aa': 13,
-                'max_antigen_length_aa': 21,
-                'antigen_content': 'minimal_epitope',
-            },
+            'min_antigen_length_aa': 13,
+            'max_antigen_length_aa': 21,
+            'antigen_content': 'minimal_epitope',
         },
     }
     pep = extract_construct_kwargs(config, 'peptide')
@@ -1417,20 +1415,22 @@ def test_extract_construct_kwargs_defaults_only():
     }
 
 
-def test_extract_construct_kwargs_modality_overrides_defaults():
-    """Modality-specific values override defaults for that modality
-    only; the other modality keeps the default value."""
+def test_extract_construct_kwargs_modality_overrides_cross_modality():
+    """Modality-specific values override cross-modality top-level
+    values for that modality only; the other modality keeps the
+    cross-modality value."""
     from vaxrank.config.loader import extract_construct_kwargs
     config = {
         'vaccine_constructs': {
-            'defaults': {'max_antigen_length_aa': 25},
+            'max_antigen_length_aa': 25,
             'peptide': {'max_antigen_length_aa': 27, 'mode': 'slp'},
             'mrna': {'antigens_per_construct': 8},
         },
     }
     pep = extract_construct_kwargs(config, 'peptide')
     mrna = extract_construct_kwargs(config, 'mrna')
-    # Peptide overrode max_antigen_length_aa; mRNA inherits the default
+    # Peptide overrode max_antigen_length_aa; mRNA inherits the
+    # cross-modality value
     assert pep['max_antigen_length_aa'] == 27
     assert pep['mode'] == 'slp'
     assert mrna['max_antigen_length_aa'] == 25
@@ -1447,7 +1447,7 @@ def test_extract_construct_kwargs_drops_none_entries():
     from vaxrank.config.loader import extract_construct_kwargs
     config = {
         'vaccine_constructs': {
-            'defaults': {'antigen_content': None},
+            'antigen_content': None,
             'peptide': {'mode': 'minimal_epitope', 'linker': None},
         },
     }
@@ -1470,8 +1470,7 @@ def test_construct_config_overrides_cli_default(tmp_path):
     cfg = tmp_path / "vc.yaml"
     cfg.write_text("""
 vaccine_constructs:
-  defaults:
-    max_antigen_length_aa: 19
+  max_antigen_length_aa: 19
   peptide:
     linker: AAY
 """)

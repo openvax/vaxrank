@@ -53,37 +53,20 @@ class VaccinePeptidesConfigSchema(
     manufacturability: Optional[ManufacturabilityConfigSchema] = None
 
 
-class _DefaultConstructConfigSchema(
-    msgspec.Struct,
-    frozen=True,
-    kw_only=True,
-    forbid_unknown_fields=True,
-):
-    """Default construct-assembly knobs that apply to every modality
-    that doesn't override them.
-
-    Modality-specific subsections (``peptide``, ``mrna``) override
-    these. Knobs whose defaults differ between modalities (linker,
-    ``antigens_per_construct``, ``max_constructs``) live in the
-    per-modality subsections only — putting them here would
-    misleadingly suggest a single-default-for-both.
-    """
-    min_antigen_length_aa: Optional[int] = None
-    max_antigen_length_aa: Optional[int] = None
-    candidates_per_slot: Optional[int] = None
-    antigen_content: Optional[str] = None
-    epitopes_per_antigen: Optional[int] = None
-
-
 class _PeptideConstructConfigSchema(
     msgspec.Struct,
     frozen=True,
     kw_only=True,
     forbid_unknown_fields=True,
 ):
-    """Peptide-specific construct-assembly knobs. Any knob also in
-    ``defaults`` overrides the default value when set here."""
-    # Cross-modality knobs (override of vaccine_constructs.defaults)
+    """Peptide-specific construct-assembly overrides.
+
+    Any cross-modality knob also valid at ``vaccine_constructs``
+    top-level (length bounds, antigen_content, …) can be set here
+    to override that value for peptide only.
+    """
+    # Cross-modality knobs (override of values set at the section
+    # top level).
     min_antigen_length_aa: Optional[int] = None
     max_antigen_length_aa: Optional[int] = None
     candidates_per_slot: Optional[int] = None
@@ -107,9 +90,14 @@ class _MrnaConstructConfigSchema(
     kw_only=True,
     forbid_unknown_fields=True,
 ):
-    """mRNA-specific construct-assembly knobs. Any knob also in
-    ``defaults`` overrides the default value when set here."""
-    # Cross-modality knobs (override of vaccine_constructs.defaults)
+    """mRNA-specific construct-assembly overrides.
+
+    Any cross-modality knob also valid at ``vaccine_constructs``
+    top-level (length bounds, antigen_content, …) can be set here
+    to override that value for mRNA only.
+    """
+    # Cross-modality knobs (override of values set at the section
+    # top level).
     min_antigen_length_aa: Optional[int] = None
     max_antigen_length_aa: Optional[int] = None
     candidates_per_slot: Optional[int] = None
@@ -148,19 +136,38 @@ class VaccineConstructsConfigSchema(
     Layout:
 
         vaccine_constructs:
-          defaults:  # values applied to every modality not overriding them
-          peptide:   # peptide-specific overrides (mode, linker, n-term acetyl, …)
-          mrna:      # mRNA-specific overrides (signal_peptide, UTRs, polyA, …)
+          # cross-modality knobs at the section top level (apply
+          # to every active modality unless overridden):
+          min_antigen_length_aa: 15
+          max_antigen_length_aa: 25
+          ...
+          # modality-specific overrides:
+          peptide:
+            mode: slp
+            linker: G4S3
+            ...
+          mrna:
+            signal_peptide: HLA_B
+            linker: (G4S)2
+            ...
 
     Resolution order (highest precedence first):
 
-        explicit CLI flag  >  per-modality config  >  defaults config  >  built-in default
+        explicit CLI flag  >  per-modality config  >  cross-modality config  >  built-in default
 
     A user can drive both modalities from one config file, and only
     needs to repeat a knob in a modality subsection when that
-    modality should differ from the default.
+    modality should differ from the cross-modality value.
     """
-    defaults: Optional[_DefaultConstructConfigSchema] = None
+    # Cross-modality knobs accepted at the section top level. A knob
+    # also set inside ``peptide:`` / ``mrna:`` overrides this value
+    # for that modality.
+    min_antigen_length_aa: Optional[int] = None
+    max_antigen_length_aa: Optional[int] = None
+    candidates_per_slot: Optional[int] = None
+    antigen_content: Optional[str] = None
+    epitopes_per_antigen: Optional[int] = None
+    # Modality-specific overrides + modality-only knobs.
     peptide: Optional[_PeptideConstructConfigSchema] = None
     mrna: Optional[_MrnaConstructConfigSchema] = None
 
