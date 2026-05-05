@@ -57,6 +57,13 @@ _PVACSEQ_RANK_COLS = ('%ile MT', 'Best Percentile MT')
 logger = logging.getLogger(__name__)
 
 
+# Marker appended to ``patient_info.mhc_alleles`` so reports + the
+# linker-optimizer plumbing can tell user-supplied alleles from
+# alleles inferred from a LENS / pVACseq report. Shared with
+# ``vaxrank.cli.entry_point`` so producer + consumer can't drift.
+LENS_PROVENANCE_MARKER = '(inferred from report)'
+
+
 def _parse_variant_coords(coords):
     """Parse a LENS ``variant_coords`` string into ``(contig, pos)``
     or ``None`` if the cell is empty / malformed.
@@ -1138,7 +1145,7 @@ def _patient_info_from_external(ranked, source_path, patient_id,
                 seen.add(allele)
                 mhc_alleles.append(allele)
         if mhc_alleles:
-            mhc_alleles = sorted(mhc_alleles) + ['(inferred from report)']
+            mhc_alleles = sorted(mhc_alleles) + [LENS_PROVENANCE_MARKER]
     return PatientInfo(
         patient_id=patient_id or '',
         # Leave the legacy vcf_paths empty — the external path's

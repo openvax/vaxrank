@@ -651,7 +651,7 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
     # same score, which is the correct behavior for a per-row report.
     # The duplicate count is only useful when chasing a downstream
     # row-count mismatch — log at DEBUG, not INFO.
-    if len(report_df) > 0 and logger.isEnabledFor(__import__('logging').DEBUG):
+    if len(report_df) > 0 and logger.isEnabledFor(logging.DEBUG):
         dup_count = int(report_df.duplicated(
             subset=[peptide_col, allele_col]).sum())
         if dup_count:

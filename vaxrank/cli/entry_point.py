@@ -389,6 +389,9 @@ def _emit_peptide_constructs(args, ranked, target_dir):
         len(constructs), target_dir)
 
 
+_MISSING_SENTINEL = object()
+
+
 _ARG_GROUPS = (
     ("Inputs", (
         'vcf', 'bam', 'input_lens', 'input_pvacseq',
@@ -449,6 +452,12 @@ _ARG_GROUPS = (
     )),
 )
 
+# Cached lookup for the section -> keys mapping. Built once at module
+# import; the per-section "(N defaults hidden)" footer in
+# ``_log_args_summary`` reads from here instead of rebuilding the
+# dict on every call.
+_ARG_GROUPS_BY_NAME = dict(_ARG_GROUPS)
+
 
 def _log_args_summary(args):
     """Pretty-print the resolved args. Replaces ``logger.info(args)``
@@ -458,15 +467,14 @@ def _log_args_summary(args):
     * Section header per :data:`_ARG_GROUPS` group (only sections
       with at least one set value).
     * Within each section: ``key = value`` rows for keys whose value
-      *differs* from the parser default OR is a non-empty string —
-      the parser-defaults snapshot in ``args._parser_defaults``
-      lets us hide everything boring.
+      differs from the parser default. The parser-defaults snapshot
+      in ``args._parser_defaults`` lets us hide everything boring.
     * A single ``(N defaults hidden — pass --verbose to see all)``
       footer per section so the user knows the noise is suppressed,
       not lost.
 
-    With ``--verbose`` (or DEBUG), every key prints (including
-    defaults). On the LENS path, args carries auto-inferred state
+    With ``--verbose``, every key prints (including defaults). On
+    the LENS path, args carries auto-inferred state
     (``_inferred_mhc_alleles_from_lens``); those underscore-prefixed
     keys are surfaced separately so the operator can see what was
     auto-wired.
@@ -519,7 +527,7 @@ def _log_args_summary(args):
             lines.append("    %-32s = %r%s" % (k, v, marker))
         if not verbose:
             hidden = sum(
-                1 for kk in dict(_ARG_GROUPS).get(section, ())
+                1 for kk in _ARG_GROUPS_BY_NAME.get(section, ())
                 if kk in namespace
                 and namespace[kk] == parser_defaults.get(kk, _MISSING_SENTINEL)
             )
@@ -532,9 +540,6 @@ def _log_args_summary(args):
         for k, v in inferred_rows:
             lines.append("    %-32s = %r" % (k, v))
     logger.info("\n".join(lines))
-
-
-_MISSING_SENTINEL = object()
 
 
 def _resolve_mhc_for_linker_optimizer(args):
@@ -562,13 +567,21 @@ def _resolve_mhc_for_linker_optimizer(args):
     alleles = None
     predictor_err = None
     alleles_err = None
+    # ``mhc_binding_predictor_from_args`` / ``mhc_alleles_from_args``
+    # raise ``AttributeError`` when the LENS-path arg parser doesn't
+    # declare ``--mhc-predictor`` / ``--mhc-alleles``, ``ValueError``
+    # for empty / unparseable values, and ``KeyError`` if a registry
+    # name doesn't resolve. Anything else (e.g. a real model-load
+    # failure deep inside mhctools / mhcflurry) is a bug we want to
+    # propagate, not silently swallow into "linker optimizer disabled".
+    _ARG_LOAD_ERRORS = (AttributeError, ValueError, KeyError)
     try:
         predictor = mhc_binding_predictor_from_args(args)
-    except Exception as e:
+    except _ARG_LOAD_ERRORS as e:
         predictor_err = e
     try:
         alleles = mhc_alleles_from_args(args)
-    except Exception as e:
+    except _ARG_LOAD_ERRORS as e:
         alleles_err = e
     inferred = getattr(args, '_inferred_mhc_alleles_from_lens', None) or None
     if alleles is None and inferred:
@@ -937,11 +950,10 @@ def main(args_list=None):
         # ``_resolve_mhc_for_linker_optimizer`` produces a targeted
         # message when alleles are inferred but predictor is missing.
         if patient_info is not None:
+            from ..external_input import LENS_PROVENANCE_MARKER
             args._inferred_mhc_alleles_from_lens = [
                 a for a in (patient_info.mhc_alleles or [])
-                if a and not a.startswith('(')  # skip the
-                # ``(inferred from report)`` provenance marker added
-                # in ``_patient_info_from_external``.
+                if a and a != LENS_PROVENANCE_MARKER
             ]
         # Per-(peptide, allele) CSV / XLSX report is unique to the
         # external-input path; emit it before the shared dispatch.
