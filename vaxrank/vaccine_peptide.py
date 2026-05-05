@@ -88,6 +88,11 @@ class VaccinePeptide(DataclassSerializable):
     manufacturability_thresholds: Optional[dict] = None
     manufacturability_rules: Optional[tuple] = None
     combined_score_mode: Optional[str] = None
+    # When set, supersedes ``combined_score_mode``. A string DSL
+    # expression evaluated per-VP at scoring time — see
+    # :mod:`vaxrank.combined_score_dsl` for the grammar and
+    # bindings. ``None`` keeps the enum-mode behavior.
+    combined_score_expr: Optional[str] = None
     ranking_rules: Optional[tuple] = None
 
     # Derived attributes computed in __post_init__ — not part of the
@@ -117,6 +122,18 @@ class VaccinePeptide(DataclassSerializable):
                 f"got '{resolved_mode}'"
             )
         self.combined_score_mode = resolved_mode
+
+        # Pre-parse + validate the optional DSL expression once at
+        # construction time so syntax errors surface early (not at
+        # ranking time, after we've already done all the loading
+        # work). The parsed AST is stashed on the instance for
+        # ``combined_score`` to evaluate per call.
+        if self.combined_score_expr is not None:
+            from .combined_score_dsl import parse_combined_score_expr
+            self._combined_score_expr_ast = parse_combined_score_expr(
+                self.combined_score_expr)
+        else:
+            self._combined_score_expr_ast = None
 
         sort_key = attrgetter(self.sort_predictions_by)
 
@@ -218,6 +235,14 @@ class VaccinePeptide(DataclassSerializable):
 
     @property
     def combined_score(self):
+        # When the DSL expression is set, it supersedes the enum
+        # mode entirely — same precedence relationship as
+        # ``epitopes.score_expr`` overriding the scalar logistic
+        # knobs in :mod:`vaxrank.epitope_dsl`.
+        if self._combined_score_expr_ast is not None:
+            from .combined_score_dsl import evaluate_combined_score
+            return evaluate_combined_score(
+                self._combined_score_expr_ast, self)
         epitope = self.mutant_epitope_score
         if self.combined_score_mode == "reads_times_epitope":
             return float(self.mutant_protein_fragment.n_alt_reads) * epitope

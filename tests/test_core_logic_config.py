@@ -242,6 +242,7 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
             manufacturability_thresholds=None,
             manufacturability_rules=None,
             combined_score_mode=None,
+            combined_score_expr=None,
             ranking_rules=None,
         ):
             self.mutant_protein_fragment = mutant_protein_fragment

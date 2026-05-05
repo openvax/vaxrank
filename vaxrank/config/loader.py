@@ -222,6 +222,7 @@ _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.per_mutation", "max_vaccine_peptides_per_variant"),
     ("vaccine_peptides.score_fraction_of_best", "score_fraction_of_best"),
     ("vaccine_peptides.combined_score_mode", "combined_score_mode"),
+    ("vaccine_peptides.combined_score_expr", "combined_score_expr"),
     ("vaccine_peptides.ranking_rules", "ranking_rules"),
     ("vaccine_peptides.require_mutant_epitopes_in_variant",
      "require_mutant_epitopes_in_variant"),
