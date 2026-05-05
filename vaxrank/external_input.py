@@ -57,6 +57,13 @@ _PVACSEQ_RANK_COLS = ('%ile MT', 'Best Percentile MT')
 logger = logging.getLogger(__name__)
 
 
+# Marker appended to ``patient_info.mhc_alleles`` so reports + the
+# linker-optimizer plumbing can tell user-supplied alleles from
+# alleles inferred from a LENS / pVACseq report. Shared with
+# ``vaxrank.cli.entry_point`` so producer + consumer can't drift.
+LENS_PROVENANCE_MARKER = '(inferred from report)'
+
+
 def _parse_variant_coords(coords):
     """Parse a LENS ``variant_coords`` string into ``(contig, pos)``
     or ``None`` if the cell is empty / malformed.
@@ -461,6 +468,37 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
 
     # Group rows by variant. LENS uses lowercase snake_case columns.
     rows = df.to_dict('records')
+
+    # Up-front antigen_source breakdown — logged BEFORE any filter
+    # log lines so the operator sees the composition of the input
+    # before they see what got dropped. Order: SNV / INDEL first
+    # (the per-coord paths), then non-coord categories sorted by
+    # count. Missing values surface as ``(missing)``.
+    if rows:
+        full_kinds: dict[str, int] = {}
+        for r in rows:
+            kind = r.get('antigen_source')
+            kind_key = (
+                str(kind).strip() if kind is not None and not (
+                    isinstance(kind, float) and pd.isna(kind))
+                else '(missing)')
+            full_kinds[kind_key] = full_kinds.get(kind_key, 0) + 1
+        # Stable order: SNV / INDEL up-front (the variant-coord paths),
+        # then everything else by descending count, with (missing) last.
+        priority = {'SNV': 0, 'INDEL': 1}
+        def _bucket_order(item):
+            k, count = item
+            if k.upper() in priority:
+                return (priority[k.upper()], 0, k)
+            if k == '(missing)':
+                return (3, 0, k)
+            return (2, -count, k)
+        ordered = sorted(full_kinds.items(), key=_bucket_order)
+        breakdown = ', '.join("%s=%d" % (k, v) for k, v in ordered)
+        logger.info(
+            "LENS report contains %d row(s); antigen_source "
+            "breakdown: %s.", len(rows), breakdown)
+
     groups = {}
     n_skipped_empty_coords = 0
     # When a row has no variant_coords, the only sensible explanation
@@ -786,12 +824,31 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
                 "antigen kinds are expected to carry one. Likely "
                 "upstream LENS bug.", len(anomalous))
     if n_no_reads:
-        logger.warning(
-            "%d / %d LENS row(s) lack RNA-read counts "
-            "(rna_reads_covering_genomic_origin). Combined-score "
-            "ranking will collapse to epitope-only for those rows; "
-            "consider --combined-score-mode=epitope_only if RNA data "
-            "is consistently absent.", n_no_reads, len(rows))
+        rows_no_reads = [
+            r for r in rows
+            if _is_missing(r.get('rna_reads_covering_genomic_origin'))
+        ]
+        # Antigen kinds where ``rna_reads_covering_genomic_origin`` is
+        # legitimately missing: ERV / SPLICE / FUSION don't have a
+        # genome-coord origin in the same sense as SNV / INDEL —
+        # those rows are RNA-evidenced via different LENS columns
+        # (e.g. ERV expression). Surface SNV / INDEL gaps as the
+        # noteworthy anomaly and treat the rest as informational.
+        anomalous_no_reads = [
+            r for r in rows_no_reads
+            if _kind(r).upper() in _SNV_OR_INDEL_KINDS
+        ]
+        logger.info(
+            "%d / %d LENS row(s) lack rna_reads_covering_genomic_origin; "
+            "antigen_source breakdown: %s. Those rows score with "
+            "n_alt_reads=0 — combined-score ranking falls back to the "
+            "epitope-only branch for them.",
+            n_no_reads, len(rows), _kind_breakdown(rows_no_reads))
+        if anomalous_no_reads:
+            logger.warning(
+                "%d SNV / INDEL row(s) lack rna_reads_covering_genomic_origin "
+                "— those kinds are expected to carry RNA-read counts.",
+                len(anomalous_no_reads))
 
     # Transcript-resolution summary. The "no genome configured" case
     # is now caught pre-flight in ``arg_parser.check_args`` for any
@@ -1088,7 +1145,7 @@ def _patient_info_from_external(ranked, source_path, patient_id,
                 seen.add(allele)
                 mhc_alleles.append(allele)
         if mhc_alleles:
-            mhc_alleles = sorted(mhc_alleles) + ['(inferred from report)']
+            mhc_alleles = sorted(mhc_alleles) + [LENS_PROVENANCE_MARKER]
     return PatientInfo(
         patient_id=patient_id or '',
         # Leave the legacy vcf_paths empty — the external path's

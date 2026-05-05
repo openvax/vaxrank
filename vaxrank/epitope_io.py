@@ -649,11 +649,13 @@ def write_neoepitope_report(report_df, predictions, excel_report_path=None,
     # — that's expected, not an error. Each row retains its own source
     # provenance (variant_coords, gene_name, transcript) and gets the
     # same score, which is the correct behavior for a per-row report.
-    if len(report_df) > 0:
+    # The duplicate count is only useful when chasing a downstream
+    # row-count mismatch — log at DEBUG, not INFO.
+    if len(report_df) > 0 and logger.isEnabledFor(logging.DEBUG):
         dup_count = int(report_df.duplicated(
             subset=[peptide_col, allele_col]).sum())
         if dup_count:
-            logger.info(
+            logger.debug(
                 "report_df has %d duplicate (peptide, allele) row(s) "
                 "from multi-source input; the same score broadcasts "
                 "across each duplicate. Per-source provenance is "

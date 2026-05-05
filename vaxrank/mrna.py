@@ -171,7 +171,10 @@ class RNAConstructConfig:
     min_antigen_length_aa: int = 15
     max_antigen_length_aa: int = 25  # Sahin 2017 used 27mers; 25 is typical
     antigens_per_construct: int = 5
-    max_constructs: int = 1
+    # BioNTech FixVac canonical: 2× pentatope = 10 antigens at
+    # 5 antigens/construct (Sahin 2017). Set to 1 for a single
+    # construct; raise for broader coverage.
+    max_constructs: int = 2
     candidates_per_slot: int = 1
     max_length_nt: int = 4000
     avoid_patterns: tuple = ()
@@ -530,7 +533,9 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
     constructs = []
     current = []
     current_aa_nt = 0
-    for name, aa in antigen_pairs:
+    total_antigens = (
+        len(antigen_pairs) if hasattr(antigen_pairs, '__len__') else None)
+    for i, (name, aa) in enumerate(antigen_pairs):
         antigen_nt = len(aa) * 3
         linker_nt = len(linker_aa) * 3 if current else 0
         projected = fixed_overhead_nt + current_aa_nt + linker_nt + antigen_nt
@@ -545,10 +550,33 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
             antigen_nt = len(aa) * 3
             linker_nt = 0
             if len(constructs) >= options.max_constructs:
-                logger.warning(
-                    "Reached --mrna-max-constructs (%d); dropping "
-                    "remaining antigens including %s.",
-                    options.max_constructs, name)
+                # Top-k selection log. Ranking N candidates and
+                # keeping the top k (the chosen 5 antigens × 1
+                # construct here) is *the whole point* — not a
+                # warning, not "spill" / "drop" panic language.
+                # Operators who want a different cut control it via
+                # ``--mrna-max-constructs`` /
+                # ``--mrna-antigens-per-construct``. ``total_antigens``
+                # is None on a generator caller; the count line is
+                # the only thing that requires it.
+                kept = sum(len(c) for c in constructs)
+                if total_antigens is not None:
+                    logger.info(
+                        "mRNA assembly: selected top %d / %d "
+                        "ranked antigen(s) into %d construct(s) at "
+                        "--mrna-max-constructs=%d. Lower-ranked "
+                        "antigens past the cap (e.g. %s) are "
+                        "available in --output-csv / "
+                        "--output-json-file for downstream review.",
+                        kept, total_antigens, len(constructs),
+                        options.max_constructs, name)
+                else:
+                    logger.info(
+                        "mRNA assembly: selected top %d ranked "
+                        "antigen(s) into %d construct(s) at "
+                        "--mrna-max-constructs=%d (next-best: %s).",
+                        kept, len(constructs),
+                        options.max_constructs, name)
                 return constructs
         # A single antigen larger than the length cap is still emitted in
         # its own construct — splitting one antigen would corrupt the
@@ -822,7 +850,12 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             components['junction_swap'] = junction_swap_meta
 
         constructs.append(RNAConstruct(
-            name="seq_%03d" % (i + 1),
+            # Modality-stamped namespace (was bare ``seq_NNN``):
+            # users mix peptide + mRNA outputs in the same downstream
+            # pipeline and a bare ``seq_001`` collides with peptide
+            # construct names. Mirrors the peptide writer's
+            # ``peptide_NNN`` scheme.
+            name="mrna_%03d" % (i + 1),
             antigen_names=names,
             sequence=full_nt,
             components=components,
@@ -908,8 +941,13 @@ def write_mrna_outputs(constructs, output_dir, manifest_path=None,
         with open(path, 'w') as f:
             for c in constructs:
                 seq = getattr(c, attr)
+                # Use ';' as the antigen separator: GenBank
+                # convention for compound description fields, and
+                # avoids the trap where downstream tools split the
+                # FASTA description on ',' (treating each antigen
+                # name as a separate token).
                 f.write(">%s antigens=%s length=%d\n" % (
-                    c.name, ','.join(c.antigen_names), len(seq)))
+                    c.name, ';'.join(c.antigen_names), len(seq)))
                 f.write(_wrap_fasta(seq))
                 f.write("\n")
 

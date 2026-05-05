@@ -10,17 +10,37 @@
 #
 #     vaxrank --print-default-config > my-config.yaml
 #
-# The four sections below correspond to vaxrank's frozen config groups:
-#   epitopes           -> EpitopeConfig (filter / score MHC ligand predictions)
-#   vaccine_peptides   -> VaccineConfig (per-variant antigen-window selection,
-#                                        ranking; applies to BOTH peptide AND
-#                                        mRNA — name kept for back-compat)
-#   manufacturability  -> VaccineConfig (peptide-synthesis difficulty rules)
-#   vaccine_constructs -> per-modality construct-assembly knobs;
-#                         cross-modality values at the section top
-#                         level, modality-specific values under
-#                         `peptide:` / `mrna:` subsections (CLI flags
-#                         continue to work and override config)
+# Top-level sections (modality-agnostic unless noted):
+#
+#   epitopes           Filter / score MHC ligand predictions
+#                      (logistic IC50 / percentile-rank knobs, the
+#                      topiary DSL ``filter_expr`` / ``score_expr``,
+#                      and ``default_methods`` for multi-predictor
+#                      inputs).
+#
+#   vaccine_peptides   Per-variant antigen-window selection + the
+#                      *ranking* of those windows (length, padding,
+#                      ``combined_score_mode`` / ``combined_score_expr``,
+#                      ``ranking_rules``, ``score_fraction_of_best``).
+#                      Modality-agnostic — every active --vaccine-type
+#                      reads from here. (Section name kept for
+#                      back-compat with pre-mRNA configs.)
+#
+#   manufacturability  Peptide-synthesis difficulty rules + thresholds.
+#                      Used as a tie-break when ``vaccine_peptides.ranking_rules``
+#                      references the ``manufacturability`` sentinel.
+#                      Auto-skipped from peptide-only report sections
+#                      when --vaccine-type doesn't include 'peptide'.
+#
+#   vaccine_constructs Per-modality construct-assembly knobs.
+#                      Cross-modality values at the section top level;
+#                      modality-specific values under ``peptide:`` /
+#                      ``mrna:`` subsections.
+#
+# Resolution order (highest precedence first) for any single value:
+#
+#   explicit CLI flag  >  per-modality config  >  cross-modality config
+#                      >  built-in default
 
 
 epitopes:

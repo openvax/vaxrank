@@ -263,14 +263,14 @@ def test_write_mrna_outputs_fasta_and_manifest():
         assert os.path.isfile(os.path.join(out_dir, "full.fasta"))
         with open(os.path.join(out_dir, "no_polyA.fasta")) as f:
             text = f.read()
-        assert text.startswith(">seq_001")
+        assert text.startswith(">mrna_001")
         assert UTR_5P_HBB in text.replace('\n', '')
         with open(manifest_path) as f:
             manifest = json.load(f)
         entry = manifest[0]
         assert entry['modality'] == 'mrna'
         assert entry['length_unit'] == 'nt'
-        assert entry['name'] == 'seq_001'
+        assert entry['name'] == 'mrna_001'
         assert entry['antigen_names'] == ['GENE_1_1000_A_T']
         # New structured fields
         assert 'lengths' in entry
@@ -282,6 +282,73 @@ def test_write_mrna_outputs_fasta_and_manifest():
         # Back-compat 2.12 schema preserved
         assert 'components' in entry
         assert 'manufacturability' in entry
+
+
+def test_mrna_fasta_uses_semicolon_antigen_separator():
+    """The FASTA description's ``antigens=`` field must use ``;`` as
+    the separator — comma collides with FASTA-parsing tools that
+    treat ``,`` as a token boundary in description fields. Pin the
+    contract so a future maintainer can't accidentally regress to
+    comma-joined.
+    """
+    pairs = [
+        _variant_pair("KLQGHSAPVLDVIVN", contig='1', start=100, gene_name='GENEA'),
+        _variant_pair("MNNVDEILGRWESPV", contig='2', start=200, gene_name='GENEB'),
+    ]
+    constructs = assemble_mrna_constructs(
+        pairs,
+        options=RNAConstructConfig(
+            signal_peptide=None, include_mitd=False,
+            utr_3p='HBB', poly_a_length=0))
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = os.path.join(tmp, "out")
+        write_mrna_outputs(constructs, out_dir)
+        with open(os.path.join(out_dir, "cds.fasta")) as f:
+            header = f.readline().rstrip()
+    assert "antigens=" in header
+    # Both antigens land in one description, separated by ';'.
+    assert "GENEA_1_100_A_T;GENEB_2_200_A_T" in header
+    # And the legacy comma-joined form must not survive.
+    assert "GENEA_1_100_A_T,GENEB_2_200_A_T" not in header
+
+
+def test_mrna_max_constructs_logs_topk_selection_at_info(caplog):
+    """When ``--mrna-max-constructs`` caps off the input list, the
+    log line must (a) be INFO not WARNING (top-k selection is the
+    whole point of vaxrank, not an error), and (b) name the kept
+    count + total-ranked count so the operator can tell what fraction
+    landed in the vaccine."""
+    import logging
+    # Build 6 antigens against a cap of 1 construct × 2 antigens =
+    # 2 selected, 4 not selected.
+    pairs = [
+        _variant_pair("KLQGHSAPVLDVIVN", contig=str(i + 1),
+                      start=1000 + i, gene_name="GENE%d" % i)
+        for i in range(6)
+    ]
+    with caplog.at_level(logging.INFO):
+        assemble_mrna_constructs(
+            pairs,
+            options=RNAConstructConfig(
+                signal_peptide=None, include_mitd=False,
+                utr_3p='HBB', poly_a_length=0,
+                antigens_per_construct=2, max_constructs=1))
+    # The cap event surfaces at INFO, never WARNING.
+    cap_records = [
+        r for r in caplog.records
+        if 'mRNA assembly' in r.getMessage()
+        and '--mrna-max-constructs' in r.getMessage()
+    ]
+    assert cap_records, \
+        "Expected an mRNA assembly top-k log line at the cap"
+    assert all(r.levelno == logging.INFO for r in cap_records), \
+        "Cap event must be INFO, not WARNING (top-k selection is the goal)"
+    msg = cap_records[0].getMessage()
+    # Selected 2 of 6 ranked antigens.
+    assert "2" in msg
+    assert "6" in msg
+    # The next-best (not-selected) antigen is named for traceability.
+    assert "GENE2" in msg
 
 
 def test_mrna_min_antigen_length_warning(caplog):
@@ -424,9 +491,9 @@ def test_write_mrna_three_fastas_have_matching_records():
         cds = open(os.path.join(out_dir, "cds.fasta")).read()
         no_polya = open(os.path.join(out_dir, "no_polyA.fasta")).read()
         full = open(os.path.join(out_dir, "full.fasta")).read()
-    # All three have the seq_001 header
+    # All three have the mrna_001 header
     for txt in (cds, no_polya, full):
-        assert ">seq_001" in txt
+        assert ">mrna_001" in txt
     # full > no_polyA > cds in body length
     cds_body = "".join(line for line in cds.split("\n") if not line.startswith(">"))
     no_pa_body = "".join(line for line in no_polya.split("\n") if not line.startswith(">"))
