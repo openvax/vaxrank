@@ -55,9 +55,10 @@ epitopes:
   # identically — pick whichever reads best for you:
   #
   #   affinity[mhcflurry]       (bare identifier in brackets)
+  #   ba[mhcflurry]             (alias: ba == affinity, "binding affinity")
   #   affinity['mhcflurry']     (string literal in brackets — explicit)
   #   mhcflurry_affinity        (underscore-joined, method-prefixed)
-  #   mhcflurry_ba              (alias: ba == affinity)
+  #   mhcflurry_ba              (combine both: ba alias + method prefix)
   #
   # Versioned predictors take a second bracket arg:
   #
