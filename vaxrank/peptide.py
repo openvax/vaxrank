@@ -94,7 +94,8 @@ class PeptideConstructConfig:
     mode: str = "slp"            # legacy alias; see __post_init__
     antigen_content: str = "mutation_spanning"  # 'mutation_spanning' | 'minimal_epitope'
     epitopes_per_antigen: int = 1               # for minimal_epitope content
-    linker: str = "G4S3"         # only used when antigens_per_construct > 1
+    linker: str = "G4Sx3"        # only used when antigens_per_construct > 1
+                                  # G4Sx3 = (G4S)3 = GGGGSGGGGSGGGGS (15 aa)
     min_antigen_length_aa: int = 15
     max_antigen_length_aa: int = 25
     antigens_per_construct: int = 1

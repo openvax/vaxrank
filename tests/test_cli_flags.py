@@ -229,11 +229,13 @@ def test_peptide_construct_config_normalizes_uppercase_mode():
     assert cfg2.antigen_content == 'minimal_epitope'
 
 
-def test_default_peptide_linker_resolves_to_canonical_g4s3():
-    """Default ``--peptide-linker GS3`` resolves to the canonical
-    15aa flexible linker GGGGSGGGGSGGGGS — not the literal 7aa
-    ``GGGGSSS`` that the bare ``G4S3`` form parses as via the
-    GnSm grammar."""
+def test_default_peptide_linker_is_unambiguous_and_canonical():
+    """Default ``--peptide-linker G4Sx3`` is the self-documenting
+    "(G4S) repeated 3x" form — resolves to GGGGSGGGGSGGGGS (15 aa,
+    canonical FixVac flexible linker). The bare ``G4S3`` parses as
+    a different 7aa literal (4 G + 3 S, GnSm grammar) and the
+    legacy ``GS3`` reads ambiguously as "G + S + 3," so neither is
+    used as the default."""
     from vaxrank.vaccine_library import get_linker
     parser = make_vaxrank_arg_parser()
     args = parser.parse_args([
@@ -241,7 +243,24 @@ def test_default_peptide_linker_resolves_to_canonical_g4s3():
         "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
         "--output-csv", "out.csv",
     ])
-    assert args.peptide_linker == "GS3"
+    assert args.peptide_linker == "G4SX3"   # _linker_arg uppercases
     linker = get_linker(args.peptide_linker)
     assert linker.amino_acids == "GGGGSGGGGSGGGGS"
     assert len(linker.amino_acids) == 15
+
+
+def test_default_mrna_linker_is_unambiguous_and_canonical():
+    """Default ``--mrna-linker G4Sx2`` resolves to GGGGSGGGGS (10 aa,
+    canonical FixVac mRNA inter-antigen linker). Same self-
+    documenting compositional form as the peptide-side default."""
+    from vaxrank.vaccine_library import get_linker
+    parser = make_vaxrank_arg_parser()
+    args = parser.parse_args([
+        "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+        "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+        "--output-csv", "out.csv",
+    ])
+    assert args.mrna_linker == "G4SX2"
+    linker = get_linker(args.mrna_linker)
+    assert linker.amino_acids == "GGGGSGGGGS"
+    assert len(linker.amino_acids) == 10

@@ -470,14 +470,18 @@ def add_mrna_output_args(group):
              "Sahin 2017)." % ", ".join(sorted(SIGNAL_PEPTIDES)))
     group.add_argument(
         "--mrna-linker",
-        default="(G4S)2",
+        # ``G4Sx2`` is self-documenting; ``(G4S)2`` parses to the
+        # same string but the parens require shell escaping. Avoid
+        # the ambiguous bare ``GS2`` shorthand — see --peptide-linker.
+        default="G4Sx2",
         type=_linker_arg,
         help="Linker name from the shared vocabulary (case-insensitive). "
              "Accepts named entries (G4S, AAY, EAAAK, P2A, ...) and "
              "compositional forms: (BASE)N / (BASE)xN / BASExN for repeats, "
              "GnSm for n-glycines + m-serines literal, AnY for n-alanines + Y. "
-             "Examples: (G4S)2, G4Sx2, A3Y, G6S. "
-             "Default: (G4S)2 (BioNTech FixVac canonical, Sahin 2017).")
+             "Examples: G4Sx2, (G4S)2, A3Y, G6S. "
+             "Default: G4Sx2 = (G4S)2 = GGGGSGGGGS (BioNTech FixVac "
+             "canonical, Sahin 2017).")
     group.add_argument(
         "--mrna-include-mitd",
         action="store_true",
@@ -669,18 +673,20 @@ def add_peptide_output_args(group):
         help="Override --epitopes-per-antigen for peptide vaccines.")
     group.add_argument(
         "--peptide-linker",
-        # Default is the alias ``GS3`` which expands to ``(G4S)3 =
-        # GGGGSGGGGSGGGGS`` (the canonical 15aa flexible linker
-        # used in multi-epitope SLP / FixVac mRNA designs). The
-        # bare form ``G4S3`` parses as the 7aa literal ``GGGGSSS``
-        # via the GnSm grammar — different sequence, used only
-        # when the literal is actually wanted.
-        default="GS3",
+        # ``G4Sx3`` is self-documenting: "G4S repeated 3x" =
+        # GGGGSGGGGSGGGGS. The shorter alias ``GS3`` and the bare
+        # form ``G4S3`` both also parse, but G4S3 means literally
+        # ``GGGGSSS`` (4 G + 3 S, GnSm form) and GS3 reads as
+        # ambiguous "G + S + 3"; G4Sx3 leaves no doubt about which
+        # was meant.
+        default="G4Sx3",
         type=_linker_arg,
         help="Linker used in --peptide-mode=multi_epitope (case-insensitive). "
-             "Accepts named entries, compositional forms ((BASE)N / GnSm / "
-             "AnY), and aliases. Shared with mRNA mode. Default: GS3 = "
-             "(G4S)3 = GGGGSGGGGSGGGGS.")
+             "Accepts named entries (P2A, AAY, EAAAK, …), compositional "
+             "forms ((BASE)N or BASExN for repeats, GnSm for n-glycines + "
+             "m-serines literal, AnY for n-alanines + Y), and aliases. "
+             "Shared with mRNA mode. Default: G4Sx3 = (G4S)3 = "
+             "GGGGSGGGGSGGGGS (15 aa, BioNTech FixVac canonical).")
     group.add_argument(
         "--peptide-min-antigen-length-aa",
         default=15,
@@ -1017,10 +1023,25 @@ def parse_vaxrank_args(args_list):
     # "user explicitly passed this flag" by ``args.X !=
     # args._parser_defaults['X']``. Used by the construct-kwargs
     # resolver to give CLI flags precedence over YAML config values.
-    parsed._parser_defaults = {
-        a.dest: a.default for a in arg_parser._actions
-        if a.dest and a.dest != 'help'
-    }
+    #
+    # Apply ``action.type`` to string defaults the same way argparse
+    # does at parse time — otherwise the snapshot stores the raw
+    # default (e.g. ``'G4Sx3'``) while ``args.peptide_linker`` holds
+    # the type-converted form (``'G4SX3'`` after _linker_arg
+    # uppercases), and the equality check falsely flags the
+    # unmodified default as user-supplied.
+    defaults = {}
+    for a in arg_parser._actions:
+        if not a.dest or a.dest == 'help':
+            continue
+        val = a.default
+        if isinstance(val, str) and a.type and callable(a.type):
+            try:
+                val = a.type(val)
+            except Exception:
+                pass
+        defaults[a.dest] = val
+    parsed._parser_defaults = defaults
     return parsed
 class _ConfigOverrideAction(Action):
     def __init__(self, option_strings, dest, **kwargs):
