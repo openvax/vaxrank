@@ -87,6 +87,19 @@ import math
 logger = logging.getLogger(__name__)
 
 
+# When evaluation fails, these bindings get shown verbatim in the
+# user-facing error message — they're the per-VP score axes most
+# useful for diagnosing "why did my expression evaluate weirdly"
+# (the read counts and mutant-AA count are useful too, but more
+# numerous and less specific; they go in the DEBUG log). Order is
+# the order they appear in the preview.
+_HEADLINE_BINDINGS = (
+    'mutant_epitope_score',
+    'wildtype_epitope_score',
+    'expression_score',
+)
+
+
 # Functions exposed to the expression namespace. All real-valued and
 # safe to call on user input — no I/O, no side effects.
 _FUNCTIONS = {
@@ -229,18 +242,32 @@ def evaluate_combined_score(expr_or_tree, vaccine_peptide):
             namespace,
         ))
     except Exception as e:
-        # Truncate the bindings preview in the user-facing message —
-        # the full dump goes to DEBUG. Eight bindings today, but
-        # someone may add more (e.g. wildtype / synonymous reads),
-        # and per-VP exceptions can fan out across the whole ranked
-        # list — a long error stack is easier to read with a 3-key
-        # preview.
-        keys = sorted(bindings)
-        preview_keys = keys[:3]
-        preview = {k: bindings[k] for k in preview_keys}
+        # Opinionated preview: surface the per-VP *score* axes
+        # (mutant / wildtype / expression) since those are what
+        # users actually look at when a score expression goes
+        # sideways. Read counts and mutant-AA count live in the
+        # DEBUG dump; per-VP exceptions can fan out across the
+        # whole ranked list and a tight preview keeps the stack
+        # readable.
+        preview = {
+            k: bindings[k] for k in _HEADLINE_BINDINGS if k in bindings
+        }
+        missing = [k for k in _HEADLINE_BINDINGS if k not in bindings]
+        if missing:
+            # Soft contract: ``_bindings_from_vaccine_peptide`` is
+            # supposed to populate every headline binding. If a
+            # future refactor renames or drops one, the preview will
+            # silently shrink — surface that through a warning so
+            # the maintainer notices instead of users wondering why
+            # their error message lost a field.
+            logger.warning(
+                "combined_score_expr error preview is missing "
+                "expected headline binding(s) %s; the bindings "
+                "contract from _bindings_from_vaccine_peptide may "
+                "have changed.", missing)
+        other_count = len(bindings) - len(preview)
         suffix = (
-            ", ... (%d more)" % (len(keys) - len(preview_keys))
-            if len(keys) > len(preview_keys) else "")
+            ", ... (%d more)" % other_count if other_count > 0 else "")
         logger.debug(
             "combined_score_expr %r evaluation failure; full "
             "bindings: %s", expr_text, bindings)

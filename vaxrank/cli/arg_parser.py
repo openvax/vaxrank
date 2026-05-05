@@ -845,9 +845,11 @@ def _reject_output_dir_misuse(args):
     1. The path already exists and is a file (vaxrank would
        ``os.makedirs(path)`` and crash deep in the writer).
     2. The path doesn't exist but ends in a suffix that strongly
-       suggests a single-file target — ``out.fasta``, ``out.json``,
-       etc. Better to refuse than create a directory called
-       ``out.fasta/``.
+       suggests a single-file target — ``out.fasta``, ``out.zip``,
+       etc. (See ``_OUTPUT_DIR_REJECTED_SUFFIXES`` for the exact
+       list — kept narrow so common directory names like
+       ``runs/csv/`` aren't rejected.) Better to refuse than create
+       a directory called ``out.fasta/``.
     3. (Multi-mode-only) the path resolves to a sub-path of an
        existing modality subdir — handled by the writers.
     """

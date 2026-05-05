@@ -220,8 +220,9 @@ def test_dsl_parses_documented_default_yaml_examples():
 
 def test_dsl_eval_error_truncates_bindings_in_user_message():
     """Evaluation-time errors should surface a *preview* of the
-    bindings, not the full dict — the full dict is logged at DEBUG.
-    Keeps multi-VP failure stacks readable."""
+    bindings (the three headline scores), not the full dict — the
+    full dict is logged at DEBUG. Keeps multi-VP failure stacks
+    readable."""
     from vaxrank.combined_score_dsl import (
         parse_combined_score_expr, evaluate_combined_score)
     vp = _make_vp()
@@ -236,3 +237,58 @@ def test_dsl_eval_error_truncates_bindings_in_user_message():
     # And the message stays compact: under ~400 chars even though
     # there are 8 bindings of varying width.
     assert len(msg) < 400, "error message too long: %r" % msg
+    # Opinionated preview: the three headline scores must be in
+    # the message. Read counts and mutant-AA count must NOT —
+    # those go to the DEBUG log.
+    assert 'mutant_epitope_score' in msg
+    assert 'wildtype_epitope_score' in msg
+    assert 'expression_score' in msg
+    assert 'n_alt_reads' not in msg
+    assert 'n_overlapping_reads' not in msg
+
+
+def test_dsl_eval_error_warns_when_headline_binding_missing():
+    """Soft contract: ``_bindings_from_vaccine_peptide`` is supposed
+    to populate every entry in ``_HEADLINE_BINDINGS``. If a future
+    refactor drops one, the user-facing preview shrinks silently —
+    surface that through a warning so the maintainer notices."""
+    import logging
+    from vaxrank.combined_score_dsl import (
+        _HEADLINE_BINDINGS, evaluate_combined_score,
+        parse_combined_score_expr)
+    import vaxrank.combined_score_dsl as dsl_mod
+
+    # Monkeypatch the bindings extractor to drop one headline key.
+    real_extractor = dsl_mod._bindings_from_vaccine_peptide
+
+    def _stripped(vp):
+        b = real_extractor(vp)
+        b.pop(_HEADLINE_BINDINGS[0])  # drop mutant_epitope_score
+        return b
+
+    dsl_mod._bindings_from_vaccine_peptide = _stripped
+    try:
+        vp = _make_vp()
+        tree = parse_combined_score_expr('log(-1)')
+        # Trigger eval-time failure and capture the warning record.
+        caplog_records = []
+
+        class _Capture(logging.Handler):
+            def emit(self, record):
+                caplog_records.append(record)
+
+        handler = _Capture(level=logging.WARNING)
+        dsl_mod.logger.addHandler(handler)
+        try:
+            with pytest.raises(ValueError):
+                evaluate_combined_score(tree, vp)
+        finally:
+            dsl_mod.logger.removeHandler(handler)
+        warnings = [r for r in caplog_records if r.levelno == logging.WARNING]
+        assert any(
+            'missing expected headline binding' in r.getMessage()
+            for r in warnings), (
+                "Expected a warning about the missing headline "
+                "binding; got: %r" % [r.getMessage() for r in warnings])
+    finally:
+        dsl_mod._bindings_from_vaccine_peptide = real_extractor
