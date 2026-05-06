@@ -273,6 +273,97 @@ def test_load_default_predictor_returns_none_when_mhctools_missing(
 
 # ---- Report integration --------------------------------------------------
 
+def test_ascii_report_surfaces_each_predictor_in_per_epitope_table():
+    """End-to-end render: when a VaccinePeptide carries two
+    EpitopePredictions for the same (peptide, allele) — one per
+    predictor — both rows appear in the rendered ASCII table with
+    a ``Predictor`` column distinguishing them. Pre-2.24 the
+    VCF/BAM path collapsed via dict-overwrite so this test would
+    have only seen one row."""
+    import io
+    from vaxrank.report import _make_report
+    template_data = {
+        'patient_info': {'Patient ID': 'TEST'},
+        'package_versions': {},
+        'reviewers': [], 'final_review': '',
+        'input_json_file': None,
+        'include_manufacturability': False,
+        'include_wt_epitopes': False,
+        'args': [], 'mrna_ranking': None,
+        'variants': [{
+            'num': 1,
+            'short_description': 'chr1:100 A>T',
+            'variant_data': {'Gene name': 'GENEA', 'Top score': 1.0},
+            'effect_data': {'effect': 'missense'},
+            'peptides': [{
+                'header_display_data': {
+                    'num': 1,
+                    'aa_before_mutation': 'KLQ',
+                    'aa_mutant': 'X',
+                    'aa_after_mutation': 'GHS'},
+                'peptide_data': {},
+                'manufacturability_data': {},
+                'wt_epitopes': [], 'ascii_wt_epitopes': None,
+                'epitopes': [
+                    {'Sequence': 'SIINFEKL', 'Predictor': 'mhcflurry',
+                     'IC50': '50.00 nM', 'Allele': 'A*02:01'},
+                    {'Sequence': 'SIINFEKL', 'Predictor': 'netmhcpan',
+                     'IC50': '75.00 nM', 'Allele': 'A*02:01'},
+                ],
+                'ascii_epitopes': (
+                    "Sequence Predictor IC50 Allele\n"
+                    "SIINFEKL mhcflurry 50.00 A*02:01\n"
+                    "SIINFEKL netmhcpan 75.00 A*02:01\n"),
+            }],
+        }],
+    }
+    f = io.StringIO()
+    _make_report(template_data, f, 'templates/template.txt')
+    rendered = f.getvalue()
+    # Both predictors named in the per-epitope ASCII table; same
+    # peptide+allele appears twice (one row per predictor).
+    assert 'mhcflurry' in rendered
+    assert 'netmhcpan' in rendered
+    assert rendered.count('SIINFEKL') >= 2
+
+
+def test_epitope_data_renders_one_row_per_predictor_for_same_pep_allele():
+    """Issue #261: when LENS / pVACseq / multi-predictor VCF runs
+    emit multiple EpitopePredictions per (peptide, allele) — one
+    per predictor — the per-epitope report table renders one row
+    per prediction with a ``Predictor`` column distinguishing them."""
+    from collections import OrderedDict
+    from vaxrank.report import TemplateDataCreator
+    from vaxrank.epitope_prediction import EpitopePrediction
+
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.processing_predictions_by_key = {}
+
+    def _ep(method, ic50):
+        return EpitopePrediction(
+            allele='HLA-A*02:01', peptide_sequence='SIINFEKL',
+            wt_peptide_sequence='SIINFEKL', ic50=ic50, wt_ic50=2000.0,
+            percentile_rank=0.5, prediction_method_name=method,
+            overlaps_mutation=True, source_sequence='SSIINFEKL',
+            offset=1, occurs_in_reference=False)
+    preds = [_ep('mhcflurry', 50.0), _ep('netmhcpan', 75.0)]
+
+    rows = [creator._epitope_data(p) for p in preds]
+    assert len(rows) == 2
+    # Each row preserves its own predictor name + IC50 — no collapsing.
+    assert rows[0]['Predictor'] == 'mhcflurry'
+    assert rows[1]['Predictor'] == 'netmhcpan'
+    assert rows[0]['IC50'] == '50.00 nM'
+    assert rows[1]['IC50'] == '75.00 nM'
+    # Same allele + sequence (the join we want to surface, not collapse).
+    assert rows[0]['Sequence'] == rows[1]['Sequence'] == 'SIINFEKL'
+    assert rows[0]['Allele'] == rows[1]['Allele'] == 'A*02:01'
+    # Result is an OrderedDict so the rendered HTML/PDF table
+    # column order is stable across rows.
+    assert all(isinstance(r, OrderedDict) for r in rows)
+    assert list(rows[0].keys()) == list(rows[1].keys())
+
+
 def test_epitope_data_surfaces_processing_columns_when_annotated():
     """``TemplateDataCreator._epitope_data`` adds three extra
     columns (Processing: C-term, Processing: max internal,

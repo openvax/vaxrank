@@ -11,7 +11,6 @@
 # limitations under the License.
 
 
-from collections import OrderedDict
 import traceback
 import logging
 from typing import Optional
@@ -45,20 +44,21 @@ def slice_epitope_predictions(
         if p.offset >= start_offset and p.offset + p.length <= end_offset
     ]
 
-Peptide = str
-Allele = str
-
 def predict_epitopes(
         mhc_predictor,
         protein_fragment : MutantProteinFragment,
         epitope_config : Optional[EpitopeConfig] = None,
-        genome : Optional[Genome] = None) -> dict[tuple[Peptide, Allele], EpitopePrediction]:
+        genome : Optional[Genome] = None) -> list[EpitopePrediction]:
     """
     Parameters
     ----------
     mhc_predictor
-        Either a topiary.TopiaryPredictor or a mhctools BasePredictor.
-        If a BasePredictor is given, it will be wrapped in a TopiaryPredictor.
+        Either a topiary.TopiaryPredictor (which can wrap multiple
+        models) or a mhctools BasePredictor. A bare BasePredictor is
+        wrapped in a single-model TopiaryPredictor; pass a multi-model
+        TopiaryPredictor (or use ``--mhc-predictor`` with multiple
+        names on the CLI) to get one EpitopePrediction per (peptide,
+        allele, predictor).
 
     protein_fragment
         Protein sub-sequence to run MHC binding predictor over
@@ -70,16 +70,22 @@ def predict_epitopes(
     genome
         Genome whose proteome to use for reference peptide filtering
 
-    Returns an OrderedDict of EpitopePrediction objects, keyed by a
-    (peptide sequence, allele) tuple, that have a normalized score greater
-    than min_epitope_score.
+    Returns
+    -------
+    list[EpitopePrediction]
+        One entry per (peptide, allele, predictor) tuple — multi-predictor
+        runs (mhcflurry + netmhcpan, …) yield multiple entries per
+        (peptide, allele) pair, with ``prediction_method_name``
+        distinguishing them. Pre-2.24 this was a dict keyed on
+        ``(peptide, allele)`` which silently overwrote when multiple
+        predictors were configured (issue #261).
 
     Uses the input genome to evaluate whether the epitope occurs in reference.
     """
     if epitope_config is None:
         epitope_config = EpitopeConfig()
 
-    results = OrderedDict()
+    results: list[EpitopePrediction] = []
     reference_proteome = ReferenceProteome(genome)
 
     # Wrap bare mhctools predictors in a TopiaryPredictor
@@ -101,18 +107,26 @@ def predict_epitopes(
     if predictions_df.empty:
         return results
 
+    # ``default_methods`` (per-kind ``prediction_method_name`` defaults
+    # for unqualified DSL refs) is required when multi-predictor data
+    # is in play — without it, ``affinity.value`` is ambiguous and
+    # topiary raises. Single-predictor runs leave ``default_methods``
+    # unset and the DSL resolves the only available method.
+    default_methods = getattr(epitope_config, 'default_methods', None) or None
+
     # Apply the configured filter (default: affinity or percentile-rank cutoff)
     # so that rows dropped by the filter are never scored or WT-predicted.
     filter_node = build_filter_node(epitope_config)
     if filter_node is not None:
-        predictions_df = apply_filter(predictions_df, filter_node)
+        predictions_df = apply_filter(
+            predictions_df, filter_node, default_methods=default_methods)
         if predictions_df.empty:
             return results
 
     # Evaluate the score expression once; indexed by
     # (source_sequence_name, peptide, peptide_offset, allele) group tuple.
     score_node = build_score_node(epitope_config)
-    score_ctx = EvalContext(predictions_df)
+    score_ctx = EvalContext(predictions_df, default_methods=default_methods)
     score_series = (
         score_node.eval(score_ctx).reindex(score_ctx.group_index).fillna(0.0)
     )
@@ -232,8 +246,7 @@ def predict_epitopes(
         epitope_score = float(score_series[group_key])
 
         if epitope_score >= epitope_config.min_epitope_score:
-            key = (epitope_prediction.peptide_sequence, epitope_prediction.allele)
-            results[key] = epitope_prediction
+            results.append(epitope_prediction)
         else:
             num_low_scoring += 1
 

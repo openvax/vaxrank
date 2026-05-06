@@ -232,13 +232,12 @@ def vaccine_peptides_for_variant(
 
     logger.info("Mutant protein fragment for %s: %s", variant, long_protein_fragment)
 
-    epitope_predictions_dict = predict_epitopes(
+    epitope_predictions = predict_epitopes(
         mhc_predictor=mhc_predictor,
         protein_fragment=long_protein_fragment,
         epitope_config=epitope_config,
         genome=variant.ensembl,
     )
-    epitope_predictions = list(epitope_predictions_dict.values())
     return vaccine_peptides_from_epitopes(
         variant=variant,
         long_protein_fragment=long_protein_fragment,
