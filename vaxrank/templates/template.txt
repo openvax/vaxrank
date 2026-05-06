@@ -46,3 +46,20 @@ Package version info
 {% else %}
 No variants with sufficient ranked antigens were found.
 {% endif %}
+
+{% if mrna_ranking %}
+---
+
+mRNA vaccine antigen selection
+  Selected ({{ mrna_ranking.selected|length }} of {{ mrna_ranking.total_ranked }} ranked) at --mrna-antigens-per-construct={{ mrna_ranking.antigens_per_construct }} × --mrna-max-constructs={{ mrna_ranking.max_constructs }} = {{ mrna_ranking.cap }} antigen slots:
+  {% for a in mrna_ranking.selected %}
+    {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}
+  {% endfor %}
+  {% if mrna_ranking.dropped %}
+
+  Not selected — past the cap (raise --mrna-max-constructs to include more):
+  {% for a in mrna_ranking.dropped %}
+    {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}
+  {% endfor %}
+  {% endif %}
+{% endif %}

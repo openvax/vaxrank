@@ -24,6 +24,7 @@ from vaxrank.mrna import (
     RNAConstructConfig,
     assemble_mrna_constructs,
     codon_optimize,
+    summarize_mrna_ranking_decisions,
     write_mrna_outputs,
 )
 from vaxrank.mrna_library import (
@@ -84,6 +85,142 @@ def _peptide_stub(amino_acids, gene_name='GENE'):
 def _variant_pair(amino_acids, contig='1', start=1000, gene_name='GENE'):
     variant = Variant(contig, start, 'A', 'T')
     return (variant, [_peptide_stub(amino_acids, gene_name=gene_name)])
+
+
+# ---- mRNA ranking-decisions summary (#270) ------------------------------
+
+
+def _vp_with_score(amino_acids, gene_name, combined_score):
+    """Like ``_peptide_stub`` but with a settable ``combined_score``
+    so we can verify the ordered list comes through."""
+    fragment = SimpleNamespace(amino_acids=amino_acids, gene_name=gene_name)
+    return SimpleNamespace(
+        mutant_protein_fragment=fragment, combined_score=combined_score)
+
+
+def test_summarize_mrna_ranking_decisions_splits_at_cap():
+    """``selected`` = top ``antigens_per_construct × max_constructs``
+    of the ranked variants; ``dropped`` = the rest. ``cap`` and
+    ``total_ranked`` are surfaced for the report header."""
+    pairs = [
+        (Variant('1', 100 + i, 'A', 'T'),
+         [_vp_with_score("KLQGHSAPVLDVIVN", "GENE%d" % i, 100.0 - i)])
+        for i in range(7)
+    ]
+    options = RNAConstructConfig(
+        antigens_per_construct=2, max_constructs=2)  # cap = 4
+    summary = summarize_mrna_ranking_decisions(pairs, options)
+    assert summary['cap'] == 4
+    assert summary['total_ranked'] == 7
+    assert summary['antigens_per_construct'] == 2
+    assert summary['max_constructs'] == 2
+    assert len(summary['selected']) == 4
+    assert len(summary['dropped']) == 3
+    # Selected entries are the first 4 in ranked order with rank 1..4.
+    assert [a['rank'] for a in summary['selected']] == [1, 2, 3, 4]
+    assert [a['gene_name'] for a in summary['selected']] == \
+        ['GENE0', 'GENE1', 'GENE2', 'GENE3']
+    # Dropped entries continue the ranking from rank 5.
+    assert [a['rank'] for a in summary['dropped']] == [5, 6, 7]
+
+
+def test_summarize_mrna_ranking_decisions_no_drops_when_under_cap():
+    """When the ranked list is shorter than the cap, every variant
+    is selected and ``dropped`` is empty."""
+    pairs = [
+        (Variant('1', 100, 'A', 'T'),
+         [_vp_with_score("KLQGHSAPVLDVIVN", "GENE_A", 50.0)]),
+        (Variant('1', 200, 'A', 'T'),
+         [_vp_with_score("MNNVDEILGRWESPV", "GENE_B", 30.0)]),
+    ]
+    options = RNAConstructConfig(
+        antigens_per_construct=5, max_constructs=2)  # cap = 10
+    summary = summarize_mrna_ranking_decisions(pairs, options)
+    assert summary['cap'] == 10
+    assert summary['total_ranked'] == 2
+    assert len(summary['selected']) == 2
+    assert summary['dropped'] == []
+
+
+def test_summarize_mrna_ranking_decisions_empty_input():
+    """No ranked variants → both lists empty, cap still surfaces so
+    the report can still render the header."""
+    options = RNAConstructConfig(
+        antigens_per_construct=5, max_constructs=2)
+    summary = summarize_mrna_ranking_decisions([], options)
+    assert summary['cap'] == 10
+    assert summary['total_ranked'] == 0
+    assert summary['selected'] == []
+    assert summary['dropped'] == []
+
+
+def test_ascii_report_renders_mrna_ranking_section():
+    """End-to-end: the ASCII report includes a ``mRNA vaccine
+    antigen selection`` section when the
+    ``mrna_ranking`` template-data field is populated."""
+    from vaxrank.report import _make_report
+    import io
+
+    template_data = {
+        'patient_info': {'Patient ID': 'TEST'},
+        'package_versions': {},
+        'reviewers': [], 'final_review': '',
+        'input_json_file': None,
+        'include_manufacturability': False,
+        'include_wt_epitopes': True,
+        'args': [],
+        'variants': [],
+        'mrna_ranking': {
+            'antigens_per_construct': 5,
+            'max_constructs': 2,
+            'cap': 10,
+            'total_ranked': 12,
+            'selected': [
+                {'rank': 1, 'gene_name': 'GENEA',
+                 'description': 'GENEA_1_100_A_T', 'combined_score': 12.5},
+                {'rank': 2, 'gene_name': 'GENEB',
+                 'description': 'GENEB_2_200_A_T', 'combined_score': 11.1},
+            ],
+            'dropped': [
+                {'rank': 11, 'gene_name': 'GENEK',
+                 'description': 'GENEK_3_300_A_T', 'combined_score': 4.3},
+            ],
+        },
+    }
+    f = io.StringIO()
+    _make_report(template_data, f, 'templates/template.txt')
+    rendered = f.getvalue()
+    # Section header, selected rows, dropped rows all present.
+    assert 'mRNA vaccine antigen selection' in rendered
+    assert '2 of 12 ranked' in rendered
+    assert 'GENEA_1_100_A_T' in rendered
+    assert 'GENEB_2_200_A_T' in rendered
+    assert 'Not selected' in rendered
+    assert 'GENEK_3_300_A_T' in rendered
+    # Cap params named in the header.
+    assert '5' in rendered  # antigens_per_construct
+    assert '10' in rendered  # cap
+
+
+def test_ascii_report_skips_mrna_section_when_not_set():
+    """When ``mrna_ranking`` is None (peptide-only run), the section
+    doesn't render."""
+    from vaxrank.report import _make_report
+    import io
+    template_data = {
+        'patient_info': {'Patient ID': 'TEST'},
+        'package_versions': {},
+        'reviewers': [], 'final_review': '',
+        'input_json_file': None,
+        'include_manufacturability': False,
+        'include_wt_epitopes': True,
+        'args': [], 'variants': [],
+        'mrna_ranking': None,
+    }
+    f = io.StringIO()
+    _make_report(template_data, f, 'templates/template.txt')
+    rendered = f.getvalue()
+    assert 'mRNA vaccine antigen selection' not in rendered
 
 
 def test_resolve_named_accepts_dashes_and_case_variants():

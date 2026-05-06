@@ -322,6 +322,87 @@ def codon_optimize(amino_acids, species="h_sapiens", method="use_best_codon",
     return problem.sequence
 
 
+def summarize_mrna_ranking_decisions(
+        ranked_variants_with_vaccine_peptides, options):
+    """Produce a "which antigens land in the mRNA vaccine?" summary
+    derived from the ranked-variants list and the
+    :class:`RNAConstructConfig` caps. Used by report writers (#270)
+    to surface the mRNA ranking-decision section of the ASCII / HTML
+    / PDF report next to the existing per-variant tables.
+
+    The mRNA assembler iterates the ranked variants in score order
+    and packs antigens into constructs until
+    ``antigens_per_construct × max_constructs`` is reached — so the
+    first ``cap`` variants in ``ranked_variants_with_vaccine_peptides``
+    are the ones that land in the vaccine, and the rest fall past the
+    cap. (Edge case: a single antigen too long to fit is still
+    emitted, which can shift the cut by one — the writer logs the
+    edge-case warning separately.)
+
+    Parameters
+    ----------
+    ranked_variants_with_vaccine_peptides : list[tuple]
+        ``[(Variant, [VaccinePeptide])]`` — vaxrank's canonical
+        ranked-output shape.
+    options : RNAConstructConfig
+        Construct-assembly knobs; the cap comes from
+        ``options.antigens_per_construct * options.max_constructs``.
+
+    Returns
+    -------
+    dict
+        Shape:
+
+        ``{
+            'antigens_per_construct': int,
+            'max_constructs': int,
+            'cap': int,        # antigens_per_construct × max_constructs
+            'total_ranked': int,
+            'selected': [{'rank': 1, 'description': 'GENE_X_...',
+                          'gene_name': 'GENE',
+                          'combined_score': float, ...}, ...],
+            'dropped': [...],   # past-cap, same shape
+          }``
+
+        ``selected`` and ``dropped`` are sorted by rank (ascending
+        index in the ranked list).
+    """
+    cap = options.antigens_per_construct * options.max_constructs
+
+    def _row(rank, variant, peptides):
+        vp = peptides[0] if peptides else None
+        gene_name = (
+            getattr(vp.mutant_protein_fragment, 'gene_name', '')
+            if vp is not None else '')
+        return {
+            'rank': rank,
+            'gene_name': gene_name or '',
+            'description': '%s_%s' % (
+                gene_name or '?',
+                getattr(variant, 'short_description', str(variant))),
+            'combined_score': (
+                float(vp.combined_score) if vp is not None else 0.0),
+        }
+
+    selected = []
+    dropped = []
+    for i, (variant, peptides) in enumerate(
+            ranked_variants_with_vaccine_peptides):
+        rank = i + 1
+        if i < cap:
+            selected.append(_row(rank, variant, peptides))
+        else:
+            dropped.append(_row(rank, variant, peptides))
+    return {
+        'antigens_per_construct': options.antigens_per_construct,
+        'max_constructs': options.max_constructs,
+        'cap': cap,
+        'total_ranked': len(ranked_variants_with_vaccine_peptides),
+        'selected': selected,
+        'dropped': dropped,
+    }
+
+
 def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
                           min_antigen_length_aa=0, candidates_per_slot=1,
                           antigen_content="mutation_spanning",

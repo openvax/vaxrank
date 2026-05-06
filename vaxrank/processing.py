@@ -33,16 +33,13 @@ three scores:
                                     a balanced (0.6, 0.6) row scores
                                     ~0.6 instead of 0.36.
 
-``ProcessingPrediction`` is the canonical record post-2.22 (see
-:mod:`vaxrank.processing_prediction`). Pre-2.22 vaxrank annotated
-``EpitopePrediction`` objects in place with ``pepsickle_*`` fields
-— that conflated MHC-binding and processing predictions, which are
-on different axes (binding has an allele dimension; processing
-doesn't). The legacy in-place mutation is preserved for one
-deprecation cycle so existing report writers keep rendering;
-:func:`annotate_processing` returns a map of
-``(peptide, source, predictor_name) -> ProcessingPrediction`` that
-new readers can join into at render time.
+``ProcessingPrediction`` is the canonical record (see
+:mod:`vaxrank.processing_prediction`). Report writers join in by
+``(peptide, source, predictor_name)`` at render time. Pre-2.22
+vaxrank ALSO mutated ``EpitopePrediction`` objects in place with
+``pepsickle_*`` fields; that mutation is gone in 2.23 (closes
+#272). All readers must consume the
+``processing_predictions_by_key`` map returned here.
 
 The annotations are purely additive — vaccine ranking is unaffected.
 Reports surface the three columns when at least one prediction in
@@ -173,20 +170,15 @@ def _load_default_predictor(human_only=False, threshold=0.5):
 def annotate_processing(predictions, predictor=None,
                         human_only=False, threshold=0.5):
     """Build a map of pepsickle ``ProcessingPrediction`` records for
-    the given EpitopePredictions, and (for one deprecation cycle)
-    also annotate each EpitopePrediction in place with the legacy
-    ``pepsickle_*`` fields.
+    the given EpitopePredictions.
 
     Parameters
     ----------
     predictions : iterable of EpitopePrediction
-        Each prediction is processed against its ``source_sequence``.
-        Legacy in-place mutation: each gets
-        ``pepsickle_c_term_cleavage_prob`` /
-        ``pepsickle_max_internal_cut_prob`` /
-        ``pepsickle_processing_score`` populated when annotation
-        succeeds. Predictions with no usable source sequence pass
-        through unchanged.
+        Each prediction is processed against its ``source_sequence``
+        to compute one ProcessingPrediction. EpitopePrediction
+        objects are NOT mutated (was the case pre-2.23 — see #272).
+        Predictions with no usable source sequence are skipped.
     predictor : optional, object with a ``cleavage_probs(sequence) ->
         list[float]`` method
         Test seam. When None (default), constructs
@@ -205,11 +197,10 @@ def annotate_processing(predictions, predictor=None,
         ``(n_annotated, processing_predictions_by_key)``.
 
         * ``n_annotated`` (int): number of predictions successfully
-          annotated. Same number as before for back-compat.
+          scored.
         * ``processing_predictions_by_key`` (dict): keyed on
           ``(peptide_sequence, source_sequence, predictor_name)`` —
-          the canonical post-2.22 record (see :mod:`vaxrank.processing_prediction`).
-          Empty dict when nothing was annotated.
+          the canonical record. Empty dict when nothing was annotated.
     """
     predictions_list = list(predictions)
     processing_predictions: dict[tuple, ProcessingPrediction] = {}
@@ -326,11 +317,6 @@ def annotate_processing(predictions, predictor=None,
                 processing_score=processing_score,
             )
             processing_predictions[pp.key()] = pp
-            # Legacy in-place mutation (deprecated; kept for one
-            # cycle so existing report writers keep rendering).
-            p.pepsickle_c_term_cleavage_prob = c_term
-            p.pepsickle_max_internal_cut_prob = max_internal
-            p.pepsickle_processing_score = processing_score
             n_annotated += 1
 
     if n_annotated:
