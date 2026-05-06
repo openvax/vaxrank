@@ -9,6 +9,12 @@ Package version info
 ---
 
 {% if variants %}
+=== Antigen ranking ===
+Per-variant ranked antigen windows by combined_score. Modality-agnostic;
+modality-specific decisions (which antigens land in the vaccine, the
+manufacturability tuple, allele coverage) are in the "Vaccine construction"
+sections below.
+
 {% for v in variants %}
 {{ v.num }}) {{ v.short_description }} ({{ v.variant_data['Gene name'] }})
         {% for key, val in v.variant_data.items() %}
@@ -25,14 +31,7 @@ Package version info
                   {% for key, val in p.peptide_data.items() %}
                   - {{ key }}: {{ val }}
                   {% endfor %}
-                  {% if include_manufacturability %}
 
-                  Manufacturability:
-                  {% for key, val in p.manufacturability_data.items() %}
-                  - {{ key }}: {{ val }}
-                  {% endfor %}
-                  {% endif %}
-                  
                   Predicted mutant epitopes:
                   {{ p.ascii_epitopes|indent(18) }}
 
@@ -47,19 +46,52 @@ Package version info
 No variants with sufficient ranked antigens were found.
 {% endif %}
 
-{% if mrna_ranking %}
+{% for modality, vc in (vaccine_constructions|default({})).items() %}
 ---
 
-mRNA vaccine antigen selection
-  Selected ({{ mrna_ranking.selected|length }} of {{ mrna_ranking.total_ranked }} ranked) at --mrna-antigens-per-construct={{ mrna_ranking.antigens_per_construct }} × --mrna-max-constructs={{ mrna_ranking.max_constructs }} = {{ mrna_ranking.cap }} antigen slots:
-  {% for a in mrna_ranking.selected %}
-    {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}
-  {% endfor %}
-  {% if mrna_ranking.dropped %}
+=== Vaccine construction — {{ modality }} ===
+Cap: {{ vc.antigens_per_construct }} antigens × {{ vc.max_constructs }} constructs = {{ vc.cap }} antigen slots.
+Selected {{ vc.selected|length }} of {{ vc.total_ranked }} ranked antigen(s).
 
-  Not selected — past the cap (raise --mrna-max-constructs to include more):
-  {% for a in mrna_ranking.dropped %}
-    {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}
+  {% if vc.coverage %}
+  Allele coverage of the selected pool:
+    {% for ac in vc.coverage %}
+    {% if ac.tier %}{{ '✓' }} {{ '%-7s' % ac.tier }}{% else %}{{ '✗' }} {{ '%-7s' % 'none' }}{% endif %}  {{ ac.allele }}{% if ac.tier %}  (n={{ ac.n_peptides }}{% if ac.best_presentation_pct is not none %}, best presentation_pct={{ '%.2f' % ac.best_presentation_pct }}{% endif %}{% if ac.best_affinity_pct is not none %}, best affinity_pct={{ '%.2f' % ac.best_affinity_pct }}{% endif %}){% endif %}
+    {% endfor %}
+  {% endif %}
+
+  Selected antigens:
+  {% for a in vc.selected %}
+    {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}{% if a.allele_tiers %}    covers {% for allele, tier in a.allele_tiers.items() %}{{ allele }} ({{ tier }}){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+        {% if include_manufacturability and modality == 'peptide' and a.manufacturability %}
+        Manufacturability:
+        {% for key, val in a.manufacturability.items() %}
+        - {{ key }}: {{ val }}
+        {% endfor %}
+        {% endif %}
+  {% endfor %}
+  {% if vc.dropped %}
+
+  Not selected — past the cap (raise --{{ modality }}-max-constructs to include more):
+  {% for a in vc.dropped %}
+    {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}{% if a.allele_tiers %}    would add: {% for allele, tier in a.allele_tiers.items() %}{{ allele }} ({{ tier }}){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
   {% endfor %}
   {% endif %}
+{% endfor %}
+
+{% if not vaccine_constructions and mrna_ranking %}
+---
+
+=== Vaccine construction — mrna (legacy block) ===
+Selected ({{ mrna_ranking.selected|length }} of {{ mrna_ranking.total_ranked }} ranked) at cap = {{ mrna_ranking.cap }} antigen slots.
+{% for a in mrna_ranking.selected %}
+  {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}
+{% endfor %}
+{% if mrna_ranking.dropped %}
+
+Not selected — past the cap:
+{% for a in mrna_ranking.dropped %}
+  {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}
+{% endfor %}
+{% endif %}
 {% endif %}

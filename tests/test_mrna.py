@@ -170,28 +170,37 @@ def test_ascii_report_renders_mrna_ranking_section():
         'include_wt_epitopes': True,
         'args': [],
         'variants': [],
-        'mrna_ranking': {
-            'antigens_per_construct': 5,
-            'max_constructs': 2,
-            'cap': 10,
-            'total_ranked': 12,
-            'selected': [
-                {'rank': 1, 'gene_name': 'GENEA',
-                 'description': 'GENEA_1_100_A_T', 'combined_score': 12.5},
-                {'rank': 2, 'gene_name': 'GENEB',
-                 'description': 'GENEB_2_200_A_T', 'combined_score': 11.1},
-            ],
-            'dropped': [
-                {'rank': 11, 'gene_name': 'GENEK',
-                 'description': 'GENEK_3_300_A_T', 'combined_score': 4.3},
-            ],
+        'vaccine_constructions': {
+            'mrna': {
+                'antigens_per_construct': 5,
+                'max_constructs': 2,
+                'cap': 10,
+                'total_ranked': 12,
+                'selected': [
+                    {'rank': 1, 'gene_name': 'GENEA',
+                     'description': 'GENEA_1_100_A_T',
+                     'combined_score': 12.5,
+                     'allele_tiers': {}, 'manufacturability': {}},
+                    {'rank': 2, 'gene_name': 'GENEB',
+                     'description': 'GENEB_2_200_A_T',
+                     'combined_score': 11.1,
+                     'allele_tiers': {}, 'manufacturability': {}},
+                ],
+                'dropped': [
+                    {'rank': 11, 'gene_name': 'GENEK',
+                     'description': 'GENEK_3_300_A_T',
+                     'combined_score': 4.3,
+                     'allele_tiers': {}, 'manufacturability': {}},
+                ],
+                'coverage': [],
+            },
         },
     }
     f = io.StringIO()
     _make_report(template_data, f, 'templates/template.txt')
     rendered = f.getvalue()
-    # Section header, selected rows, dropped rows all present.
-    assert 'mRNA vaccine antigen selection' in rendered
+    # Post-2.25 section header (was "mRNA vaccine antigen selection").
+    assert 'Vaccine construction — mrna' in rendered
     assert '2 of 12 ranked' in rendered
     assert 'GENEA_1_100_A_T' in rendered
     assert 'GENEB_2_200_A_T' in rendered
@@ -202,9 +211,9 @@ def test_ascii_report_renders_mrna_ranking_section():
     assert '10' in rendered  # cap
 
 
-def test_ascii_report_skips_mrna_section_when_not_set():
-    """When ``mrna_ranking`` is None (peptide-only run), the section
-    doesn't render."""
+def test_ascii_report_skips_construction_section_when_no_modalities():
+    """When ``vaccine_constructions`` is empty (no active modality
+    or no ranked antigens), no construction sections render."""
     from vaxrank.report import _make_report
     import io
     template_data = {
@@ -215,12 +224,13 @@ def test_ascii_report_skips_mrna_section_when_not_set():
         'include_manufacturability': False,
         'include_wt_epitopes': True,
         'args': [], 'variants': [],
+        'vaccine_constructions': {},
         'mrna_ranking': None,
     }
     f = io.StringIO()
     _make_report(template_data, f, 'templates/template.txt')
     rendered = f.getvalue()
-    assert 'mRNA vaccine antigen selection' not in rendered
+    assert 'Vaccine construction' not in rendered
 
 
 def test_resolve_named_accepts_dashes_and_case_variants():

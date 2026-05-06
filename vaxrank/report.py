@@ -51,7 +51,9 @@ class TemplateDataCreator(object):
             cosmic_vcf_filename=None,
             dna_vaf_by_variant=None,
             processing_predictions_by_key=None,
-            mrna_ranking_decisions=None):
+            mrna_ranking_decisions=None,
+            vaccine_constructions=None,
+            target_alleles=None):
         """
         Construct a TemplateDataCreator object, from the output of the vaxrank pipeline.
 
@@ -67,11 +69,18 @@ class TemplateDataCreator(object):
         self.dna_vaf_by_variant = dna_vaf_by_variant or {}
         self.processing_predictions_by_key = (
             processing_predictions_by_key or {})
-        # Issue #270: mRNA ranking-decisions section. Set when mRNA
-        # is in the active ``--vaccine-type``. ``None`` skips the
-        # section in the rendered report. See
-        # :func:`vaxrank.mrna.summarize_mrna_ranking_decisions`.
+        # Issue #270: mRNA ranking-decisions section. Legacy field;
+        # superseded by ``vaccine_constructions['mrna']`` in the new
+        # report layout (#269). Both reach the template so existing
+        # tests / consumers keep working.
         self.mrna_ranking_decisions = mrna_ranking_decisions
+        # Issue #269: per-modality "Vaccine construction" sections —
+        # coverage block + selected antigens with allele tiers
+        # + dropped-past-cap list. Keys are modality names; values
+        # are the dicts produced by
+        # :func:`vaxrank.coverage.summarize_construction_decisions`.
+        self.vaccine_constructions = vaccine_constructions or {}
+        self.target_alleles = list(target_alleles or [])
 
         # ``vaccine_type`` is rendered in the patient-info block so
         # the reader can tell at a glance what's being designed.
@@ -525,11 +534,17 @@ class TemplateDataCreator(object):
             'patient_info': patient_info,
             'variants': variants,
             'package_versions': package_versions,
-            # Issue #270: mRNA ranking decisions. ``None`` when not
-            # applicable (peptide-only run, or no ranked antigens).
-            # The template renders the section only when the value
-            # is truthy.
+            # Issue #270: legacy mRNA-only ranking block. Kept for
+            # back-compat with older templates / tests; new
+            # consumers read ``vaccine_constructions['mrna']``.
             'mrna_ranking': self.mrna_ranking_decisions,
+            # Issue #269: per-modality "Vaccine construction"
+            # blocks. Keyed by modality name (``'peptide'`` /
+            # ``'mrna'`` / future ``'dna'``). Empty dict when no
+            # ranked antigens exist; the template renders blocks
+            # only for keys present here.
+            'vaccine_constructions': self.vaccine_constructions,
+            'target_alleles': self.target_alleles,
         })
         return self.template_data
 
