@@ -252,19 +252,40 @@ def _pack_multi_epitope(records, options, linker):
     return constructs
 
 
-def assemble_peptide_constructs(ranked_vaccine_peptides, options=None):
+def assemble_peptide_constructs(
+        ranked_vaccine_peptides, options=None, *,
+        target_alleles=None):
     """Assemble peptide constructs from ranked vaccine peptides.
 
     Parameters
     ----------
     ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
     options : PeptideConstructConfig or None
+    target_alleles : optional, list[str]
+        Patient MHC alleles. When non-empty, the selector reorders
+        the ranked list to maximize allele coverage before packing
+        — see :func:`vaxrank.coverage.select_antigens_for_coverage`.
+        When empty / None, the input order is preserved (today's
+        pure-score behavior). Animal-agnostic: HLA, mouse H-2, swine
+        SLA all work the same way.
 
     Returns
     -------
     list[PeptideConstruct]
     """
     options = options or PeptideConstructConfig()
+    if target_alleles:
+        from .coverage import select_antigens_for_coverage
+        cap = options.antigens_per_construct * options.max_constructs
+        # Reorder up to ``cap`` antigens for coverage; leave the
+        # rest in their original score order so the report's
+        # not-selected list is still meaningful.
+        head = select_antigens_for_coverage(
+            ranked_vaccine_peptides, target_alleles, cap)
+        head_keys = {id(item) for item in head}
+        tail = [item for item in ranked_vaccine_peptides
+                if id(item) not in head_keys]
+        ranked_vaccine_peptides = head + tail
 
     records = list(_antigen_records(
         ranked_vaccine_peptides, options.antigen_content,

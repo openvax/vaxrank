@@ -371,7 +371,14 @@ def _emit_peptide_constructs(args, ranked, target_dir):
     if antigen_content is not None:
         config_kwargs['antigen_content'] = antigen_content
     peptide_options = PeptideConstructConfig(**config_kwargs)
-    constructs = assemble_peptide_constructs(ranked, options=peptide_options)
+    # Coverage-aware antigen selection (#269): when patient alleles
+    # are known, the selector reorders ``ranked`` greedily by
+    # coverage tier before bin-packing. No-op when alleles aren't
+    # available (e.g. external arg parser without
+    # ``--mhc-alleles`` and no LENS-inferred set).
+    target_alleles = _resolve_target_alleles(args)
+    constructs = assemble_peptide_constructs(
+        ranked, options=peptide_options, target_alleles=target_alleles)
     # Canonical filenames inside the per-modality target directory:
     # vaccine.fasta + manifest.json + order_form.csv. Single-mode
     # runs land directly in args.output_dir; multi-mode runs land in
@@ -545,6 +552,33 @@ def _log_args_summary(args):
     logger.info("\n".join(lines))
 
 
+def _resolve_target_alleles(args):
+    """Return the list of patient MHC alleles for coverage-aware
+    antigen selection (and for report-time coverage display).
+
+    Resolution mirrors :func:`_resolve_mhc_for_linker_optimizer`:
+
+    * Pipeline path: from ``--mhc-alleles`` on the CLI.
+    * External path (LENS / pVACseq): the loader stashes inferred
+      alleles on ``args._inferred_mhc_alleles_from_lens``.
+
+    Returns an empty list when neither source has data — callers
+    treat that as "coverage selection / display disabled, fall back
+    to pure-score order." Animal-agnostic: HLA, mouse H-2, swine
+    SLA all flow through here.
+    """
+    _ARG_LOAD_ERRORS = (AttributeError, ValueError, KeyError)
+    alleles = None
+    try:
+        alleles = mhc_alleles_from_args(args)
+    except _ARG_LOAD_ERRORS:
+        pass
+    if not alleles:
+        alleles = (
+            getattr(args, '_inferred_mhc_alleles_from_lens', None) or [])
+    return list(alleles or [])
+
+
 def _resolve_mhc_for_linker_optimizer(args):
     """Find a usable (predictor, alleles) pair for the per-junction
     linker optimizer.
@@ -708,9 +742,11 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     else:
         mhc_predictor = None
         mhc_alleles = None
+    target_alleles = _resolve_target_alleles(args)
     constructs = assemble_mrna_constructs(
         ranked, options=options,
-        mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles)
+        mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles,
+        target_alleles=target_alleles)
     # Canonical filenames inside the per-modality target directory:
     # cds.fasta + no_polyA.fasta + full.fasta + manifest.json +
     # mrna-sequence-parts.csv. The cds/no_polyA/full FASTAs are
@@ -1084,30 +1120,87 @@ def main(args_list=None):
     if not (args.output_ascii_report or args.output_html_report or args.output_pdf_report):
         return
 
-    # Issue #270: mRNA ranking-decisions section in the template
-    # report. Computed when 'mrna' is in the active --vaccine-type so
-    # an mRNA-only or peptide+mrna run shows which top-k antigens
-    # land in the mRNA construct(s) vs which fall past the cap.
-    mrna_ranking_decisions = None
-    if 'mrna' in _resolve_vaccine_types(args) \
-            and ranked_variants_with_vaccine_peptides:
-        from ..mrna import (
-            RNAConstructConfig, summarize_mrna_ranking_decisions,
+    # Per-modality "Vaccine construction" blocks (#269 + #270).
+    # Each active modality gets a coverage-aware view of which
+    # antigens landed in the vaccine, plus per-allele coverage of
+    # the selected pool. The selector is the same one
+    # ``_emit_*_constructs`` runs at write time, so the report
+    # matches what would actually be assembled with --output-dir.
+    target_alleles = _resolve_target_alleles(args)
+    vaccine_constructions = {}
+    if ranked_variants_with_vaccine_peptides:
+        from ..coverage import (
+            select_antigens_for_coverage, summarize_construction_decisions,
         )
-        # Reuse the same kwargs the writer uses so the cap matches
-        # what the user would actually get if they ran with
-        # --output-dir.
-        yaml_kwargs = _construct_config_for_modality(args, 'mrna')
+        active_types = _resolve_vaccine_types(args)
+        if 'mrna' in active_types:
+            from ..mrna import RNAConstructConfig
+            yaml_kwargs = _construct_config_for_modality(args, 'mrna')
 
-        def _cfg(cli_attr, yaml_key):
-            return _coalesce_from_config(args, cli_attr, yaml_kwargs, yaml_key)
-        mrna_options = RNAConstructConfig(
-            antigens_per_construct=_cfg(
-                'mrna_antigens_per_construct', 'antigens_per_construct'),
-            max_constructs=_cfg('mrna_max_constructs', 'max_constructs'),
-        )
-        mrna_ranking_decisions = summarize_mrna_ranking_decisions(
-            ranked_variants_with_vaccine_peptides, mrna_options)
+            def _mrna_cfg(cli_attr, yaml_key):
+                return _coalesce_from_config(
+                    args, cli_attr, yaml_kwargs, yaml_key)
+            mrna_options = RNAConstructConfig(
+                antigens_per_construct=_mrna_cfg(
+                    'mrna_antigens_per_construct',
+                    'antigens_per_construct'),
+                max_constructs=_mrna_cfg(
+                    'mrna_max_constructs', 'max_constructs'),
+            )
+            cap = (
+                mrna_options.antigens_per_construct
+                * mrna_options.max_constructs)
+            selected = (
+                select_antigens_for_coverage(
+                    ranked_variants_with_vaccine_peptides,
+                    target_alleles, cap)
+                if target_alleles else
+                list(ranked_variants_with_vaccine_peptides[:cap]))
+            vaccine_constructions['mrna'] = {
+                **summarize_construction_decisions(
+                    ranked_variants_with_vaccine_peptides,
+                    cap=cap, target_alleles=target_alleles,
+                    selected=selected),
+                'antigens_per_construct': mrna_options.antigens_per_construct,
+                'max_constructs': mrna_options.max_constructs,
+            }
+        if 'peptide' in active_types:
+            from ..peptide import PeptideConstructConfig
+            yaml_kwargs = _construct_config_for_modality(args, 'peptide')
+
+            def _pep_cfg(cli_attr, yaml_key):
+                return _coalesce_from_config(
+                    args, cli_attr, yaml_kwargs, yaml_key)
+            pep_options = PeptideConstructConfig(
+                antigens_per_construct=_pep_cfg(
+                    'peptide_antigens_per_construct',
+                    'antigens_per_construct'),
+                max_constructs=_pep_cfg(
+                    'peptide_max_constructs', 'max_constructs'),
+            )
+            cap = (
+                pep_options.antigens_per_construct
+                * pep_options.max_constructs)
+            selected = (
+                select_antigens_for_coverage(
+                    ranked_variants_with_vaccine_peptides,
+                    target_alleles, cap)
+                if target_alleles else
+                list(ranked_variants_with_vaccine_peptides[:cap]))
+            vaccine_constructions['peptide'] = {
+                **summarize_construction_decisions(
+                    ranked_variants_with_vaccine_peptides,
+                    cap=cap, target_alleles=target_alleles,
+                    selected=selected),
+                'antigens_per_construct': pep_options.antigens_per_construct,
+                'max_constructs': pep_options.max_constructs,
+            }
+
+    # Back-compat: ``mrna_ranking_decisions`` is the legacy field
+    # name TemplateDataCreator already understands; we still pass
+    # it so older callers / tests keep working. New section is
+    # ``vaccine_constructions``.
+    mrna_ranking_decisions = vaccine_constructions.get('mrna')
 
     template_data_creator = TemplateDataCreator(
         ranked_variants_with_vaccine_peptides=ranked_variants_with_vaccine_peptides,
@@ -1119,7 +1212,9 @@ def main(args_list=None):
         cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
         dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
         processing_predictions_by_key=processing_predictions_by_key,
-        mrna_ranking_decisions=mrna_ranking_decisions)
+        mrna_ranking_decisions=mrna_ranking_decisions,
+        vaccine_constructions=vaccine_constructions,
+        target_alleles=target_alleles)
 
     template_data = template_data_creator.compute_template_data()
 

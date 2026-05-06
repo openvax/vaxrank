@@ -680,7 +680,8 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
 
 def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                              mhc_predictor=None, mhc_alleles=None,
-                             reference_proteome=None):
+                             reference_proteome=None, *,
+                             target_alleles=None):
     """Assemble mRNA constructs from ranked vaccine peptides.
 
     Parameters
@@ -697,12 +698,31 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
         Container that answers ``kmer in reference_proteome``. Junction
         k-mers found in the reference proteome are filtered out before
         scoring (already-tolerated, not new presentation).
+    target_alleles : optional, list[str]
+        Patient MHC alleles for coverage-aware antigen selection.
+        When non-empty, the selector reorders the ranked list to
+        maximize coverage before bin-packing into constructs — see
+        :func:`vaxrank.coverage.select_antigens_for_coverage`. When
+        empty / None, today's pure-score order is preserved.
+        Typically the same list as ``mhc_alleles`` (the linker
+        optimizer's input); kept separate so the two can diverge if
+        a future caller wants to optimize against a population
+        cohort while ranking against the patient.
 
     Returns
     -------
     list[RNAConstruct]
     """
     options = options or RNAConstructConfig()
+    if target_alleles:
+        from .coverage import select_antigens_for_coverage
+        cap = options.antigens_per_construct * options.max_constructs
+        head = select_antigens_for_coverage(
+            ranked_vaccine_peptides, target_alleles, cap)
+        head_keys = {id(item) for item in head}
+        tail = [item for item in ranked_vaccine_peptides
+                if id(item) not in head_keys]
+        ranked_vaccine_peptides = head + tail
     signal_peptide_aa = (
         _resolve_named(SIGNAL_PEPTIDES, options.signal_peptide,
                        'signal peptide')
