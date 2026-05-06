@@ -110,28 +110,6 @@ def test_epitope_prediction_length_is_derived():
     assert "length" not in e.to_dict()
 
 
-def test_epitope_prediction_from_dict_drops_legacy_length_field():
-    """Old JSON blobs that include the retired `length` init arg still
-    load, via _SERIALIZABLE_KEYWORD_ALIASES."""
-    legacy_dict = {
-        "allele": "HLA-A*02:01",
-        "peptide_sequence": "SIINFEQL",
-        "wt_peptide_sequence": "SIINFEKL",
-        "ic50": 2.0,
-        "wt_ic50": 2000.0,
-        "percentile_rank": 0.3,
-        "prediction_method_name": "ImaginationMHCpan",
-        "overlaps_mutation": True,
-        "source_sequence": "SSIINFEQL",
-        "offset": 1,
-        "occurs_in_reference": False,
-        "length": 8,  # legacy field, should be silently dropped
-    }
-    e = EpitopePrediction.from_dict(legacy_dict)
-    assert e.peptide_sequence == "SIINFEQL"
-    assert e.length == 8  # derived from peptide_sequence
-
-
 # ---- MutantProteinFragment --------------------------------------------
 
 

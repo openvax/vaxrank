@@ -25,6 +25,7 @@ from varcode import load_vcf_fast
 
 from .cancer_hotspots import get_hotspot_url
 from .manufacturability import ManufacturabilityScores
+from .processing import PEPSICKLE_PREDICTOR_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,7 @@ class TemplateDataCreator(object):
         # ``vaxrank.processing``); a future per-position predictor
         # plugged in via the same EpitopePrediction fields would
         # show its own name here.
-        patient_info['Processing predictor'] = 'pepsickle'
+        patient_info['Processing predictor'] = PEPSICKLE_PREDICTOR_NAME
         patient_info['Total number of somatic variants'] = (
             self.patient_info.num_somatic_variants)
         patient_info['Somatic variants with predicted coding effects'] = (
@@ -278,19 +279,20 @@ class TemplateDataCreator(object):
 
     def _processing_prediction_for(self, epitope_prediction):
         """Look up the ProcessingPrediction for this epitope by
-        ``(peptide, source, 'pepsickle')``. Returns ``None`` when no
-        record exists (annotation pass didn't run, or this prediction
-        had no usable source sequence).
+        ``(peptide, source, predictor_name)``. Returns ``None`` when
+        no record exists (annotation pass didn't run, or this
+        prediction had no usable source sequence).
 
-        Hard-coded predictor name is ``'pepsickle'`` for now — when a
-        second per-position cleavage predictor lands, this method
-        becomes the swap point (read predictor name from a config knob
-        + fall back).
+        Predictor name is currently always
+        :data:`vaxrank.processing.PEPSICKLE_PREDICTOR_NAME`; when a
+        second per-position cleavage predictor (NetChop, PAProC, …)
+        lands, this method becomes the swap point — read the
+        predictor name from a config knob and fall back as needed.
         """
         key = (
             epitope_prediction.peptide_sequence or '',
             getattr(epitope_prediction, 'source_sequence', '') or '',
-            'pepsickle',
+            PEPSICKLE_PREDICTOR_NAME,
         )
         return self.processing_predictions_by_key.get(key)
 

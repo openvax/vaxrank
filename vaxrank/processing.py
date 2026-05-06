@@ -78,8 +78,10 @@ logger = logging.getLogger(__name__)
 
 # Lowercase predictor identifier used in the ProcessingPrediction
 # join key. Future per-position cleavage predictors (NetChop,
-# PAProC, …) get their own constant.
-_PEPSICKLE_PREDICTOR_NAME = 'pepsickle'
+# PAProC, …) get their own constant. Public so report writers
+# (``vaxrank.report.TemplateDataCreator._processing_prediction_for``)
+# can build the same key without re-stringifying.
+PEPSICKLE_PREDICTOR_NAME = 'pepsickle'
 
 
 # ----------------------------------------------------------------------------
@@ -309,7 +311,7 @@ def annotate_processing(predictions, predictor=None,
             pp = ProcessingPrediction(
                 peptide_sequence=peptide,
                 source_sequence=source,
-                predictor_name=_PEPSICKLE_PREDICTOR_NAME,
+                predictor_name=PEPSICKLE_PREDICTOR_NAME,
                 predictor_version=getattr(
                     predictor, 'version', None),
                 c_term_cleavage_prob=c_term,

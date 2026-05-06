@@ -13,14 +13,17 @@
 """Pepsickle proteasome-cleavage credibility tagging (issue #249).
 
 Pins:
-- Annotation is purely additive — never mutates ranking.
-- Continuous (not binary) per-position scores attach to each
-  EpitopePrediction.
+- Annotation is purely additive — never mutates ranking, and (post-2.23,
+  see #272 Phase B) never mutates the EpitopePrediction objects either.
+  Per-(peptide, source) records land on
+  :class:`vaxrank.processing_prediction.ProcessingPrediction` and reach
+  report writers via the ``processing_predictions_by_key`` map.
+- Continuous (not binary) per-position cleavage scores.
 - Re-locates peptides in the source sequence when declared offset is
   off by one (off-by-one drift in offsets is common in upstream
   loaders).
-- Composite ``pepsickle_processing_score`` = sqrt(c_term × (1 − max_internal))
-  (geometric mean of the two factors).
+- Composite ``ProcessingPrediction.processing_score`` =
+  sqrt(c_term × (1 − max_internal)) (geometric mean of the two factors).
 - Single pepsickle pass per unique source sequence (not per peptide).
 """
 

@@ -11,7 +11,6 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import ClassVar, Optional
 
 import numpy as np
 from serializable import DataclassSerializable
@@ -75,12 +74,6 @@ class EpitopePrediction(DataclassSerializable):
     # dimension, processing doesn't — so conflating them on one record
     # was making it awkward to add a second per-position cleavage
     # predictor. See issue #272.
-
-    # `length` used to be a constructor arg; since 1.1.0 it is derived from
-    # `peptide_sequence`. Drop it from any old JSON blobs we happen to load.
-    _SERIALIZABLE_KEYWORD_ALIASES: ClassVar[dict[str, Optional[str]]] = {
-        "length": None,
-    }
 
     @property
     def length(self) -> int:
