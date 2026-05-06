@@ -34,11 +34,25 @@ holds them.
 mhctools' ``Prediction.score`` is normalized so higher = better
 *within one predictor*. Cross-predictor ``max(score)`` is
 meaningless — mhcflurry's score scale and netmhcpan's score scale
-are independent transforms. So ``best_for_kind(kind)`` raises
-when there's no unambiguous answer and the caller hasn't passed
+are independent transforms. So ``best(kind)`` raises when multiple
+predictors emitted ``kind`` and the caller hasn't passed
 ``predictor=``. Callers that legitimately want a per-predictor
 loop iterate ``predictors_for_kind(kind)`` and call
-``best_for_kind(kind, predictor=…)`` per predictor.
+``best(kind, predictor=…)`` per predictor.
+
+Versions, however, *do* auto-resolve: when one predictor has
+multiple ``predictor_version`` strings on file (e.g. mhcflurry
+2.1.0 and 2.1.1 both ran), ``best`` defaults to the most recent
+version (PEP 440 ordering). Pass ``version=`` to pin to a specific
+version explicitly.
+
+## Kind aliases
+
+mhcflurry / netmhcpan / pVACseq / LENS use shorthand for the same
+underlying kinds (``BA`` / ``EL`` / etc). ``best`` and friends
+accept those aliases (case-insensitive) so callers don't have to
+remember which canonical string vaxrank stores. The canonical
+``pMHC_*`` strings keep working unchanged.
 
 Issue: openvax/vaxrank#282 (replaces).
 """
@@ -47,6 +61,69 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional
+
+from packaging.version import InvalidVersion, Version
+
+
+# Lowercase alias → canonical mhctools.Prediction.kind. The canonical
+# strings also resolve through this map (since ``str.lower`` is
+# applied first), so callers can pass either form.
+_KIND_ALIASES = {
+    # pMHC_affinity — "BA" in mhcflurry / netmhcpan parlance.
+    'pmhc_affinity': 'pMHC_affinity',
+    'affinity': 'pMHC_affinity',
+    'ba': 'pMHC_affinity',
+    'binding': 'pMHC_affinity',
+    # pMHC_presentation — "EL" (elution likelihood) in mhcflurry-pres.
+    'pmhc_presentation': 'pMHC_presentation',
+    'presentation': 'pMHC_presentation',
+    'el': 'pMHC_presentation',
+    'elution': 'pMHC_presentation',
+    # pMHC_stability.
+    'pmhc_stability': 'pMHC_stability',
+    'stability': 'pMHC_stability',
+    # Single-word kinds — keep canonical and short alias both routed.
+    'immunogenicity': 'immunogenicity',
+    'antigen_processing': 'antigen_processing',
+    'processing': 'antigen_processing',
+    'ap': 'antigen_processing',
+    'proteasome_cleavage': 'proteasome_cleavage',
+    'cleavage': 'proteasome_cleavage',
+    'proteasome': 'proteasome_cleavage',
+    'tap_transport': 'tap_transport',
+    'tap': 'tap_transport',
+    'erap_trimming': 'erap_trimming',
+    'erap': 'erap_trimming',
+}
+
+
+def _resolve_kind(kind: str) -> str:
+    """Map an alias / case-variant onto the canonical
+    ``mhctools.Prediction.kind`` string. Unknown inputs pass through
+    unchanged (so future predictor kinds work without a registry
+    update — they just won't have short aliases until added)."""
+    return _KIND_ALIASES.get(kind.lower(), kind)
+
+
+def _most_recent_version(versions) -> str:
+    """Pick the most recent ``predictor_version`` from a set.
+
+    PEP 440 ordering via ``packaging.version.Version``. Strings that
+    don't parse (empty / non-semver / pre-#261 unset) sort below any
+    valid version — so when both styles coexist, valid wins; when
+    none parse, lexicographic ``max`` is the fallback. Returning a
+    single string lets callers filter ``candidates`` by exact match.
+    """
+    parsed = []
+    fallback = []
+    for v in versions:
+        try:
+            parsed.append((Version(v), v))
+        except (InvalidVersion, TypeError):
+            fallback.append(v)
+    if parsed:
+        return max(parsed, key=lambda x: x[0])[1]
+    return max(fallback)
 
 
 # Reserved comparator names. Open-ended — callers can add new ones —
@@ -117,42 +194,81 @@ class PeptideContext:
 
     def predictors_for_kind(self, kind: str) -> tuple:
         """Predictors that emitted ``kind`` for this peptide.
-        Drives multi-predictor disambiguation in
-        ``best_for_kind``."""
+        Drives multi-predictor disambiguation in ``best``. Accepts
+        kind aliases (``'ba'`` / ``'el'`` / …)."""
+        canonical = _resolve_kind(kind)
         return tuple(sorted({
             p.predictor_name for p in self.predictions
-            if p.kind == kind}))
+            if p.kind == canonical}))
+
+    def versions_for(self, kind: str, predictor: str) -> tuple:
+        """Versions of ``predictor`` that emitted ``kind``, sorted
+        oldest → newest by PEP 440. When multiple coexist, ``best``
+        picks the last entry by default; this accessor exposes the
+        full set for callers that want to walk every version."""
+        canonical = _resolve_kind(kind)
+        versions = {
+            p.predictor_version for p in self.predictions
+            if p.kind == canonical and p.predictor_name == predictor}
+        # Sort newest last so callers can do versions[-1] for "latest".
+        parsed = []
+        fallback = []
+        for v in versions:
+            try:
+                parsed.append((Version(v), v))
+            except (InvalidVersion, TypeError):
+                fallback.append(v)
+        return tuple(sorted(fallback) +
+                     [v for _, v in sorted(parsed, key=lambda x: x[0])])
 
     def alleles_for(self, kind: str, predictor: str) -> tuple:
         """Alleles a given (kind, predictor) covers. Used by
         coverage / report code that walks per-allele evidence
         without forcing a single 'best' allele."""
+        canonical = _resolve_kind(kind)
         return tuple(sorted({
             p.allele for p in self.predictions
-            if p.kind == kind and p.predictor_name == predictor
+            if p.kind == canonical and p.predictor_name == predictor
             and p.allele}))
 
     # ------------------------------------------------------------------
     # Best-of accessors — kind-named, predictor-aware.
     # ------------------------------------------------------------------
 
-    def best_for_kind(self, kind: str, *,
-                       predictor: Optional[str] = None):
-        """Best prediction for ``kind`` across alleles for one
-        predictor. Returns the ``mhctools.Prediction`` (carries
-        allele, score, value, percentile_rank, …) or ``None`` when
-        no record matches.
+    def best(self, kind: str, *,
+             predictor: Optional[str] = None,
+             version: Optional[str] = None):
+        """Best prediction for ``kind`` across alleles. Returns the
+        ``mhctools.Prediction`` (carries allele, score, value,
+        percentile_rank, …) or ``None`` when no record matches.
 
-        Disambiguation:
-        - If only one predictor emitted ``kind`` for this peptide,
-          ``predictor`` may be omitted.
-        - If multiple predictors emitted ``kind``, ``predictor`` is
-          required — cross-predictor ``max(score)`` is meaningless
-          since each predictor's score scale is its own.
+        ``kind`` accepts aliases (case-insensitive): ``'ba'`` /
+        ``'affinity'`` / ``'binding'`` → ``pMHC_affinity``;
+        ``'el'`` / ``'presentation'`` / ``'elution'`` →
+        ``pMHC_presentation``; ``'stability'``;
+        ``'immunogenicity'``; ``'cleavage'`` / ``'proteasome'`` →
+        ``proteasome_cleavage``; ``'processing'`` / ``'ap'`` →
+        ``antigen_processing``; ``'tap'``; ``'erap'``. Canonical
+        ``pMHC_*`` strings also work.
 
-        Raises ``ValueError`` when the call is ambiguous.
+        Predictor disambiguation:
+        - One predictor emitted ``kind`` → ``predictor`` may be
+          omitted.
+        - Multiple predictors emitted ``kind`` → ``predictor`` is
+          required (cross-predictor ``max(score)`` is meaningless;
+          each predictor's score scale is its own). Raises
+          ``ValueError`` otherwise.
+
+        Version disambiguation:
+        - One ``predictor_version`` on file → unambiguous.
+        - Multiple versions on file → defaults to the most recent
+          (PEP 440 ordering). Pass ``version=`` to pin explicitly.
+          Versions auto-resolve (vs. predictor's hard-raise) because
+          the score scale is comparable across versions of the same
+          predictor — just freshness differs.
         """
-        candidates = [p for p in self.predictions if p.kind == kind]
+        canonical = _resolve_kind(kind)
+        candidates = [p for p in self.predictions if p.kind == canonical]
         if not candidates:
             return None
         predictor_set = {p.predictor_name for p in candidates}
@@ -163,11 +279,22 @@ class PeptideContext:
                     "(%s); pass predictor= to disambiguate. "
                     "Each predictor's score scale is its own — "
                     "cross-predictor max() is meaningless."
-                    % (kind, sorted(predictor_set)))
+                    % (canonical, sorted(predictor_set)))
             # Single predictor → unambiguous.
         else:
             candidates = [
                 p for p in candidates if p.predictor_name == predictor]
+            if not candidates:
+                return None
+        version_set = {p.predictor_version for p in candidates}
+        if version is None:
+            if len(version_set) > 1:
+                latest = _most_recent_version(version_set)
+                candidates = [
+                    p for p in candidates if p.predictor_version == latest]
+        else:
+            candidates = [
+                p for p in candidates if p.predictor_version == version]
             if not candidates:
                 return None
         # mhctools normalizes ``score`` so higher = better within a
@@ -176,25 +303,38 @@ class PeptideContext:
         # Best-across-alleles is unambiguously max(score).
         return max(candidates, key=lambda p: p.score)
 
-    # Kind-specific helpers. Each forwards to ``best_for_kind``
-    # with the same disambiguation contract.
-    def best_affinity(self, *, predictor: Optional[str] = None):
-        return self.best_for_kind('pMHC_affinity', predictor=predictor)
+    # Kind-specific helpers. Each forwards to ``best`` with the same
+    # disambiguation contract — predictor required when ambiguous,
+    # version auto-resolves to most recent.
+    def best_affinity(self, *, predictor: Optional[str] = None,
+                      version: Optional[str] = None):
+        return self.best(
+            'pMHC_affinity', predictor=predictor, version=version)
 
-    def best_presentation(self, *, predictor: Optional[str] = None):
-        return self.best_for_kind('pMHC_presentation', predictor=predictor)
+    def best_presentation(self, *, predictor: Optional[str] = None,
+                          version: Optional[str] = None):
+        return self.best(
+            'pMHC_presentation', predictor=predictor, version=version)
 
-    def best_stability(self, *, predictor: Optional[str] = None):
-        return self.best_for_kind('pMHC_stability', predictor=predictor)
+    def best_stability(self, *, predictor: Optional[str] = None,
+                       version: Optional[str] = None):
+        return self.best(
+            'pMHC_stability', predictor=predictor, version=version)
 
-    def best_immunogenicity(self, *, predictor: Optional[str] = None):
-        return self.best_for_kind('immunogenicity', predictor=predictor)
+    def best_immunogenicity(self, *, predictor: Optional[str] = None,
+                            version: Optional[str] = None):
+        return self.best(
+            'immunogenicity', predictor=predictor, version=version)
 
-    def best_cleavage(self, *, predictor: Optional[str] = None):
-        return self.best_for_kind('proteasome_cleavage', predictor=predictor)
+    def best_cleavage(self, *, predictor: Optional[str] = None,
+                      version: Optional[str] = None):
+        return self.best(
+            'proteasome_cleavage', predictor=predictor, version=version)
 
-    def best_antigen_processing(self, *, predictor: Optional[str] = None):
-        return self.best_for_kind('antigen_processing', predictor=predictor)
+    def best_antigen_processing(self, *, predictor: Optional[str] = None,
+                                version: Optional[str] = None):
+        return self.best(
+            'antigen_processing', predictor=predictor, version=version)
 
 
 @dataclass(frozen=True)
