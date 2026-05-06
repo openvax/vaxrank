@@ -50,22 +50,45 @@ def _pred(kind, *, predictor='mhcflurry', version='', allele='HLA-A*02:01',
 
 def test_peptide_context_predictions_by_kind_and_predictor_groups_correctly():
     """The flat storage tuple is the source of truth; the nested
-    view is built on demand."""
+    view is built on demand. Four levels: kind → predictor →
+    version → allele. Version axis prevents collision when the same
+    (kind, predictor, allele) was scored at multiple versions."""
     ctx = PeptideContext(
         peptide_sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', predictor='mhcflurry',
-                  allele='HLA-A*02:01'),
+                  version='2.1.1', allele='HLA-A*02:01'),
             _pred('pMHC_affinity', predictor='netmhcpan',
-                  allele='HLA-A*02:01'),
+                  version='4.1', allele='HLA-A*02:01'),
             _pred('pMHC_presentation', predictor='mhcflurry',
-                  allele='HLA-A*02:01'),
+                  version='2.1.1', allele='HLA-A*02:01'),
         ))
     nested = ctx.predictions_by_kind_and_predictor()
     assert set(nested.keys()) == {'pMHC_affinity', 'pMHC_presentation'}
     assert set(nested['pMHC_affinity'].keys()) == {'mhcflurry', 'netmhcpan'}
-    assert 'HLA-A*02:01' in nested['pMHC_affinity']['mhcflurry']
-    assert 'HLA-A*02:01' in nested['pMHC_presentation']['mhcflurry']
+    assert set(nested['pMHC_affinity']['mhcflurry'].keys()) == {'2.1.1'}
+    assert 'HLA-A*02:01' in nested['pMHC_affinity']['mhcflurry']['2.1.1']
+    assert 'HLA-A*02:01' in (
+        nested['pMHC_presentation']['mhcflurry']['2.1.1'])
+
+
+def test_predictions_by_kind_and_predictor_separates_versions():
+    """Same (kind, predictor, allele) at two versions stays
+    addressable — without the version axis this would be one record
+    silently overwriting the other."""
+    ctx = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_affinity', predictor='mhcflurry',
+                  version='2.1.0', allele='HLA-A*02:01', score=0.4),
+            _pred('pMHC_affinity', predictor='mhcflurry',
+                  version='2.1.1', allele='HLA-A*02:01', score=0.7),
+        ))
+    nested = ctx.predictions_by_kind_and_predictor()
+    versions = nested['pMHC_affinity']['mhcflurry']
+    assert set(versions.keys()) == {'2.1.0', '2.1.1'}
+    assert versions['2.1.0']['HLA-A*02:01'].score == 0.4
+    assert versions['2.1.1']['HLA-A*02:01'].score == 0.7
 
 
 def test_predictors_for_kind_lists_emitting_predictors():
@@ -466,6 +489,148 @@ def test_kind_named_helpers_forward_version_arg():
     assert ctx.best_affinity().predictor_version == '2.1.1'
     # Pinned version overrides.
     assert ctx.best_affinity(version='2.1.0').predictor_version == '2.1.0'
+
+
+# ---- Parametric scoring (score_key) ------------------------------------
+
+
+def test_best_default_score_key_uses_score_field():
+    """Default ``score_key`` is ``Prediction.score`` (mhctools'
+    normalized higher-is-better axis). Keep this pinned so a
+    refactor of the default doesn't silently flip ranking."""
+    from vaxrank.peptide_context import default_score_key
+    p = _pred('pMHC_affinity', score=0.42, value=100.0)
+    assert default_score_key(p) == 0.42
+
+
+def test_best_with_custom_score_key_picks_by_that_axis():
+    """Override ``score_key`` to rank by a different axis — e.g.
+    lowest percentile_rank. Higher return value still wins, so
+    invert the sign for lower-is-better axes."""
+    ctx = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_affinity', allele='HLA-A*02:01',
+                  score=0.9, percentile_rank=2.5),
+            _pred('pMHC_affinity', allele='HLA-B*07:02',
+                  score=0.4, percentile_rank=0.3),
+        ))
+    # Default score-based: A*02 wins (0.9 > 0.4).
+    assert ctx.best('pMHC_affinity').allele == 'HLA-A*02:01'
+    # Custom: rank by lowest percentile_rank → B*07 wins (0.3 < 2.5).
+    by_rank = ctx.best(
+        'pMHC_affinity', score_key=lambda p: -p.percentile_rank)
+    assert by_rank.allele == 'HLA-B*07:02'
+
+
+def test_kind_named_helpers_forward_score_key():
+    """``best_affinity(score_key=…)`` etc. forward through to
+    ``best`` — the convenience helpers stay in lockstep with the
+    primitive's contract."""
+    ctx = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_affinity', allele='HLA-A*02:01',
+                  score=0.9, value=10.0),
+            _pred('pMHC_affinity', allele='HLA-B*07:02',
+                  score=0.4, value=2.0),
+        ))
+    # Custom: rank by lowest IC50 (lower nM = better binder).
+    result = ctx.best_affinity(score_key=lambda p: -p.value)
+    assert result.allele == 'HLA-B*07:02'
+    assert result.value == 2.0
+
+
+def test_best_score_key_respects_predictor_disambiguation():
+    """``score_key`` doesn't escape the multi-predictor raise —
+    cross-predictor ranking is meaningless under any axis since
+    each predictor's score scales are independent. Keep the raise
+    in place even when a custom key is provided."""
+    ctx = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_affinity', predictor='mhcflurry',
+                  percentile_rank=2.5),
+            _pred('pMHC_affinity', predictor='netmhcpan',
+                  percentile_rank=0.3),
+        ))
+    with pytest.raises(ValueError, match='multiple predictors'):
+        ctx.best(
+            'pMHC_affinity', score_key=lambda p: -p.percentile_rank)
+
+
+# ---- Serialization round-trip ------------------------------------------
+
+
+def test_peptide_context_roundtrips_through_asdict():
+    """Frozen dataclass + ``mhctools.Prediction.to_dict``/``from_dict``
+    let the whole structure round-trip through plain dicts. Pin the
+    contract so downstream code can persist these to JSON / msgspec
+    without surprise."""
+    from dataclasses import asdict
+    ctx = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        n_flank='AAAAA',
+        c_flank='BBBBB',
+        source_sequence='AAAAASIINFEKLBBBBB',
+        source_name='OVA',
+        offset=5,
+        predictions=(
+            _pred('pMHC_affinity', allele='HLA-A*02:01',
+                  score=0.7, value=120.0, percentile_rank=0.5),
+            _pred('pMHC_presentation', allele='HLA-A*02:01',
+                  score=0.85, percentile_rank=0.3),
+        ))
+    d = asdict(ctx)
+    # Predictions came back as a tuple of dicts (asdict recurses).
+    assert d['peptide_sequence'] == 'SIINFEKL'
+    assert d['n_flank'] == 'AAAAA'
+    assert d['c_flank'] == 'BBBBB'
+    assert d['offset'] == 5
+    assert len(d['predictions']) == 2
+    # Reconstruct via Prediction.from_dict.
+    rebuilt = PeptideContext(
+        peptide_sequence=d['peptide_sequence'],
+        n_flank=d['n_flank'],
+        c_flank=d['c_flank'],
+        source_sequence=d['source_sequence'],
+        source_name=d['source_name'],
+        offset=d['offset'],
+        predictions=tuple(Prediction.from_dict(p) for p in d['predictions']))
+    assert rebuilt == ctx
+
+
+# ---- Flanking residues -------------------------------------------------
+
+
+def test_peptide_context_carries_flanks():
+    """Flanks land at the PeptideContext level (not on each
+    Prediction) because they describe the peptide's position in its
+    source, not the prediction. Pin the storage so downstream code
+    can read them directly."""
+    ctx = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        n_flank='AAAAA',
+        c_flank='CCCCC',
+        source_sequence='AAAAASIINFEKLCCCCC',
+        source_name='OVA',
+        offset=5)
+    assert ctx.n_flank == 'AAAAA'
+    assert ctx.c_flank == 'CCCCC'
+    assert ctx.source_sequence == 'AAAAASIINFEKLCCCCC'
+    assert ctx.source_name == 'OVA'
+    assert ctx.offset == 5
+
+
+def test_peptide_context_flanks_default_to_empty():
+    """Comparator contexts (``nearest_self``, ``nearest_oncovirus``)
+    may not have flanks available — empty defaults keep the type
+    usable without forcing every producer to know flanks."""
+    ctx = PeptideContext(peptide_sequence='SIINFEKL')
+    assert ctx.n_flank == ''
+    assert ctx.c_flank == ''
+    assert ctx.source_sequence == ''
+    assert ctx.source_name == ''
 
 
 # ---- CandidateEpitope ---------------------------------------------------

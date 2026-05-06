@@ -19,3 +19,9 @@ platformdirs
 msgspec>=0.18.6,<1.0.0
 dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
+# Used by vaxrank.peptide_context for PEP 440 ordering of
+# Prediction.predictor_version when ``best`` auto-resolves
+# multi-version data to the most recent. Effectively always
+# present (transitive via setuptools / pip) but declared here so
+# minimal installs resolve cleanly.
+packaging>=21.0
