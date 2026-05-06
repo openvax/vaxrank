@@ -1055,13 +1055,14 @@ def main(args_list=None):
         args_for_report = data['args']
         source = 'pipeline'
 
-    # Issue #249: annotate epitope predictions with pepsickle proteasome-
-    # cleavage credibility. Mutates EpitopePredictions in place; doesn't
-    # affect ranking — purely additional information surfaced in the
-    # per-epitope report tables. On by default; opt-out via
-    # --no-processing-aware-annotation.
+    # Issue #249 / #272: build per-(peptide, source) ProcessingPrediction
+    # records via pepsickle. Doesn't affect ranking — purely additional
+    # information surfaced in the per-epitope report tables, joined in
+    # at render time by ``(peptide, source, predictor_name)``. On by
+    # default; opt-out via --no-processing-aware-annotation.
+    processing_predictions_by_key = {}
     if getattr(args, 'processing_aware_annotation', True):
-        _annotate_predictions_with_processing(
+        _, processing_predictions_by_key = _annotate_predictions_with_processing(
             ranked_variants_with_vaccine_peptides, predictions,
             human_only=getattr(args, 'pepsickle_human_only', False),
             threshold=getattr(args, 'pepsickle_threshold', 0.5))
@@ -1082,6 +1083,31 @@ def main(args_list=None):
     if not (args.output_ascii_report or args.output_html_report or args.output_pdf_report):
         return
 
+    # Issue #270: mRNA ranking-decisions section in the template
+    # report. Computed when 'mrna' is in the active --vaccine-type so
+    # an mRNA-only or peptide+mrna run shows which top-k antigens
+    # land in the mRNA construct(s) vs which fall past the cap.
+    mrna_ranking_decisions = None
+    if 'mrna' in _resolve_vaccine_types(args) \
+            and ranked_variants_with_vaccine_peptides:
+        from ..mrna import (
+            RNAConstructConfig, summarize_mrna_ranking_decisions,
+        )
+        # Reuse the same kwargs the writer uses so the cap matches
+        # what the user would actually get if they ran with
+        # --output-dir.
+        yaml_kwargs = _construct_config_for_modality(args, 'mrna')
+
+        def _cfg(cli_attr, yaml_key):
+            return _coalesce_from_config(args, cli_attr, yaml_kwargs, yaml_key)
+        mrna_options = RNAConstructConfig(
+            antigens_per_construct=_cfg(
+                'mrna_antigens_per_construct', 'antigens_per_construct'),
+            max_constructs=_cfg('mrna_max_constructs', 'max_constructs'),
+        )
+        mrna_ranking_decisions = summarize_mrna_ranking_decisions(
+            ranked_variants_with_vaccine_peptides, mrna_options)
+
     template_data_creator = TemplateDataCreator(
         ranked_variants_with_vaccine_peptides=ranked_variants_with_vaccine_peptides,
         patient_info=patient_info,
@@ -1090,7 +1116,9 @@ def main(args_list=None):
         args_for_report=args_for_report,
         input_json_file=getattr(args, 'input_json_file', None),
         cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
-        dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {})
+        dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
+        processing_predictions_by_key=processing_predictions_by_key,
+        mrna_ranking_decisions=mrna_ranking_decisions)
 
     template_data = template_data_creator.compute_template_data()
 

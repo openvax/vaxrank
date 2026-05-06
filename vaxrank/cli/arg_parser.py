@@ -311,15 +311,17 @@ def add_output_args(arg_parser):
         dest="processing_aware_annotation",
         action="store_true",
         default=True,
-        help="Annotate each predicted MHC ligand with pepsickle's "
-             "proteasome-cleavage credibility scores "
-             "(pepsickle_c_term_cleavage_prob, "
-             "pepsickle_max_internal_cut_prob, "
-             "pepsickle_processing_score). On by default. "
-             "Pepsickle runs in an isolated subprocess (issue #266) so "
-             "torch's libomp doesn't clash with the parent's pandas / "
-             "numpy / pyarrow OpenMP runtime. Doesn't change vaccine "
-             "ranking — adds info for review.")
+        help="Build pepsickle proteasome-cleavage credibility scores "
+             "for each predicted MHC ligand (c_term_cleavage_prob, "
+             "max_internal_cut_prob, processing_score). On by default. "
+             "Scores live on a separate ProcessingPrediction record "
+             "joined into the per-epitope report tables at render "
+             "time by (peptide, source, predictor); see "
+             "vaxrank/processing_prediction.py. Pepsickle runs in an "
+             "isolated subprocess (issue #266) so torch's libomp "
+             "doesn't clash with the parent's pandas / numpy / "
+             "pyarrow OpenMP runtime. Doesn't change vaccine ranking — "
+             "adds info for review.")
     output_args_group.add_argument(
         "--no-processing-aware-annotation",
         dest="processing_aware_annotation",

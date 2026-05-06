@@ -82,28 +82,31 @@ def test_component_probs_out_of_range_returns_none_tuple():
 # ---- Annotation (integration with EpitopePrediction) ---------------------
 
 def test_annotate_processing_attaches_continuous_scores():
-    """Each EpitopePrediction gets c_term / max_internal / processing
-    set as floats. None of them should be left as the default (None)
-    for a successfully-annotated prediction."""
+    """Each (peptide, source) pair lands in the returned
+    ProcessingPrediction map with c_term / max_internal /
+    processing as floats. Post-2.23 (#272 Phase B) the
+    EpitopePrediction is *not* mutated — readers consume the map."""
     source = "AAAAKLMNPVAAAA"  # 14 aa
     # Peptide KLMNPV at offset 4, length 6
     probs = [0.0, 0.0, 0.0, 0.05,   # source positions 0-3
              0.10, 0.20, 0.05, 0.50, 0.30, 0.85,   # peptide positions 4-9
              0.0, 0.0, 0.0, 0.0]
     pred = _ep("KLMNPV", source, offset=4)
-    n, _ = annotate_processing(
+    n, by_key = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
     assert n == 1
+    pp = by_key[(pred.peptide_sequence, source, 'pepsickle')]
     # C-term = probs at index 9 = 0.85 (clean release)
-    assert abs(pred.pepsickle_c_term_cleavage_prob - 0.85) < 1e-9
+    assert abs(pp.c_term_cleavage_prob - 0.85) < 1e-9
     # max internal = max of probs[4..8] = max(0.10, 0.20, 0.05, 0.50, 0.30) = 0.50
-    assert abs(pred.pepsickle_max_internal_cut_prob - 0.50) < 1e-9
+    assert abs(pp.max_internal_cut_prob - 0.50) < 1e-9
     # processing = sqrt(0.85 * (1 - 0.50)) = sqrt(0.425) ≈ 0.6519
     # (geometric mean of c_term and (1 - max_internal); see
     # ``vaxrank.processing`` for the rationale).
     import math
-    assert abs(pred.pepsickle_processing_score
-               - math.sqrt(0.85 * 0.50)) < 1e-9
+    assert abs(pp.processing_score - math.sqrt(0.85 * 0.50)) < 1e-9
+    # The EpitopePrediction is NOT mutated.
+    assert not hasattr(pred, 'pepsickle_c_term_cleavage_prob')
 
 
 def test_annotate_processing_returns_processing_prediction_map():
@@ -131,8 +134,9 @@ def test_annotate_processing_returns_processing_prediction_map():
     assert pp.predictor_name == 'pepsickle'
     assert abs(pp.c_term_cleavage_prob - 0.85) < 1e-9
     assert abs(pp.max_internal_cut_prob - 0.50) < 1e-9
-    # Same processing_score as the in-place mutation.
-    assert pp.processing_score == pred.pepsickle_processing_score
+    # Composite is the geometric mean of c_term and (1 - max_internal).
+    import math
+    assert abs(pp.processing_score - math.sqrt(0.85 * 0.50)) < 1e-9
 
 
 def test_annotate_processing_one_pass_per_unique_source():
@@ -159,12 +163,15 @@ def test_annotate_processing_one_pass_per_unique_source():
 
 def test_annotate_processing_skips_predictions_without_source():
     """Predictions with empty source_sequence are passed through
-    untouched (annotation requires a source to slice probs against)."""
+    untouched (annotation requires a source to slice probs against)
+    and don't land in the ProcessingPrediction map."""
     pred = _ep("KLMNPV", source="", offset=0)
-    n, _ = annotate_processing(
+    n, by_key = annotate_processing(
         [pred], predictor=StubPepsickle({}))
     assert n == 0
-    assert pred.pepsickle_c_term_cleavage_prob is None
+    assert by_key == {}
+    # No mutation on the EpitopePrediction (post-2.23).
+    assert not hasattr(pred, 'pepsickle_c_term_cleavage_prob')
 
 
 def test_annotate_processing_relocates_peptide_when_offset_off():
@@ -178,11 +185,12 @@ def test_annotate_processing_relocates_peptide_when_offset_off():
     probs = [0.0, 0.0, 0.0,   # 0-2
              0.10, 0.20, 0.05, 0.50, 0.30, 0.95,   # peptide at 3-8
              0.0, 0.0, 0.0]
-    n, _ = annotate_processing(
+    n, by_key = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
     assert n == 1
+    pp = by_key[(pred.peptide_sequence, source, 'pepsickle')]
     # C-term should pick up probs[8] = 0.95 (re-located, not probs[1+5]=0.05)
-    assert abs(pred.pepsickle_c_term_cleavage_prob - 0.95) < 1e-9
+    assert abs(pp.c_term_cleavage_prob - 0.95) < 1e-9
 
 
 def test_annotate_processing_does_not_touch_ranking_score():
@@ -193,11 +201,13 @@ def test_annotate_processing_does_not_touch_ranking_score():
     pre_ic50 = pred.ic50
     pre_rank = pred.percentile_rank
     pre_logistic = pred.logistic_epitope_score()
-    annotate_processing(
+    n, by_key = annotate_processing(
         [pred],
         predictor=StubPepsickle({source: [0.1] * len(source)}))
-    # Annotation fields are now set
-    assert pred.pepsickle_c_term_cleavage_prob is not None
+    # ProcessingPrediction landed in the map (post-2.23, the
+    # canonical record).
+    assert n == 1
+    assert (pred.peptide_sequence, source, 'pepsickle') in by_key
     # Ranking-driving fields untouched
     assert pred.ic50 == pre_ic50
     assert pred.percentile_rank == pre_rank
@@ -217,12 +227,12 @@ def test_annotate_processing_predictor_failure_degrades_gracefully():
             return [0.5] * len(sequence)
     pred_ok = _ep("AAAAA", "AAAAAAAAAA", offset=2)
     pred_fail = _ep("FFFFF", "FFAILFFFFFF", offset=0)
-    n, _ = annotate_processing(
+    n, by_key = annotate_processing(
         [pred_ok, pred_fail], predictor=FlakyPredictor())
     # Only the OK one annotated; the failing source skipped, no crash.
     assert n == 1
-    assert pred_ok.pepsickle_c_term_cleavage_prob is not None
-    assert pred_fail.pepsickle_c_term_cleavage_prob is None
+    assert (pred_ok.peptide_sequence, "AAAAAAAAAA", 'pepsickle') in by_key
+    assert (pred_fail.peptide_sequence, "FFAILFFFFFF", 'pepsickle') not in by_key
 
 
 def test_annotate_processing_empty_input_returns_zero():
@@ -261,13 +271,13 @@ def test_load_default_predictor_returns_none_when_mhctools_missing(
 # ---- Report integration --------------------------------------------------
 
 def test_epitope_data_surfaces_processing_columns_when_annotated():
-    """report.TemplateDataCreator._epitope_data adds three extra
+    """``TemplateDataCreator._epitope_data`` adds three extra
     columns (Processing: C-term, Processing: max internal,
-    Processing: combined) when ``include_processing=True``.
-    Default ``include_processing=False`` keeps the original 6-column
-    shape so unannotated reports don't change. Predictor name is in
-    the column header so a future per-position predictor (NetChop, …)
-    can land alongside without ambiguity."""
+    Processing: combined) when ``include_processing=True`` — the
+    values come from the ProcessingPrediction map by joining on
+    ``(peptide, source, predictor_name)``. Default
+    ``include_processing=False`` keeps the original 6-column shape
+    so unannotated reports don't change."""
     from collections import OrderedDict
 
     source = "AAAAKLMNPVAAAA"
@@ -275,20 +285,26 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
 
     from vaxrank.report import TemplateDataCreator
     creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.processing_predictions_by_key = {}
     # Default: 6-column legacy shape.
     pre = creator._epitope_data(pred)
     assert isinstance(pre, OrderedDict)
     assert 'Processing: C-term' not in pre
     assert 'Processing: combined' not in pre
 
-    # After annotation, ``include_processing=True`` surfaces the columns.
-    annotate_processing(
+    # After annotation, ``include_processing=True`` surfaces the
+    # columns — read from the ProcessingPrediction map (#272 Phase B).
+    n, by_key = annotate_processing(
         [pred],
         predictor=StubPepsickle({source: [0.1] * 9 + [0.85] + [0.0] * 4}))
+    creator.processing_predictions_by_key = by_key
     post = creator._epitope_data(pred, include_processing=True)
     assert 'Processing: C-term' in post
     assert 'Processing: max internal' in post
     assert 'Processing: combined' in post
+    # And the values are real (not '—' placeholders) since we have
+    # a ProcessingPrediction for this peptide.
+    assert post['Processing: C-term'] != '—'
 
 
 # ---- entry_point integration --------------------------------------------
@@ -391,13 +407,14 @@ def test_epitope_data_header_consistent_when_some_predictions_unannotated():
     source = "AAAAKLMNPVAAAA"
     annotated = _ep("KLMNPV", source, offset=4)
     unannotated = _ep("AAAAA", source, offset=0)
-    annotate_processing(
+    n, by_key = annotate_processing(
         [annotated],
         predictor=StubPepsickle(
             {source: [0.1] * 9 + [0.85] + [0.0] * 4}))
-    # Verify mixed state: only one of the two has the field set
-    assert annotated.pepsickle_c_term_cleavage_prob is not None
-    assert unannotated.pepsickle_c_term_cleavage_prob is None
+    # Verify mixed state: only one of the two has a record in the map.
+    assert (annotated.peptide_sequence, source, 'pepsickle') in by_key
+    assert (unannotated.peptide_sequence, source, 'pepsickle') not in by_key
+    creator.processing_predictions_by_key = by_key
 
     # When the caller turns include_processing on, BOTH rows have
     # the same key set — table renders cleanly.
@@ -427,15 +444,16 @@ def test_re_location_picks_closest_to_declared_offset():
     probs = [0.0, 0.0, 0.0, 0.0, 0.0,
              0.0, 0.0, 0.0,
              0.0, 0.0, 0.0, 0.0, 0.95]  # cleavage at last position only
-    annotate_processing(
+    n, by_key = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
+    pp = by_key[(pred.peptide_sequence, source, 'pepsickle')]
     # If re-location snapped to position 0 (first occurrence), c_term
     # would be probs[4] = 0.0; if it correctly snapped to position 8,
     # c_term = probs[12] = 0.95.
-    assert pred.pepsickle_c_term_cleavage_prob == 0.95, (
+    assert pp.c_term_cleavage_prob == 0.95, (
         "Re-location should pick the closest occurrence to declared "
         "offset (8 → 12), not the first occurrence (0 → 4); got "
-        "c_term=%s" % pred.pepsickle_c_term_cleavage_prob)
+        "c_term=%s" % pp.c_term_cleavage_prob)
 
 
 def test_re_location_warns_on_large_offset_drift(caplog):

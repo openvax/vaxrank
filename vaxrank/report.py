@@ -48,13 +48,29 @@ class TemplateDataCreator(object):
             args_for_report,
             input_json_file,
             cosmic_vcf_filename=None,
-            dna_vaf_by_variant=None):
+            dna_vaf_by_variant=None,
+            processing_predictions_by_key=None,
+            mrna_ranking_decisions=None):
         """
         Construct a TemplateDataCreator object, from the output of the vaxrank pipeline.
+
+        ``processing_predictions_by_key`` is the map returned by
+        :func:`vaxrank.processing.annotate_processing` —
+        ``(peptide, source, predictor_name) -> ProcessingPrediction``.
+        Report writers join this in at render time. ``None`` means
+        the processing-aware annotation pass didn't run; the
+        per-epitope tables then omit the processing columns.
         """
         self.ranked_variants_with_vaccine_peptides = ranked_variants_with_vaccine_peptides
         self.patient_info = patient_info
         self.dna_vaf_by_variant = dna_vaf_by_variant or {}
+        self.processing_predictions_by_key = (
+            processing_predictions_by_key or {})
+        # Issue #270: mRNA ranking-decisions section. Set when mRNA
+        # is in the active ``--vaccine-type``. ``None`` skips the
+        # section in the rendered report. See
+        # :func:`vaxrank.mrna.summarize_mrna_ranking_decisions`.
+        self.mrna_ranking_decisions = mrna_ranking_decisions
 
         # ``vaccine_type`` is rendered in the patient-info block so
         # the reader can tell at a glance what's being designed.
@@ -260,22 +276,47 @@ class TemplateDataCreator(object):
         ])
         return manufacturability_data
 
+    def _processing_prediction_for(self, epitope_prediction):
+        """Look up the ProcessingPrediction for this epitope by
+        ``(peptide, source, 'pepsickle')``. Returns ``None`` when no
+        record exists (annotation pass didn't run, or this prediction
+        had no usable source sequence).
+
+        Hard-coded predictor name is ``'pepsickle'`` for now — when a
+        second per-position cleavage predictor lands, this method
+        becomes the swap point (read predictor name from a config knob
+        + fall back).
+        """
+        key = (
+            epitope_prediction.peptide_sequence or '',
+            getattr(epitope_prediction, 'source_sequence', '') or '',
+            'pepsickle',
+        )
+        return self.processing_predictions_by_key.get(key)
+
     def _epitope_data(self, epitope_prediction, include_processing=False):
         """Returns an OrderedDict with epitope data from the given prediction.
 
         ``include_processing``: when True, always emit the three
-        pepsickle credibility columns (``C-term cut``, ``Max internal
-        cut``, ``Processing score``), using ``'—'`` as the placeholder
+        proteasomal-cleavage credibility columns
+        (``Processing: C-term`` / ``Processing: max internal`` /
+        ``Processing: combined``), using ``'—'`` as the placeholder
         for predictions that weren't annotated. The caller decides
         per-list (per-VaccinePeptide) whether *any* prediction in
-        the list is annotated; if so, every row gets the columns so
-        the rendered table has consistent headers and column widths.
+        the list has a ProcessingPrediction; if so, every row gets
+        the columns so the rendered table has consistent headers
+        and column widths.
 
         When False (default), the legacy 6-column dict is returned
         unchanged — reports that don't run pepsickle keep their
         original shape.
 
-        Issue #249.
+        Processing scores come from
+        ``self.processing_predictions_by_key`` (built by
+        :func:`vaxrank.processing.annotate_processing`), looked up
+        by ``(peptide, source, predictor_name)``. Pre-2.23 these
+        lived as ``pepsickle_*`` attributes on the EpitopePrediction
+        itself; the join is the new contract (#272).
         """
         # if the WT peptide is too short, it's possible that we're missing a prediction for it
         if epitope_prediction.wt_ic50 is not None:
@@ -311,12 +352,13 @@ class TemplateDataCreator(object):
             # The active predictor is named in the patient-info
             # header (``Processing predictor: pepsickle``) so the
             # reader can trace which model produced the values.
-            c_term = getattr(
-                epitope_prediction, 'pepsickle_c_term_cleavage_prob', None)
-            max_int = getattr(
-                epitope_prediction, 'pepsickle_max_internal_cut_prob', None)
-            proc = getattr(
-                epitope_prediction, 'pepsickle_processing_score', None)
+            pp = self._processing_prediction_for(epitope_prediction)
+            if pp is None:
+                c_term = max_int = proc = None
+            else:
+                c_term = pp.c_term_cleavage_prob
+                max_int = pp.max_internal_cut_prob
+                proc = pp.processing_score
             epitope_data['Processing: C-term'] = (
                 '%.2f' % c_term if c_term is not None else '—')
             epitope_data['Processing: max internal'] = (
@@ -407,17 +449,16 @@ class TemplateDataCreator(object):
                 peptide_data = self._peptide_data(vaccine_peptide, transcript_name)
                 manufacturability_data = self._manufacturability_data(vaccine_peptide)
 
-                # Issue #249: pepsickle credibility columns are added
-                # to every row in this VP's per-epitope table iff *any*
-                # mutant prediction in the list was annotated. This
-                # keeps the rendered HTML/PDF/ASCII table headers
-                # consistent with the rows even when some predictions
-                # failed annotation (per-source pepsickle errors are
-                # graceful, so mixed annotated/unannotated lists are
-                # possible).
+                # Issue #249 / #272: processing-credibility columns
+                # are added to every row in this VP's per-epitope
+                # table iff *any* mutant prediction in the list has a
+                # ProcessingPrediction in the map. Keeps the rendered
+                # HTML/PDF/ASCII table headers consistent with the
+                # rows even when some predictions failed annotation
+                # (per-source pepsickle errors are graceful, so
+                # mixed annotated/unannotated lists are possible).
                 any_processing = any(
-                    getattr(p, 'pepsickle_c_term_cleavage_prob', None)
-                    is not None
+                    self._processing_prediction_for(p) is not None
                     for p in vaccine_peptide.mutant_epitope_predictions)
 
                 epitopes = []
@@ -482,6 +523,11 @@ class TemplateDataCreator(object):
             'patient_info': patient_info,
             'variants': variants,
             'package_versions': package_versions,
+            # Issue #270: mRNA ranking decisions. ``None`` when not
+            # applicable (peptide-only run, or no ranked antigens).
+            # The template renders the section only when the value
+            # is truthy.
+            'mrna_ranking': self.mrna_ranking_decisions,
         })
         return self.template_data
 
