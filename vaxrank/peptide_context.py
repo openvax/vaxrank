@@ -19,61 +19,71 @@ Two layers:
   features (#254 / #257 / #258) populate comparators with their
   respective contexts; today only ``'wt'`` is canonical.
 
-## Why this shape
+## Storage shape
 
-Replaces the legacy flat ``EpitopePrediction`` (single-axis
-affinity-only record). Predictions live in ``mhctools.Prediction``
-form so multi-axis data (pMHC_affinity / pMHC_presentation /
-pMHC_stability / immunogenicity / proteasome_cleavage /
-antigen_processing) flows through unchanged. Multi-predictor
-support (post-#261) is native to mhctools' record — vaxrank just
-holds them.
+``predictions`` is a *natively nested* dict:
+``{kind: {predictor_name: {predictor_version: tuple[Prediction, ...]}}}``.
 
-## Design choice: cross-predictor disambiguation is explicit
+The leaf tuple holds whatever ``mhctools.Prediction`` records exist
+for that ``(kind, predictor, version)`` triple. Allele is a *record
+property*, not a structural key — that way:
+
+- ``proteasome_cleavage`` / ``antigen_processing`` (no allele) live
+  cleanly as one-element leaves.
+- ``pMHC_affinity`` / ``pMHC_stability`` (one record per allele)
+  live as N-element leaves.
+- ``pMHC_presentation`` lives as N-element leaves under mhctools'
+  current per-allele emission (mhcflurry-pres deconvolutes across
+  alleles internally; mhctools calls it per-allele to capture each
+  allele's score — see ``mhctools/mhcflurry.py`` line 246).
+
+The constructor accepts either nested form *or* a flat
+``Sequence[Prediction]`` for producer ergonomics — flat input is
+auto-grouped on construction. ``predictions_flat()`` flattens back
+out for serialization or iteration.
+
+## Disambiguation contract
 
 mhctools' ``Prediction.score`` is normalized so higher = better
 *within one predictor*. Cross-predictor ``max(score)`` is
 meaningless — mhcflurry's score scale and netmhcpan's score scale
-are independent transforms. So ``best(kind)`` raises when multiple
-predictors emitted ``kind`` and the caller hasn't passed
-``predictor=``. Callers that legitimately want a per-predictor
-loop iterate ``predictors_for_kind(kind)`` and call
-``best(kind, predictor=…)`` per predictor.
+are independent transforms. So ``best(kind)`` and
+``predictions_for(kind)`` raise when multiple predictors emitted
+``kind`` and the caller hasn't passed ``predictor=``.
 
 Versions, however, *do* auto-resolve: when one predictor has
 multiple ``predictor_version`` strings on file (e.g. mhcflurry
-2.1.0 and 2.1.1 both ran), ``best`` defaults to the most recent
-version (PEP 440 ordering). Pass ``version=`` to pin to a specific
-version explicitly.
-
-## Kind aliases
-
-mhcflurry / netmhcpan / pVACseq / LENS use shorthand for the same
-underlying kinds (``BA`` / ``EL`` / etc). ``best`` and friends
-accept those aliases (case-insensitive) so callers don't have to
-remember which canonical string vaxrank stores. The canonical
-``pMHC_*`` strings keep working unchanged.
+2.1.0 and 2.1.1 both ran), the leaf accessor defaults to the most
+recent version (PEP 440 ordering). Pass ``version=`` to pin.
 
 ## Parametric scoring
 
-``best`` accepts ``score_key`` — a ``Prediction -> float`` callable
-that names the ranking axis (higher = better). Default is
-:func:`default_score_key` (uses ``Prediction.score``, mhctools'
-normalized higher-is-better axis). Pass a custom key for a
-different axis (``lambda p: -p.percentile_rank`` for "lowest %-rank
-wins") so the score-normalization assumption isn't load-bearing in
-silent ways. Higher-level pipelines drive ranking via the topiary
-DSL on row-frames (``EpitopeConfig.score_expr``); ``best`` stays
-the per-record primitive.
+``best`` uses ``Prediction.score`` (mhctools' normalized
+higher-is-better axis). For a different ranking axis, use
+``predictions_for(...)`` to get the leaf tuple and rank yourself —
+the records expose ``value`` (e.g. IC50) and ``percentile_rank``
+alongside ``score``.
+
+Higher-level *peptide* ranking across the report is driven by the
+topiary DSL (``EpitopeConfig.score_expr`` / row-frame
+``apply_filter``); ``best`` is the per-record primitive and stays
+deliberately simple.
+
+## Kind aliases
+
+Defers to ``topiary.ranking._KIND_ALIASES`` for canonical
+resolution (``ba`` / ``el`` / ``aff`` / ``ic50`` / ``presentation``
+/ etc. → canonical ``pMHC_*``). vaxrank does not maintain its own
+alias table.
 
 Issue: openvax/vaxrank#282 (replaces).
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from types import MappingProxyType
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Optional
 
 from packaging.version import InvalidVersion, Version
 
@@ -81,53 +91,21 @@ if TYPE_CHECKING:
     from mhctools.pred import Prediction
 
 
-# Lowercase alias → canonical mhctools.Prediction.kind. The canonical
-# strings also resolve through this map (since ``str.lower`` is
-# applied first), so callers can pass either form. Wrapped in a
-# read-only ``MappingProxyType`` so accidental monkeypatching from
-# tests doesn't bleed into other tests.
-_KIND_ALIASES: MappingProxyType = MappingProxyType({
-    # pMHC_affinity — "BA" in mhcflurry / netmhcpan parlance.
-    'pmhc_affinity': 'pMHC_affinity',
-    'affinity': 'pMHC_affinity',
-    'ba': 'pMHC_affinity',
-    'binding': 'pMHC_affinity',
-    # pMHC_presentation — "EL" (elution likelihood) in mhcflurry-pres.
-    'pmhc_presentation': 'pMHC_presentation',
-    'presentation': 'pMHC_presentation',
-    'el': 'pMHC_presentation',
-    'elution': 'pMHC_presentation',
-    # pMHC_stability.
-    'pmhc_stability': 'pMHC_stability',
-    'stability': 'pMHC_stability',
-    # Single-word kinds — keep canonical and short alias both routed.
-    'immunogenicity': 'immunogenicity',
-    'antigen_processing': 'antigen_processing',
-    'processing': 'antigen_processing',
-    'ap': 'antigen_processing',
-    'proteasome_cleavage': 'proteasome_cleavage',
-    'cleavage': 'proteasome_cleavage',
-    'proteasome': 'proteasome_cleavage',
-    'tap_transport': 'tap_transport',
-    'tap': 'tap_transport',
-    'erap_trimming': 'erap_trimming',
-    'erap': 'erap_trimming',
-})
-
-
 def _resolve_kind(kind: str) -> str:
     """Map an alias / case-variant onto the canonical
-    ``mhctools.Prediction.kind`` string. Unknown inputs pass through
-    unchanged (so future predictor kinds work without a registry
-    update — they just won't have short aliases until added)."""
+    ``mhctools.Prediction.kind`` string. Defers to topiary's
+    ``_KIND_ALIASES`` so vaxrank doesn't fork the canonical list.
+    Unknown inputs pass through unchanged."""
+    # Imported lazily so this module stays import-light.
+    from topiary.ranking import _KIND_ALIASES
     return _KIND_ALIASES.get(kind.lower(), kind)
 
 
 def _split_versions(versions) -> tuple:
     """Split a set of ``predictor_version`` strings into PEP 440
     parseable + fallback. Returns ``(parsed_oldest_to_newest,
-    fallback_lex_sorted)`` — both are lists of the original strings.
-    Shared helper for the version-disambiguation paths."""
+    fallback_lex_sorted)`` — both are lists of the original
+    strings."""
     parsed = []
     fallback = []
     for v in versions:
@@ -145,8 +123,7 @@ def _most_recent_version(versions) -> str:
     PEP 440 ordering via ``packaging.version.Version``. Strings that
     don't parse (empty / non-semver / pre-#261 unset) sort below any
     valid version — so when both styles coexist, valid wins; when
-    none parse, lexicographic ``max`` is the fallback. Returning a
-    single string lets callers filter ``candidates`` by exact match.
+    none parse, lexicographic ``max`` is the fallback.
     """
     parsed, fallback = _split_versions(versions)
     if parsed:
@@ -154,26 +131,22 @@ def _most_recent_version(versions) -> str:
     return fallback[-1]
 
 
-def default_score_key(prediction) -> float:
-    """Default ranking key for ``PeptideContext.best`` and friends.
-
-    CONTRACT: relies on mhctools normalizing ``Prediction.score`` so
-    that **higher = better within one predictor** — across IC50
-    (lower-is-better-natively) and probability (higher-is-better-
-    natively) underlying axes. The contract is mhctools' to enforce
-    on producers; vaxrank just consumes ``score`` directly.
-
-    Override by passing ``score_key=`` to ``best`` if you want a
-    different axis (e.g. ``score_key=lambda p: -p.percentile_rank``
-    for "lowest %-rank wins") or a custom DSL-derived ranking. Higher
-    return value = better, regardless of underlying scale.
-
-    Cross-predictor comparison is *still* not meaningful even with a
-    custom ``score_key`` — that disambiguation is enforced by
-    ``best`` raising ``ValueError`` when multiple predictors emit
-    ``kind`` and the caller hasn't pinned ``predictor=``.
-    """
-    return prediction.score
+def _group_predictions(predictions) -> dict:
+    """Flat ``Sequence[Prediction]`` → nested
+    ``{kind: {predictor: {version: tuple}}}``. Producer-friendly:
+    most call sites already have a flat list of ``Prediction``s
+    coming out of mhctools / topiary."""
+    nested: dict = {}
+    for p in predictions:
+        (nested.setdefault(p.kind, {})
+               .setdefault(p.predictor_name, {})
+               .setdefault(p.predictor_version, [])
+               .append(p))
+    return {
+        k: {pn: {pv: tuple(records) for pv, records in by_version.items()}
+            for pn, by_version in by_predictor.items()}
+        for k, by_predictor in nested.items()
+    }
 
 
 # Reserved comparator names. Open-ended — callers can add new ones —
@@ -198,10 +171,8 @@ class PeptideContext:
     answering "does the patient's MHC also bind this comparator?"
     — which is the actual safety question for autoimmunity scoring.
 
-    Predictions follow mhctools' multi-kind / multi-predictor /
-    multi-allele shape: one ``mhctools.Prediction`` per
-    (kind, predictor, allele) tuple. Stored as a flat tuple for
-    serializability; structured access is via the methods below.
+    See module docstring for the storage shape and disambiguation
+    contract.
     """
 
     peptide_sequence: str
@@ -213,206 +184,196 @@ class PeptideContext:
     source_sequence: str = ''
     source_name: str = ''         # gene / virus / "self_proteome" / …
     offset: int = 0
-    # ``predictions`` is a flat tuple for serializability. Annotated
-    # under ``TYPE_CHECKING`` to give static analyzers the full type
-    # without importing ``mhctools.Prediction`` at runtime (mhctools
-    # pulls in heavy deps).
-    predictions: tuple["Prediction", ...] = ()
+    # Nested storage. Constructor accepts either this form or a
+    # flat ``Sequence[Prediction]`` (auto-grouped via
+    # ``__post_init__``). Annotated under ``TYPE_CHECKING`` to keep
+    # mhctools off the runtime import path.
+    predictions: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        # Flat producer input → nested storage. Flat is the common
+        # case (mhctools / topiary hand back ``list[Prediction]``);
+        # converting at construction means read accessors don't
+        # have to repeat the work on every call.
+        if isinstance(self.predictions, Sequence):
+            object.__setattr__(
+                self, 'predictions', _group_predictions(self.predictions))
 
     # ------------------------------------------------------------------
-    # Structured views — read-only, computed on demand.
+    # Structured views — read-only, computed against the nested store.
     # ------------------------------------------------------------------
-
-    def predictions_by_kind_and_predictor(self) -> dict:
-        """Four-level nested view:
-        ``{kind: {predictor_name: {predictor_version: {allele:
-        Prediction}}}}``.
-
-        Built fresh each call (the storage tuple is the source of
-        truth). Use this when you need full structure; the
-        ``best_*`` methods cover the common case. The version axis
-        prevents collision when the same (kind, predictor, allele)
-        was scored at multiple ``predictor_version`` values — every
-        record stays addressable.
-        """
-        nested: dict = {}
-        for p in self.predictions:
-            (nested.setdefault(p.kind, {})
-                   .setdefault(p.predictor_name, {})
-                   .setdefault(p.predictor_version, {})[p.allele]) = p
-        return nested
 
     def kinds(self) -> tuple:
         """Sorted tuple of distinct ``kind`` values in this context.
         Empty when the context has no predictions (e.g. a
         ``nearest_self`` comparator that's just a sequence with no
         binding probe yet)."""
-        return tuple(sorted({p.kind for p in self.predictions}))
+        return tuple(sorted(self.predictions))
 
-    def predictors_for_kind(self, kind: str) -> tuple:
+    def predictors_for(self, kind: str) -> tuple:
         """Predictors that emitted ``kind`` for this peptide.
-        Drives multi-predictor disambiguation in ``best``. Accepts
-        kind aliases (``'ba'`` / ``'el'`` / …)."""
+        Drives multi-predictor disambiguation in ``best`` and
+        ``predictions_for``. Accepts kind aliases (``'ba'`` /
+        ``'el'`` / …)."""
         canonical = _resolve_kind(kind)
-        return tuple(sorted({
-            p.predictor_name for p in self.predictions
-            if p.kind == canonical}))
+        return tuple(sorted(self.predictions.get(canonical, {})))
 
     def versions_for(self, kind: str, predictor: str) -> tuple:
         """Versions of ``predictor`` that emitted ``kind``, sorted
-        oldest → newest by PEP 440. When multiple coexist, ``best``
-        picks the last entry by default; this accessor exposes the
-        full set for callers that want to walk every version.
-
-        Unparseable strings (legacy / pre-#261) sort before parseable
-        ones — so ``versions[-1]`` still yields the most recent valid
-        version when both styles coexist.
-        """
+        oldest → newest by PEP 440. When multiple coexist, the
+        leaf accessors default to the last entry; this method
+        exposes the full set for callers that want to walk every
+        version. Unparseable / legacy strings sort before
+        parseable ones."""
         canonical = _resolve_kind(kind)
-        versions = {
-            p.predictor_version for p in self.predictions
-            if p.kind == canonical and p.predictor_name == predictor}
-        parsed, fallback = _split_versions(versions)
+        by_version = self.predictions.get(canonical, {}).get(predictor, {})
+        parsed, fallback = _split_versions(by_version)
         return tuple(fallback + parsed)
 
-    def alleles_for(self, kind: str, predictor: str) -> tuple:
-        """Alleles a given (kind, predictor) covers. Used by
+    def alleles_for(self, kind: str, *,
+                    predictor: Optional[str] = None,
+                    version: Optional[str] = None) -> tuple:
+        """Alleles attested in the leaf tuple for
+        ``(kind, predictor, version)``. Filters out empty-string
+        alleles (processing kinds emit ``allele=""``). Used by
         coverage / report code that walks per-allele evidence
-        without forcing a single 'best' allele."""
-        canonical = _resolve_kind(kind)
-        return tuple(sorted({
-            p.allele for p in self.predictions
-            if p.kind == canonical and p.predictor_name == predictor
-            and p.allele}))
+        without forcing a single 'best' allele.
+
+        Same disambiguation contract as ``best``: raises when
+        multiple predictors emitted ``kind`` and ``predictor`` is
+        unset; auto-resolves to most recent when multiple versions
+        coexist and ``version`` is unset.
+        """
+        records = self.predictions_for(
+            kind, predictor=predictor, version=version)
+        return tuple(sorted({p.allele for p in records if p.allele}))
 
     # ------------------------------------------------------------------
-    # Best-of accessors — kind-named, predictor-aware.
+    # Leaf access + best-of.
     # ------------------------------------------------------------------
 
-    def best(self, kind: str, *,
-             predictor: Optional[str] = None,
-             version: Optional[str] = None,
-             score_key: Optional[Callable] = None):
-        """Best prediction for ``kind`` across alleles. Returns the
-        ``mhctools.Prediction`` (carries allele, score, value,
-        percentile_rank, …) or ``None`` when no record matches.
-
-        ``kind`` accepts aliases (case-insensitive): ``'ba'`` /
-        ``'affinity'`` / ``'binding'`` → ``pMHC_affinity``;
-        ``'el'`` / ``'presentation'`` / ``'elution'`` →
-        ``pMHC_presentation``; ``'stability'``;
-        ``'immunogenicity'``; ``'cleavage'`` / ``'proteasome'`` →
-        ``proteasome_cleavage``; ``'processing'`` / ``'ap'`` →
-        ``antigen_processing``; ``'tap'``; ``'erap'``. Canonical
-        ``pMHC_*`` strings also work.
+    def predictions_for(self, kind: str, *,
+                        predictor: Optional[str] = None,
+                        version: Optional[str] = None
+                        ) -> tuple["Prediction", ...]:
+        """All ``Prediction`` records for ``(kind, predictor,
+        version)``. Empty tuple when nothing matches.
 
         Predictor disambiguation:
         - One predictor emitted ``kind`` → ``predictor`` may be
           omitted.
         - Multiple predictors emitted ``kind`` → ``predictor`` is
-          required (cross-predictor ranking is meaningless under
-          *any* score key, since each predictor's score scale is its
-          own). Raises ``ValueError`` otherwise.
+          required; raises ``ValueError`` otherwise.
 
         Version disambiguation:
-        - One ``predictor_version`` on file → unambiguous.
         - Multiple versions on file → defaults to the most recent
-          (PEP 440 ordering). Pass ``version=`` to pin explicitly.
-          Versions auto-resolve (vs. predictor's hard-raise) because
-          the score scale is comparable across versions of the same
-          predictor — just freshness differs.
+          (PEP 440 ordering). Pass ``version=`` to pin.
 
-        Score selection:
-        - ``score_key`` is a callable ``Prediction -> float`` (higher
-          return value wins). Default is :func:`default_score_key`,
-          which uses ``Prediction.score`` (mhctools' normalized,
-          higher-is-better axis). Pass a custom key when you want
-          per-call ranking on a different axis — e.g.
-          ``score_key=lambda p: -p.percentile_rank`` for
-          "lowest %-rank wins". Higher-level pipelines use the
-          topiary DSL (``EpitopeConfig.score_expr``) on a row-frame
-          of predictions; ``best()`` is the per-record primitive.
+        Use this to rank predictions on a non-default axis (e.g.
+        ``min(ctx.predictions_for('affinity'), key=lambda p:
+        p.percentile_rank)``) — ``best`` does the common case
+        (``max`` over normalized ``score``) but isn't parametric.
         """
         canonical = _resolve_kind(kind)
-        candidates = [p for p in self.predictions if p.kind == canonical]
-        if not candidates:
-            return None
-        predictor_set = {p.predictor_name for p in candidates}
+        by_predictor = self.predictions.get(canonical, {})
+        if not by_predictor:
+            return ()
         if predictor is None:
-            if len(predictor_set) > 1:
+            if len(by_predictor) > 1:
                 raise ValueError(
                     "%s has predictions from multiple predictors "
                     "(%s); pass predictor= to disambiguate. "
                     "Each predictor's score scale is its own — "
-                    "cross-predictor ranking is meaningless under "
-                    "any score_key."
-                    % (canonical, sorted(predictor_set)))
-            # Single predictor → unambiguous.
-        else:
-            candidates = [
-                p for p in candidates if p.predictor_name == predictor]
-            if not candidates:
-                return None
-        version_set = {p.predictor_version for p in candidates}
+                    "cross-predictor ranking is not meaningful."
+                    % (canonical, sorted(by_predictor)))
+            predictor = next(iter(by_predictor))
+        by_version = by_predictor.get(predictor, {})
+        if not by_version:
+            return ()
         if version is None:
-            if len(version_set) > 1:
-                latest = _most_recent_version(version_set)
-                candidates = [
-                    p for p in candidates if p.predictor_version == latest]
-        else:
-            candidates = [
-                p for p in candidates if p.predictor_version == version]
-            if not candidates:
-                return None
-        if score_key is None:
-            score_key = default_score_key
-        return max(candidates, key=score_key)
+            if len(by_version) > 1:
+                version = _most_recent_version(by_version)
+            else:
+                version = next(iter(by_version))
+        return by_version.get(version, ())
 
-    # Kind-specific helpers. Each forwards to ``best`` with the same
-    # disambiguation contract — predictor required when ambiguous,
-    # version auto-resolves to most recent, ``score_key`` overridable
-    # for per-call ranking customization.
+    def best(self, kind: str, *,
+             predictor: Optional[str] = None,
+             version: Optional[str] = None
+             ) -> Optional["Prediction"]:
+        """Best ``Prediction`` for ``(kind, predictor, version)``
+        across alleles, ranked by ``Prediction.score``. Returns
+        ``None`` when no record matches.
+
+        ``kind`` accepts topiary's aliases (``'ba'`` / ``'el'`` /
+        ``'aff'`` / ``'ic50'`` / ``'presentation'`` / …).
+
+        For a different ranking axis (e.g. lowest IC50, lowest
+        %-rank), call ``predictions_for(...)`` and rank the leaf
+        tuple yourself — ``best`` is deliberately the common-case
+        primitive only.
+
+        CONTRACT: relies on mhctools normalizing
+        ``Prediction.score`` so higher = better *within one
+        predictor*. mhctools enforces this on producers; vaxrank
+        consumes ``score`` directly. Cross-predictor max is *not*
+        meaningful — handled by the ``predictor`` disambiguation
+        in ``predictions_for``.
+        """
+        candidates = self.predictions_for(
+            kind, predictor=predictor, version=version)
+        if not candidates:
+            return None
+        return max(candidates, key=lambda p: p.score)
+
+    # Kind-specific helpers. Each forwards to ``best`` with the
+    # same disambiguation contract.
     def best_affinity(self, *, predictor: Optional[str] = None,
-                      version: Optional[str] = None,
-                      score_key: Optional[Callable] = None):
+                      version: Optional[str] = None):
         return self.best(
-            'pMHC_affinity', predictor=predictor, version=version,
-            score_key=score_key)
+            'pMHC_affinity', predictor=predictor, version=version)
 
     def best_presentation(self, *, predictor: Optional[str] = None,
-                          version: Optional[str] = None,
-                          score_key: Optional[Callable] = None):
+                          version: Optional[str] = None):
         return self.best(
-            'pMHC_presentation', predictor=predictor, version=version,
-            score_key=score_key)
+            'pMHC_presentation', predictor=predictor, version=version)
 
     def best_stability(self, *, predictor: Optional[str] = None,
-                       version: Optional[str] = None,
-                       score_key: Optional[Callable] = None):
+                       version: Optional[str] = None):
         return self.best(
-            'pMHC_stability', predictor=predictor, version=version,
-            score_key=score_key)
+            'pMHC_stability', predictor=predictor, version=version)
 
     def best_immunogenicity(self, *, predictor: Optional[str] = None,
-                            version: Optional[str] = None,
-                            score_key: Optional[Callable] = None):
+                            version: Optional[str] = None):
         return self.best(
-            'immunogenicity', predictor=predictor, version=version,
-            score_key=score_key)
+            'immunogenicity', predictor=predictor, version=version)
 
     def best_cleavage(self, *, predictor: Optional[str] = None,
-                      version: Optional[str] = None,
-                      score_key: Optional[Callable] = None):
+                      version: Optional[str] = None):
         return self.best(
-            'proteasome_cleavage', predictor=predictor, version=version,
-            score_key=score_key)
+            'proteasome_cleavage', predictor=predictor, version=version)
 
     def best_antigen_processing(self, *, predictor: Optional[str] = None,
-                                version: Optional[str] = None,
-                                score_key: Optional[Callable] = None):
+                                version: Optional[str] = None):
         return self.best(
-            'antigen_processing', predictor=predictor, version=version,
-            score_key=score_key)
+            'antigen_processing', predictor=predictor, version=version)
+
+    # ------------------------------------------------------------------
+    # Flatten — for serialization / iteration when you don't care
+    # about the nesting.
+    # ------------------------------------------------------------------
+
+    def predictions_flat(self) -> tuple:
+        """Flatten the nested store back to a tuple of
+        ``Prediction`` records. Useful for serialization round-trips
+        and any code that just wants to iterate every prediction
+        without caring about the kind/predictor/version structure."""
+        return tuple(
+            p
+            for by_predictor in self.predictions.values()
+            for by_version in by_predictor.values()
+            for records in by_version.values()
+            for p in records)
 
 
 @dataclass(frozen=True)
