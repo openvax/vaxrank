@@ -35,6 +35,7 @@ from isovar.cli.filter_args import filter_threshold_dict_from_args
 from mhctools.cli import (
     mhc_alleles_from_args,
     mhc_binding_predictor_from_args,
+    predictors_from_args,
 )
 
 from .arg_parser import parse_vaxrank_args, check_args
@@ -1164,7 +1165,28 @@ def run_vaxrank_from_parsed_args(args):
     args.max_vaccine_peptides_per_mutation = vaccine_config.max_vaccine_peptides_per_variant
     args.num_epitopes_per_vaccine_peptide = vaccine_config.num_mutant_epitopes_to_keep
 
-    mhc_predictor = mhc_binding_predictor_from_args(args)
+    # Multi-predictor support (#261): mhctools' ``--mhc-predictor`` is
+    # nargs='+', so the user can configure
+    # ``--mhc-predictor mhcflurry netmhcpan`` and we run both, emitting
+    # one EpitopePrediction per (peptide, allele, predictor). Single-
+    # predictor runs unchanged (use the bare predictor; topiary wraps
+    # it inside ``predict_epitopes``). Multi-predictor runs use
+    # ``topiary.TopiaryPredictor(models=[...])`` so the per-row
+    # ``prediction_method_name`` ends up on every EpitopePrediction.
+    predictors_list = predictors_from_args(args)
+    if len(predictors_list) == 1:
+        mhc_predictor = predictors_list[0]
+    else:
+        from topiary import TopiaryPredictor
+        mhc_predictor = TopiaryPredictor(models=predictors_list)
+        logger.info(
+            "Running %d MHC predictors: %s. Each (peptide, allele) "
+            "lands in the report once per predictor; combine them via "
+            "``epitopes.score_expr`` (e.g. "
+            "``affinity[mhcflurry] * 0.5 + affinity[netmhcpan] * 0.5``).",
+            len(predictors_list),
+            [getattr(p, '__class__', type(p)).__name__
+             for p in predictors_list])
 
     prediction_cache = getattr(args, 'prediction_cache', None)
     if prediction_cache:

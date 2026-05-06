@@ -123,7 +123,7 @@ def test_vaccine_peptides_for_variant_config_overrides_explicit_params():
     with patch('vaxrank.core_logic.MutantProteinFragment') as MockFragment:
         MockFragment.from_isovar_result.return_value = mock_fragment
         with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
-            mock_predict.return_value = {}
+            mock_predict.return_value = []
 
             vaccine_peptides_for_variant(
                 isovar_result=mock_isovar_result,
@@ -151,7 +151,7 @@ def test_vaccine_peptides_for_variant_explicit_params_used_without_config():
     with patch('vaxrank.core_logic.MutantProteinFragment') as MockFragment:
         MockFragment.from_isovar_result.return_value = mock_fragment
         with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
-            mock_predict.return_value = {}
+            mock_predict.return_value = []
 
             vaccine_peptides_for_variant(
                 isovar_result=mock_isovar_result,
@@ -180,7 +180,7 @@ def test_vaccine_peptides_for_variant_epitope_config_passed_to_predict():
     with patch('vaxrank.core_logic.MutantProteinFragment') as MockFragment:
         MockFragment.from_isovar_result.return_value = mock_fragment
         with patch('vaxrank.core_logic.predict_epitopes') as mock_predict:
-            mock_predict.return_value = {}
+            mock_predict.return_value = []
 
             vaccine_peptides_for_variant(
                 isovar_result=mock_isovar_result,
