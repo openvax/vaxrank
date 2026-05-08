@@ -38,9 +38,10 @@ property*, not a structural key — that way:
   allele's score — see ``mhctools/mhcflurry.py`` line 246).
 
 The constructor accepts either nested form *or* a flat
-``Sequence[Prediction]`` for producer ergonomics — flat input is
-auto-grouped on construction. ``predictions_flat()`` flattens back
-out for serialization or iteration.
+``list``/``tuple`` of ``Prediction`` records for producer
+ergonomics — flat input is auto-grouped on construction.
+``predictions_flat()`` flattens back out for serialization or
+iteration.
 
 ## Disambiguation contract
 
@@ -219,18 +220,14 @@ class PeptideContext:
             object.__setattr__(
                 self, 'predictions', _group_predictions(self.predictions))
 
-    # ------------------------------------------------------------------
-    # Structured views — read-only, computed against the nested store.
-    # ------------------------------------------------------------------
-
-    def kinds(self) -> tuple:
+    def kinds(self) -> tuple[str, ...]:
         """Sorted tuple of distinct ``kind`` values in this context.
         Empty when the context has no predictions (e.g. a
         ``nearest_self`` comparator that's just a sequence with no
         binding probe yet)."""
         return tuple(sorted(self.predictions))
 
-    def predictors_for(self, kind: str) -> tuple:
+    def predictors_for(self, kind: str) -> tuple[str, ...]:
         """Predictors that emitted ``kind`` for this peptide.
         Drives multi-predictor disambiguation in ``best`` and
         ``predictions_for``. Accepts kind aliases (``'ba'`` /
@@ -238,7 +235,7 @@ class PeptideContext:
         canonical = _resolve_kind(kind)
         return tuple(sorted(self.predictions.get(canonical, {})))
 
-    def versions_for(self, kind: str, predictor: str) -> tuple:
+    def versions_for(self, kind: str, predictor: str) -> tuple[str, ...]:
         """All versions of ``predictor`` that emitted ``kind``.
 
         Ordering: legacy / unparseable strings (lex-sorted) come
@@ -253,7 +250,7 @@ class PeptideContext:
 
     def alleles_for(self, kind: str, *,
                     predictor: Optional[str] = None,
-                    version: Optional[str] = None) -> tuple:
+                    version: Optional[str] = None) -> tuple[str, ...]:
         """Alleles attested in the leaf tuple for
         ``(kind, predictor, version)``. Filters out empty-string
         alleles (processing kinds emit ``allele=""``). Used by
@@ -268,10 +265,6 @@ class PeptideContext:
         records = self.predictions_for(
             kind, predictor=predictor, version=version)
         return tuple(sorted({p.allele for p in records if p.allele}))
-
-    # ------------------------------------------------------------------
-    # Leaf access + best-of.
-    # ------------------------------------------------------------------
 
     def predictions_for(self, kind: str, *,
                         predictor: Optional[str] = None,
@@ -353,12 +346,7 @@ class PeptideContext:
     def best_cleavage(self): return self.best('proteasome_cleavage')
     def best_antigen_processing(self): return self.best('antigen_processing')
 
-    # ------------------------------------------------------------------
-    # Flatten — for serialization / iteration when you don't care
-    # about the nesting.
-    # ------------------------------------------------------------------
-
-    def predictions_flat(self) -> tuple:
+    def predictions_flat(self) -> tuple["Prediction", ...]:
         """Flatten the nested store back to a tuple of
         ``Prediction`` records. Useful for serialization round-trips
         and any code that just wants to iterate every prediction
