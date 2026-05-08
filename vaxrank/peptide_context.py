@@ -86,6 +86,7 @@ from __future__ import annotations
 
 import functools
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Optional
 
 from packaging.version import InvalidVersion, Version
@@ -130,7 +131,9 @@ def _load_kind_aliases():
             "neither name is present. topiary may have refactored "
             "the alias table — open an issue on vaxrank."
         )
-    return table
+    # Wrap as a read-only view so a misbehaving caller can't
+    # mutate topiary's alias table for the rest of the session.
+    return MappingProxyType(table)
 
 
 def _resolve_kind(kind: str) -> str:
@@ -235,7 +238,7 @@ class PeptideContext:
         canonical = _resolve_kind(kind)
         return tuple(sorted(self.predictions.get(canonical, {})))
 
-    def versions_for(self, kind: str, predictor: str) -> tuple[str, ...]:
+    def versions_for(self, kind: str, *, predictor: str) -> tuple[str, ...]:
         """All versions of ``predictor`` that emitted ``kind``.
 
         Ordering: legacy / unparseable strings (lex-sorted) come
@@ -243,6 +246,9 @@ class PeptideContext:
         That matches ``best`` / ``predictions_for`` defaulting to
         the *last* entry — i.e. the most-recent valid version when
         any exist, with legacy strings falling below.
+
+        ``predictor`` is keyword-only for consistency with
+        ``alleles_for`` / ``predictions_for``.
         """
         canonical = _resolve_kind(kind)
         by_version = self.predictions.get(canonical, {}).get(predictor, {})
@@ -261,17 +267,40 @@ class PeptideContext:
         than raise. This is unlike ``best`` / ``predictions_for``,
         where score scales differ across predictors so ranking
         requires explicit disambiguation.
+
+        Explicit ``predictor=`` / ``version=`` arguments are
+        validated against what's actually present — a typo raises
+        ``ValueError`` rather than silently returning ``()``.
+        Missing kind itself still returns ``()`` (asking about a
+        kind we don't have isn't a typo).
         """
         canonical = _resolve_kind(kind)
-        alleles: set[str] = set()
-        for pn, by_version in self.predictions.get(canonical, {}).items():
-            if predictor is not None and pn != predictor:
-                continue
-            for ver, records in by_version.items():
-                if version is not None and ver != version:
-                    continue
-                alleles.update(p.allele for p in records if p.allele)
-        return tuple(sorted(alleles))
+        by_predictor = self.predictions.get(canonical, {})
+        if not by_predictor:
+            return ()
+        if predictor is not None and predictor not in by_predictor:
+            raise ValueError(
+                f"{canonical} has no predictions from predictor "
+                f"{predictor!r}; available: {sorted(by_predictor)}.")
+        leaves = [
+            (ver, records)
+            for pn, by_ver in by_predictor.items()
+            if predictor is None or pn == predictor
+            for ver, records in by_ver.items()
+        ]
+        available_versions = {ver for ver, _ in leaves}
+        if version is not None and version not in available_versions:
+            raise ValueError(
+                f"{canonical} has no predictions at version "
+                f"{version!r}; available: "
+                f"{sorted(available_versions)}.")
+        return tuple(sorted({
+            p.allele
+            for ver, records in leaves
+            if version is None or ver == version
+            for p in records
+            if p.allele
+        }))
 
     def predictions_for(self, kind: str, *,
                         predictor: Optional[str] = None,
@@ -355,10 +384,12 @@ class PeptideContext:
 
     def predictions_flat(self) -> tuple["Prediction", ...]:
         """Flatten the nested store back to a tuple of
-        ``Prediction`` records, sorted by ``(kind, predictor_name,
-        predictor_version, allele)``. Sorted output is deterministic
-        across runs and through serialization round-trips even when
-        the input arrived in producer-specific order."""
+        ``Prediction`` records. Sorted by ``(kind, predictor_name,
+        predictor_version, allele, score, value, percentile_rank)``
+        so the output is fully deterministic — even if a producer
+        ever emits duplicate ``(kind, predictor, version, allele)``
+        records, the score / value / %-rank tail breaks ties
+        without falling back on input order."""
         flat = (
             p
             for by_predictor in self.predictions.values()
@@ -366,7 +397,8 @@ class PeptideContext:
             for records in by_version.values()
             for p in records)
         return tuple(sorted(flat, key=lambda p: (
-            p.kind, p.predictor_name, p.predictor_version, p.allele)))
+            p.kind, p.predictor_name, p.predictor_version, p.allele,
+            p.score, p.value, p.percentile_rank)))
 
 
 @dataclass(frozen=True)

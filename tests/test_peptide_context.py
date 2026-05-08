@@ -183,6 +183,31 @@ def test_predictions_flat_is_deterministic():
     ]
 
 
+def test_predictions_flat_tiebreaker_for_duplicate_keys():
+    """If a producer ever emits duplicate ``(kind, predictor,
+    version, allele)`` records, the score / value / %-rank tail
+    of the sort key keeps order deterministic across input
+    shuffles. Pin so future producers can't sneak in an order
+    dependency on input order."""
+    a = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_affinity', score=0.5),
+            _pred('pMHC_affinity', score=0.9),
+            _pred('pMHC_affinity', score=0.3),
+        ))
+    b = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(  # same records, shuffled
+            _pred('pMHC_affinity', score=0.9),
+            _pred('pMHC_affinity', score=0.3),
+            _pred('pMHC_affinity', score=0.5),
+        ))
+    assert a.predictions_flat() == b.predictions_flat()
+    # Within-key sort is by score ascending.
+    assert [p.score for p in a.predictions_flat()] == [0.3, 0.5, 0.9]
+
+
 # ---- Structured views --------------------------------------------------
 
 
@@ -263,6 +288,49 @@ def test_alleles_for_unions_across_predictors():
             'HLA-A*02:01', 'HLA-C*03:04')
 
 
+def test_alleles_for_raises_on_unknown_predictor():
+    """Explicit ``predictor=`` that doesn't match any predictor
+    for the kind raises ``ValueError`` rather than silently
+    returning ``()`` — silent empty-on-typo masks call-site
+    bugs."""
+    ctx = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_affinity', predictor='mhcflurry',
+                  allele='HLA-A*02:01'),
+        ))
+    with pytest.raises(ValueError, match='no predictions from predictor'):
+        ctx.alleles_for('pMHC_affinity', predictor='nonexistent')
+
+
+def test_alleles_for_raises_on_unknown_version():
+    """Same strictness for ``version=``: a typo raises rather
+    than masquerading as an empty result."""
+    ctx = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_affinity', version='2.1.1',
+                  allele='HLA-A*02:01'),
+        ))
+    with pytest.raises(ValueError, match='no predictions at version'):
+        ctx.alleles_for('pMHC_affinity', version='99.0.0')
+
+
+def test_alleles_for_silent_on_missing_kind():
+    """Asking about a kind we don't have isn't a typo — that's
+    the standard "this peptide didn't get scored on X" case.
+    Returns ``()`` silently. Distinguishes "kind missing" from
+    "predictor / version missing" — the latter is a call-site
+    bug worth flagging."""
+    ctx = PeptideContext(peptide_sequence='SIINFEKL')
+    assert ctx.alleles_for('pMHC_affinity') == ()
+    # Even with explicit predictor= against a kind that has no
+    # records: still silent (no validation possible against an
+    # empty kind).
+    assert ctx.alleles_for(
+        'pMHC_affinity', predictor='mhcflurry') == ()
+
+
 def test_alleles_for_unions_across_versions():
     """Same predictor-agnostic logic for versions: when a
     predictor ran at multiple versions on different alleles,
@@ -330,7 +398,9 @@ def test_load_kind_aliases_prefers_public_name(monkeypatch):
     """When topiary publishes a public ``KIND_ALIASES``, vaxrank
     prefers it over the legacy private ``_KIND_ALIASES``. Pins the
     upgrade path so when topiary promotes the name, vaxrank picks
-    it up without code changes."""
+    it up without code changes. The result is wrapped in a
+    read-only view so vaxrank can't mutate topiary's table."""
+    from types import MappingProxyType
     import topiary.ranking
     from vaxrank import peptide_context as pc
 
@@ -339,7 +409,10 @@ def test_load_kind_aliases_prefers_public_name(monkeypatch):
     monkeypatch.setattr(
         topiary.ranking, 'KIND_ALIASES', sentinel, raising=False)
     try:
-        assert pc._load_kind_aliases() is sentinel
+        result = pc._load_kind_aliases()
+        assert isinstance(result, MappingProxyType)
+        assert dict(result) == sentinel  # content equal
+        assert result is not sentinel    # but wrapped, not aliased
     finally:
         pc._load_kind_aliases.cache_clear()
 
@@ -379,9 +452,10 @@ def test_load_kind_aliases_is_cached(monkeypatch):
         topiary.ranking, 'KIND_ALIASES', sentinel, raising=False)
     try:
         assert pc._load_kind_aliases() is first  # cached
-        # After cache_clear, the new attr wins.
+        # After cache_clear, the new attr wins (still wrapped).
         pc._load_kind_aliases.cache_clear()
-        assert pc._load_kind_aliases() is sentinel
+        result = pc._load_kind_aliases()
+        assert dict(result) == sentinel
     finally:
         pc._load_kind_aliases.cache_clear()
 
@@ -539,7 +613,7 @@ def test_versions_for_returns_oldest_to_newest():
             _pred('pMHC_affinity', version='2.1.0'),
             _pred('pMHC_affinity', version='2.0.0'),
         ))
-    assert ctx.versions_for('pMHC_affinity', 'mhcflurry') == (
+    assert ctx.versions_for('pMHC_affinity', predictor='mhcflurry') == (
         '2.0.0', '2.1.0', '2.1.1')
 
 
@@ -551,7 +625,7 @@ def test_versions_for_invalid_strings_sort_first():
             _pred('pMHC_affinity', version='2.1.1'),
             _pred('pMHC_affinity', version='2.1.0'),
         ))
-    assert ctx.versions_for('pMHC_affinity', 'mhcflurry') == (
+    assert ctx.versions_for('pMHC_affinity', predictor='mhcflurry') == (
         'legacy', '2.1.0', '2.1.1')
 
 
