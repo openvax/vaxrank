@@ -231,6 +231,69 @@ def test_predictors_for_accepts_aliases():
     assert ctx.predictors_for('presentation') == ('bigmhc', 'mhcflurry')
 
 
+# ---- _load_kind_aliases: defensive topiary import ----------------------
+
+
+def test_load_kind_aliases_prefers_public_name(monkeypatch):
+    """When topiary publishes a public ``KIND_ALIASES``, vaxrank
+    prefers it over the legacy private ``_KIND_ALIASES``. Pins the
+    upgrade path so when topiary promotes the name, vaxrank picks
+    it up without code changes."""
+    import topiary.ranking
+    from vaxrank import peptide_context as pc
+
+    sentinel = {'sentinel_alias': 'pMHC_affinity'}
+    pc._load_kind_aliases.cache_clear()
+    monkeypatch.setattr(
+        topiary.ranking, 'KIND_ALIASES', sentinel, raising=False)
+    try:
+        assert pc._load_kind_aliases() is sentinel
+    finally:
+        pc._load_kind_aliases.cache_clear()
+
+
+def test_load_kind_aliases_raises_when_neither_present(monkeypatch):
+    """If a future topiary refactor removes both names, vaxrank
+    raises ``ImportError`` with a clear diagnostic instead of
+    letting an opaque ``AttributeError`` surface from inside
+    PeptideContext construction. Proves the safety net actually
+    fires + the message is well-formed."""
+    import topiary.ranking
+    from vaxrank import peptide_context as pc
+
+    pc._load_kind_aliases.cache_clear()
+    monkeypatch.delattr(topiary.ranking, 'KIND_ALIASES', raising=False)
+    monkeypatch.delattr(topiary.ranking, '_KIND_ALIASES', raising=False)
+    try:
+        with pytest.raises(ImportError, match='KIND_ALIASES'):
+            pc._load_kind_aliases()
+    finally:
+        pc._load_kind_aliases.cache_clear()
+
+
+def test_load_kind_aliases_is_cached(monkeypatch):
+    """``_load_kind_aliases`` is on the per-record hot path of
+    ``best`` / ``predictions_for``; the result is module-constant
+    so we cache it (``functools.lru_cache``) instead of redoing
+    the ``getattr`` chain on every call."""
+    import topiary.ranking
+    from vaxrank import peptide_context as pc
+
+    pc._load_kind_aliases.cache_clear()
+    first = pc._load_kind_aliases()
+    # Swap the underlying table; cached call should NOT see the swap.
+    sentinel = {'sentinel_alias': 'pMHC_affinity'}
+    monkeypatch.setattr(
+        topiary.ranking, 'KIND_ALIASES', sentinel, raising=False)
+    try:
+        assert pc._load_kind_aliases() is first  # cached
+        # After cache_clear, the new attr wins.
+        pc._load_kind_aliases.cache_clear()
+        assert pc._load_kind_aliases() is sentinel
+    finally:
+        pc._load_kind_aliases.cache_clear()
+
+
 # ---- predictions_for: leaf access + disambiguation ---------------------
 
 

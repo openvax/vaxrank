@@ -83,6 +83,7 @@ Issue: openvax/vaxrank#282 (replaces).
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
@@ -90,15 +91,9 @@ from packaging.version import InvalidVersion, Version
 
 if TYPE_CHECKING:
     from mhctools.pred import Prediction
-    # Nested storage shape: kind → predictor → version →
-    # tuple[Prediction]. ``frozen=True`` on the dataclass blocks
-    # field reassignment; the nested dicts themselves are mutable
-    # by Python convention — consumers go through the typed
-    # accessors (``best`` / ``predictions_for`` / …) and don't
-    # reach into the raw store.
-    PredictionStore = dict[str, dict[str, dict[str, tuple[Prediction, ...]]]]
 
 
+@functools.lru_cache(maxsize=1)
 def _load_kind_aliases():
     """Load topiary's canonical kind-alias table.
 
@@ -110,6 +105,12 @@ def _load_kind_aliases():
     Cross-package private-name dependencies are brittle; this
     wrapper is the seam for upgrading topiary's public surface
     without touching every call site here.
+
+    Cached: the table is module-constant once topiary is loaded;
+    ``_resolve_kind`` is on the per-record hot path of ``best`` /
+    ``predictions_for``, so we don't want to redo the ``getattr``
+    chain on every call. Tests that need to swap topiary's table
+    must call ``_load_kind_aliases.cache_clear()``.
     """
     try:
         import topiary.ranking as _r
@@ -121,7 +122,7 @@ def _load_kind_aliases():
     table = getattr(_r, 'KIND_ALIASES', None)
     if table is None:
         table = getattr(_r, '_KIND_ALIASES', None)
-    if table is None:  # pragma: no cover
+    if table is None:
         raise ImportError(
             "vaxrank.peptide_context expected topiary.ranking to "
             "expose KIND_ALIASES (or the legacy _KIND_ALIASES); "
@@ -139,34 +140,19 @@ def _resolve_kind(kind: str) -> str:
     return _load_kind_aliases().get(kind.lower(), kind)
 
 
-def _split_versions(versions) -> tuple:
-    """Split a set of ``predictor_version`` strings into PEP 440
-    parseable + fallback. Returns ``(parsed_oldest_to_newest,
-    fallback_lex_sorted)`` — both are lists of the original
-    strings."""
-    parsed = []
-    fallback = []
+def _sort_versions(versions) -> list:
+    """Sort ``predictor_version`` strings: legacy / unparseable
+    strings come first (lex-sorted), valid PEP 440 versions follow
+    oldest → newest. The last element is therefore the *most recent*
+    valid version when any are valid, else the last legacy string
+    lex-sorted — that's what the leaf accessors default to."""
+    parsed, fallback = [], []
     for v in versions:
         try:
             parsed.append((Version(v), v))
         except (InvalidVersion, TypeError):
             fallback.append(v)
-    return ([v for _, v in sorted(parsed, key=lambda x: x[0])],
-            sorted(fallback))
-
-
-def _most_recent_version(versions) -> str:
-    """Pick the most recent ``predictor_version`` from a set.
-
-    PEP 440 ordering via ``packaging.version.Version``. Strings that
-    don't parse (empty / non-semver / pre-#261 unset) sort below any
-    valid version — so when both styles coexist, valid wins; when
-    none parse, lexicographic ``max`` is the fallback.
-    """
-    parsed, fallback = _split_versions(versions)
-    if parsed:
-        return parsed[-1]
-    return fallback[-1]
+    return sorted(fallback) + [v for _, v in sorted(parsed)]
 
 
 def _group_predictions(predictions) -> dict:
@@ -222,18 +208,13 @@ class PeptideContext:
     source_sequence: str = ''
     source_name: str = ''         # gene / virus / "self_proteome" / …
     offset: int = 0
-    # Nested storage. Constructor accepts either this shape or a
-    # flat ``list``/``tuple`` of ``Prediction`` records (auto-grouped
-    # via ``__post_init__``). Field type is ``PredictionStore``
-    # (alias under ``TYPE_CHECKING`` — see module top) so mhctools
-    # stays off the runtime import path.
-    predictions: "PredictionStore" = field(default_factory=dict)
+    # Nested storage; flat ``list[Prediction]`` is auto-grouped on
+    # construction. Shape documented in the module docstring.
+    predictions: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        # Flat ``Prediction`` sequence → nested dict (one-time work
-        # at construction so read accessors don't have to repeat it).
-        # ``object.__setattr__`` is the escape hatch for writing to a
-        # frozen-dataclass field — plain ``self.x = ...`` is blocked.
+        # ``object.__setattr__`` is the escape hatch for writing to
+        # a frozen-dataclass field.
         if isinstance(self.predictions, (list, tuple)):
             object.__setattr__(
                 self, 'predictions', _group_predictions(self.predictions))
@@ -268,8 +249,7 @@ class PeptideContext:
         """
         canonical = _resolve_kind(kind)
         by_version = self.predictions.get(canonical, {}).get(predictor, {})
-        parsed, fallback = _split_versions(by_version)
-        return tuple(fallback + parsed)
+        return tuple(_sort_versions(by_version))
 
     def alleles_for(self, kind: str, *,
                     predictor: Optional[str] = None,
@@ -322,20 +302,17 @@ class PeptideContext:
         if predictor is None:
             if len(by_predictor) > 1:
                 raise ValueError(
-                    "%s has predictions from multiple predictors "
-                    "(%s); pass predictor= to disambiguate. "
-                    "Each predictor's score scale is its own — "
-                    "cross-predictor ranking is not meaningful."
-                    % (canonical, sorted(by_predictor)))
+                    f"{canonical} has predictions from multiple "
+                    f"predictors ({sorted(by_predictor)}); pass "
+                    f"predictor= to disambiguate. Each predictor's "
+                    f"score scale is its own — cross-predictor "
+                    f"ranking is not meaningful.")
             predictor = next(iter(by_predictor))
         by_version = by_predictor.get(predictor, {})
         if not by_version:
             return ()
         if version is None:
-            if len(by_version) > 1:
-                version = _most_recent_version(by_version)
-            else:
-                version = next(iter(by_version))
+            version = _sort_versions(by_version)[-1]
         return by_version.get(version, ())
 
     def best(self, kind: str, *,
@@ -367,37 +344,14 @@ class PeptideContext:
             return None
         return max(candidates, key=lambda p: p.score)
 
-    # Kind-specific helpers. Each forwards to ``best`` with the
-    # same disambiguation contract.
-    def best_affinity(self, *, predictor: Optional[str] = None,
-                      version: Optional[str] = None):
-        return self.best(
-            'pMHC_affinity', predictor=predictor, version=version)
-
-    def best_presentation(self, *, predictor: Optional[str] = None,
-                          version: Optional[str] = None):
-        return self.best(
-            'pMHC_presentation', predictor=predictor, version=version)
-
-    def best_stability(self, *, predictor: Optional[str] = None,
-                       version: Optional[str] = None):
-        return self.best(
-            'pMHC_stability', predictor=predictor, version=version)
-
-    def best_immunogenicity(self, *, predictor: Optional[str] = None,
-                            version: Optional[str] = None):
-        return self.best(
-            'immunogenicity', predictor=predictor, version=version)
-
-    def best_cleavage(self, *, predictor: Optional[str] = None,
-                      version: Optional[str] = None):
-        return self.best(
-            'proteasome_cleavage', predictor=predictor, version=version)
-
-    def best_antigen_processing(self, *, predictor: Optional[str] = None,
-                                version: Optional[str] = None):
-        return self.best(
-            'antigen_processing', predictor=predictor, version=version)
+    # Kind-named sugar for the common ``best(kind)`` calls. For
+    # predictor / version pinning, use ``best`` directly.
+    def best_affinity(self): return self.best('pMHC_affinity')
+    def best_presentation(self): return self.best('pMHC_presentation')
+    def best_stability(self): return self.best('pMHC_stability')
+    def best_immunogenicity(self): return self.best('immunogenicity')
+    def best_cleavage(self): return self.best('proteasome_cleavage')
+    def best_antigen_processing(self): return self.best('antigen_processing')
 
     # ------------------------------------------------------------------
     # Flatten — for serialization / iteration when you don't care
@@ -447,9 +401,6 @@ class CandidateEpitope:
     """
 
     mutant: PeptideContext
-    # ``field(default_factory=dict)`` would normally be required
-    # for mutable defaults, but the class is frozen so callers
-    # construct dicts explicitly. Keeps the dataclass simple.
     comparators: dict = field(default_factory=dict)
 
     # Mutation-specific context. Lives at this level (not on
