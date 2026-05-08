@@ -19,3 +19,8 @@ platformdirs
 msgspec>=0.18.6,<1.0.0
 dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
+# vaxrank.peptide_context imports packaging.version for PEP 440 ordering
+# of predictor_version strings. Always pulled in transitively via setuptools
+# / pip, but pinned explicitly so minimal / --no-deps installs don't break
+# at import time.
+packaging>=21.0

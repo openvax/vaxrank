@@ -71,17 +71,18 @@ deliberately simple.
 
 ## Kind aliases
 
-Defers to ``topiary.ranking._KIND_ALIASES`` for canonical
-resolution (``ba`` / ``el`` / ``aff`` / ``ic50`` / ``presentation``
-/ etc. → canonical ``pMHC_*``). vaxrank does not maintain its own
-alias table.
+Defers to topiary's kind-alias table for canonical resolution
+(``ba`` / ``el`` / ``aff`` / ``ic50`` / ``presentation`` / etc. →
+canonical ``pMHC_*``). vaxrank does not maintain its own alias
+table. We prefer topiary's public ``KIND_ALIASES`` when available
+and fall back to the ``_KIND_ALIASES`` private name for older
+topiary releases — see ``_load_kind_aliases``.
 
 Issue: openvax/vaxrank#282 (replaces).
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
@@ -89,16 +90,53 @@ from packaging.version import InvalidVersion, Version
 
 if TYPE_CHECKING:
     from mhctools.pred import Prediction
+    # Nested storage shape: kind → predictor → version →
+    # tuple[Prediction]. ``frozen=True`` on the dataclass blocks
+    # field reassignment; the nested dicts themselves are mutable
+    # by Python convention — consumers go through the typed
+    # accessors (``best`` / ``predictions_for`` / …) and don't
+    # reach into the raw store.
+    PredictionStore = dict[str, dict[str, dict[str, tuple[Prediction, ...]]]]
+
+
+def _load_kind_aliases():
+    """Load topiary's canonical kind-alias table.
+
+    Prefers the public ``KIND_ALIASES`` (added in topiary going
+    forward) and falls back to ``_KIND_ALIASES`` for older releases
+    that haven't promoted the name yet. If neither is exposed,
+    raises a clear ``ImportError`` instead of letting an opaque
+    ``AttributeError`` surface deep inside vaxrank construction.
+    Cross-package private-name dependencies are brittle; this
+    wrapper is the seam for upgrading topiary's public surface
+    without touching every call site here.
+    """
+    try:
+        import topiary.ranking as _r
+    except ImportError as e:  # pragma: no cover
+        raise ImportError(
+            "vaxrank.peptide_context requires topiary's kind-alias "
+            "table; topiary itself failed to import."
+        ) from e
+    table = getattr(_r, 'KIND_ALIASES', None)
+    if table is None:
+        table = getattr(_r, '_KIND_ALIASES', None)
+    if table is None:  # pragma: no cover
+        raise ImportError(
+            "vaxrank.peptide_context expected topiary.ranking to "
+            "expose KIND_ALIASES (or the legacy _KIND_ALIASES); "
+            "neither name is present. topiary may have refactored "
+            "the alias table — open an issue on vaxrank."
+        )
+    return table
 
 
 def _resolve_kind(kind: str) -> str:
     """Map an alias / case-variant onto the canonical
     ``mhctools.Prediction.kind`` string. Defers to topiary's
-    ``_KIND_ALIASES`` so vaxrank doesn't fork the canonical list.
+    kind-alias table so vaxrank doesn't fork the canonical list.
     Unknown inputs pass through unchanged."""
-    # Imported lazily so this module stays import-light.
-    from topiary.ranking import _KIND_ALIASES
-    return _KIND_ALIASES.get(kind.lower(), kind)
+    return _load_kind_aliases().get(kind.lower(), kind)
 
 
 def _split_versions(versions) -> tuple:
@@ -184,18 +222,19 @@ class PeptideContext:
     source_sequence: str = ''
     source_name: str = ''         # gene / virus / "self_proteome" / …
     offset: int = 0
-    # Nested storage. Constructor accepts either this form or a
-    # flat ``Sequence[Prediction]`` (auto-grouped via
-    # ``__post_init__``). Annotated under ``TYPE_CHECKING`` to keep
-    # mhctools off the runtime import path.
-    predictions: dict = field(default_factory=dict)
+    # Nested storage. Constructor accepts either this shape or a
+    # flat ``list``/``tuple`` of ``Prediction`` records (auto-grouped
+    # via ``__post_init__``). Field type is ``PredictionStore``
+    # (alias under ``TYPE_CHECKING`` — see module top) so mhctools
+    # stays off the runtime import path.
+    predictions: "PredictionStore" = field(default_factory=dict)
 
     def __post_init__(self):
-        # Flat producer input → nested storage. Flat is the common
-        # case (mhctools / topiary hand back ``list[Prediction]``);
-        # converting at construction means read accessors don't
-        # have to repeat the work on every call.
-        if isinstance(self.predictions, Sequence):
+        # Flat ``Prediction`` sequence → nested dict (one-time work
+        # at construction so read accessors don't have to repeat it).
+        # ``object.__setattr__`` is the escape hatch for writing to a
+        # frozen-dataclass field — plain ``self.x = ...`` is blocked.
+        if isinstance(self.predictions, (list, tuple)):
             object.__setattr__(
                 self, 'predictions', _group_predictions(self.predictions))
 
@@ -219,12 +258,14 @@ class PeptideContext:
         return tuple(sorted(self.predictions.get(canonical, {})))
 
     def versions_for(self, kind: str, predictor: str) -> tuple:
-        """Versions of ``predictor`` that emitted ``kind``, sorted
-        oldest → newest by PEP 440. When multiple coexist, the
-        leaf accessors default to the last entry; this method
-        exposes the full set for callers that want to walk every
-        version. Unparseable / legacy strings sort before
-        parseable ones."""
+        """All versions of ``predictor`` that emitted ``kind``.
+
+        Ordering: legacy / unparseable strings (lex-sorted) come
+        first, followed by valid PEP 440 versions oldest → newest.
+        That matches ``best`` / ``predictions_for`` defaulting to
+        the *last* entry — i.e. the most-recent valid version when
+        any exist, with legacy strings falling below.
+        """
         canonical = _resolve_kind(kind)
         by_version = self.predictions.get(canonical, {}).get(predictor, {})
         parsed, fallback = _split_versions(by_version)
