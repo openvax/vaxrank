@@ -142,6 +142,47 @@ def test_predictions_flat_round_trips_through_constructor():
     assert rebuilt.predictions == original.predictions
 
 
+def test_predictions_flat_is_deterministic():
+    """Output sorted by (kind, predictor, version, allele) so two
+    contexts built from differently-ordered input emit the same
+    flat tuple. Pin so callers diffing serialized output across
+    runs don't see producer-order noise."""
+    a = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_presentation', predictor='mhcflurry',
+                  allele='HLA-B*07:02'),
+            _pred('pMHC_affinity', predictor='netmhcpan',
+                  allele='HLA-A*02:01'),
+            _pred('pMHC_affinity', predictor='mhcflurry',
+                  allele='HLA-B*07:02'),
+            _pred('pMHC_affinity', predictor='mhcflurry',
+                  allele='HLA-A*02:01'),
+        ))
+    b = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(  # same records, shuffled
+            _pred('pMHC_affinity', predictor='mhcflurry',
+                  allele='HLA-A*02:01'),
+            _pred('pMHC_affinity', predictor='mhcflurry',
+                  allele='HLA-B*07:02'),
+            _pred('pMHC_affinity', predictor='netmhcpan',
+                  allele='HLA-A*02:01'),
+            _pred('pMHC_presentation', predictor='mhcflurry',
+                  allele='HLA-B*07:02'),
+        ))
+    assert a.predictions_flat() == b.predictions_flat()
+    # Verify the sort order: kind primary, predictor secondary,
+    # allele tertiary (version is constant at '' here).
+    flat = a.predictions_flat()
+    assert [(p.kind, p.predictor_name, p.allele) for p in flat] == [
+        ('pMHC_affinity', 'mhcflurry', 'HLA-A*02:01'),
+        ('pMHC_affinity', 'mhcflurry', 'HLA-B*07:02'),
+        ('pMHC_affinity', 'netmhcpan', 'HLA-A*02:01'),
+        ('pMHC_presentation', 'mhcflurry', 'HLA-B*07:02'),
+    ]
+
+
 # ---- Structured views --------------------------------------------------
 
 
@@ -189,6 +230,57 @@ def test_alleles_for_lists_alleles_only():
         'HLA-A*02:01', 'HLA-B*07:02')
     # Processing kind: no alleles surfaced.
     assert ctx.alleles_for('proteasome_cleavage') == ()
+
+
+def test_alleles_for_unions_across_predictors():
+    """Unlike ``best`` / ``predictions_for``, ``alleles_for``
+    is predictor-agnostic — alleles are a set property, not
+    score-bound, so when multiple predictors emitted ``kind``
+    we union their alleles instead of raising. Pin so callers
+    asking "what alleles do we have evidence for?" don't get
+    surprised by a ValueError."""
+    ctx = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_affinity', predictor='mhcflurry',
+                  allele='HLA-A*02:01'),
+            _pred('pMHC_affinity', predictor='mhcflurry',
+                  allele='HLA-B*07:02'),
+            _pred('pMHC_affinity', predictor='netmhcpan',
+                  allele='HLA-A*02:01'),
+            _pred('pMHC_affinity', predictor='netmhcpan',
+                  allele='HLA-C*03:04'),
+        ))
+    # No predictor= → union across mhcflurry + netmhcpan.
+    assert ctx.alleles_for('pMHC_affinity') == (
+        'HLA-A*02:01', 'HLA-B*07:02', 'HLA-C*03:04')
+    # predictor= still filters.
+    assert ctx.alleles_for(
+        'pMHC_affinity', predictor='mhcflurry') == (
+            'HLA-A*02:01', 'HLA-B*07:02')
+    assert ctx.alleles_for(
+        'pMHC_affinity', predictor='netmhcpan') == (
+            'HLA-A*02:01', 'HLA-C*03:04')
+
+
+def test_alleles_for_unions_across_versions():
+    """Same predictor-agnostic logic for versions: when a
+    predictor ran at multiple versions on different alleles,
+    union rather than auto-resolving to the latest version's
+    alleles only."""
+    ctx = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_affinity', version='2.1.0',
+                  allele='HLA-A*02:01'),
+            _pred('pMHC_affinity', version='2.1.1',
+                  allele='HLA-B*07:02'),
+        ))
+    assert ctx.alleles_for('pMHC_affinity') == (
+        'HLA-A*02:01', 'HLA-B*07:02')
+    # Explicit version= restricts.
+    assert ctx.alleles_for(
+        'pMHC_affinity', version='2.1.1') == ('HLA-B*07:02',)
 
 
 # ---- Kind aliases (delegated to topiary) -------------------------------

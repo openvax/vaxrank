@@ -251,20 +251,27 @@ class PeptideContext:
     def alleles_for(self, kind: str, *,
                     predictor: Optional[str] = None,
                     version: Optional[str] = None) -> tuple[str, ...]:
-        """Alleles attested in the leaf tuple for
-        ``(kind, predictor, version)``. Filters out empty-string
-        alleles (processing kinds emit ``allele=""``). Used by
-        coverage / report code that walks per-allele evidence
-        without forcing a single 'best' allele.
+        """Alleles attested for ``kind``, optionally restricted by
+        ``predictor`` and / or ``version``. Filters out empty
+        alleles (processing kinds emit ``allele=""``).
 
-        Same disambiguation contract as ``best``: raises when
-        multiple predictors emitted ``kind`` and ``predictor`` is
-        unset; auto-resolves to most recent when multiple versions
-        coexist and ``version`` is unset.
+        Predictor- and version-agnostic by default — alleles are a
+        set property, not predictor-specific, so when multiple
+        predictors emitted ``kind`` we union their alleles rather
+        than raise. This is unlike ``best`` / ``predictions_for``,
+        where score scales differ across predictors so ranking
+        requires explicit disambiguation.
         """
-        records = self.predictions_for(
-            kind, predictor=predictor, version=version)
-        return tuple(sorted({p.allele for p in records if p.allele}))
+        canonical = _resolve_kind(kind)
+        alleles: set[str] = set()
+        for pn, by_version in self.predictions.get(canonical, {}).items():
+            if predictor is not None and pn != predictor:
+                continue
+            for ver, records in by_version.items():
+                if version is not None and ver != version:
+                    continue
+                alleles.update(p.allele for p in records if p.allele)
+        return tuple(sorted(alleles))
 
     def predictions_for(self, kind: str, *,
                         predictor: Optional[str] = None,
@@ -348,15 +355,18 @@ class PeptideContext:
 
     def predictions_flat(self) -> tuple["Prediction", ...]:
         """Flatten the nested store back to a tuple of
-        ``Prediction`` records. Useful for serialization round-trips
-        and any code that just wants to iterate every prediction
-        without caring about the kind/predictor/version structure."""
-        return tuple(
+        ``Prediction`` records, sorted by ``(kind, predictor_name,
+        predictor_version, allele)``. Sorted output is deterministic
+        across runs and through serialization round-trips even when
+        the input arrived in producer-specific order."""
+        flat = (
             p
             for by_predictor in self.predictions.values()
             for by_version in by_predictor.values()
             for records in by_version.values()
             for p in records)
+        return tuple(sorted(flat, key=lambda p: (
+            p.kind, p.predictor_name, p.predictor_version, p.allele)))
 
 
 @dataclass(frozen=True)
