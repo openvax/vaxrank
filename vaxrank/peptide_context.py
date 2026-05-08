@@ -85,6 +85,7 @@ Issue: openvax/vaxrank#282 (replaces).
 from __future__ import annotations
 
 import functools
+import math
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Optional
@@ -142,6 +143,18 @@ def _resolve_kind(kind: str) -> str:
     kind-alias table so vaxrank doesn't fork the canonical list.
     Unknown inputs pass through unchanged."""
     return _load_kind_aliases().get(kind.lower(), kind)
+
+
+def _nan_safe(x: float) -> tuple[bool, float]:
+    """Wrap a float so it sorts deterministically even when NaN.
+    Python's ``sorted`` is undefined on NaN keys (NaN comparisons
+    return False both ways). Returns ``(is_nan, x_or_zero)`` —
+    NaN-bearing entries sort *after* finite ones; within the NaN
+    bucket they all tie at ``(True, 0.0)`` and stable sort
+    preserves their relative order from the preceding key
+    components, which is the best we can do."""
+    is_nan = math.isnan(x)
+    return (is_nan, 0.0 if is_nan else x)
 
 
 def _sort_versions(versions) -> list:
@@ -389,7 +402,9 @@ class PeptideContext:
         so the output is fully deterministic — even if a producer
         ever emits duplicate ``(kind, predictor, version, allele)``
         records, the score / value / %-rank tail breaks ties
-        without falling back on input order."""
+        without falling back on input order. Float keys are wrapped
+        with ``_nan_safe`` because mhctools sometimes emits NaN
+        for ``percentile_rank`` and ``sorted`` is undefined on NaN."""
         flat = (
             p
             for by_predictor in self.predictions.values()
@@ -398,7 +413,8 @@ class PeptideContext:
             for p in records)
         return tuple(sorted(flat, key=lambda p: (
             p.kind, p.predictor_name, p.predictor_version, p.allele,
-            p.score, p.value, p.percentile_rank)))
+            _nan_safe(p.score), _nan_safe(p.value),
+            _nan_safe(p.percentile_rank))))
 
 
 @dataclass(frozen=True)

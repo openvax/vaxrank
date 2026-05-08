@@ -208,6 +208,38 @@ def test_predictions_flat_tiebreaker_for_duplicate_keys():
     assert [p.score for p in a.predictions_flat()] == [0.3, 0.5, 0.9]
 
 
+def test_predictions_flat_handles_nan_in_float_keys():
+    """mhctools sometimes emits NaN for ``percentile_rank``.
+    Python's ``sorted`` is undefined on NaN — wrap floats so
+    NaN-bearing entries sort consistently rather than producing
+    nondeterministic order."""
+    import math
+    nan = float('nan')
+    a = PeptideContext(
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_affinity', allele='HLA-A*02:01',
+                  score=0.5, percentile_rank=nan),
+            _pred('pMHC_affinity', allele='HLA-B*07:02',
+                  score=0.7, percentile_rank=2.5),
+        ))
+    b = PeptideContext(  # same records, shuffled
+        peptide_sequence='SIINFEKL',
+        predictions=(
+            _pred('pMHC_affinity', allele='HLA-B*07:02',
+                  score=0.7, percentile_rank=2.5),
+            _pred('pMHC_affinity', allele='HLA-A*02:01',
+                  score=0.5, percentile_rank=nan),
+        ))
+    flat_a = a.predictions_flat()
+    flat_b = b.predictions_flat()
+    # Allele order matches between shuffled inputs.
+    assert ([p.allele for p in flat_a]
+            == [p.allele for p in flat_b])
+    # NaN-bearing entries didn't crash the sort.
+    assert any(math.isnan(p.percentile_rank) for p in flat_a)
+
+
 # ---- Structured views --------------------------------------------------
 
 
