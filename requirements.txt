@@ -7,7 +7,9 @@ mhctools>=3.13.3,<4.0.0
 # 5.10.0 adds EvalContext(default_methods=...) and apply_filter(default_methods=...)
 # which vaxrank uses to score multi-model inputs (e.g. LENS with mhcflurry +
 # netmhcpan) without pre-subsetting the frame.
-topiary>=5.10.0,<6.0.0
+# 5.12.0 promotes KIND_ALIASES to the public surface so vaxrank's
+# peptide_context can drop its defensive private-name fallback.
+topiary>=5.12.0,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0

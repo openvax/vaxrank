@@ -72,69 +72,25 @@ deliberately simple.
 
 ## Kind aliases
 
-Defers to topiary's kind-alias table for canonical resolution
+Defers to ``topiary.ranking.KIND_ALIASES`` for canonical resolution
 (``ba`` / ``el`` / ``aff`` / ``ic50`` / ``presentation`` / etc. →
 canonical ``pMHC_*``). vaxrank does not maintain its own alias
-table. We prefer topiary's public ``KIND_ALIASES`` when available
-and fall back to the ``_KIND_ALIASES`` private name for older
-topiary releases — see ``_load_kind_aliases``.
+table. Requires topiary >= 5.12.0 (public name).
 
 Issue: openvax/vaxrank#282 (replaces).
 """
 
 from __future__ import annotations
 
-import functools
 import math
 from dataclasses import dataclass, field
-from types import MappingProxyType
 from typing import TYPE_CHECKING, Optional
 
 from packaging.version import InvalidVersion, Version
+from topiary.ranking import KIND_ALIASES as _KIND_ALIASES
 
 if TYPE_CHECKING:
     from mhctools.pred import Prediction
-
-
-@functools.lru_cache(maxsize=1)
-def _load_kind_aliases():
-    """Load topiary's canonical kind-alias table.
-
-    Prefers the public ``KIND_ALIASES`` (added in topiary going
-    forward) and falls back to ``_KIND_ALIASES`` for older releases
-    that haven't promoted the name yet. If neither is exposed,
-    raises a clear ``ImportError`` instead of letting an opaque
-    ``AttributeError`` surface deep inside vaxrank construction.
-    Cross-package private-name dependencies are brittle; this
-    wrapper is the seam for upgrading topiary's public surface
-    without touching every call site here.
-
-    Cached: the table is module-constant once topiary is loaded;
-    ``_resolve_kind`` is on the per-record hot path of ``best`` /
-    ``predictions_for``, so we don't want to redo the ``getattr``
-    chain on every call. Tests that need to swap topiary's table
-    must call ``_load_kind_aliases.cache_clear()``.
-    """
-    try:
-        import topiary.ranking as _r
-    except ImportError as e:  # pragma: no cover
-        raise ImportError(
-            "vaxrank.peptide_context requires topiary's kind-alias "
-            "table; topiary itself failed to import."
-        ) from e
-    table = getattr(_r, 'KIND_ALIASES', None)
-    if table is None:
-        table = getattr(_r, '_KIND_ALIASES', None)
-    if table is None:
-        raise ImportError(
-            "vaxrank.peptide_context expected topiary.ranking to "
-            "expose KIND_ALIASES (or the legacy _KIND_ALIASES); "
-            "neither name is present. topiary may have refactored "
-            "the alias table — open an issue on vaxrank."
-        )
-    # Wrap as a read-only view so a misbehaving caller can't
-    # mutate topiary's alias table for the rest of the session.
-    return MappingProxyType(table)
 
 
 def _resolve_kind(kind: str) -> str:
@@ -142,7 +98,7 @@ def _resolve_kind(kind: str) -> str:
     ``mhctools.Prediction.kind`` string. Defers to topiary's
     kind-alias table so vaxrank doesn't fork the canonical list.
     Unknown inputs pass through unchanged."""
-    return _load_kind_aliases().get(kind.lower(), kind)
+    return _KIND_ALIASES.get(kind.lower(), kind)
 
 
 def _nan_safe(x: float) -> tuple[bool, float]:
