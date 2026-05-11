@@ -11,12 +11,17 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field
-from operator import attrgetter
 from typing import Any, Optional
 
 import numpy as np
 from serializable import DataclassSerializable
 
+from .config.defaults import (
+    DEFAULT_BINDING_AFFINITY_CUTOFF,
+    DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT,
+    DEFAULT_LOGISTIC_EPITOPE_SCORE_WIDTH,
+    DEFAULT_PERCENTILE_RANK_CUTOFF,
+)
 from .manufacturability import (
     ManufacturabilityScores,
     compute_manufacturability_tuple,
@@ -25,31 +30,68 @@ from .ranking import compute_ranking_tuple
 from .vaccine_config import COMBINED_SCORE_MODES, DEFAULT_COMBINED_SCORE_MODE
 
 
+def _legacy_score_one(ic50, percentile_rank, *,
+                      midpoint=DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT,
+                      width=DEFAULT_LOGISTIC_EPITOPE_SCORE_WIDTH,
+                      ic50_cutoff=DEFAULT_BINDING_AFFINITY_CUTOFF,
+                      scoring_mode="affinity",
+                      percentile_rank_cutoff=DEFAULT_PERCENTILE_RANK_CUTOFF):
+    """Per-prediction logistic score — extracted verbatim from the
+    deleted ``EpitopePrediction.logistic_epitope_score`` method.
+
+    Kept as a free function so ``VaccinePeptide`` can sum scores
+    across leaf ``mhctools.Prediction`` records inside each
+    ``Epitope.mutant`` without owning the math itself. The topiary
+    DSL's default ``score_expr`` produces byte-identical output
+    (see ``test_default_score_matches_legacy_*``); a follow-up will
+    route ``VaccinePeptide``'s score aggregation through
+    ``score_predictions`` directly.
+    """
+    if scoring_mode == "percentile_rank":
+        if percentile_rank is None:
+            return 0.0
+        rank = float(percentile_rank)
+        if rank >= percentile_rank_cutoff:
+            return 0.0
+        return max(0.0, 1.0 - rank / percentile_rank_cutoff)
+
+    if ic50 >= ic50_cutoff:
+        return 0.0
+    rescaled = (float(ic50) - midpoint) / width
+    logistic = 1.0 / (1.0 + np.exp(rescaled))
+    normalizer = 1.0 / (1.0 + np.exp(-midpoint / width))
+    return logistic / normalizer
+
+
 @dataclass
 class VaccinePeptide(DataclassSerializable):
     """
     VaccinePeptide combines the sequence information of MutantProteinFragment
     with MHC binding predictions for subsequences of the protein fragment.
 
-    The resulting lists of mutant and wildtype epitope predictions
-    are sorted by affinity.
+    The resulting lists of mutant and wildtype ``Epitope`` objects
+    are sorted by best mutant affinity.
 
     Parameters
     ----------
     mutant_protein_fragment : MutantProteinFragment
 
-    epitope_predictions : list of EpitopePrediction
+    epitopes : list of Epitope
 
     num_mutant_epitopes_to_keep : int or None
         If None or 0 then keep all mutant epitopes.
 
     epitope_score_params : dict or None
-        Parameters passed to EpitopePrediction.logistic_epitope_score.
+        Parameters for the per-prediction score (midpoint, width,
+        ic50_cutoff, scoring_mode, percentile_rank_cutoff). Matches
+        the legacy ``EpitopePrediction.logistic_epitope_score`` knobs
+        byte-for-byte.
 
-    sort_predictions_by : str
-        Field of EpitopePrediction used for sorting epitope predictions
-        overlapping mutation in ascending order. Can be either 'ic50'
-        or 'percentile_rank'.
+    sort_epitopes_by : str
+        Field of the mutant's best affinity ``mhctools.Prediction``
+        used for sorting epitopes overlapping mutation in ascending
+        order. Can be either 'ic50' (Prediction.value) or
+        'percentile_rank'.
 
     manufacturability_thresholds : dict or None
         Hydropathy thresholds for peptide synthesis difficulty scoring.
@@ -81,10 +123,15 @@ class VaccinePeptide(DataclassSerializable):
     """
 
     mutant_protein_fragment: Any
-    epitope_predictions: list
+    epitopes: list = field(default=None)
     num_mutant_epitopes_to_keep: Optional[int] = None
     epitope_score_params: Optional[dict] = None
-    sort_predictions_by: str = "ic50"
+    sort_epitopes_by: str = "ic50"
+    # Legacy kwarg accepted for one transitional minor (vaxrank#284
+    # consumer migration). Constructor auto-converts via the legacy
+    # adapter. Drops once every caller passes ``epitopes=``.
+    epitope_predictions: Optional[list] = None
+    sort_predictions_by: Optional[str] = None  # legacy alias
     manufacturability_thresholds: Optional[dict] = None
     manufacturability_rules: Optional[tuple] = None
     combined_score_mode: Optional[str] = None
@@ -99,13 +146,24 @@ class VaccinePeptide(DataclassSerializable):
     # serialized form. `init=False` keeps them out of the generated
     # __init__ signature; default=None gives them a sane pre-computed
     # value for any pathway that inspects fields before __post_init__.
-    mutant_epitope_predictions: list = field(default_factory=list, init=False, repr=False)
-    wildtype_epitope_predictions: list = field(default_factory=list, init=False, repr=False)
+    mutant_epitopes: list = field(default_factory=list, init=False, repr=False)
+    wildtype_epitopes: list = field(default_factory=list, init=False, repr=False)
     wildtype_epitope_score: float = field(default=0.0, init=False, repr=False)
     mutant_epitope_score: float = field(default=0.0, init=False, repr=False)
     manufacturability_scores: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
+        # Legacy compat: accept ``epitope_predictions=`` and auto-convert
+        # via the migration adapter. Same for ``sort_predictions_by``.
+        if self.epitopes is None and self.epitope_predictions is not None:
+            from .epitope_dsl import _legacy_predictions_to_epitopes
+            self.epitopes = _legacy_predictions_to_epitopes(
+                self.epitope_predictions)
+        elif self.epitopes is None:
+            self.epitopes = []
+        if self.sort_predictions_by is not None:
+            self.sort_epitopes_by = self.sort_predictions_by
+
         # Normalize the optional collection/tuple fields.
         self.epitope_score_params = self.epitope_score_params or {}
         self.manufacturability_thresholds = self.manufacturability_thresholds or {}
@@ -135,38 +193,60 @@ class VaccinePeptide(DataclassSerializable):
         else:
             self._combined_score_expr_ast = None
 
-        sort_key = attrgetter(self.sort_predictions_by)
+        # Sort key over Epitope: read the mutant's best-affinity record
+        # and pick its ic50 (``value``) or percentile_rank, matching the
+        # legacy attrgetter('ic50') / attrgetter('percentile_rank') on
+        # flat EpitopePrediction. Epitopes without any affinity record
+        # sort to the end via +inf.
+        def _epitope_sort_key(e):
+            best = e.mutant.best_affinity()
+            if best is None:
+                return float("inf")
+            if self.sort_epitopes_by == "percentile_rank":
+                rank = best.percentile_rank
+                return rank if rank is not None and not np.isnan(rank) else float("inf")
+            return best.value
 
         # only keep the top k epitopes
-        self.mutant_epitope_predictions = sorted(
+        self.mutant_epitopes = sorted(
             [
-                p for p in self.epitope_predictions
-                if p.overlaps_mutation and not p.occurs_in_reference
+                e for e in self.epitopes
+                if e.overlaps_mutation and not e.occurs_in_reference
             ],
-            key=sort_key,
+            key=_epitope_sort_key,
         )
         if self.num_mutant_epitopes_to_keep:
-            self.mutant_epitope_predictions = (
-                self.mutant_epitope_predictions[: self.num_mutant_epitopes_to_keep]
+            self.mutant_epitopes = (
+                self.mutant_epitopes[: self.num_mutant_epitopes_to_keep]
             )
 
-        self.wildtype_epitope_predictions = sorted(
+        self.wildtype_epitopes = sorted(
             [
-                p for p in self.epitope_predictions
-                if not p.overlaps_mutation or p.occurs_in_reference
+                e for e in self.epitopes
+                if not e.overlaps_mutation or e.occurs_in_reference
             ],
-            key=sort_key,
+            key=_epitope_sort_key,
         )
 
-        def epitope_score(prediction):
-            return prediction.logistic_epitope_score(**self.epitope_score_params)
+        # Score each Epitope by summing the legacy per-prediction
+        # logistic score across all of its mutant affinity records.
+        # Preserves byte-identical totals with pre-migration vaxrank:
+        # one EpitopePrediction per (peptide, allele, predictor) → one
+        # leaf Prediction in the new shape; the sum has the same terms.
+        params = self.epitope_score_params
+
+        def _epitope_total_score(e):
+            return sum(
+                _legacy_score_one(
+                    ic50=p.value,
+                    percentile_rank=p.percentile_rank,
+                    **params)
+                for p in e.mutant.predictions_for('pMHC_affinity'))
 
         self.wildtype_epitope_score = sum(
-            epitope_score(p) for p in self.wildtype_epitope_predictions
-        )
+            _epitope_total_score(e) for e in self.wildtype_epitopes)
         self.mutant_epitope_score = sum(
-            epitope_score(p) for p in self.mutant_epitope_predictions
-        )
+            _epitope_total_score(e) for e in self.mutant_epitopes)
 
         self.manufacturability_scores = ManufacturabilityScores.from_amino_acids(
             self.mutant_protein_fragment.amino_acids
@@ -224,7 +304,20 @@ class VaccinePeptide(DataclassSerializable):
         return compute_ranking_tuple(self, rules=self.ranking_rules)
 
     def contains_mutant_epitopes(self):
-        return len(self.mutant_epitope_predictions) > 0
+        return len(self.mutant_epitopes) > 0
+
+    # Legacy aliases — consumers still using EpitopePrediction-shaped
+    # field names during the migration (vaxrank#284). Return the new
+    # Epitope objects, which expose the legacy field names via the
+    # ``__getattr__`` shim on ``Epitope`` (TODO: add shim or migrate
+    # consumers; today they index into ``.mutant`` etc. directly).
+    @property
+    def mutant_epitope_predictions(self):
+        return self.mutant_epitopes
+
+    @property
+    def wildtype_epitope_predictions(self):
+        return self.wildtype_epitopes
 
     @property
     def expression_score(self):
@@ -253,18 +346,16 @@ class VaccinePeptide(DataclassSerializable):
 
     def to_dict(self):
         # The persisted form combines the filtered mutant + wildtype lists
-        # back into a single `epitope_predictions` list. Also trims fields
-        # that match their defaults so the JSON stays small and older
-        # readers don't see keys they don't understand.
-        epitope_predictions = (
-            self.mutant_epitope_predictions + self.wildtype_epitope_predictions
-        )
+        # back into a single `epitopes` list. Also trims fields that match
+        # their defaults so the JSON stays small and older readers don't
+        # see keys they don't understand.
+        epitopes = self.mutant_epitopes + self.wildtype_epitopes
         d = {
             "mutant_protein_fragment": self.mutant_protein_fragment,
-            "epitope_predictions": epitope_predictions,
+            "epitopes": epitopes,
             "num_mutant_epitopes_to_keep": self.num_mutant_epitopes_to_keep,
             "epitope_score_params": self.epitope_score_params,
-            "sort_predictions_by": self.sort_predictions_by,
+            "sort_epitopes_by": self.sort_epitopes_by,
         }
         if self.manufacturability_thresholds:
             d["manufacturability_thresholds"] = self.manufacturability_thresholds

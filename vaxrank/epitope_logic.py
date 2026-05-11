@@ -22,33 +22,35 @@ from topiary.ranking import EvalContext, apply_filter
 
 from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
-from .epitope_dsl import build_filter_node, build_score_node
+from .epitope_dsl import (
+    _legacy_predictions_to_epitopes,
+    build_filter_node,
+    build_score_node,
+)
 from .epitope_prediction import EpitopePrediction
 from .mutant_protein_fragment import MutantProteinFragment
+from .peptide_context import Epitope
 from .reference_proteome import ReferenceProteome
 
 logger = logging.getLogger(__name__)
 
 
-def slice_epitope_predictions(
-        epitope_predictions,
-        start_offset,
-        end_offset):
+def slice_epitopes(epitopes, start_offset, end_offset):
+    """Return subset of ``Epitope`` objects whose mutant peptide lies
+    fully within ``[start_offset, end_offset)``, with each one's source
+    window narrowed to that range and offset rebased.
+
+    Drop-in replacement for the legacy ``slice_epitope_predictions``
+    that operated on flat ``EpitopePrediction`` records.
     """
-    Return subset of EpitopePrediction objects which overlap the given interval
-    and slice through their source sequences and adjust their offset.
-    """
-    return [
-        p.slice_source_sequence(start_offset, end_offset)
-        for p in epitope_predictions
-        if p.offset >= start_offset and p.offset + p.length <= end_offset
-    ]
+    sliced = (e.sliced(start_offset, end_offset) for e in epitopes)
+    return [e for e in sliced if e is not None]
 
 def predict_epitopes(
         mhc_predictor,
         protein_fragment : MutantProteinFragment,
         epitope_config : Optional[EpitopeConfig] = None,
-        genome : Optional[Genome] = None) -> list[EpitopePrediction]:
+        genome : Optional[Genome] = None) -> list[Epitope]:
     """
     Parameters
     ----------
@@ -57,8 +59,8 @@ def predict_epitopes(
         models) or a mhctools BasePredictor. A bare BasePredictor is
         wrapped in a single-model TopiaryPredictor; pass a multi-model
         TopiaryPredictor (or use ``--mhc-predictor`` with multiple
-        names on the CLI) to get one EpitopePrediction per (peptide,
-        allele, predictor).
+        names on the CLI) to get all alleles' / predictors' results
+        rolled into each Epitope's mutant context.
 
     protein_fragment
         Protein sub-sequence to run MHC binding predictor over
@@ -72,19 +74,22 @@ def predict_epitopes(
 
     Returns
     -------
-    list[EpitopePrediction]
-        One entry per (peptide, allele, predictor) tuple — multi-predictor
-        runs (mhcflurry + netmhcpan, …) yield multiple entries per
-        (peptide, allele) pair, with ``prediction_method_name``
-        distinguishing them. Pre-2.24 this was a dict keyed on
-        ``(peptide, allele)`` which silently overwrote when multiple
-        predictors were configured (issue #261).
+    list[Epitope]
+        One ``Epitope`` per (peptide, peptide_offset) — each carrying
+        all per-(allele, predictor) ``mhctools.Prediction`` records
+        in its mutant ``PeptideContext``, plus the WT comparator
+        context when the peptide overlaps the mutation.
 
     Uses the input genome to evaluate whether the epitope occurs in reference.
     """
     if epitope_config is None:
         epitope_config = EpitopeConfig()
 
+    # Internal scratchpad of flat EpitopePrediction records; converted
+    # to ``list[Epitope]`` at the end via the migration adapter so this
+    # producer's body doesn't need a structural rewrite. (Issue #284 —
+    # adapter drops out once the body emits Predictions / contexts
+    # natively.)
     results: list[EpitopePrediction] = []
     reference_proteome = ReferenceProteome(genome)
 
@@ -255,4 +260,4 @@ def predict_epitopes(
         num_total,
         num_occurs_in_reference,
         num_low_scoring)
-    return results
+    return _legacy_predictions_to_epitopes(results)

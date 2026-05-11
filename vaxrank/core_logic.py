@@ -25,7 +25,7 @@ from topiary import TopiaryPredictor
 from .epitope_config import EpitopeConfig
 from .vaccine_config import VaccineConfig
 from .manufacturability_config import ManufacturabilityConfig
-from .epitope_logic import slice_epitope_predictions, predict_epitopes
+from .epitope_logic import slice_epitopes, predict_epitopes
 from .mutant_protein_fragment import MutantProteinFragment
 from .vaccine_peptide import VaccinePeptide
 from .vaxrank_results import VaxrankResults
@@ -232,7 +232,7 @@ def vaccine_peptides_for_variant(
 
     logger.info("Mutant protein fragment for %s: %s", variant, long_protein_fragment)
 
-    epitope_predictions = predict_epitopes(
+    epitopes = predict_epitopes(
         mhc_predictor=mhc_predictor,
         protein_fragment=long_protein_fragment,
         epitope_config=epitope_config,
@@ -241,7 +241,7 @@ def vaccine_peptides_for_variant(
     return vaccine_peptides_from_epitopes(
         variant=variant,
         long_protein_fragment=long_protein_fragment,
-        epitope_predictions=epitope_predictions,
+        epitopes=epitopes,
         vaccine_peptide_length=vaccine_peptide_length,
         max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
         num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
@@ -254,7 +254,7 @@ def vaccine_peptides_for_variant(
 def vaccine_peptides_from_epitopes(
     variant,
     long_protein_fragment: MutantProteinFragment,
-    epitope_predictions: list,
+    epitopes: list,
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
     num_mutant_epitopes_to_keep: int = 1000,
@@ -263,7 +263,7 @@ def vaccine_peptides_from_epitopes(
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
 ):
     """
-    Generate vaccine peptide candidates from epitope predictions.
+    Generate vaccine peptide candidates from epitopes.
 
     Parameters
     ----------
@@ -273,8 +273,8 @@ def vaccine_peptides_from_epitopes(
     long_protein_fragment
         The protein fragment containing the mutation
 
-    epitope_predictions
-        List of EpitopePrediction objects
+    epitopes
+        List of Epitope objects
 
     vaccine_peptide_length
         Length of vaccine SLP to construct
@@ -331,22 +331,22 @@ def vaccine_peptides_from_epitopes(
         subsequence_length=vaccine_config.preferred_peptide_length
     ):
 
-        subsequence_epitope_predictions = slice_epitope_predictions(
-            epitope_predictions,
+        subsequence_epitopes = slice_epitopes(
+            epitopes,
             start_offset=offset,
             end_offset=offset + len(candidate_fragment),
         )
         # filter out peptides that have no epitopes
-        if not subsequence_epitope_predictions:
+        if not subsequence_epitopes:
             logger.info(
-                "No epitope predictions for mutant protein fragment %s",
+                "No epitopes for mutant protein fragment %s",
                 candidate_fragment,
             )
             continue
 
         assert all(
-            p.source_sequence == candidate_fragment.amino_acids
-            for p in subsequence_epitope_predictions
+            e.mutant.source_sequence == candidate_fragment.amino_acids
+            for e in subsequence_epitopes
         )
 
         # Manufacturability config is peptide-only (post-2.20). When
@@ -358,7 +358,7 @@ def vaccine_peptides_from_epitopes(
         mfg = manufacturability_config or ManufacturabilityConfig()
         candidate_vaccine_peptide = VaccinePeptide(
             mutant_protein_fragment=candidate_fragment,
-            epitope_predictions=subsequence_epitope_predictions,
+            epitopes=subsequence_epitopes,
             num_mutant_epitopes_to_keep=vaccine_config.num_mutant_epitopes_to_keep,
             epitope_score_params=epitope_score_params,
             manufacturability_thresholds=mfg.thresholds_dict(),
