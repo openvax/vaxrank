@@ -20,11 +20,10 @@ Supports:
 
 All loader functions emit ``list[vaxrank.peptide_context.Epitope]``;
 the flat per-(peptide, allele, predictor) row shape lives only inside
-the CSV / DataFrame layer for round-trip fidelity. Internal scratchpads
-build :class:`vaxrank.epitope_dsl._PredRow` records as a row-level
-container, then :func:`vaxrank.epitope_dsl._rows_to_epitopes` collapses
-them into ``Epitope`` objects keyed by
-``(peptide_sequence, source_sequence, offset)``.
+the CSV / DataFrame layer for round-trip fidelity. Loaders push
+each row through :class:`~vaxrank.peptide_context.EpitopeBuilder`,
+which groups by ``(peptide, source, offset)`` into ``Epitope``
+objects at the end.
 """
 
 import logging
@@ -32,8 +31,10 @@ import re
 from dataclasses import dataclass
 
 import pandas as pd
+from mhctools.pred import Prediction
 
-from .epitope_dsl import _PredRow, _rows_to_epitopes
+from .epitope_dsl import _kind_for_method
+from .peptide_context import EpitopeBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -130,19 +131,13 @@ def load_predictions(path):
     """Load a vaxrank-native CSV/TSV file and return ``list[Epitope]``."""
     sep = "\t" if str(path).endswith(".tsv") else ","
     df = pd.read_csv(path, sep=sep)
-    return _rows_to_epitopes(_dataframe_to_predictions(df))
 
-
-def _dataframe_to_predictions(df):
-    """Read a vaxrank-format DataFrame into a flat scratchpad of
-    :class:`~vaxrank.epitope_dsl._PredRow` records, ready to be
-    grouped into Epitopes by ``_rows_to_epitopes``."""
     def _str_or_empty(val):
         if val is None or (isinstance(val, float) and pd.isna(val)):
             return ""
         return str(val)
 
-    predictions = []
+    builder = EpitopeBuilder()
     for _, row in df.iterrows():
         wt_ic50 = row.get("wt_ic50")
         if pd.isna(wt_ic50):
@@ -150,21 +145,37 @@ def _dataframe_to_predictions(df):
         percentile_rank = row.get("percentile_rank")
         if pd.isna(percentile_rank):
             percentile_rank = None
-        predictions.append(_PredRow(
-            allele=row["allele"],
-            peptide_sequence=row["peptide_sequence"],
-            wt_peptide_sequence=_str_or_empty(row.get("wt_peptide_sequence", "")),
-            ic50=float(row["ic50"]),
-            wt_ic50=float(wt_ic50) if wt_ic50 is not None else None,
-            percentile_rank=float(percentile_rank) if percentile_rank is not None else None,
-            prediction_method_name=_str_or_empty(row.get("prediction_method_name", "")),
-            overlaps_mutation=bool(row.get("overlaps_mutation", True)),
-            source_sequence=_str_or_empty(row.get("source_sequence", "")),
+        peptide = row["peptide_sequence"]
+        wt_peptide = _str_or_empty(row.get("wt_peptide_sequence", ""))
+        method = _str_or_empty(row.get("prediction_method_name", ""))
+        version = _str_or_empty(row.get("predictor_version", ""))
+        allele = row["allele"]
+        kind = _kind_for_method(method)
+        mutant = Prediction(
+            kind=kind, predictor_name=method, predictor_version=version,
+            allele=allele, peptide=peptide, value=float(row["ic50"]),
+            score=0.0,
+            percentile_rank=(
+                float(percentile_rank) if percentile_rank is not None
+                else None),
+        )
+        wt = None
+        if wt_ic50 is not None:
+            wt = Prediction(
+                kind=kind, predictor_name=method,
+                predictor_version=version, allele=allele,
+                peptide=wt_peptide, value=float(wt_ic50), score=0.0,
+                percentile_rank=None,
+            )
+        builder.add_row(
+            peptide=peptide,
+            source=_str_or_empty(row.get("source_sequence", "")),
             offset=int(row.get("offset", 0)),
-            predictor_version=_str_or_empty(row.get("predictor_version", "")),
+            mutant=mutant, wt=wt,
+            overlaps_mutation=bool(row.get("overlaps_mutation", True)),
             occurs_in_reference=bool(row.get("occurs_in_reference", False)),
-        ))
-    return predictions
+        )
+    return builder.epitopes()
 
 
 # ── pVACseq import ───────────────────────────────────────────────────────────
@@ -199,8 +210,9 @@ def load_pvacseq(path):
         raise ValueError(
             f"pVACseq file {path} missing required columns: {missing}")
 
-    predictions = []
+    builder = EpitopeBuilder()
     report_rows = []
+    n_rows = 0
     for _, row in df.iterrows():
         peptide = row.get("Best Peptide", "")
         if not peptide or pd.isna(peptide):
@@ -245,20 +257,26 @@ def load_pvacseq(path):
         if pd.isna(tier):
             tier = ""
 
-        pred = _PredRow(
-            allele=str(allele),
-            peptide_sequence=str(peptide),
-            wt_peptide_sequence=str(wt_peptide),
-            ic50=ic50_mt,
-            wt_ic50=wt_ic50,
-            percentile_rank=percentile_rank,
-            prediction_method_name=str(method),
+        kind = _kind_for_method(str(method))
+        mutant = Prediction(
+            kind=kind, predictor_name=str(method), predictor_version="",
+            allele=str(allele), peptide=str(peptide), value=ic50_mt,
+            score=0.0, percentile_rank=percentile_rank,
+        )
+        wt = None
+        if wt_ic50 is not None:
+            wt = Prediction(
+                kind=kind, predictor_name=str(method), predictor_version="",
+                allele=str(allele), peptide=str(wt_peptide),
+                value=wt_ic50, score=0.0, percentile_rank=None,
+            )
+        builder.add_row(
+            peptide=str(peptide), source="", offset=0,
+            mutant=mutant, wt=wt,
             overlaps_mutation=True,
-            source_sequence="",
-            offset=0,
             occurs_in_reference=occurs_in_reference,
         )
-        predictions.append(pred)
+        n_rows += 1
 
         # Build report row preserving pVACseq metadata
         wt_ic50_str = '%.2f nM' % wt_ic50 if wt_ic50 is not None else 'No prediction'
@@ -279,10 +297,10 @@ def load_pvacseq(path):
         })
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
-    epitopes = _rows_to_epitopes(predictions)
+    epitopes = builder.epitopes()
     logger.info(
         "Loaded %d epitope(s) (%d row(s)) from pVACseq file %s",
-        len(epitopes), len(predictions), path)
+        len(epitopes), n_rows, path)
     return report_df, epitopes
 
 
@@ -489,7 +507,7 @@ def load_lens(path):
         _pick_canonical_predictor(affinity_preds) if affinity_preds else None)
     chosen = list(detected)
 
-    predictions = []
+    builder = EpitopeBuilder()
     report_rows = []
     for _, row in df.iterrows():
         peptide = row.get("peptide", "")
@@ -505,12 +523,10 @@ def load_lens(path):
         # convention (small values ≪ 1 = mutation strengthened
         # binding). WT_IC50 = MT_IC50 / agretopicity is the only
         # way to recover wildtype affinity from a LENS row, since
-        # LENS doesn't emit a WT IC50 column directly. Compute
+        # LENS doesn't emit a WT IC50 column directly. Computed
         # once per row (shared across detected predictors).
         agretopicity = _safe_float(row.get("mhcflurry_agretopicity"))
-        # Build one _PredRow per chosen predictor for this row.
-        # Predictions with no usable value for this row are skipped.
-        row_preds = []
+        row_added = False
         for d in chosen:
             value = _safe_float(row.get(d.value_col))
             if value is None:
@@ -537,35 +553,37 @@ def load_lens(path):
             if (d.tool == "mhcflurry" and d.kind == "pMHC_affinity"
                     and agretopicity is not None and agretopicity > 0):
                 wt_ic50 = value / agretopicity
-            row_preds.append(_PredRow(
-                allele=allele,
-                peptide_sequence=str(peptide),
-                # LENS doesn't carry a wildtype peptide column. Empty
-                # string is the codebase convention for "not known"
-                # (the field is typed str, not Optional[str]).
-                wt_peptide_sequence="",
-                ic50=value,
-                wt_ic50=wt_ic50,
+            mutant = Prediction(
+                kind=d.kind, predictor_name=d.tool,
+                predictor_version=d.version, allele=allele,
+                peptide=str(peptide), value=value, score=0.0,
                 percentile_rank=percentile_rank,
-                prediction_method_name=d.tool,
-                # LENS pre-curates rows as neoepitopes (each row is a
-                # mutant-derived peptide), so overlaps_mutation is
-                # structurally true. Not invented — implied by the
-                # fact that the row exists in a LENS report.
+            )
+            wt = None
+            if wt_ic50 is not None:
+                # LENS doesn't emit a WT peptide column — pass an
+                # empty string. ``EpitopeBuilder`` keeps the WT
+                # context (anonymous-WT signal) because wt_ic50 is
+                # non-None even though the sequence is unknown.
+                wt = Prediction(
+                    kind=d.kind, predictor_name=d.tool,
+                    predictor_version=d.version, allele=allele,
+                    peptide="", value=wt_ic50, score=0.0,
+                    percentile_rank=None,
+                )
+            builder.add_row(
+                peptide=str(peptide), source=pep_context, offset=offset,
+                mutant=mutant, wt=wt,
+                # LENS pre-curates rows as neoepitopes and pre-filters
+                # against the patient reference proteome — both flags
+                # are structurally true for any surviving row.
                 overlaps_mutation=True,
-                source_sequence=pep_context,
-                offset=offset,
-                # LENS pre-filters rows against the patient reference
-                # proteome (or upstream tools do); rows that survive
-                # are by definition not in reference. Same structural
-                # assumption as overlaps_mutation.
                 occurs_in_reference=False,
-                predictor_version=d.version,
-            ))
+            )
+            row_added = True
 
-        if not row_preds:
+        if not row_added:
             continue
-        predictions.extend(row_preds)
 
         report_rows.append(_build_lens_report_row(
             row=row,
@@ -577,7 +595,7 @@ def load_lens(path):
         ))
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
-    epitopes = _rows_to_epitopes(predictions)
+    epitopes = builder.epitopes()
     logger.info(
         "Loaded %d epitope(s) (%d row(s) × %d predictor(s)) from %s",
         len(epitopes), len(report_df), len(chosen), path)

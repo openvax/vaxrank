@@ -241,46 +241,51 @@ def test_multi_method_resolves_with_qualified_affinity():
     assert float(scores.iloc[0]) == pytest.approx(expected, abs=1e-12)
 
 
-# ---- epitopes_to_topiary_df + _rows_to_epitopes ---------
+# ---- EpitopeBuilder + epitopes_to_topiary_df ---------
 
 
-def _make_legacy(peptide='SIINFEKL', allele='HLA-A*02:01', ic50=50.0,
-                 wt_peptide=None, wt_ic50=None, predictor='mhcflurry',
-                 version='2.1.1', source='AAAASIINFEKLCCCC', offset=4,
-                 percentile_rank=0.5, overlaps_mutation=True,
-                 occurs_in_reference=False):
-    """Concise factory for a private ``_PredRow`` — the row-level
-    scratchpad shape that producers build before grouping into
-    Epitopes via ``_rows_to_epitopes``."""
-    from vaxrank.epitope_dsl import _PredRow
-    return _PredRow(
-        allele=allele,
-        peptide_sequence=peptide,
-        wt_peptide_sequence=wt_peptide if wt_peptide is not None else peptide,
-        ic50=ic50,
-        wt_ic50=wt_ic50 if wt_ic50 is not None else ic50,
-        percentile_rank=percentile_rank,
-        prediction_method_name=predictor,
+def _add_row(builder, peptide='SIINFEKL', allele='HLA-A*02:01', ic50=50.0,
+             wt_peptide=None, wt_ic50=None, predictor='mhcflurry',
+             version='2.1.1', source='AAAASIINFEKLCCCC', offset=4,
+             percentile_rank=0.5, overlaps_mutation=True,
+             occurs_in_reference=False):
+    """Concise test helper: build a per-row mutant + (optional) WT
+    ``Prediction`` and push them into ``builder``. Mirrors the
+    per-row shape that ``predict_epitopes`` and the LENS / pVACseq
+    loaders emit. ``wt_ic50=None`` skips the WT pairing entirely."""
+    from mhctools.pred import Prediction
+    mutant = Prediction(
+        kind='pMHC_affinity', predictor_name=predictor,
+        predictor_version=version, allele=allele, peptide=peptide,
+        value=ic50, score=0.0, percentile_rank=percentile_rank,
+    )
+    wt = None
+    if wt_ic50 is not None:
+        wt = Prediction(
+            kind='pMHC_affinity', predictor_name=predictor,
+            predictor_version=version, allele=allele,
+            peptide=wt_peptide if wt_peptide is not None else peptide,
+            value=wt_ic50, score=0.0, percentile_rank=None,
+        )
+    builder.add_row(
+        peptide=peptide, source=source, offset=offset,
+        mutant=mutant, wt=wt,
         overlaps_mutation=overlaps_mutation,
-        source_sequence=source,
-        offset=offset,
         occurs_in_reference=occurs_in_reference,
-        predictor_version=version,
     )
 
 
-def test_legacy_adapter_groups_by_peptide_offset_source():
-    """The adapter groups per-(peptide, source, offset) → one Epitope.
-    Multi-allele inputs collapse into one Epitope whose mutant context
-    carries N predictions."""
-    from vaxrank.epitope_dsl import _rows_to_epitopes
+def test_builder_groups_by_peptide_offset_source():
+    """The builder groups per-(peptide, source, offset) → one Epitope.
+    Multi-allele rows for the same position collapse into one
+    Epitope whose mutant context carries N predictions."""
+    from vaxrank.peptide_context import EpitopeBuilder
 
-    legacies = [
-        _make_legacy(allele='HLA-A*02:01', ic50=50.0),
-        _make_legacy(allele='HLA-B*07:02', ic50=200.0),
-        _make_legacy(allele='HLA-C*03:04', ic50=800.0),
-    ]
-    epitopes = _rows_to_epitopes(legacies)
+    builder = EpitopeBuilder()
+    _add_row(builder, allele='HLA-A*02:01', ic50=50.0)
+    _add_row(builder, allele='HLA-B*07:02', ic50=200.0)
+    _add_row(builder, allele='HLA-C*03:04', ic50=800.0)
+    epitopes = builder.epitopes()
     assert len(epitopes) == 1
     e = epitopes[0]
     assert e.mutant.peptide_sequence == 'SIINFEKL'
@@ -290,33 +295,30 @@ def test_legacy_adapter_groups_by_peptide_offset_source():
     assert e.overlaps_mutation is True
 
 
-def test_legacy_adapter_separates_distinct_peptides():
-    """Two records with different peptides → two Epitopes."""
-    from vaxrank.epitope_dsl import _rows_to_epitopes
+def test_builder_separates_distinct_peptides():
+    """Two rows with different peptides → two Epitopes."""
+    from vaxrank.peptide_context import EpitopeBuilder
 
-    legacies = [
-        _make_legacy(peptide='SIINFEKL', offset=4),
-        _make_legacy(peptide='SIINFEKM', offset=12),
-    ]
-    epitopes = _rows_to_epitopes(legacies)
+    builder = EpitopeBuilder()
+    _add_row(builder, peptide='SIINFEKL', offset=4, wt_ic50=None)
+    _add_row(builder, peptide='SIINFEKM', offset=12, wt_ic50=None)
+    epitopes = builder.epitopes()
     assert len(epitopes) == 2
     assert {e.mutant.peptide_sequence for e in epitopes} == {
         'SIINFEKL', 'SIINFEKM'}
 
 
-def test_legacy_adapter_builds_wt_comparator_when_peptides_differ():
-    """When ``wt_peptide_sequence`` differs from the mutant peptide,
-    a parallel WT comparator context is built with one Prediction
-    per allele carrying the ``wt_ic50``."""
-    from vaxrank.epitope_dsl import _rows_to_epitopes
+def test_builder_builds_wt_comparator_when_peptides_differ():
+    """A parallel WT comparator context is built when each row carries
+    a WT prediction whose peptide differs from the mutant."""
+    from vaxrank.peptide_context import EpitopeBuilder
 
-    legacies = [
-        _make_legacy(peptide='SIINFEKL', wt_peptide='SIINFEKM',
-                     ic50=50.0, wt_ic50=500.0, allele='HLA-A*02:01'),
-        _make_legacy(peptide='SIINFEKL', wt_peptide='SIINFEKM',
-                     ic50=100.0, wt_ic50=400.0, allele='HLA-B*07:02'),
-    ]
-    epitopes = _rows_to_epitopes(legacies)
+    builder = EpitopeBuilder()
+    _add_row(builder, peptide='SIINFEKL', wt_peptide='SIINFEKM',
+             ic50=50.0, wt_ic50=500.0, allele='HLA-A*02:01')
+    _add_row(builder, peptide='SIINFEKL', wt_peptide='SIINFEKM',
+             ic50=100.0, wt_ic50=400.0, allele='HLA-B*07:02')
+    epitopes = builder.epitopes()
     assert len(epitopes) == 1
     e = epitopes[0]
     assert e.wt is not None
@@ -326,36 +328,66 @@ def test_legacy_adapter_builds_wt_comparator_when_peptides_differ():
     assert {p.value for p in wt_preds} == {500.0, 400.0}
 
 
-def test_legacy_adapter_omits_wt_when_peptide_unchanged():
-    """When WT peptide == mutant peptide (non-overlapping epitopes),
-    no WT comparator is created — that record was tracking 'no
-    mutation here'."""
-    from vaxrank.epitope_dsl import _rows_to_epitopes
+def test_builder_drops_wt_when_peptide_matches_mutant():
+    """A WT Prediction whose peptide equals the mutant peptide is
+    dropped as a meaningless self-comparator. The Epitope has no WT
+    context."""
+    from mhctools.pred import Prediction
+    from vaxrank.peptide_context import EpitopeBuilder
 
-    legacies = [
-        _make_legacy(peptide='SIINFEKL', wt_peptide='SIINFEKL',
-                     overlaps_mutation=False),
-    ]
-    epitopes = _rows_to_epitopes(legacies)
+    builder = EpitopeBuilder()
+    mutant = Prediction(
+        kind='pMHC_affinity', predictor_name='mhcflurry',
+        predictor_version='2.1.1', allele='HLA-A*02:01',
+        peptide='SIINFEKL', value=50.0, score=0.0, percentile_rank=0.5)
+    self_wt = Prediction(
+        kind='pMHC_affinity', predictor_name='mhcflurry',
+        predictor_version='2.1.1', allele='HLA-A*02:01',
+        peptide='SIINFEKL', value=50.0, score=0.0, percentile_rank=None)
+    builder.add_row(
+        peptide='SIINFEKL', source='AAAASIINFEKLCCCC', offset=4,
+        mutant=mutant, wt=self_wt, overlaps_mutation=False)
+    epitopes = builder.epitopes()
     assert epitopes[0].wt is None
     assert epitopes[0].overlaps_mutation is False
 
 
+def test_builder_keeps_anonymous_wt_when_peptide_empty():
+    """LENS / pVACseq inputs sometimes carry a WT IC50 without a WT
+    peptide sequence. An empty WT peptide is NOT treated as a
+    self-match — the WT context is retained so the IC50 signal
+    isn't lost."""
+    from mhctools.pred import Prediction
+    from vaxrank.peptide_context import EpitopeBuilder
+
+    builder = EpitopeBuilder()
+    mutant = Prediction(
+        kind='pMHC_affinity', predictor_name='mhcflurry',
+        predictor_version='2.1.1', allele='HLA-A*02:01',
+        peptide='SIINFEKL', value=50.0, score=0.0, percentile_rank=0.5)
+    anon_wt = Prediction(
+        kind='pMHC_affinity', predictor_name='mhcflurry',
+        predictor_version='2.1.1', allele='HLA-A*02:01',
+        peptide='', value=2500.0, score=0.0, percentile_rank=None)
+    builder.add_row(
+        peptide='SIINFEKL', source='AAAASIINFEKLCCCC', offset=4,
+        mutant=mutant, wt=anon_wt, overlaps_mutation=True)
+    epitopes = builder.epitopes()
+    assert epitopes[0].wt is not None
+    wt_leaf = epitopes[0].wt.predictions_for('pMHC_affinity')[0]
+    assert wt_leaf.value == 2500.0
+
+
 def test_epitopes_to_topiary_df_emits_one_row_per_prediction():
     """Each leaf ``mhctools.Prediction`` in an Epitope's mutant
-    context becomes one frame row. Schema matches the legacy
-    ``predictions_to_topiary_df``."""
-    from vaxrank.epitope_dsl import (
-        _rows_to_epitopes,
-        epitopes_to_topiary_df,
-    )
+    context becomes one frame row."""
+    from vaxrank.epitope_dsl import epitopes_to_topiary_df
+    from vaxrank.peptide_context import EpitopeBuilder
 
-    legacies = [
-        _make_legacy(allele='HLA-A*02:01', ic50=50.0),
-        _make_legacy(allele='HLA-B*07:02', ic50=200.0),
-    ]
-    epitopes = _rows_to_epitopes(legacies)
-    df = epitopes_to_topiary_df(epitopes)
+    builder = EpitopeBuilder()
+    _add_row(builder, allele='HLA-A*02:01', ic50=50.0)
+    _add_row(builder, allele='HLA-B*07:02', ic50=200.0)
+    df = epitopes_to_topiary_df(builder.epitopes())
     assert len(df) == 2
     assert set(df.columns) >= {
         'peptide', 'allele', 'value', 'affinity', 'percentile_rank',
@@ -368,18 +400,18 @@ def test_epitopes_to_topiary_df_emits_one_row_per_prediction():
 
 
 def test_epitopes_to_topiary_df_schema_pinned():
-    """Round-trip pin: row scratchpad -> Epitope -> frame must
-    produce the canonical topiary schema (columns + dtype-stable
-    values) that ``apply_filter`` / ``score_predictions`` consume."""
-    from vaxrank.epitope_dsl import _rows_to_epitopes, epitopes_to_topiary_df
+    """Round-trip pin: builder → Epitope → frame must produce the
+    canonical topiary schema (columns + dtype-stable values) that
+    ``apply_filter`` / ``score_predictions`` consume."""
+    from vaxrank.epitope_dsl import epitopes_to_topiary_df
+    from vaxrank.peptide_context import EpitopeBuilder
 
-    legacies = [
-        _make_legacy(allele='HLA-A*02:01', ic50=50.0, percentile_rank=0.3),
-        _make_legacy(allele='HLA-B*07:02', ic50=200.0, percentile_rank=1.5),
-        _make_legacy(peptide='SIINFEKM', allele='HLA-A*02:01',
-                     ic50=800.0, offset=12),
-    ]
-    df = epitopes_to_topiary_df(_rows_to_epitopes(legacies))
+    builder = EpitopeBuilder()
+    _add_row(builder, allele='HLA-A*02:01', ic50=50.0, percentile_rank=0.3)
+    _add_row(builder, allele='HLA-B*07:02', ic50=200.0, percentile_rank=1.5)
+    _add_row(builder, peptide='SIINFEKM', allele='HLA-A*02:01',
+             ic50=800.0, offset=12)
+    df = epitopes_to_topiary_df(builder.epitopes())
 
     # One row per leaf prediction; alleles are preserved.
     assert len(df) == 3

@@ -476,3 +476,93 @@ class Epitope:
             comparators=self.comparators,
             overlaps_mutation=self.overlaps_mutation,
             occurs_in_reference=self.occurs_in_reference)
+
+
+class EpitopeBuilder:
+    """Accumulator producers use to assemble ``list[Epitope]`` one
+    leaf prediction at a time.
+
+    ``predict_epitopes`` and the LENS / pVACseq loaders all iterate
+    row-shaped inputs (topiary frame, TSV) and call :meth:`add_row`
+    per (peptide × allele × predictor) record. :meth:`epitopes`
+    finalizes by grouping rows that share a
+    ``(peptide, source, offset)`` key into one ``Epitope`` (mutant
+    ``PeptideContext`` carrying all leaf Predictions, plus an
+    optional ``wt`` comparator when any WT signal arrived for the
+    group) and returning the list in insertion order.
+
+    The builder owns the grouping logic so producers don't reinvent
+    it; ``Epitope`` itself stays an immutable value type, never a
+    construction-site partial.
+    """
+
+    def __init__(self):
+        self._groups: dict = {}
+
+    def add_row(self, *, peptide: str, source: str, offset: int,
+                mutant: "Prediction",
+                wt: Optional["Prediction"] = None,
+                overlaps_mutation: bool = False,
+                occurs_in_reference: bool = False) -> None:
+        """Add one leaf prediction.
+
+        ``mutant`` is the :class:`mhctools.Prediction` for one
+        (allele, predictor) cell of the mutant peptide. ``wt`` is
+        the parallel WT prediction when known; omit or pass
+        ``None`` when no WT signal exists. A ``wt`` whose
+        ``peptide`` equals the mutant peptide is treated as no WT
+        signal (self-comparator is meaningless) and dropped.
+
+        ``overlaps_mutation`` / ``occurs_in_reference`` apply at
+        the (peptide, source, offset) group level — the first row
+        to set them sticks (matches the legacy semantics where
+        these flags were stored redundantly on each per-row record
+        and the adapter took the first).
+        """
+        key = (peptide, source, offset)
+        slot = self._groups.get(key)
+        if slot is None:
+            slot = {
+                'peptide': peptide,
+                'source': source,
+                'offset': offset,
+                'mutant_preds': [],
+                'wt_preds': [],
+                'wt_peptide': None,
+                'overlaps_mutation': overlaps_mutation,
+                'occurs_in_reference': occurs_in_reference,
+            }
+            self._groups[key] = slot
+        slot['mutant_preds'].append(mutant)
+        if wt is not None and wt.peptide and wt.peptide == peptide:
+            wt = None
+        if wt is not None:
+            slot['wt_preds'].append(wt)
+            if slot['wt_peptide'] is None:
+                slot['wt_peptide'] = wt.peptide
+
+    def epitopes(self) -> list["Epitope"]:
+        """Finalize: emit one ``Epitope`` per group in insertion order."""
+        out = []
+        for slot in self._groups.values():
+            mutant_ctx = PeptideContext(
+                peptide_sequence=slot['peptide'],
+                source_sequence=slot['source'],
+                offset=slot['offset'],
+                predictions=tuple(slot['mutant_preds']),
+            )
+            comparators = {}
+            if slot['wt_preds']:
+                comparators[COMPARATOR_WT] = PeptideContext(
+                    peptide_sequence=slot['wt_peptide'] or '',
+                    source_sequence=slot['source'],
+                    offset=slot['offset'],
+                    predictions=tuple(slot['wt_preds']),
+                )
+            out.append(Epitope(
+                mutant=mutant_ctx,
+                comparators=comparators,
+                overlaps_mutation=slot['overlaps_mutation'],
+                occurs_in_reference=slot['occurs_in_reference'],
+            ))
+        return out

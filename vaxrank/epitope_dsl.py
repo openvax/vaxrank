@@ -44,38 +44,11 @@ from __future__ import annotations
 
 import functools
 import logging
-from dataclasses import dataclass
-from typing import Optional
 
 import pandas as pd
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class _PredRow:
-    """Internal row-level scratchpad shape — one MHC prediction record
-    in the flat (peptide, allele, predictor) form, before
-    :func:`_rows_to_epitopes` groups them into ``Epitope`` objects.
-
-    Used by ``epitope_logic.predict_epitopes`` and ``epitope_io``
-    loaders to keep their existing row-at-a-time loops without
-    structural rewrites; consumers never see these — every public
-    output is a list of ``Epitope``.
-    """
-    allele: str
-    peptide_sequence: str
-    wt_peptide_sequence: str
-    ic50: float
-    wt_ic50: Optional[float]
-    percentile_rank: Optional[float]
-    prediction_method_name: str
-    overlaps_mutation: bool
-    source_sequence: str
-    offset: int
-    occurs_in_reference: bool
-    predictor_version: str = ""
 
 
 # Method name -> topiary Kind for external-input predictions (LENS / pVACseq
@@ -159,104 +132,6 @@ def epitopes_to_topiary_df(epitopes):
                 "score": p.score,
             })
     return pd.DataFrame(rows)
-
-
-def _rows_to_epitopes(rows):
-    """Group a flat list of :class:`_PredRow` records (one per
-    (peptide, allele, predictor) cell) into ``list[Epitope]``.
-
-    Used inside ``epitope_logic.predict_epitopes`` and the
-    ``epitope_io`` loaders so their existing row-at-a-time loops can
-    keep accumulating flat records, then collapse at the end into
-    the multi-axis Epitope shape consumers expect.
-
-    Groups input by ``(peptide_sequence, source_sequence, offset)``
-    — each group becomes one ``Epitope``. Per-allele / per-predictor
-    rows in the group populate the mutant
-    ``PeptideContext.predictions``. A WT comparator context is built
-    when the group carries either a distinct ``wt_peptide_sequence``
-    or an anonymous WT signal (non-None ``wt_ic50`` paired with an
-    empty WT peptide — the pVACseq case).
-
-    ``mhctools.Prediction.score`` is set to ``0.0`` because the row
-    scratchpad doesn't carry a normalized score — matches the legacy
-    frame's hardcoded value. Downstream code that calls ``best()``
-    (which ranks by score) will see ties and pick first; consumers
-    needing a meaningful score should use ``predictions_for`` +
-    custom ranking.
-    """
-    from mhctools.pred import Prediction
-    from vaxrank.peptide_context import COMPARATOR_WT, Epitope, PeptideContext
-
-    groups: dict = {}
-    for p in rows:
-        key = (p.peptide_sequence, p.source_sequence, p.offset)
-        groups.setdefault(key, []).append(p)
-
-    epitopes = []
-    for (peptide, source, offset), members in groups.items():
-        first = members[0]
-        mutant_preds = []
-        wt_peptide = first.wt_peptide_sequence
-        wt_preds = []
-        # WT comparator is built whenever the group carries genuine
-        # WT signal — either a wt_peptide that differs from the mutant
-        # (canonical case from the VCF/BAM pipeline + LENS), OR an
-        # empty wt_peptide paired with a non-None wt_ic50 (pVACseq
-        # exports that omit ``WT Epitope Seq`` but keep ``IC50 WT``).
-        # When wt_peptide == peptide we skip — that row was tracking
-        # "no mutation here," not a WT comparison.
-        has_distinct_wt = bool(wt_peptide) and wt_peptide != peptide
-        has_anonymous_wt = (
-            not wt_peptide
-            and any(ep.wt_ic50 is not None for ep in members))
-        has_wt_signal = has_distinct_wt or has_anonymous_wt
-        for ep in members:
-            tool = str(ep.prediction_method_name or "")
-            kind = _kind_for_method(tool)
-            mutant_preds.append(Prediction(
-                kind=kind,
-                predictor_name=tool,
-                predictor_version=ep.predictor_version or "",
-                allele=ep.allele,
-                peptide=ep.peptide_sequence,
-                value=ep.ic50,
-                score=0.0,
-                percentile_rank=ep.percentile_rank,
-            ))
-            if has_wt_signal and ep.wt_ic50 is not None:
-                wt_preds.append(Prediction(
-                    kind=kind,
-                    predictor_name=tool,
-                    predictor_version=ep.predictor_version or "",
-                    allele=ep.allele,
-                    peptide=wt_peptide,
-                    value=ep.wt_ic50,
-                    score=0.0,
-                    percentile_rank=None,
-                ))
-
-        mutant_ctx = PeptideContext(
-            peptide_sequence=peptide,
-            source_sequence=source,
-            offset=offset,
-            predictions=tuple(mutant_preds),
-        )
-        comparators = {}
-        if wt_preds:
-            comparators[COMPARATOR_WT] = PeptideContext(
-                peptide_sequence=wt_peptide,
-                source_sequence=source,
-                offset=offset,
-                predictions=tuple(wt_preds),
-            )
-        epitopes.append(Epitope(
-            mutant=mutant_ctx,
-            comparators=comparators,
-            overlaps_mutation=first.overlaps_mutation,
-            occurs_in_reference=first.occurs_in_reference,
-        ))
-    return epitopes
 
 
 # Priority order for auto-picking a canonical method when the user hasn't

@@ -16,20 +16,16 @@ import logging
 from typing import Optional
 
 import numpy as np
+from mhctools.pred import Prediction
 from pyensembl import Genome
 from topiary import TopiaryPredictor
 from topiary.ranking import EvalContext, apply_filter
 
 from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
-from .epitope_dsl import (
-    _PredRow,
-    _rows_to_epitopes,
-    build_filter_node,
-    build_score_node,
-)
+from .epitope_dsl import build_filter_node, build_score_node
 from .mutant_protein_fragment import MutantProteinFragment
-from .peptide_context import Epitope
+from .peptide_context import Epitope, EpitopeBuilder
 from .reference_proteome import ReferenceProteome
 
 logger = logging.getLogger(__name__)
@@ -85,11 +81,7 @@ def predict_epitopes(
     if epitope_config is None:
         epitope_config = EpitopeConfig()
 
-    # Internal scratchpad of flat per-(peptide, allele, predictor) row
-    # records; ``_rows_to_epitopes`` collapses them into the
-    # ``list[Epitope]`` return value at the end so this producer's
-    # body stays row-at-a-time.
-    results: list[_PredRow] = []
+    builder = EpitopeBuilder()
     reference_proteome = ReferenceProteome(genome)
 
     # Wrap bare mhctools predictors in a TopiaryPredictor
@@ -106,10 +98,10 @@ def predict_epitopes(
         logger.error(
             'MHC prediction errored for protein fragment %s, with traceback: %s',
             protein_fragment, traceback.format_exc())
-        return results
+        return builder.epitopes()
 
     if predictions_df.empty:
-        return results
+        return builder.epitopes()
 
     # ``default_methods`` (per-kind ``prediction_method_name`` defaults
     # for unqualified DSL refs) is required when multi-predictor data
@@ -125,7 +117,7 @@ def predict_epitopes(
         predictions_df = apply_filter(
             predictions_df, filter_node, default_methods=default_methods)
         if predictions_df.empty:
-            return results
+            return builder.epitopes()
 
     # Evaluate the score expression once; indexed by
     # (source_sequence_name, peptide, peptide_offset, allele) group tuple.
@@ -178,8 +170,10 @@ def predict_epitopes(
                 'MHC prediction for WT peptides errored, with traceback: %s',
                 traceback.format_exc())
 
-    # Convert Topiary DataFrame rows to flat _PredRow scratchpad
-    # records (grouped into Epitopes at the end).
+    # Walk topiary frame rows; build per-(allele, predictor) leaf
+    # ``Prediction`` records and push them into ``builder``. The
+    # builder groups by (peptide, source, offset) into one Epitope
+    # per peptide position.
     num_total = 0
     num_occurs_in_reference = 0
     num_low_scoring = 0
@@ -199,6 +193,18 @@ def predict_epitopes(
             logger.debug('Peptide %s occurs in reference', peptide)
             num_occurs_in_reference += 1
 
+        # reindex + fillna above guarantee every group tuple is in the series.
+        group_key = (
+            row["source_sequence_name"],
+            peptide,
+            peptide_start_offset,
+            row["allele"],
+        )
+        epitope_score = float(score_series[group_key])
+        if epitope_score < epitope_config.min_epitope_score:
+            num_low_scoring += 1
+            continue
+
         # IC50 value: use the "affinity" column if available, otherwise "value"
         ic50 = row.get("affinity")
         if ic50 is None or (isinstance(ic50, float) and np.isnan(ic50)):
@@ -208,12 +214,13 @@ def predict_epitopes(
         if percentile_rank is not None and isinstance(percentile_rank, float) and np.isnan(percentile_rank):
             percentile_rank = None
 
-        # Compute WT epitope sequence and binding
+        # Resolve WT comparator only when the peptide overlaps the
+        # mutation — non-overlapping peptides aren't neoepitopes and
+        # don't get a meaningful WT pair.
+        wt_pred = None
         if overlaps_mutation:
             wt_peptide = wt_peptides[peptide]
-            wt_row = wt_predictions_grouped.get(
-                (wt_peptide, row["allele"]))
-            wt_ic50 = None
+            wt_row = wt_predictions_grouped.get((wt_peptide, row["allele"]))
             if wt_row is None:
                 if len(wt_peptide) < min_peptide_length:
                     logger.info(
@@ -225,40 +232,42 @@ def predict_epitopes(
                     wt_ic50 = wt_affinity
                 else:
                     wt_ic50 = wt_row["value"]
-        else:
-            wt_peptide = peptide
-            wt_ic50 = ic50
+                tool = row.get("prediction_method_name", "")
+                wt_pred = Prediction(
+                    kind=row.get("kind") or "pMHC_affinity",
+                    predictor_name=tool,
+                    predictor_version=row.get("predictor_version", "") or "",
+                    allele=row["allele"],
+                    peptide=wt_peptide,
+                    value=wt_ic50,
+                    score=0.0,
+                    percentile_rank=None,
+                )
 
-        epitope_prediction = _PredRow(
+        tool = row.get("prediction_method_name", "")
+        mutant_pred = Prediction(
+            kind=row.get("kind") or "pMHC_affinity",
+            predictor_name=tool,
+            predictor_version=row.get("predictor_version", "") or "",
             allele=row["allele"],
-            peptide_sequence=peptide,
-            wt_peptide_sequence=wt_peptide,
-            ic50=ic50,
-            wt_ic50=wt_ic50,
+            peptide=peptide,
+            value=ic50,
+            score=0.0,
             percentile_rank=percentile_rank,
-            prediction_method_name=row.get("prediction_method_name", ""),
-            overlaps_mutation=overlaps_mutation,
-            source_sequence=protein_fragment.amino_acids,
-            offset=peptide_start_offset,
-            occurs_in_reference=occurs_in_reference,
-            predictor_version=row.get("predictor_version", "") or "")
-        group_key = (
-            row["source_sequence_name"],
-            peptide,
-            peptide_start_offset,
-            row["allele"],
         )
-        # reindex + fillna above guarantee every group tuple is in the series.
-        epitope_score = float(score_series[group_key])
-
-        if epitope_score >= epitope_config.min_epitope_score:
-            results.append(epitope_prediction)
-        else:
-            num_low_scoring += 1
+        builder.add_row(
+            peptide=peptide,
+            source=protein_fragment.amino_acids,
+            offset=peptide_start_offset,
+            mutant=mutant_pred,
+            wt=wt_pred,
+            overlaps_mutation=overlaps_mutation,
+            occurs_in_reference=occurs_in_reference,
+        )
 
     logger.info(
         "%d total peptides: %d occur in reference, %d failed score threshold",
         num_total,
         num_occurs_in_reference,
         num_low_scoring)
-    return _rows_to_epitopes(results)
+    return builder.epitopes()
