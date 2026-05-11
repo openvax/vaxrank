@@ -39,8 +39,12 @@ def _peptide_stub(amino_acids, gene_name='GENE',
         mutant_amino_acid_end_offset=(
             len(amino_acids) if mut_end is None else mut_end),
     )
+    # Post-#284 the canonical field is ``mutant_epitopes``;
+    # ``mutant_epitope_predictions`` survives as a back-compat property
+    # alias for now. Tests can pass either name interchangeably here.
     return SimpleNamespace(
         mutant_protein_fragment=fragment,
+        mutant_epitopes=mutant_epitope_predictions or [],
         mutant_epitope_predictions=mutant_epitope_predictions or [],
         manufacturability_scores=manufacturability_scores,
     )
@@ -299,10 +303,10 @@ def test_candidates_per_slot_emits_alternates():
         amino_acids="LQGHSAPVLDV", gene_name='GENEA',  # alternate window
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=11)
     peptide_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[],
+        mutant_protein_fragment=fragment_a, mutant_epitopes=[],
         manufacturability_scores=None)
     peptide_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[],
+        mutant_protein_fragment=fragment_b, mutant_epitopes=[],
         manufacturability_scores=None)
     from varcode import Variant
     pairs = [(Variant('1', 100, 'A', 'T'), [peptide_a, peptide_b])]
@@ -323,10 +327,10 @@ def test_candidates_per_slot_default_is_one():
         amino_acids="LQGHSAPVLDV", gene_name='GENE',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=11)
     pa = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[],
+        mutant_protein_fragment=fragment_a, mutant_epitopes=[],
         manufacturability_scores=None)
     pb = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[],
+        mutant_protein_fragment=fragment_b, mutant_epitopes=[],
         manufacturability_scores=None)
     from varcode import Variant
     pairs = [(Variant('1', 100, 'A', 'T'), [pa, pb])]
@@ -344,7 +348,7 @@ def test_max_constructs_caps_peptide_pool():
             mutant_amino_acid_start_offset=0,
             mutant_amino_acid_end_offset=11)
         peptide = SimpleNamespace(
-            mutant_protein_fragment=fragment, mutant_epitope_predictions=[],
+            mutant_protein_fragment=fragment, mutant_epitopes=[],
             manufacturability_scores=None)
         pairs.append((Variant('1', 100 + i, 'A', 'T'), [peptide]))
     constructs = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())

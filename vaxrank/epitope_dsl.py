@@ -212,15 +212,20 @@ def _legacy_predictions_to_epitopes(predictions):
     for (peptide, source, offset), members in groups.items():
         first = members[0]
         mutant_preds = []
-        # WT comparator is built whenever ANY group member carries a
-        # non-None wt_ic50. The WT peptide sequence may be empty
-        # (LENS doesn't emit one; some pVACseq exports omit the
-        # ``WT Epitope Seq`` column) — we keep the empty string as
-        # the codebase's "unknown WT peptide" sentinel rather than
-        # dropping the WT IC50 signal entirely.
         wt_peptide = first.wt_peptide_sequence
         wt_preds = []
-        has_wt_signal = any(ep.wt_ic50 is not None for ep in members)
+        # WT comparator is built whenever the group carries genuine
+        # WT signal — either a wt_peptide that differs from the mutant
+        # (canonical case from the VCF/BAM pipeline + LENS), OR an
+        # empty wt_peptide paired with a non-None wt_ic50 (pVACseq
+        # exports that omit ``WT Epitope Seq`` but keep ``IC50 WT``).
+        # When wt_peptide == peptide we skip — that row was tracking
+        # "no mutation here," not a WT comparison.
+        has_distinct_wt = bool(wt_peptide) and wt_peptide != peptide
+        has_anonymous_wt = (
+            not wt_peptide
+            and any(ep.wt_ic50 is not None for ep in members))
+        has_wt_signal = has_distinct_wt or has_anonymous_wt
         for ep in members:
             tool = str(ep.prediction_method_name or "")
             kind = _kind_for_method(tool)

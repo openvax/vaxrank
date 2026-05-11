@@ -40,11 +40,12 @@ Eight distinct designs:
 from types import SimpleNamespace
 
 import pytest
+from mhctools.pred import Prediction
 from varcode import Variant
 
-from vaxrank.epitope_prediction import EpitopePrediction
 from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
 from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
+from vaxrank.peptide_context import Epitope, PeptideContext
 
 
 def _make_vaccine_peptide(
@@ -63,27 +64,27 @@ def _make_vaccine_peptide(
         mutant_amino_acid_end_offset=mut_end,
         n_alt_reads=n_alt_reads,
     )
-    epitope_predictions = [
-        EpitopePrediction(
-            allele="HLA-A*02:01",
-            peptide_sequence=seq,
-            wt_peptide_sequence="",
-            ic50=ic50,
-            wt_ic50=10000.0,
-            percentile_rank=ic50 / 100.0,
-            prediction_method_name="stub",
-            overlaps_mutation=True,
-            source_sequence=amino_acids,
-            offset=0,
-            occurs_in_reference=False,
-        )
+    epitopes = [
+        Epitope(
+            mutant=PeptideContext(
+                peptide_sequence=seq,
+                source_sequence=amino_acids,
+                offset=amino_acids.find(seq) if seq in amino_acids else 0,
+                predictions=(Prediction(
+                    kind='pMHC_affinity', predictor_name='stub',
+                    predictor_version='', allele='HLA-A*02:01',
+                    peptide=seq, value=ic50, score=0.0,
+                    percentile_rank=ic50 / 100.0),)),
+            overlaps_mutation=True, occurs_in_reference=False)
         for seq, ic50 in epitope_seqs_with_ic50
     ]
     return SimpleNamespace(
         mutant_protein_fragment=fragment,
-        mutant_epitope_predictions=epitope_predictions,
+        mutant_epitopes=epitopes,
+        wildtype_epitopes=[],
+        # legacy property alias still consumed by some callers
+        mutant_epitope_predictions=epitopes,
         wildtype_epitope_predictions=[],
-        epitope_predictions=epitope_predictions,
     )
 
 

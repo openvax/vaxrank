@@ -507,12 +507,12 @@ def test_predicted_effect_returns_none_when_varcode_rejects_all_transcripts():
 
 
 def test_lens_to_ranked_vaccine_peptides_round_trip():
-    """Loading the LENS fixture and converting to ranked vaccine peptides
-    should produce one entry per unique variant, each carrying the
-    pep_context as the antigen fragment."""
+    """Loading the LENS fixture and converting to ranked vaccine
+    peptides should produce one entry per unique variant, each
+    carrying the pep_context as the antigen fragment."""
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    report_df, epitopes = load_lens(path)
+    ranked, _dna_vaf = ranked_from_lens_predictions(epitopes, path)
     assert len(ranked) == 3, (
         "LENS fixture has 3 unique variants; got %d" % len(ranked))
     # Each ranked entry: (Variant, [VaccinePeptide])
@@ -523,7 +523,7 @@ def test_lens_to_ranked_vaccine_peptides_round_trip():
         assert vp.mutant_protein_fragment.amino_acids
         # All three fixture rows have pep_context longer than peptide
         assert (len(vp.mutant_protein_fragment.amino_acids)
-                > len(vp.epitope_predictions[0].peptide_sequence))
+                > len(vp.epitopes[0].mutant.peptide_sequence))
         # Mutation span is non-empty inside the fragment
         assert (vp.mutant_protein_fragment.mutant_amino_acid_end_offset
                 > vp.mutant_protein_fragment.mutant_amino_acid_start_offset)
