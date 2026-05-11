@@ -13,7 +13,7 @@ Two layers:
   candidate AND for any reference comparator (WT pair, nearest_self,
   nearest_vital_self, nearest_nonCTA, nearest_oncovirus, …).
 
-  ``CandidateEpitope`` — one sliding-window position from a
+  ``Epitope`` — one sliding-window position from a
   VaccinePeptide. Holds the mutant ``PeptideContext`` plus a
   ``comparators`` dict keyed by name. Future safety / homology
   features (#254 / #257 / #258) populate comparators with their
@@ -372,9 +372,33 @@ class PeptideContext:
             _nan_safe(p.score), _nan_safe(p.value),
             _nan_safe(p.percentile_rank))))
 
+    def sliced(self, start_offset: int,
+               end_offset: int) -> Optional["PeptideContext"]:
+        """Return a new ``PeptideContext`` whose source window is
+        narrowed to ``[start_offset, end_offset)``. Returns ``None``
+        if the peptide doesn't fit inside the window.
+
+        The peptide sequence, flanks, source name, and predictions
+        are preserved — only ``source_sequence`` is sliced and
+        ``offset`` is rebased relative to the new source start.
+        Replaces the legacy ``EpitopePrediction.slice_source_sequence``.
+        """
+        if self.offset < start_offset:
+            return None
+        if self.offset + len(self.peptide_sequence) > end_offset:
+            return None
+        return PeptideContext(
+            peptide_sequence=self.peptide_sequence,
+            n_flank=self.n_flank,
+            c_flank=self.c_flank,
+            source_sequence=self.source_sequence[start_offset:end_offset],
+            source_name=self.source_name,
+            offset=self.offset - start_offset,
+            predictions=self.predictions)
+
 
 @dataclass(frozen=True)
-class CandidateEpitope:
+class Epitope:
     """One sliding-window peptide position from a VaccinePeptide,
     with its mutation context + reference comparators for safety
     / immunogenicity scoring.
@@ -432,3 +456,20 @@ class CandidateEpitope:
     @property
     def length(self) -> int:
         return len(self.mutant.peptide_sequence)
+
+    def sliced(self, start_offset: int,
+               end_offset: int) -> Optional["Epitope"]:
+        """Return a new ``Epitope`` whose mutant source window is
+        narrowed to ``[start_offset, end_offset)``. Returns ``None``
+        if the mutant peptide doesn't fit inside the window.
+        Comparators (WT etc.) keep their own source windows
+        unchanged — they're independent peptides, not slices of
+        the mutant's source."""
+        sliced_mutant = self.mutant.sliced(start_offset, end_offset)
+        if sliced_mutant is None:
+            return None
+        return Epitope(
+            mutant=sliced_mutant,
+            comparators=self.comparators,
+            overlaps_mutation=self.overlaps_mutation,
+            occurs_in_reference=self.occurs_in_reference)
