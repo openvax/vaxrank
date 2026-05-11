@@ -920,9 +920,9 @@ def test_junction_swap_meta_appears_in_elements_when_optimizer_runs():
         amino_acids=a2, gene_name='GENEB',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(a2))
     pep_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[])
+        mutant_protein_fragment=fragment_a, mutant_epitopes=[])
     pep_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[])
+        mutant_protein_fragment=fragment_b, mutant_epitopes=[])
     pairs = [
         (Variant('1', 100, 'A', 'T'), [pep_a]),
         (Variant('2', 200, 'A', 'T'), [pep_b]),

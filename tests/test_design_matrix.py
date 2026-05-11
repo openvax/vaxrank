@@ -82,9 +82,6 @@ def _make_vaccine_peptide(
         mutant_protein_fragment=fragment,
         mutant_epitopes=epitopes,
         wildtype_epitopes=[],
-        # legacy property alias still consumed by some callers
-        mutant_epitope_predictions=epitopes,
-        wildtype_epitope_predictions=[],
     )
 
 

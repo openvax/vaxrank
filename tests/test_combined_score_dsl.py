@@ -47,7 +47,7 @@ def _make_vp(
     )
     vp = VaccinePeptide(
         mutant_protein_fragment=frag,
-        epitope_predictions=[],
+        epitopes=[],
         combined_score_mode=combined_score_mode,
         combined_score_expr=combined_score_expr,
     )

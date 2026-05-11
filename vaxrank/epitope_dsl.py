@@ -44,11 +44,38 @@ from __future__ import annotations
 
 import functools
 import logging
+from dataclasses import dataclass
+from typing import Optional
 
 import pandas as pd
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _PredRow:
+    """Internal row-level scratchpad shape — one MHC prediction record
+    in the flat (peptide, allele, predictor) form, before
+    :func:`_rows_to_epitopes` groups them into ``Epitope`` objects.
+
+    Used by ``epitope_logic.predict_epitopes`` and ``epitope_io``
+    loaders to keep their existing row-at-a-time loops without
+    structural rewrites; consumers never see these — every public
+    output is a list of ``Epitope``.
+    """
+    allele: str
+    peptide_sequence: str
+    wt_peptide_sequence: str
+    ic50: float
+    wt_ic50: Optional[float]
+    percentile_rank: Optional[float]
+    prediction_method_name: str
+    overlaps_mutation: bool
+    source_sequence: str
+    offset: int
+    occurs_in_reference: bool
+    predictor_version: str = ""
 
 
 # Method name -> topiary Kind for external-input predictions (LENS / pVACseq
@@ -88,69 +115,26 @@ def _kind_for_method(method_name):
     return _METHOD_KIND_MAP.get(str(method_name).lower(), "pMHC_affinity")
 
 
-def predictions_to_topiary_df(predictions):
-    """Convert a list of :class:`EpitopePrediction` into the topiary
-    long-format DataFrame consumed by :class:`topiary.ranking.EvalContext`
-    and :func:`topiary.ranking.apply_filter`.
-
-    Each ``EpitopePrediction`` becomes one row; when multiple predictions
-    share a (peptide, allele) pair (e.g. MHCflurry and netMHCpan rows
-    from a LENS file), DSL expressions can select between them via
-    ``affinity['mhcflurry']`` / ``affinity['netmhcpan']``, and when the
-    predictions carry ``predictor_version`` they can also disambiguate
-    by version via ``affinity['mhcflurry', '2.1.1']``. Unqualified refs
-    (``affinity.value``) resolve to the Kind's default method — see
-    :func:`resolve_default_methods`.
-    """
-    rows = []
-    for p in predictions:
-        tool = str(p.prediction_method_name or "")
-        rows.append({
-            "sample_name": "",
-            "source_sequence_name": p.source_sequence or p.peptide_sequence,
-            "peptide": p.peptide_sequence,
-            "peptide_offset": p.offset,
-            "peptide_length": len(p.peptide_sequence),
-            "allele": p.allele,
-            "n_flank": "",
-            "c_flank": "",
-            "prediction_method_name": tool,
-            "predictor_version": p.predictor_version or "",
-            "kind": _kind_for_method(tool),
-            "value": p.ic50,
-            "affinity": p.ic50,
-            "percentile_rank": p.percentile_rank,
-            "score": 0.0,
-        })
-    return pd.DataFrame(rows)
-
-
 def epitopes_to_topiary_df(epitopes):
     """Convert a list of :class:`vaxrank.peptide_context.Epitope` into the
-    topiary long-format DataFrame.
+    topiary long-format DataFrame consumed by
+    :class:`topiary.ranking.EvalContext` and
+    :func:`topiary.ranking.apply_filter`.
 
-    Replacement for :func:`predictions_to_topiary_df` as part of the
-    EpitopePrediction → Epitope migration (vaxrank#284). One row per
-    leaf ``mhctools.Prediction`` in each Epitope's mutant context —
-    the new types carry multi-axis predictions natively, so a single
-    Epitope can emit N rows (one per allele × predictor × kind).
+    One row per leaf ``mhctools.Prediction`` in each Epitope's mutant
+    context — a single Epitope can emit N rows (one per allele x
+    predictor x kind). When multiple predictions share a (peptide,
+    allele) pair (e.g. MHCflurry and netMHCpan rows from a LENS file),
+    DSL expressions can select between them via
+    ``affinity['mhcflurry']`` / ``affinity['netmhcpan']``, and when
+    the predictions carry ``predictor_version`` they can also
+    disambiguate by version via ``affinity['mhcflurry', '2.1.1']``.
+    Unqualified refs (``affinity.value``) resolve to the Kind's
+    default method — see :func:`resolve_default_methods`.
 
-    Schema matches ``predictions_to_topiary_df`` so consumers
-    (``apply_filter``, ``EvalContext``, ``score_predictions``) don't
-    care which producer built the frame. Notable differences from
-    the legacy producer:
-
-    * ``score`` column carries the real ``mhctools.Prediction.score``
-      value instead of the hardcoded ``0.0``. The legacy frame's
-      ``score`` was never read by the default DSL (which references
-      ``Affinity.value``), so populating it can only help.
-    * ``n_flank`` / ``c_flank`` come from the parent ``PeptideContext``
-      instead of being empty strings.
-    * Comparator predictions (``epitope.wt``, ``nearest_self``, …) are
-      NOT emitted as rows. The DSL frame is mutant-only by convention
-      — comparator data stays on the Epitope for display. This matches
-      legacy behavior (``predictions_to_topiary_df`` never emitted
-      ``wt_*`` columns either).
+    Comparator predictions (``epitope.wt``, ``nearest_self``, ...)
+    are NOT emitted as rows. The DSL frame is mutant-only by
+    convention — comparator data stays on the Epitope for display.
     """
     rows = []
     for e in epitopes:
@@ -177,34 +161,35 @@ def epitopes_to_topiary_df(epitopes):
     return pd.DataFrame(rows)
 
 
-def _legacy_predictions_to_epitopes(predictions):
-    """Adapter: convert ``list[EpitopePrediction]`` to ``list[Epitope]``.
+def _rows_to_epitopes(rows):
+    """Group a flat list of :class:`_PredRow` records (one per
+    (peptide, allele, predictor) cell) into ``list[Epitope]``.
 
-    Transitional bridge for the Phase 2 migration (vaxrank#284). Used
-    by producers that still emit ``EpitopePrediction`` internally —
-    they pipe through this adapter to expose the new shape to migrated
-    consumers. Drops out of the codebase once every producer emits
-    ``Epitope`` natively.
+    Used inside ``epitope_logic.predict_epitopes`` and the
+    ``epitope_io`` loaders so their existing row-at-a-time loops can
+    keep accumulating flat records, then collapse at the end into
+    the multi-axis Epitope shape consumers expect.
 
-    Groups input by ``(peptide_sequence, source_sequence, offset)`` —
-    each group becomes one ``Epitope``. Per-allele / per-predictor
-    rows in the group populate the mutant ``PeptideContext.predictions``;
-    when ``wt_peptide_sequence`` differs from the mutant peptide and
-    ``wt_ic50`` is set, a parallel ``wt`` comparator context is built.
+    Groups input by ``(peptide_sequence, source_sequence, offset)``
+    — each group becomes one ``Epitope``. Per-allele / per-predictor
+    rows in the group populate the mutant
+    ``PeptideContext.predictions``. A WT comparator context is built
+    when the group carries either a distinct ``wt_peptide_sequence``
+    or an anonymous WT signal (non-None ``wt_ic50`` paired with an
+    empty WT peptide — the pVACseq case).
 
-    ``mhctools.Prediction.score`` is set to ``0.0`` because
-    ``EpitopePrediction`` doesn't carry a normalized score — matches
-    the legacy frame's hardcoded value. Downstream code that calls
-    ``best()`` (which ranks by score) will see ties and pick first;
-    consumers needing a meaningful score should use ``predictions_for``
-    + custom ranking. Real scores arrive when producers stop going
-    through this adapter.
+    ``mhctools.Prediction.score`` is set to ``0.0`` because the row
+    scratchpad doesn't carry a normalized score — matches the legacy
+    frame's hardcoded value. Downstream code that calls ``best()``
+    (which ranks by score) will see ties and pick first; consumers
+    needing a meaningful score should use ``predictions_for`` +
+    custom ranking.
     """
     from mhctools.pred import Prediction
     from vaxrank.peptide_context import COMPARATOR_WT, Epitope, PeptideContext
 
     groups: dict = {}
-    for p in predictions:
+    for p in rows:
         key = (p.peptide_sequence, p.source_sequence, p.offset)
         groups.setdefault(key, []).append(p)
 

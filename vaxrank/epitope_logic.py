@@ -23,11 +23,11 @@ from topiary.ranking import EvalContext, apply_filter
 from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
 from .epitope_dsl import (
-    _legacy_predictions_to_epitopes,
+    _PredRow,
+    _rows_to_epitopes,
     build_filter_node,
     build_score_node,
 )
-from .epitope_prediction import EpitopePrediction
 from .mutant_protein_fragment import MutantProteinFragment
 from .peptide_context import Epitope
 from .reference_proteome import ReferenceProteome
@@ -85,12 +85,11 @@ def predict_epitopes(
     if epitope_config is None:
         epitope_config = EpitopeConfig()
 
-    # Internal scratchpad of flat EpitopePrediction records; converted
-    # to ``list[Epitope]`` at the end via the migration adapter so this
-    # producer's body doesn't need a structural rewrite. (Issue #284 —
-    # adapter drops out once the body emits Predictions / contexts
-    # natively.)
-    results: list[EpitopePrediction] = []
+    # Internal scratchpad of flat per-(peptide, allele, predictor) row
+    # records; ``_rows_to_epitopes`` collapses them into the
+    # ``list[Epitope]`` return value at the end so this producer's
+    # body stays row-at-a-time.
+    results: list[_PredRow] = []
     reference_proteome = ReferenceProteome(genome)
 
     # Wrap bare mhctools predictors in a TopiaryPredictor
@@ -179,7 +178,8 @@ def predict_epitopes(
                 'MHC prediction for WT peptides errored, with traceback: %s',
                 traceback.format_exc())
 
-    # Convert Topiary DataFrame rows to EpitopePrediction objects
+    # Convert Topiary DataFrame rows to flat _PredRow scratchpad
+    # records (grouped into Epitopes at the end).
     num_total = 0
     num_occurs_in_reference = 0
     num_low_scoring = 0
@@ -229,7 +229,7 @@ def predict_epitopes(
             wt_peptide = peptide
             wt_ic50 = ic50
 
-        epitope_prediction = EpitopePrediction(
+        epitope_prediction = _PredRow(
             allele=row["allele"],
             peptide_sequence=peptide,
             wt_peptide_sequence=wt_peptide,
@@ -240,7 +240,8 @@ def predict_epitopes(
             overlaps_mutation=overlaps_mutation,
             source_sequence=protein_fragment.amino_acids,
             offset=peptide_start_offset,
-            occurs_in_reference=occurs_in_reference)
+            occurs_in_reference=occurs_in_reference,
+            predictor_version=row.get("predictor_version", "") or "")
         group_key = (
             row["source_sequence_name"],
             peptide,
@@ -260,4 +261,4 @@ def predict_epitopes(
         num_total,
         num_occurs_in_reference,
         num_low_scoring)
-    return _legacy_predictions_to_epitopes(results)
+    return _rows_to_epitopes(results)

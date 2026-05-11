@@ -29,7 +29,7 @@ from vaxrank.peptide import (
 
 
 def _peptide_stub(amino_acids, gene_name='GENE',
-                  mutant_epitope_predictions=None,
+                  mutant_epitopes=None,
                   manufacturability_scores=None,
                   mut_start=None, mut_end=None):
     fragment = SimpleNamespace(
@@ -39,13 +39,9 @@ def _peptide_stub(amino_acids, gene_name='GENE',
         mutant_amino_acid_end_offset=(
             len(amino_acids) if mut_end is None else mut_end),
     )
-    # Post-#284 the canonical field is ``mutant_epitopes``;
-    # ``mutant_epitope_predictions`` survives as a back-compat property
-    # alias for now. Tests can pass either name interchangeably here.
     return SimpleNamespace(
         mutant_protein_fragment=fragment,
-        mutant_epitopes=mutant_epitope_predictions or [],
-        mutant_epitope_predictions=mutant_epitope_predictions or [],
+        mutant_epitopes=mutant_epitopes or [],
         manufacturability_scores=manufacturability_scores,
     )
 
@@ -56,7 +52,7 @@ def _variant_pair(amino_acids, contig='1', start=1000, gene_name='GENE',
     variant = Variant(contig, start, 'A', 'T')
     peptide = _peptide_stub(
         amino_acids, gene_name=gene_name,
-        mutant_epitope_predictions=epitopes,
+        mutant_epitopes=epitopes,
         manufacturability_scores=manufacturability,
         mut_start=mut_start, mut_end=mut_end)
     return (variant, [peptide])

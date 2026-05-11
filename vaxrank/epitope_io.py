@@ -21,11 +21,10 @@ Supports:
 All loader functions emit ``list[vaxrank.peptide_context.Epitope]``;
 the flat per-(peptide, allele, predictor) row shape lives only inside
 the CSV / DataFrame layer for round-trip fidelity. Internal scratchpads
-build :class:`~vaxrank.epitope_prediction.EpitopePrediction` records as
-a row-level container, then the
-:func:`vaxrank.epitope_dsl._legacy_predictions_to_epitopes` adapter
-collapses them into ``Epitope`` objects keyed by ``(peptide_sequence,
-source_sequence, offset)``.
+build :class:`vaxrank.epitope_dsl._PredRow` records as a row-level
+container, then :func:`vaxrank.epitope_dsl._rows_to_epitopes` collapses
+them into ``Epitope`` objects keyed by
+``(peptide_sequence, source_sequence, offset)``.
 """
 
 import logging
@@ -34,8 +33,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from .epitope_dsl import _legacy_predictions_to_epitopes
-from .epitope_prediction import EpitopePrediction
+from .epitope_dsl import _PredRow, _rows_to_epitopes
 
 logger = logging.getLogger(__name__)
 
@@ -132,13 +130,13 @@ def load_predictions(path):
     """Load a vaxrank-native CSV/TSV file and return ``list[Epitope]``."""
     sep = "\t" if str(path).endswith(".tsv") else ","
     df = pd.read_csv(path, sep=sep)
-    return _legacy_predictions_to_epitopes(_dataframe_to_predictions(df))
+    return _rows_to_epitopes(_dataframe_to_predictions(df))
 
 
 def _dataframe_to_predictions(df):
     """Read a vaxrank-format DataFrame into a flat scratchpad of
-    ``EpitopePrediction`` records, ready to be grouped into Epitopes
-    by ``_legacy_predictions_to_epitopes``."""
+    :class:`~vaxrank.epitope_dsl._PredRow` records, ready to be
+    grouped into Epitopes by ``_rows_to_epitopes``."""
     def _str_or_empty(val):
         if val is None or (isinstance(val, float) and pd.isna(val)):
             return ""
@@ -152,7 +150,7 @@ def _dataframe_to_predictions(df):
         percentile_rank = row.get("percentile_rank")
         if pd.isna(percentile_rank):
             percentile_rank = None
-        predictions.append(EpitopePrediction(
+        predictions.append(_PredRow(
             allele=row["allele"],
             peptide_sequence=row["peptide_sequence"],
             wt_peptide_sequence=_str_or_empty(row.get("wt_peptide_sequence", "")),
@@ -247,7 +245,7 @@ def load_pvacseq(path):
         if pd.isna(tier):
             tier = ""
 
-        pred = EpitopePrediction(
+        pred = _PredRow(
             allele=str(allele),
             peptide_sequence=str(peptide),
             wt_peptide_sequence=str(wt_peptide),
@@ -281,7 +279,7 @@ def load_pvacseq(path):
         })
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
-    epitopes = _legacy_predictions_to_epitopes(predictions)
+    epitopes = _rows_to_epitopes(predictions)
     logger.info(
         "Loaded %d epitope(s) (%d row(s)) from pVACseq file %s",
         len(epitopes), len(predictions), path)
@@ -510,7 +508,7 @@ def load_lens(path):
         # LENS doesn't emit a WT IC50 column directly. Compute
         # once per row (shared across detected predictors).
         agretopicity = _safe_float(row.get("mhcflurry_agretopicity"))
-        # Build one EpitopePrediction per chosen predictor for this row.
+        # Build one _PredRow per chosen predictor for this row.
         # Predictions with no usable value for this row are skipped.
         row_preds = []
         for d in chosen:
@@ -539,7 +537,7 @@ def load_lens(path):
             if (d.tool == "mhcflurry" and d.kind == "pMHC_affinity"
                     and agretopicity is not None and agretopicity > 0):
                 wt_ic50 = value / agretopicity
-            row_preds.append(EpitopePrediction(
+            row_preds.append(_PredRow(
                 allele=allele,
                 peptide_sequence=str(peptide),
                 # LENS doesn't carry a wildtype peptide column. Empty
@@ -579,7 +577,7 @@ def load_lens(path):
         ))
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
-    epitopes = _legacy_predictions_to_epitopes(predictions)
+    epitopes = _rows_to_epitopes(predictions)
     logger.info(
         "Loaded %d epitope(s) (%d row(s) × %d predictor(s)) from %s",
         len(epitopes), len(report_df), len(chosen), path)

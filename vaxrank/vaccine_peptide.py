@@ -36,16 +36,15 @@ def _legacy_score_one(ic50, percentile_rank, *,
                       ic50_cutoff=DEFAULT_BINDING_AFFINITY_CUTOFF,
                       scoring_mode="affinity",
                       percentile_rank_cutoff=DEFAULT_PERCENTILE_RANK_CUTOFF):
-    """Per-prediction logistic score — extracted verbatim from the
-    deleted ``EpitopePrediction.logistic_epitope_score`` method.
+    """Per-prediction logistic score used by ``VaccinePeptide`` to sum
+    scores across the leaf ``mhctools.Prediction`` records inside
+    each ``Epitope.mutant``.
 
-    Kept as a free function so ``VaccinePeptide`` can sum scores
-    across leaf ``mhctools.Prediction`` records inside each
-    ``Epitope.mutant`` without owning the math itself. The topiary
-    DSL's default ``score_expr`` produces byte-identical output
-    (see ``test_default_score_matches_legacy_*``); a follow-up will
-    route ``VaccinePeptide``'s score aggregation through
-    ``score_predictions`` directly.
+    Kept as a free function so the math stays in one place. The
+    topiary DSL's default ``score_expr`` produces byte-identical
+    output (pinned by ``test_default_score_matches_legacy_*``); a
+    follow-up will route ``VaccinePeptide``'s score aggregation
+    through ``score_predictions`` directly and this helper goes away.
     """
     if scoring_mode == "percentile_rank":
         if percentile_rank is None:
@@ -84,8 +83,7 @@ class VaccinePeptide(DataclassSerializable):
     epitope_score_params : dict or None
         Parameters for the per-prediction score (midpoint, width,
         ic50_cutoff, scoring_mode, percentile_rank_cutoff). Matches
-        the legacy ``EpitopePrediction.logistic_epitope_score`` knobs
-        byte-for-byte.
+        the topiary DSL default-score knobs byte-for-byte.
 
     sort_epitopes_by : str
         Field of the mutant's best affinity ``mhctools.Prediction``
@@ -123,15 +121,10 @@ class VaccinePeptide(DataclassSerializable):
     """
 
     mutant_protein_fragment: Any
-    epitopes: list = field(default=None)
+    epitopes: list = field(default_factory=list)
     num_mutant_epitopes_to_keep: Optional[int] = None
     epitope_score_params: Optional[dict] = None
     sort_epitopes_by: str = "ic50"
-    # Legacy kwarg accepted for one transitional minor (vaxrank#284
-    # consumer migration). Constructor auto-converts via the legacy
-    # adapter. Drops once every caller passes ``epitopes=``.
-    epitope_predictions: Optional[list] = None
-    sort_predictions_by: Optional[str] = None  # legacy alias
     manufacturability_thresholds: Optional[dict] = None
     manufacturability_rules: Optional[tuple] = None
     combined_score_mode: Optional[str] = None
@@ -153,17 +146,6 @@ class VaccinePeptide(DataclassSerializable):
     manufacturability_scores: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
-        # Legacy compat: accept ``epitope_predictions=`` and auto-convert
-        # via the migration adapter. Same for ``sort_predictions_by``.
-        if self.epitopes is None and self.epitope_predictions is not None:
-            from .epitope_dsl import _legacy_predictions_to_epitopes
-            self.epitopes = _legacy_predictions_to_epitopes(
-                self.epitope_predictions)
-        elif self.epitopes is None:
-            self.epitopes = []
-        if self.sort_predictions_by is not None:
-            self.sort_epitopes_by = self.sort_predictions_by
-
         # Normalize the optional collection/tuple fields.
         self.epitope_score_params = self.epitope_score_params or {}
         self.manufacturability_thresholds = self.manufacturability_thresholds or {}
@@ -240,15 +222,11 @@ class VaccinePeptide(DataclassSerializable):
             key=_epitope_sort_key,
         )
 
-        # Score each Epitope by summing the legacy per-prediction
-        # logistic score across all of its mutant affinity records.
-        # Preserves byte-identical totals with pre-migration vaxrank:
-        # one EpitopePrediction per (peptide, allele, predictor) → one
-        # leaf Prediction in the new shape; the sum has the same
-        # terms across alleles AND across predictors when multi-model
-        # data is in play (#261). Iterates ``predictions_flat()`` +
-        # kind-filters rather than ``predictions_for(kind=...)`` so
-        # multi-predictor data doesn't trip the disambiguation check.
+        # Score each Epitope by summing the per-prediction logistic
+        # score across all of its mutant affinity records. Iterates
+        # ``predictions_flat()`` + kind-filters rather than
+        # ``predictions_for(kind=...)`` so multi-predictor data
+        # doesn't trip the predictor-disambiguation check.
         params = self.epitope_score_params
 
         def _epitope_total_score(e):
@@ -322,19 +300,6 @@ class VaccinePeptide(DataclassSerializable):
 
     def contains_mutant_epitopes(self):
         return len(self.mutant_epitopes) > 0
-
-    # Legacy aliases — consumers still using EpitopePrediction-shaped
-    # field names during the migration (vaxrank#284). Return the new
-    # Epitope objects, which expose the legacy field names via the
-    # ``__getattr__`` shim on ``Epitope`` (TODO: add shim or migrate
-    # consumers; today they index into ``.mutant`` etc. directly).
-    @property
-    def mutant_epitope_predictions(self):
-        return self.mutant_epitopes
-
-    @property
-    def wildtype_epitope_predictions(self):
-        return self.wildtype_epitopes
 
     @property
     def expression_score(self):

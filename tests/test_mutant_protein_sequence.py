@@ -111,13 +111,19 @@ def test_keep_top_k_epitopes():
 
     ranked_list = results.ranked_vaccine_peptides
 
+    from vaxrank.vaccine_peptide import _legacy_score_one
     for variant, vaccine_peptides in ranked_list:
         vaccine_peptide = vaccine_peptides[0]
-        eq_(keep_k_epitopes, len(vaccine_peptide.mutant_epitope_predictions))
-        # recompute the expected score, make sure the top-k argument from ranked_vaccine_peptides()
-        # propagated as expected
+        eq_(keep_k_epitopes, len(vaccine_peptide.mutant_epitopes))
+        # Recompute the expected score and verify the top-k slice from
+        # ``ranked_vaccine_peptides()`` reached the per-Epitope sum.
+        # Each Epitope contributes the sum of its per-allele leaf
+        # ``pMHC_affinity`` records' logistic score.
         mutant_epitope_score = sum(
-            p.logistic_epitope_score() for p in vaccine_peptide.mutant_epitope_predictions)
+            _legacy_score_one(leaf.value, leaf.percentile_rank)
+            for e in vaccine_peptide.mutant_epitopes
+            for leaf in e.mutant.predictions_flat()
+            if leaf.kind == 'pMHC_affinity')
         almost_eq_(mutant_epitope_score, vaccine_peptide.mutant_epitope_score)
 
 def test_rna_vaf_property():
