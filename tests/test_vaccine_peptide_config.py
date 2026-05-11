@@ -21,9 +21,11 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from mhctools.pred import Prediction
 
 from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
 from vaxrank.manufacturability import DEFAULT_MANUFACTURABILITY_RULES
+from vaxrank.peptide_context import Epitope, PeptideContext
 from vaxrank.vaccine_peptide import VaccinePeptide
 
 
@@ -38,14 +40,29 @@ def _make_fragment(seq="A" * 25, n_alt_reads=9):
     )
 
 
-def _make_mutant_epitope(ic50=10.0):
-    """Duck-typed EpitopePrediction that overlaps mutation, not in reference."""
-    return SimpleNamespace(
-        ic50=ic50,
+def _make_mutant_epitope(ic50=10.0, peptide="A" * 9, source="A" * 25,
+                         offset=0):
+    """One ``Epitope`` with a single pMHC_affinity prediction, marked
+    as overlapping the mutation."""
+    pred = Prediction(
+        kind='pMHC_affinity',
+        predictor_name='test',
+        predictor_version='',
+        allele='HLA-A*02:01',
+        peptide=peptide,
+        value=ic50,
+        score=0.0,
         percentile_rank=0.5,
+    )
+    return Epitope(
+        mutant=PeptideContext(
+            peptide_sequence=peptide,
+            source_sequence=source,
+            offset=offset,
+            predictions=(pred,),
+        ),
         overlaps_mutation=True,
         occurs_in_reference=False,
-        logistic_epitope_score=lambda **kw: 0.9,
     )
 
 
@@ -53,7 +70,7 @@ def test_default_manufacturability_tuple_length():
     """Default sort tuple length = 10 (legacy behavior, unchanged)."""
     vp = VaccinePeptide(
         mutant_protein_fragment=_make_fragment(),
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
     )
     tup = vp.peptide_synthesis_difficulty_score_tuple()
     assert len(tup) == 10
@@ -63,7 +80,7 @@ def test_default_manufacturability_tuple_length():
 def test_custom_rules_shorten_tuple():
     vp = VaccinePeptide(
         mutant_protein_fragment=_make_fragment(),
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
         manufacturability_rules=["cysteine_count", "cterm_hydropathy"],
     )
     tup = vp.peptide_synthesis_difficulty_score_tuple(
@@ -76,7 +93,7 @@ def test_combined_score_default_mode_is_legacy():
     fragment = _make_fragment(n_alt_reads=9)
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
     )
     # Legacy: sqrt(9) * mutant_epitope_score
     assert vp.expression_score == pytest.approx(np.sqrt(9))
@@ -87,7 +104,7 @@ def test_combined_score_reads_times_epitope_mode():
     fragment = _make_fragment(n_alt_reads=9)
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
         combined_score_mode="reads_times_epitope",
     )
     # expression_score is an honest metric; mode only affects combined_score
@@ -99,7 +116,7 @@ def test_combined_score_epitope_only_mode():
     fragment = _make_fragment(n_alt_reads=9)
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
         combined_score_mode="epitope_only",
     )
     assert vp.expression_score == pytest.approx(np.sqrt(9))
@@ -110,7 +127,7 @@ def test_vaccine_peptide_rejects_unknown_combined_score_mode():
     with pytest.raises(ValueError, match="combined_score_mode"):
         VaccinePeptide(
             mutant_protein_fragment=_make_fragment(),
-            epitope_predictions=[_make_mutant_epitope()],
+            epitopes=[_make_mutant_epitope()],
             combined_score_mode="garbage",
         )
 
@@ -160,7 +177,7 @@ vaccine_peptides:
 
         vp = VaccinePeptide(
             mutant_protein_fragment=_make_fragment(),
-            epitope_predictions=[_make_mutant_epitope()],
+            epitopes=[_make_mutant_epitope()],
             manufacturability_rules=mfg.rules,
             combined_score_mode=vc.combined_score_mode,
         )
@@ -179,7 +196,7 @@ def test_vaccine_peptide_roundtrip_preserves_custom_config():
     fragment = _make_fragment()
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
         manufacturability_rules=["cysteine_count"],
         combined_score_mode="epitope_only",
     )
@@ -193,7 +210,7 @@ def test_vaccine_peptide_roundtrip_omits_defaults():
     fragment = _make_fragment()
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
     )
     d = vp.to_dict()
     assert "manufacturability_rules" not in d
@@ -206,7 +223,7 @@ def test_vaccine_peptide_ranking_rules_tuple_coercion():
     manufacturability_rules)."""
     vp = VaccinePeptide(
         mutant_protein_fragment=_make_fragment(),
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
         ranking_rules=["mutant_epitope_score", "n_alt_reads"],
     )
     assert vp.ranking_rules == ("mutant_epitope_score", "n_alt_reads")
@@ -218,7 +235,7 @@ def test_vaccine_peptide_ranking_rules_tuple_coercion():
 def test_vaccine_peptide_custom_ranking_rules_in_to_dict():
     vp = VaccinePeptide(
         mutant_protein_fragment=_make_fragment(),
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
         ranking_rules=["mutant_epitope_score"],
     )
     d = vp.to_dict()
@@ -257,7 +274,7 @@ vaccine_peptides:
         # wildtype_epitope_score, n_mutant_amino_acids, mutation_distance_from_edge).
         vp = VaccinePeptide(
             mutant_protein_fragment=_make_fragment(),
-            epitope_predictions=[_make_mutant_epitope()],
+            epitopes=[_make_mutant_epitope()],
             ranking_rules=vc.ranking_rules,
         )
         # 2 essential + 10 manufacturability defaults = 12 entries

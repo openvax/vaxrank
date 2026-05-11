@@ -193,19 +193,31 @@ class VaccinePeptide(DataclassSerializable):
         else:
             self._combined_score_expr_ast = None
 
-        # Sort key over Epitope: read the mutant's best-affinity record
-        # and pick its ic50 (``value``) or percentile_rank, matching the
-        # legacy attrgetter('ic50') / attrgetter('percentile_rank') on
-        # flat EpitopePrediction. Epitopes without any affinity record
+        # Sort key over Epitope: pick the strongest pMHC_affinity
+        # record across all predictors / alleles inside the Epitope.
+        # Legacy semantic: sort by the SINGLE best (peptide, allele,
+        # predictor) row's ic50 or percentile_rank — which here is
+        # the min over the flat leaf set. ``best_affinity()`` would
+        # raise on multi-predictor Epitopes (cross-predictor ranking
+        # ambiguous), so we iterate ``predictions_flat()`` + filter
+        # by kind and take ``min``. Epitopes with no affinity record
         # sort to the end via +inf.
+        sort_by = self.sort_epitopes_by
+
         def _epitope_sort_key(e):
-            best = e.mutant.best_affinity()
-            if best is None:
+            affinity_leaves = [
+                p for p in e.mutant.predictions_flat()
+                if p.kind == 'pMHC_affinity']
+            if not affinity_leaves:
                 return float("inf")
-            if self.sort_epitopes_by == "percentile_rank":
-                rank = best.percentile_rank
-                return rank if rank is not None and not np.isnan(rank) else float("inf")
-            return best.value
+            if sort_by == "percentile_rank":
+                ranks = [
+                    p.percentile_rank for p in affinity_leaves
+                    if p.percentile_rank is not None
+                    and not (isinstance(p.percentile_rank, float)
+                             and np.isnan(p.percentile_rank))]
+                return min(ranks) if ranks else float("inf")
+            return min(p.value for p in affinity_leaves)
 
         # only keep the top k epitopes
         self.mutant_epitopes = sorted(
@@ -232,7 +244,11 @@ class VaccinePeptide(DataclassSerializable):
         # logistic score across all of its mutant affinity records.
         # Preserves byte-identical totals with pre-migration vaxrank:
         # one EpitopePrediction per (peptide, allele, predictor) → one
-        # leaf Prediction in the new shape; the sum has the same terms.
+        # leaf Prediction in the new shape; the sum has the same
+        # terms across alleles AND across predictors when multi-model
+        # data is in play (#261). Iterates ``predictions_flat()`` +
+        # kind-filters rather than ``predictions_for(kind=...)`` so
+        # multi-predictor data doesn't trip the disambiguation check.
         params = self.epitope_score_params
 
         def _epitope_total_score(e):
@@ -241,7 +257,8 @@ class VaccinePeptide(DataclassSerializable):
                     ic50=p.value,
                     percentile_rank=p.percentile_rank,
                     **params)
-                for p in e.mutant.predictions_for('pMHC_affinity'))
+                for p in e.mutant.predictions_flat()
+                if p.kind == 'pMHC_affinity')
 
         self.wildtype_epitope_score = sum(
             _epitope_total_score(e) for e in self.wildtype_epitopes)

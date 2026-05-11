@@ -27,26 +27,38 @@ Pins:
 - Single pepsickle pass per unique source sequence (not per peptide).
 """
 
-from vaxrank.epitope_prediction import EpitopePrediction
+from mhctools.pred import Prediction
+
+from vaxrank.peptide_context import Epitope, PeptideContext
 from vaxrank.processing import (
     _component_probs,
     annotate_processing,
 )
 
 
-def _ep(peptide, source, offset, ic50=100.0, allele="HLA-A*02:01"):
-    """Build a minimal EpitopePrediction for tests."""
-    return EpitopePrediction(
+def _ep(peptide, source, offset, ic50=100.0, allele="HLA-A*02:01",
+        predictor="stub"):
+    """Build a minimal ``Epitope`` for tests — one mutant
+    pMHC_affinity ``Prediction`` plus the (peptide, source, offset)
+    layout the processing annotator joins on."""
+    pred = Prediction(
+        kind='pMHC_affinity',
+        predictor_name=predictor,
+        predictor_version='',
         allele=allele,
-        peptide_sequence=peptide,
-        wt_peptide_sequence="",
-        ic50=ic50,
-        wt_ic50=10000.0,
+        peptide=peptide,
+        value=ic50,
+        score=0.0,
         percentile_rank=ic50 / 100.0,
-        prediction_method_name="stub",
+    )
+    return Epitope(
+        mutant=PeptideContext(
+            peptide_sequence=peptide,
+            source_sequence=source,
+            offset=offset,
+            predictions=(pred,),
+        ),
         overlaps_mutation=True,
-        source_sequence=source,
-        offset=offset,
         occurs_in_reference=False,
     )
 
@@ -108,8 +120,6 @@ def test_annotate_processing_attaches_continuous_scores():
     # ``vaxrank.processing`` for the rationale).
     import math
     assert abs(pp.processing_score - math.sqrt(0.85 * 0.50)) < 1e-9
-    # The EpitopePrediction is NOT mutated.
-    assert not hasattr(pred, 'pepsickle_c_term_cleavage_prob')
 
 
 def test_annotate_processing_returns_processing_prediction_map():
@@ -165,7 +175,7 @@ def test_annotate_processing_one_pass_per_unique_source():
 
 
 def test_annotate_processing_skips_predictions_without_source():
-    """Predictions with empty source_sequence are passed through
+    """Epitopes with empty source_sequence are passed through
     untouched (annotation requires a source to slice probs against)
     and don't land in the ProcessingPrediction map."""
     pred = _ep("KLMNPV", source="", offset=0)
@@ -173,8 +183,6 @@ def test_annotate_processing_skips_predictions_without_source():
         [pred], predictor=StubPepsickle({}))
     assert n == 0
     assert by_key == {}
-    # No mutation on the EpitopePrediction (post-2.23).
-    assert not hasattr(pred, 'pepsickle_c_term_cleavage_prob')
 
 
 def test_annotate_processing_relocates_peptide_when_offset_off():
@@ -197,13 +205,13 @@ def test_annotate_processing_relocates_peptide_when_offset_off():
 
 
 def test_annotate_processing_does_not_touch_ranking_score():
-    """The annotation must not alter the prediction's existing scoring
-    fields — ranking is unchanged whether or not pepsickle ran."""
+    """The annotation must not alter the underlying epitope's
+    ranking-driving fields — pepsickle's job is purely additive."""
     source = "AAAAKLMNPVAAAA"
     pred = _ep("KLMNPV", source, offset=4, ic50=42.0)
-    pre_ic50 = pred.ic50
-    pre_rank = pred.percentile_rank
-    pre_logistic = pred.logistic_epitope_score()
+    leaf = pred.mutant.best_affinity()
+    pre_ic50 = leaf.value
+    pre_rank = leaf.percentile_rank
     n, by_key = annotate_processing(
         [pred],
         predictor=StubPepsickle({source: [0.1] * len(source)}))
@@ -211,10 +219,10 @@ def test_annotate_processing_does_not_touch_ranking_score():
     # canonical record).
     assert n == 1
     assert (pred.peptide_sequence, source, 'pepsickle') in by_key
-    # Ranking-driving fields untouched
-    assert pred.ic50 == pre_ic50
-    assert pred.percentile_rank == pre_rank
-    assert pred.logistic_epitope_score() == pre_logistic
+    # Ranking-driving fields untouched (frozen Epitope, can't be mutated).
+    leaf_after = pred.mutant.best_affinity()
+    assert leaf_after.value == pre_ic50
+    assert leaf_after.percentile_rank == pre_rank
 
 
 def test_annotate_processing_predictor_failure_degrades_gracefully():
@@ -329,26 +337,31 @@ def test_ascii_report_surfaces_each_predictor_in_per_epitope_table():
 
 def test_epitope_data_renders_one_row_per_predictor_for_same_pep_allele():
     """Issue #261: when LENS / pVACseq / multi-predictor VCF runs
-    emit multiple EpitopePredictions per (peptide, allele) — one
-    per predictor — the per-epitope report table renders one row
+    emit multiple Predictions per (peptide, allele) — one per
+    predictor — the per-epitope report table renders one row
     per prediction with a ``Predictor`` column distinguishing them."""
     from collections import OrderedDict
     from vaxrank.report import TemplateDataCreator
-    from vaxrank.epitope_prediction import EpitopePrediction
 
     creator = TemplateDataCreator.__new__(TemplateDataCreator)
     creator.processing_predictions_by_key = {}
 
-    def _ep(method, ic50):
-        return EpitopePrediction(
-            allele='HLA-A*02:01', peptide_sequence='SIINFEKL',
-            wt_peptide_sequence='SIINFEKL', ic50=ic50, wt_ic50=2000.0,
-            percentile_rank=0.5, prediction_method_name=method,
-            overlaps_mutation=True, source_sequence='SSIINFEKL',
-            offset=1, occurs_in_reference=False)
-    preds = [_ep('mhcflurry', 50.0), _ep('netmhcpan', 75.0)]
+    def _pred(method, ic50):
+        return Prediction(
+            kind='pMHC_affinity', predictor_name=method,
+            predictor_version='', allele='HLA-A*02:01',
+            peptide='SIINFEKL', value=ic50, score=0.0,
+            percentile_rank=0.5)
+    mhcflurry, netmhcpan = _pred('mhcflurry', 50.0), _pred('netmhcpan', 75.0)
+    epitope = Epitope(
+        mutant=PeptideContext(
+            peptide_sequence='SIINFEKL',
+            source_sequence='SSIINFEKL', offset=1,
+            predictions=(mhcflurry, netmhcpan)),
+        comparators={'wt': PeptideContext(peptide_sequence='SIINFEKL')},
+        overlaps_mutation=True, occurs_in_reference=False)
 
-    rows = [creator._epitope_data(p) for p in preds]
+    rows = [creator._epitope_data(epitope, p) for p in (mhcflurry, netmhcpan)]
     assert len(rows) == 2
     # Each row preserves its own predictor name + IC50 — no collapsing.
     assert rows[0]['Predictor'] == 'mhcflurry'
@@ -376,12 +389,13 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
 
     source = "AAAAKLMNPVAAAA"
     pred = _ep("KLMNPV", source, offset=4)
+    leaf = pred.mutant.best_affinity()
 
     from vaxrank.report import TemplateDataCreator
     creator = TemplateDataCreator.__new__(TemplateDataCreator)
     creator.processing_predictions_by_key = {}
-    # Default: 6-column legacy shape.
-    pre = creator._epitope_data(pred)
+    # Default: legacy 7-column shape (no Processing columns).
+    pre = creator._epitope_data(pred, leaf)
     assert isinstance(pre, OrderedDict)
     assert 'Processing: C-term' not in pre
     assert 'Processing: combined' not in pre
@@ -392,7 +406,7 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
         [pred],
         predictor=StubPepsickle({source: [0.1] * 9 + [0.85] + [0.0] * 4}))
     creator.processing_predictions_by_key = by_key
-    post = creator._epitope_data(pred, include_processing=True)
+    post = creator._epitope_data(pred, leaf, include_processing=True)
     assert 'Processing: C-term' in post
     assert 'Processing: max internal' in post
     assert 'Processing: combined' in post
@@ -501,6 +515,8 @@ def test_epitope_data_header_consistent_when_some_predictions_unannotated():
     source = "AAAAKLMNPVAAAA"
     annotated = _ep("KLMNPV", source, offset=4)
     unannotated = _ep("AAAAA", source, offset=0)
+    leaf_a = annotated.mutant.best_affinity()
+    leaf_u = unannotated.mutant.best_affinity()
     n, by_key = annotate_processing(
         [annotated],
         predictor=StubPepsickle(
@@ -512,8 +528,8 @@ def test_epitope_data_header_consistent_when_some_predictions_unannotated():
 
     # When the caller turns include_processing on, BOTH rows have
     # the same key set — table renders cleanly.
-    row_a = creator._epitope_data(annotated, include_processing=True)
-    row_u = creator._epitope_data(unannotated, include_processing=True)
+    row_a = creator._epitope_data(annotated, leaf_a, include_processing=True)
+    row_u = creator._epitope_data(unannotated, leaf_u, include_processing=True)
     assert list(row_a.keys()) == list(row_u.keys()), (
         "Annotated and unannotated rows should share identical "
         "column keys when include_processing=True; got "
@@ -620,9 +636,9 @@ def test_dedup_by_content_when_duplicate_objects(monkeypatch):
     fragment = SimpleNamespace(amino_acids=source, gene_name='G')
     vp = SimpleNamespace(
         mutant_protein_fragment=fragment,
-        mutant_epitope_predictions=[pred_a])
+        mutant_epitopes=[pred_a])
     ranked = [(SimpleNamespace(), [vp])]
-    lens_predictions = [pred_b]
+    lens_epitopes = [pred_b]
 
     captured = {}
     stub = StubPepsickle({source: [0.1] * 14})
@@ -632,13 +648,13 @@ def test_dedup_by_content_when_duplicate_objects(monkeypatch):
         return real_annotate(pred_list, predictor=stub)
 
     monkeypatch.setattr(proc_mod, 'annotate_processing', _capture)
-    _annotate_predictions_with_processing(ranked, lens_predictions)
+    _annotate_predictions_with_processing(ranked, lens_epitopes)
 
     assert 'list' in captured
     deduped = captured['list']
     assert len(deduped) == 1, (
         "Content-key dedup should collapse two distinct objects with "
-        "identical (peptide, allele, source, offset) to one; got %d"
+        "identical (peptide, source, offset) to one; got %d"
         % len(deduped))
 
 

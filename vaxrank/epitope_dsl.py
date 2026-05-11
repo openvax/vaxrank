@@ -212,9 +212,15 @@ def _legacy_predictions_to_epitopes(predictions):
     for (peptide, source, offset), members in groups.items():
         first = members[0]
         mutant_preds = []
+        # WT comparator is built whenever ANY group member carries a
+        # non-None wt_ic50. The WT peptide sequence may be empty
+        # (LENS doesn't emit one; some pVACseq exports omit the
+        # ``WT Epitope Seq`` column) — we keep the empty string as
+        # the codebase's "unknown WT peptide" sentinel rather than
+        # dropping the WT IC50 signal entirely.
         wt_peptide = first.wt_peptide_sequence
         wt_preds = []
-        has_distinct_wt = bool(wt_peptide) and wt_peptide != peptide
+        has_wt_signal = any(ep.wt_ic50 is not None for ep in members)
         for ep in members:
             tool = str(ep.prediction_method_name or "")
             kind = _kind_for_method(tool)
@@ -226,13 +232,9 @@ def _legacy_predictions_to_epitopes(predictions):
                 peptide=ep.peptide_sequence,
                 value=ep.ic50,
                 score=0.0,
-                percentile_rank=(
-                    ep.percentile_rank
-                    if ep.percentile_rank is not None
-                    else float("nan")
-                ),
+                percentile_rank=ep.percentile_rank,
             ))
-            if has_distinct_wt and ep.wt_ic50 is not None:
+            if has_wt_signal and ep.wt_ic50 is not None:
                 wt_preds.append(Prediction(
                     kind=kind,
                     predictor_name=tool,
@@ -241,7 +243,7 @@ def _legacy_predictions_to_epitopes(predictions):
                     peptide=wt_peptide,
                     value=ep.wt_ic50,
                     score=0.0,
-                    percentile_rank=float("nan"),
+                    percentile_rank=None,
                 ))
 
         mutant_ctx = PeptideContext(
@@ -347,8 +349,8 @@ def validate_default_methods(cfg, topiary_df):
                 f"(available for {kind}: {sorted(available)})")
 
 
-def score_predictions(predictions, cfg, *, topiary_df=None):
-    """Score external-input predictions using the configured Topiary DSL.
+def score_predictions(epitopes, cfg, *, topiary_df=None):
+    """Score external-input epitopes using the configured Topiary DSL.
 
     Returns a ``pandas.Series`` of per-(peptide, allele) scores indexed
     by the group-key MultiIndex topiary uses internally
@@ -366,15 +368,15 @@ def score_predictions(predictions, cfg, *, topiary_df=None):
 
     When ``cfg.score_expr`` / ``cfg.filter_expr`` are unset this applies
     the same default node that the main pipeline uses, which matches the
-    legacy :meth:`EpitopePrediction.logistic_epitope_score` byte-for-byte.
+    legacy per-prediction logistic score byte-for-byte.
 
     Pass ``topiary_df`` to reuse an already-built frame (see
-    :func:`predictions_to_topiary_df`) rather than rebuilding from
-    ``predictions``.
+    :func:`epitopes_to_topiary_df`) rather than rebuilding from
+    ``epitopes``.
     """
     from topiary.ranking import EvalContext, apply_filter
 
-    df = (predictions_to_topiary_df(predictions)
+    df = (epitopes_to_topiary_df(epitopes)
           if topiary_df is None else topiary_df)
     if df.empty:
         return pd.Series(dtype=float)
@@ -429,9 +431,9 @@ def collect_dsl_references(node):
     return {"columns": columns, "kinds": kinds}
 
 
-def validate_dsl_against_predictions(cfg, predictions, *, topiary_df=None):
+def validate_dsl_against_predictions(cfg, epitopes, *, topiary_df=None):
     """Error early when ``filter_expr`` / ``score_expr`` references a
-    predictor the loaded predictions don't expose.
+    predictor the loaded epitopes don't expose.
 
     Topiary's own ``apply_filter`` already validates ``Column(...)``
     references, but when a ``Field``'s (kind, method, version) isn't
@@ -440,7 +442,7 @@ def validate_dsl_against_predictions(cfg, predictions, *, topiary_df=None):
     user at ``default_methods`` / ``--input-lens`` when appropriate.
 
     Pass ``topiary_df`` to reuse an already-built frame rather than
-    rebuilding it from ``predictions``.
+    rebuilding it from ``epitopes``.
     """
     nodes = []
     if cfg.filter_expr is not None:
@@ -450,7 +452,7 @@ def validate_dsl_against_predictions(cfg, predictions, *, topiary_df=None):
     if not nodes:
         return
 
-    df = (predictions_to_topiary_df(predictions)
+    df = (epitopes_to_topiary_df(epitopes)
           if topiary_df is None else topiary_df)
     available_kinds = set(df["kind"].unique()) if not df.empty else set()
     available_methods = (

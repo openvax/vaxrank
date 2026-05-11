@@ -101,14 +101,17 @@ def _resolve_kind(kind: str) -> str:
     return _KIND_ALIASES.get(kind.lower(), kind)
 
 
-def _nan_safe(x: float) -> tuple[bool, float]:
-    """Wrap a float so it sorts deterministically even when NaN.
-    Python's ``sorted`` is undefined on NaN keys (NaN comparisons
-    return False both ways). Returns ``(is_nan, x_or_zero)`` —
-    NaN-bearing entries sort *after* finite ones; within the NaN
-    bucket they all tie at ``(True, 0.0)`` and stable sort
+def _nan_safe(x) -> tuple[bool, float]:
+    """Wrap a float so it sorts deterministically even when NaN or
+    None. Python's ``sorted`` is undefined on NaN keys (NaN
+    comparisons return False both ways), and ``None`` doesn't
+    compare with floats at all. Returns ``(is_missing, x_or_zero)``
+    — NaN / None entries sort *after* finite ones; within the
+    missing bucket they all tie at ``(True, 0.0)`` and stable sort
     preserves their relative order from the preceding key
     components, which is the best we can do."""
+    if x is None:
+        return (True, 0.0)
     is_nan = math.isnan(x)
     return (is_nan, 0.0 if is_nan else x)
 
