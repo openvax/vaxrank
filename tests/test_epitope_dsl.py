@@ -251,3 +251,162 @@ def test_multi_method_resolves_with_qualified_affinity():
     # Only the netmhcpan ic50=100 contributes; expected = raw sigmoid at ic50=100
     expected = 1.0 / (1.0 + math.exp((100.0 - 350.0) / 150.0))
     assert float(scores.iloc[0]) == pytest.approx(expected, abs=1e-12)
+
+
+# ---- epitopes_to_topiary_df + _legacy_predictions_to_epitopes ---------
+
+
+def _make_legacy(peptide='SIINFEKL', allele='HLA-A*02:01', ic50=50.0,
+                 wt_peptide=None, wt_ic50=None, predictor='mhcflurry',
+                 version='2.1.1', source='AAAASIINFEKLCCCC', offset=4,
+                 percentile_rank=0.5, overlaps_mutation=True,
+                 occurs_in_reference=False):
+    """Concise factory for a legacy ``EpitopePrediction``."""
+    return EpitopePrediction(
+        allele=allele,
+        peptide_sequence=peptide,
+        wt_peptide_sequence=wt_peptide if wt_peptide is not None else peptide,
+        ic50=ic50,
+        wt_ic50=wt_ic50 if wt_ic50 is not None else ic50,
+        percentile_rank=percentile_rank,
+        prediction_method_name=predictor,
+        overlaps_mutation=overlaps_mutation,
+        source_sequence=source,
+        offset=offset,
+        occurs_in_reference=occurs_in_reference,
+        predictor_version=version,
+    )
+
+
+def test_legacy_adapter_groups_by_peptide_offset_source():
+    """The adapter groups per-(peptide, source, offset) → one Epitope.
+    Multi-allele inputs collapse into one Epitope whose mutant context
+    carries N predictions."""
+    from vaxrank.epitope_dsl import _legacy_predictions_to_epitopes
+
+    legacies = [
+        _make_legacy(allele='HLA-A*02:01', ic50=50.0),
+        _make_legacy(allele='HLA-B*07:02', ic50=200.0),
+        _make_legacy(allele='HLA-C*03:04', ic50=800.0),
+    ]
+    epitopes = _legacy_predictions_to_epitopes(legacies)
+    assert len(epitopes) == 1
+    e = epitopes[0]
+    assert e.mutant.peptide_sequence == 'SIINFEKL'
+    assert e.mutant.offset == 4
+    assert sorted(e.mutant.alleles_for('pMHC_affinity')) == [
+        'HLA-A*02:01', 'HLA-B*07:02', 'HLA-C*03:04']
+    assert e.overlaps_mutation is True
+
+
+def test_legacy_adapter_separates_distinct_peptides():
+    """Two records with different peptides → two Epitopes."""
+    from vaxrank.epitope_dsl import _legacy_predictions_to_epitopes
+
+    legacies = [
+        _make_legacy(peptide='SIINFEKL', offset=4),
+        _make_legacy(peptide='SIINFEKM', offset=12),
+    ]
+    epitopes = _legacy_predictions_to_epitopes(legacies)
+    assert len(epitopes) == 2
+    assert {e.mutant.peptide_sequence for e in epitopes} == {
+        'SIINFEKL', 'SIINFEKM'}
+
+
+def test_legacy_adapter_builds_wt_comparator_when_peptides_differ():
+    """When ``wt_peptide_sequence`` differs from the mutant peptide,
+    a parallel WT comparator context is built with one Prediction
+    per allele carrying the ``wt_ic50``."""
+    from vaxrank.epitope_dsl import _legacy_predictions_to_epitopes
+
+    legacies = [
+        _make_legacy(peptide='SIINFEKL', wt_peptide='SIINFEKM',
+                     ic50=50.0, wt_ic50=500.0, allele='HLA-A*02:01'),
+        _make_legacy(peptide='SIINFEKL', wt_peptide='SIINFEKM',
+                     ic50=100.0, wt_ic50=400.0, allele='HLA-B*07:02'),
+    ]
+    epitopes = _legacy_predictions_to_epitopes(legacies)
+    assert len(epitopes) == 1
+    e = epitopes[0]
+    assert e.wt is not None
+    assert e.wt.peptide_sequence == 'SIINFEKM'
+    wt_preds = e.wt.predictions_for('pMHC_affinity')
+    assert {p.allele for p in wt_preds} == {'HLA-A*02:01', 'HLA-B*07:02'}
+    assert {p.value for p in wt_preds} == {500.0, 400.0}
+
+
+def test_legacy_adapter_omits_wt_when_peptide_unchanged():
+    """When WT peptide == mutant peptide (non-overlapping epitopes),
+    no WT comparator is created — that record was tracking 'no
+    mutation here'."""
+    from vaxrank.epitope_dsl import _legacy_predictions_to_epitopes
+
+    legacies = [
+        _make_legacy(peptide='SIINFEKL', wt_peptide='SIINFEKL',
+                     overlaps_mutation=False),
+    ]
+    epitopes = _legacy_predictions_to_epitopes(legacies)
+    assert epitopes[0].wt is None
+    assert epitopes[0].overlaps_mutation is False
+
+
+def test_epitopes_to_topiary_df_emits_one_row_per_prediction():
+    """Each leaf ``mhctools.Prediction`` in an Epitope's mutant
+    context becomes one frame row. Schema matches the legacy
+    ``predictions_to_topiary_df``."""
+    from vaxrank.epitope_dsl import (
+        _legacy_predictions_to_epitopes,
+        epitopes_to_topiary_df,
+    )
+
+    legacies = [
+        _make_legacy(allele='HLA-A*02:01', ic50=50.0),
+        _make_legacy(allele='HLA-B*07:02', ic50=200.0),
+    ]
+    epitopes = _legacy_predictions_to_epitopes(legacies)
+    df = epitopes_to_topiary_df(epitopes)
+    assert len(df) == 2
+    assert set(df.columns) >= {
+        'peptide', 'allele', 'value', 'affinity', 'percentile_rank',
+        'kind', 'prediction_method_name', 'predictor_version',
+        'source_sequence_name', 'peptide_offset', 'peptide_length',
+        'score', 'n_flank', 'c_flank',
+    }
+    assert set(df['allele']) == {'HLA-A*02:01', 'HLA-B*07:02'}
+    assert (df['kind'] == 'pMHC_affinity').all()
+
+
+def test_legacy_to_epitopes_to_frame_equivalent_to_legacy_to_frame():
+    """Round-trip: legacy → Epitope → frame should produce the same
+    rows as legacy → frame directly. Pin so the migration adapter
+    + new producer don't drift from the legacy producer's frame
+    shape that ``apply_filter`` / ``score_predictions`` consume."""
+    from vaxrank.epitope_dsl import (
+        _legacy_predictions_to_epitopes,
+        epitopes_to_topiary_df,
+        predictions_to_topiary_df,
+    )
+
+    legacies = [
+        _make_legacy(allele='HLA-A*02:01', ic50=50.0, percentile_rank=0.3),
+        _make_legacy(allele='HLA-B*07:02', ic50=200.0, percentile_rank=1.5),
+        _make_legacy(peptide='SIINFEKM', allele='HLA-A*02:01',
+                     ic50=800.0, offset=12),
+    ]
+    direct = predictions_to_topiary_df(legacies)
+    via_epitope = epitopes_to_topiary_df(
+        _legacy_predictions_to_epitopes(legacies))
+
+    # Same row count.
+    assert len(direct) == len(via_epitope)
+
+    # Same key-shape per row. Compare on the canonical sort.
+    key_cols = ['peptide', 'allele', 'prediction_method_name',
+                'predictor_version', 'kind']
+    direct_sorted = direct.sort_values(key_cols).reset_index(drop=True)
+    via_sorted = via_epitope.sort_values(key_cols).reset_index(drop=True)
+    for col in ['peptide', 'allele', 'value', 'affinity', 'percentile_rank',
+                'kind', 'prediction_method_name', 'predictor_version',
+                'source_sequence_name', 'peptide_offset', 'peptide_length']:
+        assert (direct_sorted[col].fillna(-1) == via_sorted[col].fillna(-1)).all(), (
+            f"column {col} diverged between direct and adapter paths")

@@ -125,6 +125,148 @@ def predictions_to_topiary_df(predictions):
     return pd.DataFrame(rows)
 
 
+def epitopes_to_topiary_df(epitopes):
+    """Convert a list of :class:`vaxrank.peptide_context.Epitope` into the
+    topiary long-format DataFrame.
+
+    Replacement for :func:`predictions_to_topiary_df` as part of the
+    EpitopePrediction → Epitope migration (vaxrank#284). One row per
+    leaf ``mhctools.Prediction`` in each Epitope's mutant context —
+    the new types carry multi-axis predictions natively, so a single
+    Epitope can emit N rows (one per allele × predictor × kind).
+
+    Schema matches ``predictions_to_topiary_df`` so consumers
+    (``apply_filter``, ``EvalContext``, ``score_predictions``) don't
+    care which producer built the frame. Notable differences from
+    the legacy producer:
+
+    * ``score`` column carries the real ``mhctools.Prediction.score``
+      value instead of the hardcoded ``0.0``. The legacy frame's
+      ``score`` was never read by the default DSL (which references
+      ``Affinity.value``), so populating it can only help.
+    * ``n_flank`` / ``c_flank`` come from the parent ``PeptideContext``
+      instead of being empty strings.
+    * Comparator predictions (``epitope.wt``, ``nearest_self``, …) are
+      NOT emitted as rows. The DSL frame is mutant-only by convention
+      — comparator data stays on the Epitope for display. This matches
+      legacy behavior (``predictions_to_topiary_df`` never emitted
+      ``wt_*`` columns either).
+    """
+    rows = []
+    for e in epitopes:
+        ctx = e.mutant
+        source_name = ctx.source_sequence or ctx.peptide_sequence
+        for p in ctx.predictions_flat():
+            rows.append({
+                "sample_name": "",
+                "source_sequence_name": source_name,
+                "peptide": p.peptide,
+                "peptide_offset": ctx.offset,
+                "peptide_length": len(p.peptide),
+                "allele": p.allele,
+                "n_flank": ctx.n_flank,
+                "c_flank": ctx.c_flank,
+                "prediction_method_name": p.predictor_name,
+                "predictor_version": p.predictor_version or "",
+                "kind": p.kind,
+                "value": p.value,
+                "affinity": p.value,
+                "percentile_rank": p.percentile_rank,
+                "score": p.score,
+            })
+    return pd.DataFrame(rows)
+
+
+def _legacy_predictions_to_epitopes(predictions):
+    """Adapter: convert ``list[EpitopePrediction]`` to ``list[Epitope]``.
+
+    Transitional bridge for the Phase 2 migration (vaxrank#284). Used
+    by producers that still emit ``EpitopePrediction`` internally —
+    they pipe through this adapter to expose the new shape to migrated
+    consumers. Drops out of the codebase once every producer emits
+    ``Epitope`` natively.
+
+    Groups input by ``(peptide_sequence, source_sequence, offset)`` —
+    each group becomes one ``Epitope``. Per-allele / per-predictor
+    rows in the group populate the mutant ``PeptideContext.predictions``;
+    when ``wt_peptide_sequence`` differs from the mutant peptide and
+    ``wt_ic50`` is set, a parallel ``wt`` comparator context is built.
+
+    ``mhctools.Prediction.score`` is set to ``0.0`` because
+    ``EpitopePrediction`` doesn't carry a normalized score — matches
+    the legacy frame's hardcoded value. Downstream code that calls
+    ``best()`` (which ranks by score) will see ties and pick first;
+    consumers needing a meaningful score should use ``predictions_for``
+    + custom ranking. Real scores arrive when producers stop going
+    through this adapter.
+    """
+    from mhctools.pred import Prediction
+    from vaxrank.peptide_context import COMPARATOR_WT, Epitope, PeptideContext
+
+    groups: dict = {}
+    for p in predictions:
+        key = (p.peptide_sequence, p.source_sequence, p.offset)
+        groups.setdefault(key, []).append(p)
+
+    epitopes = []
+    for (peptide, source, offset), members in groups.items():
+        first = members[0]
+        mutant_preds = []
+        wt_peptide = first.wt_peptide_sequence
+        wt_preds = []
+        has_distinct_wt = bool(wt_peptide) and wt_peptide != peptide
+        for ep in members:
+            tool = str(ep.prediction_method_name or "")
+            kind = _kind_for_method(tool)
+            mutant_preds.append(Prediction(
+                kind=kind,
+                predictor_name=tool,
+                predictor_version=ep.predictor_version or "",
+                allele=ep.allele,
+                peptide=ep.peptide_sequence,
+                value=ep.ic50,
+                score=0.0,
+                percentile_rank=(
+                    ep.percentile_rank
+                    if ep.percentile_rank is not None
+                    else float("nan")
+                ),
+            ))
+            if has_distinct_wt and ep.wt_ic50 is not None:
+                wt_preds.append(Prediction(
+                    kind=kind,
+                    predictor_name=tool,
+                    predictor_version=ep.predictor_version or "",
+                    allele=ep.allele,
+                    peptide=wt_peptide,
+                    value=ep.wt_ic50,
+                    score=0.0,
+                    percentile_rank=float("nan"),
+                ))
+
+        mutant_ctx = PeptideContext(
+            peptide_sequence=peptide,
+            source_sequence=source,
+            offset=offset,
+            predictions=tuple(mutant_preds),
+        )
+        comparators = {}
+        if wt_preds:
+            comparators[COMPARATOR_WT] = PeptideContext(
+                peptide_sequence=wt_peptide,
+                source_sequence=source,
+                offset=offset,
+                predictions=tuple(wt_preds),
+            )
+        epitopes.append(Epitope(
+            mutant=mutant_ctx,
+            comparators=comparators,
+            overlaps_mutation=first.overlaps_mutation,
+            occurs_in_reference=first.occurs_in_reference,
+        ))
+    return epitopes
+
+
 # Priority order for auto-picking a canonical method when the user hasn't
 # set ``default_methods[kind]`` and the data exposes multiple models for
 # that Kind. Listed by decreasing preference; any method not listed falls
