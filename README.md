@@ -17,44 +17,90 @@ ranks the mutant antigens most likely to elicit a T-cell response and
 emits them as the vaccine type(s) the user requests — peptide pools,
 mRNA constructs, or analysis reports for review.
 
-## Architecture
+## Contents
 
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Overview](#overview)
+- [Vaccine designs](#vaccine-designs) — 8 design points across two modalities
+- [Vaccine types and output modes](#vaccine-types-and-output-modes) —
+  reports, peptide constructs, mRNA constructs, external inputs
+- [Clinical Use](#clinical-use)
+- [Installation](#installation)
+- [Configuration](#configuration) — YAML config + topiary DSL
+- [MHC Binding Predictors](#mhc-binding-predictors)
+- [How It Works](#how-it-works) — pipeline internals + data model
+- [Papers & Citations](#papers--citations)
+- [Dependencies](#dependencies)
+- [Legacy flags](#legacy-flags)
+- [Development](#development)
+
+## Features
+
+- **Two input paths.** Full pipeline from a tumor VCF + RNA-seq BAM,
+  or drive ranking from a pre-computed neoepitope report produced by
+  [LENS](https://github.com/openvax/lens) or pVACseq via
+  `--input-lens` / `--input-pvacseq`.
+- **Multiple vaccine types from one run.** `--vaccine-type` is
+  multi-valued: pass `peptide`, `mrna`, or both. The same ranked
+  candidates render to peptide-pool FASTAs, mRNA constructs, or both
+  in parallel.
+- **Eight vaccine designs across two modalities.** Two orthogonal
+  axes — `--antigen-content` (mutation-spanning SLP vs minimal MHC
+  ligand) × `--antigens-per-construct` (1 vs N) — give four designs
+  per modality, including canonical SLPs (PGV-001) and BioNTech-style
+  multi-antigen mRNA (FixVac / iNeST).
+- **Analysis reports** in CSV, XLSX, ASCII, HTML, PDF, and JSON, plus
+  a per-(peptide, allele) neoepitope report. Reports run independently
+  of vaccine-type dispatch.
+- **MHC predictor integration** via [mhctools](https://github.com/openvax/mhctools):
+  MHCflurry, NetMHCpan family, BigMHC, NetMHCIIpan, Pepsickle, and IEDB
+  web predictors.
+- **Shared linker library** with primary-source citations and a
+  compositional grammar — `(G4S)2`, `AAY`, 2A self-cleaving peptides,
+  furin motifs — usable interchangeably across peptide and mRNA
+  designs.
+
+## Quick Start
+
+Full pipeline from a tumor VCF + RNA-seq BAM, emitting ranked vaccine
+peptides as text, HTML, and PDF reports:
+
+```sh
+vaxrank \
+    --vcf tests/data/b16.f10/b16.vcf \
+    --bam tests/data/b16.f10/b16.combined.bam \
+    --mhc-predictor netmhc \
+    --mhc-alleles H2-Kb,H2-Db \
+    --output-ascii-report vaccine-peptides.txt \
+    --output-pdf-report vaccine-peptides.pdf
 ```
-INPUT (one of)
-  ├── --vcf + --bam              full pipeline: variant calling → Isovar
-  │                              transcript assembly → MHC prediction → ranking
-  └── --input-lens / --input-pvacseq
-                                 use a pre-computed neoepitope report;
-                                 ranking happens against existing
-                                 (peptide, allele) predictions
 
-SHARED MIDDLE
-  ranked_variants_with_vaccine_peptides   (the canonical intermediate;
-                                           same shape from both inputs)
+Required inputs:
+- `--vcf` — somatic variants (VCF from any variant caller)
+- `--bam` — tumor RNA-seq alignments (used by Isovar to assemble mutant transcripts)
+- `--mhc-alleles` — patient HLA alleles (e.g. `HLA-A*02:01,HLA-B*07:02`)
+- `--mhc-predictor` — which MHC binding predictor to use (see
+  [MHC Binding Predictors](#mhc-binding-predictors))
 
-VACCINE-TYPE DISPATCH (multi-valued; --vaccine-type)
-  ├── peptide   →  vaccine.fasta + manifest.json + order_form.csv
-  │                (sub-modes via --peptide-mode: slp / minimal_epitope /
-  │                multi_epitope)
-  ├── mrna      →  cds.fasta + no_polyA.fasta + full.fasta +
-  │                manifest.json + layers.csv
-  └── (future)  →  dna, etc. plug in as one entry in the dispatch table
+Drive design from a pre-computed neoepitope report (LENS or pVACseq)
+when upstream MHC prediction has already been done:
 
-OUTPUT LAYOUT (--output-dir DIR)
-  Single-mode (one --vaccine-type): files land directly in DIR.
-  Multi-mode (≥2):                  per-modality subdirs DIR/<type>/.
-
-REPORTS (orthogonal to vaccine-type)
-  CSV / XLSX / ASCII / HTML / PDF / JSON / neoepitope-report
+```sh
+vaxrank --input-lens patient.lens.tsv \
+        --vaccine-type mrna --output-dir mrna_out/ \
+        --ensembl-release 102
 ```
 
-Vaxrank always ranks; the vaccine-type writer fires only when both
-`--vaccine-type` and `--output-dir` are set. ``--vaccine-type`` is
-multi-valued: pass one or more of ``peptide`` / ``mrna``. Single-mode
-runs write canonical files directly in ``--output-dir``; multi-mode
-runs scope into per-modality subdirs (``DIR/peptide/``, ``DIR/mrna/``,
-…). Analysis reports use their own ``--output-*`` flags and are
-independent of the vaccine-type dispatch.
+Emit both peptide and mRNA constructs in one run — outputs land in
+per-modality subdirs:
+
+```sh
+vaxrank --vcf v.vcf --bam r.bam \
+        --vaccine-type peptide mrna --output-dir vaccines/
+# → vaccines/peptide/{vaccine.fasta, manifest.json, order_form.csv}
+# → vaccines/mrna/{cds.fasta, no_polyA.fasta, full.fasta, manifest.json, layers.csv}
+```
 
 ## Overview
 
@@ -108,66 +154,102 @@ Combined, the matrix yields 8 distinct designs — 4 per vaccine type:
 
 | Type | Content | Per-construct | Design name | Reference |
 |---|---|---|---|---|
-| peptide | mutation_spanning | 1 | **SLP** (default) | PGV-001 (Bortman 2025) |
+| peptide | mutation_spanning | 1 | **SLP** (default) | [PGV-001 (Bortman 2025)](https://pubmed.ncbi.nlm.nih.gov/40094414/) |
 | peptide | mutation_spanning | N | Multi-SLP / multi-epitope long peptide | |
 | peptide | minimal_epitope | 1 | Minimal-ligand peptide | |
 | peptide | minimal_epitope | N | Concatenated minimal-ligand peptide | |
-| mrna | mutation_spanning | N | **BioNTech FixVac / iNeST** (default for mRNA) | Sahin 2017 / Rojas 2023 |
+| mrna | mutation_spanning | N | **BioNTech FixVac / iNeST** (default for mRNA) | [Sahin 2017](https://www.nature.com/articles/nature23003) / [Rojas 2023](https://www.nature.com/articles/s41586-023-06063-y) |
 | mrna | mutation_spanning | 1 | Single-antigen mRNA | |
-| mrna | minimal_epitope | N | "String of beads" mRNA | Velten 2018 |
+| mrna | minimal_epitope | N | "String of beads" mRNA | [Thomson 1996](https://www.pnas.org/doi/10.1073/pnas.94.26.14660) |
 | mrna | minimal_epitope | 1 | Single-ligand mRNA | |
 
 A third knob, `--epitopes-per-antigen`, controls how many top MHC
 ligands to take *per ranked vaccine peptide* when content is
-`minimal_epitope`. The default `1` is the legacy "single top ligand"
-semantics; >1 packs multiple top ligands from the same variant as
+`minimal_epitope`. The default `1` is the "single top ligand"
+semantics; `>1` packs multiple top ligands from the same variant as
 separate antigens.
 
+### Peptide designs
+
+**SLP (default).** Mutation-spanning long peptide, one antigen per
+construct — the PGV-001 canonical design.
+
 ```sh
-# Default: SLP peptide pool — files land directly in DIR
 vaxrank --vcf v.vcf --bam r.bam --output-dir vaccine_out/
 # → vaccine_out/{vaccine.fasta, manifest.json, order_form.csv}
+```
 
-# Multi-epitope concatenated peptide
+**Multi-epitope concatenated peptide.** Several mutation-spanning
+antigens linked into one longer peptide. Use `--peptide-linker` to
+pick the spacer; `AAY` is the proteasome-friendly default.
+
+```sh
 vaxrank --vcf v.vcf --bam r.bam \
         --output-dir vaccine_out/ \
         --peptide-antigens-per-construct 5 --peptide-linker AAY
+```
 
-# Minimal-epitope peptide (single ligand per construct)
+**Minimal-epitope peptide.** A single short MHC ligand per construct
+— useful when minimum-length manufacturability matters more than
+flanking context.
+
+```sh
 vaxrank --vcf v.vcf --bam r.bam \
         --output-dir vaccine_out/ \
         --antigen-content minimal_epitope
+```
 
-# BioNTech FixVac canonical mRNA
+### mRNA designs
+
+**BioNTech FixVac / iNeST canonical.** Multi-antigen mutation-spanning
+mRNA — the default for `--vaccine-type mrna`. Antigens are linked with
+`(G4S)2` and emitted as CDS, no-polyA, and full (with polyA) FASTAs
+plus a structured manifest.
+
+```sh
 vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-dir mrna_out/
 # → mrna_out/{cds.fasta, no_polyA.fasta, full.fasta, manifest.json, layers.csv}
+```
 
-# Both modalities in one run — per-modality subdirs
-vaxrank --vcf v.vcf --bam r.bam --vaccine-type peptide mrna --output-dir vaccines/
-# → vaccines/peptide/{vaccine.fasta, …}
-# → vaccines/mrna/{cds.fasta, no_polyA.fasta, full.fasta, manifest.json, layers.csv}
+**String-of-beads mRNA.** Concatenated minimal-epitope antigens —
+short MHC ligands linked together rather than mutation-spanning
+windows.
 
-# String-of-beads mRNA (concatenated minimal epitopes)
+```sh
 vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-dir out/ \
         --mrna-antigen-content minimal_epitope --mrna-antigens-per-construct 8 \
         --mrna-linker AAY
+```
 
-# Top-2 ligands per variant in a string-of-beads mRNA
+**Top-N ligands per variant in a string-of-beads.** Pack multiple top
+MHC ligands from each ranked vaccine peptide as separate antigens.
+
+```sh
 vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-dir out/ \
         --mrna-antigen-content minimal_epitope \
         --mrna-epitopes-per-antigen 2 --mrna-antigens-per-construct 16
 ```
 
-The legacy `--peptide-mode {slp, minimal_epitope, multi_epitope}`
-flag still works as a shorthand (slp ≡ mutation_spanning + 1, etc.)
-but the orthogonal axes are preferred for new designs.
+### Both modalities in one run
+
+Multi-valued `--vaccine-type` writes per-modality subdirs in
+`--output-dir`.
+
+```sh
+vaxrank --vcf v.vcf --bam r.bam --vaccine-type peptide mrna --output-dir vaccines/
+# → vaccines/peptide/{vaccine.fasta, manifest.json, order_form.csv}
+# → vaccines/mrna/{cds.fasta, no_polyA.fasta, full.fasta, manifest.json, layers.csv}
+```
 
 ## Vaccine types and output modes
 
-Vaccine-type selection is controlled by `--vaccine-type` (multi-valued,
-default `peptide`). The vaccine writer fires only when `--output-dir`
-is also set. Analysis reports use independent `--output-*` flags and
-run regardless of vaccine type.
+Vaxrank always ranks. The vaccine-type writer fires only when both
+`--vaccine-type` and `--output-dir` are set. `--vaccine-type` is
+multi-valued (default `peptide`): pass one or more of `peptide` / `mrna`.
+Single-mode runs write canonical files directly in `--output-dir`;
+multi-mode runs scope into per-modality subdirs (`DIR/peptide/`,
+`DIR/mrna/`, …). Analysis reports use their own `--output-*` flags
+and are independent of the vaccine-type dispatch.
 
 ```sh
 # Peptide pool (default vaccine type)
@@ -192,13 +274,113 @@ vaxrank --input-lens patient.lens.tsv --output-ascii-report report.txt \
         --ensembl-release 102
 ```
 
-| Output | What you get | Flags |
-|---|---|---|
-| **Analysis reports** | Per-variant tables of ranked vaccine peptide candidates, predicted epitopes, and manufacturability scores | `--output-ascii-report`, `--output-html-report`, `--output-pdf-report`, `--output-xlsx-report`, `--output-csv`, `--output-json-file` |
-| **Neoepitope report** | Per-(peptide, allele) report (XLSX/CSV). Default output of the LENS/pVACseq input path; also available on the full pipeline. | `--output-neoepitope-report` |
-| **Peptide constructs** | `vaccine.fasta` + `manifest.json` + `order_form.csv` written into `--output-dir` (or `--output-dir/peptide/` in multi-mode). Sub-mode via `--peptide-mode`: `slp` (one SLP per ranked vaccine peptide, default), `minimal_epitope` (top mutant MHC ligand only), `multi_epitope` (concatenate antigens with a linker). | `--output-dir`, `--peptide-mode`, `--peptide-linker`, `--peptide-max-antigen-length-aa`, `--peptide-n-terminal-acetyl`, `--peptide-c-terminal-amide` |
-| **mRNA constructs** | A directory containing three FASTAs (`cds.fasta`, `no_polyA.fasta`, `full.fasta`) plus `manifest.json` (per-element view) and `layers.csv` (long-format per-element table with AA + nt). Configurable 5'/3' UTRs (e.g. HBB / HBB_FI tandem), signal peptide (HLA-A / HLA-B / tPA / IgK / CD8A / CD28), optional MITD trafficking domain (HLA-A / HLA-B), polyA tail (default A120; optional segmented BNT162b2 pattern A30+linker+A70), and per-junction linker optimization that minimizes predicted MHC presentation of chimeric k-mers. Codon optimization uses [DnaChisel](https://github.com/Edinburgh-Genome-Foundry/DnaChisel); 2A self-cleaving peptides preserve their published codon usage automatically. | `--output-dir` (or `--output-dir/mrna/` in multi-mode), `--mrna-csv-no-full-rows`, `--mrna-signal-peptide`, `--mrna-linker`, `--mrna-include-mitd` / `--mrna-no-mitd`, `--mrna-mitd`, `--mrna-5p-utr`, `--mrna-3p-utr`, `--mrna-poly-a-length`, `--mrna-poly-a-segmented`, `--mrna-poly-a-first-segment`, `--mrna-poly-a-segment-linker`, `--mrna-optimize-linkers` / `--mrna-no-optimize-linkers`, `--mrna-junction-candidates`, `--mrna-junction-rank-strong`, `--mrna-junction-rank-mild`, `--mrna-codon-species`, `--mrna-codon-method`, `--mrna-max-length-nt`, `--mrna-antigens-per-construct`, `--mrna-max-constructs` |
-| **External-input mode** | Drive vaccine design from a pre-computed neoepitope report instead of VCF + BAM. Same downstream dispatch — peptide and mRNA construct outputs work identically. | `--input-pvacseq`, `--input-lens` |
+### Analysis reports
+
+Per-variant tables of ranked vaccine peptide candidates, predicted
+epitopes, and manufacturability scores. Independent of vaccine-type
+dispatch — runs whenever any report flag is set.
+
+| Flag | Output |
+|---|---|
+| `--output-ascii-report` | Plain-text summary |
+| `--output-html-report` | HTML report |
+| `--output-pdf-report` | PDF report (wkhtmltopdf or WeasyPrint backend) |
+| `--output-xlsx-report` | Excel workbook with one sheet per variant |
+| `--output-csv` | Flat CSV |
+| `--output-json-file` | Full ranked-vaccine-peptides graph as JSON |
+
+### Neoepitope report
+
+Per-(peptide, allele) report (XLSX/CSV). Default output of the
+LENS / pVACseq input path; also available on the full pipeline.
+
+| Flag | Output |
+|---|---|
+| `--output-neoepitope-report` | XLSX (default) or CSV (by extension) |
+
+### Peptide constructs
+
+`vaccine.fasta` + `manifest.json` + `order_form.csv` written into
+`--output-dir` (or `--output-dir/peptide/` in multi-mode). The
+peptide design comes from `--antigen-content` and
+`--peptide-antigens-per-construct` (see [Vaccine designs](#vaccine-designs)
+above).
+
+| Flag | Purpose |
+|---|---|
+| `--output-dir` | Where to write the construct files |
+| `--peptide-linker` | Inter-antigen spacer (e.g. `AAY`, `(G4S)2`); default `G4S3` |
+| `--peptide-max-antigen-length-aa` | Truncate antigens longer than this |
+| `--peptide-n-terminal-acetyl` | Add N-terminal acetylation note to the manifest |
+| `--peptide-c-terminal-amide` | Add C-terminal amide note to the manifest |
+
+### mRNA constructs
+
+A directory containing three FASTAs (`cds.fasta`, `no_polyA.fasta`,
+`full.fasta`) plus `manifest.json` (per-element view) and `layers.csv`
+(long-format per-element table with AA + nt). Codon optimization uses
+[DnaChisel](https://github.com/Edinburgh-Genome-Foundry/DnaChisel); 2A
+self-cleaving peptides preserve their published codon usage
+automatically.
+
+Flags are grouped by what they configure:
+
+**Construct anatomy**
+
+| Flag | Purpose |
+|---|---|
+| `--output-dir` | Where to write construct files (or `--output-dir/mrna/` in multi-mode) |
+| `--mrna-signal-peptide` | Leader peptide: `HLA-A`, `HLA-B`, `tPA`, `IgK`, `CD8A`, `CD28` |
+| `--mrna-5p-utr` | 5' UTR (e.g. `HBB`, `HBB_FI` tandem) |
+| `--mrna-3p-utr` | 3' UTR |
+| `--mrna-include-mitd` / `--mrna-no-mitd` | Include the BioNTech MITD trafficking domain |
+| `--mrna-mitd` | Which MITD variant (`HLA-A` / `HLA-B`) |
+| `--mrna-max-length-nt` | Hard cap on construct length (nt) |
+| `--mrna-antigens-per-construct` | Antigens per CDS |
+| `--mrna-max-constructs` | Stop emitting after this many constructs |
+
+**PolyA tail**
+
+| Flag | Purpose |
+|---|---|
+| `--mrna-poly-a-length` | Length of polyA tail (default `120`) |
+| `--mrna-poly-a-segmented` | Use BNT162b2-style segmented pattern (A30 + linker + A70) |
+| `--mrna-poly-a-first-segment` | Length of the first segment when segmented |
+| `--mrna-poly-a-segment-linker` | Inter-segment linker sequence |
+
+**Linker optimization**
+
+Per-junction MHC-aware linker swap minimizes predicted presentation
+of chimeric k-mers spanning antigen junctions.
+
+| Flag | Purpose |
+|---|---|
+| `--mrna-linker` | Default inter-antigen spacer (e.g. `(G4S)2`) |
+| `--mrna-optimize-linkers` / `--mrna-no-optimize-linkers` | Per-junction MHC-aware swap (on by default) |
+| `--mrna-junction-candidates` | Candidate linkers considered at each junction |
+| `--mrna-junction-rank-strong` | Strong-binder %-rank threshold |
+| `--mrna-junction-rank-mild` | Mild-binder %-rank threshold |
+
+**Codon optimization**
+
+| Flag | Purpose |
+|---|---|
+| `--mrna-codon-species` | Target organism for codon usage (default `h_sapiens`) |
+| `--mrna-codon-method` | DnaChisel optimization strategy |
+| `--mrna-csv-no-full-rows` | Skip the `full` polyA'd rows in `layers.csv` (saves disk space) |
+
+### External-input mode
+
+Drive vaccine design from a pre-computed neoepitope report instead of
+VCF + BAM. Same downstream dispatch — peptide and mRNA construct
+outputs work identically.
+
+| Flag | Input format |
+|---|---|
+| `--input-lens` | LENS report TSV |
+| `--input-pvacseq` | pVACseq aggregated TSV (`*all_epitopes.aggregated.tsv`) |
+
+### Manifest schema
 
 The peptide and mRNA construct JSON manifests share a back-compat
 schema (`modality`, `name`, `length`, `length_unit`, `antigen_names`,
@@ -218,13 +400,13 @@ construct design can be ported between peptide and mRNA backbones.
 
 | Name | Type | Use |
 |---|---|---|
-| `G2S`, `G3S`, `G4S`, `G5S` | flexible (Gly_n_Ser) | The (Gly4Ser)n family (Huston *PNAS* 1988); used clinically in BioNTech FixVac / iNeST as `(G4S)2` |
-| `EAAAK` | rigid α-helical | When fused antigens need separation rather than flex (Arai *Protein Eng* 2001) |
-| `RKRR`, `RVKR`, `RKRKR` | furin cleavage | R-X-(K/R)-R motif (Hosaka *J Biol Chem* 1991); preclinical in DNA vaccines, no clinical vaccine use as of 2025 |
-| `AAY` | proteasome-friendly | Empirical foundation: Livingston *Vaccine* 2001 (PMID 11535313); see citation in `vaxrank/vaccine_library.py` for the AAY-vs-GGGS empirical landscape (Yang 2015 vs Aguilar-Gurrieri 2023) |
-| `AAA` | alanine spacer | Aguilar-Gurrieri *Cancer Immunol Immunother* 2023 — strongest empirical alanine spacer for MHC-I presentation |
-| `GPGPG` | helper-T spacer | Between MHC-II epitopes (Livingston *J Immunol* 2002) |
-| `P2A`, `T2A`, `F2A`, `E2A` | self-cleaving 2A | Co-translational ribosomal skipping for mRNA constructs (Donnelly *J Gen Virol* 2001; Kim *PLoS ONE* 2011). In peptide mode these are functionally inert and the manifest annotates them as such. |
+| `G2S`, `G3S`, `G4S`, `G5S` | flexible (Gly_n_Ser) | The (Gly4Ser)n family ([Huston *PNAS* 1988](https://doi.org/10.1073/pnas.85.16.5879)); used clinically in BioNTech FixVac / iNeST as `(G4S)2` |
+| `EAAAK` | rigid α-helical | When fused antigens need separation rather than flex ([Arai *Protein Eng* 2001](https://doi.org/10.1093/protein/14.8.529)) |
+| `RKRR`, `RVKR`, `RKRKR` | furin cleavage | R-X-(K/R)-R motif ([Hosaka *J Biol Chem* 1991](https://pubmed.ncbi.nlm.nih.gov/1907971/)); preclinical in DNA vaccines, no clinical vaccine use as of 2025 |
+| `AAY` | proteasome-friendly | Empirical foundation: [Livingston *Vaccine* 2001](https://doi.org/10.1016/S0264-410X(01)00233-X); see citation in `vaxrank/vaccine_library.py` for the AAY-vs-GGGS empirical landscape ([Yang 2015](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4514284/) vs [Aguilar-Gurrieri 2023](https://doi.org/10.1007/s00262-023-03409-3)) |
+| `AAA` | alanine spacer | [Aguilar-Gurrieri *Cancer Immunol Immunother* 2023](https://doi.org/10.1007/s00262-023-03409-3) — strongest empirical alanine spacer for MHC-I presentation |
+| `GPGPG` | helper-T spacer | Between MHC-II epitopes ([Livingston *J Immunol* 2002](https://doi.org/10.4049/jimmunol.168.11.5499)) |
+| `P2A`, `T2A`, `F2A`, `E2A` | self-cleaving 2A | Co-translational ribosomal skipping for mRNA constructs ([Donnelly *J Gen Virol* 2001](https://doi.org/10.1099/0022-1317-82-5-1027); [Kim *PLoS ONE* 2011](https://doi.org/10.1371/journal.pone.0018556)). In peptide mode these are functionally inert and the manifest annotates them as such. |
 
 **Compositional grammar** (parsed at lookup time):
 
@@ -242,11 +424,12 @@ are rejected in repeat forms — use the base linker once.
 Every name resolves through `vaccine_library.get_linker(name)` and
 returns a `Linker` with primary-source citations attached. The
 default mRNA inter-antigen linker is `(G4S)2` (BioNTech FixVac
-canonical, Sahin *Nature* 2017); the default peptide linker is
-`G4S3`. Per-junction MHC-aware linker swap (`--mrna-optimize-linkers`,
-on by default) considers `G3S`, `G4S`, `(G3S)2`, `(G4S)2`, `AAA` per
-junction and substitutes whichever minimizes predicted presentation
-of chimeric k-mers spanning the junction.
+canonical, [Sahin *Nature* 2017](https://www.nature.com/articles/nature23003));
+the default peptide linker is `G4S3`. Per-junction MHC-aware linker
+swap (`--mrna-optimize-linkers`, on by default) considers `G3S`,
+`G4S`, `(G3S)2`, `(G4S)2`, `AAA` per junction and substitutes
+whichever minimizes predicted presentation of chimeric k-mers
+spanning the junction.
 
 All sequences carry primary-source citations in `vaxrank/vaccine_library.py`.
 
@@ -274,27 +457,6 @@ cancer vaccines at Mount Sinai:
 
 The computational pipeline used in these trials is described in
 [Kodysh & Rubinsteyn, Methods Mol. Biol. 2020](https://link.springer.com/protocol/10.1007/978-1-0716-0327-7_10).
-
-## Quick Start
-
-```sh
-vaxrank \
-    --vcf tests/data/b16.f10/b16.vcf \
-    --bam tests/data/b16.f10/b16.combined.bam \
-    --vaccine-peptide-length 25 \
-    --mhc-predictor netmhc \
-    --mhc-alleles H2-Kb,H2-Db \
-    --padding-around-mutation 5 \
-    --output-ascii-report vaccine-peptides.txt \
-    --output-pdf-report vaccine-peptides.pdf \
-    --output-html-report vaccine-peptides.html
-```
-
-Inputs:
-- `--vcf` — Somatic variants (VCF from any variant caller)
-- `--bam` — Tumor RNA-seq alignments (used by Isovar to assemble mutant transcripts)
-- `--mhc-alleles` — Patient HLA alleles (e.g. `HLA-A*02:01,HLA-B*07:02`)
-- `--mhc-predictor` — Which MHC binding predictor to use (see table below)
 
 ## Installation
 
@@ -699,6 +861,18 @@ Other key dependencies:
 - `msgspec`: Configuration serialization (YAML/JSON)
 - `pandas`, `numpy`: Data processing
 - `jinja2`, `pdfkit`/`weasyprint`: Report generation
+
+## Legacy flags
+
+For back-compat with older scripts:
+
+- `--peptide-mode {slp, minimal_epitope, multi_epitope}` is a
+  shorthand for the orthogonal axes:
+  - `slp` ≡ `--antigen-content mutation_spanning --peptide-antigens-per-construct 1`
+  - `minimal_epitope` ≡ `--antigen-content minimal_epitope --peptide-antigens-per-construct 1`
+  - `multi_epitope` ≡ `--antigen-content mutation_spanning --peptide-antigens-per-construct N`
+
+The orthogonal axes are preferred for new designs.
 
 ## Development
 
