@@ -84,6 +84,7 @@ Issue: openvax/vaxrank#282 (replaces).
 
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
@@ -190,6 +191,16 @@ class Peptide:
     blank display; predictions are accessed via
     ``predictions_flat()``.
 
+    Hashability: instances are hashable by their *position identity*
+    — ``(sequence, source_sequence, offset)`` — not by the full
+    field set. The ``predictions`` dict is mutable so it can't
+    participate in a hash, but two peptides at the same position
+    are the natural dedup key (and match the grouping in
+    ``candidate_epitopes_from_rows``). Equality is still
+    field-wise, so the hash may collide for peptides with the same
+    position but different predictions / flanks — that's a legal
+    hash collision, resolved by ``__eq__``.
+
     See module docstring for the storage shape and disambiguation
     contract.
     """
@@ -214,6 +225,15 @@ class Peptide:
         if isinstance(self.predictions, (list, tuple)):
             object.__setattr__(
                 self, 'predictions', _group_predictions(self.predictions))
+
+    def __hash__(self) -> int:
+        # Position identity. The dataclass-generated hash would
+        # include ``predictions`` (a mutable dict), which raises
+        # TypeError. ``(sequence, source_sequence, offset)`` is the
+        # natural dedup key — matches the grouping used by
+        # ``candidate_epitopes_from_rows`` and lets these instances
+        # land in sets / dict keys without surprise.
+        return hash((self.sequence, self.source_sequence, self.offset))
 
     def kinds(self) -> tuple[str, ...]:
         """Sorted tuple of distinct ``kind`` values in this context.
@@ -414,9 +434,13 @@ class Peptide:
         """
         if not self._slice_fits(start_offset, end_offset):
             return None
-        # Defensive copy: the nested predictions dict is mutable, so
-        # sharing it across two frozen instances would couple their
-        # equality / hash semantics in surprising ways. Cheap to copy.
+        # Deep copy of predictions: the nested
+        # ``{kind: {predictor: {version: tuple}}}`` chain is mutable
+        # at every level above the leaf tuple. Sharing it across two
+        # frozen instances would couple their state — a mutation
+        # anywhere in the chain would leak between slices. The
+        # ``Prediction`` leaves themselves are NamedTuple-like and
+        # immutable; deepcopy is fast on the dict spine.
         return Peptide(
             sequence=self.sequence,
             n_flank=self.n_flank,
@@ -424,7 +448,7 @@ class Peptide:
             source_sequence=self.source_sequence[start_offset:end_offset],
             source_name=self.source_name,
             offset=self.offset - start_offset,
-            predictions=dict(self.predictions))
+            predictions=copy.deepcopy(self.predictions))
 
 
 @dataclass(frozen=True)
@@ -492,6 +516,13 @@ class CandidateEpitope(Peptide):
     # reading this flag instead of the raw one.
     occurs_in_non_CTA_reference: bool = False
 
+    def __hash__(self) -> int:
+        # Inherited from Peptide in spirit, but ``@dataclass(frozen=True)``
+        # regenerates ``__hash__`` on every subclass — and ours would
+        # include the mutable ``comparators`` dict. Re-define here to
+        # keep the same position-identity hash as the parent.
+        return hash((self.sequence, self.source_sequence, self.offset))
+
     # Convenience: most call sites today read the WT alongside the
     # candidate. Common-case shortcut.
     @property
@@ -519,6 +550,11 @@ class CandidateEpitope(Peptide):
         """
         if not self._slice_fits(start_offset, end_offset):
             return None
+        # See ``Peptide.sliced`` for why predictions get a deep copy.
+        # Comparators are independent ``Peptide`` instances and pass
+        # through by reference — slicing the candidate doesn't slice
+        # them. They're already deep-shared with the source
+        # ``CandidateEpitope`` and that's the documented contract.
         return CandidateEpitope(
             sequence=self.sequence,
             n_flank=self.n_flank,
@@ -526,7 +562,7 @@ class CandidateEpitope(Peptide):
             source_sequence=self.source_sequence[start_offset:end_offset],
             source_name=self.source_name,
             offset=self.offset - start_offset,
-            predictions=dict(self.predictions),
+            predictions=copy.deepcopy(self.predictions),
             comparators=self.comparators,
             source_class=self.source_class,
             overlaps_mutation=self.overlaps_mutation,

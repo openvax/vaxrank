@@ -68,8 +68,8 @@ class VaccinePeptide(DataclassSerializable):
     VaccinePeptide combines the sequence information of MutantProteinFragment
     with MHC binding predictions for subsequences of the protein fragment.
 
-    The resulting lists of mutant and wildtype ``CandidateEpitope`` objects
-    are sorted by best mutant affinity.
+    The resulting lists of target and self ``CandidateEpitope`` objects
+    are sorted by best (target) affinity.
 
     Parameters
     ----------
@@ -331,7 +331,7 @@ class VaccinePeptide(DataclassSerializable):
         return self.expression_score * epitope
 
     def to_dict(self):
-        # The persisted form combines the filtered mutant + wildtype lists
+        # The persisted form combines the filtered target + self lists
         # back into a single `epitopes` list. Also trims fields that match
         # their defaults so the JSON stays small and older readers don't
         # see keys they don't understand.
