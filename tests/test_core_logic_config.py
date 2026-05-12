@@ -83,7 +83,7 @@ def test_vaccine_peptides_from_epitopes_basic_parameters():
         epitopes=[],
         vaccine_peptide_length=25,
         max_vaccine_peptides_per_variant=1,
-        num_mutant_epitopes_to_keep=1000,
+        num_target_epitopes_to_keep=1000,
     )
 
     # Should return empty list since no subsequences
@@ -104,7 +104,7 @@ def test_vaccine_peptides_from_epitopes_length_used():
         epitopes=[],
         vaccine_peptide_length=30,  # Custom length
         max_vaccine_peptides_per_variant=1,
-        num_mutant_epitopes_to_keep=1000,
+        num_target_epitopes_to_keep=1000,
     )
 
     # Verify sorted_subsequences was called with correct length
@@ -148,7 +148,7 @@ def test_vaccine_peptides_for_variant_config_overrides_explicit_params():
         min_peptide_length=40,
         max_peptide_length=40,
         max_vaccine_peptides_per_variant=5,
-        num_mutant_epitopes_to_keep=500,
+        num_target_epitopes_to_keep=500,
     )
 
     with patch('vaxrank.core_logic.MutantProteinFragment') as MockFragment:
@@ -268,7 +268,7 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
             self,
             mutant_protein_fragment,
             epitopes,
-            num_mutant_epitopes_to_keep=None,
+            num_target_epitopes_to_keep=None,
             epitope_score_params=None,
             manufacturability_thresholds=None,
             manufacturability_rules=None,
@@ -373,11 +373,11 @@ def test_config_integration_epitope_config_affects_vaccine_peptide_scoring():
         epitopes=[epitope],
         vaccine_peptide_length=len(fragment),
         max_vaccine_peptides_per_variant=1,
-        num_mutant_epitopes_to_keep=10,
+        num_target_epitopes_to_keep=10,
         epitope_config=epitope_config,
     )
     eq_(len(peptides), 1)
-    eq_(peptides[0].mutant_epitope_score, custom_score)
+    eq_(peptides[0].target_epitope_score, custom_score)
 
 
 def test_config_defaults_match_historical_behavior():
@@ -397,13 +397,13 @@ def test_config_defaults_match_historical_behavior():
 
 def test_core_logic_default_num_epitope_limit_matches_vaccine_config():
     """Public core helpers should share the same default epitope limit."""
-    expected = VaccineConfig().num_mutant_epitopes_to_keep
+    expected = VaccineConfig().num_target_epitopes_to_keep
     for fn in (
             run_vaxrank,
             create_vaccine_peptides_dict,
             vaccine_peptides_for_variant,
             vaccine_peptides_from_epitopes):
-        eq_(signature(fn).parameters["num_mutant_epitopes_to_keep"].default, expected)
+        eq_(signature(fn).parameters["num_target_epitopes_to_keep"].default, expected)
 
 
 # =============================================================================
@@ -484,9 +484,9 @@ def test_vaccine_peptide_zero_epitope_limit_keeps_all():
     vaccine_peptide = VaccinePeptide(
         mutant_protein_fragment=fragment,
         epitopes=[epitope1, epitope2],
-        num_mutant_epitopes_to_keep=0,
+        num_target_epitopes_to_keep=0,
     )
-    eq_(len(vaccine_peptide.mutant_epitopes), 2)
+    eq_(len(vaccine_peptide.target_epitopes), 2)
 
 
 def test_manufacturability_thresholds_flow_from_manufacturability_config():

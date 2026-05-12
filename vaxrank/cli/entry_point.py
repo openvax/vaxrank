@@ -168,7 +168,7 @@ def _annotate_predictions_with_processing(ranked_vaccine_peptides,
 
     for _, peptides in (ranked_vaccine_peptides or []):
         for vp in peptides or []:
-            for e in (getattr(vp, 'mutant_epitopes', None) or []):
+            for e in (getattr(vp, 'target_epitopes', None) or []):
                 _maybe_add(e)
     for e in (lens_epitopes or []):
         _maybe_add(e)
@@ -1251,7 +1251,7 @@ def run_vaxrank_from_parsed_args(args):
     args.max_vaccine_peptides_per_variant = vaccine_config.max_vaccine_peptides_per_variant
     # Keep legacy key for backward compatibility in JSON/report args.
     args.max_vaccine_peptides_per_mutation = vaccine_config.max_vaccine_peptides_per_variant
-    args.num_epitopes_per_vaccine_peptide = vaccine_config.num_mutant_epitopes_to_keep
+    args.num_epitopes_per_vaccine_peptide = vaccine_config.num_target_epitopes_to_keep
 
     # Multi-predictor support (#261): mhctools' ``--mhc-predictor`` is
     # nargs='+', so the user can configure
@@ -1311,7 +1311,7 @@ def run_vaxrank_from_parsed_args(args):
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_variant,
-        num_mutant_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
+        num_target_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
         epitope_config=epitope_config,
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config,
@@ -1323,7 +1323,7 @@ def run_vaxrank_from_parsed_args(args):
         all_epitopes = []
         for _variant, peptides in vaxrank_results.ranked_vaccine_peptides:
             for vp in peptides:
-                all_epitopes.extend(vp.mutant_epitopes)
+                all_epitopes.extend(vp.target_epitopes)
         save_predictions(all_epitopes, args.output_epitopes)
 
     return vaxrank_results

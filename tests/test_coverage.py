@@ -59,7 +59,7 @@ def _ep(peptide, allele, *, presentation_pct=None, affinity_pct=None,
 def _vp(epitopes, *, combined_score=1.0, gene_name='GENE'):
     """Minimal VaccinePeptide-like record (CandidateEpitope shape)."""
     return SimpleNamespace(
-        mutant_epitopes=epitopes,
+        target_epitopes=epitopes,
         mutant_protein_fragment=SimpleNamespace(
             gene_name=gene_name, amino_acids='AAAAAAA'),
         combined_score=combined_score,

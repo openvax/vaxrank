@@ -329,8 +329,8 @@ _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.combined_score_mode", "combined_score_mode"),
     ("vaccine_peptides.combined_score_expr", "combined_score_expr"),
     ("vaccine_peptides.ranking_rules", "ranking_rules"),
-    ("vaccine_peptides.require_mutant_epitopes_in_variant",
-     "require_mutant_epitopes_in_variant"),
+    ("vaccine_peptides.require_target_epitopes_in_variant",
+     "require_target_epitopes_in_variant"),
 ]
 
 
@@ -446,7 +446,7 @@ def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
         kwargs.setdefault("min_peptide_length", pref)
         kwargs.setdefault("max_peptide_length", pref)
 
-    # Handle num_mutant_epitopes_to_keep from two possible locations;
+    # Handle num_target_epitopes_to_keep from two possible locations;
     # error if both are set.
     from_vaccine = _resolve_dotted(
         config, "vaccine_peptides.max_epitopes_per_candidate"
@@ -460,8 +460,8 @@ def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
             "and epitopes.top_epitopes_per_candidate. Use one or the other."
         )
     if from_vaccine is not _MISSING:
-        kwargs["num_mutant_epitopes_to_keep"] = from_vaccine
+        kwargs["num_target_epitopes_to_keep"] = from_vaccine
     elif from_epitopes is not _MISSING:
-        kwargs["num_mutant_epitopes_to_keep"] = from_epitopes
+        kwargs["num_target_epitopes_to_keep"] = from_epitopes
 
     return kwargs

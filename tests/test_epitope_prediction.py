@@ -69,9 +69,9 @@ def test_reference_peptide_logic(mouse_genome):
         protein_fragment, [e_in_ref, e_not_in_ref])
 
     eq_(_legacy_score_one(p_in_ref.value, p_in_ref.percentile_rank),
-        vaccine_peptide.wildtype_epitope_score)
+        vaccine_peptide.self_epitope_score)
     eq_(_legacy_score_one(p_not_in_ref.value, p_not_in_ref.percentile_rank),
-        vaccine_peptide.mutant_epitope_score)
+        vaccine_peptide.target_epitope_score)
 
 def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel(mouse_genome):
     """Multi-model TopiaryPredictor (post-2.24, #261) keeps each

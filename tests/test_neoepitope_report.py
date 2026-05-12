@@ -30,8 +30,8 @@ def _dummy_variant():
 def _dummy_vaccine_peptide(epitopes):
     fragment = SimpleNamespace(gene_name="GENE1", n_alt_reads=10)
     return SimpleNamespace(
-        mutant_epitopes=epitopes,
-        mutant_epitope_score=1.23,
+        target_epitopes=epitopes,
+        target_epitope_score=1.23,
         mutant_protein_fragment=fragment,
     )
 

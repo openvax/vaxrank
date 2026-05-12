@@ -84,7 +84,7 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
         different epitope content.
         Default: 1
 
-    num_mutant_epitopes_to_keep : int
+    num_target_epitopes_to_keep : int
         Maximum number of epitope predictions to retain per variant
         during processing. Higher values increase computational cost
         but may capture more potential vaccine targets. Set to 0 to
@@ -123,7 +123,7 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     max_peptide_length: int = DEFAULT_MAX_PEPTIDE_LENGTH
     padding_around_mutation: int = DEFAULT_PADDING_AROUND_MUTATION
     max_vaccine_peptides_per_variant: int = DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT
-    num_mutant_epitopes_to_keep: int = DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP
+    num_target_epitopes_to_keep: int = DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP
     score_fraction_of_best: float = DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST
     combined_score_mode: str = DEFAULT_COMBINED_SCORE_MODE
     # Optional DSL expression that supersedes ``combined_score_mode``
@@ -137,7 +137,7 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     # peptide could be assembled, regardless of epitope coverage —
     # useful when the report itself is downstream input for an
     # independent epitope predictor.
-    require_mutant_epitopes_in_variant: bool = True
+    require_target_epitopes_in_variant: bool = True
 
     def __post_init__(self):
         if self.preferred_peptide_length < 1:
@@ -178,10 +178,10 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
                 f"max_vaccine_peptides_per_variant must be non-negative, "
                 f"got {self.max_vaccine_peptides_per_variant}"
             )
-        if self.num_mutant_epitopes_to_keep < 0:
+        if self.num_target_epitopes_to_keep < 0:
             raise ValueError(
-                f"num_mutant_epitopes_to_keep must be non-negative, "
-                f"got {self.num_mutant_epitopes_to_keep}"
+                f"num_target_epitopes_to_keep must be non-negative, "
+                f"got {self.num_target_epitopes_to_keep}"
             )
         if not (0 < self.score_fraction_of_best <= 1):
             raise ValueError(

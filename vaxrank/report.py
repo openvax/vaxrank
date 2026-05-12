@@ -259,7 +259,7 @@ class TemplateDataCreator(object):
             ('Transcript name', transcript_name),
             ('Length', len(amino_acids)),
             ('Expression score', _sanitize(vaccine_peptide.expression_score)),
-            ('Mutant epitope score', _sanitize(vaccine_peptide.mutant_epitope_score)),
+            ('Mutant epitope score', _sanitize(vaccine_peptide.target_epitope_score)),
             ('Combined score', _sanitize(vaccine_peptide.combined_score)),
             ('Max coding sequence coverage',
                 mutant_protein_fragment.n_alt_reads_supporting_protein_sequence),
@@ -482,7 +482,7 @@ class TemplateDataCreator(object):
 
             peptides = []
             for j, vaccine_peptide in enumerate(vaccine_peptides):
-                if not vaccine_peptide.contains_mutant_epitopes():
+                if not vaccine_peptide.contains_target_epitopes():
                     logger.info('No epitopes for peptide: %s', vaccine_peptide)
                     continue
 
@@ -513,7 +513,7 @@ class TemplateDataCreator(object):
 
                 any_processing = any(
                     _has_processing(e)
-                    for e in vaccine_peptide.mutant_epitopes)
+                    for e in vaccine_peptide.target_epitopes)
 
                 epitopes = []
                 wt_epitopes = []
@@ -528,12 +528,12 @@ class TemplateDataCreator(object):
                         p for p in e.predictions_flat()
                         if p.kind == 'pMHC_affinity']
 
-                for e in vaccine_peptide.mutant_epitopes:
+                for e in vaccine_peptide.target_epitopes:
                     for p in _affinity_leaves(e):
                         epitopes.append(self._epitope_data(
                             e, p, include_processing=any_processing))
 
-                for e in vaccine_peptide.wildtype_epitopes:
+                for e in vaccine_peptide.self_epitopes:
                     for p in _affinity_leaves(e):
                         epitope_data = self._epitope_data(e, p)
                         key_list = ['Allele', 'IC50', 'Sequence']
@@ -683,7 +683,7 @@ def new_columns():
         ("mutation_end", []),
         ("combined_score", []),
         ("expression_score", []),
-        ("mutant_epitope_score", []),
+        ("target_epitope_score", []),
     ])
     for field in ManufacturabilityScores._fields:
         columns[field] = []
@@ -733,7 +733,7 @@ def make_minimal_neoepitope_report(
     # each row in the spreadsheet is one (peptide, allele) record
     for (variant, vaccine_peptides) in ranked_variants_with_vaccine_peptides:
         for vaccine_peptide in vaccine_peptides:
-            epitopes = vaccine_peptide.mutant_epitopes
+            epitopes = vaccine_peptide.target_epitopes
             if num_epitopes_per_peptide is not None:
                 epitopes = epitopes[:num_epitopes_per_peptide]
             for epitope in epitopes:
@@ -760,7 +760,7 @@ def make_minimal_neoepitope_report(
                         ('Allele', p.allele),
                         ('Mutant peptide sequence',
                             epitope.sequence),
-                        ('Score', vaccine_peptide.mutant_epitope_score),
+                        ('Score', vaccine_peptide.target_epitope_score),
                         ('Predicted mutant pMHC affinity',
                             '%.2f nM' % p.value),
                         ('Variant allele RNA read count',
@@ -813,7 +813,7 @@ def make_csv_report(
         for j, vaccine_peptide in enumerate(vaccine_peptides):
 
             # if there are no predicted epitopes, exclude this peptide from the report
-            if not vaccine_peptide.contains_mutant_epitopes():
+            if not vaccine_peptide.contains_target_epitopes():
                 logger.info('No epitopes for peptide: %s', vaccine_peptide)
                 continue
 
@@ -831,7 +831,7 @@ def make_csv_report(
                 vaccine_peptide.mutant_protein_fragment.mutant_amino_acid_end_offset)
             columns["combined_score"].append(_sanitize(vaccine_peptide.combined_score))
             columns["expression_score"].append(_sanitize(vaccine_peptide.expression_score))
-            columns["mutant_epitope_score"].append(_sanitize(vaccine_peptide.mutant_epitope_score))
+            columns["target_epitope_score"].append(_sanitize(vaccine_peptide.target_epitope_score))
             for field in ManufacturabilityScores._fields:
                 columns[field].append(
                     _sanitize(getattr(vaccine_peptide.manufacturability_scores, field)))

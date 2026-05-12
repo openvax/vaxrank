@@ -65,7 +65,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         help=(
             "Maximum number of mutant epitopes to consider when scoring "
             "each vaccine peptide. Set to 0 to keep all epitopes. "
-            f"(default: {default_vaccine_config.num_mutant_epitopes_to_keep})"
+            f"(default: {default_vaccine_config.num_target_epitopes_to_keep})"
         ))
 
 
@@ -105,7 +105,7 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
             max_vaccine_peptides_per_variant
         )
     if args.num_epitopes_per_vaccine_peptide is not None:
-        vaccine_config_kwargs["num_mutant_epitopes_to_keep"] = args.num_epitopes_per_vaccine_peptide
+        vaccine_config_kwargs["num_target_epitopes_to_keep"] = args.num_epitopes_per_vaccine_peptide
 
     vaccine_config = msgspec.convert(vaccine_config_kwargs, VaccineConfig)
     return vaccine_config

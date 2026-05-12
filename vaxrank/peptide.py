@@ -39,7 +39,7 @@ from .vaccine_library import (
     get_linker,
     iter_named_antigens,
     select_antigen_window,
-    top_mutant_epitopes,
+    top_target_epitopes,
 )
 
 logger = logging.getLogger(__name__)
@@ -173,7 +173,7 @@ def _antigen_records(ranked_vaccine_peptides, antigen_content,
     for base_name, fragment, peptide in iter_named_antigens(
             ranked_vaccine_peptides, candidates_per_slot=candidates_per_slot):
         if antigen_content == "minimal_epitope":
-            tops = top_mutant_epitopes(peptide, n=epitopes_per_antigen)
+            tops = top_target_epitopes(peptide, n=epitopes_per_antigen)
             if not tops:
                 logger.info(
                     "Skipping %s in minimal_epitope mode: no mutant "

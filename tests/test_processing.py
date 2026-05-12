@@ -636,7 +636,7 @@ def test_dedup_by_content_when_duplicate_objects(monkeypatch):
     fragment = SimpleNamespace(amino_acids=source, gene_name='G')
     vp = SimpleNamespace(
         mutant_protein_fragment=fragment,
-        mutant_epitopes=[pred_a])
+        target_epitopes=[pred_a])
     ranked = [(SimpleNamespace(), [vp])]
     lens_epitopes = [pred_b]
 

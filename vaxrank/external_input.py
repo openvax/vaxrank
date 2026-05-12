@@ -404,7 +404,7 @@ def _read_counts_from_lens_row(row):
 
 
 def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
-                                 num_mutant_epitopes_to_keep=None,
+                                 num_target_epitopes_to_keep=None,
                                  vaccine_peptide_length=25):
     """Group LENS epitopes by variant; emit ranked vaccine peptides.
 
@@ -424,7 +424,7 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
         Passed through to ``Variant`` construction. When None,
         Variants are constructed without genome resolution and
         downstream code that needs gene annotation may degrade.
-    num_mutant_epitopes_to_keep : int, optional
+    num_target_epitopes_to_keep : int, optional
         Forwarded to ``VaccinePeptide``. When None, all overlapping
         epitopes are kept.
 
@@ -718,7 +718,7 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
         vp = VaccinePeptide(
             mutant_protein_fragment=fragment,
             epitopes=variant_epitopes,
-            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+            num_target_epitopes_to_keep=num_target_epitopes_to_keep,
         )
         ranked.append((variant, [vp]))
 
@@ -852,12 +852,12 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
             "is a release mismatch — pass --ensembl-release N to match "
             "the build LENS used.", n_unresolved, n_with_ids)
 
-    # Order by mutant_epitope_score descending so the top candidates
+    # Order by target_epitope_score descending so the top candidates
     # win greedy bin-packing in the construct assemblers. Ties broken
     # alphabetically by variant coordinates for determinism.
     ranked.sort(
         key=lambda pair: (
-            -pair[1][0].mutant_epitope_score if pair[1] else 0.0,
+            -pair[1][0].target_epitope_score if pair[1] else 0.0,
             str(pair[0]),
         ))
     return ranked, dna_vaf_by_variant
@@ -921,7 +921,7 @@ def _parse_pvacseq_id(vid, genome=None):
 
 def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
                                     genome=None,
-                                    num_mutant_epitopes_to_keep=None):
+                                    num_target_epitopes_to_keep=None):
     """pVACseq variant of :func:`ranked_from_lens_predictions`.
 
     Re-reads the raw aggregate TSV (the per-(peptide, allele)
@@ -1047,7 +1047,7 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
         ranked.append((variant, [VaccinePeptide(
             mutant_protein_fragment=fragment,
             epitopes=variant_epitopes,
-            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+            num_target_epitopes_to_keep=num_target_epitopes_to_keep,
         )]))
 
         dna_vaf_raw = rep.get('DNA VAF')
@@ -1077,7 +1077,7 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
 
     ranked.sort(
         key=lambda pair: (
-            -pair[1][0].mutant_epitope_score if pair[1] else 0.0,
+            -pair[1][0].target_epitope_score if pair[1] else 0.0,
             str(pair[0]),
         ))
     return ranked, dna_vaf_by_variant

@@ -455,7 +455,7 @@ Config values are resolved in order (later wins):
 | `max_peptide_length` | 25 | Maximum vaccine peptide length |
 | `padding_around_mutation` | 5 | Off-centre window positions to consider |
 | `max_vaccine_peptides_per_variant` | 1 | Peptides to keep per variant |
-| `num_mutant_epitopes_to_keep` | 1000 | Max epitope predictions per peptide (0 = all) |
+| `num_target_epitopes_to_keep` | 1000 | Max epitope predictions per peptide (0 = all) |
 | `score_fraction_of_best` | 0.99 | Drop candidates scoring below this fraction of the best |
 | `max_c_terminal_hydropathy` | 1.5 | Max GRAVY score of the C-terminal 7-mer |
 | `min_kmer_hydropathy` | 0.0 | Minimum max-7mer GRAVY (floor) |

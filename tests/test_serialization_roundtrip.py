@@ -157,8 +157,8 @@ def test_vaccine_peptide_post_init_derives_epitope_lists():
         mutant_protein_fragment=_FakeFragment(),
         epitopes=[mutant, wildtype],
     )
-    assert vp.mutant_epitopes == [mutant]
-    assert vp.wildtype_epitopes == [wildtype]
+    assert vp.target_epitopes == [mutant]
+    assert vp.self_epitopes == [wildtype]
 
 
 def test_vaccine_peptide_post_init_validates_combined_score_mode():
@@ -174,17 +174,17 @@ def test_vaccine_peptide_post_init_validates_combined_score_mode():
 
 def test_vaccine_peptide_to_dict_omits_derived_fields():
     """The custom to_dict only emits constructor args, not the
-    init=False dataclass fields (mutant_epitopes, etc.)."""
+    init=False dataclass fields (target_epitopes, etc.)."""
     vp = VaccinePeptide(
         mutant_protein_fragment=_FakeFragment(),
         epitopes=[_sample_epitope()],
     )
     d = vp.to_dict()
     for derived in (
-        "mutant_epitopes",
-        "wildtype_epitopes",
-        "mutant_epitope_score",
-        "wildtype_epitope_score",
+        "target_epitopes",
+        "self_epitopes",
+        "target_epitope_score",
+        "self_epitope_score",
         "manufacturability_scores",
     ):
         assert derived not in d
@@ -227,9 +227,9 @@ def test_vaccine_peptide_json_roundtrip_with_real_fragment():
     assert restored.combined_score_mode == vp.combined_score_mode
 
     # Derived state must match — __post_init__ re-ran on load
-    assert restored.mutant_epitopes == vp.mutant_epitopes
-    assert restored.wildtype_epitopes == vp.wildtype_epitopes
-    assert restored.mutant_epitope_score == pytest.approx(vp.mutant_epitope_score)
+    assert restored.target_epitopes == vp.target_epitopes
+    assert restored.self_epitopes == vp.self_epitopes
+    assert restored.target_epitope_score == pytest.approx(vp.target_epitope_score)
     assert restored.combined_score == pytest.approx(vp.combined_score)
 
 

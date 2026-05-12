@@ -80,8 +80,8 @@ def _make_vaccine_peptide(
     ]
     return SimpleNamespace(
         mutant_protein_fragment=fragment,
-        mutant_epitopes=epitopes,
-        wildtype_epitopes=[],
+        target_epitopes=epitopes,
+        self_epitopes=[],
     )
 
 

@@ -33,8 +33,8 @@ def _fake_peptide(
     n_alt_reads_supporting=5,
     n_mutant_amino_acids=3,
     mutation_distance_from_edge=9,
-    mutant_epitope_score=0.73,
-    wildtype_epitope_score=0.42,
+    target_epitope_score=0.73,
+    self_epitope_score=0.42,
     manufacturability_rules=None,
     manufacturability_thresholds=None,
 ):
@@ -53,8 +53,8 @@ def _fake_peptide(
         manufacturability_scores=manufacturability_scores,
         manufacturability_rules=manufacturability_rules,
         manufacturability_thresholds=manufacturability_thresholds or {},
-        mutant_epitope_score=mutant_epitope_score,
-        wildtype_epitope_score=wildtype_epitope_score,
+        target_epitope_score=target_epitope_score,
+        self_epitope_score=self_epitope_score,
     )
 
     # Mirror VaccinePeptide.peptide_synthesis_difficulty_score_tuple so the
@@ -82,7 +82,7 @@ def _legacy_sort_tuple(peptide):
     BOTH this and DEFAULT_RANKING_RULES together."""
     fragment = peptide.mutant_protein_fragment
     essential = (
-        -round(peptide.mutant_epitope_score, 6),
+        -round(peptide.target_epitope_score, 6),
         -fragment.n_alt_reads,
     )
     manufacturability = peptide.peptide_synthesis_difficulty_score_tuple(
@@ -91,7 +91,7 @@ def _legacy_sort_tuple(peptide):
     )
     extra = (
         -fragment.n_alt_reads_supporting_protein_sequence,
-        round(peptide.wildtype_epitope_score, 6),
+        round(peptide.self_epitope_score, 6),
         -fragment.n_mutant_amino_acids,
         -fragment.mutation_distance_from_edge,
     )
@@ -114,7 +114,7 @@ def test_default_rules_match_legacy_tuple(seq, epitope_score, n_alt_reads):
     peptide = _fake_peptide(
         amino_acids=seq,
         n_alt_reads=n_alt_reads,
-        mutant_epitope_score=epitope_score,
+        target_epitope_score=epitope_score,
     )
     assert compute_ranking_tuple(peptide) == _legacy_sort_tuple(peptide)
 
@@ -142,21 +142,21 @@ def test_custom_rules_reorder_and_subset():
     """Users can narrow the sort tuple — lower-priority rules drop out,
     and order in the list drives lexicographic precedence."""
     peptide = _fake_peptide()
-    # Two-element tuple, sort first by n_alt_reads then by mutant_epitope_score.
+    # Two-element tuple, sort first by n_alt_reads then by target_epitope_score.
     result = compute_ranking_tuple(
-        peptide, rules=["n_alt_reads", "mutant_epitope_score"]
+        peptide, rules=["n_alt_reads", "target_epitope_score"]
     )
     fragment = peptide.mutant_protein_fragment
     assert result == (
         -fragment.n_alt_reads,
-        -round(peptide.mutant_epitope_score, 6),
+        -round(peptide.target_epitope_score, 6),
     )
 
 
 def test_custom_rules_can_drop_manufacturability():
     peptide = _fake_peptide()
     result = compute_ranking_tuple(
-        peptide, rules=["mutant_epitope_score", "n_alt_reads"]
+        peptide, rules=["target_epitope_score", "n_alt_reads"]
     )
     assert len(result) == 2
     # None of the manufacturability fields should leak through

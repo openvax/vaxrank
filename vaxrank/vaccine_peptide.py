@@ -77,7 +77,7 @@ class VaccinePeptide(DataclassSerializable):
 
     epitopes : list of CandidateEpitope
 
-    num_mutant_epitopes_to_keep : int or None
+    num_target_epitopes_to_keep : int or None
         If None or 0 then keep all mutant epitopes.
 
     epitope_score_params : dict or None
@@ -122,7 +122,7 @@ class VaccinePeptide(DataclassSerializable):
 
     mutant_protein_fragment: Any
     epitopes: list = field(default_factory=list)
-    num_mutant_epitopes_to_keep: Optional[int] = None
+    num_target_epitopes_to_keep: Optional[int] = None
     epitope_score_params: Optional[dict] = None
     sort_epitopes_by: str = "ic50"
     manufacturability_thresholds: Optional[dict] = None
@@ -139,10 +139,10 @@ class VaccinePeptide(DataclassSerializable):
     # serialized form. `init=False` keeps them out of the generated
     # __init__ signature; default=None gives them a sane pre-computed
     # value for any pathway that inspects fields before __post_init__.
-    mutant_epitopes: list = field(default_factory=list, init=False, repr=False)
-    wildtype_epitopes: list = field(default_factory=list, init=False, repr=False)
-    wildtype_epitope_score: float = field(default=0.0, init=False, repr=False)
-    mutant_epitope_score: float = field(default=0.0, init=False, repr=False)
+    target_epitopes: list = field(default_factory=list, init=False, repr=False)
+    self_epitopes: list = field(default_factory=list, init=False, repr=False)
+    self_epitope_score: float = field(default=0.0, init=False, repr=False)
+    target_epitope_score: float = field(default=0.0, init=False, repr=False)
     manufacturability_scores: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
@@ -201,24 +201,28 @@ class VaccinePeptide(DataclassSerializable):
                 return min(ranks) if ranks else float("inf")
             return min(p.value for p in affinity_leaves)
 
-        # only keep the top k epitopes
-        self.mutant_epitopes = sorted(
-            [
-                e for e in self.epitopes
-                if e.overlaps_mutation and not e.occurs_in_reference
-            ],
+        # Universal target/self split — source-agnostic. An epitope
+        # whose exact sequence appears in the patient's reference
+        # proteome (``occurs_in_reference``) is unsafe by default
+        # (would cross-react with self on normal tissue). For
+        # mutation-derived candidates this matches the historical
+        # behavior: peptides identical to WT land in self_epitopes
+        # because they're in the reference. Viral peptides absent
+        # from the reference land in target_epitopes. CTAs land in
+        # self_epitopes today; when consumers opt into the
+        # CTA-aware ``occurs_in_non_CTA_reference`` flag, CTAs will
+        # move to target_epitopes without changing this code.
+        self.target_epitopes = sorted(
+            [e for e in self.epitopes if not e.occurs_in_reference],
             key=_epitope_sort_key,
         )
-        if self.num_mutant_epitopes_to_keep:
-            self.mutant_epitopes = (
-                self.mutant_epitopes[: self.num_mutant_epitopes_to_keep]
+        if self.num_target_epitopes_to_keep:
+            self.target_epitopes = (
+                self.target_epitopes[: self.num_target_epitopes_to_keep]
             )
 
-        self.wildtype_epitopes = sorted(
-            [
-                e for e in self.epitopes
-                if not e.overlaps_mutation or e.occurs_in_reference
-            ],
+        self.self_epitopes = sorted(
+            [e for e in self.epitopes if e.occurs_in_reference],
             key=_epitope_sort_key,
         )
 
@@ -238,10 +242,10 @@ class VaccinePeptide(DataclassSerializable):
                 for p in e.predictions_flat()
                 if p.kind == 'pMHC_affinity')
 
-        self.wildtype_epitope_score = sum(
-            _epitope_total_score(e) for e in self.wildtype_epitopes)
-        self.mutant_epitope_score = sum(
-            _epitope_total_score(e) for e in self.mutant_epitopes)
+        self.self_epitope_score = sum(
+            _epitope_total_score(e) for e in self.self_epitopes)
+        self.target_epitope_score = sum(
+            _epitope_total_score(e) for e in self.target_epitopes)
 
         self.manufacturability_scores = ManufacturabilityScores.from_amino_acids(
             self.mutant_protein_fragment.amino_acids
@@ -298,8 +302,8 @@ class VaccinePeptide(DataclassSerializable):
         """
         return compute_ranking_tuple(self, rules=self.ranking_rules)
 
-    def contains_mutant_epitopes(self):
-        return len(self.mutant_epitopes) > 0
+    def contains_target_epitopes(self):
+        return len(self.target_epitopes) > 0
 
     @property
     def expression_score(self):
@@ -318,7 +322,7 @@ class VaccinePeptide(DataclassSerializable):
             from .combined_score_dsl import evaluate_combined_score
             return evaluate_combined_score(
                 self._combined_score_expr_ast, self)
-        epitope = self.mutant_epitope_score
+        epitope = self.target_epitope_score
         if self.combined_score_mode == "reads_times_epitope":
             return float(self.mutant_protein_fragment.n_alt_reads) * epitope
         if self.combined_score_mode == "epitope_only":
@@ -331,11 +335,11 @@ class VaccinePeptide(DataclassSerializable):
         # back into a single `epitopes` list. Also trims fields that match
         # their defaults so the JSON stays small and older readers don't
         # see keys they don't understand.
-        epitopes = self.mutant_epitopes + self.wildtype_epitopes
+        epitopes = self.target_epitopes + self.self_epitopes
         d = {
             "mutant_protein_fragment": self.mutant_protein_fragment,
             "epitopes": epitopes,
-            "num_mutant_epitopes_to_keep": self.num_mutant_epitopes_to_keep,
+            "num_target_epitopes_to_keep": self.num_target_epitopes_to_keep,
             "epitope_score_params": self.epitope_score_params,
             "sort_epitopes_by": self.sort_epitopes_by,
         }

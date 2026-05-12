@@ -204,9 +204,9 @@ def test_assemble_with_optimizer_uses_chosen_linkers():
         amino_acids=a2, gene_name='GENEB',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(a2))
     pep_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, mutant_epitopes=[])
+        mutant_protein_fragment=fragment_a, target_epitopes=[])
     pep_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, mutant_epitopes=[])
+        mutant_protein_fragment=fragment_b, target_epitopes=[])
     pairs = [
         (Variant('1', 100, 'A', 'T'), [pep_a]),
         (Variant('2', 200, 'A', 'T'), [pep_b]),
@@ -253,9 +253,9 @@ def test_assemble_with_optimizer_falls_back_when_predictor_missing(caplog):
         amino_acids="MNNVD", gene_name='G',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
     pep_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, mutant_epitopes=[])
+        mutant_protein_fragment=fragment_a, target_epitopes=[])
     pep_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, mutant_epitopes=[])
+        mutant_protein_fragment=fragment_b, target_epitopes=[])
     pairs = [
         (Variant('1', 100, 'A', 'T'), [pep_a]),
         (Variant('2', 200, 'A', 'T'), [pep_b]),
@@ -294,9 +294,9 @@ def test_assemble_default_kept_when_candidates_dont_help():
         amino_acids="MNNVD", gene_name='G',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
     pep_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, mutant_epitopes=[])
+        mutant_protein_fragment=fragment_a, target_epitopes=[])
     pep_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, mutant_epitopes=[])
+        mutant_protein_fragment=fragment_b, target_epitopes=[])
     pairs = [
         (Variant('1', 100, 'A', 'T'), [pep_a]),
         (Variant('2', 200, 'A', 'T'), [pep_b]),
@@ -428,9 +428,9 @@ def test_assemble_manifest_chosen_uses_canonical_linker_names():
         amino_acids="MNNVD", gene_name='G',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
     pep_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, mutant_epitopes=[])
+        mutant_protein_fragment=fragment_a, target_epitopes=[])
     pep_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, mutant_epitopes=[])
+        mutant_protein_fragment=fragment_b, target_epitopes=[])
     pairs = [
         (Variant('1', 100, 'A', 'T'), [pep_a]),
         (Variant('2', 200, 'A', 'T'), [pep_b]),
@@ -473,14 +473,14 @@ def test_assemble_manifest_chosen_uses_canonical_linker_names():
                  amino_acids=a1, gene_name='G',
                  mutant_amino_acid_start_offset=0,
                  mutant_amino_acid_end_offset=len(a1)),
-             mutant_epitopes=[])]),
+             target_epitopes=[])]),
         (Variant('2', 200, 'A', 'T'),
          [SimpleNamespace(
              mutant_protein_fragment=SimpleNamespace(
                  amino_acids=a2, gene_name='G',
                  mutant_amino_acid_start_offset=0,
                  mutant_amino_acid_end_offset=len(a2)),
-             mutant_epitopes=[])]),
+             target_epitopes=[])]),
     ]
     options2 = RNAConstructConfig(
         signal_peptide=None, include_mitd=False,
@@ -554,7 +554,7 @@ def test_packing_uses_longest_candidate_for_size_cap():
             mutant_amino_acid_start_offset=0,
             mutant_amino_acid_end_offset=10)
         pep = SimpleNamespace(
-            mutant_protein_fragment=frag, mutant_epitopes=[])
+            mutant_protein_fragment=frag, target_epitopes=[])
         pairs.append((Variant(str(k + 1), 100 + k, 'A', 'T'), [pep]))
 
     # Budget: HBB UTRs (~50 + 132 nt) + start codon 3 nt + 3 antigens

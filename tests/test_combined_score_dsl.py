@@ -20,7 +20,7 @@ import pytest
 def _make_vp(
         n_alt_reads=10,
         n_overlapping_reads=20,
-        mutant_epitope_score=2.5,
+        target_epitope_score=2.5,
         n_alt_reads_supporting_protein_sequence=8,
         combined_score_mode=None,
         combined_score_expr=None,
@@ -51,9 +51,9 @@ def _make_vp(
         combined_score_mode=combined_score_mode,
         combined_score_expr=combined_score_expr,
     )
-    # Fake mutant_epitope_score directly — the real one comes from
+    # Fake target_epitope_score directly — the real one comes from
     # summed epitope predictions but we want to control the scalar.
-    vp.mutant_epitope_score = mutant_epitope_score
+    vp.target_epitope_score = target_epitope_score
     return vp
 
 
@@ -64,30 +64,30 @@ def test_dsl_parity_with_legacy_modes():
     n_alt = 16
     epitope = 3.0
     vp_legacy = _make_vp(
-        n_alt_reads=n_alt, mutant_epitope_score=epitope,
+        n_alt_reads=n_alt, target_epitope_score=epitope,
         combined_score_mode='sqrt_reads_times_epitope')
     vp_expr = _make_vp(
-        n_alt_reads=n_alt, mutant_epitope_score=epitope,
-        combined_score_expr='expression_score * mutant_epitope_score')
+        n_alt_reads=n_alt, target_epitope_score=epitope,
+        combined_score_expr='expression_score * target_epitope_score')
     assert vp_expr.combined_score == pytest.approx(vp_legacy.combined_score)
     # Numeric value: sqrt(16) * 3 = 12
     assert vp_expr.combined_score == pytest.approx(12.0)
 
     vp_legacy_b = _make_vp(
-        n_alt_reads=n_alt, mutant_epitope_score=epitope,
+        n_alt_reads=n_alt, target_epitope_score=epitope,
         combined_score_mode='reads_times_epitope')
     vp_expr_b = _make_vp(
-        n_alt_reads=n_alt, mutant_epitope_score=epitope,
-        combined_score_expr='n_alt_reads * mutant_epitope_score')
+        n_alt_reads=n_alt, target_epitope_score=epitope,
+        combined_score_expr='n_alt_reads * target_epitope_score')
     assert vp_expr_b.combined_score == pytest.approx(vp_legacy_b.combined_score)
     assert vp_expr_b.combined_score == pytest.approx(48.0)
 
     vp_legacy_c = _make_vp(
-        n_alt_reads=n_alt, mutant_epitope_score=epitope,
+        n_alt_reads=n_alt, target_epitope_score=epitope,
         combined_score_mode='epitope_only')
     vp_expr_c = _make_vp(
-        n_alt_reads=n_alt, mutant_epitope_score=epitope,
-        combined_score_expr='mutant_epitope_score')
+        n_alt_reads=n_alt, target_epitope_score=epitope,
+        combined_score_expr='target_epitope_score')
     assert vp_expr_c.combined_score == pytest.approx(vp_legacy_c.combined_score)
     assert vp_expr_c.combined_score == pytest.approx(3.0)
 
@@ -96,16 +96,16 @@ def test_dsl_supersedes_combined_score_mode():
     """When both are set, the DSL wins. Same precedence as
     ``epitopes.score_expr`` over the scalar knobs."""
     vp = _make_vp(
-        n_alt_reads=4, mutant_epitope_score=2.0,
+        n_alt_reads=4, target_epitope_score=2.0,
         combined_score_mode='reads_times_epitope',  # would give 8.0
-        combined_score_expr='mutant_epitope_score')  # gives 2.0
+        combined_score_expr='target_epitope_score')  # gives 2.0
     assert vp.combined_score == pytest.approx(2.0)
 
 
 def test_dsl_supports_math_functions():
     """sqrt / log / log1p / exp / min / max / abs / pow are all
     available; arithmetic + unary minus + power compose freely."""
-    vp = _make_vp(n_alt_reads=10, mutant_epitope_score=1.0)
+    vp = _make_vp(n_alt_reads=10, target_epitope_score=1.0)
     cases = [
         ('sqrt(n_alt_reads)', math.sqrt(10)),
         ('log(n_alt_reads)', math.log(10)),
@@ -118,7 +118,7 @@ def test_dsl_supports_math_functions():
         ('n_alt_reads ** 2', 100.0),
         ('n_alt_reads / n_overlapping_reads', 0.5),
         ('-n_alt_reads + 100', 90.0),
-        ('log1p(n_alt_reads) * mutant_epitope_score + 0.1 * '
+        ('log1p(n_alt_reads) * target_epitope_score + 0.1 * '
          'n_alt_reads_supporting_protein_sequence',
          math.log1p(10) * 1.0 + 0.1 * 8),
     ]
@@ -148,7 +148,7 @@ def test_dsl_rejects_disallowed_constructs():
         # Comparison (nonsensical for a score)
         'n_alt_reads < 5',
         # Boolean op
-        'n_alt_reads and mutant_epitope_score',
+        'n_alt_reads and target_epitope_score',
         # Statements
         'import os',
         '',
@@ -198,14 +198,14 @@ def test_dsl_parses_documented_default_yaml_examples():
         parse_combined_score_expr, evaluate_combined_score)
     documented = [
         # The three legacy-mode equivalences.
-        'mutant_epitope_score',
-        'n_alt_reads * mutant_epitope_score',
-        'expression_score * mutant_epitope_score',
+        'target_epitope_score',
+        'n_alt_reads * target_epitope_score',
+        'expression_score * target_epitope_score',
         # The richer commented example.
-        'log1p(n_alt_reads) * mutant_epitope_score',
+        'log1p(n_alt_reads) * target_epitope_score',
     ]
     vp = _make_vp(
-        n_alt_reads=10, mutant_epitope_score=2.0,
+        n_alt_reads=10, target_epitope_score=2.0,
         n_alt_reads_supporting_protein_sequence=4)
     for expr in documented:
         tree = parse_combined_score_expr(expr)
@@ -240,8 +240,8 @@ def test_dsl_eval_error_truncates_bindings_in_user_message():
     # Opinionated preview: the three headline scores must be in
     # the message. Read counts and mutant-AA count must NOT —
     # those go to the DEBUG log.
-    assert 'mutant_epitope_score' in msg
-    assert 'wildtype_epitope_score' in msg
+    assert 'target_epitope_score' in msg
+    assert 'self_epitope_score' in msg
     assert 'expression_score' in msg
     assert 'n_alt_reads' not in msg
     assert 'n_overlapping_reads' not in msg
@@ -263,7 +263,7 @@ def test_dsl_eval_error_warns_when_headline_binding_missing():
 
     def _stripped(vp):
         b = real_extractor(vp)
-        b.pop(_HEADLINE_BINDINGS[0])  # drop mutant_epitope_score
+        b.pop(_HEADLINE_BINDINGS[0])  # drop target_epitope_score
         return b
 
     dsl_mod._bindings_from_vaccine_peptide = _stripped

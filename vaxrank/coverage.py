@@ -215,7 +215,7 @@ def _antigen_epitopes(vaccine_peptide):
     """All mutant ``CandidateEpitope`` records on this VaccinePeptide.
     Defensive: tolerates duck-typed test fixtures that don't carry
     the field."""
-    return list(getattr(vaccine_peptide, 'mutant_epitopes', []) or [])
+    return list(getattr(vaccine_peptide, 'target_epitopes', []) or [])
 
 
 def antigen_tier_per_allele(
@@ -325,7 +325,7 @@ def summarize_construction_decisions(
         for variant, peptides in selected:
             for vp in (peptides or [])[:1]:
                 all_epitopes.extend(
-                    getattr(vp, 'mutant_epitopes', None) or [])
+                    getattr(vp, 'target_epitopes', None) or [])
         coverage = compute_coverage(all_epitopes, target_alleles)
         # Sort: covered (strong > medium > low) before uncovered;
         # within same tier, alphabetical.
