@@ -165,7 +165,7 @@ LINKER_EAAAK = Linker(name="EAAAK", amino_acids="EAAAK", citation=_EAAAK_CITATIO
 _FURIN_CITATION = (
     "Furin cleaves at the consensus motif R-X-(K/R)-R in the trans-Golgi "
     "network. Primary establishment of the consensus: Hosaka et al., "
-    "J Biol Chem 266:12127, 1991 (PMID 1907971) — 'Arg-X-Lys/Arg-Arg "
+    "J Biol Chem 266:12127, 1991 (PMID 1905715) — 'Arg-X-Lys/Arg-Arg "
     "motif as a signal for precursor cleavage catalyzed by furin within "
     "the constitutive secretory pathway'. Reviewed in Thomas G., "
     "Nat Rev Mol Cell Biol 3:753, 2002 (doi:10.1038/nrm934). "

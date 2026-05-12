@@ -154,13 +154,13 @@ Combined, the matrix yields 8 distinct designs — 4 per vaccine type:
 
 | Type | Content | Per-construct | Design name | Reference |
 |---|---|---|---|---|
-| peptide | mutation_spanning | 1 | **SLP** (default) | [PGV-001 (Bortman 2025)](https://pubmed.ncbi.nlm.nih.gov/40094414/) |
+| peptide | mutation_spanning | 1 | **SLP** (default) | [PGV-001 (Saxena 2025)](https://pubmed.ncbi.nlm.nih.gov/40094414/) |
 | peptide | mutation_spanning | N | Multi-SLP / multi-epitope long peptide | |
 | peptide | minimal_epitope | 1 | Minimal-ligand peptide | |
 | peptide | minimal_epitope | N | Concatenated minimal-ligand peptide | |
-| mrna | mutation_spanning | N | **BioNTech FixVac / iNeST** (default for mRNA) | [Sahin 2017](https://www.nature.com/articles/nature23003) / [Rojas 2023](https://www.nature.com/articles/s41586-023-06063-y) |
+| mrna | mutation_spanning | N | **BioNTech FixVac / iNeST** (default for mRNA) | [Sahin 2017](https://doi.org/10.1038/nature23003) / [Rojas 2023](https://doi.org/10.1038/s41586-023-06063-y) |
 | mrna | mutation_spanning | 1 | Single-antigen mRNA | |
-| mrna | minimal_epitope | N | "String of beads" mRNA | [Thomson 1996](https://www.pnas.org/doi/10.1073/pnas.94.26.14660) |
+| mrna | minimal_epitope | N | "String of beads" mRNA | [Whitton 1993](https://pubmed.ncbi.nlm.nih.gov/7677954/) |
 | mrna | minimal_epitope | 1 | Single-ligand mRNA | |
 
 A third knob, `--epitopes-per-antigen`, controls how many top MHC
@@ -402,7 +402,7 @@ construct design can be ported between peptide and mRNA backbones.
 |---|---|---|
 | `G2S`, `G3S`, `G4S`, `G5S` | flexible (Gly_n_Ser) | The (Gly4Ser)n family ([Huston *PNAS* 1988](https://doi.org/10.1073/pnas.85.16.5879)); used clinically in BioNTech FixVac / iNeST as `(G4S)2` |
 | `EAAAK` | rigid α-helical | When fused antigens need separation rather than flex ([Arai *Protein Eng* 2001](https://doi.org/10.1093/protein/14.8.529)) |
-| `RKRR`, `RVKR`, `RKRKR` | furin cleavage | R-X-(K/R)-R motif ([Hosaka *J Biol Chem* 1991](https://pubmed.ncbi.nlm.nih.gov/1907971/)); preclinical in DNA vaccines, no clinical vaccine use as of 2025 |
+| `RKRR`, `RVKR`, `RKRKR` | furin cleavage | R-X-(K/R)-R motif ([Hosaka *J Biol Chem* 1991](https://pubmed.ncbi.nlm.nih.gov/1905715/)); preclinical in DNA vaccines, no clinical vaccine use as of 2025 |
 | `AAY` | proteasome-friendly | Empirical foundation: [Livingston *Vaccine* 2001](https://doi.org/10.1016/S0264-410X(01)00233-X); see citation in `vaxrank/vaccine_library.py` for the AAY-vs-GGGS empirical landscape ([Yang 2015](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4514284/) vs [Aguilar-Gurrieri 2023](https://doi.org/10.1007/s00262-023-03409-3)) |
 | `AAA` | alanine spacer | [Aguilar-Gurrieri *Cancer Immunol Immunother* 2023](https://doi.org/10.1007/s00262-023-03409-3) — strongest empirical alanine spacer for MHC-I presentation |
 | `GPGPG` | helper-T spacer | Between MHC-II epitopes ([Livingston *J Immunol* 2002](https://doi.org/10.4049/jimmunol.168.11.5499)) |
@@ -443,13 +443,13 @@ cancer vaccines at Mount Sinai:
   A phase I study of personalised neoantigen vaccines in patients with
   solid and haematologic malignancies.  All 11 treated patients developed
   neoantigen-specific T-cell responses
-  ([Bortman et al., Cancer Discovery 2025](https://pubmed.ncbi.nlm.nih.gov/40094414/)).
+  ([Saxena et al., Cancer Discovery 2025](https://pubmed.ncbi.nlm.nih.gov/40094414/)).
 - **PGV001 + atezolizumab in urothelial cancer**
   ([NCT03359239](https://clinicaltrials.gov/study/NCT03359239)) —
   A phase I trial combining PGV001 with checkpoint inhibition.
   The combination was safe and induced neoantigen-specific CD4+ and CD8+
   T-cell responses in all evaluated patients
-  ([Galsky et al., Nature Cancer 2025](https://www.nature.com/articles/s43018-025-00966-7)).
+  ([Saxena et al., Nature Cancer 2025](https://pubmed.ncbi.nlm.nih.gov/40346292/)).
 - **PGV001 + TTFields in newly diagnosed glioblastoma**
   ([NCT03223103](https://clinicaltrials.gov/study/NCT03223103)) —
   A phase I trial combining PGV001 with tumor treating fields and
@@ -828,13 +828,13 @@ processing columns).
 
 **PGV001 clinical results:**
 
-> Bortman et al.
+> Saxena, Marron, Kodysh, et al.
 > [PGV001, a Multi-Peptide Personalized Neoantigen Vaccine Platform: Phase I Study in Patients with Solid and Hematologic Malignancies in the Adjuvant Setting.](https://pubmed.ncbi.nlm.nih.gov/40094414/)
-> *Cancer Discovery* 15(5), 930–945 (2025).
+> *Cancer Discovery* 15(5), 930–947 (2025).
 
-> Galsky et al.
-> [Atezolizumab plus personalized neoantigen vaccination in urothelial cancer: a phase 1 trial.](https://www.nature.com/articles/s43018-025-00966-7)
-> *Nature Cancer* (2025).
+> Saxena, Anker, Kodysh, et al.
+> [Atezolizumab plus personalized neoantigen vaccination in urothelial cancer: a phase 1 trial.](https://pubmed.ncbi.nlm.nih.gov/40346292/)
+> *Nature Cancer* 6(6), 988–999 (2025).
 
 BibTeX for the Vaxrank paper:
 

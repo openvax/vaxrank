@@ -417,8 +417,9 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
       antigen — BioNTech FixVac-style 25mer).
     - ``'minimal_epitope'``: emit the top ``epitopes_per_antigen``
       MHC ligands per VaccinePeptide as separate (short) antigens.
-      Concatenated minimal-epitope mRNA constructs (≈ Velten 2021's
-      "string-of-beads" design) become first-class.
+      Concatenated minimal-epitope mRNA constructs (the
+      "string-of-beads" design — Whitton et al., J Virol 67:348,
+      1993, PMID 7677954) become first-class.
 
     Warns when a mutation_spanning window falls below
     ``min_antigen_length_aa`` (typically a stop-loss / frameshift
