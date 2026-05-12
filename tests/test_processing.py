@@ -51,10 +51,10 @@ def _ep(peptide, source, offset, ic50=100.0, allele="HLA-A*02:01",
         score=0.0,
         percentile_rank=ic50 / 100.0,
     )
-    return CandidateEpitope(
-        mutant=Peptide(
+    return CandidateEpitope.from_peptide(
+        Peptide(
             sequence=peptide,
-            source=source,
+            source_sequence=source,
             offset=offset,
             predictions=(pred,),
         ),
@@ -209,7 +209,7 @@ def test_annotate_processing_does_not_touch_ranking_score():
     ranking-driving fields — pepsickle's job is purely additive."""
     source = "AAAAKLMNPVAAAA"
     pred = _ep("KLMNPV", source, offset=4, ic50=42.0)
-    leaf = pred.mutant.best_affinity()
+    leaf = pred.best_affinity()
     pre_ic50 = leaf.value
     pre_rank = leaf.percentile_rank
     n, by_key = annotate_processing(
@@ -220,7 +220,7 @@ def test_annotate_processing_does_not_touch_ranking_score():
     assert n == 1
     assert (pred.sequence, source, 'pepsickle') in by_key
     # Ranking-driving fields untouched (frozen CandidateEpitope, can't be mutated).
-    leaf_after = pred.mutant.best_affinity()
+    leaf_after = pred.best_affinity()
     assert leaf_after.value == pre_ic50
     assert leaf_after.percentile_rank == pre_rank
 
@@ -353,10 +353,10 @@ def test_epitope_data_renders_one_row_per_predictor_for_same_pep_allele():
             peptide='SIINFEKL', value=ic50, score=0.0,
             percentile_rank=0.5)
     mhcflurry, netmhcpan = _pred('mhcflurry', 50.0), _pred('netmhcpan', 75.0)
-    epitope = CandidateEpitope(
-        mutant=Peptide(
+    epitope = CandidateEpitope.from_peptide(
+        Peptide(
             sequence='SIINFEKL',
-            source='SSIINFEKL', offset=1,
+            source_sequence='SSIINFEKL', offset=1,
             predictions=(mhcflurry, netmhcpan)),
         comparators={'wt': Peptide(sequence='SIINFEKL')},
         overlaps_mutation=True, occurs_in_reference=False)
@@ -389,7 +389,7 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
 
     source = "AAAAKLMNPVAAAA"
     pred = _ep("KLMNPV", source, offset=4)
-    leaf = pred.mutant.best_affinity()
+    leaf = pred.best_affinity()
 
     from vaxrank.report import TemplateDataCreator
     creator = TemplateDataCreator.__new__(TemplateDataCreator)
@@ -515,8 +515,8 @@ def test_epitope_data_header_consistent_when_some_predictions_unannotated():
     source = "AAAAKLMNPVAAAA"
     annotated = _ep("KLMNPV", source, offset=4)
     unannotated = _ep("AAAAA", source, offset=0)
-    leaf_a = annotated.mutant.best_affinity()
-    leaf_u = unannotated.mutant.best_affinity()
+    leaf_a = annotated.best_affinity()
+    leaf_u = unannotated.best_affinity()
     n, by_key = annotate_processing(
         [annotated],
         predictor=StubPepsickle(

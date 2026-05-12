@@ -36,12 +36,12 @@ from .common import eq_, ok_, gt_
 
 
 def _make_epitope(peptide, ic50, wt_ic50=None, allele="HLA-A*02:01",
-                  source=None, offset=0, percentile_rank=0.5,
+                  source_sequence=None, offset=0, percentile_rank=0.5,
                   method="test", overlaps_mutation=True,
                   occurs_in_reference=False):
     """Build a single-allele CandidateEpitope for tests that previously
     constructed a flat record."""
-    src = source if source is not None else peptide
+    src = source_sequence if source_sequence is not None else peptide
     mutant = Prediction(
         kind='pMHC_affinity', predictor_name=method,
         predictor_version='', allele=allele, peptide=peptide,
@@ -53,11 +53,11 @@ def _make_epitope(peptide, ic50, wt_ic50=None, allele="HLA-A*02:01",
             predictor_version='', allele=allele, peptide=peptide,
             value=wt_ic50, score=0.0, percentile_rank=None)
         comparators[COMPARATOR_WT] = Peptide(
-            sequence=peptide, source=src, offset=offset,
+            sequence=peptide, source_sequence=src, offset=offset,
             predictions=(wt,))
-    return CandidateEpitope(
-        mutant=Peptide(
-            sequence=peptide, source=src, offset=offset,
+    return CandidateEpitope.from_peptide(
+        Peptide(
+            sequence=peptide, source_sequence=src, offset=offset,
             predictions=(mutant,)),
         comparators=comparators,
         overlaps_mutation=overlaps_mutation,
@@ -286,7 +286,7 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
     def fake_slice_epitopes(epitopes, start_offset, end_offset):
         amino_acids = "AAAA" if start_offset == 0 else "BBBB"
         return [SimpleNamespace(
-            mutant=SimpleNamespace(source=amino_acids))]
+            source_sequence=amino_acids)]
 
     mock_variant = MagicMock()
     mock_variant.short_description = "test_variant"
@@ -351,7 +351,7 @@ def test_config_integration_epitope_config_affects_vaccine_peptide_scoring():
     long_fragment = DummyLongFragment(fragment)
 
     epitope = _make_epitope("ACDEFGHIK", ic50=100.0, wt_ic50=200.0,
-                            source="ACDEFGHIK")
+                            source_sequence="ACDEFGHIK")
 
     default_score = _legacy_score_one(100.0, 0.5)
     epitope_config = EpitopeConfig(
@@ -519,7 +519,7 @@ def test_manufacturability_thresholds_flow_from_manufacturability_config():
     long_fragment = DummyLongFragment(fragment)
 
     epitope = _make_epitope("ACDEFGHIK", ic50=100.0, wt_ic50=200.0,
-                            source="ACDEFGHIK")
+                            source_sequence="ACDEFGHIK")
 
     vaccine_config = VaccineConfig()
     manufacturability_config = ManufacturabilityConfig(

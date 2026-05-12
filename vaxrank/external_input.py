@@ -469,7 +469,7 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
     # variants — we'll filter by (peptide, allele) presence below.
     by_peptide: dict[str, list] = {}
     for e in epitopes:
-        by_peptide.setdefault(e.mutant.sequence, []).append(e)
+        by_peptide.setdefault(e.sequence, []).append(e)
 
     # Group rows by variant. LENS uses lowercase snake_case columns.
     rows = df.to_dict('records')
@@ -941,7 +941,7 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
 
     by_peptide: dict[str, list] = {}
     for e in epitopes:
-        by_peptide.setdefault(e.mutant.sequence, []).append(e)
+        by_peptide.setdefault(e.sequence, []).append(e)
 
     rows = df.to_dict('records')
     groups = {}

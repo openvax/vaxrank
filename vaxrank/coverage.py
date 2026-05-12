@@ -169,10 +169,10 @@ def compute_coverage(
     # multi-kind evidence within each CandidateEpitope.
     by_pep_allele: dict[tuple, dict] = {}
     for e in epitopes:
-        peptide = e.mutant.sequence
+        peptide = e.sequence
         if not peptide:
             continue
-        for p in e.mutant.predictions_flat():
+        for p in e.predictions_flat():
             if p.allele not in targets:
                 continue
             slot = by_pep_allele.setdefault(

@@ -668,12 +668,12 @@ def test_peptide_context_carries_flanks():
         sequence='SIINFEKL',
         n_flank='AAAAA',
         c_flank='CCCCC',
-        source='AAAAASIINFEKLCCCCC',
+        source_sequence='AAAAASIINFEKLCCCCC',
         source_name='OVA',
         offset=5)
     assert ctx.n_flank == 'AAAAA'
     assert ctx.c_flank == 'CCCCC'
-    assert ctx.source == 'AAAAASIINFEKLCCCCC'
+    assert ctx.source_sequence == 'AAAAASIINFEKLCCCCC'
     assert ctx.source_name == 'OVA'
     assert ctx.offset == 5
 
@@ -682,7 +682,7 @@ def test_peptide_context_flanks_default_to_empty():
     ctx = Peptide(sequence='SIINFEKL')
     assert ctx.n_flank == ''
     assert ctx.c_flank == ''
-    assert ctx.source == ''
+    assert ctx.source_sequence == ''
     assert ctx.source_name == ''
 
 
@@ -692,8 +692,8 @@ def test_peptide_context_flanks_default_to_empty():
 def test_candidate_epitope_wt_shortcut():
     mutant = Peptide(sequence='SIINFEKL')
     wt = Peptide(sequence='SIINFEKM')
-    candidate = CandidateEpitope(
-        mutant=mutant,
+    candidate = CandidateEpitope.from_peptide(
+        mutant,
         comparators={COMPARATOR_WT: wt},
         overlaps_mutation=True)
     assert candidate.wt is wt
@@ -703,8 +703,8 @@ def test_candidate_epitope_wt_shortcut():
 
 
 def test_candidate_epitope_no_wt_returns_none():
-    candidate = CandidateEpitope(
-        mutant=Peptide(sequence='SIINFEKL'),
+    candidate = CandidateEpitope.from_peptide(
+        Peptide(sequence='SIINFEKL'),
         comparators={})
     assert candidate.wt is None
     assert candidate.comparator('wt') is None
@@ -722,8 +722,8 @@ def test_candidate_epitope_holds_arbitrary_comparators():
         predictions=(
             _pred('pMHC_affinity', allele='HLA-A*02:01', value=80.0),
         ))
-    candidate = CandidateEpitope(
-        mutant=mutant,
+    candidate = CandidateEpitope.from_peptide(
+        mutant,
         comparators={
             COMPARATOR_WT: Peptide(sequence='SIINFEKM'),
             COMPARATOR_NEAREST_SELF: nearest_self,
@@ -737,8 +737,8 @@ def test_candidate_epitope_holds_arbitrary_comparators():
 
 
 def test_candidate_epitope_freezes_mutation_context():
-    candidate = CandidateEpitope(
-        mutant=Peptide(sequence='SIINFEKL'),
+    candidate = CandidateEpitope.from_peptide(
+        Peptide(sequence='SIINFEKL'),
         comparators={},
         overlaps_mutation=True,
         occurs_in_reference=False)
@@ -758,7 +758,7 @@ def test_peptide_context_sliced_narrows_source_window():
         sequence='SIINFEKL',
         n_flank='AAA',
         c_flank='CCC',
-        source='XXXAAASIINFEKLCCCYYY',
+        source_sequence='XXXAAASIINFEKLCCCYYY',
         source_name='OVA',
         offset=6,
         predictions=(
@@ -769,7 +769,7 @@ def test_peptide_context_sliced_narrows_source_window():
     assert sliced.sequence == 'SIINFEKL'
     assert sliced.n_flank == 'AAA'
     assert sliced.c_flank == 'CCC'
-    assert sliced.source == 'AAASIINFEKLCCC'
+    assert sliced.source_sequence == 'AAASIINFEKLCCC'
     assert sliced.source_name == 'OVA'
     assert sliced.offset == 3  # 6 - 3
     assert sliced.best_affinity().value == 50.0
@@ -778,7 +778,7 @@ def test_peptide_context_sliced_narrows_source_window():
 def test_peptide_context_sliced_returns_none_when_peptide_before_window():
     ctx = Peptide(
         sequence='SIINFEKL',
-        source='SIINFEKLYYY',
+        source_sequence='SIINFEKLYYY',
         offset=0)
     assert ctx.sliced(start_offset=2, end_offset=11) is None
 
@@ -786,7 +786,7 @@ def test_peptide_context_sliced_returns_none_when_peptide_before_window():
 def test_peptide_context_sliced_returns_none_when_peptide_after_window():
     ctx = Peptide(
         sequence='SIINFEKL',
-        source='AAASIINFEKL',
+        source_sequence='AAASIINFEKL',
         offset=3)
     # Window ends before the peptide ends.
     assert ctx.sliced(start_offset=0, end_offset=8) is None
@@ -797,21 +797,21 @@ def test_epitope_sliced_delegates_to_mutant_keeping_comparators():
     comparators are independent peptides and pass through unchanged."""
     mutant = Peptide(
         sequence='SIINFEKL',
-        source='AAASIINFEKLCCC',
+        source_sequence='AAASIINFEKLCCC',
         offset=3)
     wt = Peptide(
         sequence='SIINFEKM',
-        source='AAASIINFEKMDDD',
+        source_sequence='AAASIINFEKMDDD',
         offset=3)
-    epitope = CandidateEpitope(
-        mutant=mutant,
+    epitope = CandidateEpitope.from_peptide(
+        mutant,
         comparators={COMPARATOR_WT: wt},
         overlaps_mutation=True,
         occurs_in_reference=False)
     sliced = epitope.sliced(start_offset=2, end_offset=12)
     assert sliced is not None
-    assert sliced.mutant.source == 'ASIINFEKLC'
-    assert sliced.mutant.offset == 1  # 3 - 2
+    assert sliced.source_sequence == 'ASIINFEKLC'
+    assert sliced.offset == 1  # 3 - 2
     # WT comparator untouched.
     assert sliced.wt is wt
     # Mutation flags preserved.
@@ -820,10 +820,10 @@ def test_epitope_sliced_delegates_to_mutant_keeping_comparators():
 
 
 def test_epitope_sliced_returns_none_when_mutant_doesnt_fit():
-    epitope = CandidateEpitope(
-        mutant=Peptide(
+    epitope = CandidateEpitope.from_peptide(
+        Peptide(
             sequence='SIINFEKL',
-            source='SIINFEKLYYY',
+            source_sequence='SIINFEKLYYY',
             offset=0),
         comparators={})
     assert epitope.sliced(start_offset=2, end_offset=11) is None

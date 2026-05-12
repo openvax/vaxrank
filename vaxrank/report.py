@@ -300,8 +300,8 @@ class TemplateDataCreator(object):
         predictor name from a config knob and fall back as needed.
         """
         key = (
-            epitope.mutant.sequence or '',
-            epitope.mutant.source or '',
+            epitope.sequence or '',
+            epitope.source_sequence or '',
             PEPSICKLE_PREDICTOR_NAME,
         )
         return self.processing_predictions_by_key.get(key)
@@ -336,7 +336,7 @@ class TemplateDataCreator(object):
         One mutant ``CandidateEpitope`` carries N per-allele × per-predictor
         ``mhctools.Prediction`` records. The report keeps the legacy
         one-row-per-(peptide, allele, predictor) shape, so the caller
-        iterates over ``epitope.mutant.predictions_for('pMHC_affinity')``
+        iterates over ``epitope.predictions_for('pMHC_affinity')``
         and passes each leaf record here alongside its parent CandidateEpitope.
 
         ``include_processing``: when True, always emit the three
@@ -367,7 +367,7 @@ class TemplateDataCreator(object):
         wt_peptide_sequence = (
             epitope.wt.sequence if epitope.wt is not None else '')
         epitope_data = OrderedDict([
-            ('Sequence', epitope.mutant.sequence),
+            ('Sequence', epitope.sequence),
             # ``Predictor`` names which MHC affinity tool produced
             # ``IC50`` / ``Score`` / ``WT IC50`` for this row —
             # mhcflurry / netmhcpan / mhcflurry-presentation / etc.
@@ -506,7 +506,7 @@ class TemplateDataCreator(object):
                 # of allele — so we look up once per CandidateEpitope using
                 # the first available leaf Prediction as a probe.
                 def _has_processing(e):
-                    for p in e.mutant.predictions_flat():
+                    for p in e.predictions_flat():
                         if self._processing_prediction_for(e, p) is not None:
                             return True
                     return False
@@ -525,7 +525,7 @@ class TemplateDataCreator(object):
                 # Predictor column distinguishing them.
                 def _affinity_leaves(e):
                     return [
-                        p for p in e.mutant.predictions_flat()
+                        p for p in e.predictions_flat()
                         if p.kind == 'pMHC_affinity']
 
                 for e in vaccine_peptide.mutant_epitopes:
@@ -741,7 +741,7 @@ def make_minimal_neoepitope_report(
                     epitope.wt.sequence
                     if epitope.wt is not None else '')
                 affinity_leaves = [
-                    p for p in epitope.mutant.predictions_flat()
+                    p for p in epitope.predictions_flat()
                     if p.kind == 'pMHC_affinity']
                 for p in affinity_leaves:
                     wt_ic50 = None
@@ -759,7 +759,7 @@ def make_minimal_neoepitope_report(
                     row = OrderedDict([
                         ('Allele', p.allele),
                         ('Mutant peptide sequence',
-                            epitope.mutant.sequence),
+                            epitope.sequence),
                         ('Score', vaccine_peptide.mutant_epitope_score),
                         ('Predicted mutant pMHC affinity',
                             '%.2f nM' % p.value),

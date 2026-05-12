@@ -54,10 +54,10 @@ def _make_mutant_epitope(ic50=10.0, peptide="A" * 9, source="A" * 25,
         score=0.0,
         percentile_rank=0.5,
     )
-    return CandidateEpitope(
-        mutant=Peptide(
+    return CandidateEpitope.from_peptide(
+        Peptide(
             sequence=peptide,
-            source=source,
+            source_sequence=source,
             offset=offset,
             predictions=(pred,),
         ),

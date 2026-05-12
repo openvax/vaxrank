@@ -345,7 +345,7 @@ def vaccine_peptides_from_epitopes(
             continue
 
         assert all(
-            e.mutant.source == candidate_fragment.amino_acids
+            e.source_sequence == candidate_fragment.amino_acids
             for e in subsequence_epitopes
         )
 

@@ -147,9 +147,9 @@ def _annotate_predictions_with_processing(ranked_vaccine_peptides,
 
     def _key(e):
         return (
-            e.mutant.sequence or '',
-            e.mutant.source or '',
-            e.mutant.offset or 0,
+            e.sequence or '',
+            e.source_sequence or '',
+            e.offset or 0,
         )
 
     def _maybe_add(e):
@@ -157,7 +157,7 @@ def _annotate_predictions_with_processing(ranked_vaccine_peptides,
         if eid in seen_ids:
             return
         seen_ids.add(eid)
-        if not e.mutant.sequence:
+        if not e.sequence:
             all_epitopes.append(e)
             return
         k = _key(e)

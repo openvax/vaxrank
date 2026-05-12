@@ -61,18 +61,17 @@ def _epitope_to_rows(epitope):
     """Flatten one ``CandidateEpitope`` to per-(predictor, allele) row dicts
     matching :data:`VAXRANK_COLUMNS`. Drives ``predictions_to_dataframe``
     and ``save_predictions``."""
-    mutant = epitope.mutant
     wt = epitope.wt
     wt_peptide_sequence = wt.sequence if wt is not None else ""
     # Build (allele, predictor_name) -> wt_ic50 lookup so each per-allele
-    # mutant row gets paired with its matching WT IC50, if any.
+    # candidate row gets paired with its matching WT IC50, if any.
     wt_ic50_by_key = {}
     if wt is not None:
         for p in wt.predictions_flat():
             if p.kind == 'pMHC_affinity' and p.value is not None:
                 wt_ic50_by_key.setdefault((p.allele, p.predictor_name), p.value)
     rows = []
-    for p in mutant.predictions_flat():
+    for p in epitope.predictions_flat():
         if p.kind != 'pMHC_affinity':
             # The vaxrank-native CSV format only carries affinity rows;
             # presentation / stability / processing live elsewhere.
@@ -80,15 +79,15 @@ def _epitope_to_rows(epitope):
         wt_ic50 = wt_ic50_by_key.get((p.allele, p.predictor_name))
         rows.append({
             "allele": p.allele,
-            "peptide_sequence": mutant.sequence,
+            "peptide_sequence": epitope.sequence,
             "wt_peptide_sequence": wt_peptide_sequence,
             "ic50": p.value,
             "wt_ic50": wt_ic50,
             "percentile_rank": p.percentile_rank,
             "prediction_method_name": p.predictor_name,
             "overlaps_mutation": epitope.overlaps_mutation,
-            "source_sequence": mutant.source,
-            "offset": mutant.offset,
+            "source_sequence": epitope.source_sequence,
+            "offset": epitope.offset,
             "occurs_in_reference": epitope.occurs_in_reference,
             "predictor_version": p.predictor_version,
         })
@@ -475,7 +474,7 @@ def load_lens(path):
     list of CandidateEpitope
         One ``CandidateEpitope`` per ``(peptide, source_sequence, offset)``
         group, each carrying its per-(allele, predictor)
-        ``mhctools.Prediction`` records inside ``epitope.mutant``.
+        ``mhctools.Prediction`` records inside ``epitope``.
     """
     # low_memory=False avoids mixed-dtype warnings — LENS reports have many
     # optional columns that are mostly NA for a given antigen type.

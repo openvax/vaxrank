@@ -52,10 +52,10 @@ def _make_epitope(peptide, ic50, wt_ic50, allele="HLA-A*02:01",
         comparators[COMPARATOR_WT] = Peptide(
             sequence=wt_peptide or peptide,
             predictions=(wt_pred,))
-    return CandidateEpitope(
-        mutant=Peptide(
+    return CandidateEpitope.from_peptide(
+        Peptide(
             sequence=peptide,
-            source=peptide, offset=0,
+            source_sequence=peptide, offset=0,
             predictions=(mutant_pred,)),
         comparators=comparators,
         overlaps_mutation=True, occurs_in_reference=False)

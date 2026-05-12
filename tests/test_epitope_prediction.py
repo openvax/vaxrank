@@ -25,10 +25,10 @@ def _by_pep_allele(epitopes):
     for single-predictor test inputs."""
     out = {}
     for e in epitopes:
-        for p in e.mutant.predictions_flat():
+        for p in e.predictions_flat():
             if p.kind != 'pMHC_affinity':
                 continue
-            out[(e.mutant.sequence, p.allele)] = (e, p)
+            out[(e.sequence, p.allele)] = (e, p)
     return out
 
 
@@ -132,12 +132,12 @@ def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel(mouse_gen
     # leaf records (4 leaves total). Pre-fix dict-keyed return would
     # have lost one predictor per (peptide, allele).
     assert len(epitopes) == 2
-    leaves = [p for e in epitopes for p in e.mutant.predictions_flat()]
+    leaves = [p for e in epitopes for p in e.predictions_flat()]
     assert len(leaves) == 4
     methods = sorted({p.predictor_name for p in leaves})
     assert methods == ['mhcflurry', 'netmhcpan']
     for e in epitopes:
-        per_method = {p.predictor_name for p in e.mutant.predictions_flat()}
+        per_method = {p.predictor_name for p in e.predictions_flat()}
         assert per_method == {'mhcflurry', 'netmhcpan'}
 
 

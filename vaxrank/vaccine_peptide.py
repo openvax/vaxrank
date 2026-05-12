@@ -38,7 +38,7 @@ def _legacy_score_one(ic50, percentile_rank, *,
                       percentile_rank_cutoff=DEFAULT_PERCENTILE_RANK_CUTOFF):
     """Per-prediction logistic score used by ``VaccinePeptide`` to sum
     scores across the leaf ``mhctools.Prediction`` records inside
-    each ``CandidateEpitope.mutant``.
+    each ``CandidateEpitope``.
 
     Kept as a free function so the math stays in one place. The
     topiary DSL's default ``score_expr`` produces byte-identical
@@ -188,7 +188,7 @@ class VaccinePeptide(DataclassSerializable):
 
         def _epitope_sort_key(e):
             affinity_leaves = [
-                p for p in e.mutant.predictions_flat()
+                p for p in e.predictions_flat()
                 if p.kind == 'pMHC_affinity']
             if not affinity_leaves:
                 return float("inf")
@@ -235,7 +235,7 @@ class VaccinePeptide(DataclassSerializable):
                     ic50=p.value,
                     percentile_rank=p.percentile_rank,
                     **params)
-                for p in e.mutant.predictions_flat()
+                for p in e.predictions_flat()
                 if p.kind == 'pMHC_affinity')
 
         self.wildtype_epitope_score = sum(

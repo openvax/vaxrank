@@ -288,9 +288,9 @@ def test_grouping_collapses_multi_allele_rows():
     ])
     assert len(epitopes) == 1
     e = epitopes[0]
-    assert e.mutant.sequence == 'SIINFEKL'
-    assert e.mutant.offset == 4
-    assert sorted(e.mutant.alleles_for('pMHC_affinity')) == [
+    assert e.sequence == 'SIINFEKL'
+    assert e.offset == 4
+    assert sorted(e.alleles_for('pMHC_affinity')) == [
         'HLA-A*02:01', 'HLA-B*07:02', 'HLA-C*03:04']
     assert e.overlaps_mutation is True
 
@@ -304,7 +304,7 @@ def test_grouping_separates_distinct_peptides():
         _row(peptide='SIINFEKM', offset=12, wt_ic50=None),
     ])
     assert len(epitopes) == 2
-    assert {e.mutant.sequence for e in epitopes} == {
+    assert {e.sequence for e in epitopes} == {
         'SIINFEKL', 'SIINFEKM'}
 
 

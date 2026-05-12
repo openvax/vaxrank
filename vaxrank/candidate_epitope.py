@@ -4,20 +4,22 @@
 #
 #       http://www.apache.org/licenses/LICENSE-2.0
 
-"""Per-peptide context records used by ``VaccinePeptide``.
-
-Two layers:
+"""Peptide and CandidateEpitope types used by ``VaccinePeptide``.
 
   ``Peptide`` — one amino-acid sequence + flanks + multi-axis
-  binding predictions. Generic shape used for the antigenic
-  candidate AND for any reference comparator (WT pair, nearest_self,
-  nearest_vital_self, nearest_nonCTA, nearest_oncovirus, …).
+  binding predictions. Base shape used for reference comparator
+  peptides (WT pair, nearest_self, nearest_vital_self, nearest_nonCTA,
+  nearest_oncovirus, …) and as the parent of ``CandidateEpitope``.
 
-  ``CandidateEpitope`` — one sliding-window position from a
-  VaccinePeptide. Holds the mutant ``Peptide`` plus a
-  ``comparators`` dict keyed by name. Future safety / homology
-  features (#254 / #257 / #258) populate comparators with their
-  respective peptides; today only ``'wt'`` is canonical.
+  ``CandidateEpitope(Peptide)`` — the vaccine-candidate peptide
+  itself plus a ``comparators`` dict of reference peptides + a few
+  source-context flags. Inherits Peptide's fields, so accessors
+  like ``ce.sequence`` / ``ce.predictions_for(...)`` work directly
+  on the candidate (no ``.mutant`` indirection). Source-agnostic:
+  works for mutation-derived neoepitopes, oncoviral peptides,
+  CTAs, etc. Future safety / homology features (#254 / #257 /
+  #258) populate the comparators dict with their respective
+  peptides; today only ``'wt'`` is canonical.
 
 ## Storage shape
 
@@ -165,11 +167,12 @@ class Peptide:
     """One peptide sequence + flanking residues + (optional) MHC
     binding predictions.
 
-    Generic — the same shape is used for the antigenic candidate
-    (the mutant) and for every reference comparator (WT pair,
-    nearest_self, …). When a comparator carries predictions, it's
-    answering "does the patient's MHC also bind this comparator?"
-    — which is the actual safety question for autoimmunity scoring.
+    Generic — the same shape is used for reference comparator
+    peptides (WT pair, nearest_self, …) and is the base class for
+    ``CandidateEpitope`` (the vaccine-candidate itself). When a
+    comparator carries predictions, it's answering "does the
+    patient's MHC also bind this comparator?" — which is the actual
+    safety question for autoimmunity scoring.
 
     ``sequence`` may be empty for an *anonymous comparator* — pVACseq
     inputs carry ``IC50 WT`` without ``WT Epitope Seq`` for some
@@ -185,10 +188,11 @@ class Peptide:
     sequence: str
     n_flank: str = ''
     c_flank: str = ''
-    # Source provenance — for the mutant: the assembled mutant
-    # protein fragment. For ``nearest_self``: the matching self
-    # protein. For ``nearest_oncovirus``: the viral genome / ORF.
-    source: str = ''
+    # Source provenance — for the candidate: the assembled source
+    # protein fragment (mutant protein, viral ORF, CTA protein, etc.).
+    # For ``nearest_self``: the matching self protein. For
+    # ``nearest_oncovirus``: the viral genome / ORF.
+    source_sequence: str = ''
     source_name: str = ''         # gene / virus / "self_proteome" / …
     offset: int = 0
     # Nested storage; flat ``list[Prediction]`` is auto-grouped on
@@ -382,6 +386,13 @@ class Peptide:
             _nan_safe(p.score), _nan_safe(p.value),
             _nan_safe(p.percentile_rank))))
 
+    def _slice_fits(self, start_offset: int, end_offset: int) -> bool:
+        """True when this peptide fits inside the requested window —
+        i.e. ``sliced()`` would not return None. Shared between
+        ``Peptide.sliced`` and ``CandidateEpitope.sliced``."""
+        return (self.offset >= start_offset
+                and self.offset + len(self.sequence) <= end_offset)
+
     def sliced(self, start_offset: int,
                end_offset: int) -> Optional["Peptide"]:
         """Return a new ``Peptide`` whose source window is narrowed
@@ -389,12 +400,10 @@ class Peptide:
         peptide doesn't fit inside the window.
 
         The peptide sequence, flanks, source name, and predictions
-        are preserved — only ``source`` is sliced and ``offset`` is
-        rebased relative to the new source start.
+        are preserved — only ``source_sequence`` is sliced and
+        ``offset`` is rebased relative to the new source start.
         """
-        if self.offset < start_offset:
-            return None
-        if self.offset + len(self.sequence) > end_offset:
+        if not self._slice_fits(start_offset, end_offset):
             return None
         # Defensive copy: the nested predictions dict is mutable, so
         # sharing it across two frozen instances would couple their
@@ -403,20 +412,26 @@ class Peptide:
             sequence=self.sequence,
             n_flank=self.n_flank,
             c_flank=self.c_flank,
-            source=self.source[start_offset:end_offset],
+            source_sequence=self.source_sequence[start_offset:end_offset],
             source_name=self.source_name,
             offset=self.offset - start_offset,
             predictions=dict(self.predictions))
 
 
 @dataclass(frozen=True)
-class CandidateEpitope:
-    """One sliding-window peptide position from a VaccinePeptide,
-    with its mutation context + reference comparators for safety
-    / immunogenicity scoring.
+class CandidateEpitope(Peptide):
+    """A vaccine-candidate epitope. *Is-a* ``Peptide`` — carries the
+    candidate's sequence + predictions directly — plus comparator
+    peptides for safety / immunogenicity scoring and a couple of
+    optional source-context flags.
 
-    Comparator names are open-ended; vaxrank populates these as
-    their respective issues land:
+    Source-agnostic: works for mutation-derived neoepitopes, oncoviral
+    peptides, and self-derived candidates (CTAs etc.). Each source
+    class populates the comparators it knows how to compute; the
+    wrapper itself doesn't branch on source.
+
+    Comparator names (the ``comparators`` dict keys) are open-ended;
+    vaxrank populates these as their respective issues land:
 
       ``'wt'``                  same position, reference allele
                                 (drives mutation-specificity +
@@ -431,24 +446,30 @@ class CandidateEpitope:
       ``'nearest_oncovirus'``   closest match in oncovirus
                                 reference genomes (#258)
 
-    Each value is a ``Peptide`` carrying its own sequence +
-    (optionally) its own MHC predictions. When a comparator carries
+    Each value is a bare ``Peptide``. When a comparator carries
     predictions, scorers can ask "does the patient's MHC also bind
     this comparator?" — the actual safety question for autoimmunity
     / off-target presentation.
     """
 
-    mutant: Peptide
     comparators: dict = field(default_factory=dict)
 
-    # Mutation-specific context. Lives at this level (not on
-    # ``Peptide``) because it's about the mutant-vs-source
-    # relationship, not a property of the peptide itself.
+    # Optional mutation-specific provenance — populated only when
+    # the candidate was derived from a somatic mutation (i.e. the
+    # producer is mutation-aware). Viral / self producers leave it
+    # at the default. Used internally by ``predict_epitopes`` to
+    # gate WT-comparator generation and by mutation-flavored
+    # reports / audits.
     overlaps_mutation: bool = False
+
+    # Universal safety signal: this peptide's exact sequence appears
+    # somewhere in the patient's reference proteome. True means a
+    # cross-reactivity risk (the peptide matches a self-protein),
+    # subject to interpretation by the scoring policy.
     occurs_in_reference: bool = False
 
     # Convenience: most call sites today read the WT alongside the
-    # mutant. Common-case shortcut.
+    # candidate. Common-case shortcut.
     @property
     def wt(self) -> Optional[Peptide]:
         return self.comparators.get(COMPARATOR_WT)
@@ -459,32 +480,55 @@ class CandidateEpitope:
         (typical when a safety scorer hasn't run yet)."""
         return self.comparators.get(name)
 
-    # Convenience pass-throughs to the mutant peptide — most
-    # callers read these on the candidate level.
-    @property
-    def sequence(self) -> str:
-        return self.mutant.sequence
-
     @property
     def length(self) -> int:
-        return len(self.mutant.sequence)
+        return len(self.sequence)
 
     def sliced(self, start_offset: int,
                end_offset: int) -> Optional["CandidateEpitope"]:
-        """Return a new ``CandidateEpitope`` whose mutant source window is
+        """Return a new ``CandidateEpitope`` whose source window is
         narrowed to ``[start_offset, end_offset)``. Returns ``None``
-        if the mutant peptide doesn't fit inside the window.
+        if the candidate peptide doesn't fit inside the window.
         Comparators (WT etc.) keep their own source windows
         unchanged — they're independent peptides, not slices of
-        the mutant's source."""
-        sliced_mutant = self.mutant.sliced(start_offset, end_offset)
-        if sliced_mutant is None:
+        the candidate's source.
+        """
+        if not self._slice_fits(start_offset, end_offset):
             return None
         return CandidateEpitope(
-            mutant=sliced_mutant,
+            sequence=self.sequence,
+            n_flank=self.n_flank,
+            c_flank=self.c_flank,
+            source_sequence=self.source_sequence[start_offset:end_offset],
+            source_name=self.source_name,
+            offset=self.offset - start_offset,
+            predictions=dict(self.predictions),
             comparators=self.comparators,
             overlaps_mutation=self.overlaps_mutation,
             occurs_in_reference=self.occurs_in_reference)
+
+    @classmethod
+    def from_peptide(cls, peptide: "Peptide",
+                     **extras) -> "CandidateEpitope":
+        """Alternate constructor: spread a ``Peptide``'s fields into a
+        ``CandidateEpitope`` along with the candidate-specific
+        ``extras`` (``comparators``, ``overlaps_mutation``,
+        ``occurs_in_reference``).
+
+        Convenient when a producer or test already has a fully-built
+        ``Peptide`` in hand. Equivalent to passing the peptide fields
+        as keyword args to the regular constructor.
+        """
+        return cls(
+            sequence=peptide.sequence,
+            n_flank=peptide.n_flank,
+            c_flank=peptide.c_flank,
+            source_sequence=peptide.source_sequence,
+            source_name=peptide.source_name,
+            offset=peptide.offset,
+            predictions=dict(peptide.predictions),
+            **extras,
+        )
 
 
 def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
@@ -554,22 +598,19 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
 
     out = []
     for slot in groups.values():
-        mutant_pep = Peptide(
-            sequence=slot['peptide'],
-            source=slot['source'],
-            offset=slot['offset'],
-            predictions=tuple(slot['mutant_preds']),
-        )
         comparators = {}
         if slot['wt_preds']:
             comparators[COMPARATOR_WT] = Peptide(
                 sequence=slot['wt_peptide'] or '',
-                source=slot['source'],
+                source_sequence=slot['source'],
                 offset=slot['offset'],
                 predictions=tuple(slot['wt_preds']),
             )
         out.append(CandidateEpitope(
-            mutant=mutant_pep,
+            sequence=slot['peptide'],
+            source_sequence=slot['source'],
+            offset=slot['offset'],
+            predictions=tuple(slot['mutant_preds']),
             comparators=comparators,
             overlaps_mutation=slot['overlaps_mutation'],
             occurs_in_reference=slot['occurs_in_reference'],

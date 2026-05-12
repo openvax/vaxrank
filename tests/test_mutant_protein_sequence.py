@@ -122,7 +122,7 @@ def test_keep_top_k_epitopes():
         mutant_epitope_score = sum(
             _legacy_score_one(leaf.value, leaf.percentile_rank)
             for e in vaccine_peptide.mutant_epitopes
-            for leaf in e.mutant.predictions_flat()
+            for leaf in e.predictions_flat()
             if leaf.kind == 'pMHC_affinity')
         almost_eq_(mutant_epitope_score, vaccine_peptide.mutant_epitope_score)
 

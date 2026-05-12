@@ -111,8 +111,8 @@ def epitopes_to_topiary_df(epitopes):
     """
     rows = []
     for e in epitopes:
-        ctx = e.mutant
-        source_name = ctx.source or ctx.sequence
+        ctx = e
+        source_name = ctx.source_sequence or ctx.sequence
         for p in ctx.predictions_flat():
             rows.append({
                 "sample_name": "",

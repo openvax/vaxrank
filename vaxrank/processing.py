@@ -213,7 +213,7 @@ def annotate_processing(epitopes, predictor=None,
     # Group by source so we score each unique sequence exactly once.
     by_source = {}
     for e in epitopes_list:
-        source = e.mutant.source
+        source = e.source_sequence
         if not source:
             continue
         by_source.setdefault(source, []).append(e)
@@ -280,10 +280,10 @@ def annotate_processing(epitopes, predictor=None,
         if not seq_probs or len(seq_probs) < len(source):
             continue
         for e in epis:
-            peptide = e.mutant.sequence or ''
+            peptide = e.sequence or ''
             if not peptide:
                 continue
-            offset = _resolve_peptide_offset(source, peptide, e.mutant)
+            offset = _resolve_peptide_offset(source, peptide, e)
             if offset is None:
                 n_skipped_peptide_not_in_context += 1
                 if len(skipped_examples) < 3:

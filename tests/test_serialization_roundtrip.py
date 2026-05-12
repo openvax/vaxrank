@@ -63,14 +63,14 @@ def _sample_epitope(
         predictor_version='', allele='HLA-A*02:01',
         peptide='SIINFEKL', value=2000.0, score=0.0,
         percentile_rank=None)
-    return CandidateEpitope(
-        mutant=Peptide(
+    return CandidateEpitope.from_peptide(
+        Peptide(
             sequence=peptide_sequence,
-            source='SSIINFEQL', offset=1,
+            source_sequence='SSIINFEQL', offset=1,
             predictions=(mutant_pred,)),
         comparators={COMPARATOR_WT: Peptide(
             sequence='SIINFEKL',
-            source='SSIINFEQL', offset=1,
+            source_sequence='SSIINFEQL', offset=1,
             predictions=(wt_pred,))},
         overlaps_mutation=overlaps_mutation,
         occurs_in_reference=occurs_in_reference)

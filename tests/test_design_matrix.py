@@ -65,10 +65,10 @@ def _make_vaccine_peptide(
         n_alt_reads=n_alt_reads,
     )
     epitopes = [
-        CandidateEpitope(
-            mutant=Peptide(
+        CandidateEpitope.from_peptide(
+        Peptide(
                 sequence=seq,
-                source=amino_acids,
+                source_sequence=amino_acids,
                 offset=amino_acids.find(seq) if seq in amino_acids else 0,
                 predictions=(Prediction(
                     kind='pMHC_affinity', predictor_name='stub',

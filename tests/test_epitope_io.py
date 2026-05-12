@@ -56,12 +56,12 @@ def _make_prediction(allele="HLA-A*02:01", peptide_sequence="SIINFEKL",
             percentile_rank=None)
         comparators[COMPARATOR_WT] = Peptide(
             sequence=wt_peptide_sequence,
-            source=source_sequence, offset=offset,
+            source_sequence=source_sequence, offset=offset,
             predictions=(wt_pred,))
-    return CandidateEpitope(
-        mutant=Peptide(
+    return CandidateEpitope.from_peptide(
+        Peptide(
             sequence=peptide_sequence,
-            source=source_sequence, offset=offset,
+            source_sequence=source_sequence, offset=offset,
             predictions=(mutant_pred,)),
         comparators=comparators,
         overlaps_mutation=overlaps_mutation,
@@ -72,7 +72,7 @@ def _first_leaf(epitope, kind='pMHC_affinity'):
     """Helper for tests asserting on per-allele record fields. Returns
     the first leaf ``Prediction`` of the requested kind in the
     epitope's mutant context."""
-    return epitope.mutant.predictions_for(kind)[0]
+    return epitope.predictions_for(kind)[0]
 
 
 def _first_wt_leaf(epitope, kind='pMHC_affinity'):
@@ -105,8 +105,8 @@ def test_save_and_load_csv_roundtrip(tmp_path):
     save_predictions(preds, path)
     loaded = load_predictions(path)
     assert len(loaded) == 2
-    e0 = next(e for e in loaded if e.mutant.sequence == "SIINFEKL")
-    e1 = next(e for e in loaded if e.mutant.sequence == "DIFFRENT")
+    e0 = next(e for e in loaded if e.sequence == "SIINFEKL")
+    e1 = next(e for e in loaded if e.sequence == "DIFFRENT")
     assert _first_leaf(e0).allele == "HLA-A*02:01"
     assert _first_leaf(e0).value == 50.0
     assert e1.wt is None
@@ -118,7 +118,7 @@ def test_save_and_load_tsv_roundtrip(tmp_path):
     save_predictions(preds, path)
     loaded = load_predictions(path)
     assert len(loaded) == 1
-    assert loaded[0].mutant.sequence == "SIINFEKL"
+    assert loaded[0].sequence == "SIINFEKL"
 
 
 def test_roundtrip_preserves_values(tmp_path):
@@ -129,7 +129,7 @@ def test_roundtrip_preserves_values(tmp_path):
     loaded = load_predictions(path)[0]
     assert _first_leaf(loaded).percentile_rank == pytest.approx(1.23)
     assert loaded.occurs_in_reference is True
-    assert loaded.mutant.offset == 5
+    assert loaded.offset == 5
 
 
 # ── pVACseq import ───────────────────────────────────────────────────────────
@@ -143,10 +143,10 @@ def test_load_pvacseq():
 
     e = next(
         ep for ep in epitopes
-        if ep.mutant.sequence == "SVVGSSSSS")
+        if ep.sequence == "SVVGSSSSS")
     leaf = _first_leaf(e)
     assert leaf.allele == "HLA-A*02:01"
-    assert e.mutant.sequence == "SVVGSSSSS"
+    assert e.sequence == "SVVGSSSSS"
     assert leaf.value == pytest.approx(76.11)
     wt_leaf = _first_wt_leaf(e)
     assert wt_leaf is not None
@@ -184,21 +184,21 @@ def test_load_lens_emits_one_epitope_per_position_with_multi_predictor_leaves():
     assert len(report_df) == 3
 
     leaves = [
-        p for e in epitopes for p in e.mutant.predictions_flat()]
+        p for e in epitopes for p in e.predictions_flat()]
     methods = {p.predictor_name for p in leaves}
     assert methods == {"mhcflurry", "netmhcpan"}
 
     # Each CandidateEpitope carries both predictors' rows for one (peptide, allele).
     for e in epitopes:
-        ms = {p.predictor_name for p in e.mutant.predictions_flat()}
+        ms = {p.predictor_name for p in e.predictions_flat()}
         assert ms == {"mhcflurry", "netmhcpan"}
     assert report_df["Predictors used"].iloc[0] == "mhcflurry,netmhcpan"
 
     # Find the SVVGSSSSS CandidateEpitope and inspect its mhcflurry leaf.
     e = next(
         ep for ep in epitopes
-        if ep.mutant.sequence == "SVVGSSSSS")
-    mhcf = e.mutant.predictions_for('pMHC_affinity', predictor='mhcflurry')[0]
+        if ep.sequence == "SVVGSSSSS")
+    mhcf = e.predictions_for('pMHC_affinity', predictor='mhcflurry')[0]
     assert mhcf.allele == "HLA-A*02:01"  # 'HLA-A02:01' normalized
     assert mhcf.peptide == "SVVGSSSSS"
     assert mhcf.value == pytest.approx(95.4)
@@ -212,7 +212,7 @@ def test_load_lens_emits_one_epitope_per_position_with_multi_predictor_leaves():
         if p.predictor_name == "mhcflurry")
     assert wt_mhcf.value == pytest.approx(95.4 / 0.020)
     assert e.overlaps_mutation is True
-    assert e.mutant.source == "AASVVGSSSSSGTR"
+    assert e.source_sequence == "AASVVGSSSSSGTR"
 
 
 def test_load_lens_report_display_uses_canonical_predictor():
@@ -234,13 +234,13 @@ def test_load_lens_mhcflurry_only_v19():
     path = os.path.join(DATA_DIR, "lens_v1.9_mhcflurry_only.tsv")
     report_df, epitopes = load_lens(path)
     assert len(epitopes) == 3
-    leaves = [p for e in epitopes for p in e.mutant.predictions_flat()]
+    leaves = [p for e in epitopes for p in e.predictions_flat()]
     methods = {p.predictor_name for p in leaves}
     assert methods == {"mhcflurry"}
 
     e = next(
         ep for ep in epitopes
-        if ep.mutant.sequence == "TAEFYQRY")
+        if ep.sequence == "TAEFYQRY")
     leaf = _first_leaf(e)
     assert leaf.allele == "HLA-A*01:01"
     assert leaf.value == pytest.approx(254.15)
@@ -272,7 +272,7 @@ def test_load_lens_detects_netmhcstabpan():
     """netmhcstabpan columns are detected as a pMHC_stability predictor."""
     path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
     report_df, epitopes = load_lens(path)
-    leaves = [p for e in epitopes for p in e.mutant.predictions_flat()]
+    leaves = [p for e in epitopes for p in e.predictions_flat()]
     methods = {p.predictor_name for p in leaves}
     assert methods == {"mhcflurry", "netmhcpan", "netmhcstabpan"}
     # Stability value column is labeled with its unit
@@ -597,7 +597,7 @@ def test_predictor_version_in_epitope_prediction_from_lens():
     predictor version, so version-qualified DSL refs resolve."""
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     _, epitopes = load_lens(path)
-    leaves = [p for e in epitopes for p in e.mutant.predictions_flat()]
+    leaves = [p for e in epitopes for p in e.predictions_flat()]
     by_method = {p.predictor_name: p.predictor_version for p in leaves}
     assert by_method["mhcflurry"] == "2.1.1"
     assert by_method["netmhcpan"] == "4.1b"
@@ -799,7 +799,7 @@ def test_load_predictions_empty_string_fields_become_empty_not_nan(tmp_path):
     e = epitopes[0]
     # WT comparator is absent because wt_ic50 was blank → no WT signal.
     assert e.wt is None
-    assert e.mutant.source == ""
+    assert e.source_sequence == ""
     leaf = _first_leaf(e)
     assert leaf.predictor_name == ""
     assert leaf.predictor_version == ""
@@ -917,7 +917,7 @@ def test_lens_dsl_version_qualified_formula(tmp_path):
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, epitopes = load_lens(path)
-    leaves = [p for e in epitopes for p in e.mutant.predictions_flat()]
+    leaves = [p for e in epitopes for p in e.predictions_flat()]
     # Every LENS leaf should carry predictor_version from columns.
     assert all(p.predictor_version for p in leaves)
     mhcflurry_version = next(
@@ -947,7 +947,7 @@ REAL_LENS_DIR = os.path.join(DATA_DIR, "real_lens_subsets")
 
 
 def _leaves(epitopes):
-    return [p for e in epitopes for p in e.mutant.predictions_flat()]
+    return [p for e in epitopes for p in e.predictions_flat()]
 
 
 def test_real_lens_v14_detects_all_three_predictors():
@@ -1077,7 +1077,7 @@ def test_lens_dsl_stability_and_affinity_combined(tmp_path):
 
     path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
     report_df, epitopes = load_lens(path)
-    leaves = [p for e in epitopes for p in e.mutant.predictions_flat()]
+    leaves = [p for e in epitopes for p in e.predictions_flat()]
     kinds_seen = {p.kind for p in leaves}
     assert kinds_seen == {"pMHC_affinity", "pMHC_stability"}
 
@@ -1109,10 +1109,10 @@ def _assert_default_scores_match_legacy(cfg, path, tmp_path):
     # resolves unqualified Affinity refs in topiary's EvalContext.
     legacy_scores = {}
     for e in epitopes:
-        for p in e.mutant.predictions_flat():
+        for p in e.predictions_flat():
             if p.kind != 'pMHC_affinity' or p.predictor_name != 'mhcflurry':
                 continue
-            legacy_scores[(e.mutant.sequence, p.allele)] = round(
+            legacy_scores[(e.sequence, p.allele)] = round(
                 _legacy_score_one(
                     ic50=p.value,
                     percentile_rank=p.percentile_rank,

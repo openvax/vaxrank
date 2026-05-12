@@ -50,8 +50,8 @@ def _ep(peptide, allele, *, presentation_pct=None, affinity_pct=None,
             kind='pMHC_affinity', predictor_name=method or 'aff',
             predictor_version='', allele=allele, peptide=peptide,
             value=None, score=0.0, percentile_rank=affinity_pct))
-    return CandidateEpitope(
-        mutant=Peptide(
+    return CandidateEpitope.from_peptide(
+        Peptide(
             sequence=peptide, predictions=tuple(preds)),
         overlaps_mutation=True, occurs_in_reference=False)
 
