@@ -162,6 +162,15 @@ COMPARATOR_NEAREST_NONCTA = 'nearest_nonCTA'        # closest non-CTA self (#257
 COMPARATOR_NEAREST_ONCOVIRUS = 'nearest_oncovirus'  # closest oncoviral peptide (#258)
 
 
+# Source-class constants — what the candidate was *derived from*.
+# Open-ended (callers can introduce new classes); these are the
+# canonical entries vaxrank knows about today.
+SOURCE_CLASS_MUTATION = 'mutation'  # somatic-mutation-derived neoepitope
+SOURCE_CLASS_VIRUS = 'virus'        # oncoviral / pathogen-derived
+SOURCE_CLASS_SELF = 'self'          # self-protein-derived (CTAs, overexpressed
+                                    # WT targets, lineage antigens, etc.)
+
+
 @dataclass(frozen=True)
 class Peptide:
     """One peptide sequence + flanking residues + (optional) MHC
@@ -454,19 +463,34 @@ class CandidateEpitope(Peptide):
 
     comparators: dict = field(default_factory=dict)
 
+    # Source provenance — what the candidate was derived from. One of
+    # ``SOURCE_CLASS_MUTATION`` / ``SOURCE_CLASS_VIRUS`` /
+    # ``SOURCE_CLASS_SELF`` (or None for legacy / unspecified inputs).
+    # Producers set this; consumers can branch on it for source-aware
+    # rendering or filtering, but most ranking logic stays
+    # source-agnostic via the safety flags below.
+    source_class: Optional[str] = None
+
     # Optional mutation-specific provenance — populated only when
-    # the candidate was derived from a somatic mutation (i.e. the
-    # producer is mutation-aware). Viral / self producers leave it
-    # at the default. Used internally by ``predict_epitopes`` to
-    # gate WT-comparator generation and by mutation-flavored
-    # reports / audits.
+    # ``source_class == SOURCE_CLASS_MUTATION``. Used internally by
+    # ``predict_epitopes`` to gate WT-comparator generation and by
+    # mutation-flavored reports / audits. Viral / self leave at False.
     overlaps_mutation: bool = False
 
-    # Universal safety signal: this peptide's exact sequence appears
+    # Raw safety signal: this peptide's exact sequence appears
     # somewhere in the patient's reference proteome. True means a
-    # cross-reactivity risk (the peptide matches a self-protein),
-    # subject to interpretation by the scoring policy.
+    # cross-reactivity risk (the peptide matches a self-protein).
+    # Conservative — flags CTA peptides as unsafe even when targeting
+    # them is intended.
     occurs_in_reference: bool = False
+
+    # CTA-aware safety signal: same as ``occurs_in_reference`` but
+    # with CTA genes excluded from the reference set. Equals
+    # ``occurs_in_reference`` until a CTA database is configured
+    # (today the CTA set is empty, so producers populate the two
+    # flags identically). Consumers opt into CTA-friendly policy by
+    # reading this flag instead of the raw one.
+    occurs_in_non_CTA_reference: bool = False
 
     # Convenience: most call sites today read the WT alongside the
     # candidate. Common-case shortcut.
@@ -504,8 +528,10 @@ class CandidateEpitope(Peptide):
             offset=self.offset - start_offset,
             predictions=dict(self.predictions),
             comparators=self.comparators,
+            source_class=self.source_class,
             overlaps_mutation=self.overlaps_mutation,
-            occurs_in_reference=self.occurs_in_reference)
+            occurs_in_reference=self.occurs_in_reference,
+            occurs_in_non_CTA_reference=self.occurs_in_non_CTA_reference)
 
     @classmethod
     def from_peptide(cls, peptide: "Peptide",
@@ -542,14 +568,19 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
 
     Each row is a mapping with the following keys:
 
-      ``peptide``    str             — mutant peptide sequence
+      ``peptide``    str             — candidate peptide sequence
       ``source``     str             — source protein / transcript window
       ``offset``     int             — peptide offset within ``source``
       ``mutant``     Prediction      — leaf prediction for one (allele,
                                        predictor, version) cell
       ``wt``         Prediction|None — parallel WT prediction, optional
-      ``overlaps_mutation``    bool, default False
-      ``occurs_in_reference``  bool, default False
+      ``source_class``               str|None, default None
+      ``overlaps_mutation``          bool,     default False
+      ``occurs_in_reference``        bool,     default False
+      ``occurs_in_non_CTA_reference`` bool,    default False — when
+                                     producers don't yet integrate a
+                                     CTA database, pass the same
+                                     value as ``occurs_in_reference``.
 
     Semantics:
 
@@ -580,16 +611,20 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                 'mutant_preds': [],
                 'wt_preds': [],
                 'wt_peptide': None,
+                'source_class': row.get('source_class'),
                 'overlaps_mutation': False,
                 'occurs_in_reference': False,
+                'occurs_in_non_CTA_reference': False,
             }
             groups[key] = slot
         slot['mutant_preds'].append(row['mutant'])
         slot['overlaps_mutation'] |= bool(row.get('overlaps_mutation', False))
         slot['occurs_in_reference'] |= bool(row.get('occurs_in_reference', False))
+        slot['occurs_in_non_CTA_reference'] |= bool(
+            row.get('occurs_in_non_CTA_reference', False))
         wt = row.get('wt')
         if wt is not None and wt.peptide and wt.peptide == peptide:
-            # Self-WT: comparing the mutant against itself is meaningless.
+            # Self-WT: comparing the candidate against itself is meaningless.
             wt = None
         if wt is not None:
             slot['wt_preds'].append(wt)
@@ -612,7 +647,9 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             offset=slot['offset'],
             predictions=tuple(slot['mutant_preds']),
             comparators=comparators,
+            source_class=slot['source_class'],
             overlaps_mutation=slot['overlaps_mutation'],
             occurs_in_reference=slot['occurs_in_reference'],
+            occurs_in_non_CTA_reference=slot['occurs_in_non_CTA_reference'],
         ))
     return out

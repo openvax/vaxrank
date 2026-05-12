@@ -34,7 +34,9 @@ import pandas as pd
 from mhctools.pred import Prediction
 
 from .epitope_dsl import _kind_for_method
-from .candidate_epitope import candidate_epitopes_from_rows
+from .candidate_epitope import (
+    SOURCE_CLASS_MUTATION, candidate_epitopes_from_rows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +51,12 @@ VAXRANK_COLUMNS = [
     "wt_ic50",
     "percentile_rank",
     "prediction_method_name",
+    "source_class",
     "overlaps_mutation",
     "source_sequence",
     "offset",
     "occurs_in_reference",
+    "occurs_in_non_CTA_reference",
     "predictor_version",
 ]
 
@@ -85,10 +89,12 @@ def _epitope_to_rows(epitope):
             "wt_ic50": wt_ic50,
             "percentile_rank": p.percentile_rank,
             "prediction_method_name": p.predictor_name,
+            "source_class": epitope.source_class,
             "overlaps_mutation": epitope.overlaps_mutation,
             "source_sequence": epitope.source_sequence,
             "offset": epitope.offset,
             "occurs_in_reference": epitope.occurs_in_reference,
+            "occurs_in_non_CTA_reference": epitope.occurs_in_non_CTA_reference,
             "predictor_version": p.predictor_version,
         })
     return rows
@@ -166,14 +172,20 @@ def load_predictions(path):
                 peptide=wt_peptide, value=float(wt_ic50), score=0.0,
                 percentile_rank=None,
             )
+        occurs_in_ref = bool(row.get("occurs_in_reference", False))
         rows.append({
             'peptide': peptide,
             'source': _str_or_empty(row.get("source_sequence", "")),
             'offset': int(row.get("offset", 0)),
             'mutant': mutant,
             'wt': wt,
+            'source_class': _str_or_empty(row.get("source_class", "")) or None,
             'overlaps_mutation': bool(row.get("overlaps_mutation", True)),
-            'occurs_in_reference': bool(row.get("occurs_in_reference", False)),
+            'occurs_in_reference': occurs_in_ref,
+            # Fall back to raw occurs_in_reference when the CSV is
+            # from a pre-3.0 producer that didn't emit this column.
+            'occurs_in_non_CTA_reference': bool(
+                row.get("occurs_in_non_CTA_reference", occurs_in_ref)),
         })
     return candidate_epitopes_from_rows(rows)
 
@@ -273,8 +285,10 @@ def load_pvacseq(path):
         epitope_rows.append({
             'peptide': str(peptide), 'source': "", 'offset': 0,
             'mutant': mutant, 'wt': wt,
+            'source_class': SOURCE_CLASS_MUTATION,
             'overlaps_mutation': True,
             'occurs_in_reference': occurs_in_reference,
+            'occurs_in_non_CTA_reference': occurs_in_reference,
         })
         n_rows += 1
 
@@ -577,11 +591,13 @@ def load_lens(path):
                 'offset': offset,
                 'mutant': mutant,
                 'wt': wt,
+                'source_class': SOURCE_CLASS_MUTATION,
                 # LENS pre-curates rows as neoepitopes and pre-filters
                 # against the patient reference proteome — both flags
                 # are structurally true for any surviving row.
                 'overlaps_mutation': True,
                 'occurs_in_reference': False,
+                'occurs_in_non_CTA_reference': False,
             })
             row_added = True
 

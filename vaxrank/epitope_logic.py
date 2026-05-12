@@ -25,7 +25,10 @@ from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
 from .epitope_dsl import build_filter_node, build_score_node
 from .mutant_protein_fragment import MutantProteinFragment
-from .candidate_epitope import CandidateEpitope, candidate_epitopes_from_rows
+from .candidate_epitope import (
+    CandidateEpitope, SOURCE_CLASS_MUTATION,
+    candidate_epitopes_from_rows,
+)
 from .reference_proteome import ReferenceProteome
 
 logger = logging.getLogger(__name__)
@@ -262,8 +265,14 @@ def predict_epitopes(
             'offset': peptide_start_offset,
             'mutant': mutant_pred,
             'wt': wt_pred,
+            'source_class': SOURCE_CLASS_MUTATION,
             'overlaps_mutation': overlaps_mutation,
             'occurs_in_reference': occurs_in_reference,
+            # ReferenceProteome doesn't yet know about CTAs, so the
+            # CTA-aware flag mirrors the raw one. When the CTA set
+            # is populated (via pirlygenes), this branch will diverge
+            # for CTA-matching peptides.
+            'occurs_in_non_CTA_reference': occurs_in_reference,
         })
 
     logger.info(
