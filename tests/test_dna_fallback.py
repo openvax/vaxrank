@@ -13,13 +13,15 @@
 """Tests for the DNA-only fallback (--allow-dna-only-fallback)."""
 
 import pytest
-from pyensembl import EnsemblRelease
 import varcode
 
 from vaxrank.mutant_protein_fragment import MutantProteinFragment, _find_mutation_region
 
 
-genome = EnsemblRelease(75)
+@pytest.fixture
+def genome(human_genome_grch37):
+    """Alias of the session-scoped GRCh37 handle for this module's tests."""
+    return human_genome_grch37
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +79,7 @@ def test_find_mutation_region_extension():
 # from_variant_dna tests
 # ---------------------------------------------------------------------------
 
-def test_from_variant_dna_substitution():
+def test_from_variant_dna_substitution(genome):
     """BRAF V600E: a clean substitution should produce a valid fragment."""
     v = varcode.Variant(contig='7', start=140453136, ref='A', alt='T', ensembl=genome)
     frag = MutantProteinFragment.from_variant_dna(v, protein_sequence_length=35)
@@ -93,7 +95,7 @@ def test_from_variant_dna_substitution():
     assert len(frag.supporting_reference_transcripts) == 1
 
 
-def test_from_variant_dna_frameshift():
+def test_from_variant_dna_frameshift(genome):
     """TP53 frameshift should produce a valid fragment with extended mutation region."""
     v = varcode.Variant(contig='17', start=7577121, ref='G', alt='', ensembl=genome)
     frag = MutantProteinFragment.from_variant_dna(v, protein_sequence_length=35)
@@ -103,7 +105,7 @@ def test_from_variant_dna_frameshift():
     assert frag.gene_name == "TP53"
 
 
-def test_from_variant_dna_noncoding_returns_none():
+def test_from_variant_dna_noncoding_returns_none(genome):
     """An intronic variant should return None (no protein-modifying effect)."""
     # Use a known intronic variant
     v = varcode.Variant(contig='7', start=140500000, ref='A', alt='T', ensembl=genome)
@@ -117,7 +119,7 @@ def test_from_variant_dna_noncoding_returns_none():
         pytest.skip("Variant is unexpectedly coding")
 
 
-def test_from_variant_dna_short_protein():
+def test_from_variant_dna_short_protein(genome):
     """When the protein is shorter than protein_sequence_length, the window
     should be clamped to the actual protein length."""
     v = varcode.Variant(contig='7', start=140453136, ref='A', alt='T', ensembl=genome)
@@ -133,7 +135,7 @@ def test_from_variant_dna_short_protein():
 # DNA fallback integration with core_logic
 # ---------------------------------------------------------------------------
 
-def test_dna_fallback_disabled_returns_empty():
+def test_dna_fallback_disabled_returns_empty(genome):
     """With allow_dna_only_fallback=False, a variant without RNA should
     produce no vaccine peptides."""
     from types import SimpleNamespace
@@ -152,7 +154,7 @@ def test_dna_fallback_disabled_returns_empty():
     assert result == []
 
 
-def test_dna_fallback_enabled_attempts_construction():
+def test_dna_fallback_enabled_attempts_construction(genome):
     """With allow_dna_only_fallback=True, a variant without RNA should
     attempt DNA-based protein fragment construction."""
     from types import SimpleNamespace

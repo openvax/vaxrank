@@ -11,7 +11,6 @@
 # limitations under the License.
 
 from mhctools import RandomBindingPredictor
-from pyensembl import genome_for_reference_name
 from varcode import Variant
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.epitope_logic import predict_epitopes
@@ -19,8 +18,6 @@ from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.vaccine_peptide import VaccinePeptide, _legacy_score_one
 
 from .common import eq_, ok_
-
-mouse_genome = genome_for_reference_name("GRCm38")
 
 
 def _by_pep_allele(epitopes):
@@ -35,7 +32,7 @@ def _by_pep_allele(epitopes):
     return out
 
 
-def test_reference_peptide_logic():
+def test_reference_peptide_logic(mouse_genome):
 
     wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-201")[0]
 
@@ -76,7 +73,7 @@ def test_reference_peptide_logic():
     eq_(_legacy_score_one(p_not_in_ref.value, p_not_in_ref.percentile_rank),
         vaccine_peptide.mutant_epitope_score)
 
-def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel():
+def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel(mouse_genome):
     """Multi-model TopiaryPredictor (post-2.24, #261) keeps each
     predictor's view of every (peptide, allele) pair. In the new
     CandidateEpitope shape, one CandidateEpitope per (peptide, source, offset) carries
@@ -144,7 +141,7 @@ def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel():
         assert per_method == {'mhcflurry', 'netmhcpan'}
 
 
-def test_mhc_predictor_error():
+def test_mhc_predictor_error(mouse_genome):
     wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-201")[0]
 
     protein_fragment = MutantProteinFragment(
