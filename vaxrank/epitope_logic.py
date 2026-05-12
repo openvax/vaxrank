@@ -25,7 +25,7 @@ from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
 from .epitope_dsl import build_filter_node, build_score_node
 from .mutant_protein_fragment import MutantProteinFragment
-from .peptide_context import CandidateEpitope, CandidateEpitopeBuilder
+from .candidate_epitope import CandidateEpitope, candidate_epitopes_from_rows
 from .reference_proteome import ReferenceProteome
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def slice_epitopes(epitopes, start_offset, end_offset):
     window narrowed to that range and offset rebased.
 
     Drop-in replacement for the legacy ``slice_epitope_predictions``
-    that operated on flat ``EpitopePrediction`` records.
+    that operated on pre-3.0 flat per-(peptide, allele) records.
     """
     sliced = (e.sliced(start_offset, end_offset) for e in epitopes)
     return [e for e in sliced if e is not None]
@@ -81,7 +81,6 @@ def predict_epitopes(
     if epitope_config is None:
         epitope_config = EpitopeConfig()
 
-    builder = CandidateEpitopeBuilder()
     reference_proteome = ReferenceProteome(genome)
 
     # Wrap bare mhctools predictors in a TopiaryPredictor
@@ -98,10 +97,10 @@ def predict_epitopes(
         logger.error(
             'MHC prediction errored for protein fragment %s, with traceback: %s',
             protein_fragment, traceback.format_exc())
-        return builder.epitopes()
+        return []
 
     if predictions_df.empty:
-        return builder.epitopes()
+        return []
 
     # ``default_methods`` (per-kind ``prediction_method_name`` defaults
     # for unqualified DSL refs) is required when multi-predictor data
@@ -117,7 +116,7 @@ def predict_epitopes(
         predictions_df = apply_filter(
             predictions_df, filter_node, default_methods=default_methods)
         if predictions_df.empty:
-            return builder.epitopes()
+            return []
 
     # Evaluate the score expression once; indexed by
     # (source_sequence_name, peptide, peptide_offset, allele) group tuple.
@@ -171,9 +170,11 @@ def predict_epitopes(
                 traceback.format_exc())
 
     # Walk topiary frame rows; build per-(allele, predictor) leaf
-    # ``Prediction`` records and push them into ``builder``. The
-    # builder groups by (peptide, source, offset) into one CandidateEpitope
-    # per peptide position.
+    # ``Prediction`` records into a flat list of row dicts.
+    # ``candidate_epitopes_from_rows`` groups them by
+    # (peptide, source, offset) into one CandidateEpitope per
+    # peptide position at the end.
+    rows = []
     num_total = 0
     num_occurs_in_reference = 0
     num_low_scoring = 0
@@ -255,19 +256,19 @@ def predict_epitopes(
             score=0.0,
             percentile_rank=percentile_rank,
         )
-        builder.add_row(
-            peptide=peptide,
-            source=protein_fragment.amino_acids,
-            offset=peptide_start_offset,
-            mutant=mutant_pred,
-            wt=wt_pred,
-            overlaps_mutation=overlaps_mutation,
-            occurs_in_reference=occurs_in_reference,
-        )
+        rows.append({
+            'peptide': peptide,
+            'source': protein_fragment.amino_acids,
+            'offset': peptide_start_offset,
+            'mutant': mutant_pred,
+            'wt': wt_pred,
+            'overlaps_mutation': overlaps_mutation,
+            'occurs_in_reference': occurs_in_reference,
+        })
 
     logger.info(
         "%d total peptides: %d occur in reference, %d failed score threshold",
         num_total,
         num_occurs_in_reference,
         num_low_scoring)
-    return builder.epitopes()
+    return candidate_epitopes_from_rows(rows)

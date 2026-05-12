@@ -152,7 +152,7 @@ def compute_coverage(
     are skipped — this is a coverage view, not a directory of every
     allele the predictor saw.
 
-    ``epitopes`` is a list of ``vaxrank.peptide_context.CandidateEpitope``
+    ``epitopes`` is a list of ``vaxrank.candidate_epitope.CandidateEpitope``
     objects. Each CandidateEpitope carries its mutant ``Peptide`` with
     nested per-(kind, predictor, version, allele) ``Prediction``
     records — for the same (peptide, allele) we may see a

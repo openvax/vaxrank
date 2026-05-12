@@ -153,7 +153,7 @@ class TemplateDataCreator(object):
         # use predictor-agnostic header names without losing
         # provenance. Today there's only one (pepsickle, see
         # ``vaxrank.processing``); a future per-position predictor
-        # plugged in via the same EpitopePrediction fields would
+        # plugged in via the same flat record fields would
         # show its own name here.
         patient_info['Processing predictor'] = PEPSICKLE_PREDICTOR_NAME
         patient_info['Total number of somatic variants'] = (
@@ -357,7 +357,7 @@ class TemplateDataCreator(object):
         ``self.processing_predictions_by_key`` (built by
         :func:`vaxrank.processing.annotate_processing`), looked up
         by ``(peptide, source, predictor_name)``. Pre-2.23 these
-        lived as ``pepsickle_*`` attributes on the EpitopePrediction
+        lived as ``pepsickle_*`` attributes on the flat record
         itself; the join is the new contract (#272).
         """
         wt_ic50 = self._wt_ic50_for_allele(

@@ -25,7 +25,7 @@ from mhctools.pred import Prediction
 
 from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
 from vaxrank.manufacturability import DEFAULT_MANUFACTURABILITY_RULES
-from vaxrank.peptide_context import CandidateEpitope, Peptide
+from vaxrank.candidate_epitope import CandidateEpitope, Peptide
 from vaxrank.vaccine_peptide import VaccinePeptide
 
 

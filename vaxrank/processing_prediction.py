@@ -19,7 +19,7 @@ kinds are semantically different:
   ``mhctools.ProcessingPredictor`` — no allele axis, depends on
   the peptide's flanking context within its source protein).
 
-Pre-2.22 vaxrank annotated EpitopePrediction objects in place by
+Pre-2.22 vaxrank annotated flat record objects in place by
 adding ``pepsickle_*`` attributes — that conflated the two
 prediction kinds. ``ProcessingPrediction`` (this module) is the
 post-2.22 canonical record; consumers join in by

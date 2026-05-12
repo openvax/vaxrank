@@ -29,7 +29,7 @@ from vaxrank.core_logic import (
 from mhctools.pred import Prediction
 
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
-from vaxrank.peptide_context import COMPARATOR_WT, CandidateEpitope, Peptide
+from vaxrank.candidate_epitope import COMPARATOR_WT, CandidateEpitope, Peptide
 from vaxrank.vaccine_peptide import VaccinePeptide, _legacy_score_one
 
 from .common import eq_, ok_, gt_
@@ -40,7 +40,7 @@ def _make_epitope(peptide, ic50, wt_ic50=None, allele="HLA-A*02:01",
                   method="test", overlaps_mutation=True,
                   occurs_in_reference=False):
     """Build a single-allele CandidateEpitope for tests that previously
-    constructed an EpitopePrediction."""
+    constructed a flat record."""
     src = source if source is not None else peptide
     mutant = Prediction(
         kind='pMHC_affinity', predictor_name=method,

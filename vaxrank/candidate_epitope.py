@@ -171,6 +171,13 @@ class Peptide:
     answering "does the patient's MHC also bind this comparator?"
     — which is the actual safety question for autoimmunity scoring.
 
+    ``sequence`` may be empty for an *anonymous comparator* — pVACseq
+    inputs carry ``IC50 WT`` without ``WT Epitope Seq`` for some
+    rows, and the resulting WT ``Peptide`` keeps the predictions
+    while leaving the sequence blank. Renderers fall back to a
+    blank display; predictions are accessed via
+    ``predictions_flat()``.
+
     See module docstring for the storage shape and disambiguation
     contract.
     """
@@ -389,6 +396,9 @@ class Peptide:
             return None
         if self.offset + len(self.sequence) > end_offset:
             return None
+        # Defensive copy: the nested predictions dict is mutable, so
+        # sharing it across two frozen instances would couple their
+        # equality / hash semantics in surprising ways. Cheap to copy.
         return Peptide(
             sequence=self.sequence,
             n_flank=self.n_flank,
@@ -396,7 +406,7 @@ class Peptide:
             source=self.source[start_offset:end_offset],
             source_name=self.source_name,
             offset=self.offset - start_offset,
-            predictions=self.predictions)
+            predictions=dict(self.predictions))
 
 
 @dataclass(frozen=True)
@@ -477,91 +487,91 @@ class CandidateEpitope:
             occurs_in_reference=self.occurs_in_reference)
 
 
-class CandidateEpitopeBuilder:
-    """Accumulator producers use to assemble ``list[CandidateEpitope]`` one
-    leaf prediction at a time.
+def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
+    """Group leaf predictions into ``CandidateEpitope`` objects.
 
-    ``predict_epitopes`` and the LENS / pVACseq loaders all iterate
-    row-shaped inputs (topiary frame, TSV) and call :meth:`add_row`
-    per (peptide × allele × predictor) record. :meth:`epitopes`
-    finalizes by grouping rows that share a
-    ``(peptide, source, offset)`` key into one ``CandidateEpitope``
-    (mutant ``Peptide`` carrying all leaf Predictions, plus an
-    optional ``wt`` comparator when any WT signal arrived for the
-    group) and returning the list in insertion order.
+    Producers (``predict_epitopes``, LENS / pVACseq loaders) iterate
+    row-shaped inputs (topiary frame, TSV) and build a flat list of
+    row dicts; this function groups them by ``(peptide, source,
+    offset)`` and emits one ``CandidateEpitope`` per group, in
+    first-seen order.
 
-    The builder owns the grouping logic so producers don't reinvent
-    it; ``CandidateEpitope`` itself stays an immutable value type, never a
-    construction-site partial.
+    Each row is a mapping with the following keys:
+
+      ``peptide``    str             — mutant peptide sequence
+      ``source``     str             — source protein / transcript window
+      ``offset``     int             — peptide offset within ``source``
+      ``mutant``     Prediction      — leaf prediction for one (allele,
+                                       predictor, version) cell
+      ``wt``         Prediction|None — parallel WT prediction, optional
+      ``overlaps_mutation``    bool, default False
+      ``occurs_in_reference``  bool, default False
+
+    Semantics:
+
+    - A ``wt`` whose ``peptide`` equals the mutant peptide is treated
+      as no WT signal (self-comparator is meaningless) and dropped.
+    - A ``wt`` whose ``peptide`` is empty (anonymous WT — pVACseq with
+      ``IC50 WT`` but no ``WT Epitope Seq``) is kept; the resulting
+      WT comparator ``Peptide`` carries the predictions but an empty
+      ``sequence``. Downstream renderers display blank for the
+      sequence and use ``predictions_flat()`` for the IC50.
+    - ``overlaps_mutation`` / ``occurs_in_reference`` OR across rows
+      in the same group: any True row makes the group True. The flags
+      are properties of the (peptide, source, offset) position, not
+      of an individual leaf record — if a producer disagrees across
+      rows, OR preserves the True signal rather than depending on
+      iteration order.
     """
-
-    def __init__(self):
-        self._groups: dict = {}
-
-    def add_row(self, *, peptide: str, source: str, offset: int,
-                mutant: "Prediction",
-                wt: Optional["Prediction"] = None,
-                overlaps_mutation: bool = False,
-                occurs_in_reference: bool = False) -> None:
-        """Add one leaf prediction.
-
-        ``mutant`` is the :class:`mhctools.Prediction` for one
-        (allele, predictor) cell of the mutant peptide. ``wt`` is
-        the parallel WT prediction when known; omit or pass
-        ``None`` when no WT signal exists. A ``wt`` whose
-        ``peptide`` equals the mutant peptide is treated as no WT
-        signal (self-comparator is meaningless) and dropped.
-
-        ``overlaps_mutation`` / ``occurs_in_reference`` apply at
-        the (peptide, source, offset) group level — the first row
-        to set them sticks (matches the legacy semantics where
-        these flags were stored redundantly on each per-row record
-        and the adapter took the first).
-        """
-        key = (peptide, source, offset)
-        slot = self._groups.get(key)
+    groups: dict = {}
+    for row in rows:
+        peptide = row['peptide']
+        key = (peptide, row['source'], row['offset'])
+        slot = groups.get(key)
         if slot is None:
             slot = {
                 'peptide': peptide,
-                'source': source,
-                'offset': offset,
+                'source': row['source'],
+                'offset': row['offset'],
                 'mutant_preds': [],
                 'wt_preds': [],
                 'wt_peptide': None,
-                'overlaps_mutation': overlaps_mutation,
-                'occurs_in_reference': occurs_in_reference,
+                'overlaps_mutation': False,
+                'occurs_in_reference': False,
             }
-            self._groups[key] = slot
-        slot['mutant_preds'].append(mutant)
+            groups[key] = slot
+        slot['mutant_preds'].append(row['mutant'])
+        slot['overlaps_mutation'] |= bool(row.get('overlaps_mutation', False))
+        slot['occurs_in_reference'] |= bool(row.get('occurs_in_reference', False))
+        wt = row.get('wt')
         if wt is not None and wt.peptide and wt.peptide == peptide:
+            # Self-WT: comparing the mutant against itself is meaningless.
             wt = None
         if wt is not None:
             slot['wt_preds'].append(wt)
             if slot['wt_peptide'] is None:
                 slot['wt_peptide'] = wt.peptide
 
-    def epitopes(self) -> list["CandidateEpitope"]:
-        """Finalize: emit one ``CandidateEpitope`` per group in insertion order."""
-        out = []
-        for slot in self._groups.values():
-            mutant_pep = Peptide(
-                sequence=slot['peptide'],
+    out = []
+    for slot in groups.values():
+        mutant_pep = Peptide(
+            sequence=slot['peptide'],
+            source=slot['source'],
+            offset=slot['offset'],
+            predictions=tuple(slot['mutant_preds']),
+        )
+        comparators = {}
+        if slot['wt_preds']:
+            comparators[COMPARATOR_WT] = Peptide(
+                sequence=slot['wt_peptide'] or '',
                 source=slot['source'],
                 offset=slot['offset'],
-                predictions=tuple(slot['mutant_preds']),
+                predictions=tuple(slot['wt_preds']),
             )
-            comparators = {}
-            if slot['wt_preds']:
-                comparators[COMPARATOR_WT] = Peptide(
-                    sequence=slot['wt_peptide'] or '',
-                    source=slot['source'],
-                    offset=slot['offset'],
-                    predictions=tuple(slot['wt_preds']),
-                )
-            out.append(CandidateEpitope(
-                mutant=mutant_pep,
-                comparators=comparators,
-                overlaps_mutation=slot['overlaps_mutation'],
-                occurs_in_reference=slot['occurs_in_reference'],
-            ))
-        return out
+        out.append(CandidateEpitope(
+            mutant=mutant_pep,
+            comparators=comparators,
+            overlaps_mutation=slot['overlaps_mutation'],
+            occurs_in_reference=slot['occurs_in_reference'],
+        ))
+    return out

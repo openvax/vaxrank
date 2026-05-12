@@ -19,7 +19,7 @@ import os
 import pytest
 from mhctools.pred import Prediction
 
-from vaxrank.peptide_context import COMPARATOR_WT, CandidateEpitope, Peptide
+from vaxrank.candidate_epitope import COMPARATOR_WT, CandidateEpitope, Peptide
 from vaxrank.epitope_io import (
     predictions_to_dataframe,
     save_predictions,

@@ -1256,11 +1256,11 @@ def run_vaxrank_from_parsed_args(args):
     # Multi-predictor support (#261): mhctools' ``--mhc-predictor`` is
     # nargs='+', so the user can configure
     # ``--mhc-predictor mhcflurry netmhcpan`` and we run both, emitting
-    # one EpitopePrediction per (peptide, allele, predictor). Single-
+    # one flat record per (peptide, allele, predictor). Single-
     # predictor runs unchanged (use the bare predictor; topiary wraps
     # it inside ``predict_epitopes``). Multi-predictor runs use
     # ``topiary.TopiaryPredictor(models=[...])`` so the per-row
-    # ``prediction_method_name`` ends up on every EpitopePrediction.
+    # ``prediction_method_name`` ends up on every flat record.
     predictors_list = predictors_from_args(args)
     if len(predictors_list) == 1:
         mhc_predictor = predictors_list[0]

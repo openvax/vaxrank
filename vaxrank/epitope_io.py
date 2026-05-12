@@ -18,10 +18,10 @@ Supports:
   - pVACseq aggregated TSV (all_epitopes.aggregated.tsv)
   - LENS report TSV
 
-All loader functions emit ``list[vaxrank.peptide_context.CandidateEpitope]``;
+All loader functions emit ``list[vaxrank.candidate_epitope.CandidateEpitope]``;
 the flat per-(peptide, allele, predictor) row shape lives only inside
-the CSV / DataFrame layer for round-trip fidelity. Loaders push
-each row through :class:`~vaxrank.peptide_context.CandidateEpitopeBuilder`,
+the CSV / DataFrame layer for round-trip fidelity. Loaders feed each
+row to :func:`~vaxrank.candidate_epitope.candidate_epitopes_from_rows`,
 which groups by ``(peptide, source, offset)`` into ``CandidateEpitope``
 objects at the end.
 """
@@ -34,7 +34,7 @@ import pandas as pd
 from mhctools.pred import Prediction
 
 from .epitope_dsl import _kind_for_method
-from .peptide_context import CandidateEpitopeBuilder
+from .candidate_epitope import candidate_epitopes_from_rows
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +137,7 @@ def load_predictions(path):
             return ""
         return str(val)
 
-    builder = CandidateEpitopeBuilder()
+    rows = []
     for _, row in df.iterrows():
         wt_ic50 = row.get("wt_ic50")
         if pd.isna(wt_ic50):
@@ -167,15 +167,16 @@ def load_predictions(path):
                 peptide=wt_peptide, value=float(wt_ic50), score=0.0,
                 percentile_rank=None,
             )
-        builder.add_row(
-            peptide=peptide,
-            source=_str_or_empty(row.get("source_sequence", "")),
-            offset=int(row.get("offset", 0)),
-            mutant=mutant, wt=wt,
-            overlaps_mutation=bool(row.get("overlaps_mutation", True)),
-            occurs_in_reference=bool(row.get("occurs_in_reference", False)),
-        )
-    return builder.epitopes()
+        rows.append({
+            'peptide': peptide,
+            'source': _str_or_empty(row.get("source_sequence", "")),
+            'offset': int(row.get("offset", 0)),
+            'mutant': mutant,
+            'wt': wt,
+            'overlaps_mutation': bool(row.get("overlaps_mutation", True)),
+            'occurs_in_reference': bool(row.get("occurs_in_reference", False)),
+        })
+    return candidate_epitopes_from_rows(rows)
 
 
 # ── pVACseq import ───────────────────────────────────────────────────────────
@@ -199,7 +200,7 @@ def load_pvacseq(path):
         Gene name, Genomic variant, Tier, Ref Match, RNA Expr, DNA VAF,
         vaxrank_score
     list of CandidateEpitope
-        One ``vaxrank.peptide_context.CandidateEpitope`` per unique
+        One ``vaxrank.candidate_epitope.CandidateEpitope`` per unique
         ``(peptide, source_sequence, offset)`` group; pVACseq rows
         typically map 1:1 since each row carries its own allele.
     """
@@ -210,7 +211,7 @@ def load_pvacseq(path):
         raise ValueError(
             f"pVACseq file {path} missing required columns: {missing}")
 
-    builder = CandidateEpitopeBuilder()
+    epitope_rows = []
     report_rows = []
     n_rows = 0
     for _, row in df.iterrows():
@@ -270,12 +271,12 @@ def load_pvacseq(path):
                 allele=str(allele), peptide=str(wt_peptide),
                 value=wt_ic50, score=0.0, percentile_rank=None,
             )
-        builder.add_row(
-            peptide=str(peptide), source="", offset=0,
-            mutant=mutant, wt=wt,
-            overlaps_mutation=True,
-            occurs_in_reference=occurs_in_reference,
-        )
+        epitope_rows.append({
+            'peptide': str(peptide), 'source': "", 'offset': 0,
+            'mutant': mutant, 'wt': wt,
+            'overlaps_mutation': True,
+            'occurs_in_reference': occurs_in_reference,
+        })
         n_rows += 1
 
         # Build report row preserving pVACseq metadata
@@ -297,7 +298,7 @@ def load_pvacseq(path):
         })
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
-    epitopes = builder.epitopes()
+    epitopes = candidate_epitopes_from_rows(epitope_rows)
     logger.info(
         "Loaded %d epitope(s) (%d row(s)) from pVACseq file %s",
         len(epitopes), n_rows, path)
@@ -451,7 +452,7 @@ def normalize_hla_allele(allele):
 def load_lens(path):
     """
     Import a LENS report TSV and return a neoepitope report DataFrame
-    plus a list of ``vaxrank.peptide_context.CandidateEpitope`` objects.
+    plus a list of ``vaxrank.candidate_epitope.CandidateEpitope`` objects.
 
     LENS column schemas vary across versions (v1.4, v1.5, v1.9+); we sniff
     which predictors a given file actually emits rather than requiring a
@@ -507,7 +508,7 @@ def load_lens(path):
         _pick_canonical_predictor(affinity_preds) if affinity_preds else None)
     chosen = list(detected)
 
-    builder = CandidateEpitopeBuilder()
+    epitope_rows = []
     report_rows = []
     for _, row in df.iterrows():
         peptide = row.get("peptide", "")
@@ -562,24 +563,27 @@ def load_lens(path):
             wt = None
             if wt_ic50 is not None:
                 # LENS doesn't emit a WT peptide column — pass an
-                # empty string. ``CandidateEpitopeBuilder`` keeps the WT
-                # context (anonymous-WT signal) because wt_ic50 is
-                # non-None even though the sequence is unknown.
+                # empty string. ``candidate_epitopes_from_rows`` keeps
+                # the WT context (anonymous-WT signal) because wt_ic50
+                # is non-None even though the sequence is unknown.
                 wt = Prediction(
                     kind=d.kind, predictor_name=d.tool,
                     predictor_version=d.version, allele=allele,
                     peptide="", value=wt_ic50, score=0.0,
                     percentile_rank=None,
                 )
-            builder.add_row(
-                peptide=str(peptide), source=pep_context, offset=offset,
-                mutant=mutant, wt=wt,
+            epitope_rows.append({
+                'peptide': str(peptide),
+                'source': pep_context,
+                'offset': offset,
+                'mutant': mutant,
+                'wt': wt,
                 # LENS pre-curates rows as neoepitopes and pre-filters
                 # against the patient reference proteome — both flags
                 # are structurally true for any surviving row.
-                overlaps_mutation=True,
-                occurs_in_reference=False,
-            )
+                'overlaps_mutation': True,
+                'occurs_in_reference': False,
+            })
             row_added = True
 
         if not row_added:
@@ -595,7 +599,7 @@ def load_lens(path):
         ))
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
-    epitopes = builder.epitopes()
+    epitopes = candidate_epitopes_from_rows(epitope_rows)
     logger.info(
         "Loaded %d epitope(s) (%d row(s) × %d predictor(s)) from %s",
         len(epitopes), len(report_df), len(chosen), path)

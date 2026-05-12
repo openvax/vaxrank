@@ -14,7 +14,7 @@
 
 Pins:
 - Annotation is purely additive — never mutates ranking, and (post-2.23,
-  see #272 Phase B) never mutates the EpitopePrediction objects either.
+  see #272 Phase B) never mutates the flat record objects either.
   Per-(peptide, source) records land on
   :class:`vaxrank.processing_prediction.ProcessingPrediction` and reach
   report writers via the ``processing_predictions_by_key`` map.
@@ -29,7 +29,7 @@ Pins:
 
 from mhctools.pred import Prediction
 
-from vaxrank.peptide_context import CandidateEpitope, Peptide
+from vaxrank.candidate_epitope import CandidateEpitope, Peptide
 from vaxrank.processing import (
     _component_probs,
     annotate_processing,
@@ -94,13 +94,13 @@ def test_component_probs_out_of_range_returns_none_tuple():
     assert max_internal is None
 
 
-# ---- Annotation (integration with EpitopePrediction) ---------------------
+# ---- Annotation (integration with flat records) ---------------------
 
 def test_annotate_processing_attaches_continuous_scores():
     """Each (peptide, source) pair lands in the returned
     ProcessingPrediction map with c_term / max_internal /
     processing as floats. Post-2.23 (#272 Phase B) the
-    EpitopePrediction is *not* mutated — readers consume the map."""
+    flat record is *not* mutated — readers consume the map."""
     source = "AAAAKLMNPVAAAA"  # 14 aa
     # Peptide KLMNPV at offset 4, length 6
     probs = [0.0, 0.0, 0.0, 0.05,   # source positions 0-3
@@ -125,7 +125,7 @@ def test_annotate_processing_attaches_continuous_scores():
 def test_annotate_processing_returns_processing_prediction_map():
     """Post-2.22 ``annotate_processing`` returns a tuple of
     ``(n_annotated, processing_predictions_by_key)`` — the map is
-    the canonical record (decoupled from EpitopePrediction).
+    the canonical record (decoupled from flat record).
     Each entry is a ``ProcessingPrediction`` keyed on
     ``(peptide, source, predictor_name)``."""
     from vaxrank.processing_prediction import ProcessingPrediction
@@ -283,7 +283,7 @@ def test_load_default_predictor_returns_none_when_mhctools_missing(
 
 def test_ascii_report_surfaces_each_predictor_in_per_epitope_table():
     """End-to-end render: when a VaccinePeptide carries two
-    EpitopePredictions for the same (peptide, allele) — one per
+    flat records for the same (peptide, allele) — one per
     predictor — both rows appear in the rendered ASCII table with
     a ``Predictor`` column distinguishing them. Pre-2.24 the
     VCF/BAM path collapsed via dict-overwrite so this test would
@@ -612,7 +612,7 @@ def test_warns_when_peptide_not_in_pep_context(caplog):
 def test_dedup_by_content_when_duplicate_objects(monkeypatch):
     """The CLI annotation dispatcher dedups by both id() AND a
     content key (peptide, allele, source, offset). A future loader
-    that copies an EpitopePrediction into a VP would produce two
+    that copies a flat record into a VP would produce two
     distinct objects with the same content; only one should be
     annotated. Uses pytest's monkeypatch fixture so cleanup is
     automatic even if the test fails."""
@@ -627,7 +627,7 @@ def test_dedup_by_content_when_duplicate_objects(monkeypatch):
     # call into it without recursing through the patched name.
     real_annotate = proc_mod.annotate_processing
 
-    # Two distinct EpitopePrediction objects with identical content.
+    # Two distinct flat record objects with identical content.
     source = "AAAAKLMNPVAAAA"
     pred_a = _ep("KLMNPV", source, offset=4)
     pred_b = _ep("KLMNPV", source, offset=4)  # different object, same content

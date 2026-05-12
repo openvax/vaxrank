@@ -22,7 +22,7 @@ from mhctools.pred import Prediction
 from varcode import Variant
 
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
-from vaxrank.peptide_context import COMPARATOR_WT, CandidateEpitope, Peptide
+from vaxrank.candidate_epitope import COMPARATOR_WT, CandidateEpitope, Peptide
 from vaxrank.vaccine_peptide import VaccinePeptide
 
 
@@ -203,7 +203,7 @@ def test_vaccine_peptide_tuple_coercion_on_rules():
 
 def test_vaccine_peptide_json_roundtrip_with_real_fragment():
     """Full to_json / from_json with a real MutantProteinFragment and
-    EpitopePredictions. This is the path the CLI writes out — we want
+    flat records. This is the path the CLI writes out — we want
     __post_init__ to re-derive the mutant/wildtype split after load and
     scores to re-compute consistently."""
     mutant = _sample_epitope(peptide_sequence="SIINFEKL", ic50=500.0)

@@ -45,7 +45,7 @@ from varcode import Variant
 
 from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
 from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
-from vaxrank.peptide_context import CandidateEpitope, Peptide
+from vaxrank.candidate_epitope import CandidateEpitope, Peptide
 
 
 def _make_vaccine_peptide(

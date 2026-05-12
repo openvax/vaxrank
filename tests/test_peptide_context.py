@@ -4,8 +4,8 @@
 #
 #       http://www.apache.org/licenses/LICENSE-2.0
 
-"""Tests for ``vaxrank.peptide_context`` (replaces #282 / supersedes
-the flat ``EpitopePrediction``).
+"""Tests for ``vaxrank.candidate_epitope`` (replaces #282 / supersedes
+the pre-3.0 flat record).
 
 Pins:
 - Native nested storage: ``{kind: {predictor: {version: tuple}}}``.
@@ -27,7 +27,7 @@ import pytest
 
 from mhctools.pred import Prediction
 
-from vaxrank.peptide_context import (
+from vaxrank.candidate_epitope import (
     COMPARATOR_NEAREST_SELF,
     COMPARATOR_WT,
     CandidateEpitope,

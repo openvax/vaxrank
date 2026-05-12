@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import pandas as pd
 from mhctools.pred import Prediction
 
-from vaxrank.peptide_context import COMPARATOR_WT, CandidateEpitope, Peptide
+from vaxrank.candidate_epitope import COMPARATOR_WT, CandidateEpitope, Peptide
 from vaxrank.report import make_minimal_neoepitope_report
 
 

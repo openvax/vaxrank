@@ -36,7 +36,7 @@ three scores:
 ``ProcessingPrediction`` is the canonical record (see
 :mod:`vaxrank.processing_prediction`). Report writers join in by
 ``(peptide, source, predictor_name)`` at render time. Pre-2.22
-vaxrank mutated ``EpitopePrediction`` objects in place with
+vaxrank mutated pre-3.0 flat records in place with
 ``pepsickle_*`` fields; that mutation was removed in 2.23 (closes
 #272). All readers consume the ``processing_predictions_by_key``
 map returned here.

@@ -28,7 +28,7 @@ from scalar fields (``binding_affinity_cutoff``, ``logistic_epitope_score_*``,
 ``scoring_mode``, ``percentile_rank_cutoff``). The default affinity-mode
 score uses topiary 5.1's :class:`LogisticNormalizedExpr` so the output is in
 ``[0, 1]`` and matches the legacy
-:meth:`vaxrank.epitope_prediction.EpitopePrediction.logistic_epitope_score`
+``logistic_epitope_score`` (pre-3.0)
 byte-for-byte.
 
 Multi-model inputs (e.g. LENS with both MHCflurry and netMHCpan producing
@@ -89,7 +89,7 @@ def _kind_for_method(method_name):
 
 
 def epitopes_to_topiary_df(epitopes):
-    """Convert a list of :class:`vaxrank.peptide_context.CandidateEpitope` into the
+    """Convert a list of :class:`vaxrank.candidate_epitope.CandidateEpitope` into the
     topiary long-format DataFrame consumed by
     :class:`topiary.ranking.EvalContext` and
     :func:`topiary.ranking.apply_filter`.

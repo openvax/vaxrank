@@ -30,7 +30,7 @@ from vaxrank.coverage import (
     select_antigens_for_coverage,
     summarize_construction_decisions,
 )
-from vaxrank.peptide_context import CandidateEpitope, Peptide
+from vaxrank.candidate_epitope import CandidateEpitope, Peptide
 
 
 def _ep(peptide, allele, *, presentation_pct=None, affinity_pct=None,
