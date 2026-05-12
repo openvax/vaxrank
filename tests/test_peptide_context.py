@@ -748,6 +748,52 @@ def test_candidate_epitope_freezes_mutation_context():
         candidate.overlaps_mutation = False  # type: ignore
 
 
+# ---- Hash contract ------------------------------------------------------
+
+
+def test_peptide_hash_is_position_identity():
+    """``__hash__`` covers ``(sequence, source_sequence, offset)`` —
+    NOT all fields. Two peptides at the same position with different
+    flanks / predictions hash equal (legal collision) but compare
+    unequal."""
+    a = Peptide(sequence='SIINFEKL', source_sequence='AAASIINFEKL', offset=3)
+    b = Peptide(sequence='SIINFEKL', source_sequence='AAASIINFEKL', offset=3,
+                n_flank='AAA')
+    assert hash(a) == hash(b)
+    assert a != b
+
+
+def test_peptide_usable_in_set():
+    """Trivially: instances go into sets / dict keys. Before the
+    custom ``__hash__`` this raised ``TypeError`` on the mutable
+    ``predictions`` dict."""
+    peptides = {
+        Peptide(sequence='SIINFEKL'),
+        Peptide(sequence='SIINFEKL'),  # same position → dedup'd
+        Peptide(sequence='SIINFEKM'),
+    }
+    assert len(peptides) == 2
+
+
+def test_candidate_epitope_inherits_hash_scheme():
+    """``@dataclass(frozen=True)`` regenerates ``__hash__`` on every
+    subclass, so ``CandidateEpitope`` must redefine the position-
+    identity hash. This test guards against a future refactor
+    forgetting the override (in which case the regenerated hash
+    would fail at runtime on the mutable ``comparators`` dict)."""
+    p = Peptide(sequence='SIINFEKL', source_sequence='AAASIINFEKL', offset=3)
+    ce = CandidateEpitope(
+        sequence='SIINFEKL', source_sequence='AAASIINFEKL', offset=3)
+    assert hash(p) == hash(ce)
+    # Confirms that adding comparators / flags doesn't change the
+    # hash — position identity, not full-field identity.
+    ce_with_extras = CandidateEpitope(
+        sequence='SIINFEKL', source_sequence='AAASIINFEKL', offset=3,
+        comparators={COMPARATOR_WT: Peptide(sequence='SIINFEKM')},
+        overlaps_mutation=True)
+    assert hash(ce) == hash(ce_with_extras)
+
+
 # ---- sliced() ----------------------------------------------------------
 
 

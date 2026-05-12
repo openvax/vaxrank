@@ -553,8 +553,8 @@ class CandidateEpitope(Peptide):
         # See ``Peptide.sliced`` for why predictions get a deep copy.
         # Comparators are independent ``Peptide`` instances and pass
         # through by reference — slicing the candidate doesn't slice
-        # them. They're already deep-shared with the source
-        # ``CandidateEpitope`` and that's the documented contract.
+        # them. The sliced instance shares the same ``comparators``
+        # dict as the source; that's the documented contract.
         return CandidateEpitope(
             sequence=self.sequence,
             n_flank=self.n_flank,
