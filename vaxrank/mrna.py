@@ -443,7 +443,7 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
                 continue
             for k, ep in enumerate(tops):
                 suffix = "_epitope" if len(tops) == 1 else "_epitope%d" % (k + 1)
-                yield name + suffix, ep.peptide_sequence
+                yield name + suffix, ep.sequence
         else:
             window = select_antigen_window(
                 fragment, name, max_antigen_length_aa)

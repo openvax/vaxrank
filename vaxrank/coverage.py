@@ -153,7 +153,7 @@ def compute_coverage(
     allele the predictor saw.
 
     ``epitopes`` is a list of ``vaxrank.peptide_context.Epitope``
-    objects. Each Epitope carries its mutant ``PeptideContext`` with
+    objects. Each Epitope carries its mutant ``Peptide`` with
     nested per-(kind, predictor, version, allele) ``Prediction``
     records — for the same (peptide, allele) we may see a
     ``pMHC_presentation`` record (mhcflurry-pres) and a
@@ -169,7 +169,7 @@ def compute_coverage(
     # multi-kind evidence within each Epitope.
     by_pep_allele: dict[tuple, dict] = {}
     for e in epitopes:
-        peptide = e.mutant.peptide_sequence
+        peptide = e.mutant.sequence
         if not peptide:
             continue
         for p in e.mutant.predictions_flat():

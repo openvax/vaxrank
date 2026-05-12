@@ -73,7 +73,7 @@ def predict_epitopes(
     list[Epitope]
         One ``Epitope`` per (peptide, peptide_offset) — each carrying
         all per-(allele, predictor) ``mhctools.Prediction`` records
-        in its mutant ``PeptideContext``, plus the WT comparator
+        in its mutant ``Peptide``, plus the WT comparator
         context when the peptide overlaps the mutation.
 
     Uses the input genome to evaluate whether the epitope occurs in reference.

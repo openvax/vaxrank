@@ -22,7 +22,7 @@ from mhctools.pred import Prediction
 from varcode import Variant
 
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
-from vaxrank.peptide_context import COMPARATOR_WT, Epitope, PeptideContext
+from vaxrank.peptide_context import COMPARATOR_WT, Epitope, Peptide
 from vaxrank.vaccine_peptide import VaccinePeptide
 
 
@@ -64,13 +64,13 @@ def _sample_epitope(
         peptide='SIINFEKL', value=2000.0, score=0.0,
         percentile_rank=None)
     return Epitope(
-        mutant=PeptideContext(
-            peptide_sequence=peptide_sequence,
-            source_sequence='SSIINFEQL', offset=1,
+        mutant=Peptide(
+            sequence=peptide_sequence,
+            source='SSIINFEQL', offset=1,
             predictions=(mutant_pred,)),
-        comparators={COMPARATOR_WT: PeptideContext(
-            peptide_sequence='SIINFEKL',
-            source_sequence='SSIINFEQL', offset=1,
+        comparators={COMPARATOR_WT: Peptide(
+            sequence='SIINFEKL',
+            source='SSIINFEQL', offset=1,
             predictions=(wt_pred,))},
         overlaps_mutation=overlaps_mutation,
         occurs_in_reference=occurs_in_reference)
@@ -101,7 +101,7 @@ class _FakeFragment:
 
 
 def test_epitope_pickle_roundtrip():
-    """``Epitope`` and its nested ``PeptideContext`` survive pickle."""
+    """``Epitope`` and its nested ``Peptide`` survive pickle."""
     e = _sample_epitope()
     assert pickle.loads(pickle.dumps(e)) == e
 
@@ -111,7 +111,7 @@ def test_epitope_length_is_derived():
     peptide sequence."""
     e = _sample_epitope(peptide_sequence="SIINFEQLL")
     assert e.length == 9
-    assert e.peptide_sequence == "SIINFEQLL"
+    assert e.sequence == "SIINFEQLL"
 
 
 # ---- MutantProteinFragment --------------------------------------------

@@ -104,7 +104,7 @@ def test_slp_emits_full_fragment_when_mutation_exceeds_cap():
 
 
 def test_minimal_epitope_uses_top_prediction():
-    epitope = SimpleNamespace(peptide_sequence="KLAGHSPVL")
+    epitope = SimpleNamespace(sequence="KLAGHSPVL")
     pairs = [_variant_pair(
         "KLQGHSAPVLDVIVNCDESLLAS", gene_name='GENEA',
         epitopes=[epitope])]
@@ -119,7 +119,7 @@ def test_minimal_epitope_skips_peptides_without_predictions():
         _variant_pair("KLQGHSAPVLDVIVN", gene_name='GENEA', epitopes=[]),
         _variant_pair(
             "MNNVDEILGRWESPV", start=200, gene_name='GENEB',
-            epitopes=[SimpleNamespace(peptide_sequence="MNNVDEILG")]),
+            epitopes=[SimpleNamespace(sequence="MNNVDEILG")]),
     ]
     constructs = assemble_peptide_constructs(
         pairs, options=PeptideConstructConfig(mode='minimal_epitope'))
@@ -187,7 +187,7 @@ def test_minimal_epitope_manufacturability_matches_emitted_sequence():
     # The emitted sequence is the predicted epitope, not the full
     # source vaccine peptide; manufacturability must follow the emitted
     # sequence.
-    epitope = SimpleNamespace(peptide_sequence="KAAAAAA")  # no cysteines
+    epitope = SimpleNamespace(sequence="KAAAAAA")  # no cysteines
     pairs = [_variant_pair(
         "KAAAAAACCC",  # source has cysteines; emitted does not
         epitopes=[epitope])]

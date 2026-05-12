@@ -45,7 +45,7 @@ from varcode import Variant
 
 from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
 from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
-from vaxrank.peptide_context import Epitope, PeptideContext
+from vaxrank.peptide_context import Epitope, Peptide
 
 
 def _make_vaccine_peptide(
@@ -66,9 +66,9 @@ def _make_vaccine_peptide(
     )
     epitopes = [
         Epitope(
-            mutant=PeptideContext(
-                peptide_sequence=seq,
-                source_sequence=amino_acids,
+            mutant=Peptide(
+                sequence=seq,
+                source=amino_acids,
                 offset=amino_acids.find(seq) if seq in amino_acids else 0,
                 predictions=(Prediction(
                     kind='pMHC_affinity', predictor_name='stub',

@@ -14,7 +14,7 @@
 from .core_logic import run_vaxrank
 from .epitope_config import EpitopeConfig
 from .epitope_logic import predict_epitopes
-from .peptide_context import Epitope, PeptideContext
+from .peptide_context import Epitope, Peptide
 from .vaccine_config import VaccineConfig
 from .vaccine_peptide import VaccinePeptide
 from .version import __version__
@@ -23,7 +23,7 @@ __all__ = [
     "__version__",
     "Epitope",
     "EpitopeConfig",
-    "PeptideContext",
+    "Peptide",
     "VaccineConfig",
     "VaccinePeptide",
     "predict_epitopes",

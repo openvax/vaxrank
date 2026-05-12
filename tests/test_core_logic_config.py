@@ -29,7 +29,7 @@ from vaxrank.core_logic import (
 from mhctools.pred import Prediction
 
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
-from vaxrank.peptide_context import COMPARATOR_WT, Epitope, PeptideContext
+from vaxrank.peptide_context import COMPARATOR_WT, Epitope, Peptide
 from vaxrank.vaccine_peptide import VaccinePeptide, _legacy_score_one
 
 from .common import eq_, ok_, gt_
@@ -52,12 +52,12 @@ def _make_epitope(peptide, ic50, wt_ic50=None, allele="HLA-A*02:01",
             kind='pMHC_affinity', predictor_name=method,
             predictor_version='', allele=allele, peptide=peptide,
             value=wt_ic50, score=0.0, percentile_rank=None)
-        comparators[COMPARATOR_WT] = PeptideContext(
-            peptide_sequence=peptide, source_sequence=src, offset=offset,
+        comparators[COMPARATOR_WT] = Peptide(
+            sequence=peptide, source=src, offset=offset,
             predictions=(wt,))
     return Epitope(
-        mutant=PeptideContext(
-            peptide_sequence=peptide, source_sequence=src, offset=offset,
+        mutant=Peptide(
+            sequence=peptide, source=src, offset=offset,
             predictions=(mutant,)),
         comparators=comparators,
         overlaps_mutation=overlaps_mutation,
@@ -286,7 +286,7 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
     def fake_slice_epitopes(epitopes, start_offset, end_offset):
         amino_acids = "AAAA" if start_offset == 0 else "BBBB"
         return [SimpleNamespace(
-            mutant=SimpleNamespace(source_sequence=amino_acids))]
+            mutant=SimpleNamespace(source=amino_acids))]
 
     mock_variant = MagicMock()
     mock_variant.short_description = "test_variant"

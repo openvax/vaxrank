@@ -8,16 +8,16 @@
 
 Two layers:
 
-  ``PeptideContext`` — one peptide sequence + flanks + multi-axis
+  ``Peptide`` — one amino-acid sequence + flanks + multi-axis
   binding predictions. Generic shape used for the antigenic
   candidate AND for any reference comparator (WT pair, nearest_self,
   nearest_vital_self, nearest_nonCTA, nearest_oncovirus, …).
 
   ``Epitope`` — one sliding-window position from a
-  VaccinePeptide. Holds the mutant ``PeptideContext`` plus a
+  VaccinePeptide. Holds the mutant ``Peptide`` plus a
   ``comparators`` dict keyed by name. Future safety / homology
   features (#254 / #257 / #258) populate comparators with their
-  respective contexts; today only ``'wt'`` is canonical.
+  respective peptides; today only ``'wt'`` is canonical.
 
 ## Storage shape
 
@@ -161,7 +161,7 @@ COMPARATOR_NEAREST_ONCOVIRUS = 'nearest_oncovirus'  # closest oncoviral peptide 
 
 
 @dataclass(frozen=True)
-class PeptideContext:
+class Peptide:
     """One peptide sequence + flanking residues + (optional) MHC
     binding predictions.
 
@@ -175,13 +175,13 @@ class PeptideContext:
     contract.
     """
 
-    peptide_sequence: str
+    sequence: str
     n_flank: str = ''
     c_flank: str = ''
     # Source provenance — for the mutant: the assembled mutant
     # protein fragment. For ``nearest_self``: the matching self
     # protein. For ``nearest_oncovirus``: the viral genome / ORF.
-    source_sequence: str = ''
+    source: str = ''
     source_name: str = ''         # gene / virus / "self_proteome" / …
     offset: int = 0
     # Nested storage; flat ``list[Prediction]`` is auto-grouped on
@@ -376,25 +376,24 @@ class PeptideContext:
             _nan_safe(p.percentile_rank))))
 
     def sliced(self, start_offset: int,
-               end_offset: int) -> Optional["PeptideContext"]:
-        """Return a new ``PeptideContext`` whose source window is
-        narrowed to ``[start_offset, end_offset)``. Returns ``None``
-        if the peptide doesn't fit inside the window.
+               end_offset: int) -> Optional["Peptide"]:
+        """Return a new ``Peptide`` whose source window is narrowed
+        to ``[start_offset, end_offset)``. Returns ``None`` if the
+        peptide doesn't fit inside the window.
 
         The peptide sequence, flanks, source name, and predictions
-        are preserved — only ``source_sequence`` is sliced and
-        ``offset`` is rebased relative to the new source start.
-        Replaces the legacy ``EpitopePrediction.slice_source_sequence``.
+        are preserved — only ``source`` is sliced and ``offset`` is
+        rebased relative to the new source start.
         """
         if self.offset < start_offset:
             return None
-        if self.offset + len(self.peptide_sequence) > end_offset:
+        if self.offset + len(self.sequence) > end_offset:
             return None
-        return PeptideContext(
-            peptide_sequence=self.peptide_sequence,
+        return Peptide(
+            sequence=self.sequence,
             n_flank=self.n_flank,
             c_flank=self.c_flank,
-            source_sequence=self.source_sequence[start_offset:end_offset],
+            source=self.source[start_offset:end_offset],
             source_name=self.source_name,
             offset=self.offset - start_offset,
             predictions=self.predictions)
@@ -422,18 +421,18 @@ class Epitope:
       ``'nearest_oncovirus'``   closest match in oncovirus
                                 reference genomes (#258)
 
-    Each value is a ``PeptideContext`` carrying its own peptide
-    sequence + (optionally) its own MHC predictions. When a
-    comparator carries predictions, scorers can ask "does the
-    patient's MHC also bind this comparator?" — the actual safety
-    question for autoimmunity / off-target presentation.
+    Each value is a ``Peptide`` carrying its own sequence +
+    (optionally) its own MHC predictions. When a comparator carries
+    predictions, scorers can ask "does the patient's MHC also bind
+    this comparator?" — the actual safety question for autoimmunity
+    / off-target presentation.
     """
 
-    mutant: PeptideContext
+    mutant: Peptide
     comparators: dict = field(default_factory=dict)
 
     # Mutation-specific context. Lives at this level (not on
-    # ``PeptideContext``) because it's about the mutant-vs-source
+    # ``Peptide``) because it's about the mutant-vs-source
     # relationship, not a property of the peptide itself.
     overlaps_mutation: bool = False
     occurs_in_reference: bool = False
@@ -441,24 +440,24 @@ class Epitope:
     # Convenience: most call sites today read the WT alongside the
     # mutant. Common-case shortcut.
     @property
-    def wt(self) -> Optional[PeptideContext]:
+    def wt(self) -> Optional[Peptide]:
         return self.comparators.get(COMPARATOR_WT)
 
-    def comparator(self, name: str) -> Optional[PeptideContext]:
+    def comparator(self, name: str) -> Optional[Peptide]:
         """Generic accessor for any comparator. Returns ``None``
         when the comparator isn't present for this candidate
         (typical when a safety scorer hasn't run yet)."""
         return self.comparators.get(name)
 
-    # Convenience pass-throughs to the mutant context — most
+    # Convenience pass-throughs to the mutant peptide — most
     # callers read these on the candidate level.
     @property
-    def peptide_sequence(self) -> str:
-        return self.mutant.peptide_sequence
+    def sequence(self) -> str:
+        return self.mutant.sequence
 
     @property
     def length(self) -> int:
-        return len(self.mutant.peptide_sequence)
+        return len(self.mutant.sequence)
 
     def sliced(self, start_offset: int,
                end_offset: int) -> Optional["Epitope"]:
@@ -545,22 +544,22 @@ class EpitopeBuilder:
         """Finalize: emit one ``Epitope`` per group in insertion order."""
         out = []
         for slot in self._groups.values():
-            mutant_ctx = PeptideContext(
-                peptide_sequence=slot['peptide'],
-                source_sequence=slot['source'],
+            mutant_pep = Peptide(
+                sequence=slot['peptide'],
+                source=slot['source'],
                 offset=slot['offset'],
                 predictions=tuple(slot['mutant_preds']),
             )
             comparators = {}
             if slot['wt_preds']:
-                comparators[COMPARATOR_WT] = PeptideContext(
-                    peptide_sequence=slot['wt_peptide'] or '',
-                    source_sequence=slot['source'],
+                comparators[COMPARATOR_WT] = Peptide(
+                    sequence=slot['wt_peptide'] or '',
+                    source=slot['source'],
                     offset=slot['offset'],
                     predictions=tuple(slot['wt_preds']),
                 )
             out.append(Epitope(
-                mutant=mutant_ctx,
+                mutant=mutant_pep,
                 comparators=comparators,
                 overlaps_mutation=slot['overlaps_mutation'],
                 occurs_in_reference=slot['occurs_in_reference'],

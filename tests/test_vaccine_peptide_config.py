@@ -25,7 +25,7 @@ from mhctools.pred import Prediction
 
 from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
 from vaxrank.manufacturability import DEFAULT_MANUFACTURABILITY_RULES
-from vaxrank.peptide_context import Epitope, PeptideContext
+from vaxrank.peptide_context import Epitope, Peptide
 from vaxrank.vaccine_peptide import VaccinePeptide
 
 
@@ -55,9 +55,9 @@ def _make_mutant_epitope(ic50=10.0, peptide="A" * 9, source="A" * 25,
         percentile_rank=0.5,
     )
     return Epitope(
-        mutant=PeptideContext(
-            peptide_sequence=peptide,
-            source_sequence=source,
+        mutant=Peptide(
+            sequence=peptide,
+            source=source,
             offset=offset,
             predictions=(pred,),
         ),

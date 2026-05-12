@@ -183,7 +183,7 @@ def _antigen_records(ranked_vaccine_peptides, antigen_content,
                 # When epitopes_per_antigen=1 keep the legacy
                 # ``<name>_epitope`` suffix; for >1 disambiguate.
                 suffix = "_epitope" if len(tops) == 1 else "_epitope%d" % (k + 1)
-                yield base_name + suffix, ep.peptide_sequence
+                yield base_name + suffix, ep.sequence
         else:
             # mutation_spanning: pick a mutation-centered window
             yield base_name, select_antigen_window(

@@ -30,7 +30,7 @@ from vaxrank.coverage import (
     select_antigens_for_coverage,
     summarize_construction_decisions,
 )
-from vaxrank.peptide_context import Epitope, PeptideContext
+from vaxrank.peptide_context import Epitope, Peptide
 
 
 def _ep(peptide, allele, *, presentation_pct=None, affinity_pct=None,
@@ -51,8 +51,8 @@ def _ep(peptide, allele, *, presentation_pct=None, affinity_pct=None,
             predictor_version='', allele=allele, peptide=peptide,
             value=None, score=0.0, percentile_rank=affinity_pct))
     return Epitope(
-        mutant=PeptideContext(
-            peptide_sequence=peptide, predictions=tuple(preds)),
+        mutant=Peptide(
+            sequence=peptide, predictions=tuple(preds)),
         overlaps_mutation=True, occurs_in_reference=False)
 
 

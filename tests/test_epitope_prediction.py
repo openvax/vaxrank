@@ -31,7 +31,7 @@ def _by_pep_allele(epitopes):
         for p in e.mutant.predictions_flat():
             if p.kind != 'pMHC_affinity':
                 continue
-            out[(e.mutant.peptide_sequence, p.allele)] = (e, p)
+            out[(e.mutant.sequence, p.allele)] = (e, p)
     return out
 
 

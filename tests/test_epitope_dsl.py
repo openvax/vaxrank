@@ -288,7 +288,7 @@ def test_builder_groups_by_peptide_offset_source():
     epitopes = builder.epitopes()
     assert len(epitopes) == 1
     e = epitopes[0]
-    assert e.mutant.peptide_sequence == 'SIINFEKL'
+    assert e.mutant.sequence == 'SIINFEKL'
     assert e.mutant.offset == 4
     assert sorted(e.mutant.alleles_for('pMHC_affinity')) == [
         'HLA-A*02:01', 'HLA-B*07:02', 'HLA-C*03:04']
@@ -304,7 +304,7 @@ def test_builder_separates_distinct_peptides():
     _add_row(builder, peptide='SIINFEKM', offset=12, wt_ic50=None)
     epitopes = builder.epitopes()
     assert len(epitopes) == 2
-    assert {e.mutant.peptide_sequence for e in epitopes} == {
+    assert {e.mutant.sequence for e in epitopes} == {
         'SIINFEKL', 'SIINFEKM'}
 
 
@@ -322,7 +322,7 @@ def test_builder_builds_wt_comparator_when_peptides_differ():
     assert len(epitopes) == 1
     e = epitopes[0]
     assert e.wt is not None
-    assert e.wt.peptide_sequence == 'SIINFEKM'
+    assert e.wt.sequence == 'SIINFEKM'
     wt_preds = e.wt.predictions_for('pMHC_affinity')
     assert {p.allele for p in wt_preds} == {'HLA-A*02:01', 'HLA-B*07:02'}
     assert {p.value for p in wt_preds} == {500.0, 400.0}

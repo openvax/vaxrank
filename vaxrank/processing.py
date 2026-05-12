@@ -213,7 +213,7 @@ def annotate_processing(epitopes, predictor=None,
     # Group by source so we score each unique sequence exactly once.
     by_source = {}
     for e in epitopes_list:
-        source = e.mutant.source_sequence
+        source = e.mutant.source
         if not source:
             continue
         by_source.setdefault(source, []).append(e)
@@ -280,7 +280,7 @@ def annotate_processing(epitopes, predictor=None,
         if not seq_probs or len(seq_probs) < len(source):
             continue
         for e in epis:
-            peptide = e.mutant.peptide_sequence or ''
+            peptide = e.mutant.sequence or ''
             if not peptide:
                 continue
             offset = _resolve_peptide_offset(source, peptide, e.mutant)
@@ -344,7 +344,7 @@ def annotate_processing(epitopes, predictor=None,
 def _resolve_peptide_offset(source, peptide, mutant_ctx):
     """Locate the peptide's offset within its source.
 
-    Trust the mutant ``PeptideContext.offset`` first; re-locate via
+    Trust the mutant ``Peptide.offset`` first; re-locate via
     closest-substring search when the declared offset doesn't match.
     Warn when re-location moves the offset by more than the
     drift threshold (3aa absolute, 5% of source length, whichever is

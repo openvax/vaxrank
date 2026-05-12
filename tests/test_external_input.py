@@ -523,7 +523,7 @@ def test_lens_to_ranked_vaccine_peptides_round_trip():
         assert vp.mutant_protein_fragment.amino_acids
         # All three fixture rows have pep_context longer than peptide
         assert (len(vp.mutant_protein_fragment.amino_acids)
-                > len(vp.epitopes[0].mutant.peptide_sequence))
+                > len(vp.epitopes[0].mutant.sequence))
         # Mutation span is non-empty inside the fragment
         assert (vp.mutant_protein_fragment.mutant_amino_acid_end_offset
                 > vp.mutant_protein_fragment.mutant_amino_acid_start_offset)

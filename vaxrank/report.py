@@ -300,8 +300,8 @@ class TemplateDataCreator(object):
         predictor name from a config knob and fall back as needed.
         """
         key = (
-            epitope.mutant.peptide_sequence or '',
-            epitope.mutant.source_sequence or '',
+            epitope.mutant.sequence or '',
+            epitope.mutant.source or '',
             PEPSICKLE_PREDICTOR_NAME,
         )
         return self.processing_predictions_by_key.get(key)
@@ -365,9 +365,9 @@ class TemplateDataCreator(object):
         wt_ic50_str = (
             '%.2f nM' % wt_ic50 if wt_ic50 is not None else 'No prediction')
         wt_peptide_sequence = (
-            epitope.wt.peptide_sequence if epitope.wt is not None else '')
+            epitope.wt.sequence if epitope.wt is not None else '')
         epitope_data = OrderedDict([
-            ('Sequence', epitope.mutant.peptide_sequence),
+            ('Sequence', epitope.mutant.sequence),
             # ``Predictor`` names which MHC affinity tool produced
             # ``IC50`` / ``Score`` / ``WT IC50`` for this row —
             # mhcflurry / netmhcpan / mhcflurry-presentation / etc.
@@ -738,7 +738,7 @@ def make_minimal_neoepitope_report(
                 epitopes = epitopes[:num_epitopes_per_peptide]
             for epitope in epitopes:
                 wt_peptide_sequence = (
-                    epitope.wt.peptide_sequence
+                    epitope.wt.sequence
                     if epitope.wt is not None else '')
                 affinity_leaves = [
                     p for p in epitope.mutant.predictions_flat()
@@ -759,7 +759,7 @@ def make_minimal_neoepitope_report(
                     row = OrderedDict([
                         ('Allele', p.allele),
                         ('Mutant peptide sequence',
-                            epitope.mutant.peptide_sequence),
+                            epitope.mutant.sequence),
                         ('Score', vaccine_peptide.mutant_epitope_score),
                         ('Predicted mutant pMHC affinity',
                             '%.2f nM' % p.value),
