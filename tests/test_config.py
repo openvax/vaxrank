@@ -150,7 +150,7 @@ def test_vaccine_config_default_values():
     eq_(config.preferred_peptide_length, 25)
     eq_(config.padding_around_mutation, 5)
     eq_(config.max_vaccine_peptides_per_variant, 1)
-    eq_(config.num_mutant_epitopes_to_keep, 1000)
+    eq_(config.num_target_epitopes_to_keep, 1000)
     eq_(config.score_fraction_of_best, DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST)
 
 
@@ -162,13 +162,13 @@ def test_vaccine_config_custom_values():
         max_peptide_length=30,
         padding_around_mutation=10,
         max_vaccine_peptides_per_variant=3,
-        num_mutant_epitopes_to_keep=500,
+        num_target_epitopes_to_keep=500,
         score_fraction_of_best=0.95,
     )
     eq_(config.preferred_peptide_length, 30)
     eq_(config.padding_around_mutation, 10)
     eq_(config.max_vaccine_peptides_per_variant, 3)
-    eq_(config.num_mutant_epitopes_to_keep, 500)
+    eq_(config.num_target_epitopes_to_keep, 500)
     eq_(config.score_fraction_of_best, 0.95)
 
 
@@ -203,13 +203,13 @@ min_peptide_length: 40
 max_peptide_length: 40
 padding_around_mutation: 8
 max_vaccine_peptides_per_variant: 2
-num_mutant_epitopes_to_keep: 2000
+num_target_epitopes_to_keep: 2000
 """
     config = msgspec.yaml.decode(yaml_content, type=VaccineConfig)
     eq_(config.preferred_peptide_length, 40)
     eq_(config.padding_around_mutation, 8)
     eq_(config.max_vaccine_peptides_per_variant, 2)
-    eq_(config.num_mutant_epitopes_to_keep, 2000)
+    eq_(config.num_target_epitopes_to_keep, 2000)
 
 
 def test_vaccine_config_yaml_decode_partial():
@@ -408,7 +408,7 @@ def test_vaccine_config_from_args_no_config_file_no_cli_args():
     eq_(config.preferred_peptide_length, 25)
     eq_(config.padding_around_mutation, 5)
     eq_(config.max_vaccine_peptides_per_variant, 1)
-    eq_(config.num_mutant_epitopes_to_keep, 1000)
+    eq_(config.num_target_epitopes_to_keep, 1000)
 
 
 def test_vaccine_config_from_args_cli_override_vaccine_peptide_length():
@@ -437,7 +437,7 @@ def test_vaccine_config_from_args_cli_override_all_values():
     eq_(config.preferred_peptide_length, 30)
     eq_(config.padding_around_mutation, 10)
     eq_(config.max_vaccine_peptides_per_variant, 5)
-    eq_(config.num_mutant_epitopes_to_keep, 500)
+    eq_(config.num_target_epitopes_to_keep, 500)
 
 
 def test_vaccine_config_from_args_legacy_mutation_namespace_attr():
@@ -478,7 +478,7 @@ vaccine_peptides:
         eq_(config.preferred_peptide_length, 40)
         eq_(config.padding_around_mutation, 8)
         eq_(config.max_vaccine_peptides_per_variant, 3)
-        eq_(config.num_mutant_epitopes_to_keep, 2000)
+        eq_(config.num_target_epitopes_to_keep, 2000)
     finally:
         os.unlink(config_path)
 
@@ -560,7 +560,7 @@ vaccine_peptides:
         eq_(config.preferred_peptide_length, 31)
         eq_(config.padding_around_mutation, 9)
         eq_(config.max_vaccine_peptides_per_variant, 2)
-        eq_(config.num_mutant_epitopes_to_keep, 42)
+        eq_(config.num_target_epitopes_to_keep, 42)
         eq_(config.score_fraction_of_best, 0.95)
     finally:
         os.unlink(config_path)
@@ -1324,8 +1324,8 @@ def test_vaccine_config_rejects_negative_max_peptides():
 
 
 def test_vaccine_config_rejects_negative_epitopes_to_keep():
-    with pytest.raises(ValueError, match="num_mutant_epitopes_to_keep"):
-        VaccineConfig(num_mutant_epitopes_to_keep=-1)
+    with pytest.raises(ValueError, match="num_target_epitopes_to_keep"):
+        VaccineConfig(num_target_epitopes_to_keep=-1)
 
 
 def test_vaccine_config_rejects_score_fraction_zero():
@@ -1346,8 +1346,8 @@ def test_vaccine_config_allows_zero_max_peptides_per_variant():
 
 def test_vaccine_config_allows_zero_epitopes_to_keep():
     """0 means keep all — should be allowed."""
-    config = VaccineConfig(num_mutant_epitopes_to_keep=0)
-    eq_(config.num_mutant_epitopes_to_keep, 0)
+    config = VaccineConfig(num_target_epitopes_to_keep=0)
+    eq_(config.num_target_epitopes_to_keep, 0)
 
 
 def test_epitope_config_allows_zero_min_score():
@@ -1386,7 +1386,7 @@ vaccine_peptides:
 # =============================================================================
 
 def test_extract_vaccine_config_kwargs_errors_on_conflicting_epitope_keep():
-    """Setting num_mutant_epitopes_to_keep via both paths should error."""
+    """Setting num_target_epitopes_to_keep via both paths should error."""
     from vaxrank.config.loader import extract_vaccine_config_kwargs
 
     config = {
@@ -1405,13 +1405,13 @@ def test_extract_vaccine_config_kwargs_accepts_single_epitope_keep_path():
         "epitopes": {"top_epitopes_per_candidate": 10},
     }
     kwargs_a = extract_vaccine_config_kwargs(config_a)
-    eq_(kwargs_a["num_mutant_epitopes_to_keep"], 10)
+    eq_(kwargs_a["num_target_epitopes_to_keep"], 10)
 
     config_b = {
         "vaccine_peptides": {"max_epitopes_per_candidate": 20},
     }
     kwargs_b = extract_vaccine_config_kwargs(config_b)
-    eq_(kwargs_b["num_mutant_epitopes_to_keep"], 20)
+    eq_(kwargs_b["num_target_epitopes_to_keep"], 20)
 
 
 # ----- per-modality config section --------------------------------------

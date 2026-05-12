@@ -30,10 +30,10 @@ demote manufacturability below tie-breakers, or drop it entirely.
 """
 
 
-def _mutant_epitope_score_rule(peptide):
+def _target_epitope_score_rule(peptide):
     # Sum of normalized MHC binding scores across kept mutant epitopes.
     # Rounded to 6 digits so floating-point noise can't act as a tiebreaker.
-    return -round(peptide.mutant_epitope_score, 6)
+    return -round(peptide.target_epitope_score, 6)
 
 
 def _n_alt_reads_rule(peptide):
@@ -47,9 +47,9 @@ def _n_alt_reads_supporting_rule(peptide):
     return -peptide.mutant_protein_fragment.n_alt_reads_supporting_protein_sequence
 
 
-def _wildtype_epitope_score_rule(peptide):
+def _self_epitope_score_rule(peptide):
     # Non-mutant MHC binding score — we want this SMALL (already positive-signed).
-    return round(peptide.wildtype_epitope_score, 6)
+    return round(peptide.self_epitope_score, 6)
 
 
 def _n_mutant_amino_acids_rule(peptide):
@@ -63,10 +63,10 @@ def _mutation_distance_from_edge_rule(peptide):
 
 
 RANKING_RULE_REGISTRY = {
-    "mutant_epitope_score": _mutant_epitope_score_rule,
+    "target_epitope_score": _target_epitope_score_rule,
     "n_alt_reads": _n_alt_reads_rule,
     "n_alt_reads_supporting": _n_alt_reads_supporting_rule,
-    "wildtype_epitope_score": _wildtype_epitope_score_rule,
+    "self_epitope_score": _self_epitope_score_rule,
     "n_mutant_amino_acids": _n_mutant_amino_acids_rule,
     "mutation_distance_from_edge": _mutation_distance_from_edge_rule,
     # "manufacturability" is a sentinel handled by compute_ranking_tuple
@@ -83,11 +83,11 @@ MANUFACTURABILITY_SENTINEL = "manufacturability"
 # essential (2 rules) + manufacturability (expanded inline) + extra (4 rules).
 # Do not reorder without updating the parametrized parity test.
 DEFAULT_RANKING_RULES = (
-    "mutant_epitope_score",
+    "target_epitope_score",
     "n_alt_reads",
     MANUFACTURABILITY_SENTINEL,
     "n_alt_reads_supporting",
-    "wildtype_epitope_score",
+    "self_epitope_score",
     "n_mutant_amino_acids",
     "mutation_distance_from_edge",
 )

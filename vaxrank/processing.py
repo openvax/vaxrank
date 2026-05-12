@@ -36,10 +36,10 @@ three scores:
 ``ProcessingPrediction`` is the canonical record (see
 :mod:`vaxrank.processing_prediction`). Report writers join in by
 ``(peptide, source, predictor_name)`` at render time. Pre-2.22
-vaxrank ALSO mutated ``EpitopePrediction`` objects in place with
-``pepsickle_*`` fields; that mutation is gone in 2.23 (closes
-#272). All readers must consume the
-``processing_predictions_by_key`` map returned here.
+vaxrank mutated pre-3.0 flat records in place with
+``pepsickle_*`` fields; that mutation was removed in 2.23 (closes
+#272). All readers consume the ``processing_predictions_by_key``
+map returned here.
 
 The annotations are purely additive — vaccine ranking is unaffected.
 Reports surface the three columns when at least one prediction in
@@ -169,18 +169,19 @@ def _load_default_predictor(human_only=False, threshold=0.5):
 # Public entry point
 # ----------------------------------------------------------------------------
 
-def annotate_processing(predictions, predictor=None,
+def annotate_processing(epitopes, predictor=None,
                         human_only=False, threshold=0.5):
     """Build a map of pepsickle ``ProcessingPrediction`` records for
-    the given EpitopePredictions.
+    the given ``CandidateEpitope`` objects.
 
     Parameters
     ----------
-    predictions : iterable of EpitopePrediction
-        Each prediction is processed against its ``source_sequence``
-        to compute one ProcessingPrediction. EpitopePrediction
-        objects are NOT mutated (was the case pre-2.23 — see #272).
-        Predictions with no usable source sequence are skipped.
+    epitopes : iterable of CandidateEpitope
+        Each epitope is processed against its mutant
+        ``source_sequence`` to compute one ProcessingPrediction.
+        CandidateEpitope objects are NOT mutated — readers consume the
+        returned map.
+        Epitopes with no usable source sequence are skipped.
     predictor : optional, object with a ``cleavage_probs(sequence) ->
         list[float]`` method
         Test seam. When None (default), constructs
@@ -198,24 +199,24 @@ def annotate_processing(predictions, predictor=None,
     tuple
         ``(n_annotated, processing_predictions_by_key)``.
 
-        * ``n_annotated`` (int): number of predictions successfully
+        * ``n_annotated`` (int): number of epitopes successfully
           scored.
         * ``processing_predictions_by_key`` (dict): keyed on
           ``(peptide_sequence, source_sequence, predictor_name)`` —
           the canonical record. Empty dict when nothing was annotated.
     """
-    predictions_list = list(predictions)
+    epitopes_list = list(epitopes)
     processing_predictions: dict[tuple, ProcessingPrediction] = {}
-    if not predictions_list:
+    if not epitopes_list:
         return 0, processing_predictions
 
     # Group by source so we score each unique sequence exactly once.
     by_source = {}
-    for p in predictions_list:
-        source = getattr(p, 'source_sequence', None) or ''
+    for e in epitopes_list:
+        source = e.source_sequence
         if not source:
             continue
-        by_source.setdefault(source, []).append(p)
+        by_source.setdefault(source, []).append(e)
     if not by_source:
         return 0, processing_predictions
 
@@ -274,15 +275,15 @@ def annotate_processing(predictions, predictor=None,
     # upstream-bug filing.
     n_skipped_peptide_not_in_context = 0
     skipped_examples = []
-    for source, preds in by_source.items():
+    for source, epis in by_source.items():
         seq_probs = probs_by_source.get(source)
         if not seq_probs or len(seq_probs) < len(source):
             continue
-        for p in preds:
-            peptide = p.peptide_sequence or ''
+        for e in epis:
+            peptide = e.sequence or ''
             if not peptide:
                 continue
-            offset = _resolve_peptide_offset(source, peptide, p)
+            offset = _resolve_peptide_offset(source, peptide, e)
             if offset is None:
                 n_skipped_peptide_not_in_context += 1
                 if len(skipped_examples) < 3:
@@ -324,26 +325,26 @@ def annotate_processing(predictions, predictor=None,
     if n_annotated:
         logger.info(
             "Pepsickle credibility tagging: annotated %d / %d "
-            "EpitopePrediction(s) across %d unique source sequence(s).",
-            n_annotated, len(predictions_list), len(by_source))
+            "CandidateEpitope(s) across %d unique source sequence(s).",
+            n_annotated, len(epitopes_list), len(by_source))
     if n_skipped_peptide_not_in_context:
         ex_peptide, ex_source = skipped_examples[0]
         logger.warning(
             "Pepsickle credibility tagging: skipped %d / %d "
-            "EpitopePrediction(s) because the peptide is not a "
-            "substring of its pep_context source — peptide and "
-            "pep_context were built from different isoforms / "
-            "annotation snapshots. Example: peptide=%r not found "
-            "in pep_context=%r.",
-            n_skipped_peptide_not_in_context, len(predictions_list),
+            "CandidateEpitope(s) because the peptide is not a substring "
+            "of its pep_context source — peptide and pep_context "
+            "were built from different isoforms / annotation "
+            "snapshots. Example: peptide=%r not found in "
+            "pep_context=%r.",
+            n_skipped_peptide_not_in_context, len(epitopes_list),
             ex_peptide, ex_source)
     return n_annotated, processing_predictions
 
 
-def _resolve_peptide_offset(source, peptide, prediction):
+def _resolve_peptide_offset(source, peptide, mutant_ctx):
     """Locate the peptide's offset within its source.
 
-    Trust the prediction's declared ``offset`` first; re-locate via
+    Trust the mutant ``Peptide.offset`` first; re-locate via
     closest-substring search when the declared offset doesn't match.
     Warn when re-location moves the offset by more than the
     drift threshold (3aa absolute, 5% of source length, whichever is
@@ -352,7 +353,7 @@ def _resolve_peptide_offset(source, peptide, prediction):
 
     Returns the offset (int) or None when the peptide isn't in the source.
     """
-    declared = getattr(prediction, 'offset', None) or 0
+    declared = mutant_ctx.offset or 0
     length = len(peptide)
     if (declared + length <= len(source)
             and source[declared:declared + length] == peptide):

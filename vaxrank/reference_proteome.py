@@ -384,7 +384,7 @@ class ReferenceProteome:
             Maximum kmer length. If None, derived from epitope_lengths.
 
         epitope_lengths : collection of int, optional
-            Epitope lengths being predicted. Used to derive kmer range
+            CandidateEpitope lengths being predicted. Used to derive kmer range
             when min/max not explicitly set.
         """
         if epitope_lengths and (min_kmer_length is None or max_kmer_length is None):

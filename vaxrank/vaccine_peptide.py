@@ -11,12 +11,17 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field
-from operator import attrgetter
 from typing import Any, Optional
 
 import numpy as np
 from serializable import DataclassSerializable
 
+from .config.defaults import (
+    DEFAULT_BINDING_AFFINITY_CUTOFF,
+    DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT,
+    DEFAULT_LOGISTIC_EPITOPE_SCORE_WIDTH,
+    DEFAULT_PERCENTILE_RANK_CUTOFF,
+)
 from .manufacturability import (
     ManufacturabilityScores,
     compute_manufacturability_tuple,
@@ -25,31 +30,66 @@ from .ranking import compute_ranking_tuple
 from .vaccine_config import COMBINED_SCORE_MODES, DEFAULT_COMBINED_SCORE_MODE
 
 
+def _legacy_score_one(ic50, percentile_rank, *,
+                      midpoint=DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT,
+                      width=DEFAULT_LOGISTIC_EPITOPE_SCORE_WIDTH,
+                      ic50_cutoff=DEFAULT_BINDING_AFFINITY_CUTOFF,
+                      scoring_mode="affinity",
+                      percentile_rank_cutoff=DEFAULT_PERCENTILE_RANK_CUTOFF):
+    """Per-prediction logistic score used by ``VaccinePeptide`` to sum
+    scores across the leaf ``mhctools.Prediction`` records inside
+    each ``CandidateEpitope``.
+
+    Kept as a free function so the math stays in one place. The
+    topiary DSL's default ``score_expr`` produces byte-identical
+    output (pinned by ``test_default_score_matches_legacy_*``); a
+    follow-up will route ``VaccinePeptide``'s score aggregation
+    through ``score_predictions`` directly and this helper goes away.
+    """
+    if scoring_mode == "percentile_rank":
+        if percentile_rank is None:
+            return 0.0
+        rank = float(percentile_rank)
+        if rank >= percentile_rank_cutoff:
+            return 0.0
+        return max(0.0, 1.0 - rank / percentile_rank_cutoff)
+
+    if ic50 >= ic50_cutoff:
+        return 0.0
+    rescaled = (float(ic50) - midpoint) / width
+    logistic = 1.0 / (1.0 + np.exp(rescaled))
+    normalizer = 1.0 / (1.0 + np.exp(-midpoint / width))
+    return logistic / normalizer
+
+
 @dataclass
 class VaccinePeptide(DataclassSerializable):
     """
     VaccinePeptide combines the sequence information of MutantProteinFragment
     with MHC binding predictions for subsequences of the protein fragment.
 
-    The resulting lists of mutant and wildtype epitope predictions
-    are sorted by affinity.
+    The resulting lists of target and self ``CandidateEpitope`` objects
+    are sorted by best (target) affinity.
 
     Parameters
     ----------
     mutant_protein_fragment : MutantProteinFragment
 
-    epitope_predictions : list of EpitopePrediction
+    epitopes : list of CandidateEpitope
 
-    num_mutant_epitopes_to_keep : int or None
+    num_target_epitopes_to_keep : int or None
         If None or 0 then keep all mutant epitopes.
 
     epitope_score_params : dict or None
-        Parameters passed to EpitopePrediction.logistic_epitope_score.
+        Parameters for the per-prediction score (midpoint, width,
+        ic50_cutoff, scoring_mode, percentile_rank_cutoff). Matches
+        the topiary DSL default-score knobs byte-for-byte.
 
-    sort_predictions_by : str
-        Field of EpitopePrediction used for sorting epitope predictions
-        overlapping mutation in ascending order. Can be either 'ic50'
-        or 'percentile_rank'.
+    sort_epitopes_by : str
+        Field of the mutant's best affinity ``mhctools.Prediction``
+        used for sorting epitopes overlapping mutation in ascending
+        order. Can be either 'ic50' (Prediction.value) or
+        'percentile_rank'.
 
     manufacturability_thresholds : dict or None
         Hydropathy thresholds for peptide synthesis difficulty scoring.
@@ -81,10 +121,10 @@ class VaccinePeptide(DataclassSerializable):
     """
 
     mutant_protein_fragment: Any
-    epitope_predictions: list
-    num_mutant_epitopes_to_keep: Optional[int] = None
+    epitopes: list = field(default_factory=list)
+    num_target_epitopes_to_keep: Optional[int] = None
     epitope_score_params: Optional[dict] = None
-    sort_predictions_by: str = "ic50"
+    sort_epitopes_by: str = "ic50"
     manufacturability_thresholds: Optional[dict] = None
     manufacturability_rules: Optional[tuple] = None
     combined_score_mode: Optional[str] = None
@@ -99,10 +139,10 @@ class VaccinePeptide(DataclassSerializable):
     # serialized form. `init=False` keeps them out of the generated
     # __init__ signature; default=None gives them a sane pre-computed
     # value for any pathway that inspects fields before __post_init__.
-    mutant_epitope_predictions: list = field(default_factory=list, init=False, repr=False)
-    wildtype_epitope_predictions: list = field(default_factory=list, init=False, repr=False)
-    wildtype_epitope_score: float = field(default=0.0, init=False, repr=False)
-    mutant_epitope_score: float = field(default=0.0, init=False, repr=False)
+    target_epitopes: list = field(default_factory=list, init=False, repr=False)
+    self_epitopes: list = field(default_factory=list, init=False, repr=False)
+    self_epitope_score: float = field(default=0.0, init=False, repr=False)
+    target_epitope_score: float = field(default=0.0, init=False, repr=False)
     manufacturability_scores: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
@@ -135,38 +175,77 @@ class VaccinePeptide(DataclassSerializable):
         else:
             self._combined_score_expr_ast = None
 
-        sort_key = attrgetter(self.sort_predictions_by)
+        # Sort key over CandidateEpitope: pick the strongest pMHC_affinity
+        # record across all predictors / alleles inside the CandidateEpitope.
+        # Legacy semantic: sort by the SINGLE best (peptide, allele,
+        # predictor) row's ic50 or percentile_rank — which here is
+        # the min over the flat leaf set. ``best_affinity()`` would
+        # raise on multi-predictor Epitopes (cross-predictor ranking
+        # ambiguous), so we iterate ``predictions_flat()`` + filter
+        # by kind and take ``min``. Epitopes with no affinity record
+        # sort to the end via +inf.
+        sort_by = self.sort_epitopes_by
 
-        # only keep the top k epitopes
-        self.mutant_epitope_predictions = sorted(
-            [
-                p for p in self.epitope_predictions
-                if p.overlaps_mutation and not p.occurs_in_reference
-            ],
-            key=sort_key,
+        def _epitope_sort_key(e):
+            affinity_leaves = [
+                p for p in e.predictions_flat()
+                if p.kind == 'pMHC_affinity']
+            if not affinity_leaves:
+                return float("inf")
+            if sort_by == "percentile_rank":
+                ranks = [
+                    p.percentile_rank for p in affinity_leaves
+                    if p.percentile_rank is not None
+                    and not (isinstance(p.percentile_rank, float)
+                             and np.isnan(p.percentile_rank))]
+                return min(ranks) if ranks else float("inf")
+            return min(p.value for p in affinity_leaves)
+
+        # Universal target/self split — source-agnostic. An epitope
+        # whose exact sequence appears in the patient's reference
+        # proteome (``occurs_in_reference``) is unsafe by default
+        # (would cross-react with self on normal tissue). For
+        # mutation-derived candidates this matches the historical
+        # behavior: peptides identical to WT land in self_epitopes
+        # because they're in the reference. Viral peptides absent
+        # from the reference land in target_epitopes. CTAs land in
+        # self_epitopes today; when consumers opt into the
+        # CTA-aware ``occurs_in_non_CTA_reference`` flag, CTAs will
+        # move to target_epitopes without changing this code.
+        self.target_epitopes = sorted(
+            [e for e in self.epitopes if not e.occurs_in_reference],
+            key=_epitope_sort_key,
         )
-        if self.num_mutant_epitopes_to_keep:
-            self.mutant_epitope_predictions = (
-                self.mutant_epitope_predictions[: self.num_mutant_epitopes_to_keep]
+        if self.num_target_epitopes_to_keep:
+            self.target_epitopes = (
+                self.target_epitopes[: self.num_target_epitopes_to_keep]
             )
 
-        self.wildtype_epitope_predictions = sorted(
-            [
-                p for p in self.epitope_predictions
-                if not p.overlaps_mutation or p.occurs_in_reference
-            ],
-            key=sort_key,
+        self.self_epitopes = sorted(
+            [e for e in self.epitopes if e.occurs_in_reference],
+            key=_epitope_sort_key,
         )
 
-        def epitope_score(prediction):
-            return prediction.logistic_epitope_score(**self.epitope_score_params)
+        # Score each CandidateEpitope by summing the per-prediction logistic
+        # score across all of its mutant affinity records. Iterates
+        # ``predictions_flat()`` + kind-filters rather than
+        # ``predictions_for(kind=...)`` so multi-predictor data
+        # doesn't trip the predictor-disambiguation check.
+        params = self.epitope_score_params
 
-        self.wildtype_epitope_score = sum(
-            epitope_score(p) for p in self.wildtype_epitope_predictions
-        )
-        self.mutant_epitope_score = sum(
-            epitope_score(p) for p in self.mutant_epitope_predictions
-        )
+        def _epitope_total_score(e):
+            return sum(
+                _legacy_score_one(
+                    ic50=p.value,
+                    percentile_rank=p.percentile_rank,
+                    **params)
+                for p in e.predictions_flat()
+                if p.kind == 'pMHC_affinity')
+
+        self.self_epitope_score = sum(
+            _epitope_total_score(e) for e in self.self_epitopes)
+        self.target_epitope_score = sum(
+            _epitope_total_score(e) for e in self.target_epitopes)
 
         self.manufacturability_scores = ManufacturabilityScores.from_amino_acids(
             self.mutant_protein_fragment.amino_acids
@@ -223,8 +302,8 @@ class VaccinePeptide(DataclassSerializable):
         """
         return compute_ranking_tuple(self, rules=self.ranking_rules)
 
-    def contains_mutant_epitopes(self):
-        return len(self.mutant_epitope_predictions) > 0
+    def contains_target_epitopes(self):
+        return len(self.target_epitopes) > 0
 
     @property
     def expression_score(self):
@@ -243,7 +322,7 @@ class VaccinePeptide(DataclassSerializable):
             from .combined_score_dsl import evaluate_combined_score
             return evaluate_combined_score(
                 self._combined_score_expr_ast, self)
-        epitope = self.mutant_epitope_score
+        epitope = self.target_epitope_score
         if self.combined_score_mode == "reads_times_epitope":
             return float(self.mutant_protein_fragment.n_alt_reads) * epitope
         if self.combined_score_mode == "epitope_only":
@@ -252,19 +331,17 @@ class VaccinePeptide(DataclassSerializable):
         return self.expression_score * epitope
 
     def to_dict(self):
-        # The persisted form combines the filtered mutant + wildtype lists
-        # back into a single `epitope_predictions` list. Also trims fields
-        # that match their defaults so the JSON stays small and older
-        # readers don't see keys they don't understand.
-        epitope_predictions = (
-            self.mutant_epitope_predictions + self.wildtype_epitope_predictions
-        )
+        # The persisted form combines the filtered target + self lists
+        # back into a single `epitopes` list. Also trims fields that match
+        # their defaults so the JSON stays small and older readers don't
+        # see keys they don't understand.
+        epitopes = self.target_epitopes + self.self_epitopes
         d = {
             "mutant_protein_fragment": self.mutant_protein_fragment,
-            "epitope_predictions": epitope_predictions,
-            "num_mutant_epitopes_to_keep": self.num_mutant_epitopes_to_keep,
+            "epitopes": epitopes,
+            "num_target_epitopes_to_keep": self.num_target_epitopes_to_keep,
             "epitope_score_params": self.epitope_score_params,
-            "sort_predictions_by": self.sort_predictions_by,
+            "sort_epitopes_by": self.sort_epitopes_by,
         }
         if self.manufacturability_thresholds:
             d["manufacturability_thresholds"] = self.manufacturability_thresholds

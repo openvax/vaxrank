@@ -133,7 +133,7 @@ def test_construct_name_format_consistent_across_modalities():
         amino_acids="KLQGHSAPVLDVIVN", gene_name='G',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=15)
     peptide = SimpleNamespace(
-        mutant_protein_fragment=fragment, mutant_epitope_predictions=[],
+        mutant_protein_fragment=fragment, target_epitopes=[],
         manufacturability_scores=None)
     pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
 
@@ -329,7 +329,7 @@ def test_both_modalities_emit_compatible_manifests(tmp_path):
         amino_acids="KLQGHSAPVLDVIVN", gene_name='GENE',
         mutant_amino_acid_start_offset=5, mutant_amino_acid_end_offset=10)
     peptide = SimpleNamespace(
-        mutant_protein_fragment=fragment, mutant_epitope_predictions=[],
+        mutant_protein_fragment=fragment, target_epitopes=[],
         manufacturability_scores=None)
     pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
 
@@ -375,7 +375,7 @@ def test_iter_named_antigens_naming_format():
         amino_acids="KLQGH", gene_name='GENE',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
     peptide = SimpleNamespace(
-        mutant_protein_fragment=fragment, mutant_epitope_predictions=[])
+        mutant_protein_fragment=fragment, target_epitopes=[])
     pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
     [(name, frag, pep)] = list(iter_named_antigens(pairs))
     assert name == "GENE_1_1000_A_T"
@@ -454,7 +454,7 @@ def test_peptide_and_mrna_names_match_for_same_input():
         amino_acids="KLQGHSAPVLDVIVN", gene_name='GENE',
         mutant_amino_acid_start_offset=5, mutant_amino_acid_end_offset=10)
     peptide = SimpleNamespace(
-        mutant_protein_fragment=fragment, mutant_epitope_predictions=[],
+        mutant_protein_fragment=fragment, target_epitopes=[],
         manufacturability_scores=None)
     pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
 

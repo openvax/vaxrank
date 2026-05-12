@@ -26,11 +26,42 @@ from vaxrank.core_logic import (
     vaccine_peptides_for_variant,
     vaccine_peptides_from_epitopes,
 )
+from mhctools.pred import Prediction
+
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
-from vaxrank.epitope_prediction import EpitopePrediction
-from vaxrank.vaccine_peptide import VaccinePeptide
+from vaxrank.candidate_epitope import COMPARATOR_WT, CandidateEpitope, Peptide
+from vaxrank.vaccine_peptide import VaccinePeptide, _legacy_score_one
 
 from .common import eq_, ok_, gt_
+
+
+def _make_epitope(peptide, ic50, wt_ic50=None, allele="HLA-A*02:01",
+                  source_sequence=None, offset=0, percentile_rank=0.5,
+                  method="test", overlaps_mutation=True,
+                  occurs_in_reference=False):
+    """Build a single-allele CandidateEpitope for tests that previously
+    constructed a flat record."""
+    src = source_sequence if source_sequence is not None else peptide
+    mutant = Prediction(
+        kind='pMHC_affinity', predictor_name=method,
+        predictor_version='', allele=allele, peptide=peptide,
+        value=ic50, score=0.0, percentile_rank=percentile_rank)
+    comparators = {}
+    if wt_ic50 is not None:
+        wt = Prediction(
+            kind='pMHC_affinity', predictor_name=method,
+            predictor_version='', allele=allele, peptide=peptide,
+            value=wt_ic50, score=0.0, percentile_rank=None)
+        comparators[COMPARATOR_WT] = Peptide(
+            sequence=peptide, source_sequence=src, offset=offset,
+            predictions=(wt,))
+    return CandidateEpitope.from_peptide(
+        Peptide(
+            sequence=peptide, source_sequence=src, offset=offset,
+            predictions=(mutant,)),
+        comparators=comparators,
+        overlaps_mutation=overlaps_mutation,
+        occurs_in_reference=occurs_in_reference)
 
 
 # =============================================================================
@@ -49,10 +80,10 @@ def test_vaccine_peptides_from_epitopes_basic_parameters():
     result = vaccine_peptides_from_epitopes(
         variant=mock_variant,
         long_protein_fragment=mock_fragment,
-        epitope_predictions=[],
+        epitopes=[],
         vaccine_peptide_length=25,
         max_vaccine_peptides_per_variant=1,
-        num_mutant_epitopes_to_keep=1000,
+        num_target_epitopes_to_keep=1000,
     )
 
     # Should return empty list since no subsequences
@@ -70,10 +101,10 @@ def test_vaccine_peptides_from_epitopes_length_used():
     vaccine_peptides_from_epitopes(
         variant=mock_variant,
         long_protein_fragment=mock_fragment,
-        epitope_predictions=[],
+        epitopes=[],
         vaccine_peptide_length=30,  # Custom length
         max_vaccine_peptides_per_variant=1,
-        num_mutant_epitopes_to_keep=1000,
+        num_target_epitopes_to_keep=1000,
     )
 
     # Verify sorted_subsequences was called with correct length
@@ -117,7 +148,7 @@ def test_vaccine_peptides_for_variant_config_overrides_explicit_params():
         min_peptide_length=40,
         max_peptide_length=40,
         max_vaccine_peptides_per_variant=5,
-        num_mutant_epitopes_to_keep=500,
+        num_target_epitopes_to_keep=500,
     )
 
     with patch('vaxrank.core_logic.MutantProteinFragment') as MockFragment:
@@ -236,8 +267,8 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
         def __init__(
             self,
             mutant_protein_fragment,
-            epitope_predictions,
-            num_mutant_epitopes_to_keep=None,
+            epitopes,
+            num_target_epitopes_to_keep=None,
             epitope_score_params=None,
             manufacturability_thresholds=None,
             manufacturability_rules=None,
@@ -252,26 +283,27 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
         def lexicographic_sort_key(obj):
             return (-obj.combined_score,)
 
-    def fake_slice_predictions(epitope_predictions, start_offset, end_offset):
+    def fake_slice_epitopes(epitopes, start_offset, end_offset):
         amino_acids = "AAAA" if start_offset == 0 else "BBBB"
-        return [SimpleNamespace(source_sequence=amino_acids)]
+        return [SimpleNamespace(
+            source_sequence=amino_acids)]
 
     mock_variant = MagicMock()
     mock_variant.short_description = "test_variant"
 
     with patch("vaxrank.core_logic.VaccinePeptide", FakeVaccinePeptide), patch(
-        "vaxrank.core_logic.slice_epitope_predictions",
-        side_effect=fake_slice_predictions,
+        "vaxrank.core_logic.slice_epitopes",
+        side_effect=fake_slice_epitopes,
     ):
         default_result = vaccine_peptides_from_epitopes(
             variant=mock_variant,
             long_protein_fragment=DummyLongFragment(),
-            epitope_predictions=[MagicMock()],
+            epitopes=[MagicMock()],
         )
         relaxed_result = vaccine_peptides_from_epitopes(
             variant=mock_variant,
             long_protein_fragment=DummyLongFragment(),
-            epitope_predictions=[MagicMock()],
+            epitopes=[MagicMock()],
             vaccine_config=VaccineConfig(
                 score_fraction_of_best=0.8,
                 max_vaccine_peptides_per_variant=2,
@@ -280,7 +312,7 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
         strict_result = vaccine_peptides_from_epitopes(
             variant=mock_variant,
             long_protein_fragment=DummyLongFragment(),
-            epitope_predictions=[MagicMock()],
+            epitopes=[MagicMock()],
             vaccine_config=VaccineConfig(
                 score_fraction_of_best=1.0,
                 max_vaccine_peptides_per_variant=2,
@@ -318,27 +350,17 @@ def test_config_integration_epitope_config_affects_vaccine_peptide_scoring():
     fragment = DummyFragment("ACDEFGHIK")
     long_fragment = DummyLongFragment(fragment)
 
-    prediction = EpitopePrediction(
-        allele="HLA-A*02:01",
-        peptide_sequence="ACDEFGHIK",
-        wt_peptide_sequence="ACDEFGHIK",
-        ic50=100.0,
-        wt_ic50=200.0,
-        percentile_rank=0.5,
-        prediction_method_name="test",
-        overlaps_mutation=True,
-        source_sequence="ACDEFGHIK",
-        offset=0,
-        occurs_in_reference=False,
-    )
+    epitope = _make_epitope("ACDEFGHIK", ic50=100.0, wt_ic50=200.0,
+                            source_sequence="ACDEFGHIK")
 
-    default_score = prediction.logistic_epitope_score()
+    default_score = _legacy_score_one(100.0, 0.5)
     epitope_config = EpitopeConfig(
         logistic_epitope_score_midpoint=50.0,
         logistic_epitope_score_width=10.0,
         binding_affinity_cutoff=5000.0,
     )
-    custom_score = prediction.logistic_epitope_score(
+    custom_score = _legacy_score_one(
+        100.0, 0.5,
         midpoint=epitope_config.logistic_epitope_score_midpoint,
         width=epitope_config.logistic_epitope_score_width,
         ic50_cutoff=epitope_config.binding_affinity_cutoff,
@@ -348,14 +370,14 @@ def test_config_integration_epitope_config_affects_vaccine_peptide_scoring():
     peptides = vaccine_peptides_from_epitopes(
         variant=MagicMock(),
         long_protein_fragment=long_fragment,
-        epitope_predictions=[prediction],
+        epitopes=[epitope],
         vaccine_peptide_length=len(fragment),
         max_vaccine_peptides_per_variant=1,
-        num_mutant_epitopes_to_keep=10,
+        num_target_epitopes_to_keep=10,
         epitope_config=epitope_config,
     )
     eq_(len(peptides), 1)
-    eq_(peptides[0].mutant_epitope_score, custom_score)
+    eq_(peptides[0].target_epitope_score, custom_score)
 
 
 def test_config_defaults_match_historical_behavior():
@@ -368,20 +390,20 @@ def test_config_defaults_match_historical_behavior():
     eq_(vaccine_config.padding_around_mutation, 5)
     eq_(vaccine_config.max_vaccine_peptides_per_variant, 1)
 
-    # Epitope scoring defaults
+    # CandidateEpitope scoring defaults
     eq_(epitope_config.logistic_epitope_score_midpoint, 350.0)
     eq_(epitope_config.logistic_epitope_score_width, 150.0)
 
 
 def test_core_logic_default_num_epitope_limit_matches_vaccine_config():
     """Public core helpers should share the same default epitope limit."""
-    expected = VaccineConfig().num_mutant_epitopes_to_keep
+    expected = VaccineConfig().num_target_epitopes_to_keep
     for fn in (
             run_vaxrank,
             create_vaccine_peptides_dict,
             vaccine_peptides_for_variant,
             vaccine_peptides_from_epitopes):
-        eq_(signature(fn).parameters["num_mutant_epitopes_to_keep"].default, expected)
+        eq_(signature(fn).parameters["num_target_epitopes_to_keep"].default, expected)
 
 
 # =============================================================================
@@ -454,39 +476,17 @@ def test_vaccine_peptide_zero_epitope_limit_keeps_all():
     fragment = MagicMock()
     fragment.amino_acids = "ACDEFGHIK"
 
-    prediction1 = EpitopePrediction(
-        allele="HLA-A*02:01",
-        peptide_sequence="ACDEFGHIK",
-        wt_peptide_sequence="ACDEFGHIK",
-        ic50=100.0,
-        wt_ic50=200.0,
-        percentile_rank=0.5,
-        prediction_method_name="test",
-        overlaps_mutation=True,
-        source_sequence="ACDEFGHIK",
-        offset=0,
-        occurs_in_reference=False,
-    )
-    prediction2 = EpitopePrediction(
-        allele="HLA-A*02:01",
-        peptide_sequence="CDEFGHIKL",
-        wt_peptide_sequence="CDEFGHIKL",
-        ic50=120.0,
-        wt_ic50=220.0,
-        percentile_rank=0.4,
-        prediction_method_name="test",
-        overlaps_mutation=True,
-        source_sequence="CDEFGHIKL",
-        offset=0,
-        occurs_in_reference=False,
-    )
+    epitope1 = _make_epitope("ACDEFGHIK", ic50=100.0, wt_ic50=200.0,
+                             percentile_rank=0.5)
+    epitope2 = _make_epitope("CDEFGHIKL", ic50=120.0, wt_ic50=220.0,
+                             percentile_rank=0.4)
 
     vaccine_peptide = VaccinePeptide(
         mutant_protein_fragment=fragment,
-        epitope_predictions=[prediction1, prediction2],
-        num_mutant_epitopes_to_keep=0,
+        epitopes=[epitope1, epitope2],
+        num_target_epitopes_to_keep=0,
     )
-    eq_(len(vaccine_peptide.mutant_epitope_predictions), 2)
+    eq_(len(vaccine_peptide.target_epitopes), 2)
 
 
 def test_manufacturability_thresholds_flow_from_manufacturability_config():
@@ -518,19 +518,8 @@ def test_manufacturability_thresholds_flow_from_manufacturability_config():
     fragment = DummyFragment("ACDEFGHIK")
     long_fragment = DummyLongFragment(fragment)
 
-    prediction = EpitopePrediction(
-        allele="HLA-A*02:01",
-        peptide_sequence="ACDEFGHIK",
-        wt_peptide_sequence="ACDEFGHIK",
-        ic50=100.0,
-        wt_ic50=200.0,
-        percentile_rank=0.5,
-        prediction_method_name="test",
-        overlaps_mutation=True,
-        source_sequence="ACDEFGHIK",
-        offset=0,
-        occurs_in_reference=False,
-    )
+    epitope = _make_epitope("ACDEFGHIK", ic50=100.0, wt_ic50=200.0,
+                            source_sequence="ACDEFGHIK")
 
     vaccine_config = VaccineConfig()
     manufacturability_config = ManufacturabilityConfig(
@@ -539,7 +528,7 @@ def test_manufacturability_thresholds_flow_from_manufacturability_config():
     peptides = vaccine_peptides_from_epitopes(
         variant=MagicMock(),
         long_protein_fragment=long_fragment,
-        epitope_predictions=[prediction],
+        epitopes=[epitope],
         vaccine_peptide_length=len(fragment),
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config,
@@ -589,7 +578,7 @@ def test_vaccine_config_override_warns_on_conflicting_explicit_params(caplog):
         vaccine_peptides_from_epitopes(
             variant=mock_variant,
             long_protein_fragment=mock_fragment,
-            epitope_predictions=[],
+            epitopes=[],
             vaccine_peptide_length=30,  # Non-default, differs from config's 40
             vaccine_config=vaccine_config,
         )
@@ -614,7 +603,7 @@ def test_vaccine_config_override_no_warning_when_default_params(caplog):
         vaccine_peptides_from_epitopes(
             variant=mock_variant,
             long_protein_fragment=mock_fragment,
-            epitope_predictions=[],
+            epitopes=[],
             # All defaults — no conflict
             vaccine_config=vaccine_config,
         )

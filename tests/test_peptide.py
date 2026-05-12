@@ -29,7 +29,7 @@ from vaxrank.peptide import (
 
 
 def _peptide_stub(amino_acids, gene_name='GENE',
-                  mutant_epitope_predictions=None,
+                  target_epitopes=None,
                   manufacturability_scores=None,
                   mut_start=None, mut_end=None):
     fragment = SimpleNamespace(
@@ -41,7 +41,7 @@ def _peptide_stub(amino_acids, gene_name='GENE',
     )
     return SimpleNamespace(
         mutant_protein_fragment=fragment,
-        mutant_epitope_predictions=mutant_epitope_predictions or [],
+        target_epitopes=target_epitopes or [],
         manufacturability_scores=manufacturability_scores,
     )
 
@@ -52,7 +52,7 @@ def _variant_pair(amino_acids, contig='1', start=1000, gene_name='GENE',
     variant = Variant(contig, start, 'A', 'T')
     peptide = _peptide_stub(
         amino_acids, gene_name=gene_name,
-        mutant_epitope_predictions=epitopes,
+        target_epitopes=epitopes,
         manufacturability_scores=manufacturability,
         mut_start=mut_start, mut_end=mut_end)
     return (variant, [peptide])
@@ -104,7 +104,7 @@ def test_slp_emits_full_fragment_when_mutation_exceeds_cap():
 
 
 def test_minimal_epitope_uses_top_prediction():
-    epitope = SimpleNamespace(peptide_sequence="KLAGHSPVL")
+    epitope = SimpleNamespace(sequence="KLAGHSPVL")
     pairs = [_variant_pair(
         "KLQGHSAPVLDVIVNCDESLLAS", gene_name='GENEA',
         epitopes=[epitope])]
@@ -119,7 +119,7 @@ def test_minimal_epitope_skips_peptides_without_predictions():
         _variant_pair("KLQGHSAPVLDVIVN", gene_name='GENEA', epitopes=[]),
         _variant_pair(
             "MNNVDEILGRWESPV", start=200, gene_name='GENEB',
-            epitopes=[SimpleNamespace(peptide_sequence="MNNVDEILG")]),
+            epitopes=[SimpleNamespace(sequence="MNNVDEILG")]),
     ]
     constructs = assemble_peptide_constructs(
         pairs, options=PeptideConstructConfig(mode='minimal_epitope'))
@@ -187,7 +187,7 @@ def test_minimal_epitope_manufacturability_matches_emitted_sequence():
     # The emitted sequence is the predicted epitope, not the full
     # source vaccine peptide; manufacturability must follow the emitted
     # sequence.
-    epitope = SimpleNamespace(peptide_sequence="KAAAAAA")  # no cysteines
+    epitope = SimpleNamespace(sequence="KAAAAAA")  # no cysteines
     pairs = [_variant_pair(
         "KAAAAAACCC",  # source has cysteines; emitted does not
         epitopes=[epitope])]
@@ -299,10 +299,10 @@ def test_candidates_per_slot_emits_alternates():
         amino_acids="LQGHSAPVLDV", gene_name='GENEA',  # alternate window
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=11)
     peptide_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[],
+        mutant_protein_fragment=fragment_a, target_epitopes=[],
         manufacturability_scores=None)
     peptide_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[],
+        mutant_protein_fragment=fragment_b, target_epitopes=[],
         manufacturability_scores=None)
     from varcode import Variant
     pairs = [(Variant('1', 100, 'A', 'T'), [peptide_a, peptide_b])]
@@ -323,10 +323,10 @@ def test_candidates_per_slot_default_is_one():
         amino_acids="LQGHSAPVLDV", gene_name='GENE',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=11)
     pa = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, mutant_epitope_predictions=[],
+        mutant_protein_fragment=fragment_a, target_epitopes=[],
         manufacturability_scores=None)
     pb = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, mutant_epitope_predictions=[],
+        mutant_protein_fragment=fragment_b, target_epitopes=[],
         manufacturability_scores=None)
     from varcode import Variant
     pairs = [(Variant('1', 100, 'A', 'T'), [pa, pb])]
@@ -344,7 +344,7 @@ def test_max_constructs_caps_peptide_pool():
             mutant_amino_acid_start_offset=0,
             mutant_amino_acid_end_offset=11)
         peptide = SimpleNamespace(
-            mutant_protein_fragment=fragment, mutant_epitope_predictions=[],
+            mutant_protein_fragment=fragment, target_epitopes=[],
             manufacturability_scores=None)
         pairs.append((Variant('1', 100 + i, 'A', 'T'), [peptide]))
     constructs = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())

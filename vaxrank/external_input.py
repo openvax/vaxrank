@@ -37,11 +37,12 @@ Limitations:
   extensions aren't recoverable from external inputs.
 """
 
+import dataclasses
 import logging
 
 import pandas as pd
 
-from .epitope_io import detect_lens_predictors, normalize_hla_allele
+from .epitope_io import detect_lens_predictors
 from .mutant_protein_fragment import MutantProteinFragment
 from .vaccine_library import (
     has_only_standard_amino_acids,
@@ -402,16 +403,17 @@ def _read_counts_from_lens_row(row):
     return n_total, n_alt_reads, n_ref_reads, n_alt_supporting_protein
 
 
-def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
-                                 num_mutant_epitopes_to_keep=None,
+def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
+                                 num_target_epitopes_to_keep=None,
                                  vaccine_peptide_length=25):
-    """Group LENS predictions by variant; emit ranked vaccine peptides.
+    """Group LENS epitopes by variant; emit ranked vaccine peptides.
 
     Parameters
     ----------
-    predictions : list of EpitopePrediction
-        Output of ``load_lens(path)``. Already one prediction per
-        (peptide, allele, predictor).
+    epitopes : list of CandidateEpitope
+        Output of ``load_lens(path)``. Each CandidateEpitope groups all
+        per-(allele, predictor) ``mhctools.Prediction`` records for
+        one ``(peptide, source_sequence, offset)`` position.
     lens_tsv_path : str
         Path to the original LENS TSV. We re-read the raw rows here
         because the per-(peptide, allele) ``report_df`` returned by
@@ -422,7 +424,7 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
         Passed through to ``Variant`` construction. When None,
         Variants are constructed without genome resolution and
         downstream code that needs gene annotation may degrade.
-    num_mutant_epitopes_to_keep : int, optional
+    num_target_epitopes_to_keep : int, optional
         Forwarded to ``VaccinePeptide``. When None, all overlapping
         epitopes are kept.
 
@@ -460,11 +462,14 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             "a predictor that emits pMHC affinity (e.g. mhcflurry, "
             "netmhcpan-ba).", kinds)
 
-    # Index predictions by (peptide, allele) so we can attach all
-    # per-predictor predictions to each candidate vaccine peptide.
-    by_key = {}
-    for p in predictions:
-        by_key.setdefault((p.peptide_sequence, p.allele), []).append(p)
+    # Index epitopes by their mutant peptide sequence so we can attach
+    # the right CandidateEpitope(s) to each candidate vaccine peptide. One
+    # peptide can map to multiple Epitopes when the same sequence
+    # appears with different source contexts / offsets across
+    # variants — we'll filter by (peptide, allele) presence below.
+    by_peptide: dict[str, list] = {}
+    for e in epitopes:
+        by_peptide.setdefault(e.sequence, []).append(e)
 
     # Group rows by variant. LENS uses lowercase snake_case columns.
     rows = df.to_dict('records')
@@ -681,57 +686,39 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             placeholder_alleles=False,
         )
 
-        # Collect all predictions for any peptide associated with this
-        # variant (not just the representative) so reports / scoring
-        # see the full landscape. Real LENS files often have
-        # *multiple* rows per (peptide, allele) when the same peptide
-        # is encoded by several transcripts (~5% of Pt02 rows).
-        # ``by_key.get(key)`` then returns N identical predictions
-        # for that (peptide, allele) — left uncollapsed they render
-        # as duplicate rows in the per-VP epitope table. Dedup by
-        # content (peptide, allele, ic50, percentile_rank,
-        # prediction_method_name) so each (peptide, allele) shows
-        # exactly once per predictor in the rendered table.
-        epitope_preds = []
-        seen_lookup_keys = set()
-        seen_content_keys = set()
+        # Collect all Epitopes whose mutant peptide appears in any of
+        # this variant's rows. The load_lens adapter has already
+        # grouped all per-(allele, predictor) Prediction records into
+        # one CandidateEpitope per (peptide, source, offset), so dedup is on
+        # CandidateEpitope identity — typically yields one CandidateEpitope per unique
+        # peptide in the variant's row group.
+        seen_peptides = set()
+        seen_epitope_ids = set()
+        variant_epitopes = []
         for r in group_rows:
             pep = r.get('peptide') or ""
-            # load_lens normalizes 'HLA-A02:01' → 'HLA-A*02:01';
-            # match the same form here so the (peptide, allele)
-            # lookup hits.
-            allele = normalize_hla_allele(str(r.get('allele') or ""))
-            lookup_key = (pep, allele)
-            if lookup_key in seen_lookup_keys:
+            if not pep or pep in seen_peptides:
                 continue
-            seen_lookup_keys.add(lookup_key)
-            for pred in by_key.get(lookup_key, []):
-                content_key = (
-                    pred.peptide_sequence,
-                    pred.allele,
-                    pred.ic50,
-                    pred.percentile_rank,
-                    pred.prediction_method_name,
-                )
-                if content_key in seen_content_keys:
+            seen_peptides.add(pep)
+            for e in by_peptide.get(pep, []):
+                if id(e) in seen_epitope_ids:
                     continue
-                seen_content_keys.add(content_key)
-                epitope_preds.append(pred)
+                seen_epitope_ids.add(id(e))
+                # CandidateEpitope is frozen — flag mutation-overlap via
+                # dataclasses.replace. LENS rows are mutant-derived
+                # by construction, so every CandidateEpitope reached this way
+                # overlaps the mutation.
+                if not e.overlaps_mutation:
+                    e = dataclasses.replace(e, overlaps_mutation=True)
+                variant_epitopes.append(e)
 
-        # Make sure at least one prediction overlaps the mutation so
-        # the VaccinePeptide isn't pruned to zero mutant epitopes.
-        # LENS predictions are mutant-derived — flag them all.
-        for p in epitope_preds:
-            if not p.overlaps_mutation:
-                p.overlaps_mutation = True
-
-        if not epitope_preds:
+        if not variant_epitopes:
             continue
 
         vp = VaccinePeptide(
             mutant_protein_fragment=fragment,
-            epitope_predictions=epitope_preds,
-            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+            epitopes=variant_epitopes,
+            num_target_epitopes_to_keep=num_target_epitopes_to_keep,
         )
         ranked.append((variant, [vp]))
 
@@ -865,12 +852,12 @@ def ranked_from_lens_predictions(predictions, lens_tsv_path, genome=None,
             "is a release mismatch — pass --ensembl-release N to match "
             "the build LENS used.", n_unresolved, n_with_ids)
 
-    # Order by mutant_epitope_score descending so the top candidates
+    # Order by target_epitope_score descending so the top candidates
     # win greedy bin-packing in the construct assemblers. Ties broken
     # alphabetically by variant coordinates for determinism.
     ranked.sort(
         key=lambda pair: (
-            -pair[1][0].mutant_epitope_score if pair[1] else 0.0,
+            -pair[1][0].target_epitope_score if pair[1] else 0.0,
             str(pair[0]),
         ))
     return ranked, dna_vaf_by_variant
@@ -932,9 +919,9 @@ def _parse_pvacseq_id(vid, genome=None):
     return v, True
 
 
-def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
+def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
                                     genome=None,
-                                    num_mutant_epitopes_to_keep=None):
+                                    num_target_epitopes_to_keep=None):
     """pVACseq variant of :func:`ranked_from_lens_predictions`.
 
     Re-reads the raw aggregate TSV (the per-(peptide, allele)
@@ -952,9 +939,9 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
     if df.empty:
         return []
 
-    by_key = {}
-    for p in predictions:
-        by_key.setdefault((p.peptide_sequence, p.allele), []).append(p)
+    by_peptide: dict[str, list] = {}
+    for e in epitopes:
+        by_peptide.setdefault(e.sequence, []).append(e)
 
     rows = df.to_dict('records')
     groups = {}
@@ -1040,26 +1027,27 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
             n_ref_reads=n_ref_reads,
             n_alt_reads_supporting_protein_sequence=n_alt_reads,
         )
-        epitope_preds = []
-        seen_keys = set()
+        seen_peptides = set()
+        seen_epitope_ids = set()
+        variant_epitopes = []
         for r in group_rows:
             pep = r.get('Best Peptide') or r.get('peptide') or ""
-            allele_raw = r.get('Allele') or r.get('allele') or ""
-            allele = normalize_hla_allele(str(allele_raw))
-            key = (pep, allele)
-            if key in seen_keys:
+            if not pep or pep in seen_peptides:
                 continue
-            seen_keys.add(key)
-            epitope_preds.extend(by_key.get(key, []))
-        for p in epitope_preds:
-            if not p.overlaps_mutation:
-                p.overlaps_mutation = True
-        if not epitope_preds:
+            seen_peptides.add(pep)
+            for e in by_peptide.get(pep, []):
+                if id(e) in seen_epitope_ids:
+                    continue
+                seen_epitope_ids.add(id(e))
+                if not e.overlaps_mutation:
+                    e = dataclasses.replace(e, overlaps_mutation=True)
+                variant_epitopes.append(e)
+        if not variant_epitopes:
             continue
         ranked.append((variant, [VaccinePeptide(
             mutant_protein_fragment=fragment,
-            epitope_predictions=epitope_preds,
-            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+            epitopes=variant_epitopes,
+            num_target_epitopes_to_keep=num_target_epitopes_to_keep,
         )]))
 
         dna_vaf_raw = rep.get('DNA VAF')
@@ -1089,7 +1077,7 @@ def ranked_from_pvacseq_predictions(predictions, pvacseq_tsv_path,
 
     ranked.sort(
         key=lambda pair: (
-            -pair[1][0].mutant_epitope_score if pair[1] else 0.0,
+            -pair[1][0].target_epitope_score if pair[1] else 0.0,
             str(pair[0]),
         ))
     return ranked, dna_vaf_by_variant

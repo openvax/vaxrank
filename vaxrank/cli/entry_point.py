@@ -120,69 +120,62 @@ def _has_external_input(args):
 
 
 def _annotate_predictions_with_processing(ranked_vaccine_peptides,
-                                          lens_predictions,
+                                          lens_epitopes,
                                           human_only=False,
                                           threshold=0.5):
-    """Run pepsickle credibility tagging across all EpitopePrediction
-    records. Pulls them from BOTH the ranked-vaccine-peptides
-    intermediate (one VP per variant; each VP has its own predictions)
-    AND the LENS/pVACseq predictions list (which is the union).
+    """Run pepsickle credibility tagging across all CandidateEpitope records.
+    Pulls them from BOTH the ranked-vaccine-peptides intermediate
+    (one VP per variant; each VP has its own epitopes) AND the
+    LENS/pVACseq epitopes list (which is the union).
 
-    Annotation is in-place on the EpitopePrediction objects.
+    The result is a map of ``ProcessingPrediction`` records keyed by
+    ``(peptide, source, predictor_name)``; report writers join in at
+    render time. CandidateEpitope objects are not mutated.
 
     Dedup strategy: identity (``id()``) wins when the two paths share
-    the same Python object, but a future external-input loader that
-    *copies* a prediction into the VP would break that assumption.
-    To stay correct in both cases, we *also* dedup on the content
-    tuple ``(peptide_sequence, allele, source_sequence, offset)``
-    so a prediction reachable as two distinct objects with the same
-    semantic identity still gets annotated only once. Both checks
-    are O(1).
+    the same Python object, but external-input loaders may produce
+    distinct CandidateEpitope objects with the same content. To stay correct
+    in both cases, we *also* dedup on
+    ``(peptide_sequence, source_sequence, offset)`` so an CandidateEpitope
+    reachable as two distinct objects with the same semantic
+    identity still gets annotated only once.
     """
     from ..processing import annotate_processing
-    all_predictions = []
+    all_epitopes = []
     seen_ids = set()
     seen_keys = set()
 
-    def _key(p):
+    def _key(e):
         return (
-            getattr(p, 'peptide_sequence', '') or '',
-            getattr(p, 'allele', '') or '',
-            getattr(p, 'source_sequence', '') or '',
-            getattr(p, 'offset', 0) or 0,
+            e.sequence or '',
+            e.source_sequence or '',
+            e.offset or 0,
         )
 
-    def _maybe_add(p):
-        pid = id(p)
-        if pid in seen_ids:
+    def _maybe_add(e):
+        eid = id(e)
+        if eid in seen_ids:
             return
-        seen_ids.add(pid)
-        # Empty / missing peptide_sequence: degenerate record. Don't
-        # apply content-key dedup (every empty-peptide record would
-        # collapse to one bucket); just pass it through and let the
-        # annotation skip it on its own.
-        if not getattr(p, 'peptide_sequence', None):
-            all_predictions.append(p)
+        seen_ids.add(eid)
+        if not e.sequence:
+            all_epitopes.append(e)
             return
-        # Content-key dedup: skip if a *different* object with the
-        # same (peptide, allele, source, offset) already in flight.
-        k = _key(p)
+        k = _key(e)
         if k in seen_keys:
             return
         seen_keys.add(k)
-        all_predictions.append(p)
+        all_epitopes.append(e)
 
     for _, peptides in (ranked_vaccine_peptides or []):
         for vp in peptides or []:
-            for p in (
-                    getattr(vp, 'mutant_epitope_predictions', None) or []):
-                _maybe_add(p)
-    for p in (lens_predictions or []):
-        _maybe_add(p)
-    if not all_predictions:
+            for e in (getattr(vp, 'target_epitopes', None) or []):
+                _maybe_add(e)
+    for e in (lens_epitopes or []):
+        _maybe_add(e)
+    if not all_epitopes:
         return 0, {}
     return annotate_processing(
-        all_predictions, human_only=human_only, threshold=threshold)
+        all_epitopes, human_only=human_only, threshold=threshold)
 
 
 def _epitope_config_from_args_safe(args):
@@ -292,7 +285,7 @@ def _vaccine_target_dir(output_dir, vaccine_type, all_active_types):
     return output_dir
 
 
-def _emit_neoepitope_report_external(args, report_df, predictions):
+def _emit_neoepitope_report_external(args, report_df, epitopes):
     """LENS / pVACseq specific report path: writes the per-(peptide,
     allele) neoepitope CSV / XLSX. Independent from the modality
     dispatch — these are *report* outputs, not vaccine-design outputs.
@@ -302,14 +295,14 @@ def _emit_neoepitope_report_external(args, report_df, predictions):
     epitope_config = _epitope_config_from_args_safe(args)
     write_neoepitope_report(
         report_df=report_df,
-        predictions=predictions,
+        epitopes=epitopes,
         excel_report_path=(
             getattr(args, 'output_neoepitope_report', '') or None),
         csv_report_path=getattr(args, 'output_csv', '') or None,
         epitope_config=epitope_config,
     )
     if getattr(args, 'output_epitopes', ''):
-        save_predictions(predictions, args.output_epitopes)
+        save_predictions(epitopes, args.output_epitopes)
 
 
 def _resolve_axis(args, per_type_attr, shared_attr, fallback):
@@ -1258,16 +1251,16 @@ def run_vaxrank_from_parsed_args(args):
     args.max_vaccine_peptides_per_variant = vaccine_config.max_vaccine_peptides_per_variant
     # Keep legacy key for backward compatibility in JSON/report args.
     args.max_vaccine_peptides_per_mutation = vaccine_config.max_vaccine_peptides_per_variant
-    args.num_epitopes_per_vaccine_peptide = vaccine_config.num_mutant_epitopes_to_keep
+    args.num_epitopes_per_vaccine_peptide = vaccine_config.num_target_epitopes_to_keep
 
     # Multi-predictor support (#261): mhctools' ``--mhc-predictor`` is
     # nargs='+', so the user can configure
     # ``--mhc-predictor mhcflurry netmhcpan`` and we run both, emitting
-    # one EpitopePrediction per (peptide, allele, predictor). Single-
+    # one flat record per (peptide, allele, predictor). Single-
     # predictor runs unchanged (use the bare predictor; topiary wraps
     # it inside ``predict_epitopes``). Multi-predictor runs use
     # ``topiary.TopiaryPredictor(models=[...])`` so the per-row
-    # ``prediction_method_name`` ends up on every EpitopePrediction.
+    # ``prediction_method_name`` ends up on every flat record.
     predictors_list = predictors_from_args(args)
     if len(predictors_list) == 1:
         mhc_predictor = predictors_list[0]
@@ -1318,7 +1311,7 @@ def run_vaxrank_from_parsed_args(args):
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_variant,
-        num_mutant_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
+        num_target_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
         epitope_config=epitope_config,
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config,
@@ -1326,12 +1319,12 @@ def run_vaxrank_from_parsed_args(args):
     )
 
     if getattr(args, 'output_epitopes', ''):
-        # Collect all epitope predictions across all variants
-        all_predictions = []
+        # Collect all mutant epitopes across all variants
+        all_epitopes = []
         for _variant, peptides in vaxrank_results.ranked_vaccine_peptides:
             for vp in peptides:
-                all_predictions.extend(vp.mutant_epitope_predictions)
-        save_predictions(all_predictions, args.output_epitopes)
+                all_epitopes.extend(vp.target_epitopes)
+        save_predictions(all_epitopes, args.output_epitopes)
 
     return vaxrank_results
 

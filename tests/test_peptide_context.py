@@ -4,8 +4,8 @@
 #
 #       http://www.apache.org/licenses/LICENSE-2.0
 
-"""Tests for ``vaxrank.peptide_context`` (replaces #282 / supersedes
-the flat ``EpitopePrediction``).
+"""Tests for ``vaxrank.candidate_epitope`` (replaces #282 / supersedes
+the pre-3.0 flat record).
 
 Pins:
 - Native nested storage: ``{kind: {predictor: {version: tuple}}}``.
@@ -27,11 +27,11 @@ import pytest
 
 from mhctools.pred import Prediction
 
-from vaxrank.peptide_context import (
+from vaxrank.candidate_epitope import (
     COMPARATOR_NEAREST_SELF,
     COMPARATOR_WT,
     CandidateEpitope,
-    PeptideContext,
+    Peptide,
 )
 
 
@@ -52,8 +52,8 @@ def test_constructor_auto_groups_flat_input():
     """Producers hand back flat ``list[Prediction]``; the
     constructor groups into the nested store. Pin so producer
     ergonomics stay intact even though storage is nested."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', predictor='mhcflurry',
                   version='2.1.1', allele='HLA-A*02:01'),
@@ -85,7 +85,7 @@ def test_constructor_accepts_already_nested_input():
             }
         }
     }
-    ctx = PeptideContext(peptide_sequence='SIINFEKL', predictions=nested)
+    ctx = Peptide(sequence='SIINFEKL', predictions=nested)
     assert ctx.predictions is nested
 
 
@@ -93,8 +93,8 @@ def test_storage_collects_per_allele_records_in_leaf_tuple():
     """Affinity emits one Prediction per allele under one
     (predictor, version). The leaf tuple holds them all — alleles
     aren't structural keys, so no collision."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', allele='HLA-A*02:01', score=0.4),
             _pred('pMHC_affinity', allele='HLA-B*07:02', score=0.9),
@@ -111,8 +111,8 @@ def test_storage_handles_no_allele_kinds():
     emit Predictions with empty ``allele``. The nested store
     accommodates them naturally — leaf is a one-element tuple,
     no allele-keyed dict to collapse into."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('proteasome_cleavage', predictor='pepsickle',
                   allele='', score=0.6),
@@ -129,15 +129,15 @@ def test_predictions_flat_round_trips_through_constructor():
     tuple. Feeding that tuple back through the constructor
     reproduces the same nested shape — round-trip pinned for
     serialization paths."""
-    original = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    original = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', allele='HLA-A*02:01'),
             _pred('pMHC_presentation', allele='HLA-A*02:01'),
         ))
     flat = original.predictions_flat()
-    rebuilt = PeptideContext(
-        peptide_sequence=original.peptide_sequence,
+    rebuilt = Peptide(
+        sequence=original.sequence,
         predictions=flat)
     assert rebuilt.predictions == original.predictions
 
@@ -147,8 +147,8 @@ def test_predictions_flat_is_deterministic():
     contexts built from differently-ordered input emit the same
     flat tuple. Pin so callers diffing serialized output across
     runs don't see producer-order noise."""
-    a = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    a = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_presentation', predictor='mhcflurry',
                   allele='HLA-B*07:02'),
@@ -159,8 +159,8 @@ def test_predictions_flat_is_deterministic():
             _pred('pMHC_affinity', predictor='mhcflurry',
                   allele='HLA-A*02:01'),
         ))
-    b = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    b = Peptide(
+        sequence='SIINFEKL',
         predictions=(  # same records, shuffled
             _pred('pMHC_affinity', predictor='mhcflurry',
                   allele='HLA-A*02:01'),
@@ -189,15 +189,15 @@ def test_predictions_flat_tiebreaker_for_duplicate_keys():
     of the sort key keeps order deterministic across input
     shuffles. Pin so future producers can't sneak in an order
     dependency on input order."""
-    a = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    a = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', score=0.5),
             _pred('pMHC_affinity', score=0.9),
             _pred('pMHC_affinity', score=0.3),
         ))
-    b = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    b = Peptide(
+        sequence='SIINFEKL',
         predictions=(  # same records, shuffled
             _pred('pMHC_affinity', score=0.9),
             _pred('pMHC_affinity', score=0.3),
@@ -215,16 +215,16 @@ def test_predictions_flat_handles_nan_in_float_keys():
     nondeterministic order."""
     import math
     nan = float('nan')
-    a = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    a = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', allele='HLA-A*02:01',
                   score=0.5, percentile_rank=nan),
             _pred('pMHC_affinity', allele='HLA-B*07:02',
                   score=0.7, percentile_rank=2.5),
         ))
-    b = PeptideContext(  # same records, shuffled
-        peptide_sequence='SIINFEKL',
+    b = Peptide(  # same records, shuffled
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', allele='HLA-B*07:02',
                   score=0.7, percentile_rank=2.5),
@@ -244,8 +244,8 @@ def test_predictions_flat_handles_nan_in_float_keys():
 
 
 def test_kinds_returns_sorted_distinct_values():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity'),
             _pred('pMHC_presentation'),
@@ -255,14 +255,14 @@ def test_kinds_returns_sorted_distinct_values():
 
 
 def test_kinds_empty_when_no_predictions():
-    ctx = PeptideContext(peptide_sequence='SIINFEKL')
+    ctx = Peptide(sequence='SIINFEKL')
     assert ctx.kinds() == ()
     assert ctx.predictors_for('pMHC_affinity') == ()
 
 
 def test_predictors_for_lists_emitting_predictors():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', predictor='mhcflurry'),
             _pred('pMHC_affinity', predictor='netmhcpan'),
@@ -276,8 +276,8 @@ def test_predictors_for_lists_emitting_predictors():
 def test_alleles_for_lists_alleles_only():
     """Returns alleles among leaf records. Filters out empty
     strings (processing kinds)."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', allele='HLA-A*02:01'),
             _pred('pMHC_affinity', allele='HLA-B*07:02'),
@@ -296,8 +296,8 @@ def test_alleles_for_unions_across_predictors():
     we union their alleles instead of raising. Pin so callers
     asking "what alleles do we have evidence for?" don't get
     surprised by a ValueError."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', predictor='mhcflurry',
                   allele='HLA-A*02:01'),
@@ -325,8 +325,8 @@ def test_alleles_for_raises_on_unknown_predictor():
     for the kind raises ``ValueError`` rather than silently
     returning ``()`` — silent empty-on-typo masks call-site
     bugs."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', predictor='mhcflurry',
                   allele='HLA-A*02:01'),
@@ -338,8 +338,8 @@ def test_alleles_for_raises_on_unknown_predictor():
 def test_alleles_for_raises_on_unknown_version():
     """Same strictness for ``version=``: a typo raises rather
     than masquerading as an empty result."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', version='2.1.1',
                   allele='HLA-A*02:01'),
@@ -354,7 +354,7 @@ def test_alleles_for_silent_on_missing_kind():
     Returns ``()`` silently. Distinguishes "kind missing" from
     "predictor / version missing" — the latter is a call-site
     bug worth flagging."""
-    ctx = PeptideContext(peptide_sequence='SIINFEKL')
+    ctx = Peptide(sequence='SIINFEKL')
     assert ctx.alleles_for('pMHC_affinity') == ()
     # Even with explicit predictor= against a kind that has no
     # records: still silent (no validation possible against an
@@ -368,8 +368,8 @@ def test_alleles_for_unions_across_versions():
     predictor ran at multiple versions on different alleles,
     union rather than auto-resolving to the latest version's
     alleles only."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', version='2.1.0',
                   allele='HLA-A*02:01'),
@@ -404,8 +404,8 @@ def test_best_resolves_kind_aliases_via_topiary(alias, canonical):
     """vaxrank doesn't maintain its own alias table — defers to
     topiary's ``KIND_ALIASES``. Pin the entries vaxrank cares
     about so a topiary change shows up here."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(_pred(canonical, score=0.7),))
     result = ctx.best(alias)
     assert result is not None
@@ -413,8 +413,8 @@ def test_best_resolves_kind_aliases_via_topiary(alias, canonical):
 
 
 def test_predictors_for_accepts_aliases():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_presentation', predictor='mhcflurry'),
             _pred('pMHC_presentation', predictor='bigmhc'),
@@ -427,8 +427,8 @@ def test_predictors_for_accepts_aliases():
 
 
 def test_predictions_for_returns_leaf_tuple():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', allele='HLA-A*02:01', score=0.4),
             _pred('pMHC_affinity', allele='HLA-B*07:02', score=0.9),
@@ -439,15 +439,15 @@ def test_predictions_for_returns_leaf_tuple():
 
 
 def test_predictions_for_empty_when_no_records():
-    ctx = PeptideContext(peptide_sequence='SIINFEKL')
+    ctx = Peptide(sequence='SIINFEKL')
     assert ctx.predictions_for('pMHC_affinity') == ()
 
 
 def test_predictions_for_multi_predictor_raises():
     """Same disambiguation contract as ``best`` — predictor
     required when multiple emit ``kind``."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', predictor='mhcflurry', score=0.4),
             _pred('pMHC_affinity', predictor='netmhcpan', score=0.9),
@@ -457,8 +457,8 @@ def test_predictions_for_multi_predictor_raises():
 
 
 def test_predictions_for_with_predictor_disambiguates():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', predictor='mhcflurry',
                   allele='HLA-A*02:01', score=0.4),
@@ -473,8 +473,8 @@ def test_predictions_for_with_predictor_disambiguates():
 
 
 def test_predictions_for_unknown_predictor_returns_empty():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', predictor='mhcflurry', score=0.4),
         ))
@@ -489,8 +489,8 @@ def test_predictions_for_lets_caller_rank_on_arbitrary_axis():
     custom DSL, iterate ``predictions_for`` directly. This is
     *the* parametric-scoring affordance — no callable plumbed
     through ``best``."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', allele='HLA-A*02:01',
                   score=0.9, value=10.0, percentile_rank=2.5),
@@ -512,8 +512,8 @@ def test_predictions_for_lets_caller_rank_on_arbitrary_axis():
 
 
 def test_predictions_for_multi_version_picks_most_recent():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', version='2.1.0', score=0.9),
             _pred('pMHC_affinity', version='2.1.1', score=0.4),
@@ -524,8 +524,8 @@ def test_predictions_for_multi_version_picks_most_recent():
 
 
 def test_predictions_for_with_explicit_version_pins():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', version='2.1.0', score=0.9),
             _pred('pMHC_affinity', version='2.1.1', score=0.4),
@@ -536,8 +536,8 @@ def test_predictions_for_with_explicit_version_pins():
 
 
 def test_predictions_for_unknown_version_returns_empty():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(_pred('pMHC_affinity', version='2.1.1'),))
     assert ctx.predictions_for(
         'pMHC_affinity', version='99.0.0') == ()
@@ -547,8 +547,8 @@ def test_predictions_for_handles_empty_version_strings():
     """Pre-#261 records had empty ``predictor_version``. Mixed
     with a real version, the real version wins (empty parses as
     InvalidVersion and falls below all PEP 440 versions)."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', version='', score=0.9),
             _pred('pMHC_affinity', version='2.1.1', score=0.4),
@@ -558,8 +558,8 @@ def test_predictions_for_handles_empty_version_strings():
 
 
 def test_predictions_for_all_invalid_versions_falls_back_lex():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', version='legacy_a', score=0.4),
             _pred('pMHC_affinity', version='legacy_z', score=0.7),
@@ -569,8 +569,8 @@ def test_predictions_for_all_invalid_versions_falls_back_lex():
 
 
 def test_versions_for_returns_oldest_to_newest():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', version='2.1.1'),
             _pred('pMHC_affinity', version='2.1.0'),
@@ -581,8 +581,8 @@ def test_versions_for_returns_oldest_to_newest():
 
 
 def test_versions_for_invalid_strings_sort_first():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', version='legacy'),
             _pred('pMHC_affinity', version='2.1.1'),
@@ -596,8 +596,8 @@ def test_versions_for_invalid_strings_sort_first():
 
 
 def test_best_single_predictor_picks_best_allele():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', allele='HLA-A*02:01', score=0.4),
             _pred('pMHC_affinity', allele='HLA-B*07:02', score=0.9),
@@ -610,13 +610,13 @@ def test_best_single_predictor_picks_best_allele():
 
 
 def test_best_returns_none_when_no_records():
-    ctx = PeptideContext(peptide_sequence='SIINFEKL')
+    ctx = Peptide(sequence='SIINFEKL')
     assert ctx.best('pMHC_affinity') is None
 
 
 def test_best_multi_predictor_raises_without_predictor_arg():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', predictor='mhcflurry', score=0.4),
             _pred('pMHC_affinity', predictor='netmhcpan', score=0.9),
@@ -626,8 +626,8 @@ def test_best_multi_predictor_raises_without_predictor_arg():
 
 
 def test_kind_named_helpers_forward_to_best():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', score=0.7),
             _pred('pMHC_presentation', score=0.5),
@@ -648,8 +648,8 @@ def test_best_for_processing_kind_works_without_allele():
     """Processing kinds emit ``allele=''``. ``best`` returns the
     one record without complaining about a missing allele key —
     proves allele-as-record-property handles this naturally."""
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         predictions=(
             _pred('proteasome_cleavage', predictor='pepsickle',
                   allele='', score=0.6),
@@ -664,8 +664,8 @@ def test_best_for_processing_kind_works_without_allele():
 
 
 def test_peptide_context_carries_flanks():
-    ctx = PeptideContext(
-        peptide_sequence='SIINFEKL',
+    ctx = Peptide(
+        sequence='SIINFEKL',
         n_flank='AAAAA',
         c_flank='CCCCC',
         source_sequence='AAAAASIINFEKLCCCCC',
@@ -679,7 +679,7 @@ def test_peptide_context_carries_flanks():
 
 
 def test_peptide_context_flanks_default_to_empty():
-    ctx = PeptideContext(peptide_sequence='SIINFEKL')
+    ctx = Peptide(sequence='SIINFEKL')
     assert ctx.n_flank == ''
     assert ctx.c_flank == ''
     assert ctx.source_sequence == ''
@@ -690,21 +690,21 @@ def test_peptide_context_flanks_default_to_empty():
 
 
 def test_candidate_epitope_wt_shortcut():
-    mutant = PeptideContext(peptide_sequence='SIINFEKL')
-    wt = PeptideContext(peptide_sequence='SIINFEKM')
-    candidate = CandidateEpitope(
-        mutant=mutant,
+    mutant = Peptide(sequence='SIINFEKL')
+    wt = Peptide(sequence='SIINFEKM')
+    candidate = CandidateEpitope.from_peptide(
+        mutant,
         comparators={COMPARATOR_WT: wt},
         overlaps_mutation=True)
     assert candidate.wt is wt
     assert candidate.comparator('wt') is wt
-    assert candidate.peptide_sequence == 'SIINFEKL'
+    assert candidate.sequence == 'SIINFEKL'
     assert candidate.length == 8
 
 
 def test_candidate_epitope_no_wt_returns_none():
-    candidate = CandidateEpitope(
-        mutant=PeptideContext(peptide_sequence='SIINFEKL'),
+    candidate = CandidateEpitope.from_peptide(
+        Peptide(sequence='SIINFEKL'),
         comparators={})
     assert candidate.wt is None
     assert candidate.comparator('wt') is None
@@ -715,19 +715,19 @@ def test_candidate_epitope_holds_arbitrary_comparators():
     #257 / #258) populate ``nearest_self`` / ``nearest_vital_self``
     / ``nearest_nonCTA`` / ``nearest_oncovirus`` without changing
     the data shape."""
-    mutant = PeptideContext(peptide_sequence='SIINFEKL')
-    nearest_self = PeptideContext(
-        peptide_sequence='SIINFEKM',
+    mutant = Peptide(sequence='SIINFEKL')
+    nearest_self = Peptide(
+        sequence='SIINFEKM',
         source_name='HumanProteome:OVA',
         predictions=(
             _pred('pMHC_affinity', allele='HLA-A*02:01', value=80.0),
         ))
-    candidate = CandidateEpitope(
-        mutant=mutant,
+    candidate = CandidateEpitope.from_peptide(
+        mutant,
         comparators={
-            COMPARATOR_WT: PeptideContext(peptide_sequence='SIINFEKM'),
+            COMPARATOR_WT: Peptide(sequence='SIINFEKM'),
             COMPARATOR_NEAREST_SELF: nearest_self,
-            'custom_comparator': PeptideContext(peptide_sequence='SIINFEEK'),
+            'custom_comparator': Peptide(sequence='SIINFEEK'),
         })
     assert candidate.comparator('nearest_self') is nearest_self
     assert candidate.comparator(
@@ -737,8 +737,8 @@ def test_candidate_epitope_holds_arbitrary_comparators():
 
 
 def test_candidate_epitope_freezes_mutation_context():
-    candidate = CandidateEpitope(
-        mutant=PeptideContext(peptide_sequence='SIINFEKL'),
+    candidate = CandidateEpitope.from_peptide(
+        Peptide(sequence='SIINFEKL'),
         comparators={},
         overlaps_mutation=True,
         occurs_in_reference=False)
@@ -746,3 +746,130 @@ def test_candidate_epitope_freezes_mutation_context():
     assert candidate.occurs_in_reference is False
     with pytest.raises(Exception):
         candidate.overlaps_mutation = False  # type: ignore
+
+
+# ---- Hash contract ------------------------------------------------------
+
+
+def test_peptide_hash_is_position_identity():
+    """``__hash__`` covers ``(sequence, source_sequence, offset)`` —
+    NOT all fields. Two peptides at the same position with different
+    flanks / predictions hash equal (legal collision) but compare
+    unequal."""
+    a = Peptide(sequence='SIINFEKL', source_sequence='AAASIINFEKL', offset=3)
+    b = Peptide(sequence='SIINFEKL', source_sequence='AAASIINFEKL', offset=3,
+                n_flank='AAA')
+    assert hash(a) == hash(b)
+    assert a != b
+
+
+def test_peptide_usable_in_set():
+    """Trivially: instances go into sets / dict keys. Before the
+    custom ``__hash__`` this raised ``TypeError`` on the mutable
+    ``predictions`` dict."""
+    peptides = {
+        Peptide(sequence='SIINFEKL'),
+        Peptide(sequence='SIINFEKL'),  # same position → dedup'd
+        Peptide(sequence='SIINFEKM'),
+    }
+    assert len(peptides) == 2
+
+
+def test_candidate_epitope_inherits_hash_scheme():
+    """``@dataclass(frozen=True)`` regenerates ``__hash__`` on every
+    subclass, so ``CandidateEpitope`` must redefine the position-
+    identity hash. This test guards against a future refactor
+    forgetting the override (in which case the regenerated hash
+    would fail at runtime on the mutable ``comparators`` dict)."""
+    p = Peptide(sequence='SIINFEKL', source_sequence='AAASIINFEKL', offset=3)
+    ce = CandidateEpitope(
+        sequence='SIINFEKL', source_sequence='AAASIINFEKL', offset=3)
+    assert hash(p) == hash(ce)
+    # Confirms that adding comparators / flags doesn't change the
+    # hash — position identity, not full-field identity.
+    ce_with_extras = CandidateEpitope(
+        sequence='SIINFEKL', source_sequence='AAASIINFEKL', offset=3,
+        comparators={COMPARATOR_WT: Peptide(sequence='SIINFEKM')},
+        overlaps_mutation=True)
+    assert hash(ce) == hash(ce_with_extras)
+
+
+# ---- sliced() ----------------------------------------------------------
+
+
+def test_peptide_context_sliced_narrows_source_window():
+    """``sliced`` narrows the source window and rebases offset.
+    Peptide / flanks / source name / predictions are preserved."""
+    ctx = Peptide(
+        sequence='SIINFEKL',
+        n_flank='AAA',
+        c_flank='CCC',
+        source_sequence='XXXAAASIINFEKLCCCYYY',
+        source_name='OVA',
+        offset=6,
+        predictions=(
+            _pred('pMHC_affinity', allele='HLA-A*02:01', value=50.0),
+        ))
+    sliced = ctx.sliced(start_offset=3, end_offset=17)
+    assert sliced is not None
+    assert sliced.sequence == 'SIINFEKL'
+    assert sliced.n_flank == 'AAA'
+    assert sliced.c_flank == 'CCC'
+    assert sliced.source_sequence == 'AAASIINFEKLCCC'
+    assert sliced.source_name == 'OVA'
+    assert sliced.offset == 3  # 6 - 3
+    assert sliced.best_affinity().value == 50.0
+
+
+def test_peptide_context_sliced_returns_none_when_peptide_before_window():
+    ctx = Peptide(
+        sequence='SIINFEKL',
+        source_sequence='SIINFEKLYYY',
+        offset=0)
+    assert ctx.sliced(start_offset=2, end_offset=11) is None
+
+
+def test_peptide_context_sliced_returns_none_when_peptide_after_window():
+    ctx = Peptide(
+        sequence='SIINFEKL',
+        source_sequence='AAASIINFEKL',
+        offset=3)
+    # Window ends before the peptide ends.
+    assert ctx.sliced(start_offset=0, end_offset=8) is None
+
+
+def test_epitope_sliced_delegates_to_mutant_keeping_comparators():
+    """``CandidateEpitope.sliced`` narrows the mutant's source window;
+    comparators are independent peptides and pass through unchanged."""
+    mutant = Peptide(
+        sequence='SIINFEKL',
+        source_sequence='AAASIINFEKLCCC',
+        offset=3)
+    wt = Peptide(
+        sequence='SIINFEKM',
+        source_sequence='AAASIINFEKMDDD',
+        offset=3)
+    epitope = CandidateEpitope.from_peptide(
+        mutant,
+        comparators={COMPARATOR_WT: wt},
+        overlaps_mutation=True,
+        occurs_in_reference=False)
+    sliced = epitope.sliced(start_offset=2, end_offset=12)
+    assert sliced is not None
+    assert sliced.source_sequence == 'ASIINFEKLC'
+    assert sliced.offset == 1  # 3 - 2
+    # WT comparator untouched.
+    assert sliced.wt is wt
+    # Mutation flags preserved.
+    assert sliced.overlaps_mutation is True
+    assert sliced.occurs_in_reference is False
+
+
+def test_epitope_sliced_returns_none_when_mutant_doesnt_fit():
+    epitope = CandidateEpitope.from_peptide(
+        Peptide(
+            sequence='SIINFEKL',
+            source_sequence='SIINFEKLYYY',
+            offset=0),
+        comparators={})
+    assert epitope.sliced(start_offset=2, end_offset=11) is None

@@ -21,6 +21,8 @@ Pins:
 
 from types import SimpleNamespace
 
+from mhctools.pred import Prediction
+
 from vaxrank.coverage import (
     AlleleCoverage,
     antigen_tier_per_allele,
@@ -28,22 +30,36 @@ from vaxrank.coverage import (
     select_antigens_for_coverage,
     summarize_construction_decisions,
 )
+from vaxrank.candidate_epitope import CandidateEpitope, Peptide
 
 
 def _ep(peptide, allele, *, presentation_pct=None, affinity_pct=None,
         method=''):
-    """Minimal EpitopePrediction-like record."""
-    return SimpleNamespace(
-        peptide_sequence=peptide, allele=allele,
-        presentation_percentile=presentation_pct,
-        percentile_rank=affinity_pct,
-        prediction_method_name=method)
+    """One ``CandidateEpitope`` carrying one or two leaf ``Prediction`` records —
+    a presentation-rank one (``pMHC_presentation``) and/or an affinity-
+    rank one (``pMHC_affinity``). Matches the multi-kind shape
+    ``compute_coverage`` operates on."""
+    preds = []
+    if presentation_pct is not None:
+        preds.append(Prediction(
+            kind='pMHC_presentation', predictor_name=method or 'pres',
+            predictor_version='', allele=allele, peptide=peptide,
+            value=None, score=0.0, percentile_rank=presentation_pct))
+    if affinity_pct is not None:
+        preds.append(Prediction(
+            kind='pMHC_affinity', predictor_name=method or 'aff',
+            predictor_version='', allele=allele, peptide=peptide,
+            value=None, score=0.0, percentile_rank=affinity_pct))
+    return CandidateEpitope.from_peptide(
+        Peptide(
+            sequence=peptide, predictions=tuple(preds)),
+        overlaps_mutation=True, occurs_in_reference=False)
 
 
-def _vp(predictions, *, combined_score=1.0, gene_name='GENE'):
-    """Minimal VaccinePeptide-like record."""
+def _vp(epitopes, *, combined_score=1.0, gene_name='GENE'):
+    """Minimal VaccinePeptide-like record (CandidateEpitope shape)."""
     return SimpleNamespace(
-        mutant_epitope_predictions=predictions,
+        target_epitopes=epitopes,
         mutant_protein_fragment=SimpleNamespace(
             gene_name=gene_name, amino_acids='AAAAAAA'),
         combined_score=combined_score,

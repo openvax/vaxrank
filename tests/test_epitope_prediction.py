@@ -11,19 +11,28 @@
 # limitations under the License.
 
 from mhctools import RandomBindingPredictor
-from pyensembl import genome_for_reference_name
 from varcode import Variant
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.epitope_logic import predict_epitopes
-from vaxrank.epitope_prediction import EpitopePrediction
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
-from vaxrank.vaccine_peptide import VaccinePeptide
+from vaxrank.vaccine_peptide import VaccinePeptide, _legacy_score_one
 
 from .common import eq_, ok_
 
-mouse_genome = genome_for_reference_name("GRCm38")
 
-def test_reference_peptide_logic():
+def _by_pep_allele(epitopes):
+    """Map ``(peptide, allele) -> (CandidateEpitope, mutant Prediction leaf)``
+    for single-predictor test inputs."""
+    out = {}
+    for e in epitopes:
+        for p in e.predictions_flat():
+            if p.kind != 'pMHC_affinity':
+                continue
+            out[(e.sequence, p.allele)] = (e, p)
+    return out
+
+
+def test_reference_peptide_logic(mouse_genome):
 
     wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-201")[0]
 
@@ -39,42 +48,37 @@ def test_reference_peptide_logic():
         n_alt_reads_supporting_protein_sequence=2,
         supporting_reference_transcripts=[wdr13_transcript])
 
-    # Use min_epitope_score=0 to ensure no epitopes are filtered by score
-    # (RandomBindingPredictor generates random IC50 values that can cause filtering)
     epitope_config = EpitopeConfig(min_epitope_score=0)
-    epitope_predictions = predict_epitopes(
+    epitopes = predict_epitopes(
         mhc_predictor=RandomBindingPredictor(["H-2-Kb"]),
         protein_fragment=protein_fragment,
         epitope_config=epitope_config,
         genome=mouse_genome)
 
-    # ``predict_epitopes`` returns a flat list (post-2.24, #261) so
-    # multi-predictor runs preserve every prediction. Single-predictor
-    # tests like this one look up by (peptide, allele) themselves.
-    by_key = {
-        (p.peptide_sequence, p.allele): p for p in epitope_predictions}
+    # Single-predictor test: one Prediction per (peptide, allele).
+    by_key = _by_pep_allele(epitopes)
     # occurs in protein ENSMUSP00000033506
-    prediction_occurs_in_reference = by_key[('NCDESLLAS', 'H-2-Kb')]
-    prediction_does_not_occur_in_reference = by_key[('LDVIVNCDE', 'H-2-Kb')]
-    ok_(prediction_occurs_in_reference.occurs_in_reference)
-    ok_(not prediction_does_not_occur_in_reference.occurs_in_reference)
+    e_in_ref, p_in_ref = by_key[('NCDESLLAS', 'H-2-Kb')]
+    e_not_in_ref, p_not_in_ref = by_key[('LDVIVNCDE', 'H-2-Kb')]
+    ok_(e_in_ref.occurs_in_reference)
+    ok_(not e_not_in_ref.occurs_in_reference)
 
-    # construct a simple vaccine peptide having these two predictions, which makes it easy to check
-    # for mutant/WT scores from single contributors
+    # Build a VaccinePeptide from these two Epitopes; the mutant /
+    # wildtype split comes out of __post_init__.
     vaccine_peptide = VaccinePeptide(
-        protein_fragment,
-        [prediction_occurs_in_reference, prediction_does_not_occur_in_reference])
+        protein_fragment, [e_in_ref, e_not_in_ref])
 
-    eq_(prediction_occurs_in_reference.logistic_epitope_score(),
-        vaccine_peptide.wildtype_epitope_score)
-    eq_(prediction_does_not_occur_in_reference.logistic_epitope_score(),
-        vaccine_peptide.mutant_epitope_score)
+    eq_(_legacy_score_one(p_in_ref.value, p_in_ref.percentile_rank),
+        vaccine_peptide.self_epitope_score)
+    eq_(_legacy_score_one(p_not_in_ref.value, p_not_in_ref.percentile_rank),
+        vaccine_peptide.target_epitope_score)
 
-def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel():
-    """Multi-model TopiaryPredictor (post-2.24, #261) emits one
-    EpitopePrediction per (peptide, allele, predictor) instead of
-    overwriting via dict-keyed-on-(peptide,allele). Verifies the
-    flat-list return shape preserves every predictor's view."""
+def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel(mouse_genome):
+    """Multi-model TopiaryPredictor (post-2.24, #261) keeps each
+    predictor's view of every (peptide, allele) pair. In the new
+    CandidateEpitope shape, one CandidateEpitope per (peptide, source, offset) carries
+    multiple per-(predictor, allele) leaf Predictions — verifies that
+    no leaf record is lost in the grouping."""
     from unittest.mock import patch
     import pandas as pd
     from topiary import TopiaryPredictor
@@ -115,35 +119,29 @@ def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel():
         def predict_from_named_sequences(self, _named_sequences):
             return fake_df
 
-    # Multi-predictor mode: tell the topiary DSL which model to
-    # default ``affinity`` to (or use bracket syntax in score_expr).
-    # This is the real-world contract for multi-predictor scoring.
     epitope_config = EpitopeConfig(
         min_epitope_score=0,
         default_methods={'pMHC_affinity': 'mhcflurry'})
     with patch('vaxrank.epitope_logic.ReferenceProteome'):
-        preds = predict_epitopes(
+        epitopes = predict_epitopes(
             mhc_predictor=_StubTopiary(),
             protein_fragment=protein_fragment,
             epitope_config=epitope_config,
             genome=mouse_genome)
-    # 2 predictors × 2 peptides × 1 allele = 4 predictions; pre-fix
-    # this would collapse to 2 (one per (peptide, allele) key).
-    assert len(preds) == 4
-    methods = sorted({p.prediction_method_name for p in preds})
+    # 2 unique peptide positions; each carries 2-predictor × 1-allele
+    # leaf records (4 leaves total). Pre-fix dict-keyed return would
+    # have lost one predictor per (peptide, allele).
+    assert len(epitopes) == 2
+    leaves = [p for e in epitopes for p in e.predictions_flat()]
+    assert len(leaves) == 4
+    methods = sorted({p.predictor_name for p in leaves})
     assert methods == ['mhcflurry', 'netmhcpan']
-    # Same (peptide, allele) appears twice, once per predictor.
-    by_pep_allele = {}
-    for p in preds:
-        by_pep_allele.setdefault(
-            (p.peptide_sequence, p.allele), []).append(p.prediction_method_name)
-    for key, names in by_pep_allele.items():
-        assert sorted(names) == ['mhcflurry', 'netmhcpan'], (
-            "Expected both predictors per (peptide, allele); got %r for %r"
-            % (names, key))
+    for e in epitopes:
+        per_method = {p.predictor_name for p in e.predictions_flat()}
+        assert per_method == {'mhcflurry', 'netmhcpan'}
 
 
-def test_mhc_predictor_error():
+def test_mhc_predictor_error(mouse_genome):
     wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-201")[0]
 
     protein_fragment = MutantProteinFragment(
@@ -172,20 +170,3 @@ def test_mhc_predictor_error():
         genome=mouse_genome)
 
     eq_(0, len(epitope_predictions))
-
-def test_EpitopePrediction_json_serialization():
-    e = EpitopePrediction(
-        allele="HLA-A*02:01",
-        peptide_sequence="SIINFEQL",
-        ic50=2.0,
-        wt_peptide_sequence="SIINFEKL",
-        wt_ic50=2000.0,
-        percentile_rank=0.3,
-        prediction_method_name="ImaginationMHCpan",
-        overlaps_mutation=True,
-        source_sequence="SSIINFEQL",
-        offset=1,
-        occurs_in_reference=False)
-    json = e.to_json()
-    e2 = EpitopePrediction.from_json(json)
-    eq_(e, e2)

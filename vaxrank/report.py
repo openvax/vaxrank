@@ -26,6 +26,7 @@ from varcode import load_vcf_fast
 from .cancer_hotspots import get_hotspot_url
 from .manufacturability import ManufacturabilityScores
 from .processing import PEPSICKLE_PREDICTOR_NAME
+from .vaccine_peptide import _legacy_score_one
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +153,7 @@ class TemplateDataCreator(object):
         # use predictor-agnostic header names without losing
         # provenance. Today there's only one (pepsickle, see
         # ``vaxrank.processing``); a future per-position predictor
-        # plugged in via the same EpitopePrediction fields would
+        # plugged in via the same flat record fields would
         # show its own name here.
         patient_info['Processing predictor'] = PEPSICKLE_PREDICTOR_NAME
         patient_info['Total number of somatic variants'] = (
@@ -258,7 +259,7 @@ class TemplateDataCreator(object):
             ('Transcript name', transcript_name),
             ('Length', len(amino_acids)),
             ('Expression score', _sanitize(vaccine_peptide.expression_score)),
-            ('Mutant epitope score', _sanitize(vaccine_peptide.mutant_epitope_score)),
+            ('Mutant epitope score', _sanitize(vaccine_peptide.target_epitope_score)),
             ('Combined score', _sanitize(vaccine_peptide.combined_score)),
             ('Max coding sequence coverage',
                 mutant_protein_fragment.n_alt_reads_supporting_protein_sequence),
@@ -286,9 +287,9 @@ class TemplateDataCreator(object):
         ])
         return manufacturability_data
 
-    def _processing_prediction_for(self, epitope_prediction):
-        """Look up the ProcessingPrediction for this epitope by
-        ``(peptide, source, predictor_name)``. Returns ``None`` when
+    def _processing_prediction_for(self, epitope, prediction):
+        """Look up the ProcessingPrediction for this epitope+prediction
+        by ``(peptide, source, predictor_name)``. Returns ``None`` when
         no record exists (annotation pass didn't run, or this
         prediction had no usable source sequence).
 
@@ -299,14 +300,44 @@ class TemplateDataCreator(object):
         predictor name from a config knob and fall back as needed.
         """
         key = (
-            epitope_prediction.peptide_sequence or '',
-            getattr(epitope_prediction, 'source_sequence', '') or '',
+            epitope.sequence or '',
+            epitope.source_sequence or '',
             PEPSICKLE_PREDICTOR_NAME,
         )
         return self.processing_predictions_by_key.get(key)
 
-    def _epitope_data(self, epitope_prediction, include_processing=False):
-        """Returns an OrderedDict with epitope data from the given prediction.
+    def _wt_ic50_for_allele(self, epitope, allele, predictor=None):
+        """Return the WT pMHC_affinity IC50 for ``allele`` (optionally
+        scoped to ``predictor``) from this epitope's WT comparator,
+        or ``None`` when no WT record exists (e.g. WT peptide was
+        too short, or peptide doesn't overlap the mutation).
+
+        Iterates ``predictions_flat()`` rather than
+        ``predictions_for('pMHC_affinity')`` so multi-predictor WT
+        comparators don't trip the disambiguation check.
+        """
+        if epitope.wt is None:
+            return None
+        for p in epitope.wt.predictions_flat():
+            if p.kind != 'pMHC_affinity':
+                continue
+            if p.allele != allele:
+                continue
+            if predictor is not None and p.predictor_name != predictor:
+                continue
+            if p.value is not None:
+                return p.value
+        return None
+
+    def _epitope_data(self, epitope, prediction, include_processing=False):
+        """Returns an OrderedDict with epitope data for one
+        (CandidateEpitope, mutant Prediction) row.
+
+        One mutant ``CandidateEpitope`` carries N per-allele × per-predictor
+        ``mhctools.Prediction`` records. The report keeps the legacy
+        one-row-per-(peptide, allele, predictor) shape, so the caller
+        iterates over ``epitope.predictions_for('pMHC_affinity')``
+        and passes each leaf record here alongside its parent CandidateEpitope.
 
         ``include_processing``: when True, always emit the three
         proteasomal-cleavage credibility columns
@@ -318,7 +349,7 @@ class TemplateDataCreator(object):
         the columns so the rendered table has consistent headers
         and column widths.
 
-        When False (default), the legacy 6-column dict is returned
+        When False (default), the legacy 7-column dict is returned
         unchanged — reports that don't run pepsickle keep their
         original shape.
 
@@ -326,16 +357,17 @@ class TemplateDataCreator(object):
         ``self.processing_predictions_by_key`` (built by
         :func:`vaxrank.processing.annotate_processing`), looked up
         by ``(peptide, source, predictor_name)``. Pre-2.23 these
-        lived as ``pepsickle_*`` attributes on the EpitopePrediction
+        lived as ``pepsickle_*`` attributes on the flat record
         itself; the join is the new contract (#272).
         """
-        # if the WT peptide is too short, it's possible that we're missing a prediction for it
-        if epitope_prediction.wt_ic50 is not None:
-            wt_ic50_str = '%.2f nM' % epitope_prediction.wt_ic50
-        else:
-            wt_ic50_str = 'No prediction'
+        wt_ic50 = self._wt_ic50_for_allele(
+            epitope, prediction.allele, predictor=prediction.predictor_name)
+        wt_ic50_str = (
+            '%.2f nM' % wt_ic50 if wt_ic50 is not None else 'No prediction')
+        wt_peptide_sequence = (
+            epitope.wt.sequence if epitope.wt is not None else '')
         epitope_data = OrderedDict([
-            ('Sequence', epitope_prediction.peptide_sequence),
+            ('Sequence', epitope.sequence),
             # ``Predictor`` names which MHC affinity tool produced
             # ``IC50`` / ``Score`` / ``WT IC50`` for this row —
             # mhcflurry / netmhcpan / mhcflurry-presentation / etc.
@@ -343,17 +375,18 @@ class TemplateDataCreator(object):
             # are sometimes multi-predictor (e.g. mhcflurry +
             # netmhcpan), so making the source explicit per row is
             # the only honest answer.
-            ('Predictor', epitope_prediction.prediction_method_name or '—'),
-            ('IC50', '%.2f nM' % epitope_prediction.ic50),
+            ('Predictor', prediction.predictor_name or '—'),
+            ('IC50', '%.2f nM' % prediction.value),
             # ``Score`` is the logistic transform of IC50 (range
             # [0, 1]; higher = stronger predicted binder). It is NOT
             # mhcflurry's presentation_score / EL — vaxrank derives
             # it locally so the column is comparable across
             # predictors.
             ('Score (affinity, logistic IC50)',
-                _sanitize(epitope_prediction.logistic_epitope_score())),
-            ('Allele', epitope_prediction.allele.replace('HLA-', '')),
-            ('WT sequence', epitope_prediction.wt_peptide_sequence),
+                _sanitize(_legacy_score_one(
+                    prediction.value, prediction.percentile_rank))),
+            ('Allele', prediction.allele.replace('HLA-', '')),
+            ('WT sequence', wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
         ])
         if include_processing:
@@ -363,7 +396,7 @@ class TemplateDataCreator(object):
             # The active predictor is named in the patient-info
             # header (``Processing predictor: pepsickle``) so the
             # reader can trace which model produced the values.
-            pp = self._processing_prediction_for(epitope_prediction)
+            pp = self._processing_prediction_for(epitope, prediction)
             if pp is None:
                 c_term = max_int = proc = None
             else:
@@ -449,7 +482,7 @@ class TemplateDataCreator(object):
 
             peptides = []
             for j, vaccine_peptide in enumerate(vaccine_peptides):
-                if not vaccine_peptide.contains_mutant_epitopes():
+                if not vaccine_peptide.contains_target_epitopes():
                     logger.info('No epitopes for peptide: %s', vaccine_peptide)
                     continue
 
@@ -462,27 +495,50 @@ class TemplateDataCreator(object):
 
                 # Issue #249 / #272: processing-credibility columns
                 # are added to every row in this VP's per-epitope
-                # table iff *any* mutant prediction in the list has a
+                # table iff *any* mutant epitope in the list has a
                 # ProcessingPrediction in the map. Keeps the rendered
                 # HTML/PDF/ASCII table headers consistent with the
                 # rows even when some predictions failed annotation
                 # (per-source pepsickle errors are graceful, so
                 # mixed annotated/unannotated lists are possible).
+                #
+                # Pepsickle keys off (peptide, source) — independent
+                # of allele — so we look up once per CandidateEpitope using
+                # the first available leaf Prediction as a probe.
+                def _has_processing(e):
+                    for p in e.predictions_flat():
+                        if self._processing_prediction_for(e, p) is not None:
+                            return True
+                    return False
+
                 any_processing = any(
-                    self._processing_prediction_for(p) is not None
-                    for p in vaccine_peptide.mutant_epitope_predictions)
+                    _has_processing(e)
+                    for e in vaccine_peptide.target_epitopes)
 
                 epitopes = []
                 wt_epitopes = []
-                for mutant_epitope_prediction in vaccine_peptide.mutant_epitope_predictions:
-                    epitopes.append(self._epitope_data(
-                        mutant_epitope_prediction,
-                        include_processing=any_processing))
+                # One report row per (CandidateEpitope, allele × predictor)
+                # leaf record. Keeps today's table shape: one row per
+                # (peptide, allele) in single-predictor runs; multiple
+                # rows per (peptide, allele) when multi-predictor data
+                # is in play (mhcflurry + netmhcpan), with the
+                # Predictor column distinguishing them.
+                def _affinity_leaves(e):
+                    return [
+                        p for p in e.predictions_flat()
+                        if p.kind == 'pMHC_affinity']
 
-                for wt_epitope_prediction in vaccine_peptide.wildtype_epitope_predictions:
-                    epitope_data = self._epitope_data(wt_epitope_prediction)
-                    key_list = ['Allele', 'IC50', 'Sequence']
-                    wt_epitopes.append({key: epitope_data[key] for key in key_list})
+                for e in vaccine_peptide.target_epitopes:
+                    for p in _affinity_leaves(e):
+                        epitopes.append(self._epitope_data(
+                            e, p, include_processing=any_processing))
+
+                for e in vaccine_peptide.self_epitopes:
+                    for p in _affinity_leaves(e):
+                        epitope_data = self._epitope_data(e, p)
+                        key_list = ['Allele', 'IC50', 'Sequence']
+                        wt_epitopes.append(
+                            {key: epitope_data[key] for key in key_list})
 
                 # hack: make a nicely-formatted fixed width table for epitopes, used in ASCII report
                 with tempfile.TemporaryFile(mode='r+') as temp:
@@ -627,7 +683,7 @@ def new_columns():
         ("mutation_end", []),
         ("combined_score", []),
         ("expression_score", []),
-        ("mutant_epitope_score", []),
+        ("target_epitope_score", []),
     ])
     for field in ManufacturabilityScores._fields:
         columns[field] = []
@@ -674,31 +730,48 @@ def make_minimal_neoepitope_report(
       Path to which to write the output Excel file
     """
     rows = []
-    # each row in the spreadsheet is a neoepitope
+    # each row in the spreadsheet is one (peptide, allele) record
     for (variant, vaccine_peptides) in ranked_variants_with_vaccine_peptides:
         for vaccine_peptide in vaccine_peptides:
-            # only include mutant epitopes
-            epitope_predictions = vaccine_peptide.mutant_epitope_predictions
+            epitopes = vaccine_peptide.target_epitopes
             if num_epitopes_per_peptide is not None:
-                epitope_predictions = epitope_predictions[:num_epitopes_per_peptide]
-            for epitope_prediction in epitope_predictions:
-                if epitope_prediction.wt_ic50 is not None:
-                    wt_ic50_str = '%.2f nM' % epitope_prediction.wt_ic50
-                else:
-                    wt_ic50_str = 'No prediction'
-                row = OrderedDict([
-                    ('Allele', epitope_prediction.allele),
-                    ('Mutant peptide sequence', epitope_prediction.peptide_sequence),
-                    ('Score', vaccine_peptide.mutant_epitope_score),
-                    ('Predicted mutant pMHC affinity', '%.2f nM' % epitope_prediction.ic50),
-                    ('Variant allele RNA read count',
-                        vaccine_peptide.mutant_protein_fragment.n_alt_reads),
-                    ('Wildtype sequence', epitope_prediction.wt_peptide_sequence),
-                    ('Predicted wildtype pMHC affinity', wt_ic50_str),
-                    ('Gene name', vaccine_peptide.mutant_protein_fragment.gene_name),
-                    ('Genomic variant', variant.short_description),
-                ])
-                rows.append(row)
+                epitopes = epitopes[:num_epitopes_per_peptide]
+            for epitope in epitopes:
+                wt_peptide_sequence = (
+                    epitope.wt.sequence
+                    if epitope.wt is not None else '')
+                affinity_leaves = [
+                    p for p in epitope.predictions_flat()
+                    if p.kind == 'pMHC_affinity']
+                for p in affinity_leaves:
+                    wt_ic50 = None
+                    if epitope.wt is not None:
+                        for wt_p in epitope.wt.predictions_flat():
+                            if (wt_p.kind == 'pMHC_affinity'
+                                    and wt_p.allele == p.allele
+                                    and wt_p.predictor_name == p.predictor_name
+                                    and wt_p.value is not None):
+                                wt_ic50 = wt_p.value
+                                break
+                    wt_ic50_str = (
+                        '%.2f nM' % wt_ic50 if wt_ic50 is not None
+                        else 'No prediction')
+                    row = OrderedDict([
+                        ('Allele', p.allele),
+                        ('Mutant peptide sequence',
+                            epitope.sequence),
+                        ('Score', vaccine_peptide.target_epitope_score),
+                        ('Predicted mutant pMHC affinity',
+                            '%.2f nM' % p.value),
+                        ('Variant allele RNA read count',
+                            vaccine_peptide.mutant_protein_fragment.n_alt_reads),
+                        ('Wildtype sequence', wt_peptide_sequence),
+                        ('Predicted wildtype pMHC affinity', wt_ic50_str),
+                        ('Gene name',
+                            vaccine_peptide.mutant_protein_fragment.gene_name),
+                        ('Genomic variant', variant.short_description),
+                    ])
+                    rows.append(row)
 
     if len(rows) > 0:
         df = pd.DataFrame.from_dict(rows)
@@ -740,7 +813,7 @@ def make_csv_report(
         for j, vaccine_peptide in enumerate(vaccine_peptides):
 
             # if there are no predicted epitopes, exclude this peptide from the report
-            if not vaccine_peptide.contains_mutant_epitopes():
+            if not vaccine_peptide.contains_target_epitopes():
                 logger.info('No epitopes for peptide: %s', vaccine_peptide)
                 continue
 
@@ -758,7 +831,7 @@ def make_csv_report(
                 vaccine_peptide.mutant_protein_fragment.mutant_amino_acid_end_offset)
             columns["combined_score"].append(_sanitize(vaccine_peptide.combined_score))
             columns["expression_score"].append(_sanitize(vaccine_peptide.expression_score))
-            columns["mutant_epitope_score"].append(_sanitize(vaccine_peptide.mutant_epitope_score))
+            columns["target_epitope_score"].append(_sanitize(vaccine_peptide.target_epitope_score))
             for field in ManufacturabilityScores._fields:
                 columns[field].append(
                     _sanitize(getattr(vaccine_peptide.manufacturability_scores, field)))

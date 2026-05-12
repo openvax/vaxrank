@@ -28,7 +28,7 @@ from scalar fields (``binding_affinity_cutoff``, ``logistic_epitope_score_*``,
 ``scoring_mode``, ``percentile_rank_cutoff``). The default affinity-mode
 score uses topiary 5.1's :class:`LogisticNormalizedExpr` so the output is in
 ``[0, 1]`` and matches the legacy
-:meth:`vaxrank.epitope_prediction.EpitopePrediction.logistic_epitope_score`
+``logistic_epitope_score`` (pre-3.0)
 byte-for-byte.
 
 Multi-model inputs (e.g. LENS with both MHCflurry and netMHCpan producing
@@ -88,40 +88,49 @@ def _kind_for_method(method_name):
     return _METHOD_KIND_MAP.get(str(method_name).lower(), "pMHC_affinity")
 
 
-def predictions_to_topiary_df(predictions):
-    """Convert a list of :class:`EpitopePrediction` into the topiary
-    long-format DataFrame consumed by :class:`topiary.ranking.EvalContext`
-    and :func:`topiary.ranking.apply_filter`.
+def epitopes_to_topiary_df(epitopes):
+    """Convert a list of :class:`vaxrank.candidate_epitope.CandidateEpitope` into the
+    topiary long-format DataFrame consumed by
+    :class:`topiary.ranking.EvalContext` and
+    :func:`topiary.ranking.apply_filter`.
 
-    Each ``EpitopePrediction`` becomes one row; when multiple predictions
-    share a (peptide, allele) pair (e.g. MHCflurry and netMHCpan rows
-    from a LENS file), DSL expressions can select between them via
-    ``affinity['mhcflurry']`` / ``affinity['netmhcpan']``, and when the
-    predictions carry ``predictor_version`` they can also disambiguate
-    by version via ``affinity['mhcflurry', '2.1.1']``. Unqualified refs
-    (``affinity.value``) resolve to the Kind's default method — see
-    :func:`resolve_default_methods`.
+    One row per leaf ``mhctools.Prediction`` in each CandidateEpitope's mutant
+    context — a single CandidateEpitope can emit N rows (one per allele x
+    predictor x kind). When multiple predictions share a (peptide,
+    allele) pair (e.g. MHCflurry and netMHCpan rows from a LENS file),
+    DSL expressions can select between them via
+    ``affinity['mhcflurry']`` / ``affinity['netmhcpan']``, and when
+    the predictions carry ``predictor_version`` they can also
+    disambiguate by version via ``affinity['mhcflurry', '2.1.1']``.
+    Unqualified refs (``affinity.value``) resolve to the Kind's
+    default method — see :func:`resolve_default_methods`.
+
+    Comparator predictions (``epitope.wt``, ``nearest_self``, ...)
+    are NOT emitted as rows. The DSL frame is mutant-only by
+    convention — comparator data stays on the CandidateEpitope for display.
     """
     rows = []
-    for p in predictions:
-        tool = str(p.prediction_method_name or "")
-        rows.append({
-            "sample_name": "",
-            "source_sequence_name": p.source_sequence or p.peptide_sequence,
-            "peptide": p.peptide_sequence,
-            "peptide_offset": p.offset,
-            "peptide_length": len(p.peptide_sequence),
-            "allele": p.allele,
-            "n_flank": "",
-            "c_flank": "",
-            "prediction_method_name": tool,
-            "predictor_version": p.predictor_version or "",
-            "kind": _kind_for_method(tool),
-            "value": p.ic50,
-            "affinity": p.ic50,
-            "percentile_rank": p.percentile_rank,
-            "score": 0.0,
-        })
+    for e in epitopes:
+        ctx = e
+        source_name = ctx.source_sequence or ctx.sequence
+        for p in ctx.predictions_flat():
+            rows.append({
+                "sample_name": "",
+                "source_sequence_name": source_name,
+                "peptide": p.peptide,
+                "peptide_offset": ctx.offset,
+                "peptide_length": len(p.peptide),
+                "allele": p.allele,
+                "n_flank": ctx.n_flank,
+                "c_flank": ctx.c_flank,
+                "prediction_method_name": p.predictor_name,
+                "predictor_version": p.predictor_version or "",
+                "kind": p.kind,
+                "value": p.value,
+                "affinity": p.value,
+                "percentile_rank": p.percentile_rank,
+                "score": p.score,
+            })
     return pd.DataFrame(rows)
 
 
@@ -205,8 +214,8 @@ def validate_default_methods(cfg, topiary_df):
                 f"(available for {kind}: {sorted(available)})")
 
 
-def score_predictions(predictions, cfg, *, topiary_df=None):
-    """Score external-input predictions using the configured Topiary DSL.
+def score_predictions(epitopes, cfg, *, topiary_df=None):
+    """Score external-input epitopes using the configured Topiary DSL.
 
     Returns a ``pandas.Series`` of per-(peptide, allele) scores indexed
     by the group-key MultiIndex topiary uses internally
@@ -224,15 +233,15 @@ def score_predictions(predictions, cfg, *, topiary_df=None):
 
     When ``cfg.score_expr`` / ``cfg.filter_expr`` are unset this applies
     the same default node that the main pipeline uses, which matches the
-    legacy :meth:`EpitopePrediction.logistic_epitope_score` byte-for-byte.
+    legacy per-prediction logistic score byte-for-byte.
 
     Pass ``topiary_df`` to reuse an already-built frame (see
-    :func:`predictions_to_topiary_df`) rather than rebuilding from
-    ``predictions``.
+    :func:`epitopes_to_topiary_df`) rather than rebuilding from
+    ``epitopes``.
     """
     from topiary.ranking import EvalContext, apply_filter
 
-    df = (predictions_to_topiary_df(predictions)
+    df = (epitopes_to_topiary_df(epitopes)
           if topiary_df is None else topiary_df)
     if df.empty:
         return pd.Series(dtype=float)
@@ -287,9 +296,9 @@ def collect_dsl_references(node):
     return {"columns": columns, "kinds": kinds}
 
 
-def validate_dsl_against_predictions(cfg, predictions, *, topiary_df=None):
+def validate_dsl_against_predictions(cfg, epitopes, *, topiary_df=None):
     """Error early when ``filter_expr`` / ``score_expr`` references a
-    predictor the loaded predictions don't expose.
+    predictor the loaded epitopes don't expose.
 
     Topiary's own ``apply_filter`` already validates ``Column(...)``
     references, but when a ``Field``'s (kind, method, version) isn't
@@ -298,7 +307,7 @@ def validate_dsl_against_predictions(cfg, predictions, *, topiary_df=None):
     user at ``default_methods`` / ``--input-lens`` when appropriate.
 
     Pass ``topiary_df`` to reuse an already-built frame rather than
-    rebuilding it from ``predictions``.
+    rebuilding it from ``epitopes``.
     """
     nodes = []
     if cfg.filter_expr is not None:
@@ -308,7 +317,7 @@ def validate_dsl_against_predictions(cfg, predictions, *, topiary_df=None):
     if not nodes:
         return
 
-    df = (predictions_to_topiary_df(predictions)
+    df = (epitopes_to_topiary_df(epitopes)
           if topiary_df is None else topiary_df)
     available_kinds = set(df["kind"].unique()) if not df.empty else set()
     available_methods = (

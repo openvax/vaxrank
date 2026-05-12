@@ -57,7 +57,7 @@ from .vaccine_library import (
     get_linker,
     iter_named_antigens,
     select_antigen_window,
-    top_mutant_epitopes,
+    top_target_epitopes,
 )
 
 logger = logging.getLogger(__name__)
@@ -435,7 +435,7 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
     for name, fragment, peptide in iter_named_antigens(
             ranked_vaccine_peptides, candidates_per_slot=candidates_per_slot):
         if antigen_content == "minimal_epitope":
-            tops = top_mutant_epitopes(peptide, n=epitopes_per_antigen)
+            tops = top_target_epitopes(peptide, n=epitopes_per_antigen)
             if not tops:
                 logger.info(
                     "Skipping %s in minimal_epitope mode: no mutant "
@@ -443,7 +443,7 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
                 continue
             for k, ep in enumerate(tops):
                 suffix = "_epitope" if len(tops) == 1 else "_epitope%d" % (k + 1)
-                yield name + suffix, ep.peptide_sequence
+                yield name + suffix, ep.sequence
         else:
             window = select_antigen_window(
                 fragment, name, max_antigen_length_aa)

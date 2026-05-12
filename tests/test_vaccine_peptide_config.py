@@ -21,9 +21,11 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from mhctools.pred import Prediction
 
 from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
 from vaxrank.manufacturability import DEFAULT_MANUFACTURABILITY_RULES
+from vaxrank.candidate_epitope import CandidateEpitope, Peptide
 from vaxrank.vaccine_peptide import VaccinePeptide
 
 
@@ -38,14 +40,29 @@ def _make_fragment(seq="A" * 25, n_alt_reads=9):
     )
 
 
-def _make_mutant_epitope(ic50=10.0):
-    """Duck-typed EpitopePrediction that overlaps mutation, not in reference."""
-    return SimpleNamespace(
-        ic50=ic50,
+def _make_mutant_epitope(ic50=10.0, peptide="A" * 9, source="A" * 25,
+                         offset=0):
+    """One ``CandidateEpitope`` with a single pMHC_affinity prediction, marked
+    as overlapping the mutation."""
+    pred = Prediction(
+        kind='pMHC_affinity',
+        predictor_name='test',
+        predictor_version='',
+        allele='HLA-A*02:01',
+        peptide=peptide,
+        value=ic50,
+        score=0.0,
         percentile_rank=0.5,
+    )
+    return CandidateEpitope.from_peptide(
+        Peptide(
+            sequence=peptide,
+            source_sequence=source,
+            offset=offset,
+            predictions=(pred,),
+        ),
         overlaps_mutation=True,
         occurs_in_reference=False,
-        logistic_epitope_score=lambda **kw: 0.9,
     )
 
 
@@ -53,7 +70,7 @@ def test_default_manufacturability_tuple_length():
     """Default sort tuple length = 10 (legacy behavior, unchanged)."""
     vp = VaccinePeptide(
         mutant_protein_fragment=_make_fragment(),
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
     )
     tup = vp.peptide_synthesis_difficulty_score_tuple()
     assert len(tup) == 10
@@ -63,7 +80,7 @@ def test_default_manufacturability_tuple_length():
 def test_custom_rules_shorten_tuple():
     vp = VaccinePeptide(
         mutant_protein_fragment=_make_fragment(),
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
         manufacturability_rules=["cysteine_count", "cterm_hydropathy"],
     )
     tup = vp.peptide_synthesis_difficulty_score_tuple(
@@ -76,41 +93,41 @@ def test_combined_score_default_mode_is_legacy():
     fragment = _make_fragment(n_alt_reads=9)
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
     )
-    # Legacy: sqrt(9) * mutant_epitope_score
+    # Legacy: sqrt(9) * target_epitope_score
     assert vp.expression_score == pytest.approx(np.sqrt(9))
-    assert vp.combined_score == pytest.approx(np.sqrt(9) * vp.mutant_epitope_score)
+    assert vp.combined_score == pytest.approx(np.sqrt(9) * vp.target_epitope_score)
 
 
 def test_combined_score_reads_times_epitope_mode():
     fragment = _make_fragment(n_alt_reads=9)
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
         combined_score_mode="reads_times_epitope",
     )
     # expression_score is an honest metric; mode only affects combined_score
     assert vp.expression_score == pytest.approx(np.sqrt(9))
-    assert vp.combined_score == pytest.approx(9.0 * vp.mutant_epitope_score)
+    assert vp.combined_score == pytest.approx(9.0 * vp.target_epitope_score)
 
 
 def test_combined_score_epitope_only_mode():
     fragment = _make_fragment(n_alt_reads=9)
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
         combined_score_mode="epitope_only",
     )
     assert vp.expression_score == pytest.approx(np.sqrt(9))
-    assert vp.combined_score == pytest.approx(vp.mutant_epitope_score)
+    assert vp.combined_score == pytest.approx(vp.target_epitope_score)
 
 
 def test_vaccine_peptide_rejects_unknown_combined_score_mode():
     with pytest.raises(ValueError, match="combined_score_mode"):
         VaccinePeptide(
             mutant_protein_fragment=_make_fragment(),
-            epitope_predictions=[_make_mutant_epitope()],
+            epitopes=[_make_mutant_epitope()],
             combined_score_mode="garbage",
         )
 
@@ -160,7 +177,7 @@ vaccine_peptides:
 
         vp = VaccinePeptide(
             mutant_protein_fragment=_make_fragment(),
-            epitope_predictions=[_make_mutant_epitope()],
+            epitopes=[_make_mutant_epitope()],
             manufacturability_rules=mfg.rules,
             combined_score_mode=vc.combined_score_mode,
         )
@@ -169,7 +186,7 @@ vaccine_peptides:
         )
         assert len(tup) == 3
         # combined_score under epitope_only is just the epitope score
-        assert vp.combined_score == pytest.approx(vp.mutant_epitope_score)
+        assert vp.combined_score == pytest.approx(vp.target_epitope_score)
     finally:
         os.unlink(config_path)
 
@@ -179,7 +196,7 @@ def test_vaccine_peptide_roundtrip_preserves_custom_config():
     fragment = _make_fragment()
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
         manufacturability_rules=["cysteine_count"],
         combined_score_mode="epitope_only",
     )
@@ -193,7 +210,7 @@ def test_vaccine_peptide_roundtrip_omits_defaults():
     fragment = _make_fragment()
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
-        epitope_predictions=[_make_mutant_epitope()],
+        epitopes=[_make_mutant_epitope()],
     )
     d = vp.to_dict()
     assert "manufacturability_rules" not in d
@@ -206,10 +223,10 @@ def test_vaccine_peptide_ranking_rules_tuple_coercion():
     manufacturability_rules)."""
     vp = VaccinePeptide(
         mutant_protein_fragment=_make_fragment(),
-        epitope_predictions=[_make_mutant_epitope()],
-        ranking_rules=["mutant_epitope_score", "n_alt_reads"],
+        epitopes=[_make_mutant_epitope()],
+        ranking_rules=["target_epitope_score", "n_alt_reads"],
     )
-    assert vp.ranking_rules == ("mutant_epitope_score", "n_alt_reads")
+    assert vp.ranking_rules == ("target_epitope_score", "n_alt_reads")
     assert isinstance(vp.ranking_rules, tuple)
     # Sort tuple length reflects the custom 2-rule list.
     assert len(vp.lexicographic_sort_key()) == 2
@@ -218,11 +235,11 @@ def test_vaccine_peptide_ranking_rules_tuple_coercion():
 def test_vaccine_peptide_custom_ranking_rules_in_to_dict():
     vp = VaccinePeptide(
         mutant_protein_fragment=_make_fragment(),
-        epitope_predictions=[_make_mutant_epitope()],
-        ranking_rules=["mutant_epitope_score"],
+        epitopes=[_make_mutant_epitope()],
+        ranking_rules=["target_epitope_score"],
     )
     d = vp.to_dict()
-    assert d["ranking_rules"] == ["mutant_epitope_score"]
+    assert d["ranking_rules"] == ["target_epitope_score"]
 
 
 def test_end_to_end_yaml_ranking_rules():
@@ -231,7 +248,7 @@ def test_end_to_end_yaml_ranking_rules():
     yaml_content = """
 vaccine_peptides:
   ranking_rules:
-    - mutant_epitope_score
+    - target_epitope_score
     - n_alt_reads
     - manufacturability
 """
@@ -250,14 +267,14 @@ vaccine_peptides:
         )
         vc = vaccine_config_from_args(args)
         assert vc.ranking_rules == (
-            "mutant_epitope_score", "n_alt_reads", "manufacturability",
+            "target_epitope_score", "n_alt_reads", "manufacturability",
         )
         assert isinstance(vc.ranking_rules, tuple)
         # Custom rules drop the extra_score_tuple tiers (n_alt_reads_supporting,
-        # wildtype_epitope_score, n_mutant_amino_acids, mutation_distance_from_edge).
+        # self_epitope_score, n_mutant_amino_acids, mutation_distance_from_edge).
         vp = VaccinePeptide(
             mutant_protein_fragment=_make_fragment(),
-            epitope_predictions=[_make_mutant_epitope()],
+            epitopes=[_make_mutant_epitope()],
             ranking_rules=vc.ranking_rules,
         )
         # 2 essential + 10 manufacturability defaults = 12 entries
@@ -273,24 +290,24 @@ def test_vaccine_config_rejects_unknown_ranking_rule():
         VaccineConfig(ranking_rules=("not_a_real_rule",))
 
 
-# ── require_mutant_epitopes_in_variant ───────────────────────────────────────
+# ── require_target_epitopes_in_variant ───────────────────────────────────────
 
-def test_vaccine_config_default_requires_mutant_epitopes():
+def test_vaccine_config_default_requires_target_epitopes():
     """Legacy behavior preserved: default is to drop variants with no
     mutant-overlapping epitopes."""
     from vaxrank.vaccine_config import VaccineConfig
-    assert VaccineConfig().require_mutant_epitopes_in_variant is True
+    assert VaccineConfig().require_target_epitopes_in_variant is True
 
 
-def test_require_mutant_epitopes_yaml_override(tmp_path):
-    """vaccine_peptides.require_mutant_epitopes_in_variant: false in YAML
+def test_require_target_epitopes_yaml_override(tmp_path):
+    """vaccine_peptides.require_target_epitopes_in_variant: false in YAML
     propagates into the config struct."""
     import yaml
     from vaxrank.config.loader import (
         extract_vaccine_config_kwargs, load_vaxrank_config)
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(yaml.safe_dump({
-        "vaccine_peptides": {"require_mutant_epitopes_in_variant": False}
+        "vaccine_peptides": {"require_target_epitopes_in_variant": False}
     }))
     import argparse
     args = argparse.Namespace(config=[str(cfg_path)],
@@ -298,11 +315,11 @@ def test_require_mutant_epitopes_yaml_override(tmp_path):
                               config_expr_overrides=None)
     merged = load_vaxrank_config(args)
     kwargs = extract_vaccine_config_kwargs(merged)
-    assert kwargs["require_mutant_epitopes_in_variant"] is False
+    assert kwargs["require_target_epitopes_in_variant"] is False
 
 
-def test_create_vaccine_peptides_dict_respects_require_mutant_epitopes():
-    """When require_mutant_epitopes_in_variant=False, variants with no
+def test_create_vaccine_peptides_dict_respects_require_target_epitopes():
+    """When require_target_epitopes_in_variant=False, variants with no
     mutant-overlapping vaccine peptides should still appear in the
     output dict (instead of being silently dropped)."""
     from unittest.mock import MagicMock, patch
@@ -313,7 +330,7 @@ def test_create_vaccine_peptides_dict_respects_require_mutant_epitopes():
     iso = MagicMock()
     iso.variant = "v1"
     no_epi_peptide = MagicMock()
-    no_epi_peptide.contains_mutant_epitopes.return_value = False
+    no_epi_peptide.contains_target_epitopes.return_value = False
 
     with patch("vaxrank.core_logic.vaccine_peptides_for_variant",
                return_value=[no_epi_peptide]):
@@ -327,7 +344,7 @@ def test_create_vaccine_peptides_dict_respects_require_mutant_epitopes():
         out_lax = create_vaccine_peptides_dict(
             isovar_results=[iso], mhc_predictor=MagicMock(),
             vaccine_config=VaccineConfig(
-                require_mutant_epitopes_in_variant=False))
+                require_target_epitopes_in_variant=False))
         assert "v1" in out_lax
 
 
@@ -386,7 +403,7 @@ def test_bundled_default_yaml_round_trips_to_default_configs(tmp_path):
     ec = epitope_config_from_args(args)
     vc = vaccine_config_from_args(args)
     mfg = manufacturability_config_from_args(args)
-    # Epitope side has no list-typed fields, so == works.
+    # CandidateEpitope side has no list-typed fields, so == works.
     assert ec == EpitopeConfig()
     # Vaccine side: ranking_rules tuple matches the default.
     assert vc.ranking_rules == DEFAULT_RANKING_RULES
@@ -397,9 +414,9 @@ def test_bundled_default_yaml_round_trips_to_default_configs(tmp_path):
     for field in (
         "preferred_peptide_length", "min_peptide_length",
         "max_peptide_length", "padding_around_mutation",
-        "max_vaccine_peptides_per_variant", "num_mutant_epitopes_to_keep",
+        "max_vaccine_peptides_per_variant", "num_target_epitopes_to_keep",
         "score_fraction_of_best", "combined_score_mode",
-        "require_mutant_epitopes_in_variant",
+        "require_target_epitopes_in_variant",
     ):
         assert getattr(vc, field) == getattr(vc_defaults, field), (
             f"default.yaml VaccineConfig drift: {field}")

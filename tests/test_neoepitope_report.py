@@ -17,8 +17,9 @@ Tests for the minimal neoepitope XLSX report.
 from types import SimpleNamespace
 
 import pandas as pd
+from mhctools.pred import Prediction
 
-from vaxrank.epitope_prediction import EpitopePrediction
+from vaxrank.candidate_epitope import COMPARATOR_WT, CandidateEpitope, Peptide
 from vaxrank.report import make_minimal_neoepitope_report
 
 
@@ -26,43 +27,44 @@ def _dummy_variant():
     return SimpleNamespace(short_description="chr1:1 A>G")
 
 
-def _dummy_vaccine_peptide(epitope_predictions):
+def _dummy_vaccine_peptide(epitopes):
     fragment = SimpleNamespace(gene_name="GENE1", n_alt_reads=10)
     return SimpleNamespace(
-        mutant_epitope_predictions=epitope_predictions,
-        mutant_epitope_score=1.23,
+        target_epitopes=epitopes,
+        target_epitope_score=1.23,
         mutant_protein_fragment=fragment,
     )
 
 
+def _make_epitope(peptide, ic50, wt_ic50, allele="HLA-A*02:01",
+                  wt_peptide=None):
+    mutant_pred = Prediction(
+        kind='pMHC_affinity', predictor_name='test',
+        predictor_version='', allele=allele, peptide=peptide,
+        value=ic50, score=0.0, percentile_rank=0.5)
+    comparators = {}
+    if wt_ic50 is not None:
+        wt_pred = Prediction(
+            kind='pMHC_affinity', predictor_name='test',
+            predictor_version='', allele=allele,
+            peptide=wt_peptide or peptide,
+            value=wt_ic50, score=0.0, percentile_rank=None)
+        comparators[COMPARATOR_WT] = Peptide(
+            sequence=wt_peptide or peptide,
+            predictions=(wt_pred,))
+    return CandidateEpitope.from_peptide(
+        Peptide(
+            sequence=peptide,
+            source_sequence=peptide, offset=0,
+            predictions=(mutant_pred,)),
+        comparators=comparators,
+        overlaps_mutation=True, occurs_in_reference=False)
+
+
 def test_neoepitope_report_limits_epitopes_per_peptide(tmp_path):
-    prediction1 = EpitopePrediction(
-        allele="HLA-A*02:01",
-        peptide_sequence="ABCDEFGHI",
-        wt_peptide_sequence="ABCDEFGHI",
-        ic50=100.0,
-        wt_ic50=200.0,
-        percentile_rank=0.5,
-        prediction_method_name="test",
-        overlaps_mutation=True,
-        source_sequence="ABCDEFGHI",
-        offset=0,
-        occurs_in_reference=False,
-    )
-    prediction2 = EpitopePrediction(
-        allele="HLA-A*02:01",
-        peptide_sequence="BCDEFGHIJ",
-        wt_peptide_sequence="BCDEFGHIJ",
-        ic50=150.0,
-        wt_ic50=250.0,
-        percentile_rank=0.4,
-        prediction_method_name="test",
-        overlaps_mutation=True,
-        source_sequence="BCDEFGHIJ",
-        offset=0,
-        occurs_in_reference=False,
-    )
-    vaccine_peptide = _dummy_vaccine_peptide([prediction1, prediction2])
+    e1 = _make_epitope("ABCDEFGHI", ic50=100.0, wt_ic50=200.0)
+    e2 = _make_epitope("BCDEFGHIJ", ic50=150.0, wt_ic50=250.0)
+    vaccine_peptide = _dummy_vaccine_peptide([e1, e2])
     excel_path = tmp_path / "neoepitopes.xlsx"
 
     make_minimal_neoepitope_report(
@@ -77,20 +79,8 @@ def test_neoepitope_report_limits_epitopes_per_peptide(tmp_path):
 
 
 def test_neoepitope_report_handles_missing_wt_ic50(tmp_path):
-    prediction = EpitopePrediction(
-        allele="HLA-A*02:01",
-        peptide_sequence="ABCDEFGHI",
-        wt_peptide_sequence="ABCDEFGHI",
-        ic50=100.0,
-        wt_ic50=None,
-        percentile_rank=0.5,
-        prediction_method_name="test",
-        overlaps_mutation=True,
-        source_sequence="ABCDEFGHI",
-        offset=0,
-        occurs_in_reference=False,
-    )
-    vaccine_peptide = _dummy_vaccine_peptide([prediction])
+    e = _make_epitope("ABCDEFGHI", ic50=100.0, wt_ic50=None)
+    vaccine_peptide = _dummy_vaccine_peptide([e])
     excel_path = tmp_path / "neoepitopes_missing_wt.xlsx"
 
     make_minimal_neoepitope_report(

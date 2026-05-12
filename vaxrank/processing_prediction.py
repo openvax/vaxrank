@@ -7,25 +7,24 @@
 """``ProcessingPrediction`` — a per-(peptide, source_sequence)
 proteasomal-cleavage prediction.
 
-Distinct from :class:`vaxrank.epitope_prediction.EpitopePrediction`
-because the two prediction kinds are semantically different axes:
+Lives on its own axis from MHC binding because the two prediction
+kinds are semantically different:
 
-- ``EpitopePrediction`` is a **(peptide, allele) MHC-binding** score
-  (output of an ``mhctools.BindingPredictor`` — pMHC affinity /
-  presentation / stability).
+- :class:`mhctools.Prediction` (carried inside ``vaxrank.CandidateEpitope``)
+  records **(peptide, allele) MHC-binding** scores (output of an
+  ``mhctools.BindingPredictor`` — pMHC affinity / presentation /
+  stability).
 - ``ProcessingPrediction`` is a **(peptide, source_sequence)
   proteasomal-cleavage** score (output of an
   ``mhctools.ProcessingPredictor`` — no allele axis, depends on
   the peptide's flanking context within its source protein).
 
-Pre-2.22 vaxrank annotated EpitopePrediction objects in place by
+Pre-2.22 vaxrank annotated flat record objects in place by
 adding ``pepsickle_*`` attributes — that conflated the two
 prediction kinds. ``ProcessingPrediction`` (this module) is the
-post-2.22 canonical record. The legacy in-place mutation is still
-performed for one deprecation cycle so existing report writers keep
-rendering; downstream code should migrate to consume the map of
-``ProcessingPrediction`` records returned by
-:func:`vaxrank.processing.annotate_processing`.
+post-2.22 canonical record; consumers join in by
+``(peptide_sequence, source_sequence, predictor_name)`` at
+render time.
 
 Issue: openvax/vaxrank#272.
 """
@@ -84,7 +83,7 @@ class ProcessingPrediction:
 
     def key(self) -> tuple:
         """Stable join key used by report writers to look up the
-        ProcessingPrediction for a given EpitopePrediction at render
+        ProcessingPrediction for a given mutant CandidateEpitope at render
         time. Includes the predictor name so a future second
         per-position cleavage predictor (NetChop, …) lands in the
         same map without colliding."""

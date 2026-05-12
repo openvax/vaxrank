@@ -95,16 +95,6 @@ def _better_tier(a: Optional[str], b: Optional[str]) -> Optional[str]:
     return a if rank[a] >= rank[b] else b
 
 
-def _peptide_tier(p) -> Optional[str]:
-    """Best tier achieved by one EpitopePrediction, taking the
-    smaller of presentation_percentile and percentile_rank when
-    both are available. Predictors that don't expose a given axis
-    don't contribute (None on that axis is ignored)."""
-    pres = getattr(p, 'presentation_percentile', None)
-    aff = getattr(p, 'percentile_rank', None)
-    return _better_tier(_tier_for_percentile(pres), _tier_for_percentile(aff))
-
-
 @dataclass(frozen=True)
 class AlleleCoverage:
     """Per-allele binding-evidence summary at one selection scope.
@@ -151,47 +141,46 @@ def _min(a: Optional[float], b: Optional[float]) -> Optional[float]:
 
 
 def compute_coverage(
-    epitope_predictions,
+    epitopes,
     target_alleles,
 ) -> dict[str, AlleleCoverage]:
     """Build {allele: AlleleCoverage} for ``target_alleles`` against
-    the evidence in ``epitope_predictions``.
+    the evidence in ``epitopes``.
 
     Every allele in ``target_alleles`` gets a row, even alleles with
     no predictions (tier=None, n=0). Alleles outside the target set
     are skipped — this is a coverage view, not a directory of every
     allele the predictor saw.
 
-    ``epitope_predictions`` is the flat list shape that vaxrank uses
-    everywhere post-#261 — one record per (peptide, allele,
-    predictor). When multi-predictor data is in play (e.g.
-    mhcflurry-presentation + netmhcpan-affinity for the same
-    (peptide, allele)), the predictions land here as separate
-    objects and ``compute_coverage`` aggregates evidence across
-    them.
+    ``epitopes`` is a list of ``vaxrank.candidate_epitope.CandidateEpitope``
+    objects. Each CandidateEpitope carries its mutant ``Peptide`` with
+    nested per-(kind, predictor, version, allele) ``Prediction``
+    records — for the same (peptide, allele) we may see a
+    ``pMHC_presentation`` record (mhcflurry-pres) and a
+    ``pMHC_affinity`` record (netmhcpan-affinity); ``compute_coverage``
+    aggregates evidence across kinds, taking the better of
+    presentation and binding-affinity %-rank per (peptide, allele).
     """
     targets = set(target_alleles or [])
     if not targets:
         return {}
     # Two passes: collect best %-ranks per (peptide, allele), then
-    # bucket into tiers. The first pass merges multi-predictor
-    # evidence — for one (peptide, allele) we may see two records,
-    # one with presentation and one with affinity.
+    # bucket into tiers. The first pass merges multi-predictor /
+    # multi-kind evidence within each CandidateEpitope.
     by_pep_allele: dict[tuple, dict] = {}
-    for p in epitope_predictions:
-        allele = getattr(p, 'allele', None)
-        if allele not in targets:
-            continue
-        peptide = getattr(p, 'peptide_sequence', None) or ''
+    for e in epitopes:
+        peptide = e.sequence
         if not peptide:
             continue
-        key = (peptide, allele)
-        slot = by_pep_allele.setdefault(
-            key, {'pres': None, 'aff': None})
-        slot['pres'] = _min(
-            slot['pres'], getattr(p, 'presentation_percentile', None))
-        slot['aff'] = _min(
-            slot['aff'], getattr(p, 'percentile_rank', None))
+        for p in e.predictions_flat():
+            if p.allele not in targets:
+                continue
+            slot = by_pep_allele.setdefault(
+                (peptide, p.allele), {'pres': None, 'aff': None})
+            if p.kind == 'pMHC_presentation':
+                slot['pres'] = _min(slot['pres'], p.percentile_rank)
+            elif p.kind == 'pMHC_affinity':
+                slot['aff'] = _min(slot['aff'], p.percentile_rank)
 
     # Aggregate to per-allele coverage.
     out: dict[str, AlleleCoverage] = {}
@@ -222,21 +211,21 @@ def compute_coverage(
     return out
 
 
-def _antigen_predictions(vaccine_peptide):
-    """All EpitopePredictions on this VaccinePeptide. Defensive:
-    tolerates duck-typed test fixtures that don't carry the field."""
-    return list(getattr(vaccine_peptide, 'mutant_epitope_predictions', []) or [])
+def _antigen_epitopes(vaccine_peptide):
+    """All mutant ``CandidateEpitope`` records on this VaccinePeptide.
+    Defensive: tolerates duck-typed test fixtures that don't carry
+    the field."""
+    return list(getattr(vaccine_peptide, 'target_epitopes', []) or [])
 
 
 def antigen_tier_per_allele(
     vaccine_peptide, target_alleles,
 ) -> dict[str, Optional[str]]:
     """Return ``{allele: tier}`` for one antigen — the best tier
-    each target allele reaches via this antigen's epitope
-    predictions. ``None`` for alleles the antigen doesn't cover at
-    any tier."""
+    each target allele reaches via this antigen's mutant epitopes.
+    ``None`` for alleles the antigen doesn't cover at any tier."""
     coverage = compute_coverage(
-        _antigen_predictions(vaccine_peptide), target_alleles)
+        _antigen_epitopes(vaccine_peptide), target_alleles)
     return {a: coverage[a].tier for a in target_alleles}
 
 
@@ -329,15 +318,15 @@ def summarize_construction_decisions(
     ]
 
     # Coverage of the SELECTED pool: aggregate evidence across
-    # every selected antigen's mutant-epitope predictions.
+    # every selected antigen's mutant epitopes.
     coverage_records: list = []
     if target_alleles:
-        all_predictions = []
+        all_epitopes = []
         for variant, peptides in selected:
             for vp in (peptides or [])[:1]:
-                all_predictions.extend(
-                    getattr(vp, 'mutant_epitope_predictions', None) or [])
-        coverage = compute_coverage(all_predictions, target_alleles)
+                all_epitopes.extend(
+                    getattr(vp, 'target_epitopes', None) or [])
+        coverage = compute_coverage(all_epitopes, target_alleles)
         # Sort: covered (strong > medium > low) before uncovered;
         # within same tier, alphabetical.
         tier_rank = {'strong': 0, 'medium': 1, 'low': 2, None: 3}

@@ -14,7 +14,7 @@
 
 Pins:
 - Annotation is purely additive — never mutates ranking, and (post-2.23,
-  see #272 Phase B) never mutates the EpitopePrediction objects either.
+  see #272 Phase B) never mutates the flat record objects either.
   Per-(peptide, source) records land on
   :class:`vaxrank.processing_prediction.ProcessingPrediction` and reach
   report writers via the ``processing_predictions_by_key`` map.
@@ -27,26 +27,38 @@ Pins:
 - Single pepsickle pass per unique source sequence (not per peptide).
 """
 
-from vaxrank.epitope_prediction import EpitopePrediction
+from mhctools.pred import Prediction
+
+from vaxrank.candidate_epitope import CandidateEpitope, Peptide
 from vaxrank.processing import (
     _component_probs,
     annotate_processing,
 )
 
 
-def _ep(peptide, source, offset, ic50=100.0, allele="HLA-A*02:01"):
-    """Build a minimal EpitopePrediction for tests."""
-    return EpitopePrediction(
+def _ep(peptide, source, offset, ic50=100.0, allele="HLA-A*02:01",
+        predictor="stub"):
+    """Build a minimal ``CandidateEpitope`` for tests — one mutant
+    pMHC_affinity ``Prediction`` plus the (peptide, source, offset)
+    layout the processing annotator joins on."""
+    pred = Prediction(
+        kind='pMHC_affinity',
+        predictor_name=predictor,
+        predictor_version='',
         allele=allele,
-        peptide_sequence=peptide,
-        wt_peptide_sequence="",
-        ic50=ic50,
-        wt_ic50=10000.0,
+        peptide=peptide,
+        value=ic50,
+        score=0.0,
         percentile_rank=ic50 / 100.0,
-        prediction_method_name="stub",
+    )
+    return CandidateEpitope.from_peptide(
+        Peptide(
+            sequence=peptide,
+            source_sequence=source,
+            offset=offset,
+            predictions=(pred,),
+        ),
         overlaps_mutation=True,
-        source_sequence=source,
-        offset=offset,
         occurs_in_reference=False,
     )
 
@@ -82,13 +94,13 @@ def test_component_probs_out_of_range_returns_none_tuple():
     assert max_internal is None
 
 
-# ---- Annotation (integration with EpitopePrediction) ---------------------
+# ---- Annotation (integration with flat records) ---------------------
 
 def test_annotate_processing_attaches_continuous_scores():
     """Each (peptide, source) pair lands in the returned
     ProcessingPrediction map with c_term / max_internal /
     processing as floats. Post-2.23 (#272 Phase B) the
-    EpitopePrediction is *not* mutated — readers consume the map."""
+    flat record is *not* mutated — readers consume the map."""
     source = "AAAAKLMNPVAAAA"  # 14 aa
     # Peptide KLMNPV at offset 4, length 6
     probs = [0.0, 0.0, 0.0, 0.05,   # source positions 0-3
@@ -98,7 +110,7 @@ def test_annotate_processing_attaches_continuous_scores():
     n, by_key = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
     assert n == 1
-    pp = by_key[(pred.peptide_sequence, source, 'pepsickle')]
+    pp = by_key[(pred.sequence, source, 'pepsickle')]
     # C-term = probs at index 9 = 0.85 (clean release)
     assert abs(pp.c_term_cleavage_prob - 0.85) < 1e-9
     # max internal = max of probs[4..8] = max(0.10, 0.20, 0.05, 0.50, 0.30) = 0.50
@@ -108,14 +120,12 @@ def test_annotate_processing_attaches_continuous_scores():
     # ``vaxrank.processing`` for the rationale).
     import math
     assert abs(pp.processing_score - math.sqrt(0.85 * 0.50)) < 1e-9
-    # The EpitopePrediction is NOT mutated.
-    assert not hasattr(pred, 'pepsickle_c_term_cleavage_prob')
 
 
 def test_annotate_processing_returns_processing_prediction_map():
     """Post-2.22 ``annotate_processing`` returns a tuple of
     ``(n_annotated, processing_predictions_by_key)`` — the map is
-    the canonical record (decoupled from EpitopePrediction).
+    the canonical record (decoupled from flat record).
     Each entry is a ``ProcessingPrediction`` keyed on
     ``(peptide, source, predictor_name)``."""
     from vaxrank.processing_prediction import ProcessingPrediction
@@ -165,7 +175,7 @@ def test_annotate_processing_one_pass_per_unique_source():
 
 
 def test_annotate_processing_skips_predictions_without_source():
-    """Predictions with empty source_sequence are passed through
+    """Epitopes with empty source_sequence are passed through
     untouched (annotation requires a source to slice probs against)
     and don't land in the ProcessingPrediction map."""
     pred = _ep("KLMNPV", source="", offset=0)
@@ -173,8 +183,6 @@ def test_annotate_processing_skips_predictions_without_source():
         [pred], predictor=StubPepsickle({}))
     assert n == 0
     assert by_key == {}
-    # No mutation on the EpitopePrediction (post-2.23).
-    assert not hasattr(pred, 'pepsickle_c_term_cleavage_prob')
 
 
 def test_annotate_processing_relocates_peptide_when_offset_off():
@@ -191,30 +199,30 @@ def test_annotate_processing_relocates_peptide_when_offset_off():
     n, by_key = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
     assert n == 1
-    pp = by_key[(pred.peptide_sequence, source, 'pepsickle')]
+    pp = by_key[(pred.sequence, source, 'pepsickle')]
     # C-term should pick up probs[8] = 0.95 (re-located, not probs[1+5]=0.05)
     assert abs(pp.c_term_cleavage_prob - 0.95) < 1e-9
 
 
 def test_annotate_processing_does_not_touch_ranking_score():
-    """The annotation must not alter the prediction's existing scoring
-    fields — ranking is unchanged whether or not pepsickle ran."""
+    """The annotation must not alter the underlying epitope's
+    ranking-driving fields — pepsickle's job is purely additive."""
     source = "AAAAKLMNPVAAAA"
     pred = _ep("KLMNPV", source, offset=4, ic50=42.0)
-    pre_ic50 = pred.ic50
-    pre_rank = pred.percentile_rank
-    pre_logistic = pred.logistic_epitope_score()
+    leaf = pred.best_affinity()
+    pre_ic50 = leaf.value
+    pre_rank = leaf.percentile_rank
     n, by_key = annotate_processing(
         [pred],
         predictor=StubPepsickle({source: [0.1] * len(source)}))
     # ProcessingPrediction landed in the map (post-2.23, the
     # canonical record).
     assert n == 1
-    assert (pred.peptide_sequence, source, 'pepsickle') in by_key
-    # Ranking-driving fields untouched
-    assert pred.ic50 == pre_ic50
-    assert pred.percentile_rank == pre_rank
-    assert pred.logistic_epitope_score() == pre_logistic
+    assert (pred.sequence, source, 'pepsickle') in by_key
+    # Ranking-driving fields untouched (frozen CandidateEpitope, can't be mutated).
+    leaf_after = pred.best_affinity()
+    assert leaf_after.value == pre_ic50
+    assert leaf_after.percentile_rank == pre_rank
 
 
 def test_annotate_processing_predictor_failure_degrades_gracefully():
@@ -234,8 +242,8 @@ def test_annotate_processing_predictor_failure_degrades_gracefully():
         [pred_ok, pred_fail], predictor=FlakyPredictor())
     # Only the OK one annotated; the failing source skipped, no crash.
     assert n == 1
-    assert (pred_ok.peptide_sequence, "AAAAAAAAAA", 'pepsickle') in by_key
-    assert (pred_fail.peptide_sequence, "FFAILFFFFFF", 'pepsickle') not in by_key
+    assert (pred_ok.sequence, "AAAAAAAAAA", 'pepsickle') in by_key
+    assert (pred_fail.sequence, "FFAILFFFFFF", 'pepsickle') not in by_key
 
 
 def test_annotate_processing_empty_input_returns_zero():
@@ -275,7 +283,7 @@ def test_load_default_predictor_returns_none_when_mhctools_missing(
 
 def test_ascii_report_surfaces_each_predictor_in_per_epitope_table():
     """End-to-end render: when a VaccinePeptide carries two
-    EpitopePredictions for the same (peptide, allele) — one per
+    flat records for the same (peptide, allele) — one per
     predictor — both rows appear in the rendered ASCII table with
     a ``Predictor`` column distinguishing them. Pre-2.24 the
     VCF/BAM path collapsed via dict-overwrite so this test would
@@ -329,26 +337,31 @@ def test_ascii_report_surfaces_each_predictor_in_per_epitope_table():
 
 def test_epitope_data_renders_one_row_per_predictor_for_same_pep_allele():
     """Issue #261: when LENS / pVACseq / multi-predictor VCF runs
-    emit multiple EpitopePredictions per (peptide, allele) — one
-    per predictor — the per-epitope report table renders one row
+    emit multiple Predictions per (peptide, allele) — one per
+    predictor — the per-epitope report table renders one row
     per prediction with a ``Predictor`` column distinguishing them."""
     from collections import OrderedDict
     from vaxrank.report import TemplateDataCreator
-    from vaxrank.epitope_prediction import EpitopePrediction
 
     creator = TemplateDataCreator.__new__(TemplateDataCreator)
     creator.processing_predictions_by_key = {}
 
-    def _ep(method, ic50):
-        return EpitopePrediction(
-            allele='HLA-A*02:01', peptide_sequence='SIINFEKL',
-            wt_peptide_sequence='SIINFEKL', ic50=ic50, wt_ic50=2000.0,
-            percentile_rank=0.5, prediction_method_name=method,
-            overlaps_mutation=True, source_sequence='SSIINFEKL',
-            offset=1, occurs_in_reference=False)
-    preds = [_ep('mhcflurry', 50.0), _ep('netmhcpan', 75.0)]
+    def _pred(method, ic50):
+        return Prediction(
+            kind='pMHC_affinity', predictor_name=method,
+            predictor_version='', allele='HLA-A*02:01',
+            peptide='SIINFEKL', value=ic50, score=0.0,
+            percentile_rank=0.5)
+    mhcflurry, netmhcpan = _pred('mhcflurry', 50.0), _pred('netmhcpan', 75.0)
+    epitope = CandidateEpitope.from_peptide(
+        Peptide(
+            sequence='SIINFEKL',
+            source_sequence='SSIINFEKL', offset=1,
+            predictions=(mhcflurry, netmhcpan)),
+        comparators={'wt': Peptide(sequence='SIINFEKL')},
+        overlaps_mutation=True, occurs_in_reference=False)
 
-    rows = [creator._epitope_data(p) for p in preds]
+    rows = [creator._epitope_data(epitope, p) for p in (mhcflurry, netmhcpan)]
     assert len(rows) == 2
     # Each row preserves its own predictor name + IC50 — no collapsing.
     assert rows[0]['Predictor'] == 'mhcflurry'
@@ -376,12 +389,13 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
 
     source = "AAAAKLMNPVAAAA"
     pred = _ep("KLMNPV", source, offset=4)
+    leaf = pred.best_affinity()
 
     from vaxrank.report import TemplateDataCreator
     creator = TemplateDataCreator.__new__(TemplateDataCreator)
     creator.processing_predictions_by_key = {}
-    # Default: 6-column legacy shape.
-    pre = creator._epitope_data(pred)
+    # Default: legacy 7-column shape (no Processing columns).
+    pre = creator._epitope_data(pred, leaf)
     assert isinstance(pre, OrderedDict)
     assert 'Processing: C-term' not in pre
     assert 'Processing: combined' not in pre
@@ -392,7 +406,7 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
         [pred],
         predictor=StubPepsickle({source: [0.1] * 9 + [0.85] + [0.0] * 4}))
     creator.processing_predictions_by_key = by_key
-    post = creator._epitope_data(pred, include_processing=True)
+    post = creator._epitope_data(pred, leaf, include_processing=True)
     assert 'Processing: C-term' in post
     assert 'Processing: max internal' in post
     assert 'Processing: combined' in post
@@ -501,19 +515,21 @@ def test_epitope_data_header_consistent_when_some_predictions_unannotated():
     source = "AAAAKLMNPVAAAA"
     annotated = _ep("KLMNPV", source, offset=4)
     unannotated = _ep("AAAAA", source, offset=0)
+    leaf_a = annotated.best_affinity()
+    leaf_u = unannotated.best_affinity()
     n, by_key = annotate_processing(
         [annotated],
         predictor=StubPepsickle(
             {source: [0.1] * 9 + [0.85] + [0.0] * 4}))
     # Verify mixed state: only one of the two has a record in the map.
-    assert (annotated.peptide_sequence, source, 'pepsickle') in by_key
-    assert (unannotated.peptide_sequence, source, 'pepsickle') not in by_key
+    assert (annotated.sequence, source, 'pepsickle') in by_key
+    assert (unannotated.sequence, source, 'pepsickle') not in by_key
     creator.processing_predictions_by_key = by_key
 
     # When the caller turns include_processing on, BOTH rows have
     # the same key set — table renders cleanly.
-    row_a = creator._epitope_data(annotated, include_processing=True)
-    row_u = creator._epitope_data(unannotated, include_processing=True)
+    row_a = creator._epitope_data(annotated, leaf_a, include_processing=True)
+    row_u = creator._epitope_data(unannotated, leaf_u, include_processing=True)
     assert list(row_a.keys()) == list(row_u.keys()), (
         "Annotated and unannotated rows should share identical "
         "column keys when include_processing=True; got "
@@ -540,7 +556,7 @@ def test_re_location_picks_closest_to_declared_offset():
              0.0, 0.0, 0.0, 0.0, 0.95]  # cleavage at last position only
     n, by_key = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
-    pp = by_key[(pred.peptide_sequence, source, 'pepsickle')]
+    pp = by_key[(pred.sequence, source, 'pepsickle')]
     # If re-location snapped to position 0 (first occurrence), c_term
     # would be probs[4] = 0.0; if it correctly snapped to position 8,
     # c_term = probs[12] = 0.95.
@@ -596,7 +612,7 @@ def test_warns_when_peptide_not_in_pep_context(caplog):
 def test_dedup_by_content_when_duplicate_objects(monkeypatch):
     """The CLI annotation dispatcher dedups by both id() AND a
     content key (peptide, allele, source, offset). A future loader
-    that copies an EpitopePrediction into a VP would produce two
+    that copies a flat record into a VP would produce two
     distinct objects with the same content; only one should be
     annotated. Uses pytest's monkeypatch fixture so cleanup is
     automatic even if the test fails."""
@@ -611,7 +627,7 @@ def test_dedup_by_content_when_duplicate_objects(monkeypatch):
     # call into it without recursing through the patched name.
     real_annotate = proc_mod.annotate_processing
 
-    # Two distinct EpitopePrediction objects with identical content.
+    # Two distinct flat record objects with identical content.
     source = "AAAAKLMNPVAAAA"
     pred_a = _ep("KLMNPV", source, offset=4)
     pred_b = _ep("KLMNPV", source, offset=4)  # different object, same content
@@ -620,9 +636,9 @@ def test_dedup_by_content_when_duplicate_objects(monkeypatch):
     fragment = SimpleNamespace(amino_acids=source, gene_name='G')
     vp = SimpleNamespace(
         mutant_protein_fragment=fragment,
-        mutant_epitope_predictions=[pred_a])
+        target_epitopes=[pred_a])
     ranked = [(SimpleNamespace(), [vp])]
-    lens_predictions = [pred_b]
+    lens_epitopes = [pred_b]
 
     captured = {}
     stub = StubPepsickle({source: [0.1] * 14})
@@ -632,13 +648,13 @@ def test_dedup_by_content_when_duplicate_objects(monkeypatch):
         return real_annotate(pred_list, predictor=stub)
 
     monkeypatch.setattr(proc_mod, 'annotate_processing', _capture)
-    _annotate_predictions_with_processing(ranked, lens_predictions)
+    _annotate_predictions_with_processing(ranked, lens_epitopes)
 
     assert 'list' in captured
     deduped = captured['list']
     assert len(deduped) == 1, (
         "Content-key dedup should collapse two distinct objects with "
-        "identical (peptide, allele, source, offset) to one; got %d"
+        "identical (peptide, source, offset) to one; got %d"
         % len(deduped))
 
 

@@ -158,16 +158,16 @@ vaccine_peptides:
   combined_score_mode: sqrt_reads_times_epitope
 
   # Optional DSL expression evaluated per VaccinePeptide; supersedes
-  # combined_score_mode when set. Bindings: mutant_epitope_score,
-  # wildtype_epitope_score, expression_score, n_alt_reads,
+  # combined_score_mode when set. Bindings: target_epitope_score,
+  # self_epitope_score, expression_score, n_alt_reads,
   # n_ref_reads, n_overlapping_reads,
   # n_alt_reads_supporting_protein_sequence, n_mutant_amino_acids.
   # Functions: sqrt, log, log1p, exp, min, max, abs, pow.
   # The three legacy modes are equivalent to:
-  #   epitope_only             ≡ "mutant_epitope_score"
-  #   reads_times_epitope      ≡ "n_alt_reads * mutant_epitope_score"
-  #   sqrt_reads_times_epitope ≡ "expression_score * mutant_epitope_score"
-  # combined_score_expr: "log1p(n_alt_reads) * mutant_epitope_score"
+  #   epitope_only             ≡ "target_epitope_score"
+  #   reads_times_epitope      ≡ "n_alt_reads * target_epitope_score"
+  #   sqrt_reads_times_epitope ≡ "expression_score * target_epitope_score"
+  # combined_score_expr: "log1p(n_alt_reads) * target_epitope_score"
   # Keep candidates whose score is at least this fraction of the best
   # before lexicographic tie-breaking.
   score_fraction_of_best: 0.99
@@ -175,15 +175,15 @@ vaccine_peptides:
   # Ordered list of tie-break rules (legacy default below). The
   # 'manufacturability' sentinel expands inline using the manufacturability
   # rules + thresholds in the section below. Available rules:
-  # mutant_epitope_score, n_alt_reads, n_alt_reads_supporting,
-  # wildtype_epitope_score, n_mutant_amino_acids, mutation_distance_from_edge,
+  # target_epitope_score, n_alt_reads, n_alt_reads_supporting,
+  # self_epitope_score, n_mutant_amino_acids, mutation_distance_from_edge,
   # manufacturability.
   ranking_rules:
-    - mutant_epitope_score
+    - target_epitope_score
     - n_alt_reads
     - manufacturability
     - n_alt_reads_supporting
-    - wildtype_epitope_score
+    - self_epitope_score
     - n_mutant_amino_acids
     - mutation_distance_from_edge
 
@@ -191,7 +191,7 @@ vaccine_peptides:
   # zero mutant epitopes from the report. Set false to keep every variant
   # for which any vaccine peptide could be assembled — useful when the
   # report itself is downstream input to an independent predictor.
-  require_mutant_epitopes_in_variant: true
+  require_target_epitopes_in_variant: true
 
 
 # ----------------------------------------------------------------------

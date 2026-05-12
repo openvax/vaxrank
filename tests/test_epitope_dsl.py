@@ -14,7 +14,7 @@
 
 The parity tests (``test_default_score_matches_legacy_*``) verify that the
 default synthesized score node produces byte-identical output to the legacy
-``EpitopePrediction.logistic_epitope_score``. This is the back-compat
+``pre-3.0 logistic_epitope_score``. This is the back-compat
 contract that makes the DSL migration safe for existing users and fixtures.
 """
 
@@ -27,7 +27,7 @@ from topiary.ranking import EvalContext, apply_filter
 
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.epitope_dsl import build_filter_node, build_score_node
-from vaxrank.epitope_prediction import EpitopePrediction
+from vaxrank.vaccine_peptide import _legacy_score_one
 
 from .common import eq_
 
@@ -53,20 +53,8 @@ def _predictions_df(rows):
 
 
 def _legacy_score(ic50, percentile_rank, cfg):
-    pred = EpitopePrediction(
-        allele="HLA-A*02:01",
-        peptide_sequence="AAAAAAAAA",
-        wt_peptide_sequence="AAAAAAAAA",
-        ic50=ic50,
-        wt_ic50=ic50,
-        percentile_rank=percentile_rank,
-        prediction_method_name="test",
-        overlaps_mutation=True,
-        source_sequence="AAAAAAAAA",
-        offset=0,
-        occurs_in_reference=False,
-    )
-    return pred.logistic_epitope_score(
+    return _legacy_score_one(
+        ic50, percentile_rank,
         midpoint=cfg.logistic_epitope_score_midpoint,
         width=cfg.logistic_epitope_score_width,
         ic50_cutoff=cfg.binding_affinity_cutoff,
@@ -251,3 +239,207 @@ def test_multi_method_resolves_with_qualified_affinity():
     # Only the netmhcpan ic50=100 contributes; expected = raw sigmoid at ic50=100
     expected = 1.0 / (1.0 + math.exp((100.0 - 350.0) / 150.0))
     assert float(scores.iloc[0]) == pytest.approx(expected, abs=1e-12)
+
+
+# ---- candidate_epitopes_from_rows + epitopes_to_topiary_df ---------
+
+
+def _row(peptide='SIINFEKL', allele='HLA-A*02:01', ic50=50.0,
+         wt_peptide=None, wt_ic50=None, predictor='mhcflurry',
+         version='2.1.1', source='AAAASIINFEKLCCCC', offset=4,
+         percentile_rank=0.5, overlaps_mutation=True,
+         occurs_in_reference=False):
+    """Concise test helper: build one row dict suitable for
+    ``candidate_epitopes_from_rows``. Mirrors the per-row shape that
+    ``predict_epitopes`` and the LENS / pVACseq loaders emit.
+    ``wt_ic50=None`` skips the WT pairing entirely."""
+    from mhctools.pred import Prediction
+    mutant = Prediction(
+        kind='pMHC_affinity', predictor_name=predictor,
+        predictor_version=version, allele=allele, peptide=peptide,
+        value=ic50, score=0.0, percentile_rank=percentile_rank,
+    )
+    wt = None
+    if wt_ic50 is not None:
+        wt = Prediction(
+            kind='pMHC_affinity', predictor_name=predictor,
+            predictor_version=version, allele=allele,
+            peptide=wt_peptide if wt_peptide is not None else peptide,
+            value=wt_ic50, score=0.0, percentile_rank=None,
+        )
+    return {
+        'peptide': peptide, 'source': source, 'offset': offset,
+        'mutant': mutant, 'wt': wt,
+        'overlaps_mutation': overlaps_mutation,
+        'occurs_in_reference': occurs_in_reference,
+    }
+
+
+def test_grouping_collapses_multi_allele_rows():
+    """Per-(peptide, source, offset) grouping → one CandidateEpitope.
+    Multi-allele rows for the same position collapse into one
+    CandidateEpitope whose mutant context carries N predictions."""
+    from vaxrank.candidate_epitope import candidate_epitopes_from_rows
+
+    epitopes = candidate_epitopes_from_rows([
+        _row(allele='HLA-A*02:01', ic50=50.0),
+        _row(allele='HLA-B*07:02', ic50=200.0),
+        _row(allele='HLA-C*03:04', ic50=800.0),
+    ])
+    assert len(epitopes) == 1
+    e = epitopes[0]
+    assert e.sequence == 'SIINFEKL'
+    assert e.offset == 4
+    assert sorted(e.alleles_for('pMHC_affinity')) == [
+        'HLA-A*02:01', 'HLA-B*07:02', 'HLA-C*03:04']
+    assert e.overlaps_mutation is True
+
+
+def test_grouping_separates_distinct_peptides():
+    """Two rows with different peptides → two Epitopes."""
+    from vaxrank.candidate_epitope import candidate_epitopes_from_rows
+
+    epitopes = candidate_epitopes_from_rows([
+        _row(peptide='SIINFEKL', offset=4, wt_ic50=None),
+        _row(peptide='SIINFEKM', offset=12, wt_ic50=None),
+    ])
+    assert len(epitopes) == 2
+    assert {e.sequence for e in epitopes} == {
+        'SIINFEKL', 'SIINFEKM'}
+
+
+def test_wt_comparator_built_when_peptides_differ():
+    """A parallel WT comparator context is built when each row carries
+    a WT prediction whose peptide differs from the mutant."""
+    from vaxrank.candidate_epitope import candidate_epitopes_from_rows
+
+    epitopes = candidate_epitopes_from_rows([
+        _row(peptide='SIINFEKL', wt_peptide='SIINFEKM',
+             ic50=50.0, wt_ic50=500.0, allele='HLA-A*02:01'),
+        _row(peptide='SIINFEKL', wt_peptide='SIINFEKM',
+             ic50=100.0, wt_ic50=400.0, allele='HLA-B*07:02'),
+    ])
+    assert len(epitopes) == 1
+    e = epitopes[0]
+    assert e.wt is not None
+    assert e.wt.sequence == 'SIINFEKM'
+    wt_preds = e.wt.predictions_for('pMHC_affinity')
+    assert {p.allele for p in wt_preds} == {'HLA-A*02:01', 'HLA-B*07:02'}
+    assert {p.value for p in wt_preds} == {500.0, 400.0}
+
+
+def test_self_wt_is_dropped():
+    """A WT Prediction whose peptide equals the mutant peptide is
+    dropped as a meaningless self-comparator. The CandidateEpitope has no WT
+    context."""
+    from mhctools.pred import Prediction
+    from vaxrank.candidate_epitope import candidate_epitopes_from_rows
+
+    mutant = Prediction(
+        kind='pMHC_affinity', predictor_name='mhcflurry',
+        predictor_version='2.1.1', allele='HLA-A*02:01',
+        peptide='SIINFEKL', value=50.0, score=0.0, percentile_rank=0.5)
+    self_wt = Prediction(
+        kind='pMHC_affinity', predictor_name='mhcflurry',
+        predictor_version='2.1.1', allele='HLA-A*02:01',
+        peptide='SIINFEKL', value=50.0, score=0.0, percentile_rank=None)
+    epitopes = candidate_epitopes_from_rows([{
+        'peptide': 'SIINFEKL', 'source': 'AAAASIINFEKLCCCC', 'offset': 4,
+        'mutant': mutant, 'wt': self_wt, 'overlaps_mutation': False,
+    }])
+    assert epitopes[0].wt is None
+    assert epitopes[0].overlaps_mutation is False
+
+
+def test_anonymous_wt_kept_when_peptide_empty():
+    """LENS / pVACseq inputs sometimes carry a WT IC50 without a WT
+    peptide sequence. An empty WT peptide is NOT treated as a
+    self-match — the WT context is retained so the IC50 signal
+    isn't lost."""
+    from mhctools.pred import Prediction
+    from vaxrank.candidate_epitope import candidate_epitopes_from_rows
+
+    mutant = Prediction(
+        kind='pMHC_affinity', predictor_name='mhcflurry',
+        predictor_version='2.1.1', allele='HLA-A*02:01',
+        peptide='SIINFEKL', value=50.0, score=0.0, percentile_rank=0.5)
+    anon_wt = Prediction(
+        kind='pMHC_affinity', predictor_name='mhcflurry',
+        predictor_version='2.1.1', allele='HLA-A*02:01',
+        peptide='', value=2500.0, score=0.0, percentile_rank=None)
+    epitopes = candidate_epitopes_from_rows([{
+        'peptide': 'SIINFEKL', 'source': 'AAAASIINFEKLCCCC', 'offset': 4,
+        'mutant': mutant, 'wt': anon_wt, 'overlaps_mutation': True,
+    }])
+    assert epitopes[0].wt is not None
+    wt_leaf = epitopes[0].wt.predictions_for('pMHC_affinity')[0]
+    assert wt_leaf.value == 2500.0
+
+
+def test_flags_or_across_rows():
+    """``overlaps_mutation`` / ``occurs_in_reference`` OR across rows
+    in the same (peptide, source, offset) group. If any row says
+    True, the group is True — flags are position-level, not
+    leaf-level."""
+    from vaxrank.candidate_epitope import candidate_epitopes_from_rows
+
+    epitopes = candidate_epitopes_from_rows([
+        _row(allele='HLA-A*02:01', overlaps_mutation=False,
+             occurs_in_reference=False),
+        _row(allele='HLA-B*07:02', overlaps_mutation=True,
+             occurs_in_reference=True),
+    ])
+    assert len(epitopes) == 1
+    assert epitopes[0].overlaps_mutation is True
+    assert epitopes[0].occurs_in_reference is True
+
+
+def test_epitopes_to_topiary_df_emits_one_row_per_prediction():
+    """Each leaf ``mhctools.Prediction`` in a CandidateEpitope's mutant
+    context becomes one frame row."""
+    from vaxrank.epitope_dsl import epitopes_to_topiary_df
+    from vaxrank.candidate_epitope import candidate_epitopes_from_rows
+
+    epitopes = candidate_epitopes_from_rows([
+        _row(allele='HLA-A*02:01', ic50=50.0),
+        _row(allele='HLA-B*07:02', ic50=200.0),
+    ])
+    df = epitopes_to_topiary_df(epitopes)
+    assert len(df) == 2
+    assert set(df.columns) >= {
+        'peptide', 'allele', 'value', 'affinity', 'percentile_rank',
+        'kind', 'prediction_method_name', 'predictor_version',
+        'source_sequence_name', 'peptide_offset', 'peptide_length',
+        'score', 'n_flank', 'c_flank',
+    }
+    assert set(df['allele']) == {'HLA-A*02:01', 'HLA-B*07:02'}
+    assert (df['kind'] == 'pMHC_affinity').all()
+
+
+def test_epitopes_to_topiary_df_schema_pinned():
+    """Round-trip pin: rows → CandidateEpitope → frame must produce the
+    canonical topiary schema (columns + dtype-stable values) that
+    ``apply_filter`` / ``score_predictions`` consume."""
+    from vaxrank.epitope_dsl import epitopes_to_topiary_df
+    from vaxrank.candidate_epitope import candidate_epitopes_from_rows
+
+    epitopes = candidate_epitopes_from_rows([
+        _row(allele='HLA-A*02:01', ic50=50.0, percentile_rank=0.3),
+        _row(allele='HLA-B*07:02', ic50=200.0, percentile_rank=1.5),
+        _row(peptide='SIINFEKM', allele='HLA-A*02:01',
+             ic50=800.0, offset=12),
+    ])
+    df = epitopes_to_topiary_df(epitopes)
+
+    # One row per leaf prediction; alleles are preserved.
+    assert len(df) == 3
+    assert set(df['allele']) == {'HLA-A*02:01', 'HLA-B*07:02'}
+    # ``value`` carries the IC50 verbatim; ``affinity`` is the alias.
+    assert sorted(df['value']) == [50.0, 200.0, 800.0]
+    assert (df['value'] == df['affinity']).all()
+    # Multi-peptide inputs land in distinct rows.
+    assert set(df['peptide']) == {'SIINFEKL', 'SIINFEKM'}
+    # Every leaf inherits its parent CandidateEpitope's offset.
+    by_peptide = df.set_index('peptide')['peptide_offset'].to_dict()
+    assert by_peptide['SIINFEKL'] == 4
+    assert by_peptide['SIINFEKM'] == 12

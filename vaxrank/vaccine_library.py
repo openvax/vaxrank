@@ -603,12 +603,13 @@ def select_antigen_window(fragment, base_name, max_length_aa):
     return aa[start:end]
 
 
-def mutant_epitopes_sorted(vaccine_peptide):
-    """All mutant epitopes on a VaccinePeptide, score-sorted (best first).
+def target_epitopes_sorted(vaccine_peptide):
+    """All mutant ``CandidateEpitope`` records on a VaccinePeptide, score-sorted
+    (best first).
 
     Returns the full list (possibly empty). The pipeline already sorts
-    ``mutant_epitope_predictions`` by score, so this is a thin wrapper
-    that exposes the slice point to callers.
+    ``target_epitopes`` by score, so this is a thin wrapper that
+    exposes the slice point to callers.
 
     Used by both peptide and mRNA vaccine assembly when
     ``antigen_content='minimal_epitope'`` — the antigen is one or more
@@ -618,7 +619,7 @@ def mutant_epitopes_sorted(vaccine_peptide):
     from the same variant are first-class, not an afterthought.
     """
     return list(
-        getattr(vaccine_peptide, 'mutant_epitope_predictions', None) or [])
+        getattr(vaccine_peptide, 'target_epitopes', None) or [])
 
 
 _STANDARD_AMINO_ACIDS = set("ACDEFGHIKLMNPQRSTVWY")
@@ -657,7 +658,7 @@ def has_only_standard_amino_acids(amino_acids):
     return all(aa in _STANDARD_AMINO_ACIDS for aa in amino_acids)
 
 
-def top_mutant_epitopes(vaccine_peptide, n=1):
+def top_target_epitopes(vaccine_peptide, n=1):
     """Top ``n`` score-sorted mutant epitopes on a VaccinePeptide.
 
     Returns a list of length ``min(n, len(predictions))`` — possibly
@@ -667,4 +668,4 @@ def top_mutant_epitopes(vaccine_peptide, n=1):
     """
     if n <= 0:
         return []
-    return mutant_epitopes_sorted(vaccine_peptide)[:n]
+    return target_epitopes_sorted(vaccine_peptide)[:n]

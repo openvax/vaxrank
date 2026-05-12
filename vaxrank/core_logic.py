@@ -25,7 +25,7 @@ from topiary import TopiaryPredictor
 from .epitope_config import EpitopeConfig
 from .vaccine_config import VaccineConfig
 from .manufacturability_config import ManufacturabilityConfig
-from .epitope_logic import slice_epitope_predictions, predict_epitopes
+from .epitope_logic import slice_epitopes, predict_epitopes
 from .mutant_protein_fragment import MutantProteinFragment
 from .vaccine_peptide import VaccinePeptide
 from .vaxrank_results import VaxrankResults
@@ -38,7 +38,7 @@ def run_vaxrank(
     mhc_predictor: Union[BasePredictor, TopiaryPredictor],
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
-    num_mutant_epitopes_to_keep: int = 1000,
+    num_target_epitopes_to_keep: int = 1000,
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
@@ -61,7 +61,7 @@ def run_vaxrank(
     max_vaccine_peptides_per_variant
         Number of vaccine peptides to generate for each variant.
 
-    num_mutant_epitopes_to_keep
+    num_target_epitopes_to_keep
         Number of top-ranking epitopes for each vaccine peptide to include in
         computation.
 
@@ -80,7 +80,7 @@ def run_vaxrank(
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=vaccine_peptide_length,
         max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
-        num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+        num_target_epitopes_to_keep=num_target_epitopes_to_keep,
         epitope_config=epitope_config,
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config,
@@ -100,7 +100,7 @@ def create_vaccine_peptides_dict(
     mhc_predictor: Union[BasePredictor, TopiaryPredictor],
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
-    num_mutant_epitopes_to_keep: int = 1000,
+    num_target_epitopes_to_keep: int = 1000,
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
@@ -122,7 +122,7 @@ def create_vaccine_peptides_dict(
     max_vaccine_peptides_per_variant
         Number of vaccine peptides to generate for each variant.
 
-    num_mutant_epitopes_to_keep
+    num_target_epitopes_to_keep
         Number of top-ranking epitopes for each vaccine peptide to include in
         computation.
 
@@ -137,8 +137,8 @@ def create_vaccine_peptides_dict(
     Returns a dictionary of varcode.Variant objects to a list of
     VaccinePeptides.
     """
-    require_mutant_epitopes = (
-        vaccine_config.require_mutant_epitopes_in_variant
+    require_target_epitopes = (
+        vaccine_config.require_target_epitopes_in_variant
         if vaccine_config is not None else True
     )
     vaccine_peptides_dict = {}
@@ -149,7 +149,7 @@ def create_vaccine_peptides_dict(
             mhc_predictor=mhc_predictor,
             vaccine_peptide_length=vaccine_peptide_length,
             max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
-            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+            num_target_epitopes_to_keep=num_target_epitopes_to_keep,
             epitope_config=epitope_config,
             vaccine_config=vaccine_config,
             manufacturability_config=manufacturability_config,
@@ -158,8 +158,8 @@ def create_vaccine_peptides_dict(
 
         if not vaccine_peptides:
             continue
-        if require_mutant_epitopes and not any(
-                x.contains_mutant_epitopes() for x in vaccine_peptides):
+        if require_target_epitopes and not any(
+                x.contains_target_epitopes() for x in vaccine_peptides):
             continue
         vaccine_peptides_dict[variant] = vaccine_peptides
 
@@ -171,7 +171,7 @@ def vaccine_peptides_for_variant(
     mhc_predictor: Union[BasePredictor, TopiaryPredictor],
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
-    num_mutant_epitopes_to_keep: int = 1000,
+    num_target_epitopes_to_keep: int = 1000,
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
@@ -192,7 +192,7 @@ def vaccine_peptides_for_variant(
     max_vaccine_peptides_per_variant
         Number of vaccine peptides to generate for each variant.
 
-    num_mutant_epitopes_to_keep
+    num_target_epitopes_to_keep
         Number of top-ranking epitopes for each vaccine peptide to include in
         computation.
 
@@ -232,7 +232,7 @@ def vaccine_peptides_for_variant(
 
     logger.info("Mutant protein fragment for %s: %s", variant, long_protein_fragment)
 
-    epitope_predictions = predict_epitopes(
+    epitopes = predict_epitopes(
         mhc_predictor=mhc_predictor,
         protein_fragment=long_protein_fragment,
         epitope_config=epitope_config,
@@ -241,10 +241,10 @@ def vaccine_peptides_for_variant(
     return vaccine_peptides_from_epitopes(
         variant=variant,
         long_protein_fragment=long_protein_fragment,
-        epitope_predictions=epitope_predictions,
+        epitopes=epitopes,
         vaccine_peptide_length=vaccine_peptide_length,
         max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
-        num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+        num_target_epitopes_to_keep=num_target_epitopes_to_keep,
         epitope_config=epitope_config,
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config,
@@ -254,16 +254,16 @@ def vaccine_peptides_for_variant(
 def vaccine_peptides_from_epitopes(
     variant,
     long_protein_fragment: MutantProteinFragment,
-    epitope_predictions: list,
+    epitopes: list,
     vaccine_peptide_length: int = 25,
     max_vaccine_peptides_per_variant: int = 1,
-    num_mutant_epitopes_to_keep: int = 1000,
+    num_target_epitopes_to_keep: int = 1000,
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
 ):
     """
-    Generate vaccine peptide candidates from epitope predictions.
+    Generate vaccine peptide candidates from epitopes.
 
     Parameters
     ----------
@@ -273,8 +273,8 @@ def vaccine_peptides_from_epitopes(
     long_protein_fragment
         The protein fragment containing the mutation
 
-    epitope_predictions
-        List of EpitopePrediction objects
+    epitopes
+        List of CandidateEpitope objects
 
     vaccine_peptide_length
         Length of vaccine SLP to construct
@@ -282,7 +282,7 @@ def vaccine_peptides_from_epitopes(
     max_vaccine_peptides_per_variant
         Number of vaccine peptides to generate for each variant
 
-    num_mutant_epitopes_to_keep
+    num_target_epitopes_to_keep
         Number of top-ranking epitopes for each vaccine peptide to include
 
     epitope_config
@@ -308,7 +308,7 @@ def vaccine_peptides_from_epitopes(
             min_peptide_length=vaccine_peptide_length,
             max_peptide_length=vaccine_peptide_length,
             max_vaccine_peptides_per_variant=max_vaccine_peptides_per_variant,
-            num_mutant_epitopes_to_keep=num_mutant_epitopes_to_keep,
+            num_target_epitopes_to_keep=num_target_epitopes_to_keep,
         )
     else:
         _defaults = VaccineConfig()
@@ -317,8 +317,8 @@ def vaccine_peptides_from_epitopes(
              vaccine_config.preferred_peptide_length, _defaults.preferred_peptide_length),
             ("max_vaccine_peptides_per_variant", max_vaccine_peptides_per_variant,
              vaccine_config.max_vaccine_peptides_per_variant, _defaults.max_vaccine_peptides_per_variant),
-            ("num_mutant_epitopes_to_keep", num_mutant_epitopes_to_keep,
-             vaccine_config.num_mutant_epitopes_to_keep, _defaults.num_mutant_epitopes_to_keep),
+            ("num_target_epitopes_to_keep", num_target_epitopes_to_keep,
+             vaccine_config.num_target_epitopes_to_keep, _defaults.num_target_epitopes_to_keep),
         ]:
             if explicit_val != default_val and explicit_val != config_val:
                 logger.warning(
@@ -331,22 +331,22 @@ def vaccine_peptides_from_epitopes(
         subsequence_length=vaccine_config.preferred_peptide_length
     ):
 
-        subsequence_epitope_predictions = slice_epitope_predictions(
-            epitope_predictions,
+        subsequence_epitopes = slice_epitopes(
+            epitopes,
             start_offset=offset,
             end_offset=offset + len(candidate_fragment),
         )
         # filter out peptides that have no epitopes
-        if not subsequence_epitope_predictions:
+        if not subsequence_epitopes:
             logger.info(
-                "No epitope predictions for mutant protein fragment %s",
+                "No epitopes for mutant protein fragment %s",
                 candidate_fragment,
             )
             continue
 
         assert all(
-            p.source_sequence == candidate_fragment.amino_acids
-            for p in subsequence_epitope_predictions
+            e.source_sequence == candidate_fragment.amino_acids
+            for e in subsequence_epitopes
         )
 
         # Manufacturability config is peptide-only (post-2.20). When
@@ -358,8 +358,8 @@ def vaccine_peptides_from_epitopes(
         mfg = manufacturability_config or ManufacturabilityConfig()
         candidate_vaccine_peptide = VaccinePeptide(
             mutant_protein_fragment=candidate_fragment,
-            epitope_predictions=subsequence_epitope_predictions,
-            num_mutant_epitopes_to_keep=vaccine_config.num_mutant_epitopes_to_keep,
+            epitopes=subsequence_epitopes,
+            num_target_epitopes_to_keep=vaccine_config.num_target_epitopes_to_keep,
             epitope_score_params=epitope_score_params,
             manufacturability_thresholds=mfg.thresholds_dict(),
             manufacturability_rules=mfg.rules,
@@ -420,7 +420,7 @@ def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):
 
     Variants are ranked by their top vaccine peptide using a three-level
     tiebreak (see vaxrank#151): primarily by ``combined_score``, then by
-    ``n_alt_reads`` (RNA support), then by ``mutant_epitope_score`` (MHC
+    ``n_alt_reads`` (RNA support), then by ``target_epitope_score`` (MHC
     binding). The extra tiers matter when ``combined_score`` ties (common
     when either factor is zero) so that the downstream report order is
     stable and intuitively favors better-supported variants.
@@ -442,9 +442,9 @@ def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):
         return (
             top_vaccine_peptide.combined_score,
             top_vaccine_peptide.mutant_protein_fragment.n_alt_reads,
-            top_vaccine_peptide.mutant_epitope_score,
+            top_vaccine_peptide.target_epitope_score,
         )
 
-    # sort in descending order by (combined_score, n_alt_reads, mutant_epitope_score)
+    # sort in descending order by (combined_score, n_alt_reads, target_epitope_score)
     result_list.sort(key=sort_key, reverse=True)
     return result_list

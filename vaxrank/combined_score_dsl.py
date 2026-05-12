@@ -15,26 +15,26 @@
 Mirrors the per-epitope DSL in :mod:`vaxrank.epitope_dsl` but at the
 ``VaccinePeptide`` scope. Lets users write expressions like::
 
-    combined_score_expr: "sqrt(n_alt_reads) * mutant_epitope_score"
-    combined_score_expr: "n_alt_reads * mutant_epitope_score"
-    combined_score_expr: "log1p(n_alt_reads) * mutant_epitope_score
+    combined_score_expr: "sqrt(n_alt_reads) * target_epitope_score"
+    combined_score_expr: "n_alt_reads * target_epitope_score"
+    combined_score_expr: "log1p(n_alt_reads) * target_epitope_score
                           + 0.1 * n_alt_reads_supporting_protein_sequence"
-    combined_score_expr: "mutant_epitope_score"
+    combined_score_expr: "target_epitope_score"
 
 Bindings (read-only scalars from the active VaccinePeptide):
 
-  ``mutant_epitope_score``
+  ``target_epitope_score``
       Sum of per-epitope scores across the VP's mutant ligands
       (after EpitopeConfig filtering / scoring).
 
-  ``wildtype_epitope_score``
+  ``self_epitope_score``
       Same metric for the WT-aligned ligands (when present).
 
   ``expression_score``
       ``sqrt(n_alt_reads)`` — the canonical "expression strength"
       surrogate; available so the legacy
       ``sqrt_reads_times_epitope`` mode is exactly
-      ``expression_score * mutant_epitope_score``.
+      ``expression_score * target_epitope_score``.
 
   ``n_alt_reads``
       RNA reads supporting the variant allele.
@@ -73,10 +73,10 @@ Same precedence relationship as the per-epitope DSL: when
 ``combined_score_mode``. The three legacy modes are equivalent to
 these expressions:
 
-  ``epitope_only``               ≡ ``mutant_epitope_score``
-  ``reads_times_epitope``        ≡ ``n_alt_reads * mutant_epitope_score``
-  ``sqrt_reads_times_epitope``   ≡ ``expression_score * mutant_epitope_score``
-                                 ≡ ``sqrt(n_alt_reads) * mutant_epitope_score``
+  ``epitope_only``               ≡ ``target_epitope_score``
+  ``reads_times_epitope``        ≡ ``n_alt_reads * target_epitope_score``
+  ``sqrt_reads_times_epitope``   ≡ ``expression_score * target_epitope_score``
+                                 ≡ ``sqrt(n_alt_reads) * target_epitope_score``
 """
 
 import ast
@@ -94,8 +94,8 @@ logger = logging.getLogger(__name__)
 # numerous and less specific; they go in the DEBUG log). Order is
 # the order they appear in the preview.
 _HEADLINE_BINDINGS = (
-    'mutant_epitope_score',
-    'wildtype_epitope_score',
+    'target_epitope_score',
+    'self_epitope_score',
     'expression_score',
 )
 
@@ -191,9 +191,9 @@ def _bindings_from_vaccine_peptide(vp):
     """
     frag = vp.mutant_protein_fragment
     return {
-        'mutant_epitope_score': float(vp.mutant_epitope_score),
-        'wildtype_epitope_score': float(getattr(
-            vp, 'wildtype_epitope_score', 0.0) or 0.0),
+        'target_epitope_score': float(vp.target_epitope_score),
+        'self_epitope_score': float(getattr(
+            vp, 'self_epitope_score', 0.0) or 0.0),
         'expression_score': float(vp.expression_score),
         'n_alt_reads': float(frag.n_alt_reads or 0),
         'n_ref_reads': float(frag.n_ref_reads or 0),

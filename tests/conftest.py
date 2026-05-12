@@ -18,6 +18,27 @@ import pytest
 import shutil
 
 
+@pytest.fixture(scope="session")
+def mouse_genome():
+    """Lazy session-scoped pyensembl GRCm38 handle.
+
+    Module-level ``genome_for_reference_name(...)`` runs at *collection*
+    time — paid by every xdist worker before any test runs, even
+    workers that won't touch the genome. Deferring to a fixture defers
+    the load until something actually asks; scope='session' shares the
+    handle across tests within one worker process.
+    """
+    from pyensembl import genome_for_reference_name
+    return genome_for_reference_name("GRCm38")
+
+
+@pytest.fixture(scope="session")
+def human_genome_grch37():
+    """Lazy session-scoped pyensembl GRCh37 (Ensembl release 75) handle."""
+    from pyensembl import EnsemblRelease
+    return EnsemblRelease(75)
+
+
 def pytest_configure(config):
     """Register custom markers."""
     config.addinivalue_line(

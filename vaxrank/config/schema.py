@@ -94,7 +94,7 @@ class VaccinePeptidesConfigSchema(
     combined_score_mode: Optional[str] = None
     combined_score_expr: Optional[str] = None
     ranking_rules: Optional[list[str]] = None
-    require_mutant_epitopes_in_variant: Optional[bool] = None
+    require_target_epitopes_in_variant: Optional[bool] = None
     # Antigen-design knobs hoisted from ``vaccine_constructs:`` top
     # level (post-2.19).
     antigen_content: Optional[str] = None
