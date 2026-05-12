@@ -274,7 +274,7 @@ def vaccine_peptides_from_epitopes(
         The protein fragment containing the mutation
 
     epitopes
-        List of Epitope objects
+        List of CandidateEpitope objects
 
     vaccine_peptide_length
         Length of vaccine SLP to construct

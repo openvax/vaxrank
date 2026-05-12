@@ -89,13 +89,13 @@ def _kind_for_method(method_name):
 
 
 def epitopes_to_topiary_df(epitopes):
-    """Convert a list of :class:`vaxrank.peptide_context.Epitope` into the
+    """Convert a list of :class:`vaxrank.peptide_context.CandidateEpitope` into the
     topiary long-format DataFrame consumed by
     :class:`topiary.ranking.EvalContext` and
     :func:`topiary.ranking.apply_filter`.
 
-    One row per leaf ``mhctools.Prediction`` in each Epitope's mutant
-    context — a single Epitope can emit N rows (one per allele x
+    One row per leaf ``mhctools.Prediction`` in each CandidateEpitope's mutant
+    context — a single CandidateEpitope can emit N rows (one per allele x
     predictor x kind). When multiple predictions share a (peptide,
     allele) pair (e.g. MHCflurry and netMHCpan rows from a LENS file),
     DSL expressions can select between them via
@@ -107,7 +107,7 @@ def epitopes_to_topiary_df(epitopes):
 
     Comparator predictions (``epitope.wt``, ``nearest_self``, ...)
     are NOT emitted as rows. The DSL frame is mutant-only by
-    convention — comparator data stays on the Epitope for display.
+    convention — comparator data stays on the CandidateEpitope for display.
     """
     rows = []
     for e in epitopes:

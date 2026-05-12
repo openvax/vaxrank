@@ -410,8 +410,8 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
 
     Parameters
     ----------
-    epitopes : list of Epitope
-        Output of ``load_lens(path)``. Each Epitope groups all
+    epitopes : list of CandidateEpitope
+        Output of ``load_lens(path)``. Each CandidateEpitope groups all
         per-(allele, predictor) ``mhctools.Prediction`` records for
         one ``(peptide, source_sequence, offset)`` position.
     lens_tsv_path : str
@@ -463,7 +463,7 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
             "netmhcpan-ba).", kinds)
 
     # Index epitopes by their mutant peptide sequence so we can attach
-    # the right Epitope(s) to each candidate vaccine peptide. One
+    # the right CandidateEpitope(s) to each candidate vaccine peptide. One
     # peptide can map to multiple Epitopes when the same sequence
     # appears with different source contexts / offsets across
     # variants — we'll filter by (peptide, allele) presence below.
@@ -689,8 +689,8 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
         # Collect all Epitopes whose mutant peptide appears in any of
         # this variant's rows. The load_lens adapter has already
         # grouped all per-(allele, predictor) Prediction records into
-        # one Epitope per (peptide, source, offset), so dedup is on
-        # Epitope identity — typically yields one Epitope per unique
+        # one CandidateEpitope per (peptide, source, offset), so dedup is on
+        # CandidateEpitope identity — typically yields one CandidateEpitope per unique
         # peptide in the variant's row group.
         seen_peptides = set()
         seen_epitope_ids = set()
@@ -704,9 +704,9 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
                 if id(e) in seen_epitope_ids:
                     continue
                 seen_epitope_ids.add(id(e))
-                # Epitope is frozen — flag mutation-overlap via
+                # CandidateEpitope is frozen — flag mutation-overlap via
                 # dataclasses.replace. LENS rows are mutant-derived
-                # by construction, so every Epitope reached this way
+                # by construction, so every CandidateEpitope reached this way
                 # overlaps the mutation.
                 if not e.overlaps_mutation:
                     e = dataclasses.replace(e, overlaps_mutation=True)

@@ -172,14 +172,14 @@ def _load_default_predictor(human_only=False, threshold=0.5):
 def annotate_processing(epitopes, predictor=None,
                         human_only=False, threshold=0.5):
     """Build a map of pepsickle ``ProcessingPrediction`` records for
-    the given ``Epitope`` objects.
+    the given ``CandidateEpitope`` objects.
 
     Parameters
     ----------
-    epitopes : iterable of Epitope
+    epitopes : iterable of CandidateEpitope
         Each epitope is processed against its mutant
         ``source_sequence`` to compute one ProcessingPrediction.
-        Epitope objects are NOT mutated — readers consume the
+        CandidateEpitope objects are NOT mutated — readers consume the
         returned map.
         Epitopes with no usable source sequence are skipped.
     predictor : optional, object with a ``cleavage_probs(sequence) ->
@@ -325,13 +325,13 @@ def annotate_processing(epitopes, predictor=None,
     if n_annotated:
         logger.info(
             "Pepsickle credibility tagging: annotated %d / %d "
-            "Epitope(s) across %d unique source sequence(s).",
+            "CandidateEpitope(s) across %d unique source sequence(s).",
             n_annotated, len(epitopes_list), len(by_source))
     if n_skipped_peptide_not_in_context:
         ex_peptide, ex_source = skipped_examples[0]
         logger.warning(
             "Pepsickle credibility tagging: skipped %d / %d "
-            "Epitope(s) because the peptide is not a substring "
+            "CandidateEpitope(s) because the peptide is not a substring "
             "of its pep_context source — peptide and pep_context "
             "were built from different isoforms / annotation "
             "snapshots. Example: peptide=%r not found in "

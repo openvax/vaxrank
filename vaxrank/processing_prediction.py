@@ -10,7 +10,7 @@ proteasomal-cleavage prediction.
 Lives on its own axis from MHC binding because the two prediction
 kinds are semantically different:
 
-- :class:`mhctools.Prediction` (carried inside ``vaxrank.Epitope``)
+- :class:`mhctools.Prediction` (carried inside ``vaxrank.CandidateEpitope``)
   records **(peptide, allele) MHC-binding** scores (output of an
   ``mhctools.BindingPredictor`` — pMHC affinity / presentation /
   stability).
@@ -83,7 +83,7 @@ class ProcessingPrediction:
 
     def key(self) -> tuple:
         """Stable join key used by report writers to look up the
-        ProcessingPrediction for a given mutant Epitope at render
+        ProcessingPrediction for a given mutant CandidateEpitope at render
         time. Includes the predictor name so a future second
         per-position cleavage predictor (NetChop, …) lands in the
         same map without colliding."""

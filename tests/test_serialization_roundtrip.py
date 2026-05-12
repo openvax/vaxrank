@@ -22,7 +22,7 @@ from mhctools.pred import Prediction
 from varcode import Variant
 
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
-from vaxrank.peptide_context import COMPARATOR_WT, Epitope, Peptide
+from vaxrank.peptide_context import COMPARATOR_WT, CandidateEpitope, Peptide
 from vaxrank.vaccine_peptide import VaccinePeptide
 
 
@@ -63,7 +63,7 @@ def _sample_epitope(
         predictor_version='', allele='HLA-A*02:01',
         peptide='SIINFEKL', value=2000.0, score=0.0,
         percentile_rank=None)
-    return Epitope(
+    return CandidateEpitope(
         mutant=Peptide(
             sequence=peptide_sequence,
             source='SSIINFEQL', offset=1,
@@ -97,11 +97,11 @@ class _FakeFragment:
         self.mutation_distance_from_edge = 5
 
 
-# ---- Epitope -----------------------------------------------------------
+# ---- CandidateEpitope -----------------------------------------------------------
 
 
 def test_epitope_pickle_roundtrip():
-    """``Epitope`` and its nested ``Peptide`` survive pickle."""
+    """``CandidateEpitope`` and its nested ``Peptide`` survive pickle."""
     e = _sample_epitope()
     assert pickle.loads(pickle.dumps(e)) == e
 

@@ -25,14 +25,14 @@ from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
 from .epitope_dsl import build_filter_node, build_score_node
 from .mutant_protein_fragment import MutantProteinFragment
-from .peptide_context import Epitope, EpitopeBuilder
+from .peptide_context import CandidateEpitope, CandidateEpitopeBuilder
 from .reference_proteome import ReferenceProteome
 
 logger = logging.getLogger(__name__)
 
 
 def slice_epitopes(epitopes, start_offset, end_offset):
-    """Return subset of ``Epitope`` objects whose mutant peptide lies
+    """Return subset of ``CandidateEpitope`` objects whose mutant peptide lies
     fully within ``[start_offset, end_offset)``, with each one's source
     window narrowed to that range and offset rebased.
 
@@ -46,7 +46,7 @@ def predict_epitopes(
         mhc_predictor,
         protein_fragment : MutantProteinFragment,
         epitope_config : Optional[EpitopeConfig] = None,
-        genome : Optional[Genome] = None) -> list[Epitope]:
+        genome : Optional[Genome] = None) -> list[CandidateEpitope]:
     """
     Parameters
     ----------
@@ -56,7 +56,7 @@ def predict_epitopes(
         wrapped in a single-model TopiaryPredictor; pass a multi-model
         TopiaryPredictor (or use ``--mhc-predictor`` with multiple
         names on the CLI) to get all alleles' / predictors' results
-        rolled into each Epitope's mutant context.
+        rolled into each CandidateEpitope's mutant context.
 
     protein_fragment
         Protein sub-sequence to run MHC binding predictor over
@@ -70,8 +70,8 @@ def predict_epitopes(
 
     Returns
     -------
-    list[Epitope]
-        One ``Epitope`` per (peptide, peptide_offset) — each carrying
+    list[CandidateEpitope]
+        One ``CandidateEpitope`` per (peptide, peptide_offset) — each carrying
         all per-(allele, predictor) ``mhctools.Prediction`` records
         in its mutant ``Peptide``, plus the WT comparator
         context when the peptide overlaps the mutation.
@@ -81,7 +81,7 @@ def predict_epitopes(
     if epitope_config is None:
         epitope_config = EpitopeConfig()
 
-    builder = EpitopeBuilder()
+    builder = CandidateEpitopeBuilder()
     reference_proteome = ReferenceProteome(genome)
 
     # Wrap bare mhctools predictors in a TopiaryPredictor
@@ -172,7 +172,7 @@ def predict_epitopes(
 
     # Walk topiary frame rows; build per-(allele, predictor) leaf
     # ``Prediction`` records and push them into ``builder``. The
-    # builder groups by (peptide, source, offset) into one Epitope
+    # builder groups by (peptide, source, offset) into one CandidateEpitope
     # per peptide position.
     num_total = 0
     num_occurs_in_reference = 0

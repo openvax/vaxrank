@@ -29,7 +29,7 @@ from vaxrank.core_logic import (
 from mhctools.pred import Prediction
 
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
-from vaxrank.peptide_context import COMPARATOR_WT, Epitope, Peptide
+from vaxrank.peptide_context import COMPARATOR_WT, CandidateEpitope, Peptide
 from vaxrank.vaccine_peptide import VaccinePeptide, _legacy_score_one
 
 from .common import eq_, ok_, gt_
@@ -39,7 +39,7 @@ def _make_epitope(peptide, ic50, wt_ic50=None, allele="HLA-A*02:01",
                   source=None, offset=0, percentile_rank=0.5,
                   method="test", overlaps_mutation=True,
                   occurs_in_reference=False):
-    """Build a single-allele Epitope for tests that previously
+    """Build a single-allele CandidateEpitope for tests that previously
     constructed an EpitopePrediction."""
     src = source if source is not None else peptide
     mutant = Prediction(
@@ -55,7 +55,7 @@ def _make_epitope(peptide, ic50, wt_ic50=None, allele="HLA-A*02:01",
         comparators[COMPARATOR_WT] = Peptide(
             sequence=peptide, source=src, offset=offset,
             predictions=(wt,))
-    return Epitope(
+    return CandidateEpitope(
         mutant=Peptide(
             sequence=peptide, source=src, offset=offset,
             predictions=(mutant,)),
@@ -390,7 +390,7 @@ def test_config_defaults_match_historical_behavior():
     eq_(vaccine_config.padding_around_mutation, 5)
     eq_(vaccine_config.max_vaccine_peptides_per_variant, 1)
 
-    # Epitope scoring defaults
+    # CandidateEpitope scoring defaults
     eq_(epitope_config.logistic_epitope_score_midpoint, 350.0)
     eq_(epitope_config.logistic_epitope_score_width, 150.0)
 

@@ -241,7 +241,7 @@ def test_multi_method_resolves_with_qualified_affinity():
     assert float(scores.iloc[0]) == pytest.approx(expected, abs=1e-12)
 
 
-# ---- EpitopeBuilder + epitopes_to_topiary_df ---------
+# ---- CandidateEpitopeBuilder + epitopes_to_topiary_df ---------
 
 
 def _add_row(builder, peptide='SIINFEKL', allele='HLA-A*02:01', ic50=50.0,
@@ -276,12 +276,12 @@ def _add_row(builder, peptide='SIINFEKL', allele='HLA-A*02:01', ic50=50.0,
 
 
 def test_builder_groups_by_peptide_offset_source():
-    """The builder groups per-(peptide, source, offset) → one Epitope.
+    """The builder groups per-(peptide, source, offset) → one CandidateEpitope.
     Multi-allele rows for the same position collapse into one
-    Epitope whose mutant context carries N predictions."""
-    from vaxrank.peptide_context import EpitopeBuilder
+    CandidateEpitope whose mutant context carries N predictions."""
+    from vaxrank.peptide_context import CandidateEpitopeBuilder
 
-    builder = EpitopeBuilder()
+    builder = CandidateEpitopeBuilder()
     _add_row(builder, allele='HLA-A*02:01', ic50=50.0)
     _add_row(builder, allele='HLA-B*07:02', ic50=200.0)
     _add_row(builder, allele='HLA-C*03:04', ic50=800.0)
@@ -297,9 +297,9 @@ def test_builder_groups_by_peptide_offset_source():
 
 def test_builder_separates_distinct_peptides():
     """Two rows with different peptides → two Epitopes."""
-    from vaxrank.peptide_context import EpitopeBuilder
+    from vaxrank.peptide_context import CandidateEpitopeBuilder
 
-    builder = EpitopeBuilder()
+    builder = CandidateEpitopeBuilder()
     _add_row(builder, peptide='SIINFEKL', offset=4, wt_ic50=None)
     _add_row(builder, peptide='SIINFEKM', offset=12, wt_ic50=None)
     epitopes = builder.epitopes()
@@ -311,9 +311,9 @@ def test_builder_separates_distinct_peptides():
 def test_builder_builds_wt_comparator_when_peptides_differ():
     """A parallel WT comparator context is built when each row carries
     a WT prediction whose peptide differs from the mutant."""
-    from vaxrank.peptide_context import EpitopeBuilder
+    from vaxrank.peptide_context import CandidateEpitopeBuilder
 
-    builder = EpitopeBuilder()
+    builder = CandidateEpitopeBuilder()
     _add_row(builder, peptide='SIINFEKL', wt_peptide='SIINFEKM',
              ic50=50.0, wt_ic50=500.0, allele='HLA-A*02:01')
     _add_row(builder, peptide='SIINFEKL', wt_peptide='SIINFEKM',
@@ -330,12 +330,12 @@ def test_builder_builds_wt_comparator_when_peptides_differ():
 
 def test_builder_drops_wt_when_peptide_matches_mutant():
     """A WT Prediction whose peptide equals the mutant peptide is
-    dropped as a meaningless self-comparator. The Epitope has no WT
+    dropped as a meaningless self-comparator. The CandidateEpitope has no WT
     context."""
     from mhctools.pred import Prediction
-    from vaxrank.peptide_context import EpitopeBuilder
+    from vaxrank.peptide_context import CandidateEpitopeBuilder
 
-    builder = EpitopeBuilder()
+    builder = CandidateEpitopeBuilder()
     mutant = Prediction(
         kind='pMHC_affinity', predictor_name='mhcflurry',
         predictor_version='2.1.1', allele='HLA-A*02:01',
@@ -358,9 +358,9 @@ def test_builder_keeps_anonymous_wt_when_peptide_empty():
     self-match — the WT context is retained so the IC50 signal
     isn't lost."""
     from mhctools.pred import Prediction
-    from vaxrank.peptide_context import EpitopeBuilder
+    from vaxrank.peptide_context import CandidateEpitopeBuilder
 
-    builder = EpitopeBuilder()
+    builder = CandidateEpitopeBuilder()
     mutant = Prediction(
         kind='pMHC_affinity', predictor_name='mhcflurry',
         predictor_version='2.1.1', allele='HLA-A*02:01',
@@ -379,12 +379,12 @@ def test_builder_keeps_anonymous_wt_when_peptide_empty():
 
 
 def test_epitopes_to_topiary_df_emits_one_row_per_prediction():
-    """Each leaf ``mhctools.Prediction`` in an Epitope's mutant
+    """Each leaf ``mhctools.Prediction`` in an CandidateEpitope's mutant
     context becomes one frame row."""
     from vaxrank.epitope_dsl import epitopes_to_topiary_df
-    from vaxrank.peptide_context import EpitopeBuilder
+    from vaxrank.peptide_context import CandidateEpitopeBuilder
 
-    builder = EpitopeBuilder()
+    builder = CandidateEpitopeBuilder()
     _add_row(builder, allele='HLA-A*02:01', ic50=50.0)
     _add_row(builder, allele='HLA-B*07:02', ic50=200.0)
     df = epitopes_to_topiary_df(builder.epitopes())
@@ -400,13 +400,13 @@ def test_epitopes_to_topiary_df_emits_one_row_per_prediction():
 
 
 def test_epitopes_to_topiary_df_schema_pinned():
-    """Round-trip pin: builder → Epitope → frame must produce the
+    """Round-trip pin: builder → CandidateEpitope → frame must produce the
     canonical topiary schema (columns + dtype-stable values) that
     ``apply_filter`` / ``score_predictions`` consume."""
     from vaxrank.epitope_dsl import epitopes_to_topiary_df
-    from vaxrank.peptide_context import EpitopeBuilder
+    from vaxrank.peptide_context import CandidateEpitopeBuilder
 
-    builder = EpitopeBuilder()
+    builder = CandidateEpitopeBuilder()
     _add_row(builder, allele='HLA-A*02:01', ic50=50.0, percentile_rank=0.3)
     _add_row(builder, allele='HLA-B*07:02', ic50=200.0, percentile_rank=1.5)
     _add_row(builder, peptide='SIINFEKM', allele='HLA-A*02:01',
@@ -421,7 +421,7 @@ def test_epitopes_to_topiary_df_schema_pinned():
     assert (df['value'] == df['affinity']).all()
     # Multi-peptide inputs land in distinct rows.
     assert set(df['peptide']) == {'SIINFEKL', 'SIINFEKM'}
-    # Every leaf inherits its parent Epitope's offset.
+    # Every leaf inherits its parent CandidateEpitope's offset.
     by_peptide = df.set_index('peptide')['peptide_offset'].to_dict()
     assert by_peptide['SIINFEKL'] == 4
     assert by_peptide['SIINFEKM'] == 12

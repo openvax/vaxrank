@@ -38,7 +38,7 @@ def _legacy_score_one(ic50, percentile_rank, *,
                       percentile_rank_cutoff=DEFAULT_PERCENTILE_RANK_CUTOFF):
     """Per-prediction logistic score used by ``VaccinePeptide`` to sum
     scores across the leaf ``mhctools.Prediction`` records inside
-    each ``Epitope.mutant``.
+    each ``CandidateEpitope.mutant``.
 
     Kept as a free function so the math stays in one place. The
     topiary DSL's default ``score_expr`` produces byte-identical
@@ -68,14 +68,14 @@ class VaccinePeptide(DataclassSerializable):
     VaccinePeptide combines the sequence information of MutantProteinFragment
     with MHC binding predictions for subsequences of the protein fragment.
 
-    The resulting lists of mutant and wildtype ``Epitope`` objects
+    The resulting lists of mutant and wildtype ``CandidateEpitope`` objects
     are sorted by best mutant affinity.
 
     Parameters
     ----------
     mutant_protein_fragment : MutantProteinFragment
 
-    epitopes : list of Epitope
+    epitopes : list of CandidateEpitope
 
     num_mutant_epitopes_to_keep : int or None
         If None or 0 then keep all mutant epitopes.
@@ -175,8 +175,8 @@ class VaccinePeptide(DataclassSerializable):
         else:
             self._combined_score_expr_ast = None
 
-        # Sort key over Epitope: pick the strongest pMHC_affinity
-        # record across all predictors / alleles inside the Epitope.
+        # Sort key over CandidateEpitope: pick the strongest pMHC_affinity
+        # record across all predictors / alleles inside the CandidateEpitope.
         # Legacy semantic: sort by the SINGLE best (peptide, allele,
         # predictor) row's ic50 or percentile_rank — which here is
         # the min over the flat leaf set. ``best_affinity()`` would
@@ -222,7 +222,7 @@ class VaccinePeptide(DataclassSerializable):
             key=_epitope_sort_key,
         )
 
-        # Score each Epitope by summing the per-prediction logistic
+        # Score each CandidateEpitope by summing the per-prediction logistic
         # score across all of its mutant affinity records. Iterates
         # ``predictions_flat()`` + kind-filters rather than
         # ``predictions_for(kind=...)`` so multi-predictor data

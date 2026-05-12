@@ -604,7 +604,7 @@ def select_antigen_window(fragment, base_name, max_length_aa):
 
 
 def mutant_epitopes_sorted(vaccine_peptide):
-    """All mutant ``Epitope`` records on a VaccinePeptide, score-sorted
+    """All mutant ``CandidateEpitope`` records on a VaccinePeptide, score-sorted
     (best first).
 
     Returns the full list (possibly empty). The pipeline already sorts

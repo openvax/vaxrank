@@ -152,8 +152,8 @@ def compute_coverage(
     are skipped — this is a coverage view, not a directory of every
     allele the predictor saw.
 
-    ``epitopes`` is a list of ``vaxrank.peptide_context.Epitope``
-    objects. Each Epitope carries its mutant ``Peptide`` with
+    ``epitopes`` is a list of ``vaxrank.peptide_context.CandidateEpitope``
+    objects. Each CandidateEpitope carries its mutant ``Peptide`` with
     nested per-(kind, predictor, version, allele) ``Prediction``
     records — for the same (peptide, allele) we may see a
     ``pMHC_presentation`` record (mhcflurry-pres) and a
@@ -166,7 +166,7 @@ def compute_coverage(
         return {}
     # Two passes: collect best %-ranks per (peptide, allele), then
     # bucket into tiers. The first pass merges multi-predictor /
-    # multi-kind evidence within each Epitope.
+    # multi-kind evidence within each CandidateEpitope.
     by_pep_allele: dict[tuple, dict] = {}
     for e in epitopes:
         peptide = e.mutant.sequence
@@ -212,7 +212,7 @@ def compute_coverage(
 
 
 def _antigen_epitopes(vaccine_peptide):
-    """All mutant ``Epitope`` records on this VaccinePeptide.
+    """All mutant ``CandidateEpitope`` records on this VaccinePeptide.
     Defensive: tolerates duck-typed test fixtures that don't carry
     the field."""
     return list(getattr(vaccine_peptide, 'mutant_epitopes', []) or [])

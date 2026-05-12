@@ -123,20 +123,20 @@ def _annotate_predictions_with_processing(ranked_vaccine_peptides,
                                           lens_epitopes,
                                           human_only=False,
                                           threshold=0.5):
-    """Run pepsickle credibility tagging across all Epitope records.
+    """Run pepsickle credibility tagging across all CandidateEpitope records.
     Pulls them from BOTH the ranked-vaccine-peptides intermediate
     (one VP per variant; each VP has its own epitopes) AND the
     LENS/pVACseq epitopes list (which is the union).
 
     The result is a map of ``ProcessingPrediction`` records keyed by
     ``(peptide, source, predictor_name)``; report writers join in at
-    render time. Epitope objects are not mutated.
+    render time. CandidateEpitope objects are not mutated.
 
     Dedup strategy: identity (``id()``) wins when the two paths share
     the same Python object, but external-input loaders may produce
-    distinct Epitope objects with the same content. To stay correct
+    distinct CandidateEpitope objects with the same content. To stay correct
     in both cases, we *also* dedup on
-    ``(peptide_sequence, source_sequence, offset)`` so an Epitope
+    ``(peptide_sequence, source_sequence, offset)`` so an CandidateEpitope
     reachable as two distinct objects with the same semantic
     identity still gets annotated only once.
     """

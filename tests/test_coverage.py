@@ -30,12 +30,12 @@ from vaxrank.coverage import (
     select_antigens_for_coverage,
     summarize_construction_decisions,
 )
-from vaxrank.peptide_context import Epitope, Peptide
+from vaxrank.peptide_context import CandidateEpitope, Peptide
 
 
 def _ep(peptide, allele, *, presentation_pct=None, affinity_pct=None,
         method=''):
-    """One ``Epitope`` carrying one or two leaf ``Prediction`` records —
+    """One ``CandidateEpitope`` carrying one or two leaf ``Prediction`` records —
     a presentation-rank one (``pMHC_presentation``) and/or an affinity-
     rank one (``pMHC_affinity``). Matches the multi-kind shape
     ``compute_coverage`` operates on."""
@@ -50,14 +50,14 @@ def _ep(peptide, allele, *, presentation_pct=None, affinity_pct=None,
             kind='pMHC_affinity', predictor_name=method or 'aff',
             predictor_version='', allele=allele, peptide=peptide,
             value=None, score=0.0, percentile_rank=affinity_pct))
-    return Epitope(
+    return CandidateEpitope(
         mutant=Peptide(
             sequence=peptide, predictions=tuple(preds)),
         overlaps_mutation=True, occurs_in_reference=False)
 
 
 def _vp(epitopes, *, combined_score=1.0, gene_name='GENE'):
-    """Minimal VaccinePeptide-like record (Epitope shape)."""
+    """Minimal VaccinePeptide-like record (CandidateEpitope shape)."""
     return SimpleNamespace(
         mutant_epitopes=epitopes,
         mutant_protein_fragment=SimpleNamespace(

@@ -25,7 +25,7 @@ from mhctools.pred import Prediction
 
 from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
 from vaxrank.manufacturability import DEFAULT_MANUFACTURABILITY_RULES
-from vaxrank.peptide_context import Epitope, Peptide
+from vaxrank.peptide_context import CandidateEpitope, Peptide
 from vaxrank.vaccine_peptide import VaccinePeptide
 
 
@@ -42,7 +42,7 @@ def _make_fragment(seq="A" * 25, n_alt_reads=9):
 
 def _make_mutant_epitope(ic50=10.0, peptide="A" * 9, source="A" * 25,
                          offset=0):
-    """One ``Epitope`` with a single pMHC_affinity prediction, marked
+    """One ``CandidateEpitope`` with a single pMHC_affinity prediction, marked
     as overlapping the mutation."""
     pred = Prediction(
         kind='pMHC_affinity',
@@ -54,7 +54,7 @@ def _make_mutant_epitope(ic50=10.0, peptide="A" * 9, source="A" * 25,
         score=0.0,
         percentile_rank=0.5,
     )
-    return Epitope(
+    return CandidateEpitope(
         mutant=Peptide(
             sequence=peptide,
             source=source,
@@ -403,7 +403,7 @@ def test_bundled_default_yaml_round_trips_to_default_configs(tmp_path):
     ec = epitope_config_from_args(args)
     vc = vaccine_config_from_args(args)
     mfg = manufacturability_config_from_args(args)
-    # Epitope side has no list-typed fields, so == works.
+    # CandidateEpitope side has no list-typed fields, so == works.
     assert ec == EpitopeConfig()
     # Vaccine side: ranking_rules tuple matches the default.
     assert vc.ranking_rules == DEFAULT_RANKING_RULES

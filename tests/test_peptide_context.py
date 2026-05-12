@@ -18,7 +18,7 @@ Pins:
   (cross-predictor ranking is meaningless); auto-resolve multi-
   version to the most recent (PEP 440).
 - Kind aliases defer to ``topiary.ranking._KIND_ALIASES``.
-- ``Epitope.comparators`` dict accommodates ``'wt'`` plus
+- ``CandidateEpitope.comparators`` dict accommodates ``'wt'`` plus
   future ``nearest_self`` / ``nearest_vital_self`` /
   ``nearest_nonCTA`` / ``nearest_oncovirus`` (#254 / #257 / #258).
 """
@@ -30,7 +30,7 @@ from mhctools.pred import Prediction
 from vaxrank.peptide_context import (
     COMPARATOR_NEAREST_SELF,
     COMPARATOR_WT,
-    Epitope,
+    CandidateEpitope,
     Peptide,
 )
 
@@ -686,13 +686,13 @@ def test_peptide_context_flanks_default_to_empty():
     assert ctx.source_name == ''
 
 
-# ---- Epitope ---------------------------------------------------
+# ---- CandidateEpitope ---------------------------------------------------
 
 
 def test_candidate_epitope_wt_shortcut():
     mutant = Peptide(sequence='SIINFEKL')
     wt = Peptide(sequence='SIINFEKM')
-    candidate = Epitope(
+    candidate = CandidateEpitope(
         mutant=mutant,
         comparators={COMPARATOR_WT: wt},
         overlaps_mutation=True)
@@ -703,7 +703,7 @@ def test_candidate_epitope_wt_shortcut():
 
 
 def test_candidate_epitope_no_wt_returns_none():
-    candidate = Epitope(
+    candidate = CandidateEpitope(
         mutant=Peptide(sequence='SIINFEKL'),
         comparators={})
     assert candidate.wt is None
@@ -722,7 +722,7 @@ def test_candidate_epitope_holds_arbitrary_comparators():
         predictions=(
             _pred('pMHC_affinity', allele='HLA-A*02:01', value=80.0),
         ))
-    candidate = Epitope(
+    candidate = CandidateEpitope(
         mutant=mutant,
         comparators={
             COMPARATOR_WT: Peptide(sequence='SIINFEKM'),
@@ -737,7 +737,7 @@ def test_candidate_epitope_holds_arbitrary_comparators():
 
 
 def test_candidate_epitope_freezes_mutation_context():
-    candidate = Epitope(
+    candidate = CandidateEpitope(
         mutant=Peptide(sequence='SIINFEKL'),
         comparators={},
         overlaps_mutation=True,
@@ -793,7 +793,7 @@ def test_peptide_context_sliced_returns_none_when_peptide_after_window():
 
 
 def test_epitope_sliced_delegates_to_mutant_keeping_comparators():
-    """``Epitope.sliced`` narrows the mutant's source window;
+    """``CandidateEpitope.sliced`` narrows the mutant's source window;
     comparators are independent peptides and pass through unchanged."""
     mutant = Peptide(
         sequence='SIINFEKL',
@@ -803,7 +803,7 @@ def test_epitope_sliced_delegates_to_mutant_keeping_comparators():
         sequence='SIINFEKM',
         source='AAASIINFEKMDDD',
         offset=3)
-    epitope = Epitope(
+    epitope = CandidateEpitope(
         mutant=mutant,
         comparators={COMPARATOR_WT: wt},
         overlaps_mutation=True,
@@ -820,7 +820,7 @@ def test_epitope_sliced_delegates_to_mutant_keeping_comparators():
 
 
 def test_epitope_sliced_returns_none_when_mutant_doesnt_fit():
-    epitope = Epitope(
+    epitope = CandidateEpitope(
         mutant=Peptide(
             sequence='SIINFEKL',
             source='SIINFEKLYYY',

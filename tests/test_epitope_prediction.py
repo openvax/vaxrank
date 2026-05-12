@@ -24,7 +24,7 @@ mouse_genome = genome_for_reference_name("GRCm38")
 
 
 def _by_pep_allele(epitopes):
-    """Map ``(peptide, allele) -> (Epitope, mutant Prediction leaf)``
+    """Map ``(peptide, allele) -> (CandidateEpitope, mutant Prediction leaf)``
     for single-predictor test inputs."""
     out = {}
     for e in epitopes:
@@ -79,7 +79,7 @@ def test_reference_peptide_logic():
 def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel():
     """Multi-model TopiaryPredictor (post-2.24, #261) keeps each
     predictor's view of every (peptide, allele) pair. In the new
-    Epitope shape, one Epitope per (peptide, source, offset) carries
+    CandidateEpitope shape, one CandidateEpitope per (peptide, source, offset) carries
     multiple per-(predictor, allele) leaf Predictions — verifies that
     no leaf record is lost in the grouping."""
     from unittest.mock import patch

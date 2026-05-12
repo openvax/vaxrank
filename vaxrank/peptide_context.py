@@ -13,7 +13,7 @@ Two layers:
   candidate AND for any reference comparator (WT pair, nearest_self,
   nearest_vital_self, nearest_nonCTA, nearest_oncovirus, …).
 
-  ``Epitope`` — one sliding-window position from a
+  ``CandidateEpitope`` — one sliding-window position from a
   VaccinePeptide. Holds the mutant ``Peptide`` plus a
   ``comparators`` dict keyed by name. Future safety / homology
   features (#254 / #257 / #258) populate comparators with their
@@ -400,7 +400,7 @@ class Peptide:
 
 
 @dataclass(frozen=True)
-class Epitope:
+class CandidateEpitope:
     """One sliding-window peptide position from a VaccinePeptide,
     with its mutation context + reference comparators for safety
     / immunogenicity scoring.
@@ -460,8 +460,8 @@ class Epitope:
         return len(self.mutant.sequence)
 
     def sliced(self, start_offset: int,
-               end_offset: int) -> Optional["Epitope"]:
-        """Return a new ``Epitope`` whose mutant source window is
+               end_offset: int) -> Optional["CandidateEpitope"]:
+        """Return a new ``CandidateEpitope`` whose mutant source window is
         narrowed to ``[start_offset, end_offset)``. Returns ``None``
         if the mutant peptide doesn't fit inside the window.
         Comparators (WT etc.) keep their own source windows
@@ -470,28 +470,28 @@ class Epitope:
         sliced_mutant = self.mutant.sliced(start_offset, end_offset)
         if sliced_mutant is None:
             return None
-        return Epitope(
+        return CandidateEpitope(
             mutant=sliced_mutant,
             comparators=self.comparators,
             overlaps_mutation=self.overlaps_mutation,
             occurs_in_reference=self.occurs_in_reference)
 
 
-class EpitopeBuilder:
-    """Accumulator producers use to assemble ``list[Epitope]`` one
+class CandidateEpitopeBuilder:
+    """Accumulator producers use to assemble ``list[CandidateEpitope]`` one
     leaf prediction at a time.
 
     ``predict_epitopes`` and the LENS / pVACseq loaders all iterate
     row-shaped inputs (topiary frame, TSV) and call :meth:`add_row`
     per (peptide × allele × predictor) record. :meth:`epitopes`
     finalizes by grouping rows that share a
-    ``(peptide, source, offset)`` key into one ``Epitope`` (mutant
-    ``PeptideContext`` carrying all leaf Predictions, plus an
+    ``(peptide, source, offset)`` key into one ``CandidateEpitope``
+    (mutant ``Peptide`` carrying all leaf Predictions, plus an
     optional ``wt`` comparator when any WT signal arrived for the
     group) and returning the list in insertion order.
 
     The builder owns the grouping logic so producers don't reinvent
-    it; ``Epitope`` itself stays an immutable value type, never a
+    it; ``CandidateEpitope`` itself stays an immutable value type, never a
     construction-site partial.
     """
 
@@ -540,8 +540,8 @@ class EpitopeBuilder:
             if slot['wt_peptide'] is None:
                 slot['wt_peptide'] = wt.peptide
 
-    def epitopes(self) -> list["Epitope"]:
-        """Finalize: emit one ``Epitope`` per group in insertion order."""
+    def epitopes(self) -> list["CandidateEpitope"]:
+        """Finalize: emit one ``CandidateEpitope`` per group in insertion order."""
         out = []
         for slot in self._groups.values():
             mutant_pep = Peptide(
@@ -558,7 +558,7 @@ class EpitopeBuilder:
                     offset=slot['offset'],
                     predictions=tuple(slot['wt_preds']),
                 )
-            out.append(Epitope(
+            out.append(CandidateEpitope(
                 mutant=mutant_pep,
                 comparators=comparators,
                 overlaps_mutation=slot['overlaps_mutation'],

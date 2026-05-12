@@ -14,14 +14,14 @@
 from .core_logic import run_vaxrank
 from .epitope_config import EpitopeConfig
 from .epitope_logic import predict_epitopes
-from .peptide_context import Epitope, Peptide
+from .peptide_context import CandidateEpitope, Peptide
 from .vaccine_config import VaccineConfig
 from .vaccine_peptide import VaccinePeptide
 from .version import __version__
 
 __all__ = [
     "__version__",
-    "Epitope",
+    "CandidateEpitope",
     "EpitopeConfig",
     "Peptide",
     "VaccineConfig",

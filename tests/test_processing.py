@@ -29,7 +29,7 @@ Pins:
 
 from mhctools.pred import Prediction
 
-from vaxrank.peptide_context import Epitope, Peptide
+from vaxrank.peptide_context import CandidateEpitope, Peptide
 from vaxrank.processing import (
     _component_probs,
     annotate_processing,
@@ -38,7 +38,7 @@ from vaxrank.processing import (
 
 def _ep(peptide, source, offset, ic50=100.0, allele="HLA-A*02:01",
         predictor="stub"):
-    """Build a minimal ``Epitope`` for tests — one mutant
+    """Build a minimal ``CandidateEpitope`` for tests — one mutant
     pMHC_affinity ``Prediction`` plus the (peptide, source, offset)
     layout the processing annotator joins on."""
     pred = Prediction(
@@ -51,7 +51,7 @@ def _ep(peptide, source, offset, ic50=100.0, allele="HLA-A*02:01",
         score=0.0,
         percentile_rank=ic50 / 100.0,
     )
-    return Epitope(
+    return CandidateEpitope(
         mutant=Peptide(
             sequence=peptide,
             source=source,
@@ -219,7 +219,7 @@ def test_annotate_processing_does_not_touch_ranking_score():
     # canonical record).
     assert n == 1
     assert (pred.sequence, source, 'pepsickle') in by_key
-    # Ranking-driving fields untouched (frozen Epitope, can't be mutated).
+    # Ranking-driving fields untouched (frozen CandidateEpitope, can't be mutated).
     leaf_after = pred.mutant.best_affinity()
     assert leaf_after.value == pre_ic50
     assert leaf_after.percentile_rank == pre_rank
@@ -353,7 +353,7 @@ def test_epitope_data_renders_one_row_per_predictor_for_same_pep_allele():
             peptide='SIINFEKL', value=ic50, score=0.0,
             percentile_rank=0.5)
     mhcflurry, netmhcpan = _pred('mhcflurry', 50.0), _pred('netmhcpan', 75.0)
-    epitope = Epitope(
+    epitope = CandidateEpitope(
         mutant=Peptide(
             sequence='SIINFEKL',
             source='SSIINFEKL', offset=1,

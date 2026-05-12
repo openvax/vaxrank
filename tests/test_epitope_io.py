@@ -19,7 +19,7 @@ import os
 import pytest
 from mhctools.pred import Prediction
 
-from vaxrank.peptide_context import COMPARATOR_WT, Epitope, Peptide
+from vaxrank.peptide_context import COMPARATOR_WT, CandidateEpitope, Peptide
 from vaxrank.epitope_io import (
     predictions_to_dataframe,
     save_predictions,
@@ -40,7 +40,7 @@ def _make_prediction(allele="HLA-A*02:01", peptide_sequence="SIINFEKL",
                      overlaps_mutation=True,
                      source_sequence="XXSIINFEKLXX", offset=2,
                      occurs_in_reference=False):
-    """Build a minimal single-allele single-predictor ``Epitope`` for
+    """Build a minimal single-allele single-predictor ``CandidateEpitope`` for
     epitope_io roundtrip tests."""
     mutant_pred = Prediction(
         kind='pMHC_affinity', predictor_name=prediction_method_name,
@@ -58,7 +58,7 @@ def _make_prediction(allele="HLA-A*02:01", peptide_sequence="SIINFEKL",
             sequence=wt_peptide_sequence,
             source=source_sequence, offset=offset,
             predictions=(wt_pred,))
-    return Epitope(
+    return CandidateEpitope(
         mutant=Peptide(
             sequence=peptide_sequence,
             source=source_sequence, offset=offset,
@@ -137,7 +137,7 @@ def test_roundtrip_preserves_values(tmp_path):
 def test_load_pvacseq():
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
     report_df, epitopes = load_pvacseq(path)
-    # One Epitope per pVACseq row (each row has its own peptide).
+    # One CandidateEpitope per pVACseq row (each row has its own peptide).
     assert len(epitopes) == 3
     assert len(report_df) == 3
 
@@ -174,7 +174,7 @@ def test_load_pvacseq_missing_columns(tmp_path):
 
 def test_load_lens_emits_one_epitope_per_position_with_multi_predictor_leaves():
     """load_lens groups all per-(allele, predictor) predictions for one
-    ``(peptide, source, offset)`` position into a single Epitope.
+    ``(peptide, source, offset)`` position into a single CandidateEpitope.
     The fixture has 3 rows × 2 predictors = 6 leaf Predictions
     spread across 3 Epitopes (the adapter dedups by position), and
     3 report rows."""
@@ -188,13 +188,13 @@ def test_load_lens_emits_one_epitope_per_position_with_multi_predictor_leaves():
     methods = {p.predictor_name for p in leaves}
     assert methods == {"mhcflurry", "netmhcpan"}
 
-    # Each Epitope carries both predictors' rows for one (peptide, allele).
+    # Each CandidateEpitope carries both predictors' rows for one (peptide, allele).
     for e in epitopes:
         ms = {p.predictor_name for p in e.mutant.predictions_flat()}
         assert ms == {"mhcflurry", "netmhcpan"}
     assert report_df["Predictors used"].iloc[0] == "mhcflurry,netmhcpan"
 
-    # Find the SVVGSSSSS Epitope and inspect its mhcflurry leaf.
+    # Find the SVVGSSSSS CandidateEpitope and inspect its mhcflurry leaf.
     e = next(
         ep for ep in epitopes
         if ep.mutant.sequence == "SVVGSSSSS")
@@ -969,14 +969,14 @@ def test_real_lens_v14_detects_all_three_predictors():
 
 def test_real_lens_v15_emits_both_affinity_predictors():
     """v1.5.1 has both mhcflurry and netmhcpan; load_lens collects all
-    per-predictor predictions inside each Epitope. Canonical
+    per-predictor predictions inside each CandidateEpitope. Canonical
     'mhcflurry' drives the report's display columns."""
     path = os.path.join(REAL_LENS_DIR, "lens_v1.5_real_subset.tsv")
     report_df, epitopes = load_lens(path)
     leaves = _leaves(epitopes)
     methods = {p.predictor_name for p in leaves}
     assert methods == {"mhcflurry", "netmhcpan"}
-    # Each Epitope spawns up to N leaves (N = detected count); NA
+    # Each CandidateEpitope spawns up to N leaves (N = detected count); NA
     # cells produce fewer.
     assert len(leaves) <= 2 * len(report_df)
     predictors_used = report_df["Predictors used"].iloc[0]

@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import pandas as pd
 from mhctools.pred import Prediction
 
-from vaxrank.peptide_context import COMPARATOR_WT, Epitope, Peptide
+from vaxrank.peptide_context import COMPARATOR_WT, CandidateEpitope, Peptide
 from vaxrank.report import make_minimal_neoepitope_report
 
 
@@ -52,7 +52,7 @@ def _make_epitope(peptide, ic50, wt_ic50, allele="HLA-A*02:01",
         comparators[COMPARATOR_WT] = Peptide(
             sequence=wt_peptide or peptide,
             predictions=(wt_pred,))
-    return Epitope(
+    return CandidateEpitope(
         mutant=Peptide(
             sequence=peptide,
             source=peptide, offset=0,

@@ -558,7 +558,7 @@ applying the DNA variant to the reference transcript because it:
 - **Confirms expression** — variants with no supporting RNA reads are
   filtered out
 
-### Epitope scoring
+### CandidateEpitope scoring
 
 Each mutant protein fragment is sliced into overlapping subsequences of
 epitope length (typically 8–15 amino acids).  These candidate epitopes
@@ -573,7 +573,7 @@ constructed around each mutation.  Each candidate is scored by the
 combined immunogenicity of the epitopes it contains.  Candidates are
 then filtered and ranked by:
 
-1. **Epitope content** — total predicted immunogenicity score
+1. **CandidateEpitope content** — total predicted immunogenicity score
 2. **Reference proteome filtering** — peptides matching the human
    reference proteome are removed to ensure only truly novel sequences
    are selected
@@ -631,7 +631,7 @@ processing columns).
 **Shared upstream:**
 
 - `core_logic.py`: Main vaccine peptide selection algorithm
-- `epitope_logic.py`: Epitope scoring and filtering
+- `epitope_logic.py`: CandidateEpitope scoring and filtering
 - `epitope_io.py`: LENS / pVACseq / vaxrank-native I/O for epitope predictions
 - `external_input.py`: Synthesize the canonical ranked-vaccine-peptides shape from a LENS / pVACseq report so external-input runs reach the same dispatch as VCF + BAM
 - `reference_proteome.py`: Set-based kmer index for reference proteome filtering (O(1) lookup, built once and cached)

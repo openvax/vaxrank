@@ -331,13 +331,13 @@ class TemplateDataCreator(object):
 
     def _epitope_data(self, epitope, prediction, include_processing=False):
         """Returns an OrderedDict with epitope data for one
-        (Epitope, mutant Prediction) row.
+        (CandidateEpitope, mutant Prediction) row.
 
-        One mutant ``Epitope`` carries N per-allele × per-predictor
+        One mutant ``CandidateEpitope`` carries N per-allele × per-predictor
         ``mhctools.Prediction`` records. The report keeps the legacy
         one-row-per-(peptide, allele, predictor) shape, so the caller
         iterates over ``epitope.mutant.predictions_for('pMHC_affinity')``
-        and passes each leaf record here alongside its parent Epitope.
+        and passes each leaf record here alongside its parent CandidateEpitope.
 
         ``include_processing``: when True, always emit the three
         proteasomal-cleavage credibility columns
@@ -503,7 +503,7 @@ class TemplateDataCreator(object):
                 # mixed annotated/unannotated lists are possible).
                 #
                 # Pepsickle keys off (peptide, source) — independent
-                # of allele — so we look up once per Epitope using
+                # of allele — so we look up once per CandidateEpitope using
                 # the first available leaf Prediction as a probe.
                 def _has_processing(e):
                     for p in e.mutant.predictions_flat():
@@ -517,7 +517,7 @@ class TemplateDataCreator(object):
 
                 epitopes = []
                 wt_epitopes = []
-                # One report row per (Epitope, allele × predictor)
+                # One report row per (CandidateEpitope, allele × predictor)
                 # leaf record. Keeps today's table shape: one row per
                 # (peptide, allele) in single-predictor runs; multiple
                 # rows per (peptide, allele) when multi-predictor data

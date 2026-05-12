@@ -116,8 +116,8 @@ def test_keep_top_k_epitopes():
         vaccine_peptide = vaccine_peptides[0]
         eq_(keep_k_epitopes, len(vaccine_peptide.mutant_epitopes))
         # Recompute the expected score and verify the top-k slice from
-        # ``ranked_vaccine_peptides()`` reached the per-Epitope sum.
-        # Each Epitope contributes the sum of its per-allele leaf
+        # ``ranked_vaccine_peptides()`` reached the per-CandidateEpitope sum.
+        # Each CandidateEpitope contributes the sum of its per-allele leaf
         # ``pMHC_affinity`` records' logistic score.
         mutant_epitope_score = sum(
             _legacy_score_one(leaf.value, leaf.percentile_rank)

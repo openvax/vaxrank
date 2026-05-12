@@ -18,11 +18,11 @@ Supports:
   - pVACseq aggregated TSV (all_epitopes.aggregated.tsv)
   - LENS report TSV
 
-All loader functions emit ``list[vaxrank.peptide_context.Epitope]``;
+All loader functions emit ``list[vaxrank.peptide_context.CandidateEpitope]``;
 the flat per-(peptide, allele, predictor) row shape lives only inside
 the CSV / DataFrame layer for round-trip fidelity. Loaders push
-each row through :class:`~vaxrank.peptide_context.EpitopeBuilder`,
-which groups by ``(peptide, source, offset)`` into ``Epitope``
+each row through :class:`~vaxrank.peptide_context.CandidateEpitopeBuilder`,
+which groups by ``(peptide, source, offset)`` into ``CandidateEpitope``
 objects at the end.
 """
 
@@ -34,7 +34,7 @@ import pandas as pd
 from mhctools.pred import Prediction
 
 from .epitope_dsl import _kind_for_method
-from .peptide_context import EpitopeBuilder
+from .peptide_context import CandidateEpitopeBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ VAXRANK_COLUMNS = [
 
 
 def _epitope_to_rows(epitope):
-    """Flatten one ``Epitope`` to per-(predictor, allele) row dicts
+    """Flatten one ``CandidateEpitope`` to per-(predictor, allele) row dicts
     matching :data:`VAXRANK_COLUMNS`. Drives ``predictions_to_dataframe``
     and ``save_predictions``."""
     mutant = epitope.mutant
@@ -96,14 +96,14 @@ def _epitope_to_rows(epitope):
 
 
 def predictions_to_dataframe(epitopes):
-    """Convert a collection of ``Epitope`` objects to a flat DataFrame
+    """Convert a collection of ``CandidateEpitope`` objects to a flat DataFrame
     matching :data:`VAXRANK_COLUMNS` — one row per leaf
     ``pMHC_affinity`` prediction.
 
     Parameters
     ----------
-    epitopes : list of Epitope, dict, or iterable
-        Most callers pass a plain ``list[Epitope]``. A ``dict`` is
+    epitopes : list of CandidateEpitope, dict, or iterable
+        Most callers pass a plain ``list[CandidateEpitope]``. A ``dict`` is
         accepted for back-compat with pre-3.0 call sites that keyed
         an ordered map by ``(peptide, allele)`` — the values are used.
     """
@@ -116,7 +116,7 @@ def predictions_to_dataframe(epitopes):
 
 
 def save_predictions(epitopes, path):
-    """Save ``Epitope`` objects to a CSV/TSV file. One row per
+    """Save ``CandidateEpitope`` objects to a CSV/TSV file. One row per
     ``(epitope, allele, predictor)`` leaf prediction.
 
     Format is inferred from the file extension (.tsv -> tab, else comma).
@@ -128,7 +128,7 @@ def save_predictions(epitopes, path):
 
 
 def load_predictions(path):
-    """Load a vaxrank-native CSV/TSV file and return ``list[Epitope]``."""
+    """Load a vaxrank-native CSV/TSV file and return ``list[CandidateEpitope]``."""
     sep = "\t" if str(path).endswith(".tsv") else ","
     df = pd.read_csv(path, sep=sep)
 
@@ -137,7 +137,7 @@ def load_predictions(path):
             return ""
         return str(val)
 
-    builder = EpitopeBuilder()
+    builder = CandidateEpitopeBuilder()
     for _, row in df.iterrows():
         wt_ic50 = row.get("wt_ic50")
         if pd.isna(wt_ic50):
@@ -198,8 +198,8 @@ def load_pvacseq(path):
         affinity, Wildtype sequence, Predicted wildtype pMHC affinity,
         Gene name, Genomic variant, Tier, Ref Match, RNA Expr, DNA VAF,
         vaxrank_score
-    list of Epitope
-        One ``vaxrank.peptide_context.Epitope`` per unique
+    list of CandidateEpitope
+        One ``vaxrank.peptide_context.CandidateEpitope`` per unique
         ``(peptide, source_sequence, offset)`` group; pVACseq rows
         typically map 1:1 since each row carries its own allele.
     """
@@ -210,7 +210,7 @@ def load_pvacseq(path):
         raise ValueError(
             f"pVACseq file {path} missing required columns: {missing}")
 
-    builder = EpitopeBuilder()
+    builder = CandidateEpitopeBuilder()
     report_rows = []
     n_rows = 0
     for _, row in df.iterrows():
@@ -451,12 +451,12 @@ def normalize_hla_allele(allele):
 def load_lens(path):
     """
     Import a LENS report TSV and return a neoepitope report DataFrame
-    plus a list of ``vaxrank.peptide_context.Epitope`` objects.
+    plus a list of ``vaxrank.peptide_context.CandidateEpitope`` objects.
 
     LENS column schemas vary across versions (v1.4, v1.5, v1.9+); we sniff
     which predictors a given file actually emits rather than requiring a
     fixed schema. Internally we build one flat per-(peptide, allele,
-    detected predictor) record per row, then group them into ``Epitope``
+    detected predictor) record per row, then group them into ``CandidateEpitope``
     objects keyed by ``(peptide, source_sequence, offset)`` so Topiary
     DSL expressions can combine multi-predictor predictions via
     ``affinity['mhcflurry']`` / ``affinity['netmhcpan']`` or use an
@@ -471,8 +471,8 @@ def load_lens(path):
     -------
     pandas.DataFrame
         Report-ready DataFrame (one row per peptide × allele).
-    list of Epitope
-        One ``Epitope`` per ``(peptide, source_sequence, offset)``
+    list of CandidateEpitope
+        One ``CandidateEpitope`` per ``(peptide, source_sequence, offset)``
         group, each carrying its per-(allele, predictor)
         ``mhctools.Prediction`` records inside ``epitope.mutant``.
     """
@@ -507,7 +507,7 @@ def load_lens(path):
         _pick_canonical_predictor(affinity_preds) if affinity_preds else None)
     chosen = list(detected)
 
-    builder = EpitopeBuilder()
+    builder = CandidateEpitopeBuilder()
     report_rows = []
     for _, row in df.iterrows():
         peptide = row.get("peptide", "")
@@ -562,7 +562,7 @@ def load_lens(path):
             wt = None
             if wt_ic50 is not None:
                 # LENS doesn't emit a WT peptide column — pass an
-                # empty string. ``EpitopeBuilder`` keeps the WT
+                # empty string. ``CandidateEpitopeBuilder`` keeps the WT
                 # context (anonymous-WT signal) because wt_ic50 is
                 # non-None even though the sequence is unknown.
                 wt = Prediction(
@@ -677,8 +677,8 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     report_df : pandas.DataFrame
         Report-ready DataFrame from load_pvacseq or load_lens
         (one row per (peptide, allele) pair).
-    epitopes : list of Epitope
-        Output of ``load_lens`` / ``load_pvacseq`` — one Epitope per
+    epitopes : list of CandidateEpitope
+        Output of ``load_lens`` / ``load_pvacseq`` — one CandidateEpitope per
         unique ``(peptide, source, offset)``.
     excel_report_path : str, optional
     csv_report_path : str, optional
