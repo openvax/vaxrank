@@ -264,6 +264,48 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
     )
 
 
+def attach_per_allele_scores(epitopes, cfg=None):
+    """Score ``epitopes`` via the configured DSL and return a new list of
+    :class:`~vaxrank.candidate_epitope.CandidateEpitope` instances with
+    each one's ``per_allele_scores`` populated.
+
+    External-input loaders (``load_pvacseq`` / ``load_lens``) build
+    unscored CandidateEpitopes from a TSV. The upstream pipeline path
+    populates ``per_allele_scores`` inside ``predict_epitopes`` from the
+    DSL eval; this helper is the equivalent step for the loader path so
+    downstream consumers (``VaccinePeptide.target_epitope_score`` etc.)
+    see the same shape regardless of where the epitopes came from.
+
+    ``cfg`` defaults to a fresh :class:`~vaxrank.epitope_config.EpitopeConfig`
+    so the loader path's default scoring matches the legacy pre-3.1
+    semantics exactly. Pass a custom config to override the threshold
+    knobs or supply a user ``score_expr``.
+    """
+    from dataclasses import replace
+    from .epitope_config import EpitopeConfig
+
+    if not epitopes:
+        return epitopes
+    if cfg is None:
+        cfg = EpitopeConfig()
+    score_series = score_predictions(epitopes, cfg)
+    # score_series is keyed by (source_sequence_name, peptide, offset, allele)
+    # where source_sequence_name mirrors ``epitopes_to_topiary_df`` —
+    # epitope.source_sequence or (falling back to) epitope.sequence.
+    by_position: dict[tuple, dict[str, float]] = {}
+    for idx, val in score_series.items():
+        src_name, peptide, offset, allele = idx
+        by_position.setdefault((src_name, peptide, offset), {})[allele] = float(val)
+    return [
+        replace(
+            e,
+            per_allele_scores=by_position.get(
+                (e.source_sequence or e.sequence, e.sequence, e.offset),
+                {}))
+        for e in epitopes
+    ]
+
+
 def collect_dsl_references(node):
     """Walk a parsed DSL node and collect its external-data references.
 
