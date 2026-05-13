@@ -312,6 +312,14 @@ def load_pvacseq(path):
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
     epitopes = candidate_epitopes_from_rows(epitope_rows)
+    # Loader path mirrors ``predict_epitopes``: populate
+    # ``per_allele_scores`` via the DSL so downstream consumers
+    # (VaccinePeptide.target_epitope_score, ranking, reports) see the
+    # same shape as upstream-path epitopes. Without this, every loaded
+    # epitope has ``epitope_score=0`` and the variant gets dropped as
+    # "no epitopes" during ranking.
+    from .epitope_dsl import attach_per_allele_scores
+    epitopes = attach_per_allele_scores(epitopes)
     logger.info(
         "Loaded %d epitope(s) (%d row(s)) from pVACseq file %s",
         len(epitopes), n_rows, path)
@@ -615,6 +623,12 @@ def load_lens(path):
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
     epitopes = candidate_epitopes_from_rows(epitope_rows)
+    # See load_pvacseq for the parallel rationale: the 3.1 refactor moved
+    # per-(peptide, allele) scoring to the DSL and stored the result on
+    # CandidateEpitope.per_allele_scores. Loaders must populate it or
+    # downstream ranking sees zero-scored epitopes and drops everything.
+    from .epitope_dsl import attach_per_allele_scores
+    epitopes = attach_per_allele_scores(epitopes)
     logger.info(
         "Loaded %d epitope(s) (%d row(s) × %d predictor(s)) from %s",
         len(epitopes), len(report_df), len(chosen), path)

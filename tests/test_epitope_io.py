@@ -163,6 +163,31 @@ def test_load_pvacseq():
     assert any(ep.occurs_in_reference for ep in epitopes)
 
 
+def test_load_pvacseq_populates_per_allele_scores():
+    """Regression: the 3.1.0 single-mechanism refactor moved
+    per-(peptide, allele) scoring to the DSL and stored the result on
+    ``CandidateEpitope.per_allele_scores``. The pVACseq loader path
+    must populate it too — otherwise every loaded epitope has
+    ``epitope_score=0`` and every variant gets dropped during
+    ranking as 'no epitopes for peptide'. Pin both ends: scores are
+    non-empty and (for binding-affinity rows) non-zero."""
+    path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
+    _, epitopes = load_pvacseq(path)
+    assert epitopes
+    # Every epitope has scores keyed by its actual allele(s).
+    for e in epitopes:
+        assert e.per_allele_scores, (
+            f"Epitope {e.sequence!r} loaded with empty per_allele_scores"
+        )
+        for p in e.predictions_flat():
+            assert p.allele in e.per_allele_scores
+    # The strong binder in the fixture (SVVGSSSSS, IC50≈76 nM) must
+    # produce a non-zero score under the default logistic.
+    e_strong = next(
+        ep for ep in epitopes if ep.sequence == "SVVGSSSSS")
+    assert e_strong.epitope_score > 0.0
+
+
 def test_load_pvacseq_missing_columns(tmp_path):
     bad_file = tmp_path / "bad.tsv"
     bad_file.write_text("Gene\tAA Change\nTP53\tG245S\n")
@@ -213,6 +238,19 @@ def test_load_lens_emits_one_epitope_per_position_with_multi_predictor_leaves():
     assert wt_mhcf.value == pytest.approx(95.4 / 0.020)
     assert e.overlaps_mutation is True
     assert e.source_sequence == "AASVVGSSSSSGTR"
+
+
+def test_load_lens_populates_per_allele_scores():
+    """Parallel of ``test_load_pvacseq_populates_per_allele_scores`` —
+    the LENS loader must populate per_allele_scores so downstream
+    ranking doesn't drop every variant as zero-scoring."""
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    _, epitopes = load_lens(path)
+    assert epitopes
+    for e in epitopes:
+        assert e.per_allele_scores, (
+            f"Epitope {e.sequence!r} loaded with empty per_allele_scores"
+        )
 
 
 def test_load_lens_report_display_uses_canonical_predictor():
