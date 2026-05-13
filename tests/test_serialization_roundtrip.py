@@ -161,14 +161,15 @@ def test_vaccine_peptide_post_init_derives_epitope_lists():
     assert vp.self_epitopes == [wildtype]
 
 
-def test_vaccine_peptide_post_init_validates_combined_score_mode():
-    """__post_init__ now raises on unknown modes — the contract added in
-    2.5.0 carries through the dataclass migration."""
-    with pytest.raises(ValueError, match="combined_score_mode"):
+def test_vaccine_peptide_post_init_validates_combined_score_expr():
+    """__post_init__ pre-parses the expression so syntax errors surface at
+    construction time rather than during ranking. 3.1 single-mechanism
+    contract — the expression IS the validated input, no enum fallback."""
+    with pytest.raises(ValueError, match="combined_score_expr"):
         VaccinePeptide(
             mutant_protein_fragment=_FakeFragment(),
             epitopes=[],
-            combined_score_mode="garbage",
+            combined_score_expr="not !! valid",
         )
 
 
@@ -217,14 +218,14 @@ def test_vaccine_peptide_json_roundtrip_with_real_fragment():
         mutant_protein_fragment=_sample_fragment(),
         epitopes=[mutant, wildtype],
         manufacturability_rules=("cysteine_count", "cterm_hydropathy"),
-        combined_score_mode="epitope_only",
+        combined_score_expr="target_epitope_score",
     )
     restored = VaccinePeptide.from_json(vp.to_json())
 
     # Wire-level invariants
     assert restored.mutant_protein_fragment == vp.mutant_protein_fragment
     assert restored.manufacturability_rules == vp.manufacturability_rules
-    assert restored.combined_score_mode == vp.combined_score_mode
+    assert restored.combined_score_expr == vp.combined_score_expr
 
     # Derived state must match — __post_init__ re-ran on load
     assert restored.target_epitopes == vp.target_epitopes

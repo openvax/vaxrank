@@ -30,7 +30,7 @@ from mhctools.pred import Prediction
 
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.candidate_epitope import COMPARATOR_WT, CandidateEpitope, Peptide
-from vaxrank.vaccine_peptide import VaccinePeptide, _legacy_score_one
+from vaxrank.vaccine_peptide import VaccinePeptide
 
 from .common import eq_, ok_, gt_
 
@@ -269,10 +269,8 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
             mutant_protein_fragment,
             epitopes,
             num_target_epitopes_to_keep=None,
-            epitope_score_params=None,
             manufacturability_thresholds=None,
             manufacturability_rules=None,
-            combined_score_mode=None,
             combined_score_expr=None,
             ranking_rules=None,
         ):
@@ -325,12 +323,21 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
     eq_(strict_result[0].combined_score, 10.0)
 
 
-def test_config_integration_epitope_config_affects_vaccine_peptide_scoring():
-    """Test that EpitopeConfig parameters affect VaccinePeptide scores"""
+def test_target_epitope_score_flows_from_per_allele_scores():
+    """``VaccinePeptide.target_epitope_score`` reads
+    ``epitope.per_allele_scores`` directly. The DSL populates that at
+    ``predict_epitopes`` time; ``vaccine_peptides_from_epitopes`` is a
+    pure aggregator and does NOT re-score (which would be the
+    parallel-default trap). Pin both ends: a known per_allele_scores
+    on a target epitope sums into ``target_epitope_score``."""
+    import dataclasses
+
     class DummyFragment:
         def __init__(self, amino_acids):
             self.amino_acids = amino_acids
             self.n_alt_reads = 4
+            self.n_ref_reads = 0
+            self.n_overlapping_reads = 4
             self.n_alt_reads_supporting_protein_sequence = 4
             self.n_mutant_amino_acids = 1
             self.mutation_distance_from_edge = 0
@@ -352,20 +359,8 @@ def test_config_integration_epitope_config_affects_vaccine_peptide_scoring():
 
     epitope = _make_epitope("ACDEFGHIK", ic50=100.0, wt_ic50=200.0,
                             source_sequence="ACDEFGHIK")
-
-    default_score = _legacy_score_one(100.0, 0.5)
-    epitope_config = EpitopeConfig(
-        logistic_epitope_score_midpoint=50.0,
-        logistic_epitope_score_width=10.0,
-        binding_affinity_cutoff=5000.0,
-    )
-    custom_score = _legacy_score_one(
-        100.0, 0.5,
-        midpoint=epitope_config.logistic_epitope_score_midpoint,
-        width=epitope_config.logistic_epitope_score_width,
-        ic50_cutoff=epitope_config.binding_affinity_cutoff,
-    )
-    ok_(custom_score != default_score)
+    epitope = dataclasses.replace(
+        epitope, per_allele_scores={"HLA-A*02:01": 0.7})
 
     peptides = vaccine_peptides_from_epitopes(
         variant=MagicMock(),
@@ -374,10 +369,9 @@ def test_config_integration_epitope_config_affects_vaccine_peptide_scoring():
         vaccine_peptide_length=len(fragment),
         max_vaccine_peptides_per_variant=1,
         num_target_epitopes_to_keep=10,
-        epitope_config=epitope_config,
     )
     eq_(len(peptides), 1)
-    eq_(peptides[0].target_epitope_score, custom_score)
+    eq_(peptides[0].target_epitope_score, 0.7)
 
 
 def test_config_defaults_match_historical_behavior():
@@ -499,6 +493,8 @@ def test_manufacturability_thresholds_flow_from_manufacturability_config():
         def __init__(self, amino_acids):
             self.amino_acids = amino_acids
             self.n_alt_reads = 4
+            self.n_ref_reads = 0
+            self.n_overlapping_reads = 4
             self.n_alt_reads_supporting_protein_sequence = 4
             self.n_mutant_amino_acids = 1
             self.mutation_distance_from_edge = 0

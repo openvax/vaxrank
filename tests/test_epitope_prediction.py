@@ -15,7 +15,8 @@ from varcode import Variant
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.epitope_logic import predict_epitopes
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
-from vaxrank.vaccine_peptide import VaccinePeptide, _legacy_score_one
+from vaxrank.vaccine_peptide import VaccinePeptide
+from tests._legacy_score_reference import legacy_score_one as _legacy_score_one
 
 from .common import eq_, ok_
 

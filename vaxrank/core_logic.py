@@ -295,13 +295,6 @@ def vaccine_peptides_from_epitopes(
     if epitope_config is None:
         epitope_config = EpitopeConfig()
 
-    epitope_score_params = {
-        "midpoint": epitope_config.logistic_epitope_score_midpoint,
-        "width": epitope_config.logistic_epitope_score_width,
-        "ic50_cutoff": epitope_config.binding_affinity_cutoff,
-        "scoring_mode": epitope_config.scoring_mode,
-        "percentile_rank_cutoff": epitope_config.percentile_rank_cutoff,
-    }
     if vaccine_config is None:
         vaccine_config = VaccineConfig(
             preferred_peptide_length=vaccine_peptide_length,
@@ -360,10 +353,8 @@ def vaccine_peptides_from_epitopes(
             mutant_protein_fragment=candidate_fragment,
             epitopes=subsequence_epitopes,
             num_target_epitopes_to_keep=vaccine_config.num_target_epitopes_to_keep,
-            epitope_score_params=epitope_score_params,
             manufacturability_thresholds=mfg.thresholds_dict(),
             manufacturability_rules=mfg.rules,
-            combined_score_mode=vaccine_config.combined_score_mode,
             combined_score_expr=vaccine_config.combined_score_expr,
             ranking_rules=vaccine_config.ranking_rules,
         )

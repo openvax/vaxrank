@@ -20,8 +20,8 @@
 #
 #   vaccine_peptides   (modality-agnostic) Per-variant antigen-window
 #                      selection + the *ranking* of those windows:
-#                      length, padding, ``combined_score_mode`` /
-#                      ``combined_score_expr``, ``ranking_rules``,
+#                      length, padding, ``combined_score_expr``,
+#                      ``ranking_rules``,
 #                      ``score_fraction_of_best``, and the
 #                      antigen-design knobs that apply to every
 #                      modality (``antigen_content``,
@@ -154,20 +154,18 @@ vaccine_peptides:
   per_mutation: 1
 
   # ---- Score / ranking ----
-  # 'sqrt_reads_times_epitope' (default) | 'reads_times_epitope' | 'epitope_only'.
-  combined_score_mode: sqrt_reads_times_epitope
-
-  # Optional DSL expression evaluated per VaccinePeptide; supersedes
-  # combined_score_mode when set. Bindings: target_epitope_score,
-  # self_epitope_score, expression_score, n_alt_reads,
-  # n_ref_reads, n_overlapping_reads,
+  # DSL expression evaluated per VaccinePeptide to produce
+  # combined_score (used to rank variants).
+  # Bindings: target_epitope_score, self_epitope_score,
+  # expression_score, n_alt_reads, n_ref_reads, n_overlapping_reads,
   # n_alt_reads_supporting_protein_sequence, n_mutant_amino_acids.
   # Functions: sqrt, log, log1p, exp, min, max, abs, pow.
-  # The three legacy modes are equivalent to:
-  #   epitope_only             ≡ "target_epitope_score"
-  #   reads_times_epitope      ≡ "n_alt_reads * target_epitope_score"
-  #   sqrt_reads_times_epitope ≡ "expression_score * target_epitope_score"
-  # combined_score_expr: "log1p(n_alt_reads) * target_epitope_score"
+  # The default below IS the canonical formula — there is no
+  # separate mode enum. Sample alternatives:
+  #   "target_epitope_score"                        (epitope-only)
+  #   "n_alt_reads * target_epitope_score"          (linear in reads)
+  #   "log1p(n_alt_reads) * target_epitope_score"   (log-compressed)
+  combined_score_expr: "sqrt(n_alt_reads) * target_epitope_score"
   # Keep candidates whose score is at least this fraction of the best
   # before lexicographic tie-breaking.
   score_fraction_of_best: 0.99

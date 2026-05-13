@@ -8,9 +8,10 @@
 
 Pins:
 - The grammar (allowed nodes / functions; rejected constructs).
-- Parity with the three legacy ``combined_score_mode`` enum values
-  expressed as DSL strings.
-- The DSL's precedence over ``combined_score_mode`` when both are set.
+- Parity between the documented default expression and the three
+  legacy pre-3.1 mode formulas, all expressed as DSL strings.
+- That a user-supplied expression is the only mechanism — the
+  default formula travels the same code path.
 """
 
 import math
@@ -22,7 +23,6 @@ def _make_vp(
         n_overlapping_reads=20,
         target_epitope_score=2.5,
         n_alt_reads_supporting_protein_sequence=8,
-        combined_score_mode=None,
         combined_score_expr=None,
 ):
     """Minimal ``VaccinePeptide`` for scoring tests. Most knobs are
@@ -48,7 +48,6 @@ def _make_vp(
     vp = VaccinePeptide(
         mutant_protein_fragment=frag,
         epitopes=[],
-        combined_score_mode=combined_score_mode,
         combined_score_expr=combined_score_expr,
     )
     # Fake target_epitope_score directly — the real one comes from
@@ -57,49 +56,49 @@ def _make_vp(
     return vp
 
 
-def test_dsl_parity_with_legacy_modes():
-    """The three legacy ``combined_score_mode`` values are exactly
-    representable as DSL expressions. Pinning the equivalences keeps
-    a future enum-mode rewrite from drifting away from the DSL."""
+def test_dsl_legacy_formulas_round_trip_as_expressions():
+    """Each pre-3.1 ``combined_score_mode`` value has an exact DSL
+    expression equivalent. Pinning these numeric values guards
+    against regressions in either the bindings (``expression_score``,
+    ``n_alt_reads``) or the arithmetic semantics."""
     n_alt = 16
     epitope = 3.0
-    vp_legacy = _make_vp(
+    # sqrt_reads_times_epitope ≡ default (DEFAULT_COMBINED_SCORE_EXPR)
+    vp_default = _make_vp(
         n_alt_reads=n_alt, target_epitope_score=epitope,
-        combined_score_mode='sqrt_reads_times_epitope')
-    vp_expr = _make_vp(
+        combined_score_expr=None)
+    vp_explicit = _make_vp(
         n_alt_reads=n_alt, target_epitope_score=epitope,
-        combined_score_expr='expression_score * target_epitope_score')
-    assert vp_expr.combined_score == pytest.approx(vp_legacy.combined_score)
+        combined_score_expr='sqrt(n_alt_reads) * target_epitope_score')
+    assert vp_default.combined_score == pytest.approx(vp_explicit.combined_score)
     # Numeric value: sqrt(16) * 3 = 12
-    assert vp_expr.combined_score == pytest.approx(12.0)
+    assert vp_default.combined_score == pytest.approx(12.0)
 
-    vp_legacy_b = _make_vp(
-        n_alt_reads=n_alt, target_epitope_score=epitope,
-        combined_score_mode='reads_times_epitope')
-    vp_expr_b = _make_vp(
+    vp_reads = _make_vp(
         n_alt_reads=n_alt, target_epitope_score=epitope,
         combined_score_expr='n_alt_reads * target_epitope_score')
-    assert vp_expr_b.combined_score == pytest.approx(vp_legacy_b.combined_score)
-    assert vp_expr_b.combined_score == pytest.approx(48.0)
+    assert vp_reads.combined_score == pytest.approx(48.0)
 
-    vp_legacy_c = _make_vp(
-        n_alt_reads=n_alt, target_epitope_score=epitope,
-        combined_score_mode='epitope_only')
-    vp_expr_c = _make_vp(
+    vp_only = _make_vp(
         n_alt_reads=n_alt, target_epitope_score=epitope,
         combined_score_expr='target_epitope_score')
-    assert vp_expr_c.combined_score == pytest.approx(vp_legacy_c.combined_score)
-    assert vp_expr_c.combined_score == pytest.approx(3.0)
+    assert vp_only.combined_score == pytest.approx(3.0)
 
 
-def test_dsl_supersedes_combined_score_mode():
-    """When both are set, the DSL wins. Same precedence as
-    ``epitopes.score_expr`` over the scalar knobs."""
-    vp = _make_vp(
-        n_alt_reads=4, target_epitope_score=2.0,
-        combined_score_mode='reads_times_epitope',  # would give 8.0
-        combined_score_expr='target_epitope_score')  # gives 2.0
-    assert vp.combined_score == pytest.approx(2.0)
+def test_default_expression_is_canonical_legacy_formula():
+    """The default ``combined_score_expr`` resolves to the canonical
+    pre-3.1 ``sqrt_reads_times_epitope`` formula. Single source of
+    truth: ``DEFAULT_COMBINED_SCORE_EXPR`` is what every default
+    VaccinePeptide evaluates."""
+    from vaxrank.vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
+    assert DEFAULT_COMBINED_SCORE_EXPR == (
+        "sqrt(n_alt_reads) * target_epitope_score")
+    vp = _make_vp(n_alt_reads=9, target_epitope_score=2.0,
+                  combined_score_expr=None)
+    # __post_init__ resolved the default
+    assert vp.combined_score_expr == DEFAULT_COMBINED_SCORE_EXPR
+    # And the score is sqrt(9) * 2 = 6
+    assert vp.combined_score == pytest.approx(6.0)
 
 
 def test_dsl_supports_math_functions():
@@ -179,11 +178,15 @@ def test_dsl_parsed_at_construction_time_not_scoring_time():
         _make_vp(combined_score_expr='import os')
 
 
-def test_dsl_default_methods_path_is_off_by_default():
-    """No ``combined_score_expr`` set → enum mode applies, behavior
-    unchanged from before this PR."""
-    vp = _make_vp(combined_score_mode='sqrt_reads_times_epitope')
-    assert vp._combined_score_expr_ast is None
+def test_default_expr_is_pre_parsed_at_construction():
+    """When the user doesn't pass ``combined_score_expr``,
+    ``__post_init__`` resolves to the default and pre-parses it. The
+    AST is the SAME single artifact ``combined_score`` evaluates —
+    no separate hardcoded Python branch for the default case."""
+    vp = _make_vp(combined_score_expr=None)
+    from vaxrank.vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
+    assert vp.combined_score_expr == DEFAULT_COMBINED_SCORE_EXPR
+    assert vp._combined_score_expr_ast is not None
     assert vp.combined_score == pytest.approx(math.sqrt(10) * 2.5)
 
 

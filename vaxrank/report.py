@@ -26,7 +26,6 @@ from varcode import load_vcf_fast
 from .cancer_hotspots import get_hotspot_url
 from .manufacturability import ManufacturabilityScores
 from .processing import PEPSICKLE_PREDICTOR_NAME
-from .vaccine_peptide import _legacy_score_one
 
 logger = logging.getLogger(__name__)
 
@@ -377,14 +376,15 @@ class TemplateDataCreator(object):
             # the only honest answer.
             ('Predictor', prediction.predictor_name or '—'),
             ('IC50', '%.2f nM' % prediction.value),
-            # ``Score`` is the logistic transform of IC50 (range
-            # [0, 1]; higher = stronger predicted binder). It is NOT
-            # mhcflurry's presentation_score / EL — vaxrank derives
-            # it locally so the column is comparable across
-            # predictors.
-            ('Score (affinity, logistic IC50)',
-                _sanitize(_legacy_score_one(
-                    prediction.value, prediction.percentile_rank))),
+            # ``Score`` is the per-allele DSL score for this epitope
+            # as computed at predict time by the configured
+            # ``EpitopeConfig.score_expr`` (default: logistic of
+            # IC50, range [0, 1]; higher = stronger). Read directly
+            # from ``epitope.per_allele_scores`` — the single source
+            # of truth — rather than recomputing from the raw IC50.
+            ('Score',
+                _sanitize(epitope.per_allele_scores.get(
+                    prediction.allele, 0.0))),
             ('Allele', prediction.allele.replace('HLA-', '')),
             ('WT sequence', wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),

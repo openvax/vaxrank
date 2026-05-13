@@ -361,22 +361,42 @@ def validate_dsl_against_predictions(cfg, epitopes, *, topiary_df=None):
                 )
 
 
-def _default_score_node(cfg):
-    from topiary.ranking import Affinity, Column, Const
+# Default per-prediction score expressions. These string templates are
+# the SINGLE source of truth for what the default scoring formula looks
+# like — there is no parallel Python builder. When an EpitopeConfig has
+# ``score_expr=None`` the relevant template is formatted with the
+# config's scalar threshold knobs and then parsed by the topiary DSL,
+# exactly as a user-supplied ``score_expr`` would be. Format placeholders
+# correspond to EpitopeConfig fields; keep them in sync.
+DEFAULT_AFFINITY_SCORE_EXPR_TEMPLATE = (
+    "(affinity.value < {binding_affinity_cutoff}) * "
+    "affinity.value.logistic_normalized("
+    "{logistic_epitope_score_midpoint}, {logistic_epitope_score_width})"
+)
+DEFAULT_PERCENTILE_SCORE_EXPR_TEMPLATE = (
+    "(percentile_rank < {percentile_rank_cutoff}) * "
+    "(1.0 - percentile_rank / {percentile_rank_cutoff}).clip(0.0, none)"
+)
 
+
+def default_score_expr(cfg):
+    """Return the default per-prediction score expression for ``cfg``.
+
+    Formats :data:`DEFAULT_AFFINITY_SCORE_EXPR_TEMPLATE` or
+    :data:`DEFAULT_PERCENTILE_SCORE_EXPR_TEMPLATE` against the
+    config's scalar threshold fields. This is the string a user would
+    write to reproduce the default — it is also exactly the string
+    that gets parsed when ``cfg.score_expr`` is unset, so the default
+    behavior travels through the same DSL pipeline as any override.
+    """
     if cfg.scoring_mode == "percentile_rank":
-        cutoff = cfg.percentile_rank_cutoff
-        rank = Column("percentile_rank")
-        # Match `max(0, 1 - rank / cutoff)` with the `rank >= cutoff → 0` gate.
-        # The mask is strict `<`, so the DSL drops NaN (→ False) and ≥-cutoff
-        # rows to 0 exactly as the legacy scorer does.
-        linear = Const(1.0) - rank / cutoff
-        return (rank < cutoff) * linear.clip(lo=0.0, hi=None)
-
-    midpoint = cfg.logistic_epitope_score_midpoint
-    width = cfg.logistic_epitope_score_width
-    cutoff_mask = Affinity < cfg.binding_affinity_cutoff
-    return cutoff_mask * Affinity.logistic_normalized(midpoint, width)
+        return DEFAULT_PERCENTILE_SCORE_EXPR_TEMPLATE.format(
+            percentile_rank_cutoff=cfg.percentile_rank_cutoff)
+    return DEFAULT_AFFINITY_SCORE_EXPR_TEMPLATE.format(
+        binding_affinity_cutoff=cfg.binding_affinity_cutoff,
+        logistic_epitope_score_midpoint=cfg.logistic_epitope_score_midpoint,
+        logistic_epitope_score_width=cfg.logistic_epitope_score_width,
+    )
 
 
 def build_filter_node(cfg):
@@ -393,7 +413,14 @@ def build_filter_node(cfg):
 
 
 def build_score_node(cfg):
-    """Return the ``DSLNode`` that computes the per-epitope score."""
-    if cfg.score_expr is not None:
-        return _parse(cfg.score_expr)
-    return _default_score_node(cfg)
+    """Return the ``DSLNode`` that computes the per-(peptide, allele) score.
+
+    Single code path: parse the resolved expression string. When
+    ``cfg.score_expr`` is set the user's string is used; otherwise
+    :func:`default_score_expr` returns the canonical default formatted
+    against the config's scalar threshold knobs. The default is not a
+    different mechanism — it is the same DSL machinery applied to a
+    well-known formula.
+    """
+    return _parse(cfg.score_expr if cfg.score_expr is not None
+                  else default_score_expr(cfg))
