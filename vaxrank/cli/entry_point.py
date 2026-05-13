@@ -71,6 +71,17 @@ from ..vaf import extract_dna_vaf_by_variant
 logger = logging.getLogger(__name__)
 
 
+def _to_json_nan_tolerant(obj):
+    """Serialize ``obj`` to a JSON string, rendering NaN/Inf as
+    ``null`` rather than raising. Defense-in-depth wrapper around
+    ``serializable.to_json``; producers should already be coercing
+    NaN to None, but a writer-side safety net prevents the whole
+    report from being lost on a single rogue float (#289)."""
+    import simplejson
+    from serializable.helpers import to_serializable_repr
+    return simplejson.dumps(to_serializable_repr(obj), ignore_nan=True)
+
+
 def _filter_unannotatable_variants(variants):
     """
     Filter out variants whose contigs cannot be resolved by varcode/pyensembl.
@@ -1420,7 +1431,15 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     # be useful to save the data to be able to iterate just on the formatting
     if args.output_json_file:
         with open(args.output_json_file, 'w') as f:
-            f.write(serializable.to_json(data))
+            # ``ignore_nan=True`` is defense in depth — producers should
+            # be coercing NaN/Inf to None before reaching the writer
+            # (see vaxrank.epitope_logic._finite_or_none), but if any
+            # slips through (e.g. a future predictor adapter, or a
+            # custom score expression), render it as JSON null instead
+            # of crashing the whole report. Note: strict JSON doesn't
+            # have a NaN literal — simplejson's default behavior is to
+            # raise; we explicitly opt into the null representation.
+            f.write(_to_json_nan_tolerant(data))
             logger.info('Wrote JSON report data to %s', args.output_json_file)
 
     return data

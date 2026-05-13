@@ -11,11 +11,11 @@
 # limitations under the License.
 
 
+import math
 import traceback
 import logging
 from typing import Optional
 
-import numpy as np
 from mhctools.pred import Prediction
 from pyensembl import Genome
 from topiary import TopiaryPredictor
@@ -32,6 +32,24 @@ from .candidate_epitope import (
 from .reference_proteome import ReferenceProteome
 
 logger = logging.getLogger(__name__)
+
+
+def _finite_or_none(x):
+    """Coerce ``None`` / NaN / Inf floats to ``None``.
+
+    Topiary frames legitimately carry NaN in the ``value`` column for
+    non-affinity kinds (``pMHC_presentation`` carries its probability
+    in ``score``, not ``value``). Pass-through writes NaN into
+    ``Prediction.value`` which then poisons every downstream consumer
+    — sorting, scoring, and especially JSON serialization (simplejson
+    rejects NaN / Inf for strict compliance). Producers should emit
+    ``None`` to mean "no IC50 for this kind", not ``NaN``.
+    """
+    if x is None:
+        return None
+    if isinstance(x, float) and (math.isnan(x) or math.isinf(x)):
+        return None
+    return x
 
 
 def slice_epitopes(epitopes, start_offset, end_offset):
@@ -209,14 +227,16 @@ def predict_epitopes(
             num_low_scoring += 1
             continue
 
-        # IC50 value: use the "affinity" column if available, otherwise "value"
-        ic50 = row.get("affinity")
-        if ic50 is None or (isinstance(ic50, float) and np.isnan(ic50)):
-            ic50 = row["value"]
+        # IC50 value: use the "affinity" column when present (affinity
+        # rows), otherwise fall back to "value". For non-affinity kinds
+        # (e.g. pMHC_presentation), both columns are legitimately NaN
+        # in the topiary frame — coerce to None so the Prediction
+        # carries an honest "no IC50" instead of a NaN poison pill.
+        ic50 = _finite_or_none(row.get("affinity"))
+        if ic50 is None:
+            ic50 = _finite_or_none(row.get("value"))
 
-        percentile_rank = row.get("percentile_rank")
-        if percentile_rank is not None and isinstance(percentile_rank, float) and np.isnan(percentile_rank):
-            percentile_rank = None
+        percentile_rank = _finite_or_none(row.get("percentile_rank"))
 
         # Resolve WT comparator only when the peptide overlaps the
         # mutation — non-overlapping peptides aren't neoepitopes and
@@ -231,11 +251,9 @@ def predict_epitopes(
                         'No prediction for too-short WT epitope %s: possible stop-loss variant',
                         wt_peptide)
             else:
-                wt_affinity = wt_row.get("affinity")
-                if wt_affinity is not None and not (isinstance(wt_affinity, float) and np.isnan(wt_affinity)):
-                    wt_ic50 = wt_affinity
-                else:
-                    wt_ic50 = wt_row["value"]
+                wt_ic50 = _finite_or_none(wt_row.get("affinity"))
+                if wt_ic50 is None:
+                    wt_ic50 = _finite_or_none(wt_row.get("value"))
                 tool = row.get("prediction_method_name", "")
                 wt_pred = Prediction(
                     kind=row.get("kind") or "pMHC_affinity",
