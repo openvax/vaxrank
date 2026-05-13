@@ -19,47 +19,19 @@ mRNA constructs, or analysis reports for review.
 
 ## Contents
 
-- [Features](#features)
 - [Quick Start](#quick-start)
 - [Overview](#overview)
-- [Vaccine designs](#vaccine-designs) — 8 design points across two modalities
-- [Vaccine types and output modes](#vaccine-types-and-output-modes) —
-  reports, peptide constructs, mRNA constructs, external inputs
+- [Vaccine designs](#vaccine-designs)
+- [Vaccine types and output modes](#vaccine-types-and-output-modes)
 - [Clinical Use](#clinical-use)
 - [Installation](#installation)
-- [Configuration](#configuration) — YAML config + topiary DSL
+- [Configuration](#configuration)
 - [MHC Binding Predictors](#mhc-binding-predictors)
-- [How It Works](#how-it-works) — pipeline internals + data model
+- [How It Works](#how-it-works)
 - [Papers & Citations](#papers--citations)
 - [Dependencies](#dependencies)
 - [Legacy flags](#legacy-flags)
 - [Development](#development)
-
-## Features
-
-- **Two input paths.** Full pipeline from a tumor VCF + RNA-seq BAM,
-  or drive ranking from a pre-computed neoepitope report produced by
-  [LENS](https://github.com/openvax/lens) or pVACseq via
-  `--input-lens` / `--input-pvacseq`.
-- **Multiple vaccine types from one run.** `--vaccine-type` is
-  multi-valued: pass `peptide`, `mrna`, or both. The same ranked
-  candidates render to peptide-pool FASTAs, mRNA constructs, or both
-  in parallel.
-- **Eight vaccine designs across two modalities.** Two orthogonal
-  axes — `--antigen-content` (mutation-spanning SLP vs minimal MHC
-  ligand) × `--antigens-per-construct` (1 vs N) — give four designs
-  per modality, including canonical SLPs (PGV-001) and BioNTech-style
-  multi-antigen mRNA (FixVac / iNeST).
-- **Analysis reports** in CSV, XLSX, ASCII, HTML, PDF, and JSON, plus
-  a per-(peptide, allele) neoepitope report. Reports run independently
-  of vaccine-type dispatch.
-- **MHC predictor integration** via [mhctools](https://github.com/openvax/mhctools):
-  MHCflurry, NetMHCpan family, BigMHC, NetMHCIIpan, Pepsickle, and IEDB
-  web predictors.
-- **Shared linker library** with primary-source citations and a
-  compositional grammar — `(G4S)2`, `AAY`, 2A self-cleaving peptides,
-  furin motifs — usable interchangeably across peptide and mRNA
-  designs.
 
 ## Quick Start
 
