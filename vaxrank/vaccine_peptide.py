@@ -16,50 +16,16 @@ from typing import Any, Optional
 import numpy as np
 from serializable import DataclassSerializable
 
-from .config.defaults import (
-    DEFAULT_BINDING_AFFINITY_CUTOFF,
-    DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT,
-    DEFAULT_LOGISTIC_EPITOPE_SCORE_WIDTH,
-    DEFAULT_PERCENTILE_RANK_CUTOFF,
+from .combined_score_dsl import (
+    evaluate_combined_score,
+    parse_combined_score_expr,
 )
 from .manufacturability import (
     ManufacturabilityScores,
     compute_manufacturability_tuple,
 )
 from .ranking import compute_ranking_tuple
-from .vaccine_config import COMBINED_SCORE_MODES, DEFAULT_COMBINED_SCORE_MODE
-
-
-def _legacy_score_one(ic50, percentile_rank, *,
-                      midpoint=DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT,
-                      width=DEFAULT_LOGISTIC_EPITOPE_SCORE_WIDTH,
-                      ic50_cutoff=DEFAULT_BINDING_AFFINITY_CUTOFF,
-                      scoring_mode="affinity",
-                      percentile_rank_cutoff=DEFAULT_PERCENTILE_RANK_CUTOFF):
-    """Per-prediction logistic score used by ``VaccinePeptide`` to sum
-    scores across the leaf ``mhctools.Prediction`` records inside
-    each ``CandidateEpitope``.
-
-    Kept as a free function so the math stays in one place. The
-    topiary DSL's default ``score_expr`` produces byte-identical
-    output (pinned by ``test_default_score_matches_legacy_*``); a
-    follow-up will route ``VaccinePeptide``'s score aggregation
-    through ``score_predictions`` directly and this helper goes away.
-    """
-    if scoring_mode == "percentile_rank":
-        if percentile_rank is None:
-            return 0.0
-        rank = float(percentile_rank)
-        if rank >= percentile_rank_cutoff:
-            return 0.0
-        return max(0.0, 1.0 - rank / percentile_rank_cutoff)
-
-    if ic50 >= ic50_cutoff:
-        return 0.0
-    rescaled = (float(ic50) - midpoint) / width
-    logistic = 1.0 / (1.0 + np.exp(rescaled))
-    normalizer = 1.0 / (1.0 + np.exp(-midpoint / width))
-    return logistic / normalizer
+from .vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
 
 
 @dataclass
@@ -104,12 +70,15 @@ class VaccinePeptide(DataclassSerializable):
         10-rule default order is used (byte-identical with prior
         releases).
 
-    combined_score_mode : str or None
-        How to fold expression into the final ``combined_score``. One
-        of ``sqrt_reads_times_epitope`` (default, legacy),
-        ``reads_times_epitope``, or ``epitope_only``. Does not affect
-        the ``expression_score`` property, which always reports
-        ``sqrt(n_alt_reads)``.
+    combined_score_expr : str or None
+        DSL expression evaluated against this VaccinePeptide to
+        produce ``combined_score``. See
+        :mod:`vaxrank.combined_score_dsl` for grammar and bindings
+        (``target_epitope_score``, ``n_alt_reads``,
+        ``expression_score``, ...). ``None`` resolves to
+        :data:`vaxrank.vaccine_config.DEFAULT_COMBINED_SCORE_EXPR`.
+        There is no separate mode enum — the expression IS the
+        mechanism.
 
     ranking_rules : sequence of str or None
         Ordered list of ranking rule names driving the lexicographic
@@ -123,15 +92,12 @@ class VaccinePeptide(DataclassSerializable):
     mutant_protein_fragment: Any
     epitopes: list = field(default_factory=list)
     num_target_epitopes_to_keep: Optional[int] = None
-    epitope_score_params: Optional[dict] = None
     sort_epitopes_by: str = "ic50"
     manufacturability_thresholds: Optional[dict] = None
     manufacturability_rules: Optional[tuple] = None
-    combined_score_mode: Optional[str] = None
-    # When set, supersedes ``combined_score_mode``. A string DSL
-    # expression evaluated per-VP at scoring time — see
-    # :mod:`vaxrank.combined_score_dsl` for the grammar and
-    # bindings. ``None`` keeps the enum-mode behavior.
+    # DSL expression that produces this peptide's ``combined_score``.
+    # ``None`` resolves to :data:`DEFAULT_COMBINED_SCORE_EXPR`. There
+    # is no fallback mode enum — this string is the single mechanism.
     combined_score_expr: Optional[str] = None
     ranking_rules: Optional[tuple] = None
 
@@ -147,33 +113,21 @@ class VaccinePeptide(DataclassSerializable):
 
     def __post_init__(self):
         # Normalize the optional collection/tuple fields.
-        self.epitope_score_params = self.epitope_score_params or {}
         self.manufacturability_thresholds = self.manufacturability_thresholds or {}
         if self.manufacturability_rules is not None:
             self.manufacturability_rules = tuple(self.manufacturability_rules)
         if self.ranking_rules is not None:
             self.ranking_rules = tuple(self.ranking_rules)
 
-        # Validate combined_score_mode; resolve None to the legacy default.
-        resolved_mode = self.combined_score_mode or DEFAULT_COMBINED_SCORE_MODE
-        if resolved_mode not in COMBINED_SCORE_MODES:
-            raise ValueError(
-                f"combined_score_mode must be one of {COMBINED_SCORE_MODES}, "
-                f"got '{resolved_mode}'"
-            )
-        self.combined_score_mode = resolved_mode
-
-        # Pre-parse + validate the optional DSL expression once at
-        # construction time so syntax errors surface early (not at
-        # ranking time, after we've already done all the loading
-        # work). The parsed AST is stashed on the instance for
-        # ``combined_score`` to evaluate per call.
-        if self.combined_score_expr is not None:
-            from .combined_score_dsl import parse_combined_score_expr
-            self._combined_score_expr_ast = parse_combined_score_expr(
-                self.combined_score_expr)
-        else:
-            self._combined_score_expr_ast = None
+        # Resolve the score expression: user-supplied or the canonical
+        # default. Pre-parse once so syntax errors surface at config /
+        # construction time, not after a full ranking run. The AST is
+        # the single artifact ``combined_score`` evaluates against —
+        # there is no fallback Python branch for the default formula.
+        if self.combined_score_expr is None:
+            self.combined_score_expr = DEFAULT_COMBINED_SCORE_EXPR
+        self._combined_score_expr_ast = parse_combined_score_expr(
+            self.combined_score_expr)
 
         # Sort key over CandidateEpitope: pick the strongest pMHC_affinity
         # record across all predictors / alleles inside the CandidateEpitope.
@@ -226,26 +180,18 @@ class VaccinePeptide(DataclassSerializable):
             key=_epitope_sort_key,
         )
 
-        # Score each CandidateEpitope by summing the per-prediction logistic
-        # score across all of its mutant affinity records. Iterates
-        # ``predictions_flat()`` + kind-filters rather than
-        # ``predictions_for(kind=...)`` so multi-predictor data
-        # doesn't trip the predictor-disambiguation check.
-        params = self.epitope_score_params
-
-        def _epitope_total_score(e):
-            return sum(
-                _legacy_score_one(
-                    ic50=p.value,
-                    percentile_rank=p.percentile_rank,
-                    **params)
-                for p in e.predictions_flat()
-                if p.kind == 'pMHC_affinity')
-
+        # The per-epitope total score lives on ``CandidateEpitope`` as
+        # ``epitope_score`` (sum of its ``per_allele_scores`` populated
+        # at predict time by the configured ``EpitopeConfig.score_expr``
+        # — see :mod:`vaxrank.epitope_dsl`). VaccinePeptide is downstream
+        # of scoring; it never recomputes from ic50 / percentile_rank.
+        # This is what makes the DSL the single source of truth: change
+        # the per-prediction formula in one place and the change flows
+        # all the way through to ``combined_score``.
         self.self_epitope_score = sum(
-            _epitope_total_score(e) for e in self.self_epitopes)
+            e.epitope_score for e in self.self_epitopes)
         self.target_epitope_score = sum(
-            _epitope_total_score(e) for e in self.target_epitopes)
+            e.epitope_score for e in self.target_epitopes)
 
         self.manufacturability_scores = ManufacturabilityScores.from_amino_acids(
             self.mutant_protein_fragment.amino_acids
@@ -307,28 +253,21 @@ class VaccinePeptide(DataclassSerializable):
 
     @property
     def expression_score(self):
-        # Honest expression metric regardless of combined_score_mode — this
-        # is what reports display as "Expression score". The mode changes
-        # how expression folds into `combined_score`, not the metric itself.
+        # Honest expression metric. ``sqrt(n_alt_reads)`` is a binding
+        # the default combined-score expression uses; if the user
+        # writes a different ``combined_score_expr`` that doesn't
+        # reference it, this property is still queryable for reports.
         return np.sqrt(self.mutant_protein_fragment.n_alt_reads)
 
     @property
     def combined_score(self):
-        # When the DSL expression is set, it supersedes the enum
-        # mode entirely — same precedence relationship as
-        # ``epitopes.score_expr`` overriding the scalar logistic
-        # knobs in :mod:`vaxrank.epitope_dsl`.
-        if self._combined_score_expr_ast is not None:
-            from .combined_score_dsl import evaluate_combined_score
-            return evaluate_combined_score(
-                self._combined_score_expr_ast, self)
-        epitope = self.target_epitope_score
-        if self.combined_score_mode == "reads_times_epitope":
-            return float(self.mutant_protein_fragment.n_alt_reads) * epitope
-        if self.combined_score_mode == "epitope_only":
-            return epitope
-        # Default: sqrt_reads_times_epitope (legacy)
-        return self.expression_score * epitope
+        # Single code path: evaluate the (pre-parsed) DSL expression.
+        # When the user didn't override, ``combined_score_expr`` was
+        # resolved to ``DEFAULT_COMBINED_SCORE_EXPR`` in
+        # ``__post_init__`` — the default formula is *evaluated*
+        # through the DSL, not branched around.
+        return evaluate_combined_score(
+            self._combined_score_expr_ast, self)
 
     def to_dict(self):
         # The persisted form combines the filtered target + self lists
@@ -340,15 +279,14 @@ class VaccinePeptide(DataclassSerializable):
             "mutant_protein_fragment": self.mutant_protein_fragment,
             "epitopes": epitopes,
             "num_target_epitopes_to_keep": self.num_target_epitopes_to_keep,
-            "epitope_score_params": self.epitope_score_params,
             "sort_epitopes_by": self.sort_epitopes_by,
         }
         if self.manufacturability_thresholds:
             d["manufacturability_thresholds"] = self.manufacturability_thresholds
         if self.manufacturability_rules is not None:
             d["manufacturability_rules"] = list(self.manufacturability_rules)
-        if self.combined_score_mode != DEFAULT_COMBINED_SCORE_MODE:
-            d["combined_score_mode"] = self.combined_score_mode
+        if self.combined_score_expr != DEFAULT_COMBINED_SCORE_EXPR:
+            d["combined_score_expr"] = self.combined_score_expr
         if self.ranking_rules is not None:
             d["ranking_rules"] = list(self.ranking_rules)
         return d

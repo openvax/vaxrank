@@ -291,6 +291,12 @@ def predict_epitopes(
             # is populated (via pirlygenes), this branch will diverge
             # for CTA-matching peptides.
             'occurs_in_non_CTA_reference': occurs_in_reference,
+            # Per-(peptide, allele) DSL score; threaded onto the
+            # CandidateEpitope as ``per_allele_scores[allele]`` by
+            # ``candidate_epitopes_from_rows``. Single source of
+            # truth — VaccinePeptide reads it directly and never
+            # recomputes from ic50 / percentile_rank.
+            'allele_score': epitope_score,
         })
 
     logger.info(

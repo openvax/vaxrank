@@ -111,7 +111,7 @@ def test_keep_top_k_epitopes():
 
     ranked_list = results.ranked_vaccine_peptides
 
-    from vaxrank.vaccine_peptide import _legacy_score_one
+    from tests._legacy_score_reference import legacy_score_one as _legacy_score_one
     for variant, vaccine_peptides in ranked_list:
         vaccine_peptide = vaccine_peptides[0]
         eq_(keep_k_epitopes, len(vaccine_peptide.target_epitopes))

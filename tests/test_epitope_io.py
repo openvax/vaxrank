@@ -1102,7 +1102,7 @@ def _assert_default_scores_match_legacy(cfg, path, tmp_path):
     legacy per-prediction logistic score on the canonical (mhcflurry)
     leaf records selected by default_methods."""
     from vaxrank.epitope_io import write_neoepitope_report
-    from vaxrank.vaccine_peptide import _legacy_score_one
+    from tests._legacy_score_reference import legacy_score_one as _legacy_score_one
 
     report_df, epitopes = load_lens(path)
     # Auto-picked default for pMHC_affinity is mhcflurry — that's what
@@ -1186,24 +1186,24 @@ def test_write_neoepitope_report_xlsx(tmp_path):
 # its scoring-mode contract directly against IC50 / percentile_rank.
 
 def test_scoring_mode_affinity():
-    from vaxrank.vaccine_peptide import _legacy_score_one
+    from tests._legacy_score_reference import legacy_score_one as _legacy_score_one
     assert _legacy_score_one(100.0, 0.5, scoring_mode="affinity") > 0.5
 
 
 def test_scoring_mode_percentile_rank():
-    from vaxrank.vaccine_peptide import _legacy_score_one
+    from tests._legacy_score_reference import legacy_score_one as _legacy_score_one
     score = _legacy_score_one(100.0, 0.5, scoring_mode="percentile_rank")
     assert score == pytest.approx(0.95)
 
 
 def test_scoring_mode_percentile_rank_weak():
-    from vaxrank.vaccine_peptide import _legacy_score_one
+    from tests._legacy_score_reference import legacy_score_one as _legacy_score_one
     score = _legacy_score_one(100.0, 10.0, scoring_mode="percentile_rank")
     assert score == 0.0
 
 
 def test_scoring_mode_percentile_rank_none():
-    from vaxrank.vaccine_peptide import _legacy_score_one
+    from tests._legacy_score_reference import legacy_score_one as _legacy_score_one
     score = _legacy_score_one(100.0, None, scoring_mode="percentile_rank")
     assert score == 0.0
 

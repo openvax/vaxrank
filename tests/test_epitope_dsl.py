@@ -27,8 +27,8 @@ from topiary.ranking import EvalContext, apply_filter
 
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.epitope_dsl import build_filter_node, build_score_node
-from vaxrank.vaccine_peptide import _legacy_score_one
 
+from ._legacy_score_reference import legacy_score_one
 from .common import eq_
 
 
@@ -53,7 +53,7 @@ def _predictions_df(rows):
 
 
 def _legacy_score(ic50, percentile_rank, cfg):
-    return _legacy_score_one(
+    return legacy_score_one(
         ic50, percentile_rank,
         midpoint=cfg.logistic_epitope_score_midpoint,
         width=cfg.logistic_epitope_score_width,

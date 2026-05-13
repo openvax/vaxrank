@@ -761,14 +761,27 @@ def test_manufacturability_config_rejects_unknown_rule():
         ManufacturabilityConfig(rules=("bogus_rule",))
 
 
-def test_vaccine_config_combined_score_mode():
-    config = VaccineConfig(combined_score_mode="reads_times_epitope")
-    eq_(config.combined_score_mode, "reads_times_epitope")
+def test_vaccine_config_combined_score_expr_default_is_legacy_formula():
+    """The default must be the canonical legacy formula expressed as a
+    DSL string — single source of truth for the default combined score.
+    """
+    from vaxrank.vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
+    config = VaccineConfig()
+    eq_(config.combined_score_expr, DEFAULT_COMBINED_SCORE_EXPR)
+    eq_(config.combined_score_expr, "sqrt(n_alt_reads) * target_epitope_score")
 
 
-def test_vaccine_config_rejects_bad_combined_score_mode():
-    with pytest.raises(ValueError, match="combined_score_mode"):
-        VaccineConfig(combined_score_mode="invalid_mode")
+def test_vaccine_config_combined_score_expr_accepts_legacy_equivalents():
+    """Each pre-3.1 enum mode is reachable as a one-line expression."""
+    eq_(VaccineConfig(combined_score_expr="target_epitope_score")
+        .combined_score_expr, "target_epitope_score")
+    eq_(VaccineConfig(combined_score_expr="n_alt_reads * target_epitope_score")
+        .combined_score_expr, "n_alt_reads * target_epitope_score")
+
+
+def test_vaccine_config_rejects_unparseable_combined_score_expr():
+    with pytest.raises(ValueError, match="combined_score_expr"):
+        VaccineConfig(combined_score_expr="garbage !! syntax error")
 
 
 def test_vaccine_config_rejects_min_greater_than_max():

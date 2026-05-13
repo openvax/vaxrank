@@ -30,13 +30,23 @@ from vaxrank.vaccine_peptide import VaccinePeptide
 
 
 def _make_fragment(seq="A" * 25, n_alt_reads=9):
-    """Minimal duck-typed MutantProteinFragment for VaccinePeptide tests."""
+    """Minimal duck-typed MutantProteinFragment for VaccinePeptide tests.
+
+    Must expose every binding the combined_score DSL evaluator looks up
+    (``_bindings_from_vaccine_peptide``); the DSL is the single path
+    that produces ``combined_score`` after the 3.1 refactor, including
+    for the default expression.
+    """
     return SimpleNamespace(
         amino_acids=seq,
         n_alt_reads=n_alt_reads,
+        n_ref_reads=0,
+        n_overlapping_reads=n_alt_reads,
         n_alt_reads_supporting_protein_sequence=n_alt_reads,
         n_mutant_amino_acids=1,
         mutation_distance_from_edge=5,
+        mutant_amino_acid_start_offset=0,
+        mutant_amino_acid_end_offset=1,
     )
 
 
@@ -100,35 +110,37 @@ def test_combined_score_default_mode_is_legacy():
     assert vp.combined_score == pytest.approx(np.sqrt(9) * vp.target_epitope_score)
 
 
-def test_combined_score_reads_times_epitope_mode():
+def test_combined_score_reads_times_epitope_expr():
+    """Legacy 'reads_times_epitope' formula via the DSL."""
     fragment = _make_fragment(n_alt_reads=9)
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
         epitopes=[_make_mutant_epitope()],
-        combined_score_mode="reads_times_epitope",
+        combined_score_expr="n_alt_reads * target_epitope_score",
     )
-    # expression_score is an honest metric; mode only affects combined_score
+    # expression_score is an honest metric; the expression sets combined_score
     assert vp.expression_score == pytest.approx(np.sqrt(9))
     assert vp.combined_score == pytest.approx(9.0 * vp.target_epitope_score)
 
 
-def test_combined_score_epitope_only_mode():
+def test_combined_score_epitope_only_expr():
+    """Legacy 'epitope_only' formula via the DSL."""
     fragment = _make_fragment(n_alt_reads=9)
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
         epitopes=[_make_mutant_epitope()],
-        combined_score_mode="epitope_only",
+        combined_score_expr="target_epitope_score",
     )
     assert vp.expression_score == pytest.approx(np.sqrt(9))
     assert vp.combined_score == pytest.approx(vp.target_epitope_score)
 
 
-def test_vaccine_peptide_rejects_unknown_combined_score_mode():
-    with pytest.raises(ValueError, match="combined_score_mode"):
+def test_vaccine_peptide_rejects_unparseable_combined_score_expr():
+    with pytest.raises(ValueError, match="combined_score_expr"):
         VaccinePeptide(
             mutant_protein_fragment=_make_fragment(),
             epitopes=[_make_mutant_epitope()],
-            combined_score_mode="garbage",
+            combined_score_expr="this is not valid syntax !!!",
         )
 
 
@@ -149,7 +161,7 @@ peptide:
       - cterm_hydropathy
       - aspartate_proline
 vaccine_peptides:
-  combined_score_mode: epitope_only
+  combined_score_expr: "target_epitope_score"
 """
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".yaml", delete=False
@@ -173,40 +185,40 @@ vaccine_peptides:
             "cysteine_count", "cterm_hydropathy", "aspartate_proline",
         )
         assert isinstance(mfg.rules, tuple)
-        assert vc.combined_score_mode == "epitope_only"
+        assert vc.combined_score_expr == "target_epitope_score"
 
         vp = VaccinePeptide(
             mutant_protein_fragment=_make_fragment(),
             epitopes=[_make_mutant_epitope()],
             manufacturability_rules=mfg.rules,
-            combined_score_mode=vc.combined_score_mode,
+            combined_score_expr=vc.combined_score_expr,
         )
         tup = vp.peptide_synthesis_difficulty_score_tuple(
             rules=vp.manufacturability_rules,
         )
         assert len(tup) == 3
-        # combined_score under epitope_only is just the epitope score
+        # combined_score under "target_epitope_score" is just the epitope score
         assert vp.combined_score == pytest.approx(vp.target_epitope_score)
     finally:
         os.unlink(config_path)
 
 
 def test_vaccine_peptide_roundtrip_preserves_custom_config():
-    """to_dict / from_dict preserves non-default rules + score mode."""
+    """to_dict / from_dict preserves non-default rules + score expression."""
     fragment = _make_fragment()
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
         epitopes=[_make_mutant_epitope()],
         manufacturability_rules=["cysteine_count"],
-        combined_score_mode="epitope_only",
+        combined_score_expr="target_epitope_score",
     )
     d = vp.to_dict()
     assert d["manufacturability_rules"] == ["cysteine_count"]
-    assert d["combined_score_mode"] == "epitope_only"
+    assert d["combined_score_expr"] == "target_epitope_score"
 
 
 def test_vaccine_peptide_roundtrip_omits_defaults():
-    """to_dict doesn't include None/default rule + mode fields."""
+    """to_dict doesn't include None/default rule + expression fields."""
     fragment = _make_fragment()
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
@@ -214,7 +226,7 @@ def test_vaccine_peptide_roundtrip_omits_defaults():
     )
     d = vp.to_dict()
     assert "manufacturability_rules" not in d
-    assert "combined_score_mode" not in d
+    assert "combined_score_expr" not in d
     assert "ranking_rules" not in d
 
 
@@ -415,7 +427,7 @@ def test_bundled_default_yaml_round_trips_to_default_configs(tmp_path):
         "preferred_peptide_length", "min_peptide_length",
         "max_peptide_length", "padding_around_mutation",
         "max_vaccine_peptides_per_variant", "num_target_epitopes_to_keep",
-        "score_fraction_of_best", "combined_score_mode",
+        "score_fraction_of_best", "combined_score_expr",
         "require_target_epitopes_in_variant",
     ):
         assert getattr(vc, field) == getattr(vc_defaults, field), (

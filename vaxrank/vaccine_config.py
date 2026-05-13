@@ -29,6 +29,7 @@ from typing import Optional
 
 import msgspec
 
+from .combined_score_dsl import parse_combined_score_expr
 from .config.defaults import (
     DEFAULT_MAX_PEPTIDE_LENGTH,
     DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT,
@@ -41,12 +42,10 @@ from .config.defaults import (
 from .ranking import RANKING_RULE_REGISTRY
 
 
-COMBINED_SCORE_MODES = (
-    "sqrt_reads_times_epitope",
-    "reads_times_epitope",
-    "epitope_only",
-)
-DEFAULT_COMBINED_SCORE_MODE = "sqrt_reads_times_epitope"
+# Single source of truth for the default vaccine-peptide combined score.
+# Everything that computes ``combined_score`` reads this constant (or a
+# user-supplied override) via the DSL — no parallel hardcoded branch.
+DEFAULT_COMBINED_SCORE_EXPR = "sqrt(n_alt_reads) * target_epitope_score"
 
 
 class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -125,11 +124,14 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     max_vaccine_peptides_per_variant: int = DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT
     num_target_epitopes_to_keep: int = DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP
     score_fraction_of_best: float = DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST
-    combined_score_mode: str = DEFAULT_COMBINED_SCORE_MODE
-    # Optional DSL expression that supersedes ``combined_score_mode``
-    # when set. See :mod:`vaxrank.combined_score_dsl` for grammar +
-    # bindings. ``None`` keeps the enum-mode behavior.
-    combined_score_expr: Optional[str] = None
+    # DSL expression evaluated to produce each vaccine peptide's
+    # ``combined_score``. See :mod:`vaxrank.combined_score_dsl` for
+    # grammar + bindings (``target_epitope_score``, ``n_alt_reads``,
+    # ``expression_score``, etc.). The default is
+    # :data:`DEFAULT_COMBINED_SCORE_EXPR` — the legacy
+    # ``sqrt(n_alt_reads) * target_epitope_score`` formula. There is
+    # no separate mode enum: the expression IS the mechanism.
+    combined_score_expr: str = DEFAULT_COMBINED_SCORE_EXPR
     ranking_rules: Optional[tuple[str, ...]] = None
     # When True (default, legacy behavior), variants whose vaccine peptides
     # contain no mutant-overlapping epitopes are dropped from the report
@@ -188,11 +190,11 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
                 f"score_fraction_of_best must be in (0, 1], "
                 f"got {self.score_fraction_of_best}"
             )
-        if self.combined_score_mode not in COMBINED_SCORE_MODES:
-            raise ValueError(
-                f"combined_score_mode must be one of {COMBINED_SCORE_MODES}, "
-                f"got '{self.combined_score_mode}'"
-            )
+        # Validate the expression at config construction so a malformed
+        # YAML / CLI override fails fast, not on first vaccine peptide.
+        # ``parse_combined_score_expr`` performs the same AST-allowlist
+        # check used at evaluation time.
+        parse_combined_score_expr(self.combined_score_expr)
         if self.ranking_rules is not None:
             for rule_name in self.ranking_rules:
                 if rule_name not in RANKING_RULE_REGISTRY:

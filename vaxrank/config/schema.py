@@ -91,7 +91,6 @@ class VaccinePeptidesConfigSchema(
     per_mutation: Optional[int] = None
     max_epitopes_per_candidate: Optional[int] = None
     score_fraction_of_best: Optional[float] = None
-    combined_score_mode: Optional[str] = None
     combined_score_expr: Optional[str] = None
     ranking_rules: Optional[list[str]] = None
     require_target_epitopes_in_variant: Optional[bool] = None

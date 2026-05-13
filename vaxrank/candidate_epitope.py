@@ -516,6 +516,30 @@ class CandidateEpitope(Peptide):
     # reading this flag instead of the raw one.
     occurs_in_non_CTA_reference: bool = False
 
+    # Per-allele score for this epitope as computed by the configured
+    # :class:`~vaxrank.epitope_config.EpitopeConfig` ``score_expr``
+    # (see :mod:`vaxrank.epitope_dsl`). Keys are allele names exactly
+    # as they appear on the predictions; values are the DSL output
+    # summed over predictor leaves with the same (peptide, allele).
+    # Populated by :func:`~vaxrank.epitope_logic.predict_epitopes`
+    # (and equivalent loaders); empty when an epitope is loaded
+    # without scores yet attached. Downstream consumers MUST read
+    # from here and never recompute — the DSL is the single source
+    # of truth.
+    per_allele_scores: dict = field(default_factory=dict)
+
+    @property
+    def epitope_score(self) -> float:
+        """Per-epitope total score = sum of per-allele scores.
+
+        This is the binding fed to the combined-score DSL as
+        ``target_epitope_score`` (aggregated across an epitope set)
+        and the value used by the vaccine-peptide ranker. Defined
+        here exactly once; no parallel formula exists in the
+        codebase.
+        """
+        return float(sum(self.per_allele_scores.values()))
+
     def __hash__(self) -> int:
         # Inherited from Peptide in spirit, but ``@dataclass(frozen=True)``
         # regenerates ``__hash__`` on every subclass — and ours would
@@ -567,7 +591,8 @@ class CandidateEpitope(Peptide):
             source_class=self.source_class,
             overlaps_mutation=self.overlaps_mutation,
             occurs_in_reference=self.occurs_in_reference,
-            occurs_in_non_CTA_reference=self.occurs_in_non_CTA_reference)
+            occurs_in_non_CTA_reference=self.occurs_in_non_CTA_reference,
+            per_allele_scores=dict(self.per_allele_scores))
 
     @classmethod
     def from_peptide(cls, peptide: "Peptide",
@@ -651,6 +676,11 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                 'overlaps_mutation': False,
                 'occurs_in_reference': False,
                 'occurs_in_non_CTA_reference': False,
+                # Accumulator for per-allele DSL scores. Same allele
+                # may appear in multiple rows (different predictors);
+                # all rows for one allele share the same score by
+                # construction of the DSL eval, so last-write-wins.
+                'per_allele_scores': {},
             }
             groups[key] = slot
         slot['mutant_preds'].append(row['mutant'])
@@ -658,6 +688,9 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
         slot['occurs_in_reference'] |= bool(row.get('occurs_in_reference', False))
         slot['occurs_in_non_CTA_reference'] |= bool(
             row.get('occurs_in_non_CTA_reference', False))
+        if 'allele_score' in row:
+            slot['per_allele_scores'][row['mutant'].allele] = float(
+                row['allele_score'])
         wt = row.get('wt')
         if wt is not None and wt.peptide and wt.peptide == peptide:
             # Self-WT: comparing the candidate against itself is meaningless.
@@ -687,5 +720,6 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             overlaps_mutation=slot['overlaps_mutation'],
             occurs_in_reference=slot['occurs_in_reference'],
             occurs_in_non_CTA_reference=slot['occurs_in_non_CTA_reference'],
+            per_allele_scores=dict(slot['per_allele_scores']),
         ))
     return out
