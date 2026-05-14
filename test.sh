@@ -1,16 +1,39 @@
 #!/usr/bin/env bash
-# Run the vaxrank test suite with a memory- and CPU-aware pytest-xdist
-# worker count. See ~/code/trufflepig/test.sh for the rationale: running
-# several sibling repos' suites concurrently can fork-bomb the laptop,
-# so we cap workers at min(cpu_reserve, available_RAM / PER_WORKER_GB).
-# Each vaxrank worker loads its own pyensembl / mhctools / topiary state
-# (~3 GB resident), so the default per-worker budget is bumped up. xdist
-# is optional — fall back to serial pytest when it isn't installed.
+# Run the vaxrank test suite.
+#
+# Defaults to serial pytest. This is counterintuitive — the previous
+# revision of this script went to lengths to pick a memory-aware
+# pytest-xdist worker count — but measurement on the current suite
+# shows xdist is consistently slower than serial regardless of worker
+# count:
+#
+#   serial, no cov     49s   ← default
+#   serial + --cov     78s
+#   xdist -n 1         60s   (worker fork + IPC overhead)
+#   xdist -n 2         95s   (slower than -n 1; disk contention)
+#   xdist -n 4 + cov   often 20+ min (memory pressure → swap)
+#
+# Two structural reasons:
+#
+# 1. ``test_reference_peptide_logic`` runs ~20s on its own — first-time
+#    mouse kmer-set pickle load. xdist's wall-time floor IS that test.
+#    Parallelism over the other 831 fast tests can't beat the single
+#    long pole.
+# 2. Every xdist worker is a fresh Python process. Each independently
+#    loads pyensembl + mhctools + topiary (~3 GB resident) AND
+#    decompresses its own copy of the mouse kmer-set pickle.
+#    Concurrent loads contend on disk I/O and (with --cov on) thrash
+#    memory into swap.
+#
+# When/if those preconditions change (e.g. the slow test is split, or
+# many new genuinely-parallel tests land), opt back into xdist with
+# ``TEST_SH_XDIST=1``. The memory-aware worker math below still applies.
 #
 # Tunables (env vars):
+#   TEST_SH_XDIST    set to 1 to use pytest-xdist (default: serial)
 #   PER_WORKER_GB    per-worker memory budget in GB (default: 3.0)
-#   TEST_SH_MIN      floor on workers (default: 1)
-#   TEST_SH_MAX      hard ceiling on workers (default: unset)
+#   TEST_SH_MIN      floor on workers when xdist is enabled (default: 1)
+#   TEST_SH_MAX      hard ceiling on workers when xdist is enabled (default: unset)
 
 set -eo pipefail
 
@@ -22,6 +45,7 @@ if [[ "$(uname)" == "Darwin" && -d /opt/homebrew/lib \
   export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 fi
 
+TEST_SH_XDIST="${TEST_SH_XDIST:-0}"
 PER_WORKER_GB="${PER_WORKER_GB:-3.0}"
 TEST_SH_MIN="${TEST_SH_MIN:-1}"
 TEST_SH_MAX="${TEST_SH_MAX:-0}"
@@ -84,34 +108,39 @@ available_bytes() {
     esac
 }
 
-CPUS=$(cpu_count)
-CPU_CAP=$(cpu_cap "$CPUS")
-
-avail=""
-if avail=$(available_bytes 2>/dev/null) && [[ -n "$avail" ]]; then
-    MEM_CAP=$(awk -v b="$avail" -v g="$PER_WORKER_GB" 'BEGIN {
-        n = int(b / 1024^3 / g)
-        if (n < 1) n = 1
-        print n
-    }')
-    AVAIL_GB=$(awk -v b="$avail" 'BEGIN { printf "%.1f", b / 1024^3 }')
-    mem_note="ram_free=${AVAIL_GB}GB mem_cap=${MEM_CAP}"
-else
-    MEM_CAP=$CPU_CAP
-    mem_note="ram_free=? (probe unavailable) mem_cap=cpu_cap"
-fi
-
-if (( CPU_CAP < MEM_CAP )); then WORKERS=$CPU_CAP; else WORKERS=$MEM_CAP; fi
-if (( TEST_SH_MAX > 0 && WORKERS > TEST_SH_MAX )); then WORKERS=$TEST_SH_MAX; fi
-if (( WORKERS < TEST_SH_MIN )); then WORKERS=$TEST_SH_MIN; fi
-
 XDIST_FLAGS=()
-if python -c "import xdist" 2>/dev/null; then
+if (( TEST_SH_XDIST == 1 )) && python -c "import xdist" 2>/dev/null; then
+    CPUS=$(cpu_count)
+    CPU_CAP=$(cpu_cap "$CPUS")
+
+    avail=""
+    if avail=$(available_bytes 2>/dev/null) && [[ -n "$avail" ]]; then
+        MEM_CAP=$(awk -v b="$avail" -v g="$PER_WORKER_GB" 'BEGIN {
+            n = int(b / 1024^3 / g)
+            if (n < 1) n = 1
+            print n
+        }')
+        AVAIL_GB=$(awk -v b="$avail" 'BEGIN { printf "%.1f", b / 1024^3 }')
+        mem_note="ram_free=${AVAIL_GB}GB mem_cap=${MEM_CAP}"
+    else
+        MEM_CAP=$CPU_CAP
+        mem_note="ram_free=? (probe unavailable) mem_cap=cpu_cap"
+    fi
+
+    if (( CPU_CAP < MEM_CAP )); then WORKERS=$CPU_CAP; else WORKERS=$MEM_CAP; fi
+    if (( TEST_SH_MAX > 0 && WORKERS > TEST_SH_MAX )); then WORKERS=$TEST_SH_MAX; fi
+    if (( WORKERS < TEST_SH_MIN )); then WORKERS=$TEST_SH_MIN; fi
+
     XDIST_FLAGS=(-n "$WORKERS")
     log "platform=${OS} cpus=${CPUS} cpu_cap=${CPU_CAP} ${mem_note} per_worker=${PER_WORKER_GB}GB"
-    log "workers=${WORKERS} → exec pytest -n ${WORKERS} --cov=vaxrank/ --cov-report=term-missing tests $*"
+    log "TEST_SH_XDIST=1 → xdist with -n ${WORKERS}"
+    log "→ exec pytest -n ${WORKERS} --cov=vaxrank/ --cov-report=term-missing tests $*"
 else
-    log "platform=${OS} cpus=${CPUS} (pytest-xdist not installed; running serial)"
+    if (( TEST_SH_XDIST == 1 )); then
+        log "TEST_SH_XDIST=1 set but pytest-xdist not installed; running serial"
+    else
+        log "running serial (set TEST_SH_XDIST=1 to use pytest-xdist)"
+    fi
     log "→ exec pytest --cov=vaxrank/ --cov-report=term-missing tests $*"
 fi
 
