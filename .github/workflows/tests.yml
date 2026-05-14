@@ -96,7 +96,9 @@ jobs:
           else
             echo "netmhc-bundle unavailable; NetMHCpan-specific tests will be skipped."
           fi
-          ./test.sh
+          # Coverage lives in CI (Coveralls consumes the .coverage file),
+          # not in ./test.sh — the local runner stays fast for inner-loop work.
+          pytest --cov=vaxrank/ --cov-report=term-missing tests
       - name: Publish coverage to Coveralls
         uses: coverallsapp/github-action@v2.3.6
         with:

@@ -10,4 +10,4 @@ if [[ "$(uname)" == "Darwin" && -d /opt/homebrew/lib \
   export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 fi
 
-exec pytest --cov=vaxrank/ --cov-report=term-missing tests "$@"
+exec pytest tests "$@"
