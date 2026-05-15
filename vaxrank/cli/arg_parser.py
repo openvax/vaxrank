@@ -110,7 +110,8 @@ def make_vaxrank_arg_parser():
     arg_parser.add_argument(
         "--input-pvacseq",
         default=None,
-        help="Path to a pVACseq aggregated TSV file (all_epitopes.aggregated.tsv). "
+        help="Path to a pVACseq TSV file (all_epitopes.tsv or "
+             "all_epitopes.aggregated.tsv). "
              "When provided without --vcf/--bam, vaxrank scores and ranks the "
              "pVACseq predictions and writes the requested output reports.")
 

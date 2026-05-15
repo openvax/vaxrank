@@ -660,6 +660,51 @@ def test_pvacseq_drives_mrna_construct_assembly_end_to_end():
     assert c.cds_nt.endswith("TAA")
 
 
+def test_pvacseq_all_epitopes_to_ranked_vaccine_peptides(tmp_path):
+    """all_epitopes flavor uses MT Epitope Seq + chr/ref/alt columns."""
+    from tests.test_epitope_io import _write_pvacseq_all_epitopes_fixture
+    from vaxrank.epitope_io import load_pvacseq
+    from vaxrank.external_input import ranked_from_pvacseq_predictions
+
+    path = _write_pvacseq_all_epitopes_fixture(tmp_path)
+    _, predictions = load_pvacseq(path)
+    ranked, dna_vaf_by_variant = ranked_from_pvacseq_predictions(
+        predictions, path)
+
+    assert len(ranked) == 1
+    variant, vaccine_peptides = ranked[0]
+    assert (variant.contig, variant.start, variant.ref, variant.alt) == (
+        "1", 154590262, "T", "A")
+    assert vaccine_peptides[0].mutant_protein_fragment.gene_name == "ADAR"
+    assert len(vaccine_peptides[0].epitopes) == 2
+    assert dna_vaf_by_variant[variant] == pytest.approx(0.302)
+
+
+def test_pvacseq_duplicate_peptides_stay_variant_scoped(tmp_path):
+    """Identical peptides from different pVACseq variants must not mix."""
+    from tests.test_epitope_io import _write_pvacseq_duplicate_peptide_fixture
+    from vaxrank.epitope_io import load_pvacseq
+    from vaxrank.external_input import ranked_from_pvacseq_predictions
+
+    path = _write_pvacseq_duplicate_peptide_fixture(tmp_path)
+    _, predictions = load_pvacseq(path)
+    ranked, _dna_vaf_by_variant = ranked_from_pvacseq_predictions(
+        predictions, path)
+
+    assert len(ranked) == 2
+    expected_source_by_variant = {
+        ("1", 154590262, "T", "A"): "chr1-154590262-T-A",
+        ("2", 200000, "G", "C"): "chr2-200000-G-C",
+    }
+    for variant, vaccine_peptides in ranked:
+        key = (variant.contig, variant.start, variant.ref, variant.alt)
+        expected_source = expected_source_by_variant[key]
+        epitopes = vaccine_peptides[0].epitopes
+        assert len(epitopes) == 1
+        assert epitopes[0].sequence == "AERMGFTVV"
+        assert epitopes[0].source_sequence == expected_source
+
+
 # ---- LENS scoring-column edge cases --------------------------------------
 
 def test_lens_warns_when_no_affinity_columns_detected(tmp_path, caplog):
