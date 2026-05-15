@@ -350,7 +350,7 @@ outputs work identically.
 | Flag | Input format |
 |---|---|
 | `--input-lens` | LENS report TSV |
-| `--input-pvacseq` | pVACseq aggregated TSV (`*all_epitopes.aggregated.tsv`) |
+| `--input-pvacseq` | pVACseq TSV (`*all_epitopes.tsv` or `*all_epitopes.aggregated.tsv`) |
 
 ### Manifest schema
 
@@ -673,10 +673,11 @@ HLA alleles — runs Isovar transcript assembly + MHC binding prediction
 upstream tool (e.g. [LENS](https://github.com/openvax/lens) or pVACseq)
 has already produced a per-(peptide, allele) neoepitope report, Vaxrank
 skips Isovar + MHC prediction and consumes the report directly. The
-per-row `pep_context` (LENS) or `Best Peptide` (pVACseq aggregate) is
-used as the SLP-style antigen window. Downstream dispatch — reports +
-peptide constructs + mRNA constructs — is identical to the full
-pipeline.
+per-row `pep_context` (LENS) or `Best Peptide` / `MT Epitope Seq`
+(pVACseq) is used as the SLP-style antigen window. Downstream dispatch
+— reports + peptide constructs + mRNA constructs — is identical to the
+full pipeline. pVACseq parsing is delegated to topiary, so both
+`all_epitopes.tsv` and `all_epitopes.aggregated.tsv` are accepted.
 
 ### Mutant transcript assembly (Isovar)
 

@@ -264,7 +264,7 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
     )
 
 
-def attach_per_allele_scores(epitopes, cfg=None):
+def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
     """Score ``epitopes`` via the configured DSL and return a new list of
     :class:`~vaxrank.candidate_epitope.CandidateEpitope` instances with
     each one's ``per_allele_scores`` populated.
@@ -280,6 +280,10 @@ def attach_per_allele_scores(epitopes, cfg=None):
     so the loader path's default scoring matches the legacy pre-3.1
     semantics exactly. Pass a custom config to override the threshold
     knobs or supply a user ``score_expr``.
+
+    ``topiary_df`` can be supplied by loaders that already have a
+    richer topiary frame than can be reconstructed from CandidateEpitope
+    objects alone, e.g. pVACseq passthrough annotation columns.
     """
     from dataclasses import replace
     from .epitope_config import EpitopeConfig
@@ -288,10 +292,12 @@ def attach_per_allele_scores(epitopes, cfg=None):
         return epitopes
     if cfg is None:
         cfg = EpitopeConfig()
-    score_series = score_predictions(epitopes, cfg)
-    # score_series is keyed by (source_sequence_name, peptide, offset, allele)
-    # where source_sequence_name mirrors ``epitopes_to_topiary_df`` —
-    # epitope.source_sequence or (falling back to) epitope.sequence.
+    score_series = score_predictions(epitopes, cfg, topiary_df=topiary_df)
+    # score_series is keyed by topiary's group columns. For the rebuilt
+    # vaxrank frame the first key mirrors ``epitopes_to_topiary_df``;
+    # for a supplied loader frame (pVACseq) it matches that loader's
+    # source/variant grouping. ``CandidateEpitope.source_sequence`` is
+    # set to the same key by those loaders.
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
         src_name, peptide, offset, allele = idx
@@ -319,7 +325,7 @@ def collect_dsl_references(node):
     already validated by topiary's ``apply_filter``; vaxrank only uses
     this to drive :func:`validate_dsl_against_predictions`.
     """
-    from topiary.ranking.nodes import Column, Field
+    from topiary.ranking.nodes import Field
 
     columns = set()
     kinds = set()
@@ -328,9 +334,10 @@ def collect_dsl_references(node):
         n = stack.pop()
         if n is None:
             continue
-        if isinstance(n, Column):
-            columns.add(n.col_name)
-        elif isinstance(n, Field):
+        col_name = getattr(n, "col_name", None)
+        if isinstance(col_name, str):
+            columns.add(col_name)
+        if isinstance(n, Field):
             kinds.add((n.kind, n.method, n.version))
         child_iter = getattr(n, "child_nodes", None)
         if callable(child_iter):

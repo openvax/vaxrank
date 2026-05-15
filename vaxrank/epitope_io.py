@@ -192,12 +192,133 @@ def load_predictions(path):
 
 # ── pVACseq import ───────────────────────────────────────────────────────────
 
+def _is_missing(val):
+    """True for scalar missing values from pandas / pVACseq TSVs."""
+    if val is None:
+        return True
+    try:
+        return bool(pd.isna(val))
+    except (TypeError, ValueError):
+        return False
+
+
+def _format_nm(value):
+    value = _safe_float(value)
+    return '%.2f nM' % value if value is not None else 'No prediction'
+
+
+def _first_float(*values):
+    for value in values:
+        coerced = _safe_float(value)
+        if coerced is not None:
+            return coerced
+    return None
+
+
+def _topiary_group_source(row):
+    """Source key matching topiary.ranking.EvalContext grouping."""
+    return (
+        _safe_str(row.get("variant"))
+        or _safe_str(row.get("source_sequence_name"))
+        or _safe_str(row.get("peptide"))
+    )
+
+
+def _topiary_pvacseq_to_epitope_rows(df):
+    """Convert topiary.read_pvacseq long-form rows to CandidateEpitope rows."""
+    epitope_rows = []
+    n_rows = 0
+    for _, row in df.iterrows():
+        peptide = _safe_str(row.get("peptide"))
+        allele = _safe_str(row.get("allele"))
+        value = _safe_float(row.get("value"))
+        if not peptide or not allele or value is None:
+            continue
+
+        method = _safe_str(row.get("prediction_method_name")) or "pvacseq"
+        version = _safe_str(row.get("predictor_version"))
+        kind = _safe_str(row.get("kind")) or _kind_for_method(method)
+        percentile_rank = _safe_float(row.get("percentile_rank"))
+        score = _safe_float(row.get("score"))
+        mutant = Prediction(
+            kind=kind, predictor_name=method, predictor_version=version,
+            allele=allele, peptide=peptide, value=value,
+            score=score if score is not None else 0.0,
+            percentile_rank=percentile_rank,
+        )
+
+        wt = None
+        wt_value = _safe_float(row.get("wt_value"))
+        if wt_value is not None:
+            wt_method = _safe_str(row.get("wt_prediction_method_name")) or method
+            wt_version = _safe_str(row.get("wt_predictor_version")) or version
+            wt = Prediction(
+                kind=kind, predictor_name=wt_method,
+                predictor_version=wt_version, allele=allele,
+                peptide=_safe_str(row.get("wt_peptide")),
+                value=wt_value, score=0.0,
+                percentile_rank=_safe_float(row.get("wt_percentile_rank")),
+            )
+
+        epitope_rows.append({
+            'peptide': peptide,
+            'source': _topiary_group_source(row),
+            'offset': int(_safe_float(row.get("peptide_offset")) or 0),
+            'mutant': mutant,
+            'wt': wt,
+            'source_class': SOURCE_CLASS_MUTATION,
+            'overlaps_mutation': _safe_bool(
+                row.get("contains_mutant_residues"), default=True),
+            'occurs_in_reference': _safe_bool(row.get("pvacseq_ref_match")),
+            'occurs_in_non_CTA_reference': _safe_bool(
+                row.get("pvacseq_ref_match")),
+        })
+        n_rows += 1
+    return epitope_rows, n_rows
+
+
+def _build_pvacseq_report_row(row):
+    """Build one user-facing report row from a topiary pVACseq row."""
+    rna_expr = _first_float(
+        row.get("rna_transcript_expression"),
+        row.get("transcript_expression"),
+        row.get("gene_expression"))
+    rna_vaf = _first_float(row.get("rna_vaf"), row.get("tumor_rna_vaf"))
+    dna_vaf = _first_float(row.get("dna_vaf"), row.get("tumor_dna_vaf"))
+    out = {
+        'Allele': _safe_str(row.get("allele")),
+        'Mutant peptide sequence': _safe_str(row.get("peptide")),
+        'Predicted mutant pMHC affinity': _format_nm(row.get("value")),
+        'Wildtype sequence': _safe_str(row.get("wt_peptide")),
+        'Predicted wildtype pMHC affinity': _format_nm(row.get("wt_value")),
+        'Gene name': _safe_str(row.get("gene")),
+        'Genomic variant': _safe_str(row.get("variant")),
+        'Tier': _safe_str(row.get("pvacseq_tier")),
+        'Ref Match': _safe_bool(row.get("pvacseq_ref_match")),
+        'RNA Expr': rna_expr,
+        'RNA VAF': rna_vaf,
+        'DNA VAF': dna_vaf,
+        '%ile MT': _safe_float(row.get("percentile_rank")),
+        'Source sequence name': _topiary_group_source(row),
+        'Peptide offset': int(_safe_float(row.get("peptide_offset")) or 0),
+        'MHC class': _safe_str(row.get("mhc_class")),
+        'Contains mutant residues': _safe_bool(
+            row.get("contains_mutant_residues"), default=True),
+    }
+    for col, value in row.items():
+        if col.startswith("pvacseq_") and col not in {
+                "pvacseq_ref_match", "pvacseq_tier"}:
+            out[col] = _safe_float(value)
+    return out
+
+
 def load_pvacseq(path):
     """
-    Import a pVACseq aggregated TSV (``*all_epitopes.aggregated.tsv``)
-    and return a neoepitope report DataFrame ready for output.
+    Import a pVACseq TSV and return a neoepitope report DataFrame ready
+    for output.
 
-    Each row is one variant's best epitope.
+    Both pVACseq output flavors are accepted:
+    ``*all_epitopes.aggregated.tsv`` and ``*all_epitopes.tsv``.
 
     Parameters
     ----------
@@ -212,117 +333,27 @@ def load_pvacseq(path):
         vaxrank_score
     list of CandidateEpitope
         One ``vaxrank.candidate_epitope.CandidateEpitope`` per unique
-        ``(peptide, source_sequence, offset)`` group; pVACseq rows
-        typically map 1:1 since each row carries its own allele.
+        ``(peptide, source_sequence, offset)`` group.
     """
-    df = pd.read_csv(path, sep="\t")
-    required = {"Best Peptide", "Allele", "IC50 MT"}
-    missing = required - set(df.columns)
-    if missing:
-        raise ValueError(
-            f"pVACseq file {path} missing required columns: {missing}")
+    from topiary import read_pvacseq
 
-    epitope_rows = []
-    report_rows = []
-    n_rows = 0
-    for _, row in df.iterrows():
-        peptide = row.get("Best Peptide", "")
-        if not peptide or pd.isna(peptide):
-            continue
-
-        allele = row.get("Allele", "")
-        if pd.isna(allele):
-            continue
-
-        ic50_mt = row.get("IC50 MT")
-        if pd.isna(ic50_mt):
-            continue
-        ic50_mt = float(ic50_mt)
-
-        ic50_wt = row.get("IC50 WT")
-        wt_ic50 = float(ic50_wt) if not pd.isna(ic50_wt) else None
-
-        percentile = row.get("%ile MT")
-        percentile_rank = float(percentile) if not pd.isna(percentile) else None
-
-        wt_peptide = row.get("WT Epitope Seq", "")
-        if pd.isna(wt_peptide):
-            wt_peptide = ""
-
-        ref_match = row.get("Ref Match", False)
-        if isinstance(ref_match, str):
-            occurs_in_reference = ref_match.strip().lower() == "true"
-        else:
-            occurs_in_reference = bool(ref_match) if not pd.isna(ref_match) else False
-
-        method = row.get("Best MT IC50 Score Method", "pvacseq")
-        if pd.isna(method):
-            method = "pvacseq"
-
-        gene = row.get("Gene", "")
-        if pd.isna(gene):
-            gene = ""
-        variant_id = row.get("ID", "")
-        if pd.isna(variant_id):
-            variant_id = ""
-        tier = row.get("Tier", "")
-        if pd.isna(tier):
-            tier = ""
-
-        kind = _kind_for_method(str(method))
-        mutant = Prediction(
-            kind=kind, predictor_name=str(method), predictor_version="",
-            allele=str(allele), peptide=str(peptide), value=ic50_mt,
-            score=0.0, percentile_rank=percentile_rank,
-        )
-        wt = None
-        if wt_ic50 is not None:
-            wt = Prediction(
-                kind=kind, predictor_name=str(method), predictor_version="",
-                allele=str(allele), peptide=str(wt_peptide),
-                value=wt_ic50, score=0.0, percentile_rank=None,
-            )
-        epitope_rows.append({
-            'peptide': str(peptide), 'source': "", 'offset': 0,
-            'mutant': mutant, 'wt': wt,
-            'source_class': SOURCE_CLASS_MUTATION,
-            'overlaps_mutation': True,
-            'occurs_in_reference': occurs_in_reference,
-            'occurs_in_non_CTA_reference': occurs_in_reference,
-        })
-        n_rows += 1
-
-        # Build report row preserving pVACseq metadata
-        wt_ic50_str = '%.2f nM' % wt_ic50 if wt_ic50 is not None else 'No prediction'
-        report_rows.append({
-            'Allele': str(allele),
-            'Mutant peptide sequence': str(peptide),
-            'Predicted mutant pMHC affinity': '%.2f nM' % ic50_mt,
-            'Wildtype sequence': str(wt_peptide),
-            'Predicted wildtype pMHC affinity': wt_ic50_str,
-            'Gene name': str(gene),
-            'Genomic variant': str(variant_id),
-            'Tier': str(tier),
-            'Ref Match': occurs_in_reference,
-            'RNA Expr': _safe_float(row.get("RNA Expr")),
-            'RNA VAF': _safe_float(row.get("RNA VAF")),
-            'DNA VAF': _safe_float(row.get("DNA VAF")),
-            '%ile MT': percentile_rank,
-        })
+    result = read_pvacseq(path)
+    topiary_df = result.df
+    epitope_rows, n_rows = _topiary_pvacseq_to_epitope_rows(topiary_df)
+    report_rows = [
+        _build_pvacseq_report_row(row)
+        for _, row in topiary_df.iterrows()
+        if _safe_str(row.get("peptide")) and _safe_str(row.get("allele"))
+    ]
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
+    report_df.attrs["topiary_df"] = topiary_df
     epitopes = candidate_epitopes_from_rows(epitope_rows)
-    # Loader path mirrors ``predict_epitopes``: populate
-    # ``per_allele_scores`` via the DSL so downstream consumers
-    # (VaccinePeptide.target_epitope_score, ranking, reports) see the
-    # same shape as upstream-path epitopes. Without this, every loaded
-    # epitope has ``epitope_score=0`` and the variant gets dropped as
-    # "no epitopes" during ranking.
     from .epitope_dsl import attach_per_allele_scores
-    epitopes = attach_per_allele_scores(epitopes)
+    epitopes = attach_per_allele_scores(epitopes, topiary_df=topiary_df)
     logger.info(
-        "Loaded %d epitope(s) (%d row(s)) from pVACseq file %s",
-        len(epitopes), n_rows, path)
+        "Loaded %d epitope(s) (%d row(s), %s flavor) from pVACseq file %s",
+        len(epitopes), n_rows, result.extra.get("pvacseq_format"), path)
     return report_df, epitopes
 
 
@@ -330,9 +361,7 @@ def load_pvacseq(path):
 
 def _safe_str(val):
     """Coerce a cell to str, mapping NaN/None/'NA' to empty string."""
-    if val is None:
-        return ""
-    if isinstance(val, float) and pd.isna(val):
+    if _is_missing(val):
         return ""
     s = str(val)
     if s == "NA":
@@ -342,12 +371,26 @@ def _safe_str(val):
 
 def _safe_float(val):
     """Convert to float, returning None for NaN/missing."""
-    if val is None or (isinstance(val, float) and pd.isna(val)):
+    if _is_missing(val):
         return None
     try:
         return float(val)
     except (ValueError, TypeError):
         return None
+
+
+def _safe_bool(val, default=False):
+    """Coerce common TSV boolean spellings; missing values use *default*."""
+    if _is_missing(val):
+        return default
+    if isinstance(val, str):
+        lowered = val.strip().lower()
+        if lowered in {"true", "t", "yes", "y", "1"}:
+            return True
+        if lowered in {"false", "f", "no", "n", "0"}:
+            return False
+        return default
+    return bool(val)
 
 
 # ── LENS import ──────────────────────────────────────────────────────────────
@@ -690,7 +733,8 @@ def _build_lens_report_row(row, allele, peptide, detected, display_pred,
 # ── Shared report writer ─────────────────────────────────────────────────────
 
 def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
-                            csv_report_path=None, epitope_config=None):
+                            csv_report_path=None, epitope_config=None,
+                            topiary_df=None):
     """
     Score epitopes and write a neoepitope report from imported data.
 
@@ -716,6 +760,11 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     excel_report_path : str, optional
     csv_report_path : str, optional
     epitope_config : EpitopeConfig, optional
+    topiary_df : pandas.DataFrame, optional
+        Pre-built topiary long-form rows to use for DSL validation and
+        scoring. ``load_pvacseq`` stores this on ``report_df.attrs`` so
+        pVACseq annotation columns remain available to custom DSL
+        expressions.
     """
     from .epitope_config import EpitopeConfig
     from .epitope_dsl import (
@@ -750,10 +799,14 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
                 "preserved by the other columns.", dup_count)
 
     # Build the topiary DataFrame once and share it between validator and
-    # scorer — these two pass over the same ~N rows and rebuilding is the
-    # dominant cost on large LENS files. ``default_methods`` typos are
-    # caught inside :func:`score_predictions` before eval.
-    topiary_df = epitopes_to_topiary_df(epitopes)
+    # scorer. pVACseq import keeps the loader-produced frame in
+    # ``report_df.attrs`` so passthrough columns such as
+    # ``pvacseq_mhcflurry_ic50_mt`` remain DSL-addressable; LENS and
+    # vaxrank-native callers fall back to rebuilding from CandidateEpitope.
+    if topiary_df is None:
+        topiary_df = report_df.attrs.get("topiary_df")
+    if topiary_df is None:
+        topiary_df = epitopes_to_topiary_df(epitopes)
 
     validate_dsl_against_predictions(
         epitope_config, epitopes, topiary_df=topiary_df)
@@ -761,20 +814,38 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     score_series = score_predictions(
         epitopes, epitope_config, topiary_df=topiary_df)
 
-    # score_series is indexed by (source_sequence_name, peptide,
-    # peptide_offset, allele). We built the topiary DF with
-    # source_sequence_name = peptide, peptide_offset = 0, so the effective
-    # group key is (peptide, allele) — align back onto report_df using that.
+    # score_series is indexed by topiary's group key
+    # (source/variant, peptide, peptide_offset, allele). pVACseq reports
+    # carry that source key through for precise alignment. If an exact
+    # source-keyed row is absent, it was filtered out and must stay at 0.
+    # Older LENS-shaped reports lack source/offset columns and keep the
+    # legacy (peptide, allele) broadcast.
     scores_by_key = {}
+    scores_by_pair = {}
     for idx_tuple, score in score_series.items():
-        _, peptide, _, allele = idx_tuple
-        scores_by_key[(peptide, allele)] = score
+        source_name, peptide, offset, allele = idx_tuple
+        scores_by_key[(source_name, peptide, int(offset), allele)] = score
+        scores_by_pair[(peptide, allele)] = score
 
     report_df = report_df.copy()
-    scores = [
-        round(float(scores_by_key.get((row[peptide_col], row[allele_col]), 0.0)), 6)
-        for _, row in report_df.iterrows()
-    ]
+    source_col = 'Source sequence name'
+    offset_col = 'Peptide offset'
+    has_source_keys = (
+        source_col in report_df.columns and offset_col in report_df.columns)
+    scores = []
+    for _, row in report_df.iterrows():
+        score = None
+        if has_source_keys:
+            offset = _safe_float(row.get(offset_col))
+            if offset is not None:
+                score = scores_by_key.get((
+                    row.get(source_col), row[peptide_col], int(offset),
+                    row[allele_col]))
+            if score is None:
+                score = 0.0
+        else:
+            score = scores_by_pair.get((row[peptide_col], row[allele_col]), 0.0)
+        scores.append(round(float(score), 6))
     report_df.insert(2, 'vaxrank_score', scores)
 
     report_df = report_df.sort_values('vaxrank_score', ascending=False)

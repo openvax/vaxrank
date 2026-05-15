@@ -50,10 +50,16 @@ from .vaccine_library import (
 )
 from .vaccine_peptide import VaccinePeptide
 
-# pVACseq aggregate-report scoring column priority. Sniffed against
-# the row dict; the first column present + non-NaN wins.
-_PVACSEQ_IC50_COLS = ('IC50 MT', 'Best IC50 Score MT')
-_PVACSEQ_RANK_COLS = ('%ile MT', 'Best Percentile MT')
+# pVACseq scoring column priority. Sniffed against the row dict; the first
+# column present + non-NaN wins. Covers both aggregate and all_epitopes TSVs.
+_PVACSEQ_IC50_COLS = (
+    'IC50 MT', 'Best IC50 Score MT',
+    'Median MT IC50 Score', 'Best MT IC50 Score',
+)
+_PVACSEQ_RANK_COLS = (
+    '%ile MT', 'Best Percentile MT',
+    'Median MT Percentile', 'Best MT Percentile',
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +69,28 @@ logger = logging.getLogger(__name__)
 # alleles inferred from a LENS / pVACseq report. Shared with
 # ``vaxrank.cli.entry_point`` so producer + consumer can't drift.
 LENS_PROVENANCE_MARKER = '(inferred from report)'
+
+
+def _missing_cell(value):
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _first_cell(row, *names):
+    for name in names:
+        value = row.get(name)
+        if not _missing_cell(value):
+            return value
+    return None
+
+
+def _first_str(row, *names):
+    value = _first_cell(row, *names)
+    return str(value) if value is not None else ""
 
 
 def _parse_variant_coords(coords):
@@ -919,17 +947,85 @@ def _parse_pvacseq_id(vid, genome=None):
     return v, True
 
 
+def _pvacseq_variant_key(row):
+    """Variant key for aggregated or all_epitopes pVACseq rows."""
+    existing = _first_cell(row, 'ID')
+    if existing is not None:
+        return existing
+    chrom = _first_cell(row, 'Chromosome')
+    start = _first_cell(row, 'Start')
+    ref = _first_cell(row, 'Reference')
+    alt = _first_cell(row, 'Variant')
+    if None in (chrom, start, ref, alt):
+        index = _first_cell(row, 'Index')
+        return index
+    stop = _first_cell(row, 'Stop')
+    if stop is not None:
+        return f"{chrom}-{start}-{stop}-{ref}-{alt}"
+    return f"{chrom}-{start}-{ref}-{alt}"
+
+
+def _pvacseq_source_key(row):
+    """Source key matching load_pvacseq's CandidateEpitope source."""
+    existing = _first_cell(row, 'ID')
+    if existing is not None:
+        return str(existing)
+    index = _first_cell(row, 'Index')
+    if index is not None:
+        return str(index)
+    chrom = _first_cell(row, 'Chromosome')
+    start = _first_cell(row, 'Start')
+    ref = _first_cell(row, 'Reference')
+    alt = _first_cell(row, 'Variant')
+    if None in (chrom, start, ref, alt):
+        return ""
+    return f"{chrom}-{start}-{ref}-{alt}"
+
+
+def _pvacseq_peptide(row):
+    return _first_str(row, 'Best Peptide', 'MT Epitope Seq', 'peptide')
+
+
+def _pvacseq_gene(row):
+    return _first_str(row, 'Gene', 'Gene Name', 'gene')
+
+
+def _pvacseq_transcript_ids(row):
+    transcript = _first_str(row, 'Best Transcript', 'Transcript', 'transcript')
+    return [transcript] if transcript else []
+
+
+def _pvacseq_rna_depth(row):
+    return _coerce_int(_first_cell(row, 'RNA Depth', 'Tumor RNA Depth'), default=0)
+
+
+def _pvacseq_rna_vaf(row):
+    raw = _first_cell(row, 'RNA VAF', 'Tumor RNA VAF')
+    try:
+        return float(raw) if raw is not None else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _pvacseq_dna_vaf(row):
+    raw = _first_cell(row, 'DNA VAF', 'Tumor DNA VAF')
+    try:
+        return float(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
                                     genome=None,
                                     num_target_epitopes_to_keep=None):
     """pVACseq variant of :func:`ranked_from_lens_predictions`.
 
-    Re-reads the raw aggregate TSV (the per-(peptide, allele)
+    Re-reads the raw pVACseq TSV (the per-(peptide, allele)
     ``report_df`` returned by ``load_pvacseq`` carries display columns
-    rather than the original ``ID`` / ``Best Peptide`` / ``IC50 MT``).
+    rather than every original aggregate / all_epitopes column).
 
-    Uses ``Best Peptide`` as the antigen sequence and treats the
-    peptide itself as the mutation span (no SLP-context column).
+    Uses ``Best Peptide`` / ``MT Epitope Seq`` as the antigen sequence
+    and treats the peptide itself as the mutation span (no SLP-context column).
     mRNA construct generation from pVACseq input therefore produces
     shorter antigen windows than the LENS path.
     """
@@ -939,15 +1035,15 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
     if df.empty:
         return []
 
-    by_peptide: dict[str, list] = {}
+    by_source_peptide: dict[tuple[str, str], list] = {}
     for e in epitopes:
-        by_peptide.setdefault(e.sequence, []).append(e)
+        by_source_peptide.setdefault((e.source_sequence, e.sequence), []).append(e)
 
     rows = df.to_dict('records')
     groups = {}
     for r in rows:
-        key = r.get('ID') or r.get('Index')
-        if key is None or pd.isna(key):
+        key = _pvacseq_variant_key(r)
+        if _missing_cell(key):
             continue
         groups.setdefault(key, []).append(r)
 
@@ -963,14 +1059,10 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
     for vid, group_rows in groups.items():
         rep = _pick_representative(
             group_rows, _PVACSEQ_IC50_COLS, _PVACSEQ_RANK_COLS)
-        best_pep = rep.get('Best Peptide') or rep.get('peptide') or ""
+        best_pep = _pvacseq_peptide(rep)
         # Preserve pVACseq's own gene name; empty string when missing
         # (codebase convention for "not known"). No 'unknown' invention.
-        gene_raw = rep.get('Gene')
-        gene = (
-            str(gene_raw) if gene_raw and not (
-                isinstance(gene_raw, float) and pd.isna(gene_raw))
-            else "")
+        gene = _pvacseq_gene(rep)
 
         variant, alleles_real = _parse_pvacseq_id(vid, genome=genome)
         if variant is None:
@@ -980,18 +1072,14 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
                 vid)
             continue
 
-        # Real RNA-read counts from pVACseq aggregate columns.
-        # ``RNA Depth`` = total coverage at the variant position.
-        # ``RNA VAF`` = variant allele frequency (alt / total).
+        # Real RNA-read counts from pVACseq columns.
+        # ``RNA Depth`` / ``Tumor RNA Depth`` = total coverage at the
+        # variant position. ``RNA VAF`` / ``Tumor RNA VAF`` = variant
+        # allele frequency (alt / total).
         # n_alt_reads = round(depth × vaf); ref = depth − alt. Missing
         # values yield 0 — honest "no read signal," never fabricated.
-        n_total = _coerce_int(rep.get('RNA Depth'), default=0)
-        rna_vaf = rep.get('RNA VAF')
-        try:
-            vaf = float(rna_vaf) if rna_vaf is not None and not (
-                isinstance(rna_vaf, float) and pd.isna(rna_vaf)) else 0.0
-        except (TypeError, ValueError):
-            vaf = 0.0
+        n_total = _pvacseq_rna_depth(rep)
+        vaf = _pvacseq_rna_vaf(rep)
         n_alt_reads = int(round(n_total * vaf)) if n_total > 0 else 0
         n_ref_reads = max(0, n_total - n_alt_reads)
 
@@ -1007,11 +1095,7 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
         # Resolve to a pyensembl ``Transcript`` so template reports
         # have real effect context; falls back to [] when the genome
         # isn't plumbed through or the ID can't be resolved.
-        best_tid = rep.get('Best Transcript')
-        transcript_ids = (
-            [str(best_tid)]
-            if best_tid and not (isinstance(best_tid, float) and pd.isna(best_tid))
-            else [])
+        transcript_ids = _pvacseq_transcript_ids(rep)
         transcripts = _resolve_transcripts(transcript_ids, genome)
         if transcript_ids:
             n_with_ids += 1
@@ -1031,11 +1115,12 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
         seen_epitope_ids = set()
         variant_epitopes = []
         for r in group_rows:
-            pep = r.get('Best Peptide') or r.get('peptide') or ""
+            pep = _pvacseq_peptide(r)
             if not pep or pep in seen_peptides:
                 continue
             seen_peptides.add(pep)
-            for e in by_peptide.get(pep, []):
+            source_key = _pvacseq_source_key(r)
+            for e in by_source_peptide.get((source_key, pep), []):
                 if id(e) in seen_epitope_ids:
                     continue
                 seen_epitope_ids.add(id(e))
@@ -1050,13 +1135,9 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
             num_target_epitopes_to_keep=num_target_epitopes_to_keep,
         )]))
 
-        dna_vaf_raw = rep.get('DNA VAF')
-        if dna_vaf_raw is not None and not (
-                isinstance(dna_vaf_raw, float) and pd.isna(dna_vaf_raw)):
-            try:
-                dna_vaf_by_variant[variant] = float(dna_vaf_raw)
-            except (TypeError, ValueError):
-                pass
+        dna_vaf = _pvacseq_dna_vaf(rep)
+        if dna_vaf is not None:
+            dna_vaf_by_variant[variant] = dna_vaf
 
     if n_skipped:
         logger.warning(

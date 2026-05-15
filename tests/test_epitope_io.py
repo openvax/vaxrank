@@ -191,8 +191,154 @@ def test_load_pvacseq_populates_per_allele_scores():
 def test_load_pvacseq_missing_columns(tmp_path):
     bad_file = tmp_path / "bad.tsv"
     bad_file.write_text("Gene\tAA Change\nTP53\tG245S\n")
-    with pytest.raises(ValueError, match="missing required columns"):
+    with pytest.raises(ValueError, match="Could not detect pVACseq format"):
         load_pvacseq(bad_file)
+
+
+def _write_pvacseq_all_epitopes_fixture(tmp_path):
+    path = tmp_path / "pvacseq_all_epitopes.tsv"
+    columns = [
+        "Chromosome", "Start", "Stop", "Reference", "Variant",
+        "Transcript", "Variant Type", "Mutation", "Gene Name", "HLA Allele",
+        "Mutation Position", "MT Epitope Seq", "WT Epitope Seq",
+        "Median MT IC50 Score", "Median WT IC50 Score",
+        "Median MT Percentile", "Median WT Percentile",
+        "NetMHCpan MT IC50 Score", "NetMHCpan WT IC50 Score",
+        "NetMHCpan MT Percentile", "NetMHCpan WT Percentile",
+        "MHCflurry MT IC50 Score", "MHCflurry WT IC50 Score",
+        "MHCflurry MT Percentile", "MHCflurry WT Percentile",
+        "Tumor DNA Depth", "Tumor DNA VAF", "Tumor RNA Depth",
+        "Tumor RNA VAF", "Gene Expression", "Transcript Expression",
+    ]
+    rows = [
+        [
+            "chr1", "154590262", "154590263", "T", "A",
+            "ENST00000368474.9", "missense", "E806V", "ADAR",
+            "HLA-B*45:01", "5", "AERMGFTVV", "AERMGFTEV",
+            "76.11", "61.80", "0.10", "0.12",
+            "20.16", "28.54", "0.02", "0.04",
+            "61.51", "58.48", "0.09", "0.07",
+            "1233", "0.302", "1233", "0.348", "131.832", "84.961",
+        ],
+        [
+            "chr1", "154590262", "154590263", "T", "A",
+            "ENST00000368474.9", "missense", "E806V", "ADAR",
+            "HLA-B*45:01", "6", "AERMGFTVVT", "AERMGFTEVT",
+            "81.43", "40.97", "0.37", "0.20",
+            "NA", "NA", "NA", "NA",
+            "81.43", "40.97", "0.37", "0.20",
+            "1233", "0.302", "1233", "0.348", "131.832", "84.961",
+        ],
+        [
+            "chr1", "154590262", "154590263", "T", "A",
+            "ENST00000368474.9", "missense", "E806V", "ADAR",
+            "HLA-A*29:02", "5", "AERMGFTVV", "AERMGFTEV",
+            "850.30", "900.10", "2.50", "2.80",
+            "840.0", "890.0", "2.4", "2.7",
+            "860.6", "910.2", "2.6", "2.9",
+            "1233", "0.302", "1233", "0.348", "131.832", "84.961",
+        ],
+    ]
+    lines = ["\t".join(columns)]
+    lines.extend("\t".join(row) for row in rows)
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def _write_pvacseq_duplicate_peptide_fixture(tmp_path):
+    path = tmp_path / "pvacseq_duplicate_peptide.tsv"
+    columns = [
+        "Chromosome", "Start", "Stop", "Reference", "Variant",
+        "Transcript", "Variant Type", "Mutation", "Gene Name", "HLA Allele",
+        "Mutation Position", "MT Epitope Seq", "WT Epitope Seq",
+        "Median MT IC50 Score", "Median WT IC50 Score",
+        "Median MT Percentile", "Median WT Percentile",
+        "Tumor DNA Depth", "Tumor DNA VAF", "Tumor RNA Depth",
+        "Tumor RNA VAF", "Gene Expression", "Transcript Expression",
+    ]
+    rows = [
+        [
+            "chr1", "154590262", "154590263", "T", "A",
+            "ENST00000368474.9", "missense", "E806V", "ADAR",
+            "HLA-B*45:01", "5", "AERMGFTVV", "AERMGFTEV",
+            "76.11", "61.80", "0.10", "0.12",
+            "1233", "0.80", "1233", "0.348", "131.832", "84.961",
+        ],
+        [
+            "chr2", "200000", "200001", "G", "C",
+            "ENST00000288602.6", "missense", "V600E", "BRAF",
+            "HLA-B*45:01", "5", "AERMGFTVV", "AERMGFTEV",
+            "410.00", "900.10", "2.50", "2.80",
+            "900", "0.20", "900", "0.100", "70.0", "42.0",
+        ],
+    ]
+    lines = ["\t".join(columns)]
+    lines.extend("\t".join(row) for row in rows)
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def test_load_pvacseq_all_epitopes_flavor(tmp_path):
+    path = _write_pvacseq_all_epitopes_fixture(tmp_path)
+    report_df, epitopes = load_pvacseq(path)
+
+    assert len(report_df) == 3
+    # Same source + peptide groups the two AERMGFTVV alleles together.
+    assert len(epitopes) == 2
+    multi_allele = next(e for e in epitopes if e.sequence == "AERMGFTVV")
+    assert {p.allele for p in multi_allele.predictions_flat()} == {
+        "HLA-A*29:02", "HLA-B*45:01"}
+    assert multi_allele.wt.sequence == "AERMGFTEV"
+    assert multi_allele.per_allele_scores
+
+    topiary_df = report_df.attrs["topiary_df"]
+    assert "pvacseq_mhcflurry_ic50_mt" in topiary_df.columns
+    assert "pvacseq_mhcflurry_ic50_mt" in report_df.columns
+    assert set(report_df["MHC class"]) == {"I"}
+
+
+def test_pvacseq_all_epitopes_per_algorithm_column_scores(tmp_path):
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+    import pandas as pd
+
+    path = _write_pvacseq_all_epitopes_fixture(tmp_path)
+    report_df, epitopes = load_pvacseq(path)
+    csv_path = tmp_path / "scored.csv"
+    cfg = EpitopeConfig(score_expr="pvacseq_mhcflurry_ic50_mt")
+
+    write_neoepitope_report(
+        report_df, epitopes, csv_report_path=str(csv_path),
+        epitope_config=cfg)
+
+    result = pd.read_csv(csv_path)
+    scored = result[
+        (result["Mutant peptide sequence"] == "AERMGFTVV")
+        & (result["Allele"] == "HLA-B*45:01")
+    ].iloc[0]
+    assert scored["vaxrank_score"] == pytest.approx(61.51)
+
+
+def test_pvacseq_source_keyed_filtered_scores_do_not_broadcast(tmp_path):
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import write_neoepitope_report
+    import pandas as pd
+
+    path = _write_pvacseq_duplicate_peptide_fixture(tmp_path)
+    report_df, epitopes = load_pvacseq(path)
+    csv_path = tmp_path / "filtered.csv"
+    cfg = EpitopeConfig(
+        filter_expr="tumor_dna_vaf > 0.5",
+        score_expr="affinity.value")
+
+    write_neoepitope_report(
+        report_df, epitopes, csv_report_path=str(csv_path),
+        epitope_config=cfg)
+
+    result = pd.read_csv(csv_path)
+    by_source = result.set_index("Source sequence name")["vaxrank_score"]
+    assert by_source["chr1-154590262-T-A"] == pytest.approx(76.11)
+    assert by_source["chr2-200000-G-C"] == 0.0
 
 
 # ── LENS import ──────────────────────────────────────────────────────────────
@@ -1365,5 +1511,3 @@ def test_lens_cli_errors_when_no_output_flag_set():
     lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
     with pytest.raises(ValueError, match="No output path specified"):
         main(["--input-lens", lens_path])
-
-
