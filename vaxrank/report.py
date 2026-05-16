@@ -26,6 +26,11 @@ from varcode import load_vcf_fast
 from .cancer_hotspots import get_hotspot_url
 from .manufacturability import ManufacturabilityScores
 from .processing import PEPSICKLE_PREDICTOR_NAME
+from .varcode_effects import (
+    OUTCOME_SELECTION_MULTI_OUTCOME,
+    is_multi_outcome_effect,
+    summarize_varcode_effect_outcomes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +194,7 @@ class TemplateDataCreator(object):
         ])
         return variant_data
 
-    def _effect_data(self, predicted_effect):
+    def _effect_data(self, predicted_effect, selected_effect=None):
         """OrderedDict with info about the given varcode effect.
 
         ``predicted_effect`` may be ``None`` on external-input paths
@@ -198,19 +203,24 @@ class TemplateDataCreator(object):
         Render those rows with ``"—"`` placeholders rather than
         crash.
         """
-        if predicted_effect is None:
+        display_effect = selected_effect or predicted_effect
+        if display_effect is None:
             return OrderedDict([
                 ('Effect type', '—'),
                 ('Transcript name', '—'),
                 ('Transcript ID', '—'),
                 ('Effect description', '—'),
             ])
-        return OrderedDict([
-            ('Effect type', predicted_effect.__class__.__name__),
-            ('Transcript name', predicted_effect.transcript_name),
-            ('Transcript ID', predicted_effect.transcript_id),
-            ('Effect description', predicted_effect.short_description),
+        effect_data = OrderedDict([
+            ('Effect type', display_effect.__class__.__name__),
+            ('Transcript name', display_effect.transcript_name or '—'),
+            ('Transcript ID', display_effect.transcript_id or '—'),
+            ('Effect description', display_effect.short_description),
         ])
+        if is_multi_outcome_effect(predicted_effect):
+            effect_data.update(summarize_varcode_effect_outcomes(
+                predicted_effect))
+        return effect_data
 
     def _peptide_header_display_data(self, vaccine_peptide, rank):
         """
@@ -474,11 +484,16 @@ class TemplateDataCreator(object):
 
             top_peptide = vaccine_peptides[0]
             variant_data = self._variant_data(variant, top_peptide)
-            predicted_effect = top_peptide.mutant_protein_fragment.predicted_effect()
-            effect_data = self._effect_data(predicted_effect)
+            mutant_protein_fragment = top_peptide.mutant_protein_fragment
+            predicted_effect = mutant_protein_fragment.predicted_effect()
+            predicted_effect_outcomes = mutant_protein_fragment.predicted_effect(
+                outcome_selection=OUTCOME_SELECTION_MULTI_OUTCOME)
+            effect_data = self._effect_data(
+                predicted_effect_outcomes,
+                selected_effect=predicted_effect)
 
             databases = self._databases(
-                variant, predicted_effect, top_peptide.mutant_protein_fragment.gene_name)
+                variant, predicted_effect, mutant_protein_fragment.gene_name)
 
             peptides = []
             for j, vaccine_peptide in enumerate(vaccine_peptides):

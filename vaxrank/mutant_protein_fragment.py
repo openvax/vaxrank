@@ -18,6 +18,13 @@ from typing import Any
 from serializable import DataclassSerializable
 from varcode.effects import top_priority_effect
 
+from .varcode_effects import (
+    OUTCOME_SELECTION_HIGHEST_PRIORITY,
+    OUTCOME_SELECTION_MOST_LIKELY,
+    OUTCOME_SELECTION_MULTI_OUTCOME,
+    select_varcode_effect_outcome,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -193,9 +200,10 @@ class MutantProteinFragment(DataclassSerializable):
         using varcode's MutantTranscript.  Used as an opt-in fallback when
         isovar has no RNA support for a variant.
 
-        Transcript selection: among protein-modifying effects, pick the one
-        with the longest mutant protein, breaking ties by lex-sorted
-        transcript ID.  (Effects are already priority-sorted by varcode.)
+        Transcript selection: ask varcode 5 for splice outcome sets, collapse
+        each to its highest-priority concrete outcome, then choose the most
+        protein-disruptive effect. Within that tier, pick the longest mutant
+        protein, breaking ties by lex-sorted transcript ID.
 
         Parameters
         ----------
@@ -207,12 +215,20 @@ class MutantProteinFragment(DataclassSerializable):
         -------
         MutantProteinFragment or None
         """
+        from varcode.effects.effect_ordering import effect_priority
         from varcode.mutant_transcript import apply_variant_to_transcript
 
-        effects = variant.effects()
+        effects = variant.effects(splice_outcomes=True)
         coding_effects = [
-            e for e in effects
-            if hasattr(e, 'transcript') and e.modifies_protein_sequence
+            select_varcode_effect_outcome(e, OUTCOME_SELECTION_HIGHEST_PRIORITY)
+            for e in effects
+        ]
+        coding_effects = [
+            e for e in coding_effects
+            if (
+                e is not None and
+                hasattr(e, 'transcript') and
+                e.modifies_protein_sequence)
         ]
         if not coding_effects:
             logger.debug(
@@ -220,26 +236,37 @@ class MutantProteinFragment(DataclassSerializable):
                 variant.short_description)
             return None
 
-        # Among same-type effects (same priority tier), prefer longest protein
-        # then lex-sorted transcript ID.  variant.effects() is already sorted
-        # by priority, so the first element's type defines the top tier.
-        best_type = type(coding_effects[0])
-        same_tier = [e for e in coding_effects if type(e) is best_type]
+        # Prefer the most protein-disruptive concrete outcome, then choose
+        # the longest protein / lex-sorted transcript within that tier.
+        best_priority = max(effect_priority(e) for e in coding_effects)
+        same_tier = [
+            e for e in coding_effects
+            if effect_priority(e) == best_priority
+        ]
         same_tier.sort(key=lambda e: (
-            -len(e.transcript.protein_sequence or ''),
+            -len(
+                getattr(e, 'mutant_protein_sequence', None) or
+                e.transcript.protein_sequence or ''),
             e.transcript.id,
         ))
         best_effect = same_tier[0]
         transcript = best_effect.transcript
 
-        mt = apply_variant_to_transcript(variant, transcript)
-        if mt is None or mt.mutant_protein_sequence is None:
+        mut_protein = getattr(best_effect, 'mutant_protein_sequence', None)
+        if mut_protein is None:
+            mt = getattr(best_effect, 'mutant_transcript', None)
+            if mt is not None:
+                mut_protein = mt.mutant_protein_sequence
+        if mut_protein is None:
+            mt = apply_variant_to_transcript(variant, transcript)
+            if mt is not None:
+                mut_protein = mt.mutant_protein_sequence
+        if mut_protein is None:
             logger.debug(
                 "MutantTranscript construction failed for %s on %s",
                 variant.short_description, transcript.id)
             return None
 
-        mut_protein = mt.mutant_protein_sequence
         ref_protein = transcript.protein_sequence
         if not ref_protein:
             return None
@@ -385,8 +412,16 @@ class MutantProteinFragment(DataclassSerializable):
             subsequences = subsequences[:limit]
         return subsequences
 
-    def predicted_effect(self):
+    def predicted_effect(
+            self,
+            outcome_selection=OUTCOME_SELECTION_HIGHEST_PRIORITY):
         """Top-priority varcode effect across the supporting transcripts.
+
+        Varcode 5 can represent splice-disrupting variants as multi-outcome
+        sets. By default vaxrank collapses those sets to the highest-priority
+        concrete outcome so peptide mechanics keep working with a single
+        protein effect. Use ``outcome_selection="most_likely"`` for producer
+        order, or ``outcome_selection="multi_outcome"`` for report metadata.
 
         Returns ``None`` when no Transcript objects are available —
         common on external-input paths (LENS / pVACseq) where a
@@ -405,15 +440,27 @@ class MutantProteinFragment(DataclassSerializable):
         invalid transcript data (``ValueError``, ``KeyError``); other
         exceptions propagate so genuine bugs aren't swallowed.
         """
+        if outcome_selection not in {
+                OUTCOME_SELECTION_HIGHEST_PRIORITY,
+                OUTCOME_SELECTION_MOST_LIKELY,
+                OUTCOME_SELECTION_MULTI_OUTCOME}:
+            select_varcode_effect_outcome(None, outcome_selection)
         if not self.supporting_reference_transcripts:
             return None
         # Imported here to keep the module-load cost down and avoid a
         # circular-ish import (varcode is heavy).
         from varcode.errors import ReferenceMismatchError
+        from varcode.splice_outcomes import enumerate_splice_outcomes
         effects = []
         for t in self.supporting_reference_transcripts:
             try:
-                effects.append(self.variant.effect_on_transcript(t))
+                effect = self.variant.effect_on_transcript(t)
+                effect = enumerate_splice_outcomes(effect)
+                effect = select_varcode_effect_outcome(
+                    effect,
+                    outcome_selection=outcome_selection)
+                if effect is not None:
+                    effects.append(effect)
             except (ReferenceMismatchError, ValueError, KeyError) as e:
                 logger.debug(
                     "varcode.effect_on_transcript failed for %s on %s: "
