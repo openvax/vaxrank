@@ -15,6 +15,8 @@ from os.path import join, dirname
 
 import pandas as pd
 
+from .varcode_effects import select_varcode_effect_outcome
+
 
 _ENSEMBL_GENE_ID_COLUMN_NAME = 'Ensembl Gene ID'
 _MUTATION_COLUMN_NAME = 'Mutation'
@@ -109,7 +111,9 @@ class GenePathwayCheck(object):
             Variant object to evaluate
         """
         try:
-            effect_description = variant.effects().top_priority_effect().short_description
+            effect = variant.effects(splice_outcomes=True).top_priority_effect()
+            effect = select_varcode_effect_outcome(effect)
+            effect_description = effect.short_description
             overlapping_gene_ids = variant.gene_ids
         except ValueError:
             # Variant is on a contig not in the reference genome
