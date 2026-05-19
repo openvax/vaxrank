@@ -23,7 +23,7 @@ from topiary.ranking import EvalContext, apply_filter
 
 from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
-from .epitope_dsl import build_filter_node, build_score_node
+from .epitope_dsl import build_filter_node, build_score_node, drop_empty_sample_name
 from .mutant_protein_fragment import MutantProteinFragment
 from .candidate_epitope import (
     CandidateEpitope, SOURCE_CLASS_MUTATION,
@@ -122,6 +122,7 @@ def predict_epitopes(
 
     if predictions_df.empty:
         return []
+    predictions_df = drop_empty_sample_name(predictions_df)
 
     # ``default_methods`` (per-kind ``prediction_method_name`` defaults
     # for unqualified DSL refs) is required when multi-predictor data
@@ -183,6 +184,7 @@ def predict_epitopes(
     if valid_wt_peptides:
         try:
             wt_df = topiary_predictor.predict_from_named_peptides(valid_wt_peptides)
+            wt_df = drop_empty_sample_name(wt_df)
             for _, row in wt_df.iterrows():
                 key = (row["source_sequence_name"], row["allele"])
                 wt_predictions_grouped[key] = row
