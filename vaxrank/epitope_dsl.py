@@ -88,6 +88,25 @@ def _kind_for_method(method_name):
     return _METHOD_KIND_MAP.get(str(method_name).lower(), "pMHC_affinity")
 
 
+def drop_empty_sample_name(df):
+    """Drop ``sample_name`` when topiary emits it with no real values.
+
+    Topiary 5.16.2+ prepends ``sample_name`` to the group index whenever
+    the column is present with any non-NaN value — and topiary's
+    ``predict_*`` methods now always emit the column filled with empty
+    strings, which count as non-NaN. Vaxrank is single-sample and would
+    rather keep the group key 4-wide than carry a placeholder level
+    through every downstream lookup.
+    """
+    if "sample_name" not in df.columns:
+        return df
+    has_real_value = (
+        df["sample_name"].dropna().astype(str).str.strip().ne("").any())
+    if has_real_value:
+        return df
+    return df.drop(columns=["sample_name"])
+
+
 def epitopes_to_topiary_df(epitopes):
     """Convert a list of :class:`vaxrank.candidate_epitope.CandidateEpitope` into the
     topiary long-format DataFrame consumed by
@@ -115,7 +134,6 @@ def epitopes_to_topiary_df(epitopes):
         source_name = ctx.source_sequence or ctx.sequence
         for p in ctx.predictions_flat():
             rows.append({
-                "sample_name": "",
                 "source_sequence_name": source_name,
                 "peptide": p.peptide,
                 "peptide_offset": ctx.offset,

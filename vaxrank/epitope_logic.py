@@ -23,7 +23,7 @@ from topiary.ranking import EvalContext, apply_filter
 
 from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
-from .epitope_dsl import build_filter_node, build_score_node
+from .epitope_dsl import build_filter_node, build_score_node, drop_empty_sample_name
 from .mutant_protein_fragment import MutantProteinFragment
 from .candidate_epitope import (
     CandidateEpitope, SOURCE_CLASS_MUTATION,
@@ -122,6 +122,7 @@ def predict_epitopes(
 
     if predictions_df.empty:
         return []
+    predictions_df = drop_empty_sample_name(predictions_df)
 
     # ``default_methods`` (per-kind ``prediction_method_name`` defaults
     # for unqualified DSL refs) is required when multi-predictor data
@@ -170,20 +171,22 @@ def predict_epitopes(
                 global_epitope_start_pos:global_epitope_start_pos + peptide_length]
             wt_peptides[peptide] = wt_peptide
 
-    # Predict binding for WT peptides via Topiary
+    # Name each WT entry after its mutant peptide so the prediction
+    # frame keys cleanly by mutant peptide. ``predict_from_named_peptides``
+    # scores the exact peptide given (no k-mer sliding).
     wt_predictions_grouped = {}
     min_peptide_length = min(predictions_df["peptide_length"]) if len(predictions_df) > 0 else DEFAULT_MIN_KMER_LENGTH
     valid_wt_peptides = {
-        f"wt_{i}": seq
-        for i, seq in enumerate(set(wt_peptides.values()))
-        if len(seq) >= min_peptide_length
+        mutant_pep: wt_pep
+        for mutant_pep, wt_pep in wt_peptides.items()
+        if len(wt_pep) >= min_peptide_length
     }
     if valid_wt_peptides:
         try:
-            wt_df = topiary_predictor.predict_from_named_sequences(valid_wt_peptides)
-            # Index WT predictions by (peptide, allele)
+            wt_df = topiary_predictor.predict_from_named_peptides(valid_wt_peptides)
+            wt_df = drop_empty_sample_name(wt_df)
             for _, row in wt_df.iterrows():
-                key = (row["peptide"], row["allele"])
+                key = (row["source_sequence_name"], row["allele"])
                 wt_predictions_grouped[key] = row
         except Exception:
             logger.error(
@@ -243,9 +246,9 @@ def predict_epitopes(
         # don't get a meaningful WT pair.
         wt_pred = None
         if overlaps_mutation:
-            wt_peptide = wt_peptides[peptide]
-            wt_row = wt_predictions_grouped.get((wt_peptide, row["allele"]))
+            wt_row = wt_predictions_grouped.get((peptide, row["allele"]))
             if wt_row is None:
+                wt_peptide = wt_peptides[peptide]
                 if len(wt_peptide) < min_peptide_length:
                     logger.info(
                         'No prediction for too-short WT epitope %s: possible stop-loss variant',
@@ -260,7 +263,7 @@ def predict_epitopes(
                     predictor_name=tool,
                     predictor_version=row.get("predictor_version", "") or "",
                     allele=row["allele"],
-                    peptide=wt_peptide,
+                    peptide=wt_row["peptide"],
                     value=wt_ic50,
                     score=0.0,
                     percentile_rank=None,

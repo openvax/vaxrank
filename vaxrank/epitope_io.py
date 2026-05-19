@@ -337,8 +337,9 @@ def load_pvacseq(path):
     """
     from topiary import read_pvacseq
 
+    from .epitope_dsl import drop_empty_sample_name
     result = read_pvacseq(path)
-    topiary_df = result.df
+    topiary_df = drop_empty_sample_name(result.df)
     epitope_rows, n_rows = _topiary_pvacseq_to_epitope_rows(topiary_df)
     report_rows = [
         _build_pvacseq_report_row(row)
