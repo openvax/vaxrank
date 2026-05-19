@@ -170,12 +170,9 @@ def predict_epitopes(
                 global_epitope_start_pos:global_epitope_start_pos + peptide_length]
             wt_peptides[peptide] = wt_peptide
 
-    # Predict binding for WT peptides. Each WT entry is named after the
-    # mutant peptide it pairs with, so the resulting frame can be looked
-    # up directly by the mutant peptide string at consumer time —
-    # ``predict_from_named_peptides`` scores the exact peptide given
-    # (no k-mer sliding) so ``source_sequence_name`` uniquely identifies
-    # each row.
+    # Name each WT entry after its mutant peptide so the prediction
+    # frame keys cleanly by mutant peptide. ``predict_from_named_peptides``
+    # scores the exact peptide given (no k-mer sliding).
     wt_predictions_grouped = {}
     min_peptide_length = min(predictions_df["peptide_length"]) if len(predictions_df) > 0 else DEFAULT_MIN_KMER_LENGTH
     valid_wt_peptides = {

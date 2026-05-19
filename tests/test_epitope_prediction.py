@@ -142,6 +142,89 @@ def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel(mouse_gen
         assert per_method == {'mhcflurry', 'netmhcpan'}
 
 
+def test_wt_prediction_uses_named_peptides_keyed_by_mutant(mouse_genome):
+    """WT comparator path: ``predict_from_named_peptides`` is called with
+    each entry named after its mutant peptide, and the resulting row's
+    own ``peptide`` column populates the CandidateEpitope's WT — not a
+    side dict. Locks in the one-hop lookup invariant."""
+    from unittest.mock import patch
+    import pandas as pd
+    from topiary import TopiaryPredictor
+
+    wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-201")[0]
+    protein_fragment = MutantProteinFragment(
+        variant=Variant('X', '8125624', 'C', 'A'),
+        gene_name='Wdr13',
+        amino_acids='KLQGHSAPVLDVIVNCDESLLASSD',
+        mutant_amino_acid_start_offset=12,
+        mutant_amino_acid_end_offset=13,
+        n_overlapping_reads=71, n_alt_reads=25, n_ref_reads=46,
+        n_alt_reads_supporting_protein_sequence=2,
+        supporting_reference_transcripts=[wdr13_transcript])
+
+    # 9-mer at offset 8 covers [8, 17) — overlaps mutation at [12, 13).
+    mutant_peptide = protein_fragment.amino_acids[8:17]
+    mutant_df = pd.DataFrame([{
+        'peptide': mutant_peptide, 'peptide_length': 9,
+        'peptide_offset': 8, 'allele': 'H-2-Kb',
+        'affinity': 100.0, 'percentile_rank': 0.5,
+        'value': 100.0, 'prediction_method_name': 'mhcflurry',
+        'source_sequence_name': 'Wdr13', 'kind': 'pMHC_affinity',
+        'predictor_version': '', 'score': 0.5,
+    }])
+
+    # Distinct WT string so we can verify the consumer reads it from
+    # the row, not from a side dict.
+    stub_wt_sequence = 'WTSEQUENC'
+    captured_calls = []
+
+    def _stub_predict_wt(name_to_peptide):
+        captured_calls.append(dict(name_to_peptide))
+        return pd.DataFrame([{
+            'source_sequence_name': name, 'peptide': stub_wt_sequence,
+            'peptide_length': 9, 'peptide_offset': 0,
+            'allele': 'H-2-Kb', 'affinity': 1000.0,
+            'percentile_rank': 5.0, 'value': 1000.0,
+            'prediction_method_name': 'mhcflurry',
+            'predictor_version': '', 'score': 0.1,
+            'kind': 'pMHC_affinity',
+        } for name in name_to_peptide])
+
+    class _StubTopiary(TopiaryPredictor):
+        def __init__(self):
+            pass
+
+        def predict_from_named_sequences(self, _named_sequences):
+            return mutant_df
+
+        def predict_from_named_peptides(self, name_to_peptide):
+            return _stub_predict_wt(name_to_peptide)
+
+    cfg = EpitopeConfig(
+        min_epitope_score=0,
+        default_methods={'pMHC_affinity': 'mhcflurry'})
+    with patch('vaxrank.epitope_logic.ReferenceProteome'):
+        epitopes = predict_epitopes(
+            mhc_predictor=_StubTopiary(),
+            protein_fragment=protein_fragment,
+            epitope_config=cfg,
+            genome=mouse_genome)
+
+    # WT call happened exactly once, named by the mutant peptide.
+    assert len(captured_calls) == 1
+    assert list(captured_calls[0].keys()) == [mutant_peptide]
+
+    # The CandidateEpitope's WT peptide came from the row's
+    # ``peptide`` column, not from any side dict.
+    assert len(epitopes) == 1
+    wt = epitopes[0].wt
+    assert wt is not None
+    assert wt.sequence == stub_wt_sequence
+    wt_leaves = wt.predictions_flat()
+    assert len(wt_leaves) == 1
+    assert wt_leaves[0].value == 1000.0
+
+
 def test_mhc_predictor_error(mouse_genome):
     wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-201")[0]
 
