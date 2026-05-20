@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 
 from .manufacturability import ManufacturabilityScores
 from .vaccine_library import (
+    gene_names_from_antigen_names,
     get_linker,
     iter_named_antigens,
     select_antigen_window,
@@ -180,10 +181,16 @@ def _antigen_records(ranked_vaccine_peptides, antigen_content,
                     "epitope predictions available.", base_name)
                 continue
             for k, ep in enumerate(tops):
-                # When epitopes_per_antigen=1 keep the legacy
-                # ``<name>_epitope`` suffix; for >1 disambiguate.
-                suffix = "_epitope" if len(tops) == 1 else "_epitope%d" % (k + 1)
-                yield base_name + suffix, ep.sequence
+                # Tag the minimal-epitope antigen inside the category
+                # parens so the gene stays cleanly parseable:
+                # "GENE (SNV)" → "GENE (SNV, epitope)". For >1 per
+                # antigen, number them.
+                tag = "epitope" if len(tops) == 1 else "epitope%d" % (k + 1)
+                if base_name.endswith(")"):
+                    name = "%s, %s)" % (base_name[:-1], tag)
+                else:
+                    name = "%s (%s)" % (base_name, tag)
+                yield name, ep.sequence
         else:
             # mutation_spanning: pick a mutation-centered window
             yield base_name, select_antigen_window(
@@ -386,8 +393,10 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
 
     with open(fasta_path, 'w') as f:
         for c in constructs:
-            f.write(">%s antigens=%s length=%d\n" % (
-                c.name, ','.join(c.antigen_names), len(c.sequence)))
+            genes = gene_names_from_antigen_names(c.antigen_names)
+            f.write(">%s antigens=%s length=%d genes=%s\n" % (
+                c.name, ','.join(c.antigen_names), len(c.sequence),
+                ','.join(genes)))
             for i in range(0, len(c.sequence), 80):
                 f.write(c.sequence[i:i + 80] + "\n")
 
