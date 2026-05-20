@@ -868,22 +868,35 @@ def _emit_outputs(args, ranked, source):
             raise
         fired.append(vtype)
 
+    if source == 'external':
+        source_label = (
+            'LENS import' if getattr(args, 'input_lens', None)
+            else 'pVACseq import' if getattr(args, 'input_pvacseq', None)
+            else 'external import')
+    else:
+        source_label = 'full pipeline'
     logger.info(
         "Vaccine-type dispatch [%s]: types=%s wrote=%s",
-        source, vaccine_types, fired)
+        source_label, vaccine_types, fired)
 
 
 _AUTO_OUTPUT_FILENAMES = {
-    # Pipeline path → ranked-peptides CSV / JSON.
+    # Pipeline path → ranked-peptides CSV / JSON + the human-readable
+    # ASCII and PDF vaccine reports.
     'pipeline': {
         'output_csv': 'ranked_vaccine_peptides.csv',
         'output_json_file': 'ranked_vaccine_peptides.json',
+        'output_ascii_report': 'vaccine_report.txt',
+        'output_pdf_report': 'vaccine_report.pdf',
     },
-    # External path → per-(peptide, allele) neoepitope CSV; no
-    # JSON dump (the LENS / pVACseq path doesn't build the rich
-    # in-memory result that ``--output-json-file`` serializes).
+    # External path → per-(peptide, allele) neoepitope CSV plus the
+    # same ASCII + PDF reports. No JSON dump (the LENS / pVACseq path
+    # doesn't build the rich in-memory result that
+    # ``--output-json-file`` serializes).
     'external': {
         'output_csv': 'neoepitope_predictions.csv',
+        'output_ascii_report': 'vaccine_report.txt',
+        'output_pdf_report': 'vaccine_report.pdf',
     },
 }
 
@@ -1081,6 +1094,14 @@ def main(args_list=None):
                 a for a in (patient_info.mhc_alleles or [])
                 if a and a != LENS_PROVENANCE_MARKER
             ]
+            # Surface the inferred alleles once, up front — every
+            # downstream consumer (linker optimizer, coverage-aware
+            # antigen selection, report) reuses this same set.
+            if args._inferred_mhc_alleles_from_lens:
+                alleles = args._inferred_mhc_alleles_from_lens
+                logger.info(
+                    "Inferred %d MHC allele(s) from the report: %s",
+                    len(alleles), ", ".join(alleles))
         # Per-(peptide, allele) CSV / XLSX report is unique to the
         # external-input path; emit it before the shared dispatch.
         _emit_neoepitope_report_external(args, report_df, predictions)

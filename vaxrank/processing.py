@@ -324,18 +324,19 @@ def annotate_processing(epitopes, predictor=None,
 
     if n_annotated:
         logger.info(
-            "Pepsickle credibility tagging: annotated %d / %d "
+            "Pepsickle proteasomal-cleavage annotation: annotated %d / %d "
             "CandidateEpitope(s) across %d unique source sequence(s).",
             n_annotated, len(epitopes_list), len(by_source))
     if n_skipped_peptide_not_in_context:
+        # LENS-import mismatches are already dropped at load
+        # (epitope_io.load_lens); reaching here means a pipeline-path
+        # peptide wasn't locatable in its source, which is unexpected.
         ex_peptide, ex_source = skipped_examples[0]
         logger.warning(
-            "Pepsickle credibility tagging: skipped %d / %d "
-            "CandidateEpitope(s) because the peptide is not a substring "
-            "of its pep_context source — peptide and pep_context "
-            "were built from different isoforms / annotation "
-            "snapshots. Example: peptide=%r not found in "
-            "pep_context=%r.",
+            "Pepsickle proteasomal-cleavage annotation: skipped %d / %d "
+            "CandidateEpitope(s) whose peptide isn't a substring of its "
+            "source sequence. Example: peptide=%r not found in "
+            "source=%r.",
             n_skipped_peptide_not_in_context, len(epitopes_list),
             ex_peptide, ex_source)
     return n_annotated, processing_predictions

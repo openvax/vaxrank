@@ -576,6 +576,12 @@ def load_lens(path):
 
     epitope_rows = []
     report_rows = []
+    # Rows whose peptide isn't a substring of a non-empty pep_context —
+    # peptide and pep_context came from different isoforms / annotation
+    # snapshots upstream. Dropped here (not carried into the report,
+    # constructs, or pepsickle); summarized once after the loop.
+    n_dropped_peptide_context_mismatch = 0
+    mismatch_examples = []
     for _, row in df.iterrows():
         peptide = row.get("peptide", "")
         if not peptide or pd.isna(peptide):
@@ -593,6 +599,23 @@ def load_lens(path):
         # LENS doesn't emit a WT IC50 column directly. Computed
         # once per row (shared across detected predictors).
         agretopicity = _safe_float(row.get("mhcflurry_agretopicity"))
+        # Locate the neoepitope inside its surrounding context once per
+        # row (pep_context is a row-level column, not per-predictor).
+        # LENS centers the peptide within pep_context but doesn't emit
+        # the offset directly; substring search recovers it. When
+        # pep_context is non-empty but doesn't contain the peptide, the
+        # two were built from different isoforms / annotation snapshots
+        # (an upstream LENS issue) — drop the row here rather than carry
+        # a fabricated offset downstream into the report, constructs,
+        # and pepsickle. An empty pep_context is a different case (no
+        # SLP window at all): keep it, offset 0, bare-neoepitope fallback.
+        pep_context = _safe_str(row.get("pep_context"))
+        if pep_context and str(peptide) not in pep_context:
+            n_dropped_peptide_context_mismatch += 1
+            if len(mismatch_examples) < 1:
+                mismatch_examples.append((str(peptide), pep_context))
+            continue
+        offset = pep_context.find(str(peptide)) if pep_context else 0
         row_added = False
         for d in chosen:
             value = _safe_float(row.get(d.value_col))
@@ -601,18 +624,6 @@ def load_lens(path):
             percentile_rank = (
                 _safe_float(row.get(d.percentile_col))
                 if d.percentile_col else None)
-            pep_context = _safe_str(row.get("pep_context"))
-            # Locate the neoepitope inside its surrounding context.
-            # LENS centers the peptide within pep_context but doesn't
-            # emit the offset directly; substring search recovers it.
-            # When the peptide isn't a substring (e.g. the row's
-            # pep_context is empty), offset stays at 0 — downstream
-            # code (vaxrank.processing) re-locates by substring search
-            # too and reports drift, so this is recoverable.
-            offset = (
-                pep_context.find(str(peptide))
-                if pep_context and str(peptide) in pep_context
-                else 0)
             # Derive WT IC50 from agretopicity, only for the
             # mhcflurry-affinity predictor (the value matches that
             # tool's IC50 scale). Other predictors leave wt_ic50=None.
@@ -665,6 +676,16 @@ def load_lens(path):
             display_pred=display_pred,
             chosen_tools=[d.tool for d in chosen],
         ))
+
+    if n_dropped_peptide_context_mismatch:
+        ex_peptide, ex_context = mismatch_examples[0]
+        logger.warning(
+            "Dropped %d LENS row(s) whose peptide isn't a substring of "
+            "its (non-empty) pep_context — peptide and pep_context were "
+            "built from different isoforms / annotation snapshots "
+            "upstream. These are excluded from the report and "
+            "constructs. Example: peptide=%r not in pep_context=%r.",
+            n_dropped_peptide_context_mismatch, ex_peptide, ex_context)
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
     epitopes = candidate_epitopes_from_rows(epitope_rows)

@@ -1208,11 +1208,21 @@ def _patient_info_from_external(ranked, source_path, patient_id,
     mhc_alleles = []
     if predictions:
         seen = set()
-        for p in predictions:
-            allele = getattr(p, 'allele', '') or ''
-            if allele and allele not in seen:
-                seen.add(allele)
-                mhc_alleles.append(allele)
+        for ep in predictions:
+            # ``predictions`` here is a list of CandidateEpitope, which
+            # has no ``.allele`` — its alleles are the keys of
+            # ``per_allele_scores`` (populated by the DSL at load).
+            # Fall back to the raw Prediction.allele list for any loader
+            # that doesn't populate per_allele_scores.
+            alleles = list((getattr(ep, 'per_allele_scores', None) or {}))
+            if not alleles:
+                alleles = [
+                    getattr(p, 'allele', '')
+                    for p in (getattr(ep, 'predictions', None) or [])]
+            for allele in alleles:
+                if allele and allele not in seen:
+                    seen.add(allele)
+                    mhc_alleles.append(allele)
         if mhc_alleles:
             mhc_alleles = sorted(mhc_alleles) + [LENS_PROVENANCE_MARKER]
     return PatientInfo(

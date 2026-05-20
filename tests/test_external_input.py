@@ -817,13 +817,14 @@ def test_emit_outputs_logs_active_and_fired_dispatch(caplog, tmp_path):
 
     out_dir = str(tmp_path / "out")
     args = _mrna_args(out_dir)
+    args.input_lens = path  # source-specific label derives from this
     with caplog.at_level(logging.INFO):
         _emit_outputs(args, ranked, source='external')
     dispatch = [r.message for r in caplog.records
                 if 'Vaccine-type dispatch' in r.message]
     assert len(dispatch) == 1
     line = dispatch[0]
-    assert "[external]" in line
+    assert "[LENS import]" in line
     assert "['mrna']" in line  # active types and fired list both ['mrna']
 
 

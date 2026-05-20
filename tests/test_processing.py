@@ -584,13 +584,12 @@ def test_re_location_warns_on_large_offset_drift(caplog):
 
 
 def test_warns_when_peptide_not_in_pep_context(caplog):
-    """LENS rows occasionally carry a ``peptide`` that isn't a
-    substring of its ``pep_context`` (peptide and pep_context built
-    from different isoforms / annotation snapshots — see Pt02
-    analysis, 8/2113 rows). Vaxrank skips those rows rather than
-    fabricate an offset, and emits a single aggregate WARN at the
-    end of ``annotate_processing`` with one example so the user can
-    file an upstream LENS bug."""
+    """A peptide that isn't a substring of its source sequence is
+    skipped during pepsickle annotation rather than given a fabricated
+    offset, with a single aggregate WARN at the end of
+    ``annotate_processing``. LENS-import mismatches are now dropped
+    earlier (``epitope_io.load_lens``); this is the defensive net for
+    anything that still reaches processing (e.g. the pipeline path)."""
     import logging
     # ``KLMXPV`` is one residue off from ``KLMNPV`` so it can't be
     # located in the source by substring or close-match search.
@@ -602,7 +601,7 @@ def test_warns_when_peptide_not_in_pep_context(caplog):
             predictor=StubPepsickle({source: [0.5] * len(source)}))
     assert n == 0
     skipped = [r for r in caplog.records
-               if 'not a substring' in r.message]
+               if "isn't a substring" in r.message]
     assert len(skipped) == 1, (
         "Expected exactly one aggregate skip-WARN; got %d" % len(skipped))
     assert "'KLMXPV'" in skipped[0].message
