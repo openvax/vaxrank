@@ -939,6 +939,74 @@ def _auto_populate_output_paths_from_dir(args):
             ", ".join("%s -> %s" % (a, p) for a, p in filled))
 
 
+def _write_run_summary(args, patient_info, source):
+    """Write a top-level ``run_summary.txt`` in --output-dir.
+
+    In multi-vaccine-type runs the constructs live in per-modality
+    subdirs (peptide/, mrna/), but this summary — plus the neoepitope
+    table and ASCII/PDF reports — sits at the top level as the shared
+    context both branches were built from: the inputs, the MHC alleles
+    in play, the antigen counts, and where each output landed. The
+    detailed LENS load funnel is in the run log."""
+    output_dir = getattr(args, 'output_dir', '') or ''
+    if not output_dir:
+        return
+    lines = ["Vaxrank run summary", "=" * 19, ""]
+    if getattr(args, 'input_lens', None):
+        lines.append("Input: LENS report — %s" % args.input_lens)
+    elif getattr(args, 'input_pvacseq', None):
+        lines.append("Input: pVACseq report — %s" % args.input_pvacseq)
+    else:
+        lines.append("Input: full pipeline")
+        for label, attr in (("vcf", "vcf"), ("bam", "bam")):
+            if getattr(args, attr, None):
+                lines.append("  %s: %s" % (label, getattr(args, attr)))
+
+    alleles = _resolve_target_alleles(args)
+    if alleles:
+        inferred = getattr(args, '_inferred_mhc_alleles_from_lens', None)
+        note = " (inferred from report)" if (
+            source == 'external' and inferred) else ""
+        lines += ["", "MHC alleles%s: %s" % (note, ", ".join(alleles))]
+
+    if patient_info is not None:
+        lines += [
+            "",
+            "Antigen counts:",
+            "  variants with antigens:    %d" % (
+                patient_info.num_somatic_variants or 0),
+            "  with resolved transcript:  %d" % (
+                patient_info.num_coding_effect_variants or 0),
+            "  with RNA support:          %d" % (
+                patient_info.num_variants_with_rna_support or 0),
+            "  with vaccine peptide(s):   %d" % (
+                patient_info.num_variants_with_vaccine_peptides or 0),
+        ]
+
+    lines += ["", "Outputs (relative to this directory):"]
+    for label, attr in (
+            ("neoepitope table", "output_csv"),
+            ("ASCII report", "output_ascii_report"),
+            ("PDF report", "output_pdf_report")):
+        path = getattr(args, attr, '') or ''
+        if path:
+            lines.append("  %-18s %s" % (
+                label + ":", os.path.relpath(path, output_dir)))
+    vaccine_types = _resolve_vaccine_types(args)
+    for vtype in vaccine_types:
+        target_dir = _vaccine_target_dir(output_dir, vtype, vaccine_types)
+        if target_dir:
+            lines.append("  %-18s %s/" % (
+                vtype + " constructs:",
+                os.path.relpath(target_dir, output_dir)))
+
+    os.makedirs(output_dir, exist_ok=True)
+    summary_path = os.path.join(output_dir, "run_summary.txt")
+    with open(summary_path, 'w') as f:
+        f.write("\n".join(lines) + "\n")
+    logger.info("Wrote run summary to %s", summary_path)
+
+
 def _confirm_output_dir_overwrite(args):
     """Confirm before writing into an existing, non-empty --output-dir.
 
@@ -1166,6 +1234,7 @@ def main(args_list=None):
             threshold=getattr(args, 'pepsickle_threshold', 0.5))
 
     _emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
+    _write_run_summary(args, patient_info, source)
 
     ########################
     # Template-based reports (PDF / HTML / ASCII)
