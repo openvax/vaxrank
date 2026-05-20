@@ -415,3 +415,40 @@ def test_lens_antigen_source_breakdown_orders_snv_indel_first():
             "'(missing)' must land last; got order %r" % kinds_in_order
     if snv_idx >= 0 and indel_idx >= 0:
         assert snv_idx < indel_idx
+
+
+# -- output-dir overwrite confirmation --------------------------------
+
+
+def test_confirm_overwrite_noop_for_missing_or_empty_dir(tmp_path):
+    """Missing or empty --output-dir needs no confirmation (no exit)."""
+    from vaxrank.cli.entry_point import _confirm_output_dir_overwrite
+    # missing
+    _confirm_output_dir_overwrite(
+        SimpleNamespace(output_dir=str(tmp_path / "nope"), force_overwrite=False))
+    # empty
+    (tmp_path / "empty").mkdir()
+    _confirm_output_dir_overwrite(
+        SimpleNamespace(output_dir=str(tmp_path / "empty"), force_overwrite=False))
+
+
+def test_confirm_overwrite_force_proceeds(tmp_path, caplog):
+    """--force-overwrite proceeds into a non-empty dir without prompting."""
+    from vaxrank.cli.entry_point import _confirm_output_dir_overwrite
+    (tmp_path / "f.txt").write_text("x")
+    with caplog.at_level(logging.INFO):
+        _confirm_output_dir_overwrite(
+            SimpleNamespace(output_dir=str(tmp_path), force_overwrite=True))
+    assert any('force-overwrite' in r.getMessage() for r in caplog.records)
+
+
+def test_confirm_overwrite_non_interactive_warns_and_proceeds(
+        tmp_path, caplog, monkeypatch):
+    """Non-interactive (no TTY) runs warn and proceed rather than hang."""
+    from vaxrank.cli import entry_point
+    (tmp_path / "f.txt").write_text("x")
+    monkeypatch.setattr(entry_point.sys.stdin, 'isatty', lambda: False)
+    with caplog.at_level(logging.WARNING):
+        entry_point._confirm_output_dir_overwrite(
+            SimpleNamespace(output_dir=str(tmp_path), force_overwrite=False))
+    assert any('already exists' in r.getMessage() for r in caplog.records)

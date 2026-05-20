@@ -939,6 +939,41 @@ def _auto_populate_output_paths_from_dir(args):
             ", ".join("%s -> %s" % (a, p) for a, p in filled))
 
 
+def _confirm_output_dir_overwrite(args):
+    """Confirm before writing into an existing, non-empty --output-dir.
+
+    Interactive (TTY) runs get a ``y/N`` prompt and abort on anything
+    but yes. Non-interactive / batch runs don't prompt (that would hang
+    a pipeline) — they proceed with a visible WARNING; pass
+    ``--force-overwrite`` to silence it. A missing or empty directory
+    needs no confirmation.
+    """
+    output_dir = getattr(args, 'output_dir', '') or ''
+    if not output_dir or not os.path.isdir(output_dir) or not os.listdir(
+            output_dir):
+        return
+    if getattr(args, 'force_overwrite', False):
+        logger.info(
+            "--output-dir %r exists and is non-empty; --force-overwrite "
+            "set, writing into it.", output_dir)
+        return
+    if not (sys.stdin.isatty() and sys.stderr.isatty()):
+        logger.warning(
+            "--output-dir %r already exists and is non-empty; writing "
+            "into it (non-interactive run — pass --force-overwrite to "
+            "silence this warning).", output_dir)
+        return
+    try:
+        reply = input(
+            "Output directory %r already exists and is non-empty. "
+            "Overwrite its contents? [y/N] " % output_dir)
+    except EOFError:
+        reply = ''
+    if reply.strip().lower() not in ('y', 'yes'):
+        logger.error("Aborted: --output-dir %r left untouched.", output_dir)
+        sys.exit(1)
+
+
 def configure_logging(args):
     logging.config.fileConfig(
         str(files('vaxrank').joinpath('logging.conf')),
@@ -1037,6 +1072,7 @@ def main(args_list=None):
     # --output-* flag, with no default destination). Applies to both
     # the VCF/BAM pipeline path and the external-input path.
     check_args(args)
+    _confirm_output_dir_overwrite(args)
 
     # Architecture (post-#252):
     #
