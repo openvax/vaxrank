@@ -337,11 +337,12 @@ def test_auto_populate_no_output_dir_is_a_noop():
 # -- LENS antigen-source breakdown ordering ---------------------------
 
 
-def test_lens_antigen_source_breakdown_logs_before_filters():
-    """The up-front ``LENS report contains N row(s); antigen_source
-    breakdown:`` log line must fire BEFORE the per-filter "skipped X
-    rows" lines so the operator sees the input composition before
-    the drop counts."""
+def test_lens_funnel_summarizes_input_composition():
+    """The consolidated ``LENS load funnel`` line replaces the old
+    scattered per-stage count lines. It must report the input row
+    count + antigen_source breakdown and the candidate-epitope count
+    in one block (so the operator isn't left correlating drop counts
+    across multiple lines)."""
     import os
     from vaxrank.epitope_io import load_lens
     from vaxrank.external_input import ranked_from_lens_predictions
@@ -355,23 +356,17 @@ def test_lens_antigen_source_breakdown_logs_before_filters():
     with _capture_logger('vaxrank.external_input', logging.INFO) as records:
         ranked_from_lens_predictions(predictions, lens_path)
 
-    breakdown_idx = [
-        i for i, r in enumerate(records)
-        if 'antigen_source breakdown' in r.getMessage()
-        and 'LENS report contains' in r.getMessage()
-    ]
-    skip_idx = [
-        i for i, r in enumerate(records)
-        if 'Skipped' in r.getMessage()
-        and 'variant_coords' in r.getMessage()
-    ]
-    if not breakdown_idx:
-        pytest.skip("Test fixture didn't trigger up-front breakdown line")
-    if skip_idx:
-        assert breakdown_idx[0] < skip_idx[0], (
-            "Up-front breakdown must log BEFORE filter messages; got "
-            "breakdown@%d, skipped@%d"
-            % (breakdown_idx[0], skip_idx[0]))
+    funnel = [r.getMessage() for r in records
+              if 'LENS load funnel' in r.getMessage()]
+    assert len(funnel) == 1, (
+        "Expected exactly one consolidated funnel line; got %d" % len(funnel))
+    msg = funnel[0]
+    assert 'rows in:' in msg
+    assert 'candidate epitopes scored' in msg
+    # The old per-stage lines must be gone (no double-counting).
+    assert not any('LENS report contains' in r.getMessage() for r in records)
+    assert not any(
+        'lack gene_name' in r.getMessage() for r in records)
 
 
 def test_lens_antigen_source_breakdown_orders_snv_indel_first():
@@ -395,13 +390,12 @@ def test_lens_antigen_source_breakdown_orders_snv_indel_first():
 
     msgs = [
         r.getMessage() for r in records
-        if 'LENS report contains' in r.getMessage()
-        and 'antigen_source breakdown' in r.getMessage()
+        if 'LENS load funnel' in r.getMessage()
     ]
     if not msgs:
-        pytest.skip("Test fixture didn't trigger up-front breakdown line")
+        pytest.skip("Test fixture didn't trigger the funnel line")
     line = msgs[0]
-    m = re.search(r'breakdown:\s*([^.]+)', line)
+    m = re.search(r'rows in:\s*([^\n]+)', line)
     assert m, "Couldn't parse breakdown segment from: %r" % line
     segments = [s.strip() for s in m.group(1).split(',')]
     kinds_in_order = [s.split('=')[0].strip() for s in segments]

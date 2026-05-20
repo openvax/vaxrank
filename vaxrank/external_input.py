@@ -39,6 +39,7 @@ Limitations:
 
 import dataclasses
 import logging
+import os
 
 import pandas as pd
 
@@ -528,9 +529,9 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
             return (2, -count, k)
         ordered = sorted(full_kinds.items(), key=_bucket_order)
         breakdown = ', '.join("%s=%d" % (k, v) for k, v in ordered)
-        logger.info(
-            "LENS report contains %d row(s); antigen_source "
-            "breakdown: %s.", len(rows), breakdown)
+    else:
+        full_kinds = {}
+        breakdown = ''
 
     groups = {}
     n_skipped_empty_coords = 0
@@ -555,17 +556,17 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
             skipped_kinds[kind_key] = skipped_kinds.get(kind_key, 0) + 1
             continue
         groups.setdefault(coords, []).append(r)
+    skipped_breakdown = ', '.join(
+        "%s=%d" % (k, v) for k, v in sorted(
+            skipped_kinds.items(), key=lambda kv: -kv[1]))
     if n_skipped_empty_coords:
-        breakdown = ', '.join(
-            "%s=%d" % (k, v) for k, v in sorted(
-                skipped_kinds.items(), key=lambda kv: -kv[1]))
-        logger.info(
-            "Skipped %d LENS row(s) with empty variant_coords; "
-            "antigen_source breakdown: %s.",
-            n_skipped_empty_coords, breakdown)
         # SNV / INDEL rows are *expected* to carry coords; flag them
         # separately so the user can chase upstream rather than assume
-        # "typical".
+        # "typical". (The non-coord rows aren't dropped from the run —
+        # they're still scored as candidate epitopes for the neoepitope
+        # report; they just can't be placed on the genome for the
+        # variant-based vaccine-construct ranking. The funnel below
+        # spells this out.)
         unexpected = {k: v for k, v in skipped_kinds.items()
                       if k.upper() in ('SNV', 'INDEL')}
         if unexpected:
@@ -785,85 +786,47 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
         k = r.get('antigen_source')
         return ('(missing)' if _is_missing(k) else str(k).strip())
 
-    def _kind_breakdown(rows_subset):
-        b = {}
-        for r in rows_subset:
-            k = _kind(r)
-            b[k] = b.get(k, 0) + 1
-        return ', '.join(
-            "%s=%d" % (k, v) for k, v in sorted(
-                b.items(), key=lambda kv: -kv[1]))
-
     rows_no_gene_name = [r for r in rows if _is_missing(r.get('gene_name'))]
     rows_no_transcript = [r for r in rows if _is_missing(r.get('transcript_id'))]
-    n_no_gene_name = len(rows_no_gene_name)
-    n_no_transcript = len(rows_no_transcript)
-    n_no_reads = sum(
-        1 for r in rows
-        if _is_missing(r.get('rna_reads_covering_genomic_origin')))
     if n_no_pep_context:
         logger.warning(
             "%d / %d LENS row(s) lack pep_context — antigens for those "
             "rows degenerate to the bare neoepitope (no SLP context). "
             "Vaccine windows will be ~9 aa instead of ~25 aa.",
             n_no_pep_context, len(rows))
-    # ``gene_name`` and ``transcript_id`` are expected to be empty for
-    # ERV / CTA-SELF / SPLICE / FUSION antigens (no canonical gene model
-    # to point at). Show the actual antigen_source breakdown rather
-    # than asserting "typical for X" — and warn separately if any SNV
-    # / INDEL rows lack these (which would be an upstream bug).
+    # ``gene_name`` / ``transcript_id`` / ``rna_reads`` are *expected*
+    # to be empty for ERV / CTA-SELF / SPLICE / FUSION antigens (no
+    # canonical gene model / genome-coord origin). So we don't log the
+    # full breakdown here (that just re-counts the same non-coord rows
+    # the funnel already accounts for) — we only warn about SNV / INDEL
+    # rows missing these, which would be a genuine upstream bug. The
+    # counts feed the funnel's "note:" line.
     _SNV_OR_INDEL_KINDS = {'SNV', 'INDEL'}
-    if n_no_gene_name:
-        logger.info(
-            "%d / %d LENS row(s) lack gene_name; antigen_source "
-            "breakdown: %s.",
-            n_no_gene_name, len(rows), _kind_breakdown(rows_no_gene_name))
-        anomalous = [r for r in rows_no_gene_name
-                     if _kind(r).upper() in _SNV_OR_INDEL_KINDS]
-        if anomalous:
-            logger.warning(
-                "%d SNV / INDEL row(s) lack gene_name — those antigen "
-                "kinds are expected to carry one. Likely upstream "
-                "LENS bug.", len(anomalous))
-    if n_no_transcript:
-        logger.info(
-            "%d / %d LENS row(s) lack transcript_id; antigen_source "
-            "breakdown: %s. Downstream varcode-effect annotation won't "
-            "have a transcript context for these.",
-            n_no_transcript, len(rows), _kind_breakdown(rows_no_transcript))
-        anomalous = [r for r in rows_no_transcript
-                     if _kind(r).upper() in _SNV_OR_INDEL_KINDS]
-        if anomalous:
-            logger.warning(
-                "%d SNV / INDEL row(s) lack transcript_id — those "
-                "antigen kinds are expected to carry one. Likely "
-                "upstream LENS bug.", len(anomalous))
-    if n_no_reads:
-        rows_no_reads = [
-            r for r in rows
-            if _is_missing(r.get('rna_reads_covering_genomic_origin'))
-        ]
-        # Antigen kinds where ``rna_reads_covering_genomic_origin`` is
-        # legitimately missing: ERV / SPLICE / FUSION don't have a
-        # genome-coord origin in the same sense as SNV / INDEL —
-        # those rows are RNA-evidenced via different LENS columns
-        # (e.g. ERV expression). Surface SNV / INDEL gaps as the
-        # noteworthy anomaly and treat the rest as informational.
-        anomalous_no_reads = [
-            r for r in rows_no_reads
-            if _kind(r).upper() in _SNV_OR_INDEL_KINDS
-        ]
-        logger.info(
-            "%d / %d LENS row(s) lack rna_reads_covering_genomic_origin; "
-            "antigen_source breakdown: %s. Those rows score with "
-            "n_alt_reads=0 — combined-score ranking falls back to the "
-            "epitope-only branch for them.",
-            n_no_reads, len(rows), _kind_breakdown(rows_no_reads))
-        if anomalous_no_reads:
-            logger.warning(
-                "%d SNV / INDEL row(s) lack rna_reads_covering_genomic_origin "
-                "— those kinds are expected to carry RNA-read counts.",
-                len(anomalous_no_reads))
+    rows_no_reads = [
+        r for r in rows
+        if _is_missing(r.get('rna_reads_covering_genomic_origin'))]
+    n_snv_indel_no_gene = sum(
+        1 for r in rows_no_gene_name if _kind(r).upper() in _SNV_OR_INDEL_KINDS)
+    n_snv_indel_no_transcript = sum(
+        1 for r in rows_no_transcript
+        if _kind(r).upper() in _SNV_OR_INDEL_KINDS)
+    n_snv_indel_no_reads = sum(
+        1 for r in rows_no_reads if _kind(r).upper() in _SNV_OR_INDEL_KINDS)
+    if n_snv_indel_no_gene:
+        logger.warning(
+            "%d SNV / INDEL row(s) lack gene_name — those antigen kinds "
+            "are expected to carry one. Likely upstream LENS bug.",
+            n_snv_indel_no_gene)
+    if n_snv_indel_no_transcript:
+        logger.warning(
+            "%d SNV / INDEL row(s) lack transcript_id — those antigen "
+            "kinds are expected to carry one. Likely upstream LENS bug.",
+            n_snv_indel_no_transcript)
+    if n_snv_indel_no_reads:
+        logger.warning(
+            "%d SNV / INDEL row(s) lack rna_reads_covering_genomic_origin "
+            "— those kinds are expected to carry RNA-read counts.",
+            n_snv_indel_no_reads)
 
     # Transcript-resolution summary. The "no genome configured" case
     # is now caught pre-flight in ``arg_parser.check_args`` for any
@@ -879,6 +842,49 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
             "against the configured pyensembl release. Most often this "
             "is a release mismatch — pass --ensembl-release N to match "
             "the build LENS used.", n_unresolved, n_with_ids)
+
+    # ── Load funnel summary ──────────────────────────────────────────
+    # One consolidated view of where the LENS rows went, replacing the
+    # per-stage count lines that double-counted (the non-coord rows
+    # "skipped" from variant ranking were the same rows re-counted as
+    # "lack gene_name / transcript_id"). The rows feed two independent
+    # uses: (1) every row minus mismatches is scored as a candidate
+    # epitope for the neoepitope report; (2) only rows with genomic
+    # variant_coords can be placed on the genome for variant-based
+    # vaccine-construct ranking. Spelling that out here is what makes
+    # the "skipped, then counted again" confusion go away.
+    n_coord_rows = len(rows) - n_skipped_empty_coords
+    n_variants_ranked = sum(1 for _v, vps in ranked if vps)
+    kept_kinds = {
+        k: full_kinds.get(k, 0) - skipped_kinds.get(k, 0) for k in full_kinds}
+    coord_breakdown = ', '.join(
+        "%s=%d" % (k, kept_kinds[k]) for k in sorted(
+            kept_kinds, key=lambda x: (x.upper() not in ('SNV', 'INDEL'), x))
+        if kept_kinds[k] > 0) or '(none)'
+    if n_snv_indel_no_gene or n_snv_indel_no_transcript or n_snv_indel_no_reads:
+        note = (
+            "%d missing gene_name, %d missing transcript_id, "
+            "%d missing rna_reads" % (
+                n_snv_indel_no_gene, n_snv_indel_no_transcript,
+                n_snv_indel_no_reads))
+    else:
+        note = "all carry gene_name / transcript_id / rna_reads"
+    funnel = [
+        "LENS load funnel: %s" % os.path.basename(lens_tsv_path),
+        "  %d rows in: %s" % (len(rows), breakdown or '(none)'),
+        "  → %d candidate epitopes scored for the neoepitope report "
+        "(all antigen sources)" % len(epitopes),
+        "  → %d row(s) with genomic variant_coords (%s) → %d unique "
+        "variant(s) → %d ranked with vaccine peptide(s) for constructs" % (
+            n_coord_rows, coord_breakdown, len(groups), n_variants_ranked),
+    ]
+    if n_skipped_empty_coords:
+        funnel.append(
+            "  → %d non-coord row(s) (%s) are report-only — no genome "
+            "placement, so excluded from construct ranking" % (
+                n_skipped_empty_coords, skipped_breakdown))
+    funnel.append("  note (SNV/INDEL anomalies): %s" % note)
+    logger.info("\n".join(funnel))
 
     # Order by target_epitope_score descending so the top candidates
     # win greedy bin-packing in the construct assemblers. Ties broken
