@@ -12,7 +12,8 @@ Vaxrank is the neoantigen ranking component of the
 [OpenVax](https://www.openvax.org/) pipeline for designing personalized
 cancer vaccines.  Given either (a) a patient's somatic mutations + tumor
 RNA-seq + HLA type, or (b) a pre-computed neoepitope report from
-[LENS](https://github.com/openvax/lens) or pVACseq, Vaxrank selects and
+[LENS](https://github.com/openvax/lens) or
+[pVACseq](https://github.com/griffithlab/pVACtools), Vaxrank selects and
 ranks the mutant antigens most likely to elicit a T-cell response and
 emits them as the vaccine type(s) the user requests — peptide pools,
 mRNA constructs, or analysis reports for review.
@@ -96,7 +97,9 @@ peptide synthesiser:
    subsequences spanning the mutation) are scored for predicted binding
    to the patient's HLA class I molecules using
    [mhctools](https://github.com/openvax/mhctools), which wraps
-   predictors such as MHCflurry, NetMHCpan, and BigMHC.
+   predictors such as [MHCflurry](https://github.com/openvax/mhcflurry),
+   [NetMHCpan](https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/),
+   and [BigMHC](https://github.com/KarchinLab/bigmhc).
 4. **Vaccine peptide selection** — Vaxrank assembles longer synthetic long
    peptides (SLPs, typically 25-mers) around the mutation, scores them by
    the number and strength of their predicted MHC-binding epitopes,
@@ -349,8 +352,8 @@ outputs work identically.
 
 | Flag | Input format |
 |---|---|
-| `--input-lens` | LENS report TSV |
-| `--input-pvacseq` | pVACseq TSV (`*all_epitopes.tsv` or `*all_epitopes.aggregated.tsv`) |
+| `--input-lens` | [LENS](https://github.com/openvax/lens) report TSV |
+| `--input-pvacseq` | [pVACseq](https://github.com/griffithlab/pVACtools) TSV (`*all_epitopes.tsv` or `*all_epitopes.aggregated.tsv`) |
 
 ### Manifest schema
 
@@ -515,7 +518,8 @@ vaccine_peptides:
 ### Custom filtering and scoring with the topiary DSL
 
 For anything beyond the scalar logistic / percentile-rank defaults, set
-`epitopes.filter_expr` and/or `epitopes.score_expr` to a topiary DSL
+`epitopes.filter_expr` and/or `epitopes.score_expr` to a
+[topiary](https://github.com/openvax/topiary) DSL
 string. Both accept the full topiary 5.0 expression grammar (kind
 accessors like `affinity` / `presentation`, arithmetic, `&` / `|`,
 `.logistic(...)` / `.clip(...)` transforms, `column(col_name)` for raw
