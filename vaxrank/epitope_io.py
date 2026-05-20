@@ -204,8 +204,12 @@ def _is_missing(val):
 
 
 def _format_nm(value):
+    # Missing affinity → blank, consistent with every other missing
+    # value in the neoepitope CSVs (see _build_lens_report_row). A
+    # blank cell in a "Predicted … affinity" column reads as "not
+    # predicted" without mixing a string sentinel into numeric data.
     value = _safe_float(value)
-    return '%.2f nM' % value if value is not None else 'No prediction'
+    return '%.2f nM' % value if value is not None else ''
 
 
 def _first_float(*values):
@@ -729,11 +733,19 @@ def _build_lens_report_row(row, allele, peptide, detected, display_pred,
     out = {
         'Allele': allele,
         'Mutant peptide sequence': str(peptide),
+        # Missing values are left blank everywhere in this CSV (the
+        # numeric columns below — %ile rank / Agretopicity / TPM —
+        # already do this). A blank cell in a "Predicted … affinity"
+        # column reads unambiguously as "not predicted", and keeps the
+        # file clean for pandas / Excel rather than mixing a
+        # "No prediction" string into otherwise-numeric data. The
+        # human-readable ASCII / PDF reports still spell out
+        # "No prediction" where that reads better.
         'Predicted mutant pMHC affinity': (
-            '%.2f nM' % display_value if display_value is not None
-            else 'No prediction'),
+            '%.2f nM' % display_value if display_value is not None else ''),
         'Wildtype sequence': '',
-        'Predicted wildtype pMHC affinity': 'No prediction',
+        # WT affinity isn't predicted on the import path → always blank.
+        'Predicted wildtype pMHC affinity': '',
         'Gene name': gene,
         'Genomic variant': variant_pos,
         'Antigen source': antigen_source,
