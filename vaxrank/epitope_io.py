@@ -27,6 +27,7 @@ objects at the end.
 """
 
 import logging
+import os
 import re
 from dataclasses import dataclass
 
@@ -733,6 +734,19 @@ def _build_lens_report_row(row, allele, peptide, detected, display_pred,
 
 # ── Shared report writer ─────────────────────────────────────────────────────
 
+def _ensure_parent_dir(path):
+    """Create the parent directory of an output file if it's missing.
+
+    pandas' ``to_csv`` / ``to_excel`` refuse to write into a
+    non-existent directory; mirror the vaccine writers, which already
+    ``os.makedirs`` their target dir, so ``--output-csv foo/bar.csv``
+    works without the user pre-creating ``foo/``.
+    """
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+
+
 def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
                             csv_report_path=None, epitope_config=None,
                             topiary_df=None):
@@ -853,10 +867,12 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     report_df.insert(0, 'rank', range(1, len(report_df) + 1))
 
     if csv_report_path:
+        _ensure_parent_dir(csv_report_path)
         report_df.to_csv(csv_report_path, index=False)
         logger.info('Wrote CSV neoepitope report to %s', csv_report_path)
 
     if excel_report_path:
+        _ensure_parent_dir(excel_report_path)
         writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
         report_df.to_excel(writer, sheet_name='Neoepitopes', index=False)
         worksheet = writer.sheets['Neoepitopes']
