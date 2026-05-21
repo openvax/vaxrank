@@ -96,9 +96,25 @@ class TemplateDataCreator(object):
             raw_types = [raw_types]
         self.vaccine_type = ', '.join(raw_types)
 
-        # filter output-related command-line args: we want to display everything else
+        # Show the *effective* run parameters, not the raw argparse
+        # Namespace. We drop: output-path args (covered by the Inputs /
+        # file listing), the argparse ``version`` SUPPRESS sentinel,
+        # internal config-plumbing keys, and any value that is unset
+        # (None / ''). A None here means "not set / inherits a default"
+        # — noise in a record of what actually ran, and the source of
+        # the confusing ``manufacturability: None`` / ``version:
+        # ==SUPPRESS==`` lines.
+        _internal_keys = {
+            'version', 'config', 'config_set_overrides',
+            'config_expr_overrides',
+        }
         args_to_display_in_report = {
-            k: v for k, v in args_for_report.items() if not k.startswith("output")
+            k: v for k, v in args_for_report.items()
+            if not k.startswith("output")
+            and k not in _internal_keys
+            and v is not None
+            and v != ''
+            and v != '==SUPPRESS=='
         }
 
         self.template_data = {
