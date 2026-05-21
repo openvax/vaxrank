@@ -940,3 +940,28 @@ def test_emit_outputs_skips_writer_when_no_output_dir(tmp_path):
     _emit_outputs(args, ranked, source='external')
     assert not os.path.exists(out_dir), \
         "Without --output-dir, no writer should have fired"
+
+
+def test_variant_is_frameshift():
+    # varcode trims the shared prefix, so the helper compares the
+    # *normalized* allele lengths: e.g. CAT/C -> AT/'' (delta 2).
+    from varcode import Variant
+    from vaxrank.external_input import variant_is_frameshift
+    assert variant_is_frameshift(Variant('1', 100, 'C', 'T')) is False    # SNV, delta 0
+    assert variant_is_frameshift(Variant('1', 100, 'CA', 'C')) is True     # 1bp del, delta 1
+    assert variant_is_frameshift(Variant('1', 100, 'C', 'CG')) is True     # 1bp ins, delta 1
+    assert variant_is_frameshift(Variant('1', 100, 'CAT', 'C')) is True    # delta 2
+    assert variant_is_frameshift(Variant('1', 100, 'CATG', 'C')) is False  # delta 3, inframe
+    assert variant_is_frameshift(Variant('1', 100, 'CATGA', 'C')) is True  # delta 4
+
+
+def test_maximal_mutant_span_combines_rows_for_frameshift():
+    from vaxrank.external_input import maximal_mutant_span
+    ctx = "WTWTWTNOVELAAANOVELBBBNOVELCCC"  # 30 chars
+    # non-frameshift: representative span unchanged
+    assert maximal_mutant_span(6, 11, ["NOVELAAA"], ctx, False) == (6, 11)
+    # frameshift: start = earliest located neoepitope, end = len(ctx)
+    peptides = ["NOVELBBB", "NOVELAAA", "NOVELCCC"]
+    start, end = maximal_mutant_span(14, 22, peptides, ctx, True)
+    assert start == ctx.find("NOVELAAA")   # earliest
+    assert end == len(ctx)                 # extends to context end

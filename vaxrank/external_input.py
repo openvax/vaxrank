@@ -85,6 +85,127 @@ def _antigen_kind_sort_key(kind, count):
     return (2, -count, kind)
 
 
+def check_varcode_annotation(variant, transcript, provided_gene,
+                             provided_is_frameshift):
+    """Cross-check varcode against an external tool's own annotation.
+
+    Shared by every external loader (LENS, pVACseq, …) — varcode is
+    used here only to *validate* and interpret the columns the provider
+    already gave us, never to supply information the provider lacks.
+
+    Compares on the provider's own transcript (different isoforms
+    renumber residues, so we check gene + effect *class*, never raw
+    positions). Returns ``(gene_ok, effect_ok)``, or ``(None, None)``
+    when varcode can't compute an effect (no resolved transcript) so
+    the caller can skip the check rather than fabricate a verdict.
+    """
+    if transcript is None:
+        return None, None
+    try:
+        effect = variant.effect_on_transcript(transcript)
+    except Exception:
+        return None, None
+    gene_ok = (not provided_gene or not effect.gene_name
+               or provided_gene == effect.gene_name)
+    effect_ok = (
+        bool(provided_is_frameshift) == (type(effect).__name__ == 'FrameShift'))
+    return gene_ok, effect_ok
+
+
+class AnnotationCheck:
+    """Accumulates the varcode-vs-provider sanity check across a load.
+
+    Shared by every external loader (LENS, pVACseq, …) so the
+    comparison and the summary log live in one place rather than being
+    re-implemented per modality. ``record`` cross-checks one variant;
+    ``log`` emits a single per-load summary.
+    """
+
+    def __init__(self):
+        self.checked = 0
+        self.gene_mismatch = 0
+        self.effect_mismatch = 0
+        self.examples = []
+
+    def record(self, variant, transcript, provided_gene,
+               provided_is_frameshift, label=''):
+        gene_ok, effect_ok = check_varcode_annotation(
+            variant, transcript, provided_gene, provided_is_frameshift)
+        if gene_ok is None:
+            return
+        self.checked += 1
+        if not gene_ok:
+            self.gene_mismatch += 1
+        if not effect_ok:
+            self.effect_mismatch += 1
+        if (not gene_ok or not effect_ok) and len(self.examples) < 1:
+            self.examples.append((label, provided_gene))
+
+    def log(self, source_name):
+        if not self.checked:
+            return
+        if self.gene_mismatch or self.effect_mismatch:
+            ex = self.examples[0] if self.examples else None
+            logger.warning(
+                "varcode disagrees with %s on %d / %d checked variant(s): "
+                "%d gene, %d effect-class mismatch(es)%s. The %s values "
+                "are kept; check that the pyensembl release matches the "
+                "build %s used.",
+                source_name, max(self.gene_mismatch, self.effect_mismatch),
+                self.checked, self.gene_mismatch, self.effect_mismatch,
+                (" (e.g. %s gene=%s)" % ex) if ex else "",
+                source_name, source_name)
+        else:
+            logger.info(
+                "varcode agrees with %s on all %d checked variant(s) "
+                "(gene + effect class).", source_name, self.checked)
+
+
+def variant_is_frameshift(variant):
+    """True if the variant's genomic ref/alt imply a frameshift.
+
+    Modality-agnostic — derived from the provider's own ref/alt
+    nucleotides (LENS, pVACseq, VCF all build a varcode ``Variant`` the
+    same way), not from a tool-specific annotation column. A frameshift
+    indel changes coding length by a non-multiple of 3.
+    """
+    ref = variant.ref or ''
+    alt = variant.alt or ''
+    return abs(len(ref) - len(alt)) % 3 != 0
+
+
+def maximal_mutant_span(rep_start, rep_end, peptides, context,
+                        is_frameshift):
+    """Mutant-residue span within ``context`` for an external antigen.
+
+    Shared by every external loader so LENS and pVACseq mark mutations
+    identically. For a **frameshift** the whole downstream sequence (to
+    the new stop) is novel, but a single representative neoepitope only
+    covers part of it — so we combine *every* neoepitope the provider
+    listed for the variant: the union of their located spans tiles the
+    novel tail and recovers the maximal mutant region. Non-frameshift
+    variants keep the representative span (the mutation is local; a
+    union would over-extend into wild-type flanks).
+
+    Uses only provider-supplied peptides (no varcode-derived sequence).
+    The start comes from combining rows (the earliest located neoepitope
+    ≈ the frameshift onset); the end extends to the end of ``context``,
+    since for a frameshift everything from the onset to the new stop
+    (= the end of the translated context) is novel — even residues no
+    single neoepitope happened to cover.
+    """
+    if not is_frameshift:
+        return rep_start, rep_end
+    start = rep_start
+    for peptide in peptides:
+        if not peptide:
+            continue
+        idx = context.find(peptide)
+        if idx >= 0:
+            start = min(start, idx)
+    return start, len(context)
+
+
 def _missing_cell(value):
     if value is None:
         return True
@@ -592,6 +713,9 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
     # Transcript. The gap is almost always a release mismatch.
     n_with_ids = 0
     n_resolved = 0
+    # Sanity-check varcode against LENS's own annotation (shared
+    # accumulator; see AnnotationCheck).
+    annotation_check = AnnotationCheck()
     # ``vaf`` column carries DNA VAF in LENS v1.9 (sits between
     # ``mhcflurry_agretopicity`` and ``totcopynum`` / ``multiplicity``
     # / ``ccf`` — all DNA-clonal annotations; values track DNA VAF
@@ -661,6 +785,19 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
                 peptide, pep_context, coords)
             continue
 
+        # Frameshift → the whole downstream tail is novel; combine the
+        # variant's neoepitope rows into the maximal mutant span.
+        # Frameshift is derived from the variant's own ref/alt (general,
+        # not a LENS-specific column). ``lens_is_frameshift`` (LENS's
+        # annotation) is kept separately only to sanity-check varcode.
+        start_off, end_off = maximal_mutant_span(
+            start_off, end_off,
+            [r.get('peptide') for r in group_rows],
+            pep_context, variant_is_frameshift(variant))
+        lens_is_frameshift = (
+            str(rep.get('indel_type') or '').strip().lower() == 'frameshift'
+            or 'fs' in str(rep.get('variant_effect') or '').lower())
+
         # Window pep_context down to the canonical SLP fragment size
         # (--vaccine-peptide-length, default 25). LENS sometimes
         # emits the entire protein prefix here, which would render
@@ -702,6 +839,13 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
             n_with_ids += 1
             if transcripts:
                 n_resolved += 1
+
+        # Sanity-check LENS's annotation against varcode on LENS's own
+        # transcript (validation only — we keep LENS's values either
+        # way; this just surfaces real disagreements).
+        annotation_check.record(
+            variant, transcripts[0] if transcripts else None,
+            gene_name, lens_is_frameshift, label=str(coords))
 
         fragment = MutantProteinFragment(
             variant=variant,
@@ -847,6 +991,8 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
             "against the configured pyensembl release. Most often this "
             "is a release mismatch — pass --ensembl-release N to match "
             "the build LENS used.", n_unresolved, n_with_ids)
+
+    annotation_check.log("LENS")
 
     # ── Load funnel summary ──────────────────────────────────────────
     # One consolidated view of where the LENS rows went, replacing the
@@ -1063,6 +1209,7 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
     # Aggregate transcript-resolution stats (see LENS path for rationale).
     n_with_ids = 0
     n_resolved = 0
+    annotation_check = AnnotationCheck()
     # pVACseq carries an explicit ``DNA VAF`` column (separate from
     # the ``RNA VAF`` we already consume for read counts). Plumb it
     # through to the report's DNA-VAF field.
@@ -1112,6 +1259,15 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
             n_with_ids += 1
             if transcripts:
                 n_resolved += 1
+        # Sanity-check varcode against the variant. pVACseq's aggregate
+        # carries no explicit effect annotation, so the "provided"
+        # frameshift comes from the variant's own ref/alt (provider
+        # data) — this still cross-checks that varcode's effect class
+        # is consistent with the genomic alleles, and that the gene
+        # agrees. Shared with the LENS path via AnnotationCheck.
+        annotation_check.record(
+            variant, transcripts[0] if transcripts else None,
+            gene, variant_is_frameshift(variant), label=str(vid))
         fragment = MutantProteinFragment(
             variant=variant, gene_name=gene,
             amino_acids=str(best_pep),
@@ -1166,6 +1322,8 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
             "often this is a release mismatch — pass --ensembl-release "
             "N to match the build pVACseq used.",
             n_unresolved, n_with_ids)
+
+    annotation_check.log("pVACseq")
 
     ranked.sort(
         key=lambda pair: (
