@@ -148,3 +148,28 @@ def test_mutant_protein_fragment_predicted_effect_selects_outcome():
         outcome_selection=OUTCOME_SELECTION_MOST_LIKELY) is likely
     assert frag.predicted_effect(
         outcome_selection=OUTCOME_SELECTION_MULTI_OUTCOME) is outcomes
+
+
+def test_template_data_include_manufacturability_override():
+    """The split-report layout (#17) toggles manufacturability per
+    report via the include_manufacturability override: forced off for
+    the modality-agnostic core + mRNA reports, following the run's
+    --manufacturability resolution (None) for the peptide report."""
+    from types import SimpleNamespace
+    from vaxrank.report import TemplateDataCreator
+
+    args = {'manufacturability': True, 'wt_epitopes': True,
+            'vaccine_type': ['peptide', 'mrna']}
+    patient = SimpleNamespace(patient_id='p', mhc_alleles=[])
+
+    def make(**kw):
+        return TemplateDataCreator(
+            ranked_variants_with_vaccine_peptides=[], patient_info=patient,
+            final_review='', reviewers='', args_for_report=args,
+            input_json_file=None, **kw).template_data
+
+    assert make()['include_manufacturability'] is True          # follows args
+    assert make(include_manufacturability=None)[
+        'include_manufacturability'] is True                    # explicit follow
+    assert make(include_manufacturability=False)[
+        'include_manufacturability'] is False                   # forced off (core/mrna)

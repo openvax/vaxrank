@@ -58,7 +58,8 @@ class TemplateDataCreator(object):
             processing_predictions_by_key=None,
             mrna_ranking_decisions=None,
             vaccine_constructions=None,
-            target_alleles=None):
+            target_alleles=None,
+            include_manufacturability=None):
         """
         Construct a TemplateDataCreator object, from the output of the vaxrank pipeline.
 
@@ -122,8 +123,15 @@ class TemplateDataCreator(object):
             'reviewers': reviewers.split(',') if reviewers else [],
             'final_review': final_review,
             'input_json_file': input_json_file,
-            # these report sections are optional
-            'include_manufacturability': args_for_report['manufacturability'],
+            # these report sections are optional. ``include_manufacturability``
+            # can be overridden per report (the split-report layout turns it
+            # off for the modality-agnostic core report and the mRNA report,
+            # on for the peptide report); when None it follows the run's
+            # ``--manufacturability`` resolution.
+            'include_manufacturability': (
+                args_for_report['manufacturability']
+                if include_manufacturability is None
+                else include_manufacturability),
             'include_wt_epitopes': args_for_report['wt_epitopes'],
         }
 

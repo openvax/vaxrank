@@ -1328,43 +1328,78 @@ def main(args_list=None):
                 'max_constructs': pep_options.max_constructs,
             }
 
-    # Back-compat: ``mrna_ranking_decisions`` is the legacy field
-    # name TemplateDataCreator already understands; we still pass
-    # it so older callers / tests keep working. New section is
-    # ``vaccine_constructions``.
-    mrna_ranking_decisions = vaccine_constructions.get('mrna')
 
-    template_data_creator = TemplateDataCreator(
-        ranked_variants_with_vaccine_peptides=ranked_variants_with_vaccine_peptides,
-        patient_info=patient_info,
-        final_review=getattr(args, 'output_final_review', '') or '',
-        reviewers=getattr(args, 'output_reviewed_by', '') or '',
-        args_for_report=args_for_report,
-        input_json_file=getattr(args, 'input_json_file', None),
-        cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
-        dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
-        processing_predictions_by_key=processing_predictions_by_key,
-        mrna_ranking_decisions=mrna_ranking_decisions,
-        vaccine_constructions=vaccine_constructions,
-        target_alleles=target_alleles)
+    def _template_data(vc_subset, include_manufacturability):
+        return TemplateDataCreator(
+            ranked_variants_with_vaccine_peptides=(
+                ranked_variants_with_vaccine_peptides),
+            patient_info=patient_info,
+            final_review=getattr(args, 'output_final_review', '') or '',
+            reviewers=getattr(args, 'output_reviewed_by', '') or '',
+            args_for_report=args_for_report,
+            input_json_file=getattr(args, 'input_json_file', None),
+            cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
+            dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
+            processing_predictions_by_key=processing_predictions_by_key,
+            mrna_ranking_decisions=vc_subset.get('mrna'),
+            vaccine_constructions=vc_subset,
+            target_alleles=target_alleles,
+            include_manufacturability=include_manufacturability,
+        ).compute_template_data()
 
-    template_data = template_data_creator.compute_template_data()
+    def _render(template_data, ascii_path, html_path, pdf_path):
+        if ascii_path:
+            make_ascii_report(
+                template_data=template_data, ascii_report_path=ascii_path)
+        if html_path:
+            make_html_report(
+                template_data=template_data, html_report_path=html_path)
+        if pdf_path:
+            make_pdf_report(
+                template_data=template_data, pdf_report_path=pdf_path,
+                backend=args.pdf_backend)
 
-    if args.output_ascii_report:
-        make_ascii_report(
-            template_data=template_data,
-            ascii_report_path=args.output_ascii_report)
-
-    if args.output_html_report:
-        make_html_report(
-            template_data=template_data,
-            html_report_path=args.output_html_report)
-
-    if args.output_pdf_report:
-        make_pdf_report(
-            template_data=template_data,
-            pdf_report_path=args.output_pdf_report,
-            backend=args.pdf_backend)
+    active_types = _resolve_vaccine_types(args)
+    report_output_dir = getattr(args, 'output_dir', '') or ''
+    if len(active_types) > 1 and report_output_dir:
+        # Split layout (#269): a modality-agnostic core report at the
+        # top level (antigen ranking + coverage, no construction blocks
+        # or manufacturability), plus a per-modality report in each
+        # subdir = core + that modality's construction detail
+        # (manufacturability follows --manufacturability for peptide,
+        # off for mRNA).
+        _render(
+            _template_data({}, include_manufacturability=False),
+            args.output_ascii_report, args.output_html_report,
+            args.output_pdf_report)
+        for vtype in active_types:
+            target_dir = _vaccine_target_dir(
+                report_output_dir, vtype, active_types)
+            if not target_dir:
+                continue
+            vc = vaccine_constructions.get(vtype)
+            subset = {vtype: vc} if vc else {}
+            td = _template_data(
+                subset,
+                include_manufacturability=(
+                    None if vtype == 'peptide' else False))
+            os.makedirs(target_dir, exist_ok=True)
+            _render(
+                td,
+                (os.path.join(target_dir, 'vaccine_report.txt')
+                    if args.output_ascii_report else ''),
+                (os.path.join(target_dir, 'vaccine_report.html')
+                    if args.output_html_report else ''),
+                (os.path.join(target_dir, 'vaccine_report.pdf')
+                    if args.output_pdf_report else ''))
+    else:
+        # Single modality (or no --output-dir): one combined report —
+        # core + the single modality + its manufacturability.
+        _render(
+            _template_data(
+                vaccine_constructions, include_manufacturability=None),
+            args.output_ascii_report, args.output_html_report,
+            args.output_pdf_report)
 
 
 def run_vaxrank_from_parsed_args(args):
