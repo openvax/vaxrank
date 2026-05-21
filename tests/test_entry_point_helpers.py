@@ -452,3 +452,39 @@ def test_confirm_overwrite_non_interactive_warns_and_proceeds(
         entry_point._confirm_output_dir_overwrite(
             SimpleNamespace(output_dir=str(tmp_path), force_overwrite=False))
     assert any('already exists' in r.getMessage() for r in caplog.records)
+
+
+def test_write_run_summary(tmp_path):
+    """The top-level run_summary.txt records inputs, the MHC alleles in
+    play (flagged inferred on the external path), antigen counts, and
+    where each output landed."""
+    from vaxrank.cli.entry_point import _write_run_summary
+    args = SimpleNamespace(
+        output_dir=str(tmp_path),
+        input_lens='patient.lens.tsv', input_pvacseq=None, vcf=None, bam=None,
+        _inferred_mhc_alleles_from_lens=['HLA-A*02:01', 'HLA-B*07:02'],
+        mhc_alleles=None, mhc_alleles_file=None,
+        output_csv=str(tmp_path / 'neoepitope_predictions.csv'),
+        output_ascii_report=str(tmp_path / 'vaccine_report.txt'),
+        output_pdf_report=str(tmp_path / 'vaccine_report.pdf'),
+        vaccine_type=['peptide', 'mrna'])
+    patient = SimpleNamespace(
+        num_somatic_variants=5, num_coding_effect_variants=5,
+        num_variants_with_rna_support=4, num_variants_with_vaccine_peptides=5)
+
+    _write_run_summary(args, patient, source='external')
+
+    text = (tmp_path / 'run_summary.txt').read_text()
+    assert 'LENS report' in text and 'patient.lens.tsv' in text
+    assert 'inferred from report' in text
+    assert 'HLA-A*02:01' in text
+    assert 'variants with antigens:' in text and '5' in text
+    assert 'peptide constructs:' in text and 'mrna constructs:' in text
+
+
+def test_write_run_summary_noop_without_output_dir(tmp_path):
+    """No --output-dir → no run summary written (ranking-only runs)."""
+    from vaxrank.cli.entry_point import _write_run_summary
+    args = SimpleNamespace(output_dir='', input_lens=None, input_pvacseq=None)
+    _write_run_summary(args, None, source='external')
+    assert not list(tmp_path.iterdir())

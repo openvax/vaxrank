@@ -104,6 +104,13 @@ def check_varcode_annotation(variant, transcript, provided_gene,
     try:
         effect = variant.effect_on_transcript(transcript)
     except Exception:
+        # A sanity check must never crash the load; skip this variant.
+        # Logged at DEBUG so a genuine effect-computation bug is still
+        # diagnosable rather than silently swallowed.
+        logger.debug(
+            "varcode could not compute an effect for %s on %s; skipping "
+            "the annotation cross-check.", variant, transcript,
+            exc_info=True)
         return None, None
     gene_ok = (not provided_gene or not effect.gene_name
                or provided_gene == effect.gene_name)
@@ -126,13 +133,16 @@ def log_varcode_agreement(results, source_name):
     gene_bad = [lbl for g, e, lbl in checked if not g]
     effect_bad = [lbl for g, e, lbl in checked if not e]
     if gene_bad or effect_bad:
+        # Distinct variants with any mismatch (a variant can be in both
+        # lists), so the headline count is truthful.
+        n_bad = len(set(gene_bad) | set(effect_bad))
         example = (gene_bad or effect_bad)[0]
         logger.warning(
             "varcode disagrees with %s on %d / %d checked variant(s): "
             "%d gene, %d effect-class mismatch(es) (e.g. %s). %s values "
             "are kept; check that the pyensembl release matches the build "
             "%s used.",
-            source_name, max(len(gene_bad), len(effect_bad)), len(checked),
+            source_name, n_bad, len(checked),
             len(gene_bad), len(effect_bad), example, source_name, source_name)
     else:
         logger.info(
@@ -172,6 +182,11 @@ def maximal_mutant_span(rep_start, rep_end, peptides, context,
     since for a frameshift everything from the onset to the new stop
     (= the end of the translated context) is novel — even residues no
     single neoepitope happened to cover.
+
+    Precondition: ``context`` is the mutant protein translation ending
+    at the (new) stop codon, with no trailing wild-type sequence — true
+    for LENS / pVACseq ``pep_context``. If a provider ever appended
+    post-stop sequence, the extend-to-end step would over-mark it.
     """
     if not is_frameshift:
         return rep_start, rep_end
