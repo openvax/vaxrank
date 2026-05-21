@@ -112,53 +112,32 @@ def check_varcode_annotation(variant, transcript, provided_gene,
     return gene_ok, effect_ok
 
 
-class AnnotationCheck:
-    """Accumulates the varcode-vs-provider sanity check across a load.
-
-    Shared by every external loader (LENS, pVACseq, …) so the
-    comparison and the summary log live in one place rather than being
-    re-implemented per modality. ``record`` cross-checks one variant;
-    ``log`` emits a single per-load summary.
+def log_varcode_agreement(results, source_name):
+    """Summarize a varcode-vs-provider annotation cross-check in one log
+    line. ``results`` is a list of ``(gene_ok, effect_ok, label)``
+    tuples from :func:`check_varcode_annotation` (entries with
+    ``gene_ok is None`` — varcode couldn't compute — are ignored).
+    Shared by every external loader so the summary isn't re-implemented
+    per modality.
     """
-
-    def __init__(self):
-        self.checked = 0
-        self.gene_mismatch = 0
-        self.effect_mismatch = 0
-        self.examples = []
-
-    def record(self, variant, transcript, provided_gene,
-               provided_is_frameshift, label=''):
-        gene_ok, effect_ok = check_varcode_annotation(
-            variant, transcript, provided_gene, provided_is_frameshift)
-        if gene_ok is None:
-            return
-        self.checked += 1
-        if not gene_ok:
-            self.gene_mismatch += 1
-        if not effect_ok:
-            self.effect_mismatch += 1
-        if (not gene_ok or not effect_ok) and len(self.examples) < 1:
-            self.examples.append((label, provided_gene))
-
-    def log(self, source_name):
-        if not self.checked:
-            return
-        if self.gene_mismatch or self.effect_mismatch:
-            ex = self.examples[0] if self.examples else None
-            logger.warning(
-                "varcode disagrees with %s on %d / %d checked variant(s): "
-                "%d gene, %d effect-class mismatch(es)%s. The %s values "
-                "are kept; check that the pyensembl release matches the "
-                "build %s used.",
-                source_name, max(self.gene_mismatch, self.effect_mismatch),
-                self.checked, self.gene_mismatch, self.effect_mismatch,
-                (" (e.g. %s gene=%s)" % ex) if ex else "",
-                source_name, source_name)
-        else:
-            logger.info(
-                "varcode agrees with %s on all %d checked variant(s) "
-                "(gene + effect class).", source_name, self.checked)
+    checked = [(g, e, lbl) for g, e, lbl in results if g is not None]
+    if not checked:
+        return
+    gene_bad = [lbl for g, e, lbl in checked if not g]
+    effect_bad = [lbl for g, e, lbl in checked if not e]
+    if gene_bad or effect_bad:
+        example = (gene_bad or effect_bad)[0]
+        logger.warning(
+            "varcode disagrees with %s on %d / %d checked variant(s): "
+            "%d gene, %d effect-class mismatch(es) (e.g. %s). %s values "
+            "are kept; check that the pyensembl release matches the build "
+            "%s used.",
+            source_name, max(len(gene_bad), len(effect_bad)), len(checked),
+            len(gene_bad), len(effect_bad), example, source_name, source_name)
+    else:
+        logger.info(
+            "varcode agrees with %s on all %d checked variant(s) "
+            "(gene + effect class).", source_name, len(checked))
 
 
 def variant_is_frameshift(variant):
@@ -713,9 +692,9 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
     # Transcript. The gap is almost always a release mismatch.
     n_with_ids = 0
     n_resolved = 0
-    # Sanity-check varcode against LENS's own annotation (shared
-    # accumulator; see AnnotationCheck).
-    annotation_check = AnnotationCheck()
+    # Sanity-check varcode against LENS's own annotation. Collected
+    # per variant, summarized once by log_varcode_agreement.
+    annotation_results = []
     # ``vaf`` column carries DNA VAF in LENS v1.9 (sits between
     # ``mhcflurry_agretopicity`` and ``totcopynum`` / ``multiplicity``
     # / ``ccf`` — all DNA-clonal annotations; values track DNA VAF
@@ -843,9 +822,10 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
         # Sanity-check LENS's annotation against varcode on LENS's own
         # transcript (validation only — we keep LENS's values either
         # way; this just surfaces real disagreements).
-        annotation_check.record(
+        gene_ok, effect_ok = check_varcode_annotation(
             variant, transcripts[0] if transcripts else None,
-            gene_name, lens_is_frameshift, label=str(coords))
+            gene_name, lens_is_frameshift)
+        annotation_results.append((gene_ok, effect_ok, str(coords)))
 
         fragment = MutantProteinFragment(
             variant=variant,
@@ -992,7 +972,7 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
             "is a release mismatch — pass --ensembl-release N to match "
             "the build LENS used.", n_unresolved, n_with_ids)
 
-    annotation_check.log("LENS")
+    log_varcode_agreement(annotation_results, "LENS")
 
     # ── Load funnel summary ──────────────────────────────────────────
     # One consolidated view of where the LENS rows went, replacing the
@@ -1209,7 +1189,7 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
     # Aggregate transcript-resolution stats (see LENS path for rationale).
     n_with_ids = 0
     n_resolved = 0
-    annotation_check = AnnotationCheck()
+    annotation_results = []
     # pVACseq carries an explicit ``DNA VAF`` column (separate from
     # the ``RNA VAF`` we already consume for read counts). Plumb it
     # through to the report's DNA-VAF field.
@@ -1264,10 +1244,12 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
         # frameshift comes from the variant's own ref/alt (provider
         # data) — this still cross-checks that varcode's effect class
         # is consistent with the genomic alleles, and that the gene
-        # agrees. Shared with the LENS path via AnnotationCheck.
-        annotation_check.record(
+        # agrees. Shared with the LENS path via check_varcode_annotation
+        # + log_varcode_agreement.
+        gene_ok, effect_ok = check_varcode_annotation(
             variant, transcripts[0] if transcripts else None,
-            gene, variant_is_frameshift(variant), label=str(vid))
+            gene, variant_is_frameshift(variant))
+        annotation_results.append((gene_ok, effect_ok, str(vid)))
         fragment = MutantProteinFragment(
             variant=variant, gene_name=gene,
             amino_acids=str(best_pep),
@@ -1323,7 +1305,7 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
             "N to match the build pVACseq used.",
             n_unresolved, n_with_ids)
 
-    annotation_check.log("pVACseq")
+    log_varcode_agreement(annotation_results, "pVACseq")
 
     ranked.sort(
         key=lambda pair: (
