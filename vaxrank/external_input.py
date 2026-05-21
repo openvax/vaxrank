@@ -72,6 +72,19 @@ logger = logging.getLogger(__name__)
 LENS_PROVENANCE_MARKER = '(inferred from report)'
 
 
+def _antigen_kind_sort_key(kind, count):
+    """Stable antigen_source ordering — SNV / INDEL first, then by
+    descending count, ``(missing)`` last. Shared by the input
+    breakdown and the funnel's coord breakdown so both read the same.
+    """
+    priority = {'SNV': 0, 'INDEL': 1}
+    if kind.upper() in priority:
+        return (priority[kind.upper()], 0, kind)
+    if kind == '(missing)':
+        return (3, 0, kind)
+    return (2, -count, kind)
+
+
 def _missing_cell(value):
     if value is None:
         return True
@@ -462,10 +475,10 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
     list[(varcode.Variant, list[VaccinePeptide])]
     """
     if not lens_tsv_path:
-        return []
+        return [], {}
     df = pd.read_csv(lens_tsv_path, sep="\t", low_memory=False)
     if df.empty:
-        return []
+        return [], {}
 
     # Auto-detect which LENS predictor columns are present so the
     # representative-row pick reads real values. Without this, every
@@ -517,17 +530,9 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
                     isinstance(kind, float) and pd.isna(kind))
                 else '(missing)')
             full_kinds[kind_key] = full_kinds.get(kind_key, 0) + 1
-        # Stable order: SNV / INDEL up-front (the variant-coord paths),
-        # then everything else by descending count, with (missing) last.
-        priority = {'SNV': 0, 'INDEL': 1}
-        def _bucket_order(item):
-            k, count = item
-            if k.upper() in priority:
-                return (priority[k.upper()], 0, k)
-            if k == '(missing)':
-                return (3, 0, k)
-            return (2, -count, k)
-        ordered = sorted(full_kinds.items(), key=_bucket_order)
+        ordered = sorted(
+            full_kinds.items(),
+            key=lambda kv: _antigen_kind_sort_key(kv[0], kv[1]))
         breakdown = ', '.join("%s=%d" % (k, v) for k, v in ordered)
     else:
         full_kinds = {}
@@ -859,7 +864,7 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
         k: full_kinds.get(k, 0) - skipped_kinds.get(k, 0) for k in full_kinds}
     coord_breakdown = ', '.join(
         "%s=%d" % (k, kept_kinds[k]) for k in sorted(
-            kept_kinds, key=lambda x: (x.upper() not in ('SNV', 'INDEL'), x))
+            kept_kinds, key=lambda k: _antigen_kind_sort_key(k, kept_kinds[k]))
         if kept_kinds[k] > 0) or '(none)'
     if n_snv_indel_no_gene or n_snv_indel_no_transcript or n_snv_indel_no_reads:
         note = (
@@ -1036,10 +1041,10 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
     shorter antigen windows than the LENS path.
     """
     if not pvacseq_tsv_path:
-        return []
+        return [], {}
     df = pd.read_csv(pvacseq_tsv_path, sep="\t", low_memory=False)
     if df.empty:
-        return []
+        return [], {}
 
     by_source_peptide: dict[tuple[str, str], list] = {}
     for e in epitopes:

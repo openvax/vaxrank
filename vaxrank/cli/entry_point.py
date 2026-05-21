@@ -1034,7 +1034,9 @@ def _confirm_output_dir_overwrite(args):
     try:
         reply = input(
             "Output directory %r already exists and is non-empty. "
-            "Overwrite its contents? [y/N] " % output_dir)
+            "Vaxrank will write into it, overwriting any files with the "
+            "same names (other files are left in place). Continue? "
+            "[y/N] " % output_dir)
     except EOFError:
         reply = ''
     if reply.strip().lower() not in ('y', 'yes'):

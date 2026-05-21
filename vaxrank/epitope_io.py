@@ -212,6 +212,43 @@ def _format_nm(value):
     return '%.2f nM' % value if value is not None else ''
 
 
+# Canonical core of the per-(peptide, allele) neoepitope table. All
+# three input paths (VCF pipeline, LENS, pVACseq) build their report
+# rows on top of this so the shared columns — and the missing-value
+# convention — are produced by one piece of code and can't drift
+# (this is where the old "No prediction" vs blank inconsistency came
+# from: three hand-rolled row dicts). Affinity args are raw nM floats
+# (or None → blank). Callers append their source-specific columns.
+NEOEPITOPE_CORE_COLUMNS = (
+    'Allele', 'Mutant peptide sequence', 'Score',
+    'Predicted mutant pMHC affinity', 'Wildtype sequence',
+    'Predicted wildtype pMHC affinity', 'Gene name', 'Genomic variant')
+
+
+def neoepitope_core_row(allele, mutant_peptide, mutant_affinity,
+                        wt_peptide, wt_affinity, gene_name, variant,
+                        score=None):
+    """Build the shared core columns of one neoepitope-report row.
+
+    ``score`` is included only when provided (the pipeline path
+    surfaces it inline; the import paths add ``vaxrank_score`` in
+    :func:`write_neoepitope_report`). Affinities are raw nM floats or
+    None; formatting + the missing-value rule live in ``_format_nm``.
+    """
+    row = {
+        'Allele': allele or '',
+        'Mutant peptide sequence': mutant_peptide or '',
+    }
+    if score is not None:
+        row['Score'] = score
+    row['Predicted mutant pMHC affinity'] = _format_nm(mutant_affinity)
+    row['Wildtype sequence'] = wt_peptide or ''
+    row['Predicted wildtype pMHC affinity'] = _format_nm(wt_affinity)
+    row['Gene name'] = gene_name or ''
+    row['Genomic variant'] = variant or ''
+    return row
+
+
 def _first_float(*values):
     for value in values:
         coerced = _safe_float(value)
@@ -290,14 +327,15 @@ def _build_pvacseq_report_row(row):
         row.get("gene_expression"))
     rna_vaf = _first_float(row.get("rna_vaf"), row.get("tumor_rna_vaf"))
     dna_vaf = _first_float(row.get("dna_vaf"), row.get("tumor_dna_vaf"))
-    out = {
-        'Allele': _safe_str(row.get("allele")),
-        'Mutant peptide sequence': _safe_str(row.get("peptide")),
-        'Predicted mutant pMHC affinity': _format_nm(row.get("value")),
-        'Wildtype sequence': _safe_str(row.get("wt_peptide")),
-        'Predicted wildtype pMHC affinity': _format_nm(row.get("wt_value")),
-        'Gene name': _safe_str(row.get("gene")),
-        'Genomic variant': _safe_str(row.get("variant")),
+    out = neoepitope_core_row(
+        allele=_safe_str(row.get("allele")),
+        mutant_peptide=_safe_str(row.get("peptide")),
+        mutant_affinity=row.get("value"),
+        wt_peptide=_safe_str(row.get("wt_peptide")),
+        wt_affinity=row.get("wt_value"),
+        gene_name=_safe_str(row.get("gene")),
+        variant=_safe_str(row.get("variant")))
+    out.update({
         'Tier': _safe_str(row.get("pvacseq_tier")),
         'Ref Match': _safe_bool(row.get("pvacseq_ref_match")),
         'RNA Expr': rna_expr,
@@ -309,7 +347,7 @@ def _build_pvacseq_report_row(row):
         'MHC class': _safe_str(row.get("mhc_class")),
         'Contains mutant residues': _safe_bool(
             row.get("contains_mutant_residues"), default=True),
-    }
+    })
     for col, value in row.items():
         if col.startswith("pvacseq_") and col not in {
                 "pvacseq_ref_match", "pvacseq_tier"}:
@@ -730,30 +768,19 @@ def _build_lens_report_row(row, allele, peptide, detected, display_pred,
         _safe_float(row.get(display_pred.agretopicity_col))
         if display_pred and display_pred.agretopicity_col else None)
 
-    out = {
-        'Allele': allele,
-        'Mutant peptide sequence': str(peptide),
-        # Missing values are left blank everywhere in this CSV (the
-        # numeric columns below — %ile rank / Agretopicity / TPM —
-        # already do this). A blank cell in a "Predicted … affinity"
-        # column reads unambiguously as "not predicted", and keeps the
-        # file clean for pandas / Excel rather than mixing a
-        # "No prediction" string into otherwise-numeric data. The
-        # human-readable ASCII / PDF reports still spell out
-        # "No prediction" where that reads better.
-        'Predicted mutant pMHC affinity': (
-            '%.2f nM' % display_value if display_value is not None else ''),
-        'Wildtype sequence': '',
-        # WT affinity isn't predicted on the import path → always blank.
-        'Predicted wildtype pMHC affinity': '',
-        'Gene name': gene,
-        'Genomic variant': variant_pos,
+    # Shared core columns (WT affinity isn't predicted on the import
+    # path → None → blank); then LENS-specific extras.
+    out = neoepitope_core_row(
+        allele=allele, mutant_peptide=str(peptide),
+        mutant_affinity=display_value, wt_peptide='', wt_affinity=None,
+        gene_name=gene, variant=variant_pos)
+    out.update({
         'Antigen source': antigen_source,
         'Predictors used': ','.join(chosen_tools),
         '%ile rank': display_percentile,
         'Agretopicity': display_agretopicity,
         'TPM': _safe_float(row.get("tpm")),
-    }
+    })
     # Every detected predictor gets a raw-value column so users can see
     # per-tool signals side-by-side in the report, even if not chosen
     # for DSL scoring.

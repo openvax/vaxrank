@@ -768,24 +768,24 @@ def make_minimal_neoepitope_report(
                                     and wt_p.value is not None):
                                 wt_ic50 = wt_p.value
                                 break
-                    wt_ic50_str = (
-                        '%.2f nM' % wt_ic50 if wt_ic50 is not None
-                        else 'No prediction')
-                    row = OrderedDict([
-                        ('Allele', p.allele),
-                        ('Mutant peptide sequence',
-                            epitope.sequence),
-                        ('Score', vaccine_peptide.target_epitope_score),
-                        ('Predicted mutant pMHC affinity',
-                            '%.2f nM' % p.value),
-                        ('Variant allele RNA read count',
-                            vaccine_peptide.mutant_protein_fragment.n_alt_reads),
-                        ('Wildtype sequence', wt_peptide_sequence),
-                        ('Predicted wildtype pMHC affinity', wt_ic50_str),
-                        ('Gene name',
+                    # Build the shared core columns via the same helper
+                    # the LENS / pVACseq report builders use, so all
+                    # three input paths emit identical core columns and
+                    # the same missing-value convention. The RNA-read
+                    # count is this path's only source-specific column.
+                    from .epitope_io import neoepitope_core_row
+                    row = neoepitope_core_row(
+                        allele=p.allele,
+                        mutant_peptide=epitope.sequence,
+                        mutant_affinity=p.value,
+                        wt_peptide=wt_peptide_sequence,
+                        wt_affinity=wt_ic50,
+                        gene_name=(
                             vaccine_peptide.mutant_protein_fragment.gene_name),
-                        ('Genomic variant', variant.short_description),
-                    ])
+                        variant=variant.short_description,
+                        score=vaccine_peptide.target_epitope_score)
+                    row['Variant allele RNA read count'] = (
+                        vaccine_peptide.mutant_protein_fragment.n_alt_reads)
                     rows.append(row)
 
     if len(rows) > 0:
