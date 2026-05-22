@@ -279,7 +279,7 @@ def test_assembly_basic_construct():
     constructs = assemble_mrna_constructs(pairs, options=options)
     assert len(constructs) == 1
     c = constructs[0]
-    assert c.antigen_names == ['GENEA_1_100_A_T', 'GENEB_2_200_A_T']
+    assert c.antigen_names == ['GENEA (SNV)', 'GENEB (SNV)']
     assert c.no_polya_nt.startswith(UTR_5P_HBB)
     assert c.no_polya_nt.endswith(UTR_3P_HBB)
     # full_nt has polyA tail beyond UTR_3P_HBB
@@ -418,7 +418,7 @@ def test_write_mrna_outputs_fasta_and_manifest():
         assert entry['modality'] == 'mrna'
         assert entry['length_unit'] == 'nt'
         assert entry['name'] == 'mrna_001'
-        assert entry['antigen_names'] == ['GENE_1_1000_A_T']
+        assert entry['antigen_names'] == ['GENE (SNV)']
         # New structured fields
         assert 'lengths' in entry
         assert 'cds' in entry
@@ -454,9 +454,9 @@ def test_mrna_fasta_uses_semicolon_antigen_separator():
             header = f.readline().rstrip()
     assert "antigens=" in header
     # Both antigens land in one description, separated by ';'.
-    assert "GENEA_1_100_A_T;GENEB_2_200_A_T" in header
+    assert "GENEA (SNV);GENEB (SNV)" in header
     # And the legacy comma-joined form must not survive.
-    assert "GENEA_1_100_A_T,GENEB_2_200_A_T" not in header
+    assert "GENEA (SNV),GENEB (SNV)" not in header
 
 
 def test_mrna_max_constructs_logs_topk_selection_at_info(caplog):

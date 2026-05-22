@@ -54,6 +54,7 @@ from .mrna_library import (
     UTRS_5P,
 )
 from .vaccine_library import (
+    gene_names_from_antigen_names,
     get_linker,
     iter_named_antigens,
     select_antigen_window,
@@ -1048,8 +1049,10 @@ def write_mrna_outputs(constructs, output_dir, manifest_path=None,
                 # avoids the trap where downstream tools split the
                 # FASTA description on ',' (treating each antigen
                 # name as a separate token).
-                f.write(">%s antigens=%s length=%d\n" % (
-                    c.name, ';'.join(c.antigen_names), len(seq)))
+                genes = gene_names_from_antigen_names(c.antigen_names)
+                f.write(">%s antigens=%s length=%d genes=%s\n" % (
+                    c.name, ';'.join(c.antigen_names), len(seq),
+                    ';'.join(genes)))
                 f.write(_wrap_fasta(seq))
                 f.write("\n")
 

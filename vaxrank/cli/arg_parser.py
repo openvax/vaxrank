@@ -269,6 +269,14 @@ def add_output_args(arg_parser):
              "canonical filenames inside (vaccine.fasta / cds.fasta / "
              "manifest.json / order_form.csv / mrna-sequence-parts.csv).")
     output_args_group.add_argument(
+        "--force-overwrite",
+        dest="force_overwrite",
+        action="store_true",
+        default=False,
+        help="Skip the confirmation prompt and write into --output-dir "
+             "even if it already exists and is non-empty. Use in "
+             "non-interactive / batch runs.")
+    output_args_group.add_argument(
         "--mrna-csv-no-full-rows",
         dest="mrna_csv_full_rows",
         action="store_false",

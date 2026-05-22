@@ -1,4 +1,4 @@
 peptide	allele	mhcflurry_2.1.1.aff	mhcflurry_2.1.1.aff_perc	mhcflurry_2.1.1.pres_score	mhcflurry_2.1.1.pres_perc	mhcflurry_agretopicity	antigen_source	mut_aa_pos	variant_coords	gene_name	tpm	pep_context	origin_descriptor	snv_ref_allele	snv_alt_allele	indel_ref_allele	indel_alt_allele
-TAEFYQRY	HLA-A01:01	254.15	0.34	0.3	0.48	0.92	ERV				10.87	MDKFLDIYTLPRLNQEEVEFLNRPITSSEIEAVINSL	Hsap38.chr1.168248172.168249089.-				
+TAEFYQRY	HLA-A01:01	254.15	0.34	0.3	0.48	0.92	ERV				10.87	MDKFLDITAEFYQRYRPITSSEIEAVINSL	Hsap38.chr1.168248172.168249089.-
 SLLPAITEY	HLA-A02:01	45.2	0.15	0.82	0.18	0.08	SNV	245.0	chr17:7675088:C:T	TP53	42.5	AASLLPAITEYGTR	chr17:7675088:C:T	C	[T]		
 APRTVALTA	HLA-B07:02	890.4	1.8	0.45	1.25	0.5	CTA			MAGEA3	5.2	MPLQLLPAPRTVALTAGHG	MAGEA3				

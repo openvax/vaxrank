@@ -176,8 +176,8 @@ def test_peptide_minimal_epitope():
     assert seqs == sorted(["KLQGHSAPV", "NVDEILGRW", "VVVGADGVG"])
     for c in constructs:
         assert c.components['antigen_content'] == "minimal_epitope"
-        # Antigen name disambiguator carries the _epitope suffix
-        assert c.antigen_names[0].endswith("_epitope")
+        # Antigen name carries the minimal-epitope tag in its parens
+        assert c.antigen_names[0].endswith(", epitope)")
 
 
 def test_peptide_concat_minimal_ligands():
@@ -220,10 +220,10 @@ def test_peptide_minimal_with_multiple_top_ligands():
         "NVDEILGRW", "VDEILGRWE",      # GENEB top-2
         "VVVGADGVG",                    # GENEC only has 1
     ])
-    # Names include the disambiguating suffix when >1 ligand from same VP
-    suffixes = sorted(c.antigen_names[0].split("_")[-1] for c in constructs)
-    assert "epitope1" in suffixes
-    assert "epitope2" in suffixes
+    # Names include the disambiguating tag when >1 ligand from same VP
+    names = " ".join(c.antigen_names[0] for c in constructs)
+    assert "epitope1" in names
+    assert "epitope2" in names
 
 
 # ---------------------------------------------------------------------------

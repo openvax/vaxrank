@@ -67,7 +67,7 @@ def test_slp_mode_one_construct_per_peptide():
     assert len(constructs) == 2
     assert constructs[0].sequence == "KLQGHSAPVLDVIVN"
     assert constructs[0].name == "peptide_001"
-    assert constructs[0].antigen_names == ["GENEA_1_100_A_T"]
+    assert constructs[0].antigen_names == ["GENEA (SNV)"]
     assert constructs[1].sequence == "MNNVDEILGRWESPV"
     assert constructs[1].name == "peptide_002"
     assert constructs[0].components['mode'] == 'slp'
@@ -111,7 +111,7 @@ def test_minimal_epitope_uses_top_prediction():
     [c] = assemble_peptide_constructs(
         pairs, options=PeptideConstructConfig(mode='minimal_epitope'))
     assert c.sequence == "KLAGHSPVL"
-    assert c.antigen_names == ["GENEA_1_1000_A_T_epitope"]
+    assert c.antigen_names == ["GENEA (SNV, epitope)"]
 
 
 def test_minimal_epitope_skips_peptides_without_predictions():
@@ -312,7 +312,7 @@ def test_candidates_per_slot_emits_alternates():
     assert len(constructs) == 2
     assert constructs[0].sequence == "KLQGHSAPVLD"
     assert constructs[1].sequence == "LQGHSAPVLDV"
-    assert "_alt1" in constructs[1].antigen_names[0]
+    assert "alt1" in constructs[1].antigen_names[0]
 
 
 def test_candidates_per_slot_default_is_one():

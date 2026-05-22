@@ -817,13 +817,14 @@ def test_emit_outputs_logs_active_and_fired_dispatch(caplog, tmp_path):
 
     out_dir = str(tmp_path / "out")
     args = _mrna_args(out_dir)
+    args.input_lens = path  # source-specific label derives from this
     with caplog.at_level(logging.INFO):
         _emit_outputs(args, ranked, source='external')
     dispatch = [r.message for r in caplog.records
                 if 'Vaccine-type dispatch' in r.message]
     assert len(dispatch) == 1
     line = dispatch[0]
-    assert "[external]" in line
+    assert "[LENS import]" in line
     assert "['mrna']" in line  # active types and fired list both ['mrna']
 
 
@@ -939,3 +940,94 @@ def test_emit_outputs_skips_writer_when_no_output_dir(tmp_path):
     _emit_outputs(args, ranked, source='external')
     assert not os.path.exists(out_dir), \
         "Without --output-dir, no writer should have fired"
+
+
+def test_variant_is_frameshift():
+    # varcode trims the shared prefix, so the helper compares the
+    # *normalized* allele lengths: e.g. CAT/C -> AT/'' (delta 2).
+    from varcode import Variant
+    from vaxrank.external_input import variant_is_frameshift
+    assert variant_is_frameshift(Variant('1', 100, 'C', 'T')) is False    # SNV, delta 0
+    assert variant_is_frameshift(Variant('1', 100, 'CA', 'C')) is True     # 1bp del, delta 1
+    assert variant_is_frameshift(Variant('1', 100, 'C', 'CG')) is True     # 1bp ins, delta 1
+    assert variant_is_frameshift(Variant('1', 100, 'CAT', 'C')) is True    # delta 2
+    assert variant_is_frameshift(Variant('1', 100, 'CATG', 'C')) is False  # delta 3, inframe
+    assert variant_is_frameshift(Variant('1', 100, 'CATGA', 'C')) is True  # delta 4
+
+
+def test_maximal_mutant_span_combines_rows_for_frameshift():
+    from vaxrank.external_input import maximal_mutant_span
+    ctx = "WTWTWTNOVELAAANOVELBBBNOVELCCC"  # 30 chars
+    # non-frameshift: representative span unchanged
+    assert maximal_mutant_span(6, 11, ["NOVELAAA"], ctx, False) == (6, 11)
+    # frameshift: start = earliest located neoepitope, end = len(ctx)
+    peptides = ["NOVELBBB", "NOVELAAA", "NOVELCCC"]
+    start, end = maximal_mutant_span(14, 22, peptides, ctx, True)
+    assert start == ctx.find("NOVELAAA")   # earliest
+    assert end == len(ctx)                 # extends to context end
+
+
+def test_check_varcode_annotation_with_stubs():
+    """Pure comparison logic (no varcode/genome): gene + effect-class
+    agreement on the provider's transcript, None when uncomputable."""
+    from types import SimpleNamespace
+    from vaxrank.external_input import check_varcode_annotation
+
+    class FrameShift:
+        gene_name = 'FYN'
+
+    class Substitution:
+        gene_name = 'TPMT'
+
+    # No resolved transcript -> skip (None, None).
+    assert check_varcode_annotation(
+        SimpleNamespace(), None, 'FYN', True) == (None, None)
+    # Frameshift + gene agree.
+    v_fs = SimpleNamespace(effect_on_transcript=lambda t: FrameShift())
+    assert check_varcode_annotation(v_fs, object(), 'FYN', True) == (True, True)
+    # Gene mismatch.
+    assert check_varcode_annotation(
+        v_fs, object(), 'OTHER', True) == (False, True)
+    # Effect-class mismatch (provider says frameshift, varcode substitution).
+    v_sub = SimpleNamespace(effect_on_transcript=lambda t: Substitution())
+    assert check_varcode_annotation(
+        v_sub, object(), 'TPMT', True) == (True, False)
+
+    # Exception during effect computation -> skipped, not raised.
+    def _boom(_t):
+        raise RuntimeError("effect blew up")
+    assert check_varcode_annotation(
+        SimpleNamespace(effect_on_transcript=_boom),
+        object(), 'X', False) == (None, None)
+
+
+def test_log_varcode_agreement(caplog):
+    import logging
+    from vaxrank.external_input import log_varcode_agreement
+
+    # All agree -> single INFO; the None entry (uncomputable) is ignored.
+    with caplog.at_level(logging.INFO, logger='vaxrank.external_input'):
+        log_varcode_agreement(
+            [(True, True, 'v1'), (True, True, 'v2'), (None, None, 'v3')],
+            'LENS')
+    assert any('agrees with LENS on all 2 checked' in r.getMessage()
+               for r in caplog.records)
+
+    # Mismatches -> WARNING; headline counts DISTINCT bad variants (v1
+    # has both, v2 effect-only -> 2 distinct, not max(1,2)=2 by luck;
+    # use a case where it differs: v1 gene-only, v2 effect-only -> 2).
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger='vaxrank.external_input'):
+        log_varcode_agreement(
+            [(False, True, 'v1'), (True, False, 'v2'), (True, True, 'v3')],
+            'pVACseq')
+    msg = [r.getMessage() for r in caplog.records
+           if 'disagrees' in r.getMessage()][0]
+    assert 'disagrees with pVACseq on 2 / 3' in msg
+    assert '1 gene' in msg and '1 effect-class' in msg
+
+    # Nothing checked -> silent.
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger='vaxrank.external_input'):
+        log_varcode_agreement([(None, None, 'x')], 'LENS')
+    assert not any('varcode' in r.getMessage() for r in caplog.records)

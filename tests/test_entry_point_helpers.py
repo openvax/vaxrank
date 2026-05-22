@@ -337,11 +337,12 @@ def test_auto_populate_no_output_dir_is_a_noop():
 # -- LENS antigen-source breakdown ordering ---------------------------
 
 
-def test_lens_antigen_source_breakdown_logs_before_filters():
-    """The up-front ``LENS report contains N row(s); antigen_source
-    breakdown:`` log line must fire BEFORE the per-filter "skipped X
-    rows" lines so the operator sees the input composition before
-    the drop counts."""
+def test_lens_funnel_summarizes_input_composition():
+    """The consolidated ``LENS load funnel`` line replaces the old
+    scattered per-stage count lines. It must report the input row
+    count + antigen_source breakdown and the candidate-epitope count
+    in one block (so the operator isn't left correlating drop counts
+    across multiple lines)."""
     import os
     from vaxrank.epitope_io import load_lens
     from vaxrank.external_input import ranked_from_lens_predictions
@@ -355,23 +356,17 @@ def test_lens_antigen_source_breakdown_logs_before_filters():
     with _capture_logger('vaxrank.external_input', logging.INFO) as records:
         ranked_from_lens_predictions(predictions, lens_path)
 
-    breakdown_idx = [
-        i for i, r in enumerate(records)
-        if 'antigen_source breakdown' in r.getMessage()
-        and 'LENS report contains' in r.getMessage()
-    ]
-    skip_idx = [
-        i for i, r in enumerate(records)
-        if 'Skipped' in r.getMessage()
-        and 'variant_coords' in r.getMessage()
-    ]
-    if not breakdown_idx:
-        pytest.skip("Test fixture didn't trigger up-front breakdown line")
-    if skip_idx:
-        assert breakdown_idx[0] < skip_idx[0], (
-            "Up-front breakdown must log BEFORE filter messages; got "
-            "breakdown@%d, skipped@%d"
-            % (breakdown_idx[0], skip_idx[0]))
+    funnel = [r.getMessage() for r in records
+              if 'LENS load funnel' in r.getMessage()]
+    assert len(funnel) == 1, (
+        "Expected exactly one consolidated funnel line; got %d" % len(funnel))
+    msg = funnel[0]
+    assert 'rows in:' in msg
+    assert 'candidate epitopes scored' in msg
+    # The old per-stage lines must be gone (no double-counting).
+    assert not any('LENS report contains' in r.getMessage() for r in records)
+    assert not any(
+        'lack gene_name' in r.getMessage() for r in records)
 
 
 def test_lens_antigen_source_breakdown_orders_snv_indel_first():
@@ -395,13 +390,12 @@ def test_lens_antigen_source_breakdown_orders_snv_indel_first():
 
     msgs = [
         r.getMessage() for r in records
-        if 'LENS report contains' in r.getMessage()
-        and 'antigen_source breakdown' in r.getMessage()
+        if 'LENS load funnel' in r.getMessage()
     ]
     if not msgs:
-        pytest.skip("Test fixture didn't trigger up-front breakdown line")
+        pytest.skip("Test fixture didn't trigger the funnel line")
     line = msgs[0]
-    m = re.search(r'breakdown:\s*([^.]+)', line)
+    m = re.search(r'rows in:\s*([^\n]+)', line)
     assert m, "Couldn't parse breakdown segment from: %r" % line
     segments = [s.strip() for s in m.group(1).split(',')]
     kinds_in_order = [s.split('=')[0].strip() for s in segments]
@@ -421,3 +415,79 @@ def test_lens_antigen_source_breakdown_orders_snv_indel_first():
             "'(missing)' must land last; got order %r" % kinds_in_order
     if snv_idx >= 0 and indel_idx >= 0:
         assert snv_idx < indel_idx
+
+
+# -- output-dir overwrite confirmation --------------------------------
+
+
+def test_confirm_overwrite_noop_for_missing_or_empty_dir(tmp_path):
+    """Missing or empty --output-dir needs no confirmation (no exit)."""
+    from vaxrank.cli.entry_point import _confirm_output_dir_overwrite
+    # missing
+    _confirm_output_dir_overwrite(
+        SimpleNamespace(output_dir=str(tmp_path / "nope"), force_overwrite=False))
+    # empty
+    (tmp_path / "empty").mkdir()
+    _confirm_output_dir_overwrite(
+        SimpleNamespace(output_dir=str(tmp_path / "empty"), force_overwrite=False))
+
+
+def test_confirm_overwrite_force_proceeds(tmp_path, caplog):
+    """--force-overwrite proceeds into a non-empty dir without prompting."""
+    from vaxrank.cli.entry_point import _confirm_output_dir_overwrite
+    (tmp_path / "f.txt").write_text("x")
+    with caplog.at_level(logging.INFO):
+        _confirm_output_dir_overwrite(
+            SimpleNamespace(output_dir=str(tmp_path), force_overwrite=True))
+    assert any('force-overwrite' in r.getMessage() for r in caplog.records)
+
+
+def test_confirm_overwrite_non_interactive_warns_and_proceeds(
+        tmp_path, caplog, monkeypatch):
+    """Non-interactive (no TTY) runs warn and proceed rather than hang."""
+    from vaxrank.cli import entry_point
+    (tmp_path / "f.txt").write_text("x")
+    monkeypatch.setattr(entry_point.sys.stdin, 'isatty', lambda: False)
+    with caplog.at_level(logging.WARNING):
+        entry_point._confirm_output_dir_overwrite(
+            SimpleNamespace(output_dir=str(tmp_path), force_overwrite=False))
+    assert any('already exists' in r.getMessage() for r in caplog.records)
+
+
+def test_write_run_summary(tmp_path):
+    """The top-level run_summary.txt records inputs, the MHC alleles in
+    play (flagged inferred on the external path), antigen counts, and
+    where each output landed."""
+    from vaxrank.cli.entry_point import _write_run_summary
+    args = SimpleNamespace(
+        output_dir=str(tmp_path),
+        input_lens='patient.lens.tsv', input_pvacseq=None, vcf=None, bam=None,
+        _inferred_mhc_alleles_from_lens=['HLA-A*02:01', 'HLA-B*07:02'],
+        mhc_alleles=None, mhc_alleles_file=None,
+        output_csv=str(tmp_path / 'neoepitope_predictions.csv'),
+        output_ascii_report=str(tmp_path / 'vaccine_report.txt'),
+        output_pdf_report=str(tmp_path / 'vaccine_report.pdf'),
+        vaccine_type=['peptide', 'mrna'])
+    patient = SimpleNamespace(
+        num_somatic_variants=5, num_coding_effect_variants=5,
+        num_variants_with_rna_support=4, num_variants_with_vaccine_peptides=5)
+
+    _write_run_summary(args, patient, source='external')
+
+    text = (tmp_path / 'run_summary.txt').read_text()
+    assert 'LENS report' in text and 'patient.lens.tsv' in text
+    assert 'inferred from report' in text
+    assert 'HLA-A*02:01' in text
+    assert 'variants with antigens:' in text and '5' in text
+    # Multi-type + reports requested → split layout, so each modality
+    # subdir holds constructs + its own report.
+    assert 'peptide/' in text and 'mrna/' in text
+    assert 'constructs + vaccine_report' in text
+
+
+def test_write_run_summary_noop_without_output_dir(tmp_path):
+    """No --output-dir → no run summary written (ranking-only runs)."""
+    from vaxrank.cli.entry_point import _write_run_summary
+    args = SimpleNamespace(output_dir='', input_lens=None, input_pvacseq=None)
+    _write_run_summary(args, None, source='external')
+    assert not list(tmp_path.iterdir())

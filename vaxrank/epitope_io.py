@@ -27,6 +27,7 @@ objects at the end.
 """
 
 import logging
+import os
 import re
 from dataclasses import dataclass
 
@@ -203,8 +204,49 @@ def _is_missing(val):
 
 
 def _format_nm(value):
+    # Missing affinity → blank, consistent with every other missing
+    # value in the neoepitope CSVs (see _build_lens_report_row). A
+    # blank cell in a "Predicted … affinity" column reads as "not
+    # predicted" without mixing a string sentinel into numeric data.
     value = _safe_float(value)
-    return '%.2f nM' % value if value is not None else 'No prediction'
+    return '%.2f nM' % value if value is not None else ''
+
+
+# Canonical core of the per-(peptide, allele) neoepitope table. All
+# three input paths (VCF pipeline, LENS, pVACseq) build their report
+# rows on top of this so the shared columns — and the missing-value
+# convention — are produced by one piece of code and can't drift
+# (this is where the old "No prediction" vs blank inconsistency came
+# from: three hand-rolled row dicts). Affinity args are raw nM floats
+# (or None → blank). Callers append their source-specific columns.
+NEOEPITOPE_CORE_COLUMNS = (
+    'Allele', 'Mutant peptide sequence', 'Score',
+    'Predicted mutant pMHC affinity', 'Wildtype sequence',
+    'Predicted wildtype pMHC affinity', 'Gene name', 'Genomic variant')
+
+
+def neoepitope_core_row(allele, mutant_peptide, mutant_affinity,
+                        wt_peptide, wt_affinity, gene_name, variant,
+                        score=None):
+    """Build the shared core columns of one neoepitope-report row.
+
+    ``score`` is included only when provided (the pipeline path
+    surfaces it inline; the import paths add ``vaxrank_score`` in
+    :func:`write_neoepitope_report`). Affinities are raw nM floats or
+    None; formatting + the missing-value rule live in ``_format_nm``.
+    """
+    row = {
+        'Allele': allele or '',
+        'Mutant peptide sequence': mutant_peptide or '',
+    }
+    if score is not None:
+        row['Score'] = score
+    row['Predicted mutant pMHC affinity'] = _format_nm(mutant_affinity)
+    row['Wildtype sequence'] = wt_peptide or ''
+    row['Predicted wildtype pMHC affinity'] = _format_nm(wt_affinity)
+    row['Gene name'] = gene_name or ''
+    row['Genomic variant'] = variant or ''
+    return row
 
 
 def _first_float(*values):
@@ -285,14 +327,15 @@ def _build_pvacseq_report_row(row):
         row.get("gene_expression"))
     rna_vaf = _first_float(row.get("rna_vaf"), row.get("tumor_rna_vaf"))
     dna_vaf = _first_float(row.get("dna_vaf"), row.get("tumor_dna_vaf"))
-    out = {
-        'Allele': _safe_str(row.get("allele")),
-        'Mutant peptide sequence': _safe_str(row.get("peptide")),
-        'Predicted mutant pMHC affinity': _format_nm(row.get("value")),
-        'Wildtype sequence': _safe_str(row.get("wt_peptide")),
-        'Predicted wildtype pMHC affinity': _format_nm(row.get("wt_value")),
-        'Gene name': _safe_str(row.get("gene")),
-        'Genomic variant': _safe_str(row.get("variant")),
+    out = neoepitope_core_row(
+        allele=_safe_str(row.get("allele")),
+        mutant_peptide=_safe_str(row.get("peptide")),
+        mutant_affinity=row.get("value"),
+        wt_peptide=_safe_str(row.get("wt_peptide")),
+        wt_affinity=row.get("wt_value"),
+        gene_name=_safe_str(row.get("gene")),
+        variant=_safe_str(row.get("variant")))
+    out.update({
         'Tier': _safe_str(row.get("pvacseq_tier")),
         'Ref Match': _safe_bool(row.get("pvacseq_ref_match")),
         'RNA Expr': rna_expr,
@@ -304,7 +347,7 @@ def _build_pvacseq_report_row(row):
         'MHC class': _safe_str(row.get("mhc_class")),
         'Contains mutant residues': _safe_bool(
             row.get("contains_mutant_residues"), default=True),
-    }
+    })
     for col, value in row.items():
         if col.startswith("pvacseq_") and col not in {
                 "pvacseq_ref_match", "pvacseq_tier"}:
@@ -575,6 +618,12 @@ def load_lens(path):
 
     epitope_rows = []
     report_rows = []
+    # Rows whose peptide isn't a substring of a non-empty pep_context —
+    # peptide and pep_context came from different isoforms / annotation
+    # snapshots upstream. Dropped here (not carried into the report,
+    # constructs, or pepsickle); summarized once after the loop.
+    n_dropped_peptide_context_mismatch = 0
+    mismatch_examples = []
     for _, row in df.iterrows():
         peptide = row.get("peptide", "")
         if not peptide or pd.isna(peptide):
@@ -592,6 +641,23 @@ def load_lens(path):
         # LENS doesn't emit a WT IC50 column directly. Computed
         # once per row (shared across detected predictors).
         agretopicity = _safe_float(row.get("mhcflurry_agretopicity"))
+        # Locate the neoepitope inside its surrounding context once per
+        # row (pep_context is a row-level column, not per-predictor).
+        # LENS centers the peptide within pep_context but doesn't emit
+        # the offset directly; substring search recovers it. When
+        # pep_context is non-empty but doesn't contain the peptide, the
+        # two were built from different isoforms / annotation snapshots
+        # (an upstream LENS issue) — drop the row here rather than carry
+        # a fabricated offset downstream into the report, constructs,
+        # and pepsickle. An empty pep_context is a different case (no
+        # SLP window at all): keep it, offset 0, bare-neoepitope fallback.
+        pep_context = _safe_str(row.get("pep_context"))
+        if pep_context and str(peptide) not in pep_context:
+            n_dropped_peptide_context_mismatch += 1
+            if len(mismatch_examples) < 1:
+                mismatch_examples.append((str(peptide), pep_context))
+            continue
+        offset = pep_context.find(str(peptide)) if pep_context else 0
         row_added = False
         for d in chosen:
             value = _safe_float(row.get(d.value_col))
@@ -600,18 +666,6 @@ def load_lens(path):
             percentile_rank = (
                 _safe_float(row.get(d.percentile_col))
                 if d.percentile_col else None)
-            pep_context = _safe_str(row.get("pep_context"))
-            # Locate the neoepitope inside its surrounding context.
-            # LENS centers the peptide within pep_context but doesn't
-            # emit the offset directly; substring search recovers it.
-            # When the peptide isn't a substring (e.g. the row's
-            # pep_context is empty), offset stays at 0 — downstream
-            # code (vaxrank.processing) re-locates by substring search
-            # too and reports drift, so this is recoverable.
-            offset = (
-                pep_context.find(str(peptide))
-                if pep_context and str(peptide) in pep_context
-                else 0)
             # Derive WT IC50 from agretopicity, only for the
             # mhcflurry-affinity predictor (the value matches that
             # tool's IC50 scale). Other predictors leave wt_ic50=None.
@@ -665,6 +719,16 @@ def load_lens(path):
             chosen_tools=[d.tool for d in chosen],
         ))
 
+    if n_dropped_peptide_context_mismatch:
+        ex_peptide, ex_context = mismatch_examples[0]
+        logger.warning(
+            "Dropped %d LENS row(s) whose peptide isn't a substring of "
+            "its (non-empty) pep_context — peptide and pep_context were "
+            "built from different isoforms / annotation snapshots "
+            "upstream. These are excluded from the report and "
+            "constructs. Example: peptide=%r not in pep_context=%r.",
+            n_dropped_peptide_context_mismatch, ex_peptide, ex_context)
+
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
     epitopes = candidate_epitopes_from_rows(epitope_rows)
     # See load_pvacseq for the parallel rationale: the 3.1 refactor moved
@@ -704,22 +768,19 @@ def _build_lens_report_row(row, allele, peptide, detected, display_pred,
         _safe_float(row.get(display_pred.agretopicity_col))
         if display_pred and display_pred.agretopicity_col else None)
 
-    out = {
-        'Allele': allele,
-        'Mutant peptide sequence': str(peptide),
-        'Predicted mutant pMHC affinity': (
-            '%.2f nM' % display_value if display_value is not None
-            else 'No prediction'),
-        'Wildtype sequence': '',
-        'Predicted wildtype pMHC affinity': 'No prediction',
-        'Gene name': gene,
-        'Genomic variant': variant_pos,
+    # Shared core columns (WT affinity isn't predicted on the import
+    # path → None → blank); then LENS-specific extras.
+    out = neoepitope_core_row(
+        allele=allele, mutant_peptide=str(peptide),
+        mutant_affinity=display_value, wt_peptide='', wt_affinity=None,
+        gene_name=gene, variant=variant_pos)
+    out.update({
         'Antigen source': antigen_source,
         'Predictors used': ','.join(chosen_tools),
         '%ile rank': display_percentile,
         'Agretopicity': display_agretopicity,
         'TPM': _safe_float(row.get("tpm")),
-    }
+    })
     # Every detected predictor gets a raw-value column so users can see
     # per-tool signals side-by-side in the report, even if not chosen
     # for DSL scoring.
@@ -732,6 +793,19 @@ def _build_lens_report_row(row, allele, peptide, detected, display_pred,
 
 
 # ── Shared report writer ─────────────────────────────────────────────────────
+
+def _ensure_parent_dir(path):
+    """Create the parent directory of an output file if it's missing.
+
+    pandas' ``to_csv`` / ``to_excel`` refuse to write into a
+    non-existent directory; mirror the vaccine writers, which already
+    ``os.makedirs`` their target dir, so ``--output-csv foo/bar.csv``
+    works without the user pre-creating ``foo/``.
+    """
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+
 
 def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
                             csv_report_path=None, epitope_config=None,
@@ -853,10 +927,12 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     report_df.insert(0, 'rank', range(1, len(report_df) + 1))
 
     if csv_report_path:
+        _ensure_parent_dir(csv_report_path)
         report_df.to_csv(csv_report_path, index=False)
         logger.info('Wrote CSV neoepitope report to %s', csv_report_path)
 
     if excel_report_path:
+        _ensure_parent_dir(excel_report_path)
         writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
         report_df.to_excel(writer, sheet_name='Neoepitopes', index=False)
         worksheet = writer.sheets['Neoepitopes']

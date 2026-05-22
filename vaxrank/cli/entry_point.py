@@ -868,22 +868,35 @@ def _emit_outputs(args, ranked, source):
             raise
         fired.append(vtype)
 
+    if source == 'external':
+        source_label = (
+            'LENS import' if getattr(args, 'input_lens', None)
+            else 'pVACseq import' if getattr(args, 'input_pvacseq', None)
+            else 'external import')
+    else:
+        source_label = 'full pipeline'
     logger.info(
         "Vaccine-type dispatch [%s]: types=%s wrote=%s",
-        source, vaccine_types, fired)
+        source_label, vaccine_types, fired)
 
 
 _AUTO_OUTPUT_FILENAMES = {
-    # Pipeline path → ranked-peptides CSV / JSON.
+    # Pipeline path → ranked-peptides CSV / JSON + the human-readable
+    # ASCII and PDF vaccine reports.
     'pipeline': {
         'output_csv': 'ranked_vaccine_peptides.csv',
         'output_json_file': 'ranked_vaccine_peptides.json',
+        'output_ascii_report': 'vaccine_report.txt',
+        'output_pdf_report': 'vaccine_report.pdf',
     },
-    # External path → per-(peptide, allele) neoepitope CSV; no
-    # JSON dump (the LENS / pVACseq path doesn't build the rich
-    # in-memory result that ``--output-json-file`` serializes).
+    # External path → per-(peptide, allele) neoepitope CSV plus the
+    # same ASCII + PDF reports. No JSON dump (the LENS / pVACseq path
+    # doesn't build the rich in-memory result that
+    # ``--output-json-file`` serializes).
     'external': {
         'output_csv': 'neoepitope_predictions.csv',
+        'output_ascii_report': 'vaccine_report.txt',
+        'output_pdf_report': 'vaccine_report.pdf',
     },
 }
 
@@ -924,6 +937,119 @@ def _auto_populate_output_paths_from_dir(args):
             "Pass the explicit flag to override.",
             output_dir,
             ", ".join("%s -> %s" % (a, p) for a, p in filled))
+
+
+def _write_run_summary(args, patient_info, source):
+    """Write a top-level ``run_summary.txt`` in --output-dir.
+
+    In multi-vaccine-type runs the constructs live in per-modality
+    subdirs (peptide/, mrna/), but this summary — plus the neoepitope
+    table and ASCII/PDF reports — sits at the top level as the shared
+    context both branches were built from: the inputs, the MHC alleles
+    in play, the antigen counts, and where each output landed. The
+    detailed LENS load funnel is in the run log."""
+    output_dir = getattr(args, 'output_dir', '') or ''
+    if not output_dir:
+        return
+    lines = ["Vaxrank run summary", "=" * 19, ""]
+    if getattr(args, 'input_lens', None):
+        lines.append("Input: LENS report — %s" % args.input_lens)
+    elif getattr(args, 'input_pvacseq', None):
+        lines.append("Input: pVACseq report — %s" % args.input_pvacseq)
+    else:
+        lines.append("Input: full pipeline")
+        for label, attr in (("vcf", "vcf"), ("bam", "bam")):
+            if getattr(args, attr, None):
+                lines.append("  %s: %s" % (label, getattr(args, attr)))
+
+    alleles = _resolve_target_alleles(args)
+    if alleles:
+        inferred = getattr(args, '_inferred_mhc_alleles_from_lens', None)
+        note = " (inferred from report)" if (
+            source == 'external' and inferred) else ""
+        lines += ["", "MHC alleles%s: %s" % (note, ", ".join(alleles))]
+
+    if patient_info is not None:
+        lines += [
+            "",
+            "Antigen counts:",
+            "  variants with antigens:    %d" % (
+                patient_info.num_somatic_variants or 0),
+            "  with resolved transcript:  %d" % (
+                patient_info.num_coding_effect_variants or 0),
+            "  with RNA support:          %d" % (
+                patient_info.num_variants_with_rna_support or 0),
+            "  with vaccine peptide(s):   %d" % (
+                patient_info.num_variants_with_vaccine_peptides or 0),
+        ]
+
+    lines += ["", "Outputs (relative to this directory):"]
+    for label, attr in (
+            ("neoepitope table", "output_csv"),
+            ("ASCII report", "output_ascii_report"),
+            ("PDF report", "output_pdf_report")):
+        path = getattr(args, attr, '') or ''
+        if path:
+            lines.append("  %-18s %s" % (
+                label + ":", os.path.relpath(path, output_dir)))
+    vaccine_types = _resolve_vaccine_types(args)
+    # In the split-report layout (multi-type + reports requested) each
+    # modality subdir also holds its own vaccine_report; say so.
+    split_reports = len(vaccine_types) > 1 and any(
+        getattr(args, a, '') for a in (
+            'output_ascii_report', 'output_html_report', 'output_pdf_report'))
+    for vtype in vaccine_types:
+        target_dir = _vaccine_target_dir(output_dir, vtype, vaccine_types)
+        if target_dir:
+            contents = (
+                "constructs + vaccine_report" if split_reports
+                else "constructs")
+            lines.append("  %-18s %s/  (%s)" % (
+                vtype + ":", os.path.relpath(target_dir, output_dir),
+                contents))
+
+    os.makedirs(output_dir, exist_ok=True)
+    summary_path = os.path.join(output_dir, "run_summary.txt")
+    with open(summary_path, 'w') as f:
+        f.write("\n".join(lines) + "\n")
+    logger.info("Wrote run summary to %s", summary_path)
+
+
+def _confirm_output_dir_overwrite(args):
+    """Confirm before writing into an existing, non-empty --output-dir.
+
+    Interactive (TTY) runs get a ``y/N`` prompt and abort on anything
+    but yes. Non-interactive / batch runs don't prompt (that would hang
+    a pipeline) — they proceed with a visible WARNING; pass
+    ``--force-overwrite`` to silence it. A missing or empty directory
+    needs no confirmation.
+    """
+    output_dir = getattr(args, 'output_dir', '') or ''
+    if not output_dir or not os.path.isdir(output_dir) or not os.listdir(
+            output_dir):
+        return
+    if getattr(args, 'force_overwrite', False):
+        logger.info(
+            "--output-dir %r exists and is non-empty; --force-overwrite "
+            "set, writing into it.", output_dir)
+        return
+    if not (sys.stdin.isatty() and sys.stderr.isatty()):
+        logger.warning(
+            "--output-dir %r already exists and is non-empty; writing "
+            "into it (non-interactive run — pass --force-overwrite to "
+            "silence this warning).", output_dir)
+        return
+    try:
+        reply = input(
+            "Output directory %r already exists and is non-empty. "
+            "Vaxrank will write into it, overwriting any files with the "
+            "same names (other files are left in place). Continue? "
+            "[y/N] " % output_dir)
+    except EOFError:
+        reply = ''
+    if reply.strip().lower() not in ('y', 'yes'):
+        logger.error("Aborted: --output-dir %r left untouched.", output_dir)
+        sys.exit(1)
 
 
 def configure_logging(args):
@@ -1024,6 +1150,7 @@ def main(args_list=None):
     # --output-* flag, with no default destination). Applies to both
     # the VCF/BAM pipeline path and the external-input path.
     check_args(args)
+    _confirm_output_dir_overwrite(args)
 
     # Architecture (post-#252):
     #
@@ -1081,6 +1208,14 @@ def main(args_list=None):
                 a for a in (patient_info.mhc_alleles or [])
                 if a and a != LENS_PROVENANCE_MARKER
             ]
+            # Surface the inferred alleles once, up front — every
+            # downstream consumer (linker optimizer, coverage-aware
+            # antigen selection, report) reuses this same set.
+            if args._inferred_mhc_alleles_from_lens:
+                alleles = args._inferred_mhc_alleles_from_lens
+                logger.info(
+                    "Inferred %d MHC allele(s) from the report: %s",
+                    len(alleles), ", ".join(alleles))
         # Per-(peptide, allele) CSV / XLSX report is unique to the
         # external-input path; emit it before the shared dispatch.
         _emit_neoepitope_report_external(args, report_df, predictions)
@@ -1109,6 +1244,7 @@ def main(args_list=None):
             threshold=getattr(args, 'pepsickle_threshold', 0.5))
 
     _emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
+    _write_run_summary(args, patient_info, source)
 
     ########################
     # Template-based reports (PDF / HTML / ASCII)
@@ -1200,43 +1336,78 @@ def main(args_list=None):
                 'max_constructs': pep_options.max_constructs,
             }
 
-    # Back-compat: ``mrna_ranking_decisions`` is the legacy field
-    # name TemplateDataCreator already understands; we still pass
-    # it so older callers / tests keep working. New section is
-    # ``vaccine_constructions``.
-    mrna_ranking_decisions = vaccine_constructions.get('mrna')
 
-    template_data_creator = TemplateDataCreator(
-        ranked_variants_with_vaccine_peptides=ranked_variants_with_vaccine_peptides,
-        patient_info=patient_info,
-        final_review=getattr(args, 'output_final_review', '') or '',
-        reviewers=getattr(args, 'output_reviewed_by', '') or '',
-        args_for_report=args_for_report,
-        input_json_file=getattr(args, 'input_json_file', None),
-        cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
-        dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
-        processing_predictions_by_key=processing_predictions_by_key,
-        mrna_ranking_decisions=mrna_ranking_decisions,
-        vaccine_constructions=vaccine_constructions,
-        target_alleles=target_alleles)
+    def _template_data(vc_subset, include_manufacturability):
+        return TemplateDataCreator(
+            ranked_variants_with_vaccine_peptides=(
+                ranked_variants_with_vaccine_peptides),
+            patient_info=patient_info,
+            final_review=getattr(args, 'output_final_review', '') or '',
+            reviewers=getattr(args, 'output_reviewed_by', '') or '',
+            args_for_report=args_for_report,
+            input_json_file=getattr(args, 'input_json_file', None),
+            cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
+            dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
+            processing_predictions_by_key=processing_predictions_by_key,
+            mrna_ranking_decisions=vc_subset.get('mrna'),
+            vaccine_constructions=vc_subset,
+            target_alleles=target_alleles,
+            include_manufacturability=include_manufacturability,
+        ).compute_template_data()
 
-    template_data = template_data_creator.compute_template_data()
+    def _render(template_data, ascii_path, html_path, pdf_path):
+        if ascii_path:
+            make_ascii_report(
+                template_data=template_data, ascii_report_path=ascii_path)
+        if html_path:
+            make_html_report(
+                template_data=template_data, html_report_path=html_path)
+        if pdf_path:
+            make_pdf_report(
+                template_data=template_data, pdf_report_path=pdf_path,
+                backend=args.pdf_backend)
 
-    if args.output_ascii_report:
-        make_ascii_report(
-            template_data=template_data,
-            ascii_report_path=args.output_ascii_report)
-
-    if args.output_html_report:
-        make_html_report(
-            template_data=template_data,
-            html_report_path=args.output_html_report)
-
-    if args.output_pdf_report:
-        make_pdf_report(
-            template_data=template_data,
-            pdf_report_path=args.output_pdf_report,
-            backend=args.pdf_backend)
+    active_types = _resolve_vaccine_types(args)
+    report_output_dir = getattr(args, 'output_dir', '') or ''
+    if len(active_types) > 1 and report_output_dir:
+        # Split layout (#269): a modality-agnostic core report at the
+        # top level (antigen ranking + coverage, no construction blocks
+        # or manufacturability), plus a per-modality report in each
+        # subdir = core + that modality's construction detail
+        # (manufacturability follows --manufacturability for peptide,
+        # off for mRNA).
+        _render(
+            _template_data({}, include_manufacturability=False),
+            args.output_ascii_report, args.output_html_report,
+            args.output_pdf_report)
+        for vtype in active_types:
+            target_dir = _vaccine_target_dir(
+                report_output_dir, vtype, active_types)
+            if not target_dir:
+                continue
+            vc = vaccine_constructions.get(vtype)
+            subset = {vtype: vc} if vc else {}
+            td = _template_data(
+                subset,
+                include_manufacturability=(
+                    None if vtype == 'peptide' else False))
+            os.makedirs(target_dir, exist_ok=True)
+            _render(
+                td,
+                (os.path.join(target_dir, 'vaccine_report.txt')
+                    if args.output_ascii_report else ''),
+                (os.path.join(target_dir, 'vaccine_report.html')
+                    if args.output_html_report else ''),
+                (os.path.join(target_dir, 'vaccine_report.pdf')
+                    if args.output_pdf_report else ''))
+    else:
+        # Single modality (or no --output-dir): one combined report —
+        # core + the single modality + its manufacturability.
+        _render(
+            _template_data(
+                vaccine_constructions, include_manufacturability=None),
+            args.output_ascii_report, args.output_html_report,
+            args.output_pdf_report)
 
 
 def run_vaxrank_from_parsed_args(args):

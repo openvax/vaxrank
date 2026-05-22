@@ -90,4 +90,7 @@ def test_neoepitope_report_handles_missing_wt_ic50(tmp_path):
     )
 
     df = pd.read_excel(excel_path, engine="openpyxl")
-    assert df.iloc[0]["Predicted wildtype pMHC affinity"] == "No prediction"
+    # Missing WT affinity is blank (read back as NaN) — the same
+    # missing-value convention all three report paths now share via
+    # neoepitope_core_row / _format_nm.
+    assert pd.isna(df.iloc[0]["Predicted wildtype pMHC affinity"])

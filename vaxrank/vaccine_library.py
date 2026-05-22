@@ -537,37 +537,84 @@ def get_linker(name):
             name, ', '.join(all_linker_names())))
 
 
+def _variant_category(variant):
+    """Coarse antigen category for naming — ``SNV`` / ``INDEL`` (the
+    LENS ``antigen_source`` vocabulary), derived from the variant
+    itself so it's identical on the pipeline and LENS / pVACseq paths.
+    """
+    if getattr(variant, 'is_snv', False):
+        return 'SNV'
+    if (getattr(variant, 'is_insertion', False)
+            or getattr(variant, 'is_deletion', False)
+            or getattr(variant, 'is_indel', False)):
+        return 'INDEL'
+    return 'variant'
+
+
+def gene_names_from_antigen_names(antigen_names):
+    """Distinct gene names (order-preserving) parsed from antigen names
+    produced by :func:`iter_named_antigens`. The gene is the text
+    before the parenthesized category, so ``"FYN (INDEL)"`` → ``FYN``.
+    Used by the FASTA writers to list the construct's gene(s) in the
+    header."""
+    genes = []
+    for name in antigen_names:
+        gene = name.split(" (")[0]
+        if gene and gene not in genes:
+            genes.append(gene)
+    return genes
+
+
 def iter_named_antigens(ranked_vaccine_peptides, candidates_per_slot=1):
     """Yield ``(name, fragment, vaccine_peptide)`` per ranked candidate.
 
     Both peptide and mRNA assembly walk the same ranked list and need
-    the same per-candidate name (``gene_chr_pos_ref_alt`` with an
-    ``_alt<k>`` suffix on alternates). Centralizing the loop here keeps
-    that naming consistent across modalities.
+    the same per-candidate name. The name reads ``GENE (CATEGORY)`` —
+    e.g. ``FYN (INDEL)`` — keeping the gene up front and the antigen
+    category (SNV / INDEL) parenthesized. The specific mutation is
+    appended *only* when a gene contributes more than one variant to
+    this construct set, so a single-variant gene stays clean while
+    collisions disambiguate: ``FYN (INDEL @ 6:111674599 G>-)``. Empty
+    indel alleles render as ``-`` (clearer than varcode's normalized
+    empty string). Alternate candidates per variant get an ``altK``
+    tag. The gene is always ``name.split(" (")[0]``.
 
     Parameters
     ----------
     ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
     candidates_per_slot : int
-        How many ranked alternates to walk per variant. The first
-        candidate gets the bare name; subsequent candidates get
-        ``_alt1``, ``_alt2``, etc.
+        How many ranked alternates to walk per variant.
     """
+    def _gene_of(variant, peptides):
+        return (getattr(peptides[0].mutant_protein_fragment, 'gene_name', None)
+                or 'unknown')
+
+    # Pre-pass: which genes contribute 2+ distinct variants? Those
+    # need the mutation spelled out to tell their antigens apart.
+    variants_per_gene = {}
     for variant, peptides in ranked_vaccine_peptides:
         if not peptides:
             continue
+        gene = _gene_of(variant, peptides)
+        variants_per_gene.setdefault(gene, set()).add(
+            (variant.contig, variant.start, variant.ref, variant.alt))
+    ambiguous_genes = {
+        g for g, keys in variants_per_gene.items() if len(keys) > 1}
+
+    for variant, peptides in ranked_vaccine_peptides:
+        if not peptides:
+            continue
+        gene = _gene_of(variant, peptides)
         for idx, peptide in enumerate(peptides[:max(1, candidates_per_slot)]):
             fragment = peptide.mutant_protein_fragment
-            base_name = "%s_%s_%s_%s_%s" % (
-                getattr(fragment, 'gene_name', None) or 'unknown',
-                variant.contig,
-                variant.start,
-                variant.ref or '.',
-                variant.alt or '.',
-            )
+            detail = _variant_category(variant)
+            if gene in ambiguous_genes:
+                detail = "%s @ %s:%s %s>%s" % (
+                    detail, variant.contig, variant.start,
+                    variant.ref or '-', variant.alt or '-')
             if idx > 0:
-                base_name = "%s_alt%d" % (base_name, idx)
-            yield base_name, fragment, peptide
+                detail = "%s alt%d" % (detail, idx)
+            yield "%s (%s)" % (gene, detail), fragment, peptide
 
 
 def select_antigen_window(fragment, base_name, max_length_aa):

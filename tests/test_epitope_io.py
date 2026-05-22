@@ -1511,3 +1511,26 @@ def test_lens_cli_errors_when_no_output_flag_set():
     lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
     with pytest.raises(ValueError, match="No output path specified"):
         main(["--input-lens", lens_path])
+
+
+def test_neoepitope_core_row_shared_contract():
+    """The shared core-row builder used by all three input paths
+    (VCF pipeline, LENS, pVACseq): consistent columns + blank for
+    missing affinity, and Score only when provided."""
+    from vaxrank.epitope_io import neoepitope_core_row
+    # Missing affinities → blank, present → 'NN.NN nM'.
+    row = neoepitope_core_row(
+        allele="HLA-A*02:01", mutant_peptide="SIINFEKL",
+        mutant_affinity=123.456, wt_peptide="", wt_affinity=None,
+        gene_name="TP53", variant="17:7675088 C>T")
+    assert row["Allele"] == "HLA-A*02:01"
+    assert row["Predicted mutant pMHC affinity"] == "123.46 nM"
+    assert row["Predicted wildtype pMHC affinity"] == ""   # blank, not "No prediction"
+    assert "Score" not in row                              # omitted when None
+    # Score is inserted only when supplied (pipeline path).
+    scored = neoepitope_core_row(
+        allele="A", mutant_peptide="P", mutant_affinity=None,
+        wt_peptide="", wt_affinity=None, gene_name="G", variant="v",
+        score=0.5)
+    assert scored["Score"] == 0.5
+    assert scored["Predicted mutant pMHC affinity"] == ""

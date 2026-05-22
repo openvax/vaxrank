@@ -378,7 +378,9 @@ def test_iter_named_antigens_naming_format():
         mutant_protein_fragment=fragment, target_epitopes=[])
     pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
     [(name, frag, pep)] = list(iter_named_antigens(pairs))
-    assert name == "GENE_1_1000_A_T"
+    # Gene up front, category parenthesized; no mutation spelled out
+    # because GENE contributes only one variant to this set.
+    assert name == "GENE (SNV)"
     assert frag is fragment
     assert pep is peptide
 
@@ -396,7 +398,41 @@ def test_iter_named_antigens_alt_suffix():
 
     pairs = [(Variant('1', 100, 'A', 'T'), [_peptide("ABC"), _peptide("DEF"), _peptide("GHI")])]
     names = [n for n, _, _ in iter_named_antigens(pairs, candidates_per_slot=3)]
-    assert names == ["G_1_100_A_T", "G_1_100_A_T_alt1", "G_1_100_A_T_alt2"]
+    assert names == ["G (SNV)", "G (SNV alt1)", "G (SNV alt2)"]
+
+
+def test_iter_named_antigens_disambiguates_multi_variant_gene():
+    """When a gene contributes 2+ variants, each gets the mutation
+    spelled out; a single-variant gene in the same set stays clean.
+    Empty indel alleles render as '-'."""
+    from types import SimpleNamespace
+    from varcode import Variant
+    from vaxrank.vaccine_library import iter_named_antigens
+
+    def _peptide(gene):
+        f = SimpleNamespace(
+            amino_acids="ABC", gene_name=gene,
+            mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=3)
+        return SimpleNamespace(mutant_protein_fragment=f)
+
+    pairs = [
+        (Variant('1', 100, 'A', 'T'), [_peptide('TP53')]),     # SNV
+        (Variant('1', 200, 'A', 'T'), [_peptide('TP53')]),     # 2nd TP53
+        (Variant('2', 300, 'C', 'G'), [_peptide('KRAS')]),     # lone gene
+    ]
+    names = [n for n, _, _ in iter_named_antigens(pairs)]
+    assert names == [
+        "TP53 (SNV @ 1:100 A>T)",
+        "TP53 (SNV @ 1:200 A>T)",
+        "KRAS (SNV)",
+    ]
+
+
+def test_gene_names_from_antigen_names():
+    from vaxrank.vaccine_library import gene_names_from_antigen_names
+    names = ["FYN (INDEL)", "TP53 (SNV @ 1:100 A>T)", "FYN (INDEL @ 6:1 G>-)"]
+    # order-preserving, de-duplicated
+    assert gene_names_from_antigen_names(names) == ["FYN", "TP53"]
 
 
 def test_iter_named_antigens_skips_empty_peptide_lists():
@@ -416,7 +452,7 @@ def test_iter_named_antigens_handles_missing_gene_name():
     peptide = SimpleNamespace(mutant_protein_fragment=fragment)
     pairs = [(Variant('1', 100, 'A', 'T'), [peptide])]
     [(name, _, _)] = list(iter_named_antigens(pairs))
-    assert name == "unknown_1_100_A_T"
+    assert name == "unknown (SNV)"
 
 
 def test_iter_named_antigens_caps_at_candidates_per_slot():
