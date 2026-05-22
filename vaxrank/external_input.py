@@ -200,6 +200,47 @@ def maximal_mutant_span(rep_start, rep_end, peptides, context,
     return start, len(context)
 
 
+def log_transcript_resolution(n_with_ids, n_resolved, source_name,
+                              id_label="transcript IDs"):
+    """Warn once when some variants' transcript IDs didn't resolve
+    against the configured pyensembl release (almost always a release
+    mismatch). Shared by every external loader."""
+    if n_with_ids and n_resolved < n_with_ids:
+        logger.warning(
+            "%d / %d variant(s) had %s that didn't resolve against the "
+            "configured pyensembl release. Most often this is a release "
+            "mismatch — pass --ensembl-release N to match the build %s "
+            "used.", n_with_ids - n_resolved, n_with_ids, id_label,
+            source_name)
+
+
+def ranked_sorted_by_target_score(ranked):
+    """Order ``(variant, [VaccinePeptide])`` entries by descending
+    target-epitope score, ties broken by variant string for
+    determinism. Shared by every external loader so the ranking order
+    is defined in one place."""
+    return sorted(
+        ranked,
+        key=lambda pair: (
+            -pair[1][0].target_epitope_score if pair[1] else 0.0,
+            str(pair[0])))
+
+
+@dataclasses.dataclass
+class _ExternalVariantEntry:
+    """One variant's contribution to an external loader's output,
+    plus the per-variant stats the loader aggregates. Lets the
+    per-variant build live in a helper while the loader stays a thin
+    accumulate-and-summarize loop."""
+    variant: object = None
+    vaccine_peptide: object = None
+    had_transcript_ids: bool = False
+    resolved_transcript: bool = False
+    annotation: object = None       # (gene_ok, effect_ok, label) or None
+    dna_vaf: object = None          # float or None
+    unparseable: bool = False
+
+
 def _missing_cell(value):
     if value is None:
         return True
@@ -560,6 +601,163 @@ def _read_counts_from_lens_row(row):
     return n_total, n_alt_reads, n_ref_reads, n_alt_supporting_protein
 
 
+def _lens_ranked_entry(coords, group_rows, by_peptide, genome,
+                       vaccine_peptide_length, affinity_cols, rank_cols,
+                       num_target_epitopes_to_keep):
+    """Build one variant's :class:`_ExternalVariantEntry` from a LENS
+    row group. Returns the entry (with ``unparseable`` / ``vaccine_peptide``
+    None for rows that can't be turned into an antigen); the caller
+    aggregates the stats and the ranked list."""
+    rep = _pick_representative(group_rows, affinity_cols, rank_cols)
+    # Build the Variant from REAL ref/alt columns (snv_*_allele /
+    # indel_*_allele depending on antigen_source). variant_coords gives
+    # only chr:pos in LENS v1.9; the alleles live in dedicated columns.
+    variant = _variant_from_lens_row(rep, genome=genome)
+    if variant is None:
+        logger.debug(
+            "Could not build Variant from LENS row at coords=%r "
+            "(antigen_source=%r); skipping.", coords,
+            rep.get('antigen_source'))
+        return _ExternalVariantEntry(unparseable=True)
+
+    peptide = rep.get('peptide') or ""
+    pep_context = rep.get('pep_context') or ""
+    if not pep_context:
+        # No SLP window available — fall back to the neoepitope itself
+        # as the antigen. The construct will be short but valid.
+        pep_context = peptide
+    # Translation halts at the first stop codon — anything after ``*``
+    # doesn't exist as protein. Truncate so manufacturability /
+    # hydropathy / codon-optimization see only real residues.
+    pep_context = truncate_at_stop_codon(str(pep_context))
+    peptide = truncate_at_stop_codon(str(peptide))
+    if not pep_context or not peptide:
+        logger.debug(
+            "Dropped LENS row for variant %r: peptide / pep_context "
+            "empty after stop-codon truncation.", coords)
+        return _ExternalVariantEntry()
+    # Some LENS files emit non-standard residues (U / O / X / B / Z / J);
+    # vaxrank's manufacturability / hydropathy code is keyed off the 20
+    # canonical AAs, so drop the row rather than crash.
+    if not has_only_standard_amino_acids(pep_context):
+        logger.warning(
+            "Dropped LENS row for variant %r: pep_context %r contains "
+            "non-standard residues (allowed: 20 canonical AAs).",
+            coords, pep_context)
+        return _ExternalVariantEntry()
+    # Preserve LENS's own gene name; fall back to empty string (the
+    # codebase convention for "not known").
+    gene_name_raw = rep.get('gene_name')
+    gene_name = (
+        str(gene_name_raw) if gene_name_raw and not (
+            isinstance(gene_name_raw, float) and pd.isna(gene_name_raw))
+        else "")
+
+    start_off, end_off = _mut_offsets_in_context(peptide, pep_context)
+    if start_off is None:
+        logger.debug(
+            "Could not locate peptide %r in pep_context %r for variant "
+            "%r; skipping (mutation span unknown).",
+            peptide, pep_context, coords)
+        return _ExternalVariantEntry()
+
+    # Frameshift → the whole downstream tail is novel; combine the
+    # variant's neoepitope rows into the maximal mutant span. Frameshift
+    # is derived from the variant's own ref/alt (general); LENS's own
+    # frameshift annotation is kept separately only to sanity-check
+    # varcode.
+    start_off, end_off = maximal_mutant_span(
+        start_off, end_off, [r.get('peptide') for r in group_rows],
+        pep_context, variant_is_frameshift(variant))
+    lens_is_frameshift = (
+        str(rep.get('indel_type') or '').strip().lower() == 'frameshift'
+        or 'fs' in str(rep.get('variant_effect') or '').lower())
+
+    # Window pep_context to the canonical SLP fragment size; the same
+    # operation the pipeline path's Isovar fragments satisfy by
+    # construction (see MutantProteinFragment.slp_window_around_mutation).
+    pep_context, start_off, end_off = (
+        MutantProteinFragment.slp_window_around_mutation(
+            pep_context, start_off, end_off, vaccine_peptide_length))
+
+    # Real RNA-read counts from LENS columns. Missing → 0 (honest "no
+    # signal"); never fabricated from TPM.
+    (n_total, n_alt_reads, n_ref_reads,
+     n_alt_supporting_protein) = _read_counts_from_lens_row(rep)
+
+    # Real transcript IDs → pyensembl Transcript objects so template
+    # reports have varcode context; shrinks to [] when unresolvable.
+    tid = rep.get('transcript_id')
+    all_tids = rep.get('all_transcript_ids_encoding_peptide')
+    transcript_ids = []
+    if tid and not (isinstance(tid, float) and pd.isna(tid)):
+        transcript_ids.append(str(tid))
+    if all_tids and isinstance(all_tids, str) and all_tids.lower() != 'nan':
+        for t in all_tids.split(','):
+            t = t.strip()
+            if t and t not in transcript_ids:
+                transcript_ids.append(t)
+    transcripts = _resolve_transcripts(transcript_ids, genome)
+
+    entry = _ExternalVariantEntry(
+        variant=variant,
+        had_transcript_ids=bool(transcript_ids),
+        resolved_transcript=bool(transcripts),
+        # Sanity-check LENS's annotation against varcode on LENS's own
+        # transcript (validation only — LENS's values are kept).
+        annotation=(check_varcode_annotation(
+            variant, transcripts[0] if transcripts else None,
+            gene_name, lens_is_frameshift) + (str(coords),)))
+
+    fragment = MutantProteinFragment(
+        variant=variant, gene_name=gene_name, amino_acids=str(pep_context),
+        mutant_amino_acid_start_offset=start_off,
+        mutant_amino_acid_end_offset=end_off,
+        supporting_reference_transcripts=transcripts,
+        n_overlapping_reads=n_total, n_alt_reads=n_alt_reads,
+        n_ref_reads=n_ref_reads,
+        n_alt_reads_supporting_protein_sequence=n_alt_supporting_protein,
+        # Real ref/alt columns → real genotype, not a placeholder.
+        placeholder_alleles=False)
+
+    # Collect the variant's CandidateEpitopes (deduped on identity); LENS
+    # rows are mutant-derived, so every one overlaps the mutation.
+    seen_peptides = set()
+    seen_epitope_ids = set()
+    variant_epitopes = []
+    for r in group_rows:
+        pep = r.get('peptide') or ""
+        if not pep or pep in seen_peptides:
+            continue
+        seen_peptides.add(pep)
+        for e in by_peptide.get(pep, []):
+            if id(e) in seen_epitope_ids:
+                continue
+            seen_epitope_ids.add(id(e))
+            if not e.overlaps_mutation:
+                e = dataclasses.replace(e, overlaps_mutation=True)
+            variant_epitopes.append(e)
+    if not variant_epitopes:
+        # Transcript stats + annotation already recorded above; just no
+        # vaccine peptide for this variant.
+        return entry
+
+    entry.vaccine_peptide = VaccinePeptide(
+        mutant_protein_fragment=fragment,
+        epitopes=variant_epitopes,
+        num_target_epitopes_to_keep=num_target_epitopes_to_keep)
+
+    # DNA VAF for the report (representative row; LENS dedupes by variant).
+    vaf_raw = rep.get('vaf')
+    if vaf_raw is not None and not (
+            isinstance(vaf_raw, float) and pd.isna(vaf_raw)):
+        try:
+            entry.dna_vaf = float(vaf_raw)
+        except (TypeError, ValueError):
+            pass
+    return entry
+
+
 def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
                                  num_target_epitopes_to_keep=None,
                                  vaccine_peptide_length=25):
@@ -718,193 +916,22 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
     # the report's "DNA VAF" field gets populated instead of "n/a".
     dna_vaf_by_variant = {}
     for coords, group_rows in groups.items():
-        rep = _pick_representative(group_rows, affinity_cols, rank_cols)
-        # Build the Variant from REAL ref/alt columns
-        # (snv_ref_allele/snv_alt_allele or indel_ref_allele/indel_alt_allele
-        # depending on antigen_source). variant_coords gives only chr:pos in
-        # LENS v1.9; the alleles live in dedicated columns.
-        variant = _variant_from_lens_row(rep, genome=genome)
-        if variant is None:
+        entry = _lens_ranked_entry(
+            coords, group_rows, by_peptide, genome, vaccine_peptide_length,
+            affinity_cols, rank_cols, num_target_epitopes_to_keep)
+        if entry.unparseable:
             n_unparseable += 1
-            logger.debug(
-                "Could not build Variant from LENS row at coords=%r "
-                "(antigen_source=%r); skipping.",
-                coords, rep.get('antigen_source'))
             continue
-        peptide = rep.get('peptide') or ""
-        pep_context = rep.get('pep_context') or ""
-        if not pep_context:
-            # No SLP window available — fall back to using the
-            # neoepitope itself as the antigen. The construct will be
-            # short but valid.
-            pep_context = peptide
-        # Translation halts at the first stop codon — anything after
-        # ``*`` doesn't exist as protein. Truncate so manufacturability
-        # / hydropathy / codon-optimization see only real residues.
-        pep_context = truncate_at_stop_codon(str(pep_context))
-        peptide = truncate_at_stop_codon(str(peptide))
-        # If the neoepitope itself was past the stop, we can't make a
-        # vaccine peptide out of it — drop the row.
-        if not pep_context or not peptide:
-            n_skipped_post_stop = locals().get('n_skipped_post_stop', 0) + 1
-            logger.debug(
-                "Dropped LENS row for variant %r: peptide / pep_context "
-                "empty after stop-codon truncation.", coords)
-            continue
-        # Some LENS files emit non-standard residues (selenocysteine
-        # 'U', pyrrolysine 'O', ambiguous 'X' / 'B' / 'Z' / 'J').
-        # Vaxrank's manufacturability / hydropathy code is keyed off
-        # the 20 canonical AAs, so drop the row rather than crash.
-        if not has_only_standard_amino_acids(pep_context):
-            logger.warning(
-                "Dropped LENS row for variant %r: pep_context %r "
-                "contains non-standard residues (allowed: 20 canonical "
-                "AAs).", coords, pep_context)
-            continue
-        # Preserve LENS's own gene name; fall back to empty string
-        # (the codebase convention for "not known") rather than
-        # invent "unknown". Empty propagates through
-        # iter_named_antigens which already handles it.
-        gene_name_raw = rep.get('gene_name')
-        gene_name = (
-            str(gene_name_raw) if gene_name_raw and not (
-                isinstance(gene_name_raw, float) and pd.isna(gene_name_raw))
-            else "")
-
-        start_off, end_off = _mut_offsets_in_context(peptide, pep_context)
-        if start_off is None:
-            logger.debug(
-                "Could not locate peptide %r in pep_context %r for "
-                "variant %r; skipping (mutation span unknown).",
-                peptide, pep_context, coords)
-            continue
-
-        # Frameshift → the whole downstream tail is novel; combine the
-        # variant's neoepitope rows into the maximal mutant span.
-        # Frameshift is derived from the variant's own ref/alt (general,
-        # not a LENS-specific column). ``lens_is_frameshift`` (LENS's
-        # annotation) is kept separately only to sanity-check varcode.
-        start_off, end_off = maximal_mutant_span(
-            start_off, end_off,
-            [r.get('peptide') for r in group_rows],
-            pep_context, variant_is_frameshift(variant))
-        lens_is_frameshift = (
-            str(rep.get('indel_type') or '').strip().lower() == 'frameshift'
-            or 'fs' in str(rep.get('variant_effect') or '').lower())
-
-        # Window pep_context down to the canonical SLP fragment size
-        # (--vaccine-peptide-length, default 25). LENS sometimes
-        # emits the entire protein prefix here, which would render
-        # as a 100+aa "vaccine peptide" — not what
-        # ``MutantProteinFragment`` represents elsewhere in vaxrank.
-        # The pipeline path gets correctly-sized fragments from
-        # Isovar by construction; the same operation lives on
-        # ``MutantProteinFragment.slp_window_around_mutation`` so
-        # both paths share one definition of "an SLP-windowed
-        # protein fragment around a mutation."
-        pep_context, start_off, end_off = (
-            MutantProteinFragment.slp_window_around_mutation(
-                pep_context, start_off, end_off, vaccine_peptide_length))
-
-        # Real RNA-read counts from LENS columns. Missing → 0
-        # (honest "no signal"); never fabricate from TPM.
-        (n_total, n_alt_reads, n_ref_reads,
-         n_alt_supporting_protein) = _read_counts_from_lens_row(rep)
-
-        # Pull real transcript IDs when available, then resolve to
-        # pyensembl ``Transcript`` objects so downstream
-        # ``predicted_effect()`` (used by template reports) has real
-        # varcode context. When ``genome`` is None or an ID can't be
-        # resolved, the resolved list shrinks accordingly — the
-        # report renderer tolerates the empty case.
-        tid = rep.get('transcript_id')
-        all_tids = rep.get('all_transcript_ids_encoding_peptide')
-        transcript_ids = []
-        if tid and not (isinstance(tid, float) and pd.isna(tid)):
-            transcript_ids.append(str(tid))
-        if (all_tids and isinstance(all_tids, str)
-                and all_tids.lower() != 'nan'):
-            for t in all_tids.split(','):
-                t = t.strip()
-                if t and t not in transcript_ids:
-                    transcript_ids.append(t)
-        transcripts = _resolve_transcripts(transcript_ids, genome)
-        if transcript_ids:
+        if entry.annotation is not None:
+            annotation_results.append(entry.annotation)
+        if entry.had_transcript_ids:
             n_with_ids += 1
-            if transcripts:
+            if entry.resolved_transcript:
                 n_resolved += 1
-
-        # Sanity-check LENS's annotation against varcode on LENS's own
-        # transcript (validation only — we keep LENS's values either
-        # way; this just surfaces real disagreements).
-        gene_ok, effect_ok = check_varcode_annotation(
-            variant, transcripts[0] if transcripts else None,
-            gene_name, lens_is_frameshift)
-        annotation_results.append((gene_ok, effect_ok, str(coords)))
-
-        fragment = MutantProteinFragment(
-            variant=variant,
-            gene_name=gene_name,
-            amino_acids=str(pep_context),
-            mutant_amino_acid_start_offset=start_off,
-            mutant_amino_acid_end_offset=end_off,
-            supporting_reference_transcripts=transcripts,
-            n_overlapping_reads=n_total,
-            n_alt_reads=n_alt_reads,
-            n_ref_reads=n_ref_reads,
-            n_alt_reads_supporting_protein_sequence=n_alt_supporting_protein,
-            # Real LENS ref/alt columns are consulted directly, so
-            # the synthesized Variant carries a real biological
-            # genotype — placeholder_alleles is False.
-            placeholder_alleles=False,
-        )
-
-        # Collect all Epitopes whose mutant peptide appears in any of
-        # this variant's rows. The load_lens adapter has already
-        # grouped all per-(allele, predictor) Prediction records into
-        # one CandidateEpitope per (peptide, source, offset), so dedup is on
-        # CandidateEpitope identity — typically yields one CandidateEpitope per unique
-        # peptide in the variant's row group.
-        seen_peptides = set()
-        seen_epitope_ids = set()
-        variant_epitopes = []
-        for r in group_rows:
-            pep = r.get('peptide') or ""
-            if not pep or pep in seen_peptides:
-                continue
-            seen_peptides.add(pep)
-            for e in by_peptide.get(pep, []):
-                if id(e) in seen_epitope_ids:
-                    continue
-                seen_epitope_ids.add(id(e))
-                # CandidateEpitope is frozen — flag mutation-overlap via
-                # dataclasses.replace. LENS rows are mutant-derived
-                # by construction, so every CandidateEpitope reached this way
-                # overlaps the mutation.
-                if not e.overlaps_mutation:
-                    e = dataclasses.replace(e, overlaps_mutation=True)
-                variant_epitopes.append(e)
-
-        if not variant_epitopes:
-            continue
-
-        vp = VaccinePeptide(
-            mutant_protein_fragment=fragment,
-            epitopes=variant_epitopes,
-            num_target_epitopes_to_keep=num_target_epitopes_to_keep,
-        )
-        ranked.append((variant, [vp]))
-
-        # Capture DNA VAF for the report's "DNA VAF" field. Take from
-        # the representative row; LENS dedupes by variant so the
-        # value is consistent across the group.
-        vaf_raw = rep.get('vaf')
-        if vaf_raw is not None and not (
-                isinstance(vaf_raw, float) and pd.isna(vaf_raw)):
-            try:
-                dna_vaf_by_variant[variant] = float(vaf_raw)
-            except (TypeError, ValueError):
-                pass
+        if entry.dna_vaf is not None:
+            dna_vaf_by_variant[entry.variant] = entry.dna_vaf
+        if entry.vaccine_peptide is not None:
+            ranked.append((entry.variant, [entry.vaccine_peptide]))
 
     if n_unparseable:
         logger.warning(
@@ -979,14 +1006,7 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
     # acceptable (e.g., a CSV-only run — no transcript effects
     # rendered anywhere). Only the release-mismatch case is worth
     # logging here.
-    if n_with_ids and n_resolved < n_with_ids:
-        n_unresolved = n_with_ids - n_resolved
-        logger.warning(
-            "%d / %d variant(s) had transcript IDs that didn't resolve "
-            "against the configured pyensembl release. Most often this "
-            "is a release mismatch — pass --ensembl-release N to match "
-            "the build LENS used.", n_unresolved, n_with_ids)
-
+    log_transcript_resolution(n_with_ids, n_resolved, "LENS")
     log_varcode_agreement(annotation_results, "LENS")
 
     # ── Load funnel summary ──────────────────────────────────────────
@@ -1032,15 +1052,9 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
     funnel.append("  note (SNV/INDEL anomalies): %s" % note)
     logger.info("\n".join(funnel))
 
-    # Order by target_epitope_score descending so the top candidates
-    # win greedy bin-packing in the construct assemblers. Ties broken
-    # alphabetically by variant coordinates for determinism.
-    ranked.sort(
-        key=lambda pair: (
-            -pair[1][0].target_epitope_score if pair[1] else 0.0,
-            str(pair[0]),
-        ))
-    return ranked, dna_vaf_by_variant
+    # Top candidates first so they win greedy bin-packing in the
+    # construct assemblers (shared ordering helper).
+    return ranked_sorted_by_target_score(ranked), dna_vaf_by_variant
 
 
 def _parse_pvacseq_id(vid, genome=None):
@@ -1308,26 +1322,10 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
             "Skipped %d pVACseq row group(s) with unparseable IDs; "
             "see DEBUG log for details.", n_skipped)
 
-    # The "no genome configured" case is now caught pre-flight in
-    # ``arg_parser.check_args`` for runs that request template
-    # reports; only the release-mismatch case is worth logging here.
-    if n_with_ids and n_resolved < n_with_ids:
-        n_unresolved = n_with_ids - n_resolved
-        logger.warning(
-            "%d / %d variant(s) had Best Transcript IDs that didn't "
-            "resolve against the configured pyensembl release. Most "
-            "often this is a release mismatch — pass --ensembl-release "
-            "N to match the build pVACseq used.",
-            n_unresolved, n_with_ids)
-
+    log_transcript_resolution(
+        n_with_ids, n_resolved, "pVACseq", id_label="Best Transcript IDs")
     log_varcode_agreement(annotation_results, "pVACseq")
-
-    ranked.sort(
-        key=lambda pair: (
-            -pair[1][0].target_epitope_score if pair[1] else 0.0,
-            str(pair[0]),
-        ))
-    return ranked, dna_vaf_by_variant
+    return ranked_sorted_by_target_score(ranked), dna_vaf_by_variant
 
 
 def _patient_info_from_external(ranked, source_path, patient_id,

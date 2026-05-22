@@ -479,7 +479,10 @@ def test_write_run_summary(tmp_path):
     assert 'inferred from report' in text
     assert 'HLA-A*02:01' in text
     assert 'variants with antigens:' in text and '5' in text
-    assert 'peptide constructs:' in text and 'mrna constructs:' in text
+    # Multi-type + reports requested → split layout, so each modality
+    # subdir holds constructs + its own report.
+    assert 'peptide/' in text and 'mrna/' in text
+    assert 'constructs + vaccine_report' in text
 
 
 def test_write_run_summary_noop_without_output_dir(tmp_path):

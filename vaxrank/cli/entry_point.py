@@ -993,12 +993,20 @@ def _write_run_summary(args, patient_info, source):
             lines.append("  %-18s %s" % (
                 label + ":", os.path.relpath(path, output_dir)))
     vaccine_types = _resolve_vaccine_types(args)
+    # In the split-report layout (multi-type + reports requested) each
+    # modality subdir also holds its own vaccine_report; say so.
+    split_reports = len(vaccine_types) > 1 and any(
+        getattr(args, a, '') for a in (
+            'output_ascii_report', 'output_html_report', 'output_pdf_report'))
     for vtype in vaccine_types:
         target_dir = _vaccine_target_dir(output_dir, vtype, vaccine_types)
         if target_dir:
-            lines.append("  %-18s %s/" % (
-                vtype + " constructs:",
-                os.path.relpath(target_dir, output_dir)))
+            contents = (
+                "constructs + vaccine_report" if split_reports
+                else "constructs")
+            lines.append("  %-18s %s/  (%s)" % (
+                vtype + ":", os.path.relpath(target_dir, output_dir),
+                contents))
 
     os.makedirs(output_dir, exist_ok=True)
     summary_path = os.path.join(output_dir, "run_summary.txt")
