@@ -395,8 +395,8 @@ class TemplateDataCreator(object):
         """
         wt_ic50 = self._wt_ic50_for_allele(
             epitope, prediction.allele, predictor=prediction.predictor_name)
-        wt_ic50_str = (
-            '%.2f nM' % wt_ic50 if wt_ic50 is not None else 'No prediction')
+        wt_ic50_str = _format_ic50(wt_ic50)
+        ic50_str = _format_ic50(prediction.value)
         wt_peptide_sequence = (
             epitope.wt.sequence if epitope.wt is not None else '')
         epitope_data = OrderedDict([
@@ -409,7 +409,7 @@ class TemplateDataCreator(object):
             # netmhcpan), so making the source explicit per row is
             # the only honest answer.
             ('Predictor', prediction.predictor_name or '—'),
-            ('IC50', '%.2f nM' % prediction.value),
+            ('IC50', ic50_str),
             # ``Score`` is the per-allele DSL score for this epitope
             # as computed at predict time by the configured
             # ``EpitopeConfig.score_expr`` (default: logistic of
@@ -739,6 +739,14 @@ def _sanitize(val):
         return int(val)
     else:
         return _str_sig_figs(val, 5)
+
+def _format_ic50(value):
+    try:
+        if pd.isna(value):
+            return 'No prediction'
+    except (TypeError, ValueError):
+        pass
+    return '%.2f nM' % value
 
 def resize_columns(worksheet, amino_acids_col, pos_col):
     """

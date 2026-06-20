@@ -76,6 +76,33 @@ def _make_mutant_epitope(ic50=10.0, peptide="A" * 9, source="A" * 25,
     )
 
 
+def _make_mutant_epitope_with_affinities(
+        ic50s, peptide="A" * 9, source="A" * 25, offset=0):
+    preds = tuple(
+        Prediction(
+            kind='pMHC_affinity',
+            predictor_name='test',
+            predictor_version='',
+            allele=f'HLA-A*{i + 1:02d}:01',
+            peptide=peptide,
+            value=ic50,
+            score=0.0,
+            percentile_rank=0.5,
+        )
+        for i, ic50 in enumerate(ic50s)
+    )
+    return CandidateEpitope.from_peptide(
+        Peptide(
+            sequence=peptide,
+            source_sequence=source,
+            offset=offset,
+            predictions=preds,
+        ),
+        overlaps_mutation=True,
+        occurs_in_reference=False,
+    )
+
+
 def test_default_manufacturability_tuple_length():
     """Default sort tuple length = 10 (legacy behavior, unchanged)."""
     vp = VaccinePeptide(
@@ -85,6 +112,23 @@ def test_default_manufacturability_tuple_length():
     tup = vp.peptide_synthesis_difficulty_score_tuple()
     assert len(tup) == 10
     assert len(DEFAULT_MANUFACTURABILITY_RULES) == 10
+
+
+def test_vaccine_peptide_sort_ignores_missing_ic50_values():
+    """IC50 sorting should use finite affinity values and send
+    missing-only epitopes to the end."""
+    mixed_missing = _make_mutant_epitope_with_affinities(
+        [None, np.nan, 10.0], peptide="A" * 9)
+    finite = _make_mutant_epitope(ic50=50.0, peptide="C" * 9)
+    missing_only = _make_mutant_epitope(ic50=np.nan, peptide="D" * 9)
+
+    vp = VaccinePeptide(
+        mutant_protein_fragment=_make_fragment(),
+        epitopes=[missing_only, finite, mixed_missing],
+        sort_epitopes_by="ic50",
+    )
+
+    assert vp.target_epitopes == [mixed_missing, finite, missing_only]
 
 
 def test_custom_rules_shorten_tuple():
