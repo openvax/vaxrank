@@ -74,7 +74,7 @@ def _make_vaccine_peptide(
                     kind='pMHC_affinity', predictor_name='stub',
                     predictor_version='', allele='HLA-A*02:01',
                     peptide=seq, value=ic50, score=0.0,
-                    percentile_rank=ic50 / 100.0),)),
+                    percentile_rank=0.5),)),
             overlaps_mutation=True, occurs_in_reference=False)
         for seq, ic50 in epitope_seqs_with_ic50
     ]

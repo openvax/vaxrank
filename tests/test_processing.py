@@ -37,7 +37,7 @@ from vaxrank.processing import (
 
 
 def _ep(peptide, source, offset, ic50=100.0, allele="HLA-A*02:01",
-        predictor="stub"):
+        predictor="stub", percentile_rank=0.5):
     """Build a minimal ``CandidateEpitope`` for tests — one mutant
     pMHC_affinity ``Prediction`` plus the (peptide, source, offset)
     layout the processing annotator joins on."""
@@ -49,7 +49,7 @@ def _ep(peptide, source, offset, ic50=100.0, allele="HLA-A*02:01",
         peptide=peptide,
         value=ic50,
         score=0.0,
-        percentile_rank=ic50 / 100.0,
+        percentile_rank=percentile_rank,
     )
     return CandidateEpitope.from_peptide(
         Peptide(
@@ -375,6 +375,22 @@ def test_epitope_data_renders_one_row_per_predictor_for_same_pep_allele():
     # column order is stable across rows.
     assert all(isinstance(r, OrderedDict) for r in rows)
     assert list(rows[0].keys()) == list(rows[1].keys())
+
+
+def test_epitope_data_renders_missing_mutant_ic50_placeholder():
+    """Rows with no affinity value should render instead of crashing."""
+    from vaxrank.report import TemplateDataCreator
+
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.processing_predictions_by_key = {}
+    for missing_value in (None, float('nan')):
+        epitope = _ep(
+            "SIINFEKL", "SSIINFEKL", offset=1, ic50=missing_value,
+            percentile_rank=None)
+
+        row = creator._epitope_data(epitope, epitope.best_affinity())
+
+        assert row['IC50'] == 'No prediction'
 
 
 def test_epitope_data_surfaces_processing_columns_when_annotated():

@@ -140,6 +140,20 @@ class VaccinePeptide(DataclassSerializable):
         # sort to the end via +inf.
         sort_by = self.sort_epitopes_by
 
+        def _usable_prediction_values(predictions, attr):
+            values = []
+            for p in predictions:
+                value = getattr(p, attr)
+                if value is None:
+                    continue
+                try:
+                    if np.isnan(value):
+                        continue
+                except TypeError:
+                    pass
+                values.append(value)
+            return values
+
         def _epitope_sort_key(e):
             affinity_leaves = [
                 p for p in e.predictions_flat()
@@ -147,13 +161,11 @@ class VaccinePeptide(DataclassSerializable):
             if not affinity_leaves:
                 return float("inf")
             if sort_by == "percentile_rank":
-                ranks = [
-                    p.percentile_rank for p in affinity_leaves
-                    if p.percentile_rank is not None
-                    and not (isinstance(p.percentile_rank, float)
-                             and np.isnan(p.percentile_rank))]
+                ranks = _usable_prediction_values(
+                    affinity_leaves, "percentile_rank")
                 return min(ranks) if ranks else float("inf")
-            return min(p.value for p in affinity_leaves)
+            ic50s = _usable_prediction_values(affinity_leaves, "value")
+            return min(ic50s) if ic50s else float("inf")
 
         # Universal target/self split — source-agnostic. An epitope
         # whose exact sequence appears in the patient's reference
