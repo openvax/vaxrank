@@ -88,8 +88,8 @@ def make_vaxrank_arg_parser():
         default=None,
         help="Path to YAML config. May be repeated; later files deep-merge "
              "over earlier ones. Each file may contain any of the top-level "
-             "sections 'epitopes', 'vaccine_peptides', and 'manufacturability' "
-             "— split them across files or keep them together.")
+             "sections 'epitopes', 'vaccine_peptides', and 'manufacturability'; "
+             "split them across files or keep them together.")
     add_config_override_args(arg_parser)
 
     arg_parser.add_argument(
@@ -237,10 +237,10 @@ def add_output_args(arg_parser):
              "{peptide, mrna}. Default: 'peptide mrna' (both); pass "
              "a subset to design just one. Single-mode runs (one "
              "type) write directly into --output-dir. Multi-mode "
-             "runs (≥2) write into per-modality subdirs "
-             "(--output-dir/peptide/, --output-dir/mrna/, …) so the "
+             "runs (2 or more) write into per-modality subdirs "
+             "(--output-dir/peptide/, --output-dir/mrna/, etc.) so the "
              "same flag set works regardless of how many modalities "
-             "are active. Future modalities (DNA, …) plug in here.")
+             "are active. Future modalities (DNA, etc.) plug in here.")
 
     # Unified output directory. ``--output-dir`` is always a
     # directory; vaxrank chooses canonical filenames inside it.
@@ -263,7 +263,7 @@ def add_output_args(arg_parser):
         help="Destination directory for the assembled vaccine "
              "constructs. Single-mode runs (one --vaccine-type) write "
              "files directly into DIR; multi-mode runs write to "
-             "per-modality subdirs (DIR/peptide/, DIR/mrna/, …). "
+             "per-modality subdirs (DIR/peptide/, DIR/mrna/, etc.). "
              "Required when designing a vaccine; omit for "
              "ranking-only / report-only runs. Vaxrank picks "
              "canonical filenames inside (vaccine.fasta / cds.fasta / "
@@ -329,7 +329,7 @@ def add_output_args(arg_parser):
              "vaxrank/processing_prediction.py. Pepsickle runs in an "
              "isolated subprocess (issue #266) so torch's libomp "
              "doesn't clash with the parent's pandas / numpy / "
-             "pyarrow OpenMP runtime. Doesn't change vaccine ranking — "
+             "pyarrow OpenMP runtime. Doesn't change vaccine ranking; "
              "adds info for review.")
     output_args_group.add_argument(
         "--no-processing-aware-annotation",
@@ -372,7 +372,7 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-ascii-report",
         default="",
-        help="Path to ASCII summary report — ranked antigens with "
+        help="Path to ASCII summary report: ranked antigens with "
              "their predicted MHC ligands, manufacturability metrics "
              "(peptide-mode only by default), and processing-credibility "
              "scores. Antigen-centric: content adapts to --vaccine-type "
@@ -519,7 +519,7 @@ def add_mrna_output_args(group):
     group.add_argument(
         "--mrna-3p-utr",
         default="HBB_FI",
-        help="3' UTR name (one of: %s). Default: HBB_FI (tandem 2× HBB / "
+        help="3' UTR name (one of: %s). Default: HBB_FI (tandem 2x HBB / "
              "FI element, BioNTech FixVac canonical)."
              % ", ".join(sorted(UTRS_3P)))
     group.add_argument(
@@ -620,7 +620,7 @@ def add_mrna_output_args(group):
         help="Override --antigen-content for mRNA. 'mutation_spanning' "
              "(default if --antigen-content unset) emits 25-aa SLP-style "
              "windows; 'minimal_epitope' emits top MHC ligands as "
-             "antigens — concatenated minimal-epitope mRNA "
+             "antigens; concatenated minimal-epitope mRNA "
              "(\"string of beads\") is a first-class design.")
     group.add_argument(
         "--mrna-epitopes-per-antigen",
@@ -633,7 +633,7 @@ def add_mrna_output_args(group):
         default=2,
         type=int,
         help="Maximum number of mRNA constructs in the vaccine. "
-             "Default: 2 (BioNTech FixVac canonical: 2× pentatope, "
+             "Default: 2 (BioNTech FixVac canonical: 2x pentatope, "
              "10 antigens at 5/construct, Sahin 2017). Set to 1 for "
              "a single construct; raise for broader coverage.")
     group.add_argument(
@@ -694,7 +694,7 @@ def add_peptide_output_args(group):
         default="G4Sx3",
         type=_linker_arg,
         help="Linker used in --peptide-mode=multi_epitope (case-insensitive). "
-             "Accepts named entries (P2A, AAY, EAAAK, …), compositional "
+             "Accepts named entries (P2A, AAY, EAAAK, etc.), compositional "
              "forms ((BASE)N or BASExN for repeats, GnSm for n-glycines + "
              "m-serines literal, AnY for n-alanines + Y), and aliases. "
              "Shared with mRNA mode. Default: G4Sx3 = (G4S)3 = "

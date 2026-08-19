@@ -18,6 +18,9 @@ See: https://github.com/openvax/vaxrank/issues/29
 """
 
 import logging
+import os
+import subprocess
+import sys
 from unittest.mock import MagicMock, patch
 
 from vaxrank.cli import make_vaxrank_arg_parser
@@ -25,6 +28,33 @@ from vaxrank.cli.entry_point import (
     _resolve_ensembl_release,
     configure_logging,
 )
+
+
+def test_help_succeeds_under_ascii_locale():
+    """CLI help must not depend on a UTF-8 terminal (issue #308)."""
+    env = os.environ.copy()
+    env.update({
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PYTHONCOERCECLOCALE": "0",
+        "PYTHONUTF8": "0",
+    })
+    command = (
+        "from vaxrank.cli.entry_point import main; "
+        "main(['-h'])"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", command],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("usage: vaxrank")
+    assert result.stdout.isascii()
 
 
 # ---- --ensembl-release (#29) ------------------------------------------------
