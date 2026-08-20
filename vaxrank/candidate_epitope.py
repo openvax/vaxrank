@@ -508,12 +508,11 @@ class CandidateEpitope(Peptide):
     # them is intended.
     occurs_in_reference: bool = False
 
-    # CTA-aware safety signal: same as ``occurs_in_reference`` but
-    # with CTA genes excluded from the reference set. Equals
-    # ``occurs_in_reference`` until a CTA database is configured
-    # (today the CTA set is empty, so producers populate the two
-    # flags identically). Consumers opt into CTA-friendly policy by
-    # reading this flag instead of the raw one.
+    # CTA-aware safety signal: same as ``occurs_in_reference`` but with
+    # source genes in oncoref's full CTA candidate universe excluded from
+    # the reference set. Shared sequences in non-CTA genes remain present.
+    # Consumers opt into CTA-friendly policy by reading this flag instead
+    # of the raw one.
     occurs_in_non_CTA_reference: bool = False
 
     # Per-allele score for this epitope as computed by the configured

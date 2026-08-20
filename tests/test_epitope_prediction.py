@@ -74,6 +74,41 @@ def test_reference_peptide_logic(mouse_genome):
     eq_(_legacy_score_one(p_not_in_ref.value, p_not_in_ref.percentile_rank),
         vaccine_peptide.target_epitope_score)
 
+
+def test_predict_epitopes_records_distinct_non_cta_reference_flag(mouse_genome):
+    """The CTA-aware flag must come from its own reference index."""
+    from unittest.mock import patch
+
+    wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-201")[0]
+    protein_fragment = MutantProteinFragment(
+        variant=Variant("X", "8125624", "C", "A"),
+        gene_name="Wdr13",
+        amino_acids="KLQGHSAPVLDVIVNCDESLLASSD",
+        mutant_amino_acid_start_offset=12,
+        mutant_amino_acid_end_offset=13,
+        n_overlapping_reads=71,
+        n_alt_reads=25,
+        n_ref_reads=46,
+        n_alt_reads_supporting_protein_sequence=2,
+        supporting_reference_transcripts=[wdr13_transcript],
+    )
+
+    with patch("vaxrank.epitope_logic.ReferenceProteome") as reference_cls:
+        reference_cls.return_value.contains.return_value = True
+        reference_cls.from_genome.return_value.contains.return_value = False
+        epitopes = predict_epitopes(
+            mhc_predictor=RandomBindingPredictor(["H-2-Kb"]),
+            protein_fragment=protein_fragment,
+            epitope_config=EpitopeConfig(min_epitope_score=0),
+            genome=mouse_genome,
+        )
+
+    assert epitopes
+    assert all(epitope.occurs_in_reference for epitope in epitopes)
+    assert all(not epitope.occurs_in_non_CTA_reference for epitope in epitopes)
+    reference_cls.from_genome.assert_called_once_with(
+        mouse_genome, exclude_cta_genes=True)
+
 def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel(mouse_genome):
     """Multi-model TopiaryPredictor (post-2.24, #261) keeps each
     predictor's view of every (peptide, allele) pair. In the new

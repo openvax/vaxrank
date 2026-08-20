@@ -30,7 +30,10 @@ from vaxrank.reference_proteome import (
     get_cache_dir,
     DEFAULT_MIN_KMER_LENGTH,
     DEFAULT_MAX_KMER_LENGTH,
+    _filtered_kmer_set_cache,
     _kmer_set_cache,
+    cta_source_gene_ids_for_genome,
+    oncoref_cta_source_gene_ids,
 )
 
 from .common import eq_, ok_
@@ -522,8 +525,6 @@ def test_genome_protein_dict_excludes_gene_ids():
     t2 = create_mock_transcript("T2", "GHIJKL", gene_id="G2")
     t3 = create_mock_transcript("T3", "MNOPQR", gene_id="G1")
     genome = create_mock_genome([t1, t2, t3])
-    genome.transcript_ids_of_gene_id.return_value = ["T1", "T3"]
-
     proteins = genome_protein_dict(genome, exclude_gene_ids={"G1"})
     assert "T1" not in proteins
     assert "T3" not in proteins
@@ -540,13 +541,21 @@ def test_genome_protein_dict_skips_non_coding():
 
 
 def test_genome_protein_dict_exclude_unknown_gene_id():
-    """Excluding a gene ID not in the genome should warn, not crash."""
+    """Excluding a gene ID not in the genome should be a harmless no-op."""
     t1 = create_mock_transcript("T1", "ABCDEF", gene_id="G1")
     genome = create_mock_genome([t1])
-    genome.transcript_ids_of_gene_id.side_effect = ValueError("not found")
 
     proteins = genome_protein_dict(genome, exclude_gene_ids={"NONEXISTENT"})
     assert "T1" in proteins
+
+
+def test_genome_protein_dict_normalizes_versioned_gene_ids():
+    t1 = create_mock_transcript("T1", "ABCDEF", gene_id="G1.7")
+    genome = create_mock_genome([t1])
+
+    proteins = genome_protein_dict(genome, exclude_gene_ids={"G1"})
+
+    assert proteins == {}
 
 
 # =============================================================================
@@ -610,8 +619,6 @@ def test_from_genome_with_exclude_gene_ids():
     t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="G1")
     t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="G2")
     genome = create_mock_genome([t1, t2])
-    genome.transcript_ids_of_gene_id.return_value = ["T1"]
-
     ref = ReferenceProteome.from_genome(
         genome, exclude_gene_ids={"G1"}, min_kmer_length=8, max_kmer_length=8)
     assert not ref.contains("ABCDEFGH")  # G1 excluded
@@ -619,17 +626,64 @@ def test_from_genome_with_exclude_gene_ids():
 
 
 def test_from_genome_with_exclude_cta_genes():
-    t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="ENSG00000006047")
+    prame_gene_id = "ENSG00000185686"
+    t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id=prame_gene_id)
     t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="ENSG00000099999")
-    genome = create_mock_genome([t1, t2])
-    genome.transcript_ids_of_gene_id.return_value = ["T1"]
-
-    ref = ReferenceProteome.from_genome(
-        genome, exclude_cta_genes=True,
-        min_kmer_length=8, max_kmer_length=8)
+    genome = create_mock_genome([t1, t2], species_name="Homo sapiens")
+    with patch(
+            "vaxrank.reference_proteome.oncoref_cta_source_gene_ids",
+            return_value=frozenset({prame_gene_id})):
+        ref = ReferenceProteome.from_genome(
+            genome, exclude_cta_genes=True,
+            min_kmer_length=8, max_kmer_length=8)
 
     assert not ref.contains("ABCDEFGH")  # CTA gene excluded
     assert ref.contains("KLMNOPQR")
+    assert ref.excluded_gene_ids == frozenset({prame_gene_id})
+
+
+def test_oncoref_cta_source_universe_includes_prame():
+    """PRAME must never re-enter the negative self source set."""
+    assert "ENSG00000185686" in oncoref_cta_source_gene_ids()
+
+
+def test_cta_source_exclusion_is_human_only():
+    genome = create_mock_genome([], species_name="Mus musculus")
+    with patch("vaxrank.reference_proteome.oncoref_cta_source_gene_ids") as load_ctas:
+        assert cta_source_gene_ids_for_genome(genome) == frozenset()
+    load_ctas.assert_not_called()
+
+
+def test_cta_shared_sequence_remains_self_through_non_cta_gene():
+    """Removing a CTA source gene must not remove a shared non-CTA peptide."""
+    prame_gene_id = "ENSG00000185686"
+    shared = "ABCDEFGHIJ"
+    cta = create_mock_transcript("CTA_TX", shared, gene_id=prame_gene_id)
+    non_cta = create_mock_transcript("SELF_TX", shared, gene_id="ENSG_NON_CTA")
+    genome = create_mock_genome(
+        [cta, non_cta], species_name="Homo sapiens", release=111)
+    with patch(
+            "vaxrank.reference_proteome.oncoref_cta_source_gene_ids",
+            return_value=frozenset({prame_gene_id})):
+        ref = ReferenceProteome.from_genome(
+            genome, exclude_cta_genes=True,
+            min_kmer_length=8, max_kmer_length=8)
+
+    assert ref.contains("ABCDEFGH")
+
+
+def test_filtered_reference_proteome_is_cached_per_genome_and_policy():
+    _filtered_kmer_set_cache.clear()
+    t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="G1")
+    t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="G2")
+    genome = create_mock_genome([t1, t2], release=112)
+    first = ReferenceProteome.from_genome(
+        genome, exclude_gene_ids={"G1"}, min_kmer_length=8, max_kmer_length=8)
+    second = ReferenceProteome.from_genome(
+        genome, exclude_gene_ids={"G1"}, min_kmer_length=8, max_kmer_length=8)
+
+    assert first._kmer_set is second._kmer_set
+    assert genome.transcripts.call_count == 1
 
 
 def test_from_genome_with_exclude_fasta(tmp_path):
@@ -664,8 +718,6 @@ def test_from_genome_combined_exclusions(tmp_path):
     t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="G2")
     t3 = create_mock_transcript("T3", "UVWXYZABCD", gene_id="G3")
     genome = create_mock_genome([t1, t2, t3])
-    genome.transcript_ids_of_gene_id.return_value = ["T1"]
-
     ref = ReferenceProteome.from_genome(
         genome,
         exclude_gene_ids={"G1"},

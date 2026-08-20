@@ -175,9 +175,8 @@ class VaccinePeptide(DataclassSerializable):
         # behavior: peptides identical to WT land in self_epitopes
         # because they're in the reference. Viral peptides absent
         # from the reference land in target_epitopes. CTAs land in
-        # self_epitopes today; when consumers opt into the
-        # CTA-aware ``occurs_in_non_CTA_reference`` flag, CTAs will
-        # move to target_epitopes without changing this code.
+        # self_epitopes today. Antigen-aware consumers introduced by
+        # issue #303 use ``occurs_in_non_CTA_reference`` for CTA sources.
         self.target_epitopes = sorted(
             [e for e in self.epitopes if not e.occurs_in_reference],
             key=_epitope_sort_key,
