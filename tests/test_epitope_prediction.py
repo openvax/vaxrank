@@ -63,11 +63,16 @@ def test_reference_peptide_logic(mouse_genome):
     e_not_in_ref, p_not_in_ref = by_key[('LDVIVNCDE', 'H-2-Kb')]
     ok_(e_in_ref.occurs_in_reference)
     ok_(not e_not_in_ref.occurs_in_reference)
+    assert e_in_ref.self_reference_match.occurs
+    assert not e_not_in_ref.self_reference_match.occurs
+    assert e_in_ref.overlaps_targetable == e_in_ref.overlaps_mutation
+    assert e_not_in_ref.overlaps_targetable == e_not_in_ref.overlaps_mutation
 
     # Build a VaccinePeptide from these two Epitopes; the mutant /
     # wildtype split comes out of __post_init__.
     vaccine_peptide = VaccinePeptide(
         protein_fragment, [e_in_ref, e_not_in_ref])
+    assert vaccine_peptide.antigen.kind == "mutation"
 
     eq_(_legacy_score_one(p_in_ref.value, p_in_ref.percentile_rank),
         vaccine_peptide.self_epitope_score)

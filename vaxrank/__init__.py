@@ -16,14 +16,28 @@ from .epitope_config import EpitopeConfig
 from .epitope_logic import predict_epitopes
 from .candidate_epitope import CandidateEpitope, Peptide
 from .vaccine_config import VaccineConfig
+from .vaccine_antigen import (
+    AminoAcidInterval,
+    SelfReferenceMatch,
+    SelfReferenceSource,
+    TargetableMask,
+    TumorSpecificityAttestation,
+    VaccineAntigen,
+)
 from .vaccine_peptide import VaccinePeptide
 from .version import __version__
 
 __all__ = [
     "__version__",
+    "AminoAcidInterval",
     "CandidateEpitope",
     "EpitopeConfig",
     "Peptide",
+    "SelfReferenceMatch",
+    "SelfReferenceSource",
+    "TargetableMask",
+    "TumorSpecificityAttestation",
+    "VaccineAntigen",
     "VaccineConfig",
     "VaccinePeptide",
     "predict_epitopes",
