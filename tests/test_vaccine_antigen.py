@@ -67,8 +67,15 @@ def test_targetable_mask_rejects_ambiguous_or_out_of_bounds_intervals():
     with pytest.raises(ValueError, match="extends beyond"):
         VaccineAntigen(
             kind=ANTIGEN_KIND_CTA,
-            amino_acids="ABCDE",
+            amino_acids="ACDEF",
             targetable_mask=TargetableMask((AminoAcidInterval(0, 6),)),
+            tumor_specificity=admitted_attestation(),
+        )
+    with pytest.raises(ValueError, match="non-canonical amino acids: J"):
+        VaccineAntigen(
+            kind=ANTIGEN_KIND_CTA,
+            amino_acids="ACDEFGHIJL",
+            targetable_mask=TargetableMask((AminoAcidInterval(0, 10),)),
             tumor_specificity=admitted_attestation(),
         )
     with pytest.raises(ValueError, match="requires targetable content"):
@@ -98,7 +105,7 @@ def test_mutation_adapter_preserves_target_span_and_source_ids():
         protein_id="ENSP000001",
     )
     fragment = SimpleNamespace(
-        amino_acids="ABCDEFGHIJ",
+        amino_acids="ACDEFGHIKL",
         mutant_amino_acid_start_offset=3,
         mutant_amino_acid_end_offset=4,
         supporting_reference_transcripts=[transcript],
@@ -135,6 +142,12 @@ def test_self_reference_match_rejects_excluded_or_inconsistent_sources():
             occurs=True,
             antigen_kind=ANTIGEN_KIND_CTA,
             source_provenance_complete=True,
+        )
+    with pytest.raises(ValueError, match="non-canonical amino acids: X"):
+        SelfReferenceMatch(
+            peptide="SIINFEKX",
+            occurs=False,
+            antigen_kind=ANTIGEN_KIND_CTA,
         )
 
 
