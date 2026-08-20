@@ -103,6 +103,8 @@ def predict_epitopes(
         epitope_config = EpitopeConfig()
 
     reference_proteome = ReferenceProteome(genome)
+    non_cta_reference_proteome = ReferenceProteome.from_genome(
+        genome, exclude_cta_genes=True)
 
     # Wrap bare mhctools predictors in a TopiaryPredictor
     if not isinstance(mhc_predictor, TopiaryPredictor):
@@ -214,6 +216,7 @@ def predict_epitopes(
             end_offset=peptide_end_offset)
 
         occurs_in_reference = reference_proteome.contains(peptide)
+        occurs_in_non_cta_reference = non_cta_reference_proteome.contains(peptide)
         if occurs_in_reference:
             logger.debug('Peptide %s occurs in reference', peptide)
             num_occurs_in_reference += 1
@@ -289,11 +292,11 @@ def predict_epitopes(
             'source_class': SOURCE_CLASS_MUTATION,
             'overlaps_mutation': overlaps_mutation,
             'occurs_in_reference': occurs_in_reference,
-            # ReferenceProteome doesn't yet know about CTAs, so the
-            # CTA-aware flag mirrors the raw one. When the CTA set
-            # is populated (via pirlygenes), this branch will diverge
-            # for CTA-matching peptides.
-            'occurs_in_non_CTA_reference': occurs_in_reference,
+            # Exact self after removing source genes in oncoref's full CTA
+            # candidate universe. This may diverge from the raw reference flag
+            # for CTA-family peptides; shared sequences in any non-CTA gene
+            # remain present because the filtered index retains those genes.
+            'occurs_in_non_CTA_reference': occurs_in_non_cta_reference,
             # Per-(peptide, allele) DSL score; threaded onto the
             # CandidateEpitope as ``per_allele_scores[allele]`` by
             # ``candidate_epitopes_from_rows``. Single source of

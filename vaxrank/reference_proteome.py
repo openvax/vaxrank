@@ -18,10 +18,11 @@ Uses a set-based index for O(1) membership testing of peptide kmers.
 
 import gzip
 import io
-import os
 import logging
+import os
 import pickle
 import threading
+from functools import lru_cache
 
 from platformdirs import user_cache_dir
 from tqdm import tqdm
@@ -30,80 +31,47 @@ from .config.defaults import DEFAULT_MAX_KMER_LENGTH, DEFAULT_MIN_KMER_LENGTH
 
 logger = logging.getLogger(__name__)
 
-# Cancer-testis antigen (CTA) Ensembl gene IDs, derived from pirlygenes
-# CTA_gene_ids() (filtered & expressed). Inlined to avoid the heavy dependency.
-CTA_GENE_IDS = frozenset({
-    "ENSG00000006047", "ENSG00000007350", "ENSG00000010318", "ENSG00000042813",
-    "ENSG00000046774", "ENSG00000054796", "ENSG00000068985", "ENSG00000077800",
-    "ENSG00000077935", "ENSG00000092345", "ENSG00000095627", "ENSG00000099399",
-    "ENSG00000102021", "ENSG00000103023", "ENSG00000104755", "ENSG00000104804",
-    "ENSG00000104901", "ENSG00000106013", "ENSG00000106304", "ENSG00000114487",
-    "ENSG00000117148", "ENSG00000118434", "ENSG00000118491", "ENSG00000121101",
-    "ENSG00000122304", "ENSG00000123576", "ENSG00000123584", "ENSG00000124092",
-    "ENSG00000124227", "ENSG00000124260", "ENSG00000124467", "ENSG00000124490",
-    "ENSG00000125207", "ENSG00000126467", "ENSG00000126752", "ENSG00000126856",
-    "ENSG00000129862", "ENSG00000129864", "ENSG00000131126", "ENSG00000132446",
-    "ENSG00000135248", "ENSG00000137090", "ENSG00000137948", "ENSG00000139351",
-    "ENSG00000140478", "ENSG00000141096", "ENSG00000141255", "ENSG00000141316",
-    "ENSG00000141371", "ENSG00000141437", "ENSG00000142025", "ENSG00000142698",
-    "ENSG00000143006", "ENSG00000143452", "ENSG00000144962", "ENSG00000145309",
-    "ENSG00000146047", "ENSG00000147081", "ENSG00000147183", "ENSG00000147378",
-    "ENSG00000147381", "ENSG00000148156", "ENSG00000150628", "ENSG00000151962",
-    "ENSG00000152430", "ENSG00000152670", "ENSG00000153060", "ENSG00000153779",
-    "ENSG00000155087", "ENSG00000155495", "ENSG00000156009", "ENSG00000156269",
-    "ENSG00000158639", "ENSG00000159289", "ENSG00000159708", "ENSG00000161860",
-    "ENSG00000161973", "ENSG00000162039", "ENSG00000162641", "ENSG00000162771",
-    "ENSG00000162843", "ENSG00000163114", "ENSG00000163530", "ENSG00000164113",
-    "ENSG00000164304", "ENSG00000165583", "ENSG00000165584", "ENSG00000166049",
-    "ENSG00000166069", "ENSG00000166118", "ENSG00000166796", "ENSG00000168594",
-    "ENSG00000168757", "ENSG00000169059", "ENSG00000169551", "ENSG00000169800",
-    "ENSG00000170516", "ENSG00000170748", "ENSG00000170950", "ENSG00000170965",
-    "ENSG00000171402", "ENSG00000171794", "ENSG00000172073", "ENSG00000172717",
-    "ENSG00000174015", "ENSG00000174016", "ENSG00000174898", "ENSG00000175646",
-    "ENSG00000175809", "ENSG00000175820", "ENSG00000175877", "ENSG00000176256",
-    "ENSG00000176566", "ENSG00000176635", "ENSG00000176774", "ENSG00000176988",
-    "ENSG00000177294", "ENSG00000177673", "ENSG00000177689", "ENSG00000177947",
-    "ENSG00000177992", "ENSG00000178021", "ENSG00000178279", "ENSG00000178997",
-    "ENSG00000179046", "ENSG00000179088", "ENSG00000179407", "ENSG00000180138",
-    "ENSG00000180336", "ENSG00000181323", "ENSG00000181433", "ENSG00000182308",
-    "ENSG00000182459", "ENSG00000182583", "ENSG00000183206", "ENSG00000183434",
-    "ENSG00000183668", "ENSG00000184033", "ENSG00000184361", "ENSG00000184507",
-    "ENSG00000184650", "ENSG00000184735", "ENSG00000185264", "ENSG00000185686",
-    "ENSG00000185863", "ENSG00000186075", "ENSG00000186118", "ENSG00000186451",
-    "ENSG00000186788", "ENSG00000187003", "ENSG00000187191", "ENSG00000187475",
-    "ENSG00000187772", "ENSG00000188120", "ENSG00000188425", "ENSG00000188782",
-    "ENSG00000189023", "ENSG00000189064", "ENSG00000189186", "ENSG00000189252",
-    "ENSG00000189326", "ENSG00000189357", "ENSG00000196406", "ENSG00000196553",
-    "ENSG00000196862", "ENSG00000197172", "ENSG00000198021", "ENSG00000198033",
-    "ENSG00000198573", "ENSG00000198681", "ENSG00000198759", "ENSG00000198765",
-    "ENSG00000198870", "ENSG00000203907", "ENSG00000203909", "ENSG00000203926",
-    "ENSG00000204279", "ENSG00000204363", "ENSG00000204379", "ENSG00000204450",
-    "ENSG00000204849", "ENSG00000204941", "ENSG00000205359", "ENSG00000205642",
-    "ENSG00000205777", "ENSG00000212710", "ENSG00000213030", "ENSG00000213218",
-    "ENSG00000213401", "ENSG00000214107", "ENSG00000215113", "ENSG00000215115",
-    "ENSG00000215269", "ENSG00000215529", "ENSG00000215817", "ENSG00000216649",
-    "ENSG00000221826", "ENSG00000221867", "ENSG00000224659", "ENSG00000224902",
-    "ENSG00000226023", "ENSG00000226650", "ENSG00000226685", "ENSG00000226929",
-    "ENSG00000227234", "ENSG00000228517", "ENSG00000228927", "ENSG00000229549",
-    "ENSG00000230594", "ENSG00000230601", "ENSG00000231924", "ENSG00000233803",
-    "ENSG00000234068", "ENSG00000234414", "ENSG00000235631", "ENSG00000235699",
-    "ENSG00000236126", "ENSG00000236362", "ENSG00000236371", "ENSG00000236424",
-    "ENSG00000236446", "ENSG00000236761", "ENSG00000237671", "ENSG00000237957",
-    "ENSG00000238269", "ENSG00000240021", "ENSG00000241476", "ENSG00000242362",
-    "ENSG00000242389", "ENSG00000242875", "ENSG00000243130", "ENSG00000244395",
-    "ENSG00000244588", "ENSG00000250741", "ENSG00000258713", "ENSG00000258992",
-    "ENSG00000261649", "ENSG00000267978", "ENSG00000268009", "ENSG00000268447",
-    "ENSG00000268606", "ENSG00000268629", "ENSG00000268651", "ENSG00000268696",
-    "ENSG00000268988", "ENSG00000269058", "ENSG00000269586", "ENSG00000270806",
-    "ENSG00000271321", "ENSG00000271449", "ENSG00000273696", "ENSG00000274274",
-    "ENSG00000274391", "ENSG00000275793", "ENSG00000275969", "ENSG00000276040",
-    "ENSG00000277322",
-})
+
+@lru_cache(maxsize=1)
+def oncoref_cta_source_gene_ids() -> frozenset[str]:
+    """Full human CTA candidate universe owned by oncoref.
+
+    The broad, unfiltered universe is intentional for self-reference source
+    exclusions: a valid CTA peptide must not cancel itself merely because the
+    same sequence occurs in a held-out CTA paralog. Target admission uses the
+    narrower ``oncoref.cta.cta_gene_ids()`` set in the antigen layer.
+    """
+    from oncoref.cta import cta_unfiltered_gene_ids
+
+    return frozenset(str(gene_id).split(".")[0]
+                     for gene_id in cta_unfiltered_gene_ids())
+
+
+def _is_human_genome(genome) -> bool:
+    if genome is None:
+        return False
+    species = getattr(genome, "species", None)
+    latin_name = str(getattr(species, "latin_name", ""))
+    normalized = latin_name.strip().casefold().replace("_", " ")
+    return normalized in {"homo sapiens", "human"}
+
+
+def cta_source_gene_ids_for_genome(genome) -> frozenset[str]:
+    """Human CTA source exclusions, or an empty set for other species."""
+    if not _is_human_genome(genome):
+        return frozenset()
+    return oncoref_cta_source_gene_ids()
 
 # In-memory cache for loaded kmer sets to avoid repeated disk reads
 # Key: (species, release, min_len, max_len) -> set of kmers
 _kmer_set_cache: dict[tuple, set[str]] = {}
 _kmer_set_cache_lock = threading.Lock()
+
+# Filtered indexes are shared within a run. The genome object's identity is
+# part of the key so distinct test/custom genomes with the same release label
+# cannot contaminate one another.
+_filtered_kmer_set_cache: dict[tuple, set[str]] = {}
+_filtered_kmer_set_cache_lock = threading.Lock()
 
 
 def get_cache_dir() -> str:
@@ -292,6 +260,20 @@ def extract_kmers(sequences, min_len, max_len):
     return kmers
 
 
+def _resolve_kmer_lengths(min_kmer_length, max_kmer_length, epitope_lengths):
+    if epitope_lengths and (min_kmer_length is None or max_kmer_length is None):
+        lengths = sorted(epitope_lengths)
+        if min_kmer_length is None:
+            min_kmer_length = lengths[0]
+        if max_kmer_length is None:
+            max_kmer_length = lengths[-1]
+    if min_kmer_length is None:
+        min_kmer_length = DEFAULT_MIN_KMER_LENGTH
+    if max_kmer_length is None:
+        max_kmer_length = DEFAULT_MAX_KMER_LENGTH
+    return min_kmer_length, max_kmer_length
+
+
 def genome_protein_dict(genome, exclude_gene_ids=None):
     """
     Build a dict of transcript_id -> protein_sequence from a pyensembl genome,
@@ -307,23 +289,24 @@ def genome_protein_dict(genome, exclude_gene_ids=None):
     -------
     dict[str, str]
     """
-    if exclude_gene_ids:
-        exclude_tids = set()
-        for gene_id in exclude_gene_ids:
-            try:
-                exclude_tids.update(genome.transcript_ids_of_gene_id(gene_id))
-            except ValueError:
-                logger.warning("Gene ID %s not found in genome, skipping", gene_id)
-        logger.info(
-            "Excluding %d transcripts from %d genes",
-            len(exclude_tids), len(exclude_gene_ids))
-    else:
-        exclude_tids = set()
+    excluded_gene_ids = {
+        str(gene_id).split(".")[0] for gene_id in (exclude_gene_ids or [])
+    }
 
     proteins = {}
+    num_excluded_transcripts = 0
     for t in genome.transcripts():
-        if t.is_protein_coding and t.protein_sequence and t.transcript_id not in exclude_tids:
+        gene_id = str(t.gene_id).split(".")[0]
+        if gene_id in excluded_gene_ids:
+            num_excluded_transcripts += 1
+        elif t.is_protein_coding and t.protein_sequence:
             proteins[t.transcript_id] = t.protein_sequence
+    if excluded_gene_ids:
+        logger.info(
+            "Excluded %d transcripts from %d source genes",
+            num_excluded_transcripts,
+            len(excluded_gene_ids),
+        )
     return proteins
 
 
@@ -358,6 +341,7 @@ class ReferenceProteome:
         self.genome = genome
         self.min_kmer_length = min_kmer_length
         self.max_kmer_length = max_kmer_length
+        self.excluded_gene_ids = frozenset()
 
         if genome is not None:
             self._kmer_set = load_kmer_set_index(
@@ -387,16 +371,8 @@ class ReferenceProteome:
             CandidateEpitope lengths being predicted. Used to derive kmer range
             when min/max not explicitly set.
         """
-        if epitope_lengths and (min_kmer_length is None or max_kmer_length is None):
-            lengths = sorted(epitope_lengths)
-            if min_kmer_length is None:
-                min_kmer_length = lengths[0]
-            if max_kmer_length is None:
-                max_kmer_length = lengths[-1]
-        if min_kmer_length is None:
-            min_kmer_length = DEFAULT_MIN_KMER_LENGTH
-        if max_kmer_length is None:
-            max_kmer_length = DEFAULT_MAX_KMER_LENGTH
+        min_kmer_length, max_kmer_length = _resolve_kmer_lengths(
+            min_kmer_length, max_kmer_length, epitope_lengths)
 
         unique_seqs = set(proteins.values())
         logger.info(
@@ -410,6 +386,7 @@ class ReferenceProteome:
         obj.min_kmer_length = min_kmer_length
         obj.max_kmer_length = max_kmer_length
         obj._kmer_set = kmer_set
+        obj.excluded_gene_ids = frozenset()
         return obj
 
     @classmethod
@@ -435,32 +412,73 @@ class ReferenceProteome:
         min_kmer_length : int, optional
         max_kmer_length : int, optional
         """
-        all_exclude_ids = set(exclude_gene_ids or [])
+        min_kmer_length, max_kmer_length = _resolve_kmer_lengths(
+            min_kmer_length, max_kmer_length, epitope_lengths)
+
+        if genome is None:
+            return cls(
+                None,
+                min_kmer_length=min_kmer_length,
+                max_kmer_length=max_kmer_length,
+            )
+
+        all_exclude_ids = {
+            str(gene_id).split(".")[0] for gene_id in (exclude_gene_ids or [])
+        }
 
         if exclude_cta_genes:
-            logger.info("Excluding %d CTA gene IDs", len(CTA_GENE_IDS))
-            all_exclude_ids.update(CTA_GENE_IDS)
-
-        proteins = genome_protein_dict(genome, exclude_gene_ids=all_exclude_ids)
-
-        if exclude_fasta:
-            exclude_seqs = set(_read_fasta(exclude_fasta).values())
-            before = len(proteins)
-            proteins = {
-                tid: seq for tid, seq in proteins.items()
-                if seq not in exclude_seqs
-            }
+            cta_gene_ids = cta_source_gene_ids_for_genome(genome)
             logger.info(
-                "Excluded %d proteins matching FASTA %s",
-                before - len(proteins), exclude_fasta)
+                "Excluding %d oncoref CTA source gene IDs", len(cta_gene_ids))
+            all_exclude_ids.update(cta_gene_ids)
 
-        obj = cls.from_sequences(
-            proteins,
-            min_kmer_length=min_kmer_length,
-            max_kmer_length=max_kmer_length,
-            epitope_lengths=epitope_lengths,
+        # With no exclusions this is exactly the ordinary reference proteome;
+        # reuse its disk/in-memory cache rather than rebuilding from transcripts.
+        if exclude_cta_genes and not all_exclude_ids and not exclude_fasta:
+            return cls(
+                genome,
+                min_kmer_length=min_kmer_length,
+                max_kmer_length=max_kmer_length,
+            )
+
+        cache_key = (
+            id(genome),
+            frozenset(all_exclude_ids),
+            min_kmer_length,
+            max_kmer_length,
         )
+        kmer_set = None
+        if not exclude_fasta:
+            with _filtered_kmer_set_cache_lock:
+                kmer_set = _filtered_kmer_set_cache.get(cache_key)
+
+        if kmer_set is None:
+            proteins = genome_protein_dict(
+                genome, exclude_gene_ids=all_exclude_ids)
+
+            if exclude_fasta:
+                exclude_seqs = set(_read_fasta(exclude_fasta).values())
+                before = len(proteins)
+                proteins = {
+                    tid: seq for tid, seq in proteins.items()
+                    if seq not in exclude_seqs
+                }
+                logger.info(
+                    "Excluded %d proteins matching FASTA %s",
+                    before - len(proteins), exclude_fasta)
+
+            kmer_set = extract_kmers(
+                set(proteins.values()), min_kmer_length, max_kmer_length)
+            if not exclude_fasta:
+                with _filtered_kmer_set_cache_lock:
+                    _filtered_kmer_set_cache[cache_key] = kmer_set
+
+        obj = cls.__new__(cls)
         obj.genome = genome
+        obj.min_kmer_length = min_kmer_length
+        obj.max_kmer_length = max_kmer_length
+        obj._kmer_set = kmer_set
+        obj.excluded_gene_ids = frozenset(all_exclude_ids)
         return obj
 
     def contains(self, peptide: str) -> bool:
