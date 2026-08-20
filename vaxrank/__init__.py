@@ -25,14 +25,29 @@ from .vaccine_antigen import (
     VaccineAntigen,
 )
 from .vaccine_peptide import VaccinePeptide
+from .safety_assessment import (
+    ConstructBoundary,
+    EmittedSafetyLigand,
+    SafetyAssessmentError,
+    SafetyPrediction,
+    SafetyPredictionCoverage,
+    WindowSafetyAssessment,
+    assess_vaccine_antigen_window,
+    safety_assessment_from_prediction_frame,
+)
 from .version import __version__
 
 __all__ = [
     "__version__",
     "AminoAcidInterval",
     "CandidateEpitope",
+    "ConstructBoundary",
+    "EmittedSafetyLigand",
     "EpitopeConfig",
     "Peptide",
+    "SafetyAssessmentError",
+    "SafetyPrediction",
+    "SafetyPredictionCoverage",
     "SelfReferenceMatch",
     "SelfReferenceSource",
     "TargetableMask",
@@ -40,6 +55,9 @@ __all__ = [
     "VaccineAntigen",
     "VaccineConfig",
     "VaccinePeptide",
+    "WindowSafetyAssessment",
+    "assess_vaccine_antigen_window",
     "predict_epitopes",
     "run_vaxrank",
+    "safety_assessment_from_prediction_frame",
 ]
