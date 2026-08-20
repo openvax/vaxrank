@@ -26,6 +26,7 @@ from .manufacturability import (
 )
 from .ranking import compute_ranking_tuple
 from .vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
+from .vaccine_antigen import VaccineAntigen
 
 
 @dataclass
@@ -100,6 +101,7 @@ class VaccinePeptide(DataclassSerializable):
     # is no fallback mode enum — this string is the single mechanism.
     combined_score_expr: Optional[str] = None
     ranking_rules: Optional[tuple] = None
+    antigen: Optional[VaccineAntigen] = None
 
     # Derived attributes computed in __post_init__ — not part of the
     # serialized form. `init=False` keeps them out of the generated
@@ -107,11 +109,43 @@ class VaccinePeptide(DataclassSerializable):
     # value for any pathway that inspects fields before __post_init__.
     target_epitopes: list = field(default_factory=list, init=False, repr=False)
     self_epitopes: list = field(default_factory=list, init=False, repr=False)
+    non_target_epitopes: list = field(default_factory=list, init=False, repr=False)
     self_epitope_score: float = field(default=0.0, init=False, repr=False)
     target_epitope_score: float = field(default=0.0, init=False, repr=False)
     manufacturability_scores: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
+        fragment = self.mutant_protein_fragment
+        mutation_start = getattr(
+            fragment, "mutant_amino_acid_start_offset", None
+        )
+        mutation_end = getattr(fragment, "mutant_amino_acid_end_offset", None)
+        fragment_has_targetable_interval = (
+            isinstance(getattr(fragment, "amino_acids", None), str)
+            and isinstance(mutation_start, int)
+            and isinstance(mutation_end, int)
+        )
+        if self.antigen is None and fragment_has_targetable_interval:
+            self.antigen = VaccineAntigen.from_mutant_protein_fragment(fragment)
+        if self.antigen is not None:
+            if not self.antigen.tumor_specificity.admits_construct:
+                raise ValueError(
+                    "A held-out antigen cannot be used to construct a VaccinePeptide"
+                )
+            if (
+                hasattr(fragment, "amino_acids")
+                and fragment.amino_acids != self.antigen.amino_acids
+            ):
+                raise ValueError(
+                    "VaccineAntigen and fragment amino-acid sequences differ"
+                )
+            for epitope in self.epitopes:
+                match = epitope.self_reference_match
+                if match is not None and match.antigen_kind != self.antigen.kind:
+                    raise ValueError(
+                        "Epitope self-reference policy does not match antigen kind"
+                    )
+
         # Normalize the optional collection/tuple fields.
         self.manufacturability_thresholds = self.manufacturability_thresholds or {}
         if self.manufacturability_rules is not None:
@@ -167,18 +201,16 @@ class VaccinePeptide(DataclassSerializable):
             ic50s = _usable_prediction_values(affinity_leaves, "value")
             return min(ic50s) if ic50s else float("inf")
 
-        # Universal target/self split — source-agnostic. An epitope
-        # whose exact sequence appears in the patient's reference
-        # proteome (``occurs_in_reference``) is unsafe by default
-        # (would cross-react with self on normal tissue). For
-        # mutation-derived candidates this matches the historical
-        # behavior: peptides identical to WT land in self_epitopes
-        # because they're in the reference. Viral peptides absent
-        # from the reference land in target_epitopes. CTAs land in
-        # self_epitopes today. Antigen-aware consumers introduced by
-        # issue #303 use ``occurs_in_non_CTA_reference`` for CTA sources.
+        # Source-agnostic target/self split. New producers require explicit
+        # targetable-mask overlap and use the antigen-aware exact-self result.
+        # Legacy rows have ``overlaps_targetable=None`` and retain their old
+        # eligibility; ``occurs_in_self_reference`` falls back to the raw
+        # reference boolean when no explicit result was serialized.
         self.target_epitopes = sorted(
-            [e for e in self.epitopes if not e.occurs_in_reference],
+            [
+                e for e in self.epitopes
+                if e.is_targetable and not e.occurs_in_self_reference
+            ],
             key=_epitope_sort_key,
         )
         if self.num_target_epitopes_to_keep:
@@ -187,7 +219,11 @@ class VaccinePeptide(DataclassSerializable):
             )
 
         self.self_epitopes = sorted(
-            [e for e in self.epitopes if e.occurs_in_reference],
+            [e for e in self.epitopes if e.occurs_in_self_reference],
+            key=_epitope_sort_key,
+        )
+        self.non_target_epitopes = sorted(
+            [e for e in self.epitopes if not e.is_targetable],
             key=_epitope_sort_key,
         )
 
@@ -282,16 +318,22 @@ class VaccinePeptide(DataclassSerializable):
 
     def to_dict(self):
         # The persisted form combines the filtered target + self lists
-        # back into a single `epitopes` list. Also trims fields that match
-        # their defaults so the JSON stays small and older readers don't
-        # see keys they don't understand.
-        epitopes = self.target_epitopes + self.self_epitopes
+        # with non-target/non-self safety facts back into one ``epitopes``
+        # list. Exact-self non-targets already appear in ``self_epitopes`` and
+        # are not duplicated. Also trim fields that match their defaults.
+        non_target_only = [
+            epitope for epitope in self.non_target_epitopes
+            if not epitope.occurs_in_self_reference
+        ]
+        epitopes = self.target_epitopes + self.self_epitopes + non_target_only
         d = {
             "mutant_protein_fragment": self.mutant_protein_fragment,
             "epitopes": epitopes,
             "num_target_epitopes_to_keep": self.num_target_epitopes_to_keep,
             "sort_epitopes_by": self.sort_epitopes_by,
         }
+        if self.antigen is not None:
+            d["antigen"] = self.antigen
         if self.manufacturability_thresholds:
             d["manufacturability_thresholds"] = self.manufacturability_thresholds
         if self.manufacturability_rules is not None:

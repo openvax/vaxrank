@@ -94,6 +94,7 @@ from topiary.ranking import KIND_ALIASES as _KIND_ALIASES
 
 if TYPE_CHECKING:
     from mhctools.pred import Prediction
+    from .vaccine_antigen import SelfReferenceMatch
 
 
 def _resolve_kind(kind: str) -> str:
@@ -501,6 +502,11 @@ class CandidateEpitope(Peptide):
     # mutation-flavored reports / audits. Viral / self leave at False.
     overlaps_mutation: bool = False
 
+    # Source-agnostic targetability. ``None`` means the legacy producer did
+    # not supply a mask result and remains eligible for backwards-compatible
+    # target/self splitting. New producers always supply a boolean.
+    overlaps_targetable: Optional[bool] = None
+
     # Raw safety signal: this peptide's exact sequence appears
     # somewhere in the patient's reference proteome. True means a
     # cross-reactivity risk (the peptide matches a self-protein).
@@ -514,6 +520,11 @@ class CandidateEpitope(Peptide):
     # Consumers opt into CTA-friendly policy by reading this flag instead
     # of the raw one.
     occurs_in_non_CTA_reference: bool = False
+
+    # Antigen-aware exact-self result. New producers populate this and
+    # consumers read ``occurs_in_self_reference`` below. ``None`` retains the
+    # raw-reference behavior for legacy files and external-input loaders.
+    self_reference_match: Optional["SelfReferenceMatch"] = None
 
     # Per-allele score for this epitope as computed by the configured
     # :class:`~vaxrank.epitope_config.EpitopeConfig` ``score_expr``
@@ -538,6 +549,20 @@ class CandidateEpitope(Peptide):
         codebase.
         """
         return float(sum(self.per_allele_scores.values()))
+
+    @property
+    def occurs_in_self_reference(self) -> bool:
+        """Exact-self status under this epitope's antigen policy."""
+        if self.self_reference_match is not None:
+            return self.self_reference_match.occurs
+        return self.occurs_in_reference
+
+    @property
+    def is_targetable(self) -> bool:
+        """Whether this epitope overlaps explicitly targetable content."""
+        if self.overlaps_targetable is not None:
+            return self.overlaps_targetable
+        return True
 
     def __hash__(self) -> int:
         # Inherited from Peptide in spirit, but ``@dataclass(frozen=True)``
@@ -589,8 +614,10 @@ class CandidateEpitope(Peptide):
             comparators=self.comparators,
             source_class=self.source_class,
             overlaps_mutation=self.overlaps_mutation,
+            overlaps_targetable=self.overlaps_targetable,
             occurs_in_reference=self.occurs_in_reference,
             occurs_in_non_CTA_reference=self.occurs_in_non_CTA_reference,
+            self_reference_match=self.self_reference_match,
             per_allele_scores=dict(self.per_allele_scores))
 
     @classmethod
@@ -636,11 +663,14 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
       ``wt``         Prediction|None — parallel WT prediction, optional
       ``source_class``               str|None, default None
       ``overlaps_mutation``          bool,     default False
+      ``overlaps_targetable``        bool|None, default None for legacy rows
       ``occurs_in_reference``        bool,     default False
       ``occurs_in_non_CTA_reference`` bool,    default False — when
                                      producers don't yet integrate a
                                      CTA database, pass the same
                                      value as ``occurs_in_reference``.
+      ``self_reference_match``       SelfReferenceMatch|None — explicit
+                                     antigen-aware exact-self result.
 
     Semantics:
 
@@ -673,8 +703,10 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                 'wt_peptide': None,
                 'source_class': row.get('source_class'),
                 'overlaps_mutation': False,
+                'overlaps_targetable': None,
                 'occurs_in_reference': False,
                 'occurs_in_non_CTA_reference': False,
+                'self_reference_match': None,
                 # Accumulator for per-allele DSL scores. Same allele
                 # may appear in multiple rows (different predictors);
                 # all rows for one allele share the same score by
@@ -684,9 +716,28 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             groups[key] = slot
         slot['mutant_preds'].append(row['mutant'])
         slot['overlaps_mutation'] |= bool(row.get('overlaps_mutation', False))
+        overlaps_targetable = row.get('overlaps_targetable')
+        if overlaps_targetable is not None:
+            existing_targetable = slot['overlaps_targetable']
+            if (
+                existing_targetable is not None
+                and existing_targetable != bool(overlaps_targetable)
+            ):
+                raise ValueError(
+                    "Conflicting targetable-mask results for one candidate epitope"
+                )
+            slot['overlaps_targetable'] = bool(overlaps_targetable)
         slot['occurs_in_reference'] |= bool(row.get('occurs_in_reference', False))
         slot['occurs_in_non_CTA_reference'] |= bool(
             row.get('occurs_in_non_CTA_reference', False))
+        self_reference_match = row.get('self_reference_match')
+        if self_reference_match is not None:
+            existing_match = slot['self_reference_match']
+            if existing_match is not None and existing_match != self_reference_match:
+                raise ValueError(
+                    "Conflicting self-reference matches for one candidate epitope"
+                )
+            slot['self_reference_match'] = self_reference_match
         if 'allele_score' in row:
             slot['per_allele_scores'][row['mutant'].allele] = float(
                 row['allele_score'])
@@ -717,8 +768,10 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             comparators=comparators,
             source_class=slot['source_class'],
             overlaps_mutation=slot['overlaps_mutation'],
+            overlaps_targetable=slot['overlaps_targetable'],
             occurs_in_reference=slot['occurs_in_reference'],
             occurs_in_non_CTA_reference=slot['occurs_in_non_CTA_reference'],
+            self_reference_match=slot['self_reference_match'],
             per_allele_scores=dict(slot['per_allele_scores']),
         ))
     return out

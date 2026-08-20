@@ -23,6 +23,7 @@ from varcode import Variant
 
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.candidate_epitope import COMPARATOR_WT, CandidateEpitope, Peptide
+from vaxrank.vaccine_antigen import VaccineAntigen
 from vaxrank.vaccine_peptide import VaccinePeptide
 
 
@@ -52,6 +53,8 @@ def _sample_epitope(
     ic50=2.0,
     overlaps_mutation=True,
     occurs_in_reference=False,
+    overlaps_targetable=None,
+    self_reference_match=None,
 ):
     mutant_pred = Prediction(
         kind='pMHC_affinity', predictor_name='ImaginationMHCpan',
@@ -73,7 +76,9 @@ def _sample_epitope(
             source_sequence='SSIINFEQL', offset=1,
             predictions=(wt_pred,))},
         overlaps_mutation=overlaps_mutation,
-        occurs_in_reference=occurs_in_reference)
+        overlaps_targetable=overlaps_targetable,
+        occurs_in_reference=occurs_in_reference,
+        self_reference_match=self_reference_match)
 
 
 class _FakeVariant:
@@ -184,6 +189,7 @@ def test_vaccine_peptide_to_dict_omits_derived_fields():
     for derived in (
         "target_epitopes",
         "self_epitopes",
+        "non_target_epitopes",
         "target_epitope_score",
         "self_epitope_score",
         "manufacturability_scores",
@@ -207,7 +213,14 @@ def test_vaccine_peptide_json_roundtrip_with_real_fragment():
     flat records. This is the path the CLI writes out — we want
     __post_init__ to re-derive the mutant/wildtype split after load and
     scores to re-compute consistently."""
-    mutant = _sample_epitope(peptide_sequence="SIINFEKL", ic50=500.0)
+    fragment = _sample_fragment()
+    antigen = VaccineAntigen.from_mutant_protein_fragment(fragment)
+    mutant = _sample_epitope(
+        peptide_sequence="SIINFEKL",
+        ic50=500.0,
+        overlaps_targetable=True,
+        self_reference_match=antigen.self_reference_match("SIINFEKL", False),
+    )
     wildtype = _sample_epitope(
         peptide_sequence="TESTWILD",
         ic50=50.0,
@@ -215,7 +228,7 @@ def test_vaccine_peptide_json_roundtrip_with_real_fragment():
         occurs_in_reference=True,
     )
     vp = VaccinePeptide(
-        mutant_protein_fragment=_sample_fragment(),
+        mutant_protein_fragment=fragment,
         epitopes=[mutant, wildtype],
         manufacturability_rules=("cysteine_count", "cterm_hydropathy"),
         combined_score_expr="target_epitope_score",
@@ -224,6 +237,10 @@ def test_vaccine_peptide_json_roundtrip_with_real_fragment():
 
     # Wire-level invariants
     assert restored.mutant_protein_fragment == vp.mutant_protein_fragment
+    assert restored.antigen == vp.antigen
+    assert restored.target_epitopes[0].self_reference_match == (
+        vp.target_epitopes[0].self_reference_match
+    )
     assert restored.manufacturability_rules == vp.manufacturability_rules
     assert restored.combined_score_expr == vp.combined_score_expr
 

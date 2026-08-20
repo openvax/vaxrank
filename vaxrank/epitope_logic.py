@@ -30,6 +30,7 @@ from .candidate_epitope import (
     candidate_epitopes_from_rows,
 )
 from .reference_proteome import ReferenceProteome
+from .vaccine_antigen import ANTIGEN_KIND_MUTATION, VaccineAntigen
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,8 @@ def predict_epitopes(
         mhc_predictor,
         protein_fragment : MutantProteinFragment,
         epitope_config : Optional[EpitopeConfig] = None,
-        genome : Optional[Genome] = None) -> list[CandidateEpitope]:
+        genome : Optional[Genome] = None,
+        antigen: Optional[VaccineAntigen] = None) -> list[CandidateEpitope]:
     """
     Parameters
     ----------
@@ -89,6 +91,10 @@ def predict_epitopes(
     genome
         Genome whose proteome to use for reference peptide filtering
 
+    antigen
+        Source-agnostic antigen semantics. When omitted, the mutation fragment
+        is adapted to a ``VaccineAntigen`` with identical mutation behavior.
+
     Returns
     -------
     list[CandidateEpitope]
@@ -101,8 +107,24 @@ def predict_epitopes(
     """
     if epitope_config is None:
         epitope_config = EpitopeConfig()
+    if antigen is None:
+        antigen = VaccineAntigen.from_mutant_protein_fragment(protein_fragment)
+    elif antigen.amino_acids != protein_fragment.amino_acids:
+        raise ValueError("Antigen and protein fragment amino-acid sequences differ")
+    if antigen.kind != ANTIGEN_KIND_MUTATION:
+        raise NotImplementedError(
+            "Non-mutation antigen prediction requires the construct-admission "
+            "vertical slice from issue #303"
+        )
 
     reference_proteome = ReferenceProteome(genome)
+    if antigen.self_reference_excluded_gene_ids:
+        antigen_reference_proteome = ReferenceProteome.from_genome(
+            genome,
+            exclude_gene_ids=antigen.self_reference_excluded_gene_ids,
+        )
+    else:
+        antigen_reference_proteome = reference_proteome
     non_cta_reference_proteome = ReferenceProteome.from_genome(
         genome, exclude_cta_genes=True)
 
@@ -158,9 +180,11 @@ def predict_epitopes(
         peptide_length = row["peptide_length"]
         peptide_end_offset = peptide_start_offset + peptide_length
 
-        overlaps_mutation = protein_fragment.interval_overlaps_mutation(
-            start_offset=peptide_start_offset,
-            end_offset=peptide_end_offset)
+        overlaps_targetable = antigen.interval_is_targetable(
+            peptide_start_offset, peptide_end_offset)
+        overlaps_mutation = (
+            antigen.kind == ANTIGEN_KIND_MUTATION and overlaps_targetable
+        )
 
         if overlaps_mutation and peptide not in wt_peptides:
             full_reference_protein_sequence = (
@@ -211,11 +235,14 @@ def predict_epitopes(
         peptide_start_offset = row["peptide_offset"]
         peptide_end_offset = peptide_start_offset + peptide_length
 
-        overlaps_mutation = protein_fragment.interval_overlaps_mutation(
-            start_offset=peptide_start_offset,
-            end_offset=peptide_end_offset)
+        overlaps_targetable = antigen.interval_is_targetable(
+            peptide_start_offset, peptide_end_offset)
+        overlaps_mutation = (
+            antigen.kind == ANTIGEN_KIND_MUTATION and overlaps_targetable
+        )
 
         occurs_in_reference = reference_proteome.contains(peptide)
+        occurs_in_antigen_reference = antigen_reference_proteome.contains(peptide)
         occurs_in_non_cta_reference = non_cta_reference_proteome.contains(peptide)
         if occurs_in_reference:
             logger.debug('Peptide %s occurs in reference', peptide)
@@ -291,12 +318,18 @@ def predict_epitopes(
             'wt': wt_pred,
             'source_class': SOURCE_CLASS_MUTATION,
             'overlaps_mutation': overlaps_mutation,
+            'overlaps_targetable': overlaps_targetable,
             'occurs_in_reference': occurs_in_reference,
             # Exact self after removing source genes in oncoref's full CTA
             # candidate universe. This may diverge from the raw reference flag
             # for CTA-family peptides; shared sequences in any non-CTA gene
             # remain present because the filtered index retains those genes.
             'occurs_in_non_CTA_reference': occurs_in_non_cta_reference,
+            'self_reference_match': antigen.self_reference_match(
+                peptide,
+                occurs_in_antigen_reference,
+                genome_release=str(getattr(genome, "release", "") or ""),
+            ),
             # Per-(peptide, allele) DSL score; threaded onto the
             # CandidateEpitope as ``per_allele_scores[allele]`` by
             # ``candidate_epitopes_from_rows``. Single source of
