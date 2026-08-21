@@ -96,6 +96,8 @@ class _FakeFragment:
 
     def __init__(self, amino_acids="A" * 25, n_alt_reads=9):
         self.amino_acids = amino_acids
+        self.mutant_amino_acid_start_offset = 12
+        self.mutant_amino_acid_end_offset = 13
         self.n_alt_reads = n_alt_reads
         self.n_alt_reads_supporting_protein_sequence = n_alt_reads
         self.n_mutant_amino_acids = 1

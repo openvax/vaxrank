@@ -24,11 +24,16 @@ Mirrors the per-epitope DSL in :mod:`vaxrank.epitope_dsl` but at the
 Bindings (read-only scalars from the active VaccinePeptide):
 
   ``target_epitope_score``
-      Sum of per-epitope scores across the VP's mutant ligands
+      Sum of per-epitope scores across the VP's target ligands
       (after EpitopeConfig filtering / scoring).
 
   ``self_epitope_score``
-      Same metric for the WT-aligned ligands (when present).
+      Same metric for exact-self ligands (when present).
+
+The two bindings above are source-agnostic. The remaining bindings are
+mutation-specific and exist only when the VaccinePeptide carries a real
+``MutantProteinFragment``. Antigen-backed candidates fail at construction if
+their expression references one of these unavailable mutation fields.
 
   ``expression_score``
       ``sqrt(n_alt_reads)`` — the canonical "expression strength"
@@ -98,6 +103,10 @@ _HEADLINE_BINDINGS = (
     'self_epitope_score',
     'expression_score',
 )
+_REQUIRED_HEADLINE_BINDINGS = (
+    'target_epitope_score',
+    'self_epitope_score',
+)
 
 
 # Functions exposed to the expression namespace. All real-valued and
@@ -112,6 +121,11 @@ _FUNCTIONS = {
     'abs': abs,
     'pow': pow,
 }
+
+SOURCE_AGNOSTIC_BINDINGS = frozenset({
+    "target_epitope_score",
+    "self_epitope_score",
+})
 
 # AST node types the parser permits. Every other node type raises at
 # parse time so the user gets the rejection at config-load, not at
@@ -181,6 +195,19 @@ def parse_combined_score_expr(expr):
     return tree
 
 
+def combined_score_binding_names(expr_or_tree):
+    """Return data-binding identifiers referenced by a score expression."""
+    tree = (
+        parse_combined_score_expr(expr_or_tree)
+        if isinstance(expr_or_tree, str)
+        else expr_or_tree
+    )
+    return frozenset(
+        node.id for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id not in _FUNCTIONS
+    )
+
+
 def _bindings_from_vaccine_peptide(vp):
     """Read-only namespace of the scalars exposed to the DSL.
 
@@ -189,11 +216,15 @@ def _bindings_from_vaccine_peptide(vp):
     (``n_alt_reads``) without needing to know which struct holds
     each value.
     """
-    frag = vp.mutant_protein_fragment
-    return {
+    bindings = {
         'target_epitope_score': float(vp.target_epitope_score),
         'self_epitope_score': float(getattr(
             vp, 'self_epitope_score', 0.0) or 0.0),
+    }
+    frag = vp.mutant_protein_fragment
+    if frag is None:
+        return bindings
+    bindings.update({
         'expression_score': float(vp.expression_score),
         'n_alt_reads': float(frag.n_alt_reads or 0),
         'n_ref_reads': float(frag.n_ref_reads or 0),
@@ -203,7 +234,8 @@ def _bindings_from_vaccine_peptide(vp):
         'n_mutant_amino_acids': float(
             frag.mutant_amino_acid_end_offset
             - frag.mutant_amino_acid_start_offset),
-    }
+    })
+    return bindings
 
 
 def evaluate_combined_score(expr_or_tree, vaccine_peptide):
@@ -243,7 +275,7 @@ def evaluate_combined_score(expr_or_tree, vaccine_peptide):
         ))
     except Exception as e:
         # Opinionated preview: surface the per-VP *score* axes
-        # (mutant / wildtype / expression) since those are what
+        # (target / self / mutation expression when available) since those are what
         # users actually look at when a score expression goes
         # sideways. Read counts and mutant-AA count live in the
         # DEBUG dump; per-VP exceptions can fan out across the
@@ -252,10 +284,10 @@ def evaluate_combined_score(expr_or_tree, vaccine_peptide):
         preview = {
             k: bindings[k] for k in _HEADLINE_BINDINGS if k in bindings
         }
-        missing = [k for k in _HEADLINE_BINDINGS if k not in bindings]
+        missing = [k for k in _REQUIRED_HEADLINE_BINDINGS if k not in bindings]
         if missing:
             # Soft contract: ``_bindings_from_vaccine_peptide`` is
-            # supposed to populate every headline binding. If a
+            # supposed to populate every source-agnostic headline binding. If a
             # future refactor renames or drops one, the preview will
             # silently shrink — surface that through a warning so
             # the maintainer notices instead of users wondering why
