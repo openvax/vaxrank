@@ -323,7 +323,7 @@ class NearSelfAssessment(DataclassSerializable):
         return incomplete_reasons.isdisjoint(self.reason_codes)
 
     def to_report_dict(self) -> dict:
-        return asdict(self)
+        return json.loads(json.dumps(asdict(self)))
 
 
 def assess_near_self_queries(

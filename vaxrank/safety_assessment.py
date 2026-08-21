@@ -16,10 +16,18 @@ from dataclasses import asdict, dataclass, field
 from numbers import Integral
 from typing import Any, Optional
 
+from mhcgnomes import parse as parse_mhc
 from serializable import DataclassSerializable
 from topiary import TopiaryPredictor
 
+from .near_self import (
+    DEFAULT_NEAR_SELF_COMPARATOR,
+    NearSelfAssessment,
+    NearSelfQuery,
+    assess_near_self_queries,
+)
 from .reference_proteome import ReferenceProteome
+from .risk_ligand import PatientHLARiskLigandIndex, RiskLigandIndexProvenance
 from .vaccine_antigen import SelfReferenceMatch, VaccineAntigen
 
 
@@ -89,8 +97,26 @@ class SafetyPrediction(DataclassSerializable):
     percentile_rank: Optional[float] = None
 
     def __post_init__(self):
-        if not self.kind:
-            raise ValueError("Safety prediction kind is required")
+        if not all((
+            self.kind,
+            self.predictor_name,
+            self.predictor_version,
+            self.allele,
+        )):
+            raise ValueError(
+                "Safety prediction kind, predictor, version, and allele are required"
+            )
+        try:
+            allele = parse_mhc(str(self.allele), raise_on_error=True)
+        except Exception as error:
+            raise ValueError(
+                f"Invalid safety prediction MHC allele {self.allele!r}"
+            ) from error
+        if allele is None:
+            raise ValueError(
+                f"Invalid safety prediction MHC allele {self.allele!r}"
+            )
+        object.__setattr__(self, "allele", allele.to_string())
         for label in ("score", "value", "percentile_rank"):
             value = getattr(self, label)
             if value is not None and not math.isfinite(value):
@@ -118,9 +144,20 @@ class SafetyPredictionCoverage(DataclassSerializable):
     prediction_count: int
 
     def __post_init__(self):
-        if not self.kind:
-            raise ValueError("Prediction coverage kind is required")
-        object.__setattr__(self, "alleles", tuple(sorted(set(self.alleles))))
+        if not all((self.kind, self.predictor_name, self.predictor_version)):
+            raise ValueError(
+                "Prediction coverage kind, predictor, and version are required"
+            )
+        try:
+            alleles = tuple(sorted({
+                parse_mhc(str(allele), raise_on_error=True).to_string()
+                for allele in self.alleles
+            }))
+        except Exception as error:
+            raise ValueError("Prediction coverage contains an invalid MHC allele") from error
+        if not alleles:
+            raise ValueError("Prediction coverage requires at least one MHC allele")
+        object.__setattr__(self, "alleles", alleles)
         object.__setattr__(
             self, "peptide_lengths", tuple(sorted(set(self.peptide_lengths)))
         )
@@ -357,6 +394,233 @@ class WindowSafetyAssessment(DataclassSerializable):
                     "percentile_rank": prediction.percentile_rank,
                 })
         return rows
+
+    @property
+    def target_ligands(self) -> tuple[EmittedSafetyLigand, ...]:
+        """Targetable ligands that are absent from the applicable self reference."""
+        return tuple(
+            ligand
+            for ligand in self.ligands
+            if ligand.overlaps_targetable and not ligand.occurs_in_self_reference
+        )
+
+
+def near_self_queries_for_window(
+    window_assessment: WindowSafetyAssessment,
+) -> tuple[NearSelfQuery, ...]:
+    """Create one traceable near-self query per target ligand and patient allele."""
+    source_name = window_assessment.antigen.display_identifier
+    queries = []
+    for ligand in window_assessment.target_ligands:
+        target_id = "%s:%d-%d:%s" % (
+            source_name,
+            ligand.antigen_start_offset,
+            ligand.antigen_end_offset,
+            ligand.peptide,
+        )
+        for allele in sorted({
+            prediction.allele for prediction in ligand.predictions
+        }):
+            queries.append(NearSelfQuery(
+                peptide=ligand.peptide,
+                allele=allele,
+                target_id=target_id,
+                source_name=source_name,
+                source_offset=ligand.antigen_start_offset,
+            ))
+    return tuple(queries)
+
+
+@dataclass(frozen=True)
+class AntigenSafetyAssessment(DataclassSerializable):
+    """Complete-window and tissue-risk near-self facts for one antigen window."""
+
+    window_assessment: WindowSafetyAssessment
+    risk_index_provenance: RiskLigandIndexProvenance
+    near_self_assessments: tuple[NearSelfAssessment, ...]
+
+    def __post_init__(self):
+        assessments = tuple(sorted(
+            self.near_self_assessments,
+            key=lambda assessment: (
+                assessment.query.source_offset,
+                assessment.query.peptide,
+                assessment.normalized_allele,
+                assessment.query.target_id,
+            ),
+        ))
+        expected_queries = near_self_queries_for_window(self.window_assessment)
+        expected_identities = {
+            (
+                query.target_id,
+                query.peptide,
+                query.allele,
+                query.source_name,
+                query.source_offset,
+            )
+            for query in expected_queries
+        }
+        observed_identities = [
+            (
+                assessment.query.target_id,
+                assessment.query.peptide,
+                assessment.query.allele,
+                assessment.query.source_name,
+                assessment.query.source_offset,
+            )
+            for assessment in assessments
+        ]
+        if len(observed_identities) != len(set(observed_identities)):
+            raise ValueError("Antigen safety assessment has duplicate near-self queries")
+        if set(observed_identities) != expected_identities:
+            raise ValueError(
+                "Antigen safety assessment does not cover every target ligand/allele"
+            )
+        if any(
+            assessment.risk_index_cache_identity_sha256
+            != self.risk_index_provenance.cache_identity_sha256
+            for assessment in assessments
+        ):
+            raise ValueError(
+                "Antigen safety assessment and near-self risk-index provenance differ"
+            )
+        object.__setattr__(self, "near_self_assessments", assessments)
+
+    @property
+    def has_complete_near_self_coverage(self) -> bool:
+        """Whether every target query has complete risk-index coverage."""
+        return all(
+            assessment.has_complete_coverage
+            for assessment in self.near_self_assessments
+        )
+
+    def to_report_dict(self) -> dict:
+        """JSON-compatible evidence tree for safety audit reports."""
+        return {
+            "window_assessment": self.window_assessment.to_report_dict(),
+            "risk_index_provenance": _json_native(
+                asdict(self.risk_index_provenance)
+            ),
+            "near_self_assessments": [
+                assessment.to_report_dict()
+                for assessment in self.near_self_assessments
+            ],
+        }
+
+    def near_self_rows(self) -> list[dict]:
+        """Flat primitive-valued near-self rows for CSV/DataFrame reports."""
+        rows = []
+        for assessment in self.near_self_assessments:
+            base = {
+                "antigen_kind": self.window_assessment.antigen.kind,
+                "antigen_source_identifier": (
+                    self.window_assessment.antigen.source_identifier
+                ),
+                "window_start_offset": self.window_assessment.window_start_offset,
+                "window_end_offset": self.window_assessment.window_end_offset,
+                "target_id": assessment.query.target_id,
+                "target_peptide": assessment.query.peptide,
+                "target_antigen_offset": assessment.query.source_offset,
+                "allele": assessment.normalized_allele,
+                "nearest_distance": assessment.nearest_distance,
+                "reason_codes": ";".join(assessment.reason_codes),
+                "has_complete_coverage": assessment.has_complete_coverage,
+                "comparator_metric": assessment.comparator.metric,
+                "substitution_matrix": assessment.comparator.matrix_name,
+                "substitution_matrix_version": assessment.comparator.matrix_version,
+                "substitution_matrix_sha256": assessment.comparator.matrix_sha256,
+                "risk_index_cache_identity_sha256": (
+                    assessment.risk_index_cache_identity_sha256
+                ),
+                "risk_index_genome_release": (
+                    self.risk_index_provenance.genome_release
+                ),
+                "risk_index_protein_resolution_policy": (
+                    self.risk_index_provenance.protein_resolution_policy
+                ),
+                "risk_index_predictor_identities": ";".join(
+                    self.risk_index_provenance.predictor_identities
+                ),
+                "risk_index_hpa_source_sha256": (
+                    self.risk_index_provenance.hpa_source_sha256
+                ),
+                "risk_index_cta_gene_set_sha256": (
+                    self.risk_index_provenance.cta_unfiltered_gene_ids_sha256
+                ),
+            }
+            if not assessment.nearest_hits:
+                rows.append(base | {
+                    "risk_peptide": "",
+                    "risk_inclusion_kinds": "",
+                    "substitutions": "",
+                    "risk_gene_id": "",
+                    "risk_gene_name": "",
+                    "risk_transcript_ids": "",
+                    "risk_protein_ids": "",
+                    "risk_protein_offsets": "",
+                    "tissue_group": "",
+                    "hpa_tissue": "",
+                    "cell_type": "",
+                    "hpa_level": "",
+                    "hpa_reliability": "",
+                })
+                continue
+            for hit in assessment.nearest_hits:
+                substitutions = ";".join(
+                    "%d:%s>%s:%d" % (
+                        substitution.position,
+                        substitution.target_residue,
+                        substitution.risk_residue,
+                        substitution.matrix_score,
+                    )
+                    for substitution in hit.substitutions
+                )
+                for source in hit.risk_ligand.sources:
+                    tissue_evidence = source.tissue_evidence or (None,)
+                    for evidence in tissue_evidence:
+                        rows.append(base | {
+                            "risk_peptide": hit.risk_ligand.peptide,
+                            "risk_inclusion_kinds": ";".join(
+                                hit.risk_ligand.inclusion_kinds
+                            ),
+                            "substitutions": substitutions,
+                            "risk_gene_id": source.gene_id,
+                            "risk_gene_name": source.gene_name,
+                            "risk_transcript_ids": ";".join(source.transcript_ids),
+                            "risk_protein_ids": ";".join(source.protein_ids),
+                            "risk_protein_offsets": ";".join(
+                                str(offset) for offset in source.protein_offsets
+                            ),
+                            "tissue_group": (
+                                evidence.tissue_group if evidence else ""
+                            ),
+                            "hpa_tissue": evidence.hpa_tissue if evidence else "",
+                            "cell_type": evidence.cell_type if evidence else "",
+                            "hpa_level": evidence.level if evidence else "",
+                            "hpa_reliability": (
+                                evidence.reliability if evidence else ""
+                            ),
+                        })
+        return rows
+
+
+def assess_antigen_safety(
+    window_assessment: WindowSafetyAssessment,
+    risk_index: PatientHLARiskLigandIndex,
+    *,
+    comparator=DEFAULT_NEAR_SELF_COMPARATOR,
+) -> AntigenSafetyAssessment:
+    """Combine complete-window safety facts with policy-neutral near-self facts."""
+    queries = near_self_queries_for_window(window_assessment)
+    return AntigenSafetyAssessment(
+        window_assessment=window_assessment,
+        risk_index_provenance=risk_index.provenance,
+        near_self_assessments=assess_near_self_queries(
+            queries,
+            risk_index,
+            comparator=comparator,
+        ),
+    )
 
 
 def _json_native(value):
