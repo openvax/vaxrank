@@ -269,6 +269,7 @@ class RiskLigandPrediction(DataclassSerializable):
             and not 0.0 <= self.percentile_rank <= 100.0
         ):
             raise ValueError("Risk prediction percentile rank must be 0..100")
+        object.__setattr__(self, "allele", _normalize_allele(self.allele))
 
     @property
     def identity(self) -> tuple[str, str, str, str]:
@@ -326,10 +327,14 @@ class RiskLigand(DataclassSerializable):
     def __post_init__(self):
         if not self.peptide or not self.allele or not self.sources:
             raise ValueError("Risk ligand requires peptide, allele, and sources")
+        allele = _normalize_allele(self.allele)
         predictions = tuple(sorted(self.predictions, key=lambda item: item.identity))
         identities = [prediction.identity for prediction in predictions]
         if len(identities) != len(set(identities)):
             raise ValueError("Risk ligand has duplicate prediction identities")
+        if any(prediction.allele != allele for prediction in predictions):
+            raise ValueError("Risk ligand and prediction alleles disagree")
+        object.__setattr__(self, "allele", allele)
         object.__setattr__(self, "predictions", predictions)
         object.__setattr__(
             self, "inclusion_kinds", tuple(sorted(set(self.inclusion_kinds)))
@@ -366,6 +371,7 @@ class RiskCoverageGap(DataclassSerializable):
             or self.expected_window_count <= self.observed_window_count
         ):
             raise ValueError("Risk coverage gaps require missing prediction windows")
+        object.__setattr__(self, "allele", _normalize_allele(self.allele))
 
     @property
     def missing_window_count(self) -> int:
@@ -434,11 +440,12 @@ class PatientHLARiskLigandIndex(DataclassSerializable):
     peptide_lengths: tuple[int, ...]
     selection_policy: RiskLigandSelectionPolicy
     ligands: tuple[RiskLigand, ...]
+    protein_resolution_coverage: ProteinResolutionCoverage
     coverage: RiskLigandCoverage
     provenance: RiskLigandIndexProvenance
 
     def __post_init__(self):
-        alleles = tuple(sorted(set(self.alleles)))
+        alleles = tuple(sorted({_normalize_allele(allele) for allele in self.alleles}))
         lengths = tuple(sorted(set(self.peptide_lengths)))
         if not alleles or not lengths or any(length <= 0 for length in lengths):
             raise ValueError("Risk index requires alleles and peptide lengths")
@@ -778,6 +785,7 @@ def risk_ligand_index_from_prediction_frame(
         peptide_lengths=lengths,
         selection_policy=selection_policy,
         ligands=tuple(ligands),
+        protein_resolution_coverage=protein_sequences.coverage,
         coverage=RiskLigandCoverage(
             prediction_row_count=total_rows,
             configured_prediction_row_count=configured_rows,
