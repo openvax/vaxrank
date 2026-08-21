@@ -5,10 +5,13 @@
 #       http://www.apache.org/licenses/LICENSE-2.0
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock, call, patch
 
 import pytest
+from mhctools import RandomBindingPredictor
 
-from vaxrank.candidate_epitope import CandidateEpitope
+from vaxrank.candidate_epitope import CandidateEpitope, SOURCE_CLASS_SELF
+from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.epitope_logic import predict_epitopes
 from vaxrank.vaccine_antigen import (
     ANTIGEN_KIND_CTA,
@@ -225,16 +228,76 @@ def test_vaccine_peptide_fails_closed_for_held_out_or_mismatched_policy():
         )
 
 
-def test_prediction_refuses_non_mutation_antigen_until_admission_path_exists():
+def test_prediction_accepts_cta_antigen_without_fake_mutation_fragment():
     antigen = cta_antigen()
-    fragment = SimpleNamespace(amino_acids=antigen.amino_acids)
 
-    with pytest.raises(NotImplementedError, match="issue #303"):
-        predict_epitopes(
-            mhc_predictor=None,
-            protein_fragment=fragment,
+    epitopes = predict_epitopes(
+        mhc_predictor=RandomBindingPredictor(["HLA-A*02:01"]),
+        epitope_config=EpitopeConfig(min_epitope_score=0),
+        antigen=antigen,
+    )
+
+    assert epitopes
+    assert all(epitope.source_sequence == antigen.amino_acids
+               for epitope in epitopes)
+    assert all(epitope.source_class == SOURCE_CLASS_SELF
+               for epitope in epitopes)
+    assert all(epitope.overlaps_targetable for epitope in epitopes)
+    assert all(not epitope.overlaps_mutation for epitope in epitopes)
+    assert all("wt" not in epitope.comparators for epitope in epitopes)
+    assert all(
+        epitope.self_reference_match.antigen_kind == ANTIGEN_KIND_CTA
+        and epitope.self_reference_match.excluded_gene_ids == (
+            "ENSG00000185686",
+        )
+        for epitope in epitopes
+    )
+
+
+def test_cta_prediction_uses_antigen_specific_self_reference():
+    antigen = cta_antigen()
+    raw_reference = MagicMock()
+    raw_reference.contains.return_value = True
+    antigen_reference = MagicMock()
+    antigen_reference.contains.return_value = False
+    non_cta_reference = MagicMock()
+    non_cta_reference.contains.return_value = False
+
+    with patch(
+            "vaxrank.epitope_logic.ReferenceProteome") as reference_cls:
+        reference_cls.return_value = raw_reference
+        reference_cls.from_genome.side_effect = [
+            antigen_reference,
+            non_cta_reference,
+        ]
+        epitopes = predict_epitopes(
+            mhc_predictor=RandomBindingPredictor(["HLA-A*02:01"]),
+            epitope_config=EpitopeConfig(min_epitope_score=0),
             antigen=antigen,
         )
+
+    assert epitopes
+    assert all(epitope.occurs_in_reference for epitope in epitopes)
+    assert all(not epitope.occurs_in_self_reference for epitope in epitopes)
+    assert reference_cls.from_genome.call_args_list == [
+        call(
+            None,
+            exclude_gene_ids=("ENSG00000185686",),
+        ),
+        call(None, exclude_cta_genes=True),
+    ]
+
+
+def test_mutation_prediction_requires_fragment_for_wt_coordinates():
+    antigen = VaccineAntigen(
+        kind=ANTIGEN_KIND_MUTATION,
+        amino_acids="ACDEFGHIKL",
+        targetable_mask=TargetableMask((AminoAcidInterval(4, 5),)),
+        tumor_specificity=admitted_attestation(),
+    )
+
+    with pytest.raises(ValueError, match="requires a mutation fragment"):
+        predict_epitopes(mhc_predictor=None, antigen=antigen)
 
 
 def test_vaccine_antigen_json_roundtrip_preserves_policy():

@@ -26,11 +26,15 @@ from .epitope_config import EpitopeConfig
 from .epitope_dsl import build_filter_node, build_score_node, drop_empty_sample_name
 from .mutant_protein_fragment import MutantProteinFragment
 from .candidate_epitope import (
-    CandidateEpitope, SOURCE_CLASS_MUTATION,
+    CandidateEpitope, SOURCE_CLASS_MUTATION, SOURCE_CLASS_SELF,
     candidate_epitopes_from_rows,
 )
 from .reference_proteome import ReferenceProteome
-from .vaccine_antigen import ANTIGEN_KIND_MUTATION, VaccineAntigen
+from .vaccine_antigen import (
+    ANTIGEN_KIND_CTA,
+    ANTIGEN_KIND_MUTATION,
+    VaccineAntigen,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +70,7 @@ def slice_epitopes(epitopes, start_offset, end_offset):
 
 def predict_epitopes(
         mhc_predictor,
-        protein_fragment : MutantProteinFragment,
+        protein_fragment: Optional[MutantProteinFragment] = None,
         epitope_config : Optional[EpitopeConfig] = None,
         genome : Optional[Genome] = None,
         antigen: Optional[VaccineAntigen] = None) -> list[CandidateEpitope]:
@@ -82,7 +86,8 @@ def predict_epitopes(
         rolled into each CandidateEpitope's mutant context.
 
     protein_fragment
-        Protein sub-sequence to run MHC binding predictor over
+        Legacy mutation fragment. Required for mutation antigens so WT
+        comparator coordinates can be reconstructed; omitted for CTA antigens.
 
     epitope_config
         Configuration object with parameters for scoring epitopes, if
@@ -92,8 +97,8 @@ def predict_epitopes(
         Genome whose proteome to use for reference peptide filtering
 
     antigen
-        Source-agnostic antigen semantics. When omitted, the mutation fragment
-        is adapted to a ``VaccineAntigen`` with identical mutation behavior.
+        Source sequence, targetability, and exact-self semantics. When omitted,
+        ``protein_fragment`` is adapted to a mutation ``VaccineAntigen``.
 
     Returns
     -------
@@ -108,14 +113,37 @@ def predict_epitopes(
     if epitope_config is None:
         epitope_config = EpitopeConfig()
     if antigen is None:
+        if protein_fragment is None:
+            raise ValueError(
+                "predict_epitopes requires a VaccineAntigen or mutation fragment"
+            )
         antigen = VaccineAntigen.from_mutant_protein_fragment(protein_fragment)
-    elif antigen.amino_acids != protein_fragment.amino_acids:
+    elif (
+        protein_fragment is not None
+        and antigen.amino_acids != protein_fragment.amino_acids
+    ):
         raise ValueError("Antigen and protein fragment amino-acid sequences differ")
-    if antigen.kind != ANTIGEN_KIND_MUTATION:
-        raise NotImplementedError(
-            "Non-mutation antigen prediction requires the construct-admission "
-            "vertical slice from issue #303"
+    if antigen.kind == ANTIGEN_KIND_MUTATION and protein_fragment is None:
+        raise ValueError(
+            "Mutation antigen prediction requires a mutation fragment for "
+            "WT comparator coordinates"
         )
+    if antigen.kind not in {ANTIGEN_KIND_MUTATION, ANTIGEN_KIND_CTA}:
+        raise NotImplementedError(
+            f"Prediction for {antigen.kind!r} antigens is not implemented"
+        )
+
+    source_name = (
+        antigen.source_identifier
+        or antigen.gene_name
+        or antigen.gene_id
+        or antigen.kind
+    )
+    source_class = (
+        SOURCE_CLASS_MUTATION
+        if antigen.kind == ANTIGEN_KIND_MUTATION
+        else SOURCE_CLASS_SELF
+    )
 
     reference_proteome = ReferenceProteome(genome)
     if antigen.self_reference_excluded_gene_ids:
@@ -137,11 +165,11 @@ def predict_epitopes(
     # Run predictions via Topiary
     try:
         predictions_df = topiary_predictor.predict_from_named_sequences(
-            {protein_fragment.gene_name: protein_fragment.amino_acids})
+            {source_name: antigen.amino_acids})
     except Exception:
         logger.error(
-            'MHC prediction errored for protein fragment %s, with traceback: %s',
-            protein_fragment, traceback.format_exc())
+            'MHC prediction errored for antigen %s, with traceback: %s',
+            antigen, traceback.format_exc())
         return []
 
     if predictions_df.empty:
@@ -312,11 +340,11 @@ def predict_epitopes(
         )
         rows.append({
             'peptide': peptide,
-            'source': protein_fragment.amino_acids,
+            'source': antigen.amino_acids,
             'offset': peptide_start_offset,
             'mutant': mutant_pred,
             'wt': wt_pred,
-            'source_class': SOURCE_CLASS_MUTATION,
+            'source_class': source_class,
             'overlaps_mutation': overlaps_mutation,
             'overlaps_targetable': overlaps_targetable,
             'occurs_in_reference': occurs_in_reference,
