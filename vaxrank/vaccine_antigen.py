@@ -12,8 +12,9 @@
 
 """Source-agnostic antigen targetability and exact-self result types."""
 
+import math
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 from serializable import DataclassSerializable
 
@@ -112,6 +113,38 @@ class TargetableMask(DataclassSerializable):
 
 
 @dataclass(frozen=True)
+class TumorSpecificityEvidence(DataclassSerializable):
+    """One machine-readable input to a tumor-specificity attestation."""
+
+    evidence_kind: str
+    evidence_source: str
+    evidence_version: str = ""
+    subject_id: str = ""
+    sample_id: str = ""
+    patient_specific: bool = False
+    passed: Optional[bool] = None
+    numeric_value: Optional[float] = None
+    unit: str = ""
+    threshold: Optional[float] = None
+    details: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+
+    def __post_init__(self):
+        if not self.evidence_kind or not self.evidence_source:
+            raise ValueError("Tumor-specificity evidence kind and source are required")
+        for label in ("numeric_value", "threshold"):
+            value = getattr(self, label)
+            if value is not None and not math.isfinite(value):
+                raise ValueError(f"Tumor-specificity {label} must be finite")
+        if (self.numeric_value is not None or self.threshold is not None) and not self.unit:
+            raise ValueError("Quantitative tumor-specificity evidence requires units")
+        details = tuple(sorted({
+            (str(name), str(value)) for name, value in self.details
+            if str(name)
+        }))
+        object.__setattr__(self, "details", details)
+
+
+@dataclass(frozen=True)
 class TumorSpecificityAttestation(DataclassSerializable):
     """Evidence-bearing decision about construct admission."""
 
@@ -123,6 +156,9 @@ class TumorSpecificityAttestation(DataclassSerializable):
     rationale_code: str = ""
     requires_review: bool = False
     override_reason: str = ""
+    evidence_records: tuple[TumorSpecificityEvidence, ...] = field(
+        default_factory=tuple
+    )
 
     def __post_init__(self):
         if self.status not in ATTESTATION_STATUSES:
@@ -134,6 +170,14 @@ class TumorSpecificityAttestation(DataclassSerializable):
             raise ValueError("Tumor-specificity evidence kind and source are required")
         if self.status == ATTESTATION_OVERRIDDEN and not self.override_reason:
             raise ValueError("An overridden attestation requires an override reason")
+        records = tuple(self.evidence_records)
+        if records and self.patient_specific != any(
+            record.patient_specific for record in records
+        ):
+            raise ValueError(
+                "Attestation patient-specific flag disagrees with evidence records"
+            )
+        object.__setattr__(self, "evidence_records", records)
 
     @property
     def admits_construct(self) -> bool:

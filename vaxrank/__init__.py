@@ -22,6 +22,7 @@ from .vaccine_antigen import (
     SelfReferenceSource,
     TargetableMask,
     TumorSpecificityAttestation,
+    TumorSpecificityEvidence,
     VaccineAntigen,
 )
 from .vaccine_peptide import VaccinePeptide
@@ -82,6 +83,16 @@ from .near_self import (
     assess_near_self,
     assess_near_self_queries,
 )
+from .cta_admission import (
+    CTAAdmissionAssessment,
+    CTAAdmissionError,
+    CTAAdmissionPolicy,
+    CTAOverrideEvidence,
+    CTAReferenceEvidence,
+    PatientTumorExpressionEvidence,
+    assess_cta_antigen,
+    build_cta_vaccine_antigen,
+)
 from .version import __version__
 
 __all__ = [
@@ -90,6 +101,11 @@ __all__ = [
     "AminoAcidSubstitutionMatrix",
     "BLOSUM62",
     "CandidateEpitope",
+    "CTAAdmissionAssessment",
+    "CTAAdmissionError",
+    "CTAAdmissionPolicy",
+    "CTAOverrideEvidence",
+    "CTAReferenceEvidence",
     "ConstructBoundary",
     "DEFAULT_NEAR_SELF_COMPARATOR",
     "EmittedSafetyLigand",
@@ -105,6 +121,7 @@ __all__ = [
     "PROTEIN_RESOLUTION_ALL_ISOFORMS",
     "PROTEIN_RESOLUTION_LONGEST_ISOFORM",
     "PatientHLARiskLigandIndex",
+    "PatientTumorExpressionEvidence",
     "ProteinResolutionCoverage",
     "ResolvedRiskProtein",
     "RiskCoverageGap",
@@ -132,6 +149,7 @@ __all__ = [
     "TissueRiskPolicy",
     "TissueRiskProtein",
     "TumorSpecificityAttestation",
+    "TumorSpecificityEvidence",
     "VaccineAntigen",
     "VaccineConfig",
     "VaccinePeptide",
@@ -139,8 +157,10 @@ __all__ = [
     "assess_vaccine_antigen_window",
     "assess_near_self",
     "assess_near_self_queries",
+    "assess_cta_antigen",
     "build_hpa_reference_provenance",
     "build_patient_hla_risk_ligand_index",
+    "build_cta_vaccine_antigen",
     "derive_tissue_risk_proteins",
     "predict_epitopes",
     "run_vaxrank",
