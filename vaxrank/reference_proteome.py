@@ -157,6 +157,9 @@ def _protein_source_snapshot(genome):
         if cached is not None:
             return cached
 
+    species = str(
+        getattr(getattr(genome, "species", None), "latin_name", "") or ""
+    )
     sources_by_sequence: dict[str, set[SelfReferenceSource]] = {}
     for transcript in genome.transcripts():
         if not transcript.is_protein_coding or not transcript.protein_sequence:
@@ -173,6 +176,7 @@ def _protein_source_snapshot(genome):
             ),
             protein_id=str(getattr(transcript, "protein_id", "") or ""),
             gene_name=str(getattr(transcript, "gene_name", "") or ""),
+            species=species,
         )
         sources_by_sequence.setdefault(
             transcript.protein_sequence, set()
@@ -188,6 +192,7 @@ def _protein_source_snapshot(genome):
                     source.transcript_id,
                     source.protein_id,
                     source.gene_name,
+                    source.species,
                 ),
             )),
         )
@@ -485,6 +490,7 @@ def self_reference_matches(
                 source.transcript_id,
                 source.protein_id,
                 source.gene_name,
+                source.species,
             ),
         ))
         result[peptide] = SelfReferenceMatch(

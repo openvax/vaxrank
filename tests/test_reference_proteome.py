@@ -735,6 +735,7 @@ def test_self_reference_matches_preserve_retained_source_provenance():
         "PROTEIN_SELF_TX_2",
     ]
     assert all(source.gene_id != prame_gene_id for source in shared.sources)
+    assert {source.species for source in shared.sources} == {"Homo sapiens"}
     assert type(shared).from_json(shared.to_json()) == shared
 
     prame_only = matches["CDEFGHIK"]
