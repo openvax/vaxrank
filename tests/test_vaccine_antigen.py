@@ -156,13 +156,13 @@ def test_self_reference_match_rejects_excluded_or_inconsistent_sources():
 
 def test_vaccine_peptide_uses_targetable_mask_and_antigen_self_result():
     antigen = cta_antigen()
-    fragment = SimpleNamespace(amino_acids=antigen.amino_acids)
     target = CandidateEpitope(
         sequence="ACDEFGHI",
         source_sequence=antigen.amino_acids,
         overlaps_targetable=True,
         occurs_in_reference=True,
         self_reference_match=antigen.self_reference_match("ACDEFGHI", False),
+        per_allele_scores={"HLA-A*02:01": 2.0},
     )
     non_target = CandidateEpitope(
         sequence="CDEFGHIK",
@@ -182,14 +182,26 @@ def test_vaccine_peptide_uses_targetable_mask_and_antigen_self_result():
     )
 
     vaccine_peptide = VaccinePeptide(
-        mutant_protein_fragment=fragment,
         antigen=antigen,
         epitopes=[target, non_target, exact_self],
+        combined_score_expr="target_epitope_score",
+        ranking_rules=(
+            "target_epitope_score",
+            "manufacturability",
+            "self_epitope_score",
+        ),
     )
 
+    assert vaccine_peptide.mutant_protein_fragment is None
+    assert vaccine_peptide.amino_acids == antigen.amino_acids
     assert vaccine_peptide.target_epitopes == [target]
     assert vaccine_peptide.non_target_epitopes == [non_target]
     assert vaccine_peptide.self_epitopes == [exact_self]
+    assert vaccine_peptide.combined_score == 2.0
+    restored = VaccinePeptide.from_json(vaccine_peptide.to_json())
+    assert restored.antigen == antigen
+    assert restored.mutant_protein_fragment is None
+    assert restored.amino_acids == antigen.amino_acids
 
 
 def test_vaccine_peptide_fails_closed_for_held_out_or_mismatched_policy():
@@ -203,9 +215,8 @@ def test_vaccine_peptide_fails_closed_for_held_out_or_mismatched_policy():
             evidence_source="test fixture",
         ),
     )
-    fragment = SimpleNamespace(amino_acids=held_out.amino_acids)
     with pytest.raises(ValueError, match="held-out antigen"):
-        VaccinePeptide(mutant_protein_fragment=fragment, antigen=held_out)
+        VaccinePeptide(antigen=held_out)
 
     antigen = cta_antigen()
     wrong_policy = SelfReferenceMatch(
@@ -220,11 +231,34 @@ def test_vaccine_peptide_fails_closed_for_held_out_or_mismatched_policy():
     )
     with pytest.raises(ValueError, match="does not match antigen kind"):
         VaccinePeptide(
+            antigen=antigen,
+            epitopes=[epitope],
+        )
+
+
+def test_antigen_backed_vaccine_peptide_rejects_mutation_only_scoring():
+    antigen = cta_antigen()
+
+    with pytest.raises(ValueError, match="combined_score_expr uses"):
+        VaccinePeptide(antigen=antigen)
+    with pytest.raises(ValueError, match="combined_score_expr uses"):
+        VaccinePeptide(
+            antigen=antigen,
+            combined_score_expr="n_alt_reads + target_epitope_score",
+            ranking_rules=("target_epitope_score",),
+        )
+    with pytest.raises(ValueError, match="ranking_rules use"):
+        VaccinePeptide(
+            antigen=antigen,
+            combined_score_expr="target_epitope_score",
+            ranking_rules=("target_epitope_score", "n_alt_reads"),
+        )
+    with pytest.raises(ValueError, match="must not carry a mutation fragment"):
+        VaccinePeptide(
             mutant_protein_fragment=SimpleNamespace(
                 amino_acids=antigen.amino_acids
             ),
             antigen=antigen,
-            epitopes=[epitope],
         )
 
 

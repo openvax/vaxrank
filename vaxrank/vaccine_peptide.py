@@ -17,6 +17,8 @@ import numpy as np
 from serializable import DataclassSerializable
 
 from .combined_score_dsl import (
+    SOURCE_AGNOSTIC_BINDINGS,
+    combined_score_binding_names,
     evaluate_combined_score,
     parse_combined_score_expr,
 )
@@ -24,9 +26,13 @@ from .manufacturability import (
     ManufacturabilityScores,
     compute_manufacturability_tuple,
 )
-from .ranking import compute_ranking_tuple
+from .ranking import (
+    DEFAULT_RANKING_RULES,
+    MUTATION_SPECIFIC_RANKING_RULES,
+    compute_ranking_tuple,
+)
 from .vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
-from .vaccine_antigen import VaccineAntigen
+from .vaccine_antigen import ANTIGEN_KIND_MUTATION, VaccineAntigen
 
 
 @dataclass
@@ -40,7 +46,8 @@ class VaccinePeptide(DataclassSerializable):
 
     Parameters
     ----------
-    mutant_protein_fragment : MutantProteinFragment
+    mutant_protein_fragment : MutantProteinFragment, optional
+        Required for mutation antigens and omitted for other antigen kinds.
 
     epitopes : list of CandidateEpitope
 
@@ -90,7 +97,7 @@ class VaccinePeptide(DataclassSerializable):
         (byte-identical with prior releases).
     """
 
-    mutant_protein_fragment: Any
+    mutant_protein_fragment: Any = None
     epitopes: list = field(default_factory=list)
     num_target_epitopes_to_keep: Optional[int] = None
     sort_epitopes_by: str = "ic50"
@@ -127,24 +134,35 @@ class VaccinePeptide(DataclassSerializable):
         )
         if self.antigen is None and fragment_has_targetable_interval:
             self.antigen = VaccineAntigen.from_mutant_protein_fragment(fragment)
-        if self.antigen is not None:
-            if not self.antigen.tumor_specificity.admits_construct:
+        if self.antigen is None:
+            raise ValueError(
+                "VaccinePeptide requires a VaccineAntigen or mutation fragment"
+            )
+        if not self.antigen.tumor_specificity.admits_construct:
+            raise ValueError(
+                "A held-out antigen cannot be used to construct a VaccinePeptide"
+            )
+        if self.antigen.kind == ANTIGEN_KIND_MUTATION and fragment is None:
+            raise ValueError(
+                "A mutation VaccinePeptide requires its MutantProteinFragment"
+            )
+        if self.antigen.kind != ANTIGEN_KIND_MUTATION and fragment is not None:
+            raise ValueError(
+                "A non-mutation VaccinePeptide must not carry a mutation fragment"
+            )
+        if (
+            fragment is not None
+            and fragment.amino_acids != self.antigen.amino_acids
+        ):
+            raise ValueError(
+                "VaccineAntigen and fragment amino-acid sequences differ"
+            )
+        for epitope in self.epitopes:
+            match = epitope.self_reference_match
+            if match is not None and match.antigen_kind != self.antigen.kind:
                 raise ValueError(
-                    "A held-out antigen cannot be used to construct a VaccinePeptide"
+                    "Epitope self-reference policy does not match antigen kind"
                 )
-            if (
-                hasattr(fragment, "amino_acids")
-                and fragment.amino_acids != self.antigen.amino_acids
-            ):
-                raise ValueError(
-                    "VaccineAntigen and fragment amino-acid sequences differ"
-                )
-            for epitope in self.epitopes:
-                match = epitope.self_reference_match
-                if match is not None and match.antigen_kind != self.antigen.kind:
-                    raise ValueError(
-                        "Epitope self-reference policy does not match antigen kind"
-                    )
 
         # Normalize the optional collection/tuple fields.
         self.manufacturability_thresholds = self.manufacturability_thresholds or {}
@@ -162,6 +180,31 @@ class VaccinePeptide(DataclassSerializable):
             self.combined_score_expr = DEFAULT_COMBINED_SCORE_EXPR
         self._combined_score_expr_ast = parse_combined_score_expr(
             self.combined_score_expr)
+        if fragment is None:
+            unavailable_bindings = (
+                combined_score_binding_names(self._combined_score_expr_ast)
+                - SOURCE_AGNOSTIC_BINDINGS
+            )
+            if unavailable_bindings:
+                raise ValueError(
+                    "Antigen-backed VaccinePeptide combined_score_expr uses "
+                    "mutation-only or unknown binding(s): %s"
+                    % ", ".join(sorted(unavailable_bindings))
+                )
+            resolved_ranking_rules = (
+                DEFAULT_RANKING_RULES
+                if self.ranking_rules is None
+                else self.ranking_rules
+            )
+            mutation_rules = (
+                set(resolved_ranking_rules) & MUTATION_SPECIFIC_RANKING_RULES
+            )
+            if mutation_rules:
+                raise ValueError(
+                    "Antigen-backed VaccinePeptide ranking_rules use "
+                    "mutation-only rule(s): %s"
+                    % ", ".join(sorted(mutation_rules))
+                )
 
         # Sort key over CandidateEpitope: pick the strongest pMHC_affinity
         # record across all predictors / alleles inside the CandidateEpitope.
@@ -241,8 +284,13 @@ class VaccinePeptide(DataclassSerializable):
             e.epitope_score for e in self.target_epitopes)
 
         self.manufacturability_scores = ManufacturabilityScores.from_amino_acids(
-            self.mutant_protein_fragment.amino_acids
+            self.amino_acids
         )
+
+    @property
+    def amino_acids(self):
+        """Amino-acid sequence of this vaccine candidate."""
+        return self.antigen.amino_acids
 
     def peptide_synthesis_difficulty_score_tuple(
             self,
@@ -304,6 +352,10 @@ class VaccinePeptide(DataclassSerializable):
         # the default combined-score expression uses; if the user
         # writes a different ``combined_score_expr`` that doesn't
         # reference it, this property is still queryable for reports.
+        if self.mutant_protein_fragment is None:
+            raise ValueError(
+                "Mutation RNA expression_score is unavailable for this antigen"
+            )
         return np.sqrt(self.mutant_protein_fragment.n_alt_reads)
 
     @property
@@ -327,11 +379,12 @@ class VaccinePeptide(DataclassSerializable):
         ]
         epitopes = self.target_epitopes + self.self_epitopes + non_target_only
         d = {
-            "mutant_protein_fragment": self.mutant_protein_fragment,
             "epitopes": epitopes,
             "num_target_epitopes_to_keep": self.num_target_epitopes_to_keep,
             "sort_epitopes_by": self.sort_epitopes_by,
         }
+        if self.mutant_protein_fragment is not None:
+            d["mutant_protein_fragment"] = self.mutant_protein_fragment
         if self.antigen is not None:
             d["antigen"] = self.antigen
         if self.manufacturability_thresholds:

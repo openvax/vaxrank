@@ -469,6 +469,9 @@ def test_vaccine_peptide_zero_epitope_limit_keeps_all():
     """A value of 0 means no truncation of mutant epitope list."""
     fragment = MagicMock()
     fragment.amino_acids = "ACDEFGHIK"
+    fragment.mutant_amino_acid_start_offset = 4
+    fragment.mutant_amino_acid_end_offset = 5
+    fragment.supporting_reference_transcripts = []
 
     epitope1 = _make_epitope("ACDEFGHIK", ic50=100.0, wt_ic50=200.0,
                              percentile_rank=0.5)

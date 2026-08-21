@@ -92,6 +92,13 @@ DEFAULT_RANKING_RULES = (
     "mutation_distance_from_edge",
 )
 
+MUTATION_SPECIFIC_RANKING_RULES = frozenset({
+    "n_alt_reads",
+    "n_alt_reads_supporting",
+    "n_mutant_amino_acids",
+    "mutation_distance_from_edge",
+})
+
 
 def compute_ranking_tuple(peptide, rules=None):
     """Apply the ordered rule list against a ``VaccinePeptide`` and return
