@@ -201,6 +201,7 @@ def test_default_union_selects_top_one_percent_and_preserves_shared_sources():
     assert presentation_only.inclusion_kinds == ("pMHC_presentation",)
     assert result.coverage.missing_combinations == ()
     assert result.coverage.retained_ligand_count == 2
+    assert result.protein_resolution_coverage == proteins.coverage
     assert result.for_allele_and_length("A*02:01", 9) == result.ligands
 
     payload = result.to_report_dict()
@@ -320,6 +321,32 @@ def test_conflicting_duplicate_model_prediction_fails_closed():
             protein_sequences=proteins,
             alleles=("HLA-A*02:01",),
             peptide_lengths=(9,),
+        )
+
+
+def test_risk_ligand_rejects_prediction_for_a_different_allele():
+    proteins = _protein_sequences()
+    frame = _prediction_frame(proteins)
+    result = risk_ligand_index_from_prediction_frame(
+        frame,
+        protein_sequences=proteins,
+        alleles=("HLA-A*02:01",),
+        peptide_lengths=(9,),
+    )
+    ligand = result.ligands[0]
+    mismatched = type(ligand.predictions[0])(
+        **{
+            **ligand.predictions[0].to_dict(),
+            "allele": "HLA-B*07:02",
+        }
+    )
+    with pytest.raises(ValueError, match="alleles disagree"):
+        type(ligand)(
+            peptide=ligand.peptide,
+            allele=ligand.allele,
+            predictions=(mismatched,),
+            inclusion_kinds=ligand.inclusion_kinds,
+            sources=ligand.sources,
         )
 
 
