@@ -121,6 +121,11 @@ class SafetyPrediction(DataclassSerializable):
             value = getattr(self, label)
             if value is not None and not math.isfinite(value):
                 raise ValueError(f"Safety prediction {label} must be finite or None")
+        if (
+            self.percentile_rank is not None
+            and not 0.0 <= self.percentile_rank <= 100.0
+        ):
+            raise ValueError("Safety prediction percentile rank must be 0..100")
 
     @property
     def identity(self) -> tuple[str, str, str, str]:
