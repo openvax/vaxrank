@@ -26,6 +26,7 @@ from .vaccine_antigen import (
     VaccineAntigen,
 )
 from .vaccine_peptide import VaccinePeptide
+from .vaccine_library import antigen_construct_name, select_antigen_window
 from .safety_assessment import (
     ConstructBoundary,
     EmittedSafetyLigand,
@@ -159,6 +160,7 @@ __all__ = [
     "assess_near_self",
     "assess_near_self_queries",
     "assess_cta_antigen",
+    "antigen_construct_name",
     "build_hpa_reference_provenance",
     "build_patient_hla_risk_ligand_index",
     "build_cta_vaccine_antigen",
@@ -170,4 +172,5 @@ __all__ = [
     "risk_ligand_index_from_prediction_frame",
     "safety_assessment_from_prediction_frame",
     "self_reference_matches",
+    "select_antigen_window",
 ]

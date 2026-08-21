@@ -160,8 +160,9 @@ def _antigen_records(ranked_vaccine_peptides, antigen_content,
     """Yield ``(name, amino_acids)`` per antigen.
 
     Dispatch on ``antigen_content``:
-      - ``'mutation_spanning'``: emit one mutation-centered window per
-        VaccinePeptide (or per ``candidates_per_slot`` alternates).
+      - ``'mutation_spanning'``: legacy configuration name for one window
+        preserving all targetable antigen content per VaccinePeptide (or per
+        ``candidates_per_slot`` alternates).
       - ``'minimal_epitope'``: emit the top
         ``epitopes_per_antigen`` MHC ligands per VaccinePeptide as
         independent antigens. ``epitopes_per_antigen=1`` (default) is
@@ -171,7 +172,7 @@ def _antigen_records(ranked_vaccine_peptides, antigen_content,
     Naming + alt-suffix logic comes from ``iter_named_antigens``,
     shared with mRNA assembly so antigen names match across types.
     """
-    for base_name, fragment, peptide in iter_named_antigens(
+    for base_name, antigen, peptide in iter_named_antigens(
             ranked_vaccine_peptides, candidates_per_slot=candidates_per_slot):
         if antigen_content == "minimal_epitope":
             tops = top_target_epitopes(peptide, n=epitopes_per_antigen)
@@ -192,9 +193,10 @@ def _antigen_records(ranked_vaccine_peptides, antigen_content,
                     name = "%s (%s)" % (base_name, tag)
                 yield name, ep.sequence
         else:
-            # mutation_spanning: pick a mutation-centered window
+            # Legacy-named mutation_spanning mode is target-mask based for all
+            # antigen kinds.
             yield base_name, select_antigen_window(
-                fragment, base_name, max_antigen_length_aa)
+                antigen, base_name, max_antigen_length_aa)
 
 
 def _manufacturability_for(sequence):
@@ -266,7 +268,7 @@ def assemble_peptide_constructs(
 
     Parameters
     ----------
-    ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
+    ranked_vaccine_peptides : list[(source, list[VaccinePeptide])]
     options : PeptideConstructConfig or None
     target_alleles : optional, list[str]
         Patient MHC alleles. When non-empty, the selector reorders

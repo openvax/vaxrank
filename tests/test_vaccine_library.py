@@ -15,6 +15,46 @@
 import pytest
 
 from vaxrank import mrna_library, vaccine_library
+from vaxrank.vaccine_antigen import (
+    ANTIGEN_KIND_CTA,
+    ATTESTATION_ADMITTED,
+    AminoAcidInterval,
+    TargetableMask,
+    TumorSpecificityAttestation,
+    VaccineAntigen,
+)
+from vaxrank.vaccine_peptide import VaccinePeptide
+
+
+def cta_vaccine_peptide(sequence, source_identifier="ENSG00000185686"):
+    antigen = VaccineAntigen(
+        kind=ANTIGEN_KIND_CTA,
+        amino_acids=sequence,
+        targetable_mask=TargetableMask((
+            AminoAcidInterval(0, len(sequence)),
+        )),
+        tumor_specificity=TumorSpecificityAttestation(
+            status=ATTESTATION_ADMITTED,
+            evidence_kind="oncoref_cta_and_patient_tumor_expression",
+            evidence_source="test fixture",
+        ),
+        self_reference_excluded_gene_ids=("ENSG00000185686",),
+        gene_name="PRAME",
+        gene_id="ENSG00000185686",
+        protein_ids=("ENSP_PRAME",),
+        species="Homo sapiens",
+        source_identifier=source_identifier,
+    )
+    peptide = VaccinePeptide(
+        antigen=antigen,
+        combined_score_expr="target_epitope_score",
+        ranking_rules=(
+            "target_epitope_score",
+            "manufacturability",
+            "self_epitope_score",
+        ),
+    )
+    return antigen, peptide
 
 
 def test_mrna_library_exports_old_string_constants():
@@ -132,9 +172,7 @@ def test_construct_name_format_consistent_across_modalities():
     fragment = SimpleNamespace(
         amino_acids="KLQGHSAPVLDVIVN", gene_name='G',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=15)
-    peptide = SimpleNamespace(
-        mutant_protein_fragment=fragment, target_epitopes=[],
-        manufacturability_scores=None)
+    peptide = VaccinePeptide(mutant_protein_fragment=fragment)
     pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
 
     [m] = assemble_mrna_constructs(pairs, options=RNAConstructConfig())
@@ -270,13 +308,14 @@ def test_select_antigen_window_centers_on_mutation():
     # and could drop the mutation when it sat past the head of the
     # fragment. The shared helper must center on mutant_amino_acid_*_offset.
     from types import SimpleNamespace
-    from vaxrank.vaccine_library import select_antigen_window
+    from vaxrank import select_antigen_window
     fragment = SimpleNamespace(
         amino_acids="A" * 40 + "WHY" + "A" * 7,  # mutation at 40-43
         mutant_amino_acid_start_offset=40,
         mutant_amino_acid_end_offset=43,
     )
-    window = select_antigen_window(fragment, "test", 30)
+    antigen = VaccineAntigen.from_mutant_protein_fragment(fragment)
+    window = select_antigen_window(antigen, "test", 30)
     assert len(window) == 30
     assert "WHY" in window
 
@@ -289,7 +328,8 @@ def test_select_antigen_window_short_fragment_passthrough():
         mutant_amino_acid_start_offset=0,
         mutant_amino_acid_end_offset=10,
     )
-    assert select_antigen_window(fragment, "test", 30) == "KLQGHSAPVL"
+    antigen = VaccineAntigen.from_mutant_protein_fragment(fragment)
+    assert select_antigen_window(antigen, "test", 30) == "KLQGHSAPVL"
 
 
 def test_select_antigen_window_warns_when_mutation_exceeds_cap(caplog):
@@ -302,10 +342,36 @@ def test_select_antigen_window_warns_when_mutation_exceeds_cap(caplog):
         mutant_amino_acid_end_offset=30,
     )
     with caplog.at_level(logging.WARNING):
-        result = select_antigen_window(fragment, "test", 20)
+        antigen = VaccineAntigen.from_mutant_protein_fragment(fragment)
+        result = select_antigen_window(antigen, "test", 20)
     # Untruncated since mutation > cap
     assert result == fragment.amino_acids
     assert any("longer than" in r.message for r in caplog.records)
+
+
+def test_select_antigen_window_preserves_discontiguous_targetable_span():
+    from vaxrank.vaccine_library import select_antigen_window
+
+    sequence = "A" * 10 + "C" + "A" * 8 + "W" + "A" * 20
+    antigen = VaccineAntigen(
+        kind=ANTIGEN_KIND_CTA,
+        amino_acids=sequence,
+        targetable_mask=TargetableMask((
+            AminoAcidInterval(10, 11),
+            AminoAcidInterval(19, 20),
+        )),
+        tumor_specificity=TumorSpecificityAttestation(
+            status=ATTESTATION_ADMITTED,
+            evidence_kind="test",
+            evidence_source="test fixture",
+        ),
+    )
+
+    window = select_antigen_window(antigen, "test", 20)
+
+    assert len(window) == 20
+    assert "C" in window
+    assert "W" in window
 
 
 # ---- end-to-end: both modalities from the same ranked list ----------------
@@ -328,9 +394,7 @@ def test_both_modalities_emit_compatible_manifests(tmp_path):
     fragment = SimpleNamespace(
         amino_acids="KLQGHSAPVLDVIVN", gene_name='GENE',
         mutant_amino_acid_start_offset=5, mutant_amino_acid_end_offset=10)
-    peptide = SimpleNamespace(
-        mutant_protein_fragment=fragment, target_epitopes=[],
-        manufacturability_scores=None)
+    peptide = VaccinePeptide(mutant_protein_fragment=fragment)
     pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
 
     p_constructs = assemble_peptide_constructs(
@@ -369,19 +433,21 @@ def test_both_modalities_emit_compatible_manifests(tmp_path):
 def test_iter_named_antigens_naming_format():
     from types import SimpleNamespace
     from varcode import Variant
+    from vaxrank import antigen_construct_name
     from vaxrank.vaccine_library import iter_named_antigens
 
     fragment = SimpleNamespace(
         amino_acids="KLQGH", gene_name='GENE',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
-    peptide = SimpleNamespace(
-        mutant_protein_fragment=fragment, target_epitopes=[])
+    peptide = VaccinePeptide(mutant_protein_fragment=fragment)
     pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
-    [(name, frag, pep)] = list(iter_named_antigens(pairs))
+    [(name, antigen, pep)] = list(iter_named_antigens(pairs))
     # Gene up front, category parenthesized; no mutation spelled out
     # because GENE contributes only one variant to this set.
     assert name == "GENE (SNV)"
-    assert frag is fragment
+    assert antigen.display_gene_name == "GENE"
+    assert antigen_construct_name(pairs[0][0], antigen) == name
+    assert antigen is peptide.antigen
     assert pep is peptide
 
 
@@ -394,9 +460,10 @@ def test_iter_named_antigens_alt_suffix():
         f = SimpleNamespace(
             amino_acids=aa, gene_name='G',
             mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(aa))
-        return SimpleNamespace(mutant_protein_fragment=f)
+        return VaccinePeptide(mutant_protein_fragment=f)
 
-    pairs = [(Variant('1', 100, 'A', 'T'), [_peptide("ABC"), _peptide("DEF"), _peptide("GHI")])]
+    pairs = [(Variant('1', 100, 'A', 'T'), [
+        _peptide("ACD"), _peptide("EFG"), _peptide("HIK")])]
     names = [n for n, _, _ in iter_named_antigens(pairs, candidates_per_slot=3)]
     assert names == ["G (SNV)", "G (SNV alt1)", "G (SNV alt2)"]
 
@@ -411,9 +478,9 @@ def test_iter_named_antigens_disambiguates_multi_variant_gene():
 
     def _peptide(gene):
         f = SimpleNamespace(
-            amino_acids="ABC", gene_name=gene,
+            amino_acids="ACD", gene_name=gene,
             mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=3)
-        return SimpleNamespace(mutant_protein_fragment=f)
+        return VaccinePeptide(mutant_protein_fragment=f)
 
     pairs = [
         (Variant('1', 100, 'A', 'T'), [_peptide('TP53')]),     # SNV
@@ -449,7 +516,7 @@ def test_iter_named_antigens_handles_missing_gene_name():
     fragment = SimpleNamespace(
         amino_acids="KLQ", gene_name=None,
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=3)
-    peptide = SimpleNamespace(mutant_protein_fragment=fragment)
+    peptide = VaccinePeptide(mutant_protein_fragment=fragment)
     pairs = [(Variant('1', 100, 'A', 'T'), [peptide])]
     [(name, _, _)] = list(iter_named_antigens(pairs))
     assert name == "unknown (SNV)"
@@ -464,10 +531,10 @@ def test_iter_named_antigens_caps_at_candidates_per_slot():
         f = SimpleNamespace(
             amino_acids=aa, gene_name='G',
             mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(aa))
-        return SimpleNamespace(mutant_protein_fragment=f)
+        return VaccinePeptide(mutant_protein_fragment=f)
 
     pairs = [(Variant('1', 100, 'A', 'T'),
-              [_peptide("ABC"), _peptide("DEF"), _peptide("GHI")])]
+              [_peptide("ACD"), _peptide("EFG"), _peptide("HIK")])]
     # candidates_per_slot=2 → only top 2 walked
     out = list(iter_named_antigens(pairs, candidates_per_slot=2))
     assert len(out) == 2
@@ -489,14 +556,81 @@ def test_peptide_and_mrna_names_match_for_same_input():
     fragment = SimpleNamespace(
         amino_acids="KLQGHSAPVLDVIVN", gene_name='GENE',
         mutant_amino_acid_start_offset=5, mutant_amino_acid_end_offset=10)
-    peptide = SimpleNamespace(
-        mutant_protein_fragment=fragment, target_epitopes=[],
-        manufacturability_scores=None)
+    peptide = VaccinePeptide(mutant_protein_fragment=fragment)
     pairs = [(Variant('1', 1000, 'A', 'T'), [peptide])]
 
     [p] = assemble_peptide_constructs(pairs, options=PeptideConstructConfig())
     [m] = assemble_mrna_constructs(pairs, options=RNAConstructConfig())
     assert p.antigen_names == m.antigen_names
+
+
+def test_cta_antigen_enters_peptide_and_mrna_constructs_without_fragment():
+    from vaxrank.coverage import summarize_construction_decisions
+    from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
+    from vaxrank.mrna import summarize_mrna_ranking_decisions
+    from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
+
+    antigen, peptide = cta_vaccine_peptide("MALWMRLLPLLALLALWGPDPAAA")
+    ranked = [(antigen, [peptide])]
+
+    [peptide_construct] = assemble_peptide_constructs(
+        ranked,
+        options=PeptideConstructConfig(max_antigen_length_aa=25),
+    )
+    [mrna_construct] = assemble_mrna_constructs(
+        ranked,
+        options=RNAConstructConfig(
+            signal_peptide=None,
+            include_mitd=False,
+            max_antigen_length_aa=25,
+        ),
+    )
+
+    assert peptide.mutant_protein_fragment is None
+    assert peptide_construct.antigen_names == ["PRAME (CTA)"]
+    assert peptide_construct.sequence == antigen.amino_acids
+    assert mrna_construct.antigen_names == ["PRAME (CTA)"]
+    assert mrna_construct.antigens[0]["aa"] == antigen.amino_acids
+
+    mrna_summary = summarize_mrna_ranking_decisions(
+        ranked, RNAConstructConfig())
+    construction_summary = summarize_construction_decisions(
+        ranked, cap=1, target_alleles=[])
+    for summary in (mrna_summary, construction_summary):
+        assert summary["selected"][0]["gene_name"] == "PRAME"
+        assert summary["selected"][0]["description"] == (
+            "PRAME_ENSG00000185686"
+        )
+
+
+def test_nonmutation_names_disambiguate_distinct_sources():
+    from vaxrank.vaccine_library import (
+        antigen_construct_name,
+        iter_named_antigens,
+    )
+
+    antigen_a, peptide_a = cta_vaccine_peptide(
+        "MALWMRLLP", "PRAME-isoform-a")
+    antigen_b, peptide_b = cta_vaccine_peptide(
+        "MALWMRLLA", "PRAME-isoform-b")
+
+    names = [
+        name for name, _, _ in iter_named_antigens([
+            (antigen_a, [peptide_a]),
+            (antigen_b, [peptide_b]),
+        ])
+    ]
+
+    assert names == [
+        "PRAME (CTA @ PRAME-isoform-a)",
+        "PRAME (CTA @ PRAME-isoform-b)",
+    ]
+    assert antigen_a.display_identifier == "PRAME-isoform-a"
+    assert antigen_construct_name(
+        antigen_a,
+        antigen_a,
+        include_source=True,
+    ) == names[0]
 
 
 # ---- compositional grammar (#247 prep) ------------------------------------

@@ -31,6 +31,7 @@ from vaxrank.coverage import (
     summarize_construction_decisions,
 )
 from vaxrank.candidate_epitope import CandidateEpitope, Peptide
+from vaxrank.vaccine_peptide import VaccinePeptide
 
 
 def _ep(peptide, allele, *, presentation_pct=None, affinity_pct=None,
@@ -56,14 +57,25 @@ def _ep(peptide, allele, *, presentation_pct=None, affinity_pct=None,
         overlaps_mutation=True, occurs_in_reference=False)
 
 
-def _vp(epitopes, *, combined_score=1.0, gene_name='GENE'):
-    """Minimal VaccinePeptide-like record (CandidateEpitope shape)."""
-    return SimpleNamespace(
-        target_epitopes=epitopes,
-        mutant_protein_fragment=SimpleNamespace(
-            gene_name=gene_name, amino_acids='AAAAAAA'),
-        combined_score=combined_score,
-        manufacturability_scores=None)
+def vaccine_peptide_with_score(
+        epitopes, *, combined_score=1.0, gene_name='GENE'):
+    """Build a real mutation peptide with deterministic scoring."""
+    fragment = SimpleNamespace(
+        gene_name=gene_name,
+        amino_acids='AAAAAAAAA',
+        mutant_amino_acid_start_offset=0,
+        mutant_amino_acid_end_offset=9,
+        n_alt_reads=1,
+        n_ref_reads=0,
+        n_overlapping_reads=1,
+        n_alt_reads_supporting_protein_sequence=1,
+        supporting_reference_transcripts=(),
+    )
+    return VaccinePeptide(
+        mutant_protein_fragment=fragment,
+        epitopes=epitopes,
+        combined_score_expr=str(combined_score),
+    )
 
 
 # -- compute_coverage --------------------------------------------------
@@ -150,7 +162,7 @@ def test_antigen_tier_per_allele_takes_best_peptide():
     """One antigen has many sliding-window peptides; the antigen's
     tier for an allele is the *best* tier any of its peptides
     achieves."""
-    vp = _vp([
+    vp = vaccine_peptide_with_score([
         _ep('AAAAAAAA', 'HLA-A*02:01', presentation_pct=1.8),  # low
         _ep('SIINFEKL', 'HLA-A*02:01', presentation_pct=0.3),  # strong
         _ep('DDDDDDDD', 'HLA-A*02:01', presentation_pct=0.9),  # medium
@@ -166,10 +178,10 @@ def test_selector_prefers_coverage_over_score():
     """When the top-scoring antigen covers no targets and a
     lower-scoring one covers a strong-tier target, the selector
     picks the lower-scoring one first."""
-    high_score_uncovered = _vp(
+    high_score_uncovered = vaccine_peptide_with_score(
         [_ep('AAAAAAAA', 'HLA-A*02:01', presentation_pct=3.0)],
         combined_score=10.0, gene_name='HIGH')
-    low_score_strong = _vp(
+    low_score_strong = vaccine_peptide_with_score(
         [_ep('SIINFEKL', 'HLA-A*02:01', presentation_pct=0.3)],
         combined_score=1.0, gene_name='LOW')
     candidates = [
@@ -187,13 +199,13 @@ def test_selector_falls_back_to_score_when_coverage_satisfied():
     """Once every target allele is covered at strong tier, the
     selector reverts to pure score order — so an already-covered
     pool gives the same selection as today's behavior."""
-    a = _vp(
+    a = vaccine_peptide_with_score(
         [_ep('SIINFEKL', 'HLA-A*02:01', presentation_pct=0.3)],
         combined_score=10.0, gene_name='A')
-    b = _vp(
+    b = vaccine_peptide_with_score(
         [_ep('AAAAAAAA', 'HLA-A*02:01', presentation_pct=0.4)],
         combined_score=8.0, gene_name='B')
-    c = _vp(
+    c = vaccine_peptide_with_score(
         [_ep('DDDDDDDD', 'HLA-A*02:01', presentation_pct=0.5)],
         combined_score=12.0, gene_name='C')
     candidates = [('vA', [a]), ('vB', [b]), ('vC', [c])]
@@ -211,9 +223,11 @@ def test_selector_falls_back_to_score_when_coverage_satisfied():
 
 def test_selector_no_op_with_empty_targets():
     """Empty target_alleles → return ranked[:n] unchanged."""
-    a = _vp([_ep('SIINFEKL', 'HLA-A*02:01', presentation_pct=0.3)],
+    a = vaccine_peptide_with_score([
+        _ep('SIINFEKL', 'HLA-A*02:01', presentation_pct=0.3)],
             combined_score=10.0)
-    b = _vp([_ep('AAAAAAAA', 'HLA-B*07:02', presentation_pct=0.4)],
+    b = vaccine_peptide_with_score([
+        _ep('AAAAAAAA', 'HLA-B*07:02', presentation_pct=0.4)],
             combined_score=8.0)
     candidates = [('vA', [a]), ('vB', [b])]
     selected = select_antigens_for_coverage(
@@ -225,13 +239,13 @@ def test_selector_spreads_across_multiple_alleles():
     """With three target alleles and three antigens each covering a
     different one, the selector picks all three (one per allele)
     rather than three of the same allele."""
-    a02 = _vp(
+    a02 = vaccine_peptide_with_score(
         [_ep('SIINFEKL', 'HLA-A*02:01', presentation_pct=0.2)],
         combined_score=5.0, gene_name='A02')
-    b07 = _vp(
+    b07 = vaccine_peptide_with_score(
         [_ep('AAAAAAAA', 'HLA-B*07:02', presentation_pct=0.2)],
         combined_score=5.0, gene_name='B07')
-    c03 = _vp(
+    c03 = vaccine_peptide_with_score(
         [_ep('CCCCCCCC', 'HLA-C*03:04', presentation_pct=0.2)],
         combined_score=5.0, gene_name='C03')
     candidates = [('vA', [a02]), ('vB', [b07]), ('vC', [c03])]
@@ -248,10 +262,10 @@ def test_selector_spreads_across_multiple_alleles():
 def test_summarize_includes_coverage_for_selected_pool():
     """The summary's ``coverage`` field is computed over the
     *selected* antigens, not the full ranked input."""
-    selected_a = _vp(
+    selected_a = vaccine_peptide_with_score(
         [_ep('SIINFEKL', 'HLA-A*02:01', presentation_pct=0.3)],
         combined_score=10.0, gene_name='SELECTED')
-    dropped_b = _vp(
+    dropped_b = vaccine_peptide_with_score(
         [_ep('DDDDDDDD', 'HLA-B*07:02', presentation_pct=0.3)],
         combined_score=1.0, gene_name='DROPPED')
     ranked = [
@@ -338,7 +352,7 @@ def test_summarize_per_row_has_allele_tiers_and_manufacturability():
     tier map (drives the ``covers A*02:01 (strong)`` annotation)
     plus the manufacturability dict (peptide construction view
     renders it)."""
-    vp = _vp(
+    vp = vaccine_peptide_with_score(
         [_ep('SIINFEKL', 'HLA-A*02:01', presentation_pct=0.3)],
         combined_score=5.0, gene_name='GENEX')
     # Stub the manufacturability_scores like ManufacturabilityScores

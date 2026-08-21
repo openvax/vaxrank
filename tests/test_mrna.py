@@ -34,6 +34,7 @@ from vaxrank.mrna_library import (
     UTR_5P_HBB,
 )
 from vaxrank.vaccine_library import get_linker
+from vaxrank.vaccine_peptide import VaccinePeptide
 
 # (G4S)3 was a static entry in 2.12.x; in 2.13+ it is parsed from the
 # compositional grammar. Resolve via get_linker so the test references
@@ -77,25 +78,50 @@ def _translate(dna):
     return ''.join(table.get(dna[i:i + 3], 'X') for i in range(0, len(dna) - 2, 3))
 
 
-def _peptide_stub(amino_acids, gene_name='GENE'):
-    fragment = SimpleNamespace(amino_acids=amino_acids, gene_name=gene_name)
-    return SimpleNamespace(mutant_protein_fragment=fragment)
+def mutation_vaccine_peptide(amino_acids, gene_name='GENE'):
+    fragment = SimpleNamespace(
+        amino_acids=amino_acids,
+        gene_name=gene_name,
+        mutant_amino_acid_start_offset=0,
+        mutant_amino_acid_end_offset=len(amino_acids),
+        n_alt_reads=1,
+        n_ref_reads=0,
+        n_overlapping_reads=1,
+        n_alt_reads_supporting_protein_sequence=1,
+        supporting_reference_transcripts=(),
+    )
+    return VaccinePeptide(
+        mutant_protein_fragment=fragment,
+    )
 
 
 def _variant_pair(amino_acids, contig='1', start=1000, gene_name='GENE'):
     variant = Variant(contig, start, 'A', 'T')
-    return (variant, [_peptide_stub(amino_acids, gene_name=gene_name)])
+    return (variant, [mutation_vaccine_peptide(
+        amino_acids, gene_name=gene_name)])
 
 
 # ---- mRNA ranking-decisions summary (#270) ------------------------------
 
 
-def _vp_with_score(amino_acids, gene_name, combined_score):
-    """Like ``_peptide_stub`` but with a settable ``combined_score``
-    so we can verify the ordered list comes through."""
-    fragment = SimpleNamespace(amino_acids=amino_acids, gene_name=gene_name)
-    return SimpleNamespace(
-        mutant_protein_fragment=fragment, combined_score=combined_score)
+def mutation_vaccine_peptide_with_score(
+        amino_acids, gene_name, combined_score):
+    """Build a real mutation peptide with a deterministic test score."""
+    fragment = SimpleNamespace(
+        amino_acids=amino_acids,
+        gene_name=gene_name,
+        mutant_amino_acid_start_offset=0,
+        mutant_amino_acid_end_offset=len(amino_acids),
+        n_alt_reads=1,
+        n_ref_reads=0,
+        n_overlapping_reads=1,
+        n_alt_reads_supporting_protein_sequence=1,
+        supporting_reference_transcripts=(),
+    )
+    return VaccinePeptide(
+        mutant_protein_fragment=fragment,
+        combined_score_expr=str(combined_score),
+    )
 
 
 def test_summarize_mrna_ranking_decisions_splits_at_cap():
@@ -104,7 +130,8 @@ def test_summarize_mrna_ranking_decisions_splits_at_cap():
     ``total_ranked`` are surfaced for the report header."""
     pairs = [
         (Variant('1', 100 + i, 'A', 'T'),
-         [_vp_with_score("KLQGHSAPVLDVIVN", "GENE%d" % i, 100.0 - i)])
+         [mutation_vaccine_peptide_with_score(
+             "KLQGHSAPVLDVIVN", "GENE%d" % i, 100.0 - i)])
         for i in range(7)
     ]
     options = RNAConstructConfig(
@@ -129,9 +156,11 @@ def test_summarize_mrna_ranking_decisions_no_drops_when_under_cap():
     is selected and ``dropped`` is empty."""
     pairs = [
         (Variant('1', 100, 'A', 'T'),
-         [_vp_with_score("KLQGHSAPVLDVIVN", "GENE_A", 50.0)]),
+         [mutation_vaccine_peptide_with_score(
+             "KLQGHSAPVLDVIVN", "GENE_A", 50.0)]),
         (Variant('1', 200, 'A', 'T'),
-         [_vp_with_score("MNNVDEILGRWESPV", "GENE_B", 30.0)]),
+         [mutation_vaccine_peptide_with_score(
+             "MNNVDEILGRWESPV", "GENE_B", 30.0)]),
     ]
     options = RNAConstructConfig(
         antigens_per_construct=5, max_constructs=2)  # cap = 10
@@ -913,16 +942,8 @@ def test_junction_swap_meta_appears_in_elements_when_optimizer_runs():
                         (p, "HLA-A*02:01"), 99.0)))
             return out
 
-    fragment_a = SimpleNamespace(
-        amino_acids=a1, gene_name='GENEA',
-        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(a1))
-    fragment_b = SimpleNamespace(
-        amino_acids=a2, gene_name='GENEB',
-        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(a2))
-    pep_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, target_epitopes=[])
-    pep_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, target_epitopes=[])
+    pep_a = mutation_vaccine_peptide(a1, gene_name='GENEA')
+    pep_b = mutation_vaccine_peptide(a2, gene_name='GENEB')
     pairs = [
         (Variant('1', 100, 'A', 'T'), [pep_a]),
         (Variant('2', 200, 'A', 'T'), [pep_b]),

@@ -19,6 +19,7 @@ from vaxrank.junction_swap import (
     junction_kmers,
     optimize_linkers,
 )
+from vaxrank.vaccine_peptide import VaccinePeptide
 
 
 class StubPredictor:
@@ -203,10 +204,8 @@ def test_assemble_with_optimizer_uses_chosen_linkers():
     fragment_b = SimpleNamespace(
         amino_acids=a2, gene_name='GENEB',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=len(a2))
-    pep_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, target_epitopes=[])
-    pep_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, target_epitopes=[])
+    pep_a = VaccinePeptide(mutant_protein_fragment=fragment_a)
+    pep_b = VaccinePeptide(mutant_protein_fragment=fragment_b)
     pairs = [
         (Variant('1', 100, 'A', 'T'), [pep_a]),
         (Variant('2', 200, 'A', 'T'), [pep_b]),
@@ -252,10 +251,8 @@ def test_assemble_with_optimizer_falls_back_when_predictor_missing(caplog):
     fragment_b = SimpleNamespace(
         amino_acids="MNNVD", gene_name='G',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
-    pep_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, target_epitopes=[])
-    pep_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, target_epitopes=[])
+    pep_a = VaccinePeptide(mutant_protein_fragment=fragment_a)
+    pep_b = VaccinePeptide(mutant_protein_fragment=fragment_b)
     pairs = [
         (Variant('1', 100, 'A', 'T'), [pep_a]),
         (Variant('2', 200, 'A', 'T'), [pep_b]),
@@ -293,10 +290,8 @@ def test_assemble_default_kept_when_candidates_dont_help():
     fragment_b = SimpleNamespace(
         amino_acids="MNNVD", gene_name='G',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
-    pep_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, target_epitopes=[])
-    pep_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, target_epitopes=[])
+    pep_a = VaccinePeptide(mutant_protein_fragment=fragment_a)
+    pep_b = VaccinePeptide(mutant_protein_fragment=fragment_b)
     pairs = [
         (Variant('1', 100, 'A', 'T'), [pep_a]),
         (Variant('2', 200, 'A', 'T'), [pep_b]),
@@ -427,10 +422,8 @@ def test_assemble_manifest_chosen_uses_canonical_linker_names():
     fragment_b = SimpleNamespace(
         amino_acids="MNNVD", gene_name='G',
         mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=5)
-    pep_a = SimpleNamespace(
-        mutant_protein_fragment=fragment_a, target_epitopes=[])
-    pep_b = SimpleNamespace(
-        mutant_protein_fragment=fragment_b, target_epitopes=[])
+    pep_a = VaccinePeptide(mutant_protein_fragment=fragment_a)
+    pep_b = VaccinePeptide(mutant_protein_fragment=fragment_b)
     pairs = [
         (Variant('1', 100, 'A', 'T'), [pep_a]),
         (Variant('2', 200, 'A', 'T'), [pep_b]),
@@ -466,21 +459,23 @@ def test_assemble_manifest_chosen_uses_canonical_linker_names():
     a2 = "DVIVNCDESLLAS"
     g4s2_kmers = junction_kmers(a1, "GGGGSGGGGS", a2, k_lengths=(9,))
     rank_table = {(g4s2_kmers[0], "HLA-A*02:01"): 0.05}
+    fragment_a = SimpleNamespace(
+        amino_acids=a1,
+        gene_name='G',
+        mutant_amino_acid_start_offset=0,
+        mutant_amino_acid_end_offset=len(a1),
+    )
+    fragment_b = SimpleNamespace(
+        amino_acids=a2,
+        gene_name='G',
+        mutant_amino_acid_start_offset=0,
+        mutant_amino_acid_end_offset=len(a2),
+    )
     pairs2 = [
         (Variant('1', 100, 'A', 'T'),
-         [SimpleNamespace(
-             mutant_protein_fragment=SimpleNamespace(
-                 amino_acids=a1, gene_name='G',
-                 mutant_amino_acid_start_offset=0,
-                 mutant_amino_acid_end_offset=len(a1)),
-             target_epitopes=[])]),
+         [VaccinePeptide(mutant_protein_fragment=fragment_a)]),
         (Variant('2', 200, 'A', 'T'),
-         [SimpleNamespace(
-             mutant_protein_fragment=SimpleNamespace(
-                 amino_acids=a2, gene_name='G',
-                 mutant_amino_acid_start_offset=0,
-                 mutant_amino_acid_end_offset=len(a2)),
-             target_epitopes=[])]),
+         [VaccinePeptide(mutant_protein_fragment=fragment_b)]),
     ]
     options2 = RNAConstructConfig(
         signal_peptide=None, include_mitd=False,
@@ -553,8 +548,7 @@ def test_packing_uses_longest_candidate_for_size_cap():
             amino_acids="KLQGHSAPVL", gene_name='G%d' % k,
             mutant_amino_acid_start_offset=0,
             mutant_amino_acid_end_offset=10)
-        pep = SimpleNamespace(
-            mutant_protein_fragment=frag, target_epitopes=[])
+        pep = VaccinePeptide(mutant_protein_fragment=frag)
         pairs.append((Variant(str(k + 1), 100 + k, 'A', 'T'), [pep]))
 
     # Budget: HBB UTRs (~50 + 132 nt) + start codon 3 nt + 3 antigens

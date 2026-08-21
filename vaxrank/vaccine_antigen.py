@@ -282,6 +282,29 @@ class VaccineAntigen(DataclassSerializable):
     def interval_is_targetable(self, start: int, end: int) -> bool:
         return self.targetable_mask.overlaps(start, end)
 
+    def targetable_span(self) -> AminoAcidInterval:
+        """Smallest contiguous interval containing all targetable residues."""
+        intervals = self.targetable_mask.intervals
+        if not intervals:
+            raise ValueError("Vaccine antigen has no targetable content")
+        return AminoAcidInterval(intervals[0].start, intervals[-1].end)
+
+    @property
+    def display_identifier(self) -> str:
+        """Best stable source identifier for reports and construct labels."""
+        identifiers = (
+            (self.source_identifier,)
+            + self.protein_ids
+            + self.transcript_ids
+            + ((self.gene_id,) if self.gene_id else ())
+        )
+        return next((value for value in identifiers if value), self.kind)
+
+    @property
+    def display_gene_name(self) -> str:
+        """Best available gene label for reports and construct labels."""
+        return self.gene_name or self.gene_id or "unknown"
+
     @classmethod
     def from_mutant_protein_fragment(cls, fragment: Any) -> "VaccineAntigen":
         """Represent a legacy mutation fragment without changing its policy."""

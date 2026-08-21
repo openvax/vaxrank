@@ -62,6 +62,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from .vaccine_library import antigen_description
+
 
 # Default tier thresholds (% rank). Stable, hardcoded for now —
 # expose as CLI knobs later if a user actually needs to tune them.
@@ -242,7 +244,7 @@ def summarize_construction_decisions(
     Parameters
     ----------
     ranked_variants_with_vaccine_peptides : list[tuple]
-        ``[(Variant, [VaccinePeptide])]`` — the score-ranked input.
+        ``[(source, [VaccinePeptide])]`` — the score-ranked input.
     cap : int
         Number of antigens this modality can hold
         (``antigens_per_construct × max_constructs`` for both
@@ -277,11 +279,10 @@ def summarize_construction_decisions(
     }
 
     def _row(item):
-        variant, peptides = item
+        source, peptides = item
         vp = peptides[0] if peptides else None
-        gene_name = (
-            getattr(vp.mutant_protein_fragment, 'gene_name', '')
-            if vp is not None else '')
+        antigen = vp.antigen if vp is not None else None
+        gene_name = antigen.display_gene_name if antigen is not None else ""
         rank = rank_by_id.get(id(item), 0)
         # Per-allele tier for this antigen — drives the
         # ``covers A*02:01 (strong)`` annotation in the report.
@@ -299,9 +300,10 @@ def summarize_construction_decisions(
         return {
             'rank': rank,
             'gene_name': gene_name or '',
-            'description': '%s_%s' % (
-                gene_name or '?',
-                getattr(variant, 'short_description', str(variant))),
+            'description': (
+                antigen_description(source, antigen)
+                if antigen is not None else str(source)
+            ),
             'combined_score': (
                 float(vp.combined_score) if vp is not None else 0.0),
             'allele_tiers': {
@@ -322,7 +324,7 @@ def summarize_construction_decisions(
     coverage_records: list = []
     if target_alleles:
         all_epitopes = []
-        for variant, peptides in selected:
+        for _source, peptides in selected:
             for vp in (peptides or [])[:1]:
                 all_epitopes.extend(
                     getattr(vp, 'target_epitopes', None) or [])
