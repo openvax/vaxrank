@@ -28,13 +28,16 @@ from .vaccine_antigen import (
 from .vaccine_peptide import VaccinePeptide
 from .vaccine_library import antigen_construct_name, select_antigen_window
 from .safety_assessment import (
+    AntigenSafetyAssessment,
     ConstructBoundary,
     EmittedSafetyLigand,
     SafetyAssessmentError,
     SafetyPrediction,
     SafetyPredictionCoverage,
     WindowSafetyAssessment,
+    assess_antigen_safety,
     assess_vaccine_antigen_window,
+    near_self_queries_for_window,
     safety_assessment_from_prediction_frame,
 )
 from .tissue_risk import (
@@ -101,6 +104,7 @@ __all__ = [
     "__version__",
     "AminoAcidInterval",
     "AminoAcidSubstitutionMatrix",
+    "AntigenSafetyAssessment",
     "BLOSUM62",
     "CandidateEpitope",
     "CTAAdmissionAssessment",
@@ -156,6 +160,7 @@ __all__ = [
     "VaccineConfig",
     "VaccinePeptide",
     "WindowSafetyAssessment",
+    "assess_antigen_safety",
     "assess_vaccine_antigen_window",
     "assess_near_self",
     "assess_near_self_queries",
@@ -165,6 +170,7 @@ __all__ = [
     "build_patient_hla_risk_ligand_index",
     "build_cta_vaccine_antigen",
     "derive_tissue_risk_proteins",
+    "near_self_queries_for_window",
     "predict_epitopes",
     "run_vaxrank",
     "resolve_tissue_risk_policy",
