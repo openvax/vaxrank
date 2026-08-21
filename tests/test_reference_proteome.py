@@ -657,7 +657,7 @@ def test_cta_source_exclusion_is_human_only():
 def test_cta_shared_sequence_remains_self_through_non_cta_gene():
     """Removing a CTA source gene must not remove a shared non-CTA peptide."""
     prame_gene_id = "ENSG00000185686"
-    shared = "ABCDEFGHIJ"
+    shared = "ACDEFGHIKL"
     cta = create_mock_transcript("CTA_TX", shared, gene_id=prame_gene_id)
     non_cta = create_mock_transcript("SELF_TX", shared, gene_id="ENSG_NON_CTA")
     genome = create_mock_genome(
@@ -669,7 +669,7 @@ def test_cta_shared_sequence_remains_self_through_non_cta_gene():
             genome, exclude_cta_genes=True,
             min_kmer_length=8, max_kmer_length=8)
 
-    assert ref.contains("ABCDEFGH")
+    assert ref.contains("ACDEFGHI")
 
 
 def test_filtered_reference_proteome_is_cached_per_genome_and_policy():
@@ -677,13 +677,52 @@ def test_filtered_reference_proteome_is_cached_per_genome_and_policy():
     t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="G1")
     t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="G2")
     genome = create_mock_genome([t1, t2], release=112)
-    first = ReferenceProteome.from_genome(
-        genome, exclude_gene_ids={"G1"}, min_kmer_length=8, max_kmer_length=8)
-    second = ReferenceProteome.from_genome(
-        genome, exclude_gene_ids={"G1"}, min_kmer_length=8, max_kmer_length=8)
+    with patch(
+            "vaxrank.reference_proteome.extract_kmers",
+            wraps=extract_kmers) as extract:
+        first = ReferenceProteome.from_genome(
+            genome, exclude_gene_ids={"G1"},
+            min_kmer_length=8, max_kmer_length=8)
+        second = ReferenceProteome.from_genome(
+            genome, exclude_gene_ids={"G1"},
+            min_kmer_length=8, max_kmer_length=8)
 
     assert first._kmer_set is second._kmer_set
-    assert genome.transcripts.call_count == 1
+    assert extract.call_count == 1
+
+
+def test_filtered_cache_is_keyed_by_protein_content_and_policy():
+    _filtered_kmer_set_cache.clear()
+    first = create_mock_genome([
+        create_mock_transcript("T1", "ACDEFGHIKL", gene_id="G1")
+    ], release=113)
+    second = create_mock_genome([
+        create_mock_transcript("T2", "LMNPQRSTVW", gene_id="G2")
+    ], release=113)
+    equivalent = create_mock_genome([
+        create_mock_transcript("T1", "ACDEFGHIKL", gene_id="G1")
+    ], release=999)
+
+    with patch(
+            "vaxrank.reference_proteome.extract_kmers",
+            wraps=extract_kmers) as extract:
+        first_ref = ReferenceProteome.from_genome(
+            first, exclude_gene_ids={"IGNORED"},
+            min_kmer_length=8, max_kmer_length=8)
+        second_ref = ReferenceProteome.from_genome(
+            second, exclude_gene_ids={"IGNORED"},
+            min_kmer_length=8, max_kmer_length=8)
+        equivalent_ref = ReferenceProteome.from_genome(
+            equivalent, exclude_gene_ids={"IGNORED"},
+            min_kmer_length=8, max_kmer_length=8)
+
+    assert first_ref.contains("ACDEFGHI")
+    assert not first_ref.contains("LMNPQRST")
+    assert second_ref.contains("LMNPQRST")
+    assert not second_ref.contains("ACDEFGHI")
+    assert equivalent_ref._kmer_set is first_ref._kmer_set
+    assert extract.call_count == 2
+    assert len(_filtered_kmer_set_cache) == 2
 
 
 def test_from_genome_with_exclude_fasta(tmp_path):
