@@ -192,6 +192,7 @@ class SelfReferenceSource(DataclassSerializable):
     transcript_id: str = ""
     protein_id: str = ""
     gene_name: str = ""
+    species: str = ""
 
     def __post_init__(self):
         if not self.gene_id:

@@ -29,7 +29,7 @@ from .candidate_epitope import (
     CandidateEpitope, SOURCE_CLASS_MUTATION, SOURCE_CLASS_SELF,
     candidate_epitopes_from_rows,
 )
-from .reference_proteome import ReferenceProteome
+from .reference_proteome import ReferenceProteome, self_reference_matches
 from .vaccine_antigen import (
     ANTIGEN_KIND_CTA,
     ANTIGEN_KIND_MUTATION,
@@ -146,13 +146,6 @@ def predict_epitopes(
     )
 
     reference_proteome = ReferenceProteome(genome)
-    if antigen.self_reference_excluded_gene_ids:
-        antigen_reference_proteome = ReferenceProteome.from_genome(
-            genome,
-            exclude_gene_ids=antigen.self_reference_excluded_gene_ids,
-        )
-    else:
-        antigen_reference_proteome = reference_proteome
     non_cta_reference_proteome = ReferenceProteome.from_genome(
         genome, exclude_cta_genes=True)
 
@@ -191,6 +184,10 @@ def predict_epitopes(
             predictions_df, filter_node, default_methods=default_methods)
         if predictions_df.empty:
             return []
+
+    antigen_self_matches = self_reference_matches(
+        predictions_df["peptide"], antigen, genome
+    )
 
     # Evaluate the score expression once; indexed by
     # (source_sequence_name, peptide, peptide_offset, allele) group tuple.
@@ -270,7 +267,6 @@ def predict_epitopes(
         )
 
         occurs_in_reference = reference_proteome.contains(peptide)
-        occurs_in_antigen_reference = antigen_reference_proteome.contains(peptide)
         occurs_in_non_cta_reference = non_cta_reference_proteome.contains(peptide)
         if occurs_in_reference:
             logger.debug('Peptide %s occurs in reference', peptide)
@@ -353,11 +349,7 @@ def predict_epitopes(
             # for CTA-family peptides; shared sequences in any non-CTA gene
             # remain present because the filtered index retains those genes.
             'occurs_in_non_CTA_reference': occurs_in_non_cta_reference,
-            'self_reference_match': antigen.self_reference_match(
-                peptide,
-                occurs_in_antigen_reference,
-                genome_release=str(getattr(genome, "release", "") or ""),
-            ),
+            'self_reference_match': antigen_self_matches[peptide],
             # Per-(peptide, allele) DSL score; threaded onto the
             # CandidateEpitope as ``per_allele_scores[allele]`` by
             # ``candidate_epitopes_from_rows``. Single source of

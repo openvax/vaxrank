@@ -19,6 +19,7 @@ import pickle
 import tempfile
 from unittest.mock import MagicMock, patch
 
+from pyensembl import Genome
 
 from vaxrank.reference_proteome import (
     ReferenceProteome,
@@ -32,8 +33,18 @@ from vaxrank.reference_proteome import (
     DEFAULT_MAX_KMER_LENGTH,
     _filtered_kmer_set_cache,
     _kmer_set_cache,
+    _protein_source_snapshot_cache,
     cta_source_gene_ids_for_genome,
     oncoref_cta_source_gene_ids,
+    self_reference_matches,
+)
+from vaxrank.vaccine_antigen import (
+    ANTIGEN_KIND_CTA,
+    ATTESTATION_ADMITTED,
+    AminoAcidInterval,
+    TargetableMask,
+    TumorSpecificityAttestation,
+    VaccineAntigen,
 )
 
 from .common import eq_, ok_
@@ -52,6 +63,8 @@ def create_mock_transcript(transcript_id, protein_sequence, is_protein_coding=Tr
     transcript.protein_sequence = protein_sequence
     transcript.is_protein_coding = is_protein_coding
     transcript.gene_id = gene_id or f"GENE_{transcript_id}"
+    transcript.gene_name = transcript.gene_id
+    transcript.protein_id = f"PROTEIN_{transcript_id}"
     return transcript
 
 
@@ -670,6 +683,131 @@ def test_cta_shared_sequence_remains_self_through_non_cta_gene():
             min_kmer_length=8, max_kmer_length=8)
 
     assert ref.contains("ACDEFGHI")
+
+
+def test_self_reference_matches_preserve_retained_source_provenance():
+    prame_gene_id = "ENSG00000185686"
+    prame = create_mock_transcript(
+        "PRAME_TX", "ACDEFGHIKL", gene_id=prame_gene_id
+    )
+    retained_1 = create_mock_transcript(
+        "SELF_TX_1", "MACDEFGHIV", gene_id="ENSG_SELF_1"
+    )
+    retained_2 = create_mock_transcript(
+        "SELF_TX_2", "ACDEFGHIMN", gene_id="ENSG_SELF_2"
+    )
+    genome = create_mock_genome(
+        [prame, retained_2, retained_1],
+        species_name="Homo sapiens",
+        release=114,
+    )
+    antigen = VaccineAntigen(
+        kind=ANTIGEN_KIND_CTA,
+        amino_acids=prame.protein_sequence,
+        targetable_mask=TargetableMask((AminoAcidInterval(0, 10),)),
+        tumor_specificity=TumorSpecificityAttestation(
+            status=ATTESTATION_ADMITTED,
+            evidence_kind="test",
+            evidence_source="test fixture",
+        ),
+        self_reference_excluded_gene_ids=(prame_gene_id,),
+        gene_id=prame_gene_id,
+    )
+
+    matches = self_reference_matches(
+        ["ACDEFGHI", "CDEFGHIK"], antigen, genome
+    )
+
+    shared = matches["ACDEFGHI"]
+    assert shared.occurs
+    assert shared.source_provenance_complete
+    assert shared.genome_release == "114"
+    assert [source.gene_id for source in shared.sources] == [
+        "ENSG_SELF_1",
+        "ENSG_SELF_2",
+    ]
+    assert [source.transcript_id for source in shared.sources] == [
+        "SELF_TX_1",
+        "SELF_TX_2",
+    ]
+    assert [source.protein_id for source in shared.sources] == [
+        "PROTEIN_SELF_TX_1",
+        "PROTEIN_SELF_TX_2",
+    ]
+    assert all(source.gene_id != prame_gene_id for source in shared.sources)
+    assert {source.species for source in shared.sources} == {"Homo sapiens"}
+    assert type(shared).from_json(shared.to_json()) == shared
+
+    prame_only = matches["CDEFGHIK"]
+    assert not prame_only.occurs
+    assert prame_only.source_provenance_complete
+    assert prame_only.sources == ()
+    assert prame_only.excluded_gene_ids == (prame_gene_id,)
+
+
+def test_self_reference_matches_without_genome_are_explicitly_incomplete():
+    antigen = VaccineAntigen(
+        kind=ANTIGEN_KIND_CTA,
+        amino_acids="ACDEFGHIKL",
+        targetable_mask=TargetableMask((AminoAcidInterval(0, 10),)),
+        tumor_specificity=TumorSpecificityAttestation(
+            status=ATTESTATION_ADMITTED,
+            evidence_kind="test",
+            evidence_source="test fixture",
+        ),
+    )
+
+    match = self_reference_matches(["ACDEFGHI"], antigen, None)["ACDEFGHI"]
+
+    assert not match.occurs
+    assert not match.source_provenance_complete
+    assert match.sources == ()
+
+
+def test_ensembl_source_snapshot_cache_tracks_resolved_source_files(tmp_path):
+    _protein_source_snapshot_cache.clear()
+    gtf_path = tmp_path / "test.gtf"
+    protein_path = tmp_path / "test.fa"
+    gtf_path.write_text("annotation-v1")
+    protein_path.write_text("protein-v1")
+    genome = Genome(
+        reference_name="test-reference",
+        annotation_name="test-annotation",
+        annotation_version="1",
+        gtf_path_or_url=str(gtf_path),
+        protein_fasta_paths_or_urls=[str(protein_path)],
+    )
+    first_transcript = create_mock_transcript(
+        "T1", "ACDEFGHIKL", gene_id="G1"
+    )
+    genome.transcripts = MagicMock(return_value=[first_transcript])
+    antigen = VaccineAntigen(
+        kind=ANTIGEN_KIND_CTA,
+        amino_acids="ACDEFGHIKL",
+        targetable_mask=TargetableMask((AminoAcidInterval(0, 10),)),
+        tumor_specificity=TumorSpecificityAttestation(
+            status=ATTESTATION_ADMITTED,
+            evidence_kind="test",
+            evidence_source="test fixture",
+        ),
+    )
+
+    first = self_reference_matches(["ACDEFGHI"], antigen, genome)
+    repeated = self_reference_matches(["ACDEFGHI"], antigen, genome)
+
+    assert first == repeated
+    assert first["ACDEFGHI"].occurs
+    assert genome.transcripts.call_count == 1
+
+    protein_path.write_text("protein-v2-with-different-size")
+    genome.transcripts.return_value = [
+        create_mock_transcript("T2", "LMNPQRSTVW", gene_id="G2")
+    ]
+    changed = self_reference_matches(["LMNPQRST"], antigen, genome)
+
+    assert changed["LMNPQRST"].occurs
+    assert changed["LMNPQRST"].sources[0].gene_id == "G2"
+    assert genome.transcripts.call_count == 2
 
 
 def test_filtered_reference_proteome_is_cached_per_genome_and_policy():

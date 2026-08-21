@@ -19,16 +19,24 @@ Uses a set-based index for O(1) membership testing of peptide kmers.
 import gzip
 import hashlib
 import io
+import json
 import logging
 import os
 import pickle
 import threading
 from functools import lru_cache
+from typing import Iterable, Optional
 
 from platformdirs import user_cache_dir
+from pyensembl import Genome
 from tqdm import tqdm
 
 from .config.defaults import DEFAULT_MAX_KMER_LENGTH, DEFAULT_MIN_KMER_LENGTH
+from .vaccine_antigen import (
+    SelfReferenceMatch,
+    SelfReferenceSource,
+    VaccineAntigen,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +82,12 @@ _kmer_set_cache_lock = threading.Lock()
 _filtered_kmer_set_cache: dict[tuple, set[str]] = {}
 _filtered_kmer_set_cache_lock = threading.Lock()
 
+# Protein/source snapshots avoid reconstructing every pyensembl Transcript for
+# each antigen. Only concrete pyensembl genomes are cached, using their public
+# serialized definition and resolved local source-file identities.
+_protein_source_snapshot_cache: dict[str, tuple] = {}
+_protein_source_snapshot_cache_lock = threading.Lock()
+
 
 def _protein_content_digest(proteins: dict[str, str]) -> str:
     """Return a deterministic digest of transcript IDs and protein sequences."""
@@ -84,6 +98,110 @@ def _protein_content_digest(proteins: dict[str, str]) -> str:
             digest.update(len(encoded).to_bytes(8, "big"))
             digest.update(encoded)
     return digest.hexdigest()
+
+
+def _ensembl_dataset_cache_key(genome) -> Optional[str]:
+    """Identify one installed pyensembl annotation/protein dataset."""
+    if not isinstance(genome, Genome):
+        return None
+    files = []
+    try:
+        definition = genome.to_dict()
+        source_paths = [definition.get("gtf_path_or_url")]
+        source_paths.extend(
+            definition.get("transcript_fasta_paths_or_urls") or []
+        )
+        source_paths.extend(
+            definition.get("protein_fasta_paths_or_urls") or []
+        )
+        source_paths = [path for path in source_paths if path]
+        cached_paths = genome.required_local_files()
+        if len(source_paths) != len(cached_paths):
+            return None
+        for source_path, cached_path in zip(source_paths, cached_paths):
+            use_source_directly = (
+                "://" not in source_path
+                and not definition.get("copy_local_files_to_cache")
+                and not definition.get("decompress_on_download")
+            )
+            path = source_path if use_source_directly else cached_path
+            resolved_path = os.path.realpath(path)
+            stat = os.stat(resolved_path)
+            files.append((
+                resolved_path,
+                stat.st_dev,
+                stat.st_ino,
+                stat.st_size,
+                stat.st_mtime_ns,
+            ))
+    except OSError:
+        return None
+    payload = json.dumps(
+        {
+            "genome": definition,
+            "files": files,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _protein_source_snapshot(genome):
+    """Return distinct protein sequences with every Ensembl source."""
+    cache_key = _ensembl_dataset_cache_key(genome)
+    if cache_key is not None:
+        with _protein_source_snapshot_cache_lock:
+            cached = _protein_source_snapshot_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    species = str(
+        getattr(getattr(genome, "species", None), "latin_name", "") or ""
+    )
+    sources_by_sequence: dict[str, set[SelfReferenceSource]] = {}
+    for transcript in genome.transcripts():
+        if not transcript.is_protein_coding or not transcript.protein_sequence:
+            continue
+        gene_id = str(getattr(transcript, "gene_id", "") or "").split(".")[0]
+        if not gene_id:
+            raise ValueError(
+                "Protein-coding self-reference transcript is missing a gene ID"
+            )
+        source = SelfReferenceSource(
+            gene_id=gene_id,
+            transcript_id=str(
+                getattr(transcript, "transcript_id", "") or ""
+            ),
+            protein_id=str(getattr(transcript, "protein_id", "") or ""),
+            gene_name=str(getattr(transcript, "gene_name", "") or ""),
+            species=species,
+        )
+        sources_by_sequence.setdefault(
+            transcript.protein_sequence, set()
+        ).add(source)
+
+    snapshot = tuple(
+        (
+            sequence,
+            tuple(sorted(
+                sources,
+                key=lambda source: (
+                    source.gene_id,
+                    source.transcript_id,
+                    source.protein_id,
+                    source.gene_name,
+                    source.species,
+                ),
+            )),
+        )
+        for sequence, sources in sorted(sources_by_sequence.items())
+    )
+    if cache_key is not None:
+        with _protein_source_snapshot_cache_lock:
+            _protein_source_snapshot_cache[cache_key] = snapshot
+    return snapshot
 
 
 def get_cache_dir() -> str:
@@ -320,6 +438,71 @@ def genome_protein_dict(genome, exclude_gene_ids=None):
             len(excluded_gene_ids),
         )
     return proteins
+
+
+def self_reference_matches(
+        peptides: Iterable[str],
+        antigen: VaccineAntigen,
+        genome) -> dict[str, SelfReferenceMatch]:
+    """Find every retained Ensembl source of each exact peptide.
+
+    The genome is traversed once for the batch. Source-gene exclusions come
+    exclusively from ``antigen.self_reference_excluded_gene_ids``; excluding a
+    CTA source therefore cannot erase a match encoded by a retained non-CTA
+    gene. With no genome, results remain explicitly provenance-incomplete.
+    """
+    unique_peptides = tuple(dict.fromkeys(peptides))
+    if not unique_peptides:
+        return {}
+    genome_release = str(getattr(genome, "release", "") or "")
+    if genome is None:
+        return {
+            peptide: antigen.self_reference_match(
+                peptide, False, genome_release=genome_release)
+            for peptide in unique_peptides
+        }
+
+    excluded_gene_ids = set(antigen.self_reference_excluded_gene_ids)
+    sources_by_peptide: dict[str, set[SelfReferenceSource]] = {
+        peptide: set() for peptide in unique_peptides
+    }
+    for sequence, sequence_sources in _protein_source_snapshot(genome):
+        retained_sources = tuple(
+            source for source in sequence_sources
+            if source.gene_id not in excluded_gene_ids
+        )
+        if not retained_sources:
+            continue
+        matching_peptides = [
+            peptide for peptide in unique_peptides if peptide in sequence
+        ]
+        if not matching_peptides:
+            continue
+        for peptide in matching_peptides:
+            sources_by_peptide[peptide].update(retained_sources)
+
+    result = {}
+    for peptide, sources in sources_by_peptide.items():
+        ordered_sources = tuple(sorted(
+            sources,
+            key=lambda source: (
+                source.gene_id,
+                source.transcript_id,
+                source.protein_id,
+                source.gene_name,
+                source.species,
+            ),
+        ))
+        result[peptide] = SelfReferenceMatch(
+            peptide=peptide,
+            occurs=bool(ordered_sources),
+            antigen_kind=antigen.kind,
+            excluded_gene_ids=antigen.self_reference_excluded_gene_ids,
+            sources=ordered_sources,
+            source_provenance_complete=True,
+            genome_release=genome_release,
+        )
+    return result
 
 
 class ReferenceProteome:
