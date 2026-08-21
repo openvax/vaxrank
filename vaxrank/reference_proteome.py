@@ -17,6 +17,7 @@ Uses a set-based index for O(1) membership testing of peptide kmers.
 """
 
 import gzip
+import hashlib
 import io
 import logging
 import os
@@ -67,11 +68,22 @@ def cta_source_gene_ids_for_genome(genome) -> frozenset[str]:
 _kmer_set_cache: dict[tuple, set[str]] = {}
 _kmer_set_cache_lock = threading.Lock()
 
-# Filtered indexes are shared within a run. The genome object's identity is
-# part of the key so distinct test/custom genomes with the same release label
-# cannot contaminate one another.
+# Filtered indexes are shared within a run. Their keys describe the retained
+# protein content and filtering policy, so equivalent inputs can share work
+# while distinct genome objects or releases cannot contaminate one another.
 _filtered_kmer_set_cache: dict[tuple, set[str]] = {}
 _filtered_kmer_set_cache_lock = threading.Lock()
+
+
+def _protein_content_digest(proteins: dict[str, str]) -> str:
+    """Return a deterministic digest of transcript IDs and protein sequences."""
+    digest = hashlib.sha256()
+    for transcript_id, sequence in sorted(proteins.items()):
+        for value in (transcript_id, sequence):
+            encoded = value.encode("utf-8")
+            digest.update(len(encoded).to_bytes(8, "big"))
+            digest.update(encoded)
+    return digest.hexdigest()
 
 
 def get_cache_dir() -> str:
@@ -441,21 +453,22 @@ class ReferenceProteome:
                 max_kmer_length=max_kmer_length,
             )
 
-        cache_key = (
-            id(genome),
-            frozenset(all_exclude_ids),
-            min_kmer_length,
-            max_kmer_length,
-        )
+        proteins = genome_protein_dict(
+            genome, exclude_gene_ids=all_exclude_ids)
+        cache_key = None
         kmer_set = None
+
         if not exclude_fasta:
+            cache_key = (
+                _protein_content_digest(proteins),
+                frozenset(all_exclude_ids),
+                min_kmer_length,
+                max_kmer_length,
+            )
             with _filtered_kmer_set_cache_lock:
                 kmer_set = _filtered_kmer_set_cache.get(cache_key)
 
         if kmer_set is None:
-            proteins = genome_protein_dict(
-                genome, exclude_gene_ids=all_exclude_ids)
-
             if exclude_fasta:
                 exclude_seqs = set(_read_fasta(exclude_fasta).values())
                 before = len(proteins)
