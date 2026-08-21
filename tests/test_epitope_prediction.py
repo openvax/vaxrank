@@ -65,6 +65,13 @@ def test_reference_peptide_logic(mouse_genome):
     ok_(not e_not_in_ref.occurs_in_reference)
     assert e_in_ref.self_reference_match.occurs
     assert not e_not_in_ref.self_reference_match.occurs
+    assert e_in_ref.self_reference_match.source_provenance_complete
+    assert e_not_in_ref.self_reference_match.source_provenance_complete
+    assert any(
+        source.protein_id == "ENSMUSP00000033506"
+        for source in e_in_ref.self_reference_match.sources
+    )
+    assert e_not_in_ref.self_reference_match.sources == ()
     assert e_in_ref.overlaps_targetable == e_in_ref.overlaps_mutation
     assert e_not_in_ref.overlaps_targetable == e_not_in_ref.overlaps_mutation
 

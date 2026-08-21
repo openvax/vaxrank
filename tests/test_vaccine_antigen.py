@@ -280,10 +280,6 @@ def test_cta_prediction_uses_antigen_specific_self_reference():
     assert all(epitope.occurs_in_reference for epitope in epitopes)
     assert all(not epitope.occurs_in_self_reference for epitope in epitopes)
     assert reference_cls.from_genome.call_args_list == [
-        call(
-            None,
-            exclude_gene_ids=("ENSG00000185686",),
-        ),
         call(None, exclude_cta_genes=True),
     ]
 

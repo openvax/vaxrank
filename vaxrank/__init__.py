@@ -93,6 +93,7 @@ from .cta_admission import (
     assess_cta_antigen,
     build_cta_vaccine_antigen,
 )
+from .reference_proteome import self_reference_matches
 from .version import __version__
 
 __all__ = [
@@ -168,4 +169,5 @@ __all__ = [
     "resolve_tissue_risk_protein_sequences",
     "risk_ligand_index_from_prediction_frame",
     "safety_assessment_from_prediction_frame",
+    "self_reference_matches",
 ]
