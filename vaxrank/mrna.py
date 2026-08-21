@@ -343,7 +343,7 @@ def summarize_mrna_ranking_decisions(
     Parameters
     ----------
     ranked_variants_with_vaccine_peptides : list[tuple]
-        ``[(Variant, [VaccinePeptide])]`` — vaxrank's canonical
+        ``[(source, [VaccinePeptide])]`` — vaxrank's canonical
         ranked-output shape.
     options : RNAConstructConfig
         Construct-assembly knobs; the cap comes from
@@ -369,38 +369,32 @@ def summarize_mrna_ranking_decisions(
         index in the ranked list).
     """
     cap = options.antigens_per_construct * options.max_constructs
+    from .coverage import summarize_construction_decisions
+    construction_summary = summarize_construction_decisions(
+        ranked_variants_with_vaccine_peptides,
+        cap=cap,
+        target_alleles=[],
+    )
 
-    def _row(rank, variant, peptides):
-        vp = peptides[0] if peptides else None
-        gene_name = (
-            getattr(vp.mutant_protein_fragment, 'gene_name', '')
-            if vp is not None else '')
-        return {
-            'rank': rank,
-            'gene_name': gene_name or '',
-            'description': '%s_%s' % (
-                gene_name or '?',
-                getattr(variant, 'short_description', str(variant))),
-            'combined_score': (
-                float(vp.combined_score) if vp is not None else 0.0),
-        }
-
-    selected = []
-    dropped = []
-    for i, (variant, peptides) in enumerate(
-            ranked_variants_with_vaccine_peptides):
-        rank = i + 1
-        if i < cap:
-            selected.append(_row(rank, variant, peptides))
-        else:
-            dropped.append(_row(rank, variant, peptides))
     return {
         'antigens_per_construct': options.antigens_per_construct,
         'max_constructs': options.max_constructs,
         'cap': cap,
         'total_ranked': len(ranked_variants_with_vaccine_peptides),
-        'selected': selected,
-        'dropped': dropped,
+        'selected': [
+            {
+                key: row[key]
+                for key in ("rank", "gene_name", "description", "combined_score")
+            }
+            for row in construction_summary['selected']
+        ],
+        'dropped': [
+            {
+                key: row[key]
+                for key in ("rank", "gene_name", "description", "combined_score")
+            }
+            for row in construction_summary['dropped']
+        ],
     }
 
 
@@ -413,9 +407,10 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
     Dispatches on ``antigen_content`` (shared semantics with
     ``peptide._antigen_records``):
 
-    - ``'mutation_spanning'``: emit a mutation-centered window of up
-      to ``max_antigen_length_aa`` per VaccinePeptide (canonical mRNA
-      antigen — BioNTech FixVac-style 25mer).
+    - ``'mutation_spanning'``: legacy configuration name for a window that
+      preserves the antigen's targetable span, up to
+      ``max_antigen_length_aa`` per VaccinePeptide (canonical mRNA antigen —
+      BioNTech FixVac-style 25mer for mutation antigens).
     - ``'minimal_epitope'``: emit the top ``epitopes_per_antigen``
       MHC ligands per VaccinePeptide as separate (short) antigens.
       Concatenated minimal-epitope mRNA constructs (the
@@ -434,7 +429,7 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
         raise ValueError(
             "antigen_content must be 'mutation_spanning' or "
             "'minimal_epitope'; got %r" % antigen_content)
-    for name, fragment, peptide in iter_named_antigens(
+    for name, antigen, peptide in iter_named_antigens(
             ranked_vaccine_peptides, candidates_per_slot=candidates_per_slot):
         if antigen_content == "minimal_epitope":
             tops = top_target_epitopes(peptide, n=epitopes_per_antigen)
@@ -448,7 +443,7 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
                 yield name + suffix, ep.sequence
         else:
             window = select_antigen_window(
-                fragment, name, max_antigen_length_aa)
+                antigen, name, max_antigen_length_aa)
             if len(window) < min_antigen_length_aa:
                 logger.warning(
                     "Antigen %s emitted at %d aa, below "
@@ -688,7 +683,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
 
     Parameters
     ----------
-    ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
+    ranked_vaccine_peptides : list[(source, list[VaccinePeptide])]
     options : RNAConstructConfig or None
     mhc_predictor : optional, mhctools.BasePredictor
         Required when ``options.optimize_linkers`` is True.

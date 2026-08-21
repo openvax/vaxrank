@@ -12,7 +12,7 @@
 
 """Shared assembly utilities used by both mRNA and peptide construct modes.
 
-Contains the linker library and the mutation-centered window selector
+Contains the linker library and the target-preserving antigen window selector
 that both ``vaxrank.mrna`` and ``vaxrank.peptide`` need.
 
 A linker is anything that goes between concatenated antigens. Some
@@ -71,6 +71,8 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import Optional
+
+from .vaccine_antigen import ANTIGEN_KIND_MUTATION, VaccineAntigen
 
 logger = logging.getLogger(__name__)
 
@@ -537,18 +539,43 @@ def get_linker(name):
             name, ', '.join(all_linker_names())))
 
 
-def _variant_category(variant):
-    """Coarse antigen category for naming — ``SNV`` / ``INDEL`` (the
-    LENS ``antigen_source`` vocabulary), derived from the variant
-    itself so it's identical on the pipeline and LENS / pVACseq paths.
-    """
-    if getattr(variant, 'is_snv', False):
-        return 'SNV'
-    if (getattr(variant, 'is_insertion', False)
-            or getattr(variant, 'is_deletion', False)
-            or getattr(variant, 'is_indel', False)):
-        return 'INDEL'
-    return 'variant'
+def antigen_description(source, antigen):
+    """Stable source-aware description for construct selection reports."""
+    if antigen.kind == ANTIGEN_KIND_MUTATION:
+        source_description = getattr(source, "short_description", None) or str(source)
+    else:
+        source_description = antigen.display_identifier
+    return "%s_%s" % (antigen.display_gene_name, source_description)
+
+
+def antigen_construct_name(
+        source, antigen, *, include_source=False, alternate_index=0):
+    """Build the stable name shared by peptide and mRNA constructs."""
+    if antigen.kind == ANTIGEN_KIND_MUTATION:
+        if getattr(source, 'is_snv', False):
+            category = 'SNV'
+        elif (getattr(source, 'is_insertion', False)
+              or getattr(source, 'is_deletion', False)
+              or getattr(source, 'is_indel', False)):
+            category = 'INDEL'
+        else:
+            category = 'variant'
+    else:
+        category = antigen.kind
+    if include_source:
+        if antigen.kind == ANTIGEN_KIND_MUTATION:
+            source_detail = "%s:%s %s>%s" % (
+                source.contig,
+                source.start,
+                source.ref or '-',
+                source.alt or '-',
+            )
+        else:
+            source_detail = antigen.display_identifier
+        category = "%s @ %s" % (category, source_detail)
+    if alternate_index > 0:
+        category = "%s alt%d" % (category, alternate_index)
+    return "%s (%s)" % (antigen.display_gene_name, category)
 
 
 def gene_names_from_antigen_names(antigen_names):
@@ -566,10 +593,14 @@ def gene_names_from_antigen_names(antigen_names):
 
 
 def iter_named_antigens(ranked_vaccine_peptides, candidates_per_slot=1):
-    """Yield ``(name, fragment, vaccine_peptide)`` per ranked candidate.
+    """Yield ``(name, antigen, vaccine_peptide)`` per ranked candidate.
 
     Both peptide and mRNA assembly walk the same ranked list and need
-    the same per-candidate name. The name reads ``GENE (CATEGORY)`` —
+    the same per-candidate name. Identity and sequence come from the
+    source-agnostic ``VaccineAntigen`` attached to each peptide; the first
+    item in each ranked pair is consulted only for mutation coordinates.
+
+    The name reads ``GENE (CATEGORY)`` —
     e.g. ``FYN (INDEL)`` — keeping the gene up front and the antigen
     category (SNV / INDEL) parenthesized. The specific mutation is
     appended *only* when a gene contributes more than one variant to
@@ -581,68 +612,77 @@ def iter_named_antigens(ranked_vaccine_peptides, candidates_per_slot=1):
 
     Parameters
     ----------
-    ranked_vaccine_peptides : list[(varcode.Variant, list[VaccinePeptide])]
+    ranked_vaccine_peptides : list[(source, list[VaccinePeptide])]
     candidates_per_slot : int
         How many ranked alternates to walk per variant.
     """
-    def _gene_of(variant, peptides):
-        return (getattr(peptides[0].mutant_protein_fragment, 'gene_name', None)
-                or 'unknown')
-
-    # Pre-pass: which genes contribute 2+ distinct variants? Those
-    # need the mutation spelled out to tell their antigens apart.
-    variants_per_gene = {}
-    for variant, peptides in ranked_vaccine_peptides:
+    # Pre-pass: which genes contribute multiple distinct antigens? Those need
+    # their source spelled out. Identical alternate windows do not make the
+    # base name ambiguous.
+    identities_per_gene = {}
+    for source, peptides in ranked_vaccine_peptides:
         if not peptides:
             continue
-        gene = _gene_of(variant, peptides)
-        variants_per_gene.setdefault(gene, set()).add(
-            (variant.contig, variant.start, variant.ref, variant.alt))
+        antigen = peptides[0].antigen
+        gene = antigen.display_gene_name
+        identity = (
+            (
+                antigen.kind,
+                source.contig,
+                source.start,
+                source.ref,
+                source.alt,
+            )
+            if antigen.kind == ANTIGEN_KIND_MUTATION
+            else antigen
+        )
+        identities_per_gene.setdefault(gene, set()).add(
+            identity)
     ambiguous_genes = {
-        g for g, keys in variants_per_gene.items() if len(keys) > 1}
+        gene for gene, identities in identities_per_gene.items()
+        if len(identities) > 1
+    }
 
-    for variant, peptides in ranked_vaccine_peptides:
+    for source, peptides in ranked_vaccine_peptides:
         if not peptides:
             continue
-        gene = _gene_of(variant, peptides)
         for idx, peptide in enumerate(peptides[:max(1, candidates_per_slot)]):
-            fragment = peptide.mutant_protein_fragment
-            detail = _variant_category(variant)
-            if gene in ambiguous_genes:
-                detail = "%s @ %s:%s %s>%s" % (
-                    detail, variant.contig, variant.start,
-                    variant.ref or '-', variant.alt or '-')
-            if idx > 0:
-                detail = "%s alt%d" % (detail, idx)
-            yield "%s (%s)" % (gene, detail), fragment, peptide
+            antigen = peptide.antigen
+            gene = antigen.display_gene_name
+            yield antigen_construct_name(
+                source,
+                antigen,
+                include_source=gene in ambiguous_genes,
+                alternate_index=idx,
+            ), antigen, peptide
 
 
-def select_antigen_window(fragment, base_name, max_length_aa):
-    """Return a sub-window of the vaccine peptide that preserves the mutation.
+def select_antigen_window(antigen, base_name, max_length_aa):
+    """Return a sub-window that preserves all targetable antigen content.
 
     A naive ``amino_acids[:max_length_aa]`` truncation can drop the
-    mutated residues entirely when the mutation sits past the head of
-    the fragment. This helper centers a window of ``max_length_aa`` on
-    the mutation (using ``mutant_amino_acid_*_offset`` from the fragment).
-    If the mutation itself exceeds the cap (rare; long inframe
-    insertions), the full fragment is emitted unchanged with a warning.
+    targetable residues entirely when they sit past the head of the antigen.
+    This helper centers a window of ``max_length_aa`` on the smallest span
+    containing the antigen's explicit targetable mask. If that span exceeds
+    the cap, the full antigen is emitted unchanged with a warning.
 
     Used by both ``vaxrank.peptide`` (SLP mode) and ``vaxrank.mrna``
     (per-antigen window in concatenated constructs).
     """
-    aa = fragment.amino_acids
+    if not isinstance(antigen, VaccineAntigen):
+        raise TypeError("select_antigen_window requires a VaccineAntigen")
+    aa = antigen.amino_acids
     if len(aa) <= max_length_aa:
         return aa
-    mut_start = getattr(fragment, 'mutant_amino_acid_start_offset', 0)
-    mut_end = getattr(fragment, 'mutant_amino_acid_end_offset', len(aa))
-    mut_len = mut_end - mut_start
-    if mut_len > max_length_aa:
+    targetable_span = antigen.targetable_span()
+    targetable_length = targetable_span.end - targetable_span.start
+    if targetable_length > max_length_aa:
         logger.warning(
-            "Mutation in %s spans %d aa, longer than the antigen-length "
-            "cap (%d); emitting full fragment without truncation.",
-            base_name, mut_len, max_length_aa)
+            "Targetable content in %s spans %d aa, longer than the antigen-length "
+            "cap (%d); emitting the full antigen without truncation.",
+            base_name, targetable_length, max_length_aa)
         return aa
-    midpoint = (mut_start + mut_end) // 2
+    midpoint = (targetable_span.start + targetable_span.end) // 2
     half = max_length_aa // 2
     start = max(0, midpoint - half)
     end = min(len(aa), start + max_length_aa)

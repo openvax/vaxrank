@@ -46,9 +46,10 @@ from varcode import Variant
 from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
 from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
 from vaxrank.candidate_epitope import CandidateEpitope, Peptide
+from vaxrank.vaccine_peptide import VaccinePeptide
 
 
-def _make_vaccine_peptide(
+def make_mutation_vaccine_peptide(
         amino_acids, gene_name, mut_start, mut_end, n_alt_reads,
         epitope_seqs_with_ic50):
     """Build a stub VaccinePeptide-shaped object that the assemblers
@@ -63,6 +64,7 @@ def _make_vaccine_peptide(
         mutant_amino_acid_start_offset=mut_start,
         mutant_amino_acid_end_offset=mut_end,
         n_alt_reads=n_alt_reads,
+        supporting_reference_transcripts=(),
     )
     epitopes = [
         CandidateEpitope.from_peptide(
@@ -78,17 +80,16 @@ def _make_vaccine_peptide(
             overlaps_mutation=True, occurs_in_reference=False)
         for seq, ic50 in epitope_seqs_with_ic50
     ]
-    return SimpleNamespace(
+    return VaccinePeptide(
         mutant_protein_fragment=fragment,
-        target_epitopes=epitopes,
-        self_epitopes=[],
+        epitopes=epitopes,
     )
 
 
 def _ranked_three_variants():
     """Three variants × multiple ligand candidates each, suitable for
     every cell of the design matrix."""
-    a1 = _make_vaccine_peptide(
+    a1 = make_mutation_vaccine_peptide(
         "AAKLQGHSAPVLDVIVNCD", gene_name="GENEA",
         mut_start=2, mut_end=12, n_alt_reads=10,
         epitope_seqs_with_ic50=[
@@ -96,14 +97,14 @@ def _ranked_three_variants():
             ("LQGHSAPVL", 80.0),    # second
             ("QGHSAPVLD", 220.0),   # third
         ])
-    a2 = _make_vaccine_peptide(
+    a2 = make_mutation_vaccine_peptide(
         "MNNVDEILGRWESPVKLPK", gene_name="GENEB",
         mut_start=2, mut_end=12, n_alt_reads=8,
         epitope_seqs_with_ic50=[
             ("NVDEILGRW", 45.0),
             ("VDEILGRWE", 110.0),
         ])
-    a3 = _make_vaccine_peptide(
+    a3 = make_mutation_vaccine_peptide(
         "AAVVVGADGVGKSALTIIQ", gene_name="GENEC",
         mut_start=4, mut_end=14, n_alt_reads=6,
         epitope_seqs_with_ic50=[
