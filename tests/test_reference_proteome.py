@@ -31,10 +31,9 @@ from vaxrank.reference_proteome import (
     get_cache_dir,
     DEFAULT_MIN_KMER_LENGTH,
     DEFAULT_MAX_KMER_LENGTH,
-    _filtered_kmer_set_cache,
-    _kmer_set_cache,
-    _protein_source_snapshot_cache,
+    clear_reference_proteome_caches,
     cta_source_gene_ids_for_genome,
+    ensembl_dataset_cache_identity,
     oncoref_cta_source_gene_ids,
     self_reference_matches,
 )
@@ -275,8 +274,7 @@ def test_load_kmer_set_loads_from_cache_when_exists():
         genome = create_mock_genome([], species_name="test_species", release=100)
 
         # Clear in-memory cache to test disk cache loading
-        cache_key = ("test_species", 100, 8, 8)
-        _kmer_set_cache.pop(cache_key, None)
+        clear_reference_proteome_caches()
 
         with patch('vaxrank.reference_proteome.get_cache_dir', return_value=tmpdir):
             # Should load from disk cache, not build new index
@@ -765,7 +763,7 @@ def test_self_reference_matches_without_genome_are_explicitly_incomplete():
 
 
 def test_ensembl_source_snapshot_cache_tracks_resolved_source_files(tmp_path):
-    _protein_source_snapshot_cache.clear()
+    clear_reference_proteome_caches()
     gtf_path = tmp_path / "test.gtf"
     protein_path = tmp_path / "test.fa"
     gtf_path.write_text("annotation-v1")
@@ -794,10 +792,13 @@ def test_ensembl_source_snapshot_cache_tracks_resolved_source_files(tmp_path):
 
     first = self_reference_matches(["ACDEFGHI"], antigen, genome)
     repeated = self_reference_matches(["ACDEFGHI"], antigen, genome)
+    first_identity = ensembl_dataset_cache_identity(genome)
 
     assert first == repeated
     assert first["ACDEFGHI"].occurs
     assert genome.transcripts.call_count == 1
+    assert len(first_identity) == 64
+    assert ensembl_dataset_cache_identity(genome) == first_identity
 
     protein_path.write_text("protein-v2-with-different-size")
     genome.transcripts.return_value = [
@@ -808,10 +809,33 @@ def test_ensembl_source_snapshot_cache_tracks_resolved_source_files(tmp_path):
     assert changed["LMNPQRST"].occurs
     assert changed["LMNPQRST"].sources[0].gene_id == "G2"
     assert genome.transcripts.call_count == 2
+    assert ensembl_dataset_cache_identity(genome) != first_identity
+
+
+def test_ensembl_dataset_identity_depends_on_content_not_install_path(tmp_path):
+    identities = []
+    for directory_name in ("first", "second"):
+        directory = tmp_path / directory_name
+        directory.mkdir()
+        gtf_path = directory / "test.gtf"
+        protein_path = directory / "test.fa"
+        gtf_path.write_text("same-annotation")
+        protein_path.write_text("same-proteins")
+        genome = Genome(
+            reference_name="test-reference",
+            annotation_name="test-annotation",
+            annotation_version="1",
+            gtf_path_or_url=str(gtf_path),
+            protein_fasta_paths_or_urls=[str(protein_path)],
+        )
+        identities.append(ensembl_dataset_cache_identity(genome))
+
+    assert identities[0] == identities[1]
+    assert ensembl_dataset_cache_identity(object()) is None
 
 
 def test_filtered_reference_proteome_is_cached_per_genome_and_policy():
-    _filtered_kmer_set_cache.clear()
+    clear_reference_proteome_caches()
     t1 = create_mock_transcript("T1", "ABCDEFGHIJ", gene_id="G1")
     t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="G2")
     genome = create_mock_genome([t1, t2], release=112)
@@ -825,12 +849,22 @@ def test_filtered_reference_proteome_is_cached_per_genome_and_policy():
             genome, exclude_gene_ids={"G1"},
             min_kmer_length=8, max_kmer_length=8)
 
-    assert first._kmer_set is second._kmer_set
+    assert not first.contains("ABCDEFGH")
+    assert second.contains("KLMNOPQR")
     assert extract.call_count == 1
+
+    clear_reference_proteome_caches()
+    with patch(
+            "vaxrank.reference_proteome.extract_kmers",
+            wraps=extract_kmers) as extract_after_clear:
+        ReferenceProteome.from_genome(
+            genome, exclude_gene_ids={"G1"},
+            min_kmer_length=8, max_kmer_length=8)
+    assert extract_after_clear.call_count == 1
 
 
 def test_filtered_cache_is_keyed_by_protein_content_and_policy():
-    _filtered_kmer_set_cache.clear()
+    clear_reference_proteome_caches()
     first = create_mock_genome([
         create_mock_transcript("T1", "ACDEFGHIKL", gene_id="G1")
     ], release=113)
@@ -858,9 +892,8 @@ def test_filtered_cache_is_keyed_by_protein_content_and_policy():
     assert not first_ref.contains("LMNPQRST")
     assert second_ref.contains("LMNPQRST")
     assert not second_ref.contains("ACDEFGHI")
-    assert equivalent_ref._kmer_set is first_ref._kmer_set
+    assert equivalent_ref.contains("ACDEFGHI")
     assert extract.call_count == 2
-    assert len(_filtered_kmer_set_cache) == 2
 
 
 def test_from_genome_with_exclude_fasta(tmp_path):
