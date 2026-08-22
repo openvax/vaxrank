@@ -91,6 +91,12 @@ _filtered_kmer_set_cache_lock = threading.Lock()
 _protein_source_snapshot_cache: dict[str, tuple] = {}
 _protein_source_snapshot_cache_lock = threading.Lock()
 
+# Source-file digests make dataset identities independent of installation
+# paths. File metadata avoids re-reading multi-gigabyte Ensembl inputs when
+# they have not changed.
+_ensembl_source_digest_cache: dict[tuple, str] = {}
+_ensembl_source_digest_cache_lock = threading.Lock()
+
 
 def _protein_content_digest(proteins: dict[str, str]) -> str:
     """Return a deterministic digest of transcript IDs and protein sequences."""
@@ -103,8 +109,18 @@ def _protein_content_digest(proteins: dict[str, str]) -> str:
     return digest.hexdigest()
 
 
-def _ensembl_dataset_cache_key(genome) -> Optional[str]:
-    """Identify one installed pyensembl annotation/protein dataset."""
+def ensembl_dataset_cache_identity(genome) -> Optional[str]:
+    """Return a content-based identity for an installed Ensembl dataset.
+
+    The identity combines the non-location parts of the public pyensembl
+    genome definition with SHA-256 digests of every resolved annotation,
+    transcript, and protein source file. Equivalent datasets installed at
+    different paths therefore share an identity, while a changed source file
+    invalidates cached protein provenance.
+
+    ``None`` means the object is not a concrete pyensembl ``Genome`` or its
+    required local files cannot be resolved.
+    """
     if not isinstance(genome, Genome):
         return None
     files = []
@@ -130,18 +146,41 @@ def _ensembl_dataset_cache_key(genome) -> Optional[str]:
             path = source_path if use_source_directly else cached_path
             resolved_path = os.path.realpath(path)
             stat = os.stat(resolved_path)
-            files.append((
+            digest_key = (
                 resolved_path,
                 stat.st_dev,
                 stat.st_ino,
                 stat.st_size,
                 stat.st_mtime_ns,
-            ))
+            )
+            with _ensembl_source_digest_cache_lock:
+                source_digest = _ensembl_source_digest_cache.get(digest_key)
+            if source_digest is None:
+                digest = hashlib.sha256()
+                with open(resolved_path, "rb") as source_file:
+                    while chunk := source_file.read(1024 * 1024):
+                        digest.update(chunk)
+                source_digest = digest.hexdigest()
+                with _ensembl_source_digest_cache_lock:
+                    _ensembl_source_digest_cache[digest_key] = source_digest
+            files.append((stat.st_size, source_digest))
     except OSError:
         return None
+    location_keys = {
+        "cache_directory_path",
+        "copy_local_files_to_cache",
+        "decompress_on_download",
+        "gtf_path_or_url",
+        "protein_fasta_paths_or_urls",
+        "transcript_fasta_paths_or_urls",
+    }
+    content_definition = {
+        key: value for key, value in definition.items()
+        if key not in location_keys
+    }
     payload = json.dumps(
         {
-            "genome": definition,
+            "genome": content_definition,
             "files": files,
         },
         sort_keys=True,
@@ -151,9 +190,22 @@ def _ensembl_dataset_cache_key(genome) -> Optional[str]:
     return hashlib.sha256(payload).hexdigest()
 
 
+def clear_reference_proteome_caches() -> None:
+    """Clear every in-memory reference-proteome and source-data cache."""
+    for lock, cache in (
+        (_kmer_set_cache_lock, _kmer_set_cache),
+        (_filtered_kmer_set_cache_lock, _filtered_kmer_set_cache),
+        (_protein_source_snapshot_cache_lock, _protein_source_snapshot_cache),
+        (_ensembl_source_digest_cache_lock, _ensembl_source_digest_cache),
+    ):
+        with lock:
+            cache.clear()
+    oncoref_cta_source_gene_ids.cache_clear()
+
+
 def _protein_source_snapshot(genome):
     """Return distinct protein sequences with every Ensembl source."""
-    cache_key = _ensembl_dataset_cache_key(genome)
+    cache_key = ensembl_dataset_cache_identity(genome)
     if cache_key is not None:
         with _protein_source_snapshot_cache_lock:
             cached = _protein_source_snapshot_cache.get(cache_key)

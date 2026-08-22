@@ -116,7 +116,11 @@ from .cta_admission import (
     assess_cta_antigen,
     build_cta_vaccine_antigen,
 )
-from .reference_proteome import self_reference_matches
+from .reference_proteome import (
+    clear_reference_proteome_caches,
+    ensembl_dataset_cache_identity,
+    self_reference_matches,
+)
 from .version import __version__
 
 __all__ = [
@@ -198,8 +202,10 @@ __all__ = [
     "build_hpa_reference_provenance",
     "build_patient_hla_risk_ligand_index",
     "build_cta_vaccine_antigen",
+    "clear_reference_proteome_caches",
     "derive_tissue_risk_proteins",
     "evaluate_antigen_safety_policy",
+    "ensembl_dataset_cache_identity",
     "finite_prediction_value",
     "has_only_standard_amino_acids",
     "near_self_queries_for_window",
