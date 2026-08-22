@@ -225,11 +225,13 @@ def ranked_sorted_by_target_score(ranked):
 
 
 @dataclasses.dataclass
-class _ExternalVariantEntry:
-    """One variant's contribution to an external loader's output,
-    plus the per-variant stats the loader aggregates. Lets the
-    per-variant build live in a helper while the loader stays a thin
-    accumulate-and-summarize loop."""
+class ExternalVariantEntry:
+    """Represent one external variant and its translation status.
+
+    LENS ingestion records the parsed variant and optional vaccine peptide
+    alongside the transcript, annotation, VAF, and parsing outcomes that are
+    aggregated into the final external-input report.
+    """
     variant: object = None
     vaccine_peptide: object = None
     had_transcript_ids: bool = False
@@ -261,7 +263,7 @@ def _first_str(row, *names):
     return str(value) if value is not None else ""
 
 
-def _parse_variant_coords(coords):
+def parse_lens_variant_coordinates(coords):
     """Parse a LENS ``variant_coords`` string into ``(contig, pos)``
     or ``None`` if the cell is empty / malformed.
 
@@ -274,7 +276,7 @@ def _parse_variant_coords(coords):
     looked up from the dedicated per-antigen-source columns
     (``snv_ref_allele`` / ``snv_alt_allele`` for SNVs,
     ``indel_ref_allele`` / ``indel_alt_allele`` for indels) by
-    :func:`_variant_from_lens_row`, which builds the actual
+    :func:`variant_from_lens_row`, which builds the actual
     ``Variant``.
 
     NaN / empty / 'nan' returns ``None`` — non-SNV antigen rows
@@ -305,7 +307,7 @@ def _parse_variant_coords(coords):
         return None
 
 
-def _strip_lens_allele(value):
+def normalize_lens_allele(value):
     """LENS records alt alleles as bracketed strings: ``'[T]'``,
     ``'[CA]'``. Strip the brackets and return the inner sequence;
     return None for missing / NaN / empty."""
@@ -325,7 +327,7 @@ def _strip_lens_allele(value):
     return s or None
 
 
-def _resolve_transcripts(transcript_ids, genome):
+def resolve_external_transcripts(transcript_ids, genome):
     """Resolve a list of Ensembl transcript-ID strings to pyensembl
     ``Transcript`` objects.
 
@@ -445,7 +447,7 @@ def installed_ensembl_releases_for_build(build):
     return sorted(set(releases))
 
 
-def _variant_from_lens_row(row, genome=None):
+def variant_from_lens_row(row, genome=None):
     """Build a ``varcode.Variant`` from a LENS row using real ref/alt.
 
     LENS dedicates per-antigen-source columns for ref/alt:
@@ -463,17 +465,17 @@ def _variant_from_lens_row(row, genome=None):
     NaN ``variant_coords`` and are skipped upstream.
     """
     from varcode import Variant
-    coords_parsed = _parse_variant_coords(row.get('variant_coords'))
+    coords_parsed = parse_lens_variant_coordinates(row.get('variant_coords'))
     if coords_parsed is None:
         return None
     contig, pos = coords_parsed
     antigen_source = (row.get('antigen_source') or '').upper()
     if antigen_source == 'SNV':
-        ref = _strip_lens_allele(row.get('snv_ref_allele'))
-        alt = _strip_lens_allele(row.get('snv_alt_allele'))
+        ref = normalize_lens_allele(row.get('snv_ref_allele'))
+        alt = normalize_lens_allele(row.get('snv_alt_allele'))
     elif antigen_source == 'INDEL':
-        ref = _strip_lens_allele(row.get('indel_ref_allele'))
-        alt = _strip_lens_allele(row.get('indel_alt_allele'))
+        ref = normalize_lens_allele(row.get('indel_ref_allele'))
+        alt = normalize_lens_allele(row.get('indel_alt_allele'))
     else:
         # SPLICE / FUSION / CTA-SELF / ERV rows have neither variant
         # coords (NaN handled above) nor SNV/INDEL alleles. Caller
@@ -496,19 +498,19 @@ def _variant_from_lens_row(row, genome=None):
         return None
 
 
-def _mut_offsets_in_context(peptide, pep_context):
+def peptide_offsets_in_context(peptide, peptide_context):
     """Locate the neoepitope inside its surrounding context.
 
     Returns ``(start, end)`` AA offsets of the peptide within
-    ``pep_context``. Returns ``(None, None)`` when the peptide can't
+    ``peptide_context``. Returns ``(None, None)`` when the peptide can't
     be located — the caller should drop the row rather than fabricate
     a mutation span. Previously this defaulted to "the whole context
     is the mutation," which falsely told downstream code that every
     residue was mutated.
     """
-    if not pep_context or not peptide:
+    if not peptide_context or not peptide:
         return None, None
-    idx = pep_context.find(peptide)
+    idx = peptide_context.find(peptide)
     if idx < 0:
         return None, None
     return idx, idx + len(peptide)
@@ -602,7 +604,7 @@ def _read_counts_from_lens_row(row):
 def _lens_ranked_entry(coords, group_rows, by_peptide, genome,
                        vaccine_peptide_length, affinity_cols, rank_cols,
                        num_target_epitopes_to_keep):
-    """Build one variant's :class:`_ExternalVariantEntry` from a LENS
+    """Build one variant's :class:`ExternalVariantEntry` from a LENS
     row group. Returns the entry (with ``unparseable`` / ``vaccine_peptide``
     None for rows that can't be turned into an antigen); the caller
     aggregates the stats and the ranked list."""
@@ -610,13 +612,13 @@ def _lens_ranked_entry(coords, group_rows, by_peptide, genome,
     # Build the Variant from REAL ref/alt columns (snv_*_allele /
     # indel_*_allele depending on antigen_source). variant_coords gives
     # only chr:pos in LENS v1.9; the alleles live in dedicated columns.
-    variant = _variant_from_lens_row(rep, genome=genome)
+    variant = variant_from_lens_row(rep, genome=genome)
     if variant is None:
         logger.debug(
             "Could not build Variant from LENS row at coords=%r "
             "(antigen_source=%r); skipping.", coords,
             rep.get('antigen_source'))
-        return _ExternalVariantEntry(unparseable=True)
+        return ExternalVariantEntry(unparseable=True)
 
     peptide = rep.get('peptide') or ""
     pep_context = rep.get('pep_context') or ""
@@ -633,7 +635,7 @@ def _lens_ranked_entry(coords, group_rows, by_peptide, genome,
         logger.debug(
             "Dropped LENS row for variant %r: peptide / pep_context "
             "empty after stop-codon truncation.", coords)
-        return _ExternalVariantEntry()
+        return ExternalVariantEntry()
     # Some LENS files emit non-standard residues (U / O / X / B / Z / J);
     # vaxrank's manufacturability / hydropathy code is keyed off the 20
     # canonical AAs, so drop the row rather than crash.
@@ -642,7 +644,7 @@ def _lens_ranked_entry(coords, group_rows, by_peptide, genome,
             "Dropped LENS row for variant %r: pep_context %r contains "
             "non-standard residues (allowed: 20 canonical AAs).",
             coords, pep_context)
-        return _ExternalVariantEntry()
+        return ExternalVariantEntry()
     # Preserve LENS's own gene name; fall back to empty string (the
     # codebase convention for "not known").
     gene_name_raw = rep.get('gene_name')
@@ -651,13 +653,13 @@ def _lens_ranked_entry(coords, group_rows, by_peptide, genome,
             isinstance(gene_name_raw, float) and pd.isna(gene_name_raw))
         else "")
 
-    start_off, end_off = _mut_offsets_in_context(peptide, pep_context)
+    start_off, end_off = peptide_offsets_in_context(peptide, pep_context)
     if start_off is None:
         logger.debug(
             "Could not locate peptide %r in pep_context %r for variant "
             "%r; skipping (mutation span unknown).",
             peptide, pep_context, coords)
-        return _ExternalVariantEntry()
+        return ExternalVariantEntry()
 
     # Frameshift → the whole downstream tail is novel; combine the
     # variant's neoepitope rows into the maximal mutant span. Frameshift
@@ -695,9 +697,9 @@ def _lens_ranked_entry(coords, group_rows, by_peptide, genome,
             t = t.strip()
             if t and t not in transcript_ids:
                 transcript_ids.append(t)
-    transcripts = _resolve_transcripts(transcript_ids, genome)
+    transcripts = resolve_external_transcripts(transcript_ids, genome)
 
-    entry = _ExternalVariantEntry(
+    entry = ExternalVariantEntry(
         variant=variant,
         had_transcript_ids=bool(transcript_ids),
         resolved_transcript=bool(transcripts),
@@ -1055,28 +1057,21 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
     return ranked_sorted_by_target_score(ranked), dna_vaf_by_variant
 
 
-def _parse_pvacseq_id(vid, genome=None):
-    """Parse a pVACseq aggregate ``ID`` field into a
-    ``(varcode.Variant, alleles_real)`` pair, matching the
-    :func:`_parse_variant_coords` shape used on the LENS path.
+def parse_pvacseq_variant(variant_id, genome=None):
+    """Parse a pVACseq aggregate ``ID`` field into a ``varcode.Variant``.
 
     Common forms in the wild:
       - ``chr1-100000-100001-A-T`` (5-part dashed: contig-start-end-ref-alt)
       - ``chr1-100000-A-T`` (4-part dashed)
       - ``1.123.A.T`` (4-part dotted, legacy)
 
-    All recognized forms supply real ref + alt nucleotides, so
-    ``alleles_real`` is always ``True`` on success. Returns
-    ``(None, False)`` for unrecognized input.
-
-    The shape symmetry with :func:`_parse_variant_coords` lets future
-    code that handles both LENS and pVACseq paths uniformly read a
-    single ``alleles_real`` flag without case analysis.
+    All recognized forms supply real ref + alt nucleotides. Returns ``None``
+    for unrecognized input.
     """
     from varcode import Variant
-    if not vid:
-        return None, False
-    s = str(vid)
+    if not variant_id:
+        return None
+    s = str(variant_id)
     contig = pos_s = ref = alt = None
     if '-' in s:
         parts = s.split('-')
@@ -1090,11 +1085,11 @@ def _parse_pvacseq_id(vid, genome=None):
         if len(parts) == 4:
             contig, pos_s, ref, alt = parts
     if contig is None:
-        return None, False
+        return None
     try:
         pos = int(pos_s)
     except (ValueError, TypeError):
-        return None, False
+        return None
     # Strip the ``chr`` prefix pVACseq emits, same rationale as LENS:
     # pyensembl uses bare contigs and ``normalize_contig_names=False``
     # below means varcode won't strip for us. Keeping the prefix
@@ -1107,8 +1102,8 @@ def _parse_pvacseq_id(vid, genome=None):
             contig=contig, start=pos, ref=ref, alt=alt,
             genome=genome, normalize_contig_names=False)
     except Exception:
-        return None, False
-    return v, True
+        return None
+    return v
 
 
 def _pvacseq_variant_key(row):
@@ -1229,7 +1224,7 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
         # (codebase convention for "not known"). No 'unknown' invention.
         gene = _pvacseq_gene(rep)
 
-        variant, alleles_real = _parse_pvacseq_id(vid, genome=genome)
+        variant = parse_pvacseq_variant(vid, genome=genome)
         if variant is None:
             n_skipped += 1
             logger.debug(
@@ -1261,7 +1256,7 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
         # have real effect context; falls back to [] when the genome
         # isn't plumbed through or the ID can't be resolved.
         transcript_ids = _pvacseq_transcript_ids(rep)
-        transcripts = _resolve_transcripts(transcript_ids, genome)
+        transcripts = resolve_external_transcripts(transcript_ids, genome)
         if transcript_ids:
             n_with_ids += 1
             if transcripts:
@@ -1326,9 +1321,9 @@ def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
     return ranked_sorted_by_target_score(ranked), dna_vaf_by_variant
 
 
-def _patient_info_from_external(ranked, source_path, patient_id,
-                                input_label='External report',
-                                predictions=None):
+def patient_info_from_external(ranked, source_path, patient_id,
+                               input_label='External report',
+                               predictions=None):
     """Build a :class:`PatientInfo` from external-input data.
 
     Counts are derived from the ranked output:
@@ -1411,7 +1406,7 @@ def load_external_ranked(args):
 
     ``patient_info`` carries the variant-count metadata template
     reports (ASCII / HTML / PDF) need; counts are proxies derived
-    from the ranked output (see ``_patient_info_from_external``).
+    from the ranked output (see :func:`patient_info_from_external`).
     """
     from .epitope_io import load_lens, load_pvacseq
     patient_id = getattr(args, 'output_patient_id', '') or ''
@@ -1422,7 +1417,7 @@ def load_external_ranked(args):
             predictions, args.input_lens,
             genome=getattr(args, 'genome', None),
             vaccine_peptide_length=vaccine_peptide_length)
-        patient_info = _patient_info_from_external(
+        patient_info = patient_info_from_external(
             ranked, args.input_lens, patient_id,
             input_label='LENS report',
             predictions=predictions)
@@ -1433,7 +1428,7 @@ def load_external_ranked(args):
         ranked, dna_vaf_by_variant = ranked_from_pvacseq_predictions(
             predictions, args.input_pvacseq,
             genome=getattr(args, 'genome', None))
-        patient_info = _patient_info_from_external(
+        patient_info = patient_info_from_external(
             ranked, args.input_pvacseq, patient_id,
             input_label='pVACseq report',
             predictions=predictions)

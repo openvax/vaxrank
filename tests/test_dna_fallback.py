@@ -15,7 +15,10 @@
 import pytest
 import varcode
 
-from vaxrank.mutant_protein_fragment import MutantProteinFragment, _find_mutation_region
+from vaxrank.mutant_protein_fragment import (
+    MutantProteinFragment,
+    find_mutation_region,
+)
 
 
 @pytest.fixture
@@ -25,13 +28,13 @@ def genome(human_genome_grch37):
 
 
 # ---------------------------------------------------------------------------
-# _find_mutation_region unit tests
+# find_mutation_region unit tests
 # ---------------------------------------------------------------------------
 
 def test_find_mutation_region_substitution():
     ref = "ABCDEFGH"
     mut = "ABCXEFGH"
-    start, end = _find_mutation_region(ref, mut)
+    start, end = find_mutation_region(ref, mut)
     assert start == 3
     assert end == 4
 
@@ -39,7 +42,7 @@ def test_find_mutation_region_substitution():
 def test_find_mutation_region_insertion():
     ref = "ABCDEFGH"
     mut = "ABCXXDEFGH"
-    start, end = _find_mutation_region(ref, mut)
+    start, end = find_mutation_region(ref, mut)
     assert start == 3
     assert end == 5  # two inserted AAs
 
@@ -47,7 +50,7 @@ def test_find_mutation_region_insertion():
 def test_find_mutation_region_deletion():
     ref = "ABCDEFGH"
     mut = "ABCFGH"
-    start, end = _find_mutation_region(ref, mut)
+    start, end = find_mutation_region(ref, mut)
     assert start == 3
     assert end == 3  # zero-length in mutant
 
@@ -55,14 +58,14 @@ def test_find_mutation_region_deletion():
 def test_find_mutation_region_frameshift():
     ref = "ABCDEFGH"
     mut = "ABCXYZ"
-    start, end = _find_mutation_region(ref, mut)
+    start, end = find_mutation_region(ref, mut)
     assert start == 3
     assert end == 6  # everything from pos 3 onward differs
 
 
 def test_find_mutation_region_identical():
     ref = "ABCDEFGH"
-    start, end = _find_mutation_region(ref, ref)
+    start, end = find_mutation_region(ref, ref)
     # start == len(ref), end == len(ref) — no mutation found
     assert start == len(ref)
 
@@ -70,7 +73,7 @@ def test_find_mutation_region_identical():
 def test_find_mutation_region_extension():
     ref = "ABCDEFGH"
     mut = "ABCDEFGHIJK"
-    start, end = _find_mutation_region(ref, mut)
+    start, end = find_mutation_region(ref, mut)
     assert start == 8
     assert end == 11
 

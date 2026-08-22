@@ -28,8 +28,9 @@ import pytest
 
 from vaxrank.epitope_io import load_lens
 from vaxrank.external_input import (
-    _mut_offsets_in_context,
-    _parse_variant_coords,
+    ExternalVariantEntry,
+    peptide_offsets_in_context,
+    parse_lens_variant_coordinates,
     ranked_from_lens_predictions,
 )
 
@@ -37,40 +38,54 @@ DATA_DIR = os.path.join(
     os.path.dirname(__file__), "data", "epitope_fixtures")
 
 
-def test_parse_variant_coords_extracts_chr_pos():
-    """``_parse_variant_coords`` extracts only (contig, pos), stripping
+def test_external_variant_entry_defaults_describe_an_empty_result():
+    entry = ExternalVariantEntry()
+
+    assert entry.variant is None
+    assert entry.vaccine_peptide is None
+    assert entry.had_transcript_ids is False
+    assert entry.resolved_transcript is False
+    assert entry.annotation is None
+    assert entry.dna_vaf is None
+    assert entry.unparseable is False
+
+
+def test_parse_lens_variant_coordinates_extracts_chr_pos():
+    """The parser extracts only (contig, pos), stripping
     the ``chr`` prefix LENS emits — pyensembl uses bare contigs, and
     keeping the prefix breaks ``variant.effect_on_transcript`` and
     renders the variant short_description as ``chrchr3 …``. Ref/alt
     come from the dedicated per-antigen-source columns
     (snv_ref_allele / snv_alt_allele etc.), looked up by
-    ``_variant_from_lens_row``."""
-    assert _parse_variant_coords("chr17:7675088:C:T") == ("17", 7675088)
-    assert _parse_variant_coords("chr1:26780312") == ("1", 26780312)
-    assert _parse_variant_coords("chr1:26780312:C") == ("1", 26780312)
+    ``variant_from_lens_row``."""
+    assert parse_lens_variant_coordinates(
+        "chr17:7675088:C:T") == ("17", 7675088)
+    assert parse_lens_variant_coordinates("chr1:26780312") == ("1", 26780312)
+    assert parse_lens_variant_coordinates(
+        "chr1:26780312:C") == ("1", 26780312)
     # Already-bare contig pass-through:
-    assert _parse_variant_coords("17:7675088") == ("17", 7675088)
+    assert parse_lens_variant_coordinates("17:7675088") == ("17", 7675088)
 
 
-def test_parse_variant_coords_returns_none_on_missing_or_malformed():
+def test_parse_lens_variant_coordinates_returns_none_on_malformed_input():
     for bad in ("garbage", "chr1:notapos:A:T", None, "", "   ",
                 "nan", "NaN"):
-        assert _parse_variant_coords(bad) is None
+        assert parse_lens_variant_coordinates(bad) is None
 
 
-def test_strip_lens_allele_handles_bracket_form():
+def test_normalize_lens_allele_handles_bracket_form():
     """LENS records alt alleles as bracketed strings: '[T]', '[CA]'.
     The helper strips brackets and returns the inner sequence."""
-    from vaxrank.external_input import _strip_lens_allele
-    assert _strip_lens_allele("[T]") == "T"
-    assert _strip_lens_allele("[CA]") == "CA"
-    assert _strip_lens_allele("T") == "T"   # already unbracketed
-    assert _strip_lens_allele("") is None
-    assert _strip_lens_allele(None) is None
-    assert _strip_lens_allele("nan") is None
+    from vaxrank.external_input import normalize_lens_allele
+    assert normalize_lens_allele("[T]") == "T"
+    assert normalize_lens_allele("[CA]") == "CA"
+    assert normalize_lens_allele("T") == "T"   # already unbracketed
+    assert normalize_lens_allele("") is None
+    assert normalize_lens_allele(None) is None
+    assert normalize_lens_allele("nan") is None
 
 
-# ---- _resolve_transcripts ------------------------------------------------
+# ---- resolve_external_transcripts ---------------------------------------
 
 class _StubGenome:
     """Minimal stand-in for pyensembl.EnsemblRelease used by tests.
@@ -91,25 +106,25 @@ class _StubGenome:
         raise ValueError("Transcript not found: %s" % tid)
 
 
-def test_resolve_transcripts_strips_version_suffix():
+def test_resolve_external_transcripts_strips_version_suffix():
     """LENS IDs carry version suffixes (``ENST00000312960.4``); pyensembl
     2.x doesn't strip them. The helper must, or every LENS lookup fails."""
-    from vaxrank.external_input import _resolve_transcripts
+    from vaxrank.external_input import resolve_external_transcripts
     sentinel = object()
     g = _StubGenome({'ENST00000312960': sentinel})
-    out = _resolve_transcripts(['ENST00000312960.4'], g)
+    out = resolve_external_transcripts(['ENST00000312960.4'], g)
     assert out == [sentinel]
     assert g.lookups == ['ENST00000312960']  # bare form was sent
 
 
-def test_resolve_transcripts_drops_unresolvable_ids():
+def test_resolve_external_transcripts_drops_unresolvable_ids():
     """A release-mismatch yields some IDs the configured release
     doesn't know. Drop quietly (DEBUG-logged) rather than crash; the
     caller's aggregate WARN summarizes the count."""
-    from vaxrank.external_input import _resolve_transcripts
+    from vaxrank.external_input import resolve_external_transcripts
     known = object()
     g = _StubGenome({'ENST00000000001': known})
-    out = _resolve_transcripts(
+    out = resolve_external_transcripts(
         ['ENST00000000001.1', 'ENST99999999999.7', ''],
         g)
     assert out == [known]
@@ -183,29 +198,29 @@ def test_infer_genome_build_from_lens_unknown_returns_none(tmp_path):
     assert infer_genome_build_from_lens(str(p)) is None
 
 
-def test_resolve_transcripts_returns_empty_when_no_genome():
+def test_resolve_external_transcripts_returns_empty_without_genome():
     """No --ensembl-release set → genome=None; resolution is a no-op
     and downstream code falls back to the empty-transcript path."""
-    from vaxrank.external_input import _resolve_transcripts
-    assert _resolve_transcripts(['ENST00000000001'], None) == []
-    assert _resolve_transcripts([], None) == []
+    from vaxrank.external_input import resolve_external_transcripts
+    assert resolve_external_transcripts(['ENST00000000001'], None) == []
+    assert resolve_external_transcripts([], None) == []
 
 
 def test_variant_from_lens_row_uses_real_snv_alleles():
     """SNV rows: ref/alt come from snv_ref_allele / snv_alt_allele.
     No placeholder genotype. The synthesized Variant carries the real
     biology so it can be fed to varcode-effect annotation safely."""
-    from vaxrank.external_input import _variant_from_lens_row
+    from vaxrank.external_input import variant_from_lens_row
     row = {
         'variant_coords': 'chr1:1624824',
         'antigen_source': 'SNV',
         'snv_ref_allele': 'C',
         'snv_alt_allele': '[T]',  # LENS's bracketed format
     }
-    v = _variant_from_lens_row(row)
+    v = variant_from_lens_row(row)
     assert v is not None
     # ``chr`` prefix stripped during parse so pyensembl-style lookups
-    # work; see ``_parse_variant_coords``.
+    # work; see ``parse_lens_variant_coordinates``.
     assert v.contig == "1"
     assert v.start == 1624824
     assert v.ref == "C"
@@ -217,14 +232,14 @@ def test_variant_from_lens_row_uses_real_indel_alleles():
     varcode normalizes indels (strips shared prefix), so ``CA → C``
     becomes ref='A' alt='' at start+1 — that's the canonical
     representation a downstream caller would expect."""
-    from vaxrank.external_input import _variant_from_lens_row
+    from vaxrank.external_input import variant_from_lens_row
     row = {
         'variant_coords': 'chr3:150742445',
         'antigen_source': 'INDEL',
         'indel_ref_allele': 'CA',
         'indel_alt_allele': '[C]',
     }
-    v = _variant_from_lens_row(row)
+    v = variant_from_lens_row(row)
     assert v is not None
     # varcode's canonical indel representation: shared prefix
     # stripped, position advanced to the differing base. Contig
@@ -239,26 +254,26 @@ def test_variant_from_lens_row_skips_non_snv_indel():
     """SPLICE / FUSION / CTA-SELF / ERV rows don't have variant_coords
     populated (NaN); the row-level helper returns None for these,
     and the caller skips them earlier on the empty-coords path."""
-    from vaxrank.external_input import _variant_from_lens_row
+    from vaxrank.external_input import variant_from_lens_row
     for src in ('SPLICE', 'FUSION', 'CTA/SELF', 'ERV'):
         row = {
             'variant_coords': None,
             'antigen_source': src,
         }
-        assert _variant_from_lens_row(row) is None
+        assert variant_from_lens_row(row) is None
 
 
 def test_variant_from_lens_row_skips_when_alleles_missing():
     """If the SNV row's allele columns are missing/NaN, return None
     rather than fabricate a placeholder."""
-    from vaxrank.external_input import _variant_from_lens_row
+    from vaxrank.external_input import variant_from_lens_row
     row = {
         'variant_coords': 'chr1:1000',
         'antigen_source': 'SNV',
         'snv_ref_allele': None,
         'snv_alt_allele': None,
     }
-    assert _variant_from_lens_row(row) is None
+    assert variant_from_lens_row(row) is None
 
 
 def test_real_lens_v19_subset_produces_ranked_entries():
@@ -358,23 +373,24 @@ def test_has_only_standard_amino_acids_helper():
             f"Should reject {non_standard!r}"
 
 
-def test_mut_offsets_in_context_finds_peptide():
+def test_peptide_offsets_in_context_finds_peptide():
     # AASVVGSSSSSGTR contains SVVGSSSSS at offset 2, length 9
-    start, end = _mut_offsets_in_context("SVVGSSSSS", "AASVVGSSSSSGTR")
+    start, end = peptide_offsets_in_context(
+        "SVVGSSSSS", "AASVVGSSSSSGTR")
     assert start == 2
     assert end == 11
 
 
-def test_mut_offsets_in_context_returns_none_when_not_found():
+def test_peptide_offsets_in_context_returns_none_when_not_found():
     """When the peptide isn't a substring of pep_context, return
     ``(None, None)`` so the caller drops the row instead of falsely
     claiming the entire context is the mutation span."""
-    start, end = _mut_offsets_in_context("XYZXYZ", "AASVVGSSSSSGTR")
+    start, end = peptide_offsets_in_context("XYZXYZ", "AASVVGSSSSSGTR")
     assert start is None
     assert end is None
     # Empty inputs also return None
-    assert _mut_offsets_in_context("", "AAVK") == (None, None)
-    assert _mut_offsets_in_context("AAVK", "") == (None, None)
+    assert peptide_offsets_in_context("", "AAVK") == (None, None)
+    assert peptide_offsets_in_context("AAVK", "") == (None, None)
 
 
 def test_lens_picks_strongest_binder_when_multiple_rows_per_variant():
@@ -401,19 +417,19 @@ def test_lens_picks_strongest_binder_when_multiple_rows_per_variant():
         "(STRNGLVLLL, IC50=18); got %r" % fragment.amino_acids)
 
 
-# ---- _patient_info_from_external ----------------------------------------
+# ---- patient_info_from_external -----------------------------------------
 
 def test_patient_info_from_external_proxy_counts():
     """The synthesized PatientInfo's variant counts come from the
     ranked output, not from VCF/BAM. Pin each count's definition so a
     later loader change can't silently shift the rendered template
     report headers."""
-    from vaxrank.external_input import _patient_info_from_external
+    from vaxrank.external_input import patient_info_from_external
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, predictions = load_lens(path)
     ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
-    info = _patient_info_from_external(
+    info = patient_info_from_external(
         ranked, path, patient_id='Pt-X', input_label='LENS report')
     assert info.patient_id == 'Pt-X'
     # PatientInfo on the external path no longer overloads
@@ -436,8 +452,8 @@ def test_patient_info_from_external_proxy_counts():
 
 def test_patient_info_from_external_empty_ranked():
     """No ranked variants → all counts zero, no crash."""
-    from vaxrank.external_input import _patient_info_from_external
-    info = _patient_info_from_external([], '/tmp/empty.tsv', patient_id='')
+    from vaxrank.external_input import patient_info_from_external
+    info = patient_info_from_external([], '/tmp/empty.tsv', patient_id='')
     assert info.num_somatic_variants == 0
     assert info.num_coding_effect_variants == 0
     assert info.num_variants_with_rna_support == 0
@@ -609,29 +625,24 @@ def test_pvacseq_id_parser_handles_dashed_and_dotted():
     """The parser accepts both modern (chr1-100000-100001-A-T) and
     legacy (1.123.A.T) ID forms, plus the 4-part dashed variant
     (chr1-100000-A-T) without an explicit end position. Returns
-    ``(Variant, alleles_real)`` matching the LENS-path shape;
-    pVACseq IDs always carry real ref/alt so alleles_real is True.
+    The returned Variant carries the real ref/alt nucleotides from the ID.
 
     The parser strips ``chr`` prefixes so pyensembl-style downstream
     lookups (``variant.effect_on_transcript``) work — same rationale
-    as ``_parse_variant_coords`` on the LENS path."""
-    from vaxrank.external_input import _parse_pvacseq_id
+    as ``parse_lens_variant_coordinates`` on the LENS path."""
+    from vaxrank.external_input import parse_pvacseq_variant
 
     for vid, expected in [
         ("chr1-100000-100001-A-T", ("1", 100000, "A", "T")),
         ("chr1-100000-A-T", ("1", 100000, "A", "T")),
         ("1.123.A.T", ("1", 123, "A", "T")),
     ]:
-        v, alleles_real = _parse_pvacseq_id(vid)
+        v = parse_pvacseq_variant(vid)
         assert v is not None
         assert (v.contig, v.start, v.ref, v.alt) == expected
-        assert alleles_real is True, (
-            "pVACseq IDs carry real ref/alt; alleles_real must be True")
-    # Garbage / wrong shape returns (None, False) instead of raising
+    # Garbage / wrong shape returns None instead of raising
     for bad in ("garbage", "chr1-notapos-A-T", None, ""):
-        v, alleles_real = _parse_pvacseq_id(bad)
-        assert v is None
-        assert alleles_real is False
+        assert parse_pvacseq_variant(bad) is None
 
 
 def test_pvacseq_drives_mrna_construct_assembly_end_to_end():
