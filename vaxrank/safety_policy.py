@@ -23,7 +23,7 @@ from .safety_assessment import (
     EmittedSafetyLigand,
     SafetyPrediction,
 )
-from .vaccine_antigen import STANDARD_AMINO_ACIDS
+from .amino_acids import STANDARD_AMINO_ACIDS
 
 
 SAFETY_MODE_OFF = "off"

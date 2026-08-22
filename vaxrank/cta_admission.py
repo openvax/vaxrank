@@ -14,6 +14,7 @@ from typing import Optional
 import pandas as pd
 from serializable import DataclassSerializable
 
+from .identifiers import normalize_ensembl_gene_id
 from .vaccine_antigen import (
     ANTIGEN_KIND_CTA,
     ATTESTATION_ADMITTED,
@@ -35,10 +36,6 @@ CTA_REASON_EXPLICIT_OVERRIDE = "cta_explicit_evidence_override"
 
 class CTAAdmissionError(RuntimeError):
     """Raised when CTA admission evidence cannot be resolved unambiguously."""
-
-
-def _gene_id(value) -> str:
-    return str(value).strip().split(".")[0]
 
 
 def _finite_nonnegative(value, label: str) -> float:
@@ -108,7 +105,7 @@ class PatientTumorExpressionEvidence(DataclassSerializable):
     assay: str = ""
 
     def __post_init__(self):
-        gene_id = _gene_id(self.gene_id)
+        gene_id = normalize_ensembl_gene_id(self.gene_id)
         if not gene_id or not self.sample_id:
             raise ValueError("Tumor expression requires gene and patient sample IDs")
         if (
@@ -163,7 +160,9 @@ class CTAReferenceEvidence(DataclassSerializable):
     source_row_sha256: str
 
     def __post_init__(self):
-        object.__setattr__(self, "gene_id", _gene_id(self.gene_id))
+        object.__setattr__(
+            self, "gene_id", normalize_ensembl_gene_id(self.gene_id)
+        )
         for digest in (
             self.canonical_gene_ids_sha256,
             self.unfiltered_gene_ids_sha256,
@@ -196,9 +195,12 @@ def _resolve_reference_evidence(gene_id: str):
     from oncoref.cta import cta_evidence, cta_gene_ids, cta_unfiltered_gene_ids
     from oncoref.version import DATA_VERSION, SOURCE_MATRIX_VERSION
 
-    canonical_ids = frozenset(_gene_id(value) for value in cta_gene_ids())
+    canonical_ids = frozenset(
+        normalize_ensembl_gene_id(value) for value in cta_gene_ids()
+    )
     unfiltered_ids = frozenset(
-        _gene_id(value) for value in cta_unfiltered_gene_ids()
+        normalize_ensembl_gene_id(value)
+        for value in cta_unfiltered_gene_ids()
     )
     if not canonical_ids or not unfiltered_ids:
         raise CTAAdmissionError("oncoref returned an empty CTA reference set")
@@ -227,7 +229,7 @@ def _resolve_reference_evidence(gene_id: str):
         raise CTAAdmissionError(
             f"oncoref CTA evidence is missing columns: {sorted(missing)}"
         )
-    normalized_ids = frame["Ensembl_Gene_ID"].map(_gene_id)
+    normalized_ids = frame["Ensembl_Gene_ID"].map(normalize_ensembl_gene_id)
     rows = frame.loc[normalized_ids == gene_id]
     if len(rows) != 1:
         raise CTAAdmissionError(
@@ -278,7 +280,7 @@ def assess_cta_antigen(
     source_identifier: str = "",
 ) -> CTAAdmissionAssessment:
     """Resolve oncoref CTA status and patient-expression construct admission."""
-    gene_id = _gene_id(gene_id)
+    gene_id = normalize_ensembl_gene_id(gene_id)
     if tumor_expression.gene_id != gene_id:
         raise ValueError("CTA and tumor-expression gene IDs differ")
     if tumor_expression.unit != policy.expression_unit:

@@ -11,15 +11,18 @@ import math
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
-from mhcgnomes import parse as parse_mhc
 from serializable import DataclassSerializable
 from topiary import TopiaryPredictor
 
+from .amino_acids import (
+    has_only_standard_amino_acids,
+    validate_amino_acid_sequence,
+)
+from .identifiers import normalize_ensembl_gene_id, normalize_mhc_allele
 from .tissue_risk import (
     TissueRiskAssessment,
     TissueRiskEvidence,
 )
-from .vaccine_antigen import STANDARD_AMINO_ACIDS
 
 
 PROTEIN_RESOLUTION_ALL_ISOFORMS = "all_protein_coding_isoforms"
@@ -38,10 +41,6 @@ RISK_COMBINATION_POLICIES = frozenset({
 
 class RiskLigandError(RuntimeError):
     """Raised when a risk-ligand index cannot be built unambiguously."""
-
-
-def _gene_id(value) -> str:
-    return str(value).strip().split(".")[0]
 
 
 def _finite_or_none(value):
@@ -65,16 +64,6 @@ def _required_int(value, label: str) -> int:
     if not equivalent:
         raise RiskLigandError(f"{label} must be an integer")
     return result
-
-
-def _normalize_allele(value: str) -> str:
-    try:
-        parsed = parse_mhc(str(value), raise_on_error=True)
-    except Exception as error:
-        raise RiskLigandError(f"Invalid MHC allele {value!r}") from error
-    if parsed is None:
-        raise RiskLigandError(f"Invalid MHC allele {value!r}")
-    return parsed.to_string()
 
 
 def _json_native(value):
@@ -104,12 +93,19 @@ class ResolvedRiskProtein(DataclassSerializable):
     tissue_evidence: tuple[TissueRiskEvidence, ...]
 
     def __post_init__(self):
-        gene_id = _gene_id(self.gene_id)
-        invalid = sorted(set(self.amino_acids) - STANDARD_AMINO_ACIDS)
-        if not gene_id or not self.amino_acids or invalid:
+        gene_id = normalize_ensembl_gene_id(self.gene_id)
+        if not gene_id:
             raise ValueError(
                 "Resolved risk protein requires a canonical amino-acid sequence"
             )
+        try:
+            validate_amino_acid_sequence(
+                self.amino_acids, "Resolved risk protein"
+            )
+        except ValueError as error:
+            raise ValueError(
+                "Resolved risk protein requires a canonical amino-acid sequence"
+            ) from error
         if not self.transcript_ids or not self.tissue_evidence:
             raise ValueError(
                 "Resolved risk protein requires transcript and tissue provenance"
@@ -269,7 +265,7 @@ class RiskLigandPrediction(DataclassSerializable):
             and not 0.0 <= self.percentile_rank <= 100.0
         ):
             raise ValueError("Risk prediction percentile rank must be 0..100")
-        object.__setattr__(self, "allele", _normalize_allele(self.allele))
+        object.__setattr__(self, "allele", normalize_mhc_allele(self.allele))
 
     @property
     def identity(self) -> tuple[str, str, str, str]:
@@ -295,7 +291,9 @@ class RiskLigandSource(DataclassSerializable):
     def __post_init__(self):
         if not self.source_sequence_name or len(self.protein_sequence_sha256) != 64:
             raise ValueError("Risk ligand source requires protein sequence identity")
-        object.__setattr__(self, "gene_id", _gene_id(self.gene_id))
+        object.__setattr__(
+            self, "gene_id", normalize_ensembl_gene_id(self.gene_id)
+        )
         object.__setattr__(
             self, "transcript_ids", tuple(sorted(set(self.transcript_ids)))
         )
@@ -327,7 +325,7 @@ class RiskLigand(DataclassSerializable):
     def __post_init__(self):
         if not self.peptide or not self.allele or not self.sources:
             raise ValueError("Risk ligand requires peptide, allele, and sources")
-        allele = _normalize_allele(self.allele)
+        allele = normalize_mhc_allele(self.allele)
         predictions = tuple(sorted(self.predictions, key=lambda item: item.identity))
         identities = [prediction.identity for prediction in predictions]
         if len(identities) != len(set(identities)):
@@ -371,7 +369,7 @@ class RiskCoverageGap(DataclassSerializable):
             or self.expected_window_count <= self.observed_window_count
         ):
             raise ValueError("Risk coverage gaps require missing prediction windows")
-        object.__setattr__(self, "allele", _normalize_allele(self.allele))
+        object.__setattr__(self, "allele", normalize_mhc_allele(self.allele))
 
     @property
     def missing_window_count(self) -> int:
@@ -445,7 +443,9 @@ class PatientHLARiskLigandIndex(DataclassSerializable):
     provenance: RiskLigandIndexProvenance
 
     def __post_init__(self):
-        alleles = tuple(sorted({_normalize_allele(allele) for allele in self.alleles}))
+        alleles = tuple(sorted({
+            normalize_mhc_allele(allele) for allele in self.alleles
+        }))
         lengths = tuple(sorted(set(self.peptide_lengths)))
         if not alleles or not lengths or any(length <= 0 for length in lengths):
             raise ValueError("Risk index requires alleles and peptide lengths")
@@ -467,7 +467,7 @@ class PatientHLARiskLigandIndex(DataclassSerializable):
         object.__setattr__(self, "ligands", ligands)
 
     def for_allele_and_length(self, allele: str, peptide_length: int):
-        normalized = _normalize_allele(allele)
+        normalized = normalize_mhc_allele(allele)
         return tuple(
             ligand for ligand in self.ligands
             if ligand.allele == normalized and len(ligand.peptide) == peptide_length
@@ -511,7 +511,7 @@ def resolve_tissue_risk_protein_sequences(
                 sequence = (transcript.protein_sequence or "").rstrip("*")
             except Exception:
                 sequence = ""
-            if not sequence or set(sequence) - STANDARD_AMINO_ACIDS:
+            if not sequence or not has_only_standard_amino_acids(sequence):
                 invalid_count += 1
                 continue
             slot = by_sequence.setdefault(
@@ -604,7 +604,12 @@ def risk_ligand_index_from_prediction_frame(
 ) -> PatientHLARiskLigandIndex:
     """Build a patient-specific index from unfiltered topiary output."""
     selection_policy = selection_policy or RiskLigandSelectionPolicy()
-    normalized_alleles = tuple(sorted({_normalize_allele(a) for a in alleles}))
+    try:
+        normalized_alleles = tuple(sorted({
+            normalize_mhc_allele(allele) for allele in alleles
+        }))
+    except ValueError as error:
+        raise RiskLigandError(str(error)) from error
     lengths = tuple(sorted({
         _required_int(length, "Configured peptide length")
         for length in peptide_lengths
@@ -643,7 +648,10 @@ def risk_ligand_index_from_prediction_frame(
                 raise RiskLigandError(
                     "Risk prediction peptide does not match its source protein"
                 )
-            allele = _normalize_allele(row.get("allele"))
+            try:
+                allele = normalize_mhc_allele(row.get("allele"))
+            except ValueError as error:
+                raise RiskLigandError(str(error)) from error
             if allele not in normalized_alleles:
                 raise RiskLigandError("Risk predictor emitted an unconfigured allele")
             prediction = _prediction_from_row(row, allele)

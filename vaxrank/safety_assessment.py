@@ -16,10 +16,10 @@ from dataclasses import asdict, dataclass, field
 from numbers import Integral
 from typing import Any, Optional
 
-from mhcgnomes import parse as parse_mhc
 from serializable import DataclassSerializable
 from topiary import TopiaryPredictor
 
+from .identifiers import normalize_mhc_allele
 from .near_self import (
     DEFAULT_NEAR_SELF_COMPARATOR,
     NearSelfAssessment,
@@ -107,16 +107,12 @@ class SafetyPrediction(DataclassSerializable):
                 "Safety prediction kind, predictor, version, and allele are required"
             )
         try:
-            allele = parse_mhc(str(self.allele), raise_on_error=True)
-        except Exception as error:
+            allele = normalize_mhc_allele(self.allele)
+        except ValueError as error:
             raise ValueError(
                 f"Invalid safety prediction MHC allele {self.allele!r}"
             ) from error
-        if allele is None:
-            raise ValueError(
-                f"Invalid safety prediction MHC allele {self.allele!r}"
-            )
-        object.__setattr__(self, "allele", allele.to_string())
+        object.__setattr__(self, "allele", allele)
         for label in ("score", "value", "percentile_rank"):
             value = getattr(self, label)
             if value is not None and not math.isfinite(value):
@@ -155,10 +151,9 @@ class SafetyPredictionCoverage(DataclassSerializable):
             )
         try:
             alleles = tuple(sorted({
-                parse_mhc(str(allele), raise_on_error=True).to_string()
-                for allele in self.alleles
+                normalize_mhc_allele(allele) for allele in self.alleles
             }))
-        except Exception as error:
+        except ValueError as error:
             raise ValueError("Prediction coverage contains an invalid MHC allele") from error
         if not alleles:
             raise ValueError("Prediction coverage requires at least one MHC allele")

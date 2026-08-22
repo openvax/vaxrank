@@ -12,6 +12,12 @@
 
 
 from .core_logic import run_vaxrank
+from .amino_acids import (
+    STANDARD_AMINO_ACIDS,
+    has_only_standard_amino_acids,
+    validate_amino_acid_sequence,
+)
+from .identifiers import normalize_ensembl_gene_id, normalize_mhc_allele
 from .epitope_config import EpitopeConfig
 from .epitope_logic import predict_epitopes
 from .candidate_epitope import CandidateEpitope, Peptide
@@ -154,6 +160,7 @@ __all__ = [
     "RiskLigandSource",
     "RiskPercentileThreshold",
     "RiskProteinSequenceSet",
+    "STANDARD_AMINO_ACIDS",
     "SAFETY_MODE_AUDIT",
     "SAFETY_MODE_ENFORCE",
     "SAFETY_MODE_OFF",
@@ -192,7 +199,10 @@ __all__ = [
     "build_cta_vaccine_antigen",
     "derive_tissue_risk_proteins",
     "evaluate_antigen_safety_policy",
+    "has_only_standard_amino_acids",
     "near_self_queries_for_window",
+    "normalize_ensembl_gene_id",
+    "normalize_mhc_allele",
     "predict_epitopes",
     "run_vaxrank",
     "resolve_tissue_risk_policy",
@@ -201,4 +211,5 @@ __all__ = [
     "safety_assessment_from_prediction_frame",
     "self_reference_matches",
     "select_antigen_window",
+    "validate_amino_acid_sequence",
 ]

@@ -349,7 +349,7 @@ def test_truncate_at_stop_codon_helper():
 def test_has_only_standard_amino_acids_helper():
     """The 20 canonical AAs pass; non-standard residues (selenocysteine
     U, pyrrolysine O, ambiguous X / B / Z / J, stop *) fail."""
-    from vaxrank.vaccine_library import has_only_standard_amino_acids
+    from vaxrank import has_only_standard_amino_acids
     assert has_only_standard_amino_acids("KLQGHSAPVL")
     assert has_only_standard_amino_acids("")
     for non_standard in ("U", "O", "X", "B", "Z", "J", "*"):

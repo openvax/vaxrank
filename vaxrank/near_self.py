@@ -23,15 +23,15 @@ from numbers import Integral
 from typing import Optional
 
 import numpy as np
-from mhcgnomes import parse as parse_mhc
 from serializable import DataclassSerializable
 
+from .amino_acids import STANDARD_AMINO_ACIDS, validate_amino_acid_sequence
+from .identifiers import normalize_mhc_allele
 from .risk_ligand import (
     PatientHLARiskLigandIndex,
     RiskCoverageGap,
     RiskLigand,
 )
-from .vaccine_antigen import STANDARD_AMINO_ACIDS
 
 
 NEAR_SELF_REASON_NO_RISK_LIGANDS = "no_same_allele_length_risk_ligands"
@@ -66,24 +66,6 @@ BLOSUM62_ROWS = (
 
 class NearSelfError(RuntimeError):
     """Raised when similarity evidence cannot be computed unambiguously."""
-
-
-def _normalize_allele(value: str) -> str:
-    try:
-        parsed = parse_mhc(str(value), raise_on_error=True)
-    except Exception as error:
-        raise NearSelfError(f"Invalid MHC allele {value!r}") from error
-    if parsed is None:
-        raise NearSelfError(f"Invalid MHC allele {value!r}")
-    return parsed.to_string()
-
-
-def _validate_peptide(peptide: str, label: str):
-    invalid = sorted(set(peptide) - STANDARD_AMINO_ACIDS)
-    if not peptide or invalid:
-        raise NearSelfError(
-            f"{label} must contain only canonical amino acids; invalid={invalid}"
-        )
 
 
 @dataclass(frozen=True)
@@ -246,8 +228,9 @@ class NearSelfQuery(DataclassSerializable):
     source_offset: int = 0
 
     def __post_init__(self):
-        invalid = sorted(set(self.peptide) - STANDARD_AMINO_ACIDS)
-        if not self.peptide or invalid:
+        try:
+            validate_amino_acid_sequence(self.peptide, "Near-self query")
+        except ValueError:
             raise ValueError("Near-self query requires a canonical peptide")
         if (
             isinstance(self.source_offset, bool)
@@ -358,8 +341,11 @@ def assess_near_self_queries(
     )
     results = []
     for query in queries:
-        _validate_peptide(query.peptide, "Target peptide")
-        allele = _normalize_allele(query.allele)
+        try:
+            validate_amino_acid_sequence(query.peptide, "Target peptide")
+            allele = normalize_mhc_allele(query.allele)
+        except ValueError as error:
+            raise NearSelfError(str(error)) from error
         group_key = (allele, len(query.peptide))
         gaps = tuple(
             gap for gap in risk_index.coverage.missing_combinations
