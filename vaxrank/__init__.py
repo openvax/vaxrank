@@ -18,6 +18,7 @@ from .amino_acids import (
     validate_amino_acid_sequence,
 )
 from .identifiers import normalize_ensembl_gene_id, normalize_mhc_allele
+from .prediction_input import finite_prediction_value, prediction_integer
 from .epitope_config import EpitopeConfig
 from .epitope_logic import predict_epitopes
 from .candidate_epitope import CandidateEpitope, Peptide
@@ -199,11 +200,13 @@ __all__ = [
     "build_cta_vaccine_antigen",
     "derive_tissue_risk_proteins",
     "evaluate_antigen_safety_policy",
+    "finite_prediction_value",
     "has_only_standard_amino_acids",
     "near_self_queries_for_window",
     "normalize_ensembl_gene_id",
     "normalize_mhc_allele",
     "predict_epitopes",
+    "prediction_integer",
     "run_vaxrank",
     "resolve_tissue_risk_policy",
     "resolve_tissue_risk_protein_sequences",

@@ -1604,7 +1604,7 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
         with open(args.output_json_file, 'w') as f:
             # ``ignore_nan=True`` is defense in depth — producers should
             # be coercing NaN/Inf to None before reaching the writer
-            # (see vaxrank.epitope_logic._finite_or_none), but if any
+            # (see vaxrank.finite_prediction_value), but if any
             # slips through (e.g. a future predictor adapter, or a
             # custom score expression), render it as JSON null instead
             # of crashing the whole report. Note: strict JSON doesn't

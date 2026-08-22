@@ -19,6 +19,7 @@ from .amino_acids import (
     validate_amino_acid_sequence,
 )
 from .identifiers import normalize_ensembl_gene_id, normalize_mhc_allele
+from .prediction_input import finite_prediction_value, prediction_integer
 from .tissue_risk import (
     TissueRiskAssessment,
     TissueRiskEvidence,
@@ -41,29 +42,6 @@ RISK_COMBINATION_POLICIES = frozenset({
 
 class RiskLigandError(RuntimeError):
     """Raised when a risk-ligand index cannot be built unambiguously."""
-
-
-def _finite_or_none(value):
-    if value is None:
-        return None
-    try:
-        value = float(value)
-    except (TypeError, ValueError) as error:
-        raise RiskLigandError(f"Prediction value {value!r} is not numeric") from error
-    return value if math.isfinite(value) else None
-
-
-def _required_int(value, label: str) -> int:
-    if isinstance(value, bool):
-        raise RiskLigandError(f"{label} must be an integer")
-    try:
-        result = int(value)
-        equivalent = float(value) == result
-    except (TypeError, ValueError) as error:
-        raise RiskLigandError(f"{label} must be an integer") from error
-    if not equivalent:
-        raise RiskLigandError(f"{label} must be an integer")
-    return result
 
 
 def _json_native(value):
@@ -266,6 +244,22 @@ class RiskLigandPrediction(DataclassSerializable):
         ):
             raise ValueError("Risk prediction percentile rank must be 0..100")
         object.__setattr__(self, "allele", normalize_mhc_allele(self.allele))
+
+    @classmethod
+    def from_prediction_row(cls, row: Any) -> "RiskLigandPrediction":
+        """Build risk-ligand evidence from one topiary prediction row."""
+        value = finite_prediction_value(row.get("affinity"))
+        if value is None:
+            value = finite_prediction_value(row.get("value"))
+        return cls(
+            kind=str(row.get("kind") or ""),
+            predictor_name=str(row.get("prediction_method_name") or ""),
+            predictor_version=str(row.get("predictor_version") or ""),
+            allele=str(row.get("allele") or ""),
+            score=finite_prediction_value(row.get("score")),
+            value=value,
+            percentile_rank=finite_prediction_value(row.get("percentile_rank")),
+        )
 
     @property
     def identity(self) -> tuple[str, str, str, str]:
@@ -576,24 +570,6 @@ def resolve_tissue_risk_protein_sequences(
     )
 
 
-def _prediction_from_row(row, allele: str) -> RiskLigandPrediction:
-    value = _finite_or_none(row.get("affinity"))
-    if value is None:
-        value = _finite_or_none(row.get("value"))
-    try:
-        return RiskLigandPrediction(
-            kind=str(row.get("kind") or ""),
-            predictor_name=str(row.get("prediction_method_name") or ""),
-            predictor_version=str(row.get("predictor_version") or ""),
-            allele=allele,
-            score=_finite_or_none(row.get("score")),
-            value=value,
-            percentile_rank=_finite_or_none(row.get("percentile_rank")),
-        )
-    except ValueError as error:
-        raise RiskLigandError(str(error)) from error
-
-
 def risk_ligand_index_from_prediction_frame(
     predictions_df,
     *,
@@ -610,10 +586,13 @@ def risk_ligand_index_from_prediction_frame(
         }))
     except ValueError as error:
         raise RiskLigandError(str(error)) from error
-    lengths = tuple(sorted({
-        _required_int(length, "Configured peptide length")
-        for length in peptide_lengths
-    }))
+    try:
+        lengths = tuple(sorted({
+            prediction_integer(length, "Configured peptide length")
+            for length in peptide_lengths
+        }))
+    except ValueError as error:
+        raise RiskLigandError(str(error)) from error
     if not normalized_alleles or not lengths or any(length <= 0 for length in lengths):
         raise ValueError("Risk index requires alleles and positive peptide lengths")
     sources_by_name = protein_sequences.sources_by_name()
@@ -634,8 +613,15 @@ def risk_ligand_index_from_prediction_frame(
                     "Risk prediction source does not match resolved proteins"
                 )
             peptide = str(row.get("peptide") or "")
-            length = _required_int(row.get("peptide_length"), "Peptide length")
-            offset = _required_int(row.get("peptide_offset"), "Peptide offset")
+            try:
+                length = prediction_integer(
+                    row.get("peptide_length"), "Peptide length"
+                )
+                offset = prediction_integer(
+                    row.get("peptide_offset"), "Peptide offset"
+                )
+            except ValueError as error:
+                raise RiskLigandError(str(error)) from error
             if length != len(peptide) or length not in lengths:
                 raise RiskLigandError(
                     "Risk prediction peptide length is inconsistent or unconfigured"
@@ -654,7 +640,10 @@ def risk_ligand_index_from_prediction_frame(
                 raise RiskLigandError(str(error)) from error
             if allele not in normalized_alleles:
                 raise RiskLigandError("Risk predictor emitted an unconfigured allele")
-            prediction = _prediction_from_row(row, allele)
+            try:
+                prediction = RiskLigandPrediction.from_prediction_row(row)
+            except ValueError as error:
+                raise RiskLigandError(str(error)) from error
             if prediction.kind not in thresholds:
                 continue
             configured_rows += 1

@@ -8,7 +8,7 @@
 
 Two layered guarantees:
 
-1. ``epitope_logic._finite_or_none`` coerces NaN / Inf to ``None`` so
+1. ``finite_prediction_value`` coerces NaN / Inf to ``None`` so
    ``Prediction.value`` never carries NaN coming out of the topiary
    frame. The topiary frame legitimately emits NaN in the ``value``
    column for non-affinity kinds (``pMHC_presentation`` carries its
@@ -28,37 +28,54 @@ import pandas as pd
 import pytest
 
 
-# ---- _finite_or_none ----------------------------------------------------
+# ---- finite_prediction_value -------------------------------------------
 
 
-def test_finite_or_none_passes_through_finite():
-    from vaxrank.epitope_logic import _finite_or_none
+def test_finite_prediction_value_passes_through_finite():
+    from vaxrank import finite_prediction_value
 
-    assert _finite_or_none(0.0) == 0.0
-    assert _finite_or_none(123.456) == 123.456
-    assert _finite_or_none(-1e9) == -1e9
-
-
-def test_finite_or_none_coerces_nan_and_inf():
-    from vaxrank.epitope_logic import _finite_or_none
-
-    assert _finite_or_none(float('nan')) is None
-    assert _finite_or_none(float('inf')) is None
-    assert _finite_or_none(float('-inf')) is None
+    assert finite_prediction_value(0.0) == 0.0
+    assert finite_prediction_value(123.456) == 123.456
+    assert finite_prediction_value(-1e9) == -1e9
 
 
-def test_finite_or_none_passes_none():
-    from vaxrank.epitope_logic import _finite_or_none
+def test_finite_prediction_value_coerces_nan_and_inf():
+    from vaxrank import finite_prediction_value
 
-    assert _finite_or_none(None) is None
+    assert finite_prediction_value(float('nan')) is None
+    assert finite_prediction_value(float('inf')) is None
+    assert finite_prediction_value(float('-inf')) is None
 
 
-def test_finite_or_none_passes_ints():
-    """Ints are well-defined; should pass through."""
-    from vaxrank.epitope_logic import _finite_or_none
+def test_finite_prediction_value_passes_none():
+    from vaxrank import finite_prediction_value
 
-    assert _finite_or_none(0) == 0
-    assert _finite_or_none(42) == 42
+    assert finite_prediction_value(None) is None
+
+
+def test_finite_prediction_value_accepts_ints_and_numeric_strings():
+    from vaxrank import finite_prediction_value
+
+    assert finite_prediction_value(0) == 0.0
+    assert finite_prediction_value(42) == 42.0
+    assert finite_prediction_value("42.5") == 42.5
+
+
+def test_finite_prediction_value_rejects_non_numeric_input():
+    from vaxrank import finite_prediction_value
+
+    with pytest.raises(ValueError, match="not numeric"):
+        finite_prediction_value("strong")
+
+
+def test_prediction_integer_accepts_pandas_style_integral_float_only():
+    from vaxrank import prediction_integer
+
+    assert prediction_integer(9.0, "Peptide length") == 9
+    with pytest.raises(ValueError, match="Peptide length must be an integer"):
+        prediction_integer(9.5, "Peptide length")
+    with pytest.raises(ValueError, match="Peptide length must be an integer"):
+        prediction_integer(True, "Peptide length")
 
 
 # ---- predict_epitopes: presentation rows don't leak NaN ----------------

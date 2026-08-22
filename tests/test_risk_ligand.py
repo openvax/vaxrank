@@ -11,6 +11,7 @@ from vaxrank.risk_ligand import (
     RISK_COMBINATION_INTERSECTION,
     PatientHLARiskLigandIndex,
     RiskLigandError,
+    RiskLigandPrediction,
     RiskLigandSelectionPolicy,
     build_patient_hla_risk_ligand_index,
     resolve_tissue_risk_protein_sequences,
@@ -126,6 +127,33 @@ def _row(source, peptide, offset, *, kind="pMHC_affinity",
         "prediction_method_name": predictor,
         "predictor_version": "2.1.4",
     }
+
+
+def test_risk_ligand_prediction_from_prediction_row_is_public():
+    row = _row(
+        "risk_000000_ENSG1",
+        "ACDEFGHIK",
+        0,
+        kind="pMHC_presentation",
+        allele="H-2-Kb",
+        percentile=0.5,
+    )
+
+    prediction = RiskLigandPrediction.from_prediction_row(row)
+
+    assert prediction.kind == "pMHC_presentation"
+    assert prediction.allele == "H2-K*b"
+    assert prediction.score == pytest.approx(0.995)
+    assert prediction.value is None
+    assert prediction.percentile_rank == 0.5
+
+
+def test_risk_ligand_prediction_from_prediction_row_rejects_bad_values():
+    row = _row("risk_000000_ENSG1", "ACDEFGHIK", 0)
+    row["percentile_rank"] = "top"
+
+    with pytest.raises(ValueError, match="not numeric"):
+        RiskLigandPrediction.from_prediction_row(row)
 
 
 def test_resolve_all_isoforms_deduplicates_sequences_and_exposes_gaps():
