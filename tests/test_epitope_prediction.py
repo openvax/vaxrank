@@ -118,8 +118,17 @@ def test_predict_epitopes_records_distinct_non_cta_reference_flag(mouse_genome):
     assert epitopes
     assert all(epitope.occurs_in_reference for epitope in epitopes)
     assert all(not epitope.occurs_in_non_CTA_reference for epitope in epitopes)
+    reference_cls.assert_called_once_with(
+        mouse_genome,
+        min_kmer_length=9,
+        max_kmer_length=9,
+    )
     reference_cls.from_genome.assert_called_once_with(
-        mouse_genome, exclude_cta_genes=True)
+        mouse_genome,
+        exclude_cta_genes=True,
+        min_kmer_length=9,
+        max_kmer_length=9,
+    )
 
 def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel(mouse_genome):
     """Multi-model TopiaryPredictor (post-2.24, #261) keeps each

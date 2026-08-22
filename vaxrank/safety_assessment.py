@@ -780,19 +780,11 @@ def assess_vaccine_antigen_window(
     """
     if genome is not None and reference_proteome is not None:
         raise ValueError("Pass genome or reference_proteome, not both")
-    if reference_proteome is None:
-        if genome is None:
-            raise ValueError(
-                "Safety assessment requires a genome or reference proteome"
-            )
-        if antigen.self_reference_excluded_gene_ids:
-            reference_proteome = ReferenceProteome.from_genome(
-                genome,
-                exclude_gene_ids=antigen.self_reference_excluded_gene_ids,
-            )
-        else:
-            reference_proteome = ReferenceProteome(genome)
-    else:
+    if reference_proteome is None and genome is None:
+        raise ValueError(
+            "Safety assessment requires a genome or reference proteome"
+        )
+    if reference_proteome is not None:
         expected_exclusions = frozenset(antigen.self_reference_excluded_gene_ids)
         actual_exclusions = frozenset(
             getattr(reference_proteome, "excluded_gene_ids", ())
@@ -823,6 +815,30 @@ def assess_vaccine_antigen_window(
         raise SafetyAssessmentError(
             f"MHC safety prediction failed for {source_name!r}"
         ) from error
+
+    if reference_proteome is None:
+        if predictions_df.empty:
+            # No ligand can match self, so do not build an unused genome index.
+            reference_proteome = ReferenceProteome(None)
+        else:
+            peptide_lengths = tuple(sorted({
+                len(str(peptide)) for peptide in predictions_df["peptide"]
+            }))
+            min_peptide_length = peptide_lengths[0]
+            max_peptide_length = peptide_lengths[-1]
+            if antigen.self_reference_excluded_gene_ids:
+                reference_proteome = ReferenceProteome.from_genome(
+                    genome,
+                    exclude_gene_ids=antigen.self_reference_excluded_gene_ids,
+                    min_kmer_length=min_peptide_length,
+                    max_kmer_length=max_peptide_length,
+                )
+            else:
+                reference_proteome = ReferenceProteome(
+                    genome,
+                    min_kmer_length=min_peptide_length,
+                    max_kmer_length=max_peptide_length,
+                )
 
     genome_release = str(getattr(genome, "release", "") or "")
     return safety_assessment_from_prediction_frame(

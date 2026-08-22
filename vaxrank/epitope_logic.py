@@ -20,7 +20,6 @@ from pyensembl import Genome
 from topiary import TopiaryPredictor
 from topiary.ranking import EvalContext, apply_filter
 
-from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
 from .epitope_dsl import build_filter_node, build_score_node, drop_empty_sample_name
 from .mutant_protein_fragment import MutantProteinFragment
@@ -127,10 +126,6 @@ def predict_epitopes(
         else SOURCE_CLASS_SELF
     )
 
-    reference_proteome = ReferenceProteome(genome)
-    non_cta_reference_proteome = ReferenceProteome.from_genome(
-        genome, exclude_cta_genes=True)
-
     # Wrap bare mhctools predictors in a TopiaryPredictor
     if not isinstance(mhc_predictor, TopiaryPredictor):
         topiary_predictor = TopiaryPredictor(models=[mhc_predictor])
@@ -166,6 +161,27 @@ def predict_epitopes(
             predictions_df, filter_node, default_methods=default_methods)
         if predictions_df.empty:
             return []
+
+    # Index only peptide lengths that survived prediction and filtering.
+    # The legacy constructor default spans 8-15 aa; loading that full range
+    # for an ordinary 9-mer MHC-I run can consume more than 10 GB even though
+    # no other lengths are queried.
+    peptide_lengths = tuple(sorted({
+        len(str(peptide)) for peptide in predictions_df["peptide"]
+    }))
+    min_peptide_length = peptide_lengths[0]
+    max_peptide_length = peptide_lengths[-1]
+    reference_proteome = ReferenceProteome(
+        genome,
+        min_kmer_length=min_peptide_length,
+        max_kmer_length=max_peptide_length,
+    )
+    non_cta_reference_proteome = ReferenceProteome.from_genome(
+        genome,
+        exclude_cta_genes=True,
+        min_kmer_length=min_peptide_length,
+        max_kmer_length=max_peptide_length,
+    )
 
     antigen_self_matches = self_reference_matches(
         predictions_df["peptide"], antigen, genome
@@ -208,7 +224,6 @@ def predict_epitopes(
     # frame keys cleanly by mutant peptide. ``predict_from_named_peptides``
     # scores the exact peptide given (no k-mer sliding).
     wt_predictions_grouped = {}
-    min_peptide_length = min(predictions_df["peptide_length"]) if len(predictions_df) > 0 else DEFAULT_MIN_KMER_LENGTH
     valid_wt_peptides = {
         mutant_pep: wt_pep
         for mutant_pep, wt_pep in wt_peptides.items()

@@ -292,18 +292,13 @@ def test_cta_prediction_uses_antigen_specific_self_reference():
     antigen = cta_antigen()
     raw_reference = MagicMock()
     raw_reference.contains.return_value = True
-    antigen_reference = MagicMock()
-    antigen_reference.contains.return_value = False
     non_cta_reference = MagicMock()
     non_cta_reference.contains.return_value = False
 
     with patch(
             "vaxrank.epitope_logic.ReferenceProteome") as reference_cls:
         reference_cls.return_value = raw_reference
-        reference_cls.from_genome.side_effect = [
-            antigen_reference,
-            non_cta_reference,
-        ]
+        reference_cls.from_genome.return_value = non_cta_reference
         epitopes = predict_epitopes(
             mhc_predictor=RandomBindingPredictor(["HLA-A*02:01"]),
             epitope_config=EpitopeConfig(min_epitope_score=0),
@@ -314,7 +309,12 @@ def test_cta_prediction_uses_antigen_specific_self_reference():
     assert all(epitope.occurs_in_reference for epitope in epitopes)
     assert all(not epitope.occurs_in_self_reference for epitope in epitopes)
     assert reference_cls.from_genome.call_args_list == [
-        call(None, exclude_cta_genes=True),
+        call(
+            None,
+            exclude_cta_genes=True,
+            min_kmer_length=9,
+            max_kmer_length=9,
+        ),
     ]
 
 

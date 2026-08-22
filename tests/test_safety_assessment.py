@@ -274,6 +274,36 @@ def test_high_level_api_checks_reference_exclusions_and_serializes():
     assert WindowSafetyAssessment.from_json(result.to_json()) == result
 
 
+def test_high_level_api_indexes_only_predicted_peptide_lengths():
+    from unittest.mock import patch
+
+    class StubPredictor(TopiaryPredictor):
+        def __init__(self):
+            pass
+
+        def predict_from_named_sequences(self, sequences):
+            sequence = next(iter(sequences.values()))
+            return pd.DataFrame([_row(sequence[:9], 0)])
+
+    genome = object()
+    with patch(
+        "vaxrank.safety_assessment.ReferenceProteome"
+    ) as reference_proteome_cls:
+        reference_proteome_cls.return_value.contains.return_value = False
+        result = assess_vaccine_antigen_window(
+            StubPredictor(),
+            _antigen(),
+            genome=genome,
+        )
+
+    assert result.ligands
+    reference_proteome_cls.assert_called_once_with(
+        genome,
+        min_kmer_length=9,
+        max_kmer_length=9,
+    )
+
+
 def test_construct_boundary_must_be_internal_to_window():
     antigen = _antigen()
     with pytest.raises(ValueError, match="outside"):
