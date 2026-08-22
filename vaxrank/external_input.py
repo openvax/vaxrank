@@ -43,12 +43,10 @@ import os
 
 import pandas as pd
 
+from .amino_acids import has_only_standard_amino_acids
 from .epitope_io import detect_lens_predictors
 from .mutant_protein_fragment import MutantProteinFragment
-from .vaccine_library import (
-    has_only_standard_amino_acids,
-    truncate_at_stop_codon,
-)
+from .vaccine_library import truncate_at_stop_codon
 from .vaccine_peptide import VaccinePeptide
 
 # pVACseq scoring column priority. Sniffed against the row dict; the first

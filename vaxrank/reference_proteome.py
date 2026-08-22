@@ -32,6 +32,7 @@ from pyensembl import Genome
 from tqdm import tqdm
 
 from .config.defaults import DEFAULT_MAX_KMER_LENGTH, DEFAULT_MIN_KMER_LENGTH
+from .identifiers import normalize_ensembl_gene_id
 from .vaccine_antigen import (
     SelfReferenceMatch,
     SelfReferenceSource,
@@ -52,8 +53,10 @@ def oncoref_cta_source_gene_ids() -> frozenset[str]:
     """
     from oncoref.cta import cta_unfiltered_gene_ids
 
-    return frozenset(str(gene_id).split(".")[0]
-                     for gene_id in cta_unfiltered_gene_ids())
+    return frozenset(
+        normalize_ensembl_gene_id(gene_id)
+        for gene_id in cta_unfiltered_gene_ids()
+    )
 
 
 def _is_human_genome(genome) -> bool:
@@ -164,7 +167,9 @@ def _protein_source_snapshot(genome):
     for transcript in genome.transcripts():
         if not transcript.is_protein_coding or not transcript.protein_sequence:
             continue
-        gene_id = str(getattr(transcript, "gene_id", "") or "").split(".")[0]
+        gene_id = normalize_ensembl_gene_id(
+            getattr(transcript, "gene_id", "") or ""
+        )
         if not gene_id:
             raise ValueError(
                 "Protein-coding self-reference transcript is missing a gene ID"
@@ -420,13 +425,14 @@ def genome_protein_dict(genome, exclude_gene_ids=None):
     dict[str, str]
     """
     excluded_gene_ids = {
-        str(gene_id).split(".")[0] for gene_id in (exclude_gene_ids or [])
+        normalize_ensembl_gene_id(gene_id)
+        for gene_id in (exclude_gene_ids or [])
     }
 
     proteins = {}
     num_excluded_transcripts = 0
     for t in genome.transcripts():
-        gene_id = str(t.gene_id).split(".")[0]
+        gene_id = normalize_ensembl_gene_id(t.gene_id)
         if gene_id in excluded_gene_ids:
             num_excluded_transcripts += 1
         elif t.is_protein_coding and t.protein_sequence:
@@ -618,7 +624,8 @@ class ReferenceProteome:
             )
 
         all_exclude_ids = {
-            str(gene_id).split(".")[0] for gene_id in (exclude_gene_ids or [])
+            normalize_ensembl_gene_id(gene_id)
+            for gene_id in (exclude_gene_ids or [])
         }
 
         if exclude_cta_genes:

@@ -25,6 +25,7 @@ from typing import Optional
 import pandas as pd
 from serializable import DataclassSerializable
 
+from .identifiers import normalize_ensembl_gene_id
 
 DEFAULT_HPA_LEVELS = ("High", "Medium")
 DEFAULT_HPA_RELIABILITIES = ("Approved", "Enhanced", "Supported")
@@ -34,12 +35,6 @@ PRAME_GENE_ID = "ENSG00000185686"
 
 class TissueRiskDerivationError(RuntimeError):
     """Raised when HPA safety evidence is missing or inconsistent."""
-
-
-def _gene_id(value) -> str:
-    if pd.isna(value):
-        return ""
-    return str(value).strip().split(".")[0]
 
 
 def _text(value) -> str:
@@ -149,7 +144,7 @@ class TissueRiskProtein(DataclassSerializable):
     evidence: tuple[TissueRiskEvidence, ...]
 
     def __post_init__(self):
-        normalized = _gene_id(self.gene_id)
+        normalized = normalize_ensembl_gene_id(self.gene_id)
         if not normalized or not self.evidence:
             raise ValueError("Tissue-risk protein requires a gene ID and evidence")
         object.__setattr__(self, "gene_id", normalized)
@@ -322,8 +317,10 @@ def derive_tissue_risk_proteins(
             f"HPA normal-tissue data is missing columns: {sorted(missing_columns)}"
         )
 
-    cta_gene_ids = frozenset(_gene_id(gene_id)
-                             for gene_id in cta_unfiltered_gene_ids())
+    cta_gene_ids = frozenset(
+        normalize_ensembl_gene_id(gene_id)
+        for gene_id in cta_unfiltered_gene_ids()
+    )
     tissue_to_groups: dict[str, list[str]] = {}
     for group in policy.tissue_groups:
         for tissue in group.tissues:
@@ -350,7 +347,10 @@ def derive_tissue_risk_proteins(
         if not groups:
             continue
         counts["selected_tissue_rows"] += 1
-        gene_id = _gene_id(row["Gene"])
+        gene_id = (
+            "" if pd.isna(row["Gene"])
+            else normalize_ensembl_gene_id(row["Gene"])
+        )
         level = _text(row["Level"])
         reliability = _text(row["Reliability"])
         if not gene_id:

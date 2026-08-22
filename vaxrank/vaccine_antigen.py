@@ -18,6 +18,9 @@ from typing import Any, Optional
 
 from serializable import DataclassSerializable
 
+from .amino_acids import validate_amino_acid_sequence
+from .identifiers import normalize_ensembl_gene_id
+
 
 ANTIGEN_KIND_MUTATION = "mutation"
 ANTIGEN_KIND_CTA = "CTA"
@@ -40,23 +43,6 @@ ATTESTATION_STATUSES = frozenset({
     ATTESTATION_HELD_OUT,
     ATTESTATION_OVERRIDDEN,
 })
-STANDARD_AMINO_ACIDS = frozenset("ACDEFGHIKLMNPQRSTVWY")
-
-
-def _normalized_gene_id(gene_id: str) -> str:
-    return str(gene_id).split(".")[0]
-
-
-def _validate_amino_acids(sequence: str, label: str) -> None:
-    if not sequence:
-        raise ValueError(f"{label} amino-acid sequence is required")
-    invalid = sorted(set(sequence) - STANDARD_AMINO_ACIDS)
-    if invalid:
-        raise ValueError(
-            f"{label} contains non-canonical amino acids: {', '.join(invalid)}"
-        )
-
-
 @dataclass(frozen=True)
 class AminoAcidInterval(DataclassSerializable):
     """Zero-based, half-open targetable interval.
@@ -197,7 +183,9 @@ class SelfReferenceSource(DataclassSerializable):
     def __post_init__(self):
         if not self.gene_id:
             raise ValueError("Self-reference source requires a gene ID")
-        object.__setattr__(self, "gene_id", _normalized_gene_id(self.gene_id))
+        object.__setattr__(
+            self, "gene_id", normalize_ensembl_gene_id(self.gene_id)
+        )
 
 
 @dataclass(frozen=True)
@@ -220,9 +208,10 @@ class SelfReferenceMatch(DataclassSerializable):
     def __post_init__(self):
         if self.antigen_kind not in ANTIGEN_KINDS:
             raise ValueError(f"Unknown antigen kind {self.antigen_kind!r}")
-        _validate_amino_acids(self.peptide, "Self-reference peptide")
+        validate_amino_acid_sequence(self.peptide, "Self-reference peptide")
         excluded_gene_ids = tuple(sorted({
-            _normalized_gene_id(gene_id) for gene_id in self.excluded_gene_ids
+            normalize_ensembl_gene_id(gene_id)
+            for gene_id in self.excluded_gene_ids
         }))
         sources = tuple(self.sources)
         object.__setattr__(self, "excluded_gene_ids", excluded_gene_ids)
@@ -260,7 +249,7 @@ class VaccineAntigen(DataclassSerializable):
                 f"Unknown antigen kind {self.kind!r}; expected one of "
                 f"{sorted(ANTIGEN_KINDS)}"
             )
-        _validate_amino_acids(self.amino_acids, "Vaccine antigen")
+        validate_amino_acid_sequence(self.amino_acids, "Vaccine antigen")
         if (
             self.tumor_specificity.admits_construct
             and not self.targetable_mask.intervals
@@ -268,14 +257,16 @@ class VaccineAntigen(DataclassSerializable):
             raise ValueError("An admitted antigen requires targetable content")
         self.targetable_mask.validate_for_sequence(self.amino_acids)
         excluded_gene_ids = tuple(sorted({
-            _normalized_gene_id(gene_id)
+            normalize_ensembl_gene_id(gene_id)
             for gene_id in self.self_reference_excluded_gene_ids
         }))
         object.__setattr__(
             self, "self_reference_excluded_gene_ids", excluded_gene_ids
         )
         if self.gene_id:
-            object.__setattr__(self, "gene_id", _normalized_gene_id(self.gene_id))
+            object.__setattr__(
+                self, "gene_id", normalize_ensembl_gene_id(self.gene_id)
+            )
         object.__setattr__(self, "transcript_ids", tuple(self.transcript_ids))
         object.__setattr__(self, "protein_ids", tuple(self.protein_ids))
 
@@ -312,7 +303,7 @@ class VaccineAntigen(DataclassSerializable):
             getattr(fragment, "supporting_reference_transcripts", ()) or ()
         )
         gene_ids = tuple(sorted({
-            _normalized_gene_id(getattr(transcript, "gene_id", ""))
+            normalize_ensembl_gene_id(getattr(transcript, "gene_id", ""))
             for transcript in transcripts
             if getattr(transcript, "gene_id", "")
         }))
