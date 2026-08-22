@@ -128,6 +128,9 @@ if [[ "${DRY_RUN}" -eq 1 ]]; then
 fi
 
 "$PYTHON" -m twine check dist/*
-"$PYTHON" -m twine upload dist/*
+"$PYTHON" release_upload.py \
+  --project vaxrank \
+  --version "${VERSION}" \
+  dist/*
 git tag "${TAG}"
 git push --tags
