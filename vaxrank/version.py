@@ -1,4 +1,4 @@
-__version__ = "3.1.23"
+__version__ = "3.1.24"
 
 
 def print_version():

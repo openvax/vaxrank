@@ -61,6 +61,34 @@ def _row(peptide, offset, *, predictor="mhcflurry", kind="pMHC_affinity",
     }
 
 
+def test_safety_prediction_from_prediction_row_is_public_and_normalizes_values():
+    row = _row(
+        "ACDEFGHIK",
+        0,
+        predictor="mhcflurry-presentation",
+        kind="pMHC_presentation",
+        allele="H-2-Kb",
+        score="0.42",
+        value=float("nan"),
+        percentile_rank="1.7",
+    )
+
+    prediction = SafetyPrediction.from_prediction_row(row)
+
+    assert prediction.kind == "pMHC_presentation"
+    assert prediction.allele == "H2-K*b"
+    assert prediction.score == 0.42
+    assert prediction.value is None
+    assert prediction.percentile_rank == 1.7
+
+
+def test_safety_prediction_from_prediction_row_rejects_non_numeric_values():
+    row = _row("ACDEFGHIK", 0, score="strong")
+
+    with pytest.raises(ValueError, match="not numeric"):
+        SafetyPrediction.from_prediction_row(row)
+
+
 class _Reference:
     def __init__(self, peptides=(), excluded_gene_ids=()):
         self.peptides = set(peptides)

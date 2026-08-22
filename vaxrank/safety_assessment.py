@@ -27,6 +27,7 @@ from .near_self import (
     assess_near_self_queries,
 )
 from .reference_proteome import ReferenceProteome
+from .prediction_input import finite_prediction_value, prediction_integer
 from .risk_ligand import PatientHLARiskLigandIndex, RiskLigandIndexProvenance
 from .vaccine_antigen import SelfReferenceMatch, VaccineAntigen
 
@@ -36,34 +37,6 @@ SAFETY_REASON_NO_PREDICTIONS = "no_predictions_emitted"
 
 class SafetyAssessmentError(RuntimeError):
     """Raised when a safety inventory cannot be produced unambiguously."""
-
-
-def _finite_or_none(value):
-    if value is None:
-        return None
-    try:
-        value = float(value)
-    except (TypeError, ValueError) as error:
-        raise SafetyAssessmentError(
-            f"Prediction value {value!r} is not numeric"
-        ) from error
-    return value if math.isfinite(value) else None
-
-
-def _required_int(value, label: str) -> int:
-    if isinstance(value, bool):
-        raise SafetyAssessmentError(f"{label} must be an integer")
-    try:
-        result = int(value)
-    except (TypeError, ValueError) as error:
-        raise SafetyAssessmentError(f"{label} must be an integer") from error
-    try:
-        equivalent = float(value) == result
-    except (TypeError, ValueError):
-        equivalent = False
-    if not equivalent:
-        raise SafetyAssessmentError(f"{label} must be an integer")
-    return result
 
 
 @dataclass(frozen=True)
@@ -122,6 +95,22 @@ class SafetyPrediction(DataclassSerializable):
             and not 0.0 <= self.percentile_rank <= 100.0
         ):
             raise ValueError("Safety prediction percentile rank must be 0..100")
+
+    @classmethod
+    def from_prediction_row(cls, row: Any) -> "SafetyPrediction":
+        """Build complete safety evidence from one topiary prediction row."""
+        value = finite_prediction_value(row.get("affinity"))
+        if value is None:
+            value = finite_prediction_value(row.get("value"))
+        return cls(
+            kind=str(row.get("kind") or "pMHC_affinity"),
+            predictor_name=str(row.get("prediction_method_name") or ""),
+            predictor_version=str(row.get("predictor_version") or ""),
+            allele=str(row.get("allele") or ""),
+            score=finite_prediction_value(row.get("score")),
+            value=value,
+            percentile_rank=finite_prediction_value(row.get("percentile_rank")),
+        )
 
     @property
     def identity(self) -> tuple[str, str, str, str]:
@@ -631,21 +620,6 @@ def _json_native(value):
     return value
 
 
-def _safety_prediction_from_row(row: Any) -> SafetyPrediction:
-    value = _finite_or_none(row.get("affinity"))
-    if value is None:
-        value = _finite_or_none(row.get("value"))
-    return SafetyPrediction(
-        kind=str(row.get("kind") or "pMHC_affinity"),
-        predictor_name=str(row.get("prediction_method_name") or ""),
-        predictor_version=str(row.get("predictor_version") or ""),
-        allele=str(row.get("allele") or ""),
-        score=_finite_or_none(row.get("score")),
-        value=value,
-        percentile_rank=_finite_or_none(row.get("percentile_rank")),
-    )
-
-
 def safety_assessment_from_prediction_frame(
     predictions_df,
     *,
@@ -691,10 +665,13 @@ def safety_assessment_from_prediction_frame(
                     "Prediction source does not match the scanned window"
                 )
         peptide = str(row.get("peptide") or "")
-        offset = _required_int(row.get("peptide_offset"), "Peptide offset")
-        peptide_length = _required_int(
-            row.get("peptide_length"), "Peptide length"
-        )
+        try:
+            offset = prediction_integer(row.get("peptide_offset"), "Peptide offset")
+            peptide_length = prediction_integer(
+                row.get("peptide_length"), "Peptide length"
+            )
+        except ValueError as error:
+            raise SafetyAssessmentError(str(error)) from error
         if peptide_length != len(peptide):
             raise SafetyAssessmentError(
                 "Prediction peptide length does not match its sequence"
@@ -709,7 +686,10 @@ def safety_assessment_from_prediction_frame(
                 "Prediction peptide does not match the scanned window"
             )
 
-        prediction = _safety_prediction_from_row(row)
+        try:
+            prediction = SafetyPrediction.from_prediction_row(row)
+        except ValueError as error:
+            raise SafetyAssessmentError(str(error)) from error
         key = (peptide, offset)
         group = groups.setdefault(key, {"predictions": [], "identities": set()})
         if prediction.identity in group["identities"]:

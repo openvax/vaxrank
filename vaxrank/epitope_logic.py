@@ -11,7 +11,6 @@
 # limitations under the License.
 
 
-import math
 import traceback
 import logging
 from typing import Optional
@@ -25,6 +24,7 @@ from .config.defaults import DEFAULT_MIN_KMER_LENGTH
 from .epitope_config import EpitopeConfig
 from .epitope_dsl import build_filter_node, build_score_node, drop_empty_sample_name
 from .mutant_protein_fragment import MutantProteinFragment
+from .prediction_input import finite_prediction_value
 from .candidate_epitope import (
     CandidateEpitope, SOURCE_CLASS_MUTATION, SOURCE_CLASS_SELF,
     candidate_epitopes_from_rows,
@@ -37,24 +37,6 @@ from .vaccine_antigen import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _finite_or_none(x):
-    """Coerce ``None`` / NaN / Inf floats to ``None``.
-
-    Topiary frames legitimately carry NaN in the ``value`` column for
-    non-affinity kinds (``pMHC_presentation`` carries its probability
-    in ``score``, not ``value``). Pass-through writes NaN into
-    ``Prediction.value`` which then poisons every downstream consumer
-    — sorting, scoring, and especially JSON serialization (simplejson
-    rejects NaN / Inf for strict compliance). Producers should emit
-    ``None`` to mean "no IC50 for this kind", not ``NaN``.
-    """
-    if x is None:
-        return None
-    if isinstance(x, float) and (math.isnan(x) or math.isinf(x)):
-        return None
-    return x
 
 
 def slice_epitopes(epitopes, start_offset, end_offset):
@@ -289,11 +271,11 @@ def predict_epitopes(
         # (e.g. pMHC_presentation), both columns are legitimately NaN
         # in the topiary frame — coerce to None so the Prediction
         # carries an honest "no IC50" instead of a NaN poison pill.
-        ic50 = _finite_or_none(row.get("affinity"))
+        ic50 = finite_prediction_value(row.get("affinity"))
         if ic50 is None:
-            ic50 = _finite_or_none(row.get("value"))
+            ic50 = finite_prediction_value(row.get("value"))
 
-        percentile_rank = _finite_or_none(row.get("percentile_rank"))
+        percentile_rank = finite_prediction_value(row.get("percentile_rank"))
 
         # Resolve WT comparator only when the peptide overlaps the
         # mutation — non-overlapping peptides aren't neoepitopes and
@@ -308,9 +290,9 @@ def predict_epitopes(
                         'No prediction for too-short WT epitope %s: possible stop-loss variant',
                         wt_peptide)
             else:
-                wt_ic50 = _finite_or_none(wt_row.get("affinity"))
+                wt_ic50 = finite_prediction_value(wt_row.get("affinity"))
                 if wt_ic50 is None:
-                    wt_ic50 = _finite_or_none(wt_row.get("value"))
+                    wt_ic50 = finite_prediction_value(wt_row.get("value"))
                 tool = row.get("prediction_method_name", "")
                 wt_pred = Prediction(
                     kind=row.get("kind") or "pMHC_affinity",
