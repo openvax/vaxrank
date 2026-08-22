@@ -12,6 +12,7 @@
 
 
 from os.path import getsize
+import random
 from unittest.mock import patch
 
 from tempfile import NamedTemporaryFile
@@ -24,6 +25,18 @@ from vaxrank.cli import main as run_shell_script
 
 from .testing_helpers import data_path
 from .conftest import requires_netmhcpan
+
+
+@pytest.fixture(autouse=True)
+def deterministic_random_predictions():
+    """Make shell tests using the mock predictor deterministic."""
+    initial_state = random.getstate()
+    random.seed(0)
+    try:
+        yield
+    finally:
+        random.setstate(initial_state)
+
 
 cli_args_for_b16_seqdata = [
     "--vcf", data_path("b16.f10/b16.vcf"),
