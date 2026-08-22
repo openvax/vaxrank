@@ -12,8 +12,10 @@ from vaxrank.cta_admission import (
     CTAAdmissionError,
     CTAAdmissionPolicy,
     CTAOverrideEvidence,
+    CTAReferenceResolution,
     PatientTumorExpressionEvidence,
     assess_cta_antigen,
+    resolve_cta_reference_evidence,
 )
 from vaxrank.vaccine_antigen import (
     ATTESTATION_ADMITTED,
@@ -126,6 +128,30 @@ def test_canonical_cta_at_expression_threshold_is_admitted(monkeypatch):
     payload = result.to_report_dict()
     assert json.loads(json.dumps(payload))["antigen"]["gene_name"] == "PRAME"
     assert CTAAdmissionAssessment.from_json(result.to_json()) == result
+
+
+def test_public_cta_reference_resolution_keeps_two_cta_sets_distinct(monkeypatch):
+    _patch_oncoref(monkeypatch)
+
+    resolution = resolve_cta_reference_evidence(f"{PRAME}.7")
+
+    assert resolution.evidence.gene_id == PRAME
+    assert resolution.evidence.canonical_default
+    assert resolution.self_reference_excluded_gene_ids == tuple(sorted({
+        PRAME, HELD_OUT, OTHER_CTA
+    }))
+    assert CTAReferenceResolution.from_json(resolution.to_json()) == resolution
+
+
+def test_cta_reference_resolution_rejects_mismatched_exclusions(monkeypatch):
+    _patch_oncoref(monkeypatch)
+    resolution = resolve_cta_reference_evidence(PRAME)
+
+    with pytest.raises(ValueError, match="disagree"):
+        CTAReferenceResolution(
+            evidence=resolution.evidence,
+            self_reference_excluded_gene_ids=(PRAME,),
+        )
 
 
 def test_expression_below_threshold_is_held_out_even_with_override(monkeypatch):

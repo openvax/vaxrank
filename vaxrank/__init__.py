@@ -112,9 +112,11 @@ from .cta_admission import (
     CTAAdmissionPolicy,
     CTAOverrideEvidence,
     CTAReferenceEvidence,
+    CTAReferenceResolution,
     PatientTumorExpressionEvidence,
     assess_cta_antigen,
     build_cta_vaccine_antigen,
+    resolve_cta_reference_evidence,
 )
 from .reference_proteome import (
     clear_reference_proteome_caches,
@@ -136,6 +138,7 @@ __all__ = [
     "CTAAdmissionPolicy",
     "CTAOverrideEvidence",
     "CTAReferenceEvidence",
+    "CTAReferenceResolution",
     "ConstructBoundary",
     "DEFAULT_NEAR_SELF_COMPARATOR",
     "DEFAULT_SAFETY_ENFORCEMENT_POLICY",
@@ -215,6 +218,7 @@ __all__ = [
     "prediction_integer",
     "run_vaxrank",
     "resolve_tissue_risk_policy",
+    "resolve_cta_reference_evidence",
     "resolve_tissue_risk_protein_sequences",
     "risk_ligand_index_from_prediction_frame",
     "safety_assessment_from_prediction_frame",
