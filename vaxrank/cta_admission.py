@@ -48,31 +48,6 @@ def _finite_nonnegative(value, label: str) -> float:
     return result
 
 
-def _clean(value) -> str:
-    if value is None or pd.isna(value):
-        return ""
-    return str(value)
-
-
-def _required_bool(value, label: str) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value in (0, 1):
-        return bool(value)
-    text = _clean(value).strip().casefold()
-    if text == "true":
-        return True
-    if text == "false":
-        return False
-    raise CTAAdmissionError(f"oncoref CTA {label} is not boolean")
-
-
-def _fingerprint(value) -> str:
-    return hashlib.sha256(json.dumps(
-        value, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")).hexdigest()
-
-
 @dataclass(frozen=True)
 class CTAAdmissionPolicy(DataclassSerializable):
     """Run-specific quantitative tumor-expression admission rule."""
@@ -173,6 +148,36 @@ class CTAReferenceEvidence(DataclassSerializable):
 
 
 @dataclass(frozen=True)
+class CTAReferenceResolution(DataclassSerializable):
+    """Pinned oncoref evidence and its CTA self-reference exclusions."""
+
+    evidence: CTAReferenceEvidence
+    self_reference_excluded_gene_ids: tuple[str, ...]
+
+    def __post_init__(self):
+        excluded_gene_ids = tuple(sorted({
+            normalize_ensembl_gene_id(gene_id)
+            for gene_id in self.self_reference_excluded_gene_ids
+        }))
+        if not excluded_gene_ids or self.evidence.gene_id not in excluded_gene_ids:
+            raise ValueError(
+                "CTA reference resolution must include its source gene"
+            )
+        excluded_digest = hashlib.sha256(json.dumps(
+            list(excluded_gene_ids),
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        if excluded_digest != self.evidence.unfiltered_gene_ids_sha256:
+            raise ValueError(
+                "CTA reference exclusions disagree with oncoref provenance"
+            )
+        object.__setattr__(
+            self, "self_reference_excluded_gene_ids", excluded_gene_ids
+        )
+
+
+@dataclass(frozen=True)
 class CTAAdmissionAssessment(DataclassSerializable):
     antigen: VaccineAntigen
     policy: CTAAdmissionPolicy
@@ -190,11 +195,19 @@ class CTAAdmissionAssessment(DataclassSerializable):
         return asdict(self)
 
 
-def _resolve_reference_evidence(gene_id: str):
+def resolve_cta_reference_evidence(gene_id: str) -> CTAReferenceResolution:
+    """Resolve one CTA against canonical and unfiltered oncoref facts.
+
+    ``cta_gene_ids()`` determines default target admission, while the broader
+    ``cta_unfiltered_gene_ids()`` universe determines which CTA source genes
+    are omitted from the negative self reference. Both sets and the selected
+    evidence row are fingerprinted in the returned immutable result.
+    """
     import oncoref
     from oncoref.cta import cta_evidence, cta_gene_ids, cta_unfiltered_gene_ids
     from oncoref.version import DATA_VERSION, SOURCE_MATRIX_VERSION
 
+    gene_id = normalize_ensembl_gene_id(gene_id)
     canonical_ids = frozenset(
         normalize_ensembl_gene_id(value) for value in cta_gene_ids()
     )
@@ -237,34 +250,64 @@ def _resolve_reference_evidence(gene_id: str):
         )
     row = rows.iloc[0]
     row_payload = {
-        column: _clean(row[column]) for column in sorted(required)
+        column: "" if pd.isna(row[column]) else str(row[column])
+        for column in sorted(required)
+    }
+    boolean_values = {}
+    for column in ("passes_filters", "never_expressed"):
+        value = row[column]
+        if isinstance(value, bool):
+            boolean_values[column] = value
+        elif value in (0, 1):
+            boolean_values[column] = bool(value)
+        elif row_payload[column].strip().casefold() in {"true", "false"}:
+            boolean_values[column] = (
+                row_payload[column].strip().casefold() == "true"
+            )
+        else:
+            raise CTAAdmissionError(
+                f"oncoref CTA {column} is not boolean"
+            )
+    fingerprint_payloads = {
+        "canonical": sorted(canonical_ids),
+        "unfiltered": sorted(unfiltered_ids),
+        "source_row": row_payload,
+    }
+    fingerprints = {
+        name: hashlib.sha256(json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        for name, payload in fingerprint_payloads.items()
     }
     evidence = CTAReferenceEvidence(
         gene_id=gene_id,
-        gene_name=_clean(row["Symbol"]),
+        gene_name=row_payload["Symbol"],
         canonical_default=gene_id in canonical_ids,
         unfiltered_candidate=True,
-        passes_filters=_required_bool(row["passes_filters"], "passes_filters"),
-        never_expressed=_required_bool(
-            row["never_expressed"], "never_expressed"
-        ),
-        specificity_status=_clean(row["specificity_status"]),
-        specificity_action=_clean(row["specificity_action"]),
-        specificity_source_anchor=_clean(row["specificity_source_anchor"]),
-        specificity_rationale=_clean(row["specificity_rationale"]),
-        restriction=_clean(row["restriction"]),
-        restriction_confidence=_clean(row["restriction_confidence"]),
-        safety_flags=_clean(row["safety_flags"]),
-        source_databases=_clean(row["source_databases"]),
-        canonical_transcript_id=_clean(row["Canonical_Transcript_ID"]),
+        passes_filters=boolean_values["passes_filters"],
+        never_expressed=boolean_values["never_expressed"],
+        specificity_status=row_payload["specificity_status"],
+        specificity_action=row_payload["specificity_action"],
+        specificity_source_anchor=row_payload["specificity_source_anchor"],
+        specificity_rationale=row_payload["specificity_rationale"],
+        restriction=row_payload["restriction"],
+        restriction_confidence=row_payload["restriction_confidence"],
+        safety_flags=row_payload["safety_flags"],
+        source_databases=row_payload["source_databases"],
+        canonical_transcript_id=row_payload["Canonical_Transcript_ID"],
         oncoref_version=oncoref.__version__,
         oncoref_data_version=DATA_VERSION,
         oncoref_source_matrix_version=SOURCE_MATRIX_VERSION,
-        canonical_gene_ids_sha256=_fingerprint(sorted(canonical_ids)),
-        unfiltered_gene_ids_sha256=_fingerprint(sorted(unfiltered_ids)),
-        source_row_sha256=_fingerprint(row_payload),
+        canonical_gene_ids_sha256=fingerprints["canonical"],
+        unfiltered_gene_ids_sha256=fingerprints["unfiltered"],
+        source_row_sha256=fingerprints["source_row"],
     )
-    return evidence, tuple(sorted(unfiltered_ids))
+    return CTAReferenceResolution(
+        evidence=evidence,
+        self_reference_excluded_gene_ids=tuple(unfiltered_ids),
+    )
 
 
 def assess_cta_antigen(
@@ -287,7 +330,8 @@ def assess_cta_antigen(
         raise ValueError(
             "CTA tumor-expression units do not match the admission policy"
         )
-    reference, self_excluded_gene_ids = _resolve_reference_evidence(gene_id)
+    reference_resolution = resolve_cta_reference_evidence(gene_id)
+    reference = reference_resolution.evidence
     expression_passes = tumor_expression.value >= policy.min_tumor_expression
 
     if reference.canonical_default and expression_passes:
@@ -369,7 +413,9 @@ def assess_cta_antigen(
             override_reason=override_reason,
             evidence_records=tuple(records),
         ),
-        self_reference_excluded_gene_ids=self_excluded_gene_ids,
+        self_reference_excluded_gene_ids=(
+            reference_resolution.self_reference_excluded_gene_ids
+        ),
         gene_name=reference.gene_name,
         gene_id=gene_id,
         transcript_ids=transcript_ids or (
