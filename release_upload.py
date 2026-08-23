@@ -42,11 +42,10 @@ def pypi_release_filenames(
     json_base_url: str = PYPI_JSON_BASE_URL,
     request_timeout_seconds: float = 10.0,
 ) -> frozenset[str]:
-    """Return filenames currently published for one PyPI release."""
-    url = "%s/%s/%s/json?cache_bust=%s" % (
+    """Return one release's filenames from PyPI's project metadata."""
+    url = "%s/%s/json?cache_bust=%s" % (
         json_base_url.rstrip("/"),
         quote(project, safe=""),
-        quote(version, safe=""),
         token_hex(8),
     )
     try:
@@ -56,7 +55,8 @@ def pypi_release_filenames(
         if error.code == 404:
             return frozenset()
         raise
-    return frozenset(item["filename"] for item in payload.get("urls", ()))
+    releases = payload.get("releases", {})
+    return frozenset(item["filename"] for item in releases.get(version, ()))
 
 
 def upload_distribution(
