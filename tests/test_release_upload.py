@@ -39,6 +39,7 @@ def test_pypi_release_filenames_reads_exact_release_metadata(monkeypatch):
         }).encode("utf-8"))
 
     monkeypatch.setattr(release_upload, "urlopen", open_url)
+    monkeypatch.setattr(release_upload, "token_hex", lambda length: "fresh-token")
 
     assert pypi_release_filenames(
         "vaxrank",
@@ -47,9 +48,32 @@ def test_pypi_release_filenames_reads_exact_release_metadata(monkeypatch):
         request_timeout_seconds=7,
     ) == {"vaxrank-3.1.28.tar.gz"}
     assert observed == {
-        "url": "https://packages.example/pypi/vaxrank/3.1.28/json",
+        "url": (
+            "https://packages.example/pypi/vaxrank/3.1.28/json"
+            "?cache_bust=fresh-token"
+        ),
         "timeout": 7,
     }
+
+
+def test_pypi_release_filenames_uses_a_fresh_url_for_each_poll(monkeypatch):
+    urls = []
+    tokens = iter(["first-token", "second-token"])
+
+    def open_url(url, *, timeout):
+        urls.append(url)
+        return io.BytesIO(b'{"urls": []}')
+
+    monkeypatch.setattr(release_upload, "urlopen", open_url)
+    monkeypatch.setattr(release_upload, "token_hex", lambda length: next(tokens))
+
+    pypi_release_filenames("vaxrank", "3.1.28")
+    pypi_release_filenames("vaxrank", "3.1.28")
+
+    assert urls == [
+        "https://pypi.org/pypi/vaxrank/3.1.28/json?cache_bust=first-token",
+        "https://pypi.org/pypi/vaxrank/3.1.28/json?cache_bust=second-token",
+    ]
 
 
 def test_pypi_release_filenames_treats_missing_release_as_empty(monkeypatch):

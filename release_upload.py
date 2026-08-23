@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from secrets import token_hex
 import subprocess
 import sys
 import time
@@ -42,10 +43,11 @@ def pypi_release_filenames(
     request_timeout_seconds: float = 10.0,
 ) -> frozenset[str]:
     """Return filenames currently published for one PyPI release."""
-    url = "%s/%s/%s/json" % (
+    url = "%s/%s/%s/json?cache_bust=%s" % (
         json_base_url.rstrip("/"),
         quote(project, safe=""),
         quote(version, safe=""),
+        token_hex(8),
     )
     try:
         with urlopen(url, timeout=request_timeout_seconds) as response:
