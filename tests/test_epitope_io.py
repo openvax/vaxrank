@@ -344,11 +344,10 @@ def test_pvacseq_source_keyed_filtered_scores_do_not_broadcast(tmp_path):
 # ── LENS import ──────────────────────────────────────────────────────────────
 
 def test_load_lens_emits_one_epitope_per_position_with_multi_predictor_leaves():
-    """load_lens groups all per-(allele, predictor) predictions for one
+    """load_lens groups all per-(allele, predictor, kind) predictions for one
     ``(peptide, source, offset)`` position into a single CandidateEpitope.
-    The fixture has 3 rows × 2 predictors = 6 leaf Predictions
-    spread across 3 Epitopes (the adapter dedups by position), and
-    3 report rows."""
+    The fixture has three report rows and each CandidateEpitope carries
+    separate MHCflurry affinity/presentation plus netMHCpan affinity leaves."""
     path = os.path.join(DATA_DIR, "lens_example.tsv")
     report_df, epitopes = load_lens(path)
     assert len(epitopes) == 3
@@ -364,6 +363,14 @@ def test_load_lens_emits_one_epitope_per_position_with_multi_predictor_leaves():
         ms = {p.predictor_name for p in e.predictions_flat()}
         assert ms == {"mhcflurry", "netmhcpan"}
     assert report_df["Predictors used"].iloc[0] == "mhcflurry,netmhcpan"
+    assert report_df["%ile rank"].iloc[0] == pytest.approx(0.45)
+    assert report_df["mhcflurry affinity percentile rank"].iloc[0] == \
+        pytest.approx(0.45)
+    assert report_df["mhcflurry presentation score"].iloc[0] == \
+        pytest.approx(0.85)
+    assert report_df[
+        "mhcflurry presentation percentile rank"].iloc[0] == \
+        pytest.approx(0.28)
 
     # Find the SVVGSSSSS CandidateEpitope and inspect its mhcflurry leaf.
     e = next(
@@ -373,8 +380,14 @@ def test_load_lens_emits_one_epitope_per_position_with_multi_predictor_leaves():
     assert mhcf.allele == "HLA-A*02:01"  # 'HLA-A02:01' normalized
     assert mhcf.peptide == "SVVGSSSSS"
     assert mhcf.value == pytest.approx(95.4)
-    assert mhcf.percentile_rank == pytest.approx(0.28)  # mhcflurry pres_perc
+    assert mhcf.percentile_rank == pytest.approx(0.45)  # mhcflurry aff_perc
     assert mhcf.predictor_version == "2.1.1"
+    presentation = e.predictions_for(
+        'pMHC_presentation', predictor='mhcflurry')[0]
+    assert presentation.allele == "HLA-A*02:01"
+    assert presentation.value is None
+    assert presentation.score == pytest.approx(0.85)
+    assert presentation.percentile_rank == pytest.approx(0.28)
     # wt_ic50 is now derived from mhcflurry_agretopicity (= MT/WT ratio).
     # Fixture row: mhcflurry IC50 = 95.4, agretopicity = 0.020 → WT ≈ 4770.
     # Only mhcflurry leaf gets a WT pair (matches that tool's IC50 scale).
@@ -461,6 +474,104 @@ def test_load_lens_detects_netmhcstabpan():
     assert methods == {"mhcflurry", "netmhcpan", "netmhcstabpan"}
     # Stability value column is labeled with its unit
     assert "netmhcstabpan value (hours)" in report_df.columns
+    # Older LENS output can carry pres_perc without pres_score. Preserve
+    # the percentile leaf with a neutral score instead of dropping it.
+    presentation = epitopes[0].predictions_for(
+        "pMHC_presentation", predictor="mhcflurry")[0]
+    assert presentation.score == 0.0
+    assert presentation.percentile_rank is not None
+
+
+def test_load_lens_preserves_mhcflurry_axes_for_coverage_and_dsl():
+    """Affinity and presentation remain distinct clinical evidence.
+
+    This pins the #265 failure mode: ``pres_perc`` must not overwrite
+    ``aff_perc``, and the presentation axis must independently drive
+    coverage and Topiary DSL scoring.
+    """
+    from vaxrank.coverage import compute_coverage
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import score_predictions
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    _, epitopes = load_lens(path)
+    epitope = next(e for e in epitopes if e.sequence == "SVVGSSSSS")
+
+    coverage = compute_coverage([epitope], ["HLA-A*02:01"])["HLA-A*02:01"]
+    # Coverage aggregates the best affinity evidence across models;
+    # netMHCpan's 0.30 beats MHCflurry's independently preserved 0.45.
+    assert coverage.best_affinity_pct == pytest.approx(0.30)
+    assert coverage.best_presentation_pct == pytest.approx(0.28)
+
+    scores = score_predictions(
+        [epitope],
+        EpitopeConfig(score_expr="presentation[mhcflurry].score"))
+    assert list(scores) == [pytest.approx(0.85)]
+
+
+def test_load_lens_preserves_allele_independent_processing_once():
+    """Repeated LENS allele rows yield one canonical processing leaf."""
+    path = os.path.join(
+        DATA_DIR, "real_lens_subsets", "lens_v1.9_real_subset.tsv")
+    report_df, epitopes = load_lens(path)
+    epitope = epitopes[0]
+    processing = epitope.predictions_for(
+        "antigen_processing", predictor="mhcflurry")
+
+    assert len(processing) == 1
+    assert processing[0].allele == ""
+    assert processing[0].score == pytest.approx(
+        report_df["mhcflurry processing score"].iloc[0])
+    assert all(epitope.per_allele_scores)
+
+
+def test_load_lens_rejects_conflicting_processing_scores(tmp_path):
+    """An allele-independent score may repeat, but may not disagree."""
+    path = tmp_path / "conflicting-processing.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t60\t0.4\n")
+
+    with pytest.raises(ValueError, match="Conflicting LENS processing"):
+        load_lens(path)
+
+
+def test_epitope_report_surfaces_integrated_mhcflurry_axes():
+    """Clinical rows distinguish integrated MHCflurry and pepsickle scores.
+
+    Mixed-predictor tables retain identical columns; the netMHCpan affinity
+    row gets explicit placeholders because those integrated axes came from
+    MHCflurry rather than netMHCpan.
+    """
+    from vaxrank.report import TemplateDataCreator
+
+    path = os.path.join(
+        DATA_DIR, "real_lens_subsets", "lens_v1.4_real_subset.tsv")
+    _, epitopes = load_lens(path)
+    epitope = epitopes[0]
+    mhcflurry_affinity = epitope.predictions_for(
+        "pMHC_affinity", predictor="mhcflurry")[0]
+    netmhcpan_affinity = epitope.predictions_for(
+        "pMHC_affinity", predictor="netmhcpan")[0]
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.processing_predictions_by_key = {}
+
+    mhcflurry_row = creator.epitope_data(
+        epitope, mhcflurry_affinity,
+        include_additional_prediction_axes=True)
+    netmhcpan_row = creator.epitope_data(
+        epitope, netmhcpan_affinity,
+        include_additional_prediction_axes=True)
+
+    assert mhcflurry_row["Presentation score"] != "—"
+    assert mhcflurry_row["Presentation %ile"] != "—"
+    assert mhcflurry_row["Integrated processing score"] != "—"
+    assert netmhcpan_row["Presentation score"] == "—"
+    assert netmhcpan_row["Presentation %ile"] == "—"
+    assert netmhcpan_row["Integrated processing score"] == "—"
+    assert tuple(mhcflurry_row) == tuple(netmhcpan_row)
 
 
 # ── DSL integration for external inputs ──────────────────────────────────────
@@ -1160,9 +1271,9 @@ def test_real_lens_v15_emits_both_affinity_predictors():
     leaves = _leaves(epitopes)
     methods = {p.predictor_name for p in leaves}
     assert methods == {"mhcflurry", "netmhcpan"}
-    # Each CandidateEpitope spawns up to N leaves (N = detected count); NA
-    # cells produce fewer.
-    assert len(leaves) <= 2 * len(report_df)
+    # MHCflurry contributes affinity + presentation + processing while
+    # netMHCpan contributes affinity. NA cells produce fewer leaves.
+    assert len(leaves) <= 4 * len(report_df)
     predictors_used = report_df["Predictors used"].iloc[0]
     assert predictors_used.startswith("mhcflurry")
 
@@ -1174,8 +1285,13 @@ def test_real_lens_v19_is_mhcflurry_only():
     leaves = _leaves(epitopes)
     methods = {p.predictor_name for p in leaves}
     assert methods == {"mhcflurry"}
-    # Real data has HLA alleles in the un-asterisked form; loader normalizes.
-    assert all(p.allele.startswith("HLA-") and "*" in p.allele for p in leaves)
+    # Real data has HLA alleles in the un-asterisked form; loader normalizes
+    # every allele-specific leaf. Processing is intentionally allele-less.
+    allele_specific = [p for p in leaves if p.allele]
+    assert all(
+        p.allele.startswith("HLA-") and "*" in p.allele
+        for p in allele_specific)
+    assert any(p.kind == "antigen_processing" and not p.allele for p in leaves)
 
 
 def test_real_lens_dsl_scoring_all_versions(tmp_path):
@@ -1263,7 +1379,8 @@ def test_lens_dsl_stability_and_affinity_combined(tmp_path):
     report_df, epitopes = load_lens(path)
     leaves = [p for e in epitopes for p in e.predictions_flat()]
     kinds_seen = {p.kind for p in leaves}
-    assert kinds_seen == {"pMHC_affinity", "pMHC_stability"}
+    assert kinds_seen == {
+        "pMHC_affinity", "pMHC_presentation", "pMHC_stability"}
 
     cfg = EpitopeConfig(
         score_expr=(

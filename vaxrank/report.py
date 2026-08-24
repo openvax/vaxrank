@@ -362,7 +362,8 @@ class TemplateDataCreator(object):
                 return p.value
         return None
 
-    def epitope_data(self, epitope, prediction, include_processing=False):
+    def epitope_data(self, epitope, prediction, include_processing=False,
+                     include_additional_prediction_axes=False):
         """Returns an OrderedDict with epitope data for one
         (CandidateEpitope, mutant Prediction) row.
 
@@ -392,6 +393,11 @@ class TemplateDataCreator(object):
         by ``(peptide, source, predictor_name)``. Pre-2.23 these
         lived as ``pepsickle_*`` attributes on the flat record
         itself; the join is the new contract (#272).
+
+        ``include_additional_prediction_axes`` appends presentation
+        score/percentile and integrated antigen-processing score leaves
+        from the same predictor/version. Missing axes render as ``'—'``
+        so mixed-predictor tables retain consistent columns.
         """
         wt_ic50 = self._wt_ic50_for_allele(
             epitope, prediction.allele, predictor=prediction.predictor_name)
@@ -423,6 +429,37 @@ class TemplateDataCreator(object):
             ('WT sequence', wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
         ])
+        if include_additional_prediction_axes:
+            presentation = None
+            antigen_processing = None
+            for related in epitope.predictions_flat():
+                if (
+                    related.predictor_name != prediction.predictor_name
+                    or related.predictor_version != prediction.predictor_version
+                ):
+                    continue
+                if (
+                    related.kind == 'pMHC_presentation'
+                    and related.allele == prediction.allele
+                ):
+                    presentation = related
+                elif (
+                    related.kind == 'antigen_processing'
+                    and not related.allele
+                ):
+                    antigen_processing = related
+            epitope_data['Presentation score'] = (
+                '%.3f' % presentation.score
+                if presentation is not None else '—')
+            epitope_data['Presentation %ile'] = (
+                '%.3f' % presentation.percentile_rank
+                if (
+                    presentation is not None
+                    and presentation.percentile_rank is not None
+                ) else '—')
+            epitope_data['Integrated processing score'] = (
+                '%.3f' % antigen_processing.score
+                if antigen_processing is not None else '—')
         if include_processing:
             # Column headers are predictor-agnostic ("Processing: …")
             # so a future per-position predictor (NetChop, PAProC)
@@ -553,6 +590,11 @@ class TemplateDataCreator(object):
                 any_processing = any(
                     _has_processing(e)
                     for e in vaccine_peptide.target_epitopes)
+                any_additional_prediction_axes = any(
+                    prediction.kind in {
+                        'pMHC_presentation', 'antigen_processing'}
+                    for epitope in vaccine_peptide.target_epitopes
+                    for prediction in epitope.predictions_flat())
 
                 epitopes = []
                 wt_epitopes = []
@@ -570,7 +612,10 @@ class TemplateDataCreator(object):
                 for e in vaccine_peptide.target_epitopes:
                     for p in _affinity_leaves(e):
                         epitopes.append(self.epitope_data(
-                            e, p, include_processing=any_processing))
+                            e, p,
+                            include_processing=any_processing,
+                            include_additional_prediction_axes=(
+                                any_additional_prediction_axes)))
 
                 for e in vaccine_peptide.self_epitopes:
                     for p in _affinity_leaves(e):

@@ -449,12 +449,19 @@ _LENS_COLUMN_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*)_(\d[\w.]*)\.(.+)$")
 # Registry describing how each LENS-emitted predictor maps into the Topiary
 # DSL. ``kind`` is the topiary prediction Kind (pMHC_affinity etc.).
 # ``value_cols`` and ``percentile_cols`` are LENS metric suffixes in
-# preference order — the first present metric wins.
+# preference order — the first present metric wins. MHCflurry's integrated
+# model contributes two additional kinds: allele-specific presentation and
+# allele-independent antigen processing. Their columns stay attached to the
+# same detected tool/version so the loader can emit all three canonical
+# mhctools prediction kinds.
 _LENS_PREDICTOR_REGISTRY = {
     "mhcflurry": {
         "kind": "pMHC_affinity",
         "value_cols": ("aff",),
-        "percentile_cols": ("pres_perc", "aff_perc"),
+        "percentile_cols": ("aff_perc",),
+        "presentation_score_cols": ("pres_score",),
+        "presentation_percentile_cols": ("pres_perc",),
+        "processing_score_cols": ("proc_score",),
     },
     "netmhcpan": {
         "kind": "pMHC_affinity",
@@ -475,7 +482,9 @@ class DetectedPredictor:
     ``value_col`` is the LENS column carrying the predicted value
     (IC50 for affinity, half-life hours for stability). The other
     ``*_col`` attributes are ``None`` when that signal isn't emitted
-    for the detected ``(tool, version)``.
+    for the detected ``(tool, version)``. MHCflurry presentation and
+    processing columns are modeled separately rather than overloading
+    its affinity percentile.
     """
     tool: str
     version: str
@@ -483,6 +492,9 @@ class DetectedPredictor:
     value_col: str
     percentile_col: str | None = None
     agretopicity_col: str | None = None
+    presentation_score_col: str | None = None
+    presentation_percentile_col: str | None = None
+    processing_score_col: str | None = None
 
 
 def detect_lens_predictors(columns):
@@ -515,6 +527,15 @@ def detect_lens_predictors(columns):
             continue
         percentile_col = next(
             (metrics[m] for m in spec["percentile_cols"] if m in metrics), None)
+        presentation_score_col = next(
+            (metrics[m] for m in spec.get("presentation_score_cols", ())
+             if m in metrics), None)
+        presentation_percentile_col = next(
+            (metrics[m] for m in spec.get(
+                "presentation_percentile_cols", ()) if m in metrics), None)
+        processing_score_col = next(
+            (metrics[m] for m in spec.get("processing_score_cols", ())
+             if m in metrics), None)
         # Agretopicity columns aren't versioned (just "<tool>_agretopicity"),
         # so we look them up directly on the full column set.
         agretopicity_col = f"{tool}_agretopicity"
@@ -527,6 +548,9 @@ def detect_lens_predictors(columns):
             value_col=value_col,
             percentile_col=percentile_col,
             agretopicity_col=agretopicity_col,
+            presentation_score_col=presentation_score_col,
+            presentation_percentile_col=presentation_percentile_col,
+            processing_score_col=processing_score_col,
         ))
     # Deterministic order: tool name alphabetical
     detected.sort(key=lambda d: (d.tool, d.version))
@@ -565,8 +589,9 @@ def load_lens(path):
     LENS column schemas vary across versions (v1.4, v1.5, v1.9+); we sniff
     which predictors a given file actually emits rather than requiring a
     fixed schema. Internally we build one flat per-(peptide, allele,
-    detected predictor) record per row, then group them into ``CandidateEpitope``
-    objects keyed by ``(peptide, source_sequence, offset)`` so Topiary
+    detected predictor, prediction kind) record per row, then group them
+    into ``CandidateEpitope`` objects keyed by
+    ``(peptide, source_sequence, offset)`` so Topiary
     DSL expressions can combine multi-predictor predictions via
     ``affinity['mhcflurry']`` / ``affinity['netmhcpan']`` or use an
     unqualified ``affinity`` fallback via the epitope config's
@@ -582,8 +607,10 @@ def load_lens(path):
         Report-ready DataFrame (one row per peptide × allele).
     list of CandidateEpitope
         One ``CandidateEpitope`` per ``(peptide, source_sequence, offset)``
-        group, each carrying its per-(allele, predictor)
-        ``mhctools.Prediction`` records inside ``epitope``.
+        group, each carrying its per-(allele, predictor, kind)
+        ``mhctools.Prediction`` records inside ``epitope``. MHCflurry
+        inputs may carry distinct ``pMHC_affinity``, ``pMHC_presentation``,
+        and allele-independent ``antigen_processing`` leaves.
     """
     # low_memory=False avoids mixed-dtype warnings — LENS reports have many
     # optional columns that are mostly NA for a given antigen type.
@@ -618,6 +645,7 @@ def load_lens(path):
 
     epitope_rows = []
     report_rows = []
+    processing_scores_by_position = {}
     # Rows whose peptide isn't a substring of a non-empty pep_context —
     # peptide and pep_context came from different isoforms / annotation
     # snapshots upstream. Dropped here (not carried into the report,
@@ -659,53 +687,120 @@ def load_lens(path):
             continue
         offset = pep_context.find(str(peptide)) if pep_context else 0
         row_added = False
+        shared_epitope_fields = {
+            'peptide': str(peptide),
+            'source': pep_context,
+            'offset': offset,
+            'source_class': SOURCE_CLASS_MUTATION,
+            # LENS pre-curates rows as neoepitopes and pre-filters
+            # against the patient reference proteome — both flags
+            # are structurally true for any surviving row.
+            'overlaps_mutation': True,
+            'occurs_in_reference': False,
+            'occurs_in_non_CTA_reference': False,
+        }
         for d in chosen:
             value = _safe_float(row.get(d.value_col))
-            if value is None:
-                continue
             percentile_rank = (
                 _safe_float(row.get(d.percentile_col))
                 if d.percentile_col else None)
             # Derive WT IC50 from agretopicity, only for the
             # mhcflurry-affinity predictor (the value matches that
             # tool's IC50 scale). Other predictors leave wt_ic50=None.
-            wt_ic50 = None
-            if (d.tool == "mhcflurry" and d.kind == "pMHC_affinity"
-                    and agretopicity is not None and agretopicity > 0):
-                wt_ic50 = value / agretopicity
-            mutant = Prediction(
-                kind=d.kind, predictor_name=d.tool,
-                predictor_version=d.version, allele=allele,
-                peptide=str(peptide), value=value, score=0.0,
-                percentile_rank=percentile_rank,
-            )
-            wt = None
-            if wt_ic50 is not None:
-                # LENS doesn't emit a WT peptide column — pass an
-                # empty string. ``candidate_epitopes_from_rows`` keeps
-                # the WT context (anonymous-WT signal) because wt_ic50
-                # is non-None even though the sequence is unknown.
-                wt = Prediction(
+            if value is not None:
+                wt_ic50 = None
+                if (d.tool == "mhcflurry" and d.kind == "pMHC_affinity"
+                        and agretopicity is not None and agretopicity > 0):
+                    wt_ic50 = value / agretopicity
+                mutant = Prediction(
                     kind=d.kind, predictor_name=d.tool,
                     predictor_version=d.version, allele=allele,
-                    peptide="", value=wt_ic50, score=0.0,
-                    percentile_rank=None,
+                    peptide=str(peptide), value=value, score=0.0,
+                    percentile_rank=percentile_rank,
                 )
-            epitope_rows.append({
-                'peptide': str(peptide),
-                'source': pep_context,
-                'offset': offset,
-                'mutant': mutant,
-                'wt': wt,
-                'source_class': SOURCE_CLASS_MUTATION,
-                # LENS pre-curates rows as neoepitopes and pre-filters
-                # against the patient reference proteome — both flags
-                # are structurally true for any surviving row.
-                'overlaps_mutation': True,
-                'occurs_in_reference': False,
-                'occurs_in_non_CTA_reference': False,
-            })
-            row_added = True
+                wt = None
+                if wt_ic50 is not None:
+                    # LENS doesn't emit a WT peptide column — pass an
+                    # empty string. ``candidate_epitopes_from_rows`` keeps
+                    # the WT context (anonymous-WT signal) because wt_ic50
+                    # is non-None even though the sequence is unknown.
+                    wt = Prediction(
+                        kind=d.kind, predictor_name=d.tool,
+                        predictor_version=d.version, allele=allele,
+                        peptide="", value=wt_ic50, score=0.0,
+                        percentile_rank=None,
+                    )
+                epitope_rows.append({
+                    **shared_epitope_fields,
+                    'mutant': mutant,
+                    'wt': wt,
+                })
+                row_added = True
+
+            presentation_score = (
+                _safe_float(row.get(d.presentation_score_col))
+                if d.presentation_score_col else None)
+            presentation_percentile = (
+                _safe_float(row.get(d.presentation_percentile_col))
+                if d.presentation_percentile_col else None)
+            if (presentation_score is not None
+                    or presentation_percentile is not None):
+                # mhctools represents MHCflurry presentation as its own
+                # allele-specific kind. ``Prediction.score`` is required;
+                # retain a percentile-only legacy row with a neutral 0.0
+                # score rather than discarding the percentile evidence.
+                epitope_rows.append({
+                    **shared_epitope_fields,
+                    'mutant': Prediction(
+                        kind="pMHC_presentation",
+                        predictor_name=d.tool,
+                        predictor_version=d.version,
+                        allele=allele,
+                        peptide=str(peptide),
+                        value=None,
+                        score=(
+                            presentation_score
+                            if presentation_score is not None else 0.0),
+                        percentile_rank=presentation_percentile,
+                    ),
+                    'wt': None,
+                })
+                row_added = True
+
+            processing_score = (
+                _safe_float(row.get(d.processing_score_col))
+                if d.processing_score_col else None)
+            if processing_score is not None:
+                # MHCflurry processing depends on peptide + flanks, not MHC.
+                # LENS repeats it on every allele row, while mhctools emits
+                # one allele-less prediction per peptide position. Preserve
+                # that canonical shape and reject inconsistent repeats.
+                processing_key = (
+                    str(peptide), pep_context, offset, d.tool, d.version)
+                if processing_key in processing_scores_by_position:
+                    if processing_scores_by_position[
+                            processing_key] != processing_score:
+                        raise ValueError(
+                            "Conflicting LENS processing scores for one "
+                            "peptide position and predictor")
+                else:
+                    processing_scores_by_position[
+                        processing_key] = processing_score
+                    epitope_rows.append({
+                        **shared_epitope_fields,
+                        'mutant': Prediction(
+                            kind="antigen_processing",
+                            predictor_name=d.tool,
+                            predictor_version=d.version,
+                            allele="",
+                            peptide=str(peptide),
+                            value=None,
+                            score=processing_score,
+                            percentile_rank=None,
+                        ),
+                        'wt': None,
+                    })
+                row_added = True
 
         if not row_added:
             continue
@@ -789,6 +884,18 @@ def _build_lens_report_row(row, allele, peptide, detected, display_pred,
         unit = unit_by_kind.get(d.kind, "")
         label = f"{d.tool} value ({unit})" if unit else f"{d.tool} value"
         out[label] = _safe_float(row.get(d.value_col))
+        if d.kind == "pMHC_affinity" and d.percentile_col:
+            out[f"{d.tool} affinity percentile rank"] = _safe_float(
+                row.get(d.percentile_col))
+        if d.presentation_score_col:
+            out[f"{d.tool} presentation score"] = _safe_float(
+                row.get(d.presentation_score_col))
+        if d.presentation_percentile_col:
+            out[f"{d.tool} presentation percentile rank"] = _safe_float(
+                row.get(d.presentation_percentile_col))
+        if d.processing_score_col:
+            out[f"{d.tool} processing score"] = _safe_float(
+                row.get(d.processing_score_col))
     return out
 
 

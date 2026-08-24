@@ -319,7 +319,12 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
         src_name, peptide, offset, allele = idx
-        by_position.setdefault((src_name, peptide, offset), {})[allele] = float(val)
+        # Allele-independent processing predictions use ``allele=''``.
+        # They belong in the nested prediction model, but never in a map
+        # whose public contract is explicitly per patient allele.
+        if allele:
+            by_position.setdefault(
+                (src_name, peptide, offset), {})[allele] = float(val)
     return [
         replace(
             e,
