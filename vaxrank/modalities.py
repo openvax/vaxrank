@@ -10,7 +10,7 @@ knows how to design (today: ``peptide`` and ``mrna``; future:
 
 Every place that needs the list of modalities — CLI ``--vaccine-type``
 choices, the YAML config schema, the dispatch table inside
-``_emit_outputs``, the per-modality config loader — reads from here.
+``emit_outputs``, the per-modality config loader — reads from here.
 Adding a new modality is one entry: register the construct-config
 class. The schema, CLI, and dispatch all pick up the new modality
 automatically.

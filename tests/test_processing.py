@@ -471,11 +471,11 @@ def test_manufacturability_default_on_for_peptide_only(monkeypatch):
             '--vaccine-type', *vaccine_type,
         ])
         # main() resolves args.manufacturability based on
-        # _resolve_vaccine_types(args). Run that resolution here.
-        from vaxrank.cli.entry_point import _resolve_vaccine_types
+        # resolve_vaccine_types(args). Run that resolution here.
+        from vaxrank.cli.entry_point import resolve_vaccine_types
         if args.manufacturability is None:
             args.manufacturability = (
-                'peptide' in _resolve_vaccine_types(args))
+                'peptide' in resolve_vaccine_types(args))
         assert args.manufacturability is expected, (
             "vaccine_type=%s: expected manufacturability=%s, got %s"
             % (vaccine_type, expected, args.manufacturability))
@@ -651,7 +651,7 @@ def test_dedup_by_content_when_duplicate_objects(monkeypatch):
     from types import SimpleNamespace
 
     from vaxrank.cli.entry_point import (
-        _annotate_predictions_with_processing,
+        annotate_predictions_with_processing,
     )
     import vaxrank.processing as proc_mod
 
@@ -680,7 +680,7 @@ def test_dedup_by_content_when_duplicate_objects(monkeypatch):
         return real_annotate(pred_list, predictor=stub)
 
     monkeypatch.setattr(proc_mod, 'annotate_processing', _capture)
-    _annotate_predictions_with_processing(ranked, lens_epitopes)
+    annotate_predictions_with_processing(ranked, lens_epitopes)
 
     assert 'list' in captured
     deduped = captured['list']

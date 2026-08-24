@@ -1597,21 +1597,21 @@ peptide:
 """)
     from vaxrank.cli.arg_parser import parse_vaxrank_args
     from vaxrank.cli.entry_point import (
-        _coalesce_from_config, _construct_config_for_modality,
+        coalesce_config_value, construct_config_for_modality,
     )
     args = parse_vaxrank_args([
         '--input-lens', '/dev/null',
         '--output-csv', '/dev/null',
         '--config', str(cfg),
     ])
-    yaml_kwargs = _construct_config_for_modality(args, 'peptide')
+    yaml_kwargs = construct_config_for_modality(args, 'peptide')
     # Cross-modality default picked up through the merge
     assert yaml_kwargs['max_antigen_length_aa'] == 19
     # Peptide-specific knob picked up through the merge
     assert yaml_kwargs['linker'] == 'AAY'
 
     # CLI default → YAML wins
-    linker = _coalesce_from_config(
+    linker = coalesce_config_value(
         args, 'peptide_linker', yaml_kwargs, 'linker')
     assert linker == 'AAY'
 
@@ -1622,7 +1622,7 @@ peptide:
         '--config', str(cfg),
         '--peptide-linker', 'EAAAK',
     ])
-    yaml_kwargs2 = _construct_config_for_modality(args2, 'peptide')
-    linker2 = _coalesce_from_config(
+    yaml_kwargs2 = construct_config_for_modality(args2, 'peptide')
+    linker2 = coalesce_config_value(
         args2, 'peptide_linker', yaml_kwargs2, 'linker')
     assert linker2 == 'EAAAK'
