@@ -1,16 +1,18 @@
-set -e
+#!/usr/bin/env bash
+
+set -euo pipefail
 set -x
 vaxrank \
     --download-reference-genome-data \
-    --vcf test/data/b16.f10/b16.vcf \
-    --bam test/data/b16.f10/b16.combined.bam \
+    --vcf tests/data/b16.f10/b16.vcf \
+    --bam tests/data/b16.f10/b16.combined.bam \
     --vaccine-peptide-length 15 \
-    --mhc-predictor netmhc \
+    --mhc-predictor random \
     --mhc-alleles H2-Kb,H2-Db \
     --mhc-epitope-lengths 8 \
     --padding-around-mutation 0 \
     --min-epitope-score 10e-100 \
-    --num-epitopes-per-peptide 5 \
+    --num-epitopes-per-vaccine-peptide 5 \
     --output-ascii-report vaccine-peptides-report.txt \
     --output-html-report vaccine-peptides-report.html \
     --output-pdf-report vaccine-peptides-report.pdf \
