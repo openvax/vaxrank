@@ -95,7 +95,7 @@ PEPSICKLE_PREDICTOR_NAME = 'pepsickle'
 # IndexError, so we range-check first and return ``(None, None)`` to mean
 # "no signal" upstream.
 
-def _component_probs(seq_probs, start, length):
+def processing_component_probabilities(seq_probs, start, length):
     """Return ``(c_term, max_internal)`` for a peptide at
     ``seq_probs[start:start+length]``, or ``(None, None)`` when the
     span doesn't fit. Both components come straight from the public
@@ -109,32 +109,11 @@ def _component_probs(seq_probs, start, length):
     return c_term, max_internal
 
 
-def _closest_occurrence(source, peptide, declared_offset):
-    """Offset of ``peptide`` in ``source`` closest to ``declared_offset``,
-    or ``None`` if not found.
-
-    Bias toward the declared offset so repeated peptides (homopolymer
-    tracts, short ligands appearing in multiple loops) don't snap to
-    position 0 when the upstream loader recorded a later occurrence.
-    """
-    if not peptide or not source:
-        return None
-    best = None
-    best_drift = None
-    pos = source.find(peptide)
-    while pos >= 0:
-        drift = abs(pos - declared_offset)
-        if best_drift is None or drift < best_drift:
-            best, best_drift = pos, drift
-        pos = source.find(peptide, pos + 1)
-    return best
-
-
 # ----------------------------------------------------------------------------
 # Pepsickle invocation (delegates to mhctools' built-in subprocess isolation)
 # ----------------------------------------------------------------------------
 
-def _load_default_predictor(human_only=False, threshold=0.5):
+def load_default_processing_predictor(human_only=False, threshold=0.5):
     """Construct an ``mhctools.Pepsickle`` with subprocess isolation
     on, or return ``None`` if mhctools / pepsickle isn't installed.
 
@@ -225,7 +204,7 @@ def annotate_processing(epitopes, predictor=None,
     # uses mhctools' built-in subprocess isolation; the test-seam
     # path uses whatever object the caller passed in.
     if predictor is None:
-        predictor = _load_default_predictor(
+        predictor = load_default_processing_predictor(
             human_only=human_only, threshold=threshold)
         if predictor is None:
             return 0, processing_predictions
@@ -283,13 +262,13 @@ def annotate_processing(epitopes, predictor=None,
             peptide = e.sequence or ''
             if not peptide:
                 continue
-            offset = _resolve_peptide_offset(source, peptide, e)
+            offset = resolve_peptide_offset(source, peptide, e)
             if offset is None:
                 n_skipped_peptide_not_in_context += 1
                 if len(skipped_examples) < 3:
                     skipped_examples.append((peptide, source))
                 continue
-            c_term, max_internal = _component_probs(
+            c_term, max_internal = processing_component_probabilities(
                 seq_probs, offset, len(peptide))
             if c_term is None:
                 continue
@@ -342,7 +321,7 @@ def annotate_processing(epitopes, predictor=None,
     return n_annotated, processing_predictions
 
 
-def _resolve_peptide_offset(source, peptide, mutant_ctx):
+def resolve_peptide_offset(source, peptide, mutant_context):
     """Locate the peptide's offset within its source.
 
     Trust the mutant ``Peptide.offset`` first; re-locate via
@@ -354,12 +333,19 @@ def _resolve_peptide_offset(source, peptide, mutant_ctx):
 
     Returns the offset (int) or None when the peptide isn't in the source.
     """
-    declared = mutant_ctx.offset or 0
+    declared = mutant_context.offset or 0
     length = len(peptide)
     if (declared + length <= len(source)
             and source[declared:declared + length] == peptide):
         return declared
-    found = _closest_occurrence(source, peptide, declared)
+    found = None
+    best_drift = None
+    position = source.find(peptide)
+    while position >= 0:
+        drift = abs(position - declared)
+        if best_drift is None or drift < best_drift:
+            found, best_drift = position, drift
+        position = source.find(peptide, position + 1)
     if found is None:
         return None
     drift = abs(found - declared)

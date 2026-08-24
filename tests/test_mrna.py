@@ -23,7 +23,9 @@ from varcode import Variant
 from vaxrank.mrna import (
     RNAConstructConfig,
     assemble_mrna_constructs,
+    build_protein_with_segments,
     codon_optimize,
+    resolve_named_mrna_element,
     summarize_mrna_ranking_decisions,
     write_mrna_outputs,
 )
@@ -187,7 +189,7 @@ def test_ascii_report_renders_mrna_ranking_section():
     """End-to-end: the ASCII report includes a ``mRNA vaccine
     antigen selection`` section when the
     ``mrna_ranking`` template-data field is populated."""
-    from vaxrank.report import _make_report
+    from vaxrank.report import render_report
     import io
 
     template_data = {
@@ -226,7 +228,7 @@ def test_ascii_report_renders_mrna_ranking_section():
         },
     }
     f = io.StringIO()
-    _make_report(template_data, f, 'templates/template.txt')
+    render_report(template_data, f, 'templates/template.txt')
     rendered = f.getvalue()
     # Post-2.25 section header (was "mRNA vaccine antigen selection").
     assert 'Vaccine construction — mrna' in rendered
@@ -243,7 +245,7 @@ def test_ascii_report_renders_mrna_ranking_section():
 def test_ascii_report_skips_construction_section_when_no_modalities():
     """When ``vaccine_constructions`` is empty (no active modality
     or no ranked antigens), no construction sections render."""
-    from vaxrank.report import _make_report
+    from vaxrank.report import render_report
     import io
     template_data = {
         'patient_info': {'Patient ID': 'TEST'},
@@ -257,34 +259,34 @@ def test_ascii_report_skips_construction_section_when_no_modalities():
         'mrna_ranking': None,
     }
     f = io.StringIO()
-    _make_report(template_data, f, 'templates/template.txt')
+    render_report(template_data, f, 'templates/template.txt')
     rendered = f.getvalue()
     assert 'Vaccine construction' not in rendered
 
 
-def test_resolve_named_accepts_dashes_and_case_variants():
+def test_resolve_named_mrna_element_accepts_dashes_and_case_variants():
     """Library keys are written ``HLA_B`` / ``tPA`` / ``IgK`` etc.,
     but users in the field write ``HLA-B`` / ``hla-b`` / ``HLAB``.
-    ``_resolve_named`` strips dashes and underscores and lowercases
+    ``resolve_named_mrna_element`` strips separators and lowercases
     so all of those resolve to the same entry."""
     from vaxrank.mrna_library import SIGNAL_PEPTIDES, MITDS, UTRS_5P
-    from vaxrank.mrna import _resolve_named
-
-    canonical = _resolve_named(SIGNAL_PEPTIDES, 'HLA_B', 'signal_peptide')
+    canonical = resolve_named_mrna_element(
+        SIGNAL_PEPTIDES, 'HLA_B', 'signal_peptide')
     for variant in ['HLA-B', 'hla_b', 'hla-b', 'HLAB', 'hlab']:
-        assert _resolve_named(
+        assert resolve_named_mrna_element(
             SIGNAL_PEPTIDES, variant, 'signal_peptide') == canonical, variant
     # MITD
-    a_canonical = _resolve_named(MITDS, 'HLA_A', 'mitd')
-    assert _resolve_named(MITDS, 'HLA-A', 'mitd') == a_canonical
-    assert _resolve_named(MITDS, 'hla-a', 'mitd') == a_canonical
+    a_canonical = resolve_named_mrna_element(MITDS, 'HLA_A', 'mitd')
+    assert resolve_named_mrna_element(MITDS, 'HLA-A', 'mitd') == a_canonical
+    assert resolve_named_mrna_element(MITDS, 'hla-a', 'mitd') == a_canonical
     # UTR
-    hbb = _resolve_named(UTRS_5P, 'HBB', '5p_utr')
-    assert _resolve_named(UTRS_5P, 'hbb', '5p_utr') == hbb
+    hbb = resolve_named_mrna_element(UTRS_5P, 'HBB', '5p_utr')
+    assert resolve_named_mrna_element(UTRS_5P, 'hbb', '5p_utr') == hbb
     # Unknown still raises
     import pytest
     with pytest.raises(ValueError, match="Unknown signal_peptide"):
-        _resolve_named(SIGNAL_PEPTIDES, 'NOT_A_REAL_KEY', 'signal_peptide')
+        resolve_named_mrna_element(
+            SIGNAL_PEPTIDES, 'NOT_A_REAL_KEY', 'signal_peptide')
 
 
 def test_codon_optimize_preserves_translation():
@@ -864,12 +866,11 @@ def test_csv_lean_mode_omits_full_rows(tmp_path):
 
 
 def test_dropped_dead_linker_name_param():
-    """_build_protein_with_segments no longer takes a linker_name arg.
+    """build_protein_with_segments no longer takes a linker_name arg.
     Pin the signature so a future regression that re-adds the dead
     parameter is caught immediately."""
     import inspect
-    from vaxrank.mrna import _build_protein_with_segments
-    sig = inspect.signature(_build_protein_with_segments)
+    sig = inspect.signature(build_protein_with_segments)
     assert 'linker_name' not in sig.parameters, (
         "linker_name was a dead parameter and should remain removed; "
         "got params %s" % list(sig.parameters))
@@ -881,12 +882,11 @@ def test_dropped_dead_linker_name_param():
 def test_start_codon_segment_has_named_kind():
     """The pre-2.14 code emitted name=None for the prepended start
     codon segment. Pin that we now use 'start_codon' as the name."""
-    from vaxrank.mrna import _build_protein_with_segments
     from vaxrank.vaccine_library import get_linker
     linker = get_linker("G4S")
     # No signal peptide and antigen doesn't start with M → assembler
     # prepends a start codon segment.
-    _, _, segments = _build_protein_with_segments(
+    _, _, segments = build_protein_with_segments(
         antigen_aas=["KLQGH"], antigen_names=["A"],
         signal_peptide_aa="", signal_peptide_name=None,
         linker=linker, mitd_aa="", mitd_name=None)

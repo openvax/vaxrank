@@ -291,7 +291,7 @@ def test_ascii_report_renders_coverage_block_in_construction_section():
     section header, per-allele coverage lines, per-antigen
     ``covers A (tier)`` annotations."""
     import io
-    from vaxrank.report import _make_report
+    from vaxrank.report import render_report
 
     template_data = {
         'patient_info': {'Patient ID': 'TEST'},
@@ -332,7 +332,7 @@ def test_ascii_report_renders_coverage_block_in_construction_section():
         },
     }
     f = io.StringIO()
-    _make_report(template_data, f, 'templates/template.txt')
+    render_report(template_data, f, 'templates/template.txt')
     rendered = f.getvalue()
     # Section header.
     assert 'Vaccine construction — mrna' in rendered

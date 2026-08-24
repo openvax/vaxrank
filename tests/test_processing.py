@@ -31,8 +31,10 @@ from mhctools.pred import Prediction
 
 from vaxrank.candidate_epitope import CandidateEpitope, Peptide
 from vaxrank.processing import (
-    _component_probs,
     annotate_processing,
+    load_default_processing_predictor,
+    processing_component_probabilities,
+    resolve_peptide_offset,
 )
 
 
@@ -85,13 +87,30 @@ class StubPepsickle:
 # tested there. The only vaxrank-side concern is the out-of-range guard, so
 # that's all we exercise locally.
 
-def test_component_probs_out_of_range_returns_none_tuple():
+def test_processing_component_probabilities_rejects_out_of_range_span():
     """Peptide span extending past the source returns ``(None, None)``
     so the caller can drop the row instead of raising IndexError from
     the mhctools slice helpers."""
-    c_term, max_internal = _component_probs([0.1, 0.2, 0.3], start=2, length=5)
+    c_term, max_internal = processing_component_probabilities(
+        [0.1, 0.2, 0.3], start=2, length=5)
     assert c_term is None
     assert max_internal is None
+
+
+def test_processing_component_probabilities_extracts_requested_span():
+    c_term, max_internal = processing_component_probabilities(
+        [0.1, 0.2, 0.3, 0.4], start=1, length=3)
+
+    assert c_term == 0.4
+    assert max_internal == 0.3
+
+
+def test_resolve_peptide_offset_prefers_nearest_repeated_occurrence():
+    source = "AAAAAXXXAAAAA"
+    context = _ep("AAAAA", source, offset=7)
+
+    assert resolve_peptide_offset(source, "AAAAA", context) == 8
+    assert resolve_peptide_offset(source, "CCCCC", context) is None
 
 
 # ---- Annotation (integration with flat records) ---------------------
@@ -258,15 +277,13 @@ def test_annotate_processing_empty_input_returns_zero():
 # Vaxrank no longer ships its own subprocess launcher — those tests
 # moved upstream alongside the implementation.
 
-def test_load_default_predictor_returns_none_when_mhctools_missing(
+def test_load_default_processing_predictor_handles_missing_mhctools(
         monkeypatch):
-    """When mhctools isn't installed, ``_load_default_predictor`` logs
+    """When mhctools isn't installed, the default factory logs
     a clear warning and returns None so the caller can degrade
     gracefully (no crash, no annotations)."""
     import builtins
     import sys
-    from vaxrank.processing import _load_default_predictor
-
     real_import = builtins.__import__
 
     def _fail_on_mhctools(name, *args, **kwargs):
@@ -276,7 +293,7 @@ def test_load_default_predictor_returns_none_when_mhctools_missing(
 
     monkeypatch.setattr(builtins, '__import__', _fail_on_mhctools)
     monkeypatch.delitem(sys.modules, 'mhctools', raising=False)
-    assert _load_default_predictor() is None
+    assert load_default_processing_predictor() is None
 
 
 # ---- Report integration --------------------------------------------------
@@ -289,7 +306,7 @@ def test_ascii_report_surfaces_each_predictor_in_per_epitope_table():
     VCF/BAM path collapsed via dict-overwrite so this test would
     have only seen one row."""
     import io
-    from vaxrank.report import _make_report
+    from vaxrank.report import render_report
     template_data = {
         'patient_info': {'Patient ID': 'TEST'},
         'package_versions': {},
@@ -326,7 +343,7 @@ def test_ascii_report_surfaces_each_predictor_in_per_epitope_table():
         }],
     }
     f = io.StringIO()
-    _make_report(template_data, f, 'templates/template.txt')
+    render_report(template_data, f, 'templates/template.txt')
     rendered = f.getvalue()
     # Both predictors named in the per-epitope ASCII table; same
     # peptide+allele appears twice (one row per predictor).

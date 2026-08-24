@@ -225,14 +225,7 @@ class RNAConstruct:
     antigens: list = field(default_factory=list)
 
 
-def _normalize_lookup_key(name):
-    """Strip case + dash/underscore differences for table lookups.
-    Lets users write ``HLA-B`` / ``hla_b`` / ``HLAB`` / ``HLA_B`` for
-    a key the library spells ``HLA_B``."""
-    return str(name).replace('-', '').replace('_', '').lower()
-
-
-def _resolve_named(table, name, kind):
+def resolve_named_mrna_element(table, name, kind):
     """Resolve ``name`` against ``table`` with case + separator
     tolerance. Common biological identifiers (HLA-B, tPA, IgK) are
     written with mixed case and dashes in the literature; the table
@@ -240,9 +233,10 @@ def _resolve_named(table, name, kind):
     accept any sensible spelling."""
     if name in table:
         return table[name]
-    needle = _normalize_lookup_key(name)
+    needle = str(name).replace('-', '').replace('_', '').lower()
     for k, v in table.items():
-        if _normalize_lookup_key(k) == needle:
+        normalized_key = str(k).replace('-', '').replace('_', '').lower()
+        if normalized_key == needle:
             return v
     raise ValueError(
         "Unknown %s '%s'. Available: %s" % (
@@ -452,10 +446,10 @@ def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
             yield name, window
 
 
-def _build_protein_with_segments(antigen_aas, antigen_names, signal_peptide_aa,
-                                 signal_peptide_name, linker, mitd_aa,
-                                 mitd_name, per_junction_linkers=None,
-                                 pre_mitd_linker=None):
+def build_protein_with_segments(antigen_aas, antigen_names, signal_peptide_aa,
+                                signal_peptide_name, linker, mitd_aa,
+                                mitd_name, per_junction_linkers=None,
+                                pre_mitd_linker=None):
     """Concatenate signal peptide + antigens + linker/MITD into one protein.
 
     Returns ``(protein_str, frozen_segments, aa_segments)`` where:
@@ -560,7 +554,7 @@ def build_poly_a(options):
     return "A" * first + options.poly_a_segment_linker + "A" * rest
 
 
-def _packing_linker_aa(options, linker):
+def packing_linker_amino_acids(options, linker):
     """Linker AA string the packer should bill against, sized to the
     longest possible per-junction substitution.
 
@@ -594,10 +588,10 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
     swap step at assembly time can never exceed the cap by picking a
     candidate longer than the shared linker.
     """
-    linker_aa = _packing_linker_aa(options, linker)
+    linker_aa = packing_linker_amino_acids(options, linker)
     # When there is no signal peptide, the assembler prepends an ATG to the
     # CDS body if the first antigen doesn't already start with M (see
-    # _build_protein_with_segments). Reserve 3 nt up-front to keep packing
+    # build_protein_with_segments). Reserve 3 nt up-front to keep packing
     # honest.
     start_codon_nt = 3 if not signal_peptide_aa else 0
     fixed_overhead_nt = (
@@ -721,8 +715,8 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                 if id(item) not in head_keys]
         ranked_vaccine_peptides = head + tail
     signal_peptide_aa = (
-        _resolve_named(SIGNAL_PEPTIDES, options.signal_peptide,
-                       'signal peptide')
+        resolve_named_mrna_element(
+            SIGNAL_PEPTIDES, options.signal_peptide, 'signal peptide')
         if options.signal_peptide else ""
     )
     # Natural secretory signal peptides start with the initial M (it's the
@@ -734,9 +728,13 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             "Signal peptide '%s' does not start with M; the resulting CDS "
             "would have no start codon." % options.signal_peptide)
     linker = get_linker(options.linker)
-    mitd_aa = _resolve_named(MITDS, options.mitd, 'MITD') if options.include_mitd else ""
-    utr_5p_dna = _resolve_named(UTRS_5P, options.utr_5p, "5' UTR")
-    utr_3p_dna = _resolve_named(UTRS_3P, options.utr_3p, "3' UTR")
+    mitd_aa = (
+        resolve_named_mrna_element(MITDS, options.mitd, 'MITD')
+        if options.include_mitd else "")
+    utr_5p_dna = resolve_named_mrna_element(
+        UTRS_5P, options.utr_5p, "5' UTR")
+    utr_3p_dna = resolve_named_mrna_element(
+        UTRS_3P, options.utr_3p, "3' UTR")
 
     antigens = list(_antigen_aa_sequences(
         ranked_vaccine_peptides,
@@ -837,7 +835,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                         'note': "default linker beat or tied all candidates",
                     }
 
-        protein, frozen_segments, aa_segments = _build_protein_with_segments(
+        protein, frozen_segments, aa_segments = build_protein_with_segments(
             antigen_aas, names, signal_peptide_aa, options.signal_peptide,
             linker, mitd_aa,
             options.mitd if options.include_mitd else None,
