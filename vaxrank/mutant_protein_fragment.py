@@ -28,33 +28,35 @@ from .varcode_effects import (
 logger = logging.getLogger(__name__)
 
 
-def _find_mutation_region(ref_protein, mut_protein):
+def find_mutation_region(reference_protein, mutant_protein):
+    """Return the differing region between reference and mutant proteins.
+
+    The returned offsets use zero-based, half-open coordinates in the mutant
+    protein. Insertions span their inserted residues; deletions have an empty
+    span at the deletion point.
     """
-    Find the mutated region by diffing reference and mutant protein sequences.
-    Returns (start, end) offsets in the mutant protein (0-based, half-open).
-    """
-    min_len = min(len(ref_protein), len(mut_protein))
+    min_len = min(len(reference_protein), len(mutant_protein))
 
     # Find first difference
     start = min_len
     for i in range(min_len):
-        if ref_protein[i] != mut_protein[i]:
+        if reference_protein[i] != mutant_protein[i]:
             start = i
             break
 
     # Find where sequences re-align from the right
-    ref_i = len(ref_protein)
-    mut_i = len(mut_protein)
+    ref_i = len(reference_protein)
+    mut_i = len(mutant_protein)
     while ref_i > start and mut_i > start:
-        if ref_protein[ref_i - 1] == mut_protein[mut_i - 1]:
+        if reference_protein[ref_i - 1] == mutant_protein[mut_i - 1]:
             ref_i -= 1
             mut_i -= 1
         else:
             break
 
     # Proteins differ only in length (e.g. stop-loss extension)
-    if start == min_len and len(ref_protein) != len(mut_protein):
-        return min_len, len(mut_protein)
+    if start == min_len and len(reference_protein) != len(mutant_protein):
+        return min_len, len(mutant_protein)
 
     return start, mut_i
 
@@ -272,7 +274,7 @@ class MutantProteinFragment(DataclassSerializable):
             return None
 
         # Locate the mutation in the protein
-        mut_start, mut_end = _find_mutation_region(ref_protein, mut_protein)
+        mut_start, mut_end = find_mutation_region(ref_protein, mut_protein)
         if mut_start >= len(mut_protein):
             return None
 
