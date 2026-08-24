@@ -563,6 +563,105 @@ def test_lens_processing_dsl_scores_every_patient_allele(tmp_path):
     }
 
 
+def test_lens_processing_only_rows_preserve_alleles_scores_and_report_rows(
+        tmp_path):
+    """Processing-only LENS evidence stays allele-scoped end to end."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import (
+        attach_per_allele_scores,
+        epitopes_to_topiary_df,
+    )
+    from vaxrank.report import TemplateDataCreator, epitope_report_row_inputs
+
+    path = tmp_path / "processing-only.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t\t0.8\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t\t0.8\n")
+
+    report_df, epitopes = load_lens(path)
+    assert len(epitopes) == 1
+    epitope = epitopes[0]
+    assert epitope.patient_alleles == (
+        "HLA-A*02:01", "HLA-B*07:02")
+    processing = epitope.predictions_for(
+        "antigen_processing", predictor="mhcflurry")
+    assert len(processing) == 1
+    assert processing[0].allele == ""
+
+    topiary_df = epitopes_to_topiary_df(epitopes)
+    assert set(topiary_df["allele"]) == {
+        "HLA-A*02:01", "HLA-B*07:02"}
+    config = EpitopeConfig(
+        score_expr="processing[mhcflurry].score")
+    scored = attach_per_allele_scores(epitopes, config)
+    assert scored[0].per_allele_scores == {
+        "HLA-A*02:01": pytest.approx(0.8),
+        "HLA-B*07:02": pytest.approx(0.8),
+    }
+
+    csv_path = tmp_path / "scored.csv"
+    write_neoepitope_report(
+        report_df,
+        epitopes,
+        csv_report_path=str(csv_path),
+        epitope_config=config,
+    )
+    import pandas as pd
+    assert list(pd.read_csv(csv_path)["vaxrank_score"]) == [0.8, 0.8]
+
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.processing_predictions_by_key = {}
+    row_inputs = epitope_report_row_inputs(scored[0])
+    rows = [
+        creator.epitope_data(
+            scored[0], row_input.prediction,
+            allele=row_input.allele,
+            include_additional_prediction_axes=True)
+        for row_input in row_inputs
+    ]
+    assert [row["Allele"] for row in rows] == ["A*02:01", "B*07:02"]
+    assert [row["Score"] for row in rows] == ["0.8", "0.8"]
+    assert all(row["Integrated processing score"] == "0.800" for row in rows)
+
+
+def test_lens_presentation_only_candidate_has_a_template_report_row(tmp_path):
+    """Presentation evidence anchors a table row when affinity is absent."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import attach_per_allele_scores
+    from vaxrank.report import TemplateDataCreator, epitope_report_row_inputs
+
+    path = tmp_path / "presentation-only.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.pres_score\tmhcflurry_2.1.1.pres_perc\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t\t0.85\t0.28\n")
+
+    _, epitopes = load_lens(path)
+    config = EpitopeConfig(
+        score_expr="presentation[mhcflurry].score")
+    epitope = attach_per_allele_scores(epitopes, config)[0]
+    row_inputs = epitope_report_row_inputs(epitope)
+    assert len(row_inputs) == 1
+    assert row_inputs[0].prediction.kind == "pMHC_presentation"
+    assert row_inputs[0].allele == "HLA-A*02:01"
+
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.processing_predictions_by_key = {}
+    row = creator.epitope_data(
+        epitope,
+        row_inputs[0].prediction,
+        allele=row_inputs[0].allele,
+        include_additional_prediction_axes=True,
+    )
+    assert row["Allele"] == "A*02:01"
+    assert row["Score"] == "0.85"
+    assert row["IC50"] == "No prediction"
+    assert row["Presentation score"] == "0.850"
+    assert row["Presentation %ile"] == "0.280"
+
+
 def test_lens_context_scores_merge_by_source_position(tmp_path):
     """Equal peptide/allele rows retain context-specific integrated scores."""
     from vaxrank.epitope_config import EpitopeConfig

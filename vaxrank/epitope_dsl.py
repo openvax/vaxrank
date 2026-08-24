@@ -136,10 +136,7 @@ def epitopes_to_topiary_df(epitopes):
         ctx = e
         source_name = ctx.source_sequence or ctx.sequence
         predictions = ctx.predictions_flat()
-        patient_alleles = tuple(sorted({
-            prediction.allele for prediction in predictions
-            if prediction.allele
-        }))
+        patient_alleles = ctx.patient_alleles
         for p in predictions:
             evaluation_alleles = (
                 patient_alleles

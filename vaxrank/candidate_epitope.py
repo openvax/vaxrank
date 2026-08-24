@@ -526,6 +526,14 @@ class CandidateEpitope(Peptide):
     # raw-reference behavior for legacy files and external-input loaders.
     self_reference_match: Optional["SelfReferenceMatch"] = None
 
+    # Patient alleles for which this candidate has input evidence. This is
+    # usually identical to the non-empty alleles on prediction leaves, but
+    # must be retained separately for allele-independent evidence such as
+    # antigen processing. External formats like LENS repeat that evidence on
+    # one row per patient allele while the canonical Prediction remains
+    # allele-less.
+    patient_alleles: tuple[str, ...] = ()
+
     # Per-allele score for this epitope as computed by the configured
     # :class:`~vaxrank.epitope_config.EpitopeConfig` ``score_expr``
     # (see :mod:`vaxrank.epitope_dsl`). Keys are allele names exactly
@@ -537,6 +545,23 @@ class CandidateEpitope(Peptide):
     # from here and never recompute — the DSL is the single source
     # of truth.
     per_allele_scores: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        """Normalize predictions and retain every explicitly known allele."""
+        super().__post_init__()
+        alleles = {
+            allele
+            for allele in self.patient_alleles
+            if allele
+        }
+        alleles.update(
+            prediction.allele
+            for prediction in self.predictions_flat()
+            if prediction.allele
+        )
+        alleles.update(
+            allele for allele in self.per_allele_scores if allele)
+        object.__setattr__(self, 'patient_alleles', tuple(sorted(alleles)))
 
     @property
     def epitope_score(self) -> float:
@@ -618,6 +643,7 @@ class CandidateEpitope(Peptide):
             occurs_in_reference=self.occurs_in_reference,
             occurs_in_non_CTA_reference=self.occurs_in_non_CTA_reference,
             self_reference_match=self.self_reference_match,
+            patient_alleles=self.patient_alleles,
             per_allele_scores=dict(self.per_allele_scores))
 
     @classmethod
@@ -671,6 +697,9 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                                      value as ``occurs_in_reference``.
       ``self_reference_match``       SelfReferenceMatch|None — explicit
                                      antigen-aware exact-self result.
+      ``patient_alleles``            iterable[str], optional — alleles
+                                     explicitly associated with this input
+                                     row even when ``mutant.allele`` is empty.
 
     Semantics:
 
@@ -707,6 +736,7 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                 'occurs_in_reference': False,
                 'occurs_in_non_CTA_reference': False,
                 'self_reference_match': None,
+                'patient_alleles': set(),
                 # Accumulator for per-allele DSL scores. Same allele
                 # may appear in multiple rows (different predictors);
                 # all rows for one allele share the same score by
@@ -715,6 +745,10 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             }
             groups[key] = slot
         slot['mutant_preds'].append(row['mutant'])
+        if row['mutant'].allele:
+            slot['patient_alleles'].add(row['mutant'].allele)
+        slot['patient_alleles'].update(
+            allele for allele in (row.get('patient_alleles') or ()) if allele)
         slot['overlaps_mutation'] |= bool(row.get('overlaps_mutation', False))
         overlaps_targetable = row.get('overlaps_targetable')
         if overlaps_targetable is not None:
@@ -772,6 +806,7 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             occurs_in_reference=slot['occurs_in_reference'],
             occurs_in_non_CTA_reference=slot['occurs_in_non_CTA_reference'],
             self_reference_match=slot['self_reference_match'],
+            patient_alleles=tuple(sorted(slot['patient_alleles'])),
             per_allele_scores=dict(slot['per_allele_scores']),
         ))
     return out

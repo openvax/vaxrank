@@ -645,7 +645,7 @@ def load_lens(path):
 
     epitope_rows = []
     report_rows = []
-    processing_scores_by_position = {}
+    processing_rows_by_position = {}
     # Rows whose peptide isn't a substring of a non-empty pep_context —
     # peptide and pep_context came from different isoforms / annotation
     # snapshots upstream. Dropped here (not carried into the report,
@@ -777,16 +777,16 @@ def load_lens(path):
                 # that canonical shape and reject inconsistent repeats.
                 processing_key = (
                     str(peptide), pep_context, offset, d.tool, d.version)
-                if processing_key in processing_scores_by_position:
-                    if processing_scores_by_position[
-                            processing_key] != processing_score:
+                if processing_key in processing_rows_by_position:
+                    processing_row = processing_rows_by_position[
+                        processing_key]
+                    if processing_row['mutant'].score != processing_score:
                         raise ValueError(
                             "Conflicting LENS processing scores for one "
                             "peptide position and predictor")
+                    processing_row['patient_alleles'].add(allele)
                 else:
-                    processing_scores_by_position[
-                        processing_key] = processing_score
-                    epitope_rows.append({
+                    processing_row = {
                         **shared_epitope_fields,
                         'mutant': Prediction(
                             kind="antigen_processing",
@@ -799,7 +799,11 @@ def load_lens(path):
                             percentile_rank=None,
                         ),
                         'wt': None,
-                    })
+                        'patient_alleles': {allele},
+                    }
+                    processing_rows_by_position[
+                        processing_key] = processing_row
+                    epitope_rows.append(processing_row)
                 row_added = True
 
         if not row_added:

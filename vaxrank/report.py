@@ -11,6 +11,7 @@
 # limitations under the License.
 
 from collections import OrderedDict
+from dataclasses import dataclass
 from importlib import import_module
 import logging
 import os
@@ -21,6 +22,7 @@ from astropy.io import ascii as asc
 import jinja2
 import pandas as pd
 import roman
+from mhctools.pred import Prediction
 from varcode import load_vcf_fast
 
 from .cancer_hotspots import get_hotspot_url
@@ -42,6 +44,47 @@ JINJA_ENVIRONMENT = jinja2.Environment(
     trim_blocks=True,
     lstrip_blocks=True,
 )
+
+
+@dataclass(frozen=True)
+class EpitopeReportRowInput:
+    """Prediction evidence and patient allele used for one report row."""
+
+    prediction: Prediction
+    allele: str
+
+
+def epitope_report_row_inputs(epitope):
+    """Return explicit row inputs for a candidate's template table.
+
+    Affinity predictions remain the preferred row anchors. When affinity is
+    absent, presentation predictions anchor rows instead. A candidate with
+    only allele-independent processing evidence emits one row per explicitly
+    retained patient allele without duplicating its canonical Prediction.
+    """
+    predictions = epitope.predictions_flat()
+    for kind in ('pMHC_affinity', 'pMHC_presentation'):
+        kind_predictions = tuple(
+            prediction for prediction in predictions
+            if prediction.kind == kind)
+        if kind_predictions:
+            return tuple(
+                EpitopeReportRowInput(prediction, prediction.allele)
+                for prediction in kind_predictions)
+
+    processing_predictions = tuple(
+        prediction for prediction in predictions
+        if prediction.kind == 'antigen_processing')
+    if not processing_predictions:
+        return ()
+    if not epitope.patient_alleles:
+        raise ValueError(
+            "Cannot render allele-independent antigen-processing evidence "
+            "without explicit patient alleles")
+    return tuple(
+        EpitopeReportRowInput(prediction, allele)
+        for prediction in processing_predictions
+        for allele in epitope.patient_alleles)
 
 
 class TemplateDataCreator(object):
@@ -363,15 +406,19 @@ class TemplateDataCreator(object):
         return None
 
     def epitope_data(self, epitope, prediction, include_processing=False,
-                     include_additional_prediction_axes=False):
+                     include_additional_prediction_axes=False, allele=None):
         """Returns an OrderedDict with epitope data for one
         (CandidateEpitope, mutant Prediction) row.
 
         One mutant ``CandidateEpitope`` carries N per-allele × per-predictor
-        ``mhctools.Prediction`` records. The report keeps the legacy
-        one-row-per-(peptide, allele, predictor) shape, so the caller
-        iterates over ``epitope.predictions_for('pMHC_affinity')``
-        and passes each leaf record here alongside its parent CandidateEpitope.
+        ``mhctools.Prediction`` records. The report keeps one row per explicit
+        :func:`epitope_report_row_inputs` result, using affinity as the
+        preferred anchor and presentation or processing when affinity is
+        absent.
+
+        ``allele`` defaults to ``prediction.allele``. Report rows anchored by
+        canonical allele-independent processing evidence pass an explicitly
+        retained patient allele here.
 
         ``include_processing``: when True, always emit the three
         proteasomal-cleavage credibility columns
@@ -399,8 +446,12 @@ class TemplateDataCreator(object):
         from the same predictor/version. Missing axes render as ``'—'``
         so mixed-predictor tables retain consistent columns.
         """
+        row_allele = prediction.allele if allele is None else allele
+        if not row_allele:
+            raise ValueError(
+                "Template epitope rows require an explicit patient allele")
         wt_ic50 = self._wt_ic50_for_allele(
-            epitope, prediction.allele, predictor=prediction.predictor_name)
+            epitope, row_allele, predictor=prediction.predictor_name)
         wt_ic50_str = _format_ic50(wt_ic50)
         ic50_str = _format_ic50(prediction.value)
         wt_peptide_sequence = (
@@ -423,9 +474,9 @@ class TemplateDataCreator(object):
             # from ``epitope.per_allele_scores`` — the single source
             # of truth — rather than recomputing from the raw IC50.
             ('Score',
-                _sanitize(epitope.per_allele_scores.get(
-                    prediction.allele, 0.0))),
-            ('Allele', prediction.allele.replace('HLA-', '')),
+                _sanitize(epitope.per_allele_scores[row_allele])
+                if row_allele in epitope.per_allele_scores else '—'),
+            ('Allele', row_allele.replace('HLA-', '')),
             ('WT sequence', wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
         ])
@@ -440,7 +491,7 @@ class TemplateDataCreator(object):
                     continue
                 if (
                     related.kind == 'pMHC_presentation'
-                    and related.allele == prediction.allele
+                    and related.allele == row_allele
                 ):
                     presentation = related
                 elif (
@@ -598,27 +649,22 @@ class TemplateDataCreator(object):
 
                 epitopes = []
                 wt_epitopes = []
-                # One report row per (CandidateEpitope, allele × predictor)
-                # leaf record. Keeps today's table shape: one row per
-                # (peptide, allele) in single-predictor runs; multiple
-                # rows per (peptide, allele) when multi-predictor data
-                # is in play (mhcflurry + netmhcpan), with the
-                # Predictor column distinguishing them.
-                def _affinity_leaves(e):
-                    return [
-                        p for p in e.predictions_flat()
-                        if p.kind == 'pMHC_affinity']
-
+                # One row per explicit report input. Affinity remains the
+                # preferred anchor; presentation-only and processing-only
+                # candidates still render rather than disappearing.
                 for e in vaccine_peptide.target_epitopes:
-                    for p in _affinity_leaves(e):
+                    for row_input in epitope_report_row_inputs(e):
                         epitopes.append(self.epitope_data(
-                            e, p,
+                            e, row_input.prediction,
                             include_processing=any_processing,
                             include_additional_prediction_axes=(
-                                any_additional_prediction_axes)))
+                                any_additional_prediction_axes),
+                            allele=row_input.allele))
 
                 for e in vaccine_peptide.self_epitopes:
-                    for p in _affinity_leaves(e):
+                    for p in e.predictions_flat():
+                        if p.kind != 'pMHC_affinity':
+                            continue
                         epitope_data = self.epitope_data(e, p)
                         key_list = ['Allele', 'IC50', 'Sequence']
                         wt_epitopes.append(
