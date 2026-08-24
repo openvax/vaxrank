@@ -170,6 +170,16 @@ def test_dsl_unknown_identifier_raises_at_eval_time():
         evaluate_combined_score(tree, vp)
 
 
+def test_combined_score_bindings_exposes_documented_scalar_namespace():
+    from vaxrank.combined_score_dsl import combined_score_bindings
+
+    bindings = combined_score_bindings(_make_vp())
+
+    assert bindings["target_epitope_score"] == pytest.approx(2.5)
+    assert bindings["n_alt_reads"] == pytest.approx(10)
+    assert bindings["expression_score"] == pytest.approx(math.sqrt(10))
+
+
 def test_dsl_parsed_at_construction_time_not_scoring_time():
     """Bad ``combined_score_expr`` should raise when the
     VaccinePeptide is built (config-load surface), not later when
@@ -178,15 +188,25 @@ def test_dsl_parsed_at_construction_time_not_scoring_time():
         _make_vp(combined_score_expr='import os')
 
 
-def test_default_expr_is_pre_parsed_at_construction():
+def test_default_expr_is_pre_parsed_at_construction(monkeypatch):
     """When the user doesn't pass ``combined_score_expr``,
     ``__post_init__`` resolves to the default and pre-parses it. The
     AST is the SAME single artifact ``combined_score`` evaluates —
     no separate hardcoded Python branch for the default case."""
     vp = _make_vp(combined_score_expr=None)
     from vaxrank.vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
+    import vaxrank.vaccine_peptide as vaccine_peptide_module
+
     assert vp.combined_score_expr == DEFAULT_COMBINED_SCORE_EXPR
-    assert vp._combined_score_expr_ast is not None
+
+    def fail_on_reparse(_expr):
+        raise AssertionError("unexpected reparse")
+
+    monkeypatch.setattr(
+        vaccine_peptide_module,
+        "parse_combined_score_expr",
+        fail_on_reparse,
+    )
     assert vp.combined_score == pytest.approx(math.sqrt(10) * 2.5)
 
 
@@ -251,25 +271,25 @@ def test_dsl_eval_error_truncates_bindings_in_user_message():
 
 
 def test_dsl_eval_error_warns_when_headline_binding_missing():
-    """Soft contract: ``_bindings_from_vaccine_peptide`` is supposed
-    to populate every entry in ``_HEADLINE_BINDINGS``. If a future
+    """Soft contract: the binding extractor is supposed
+    to populate every entry in ``HEADLINE_BINDINGS``. If a future
     refactor drops one, the user-facing preview shrinks silently —
     surface that through a warning so the maintainer notices."""
     import logging
     from vaxrank.combined_score_dsl import (
-        _HEADLINE_BINDINGS, evaluate_combined_score,
+        HEADLINE_BINDINGS, combined_score_bindings, evaluate_combined_score,
         parse_combined_score_expr)
     import vaxrank.combined_score_dsl as dsl_mod
 
     # Monkeypatch the bindings extractor to drop one headline key.
-    real_extractor = dsl_mod._bindings_from_vaccine_peptide
+    real_extractor = combined_score_bindings
 
     def _stripped(vp):
         b = real_extractor(vp)
-        b.pop(_HEADLINE_BINDINGS[0])  # drop target_epitope_score
+        b.pop(HEADLINE_BINDINGS[0])  # drop target_epitope_score
         return b
 
-    dsl_mod._bindings_from_vaccine_peptide = _stripped
+    dsl_mod.combined_score_bindings = _stripped
     try:
         vp = _make_vp()
         tree = parse_combined_score_expr('log(-1)')
@@ -294,4 +314,4 @@ def test_dsl_eval_error_warns_when_headline_binding_missing():
                 "Expected a warning about the missing headline "
                 "binding; got: %r" % [r.getMessage() for r in warnings])
     finally:
-        dsl_mod._bindings_from_vaccine_peptide = real_extractor
+        dsl_mod.combined_score_bindings = real_extractor

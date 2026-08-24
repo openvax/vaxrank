@@ -12,12 +12,15 @@
 
 """Tests for per-junction linker optimization (vaxrank issue #247)."""
 
+import warnings
 from types import SimpleNamespace
 
 from vaxrank.junction_swap import (
+    JunctionPredictionWarning,
     JunctionSwapResult,
     junction_kmers,
     optimize_linkers,
+    score_junction_kmers,
 )
 from vaxrank.vaccine_peptide import VaccinePeptide
 
@@ -346,44 +349,34 @@ def test_optimize_default_linker_burden_tracked_in_sweep():
 
 # ---- review-fix coverage -----------------------------------------------------
 
-def test_score_kmers_warn_no_rank_fires_only_once(caplog):
+def test_score_junction_kmers_warns_once_at_repeated_call_site():
     """A predictor that returns predictions without percentile_rank
-    should produce exactly one warning per process — not one per
+    should produce exactly one standard warning per call site — not one per
     junction × candidate."""
-    import logging
-
-    from vaxrank.junction_swap import (
-        _reset_score_kmers_warnings,
-        _score_kmers,
-    )
-
     class NoRankPredictor:
         def predict_peptides(self, peptides):
             return [SimpleNamespace(peptide=p, allele="HLA-A*02:01")
                     for p in peptides]
 
-    _reset_score_kmers_warnings()
-    with caplog.at_level(logging.WARNING):
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("default", JunctionPredictionWarning)
         for _ in range(5):
-            _score_kmers(["KLQGHSAPV"], ["HLA-A*02:01"], NoRankPredictor())
-    no_rank_warnings = [r for r in caplog.records
-                        if "usable percentile_rank" in r.message]
+            score_junction_kmers(
+                ["KLQGHSAPV"], ["HLA-A*02:01"], NoRankPredictor()
+            )
+    no_rank_warnings = [
+        item for item in captured
+        if "usable percentile_rank" in str(item.message)
+    ]
     assert len(no_rank_warnings) == 1, (
         "Expected exactly one no-rank warning across 5 calls, got %d"
         % len(no_rank_warnings))
 
 
-def test_score_kmers_warns_when_allele_filter_drops_all(caplog):
+def test_score_junction_kmers_warns_when_allele_filter_drops_all():
     """If the predictor returns only alleles outside the patient set,
-    warn once (the optimizer would otherwise silently pick the first
+    warn once per call site (the optimizer would otherwise silently pick the first
     candidate)."""
-    import logging
-
-    from vaxrank.junction_swap import (
-        _reset_score_kmers_warnings,
-        _score_kmers,
-    )
-
     class WrongAllelePredictor:
         def predict_peptides(self, peptides):
             # Returns only HLA-B*07:02 predictions; caller asks for A*02:01
@@ -391,16 +384,17 @@ def test_score_kmers_warns_when_allele_filter_drops_all(caplog):
                 peptide=p, allele="HLA-B*07:02", percentile_rank=10.0)
                 for p in peptides]
 
-    _reset_score_kmers_warnings()
-    with caplog.at_level(logging.WARNING):
-        rows = _score_kmers(
-            ["KLQGHSAPV"], ["HLA-A*02:01"], WrongAllelePredictor())
-        # Second call must NOT re-emit the warning
-        _score_kmers(
-            ["KLQGHSAPV"], ["HLA-A*02:01"], WrongAllelePredictor())
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("default", JunctionPredictionWarning)
+        for _ in range(2):
+            rows = score_junction_kmers(
+                ["KLQGHSAPV"], ["HLA-A*02:01"], WrongAllelePredictor()
+            )
     assert rows == [], "All predictions filtered out → no rows"
-    filter_warnings = [r for r in caplog.records
-                       if "allele filter dropped all" in r.message]
+    filter_warnings = [
+        item for item in captured
+        if "allele filter dropped all" in str(item.message)
+    ]
     assert len(filter_warnings) == 1, (
         "Expected exactly one allele-filter warning, got %d"
         % len(filter_warnings))

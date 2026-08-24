@@ -24,20 +24,20 @@ from importlib.resources import files
 logger = logging.getLogger(__name__)
 
 
-def _get_hotspots_path():
+def cancer_hotspots_path():
     """Get path to bundled cancer hotspots TSV file."""
     return str(files('vaxrank').joinpath('data/cancer_hotspots_v2.tsv'))
 
 
 @lru_cache(maxsize=1)
-def _load_hotspots():
+def load_cancer_hotspots():
     """
     Load cancer hotspots data into a lookup dictionary.
 
     Returns dict mapping (gene_upper, protein_change) -> hotspot info dict
     """
     hotspots = {}
-    path = _get_hotspots_path()
+    path = cancer_hotspots_path()
 
     if not os.path.exists(path):
         logger.warning("Cancer hotspots file not found at %s", path)
@@ -94,7 +94,7 @@ def is_hotspot(gene_name, protein_change):
     bool
         True if the mutation is a known cancer hotspot
     """
-    hotspots = _load_hotspots()
+    hotspots = load_cancer_hotspots()
 
     # Normalize protein change - strip "p." prefix if present
     if protein_change.startswith('p.'):
@@ -121,7 +121,7 @@ def get_hotspot_info(gene_name, protein_change):
     dict or None
         Hotspot information dict if found, None otherwise
     """
-    hotspots = _load_hotspots()
+    hotspots = load_cancer_hotspots()
 
     # Normalize protein change - strip "p." prefix if present
     if protein_change.startswith('p.'):

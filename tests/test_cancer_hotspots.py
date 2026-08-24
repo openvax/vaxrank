@@ -15,11 +15,11 @@ Tests for cancer hotspots lookup module.
 """
 
 from vaxrank.cancer_hotspots import (
+    cancer_hotspots_path,
+    load_cancer_hotspots,
     is_hotspot,
     get_hotspot_info,
     get_hotspot_url,
-    _load_hotspots,
-    _get_hotspots_path,
 )
 
 from .common import eq_, ok_
@@ -32,32 +32,32 @@ from .common import eq_, ok_
 def test_hotspots_path_exists():
     """Test that the hotspots data file path is valid"""
     import os
-    path = _get_hotspots_path()
+    path = cancer_hotspots_path()
     ok_(os.path.exists(path), f"Hotspots file not found at {path}")
 
 
 def test_load_hotspots_returns_dict():
-    """Test that _load_hotspots returns a dictionary"""
-    hotspots = _load_hotspots()
+    """Test that load_cancer_hotspots returns a dictionary."""
+    hotspots = load_cancer_hotspots()
     ok_(isinstance(hotspots, dict))
 
 
 def test_load_hotspots_not_empty():
     """Test that hotspots data is loaded"""
-    hotspots = _load_hotspots()
+    hotspots = load_cancer_hotspots()
     ok_(len(hotspots) > 0, "Hotspots dict should not be empty")
 
 
 def test_load_hotspots_has_expected_count():
     """Test that we have a reasonable number of hotspots"""
-    hotspots = _load_hotspots()
+    hotspots = load_cancer_hotspots()
     # The file has ~3181 lines but ~2739 unique (gene, protein_change) pairs
     ok_(len(hotspots) > 2500, f"Expected >2500 hotspots, got {len(hotspots)}")
 
 
 def test_hotspot_entry_structure():
     """Test that hotspot entries have expected fields"""
-    hotspots = _load_hotspots()
+    hotspots = load_cancer_hotspots()
     # Get any entry
     key, info = next(iter(hotspots.items()))
 
@@ -244,14 +244,14 @@ def test_url_format():
 def test_nonsense_mutation():
     """Test handling of nonsense mutations (stop codon)"""
     # Check if there are any nonsense mutations in the dataset
-    hotspots = _load_hotspots()
+    hotspots = load_cancer_hotspots()
     nonsense_found = any('*' in k[1] for k in hotspots.keys())
     ok_(nonsense_found, "Should have some nonsense mutations in dataset")
 
 
 def test_deletion_mutation():
     """Test that indel mutations are in dataset"""
-    hotspots = _load_hotspots()
+    hotspots = load_cancer_hotspots()
     # Check for DEL or INS mutations
     del_ins_found = any(
         info['mutation_type'] in ('DEL', 'INS')
@@ -265,7 +265,7 @@ def test_deletion_mutation():
 def test_caching_works():
     """Test that the LRU cache is working"""
     # Call multiple times - should use cache
-    hotspots1 = _load_hotspots()
-    hotspots2 = _load_hotspots()
+    hotspots1 = load_cancer_hotspots()
+    hotspots2 = load_cancer_hotspots()
     # Should be the exact same object due to caching
     ok_(hotspots1 is hotspots2)

@@ -720,15 +720,15 @@ def test_resolve_default_methods_stability_plus_affinity():
 
 
 def test_parse_is_cached():
-    """Repeated _parse calls for the same expression should hit the cache
+    """Repeated expression parses should hit the cache
     rather than re-invoking topiary.ranking.parse."""
-    from vaxrank.epitope_dsl import _parse
-    cache_info_before = _parse.cache_info()
+    from vaxrank.epitope_dsl import parse_epitope_expression
+    cache_info_before = parse_epitope_expression.cache_info()
     expr = "affinity['mhcflurry'].logistic(350, 150)"
-    _parse(expr)
-    _parse(expr)
-    _parse(expr)
-    info = _parse.cache_info()
+    parse_epitope_expression(expr)
+    parse_epitope_expression(expr)
+    parse_epitope_expression(expr)
+    info = parse_epitope_expression.cache_info()
     # At least two cache hits from the three calls above
     assert info.hits - cache_info_before.hits >= 2
 

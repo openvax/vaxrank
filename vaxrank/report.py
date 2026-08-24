@@ -218,7 +218,7 @@ class TemplateDataCreator(object):
         ])
         return variant_data
 
-    def _effect_data(self, predicted_effect, selected_effect=None):
+    def effect_data(self, predicted_effect, selected_effect=None):
         """OrderedDict with info about the given varcode effect.
 
         ``predicted_effect`` may be ``None`` on external-input paths
@@ -362,7 +362,7 @@ class TemplateDataCreator(object):
                 return p.value
         return None
 
-    def _epitope_data(self, epitope, prediction, include_processing=False):
+    def epitope_data(self, epitope, prediction, include_processing=False):
         """Returns an OrderedDict with epitope data for one
         (CandidateEpitope, mutant Prediction) row.
 
@@ -512,7 +512,7 @@ class TemplateDataCreator(object):
             predicted_effect = mutant_protein_fragment.predicted_effect()
             predicted_effect_outcomes = mutant_protein_fragment.predicted_effect(
                 outcome_selection=OUTCOME_SELECTION_MULTI_OUTCOME)
-            effect_data = self._effect_data(
+            effect_data = self.effect_data(
                 predicted_effect_outcomes,
                 selected_effect=predicted_effect)
 
@@ -569,12 +569,12 @@ class TemplateDataCreator(object):
 
                 for e in vaccine_peptide.target_epitopes:
                     for p in _affinity_leaves(e):
-                        epitopes.append(self._epitope_data(
+                        epitopes.append(self.epitope_data(
                             e, p, include_processing=any_processing))
 
                 for e in vaccine_peptide.self_epitopes:
                     for p in _affinity_leaves(e):
-                        epitope_data = self._epitope_data(e, p)
+                        epitope_data = self.epitope_data(e, p)
                         key_list = ['Allele', 'IC50', 'Sequence']
                         wt_epitopes.append(
                             {key: epitope_data[key] for key in key_list})

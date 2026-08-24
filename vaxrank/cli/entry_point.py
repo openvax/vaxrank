@@ -1248,7 +1248,7 @@ def main(args_list=None):
     # builder has the same shape inputs either way. Antigens whose
     # transcript IDs can't be resolved (release mismatch, ERV, …)
     # render with "—" placeholders rather than crashing — see
-    # ``TemplateDataCreator._effect_data``.
+    # ``TemplateDataCreator.effect_data``.
     if not (args.output_ascii_report or args.output_html_report or args.output_pdf_report):
         return
 

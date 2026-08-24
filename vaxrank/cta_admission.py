@@ -38,16 +38,6 @@ class CTAAdmissionError(RuntimeError):
     """Raised when CTA admission evidence cannot be resolved unambiguously."""
 
 
-def _finite_nonnegative(value, label: str) -> float:
-    try:
-        result = float(value)
-    except (TypeError, ValueError) as error:
-        raise ValueError(f"{label} must be numeric") from error
-    if not math.isfinite(result) or result < 0:
-        raise ValueError(f"{label} must be finite and non-negative")
-    return result
-
-
 @dataclass(frozen=True)
 class CTAAdmissionPolicy(DataclassSerializable):
     """Run-specific quantitative tumor-expression admission rule."""
@@ -56,15 +46,17 @@ class CTAAdmissionPolicy(DataclassSerializable):
     expression_unit: str
 
     def __post_init__(self):
-        object.__setattr__(
-            self,
-            "min_tumor_expression",
-            _finite_nonnegative(
-                self.min_tumor_expression, "Minimum tumor expression"
-            ),
-        )
-        if self.min_tumor_expression <= 0:
+        try:
+            minimum = float(self.min_tumor_expression)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Minimum tumor expression must be numeric") from error
+        if not math.isfinite(minimum) or minimum < 0:
+            raise ValueError(
+                "Minimum tumor expression must be finite and non-negative"
+            )
+        if minimum <= 0:
             raise ValueError("Minimum tumor expression must be greater than zero")
+        object.__setattr__(self, "min_tumor_expression", minimum)
         if not self.expression_unit:
             raise ValueError("CTA expression policy requires an explicit unit")
 
@@ -93,9 +85,13 @@ class PatientTumorExpressionEvidence(DataclassSerializable):
                 "Tumor expression requires assay, units, and versioned provenance"
             )
         object.__setattr__(self, "gene_id", gene_id)
-        object.__setattr__(
-            self, "value", _finite_nonnegative(self.value, "Tumor expression")
-        )
+        try:
+            value = float(self.value)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Tumor expression must be numeric") from error
+        if not math.isfinite(value) or value < 0:
+            raise ValueError("Tumor expression must be finite and non-negative")
+        object.__setattr__(self, "value", value)
 
 
 @dataclass(frozen=True)
