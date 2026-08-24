@@ -378,7 +378,7 @@ def test_epitope_data_renders_one_row_per_predictor_for_same_pep_allele():
         comparators={'wt': Peptide(sequence='SIINFEKL')},
         overlaps_mutation=True, occurs_in_reference=False)
 
-    rows = [creator._epitope_data(epitope, p) for p in (mhcflurry, netmhcpan)]
+    rows = [creator.epitope_data(epitope, p) for p in (mhcflurry, netmhcpan)]
     assert len(rows) == 2
     # Each row preserves its own predictor name + IC50 — no collapsing.
     assert rows[0]['Predictor'] == 'mhcflurry'
@@ -405,13 +405,13 @@ def test_epitope_data_renders_missing_mutant_ic50_placeholder():
             "SIINFEKL", "SSIINFEKL", offset=1, ic50=missing_value,
             percentile_rank=None)
 
-        row = creator._epitope_data(epitope, epitope.best_affinity())
+        row = creator.epitope_data(epitope, epitope.best_affinity())
 
         assert row['IC50'] == 'No prediction'
 
 
 def test_epitope_data_surfaces_processing_columns_when_annotated():
-    """``TemplateDataCreator._epitope_data`` adds three extra
+    """``TemplateDataCreator.epitope_data`` adds three extra
     columns (Processing: C-term, Processing: max internal,
     Processing: combined) when ``include_processing=True`` — the
     values come from the ProcessingPrediction map by joining on
@@ -428,7 +428,7 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
     creator = TemplateDataCreator.__new__(TemplateDataCreator)
     creator.processing_predictions_by_key = {}
     # Default: legacy 7-column shape (no Processing columns).
-    pre = creator._epitope_data(pred, leaf)
+    pre = creator.epitope_data(pred, leaf)
     assert isinstance(pre, OrderedDict)
     assert 'Processing: C-term' not in pre
     assert 'Processing: combined' not in pre
@@ -439,7 +439,7 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
         [pred],
         predictor=StubPepsickle({source: [0.1] * 9 + [0.85] + [0.0] * 4}))
     creator.processing_predictions_by_key = by_key
-    post = creator._epitope_data(pred, leaf, include_processing=True)
+    post = creator.epitope_data(pred, leaf, include_processing=True)
     assert 'Processing: C-term' in post
     assert 'Processing: max internal' in post
     assert 'Processing: combined' in post
@@ -561,8 +561,8 @@ def test_epitope_data_header_consistent_when_some_predictions_unannotated():
 
     # When the caller turns include_processing on, BOTH rows have
     # the same key set — table renders cleanly.
-    row_a = creator._epitope_data(annotated, leaf_a, include_processing=True)
-    row_u = creator._epitope_data(unannotated, leaf_u, include_processing=True)
+    row_a = creator.epitope_data(annotated, leaf_a, include_processing=True)
+    row_u = creator.epitope_data(unannotated, leaf_u, include_processing=True)
     assert list(row_a.keys()) == list(row_u.keys()), (
         "Annotated and unannotated rows should share identical "
         "column keys when include_processing=True; got "

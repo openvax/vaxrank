@@ -59,18 +59,12 @@ def oncoref_cta_source_gene_ids() -> frozenset[str]:
     )
 
 
-def _is_human_genome(genome) -> bool:
-    if genome is None:
-        return False
+def cta_source_gene_ids_for_genome(genome) -> frozenset[str]:
+    """Human CTA source exclusions, or an empty set for other species."""
     species = getattr(genome, "species", None)
     latin_name = str(getattr(species, "latin_name", ""))
     normalized = latin_name.strip().casefold().replace("_", " ")
-    return normalized in {"homo sapiens", "human"}
-
-
-def cta_source_gene_ids_for_genome(genome) -> frozenset[str]:
-    """Human CTA source exclusions, or an empty set for other species."""
-    if not _is_human_genome(genome):
+    if normalized not in {"homo sapiens", "human"}:
         return frozenset()
     return oncoref_cta_source_gene_ids()
 
@@ -447,7 +441,10 @@ def extract_kmers(sequences, min_len, max_len):
     return kmers
 
 
-def _resolve_kmer_lengths(min_kmer_length, max_kmer_length, epitope_lengths):
+def resolve_reference_kmer_lengths(
+    min_kmer_length, max_kmer_length, epitope_lengths
+):
+    """Resolve an index range from explicit bounds, epitope lengths, or defaults."""
     if epitope_lengths and (min_kmer_length is None or max_kmer_length is None):
         lengths = sorted(epitope_lengths)
         if min_kmer_length is None:
@@ -624,7 +621,7 @@ class ReferenceProteome:
             CandidateEpitope lengths being predicted. Used to derive kmer range
             when min/max not explicitly set.
         """
-        min_kmer_length, max_kmer_length = _resolve_kmer_lengths(
+        min_kmer_length, max_kmer_length = resolve_reference_kmer_lengths(
             min_kmer_length, max_kmer_length, epitope_lengths)
 
         unique_seqs = set(proteins.values())
@@ -665,7 +662,7 @@ class ReferenceProteome:
         min_kmer_length : int, optional
         max_kmer_length : int, optional
         """
-        min_kmer_length, max_kmer_length = _resolve_kmer_lengths(
+        min_kmer_length, max_kmer_length = resolve_reference_kmer_lengths(
             min_kmer_length, max_kmer_length, epitope_lengths)
 
         if genome is None:

@@ -44,21 +44,6 @@ class RiskLigandError(RuntimeError):
     """Raised when a risk-ligand index cannot be built unambiguously."""
 
 
-def _json_native(value):
-    if isinstance(value, dict):
-        return {key: _json_native(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_native(item) for item in value]
-    return value
-
-
-def _fingerprint(payload) -> str:
-    encoded = json.dumps(
-        _json_native(payload), sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
 @dataclass(frozen=True)
 class ResolvedRiskProtein(DataclassSerializable):
     """One distinct risk-protein sequence with all transcript provenance."""
@@ -468,7 +453,7 @@ class PatientHLARiskLigandIndex(DataclassSerializable):
         )
 
     def to_report_dict(self) -> dict:
-        return _json_native(asdict(self))
+        return json.loads(json.dumps(asdict(self)))
 
 
 def resolve_tissue_risk_protein_sequences(
@@ -548,12 +533,15 @@ def resolve_tissue_risk_protein_sequences(
         "policy": asdict(tissue_risk.policy),
         "cta_count": tissue_risk.cta_unfiltered_gene_count,
     }
+    policy_sha256 = hashlib.sha256(json.dumps(
+        policy_payload, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
     species = str(getattr(getattr(genome, "species", None), "latin_name", "") or "")
     return RiskProteinSequenceSet(
         resolution_policy=resolution_policy,
         genome_release=str(getattr(genome, "release", "") or ""),
         species=species,
-        tissue_risk_policy_sha256=_fingerprint(policy_payload),
+        tissue_risk_policy_sha256=policy_sha256,
         hpa_source_sha256=tissue_risk.hpa_provenance.source_sha256,
         cta_unfiltered_gene_ids_sha256=(
             tissue_risk.cta_unfiltered_gene_ids_sha256
@@ -765,6 +753,9 @@ def risk_ligand_index_from_prediction_frame(
         "selection_policy": asdict(selection_policy),
         "predictors": sorted(predictor_identities),
     }
+    cache_identity_sha256 = hashlib.sha256(json.dumps(
+        cache_payload, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
     provenance = RiskLigandIndexProvenance(
         genome_release=protein_sequences.genome_release,
         species=protein_sequences.species,
@@ -775,7 +766,7 @@ def risk_ligand_index_from_prediction_frame(
             protein_sequences.cta_unfiltered_gene_ids_sha256
         ),
         predictor_identities=tuple(predictor_identities),
-        cache_identity_sha256=_fingerprint(cache_payload),
+        cache_identity_sha256=cache_identity_sha256,
     )
     return PatientHLARiskLigandIndex(
         alleles=normalized_alleles,

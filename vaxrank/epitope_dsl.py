@@ -65,7 +65,7 @@ _METHOD_KIND_MAP = {
 
 
 @functools.lru_cache(maxsize=64)
-def _parse(expr):
+def parse_epitope_expression(expr):
     """Parse a DSL string into a topiary node. Cached so the same config's
     ``filter_expr`` / ``score_expr`` aren't re-parsed multiple times within
     one :func:`write_neoepitope_report` call (validator + build_filter_node
@@ -378,9 +378,9 @@ def validate_dsl_against_predictions(cfg, epitopes, *, topiary_df=None):
     """
     nodes = []
     if cfg.filter_expr is not None:
-        nodes.append(_parse(cfg.filter_expr))
+        nodes.append(parse_epitope_expression(cfg.filter_expr))
     if cfg.score_expr is not None:
-        nodes.append(_parse(cfg.score_expr))
+        nodes.append(parse_epitope_expression(cfg.score_expr))
     if not nodes:
         return
 
@@ -475,7 +475,7 @@ def build_filter_node(cfg):
     cutoff mask. Users who want a hard pre-filter must set ``filter_expr``.
     """
     if cfg.filter_expr is not None:
-        return _parse(cfg.filter_expr)
+        return parse_epitope_expression(cfg.filter_expr)
     return None
 
 
@@ -489,5 +489,6 @@ def build_score_node(cfg):
     different mechanism — it is the same DSL machinery applied to a
     well-known formula.
     """
-    return _parse(cfg.score_expr if cfg.score_expr is not None
-                  else default_score_expr(cfg))
+    return parse_epitope_expression(
+        cfg.score_expr if cfg.score_expr is not None else default_score_expr(cfg)
+    )

@@ -31,6 +31,7 @@ Issue: openvax/vaxrank#247.
 """
 
 import logging
+import warnings
 from dataclasses import dataclass, field
 
 from .vaccine_library import JUNCTION_SWAP_CANDIDATES, get_linker
@@ -70,6 +71,10 @@ class JunctionSwapResult:
         return [link.name for link in self.chosen_linker_per_junction]
 
 
+class JunctionPredictionWarning(UserWarning):
+    """A junction predictor cannot provide scores required for optimization."""
+
+
 def junction_kmers(left_aa, linker_aa, right_aa, k_lengths,
                    reference_proteome=None):
     """Enumerate k-mers spanning a single junction.
@@ -107,18 +112,17 @@ def junction_kmers(left_aa, linker_aa, right_aa, k_lengths,
     return out
 
 
-def _score_kmers(kmers, alleles, predictor):
+def score_junction_kmers(kmers, alleles, predictor):
     """Run the predictor and return rows of (kmer, allele, rank).
 
-    Warns once per process when:
+    Uses Python's standard warning filter to warn once per call site when:
       - the predictor returned predictions but none had a usable
         ``percentile_rank`` (e.g. binding-affinity-only mhctools
         wrappers like RandomBindingPredictor), or
       - the predictor returned predictions but the allele filter
         dropped all of them (the optimizer would silently pick the
         first candidate).
-    Each branch warns at most once per process; reset by calling
-    ``_reset_score_kmers_warnings()`` (test-only).
+    Callers can configure repetition through the standard :mod:`warnings` API.
     """
     if not kmers:
         return []
@@ -140,33 +144,27 @@ def _score_kmers(kmers, alleles, predictor):
             continue
         n_with_rank += 1
         rows.append((p.peptide, p.allele, float(rank)))
-    if n_seen and not n_with_rank and not _score_kmers.warned_no_rank:
-        logger.warning(
-            "Junction-swap predictor returned %d predictions but none had "
+    if n_seen and not n_with_rank:
+        warnings.warn(
+            f"Junction-swap predictor returned {n_seen} predictions but none had "
             "a usable percentile_rank field; the optimizer cannot rank "
             "chimeric k-mers and will fall back to the first candidate. "
             "Use mhcflurry-presentation or a predictor that exposes "
-            "percentile rank.", n_seen)
-        _score_kmers.warned_no_rank = True
-    if n_total and not n_seen and not _score_kmers.warned_allele_filter:
-        logger.warning(
-            "Junction-swap predictor returned %d predictions but the "
+            "percentile rank.",
+            JunctionPredictionWarning,
+            stacklevel=2,
+        )
+    if n_total and not n_seen:
+        warnings.warn(
+            f"Junction-swap predictor returned {n_total} predictions but the "
             "allele filter dropped all of them; the optimizer cannot "
             "rank chimeric k-mers and will fall back to the first "
             "candidate. Check that the predictor's configured alleles "
-            "include the patient HLA set.", n_total)
-        _score_kmers.warned_allele_filter = True
+            "include the patient HLA set.",
+            JunctionPredictionWarning,
+            stacklevel=2,
+        )
     return rows
-
-
-_score_kmers.warned_no_rank = False
-_score_kmers.warned_allele_filter = False
-
-
-def _reset_score_kmers_warnings():
-    """Test-only: reset the warn-once flags on _score_kmers."""
-    _score_kmers.warned_no_rank = False
-    _score_kmers.warned_allele_filter = False
 
 
 def _burden_key(rows, rank_strong=RANK_STRONG, rank_mild=RANK_MILD):
@@ -289,7 +287,7 @@ def optimize_linkers(
             kmers = junction_kmers(
                 left_aa, cand.amino_acids, right_aa, k_lengths,
                 reference_proteome=reference_proteome)
-            rows = _score_kmers(kmers, alleles, predictor)
+            rows = score_junction_kmers(kmers, alleles, predictor)
             key = _burden_key(rows, rank_strong, rank_mild)
             per_cand_keys.append(key)
             if best is None or key < best[0]:

@@ -21,10 +21,10 @@ from .varcode_effects import select_varcode_effect_outcome
 _ENSEMBL_GENE_ID_COLUMN_NAME = 'Ensembl Gene ID'
 _MUTATION_COLUMN_NAME = 'Mutation'
 
-_IFNG_RESPONSE_COLUMN_NAME = 'interferon_gamma_response'
-_CLASS_I_MHC_COLUMN_NAME = 'class1_mhc_presentation_pathway'
-_DRIVER_GENE_COLUMN_NAME = 'cancer_driver_gene'
-_DRIVER_VARIANT_COLUMN_NAME = 'cancer_driver_variant'
+IFNG_RESPONSE_COLUMN_NAME = 'interferon_gamma_response'
+CLASS_I_MHC_COLUMN_NAME = 'class1_mhc_presentation_pathway'
+DRIVER_GENE_COLUMN_NAME = 'cancer_driver_gene'
+DRIVER_VARIANT_COLUMN_NAME = 'cancer_driver_variant'
 
 _CURRENT_DIR = dirname(__file__)
 _DATA_DIR = join(_CURRENT_DIR, "data")
@@ -121,20 +121,20 @@ class GenePathwayCheck(object):
             effect_description = ""
             overlapping_gene_ids = []
         variant_dict = OrderedDict()
-        variant_dict[_IFNG_RESPONSE_COLUMN_NAME] = any([
+        variant_dict[IFNG_RESPONSE_COLUMN_NAME] = any([
             gene_id in self.interferon_gamma_response_gene_set
             for gene_id in overlapping_gene_ids
         ])
-        variant_dict[_CLASS_I_MHC_COLUMN_NAME] = any([
+        variant_dict[CLASS_I_MHC_COLUMN_NAME] = any([
             gene_id in self.class1_mhc_presentation_pathway_gene_set
             for gene_id in overlapping_gene_ids
         ])
-        variant_dict[_DRIVER_GENE_COLUMN_NAME] = any([
+        variant_dict[DRIVER_GENE_COLUMN_NAME] = any([
             gene_id in self.cancer_driver_genes_set
             for gene_id in overlapping_gene_ids
         ])
 
-        variant_dict[_DRIVER_VARIANT_COLUMN_NAME] = any([
+        variant_dict[DRIVER_VARIANT_COLUMN_NAME] = any([
             (gene_id, effect_description) in self.cancer_driver_variants_set
             for gene_id in overlapping_gene_ids
         ])

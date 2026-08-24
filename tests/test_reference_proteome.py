@@ -35,6 +35,7 @@ from vaxrank.reference_proteome import (
     cta_source_gene_ids_for_genome,
     ensembl_dataset_cache_identity,
     oncoref_cta_source_gene_ids,
+    resolve_reference_kmer_lengths,
     self_reference_matches,
 )
 from vaxrank.vaccine_antigen import (
@@ -81,12 +82,22 @@ def create_mock_genome(transcripts, species_name="test_species", release=100):
 # ReferenceProteome Basic Tests
 # =============================================================================
 
+def test_resolve_reference_kmer_lengths_precedence():
+    assert resolve_reference_kmer_lengths(None, None, [11, 9, 10]) == (9, 11)
+    assert resolve_reference_kmer_lengths(8, None, [9, 10]) == (8, 10)
+    assert resolve_reference_kmer_lengths(None, 12, [9, 10]) == (9, 12)
+    assert resolve_reference_kmer_lengths(8, 12, [9, 10]) == (8, 12)
+    assert resolve_reference_kmer_lengths(None, None, None) == (
+        DEFAULT_MIN_KMER_LENGTH,
+        DEFAULT_MAX_KMER_LENGTH,
+    )
+
+
 def test_none_genome():
     """Test ReferenceProteome with None genome"""
     ref = ReferenceProteome(None)
     ok_(not ref.contains("ANYSEQ"))
     ok_(not ref.contains("MADEUP"))
-    eq_(len(ref._kmer_set), 0)
 
 
 def test_contains_basic():

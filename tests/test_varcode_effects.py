@@ -118,7 +118,7 @@ def test_report_effect_data_uses_selected_effect_and_shows_outcomes():
     outcomes, _likely, priority = _outcome_set()
     creator = object.__new__(TemplateDataCreator)
 
-    effect_data = creator._effect_data(outcomes, selected_effect=priority)
+    effect_data = creator.effect_data(outcomes, selected_effect=priority)
 
     assert effect_data["Effect type"] == "_PriorityEffect"
     assert effect_data["Transcript name"] == "TX-PRIORITY"

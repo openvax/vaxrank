@@ -18,8 +18,8 @@ https://v23.proteinatlas.org/about/help
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -41,27 +41,6 @@ def _text(value) -> str:
     if pd.isna(value):
         return ""
     return str(value).strip()
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _set_fingerprint(values) -> str:
-    payload = "\n".join(sorted(set(values))).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
-
-
-def _json_native(value):
-    if isinstance(value, dict):
-        return {key: _json_native(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_native(item) for item in value]
-    return value
 
 
 @dataclass(frozen=True)
@@ -205,7 +184,7 @@ class TissueRiskAssessment(DataclassSerializable):
         )
 
     def to_report_dict(self) -> dict:
-        return _json_native(asdict(self))
+        return json.loads(json.dumps(asdict(self)))
 
     def evidence_rows(self) -> list[dict]:
         rows = []
@@ -260,6 +239,10 @@ def build_hpa_reference_provenance() -> HPAReferenceProvenance:
 
     hpa_version = reference_data.DEFAULT_HPA_VERSION
     path = reference_data.ensure(HPA_NORMAL_TISSUE_SOURCE, hpa_version)
+    source_digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            source_digest.update(chunk)
     try:
         verified = reference_data.verify(HPA_NORMAL_TISSUE_SOURCE, hpa_version)
         verification_status = "verified" if verified else "checksum_mismatch"
@@ -273,7 +256,7 @@ def build_hpa_reference_provenance() -> HPAReferenceProvenance:
         hpa_version=hpa_version,
         source_path=str(path),
         source_bytes=path.stat().st_size,
-        source_sha256=_sha256_file(path),
+        source_sha256=source_digest.hexdigest(),
         verification_status=verification_status,
     )
 
@@ -406,6 +389,8 @@ def derive_tissue_risk_proteins(
         coverage=HPAEvidenceCoverage(**counts),
         hpa_provenance=provenance,
         cta_unfiltered_gene_count=len(cta_gene_ids),
-        cta_unfiltered_gene_ids_sha256=_set_fingerprint(cta_gene_ids),
+        cta_unfiltered_gene_ids_sha256=hashlib.sha256(
+            "\n".join(sorted(cta_gene_ids)).encode("utf-8")
+        ).hexdigest(),
         excluded_cta_source_gene_ids=tuple(excluded_cta_gene_ids),
     )

@@ -11,6 +11,7 @@ subset that passed an immunogenicity filter.
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import asdict, dataclass, field
 from numbers import Integral
@@ -342,7 +343,7 @@ class WindowSafetyAssessment(DataclassSerializable):
 
     def to_report_dict(self) -> dict:
         """Plain JSON-compatible tree without serializer type metadata."""
-        return _json_native(asdict(self))
+        return json.loads(json.dumps(asdict(self)))
 
     def prediction_rows(self) -> list[dict]:
         """Flat, primitive-valued rows for CSV/DataFrame report inputs."""
@@ -487,9 +488,9 @@ class AntigenSafetyAssessment(DataclassSerializable):
         """JSON-compatible evidence tree for safety audit reports."""
         return {
             "window_assessment": self.window_assessment.to_report_dict(),
-            "risk_index_provenance": _json_native(
+            "risk_index_provenance": json.loads(json.dumps(
                 asdict(self.risk_index_provenance)
-            ),
+            )),
             "near_self_assessments": [
                 assessment.to_report_dict()
                 for assessment in self.near_self_assessments
@@ -610,14 +611,6 @@ def assess_antigen_safety(
             comparator=comparator,
         ),
     )
-
-
-def _json_native(value):
-    if isinstance(value, dict):
-        return {key: _json_native(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_native(item) for item in value]
-    return value
 
 
 def safety_assessment_from_prediction_frame(

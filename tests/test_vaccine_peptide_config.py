@@ -33,7 +33,7 @@ def _make_fragment(seq="A" * 25, n_alt_reads=9):
     """Minimal duck-typed MutantProteinFragment for VaccinePeptide tests.
 
     Must expose every binding the combined_score DSL evaluator looks up
-    (``_bindings_from_vaccine_peptide``); the DSL is the single path
+    (``combined_score_bindings``); the DSL is the single path
     that produces ``combined_score`` after the 3.1 refactor, including
     for the default expression.
     """

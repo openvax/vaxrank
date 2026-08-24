@@ -98,7 +98,7 @@ logger = logging.getLogger(__name__)
 # (the read counts and mutant-AA count are useful too, but more
 # numerous and less specific; they go in the DEBUG log). Order is
 # the order they appear in the preview.
-_HEADLINE_BINDINGS = (
+HEADLINE_BINDINGS = (
     'target_epitope_score',
     'self_epitope_score',
     'expression_score',
@@ -208,7 +208,7 @@ def combined_score_binding_names(expr_or_tree):
     )
 
 
-def _bindings_from_vaccine_peptide(vp):
+def combined_score_bindings(vp):
     """Read-only namespace of the scalars exposed to the DSL.
 
     Pulls from both the ``VaccinePeptide`` and its
@@ -260,7 +260,7 @@ def evaluate_combined_score(expr_or_tree, vaccine_peptide):
         # Re-render for error messages; stays cheap because this
         # only runs on failure.
         expr_text = ast.unparse(tree)
-    bindings = _bindings_from_vaccine_peptide(vaccine_peptide)
+    bindings = combined_score_bindings(vaccine_peptide)
     namespace = dict(_FUNCTIONS)
     namespace.update(bindings)
     try:
@@ -282,11 +282,11 @@ def evaluate_combined_score(expr_or_tree, vaccine_peptide):
         # whole ranked list and a tight preview keeps the stack
         # readable.
         preview = {
-            k: bindings[k] for k in _HEADLINE_BINDINGS if k in bindings
+            k: bindings[k] for k in HEADLINE_BINDINGS if k in bindings
         }
         missing = [k for k in _REQUIRED_HEADLINE_BINDINGS if k not in bindings]
         if missing:
-            # Soft contract: ``_bindings_from_vaccine_peptide`` is
+            # Soft contract: ``combined_score_bindings`` is
             # supposed to populate every source-agnostic headline binding. If a
             # future refactor renames or drops one, the preview will
             # silently shrink — surface that through a warning so
@@ -295,7 +295,7 @@ def evaluate_combined_score(expr_or_tree, vaccine_peptide):
             logger.warning(
                 "combined_score_expr error preview is missing "
                 "expected headline binding(s) %s; the bindings "
-                "contract from _bindings_from_vaccine_peptide may "
+                "contract from combined_score_bindings may "
                 "have changed.", missing)
         other_count = len(bindings) - len(preview)
         suffix = (
