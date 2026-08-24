@@ -499,12 +499,12 @@ def test_assemble_manifest_chosen_uses_canonical_linker_names():
             "Manifest 'chosen' entry %r is not the canonical name" % name)
 
 
-def test_packing_linker_aa_uses_max_candidate_length():
+def test_packing_linker_amino_acids_uses_max_candidate_length():
     """The bin-packer must size junctions against the longest possible
     per-junction substitution, not just the shared linker. Otherwise
     a short shared linker + long candidate could overflow the cap at
     swap time."""
-    from vaxrank.mrna import RNAConstructConfig, _packing_linker_aa
+    from vaxrank.mrna import RNAConstructConfig, packing_linker_amino_acids
     from vaxrank.vaccine_library import get_linker
 
     # Shared linker is short (G2S = 3 aa). Candidate set includes
@@ -515,7 +515,7 @@ def test_packing_linker_aa_uses_max_candidate_length():
         junction_swap_candidates=("G2S", "(G4S)2"),
     )
     shared = get_linker("G2S")
-    packing_aa = _packing_linker_aa(options, shared)
+    packing_aa = packing_linker_amino_acids(options, shared)
     assert len(packing_aa) == 10, (
         "Packer should use max(shared=3, longest_candidate=10) = 10, "
         "got len=%d (%r)" % (len(packing_aa), packing_aa))
@@ -525,7 +525,7 @@ def test_packing_linker_aa_uses_max_candidate_length():
         optimize_linkers=False,
         junction_swap_candidates=("G2S", "(G4S)2"),
     )
-    packing_aa_off = _packing_linker_aa(options_off, shared)
+    packing_aa_off = packing_linker_amino_acids(options_off, shared)
     assert packing_aa_off == "GGS", (
         "With optimizer off, packer should use shared linker "
         "as-is, got %r" % packing_aa_off)

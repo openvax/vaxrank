@@ -644,10 +644,11 @@ class TemplateDataCreator(object):
         return self.template_data
 
 
-def _make_report(
+def render_report(
         template_data,
         file_handle,
         template_path):
+    """Render one packaged Jinja template into an open text stream."""
     template = JINJA_ENVIRONMENT.get_template(template_path)
     report = template.render(template_data)
     file_handle.write(report)
@@ -656,14 +657,14 @@ def make_ascii_report(
         template_data,
         ascii_report_path):
     with open(ascii_report_path, "w") as f:
-        _make_report(template_data, f, 'templates/template.txt')
+        render_report(template_data, f, 'templates/template.txt')
     logger.info('Wrote ASCII report to %s', ascii_report_path)
 
 def make_html_report(
         template_data,
         html_report_path):
     with open(html_report_path, "w") as f:
-        _make_report(template_data, f, 'templates/template.html')
+        render_report(template_data, f, 'templates/template.html')
     logger.info('Wrote HTML report to %s', html_report_path)
 
 def _pdf_via_pdfkit(html_path, pdf_report_path):
@@ -697,7 +698,7 @@ def make_pdf_report(
         pdf_report_path,
         backend='pdfkit'):
     with tempfile.NamedTemporaryFile(mode='w', suffix='.html') as f:
-        _make_report(template_data, f, 'templates/template.html')
+        render_report(template_data, f, 'templates/template.html')
         f.flush()
 
         if backend == 'pdfkit':
