@@ -809,6 +809,8 @@ def load_lens(path):
             row=row,
             allele=allele,
             peptide=peptide,
+            source_sequence_name=pep_context or str(peptide),
+            peptide_offset=offset,
             detected=detected,
             display_pred=display_pred,
             chosen_tools=[d.tool for d in chosen],
@@ -838,8 +840,8 @@ def load_lens(path):
     return report_df, epitopes
 
 
-def _build_lens_report_row(row, allele, peptide, detected, display_pred,
-                           chosen_tools):
+def _build_lens_report_row(row, allele, peptide, source_sequence_name,
+                           peptide_offset, detected, display_pred, chosen_tools):
     """Assemble one row of the LENS neoepitope report DataFrame.
 
     ``display_pred`` (if not None) drives the legacy Affinity / %ile
@@ -875,6 +877,8 @@ def _build_lens_report_row(row, allele, peptide, detected, display_pred,
         '%ile rank': display_percentile,
         'Agretopicity': display_agretopicity,
         'TPM': _safe_float(row.get("tpm")),
+        'Source sequence name': source_sequence_name,
+        'Peptide offset': peptide_offset,
     })
     # Every detected predictor gets a raw-value column so users can see
     # per-tool signals side-by-side in the report, even if not chosen

@@ -525,6 +525,76 @@ def test_load_lens_preserves_allele_independent_processing_once():
     assert all(epitope.per_allele_scores)
 
 
+def test_lens_processing_dsl_scores_every_patient_allele(tmp_path):
+    """Canonical processing evidence participates in allele-scoped DSL groups."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import (
+        attach_per_allele_scores,
+        epitopes_to_topiary_df,
+    )
+
+    path = tmp_path / "multi-allele-processing.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t60\t0.8\n")
+
+    _, epitopes = load_lens(path)
+    assert len(epitopes) == 1
+    epitope = epitopes[0]
+    processing = epitope.predictions_for(
+        "antigen_processing", predictor="mhcflurry")
+    assert len(processing) == 1
+    assert processing[0].allele == ""
+
+    topiary_df = epitopes_to_topiary_df(epitopes)
+    processing_rows = topiary_df[
+        topiary_df["kind"] == "antigen_processing"]
+    assert set(processing_rows["allele"]) == {
+        "HLA-A*02:01", "HLA-B*07:02"}
+
+    scored = attach_per_allele_scores(
+        epitopes,
+        EpitopeConfig(score_expr="processing[mhcflurry].score"))
+    assert scored[0].per_allele_scores == {
+        "HLA-A*02:01": pytest.approx(0.8),
+        "HLA-B*07:02": pytest.approx(0.8),
+    }
+
+
+def test_lens_context_scores_merge_by_source_position(tmp_path):
+    """Equal peptide/allele rows retain context-specific integrated scores."""
+    from vaxrank.epitope_config import EpitopeConfig
+
+    path = tmp_path / "context-specific-scores.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.pres_score\tmhcflurry_2.1.1.proc_score\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLAA\t50\t0.2\t0.3\n"
+        "SIINFEKL\tHLA-A02:01\tYYYYSIINFEKLZ\t60\t0.9\t0.8\n")
+
+    report_df, epitopes = load_lens(path)
+    assert list(report_df["Source sequence name"]) == [
+        "XXSIINFEKLAA", "YYYYSIINFEKLZ"]
+    assert list(report_df["Peptide offset"]) == [2, 4]
+
+    csv_path = tmp_path / "scored.csv"
+    write_neoepitope_report(
+        report_df,
+        epitopes,
+        csv_report_path=str(csv_path),
+        epitope_config=EpitopeConfig(score_expr=(
+            "presentation[mhcflurry].score + "
+            "processing[mhcflurry].score")),
+    )
+
+    import pandas as pd
+    result = pd.read_csv(csv_path).set_index("Source sequence name")
+    assert result.loc["XXSIINFEKLAA", "vaxrank_score"] == pytest.approx(0.5)
+    assert result.loc["YYYYSIINFEKLZ", "vaxrank_score"] == pytest.approx(1.7)
+
+
 def test_load_lens_rejects_conflicting_processing_scores(tmp_path):
     """An allele-independent score may repeat, but may not disagree."""
     path = tmp_path / "conflicting-processing.tsv"

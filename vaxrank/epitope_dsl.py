@@ -113,9 +113,12 @@ def epitopes_to_topiary_df(epitopes):
     :class:`topiary.ranking.EvalContext` and
     :func:`topiary.ranking.apply_filter`.
 
-    One row per leaf ``mhctools.Prediction`` in each CandidateEpitope's mutant
-    context — a single CandidateEpitope can emit N rows (one per allele x
-    predictor x kind). When multiple predictions share a (peptide,
+    One row per allele-scoped leaf ``mhctools.Prediction`` in each
+    CandidateEpitope's mutant context. Allele-independent antigen-processing
+    evidence is projected into every allele group in this evaluation view while
+    remaining one canonical leaf on the CandidateEpitope. A single
+    CandidateEpitope can therefore emit N rows (one per allele x predictor x
+    kind). When multiple predictions share a (peptide,
     allele) pair (e.g. MHCflurry and netMHCpan rows from a LENS file),
     DSL expressions can select between them via
     ``affinity['mhcflurry']`` / ``affinity['netmhcpan']``, and when
@@ -132,23 +135,38 @@ def epitopes_to_topiary_df(epitopes):
     for e in epitopes:
         ctx = e
         source_name = ctx.source_sequence or ctx.sequence
-        for p in ctx.predictions_flat():
-            rows.append({
-                "source_sequence_name": source_name,
-                "peptide": p.peptide,
-                "peptide_offset": ctx.offset,
-                "peptide_length": len(p.peptide),
-                "allele": p.allele,
-                "n_flank": ctx.n_flank,
-                "c_flank": ctx.c_flank,
-                "prediction_method_name": p.predictor_name,
-                "predictor_version": p.predictor_version or "",
-                "kind": p.kind,
-                "value": p.value,
-                "affinity": p.value,
-                "percentile_rank": p.percentile_rank,
-                "score": p.score,
-            })
+        predictions = ctx.predictions_flat()
+        patient_alleles = tuple(sorted({
+            prediction.allele for prediction in predictions
+            if prediction.allele
+        }))
+        for p in predictions:
+            evaluation_alleles = (
+                patient_alleles
+                if (
+                    p.kind == "antigen_processing"
+                    and not p.allele
+                    and patient_alleles
+                )
+                else (p.allele,)
+            )
+            for allele in evaluation_alleles:
+                rows.append({
+                    "source_sequence_name": source_name,
+                    "peptide": p.peptide,
+                    "peptide_offset": ctx.offset,
+                    "peptide_length": len(p.peptide),
+                    "allele": allele,
+                    "n_flank": ctx.n_flank,
+                    "c_flank": ctx.c_flank,
+                    "prediction_method_name": p.predictor_name,
+                    "predictor_version": p.predictor_version or "",
+                    "kind": p.kind,
+                    "value": p.value,
+                    "affinity": p.value,
+                    "percentile_rank": p.percentile_rank,
+                    "score": p.score,
+                })
     return pd.DataFrame(rows)
 
 
