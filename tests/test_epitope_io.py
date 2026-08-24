@@ -662,6 +662,61 @@ def test_lens_presentation_only_candidate_has_a_template_report_row(tmp_path):
     assert row["Presentation %ile"] == "0.280"
 
 
+def test_lens_report_anchors_mixed_evidence_per_allele_and_predictor(tmp_path):
+    """Each allele/predictor gets its strongest available report anchor."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import attach_per_allele_scores
+    from vaxrank.report import TemplateDataCreator, epitope_report_row_inputs
+
+    path = tmp_path / "mixed-evidence.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.pres_score\tmhcflurry_2.1.1.proc_score\t"
+        "netmhcpan_4.1.aff_nm\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\t0.7\t\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t\t0.6\t0.7\t75\n"
+        "SIINFEKL\tHLA-C07:02\tXXSIINFEKLXX\t\t\t0.7\t\n")
+
+    _, epitopes = load_lens(path)
+    epitope = attach_per_allele_scores(
+        epitopes,
+        EpitopeConfig(score_expr="processing[mhcflurry].score"),
+    )[0]
+    row_inputs = epitope_report_row_inputs(epitope)
+    assert [
+        (row.allele, row.prediction.predictor_name, row.prediction.kind)
+        for row in row_inputs
+    ] == [
+        ("HLA-A*02:01", "mhcflurry", "pMHC_affinity"),
+        ("HLA-B*07:02", "netmhcpan", "pMHC_affinity"),
+        ("HLA-B*07:02", "mhcflurry", "pMHC_presentation"),
+        ("HLA-C*07:02", "mhcflurry", "antigen_processing"),
+    ]
+
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.processing_predictions_by_key = {}
+    report_rows = [
+        creator.epitope_data(
+            epitope,
+            row_input.prediction,
+            allele=row_input.allele,
+            include_additional_prediction_axes=True,
+        )
+        for row_input in row_inputs
+    ]
+    by_key = {
+        (row["Allele"], row["Predictor"]): row for row in report_rows}
+    assert by_key[("A*02:01", "mhcflurry")]["IC50"] == "50.00 nM"
+    assert by_key[("A*02:01", "mhcflurry")][
+        "Presentation score"] == "0.800"
+    assert by_key[("B*07:02", "netmhcpan")]["IC50"] == "75.00 nM"
+    assert by_key[("B*07:02", "mhcflurry")][
+        "Presentation score"] == "0.600"
+    assert by_key[("C*07:02", "mhcflurry")][
+        "Integrated processing score"] == "0.700"
+    assert all(row["Score"] == "0.7" for row in report_rows)
+
+
 def test_lens_context_scores_merge_by_source_position(tmp_path):
     """Equal peptide/allele rows retain context-specific integrated scores."""
     from vaxrank.epitope_config import EpitopeConfig

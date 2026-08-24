@@ -57,34 +57,50 @@ class EpitopeReportRowInput:
 def epitope_report_row_inputs(epitope):
     """Return explicit row inputs for a candidate's template table.
 
-    Affinity predictions remain the preferred row anchors. When affinity is
-    absent, presentation predictions anchor rows instead. A candidate with
-    only allele-independent processing evidence emits one row per explicitly
-    retained patient allele without duplicating its canonical Prediction.
+    Select one anchor per ``(patient allele, predictor, version)``. Affinity
+    is preferred, followed by presentation, followed by allele-independent
+    processing for combinations not covered by either allele-specific kind.
+    This preserves every scored allele and predictor in mixed-evidence inputs
+    without duplicating the canonical processing Prediction.
     """
     predictions = epitope.predictions_flat()
+    row_inputs_by_key = {}
     for kind in ('pMHC_affinity', 'pMHC_presentation'):
-        kind_predictions = tuple(
-            prediction for prediction in predictions
-            if prediction.kind == kind)
-        if kind_predictions:
-            return tuple(
-                EpitopeReportRowInput(prediction, prediction.allele)
-                for prediction in kind_predictions)
+        for prediction in predictions:
+            if prediction.kind != kind:
+                continue
+            if not prediction.allele:
+                raise ValueError(
+                    f"{kind} report evidence requires a patient allele")
+            key = (
+                prediction.allele,
+                prediction.predictor_name,
+                prediction.predictor_version,
+            )
+            row_inputs_by_key.setdefault(
+                key,
+                EpitopeReportRowInput(prediction, prediction.allele),
+            )
 
     processing_predictions = tuple(
         prediction for prediction in predictions
         if prediction.kind == 'antigen_processing')
-    if not processing_predictions:
-        return ()
-    if not epitope.patient_alleles:
+    if processing_predictions and not epitope.patient_alleles:
         raise ValueError(
             "Cannot render allele-independent antigen-processing evidence "
             "without explicit patient alleles")
-    return tuple(
-        EpitopeReportRowInput(prediction, allele)
-        for prediction in processing_predictions
-        for allele in epitope.patient_alleles)
+    for prediction in processing_predictions:
+        for allele in epitope.patient_alleles:
+            key = (
+                allele,
+                prediction.predictor_name,
+                prediction.predictor_version,
+            )
+            row_inputs_by_key.setdefault(
+                key,
+                EpitopeReportRowInput(prediction, allele),
+            )
+    return tuple(row_inputs_by_key.values())
 
 
 class TemplateDataCreator(object):
