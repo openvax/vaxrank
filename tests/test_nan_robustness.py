@@ -15,7 +15,7 @@ Two layered guarantees:
    probability in ``score``, not ``value``); the producer must
    normalize these on the way in or every downstream consumer pays.
 
-2. ``cli.entry_point._to_json_nan_tolerant`` renders NaN / Inf as
+2. ``cli.entry_point.serialize_json_nan_tolerant`` renders NaN / Inf as
    JSON ``null`` rather than crashing the writer. Defense in depth:
    even if a future producer leaks a NaN, the whole report doesn't
    get lost on the last step.
@@ -173,18 +173,18 @@ def test_predict_epitopes_does_not_emit_nan_value_for_presentation():
         "pMHC_presentation rows should have value=None, not NaN")
 
 
-# ---- _to_json_nan_tolerant ---------------------------------------------
+# ---- serialize_json_nan_tolerant ---------------------------------------
 
 
 def test_json_writer_renders_nan_as_null():
     """Defense-in-depth: if a NaN slips past the producer guards, the
     JSON writer renders it as ``null`` rather than crashing."""
-    from vaxrank.cli.entry_point import _to_json_nan_tolerant
+    from vaxrank.cli.entry_point import serialize_json_nan_tolerant
 
     payload = {'finite': 1.5, 'nan': float('nan'),
                'inf': float('inf'), 'neg_inf': float('-inf'),
                'nested': {'also_nan': float('nan')}}
-    out = _to_json_nan_tolerant(payload)
+    out = serialize_json_nan_tolerant(payload)
     parsed = json.loads(out)
     assert parsed['finite'] == 1.5
     assert parsed['nan'] is None
@@ -195,20 +195,20 @@ def test_json_writer_renders_nan_as_null():
 
 def test_json_writer_handles_list_of_floats():
     """Lists of floats with embedded NaN also serialize cleanly."""
-    from vaxrank.cli.entry_point import _to_json_nan_tolerant
+    from vaxrank.cli.entry_point import serialize_json_nan_tolerant
 
     payload = {'values': [1.0, float('nan'), 2.0, float('inf')]}
-    parsed = json.loads(_to_json_nan_tolerant(payload))
+    parsed = json.loads(serialize_json_nan_tolerant(payload))
     assert parsed['values'] == [1.0, None, 2.0, None]
 
 
 def test_json_writer_round_trips_real_payload():
     """A finite payload that doesn't trigger the NaN path should
     survive the writer with the same content."""
-    from vaxrank.cli.entry_point import _to_json_nan_tolerant
+    from vaxrank.cli.entry_point import serialize_json_nan_tolerant
 
     payload = {'a': 1, 'b': 'string', 'c': [1, 2, 3], 'd': {'e': 4.5}}
-    parsed = json.loads(_to_json_nan_tolerant(payload))
+    parsed = json.loads(serialize_json_nan_tolerant(payload))
     assert parsed == payload
 
 

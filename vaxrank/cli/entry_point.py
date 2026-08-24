@@ -71,7 +71,7 @@ from ..vaf import extract_dna_vaf_by_variant
 logger = logging.getLogger(__name__)
 
 
-def _to_json_nan_tolerant(obj):
+def serialize_json_nan_tolerant(obj):
     """Serialize ``obj`` to a JSON string, rendering NaN/Inf as
     ``null`` rather than raising. Defense-in-depth wrapper around
     ``serializable.to_json``; producers should already be coercing
@@ -82,7 +82,7 @@ def _to_json_nan_tolerant(obj):
     return simplejson.dumps(to_serializable_repr(obj), ignore_nan=True)
 
 
-def _filter_unannotatable_variants(variants):
+def filter_unannotatable_variants(variants):
     """
     Filter out variants whose contigs cannot be resolved by varcode/pyensembl.
 
@@ -124,16 +124,10 @@ def _filter_unannotatable_variants(variants):
     return variants
 
 
-def _has_external_input(args):
-    return bool(
-        getattr(args, 'input_pvacseq', None)
-        or getattr(args, 'input_lens', None))
-
-
-def _annotate_predictions_with_processing(ranked_vaccine_peptides,
-                                          lens_epitopes,
-                                          human_only=False,
-                                          threshold=0.5):
+def annotate_predictions_with_processing(ranked_vaccine_peptides,
+                                         lens_epitopes,
+                                         human_only=False,
+                                         threshold=0.5):
     """Run pepsickle credibility tagging across all CandidateEpitope records.
     Pulls them from BOTH the ranked-vaccine-peptides intermediate
     (one VP per variant; each VP has its own epitopes) AND the
@@ -189,18 +183,10 @@ def _annotate_predictions_with_processing(ranked_vaccine_peptides,
         all_epitopes, human_only=human_only, threshold=threshold)
 
 
-def _epitope_config_from_args_safe(args):
-    from ..epitope_config import EpitopeConfig
-    try:
-        return epitope_config_from_args(args)
-    except Exception:
-        return EpitopeConfig()
-
-
 _DEFAULT_VACCINE_TYPES = ['peptide', 'mrna']
 
 
-def _resolve_vaccine_types(args):
+def resolve_vaccine_types(args):
     """Return the ordered, deduplicated list of active vaccine types.
 
     ``--vaccine-type`` is multi-valued (default
@@ -233,7 +219,7 @@ def _resolve_vaccine_types(args):
     return types
 
 
-def _coalesce_from_config(args, cli_attr, config_kwargs, config_key):
+def coalesce_config_value(args, cli_attr, config_kwargs, config_key):
     """Resolve a single construct knob across CLI flag, YAML config,
     and built-in default. Precedence (highest first):
 
@@ -258,7 +244,7 @@ def _coalesce_from_config(args, cli_attr, config_kwargs, config_key):
     return cli_val       # built-in default
 
 
-def _construct_config_for_modality(args, modality):
+def construct_config_for_modality(args, modality):
     """Return ``extract_construct_kwargs(merged_config, modality)``
     or ``{}`` if the YAML config can't be loaded (e.g. tests that
     bypass the CLI and don't supply a --config attribute, or a path
@@ -282,7 +268,7 @@ def _construct_config_for_modality(args, modality):
         return {}
 
 
-def _vaccine_target_dir(output_dir, vaccine_type, all_active_types):
+def vaccine_target_dir(output_dir, vaccine_type, all_active_types):
     """Where this writer should put its files.
 
     Single-mode runs (one type) write directly into ``output_dir``.
@@ -303,7 +289,11 @@ def _emit_neoepitope_report_external(args, report_df, epitopes):
     """
     if report_df is None or report_df.empty:
         return
-    epitope_config = _epitope_config_from_args_safe(args)
+    from ..epitope_config import EpitopeConfig
+    try:
+        epitope_config = epitope_config_from_args(args)
+    except Exception:
+        epitope_config = EpitopeConfig()
     write_neoepitope_report(
         report_df=report_df,
         epitopes=epitopes,
@@ -334,10 +324,10 @@ def _resolve_axis(args, per_type_attr, shared_attr, fallback):
 def _emit_peptide_constructs(args, ranked, target_dir):
     """Build + write peptide-vaccine constructs. Modality-specific."""
     # YAML overrides for any knob not explicitly passed on the CLI.
-    yaml_kwargs = _construct_config_for_modality(args, 'peptide')
+    yaml_kwargs = construct_config_for_modality(args, 'peptide')
 
     def cfg(cli_attr, yaml_key):
-        return _coalesce_from_config(args, cli_attr, yaml_kwargs, yaml_key)
+        return coalesce_config_value(args, cli_attr, yaml_kwargs, yaml_key)
 
     # Resolve the orthogonal antigen-design axes:
     # per-type override > shared default > config default. The legacy
@@ -380,7 +370,7 @@ def _emit_peptide_constructs(args, ranked, target_dir):
     # coverage tier before bin-packing. No-op when alleles aren't
     # available (e.g. external arg parser without
     # ``--mhc-alleles`` and no LENS-inferred set).
-    target_alleles = _resolve_target_alleles(args)
+    target_alleles = resolve_target_alleles(args)
     constructs = assemble_peptide_constructs(
         ranked, options=peptide_options, target_alleles=target_alleles)
     # Canonical filenames inside the per-modality target directory:
@@ -468,12 +458,12 @@ _ARG_GROUPS = (
 
 # Cached lookup for the section -> keys mapping. Built once at module
 # import; the per-section "(N defaults hidden)" footer in
-# ``_log_args_summary`` reads from here instead of rebuilding the
+# ``log_args_summary`` reads from here instead of rebuilding the
 # dict on every call.
 _ARG_GROUPS_BY_NAME = dict(_ARG_GROUPS)
 
 
-def _log_args_summary(args):
+def log_args_summary(args):
     """Pretty-print the resolved args. Replaces ``logger.info(args)``
     which was a single flat ``Namespace(...)`` dump that scrolled past
     100 keys without grouping. We log:
@@ -556,11 +546,11 @@ def _log_args_summary(args):
     logger.info("\n".join(lines))
 
 
-def _resolve_target_alleles(args):
+def resolve_target_alleles(args):
     """Return the list of patient MHC alleles for coverage-aware
     antigen selection (and for report-time coverage display).
 
-    Resolution mirrors :func:`_resolve_mhc_for_linker_optimizer`:
+    Resolution mirrors :func:`resolve_mhc_for_linker_optimizer`:
 
     * Pipeline path: from ``--mhc-alleles`` on the CLI.
     * External path (LENS / pVACseq): the loader stashes inferred
@@ -583,7 +573,7 @@ def _resolve_target_alleles(args):
     return list(alleles or [])
 
 
-def _resolve_mhc_for_linker_optimizer(args):
+def resolve_mhc_for_linker_optimizer(args):
     """Find a usable (predictor, alleles) pair for the per-junction
     linker optimizer.
 
@@ -687,10 +677,10 @@ def _resolve_mhc_for_linker_optimizer(args):
 
 def _emit_mrna_constructs(args, ranked, target_dir):
     """Build + write mRNA-vaccine constructs. Modality-specific."""
-    yaml_kwargs = _construct_config_for_modality(args, 'mrna')
+    yaml_kwargs = construct_config_for_modality(args, 'mrna')
 
     def cfg(cli_attr, yaml_key):
-        return _coalesce_from_config(args, cli_attr, yaml_kwargs, yaml_key)
+        return coalesce_config_value(args, cli_attr, yaml_kwargs, yaml_key)
 
     junction_candidates_raw = cfg(
         'mrna_junction_candidates', 'junction_candidates') or ''
@@ -742,11 +732,11 @@ def _emit_mrna_constructs(args, ranked, target_dir):
             'mrna_poly_a_segment_linker', 'poly_a_segment_linker'),
     )
     if options.optimize_linkers:
-        mhc_predictor, mhc_alleles = _resolve_mhc_for_linker_optimizer(args)
+        mhc_predictor, mhc_alleles = resolve_mhc_for_linker_optimizer(args)
     else:
         mhc_predictor = None
         mhc_alleles = None
-    target_alleles = _resolve_target_alleles(args)
+    target_alleles = resolve_target_alleles(args)
     constructs = assemble_mrna_constructs(
         ranked, options=options,
         mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles,
@@ -774,8 +764,8 @@ def _emit_mrna_constructs(args, ranked, target_dir):
 
 
 # Multi-mode dispatch table: vaccine-type → writer.
-# ``_emit_outputs`` iterates over the active types from
-# ``_resolve_vaccine_types`` and fires each writer with its own
+# ``emit_outputs`` iterates over the active types from
+# ``resolve_vaccine_types`` and fires each writer with its own
 # target dir. Adding a new vaccine type means registering it here +
 # extending ``--vaccine-type`` choices in arg_parser.
 _VACCINE_TYPE_DISPATCH = {
@@ -784,21 +774,21 @@ _VACCINE_TYPE_DISPATCH = {
 }
 
 
-def _emit_outputs(args, ranked, source):
+def emit_outputs(args, ranked, source):
     """Single fan-out point for everything downstream of ranking.
 
     ``ranked`` is the shared ``[(Variant, [VaccinePeptide])]``
     intermediate; ``source`` is 'pipeline' (VCF/BAM) or 'external'
     (LENS/pVACseq).
 
-    Active vaccine types come from ``_resolve_vaccine_types``
+    Active vaccine types come from :func:`resolve_vaccine_types`
     (``--vaccine-type`` is multi-valued). Each writer fires when
     ``--output-dir`` is set; single-mode runs land directly in
     ``--output-dir``, multi-mode runs land in per-modality subdirs
     so their canonical filenames (manifest.json, vaccine.fasta, …)
     don't collide.
     """
-    vaccine_types = _resolve_vaccine_types(args)
+    vaccine_types = resolve_vaccine_types(args)
 
     # Rank reports run for both sources; on the external-input path
     # the LENS-native per-(peptide, allele) report already consumed
@@ -838,7 +828,7 @@ def _emit_outputs(args, ranked, source):
             # be noise on top of the dispatch line below. The user
             # sees ``wrote=[]`` and can act on it.
             continue
-        target_dir = _vaccine_target_dir(output_dir, vtype, vaccine_types)
+        target_dir = vaccine_target_dir(output_dir, vtype, vaccine_types)
         # Multi-mode is "all-or-nothing": any writer failure aborts
         # the whole run. Partial output is worse than no output —
         # ending up with a peptide vaccine on disk but no mRNA
@@ -852,7 +842,7 @@ def _emit_outputs(args, ranked, source):
             writer(args, ranked, target_dir)
         except Exception:
             written = [
-                (t, _vaccine_target_dir(output_dir, t, vaccine_types))
+                (t, vaccine_target_dir(output_dir, t, vaccine_types))
                 for t in fired
             ]
             written_desc = (
@@ -901,7 +891,7 @@ _AUTO_OUTPUT_FILENAMES = {
 }
 
 
-def _auto_populate_output_paths_from_dir(args):
+def populate_default_output_paths(args):
     """When ``--output-dir`` is set and the per-format output flags
     are not, default them to canonical filenames inside the
     directory. Lets ``--output-dir DIR`` produce the full bundle
@@ -939,7 +929,7 @@ def _auto_populate_output_paths_from_dir(args):
             ", ".join("%s -> %s" % (a, p) for a, p in filled))
 
 
-def _write_run_summary(args, patient_info, source):
+def write_run_summary(args, patient_info, source):
     """Write a top-level ``run_summary.txt`` in --output-dir.
 
     In multi-vaccine-type runs the constructs live in per-modality
@@ -962,7 +952,7 @@ def _write_run_summary(args, patient_info, source):
             if getattr(args, attr, None):
                 lines.append("  %s: %s" % (label, getattr(args, attr)))
 
-    alleles = _resolve_target_alleles(args)
+    alleles = resolve_target_alleles(args)
     if alleles:
         inferred = getattr(args, '_inferred_mhc_alleles_from_lens', None)
         note = " (inferred from report)" if (
@@ -992,14 +982,14 @@ def _write_run_summary(args, patient_info, source):
         if path:
             lines.append("  %-18s %s" % (
                 label + ":", os.path.relpath(path, output_dir)))
-    vaccine_types = _resolve_vaccine_types(args)
+    vaccine_types = resolve_vaccine_types(args)
     # In the split-report layout (multi-type + reports requested) each
     # modality subdir also holds its own vaccine_report; say so.
     split_reports = len(vaccine_types) > 1 and any(
         getattr(args, a, '') for a in (
             'output_ascii_report', 'output_html_report', 'output_pdf_report'))
     for vtype in vaccine_types:
-        target_dir = _vaccine_target_dir(output_dir, vtype, vaccine_types)
+        target_dir = vaccine_target_dir(output_dir, vtype, vaccine_types)
         if target_dir:
             contents = (
                 "constructs + vaccine_report" if split_reports
@@ -1015,7 +1005,7 @@ def _write_run_summary(args, patient_info, source):
     logger.info("Wrote run summary to %s", summary_path)
 
 
-def _confirm_output_dir_overwrite(args):
+def confirm_output_dir_overwrite(args):
     """Confirm before writing into an existing, non-empty --output-dir.
 
     Interactive (TTY) runs get a ``y/N`` prompt and abort on anything
@@ -1064,7 +1054,7 @@ def configure_logging(args):
                     handler.setLevel(logging.DEBUG)
 
 
-def _resolve_ensembl_release(args):
+def resolve_ensembl_release(args):
     """If --ensembl-release was given, override args.genome with a specific
     pyensembl EnsemblRelease so that varcode/isovar use that release."""
     ensembl_release = getattr(args, 'ensembl_release', None)
@@ -1124,25 +1114,25 @@ def main(args_list=None):
 
     args = parse_vaxrank_args(args_list)
     configure_logging(args)
-    _resolve_ensembl_release(args)
+    resolve_ensembl_release(args)
     # Manufacturability default depends on whether peptide is one of
     # the active vaccine types: those metrics (GRAVY / Cys content /
     # N-terminal Q / Asp-Pro bonds) apply to peptide synthesis but
     # not to mRNA constructs (translated in vivo). Show the section
     # when peptide is being designed; hide it when only mRNA. Users
     # can force either way via the explicit flags. Reuse
-    # ``_resolve_vaccine_types`` so the shape-tolerance and dedup
+    # ``resolve_vaccine_types`` so the shape-tolerance and dedup
     # logic lives in exactly one place.
     if getattr(args, 'manufacturability', None) is None:
-        args.manufacturability = 'peptide' in _resolve_vaccine_types(args)
+        args.manufacturability = 'peptide' in resolve_vaccine_types(args)
     # When ``--output-dir`` is set, auto-fill the canonical
     # CSV / JSON output paths inside the directory so a user
     # who passes just ``--output-dir mydir/`` gets the full
     # bundle (FASTAs + manifest + ranked-peptides CSV +
     # JSON dump) without listing every flag. Explicit
     # ``--output-csv`` / ``--output-json-file`` paths win.
-    _auto_populate_output_paths_from_dir(args)
-    _log_args_summary(args)
+    populate_default_output_paths(args)
+    log_args_summary(args)
 
     # Fail fast when no output path is set, *before* loading inputs or
     # running predictions. Otherwise a long --input-lens run silently
@@ -1150,7 +1140,7 @@ def main(args_list=None):
     # --output-* flag, with no default destination). Applies to both
     # the VCF/BAM pipeline path and the external-input path.
     check_args(args)
-    _confirm_output_dir_overwrite(args)
+    confirm_output_dir_overwrite(args)
 
     # Architecture (post-#252):
     #
@@ -1162,7 +1152,7 @@ def main(args_list=None):
     #   SHARED:  ranked_variants_with_vaccine_peptides
     #
     #   DOWNSTREAM (modality-agnostic reports + peptide / mRNA construct dispatch)
-    #     _emit_outputs(args, ranked, source)
+    #     emit_outputs(args, ranked, source)
     #
     # The external-input path no longer hard-short-circuits — it
     # produces the same shape as the VCF/BAM path so peptide and mRNA
@@ -1179,7 +1169,9 @@ def main(args_list=None):
     # shared template-report block can ``data.get(...)`` either way.
     data = {}
 
-    if _has_external_input(args):
+    if (
+            getattr(args, 'input_pvacseq', None)
+            or getattr(args, 'input_lens', None)):
         loaded = load_external_ranked(args)
         if loaded is None:
             ranked_variants_with_vaccine_peptides = []
@@ -1200,7 +1192,7 @@ def main(args_list=None):
         # ``--mhc-alleles`` being on the CLI. The external arg
         # parser doesn't include the mhctools args, so the predictor
         # still has to come from ``--mhc-predictor`` if set —
-        # ``_resolve_mhc_for_linker_optimizer`` produces a targeted
+        # ``resolve_mhc_for_linker_optimizer`` produces a targeted
         # message when alleles are inferred but predictor is missing.
         if patient_info is not None:
             from ..external_input import LENS_PROVENANCE_MARKER
@@ -1238,13 +1230,13 @@ def main(args_list=None):
     # default; opt-out via --no-processing-aware-annotation.
     processing_predictions_by_key = {}
     if getattr(args, 'processing_aware_annotation', True):
-        _, processing_predictions_by_key = _annotate_predictions_with_processing(
+        _, processing_predictions_by_key = annotate_predictions_with_processing(
             ranked_variants_with_vaccine_peptides, predictions,
             human_only=getattr(args, 'pepsickle_human_only', False),
             threshold=getattr(args, 'pepsickle_threshold', 0.5))
 
-    _emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
-    _write_run_summary(args, patient_info, source)
+    emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
+    write_run_summary(args, patient_info, source)
 
     ########################
     # Template-based reports (PDF / HTML / ASCII)
@@ -1266,19 +1258,19 @@ def main(args_list=None):
     # the selected pool. The selector is the same one
     # ``_emit_*_constructs`` runs at write time, so the report
     # matches what would actually be assembled with --output-dir.
-    target_alleles = _resolve_target_alleles(args)
+    target_alleles = resolve_target_alleles(args)
     vaccine_constructions = {}
     if ranked_variants_with_vaccine_peptides:
         from ..coverage import (
             select_antigens_for_coverage, summarize_construction_decisions,
         )
-        active_types = _resolve_vaccine_types(args)
+        active_types = resolve_vaccine_types(args)
         if 'mrna' in active_types:
             from ..mrna import RNAConstructConfig
-            yaml_kwargs = _construct_config_for_modality(args, 'mrna')
+            yaml_kwargs = construct_config_for_modality(args, 'mrna')
 
             def _mrna_cfg(cli_attr, yaml_key):
-                return _coalesce_from_config(
+                return coalesce_config_value(
                     args, cli_attr, yaml_kwargs, yaml_key)
             mrna_options = RNAConstructConfig(
                 antigens_per_construct=_mrna_cfg(
@@ -1306,10 +1298,10 @@ def main(args_list=None):
             }
         if 'peptide' in active_types:
             from ..peptide import PeptideConstructConfig
-            yaml_kwargs = _construct_config_for_modality(args, 'peptide')
+            yaml_kwargs = construct_config_for_modality(args, 'peptide')
 
             def _pep_cfg(cli_attr, yaml_key):
-                return _coalesce_from_config(
+                return coalesce_config_value(
                     args, cli_attr, yaml_kwargs, yaml_key)
             pep_options = PeptideConstructConfig(
                 antigens_per_construct=_pep_cfg(
@@ -1367,7 +1359,7 @@ def main(args_list=None):
                 template_data=template_data, pdf_report_path=pdf_path,
                 backend=args.pdf_backend)
 
-    active_types = _resolve_vaccine_types(args)
+    active_types = resolve_vaccine_types(args)
     report_output_dir = getattr(args, 'output_dir', '') or ''
     if len(active_types) > 1 and report_output_dir:
         # Split layout (#269): a modality-agnostic core report at the
@@ -1381,7 +1373,7 @@ def main(args_list=None):
             args.output_ascii_report, args.output_html_report,
             args.output_pdf_report)
         for vtype in active_types:
-            target_dir = _vaccine_target_dir(
+            target_dir = vaccine_target_dir(
                 report_output_dir, vtype, active_types)
             if not target_dir:
                 continue
@@ -1420,7 +1412,7 @@ def run_vaxrank_from_parsed_args(args):
     # ``vaccine_peptides.ranking_rules`` should be a no-op tie-break
     # against ManufacturabilityConfig() defaults rather than against
     # user-overridden thresholds that don't apply to mRNA.
-    if 'peptide' in _resolve_vaccine_types(args):
+    if 'peptide' in resolve_vaccine_types(args):
         manufacturability_config = manufacturability_config_from_args(
             args, merged_config=merged_config)
     else:
@@ -1475,7 +1467,7 @@ def run_vaxrank_from_parsed_args(args):
     # We load variants ourselves (instead of run_isovar_from_parsed_args)
     # so we can filter out alt contigs that would crash downstream.
     variants = variant_collection_from_args(args)
-    variants = _filter_unannotatable_variants(variants)
+    variants = filter_unannotatable_variants(variants)
     isovar_results = run_isovar(
         variants=variants,
         alignment_file=alignment_file_from_args(args),
@@ -1542,7 +1534,7 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     logger.info("MHC alleles: %s", mhc_alleles)
 
     all_variants = variant_collection_from_args(args)
-    variants = _filter_unannotatable_variants(all_variants)
+    variants = filter_unannotatable_variants(all_variants)
     logger.info("Variants: %d loaded, %d after filtering invalid contigs",
                 len(all_variants), len(variants))
 
@@ -1610,7 +1602,7 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
             # of crashing the whole report. Note: strict JSON doesn't
             # have a NaN literal — simplejson's default behavior is to
             # raise; we explicitly opt into the null representation.
-            f.write(_to_json_nan_tolerant(data))
+            f.write(serialize_json_nan_tolerant(data))
             logger.info('Wrote JSON report data to %s', args.output_json_file)
 
     return data

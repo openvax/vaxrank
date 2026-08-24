@@ -25,7 +25,7 @@ from unittest.mock import MagicMock, patch
 
 from vaxrank.cli import make_vaxrank_arg_parser
 from vaxrank.cli.entry_point import (
-    _resolve_ensembl_release,
+    resolve_ensembl_release,
     configure_logging,
 )
 
@@ -94,7 +94,7 @@ def test_resolve_ensembl_release_sets_genome():
     ) as mock_cls:
         mock_genome = MagicMock()
         mock_cls.return_value = mock_genome
-        _resolve_ensembl_release(args)
+        resolve_ensembl_release(args)
 
     mock_cls.assert_called_once_with(75)
     assert args.genome is mock_genome
@@ -104,7 +104,7 @@ def test_resolve_ensembl_release_noop_when_not_set():
     args = MagicMock()
     args.ensembl_release = None
     args.genome = "GRCh38"
-    _resolve_ensembl_release(args)
+    resolve_ensembl_release(args)
     assert args.genome == "GRCh38"
 
 

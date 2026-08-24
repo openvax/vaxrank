@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch, PropertyMock
 
 from varcode import VariantCollection
 
-from vaxrank.cli.entry_point import _filter_unannotatable_variants
+from vaxrank.cli.entry_point import filter_unannotatable_variants
 
 
 def _make_variant(contig, annotatable=True):
@@ -56,7 +56,7 @@ def _make_collection(variants):
 
 def test_empty_collection():
     variants = VariantCollection([])
-    result = _filter_unannotatable_variants(variants)
+    result = filter_unannotatable_variants(variants)
     assert len(result) == 0
 
 
@@ -64,7 +64,7 @@ def test_all_annotatable():
     v1 = _make_variant("1")
     v2 = _make_variant("X")
     collection = _make_collection([v1, v2])
-    result = _filter_unannotatable_variants(collection)
+    result = filter_unannotatable_variants(collection)
     # Should return the original collection unchanged
     assert result is collection
 
@@ -77,7 +77,7 @@ def test_filters_unannotatable_contig():
         "vaxrank.cli.entry_point.VariantCollection",
         side_effect=lambda variants: variants,
     ):
-        result = _filter_unannotatable_variants(
+        result = filter_unannotatable_variants(
             _make_collection([v_ok, v_bad])
         )
     assert len(result) == 1
@@ -94,7 +94,7 @@ def test_filters_multiple_unannotatable_contigs():
         "vaxrank.cli.entry_point.VariantCollection",
         side_effect=lambda variants: variants,
     ):
-        result = _filter_unannotatable_variants(
+        result = filter_unannotatable_variants(
             _make_collection([v1, v2, v3, v4])
         )
     assert len(result) == 2
@@ -107,5 +107,5 @@ def test_chr_prefixed_contigs_kept_if_annotatable():
     v_chr1 = _make_variant("chr1", annotatable=True)
     v_chrX = _make_variant("chrX", annotatable=True)
     collection = _make_collection([v_chr1, v_chrX])
-    result = _filter_unannotatable_variants(collection)
+    result = filter_unannotatable_variants(collection)
     assert result is collection

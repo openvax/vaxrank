@@ -48,7 +48,7 @@ def _capture_logger(logger_name, level=logging.DEBUG):
         target.setLevel(prev_level)
 
 
-# -- _resolve_mhc_for_linker_optimizer --------------------------------
+# -- resolve_mhc_for_linker_optimizer ----------------------------------
 
 
 def _args_with_inferred_alleles(alleles=None):
@@ -91,7 +91,7 @@ def test_resolve_mhc_defaults_to_mhcflurry_when_predictor_missing(monkeypatch):
     monkeypatch.setattr(mhctools, 'MHCflurry', _stub_ctor)
     args = _args_with_inferred_alleles(['HLA-A*02:01', 'HLA-B*07:02'])
     with _capture_logger('vaxrank.cli.entry_point') as records:
-        predictor, alleles = ep._resolve_mhc_for_linker_optimizer(args)
+        predictor, alleles = ep.resolve_mhc_for_linker_optimizer(args)
     assert isinstance(predictor, _SentinelPredictor)
     assert alleles == ['HLA-A*02:01', 'HLA-B*07:02']
     assert captured['alleles'] == ['HLA-A*02:01', 'HLA-B*07:02']
@@ -120,7 +120,7 @@ def test_resolve_mhc_warns_when_mhcflurry_default_unavailable(monkeypatch):
 
     args = _args_with_inferred_alleles(['HLA-A*02:01'])
     with _capture_logger('vaxrank.cli.entry_point') as records:
-        predictor, alleles = ep._resolve_mhc_for_linker_optimizer(args)
+        predictor, alleles = ep.resolve_mhc_for_linker_optimizer(args)
     assert predictor is None
     assert alleles is None
     msgs = [r.getMessage() for r in records]
@@ -133,10 +133,10 @@ def test_resolve_mhc_warns_when_mhcflurry_default_unavailable(monkeypatch):
 def test_resolve_mhc_no_inputs_at_all():
     """Pipeline path with neither flag set: both come back None and
     the warning explicitly mentions both flags."""
-    from vaxrank.cli.entry_point import _resolve_mhc_for_linker_optimizer
+    from vaxrank.cli.entry_point import resolve_mhc_for_linker_optimizer
     args = SimpleNamespace()  # no inferred alleles either
     with _capture_logger('vaxrank.cli.entry_point') as records:
-        predictor, alleles = _resolve_mhc_for_linker_optimizer(args)
+        predictor, alleles = resolve_mhc_for_linker_optimizer(args)
     assert predictor is None
     assert alleles is None
     msg = ' '.join(r.getMessage() for r in records)
@@ -161,10 +161,27 @@ def test_resolve_mhc_propagates_real_predictor_load_failure(monkeypatch):
     monkeypatch.setattr(ep, 'mhc_binding_predictor_from_args', _kaboom)
     args = SimpleNamespace(_inferred_mhc_alleles_from_lens=['HLA-A*02:01'])
     with pytest.raises(_BadDay):
-        ep._resolve_mhc_for_linker_optimizer(args)
+        ep.resolve_mhc_for_linker_optimizer(args)
 
 
-# -- _log_args_summary -------------------------------------------------
+def test_resolve_target_alleles_uses_cli_then_external_fallback(monkeypatch):
+    from vaxrank.cli import entry_point as ep
+
+    monkeypatch.setattr(
+        ep, 'mhc_alleles_from_args', lambda args: ['HLA-A*02:01'])
+    args = SimpleNamespace(
+        _inferred_mhc_alleles_from_lens=['HLA-B*07:02'])
+    assert ep.resolve_target_alleles(args) == ['HLA-A*02:01']
+
+    def unavailable(args):
+        raise ValueError("no CLI alleles")
+
+    monkeypatch.setattr(ep, 'mhc_alleles_from_args', unavailable)
+    assert ep.resolve_target_alleles(args) == ['HLA-B*07:02']
+    assert ep.resolve_target_alleles(SimpleNamespace()) == []
+
+
+# -- log_args_summary ---------------------------------------------------
 
 
 def _basic_args(**overrides):
@@ -213,10 +230,10 @@ def test_log_args_summary_smoke_no_user_overrides():
     """No CLI overrides → every value matches its default. Without
     ``--verbose`` we should still emit the header but nothing else
     that names a value."""
-    from vaxrank.cli.entry_point import _log_args_summary
+    from vaxrank.cli.entry_point import log_args_summary
     args = _basic_args()
     with _capture_logger('vaxrank.cli.entry_point', logging.INFO) as records:
-        _log_args_summary(args)
+        log_args_summary(args)
     msgs = [r.getMessage() for r in records
             if 'Vaxrank run configuration' in r.getMessage()]
     assert len(msgs) == 1, "Expected exactly one summary log call"
@@ -230,10 +247,10 @@ def test_log_args_summary_smoke_no_user_overrides():
 def test_log_args_summary_surfaces_user_overrides():
     """A user-set value differs from parser default → it gets a
     line. Values that match defaults stay hidden."""
-    from vaxrank.cli.entry_point import _log_args_summary
+    from vaxrank.cli.entry_point import log_args_summary
     args = _basic_args(input_lens='/path/to/file.tsv', vaccine_type=['mrna'])
     with _capture_logger('vaxrank.cli.entry_point', logging.INFO) as records:
-        _log_args_summary(args)
+        log_args_summary(args)
     msg = [r.getMessage() for r in records
            if 'Vaxrank run configuration' in r.getMessage()][0]
     assert 'input_lens' in msg
@@ -246,13 +263,13 @@ def test_log_args_summary_surfaces_user_overrides():
 
 def test_log_args_summary_shows_auto_inferred_block():
     """LENS-path inferred state lives on underscore-prefixed attrs
-    on args. ``_log_args_summary`` lifts them into a separate
+    on args. ``log_args_summary`` lifts them into a separate
     ``[auto-inferred]`` section."""
-    from vaxrank.cli.entry_point import _log_args_summary
+    from vaxrank.cli.entry_point import log_args_summary
     args = _basic_args()
     args._inferred_mhc_alleles_from_lens = ['HLA-A*02:01']
     with _capture_logger('vaxrank.cli.entry_point', logging.INFO) as records:
-        _log_args_summary(args)
+        log_args_summary(args)
     msg = [r.getMessage() for r in records
            if 'Vaxrank run configuration' in r.getMessage()][0]
     assert 'auto-inferred' in msg
@@ -264,10 +281,10 @@ def test_log_args_summary_verbose_shows_defaults():
     """``--verbose`` flips every key into the visible set, including
     those equal to the parser default. The marker ``(default)``
     annotates them."""
-    from vaxrank.cli.entry_point import _log_args_summary
+    from vaxrank.cli.entry_point import log_args_summary
     args = _basic_args(verbose=True)
     with _capture_logger('vaxrank.cli.entry_point', logging.INFO) as records:
-        _log_args_summary(args)
+        log_args_summary(args)
     msg = [r.getMessage() for r in records
            if 'Vaxrank run configuration' in r.getMessage()][0]
     # Defaults visible with ``(default)`` annotation.
@@ -275,19 +292,19 @@ def test_log_args_summary_verbose_shows_defaults():
     assert '(default)' in msg
 
 
-# -- _auto_populate_output_paths_from_dir -----------------------------
+# -- populate_default_output_paths -------------------------------------
 
 
 def test_auto_populate_pipeline_path_fills_csv_and_json():
     """Pipeline run (no LENS / pVACseq input) with just
     ``--output-dir`` set should auto-fill canonical CSV + JSON
     paths inside the directory."""
-    from vaxrank.cli.entry_point import _auto_populate_output_paths_from_dir
+    from vaxrank.cli.entry_point import populate_default_output_paths
     args = SimpleNamespace(
         output_dir='/tmp/run',
         input_lens=None, input_pvacseq=None,
         output_csv='', output_json_file='')
-    _auto_populate_output_paths_from_dir(args)
+    populate_default_output_paths(args)
     assert args.output_csv == '/tmp/run/ranked_vaccine_peptides.csv'
     assert args.output_json_file == '/tmp/run/ranked_vaccine_peptides.json'
 
@@ -298,12 +315,12 @@ def test_auto_populate_lens_path_fills_neoepitope_csv():
     ``ranked_vaccine_peptides.csv`` so the filename matches the
     content. JSON dump is skipped (the LENS path doesn't build the
     rich in-memory result that --output-json-file serializes)."""
-    from vaxrank.cli.entry_point import _auto_populate_output_paths_from_dir
+    from vaxrank.cli.entry_point import populate_default_output_paths
     args = SimpleNamespace(
         output_dir='/tmp/lens-run',
         input_lens='/path/to/lens.tsv', input_pvacseq=None,
         output_csv='', output_json_file='')
-    _auto_populate_output_paths_from_dir(args)
+    populate_default_output_paths(args)
     assert args.output_csv == '/tmp/lens-run/neoepitope_predictions.csv'
     assert args.output_json_file == ''
 
@@ -311,13 +328,13 @@ def test_auto_populate_lens_path_fills_neoepitope_csv():
 def test_auto_populate_explicit_paths_win():
     """When the user explicitly passes ``--output-csv`` /
     ``--output-json-file``, the auto-fill must not overwrite them."""
-    from vaxrank.cli.entry_point import _auto_populate_output_paths_from_dir
+    from vaxrank.cli.entry_point import populate_default_output_paths
     args = SimpleNamespace(
         output_dir='/tmp/run',
         input_lens=None, input_pvacseq=None,
         output_csv='/elsewhere/custom.csv',
         output_json_file='/elsewhere/custom.json')
-    _auto_populate_output_paths_from_dir(args)
+    populate_default_output_paths(args)
     assert args.output_csv == '/elsewhere/custom.csv'
     assert args.output_json_file == '/elsewhere/custom.json'
 
@@ -325,11 +342,11 @@ def test_auto_populate_explicit_paths_win():
 def test_auto_populate_no_output_dir_is_a_noop():
     """Without ``--output-dir`` the helper does nothing — the
     operator-passed flags determine output destinations as before."""
-    from vaxrank.cli.entry_point import _auto_populate_output_paths_from_dir
+    from vaxrank.cli.entry_point import populate_default_output_paths
     args = SimpleNamespace(
         output_dir='', input_lens=None, input_pvacseq=None,
         output_csv='', output_json_file='')
-    _auto_populate_output_paths_from_dir(args)
+    populate_default_output_paths(args)
     assert args.output_csv == ''
     assert args.output_json_file == ''
 
@@ -422,22 +439,22 @@ def test_lens_antigen_source_breakdown_orders_snv_indel_first():
 
 def test_confirm_overwrite_noop_for_missing_or_empty_dir(tmp_path):
     """Missing or empty --output-dir needs no confirmation (no exit)."""
-    from vaxrank.cli.entry_point import _confirm_output_dir_overwrite
+    from vaxrank.cli.entry_point import confirm_output_dir_overwrite
     # missing
-    _confirm_output_dir_overwrite(
+    confirm_output_dir_overwrite(
         SimpleNamespace(output_dir=str(tmp_path / "nope"), force_overwrite=False))
     # empty
     (tmp_path / "empty").mkdir()
-    _confirm_output_dir_overwrite(
+    confirm_output_dir_overwrite(
         SimpleNamespace(output_dir=str(tmp_path / "empty"), force_overwrite=False))
 
 
 def test_confirm_overwrite_force_proceeds(tmp_path, caplog):
     """--force-overwrite proceeds into a non-empty dir without prompting."""
-    from vaxrank.cli.entry_point import _confirm_output_dir_overwrite
+    from vaxrank.cli.entry_point import confirm_output_dir_overwrite
     (tmp_path / "f.txt").write_text("x")
     with caplog.at_level(logging.INFO):
-        _confirm_output_dir_overwrite(
+        confirm_output_dir_overwrite(
             SimpleNamespace(output_dir=str(tmp_path), force_overwrite=True))
     assert any('force-overwrite' in r.getMessage() for r in caplog.records)
 
@@ -449,7 +466,7 @@ def test_confirm_overwrite_non_interactive_warns_and_proceeds(
     (tmp_path / "f.txt").write_text("x")
     monkeypatch.setattr(entry_point.sys.stdin, 'isatty', lambda: False)
     with caplog.at_level(logging.WARNING):
-        entry_point._confirm_output_dir_overwrite(
+        entry_point.confirm_output_dir_overwrite(
             SimpleNamespace(output_dir=str(tmp_path), force_overwrite=False))
     assert any('already exists' in r.getMessage() for r in caplog.records)
 
@@ -458,7 +475,7 @@ def test_write_run_summary(tmp_path):
     """The top-level run_summary.txt records inputs, the MHC alleles in
     play (flagged inferred on the external path), antigen counts, and
     where each output landed."""
-    from vaxrank.cli.entry_point import _write_run_summary
+    from vaxrank.cli.entry_point import write_run_summary
     args = SimpleNamespace(
         output_dir=str(tmp_path),
         input_lens='patient.lens.tsv', input_pvacseq=None, vcf=None, bam=None,
@@ -472,7 +489,7 @@ def test_write_run_summary(tmp_path):
         num_somatic_variants=5, num_coding_effect_variants=5,
         num_variants_with_rna_support=4, num_variants_with_vaccine_peptides=5)
 
-    _write_run_summary(args, patient, source='external')
+    write_run_summary(args, patient, source='external')
 
     text = (tmp_path / 'run_summary.txt').read_text()
     assert 'LENS report' in text and 'patient.lens.tsv' in text
@@ -487,7 +504,7 @@ def test_write_run_summary(tmp_path):
 
 def test_write_run_summary_noop_without_output_dir(tmp_path):
     """No --output-dir → no run summary written (ranking-only runs)."""
-    from vaxrank.cli.entry_point import _write_run_summary
+    from vaxrank.cli.entry_point import write_run_summary
     args = SimpleNamespace(output_dir='', input_lens=None, input_pvacseq=None)
-    _write_run_summary(args, None, source='external')
+    write_run_summary(args, None, source='external')
     assert not list(tmp_path.iterdir())
