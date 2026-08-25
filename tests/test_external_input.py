@@ -47,6 +47,7 @@ def test_external_variant_entry_defaults_describe_an_empty_result():
     assert entry.resolved_transcript is False
     assert entry.annotation is None
     assert entry.dna_vaf is None
+    assert entry.has_rna_support is False
     assert entry.unparseable is False
 
 
@@ -443,24 +444,76 @@ def test_external_filter_prunes_ranked_groups_but_preserves_patient_genotype(
     assert processing[0].allele == ""
 
 
-def test_external_filter_excluding_every_group_produces_no_ranked_vaccine(
+def test_external_minimum_score_prunes_all_ranking_state_for_rejected_allele(
         tmp_path):
+    """A below-threshold allele cannot survive through the score map."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    lens_path = tmp_path / "mixed-presentation.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.pres_score\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t\t0.8\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n"
+        "SIINFEKL\tHLA-B07:02\tAASIINFEKLLL\t\t0.2\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+    config = EpitopeConfig(
+        score_expr="presentation[mhcflurry].score",
+        min_epitope_score=0.5,
+    )
+
+    ranked, _report, loaded, _patient_info, _vafs = load_external_ranked(
+        args, epitope_config=config)
+
+    assert loaded[0].per_allele_scores == {
+        "HLA-A*02:01": pytest.approx(0.8),
+        "HLA-B*07:02": pytest.approx(0.2),
+    }
+    target = ranked[0][1][0].target_epitopes[0]
+    assert target.patient_alleles == ("HLA-A*02:01",)
+    assert target.per_allele_scores == {
+        "HLA-A*02:01": pytest.approx(0.8)}
+    assert target.epitope_score == pytest.approx(0.8)
+
+
+def test_external_filter_excluding_every_group_produces_no_ranked_vaccine(
+        tmp_path, monkeypatch):
     """A hard Topiary filter cannot leave zero-scored construct targets."""
     from types import SimpleNamespace
 
     from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank import external_input
     from vaxrank.external_input import (
         LENS_PROVENANCE_MARKER,
         load_external_ranked,
+    )
+
+    monkeypatch.setattr(
+        external_input,
+        "resolve_external_transcripts",
+        lambda transcript_ids, _genome: [object()] if transcript_ids else [],
     )
 
     lens_path = tmp_path / "fully-filtered.tsv"
     lens_path.write_text(
         "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
         "antigen_source\tvariant_coords\tsnv_ref_allele\t"
-        "snv_alt_allele\tgene_name\n"
+        "snv_alt_allele\tgene_name\ttranscript_id\t"
+        "rna_reads_covering_genomic_origin\t"
+        "rna_reads_covering_genomic_origin_with_peptide_cds\n"
         "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t50\tSNV\t"
-        "chr1:1000\tA\t[T]\tGENE1\n")
+        "chr1:1000\tA\t[T]\tGENE1\tENST1\t10\t3\n")
     args = SimpleNamespace(
         input_lens=str(lens_path),
         input_pvacseq=None,
@@ -478,6 +531,10 @@ def test_external_filter_excluding_every_group_produces_no_ranked_vaccine(
     assert loaded[0].per_allele_scores == {}
     assert patient_info.mhc_alleles == [
         "HLA-A*02:01", LENS_PROVENANCE_MARKER]
+    assert patient_info.num_somatic_variants == 1
+    assert patient_info.num_coding_effect_variants == 1
+    assert patient_info.num_variants_with_rna_support == 1
+    assert patient_info.num_variants_with_vaccine_peptides == 0
 
 
 def test_external_filter_does_not_cross_lens_source_contexts(tmp_path):
@@ -547,6 +604,10 @@ def test_pvacseq_filter_excluding_every_group_produces_no_ranked_vaccine():
         for epitope in loaded
         for allele in epitope.patient_alleles
     }
+    assert patient_info.num_somatic_variants == 3
+    assert patient_info.num_coding_effect_variants == 0
+    assert patient_info.num_variants_with_rna_support == 3
+    assert patient_info.num_variants_with_vaccine_peptides == 0
 
 
 def test_real_lens_fixtures_present():

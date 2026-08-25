@@ -404,6 +404,10 @@ def epitopes_for_ranking(epitopes, cfg=None):
             predictions=retained_predictions,
             comparators=retained_comparators,
             patient_alleles=tuple(sorted(retained_alleles)),
+            per_allele_scores={
+                allele: epitope.per_allele_scores[allele]
+                for allele in sorted(retained_alleles)
+            },
         ))
     return retained_epitopes
 
