@@ -745,6 +745,26 @@ def normalize_hla_allele(allele):
     return re.sub(r"^(HLA-[A-Z]{1,3})(\d)", r"\1*\2", allele)
 
 
+def lens_epitope_position(peptide, peptide_context):
+    """Return the position identity shared by LENS import and ranking.
+
+    The identity is ``(peptide, source context, offset)``. Missing context is
+    represented by an empty source and offset zero; a peptide that does not
+    occur in a non-empty context has no valid position and returns ``None``.
+    """
+    peptide = _safe_str(peptide)
+    peptide_context = _safe_str(peptide_context)
+    if not peptide:
+        return None
+    if peptide_context:
+        offset = peptide_context.find(peptide)
+        if offset < 0:
+            return None
+    else:
+        offset = 0
+    return peptide, peptide_context, offset
+
+
 def load_lens(path, epitope_config=None):
     """
     Import a LENS report TSV and return a neoepitope report DataFrame
@@ -821,8 +841,8 @@ def load_lens(path, epitope_config=None):
     n_dropped_peptide_context_mismatch = 0
     mismatch_examples = []
     for _, row in df.iterrows():
-        peptide = row.get("peptide", "")
-        if not peptide or pd.isna(peptide):
+        peptide = _safe_str(row.get("peptide"))
+        if not peptide:
             continue
 
         allele_raw = row.get("allele", "")
@@ -848,12 +868,13 @@ def load_lens(path, epitope_config=None):
         # and pepsickle. An empty pep_context is a different case (no
         # SLP window at all): keep it, offset 0, bare-neoepitope fallback.
         pep_context = _safe_str(row.get("pep_context"))
-        if pep_context and str(peptide) not in pep_context:
+        position = lens_epitope_position(peptide, pep_context)
+        if position is None:
             n_dropped_peptide_context_mismatch += 1
             if len(mismatch_examples) < 1:
-                mismatch_examples.append((str(peptide), pep_context))
+                mismatch_examples.append((peptide, pep_context))
             continue
-        offset = pep_context.find(str(peptide)) if pep_context else 0
+        peptide, pep_context, offset = position
         row_added = False
         shared_epitope_fields = {
             'peptide': str(peptide),

@@ -350,14 +350,15 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
     ]
 
 
-def epitopes_after_dsl_filter(epitopes):
-    """Materialize the prediction groups retained by the Topiary DSL.
+def epitopes_for_ranking(epitopes, cfg=None):
+    """Materialize external prediction groups eligible for ranking.
 
     :func:`attach_per_allele_scores` records one key for every retained
-    peptide-allele group, including groups whose configured score is exactly
-    zero. This function uses that membership—not the numeric score—as the
-    authoritative filter result and returns ranking-only copies containing
-    those allele-scoped mutant and comparator leaves.
+    peptide-allele group. This function applies the configured
+    ``min_epitope_score`` to those retained groups and returns ranking-only
+    copies containing the eligible allele-scoped mutant and comparator
+    leaves. Groups below the minimum remain on the input objects for audit
+    reporting but cannot become vaccine targets.
 
     The input objects remain unchanged and retain their complete
     ``patient_alleles`` membership. Callers must infer the patient genotype
@@ -365,10 +366,18 @@ def epitopes_after_dsl_filter(epitopes):
     redefine which alleles the patient has.
     """
     from dataclasses import replace
+    from .epitope_config import EpitopeConfig
+
+    if cfg is None:
+        cfg = EpitopeConfig()
 
     retained_epitopes = []
     for epitope in epitopes:
-        retained_alleles = set(epitope.per_allele_scores)
+        retained_alleles = {
+            allele
+            for allele, score in epitope.per_allele_scores.items()
+            if score >= cfg.min_epitope_score
+        }
         if not retained_alleles:
             continue
         retained_predictions = tuple(

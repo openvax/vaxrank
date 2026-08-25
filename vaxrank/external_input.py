@@ -44,7 +44,7 @@ import os
 import pandas as pd
 
 from .amino_acids import has_only_standard_amino_acids
-from .epitope_io import detect_lens_predictors
+from .epitope_io import detect_lens_predictors, lens_epitope_position
 from .mutant_protein_fragment import MutantProteinFragment
 from .vaccine_library import truncate_at_stop_codon
 from .vaccine_peptide import VaccinePeptide
@@ -601,7 +601,7 @@ def _read_counts_from_lens_row(row):
     return n_total, n_alt_reads, n_ref_reads, n_alt_supporting_protein
 
 
-def _lens_ranked_entry(coords, group_rows, by_peptide, genome,
+def _lens_ranked_entry(coords, group_rows, by_position, genome,
                        vaccine_peptide_length, affinity_cols, rank_cols,
                        num_target_epitopes_to_keep):
     """Build one variant's :class:`ExternalVariantEntry` from a LENS
@@ -722,15 +722,16 @@ def _lens_ranked_entry(coords, group_rows, by_peptide, genome,
 
     # Collect the variant's CandidateEpitopes (deduped on identity); LENS
     # rows are mutant-derived, so every one overlaps the mutation.
-    seen_peptides = set()
+    seen_positions = set()
     seen_epitope_ids = set()
     variant_epitopes = []
     for r in group_rows:
-        pep = r.get('peptide') or ""
-        if not pep or pep in seen_peptides:
+        position = lens_epitope_position(
+            r.get('peptide'), r.get('pep_context'))
+        if position is None or position in seen_positions:
             continue
-        seen_peptides.add(pep)
-        for e in by_peptide.get(pep, []):
+        seen_positions.add(position)
+        for e in by_position.get(position, []):
             if id(e) in seen_epitope_ids:
                 continue
             seen_epitope_ids.add(id(e))
@@ -817,14 +818,13 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
             "a predictor that emits pMHC affinity (e.g. mhcflurry, "
             "netmhcpan-ba).", kinds)
 
-    # Index epitopes by their mutant peptide sequence so we can attach
-    # the right CandidateEpitope(s) to each candidate vaccine peptide. One
-    # peptide can map to multiple Epitopes when the same sequence
-    # appears with different source contexts / offsets across
-    # variants — we'll filter by (peptide, allele) presence below.
-    by_peptide: dict[str, list] = {}
+    # Index by the complete CandidateEpitope position identity. Peptide
+    # sequence alone is insufficient: the same sequence can occur in
+    # different source contexts whose DSL filter outcomes differ.
+    by_position: dict[tuple[str, str, int], list] = {}
     for e in epitopes:
-        by_peptide.setdefault(e.sequence, []).append(e)
+        position = (e.sequence, e.source_sequence, e.offset)
+        by_position.setdefault(position, []).append(e)
 
     # Group rows by variant. LENS uses lowercase snake_case columns.
     rows = df.to_dict('records')
@@ -916,8 +916,15 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
     # the report's "DNA VAF" field gets populated instead of "n/a".
     dna_vaf_by_variant = {}
     for coords, group_rows in groups.items():
+        eligible_rows = [
+            row for row in group_rows
+            if lens_epitope_position(
+                row.get('peptide'), row.get('pep_context')) in by_position
+        ]
+        if not eligible_rows:
+            continue
         entry = _lens_ranked_entry(
-            coords, group_rows, by_peptide, genome, vaccine_peptide_length,
+            coords, eligible_rows, by_position, genome, vaccine_peptide_length,
             affinity_cols, rank_cols, num_target_epitopes_to_keep)
         if entry.unparseable:
             n_unparseable += 1
@@ -1039,7 +1046,7 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
         "LENS load funnel: %s" % os.path.basename(lens_tsv_path),
         "  %d rows in: %s" % (len(rows), breakdown or '(none)'),
         "  → %d candidate epitopes eligible for construct ranking after "
-        "epitope DSL filtering" % len(epitopes),
+        "epitope DSL filtering and the minimum-score gate" % len(epitopes),
         "  → %d row(s) with genomic variant_coords (%s) → %d unique "
         "variant(s) → %d ranked with vaccine peptide(s) for constructs" % (
             n_coord_rows, coord_breakdown, len(groups), n_variants_ranked),
@@ -1411,16 +1418,18 @@ def load_external_ranked(args, epitope_config=None):
 
     The returned ``predictions`` collection retains every loaded input group
     for audit reports and patient-genotype inference. ``ranked`` is built from
-    separate copies narrowed to the groups retained by the Topiary filter.
+    separate copies narrowed to groups retained by the Topiary filter and
+    meeting the configured minimum epitope score.
     """
-    from .epitope_dsl import epitopes_after_dsl_filter
+    from .epitope_dsl import epitopes_for_ranking
     from .epitope_io import load_lens, load_pvacseq
     patient_id = getattr(args, 'output_patient_id', '') or ''
     vaccine_peptide_length = getattr(args, 'vaccine_peptide_length', None) or 25
     if getattr(args, 'input_lens', None):
         report_df, predictions = load_lens(
             args.input_lens, epitope_config=epitope_config)
-        ranking_predictions = epitopes_after_dsl_filter(predictions)
+        ranking_predictions = epitopes_for_ranking(
+            predictions, epitope_config)
         ranked, dna_vaf_by_variant = ranked_from_lens_predictions(
             ranking_predictions, args.input_lens,
             genome=getattr(args, 'genome', None),
@@ -1434,7 +1443,8 @@ def load_external_ranked(args, epitope_config=None):
     if getattr(args, 'input_pvacseq', None):
         report_df, predictions = load_pvacseq(
             args.input_pvacseq, epitope_config=epitope_config)
-        ranking_predictions = epitopes_after_dsl_filter(predictions)
+        ranking_predictions = epitopes_for_ranking(
+            predictions, epitope_config)
         ranked, dna_vaf_by_variant = ranked_from_pvacseq_predictions(
             ranking_predictions, args.input_pvacseq,
             genome=getattr(args, 'genome', None))

@@ -24,6 +24,7 @@ from vaxrank.epitope_io import (
     epitope_prediction_rows,
     predictions_to_dataframe,
     save_predictions,
+    lens_epitope_position,
     load_predictions,
     load_pvacseq,
     load_lens,
@@ -31,6 +32,15 @@ from vaxrank.epitope_io import (
 )
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "epitope_fixtures")
+
+
+def test_lens_epitope_position_uses_source_context_and_offset():
+    assert lens_epitope_position(
+        "SIINFEKL", "AASIINFEKLLL") == (
+            "SIINFEKL", "AASIINFEKLLL", 2)
+    assert lens_epitope_position("SIINFEKL", "") == (
+        "SIINFEKL", "", 0)
+    assert lens_epitope_position("SIINFEKL", "UNRELATED") is None
 
 
 def _make_prediction(allele="HLA-A*02:01", peptide_sequence="SIINFEKL",

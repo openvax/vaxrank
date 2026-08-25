@@ -357,6 +357,39 @@ def test_cli_applies_external_score_config_before_ranking(
         "HLA-A*02:01": pytest.approx(0.8)}
 
 
+def test_external_ranking_applies_default_minimum_epitope_score(tmp_path):
+    """Zero-score evidence stays auditable but cannot become a target."""
+    from types import SimpleNamespace
+
+    from vaxrank.external_input import (
+        LENS_PROVENANCE_MARKER,
+        load_external_ranked,
+    )
+
+    lens_path = tmp_path / "processing-only.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t\t0.8\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, report, loaded, patient_info, _vafs = load_external_ranked(args)
+
+    assert ranked == []
+    assert len(report) == 1
+    assert loaded[0].per_allele_scores == {"HLA-A*02:01": 0.0}
+    assert patient_info.mhc_alleles == [
+        "HLA-A*02:01", LENS_PROVENANCE_MARKER]
+
+
 def test_external_filter_prunes_ranked_groups_but_preserves_patient_genotype(
         tmp_path):
     """Topiary filtering controls targets without redefining the patient."""
@@ -445,6 +478,44 @@ def test_external_filter_excluding_every_group_produces_no_ranked_vaccine(
     assert loaded[0].per_allele_scores == {}
     assert patient_info.mhc_alleles == [
         "HLA-A*02:01", LENS_PROVENANCE_MARKER]
+
+
+def test_external_filter_does_not_cross_lens_source_contexts(tmp_path):
+    """A shared sequence cannot transfer eligibility between variants."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    lens_path = tmp_path / "shared-peptide.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "antigen_source\tvariant_coords\tsnv_ref_allele\t"
+        "snv_alt_allele\tgene_name\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t50\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n"
+        "SIINFEKL\tHLA-A02:01\tGGSIINFEKLTT\t500\tSNV\t"
+        "chr1:2000\tG\t[C]\tGENE2\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, report, loaded, _patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 100"),
+    )
+
+    assert len(report) == 2
+    assert len(loaded) == 2
+    assert len(ranked) == 1
+    variant, vaccine_peptides = ranked[0]
+    assert variant.start == 1000
+    assert vaccine_peptides[0].target_epitopes[0].source_sequence == (
+        "AASIINFEKLLL")
 
 
 def test_pvacseq_filter_excluding_every_group_produces_no_ranked_vaccine():
