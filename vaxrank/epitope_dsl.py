@@ -350,6 +350,55 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
     ]
 
 
+def epitopes_after_dsl_filter(epitopes):
+    """Materialize the prediction groups retained by the Topiary DSL.
+
+    :func:`attach_per_allele_scores` records one key for every retained
+    peptide-allele group, including groups whose configured score is exactly
+    zero. This function uses that membership—not the numeric score—as the
+    authoritative filter result and returns ranking-only copies containing
+    those allele-scoped mutant and comparator leaves.
+
+    The input objects remain unchanged and retain their complete
+    ``patient_alleles`` membership. Callers must infer the patient genotype
+    from that pre-filter collection; filtering target evidence must never
+    redefine which alleles the patient has.
+    """
+    from dataclasses import replace
+
+    retained_epitopes = []
+    for epitope in epitopes:
+        retained_alleles = set(epitope.per_allele_scores)
+        if not retained_alleles:
+            continue
+        retained_predictions = tuple(
+            prediction
+            for prediction in epitope.predictions_flat()
+            if not prediction.allele
+            or prediction.allele in retained_alleles
+        )
+        if not retained_predictions:
+            continue
+        retained_comparators = {}
+        for name, comparator in epitope.comparators.items():
+            retained_comparators[name] = replace(
+                comparator,
+                predictions=tuple(
+                    prediction
+                    for prediction in comparator.predictions_flat()
+                    if not prediction.allele
+                    or prediction.allele in retained_alleles
+                ),
+            )
+        retained_epitopes.append(replace(
+            epitope,
+            predictions=retained_predictions,
+            comparators=retained_comparators,
+            patient_alleles=tuple(sorted(retained_alleles)),
+        ))
+    return retained_epitopes
+
+
 def collect_dsl_references(node):
     """Walk a parsed DSL node and collect its external-data references.
 

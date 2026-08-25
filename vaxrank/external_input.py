@@ -1038,8 +1038,8 @@ def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
     funnel = [
         "LENS load funnel: %s" % os.path.basename(lens_tsv_path),
         "  %d rows in: %s" % (len(rows), breakdown or '(none)'),
-        "  → %d candidate epitopes scored for the neoepitope report "
-        "(all antigen sources)" % len(epitopes),
+        "  → %d candidate epitopes eligible for construct ranking after "
+        "epitope DSL filtering" % len(epitopes),
         "  → %d row(s) with genomic variant_coords (%s) → %d unique "
         "variant(s) → %d ranked with vaccine peptide(s) for constructs" % (
             n_coord_rows, coord_breakdown, len(groups), n_variants_ranked),
@@ -1366,16 +1366,13 @@ def patient_info_from_external(ranked, source_path, patient_id,
     if predictions:
         seen = set()
         for ep in predictions:
-            # ``predictions`` here is a list of CandidateEpitope, which
-            # has no ``.allele`` — its alleles are the keys of
-            # ``per_allele_scores`` (populated by the DSL at load).
-            # Fall back to the raw Prediction.allele list for any loader
-            # that doesn't populate per_allele_scores.
-            alleles = list((getattr(ep, 'per_allele_scores', None) or {}))
+            # Patient genotype is input provenance, not a side effect of
+            # which peptide-allele groups survived the target filter.
+            alleles = list(getattr(ep, 'patient_alleles', ()) or ())
             if not alleles:
                 alleles = [
-                    getattr(p, 'allele', '')
-                    for p in (getattr(ep, 'predictions', None) or [])]
+                    prediction.allele
+                    for prediction in ep.predictions_flat()]
             for allele in alleles:
                 if allele and allele not in seen:
                     seen.add(allele)
@@ -1411,15 +1408,21 @@ def load_external_ranked(args, epitope_config=None):
     ``epitope_config`` is evaluated by the selected loader before vaccine
     peptides are constructed, so ranking and template reports consume the
     configured DSL scores rather than the default affinity score.
+
+    The returned ``predictions`` collection retains every loaded input group
+    for audit reports and patient-genotype inference. ``ranked`` is built from
+    separate copies narrowed to the groups retained by the Topiary filter.
     """
+    from .epitope_dsl import epitopes_after_dsl_filter
     from .epitope_io import load_lens, load_pvacseq
     patient_id = getattr(args, 'output_patient_id', '') or ''
     vaccine_peptide_length = getattr(args, 'vaccine_peptide_length', None) or 25
     if getattr(args, 'input_lens', None):
         report_df, predictions = load_lens(
             args.input_lens, epitope_config=epitope_config)
+        ranking_predictions = epitopes_after_dsl_filter(predictions)
         ranked, dna_vaf_by_variant = ranked_from_lens_predictions(
-            predictions, args.input_lens,
+            ranking_predictions, args.input_lens,
             genome=getattr(args, 'genome', None),
             vaccine_peptide_length=vaccine_peptide_length)
         patient_info = patient_info_from_external(
@@ -1431,8 +1434,9 @@ def load_external_ranked(args, epitope_config=None):
     if getattr(args, 'input_pvacseq', None):
         report_df, predictions = load_pvacseq(
             args.input_pvacseq, epitope_config=epitope_config)
+        ranking_predictions = epitopes_after_dsl_filter(predictions)
         ranked, dna_vaf_by_variant = ranked_from_pvacseq_predictions(
-            predictions, args.input_pvacseq,
+            ranking_predictions, args.input_pvacseq,
             genome=getattr(args, 'genome', None))
         patient_info = patient_info_from_external(
             ranked, args.input_pvacseq, patient_id,

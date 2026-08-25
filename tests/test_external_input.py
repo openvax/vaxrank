@@ -357,6 +357,127 @@ def test_cli_applies_external_score_config_before_ranking(
         "HLA-A*02:01": pytest.approx(0.8)}
 
 
+def test_external_filter_prunes_ranked_groups_but_preserves_patient_genotype(
+        tmp_path):
+    """Topiary filtering controls targets without redefining the patient."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import (
+        LENS_PROVENANCE_MARKER,
+        load_external_ranked,
+    )
+
+    lens_path = tmp_path / "partially-filtered.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\t"
+        "snv_alt_allele\tgene_name\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t50\t0.7\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n"
+        "SIINFEKL\tHLA-B07:02\tAASIINFEKLLL\t500\t0.7\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, _report, loaded, patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 100"),
+    )
+
+    # Genotype comes from the complete input membership, before filtering.
+    assert loaded[0].patient_alleles == (
+        "HLA-A*02:01", "HLA-B*07:02")
+    assert patient_info.mhc_alleles == [
+        "HLA-A*02:01", "HLA-B*07:02", LENS_PROVENANCE_MARKER]
+
+    # The filtered B*07:02 group cannot enter ranking, coverage, or design.
+    target = ranked[0][1][0].target_epitopes[0]
+    assert target.patient_alleles == ("HLA-A*02:01",)
+    assert target.per_allele_scores.keys() == {"HLA-A*02:01"}
+    assert {
+        p.allele for p in target.predictions_flat() if p.allele
+    } == {"HLA-A*02:01"}
+    processing = target.predictions_for(
+        "antigen_processing", predictor="mhcflurry")
+    assert len(processing) == 1
+    assert processing[0].allele == ""
+
+
+def test_external_filter_excluding_every_group_produces_no_ranked_vaccine(
+        tmp_path):
+    """A hard Topiary filter cannot leave zero-scored construct targets."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import (
+        LENS_PROVENANCE_MARKER,
+        load_external_ranked,
+    )
+
+    lens_path = tmp_path / "fully-filtered.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "antigen_source\tvariant_coords\tsnv_ref_allele\t"
+        "snv_alt_allele\tgene_name\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t50\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, _report, loaded, patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 0"),
+    )
+
+    assert ranked == []
+    assert loaded[0].per_allele_scores == {}
+    assert patient_info.mhc_alleles == [
+        "HLA-A*02:01", LENS_PROVENANCE_MARKER]
+
+
+def test_pvacseq_filter_excluding_every_group_produces_no_ranked_vaccine():
+    """The shared external filtering contract also applies to pVACseq."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
+    args = SimpleNamespace(
+        input_lens=None,
+        input_pvacseq=path,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, _report, loaded, patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 0"),
+    )
+
+    assert ranked == []
+    assert loaded
+    assert all(epitope.per_allele_scores == {} for epitope in loaded)
+    assert set(patient_info.mhc_alleles[:-1]) == {
+        allele
+        for epitope in loaded
+        for allele in epitope.patient_alleles
+    }
+
+
 def test_real_lens_fixtures_present():
     """Pin that the fixture directory has the expected coverage:
     one fixture per known LENS version + one with stop-codon

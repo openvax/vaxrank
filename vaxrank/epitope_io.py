@@ -81,9 +81,15 @@ VAXRANK_COLUMNS = [
     # Generic WT fields parallel the mutant prediction fields. The legacy
     # ``wt_ic50`` column remains populated for affinity consumers.
     "wt_prediction_kind",
+    "wt_prediction_peptide",
     "wt_prediction_value",
     "wt_prediction_score",
     "wt_percentile_rank",
+    "wt_prediction_tcr",
+    "wt_prediction_n_flank",
+    "wt_prediction_c_flank",
+    "wt_prediction_source_sequence_name",
+    "wt_prediction_offset",
 ]
 
 
@@ -147,6 +153,8 @@ def epitope_prediction_rows(epitope):
             ),
             "wt_prediction_kind": (
                 wt_prediction.kind if wt_prediction is not None else ""),
+            "wt_prediction_peptide": (
+                wt_prediction.peptide if wt_prediction is not None else ""),
             "wt_prediction_value": (
                 wt_prediction.value if wt_prediction is not None else None),
             "wt_prediction_score": (
@@ -154,6 +162,17 @@ def epitope_prediction_rows(epitope):
             "wt_percentile_rank": (
                 wt_prediction.percentile_rank
                 if wt_prediction is not None else None),
+            "wt_prediction_tcr": (
+                wt_prediction.tcr if wt_prediction is not None else ""),
+            "wt_prediction_n_flank": (
+                wt_prediction.n_flank if wt_prediction is not None else ""),
+            "wt_prediction_c_flank": (
+                wt_prediction.c_flank if wt_prediction is not None else ""),
+            "wt_prediction_source_sequence_name": (
+                wt_prediction.source_sequence_name
+                if wt_prediction is not None else None),
+            "wt_prediction_offset": (
+                wt_prediction.offset if wt_prediction is not None else None),
         })
     unpaired_wt = [
         prediction
@@ -276,10 +295,23 @@ def load_predictions(path):
             wt = Prediction(
                 kind=wt_kind, predictor_name=method,
                 predictor_version=version, allele=allele,
-                peptide=wt_peptide,
+                peptide=(
+                    string_or_empty(row.get("wt_prediction_peptide"))
+                    or wt_peptide),
                 value=optional_float(row.get("wt_prediction_value")),
                 score=wt_score,
                 percentile_rank=optional_float(row.get("wt_percentile_rank")),
+                tcr=string_or_empty(row.get("wt_prediction_tcr", "")),
+                n_flank=string_or_empty(
+                    row.get("wt_prediction_n_flank", "")),
+                c_flank=string_or_empty(
+                    row.get("wt_prediction_c_flank", "")),
+                source_sequence_name=(
+                    string_or_empty(
+                        row.get("wt_prediction_source_sequence_name"))
+                    or None),
+                offset=int(optional_float(
+                    row.get("wt_prediction_offset")) or 0),
             )
         elif wt_ic50 is not None:
             wt = Prediction(

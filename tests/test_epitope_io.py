@@ -204,6 +204,56 @@ def test_native_reload_rejects_missing_explicit_prediction_score(tmp_path):
         load_predictions(path)
 
 
+def test_native_roundtrip_preserves_complete_wt_prediction(tmp_path):
+    """WT leaves retain the same complete provenance as mutant leaves."""
+    mutant = Prediction(
+        kind="pMHC_affinity",
+        predictor_name="mhcflurry",
+        predictor_version="2.1.1",
+        allele="HLA-A*02:01",
+        peptide="SIINFEKL",
+        value=50.0,
+        score=0.91,
+        percentile_rank=0.5,
+    )
+    wt_prediction = Prediction(
+        kind="pMHC_affinity",
+        predictor_name="mhcflurry",
+        predictor_version="2.1.1",
+        allele="HLA-A*02:01",
+        peptide="SIINFEKM",
+        value=500.0,
+        score=0.42,
+        percentile_rank=4.8,
+        tcr="CASSWTYEQYF",
+        n_flank="NN",
+        c_flank="CC",
+        source_sequence_name="WT_TRANSCRIPT_1",
+        offset=17,
+    )
+    original = CandidateEpitope(
+        sequence="SIINFEKL",
+        source_sequence="AASIINFEKLLL",
+        offset=2,
+        predictions=(mutant,),
+        comparators={
+            COMPARATOR_WT: Peptide(
+                sequence="SIINFEKM",
+                predictions=(wt_prediction,),
+            ),
+        },
+        patient_alleles=("HLA-A*02:01",),
+        per_allele_scores={"HLA-A*02:01": 0.91},
+    )
+
+    path = tmp_path / "complete-wt.csv"
+    save_predictions([original], path)
+    reloaded = load_predictions(path)[0]
+
+    assert reloaded.wt is not None
+    assert reloaded.wt.predictions_flat() == (wt_prediction,)
+
+
 # ── pVACseq import ───────────────────────────────────────────────────────────
 
 def test_load_pvacseq():

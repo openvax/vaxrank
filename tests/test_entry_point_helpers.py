@@ -379,7 +379,7 @@ def test_lens_funnel_summarizes_input_composition():
         "Expected exactly one consolidated funnel line; got %d" % len(funnel))
     msg = funnel[0]
     assert 'rows in:' in msg
-    assert 'candidate epitopes scored' in msg
+    assert 'candidate epitopes eligible for construct ranking' in msg
     # The old per-stage lines must be gone (no double-counting).
     assert not any('LENS report contains' in r.getMessage() for r in records)
     assert not any(
