@@ -26,6 +26,7 @@ which groups by ``(peptide, source, offset)`` into ``CandidateEpitope``
 objects at the end.
 """
 
+import json
 import logging
 import os
 import re
@@ -34,7 +35,7 @@ from dataclasses import dataclass
 import pandas as pd
 from mhctools.pred import Prediction
 
-from .epitope_dsl import _kind_for_method
+from .epitope_dsl import prediction_kind_for_method
 from .candidate_epitope import (
     SOURCE_CLASS_MUTATION, candidate_epitopes_from_rows,
 )
@@ -59,35 +60,66 @@ VAXRANK_COLUMNS = [
     "occurs_in_reference",
     "occurs_in_non_CTA_reference",
     "predictor_version",
+    # Generic prediction fields. The legacy ``ic50`` column remains above
+    # for compatibility, but cannot represent presentation, processing, or
+    # any future non-affinity kind.
+    "prediction_kind",
+    "prediction_peptide",
+    "prediction_value",
+    "prediction_score",
+    "prediction_tcr",
+    "prediction_n_flank",
+    "prediction_c_flank",
+    "prediction_source_sequence_name",
+    "prediction_offset",
+    # Explicit input-allele membership is necessary for canonical
+    # allele-independent processing predictions.
+    "patient_alleles",
+    # Preserve the exact configured DSL result so a native reload does not
+    # silently revert to an unrelated default scoring formula.
+    "per_allele_scores",
+    # Generic WT fields parallel the mutant prediction fields. The legacy
+    # ``wt_ic50`` column remains populated for affinity consumers.
+    "wt_prediction_kind",
+    "wt_prediction_value",
+    "wt_prediction_score",
+    "wt_percentile_rank",
 ]
 
 
-def _epitope_to_rows(epitope):
-    """Flatten one ``CandidateEpitope`` to per-(predictor, allele) row dicts
-    matching :data:`VAXRANK_COLUMNS`. Drives ``predictions_to_dataframe``
-    and ``save_predictions``."""
+def epitope_prediction_rows(epitope):
+    """Serialize one candidate to one native row per mutant prediction.
+
+    Every prediction kind is emitted. Affinity values are duplicated into
+    the legacy ``ic50`` column for compatibility; the generic prediction
+    columns retain the kind, value, normalized score, percentile, and
+    provenance needed to reconstruct the original ``Prediction`` records.
+    """
     wt = epitope.wt
     wt_peptide_sequence = wt.sequence if wt is not None else ""
-    # Build (allele, predictor_name) -> wt_ic50 lookup so each per-allele
-    # candidate row gets paired with its matching WT IC50, if any.
-    wt_ic50_by_key = {}
+    wt_by_key = {}
     if wt is not None:
         for p in wt.predictions_flat():
-            if p.kind == 'pMHC_affinity' and p.value is not None:
-                wt_ic50_by_key.setdefault((p.allele, p.predictor_name), p.value)
+            key = (
+                p.kind, p.predictor_name, p.predictor_version, p.allele)
+            wt_by_key.setdefault(key, []).append(p)
     rows = []
     for p in epitope.predictions_flat():
-        if p.kind != 'pMHC_affinity':
-            # The vaxrank-native CSV format only carries affinity rows;
-            # presentation / stability / processing live elsewhere.
-            continue
-        wt_ic50 = wt_ic50_by_key.get((p.allele, p.predictor_name))
+        key = (p.kind, p.predictor_name, p.predictor_version, p.allele)
+        matching_wt = wt_by_key.get(key, [])
+        wt_prediction = matching_wt.pop(0) if matching_wt else None
         rows.append({
             "allele": p.allele,
             "peptide_sequence": epitope.sequence,
             "wt_peptide_sequence": wt_peptide_sequence,
-            "ic50": p.value,
-            "wt_ic50": wt_ic50,
+            "ic50": p.value if p.kind == "pMHC_affinity" else None,
+            "wt_ic50": (
+                wt_prediction.value
+                if (
+                    wt_prediction is not None
+                    and wt_prediction.kind == "pMHC_affinity"
+                )
+                else None),
             "percentile_rank": p.percentile_rank,
             "prediction_method_name": p.predictor_name,
             "source_class": epitope.source_class,
@@ -97,14 +129,48 @@ def _epitope_to_rows(epitope):
             "occurs_in_reference": epitope.occurs_in_reference,
             "occurs_in_non_CTA_reference": epitope.occurs_in_non_CTA_reference,
             "predictor_version": p.predictor_version,
+            "prediction_kind": p.kind,
+            "prediction_peptide": p.peptide,
+            "prediction_value": p.value,
+            "prediction_score": p.score,
+            "prediction_tcr": p.tcr,
+            "prediction_n_flank": p.n_flank,
+            "prediction_c_flank": p.c_flank,
+            "prediction_source_sequence_name": p.source_sequence_name,
+            "prediction_offset": p.offset,
+            "patient_alleles": json.dumps(
+                list(epitope.patient_alleles), separators=(",", ":")),
+            "per_allele_scores": json.dumps(
+                epitope.per_allele_scores,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            "wt_prediction_kind": (
+                wt_prediction.kind if wt_prediction is not None else ""),
+            "wt_prediction_value": (
+                wt_prediction.value if wt_prediction is not None else None),
+            "wt_prediction_score": (
+                wt_prediction.score if wt_prediction is not None else None),
+            "wt_percentile_rank": (
+                wt_prediction.percentile_rank
+                if wt_prediction is not None else None),
         })
+    unpaired_wt = [
+        prediction
+        for predictions in wt_by_key.values()
+        for prediction in predictions
+    ]
+    if unpaired_wt:
+        raise ValueError(
+            "Cannot serialize WT predictions without matching mutant "
+            "prediction leaves; refusing to lose comparator evidence")
     return rows
 
 
 def predictions_to_dataframe(epitopes):
     """Convert a collection of ``CandidateEpitope`` objects to a flat DataFrame
-    matching :data:`VAXRANK_COLUMNS` — one row per leaf
-    ``pMHC_affinity`` prediction.
+    matching :data:`VAXRANK_COLUMNS` — one row per mutant prediction leaf,
+    regardless of prediction kind.
 
     Parameters
     ----------
@@ -117,7 +183,7 @@ def predictions_to_dataframe(epitopes):
         epitopes = list(epitopes.values())
     rows = []
     for e in epitopes:
-        rows.extend(_epitope_to_rows(e))
+        rows.extend(epitope_prediction_rows(e))
     return pd.DataFrame(rows, columns=VAXRANK_COLUMNS)
 
 
@@ -134,59 +200,120 @@ def save_predictions(epitopes, path):
 
 
 def load_predictions(path):
-    """Load a vaxrank-native CSV/TSV file and return ``list[CandidateEpitope]``."""
+    """Load a vaxrank-native CSV/TSV file.
+
+    Files written before generic prediction columns were introduced remain
+    supported as affinity-only inputs. New-format rows must carry an explicit
+    prediction kind and score; missing scientific values are not converted to
+    implicit zeros.
+    """
     sep = "\t" if str(path).endswith(".tsv") else ","
     df = pd.read_csv(path, sep=sep)
 
-    def _str_or_empty(val):
+    def string_or_empty(val):
         if val is None or (isinstance(val, float) and pd.isna(val)):
             return ""
         return str(val)
 
+    def optional_float(val):
+        if val is None or pd.isna(val):
+            return None
+        return float(val)
+
+    has_generic_predictions = "prediction_kind" in df.columns
+
     rows = []
     for _, row in df.iterrows():
-        wt_ic50 = row.get("wt_ic50")
-        if pd.isna(wt_ic50):
-            wt_ic50 = None
-        percentile_rank = row.get("percentile_rank")
-        if pd.isna(percentile_rank):
-            percentile_rank = None
+        wt_ic50 = optional_float(row.get("wt_ic50"))
+        percentile_rank = optional_float(row.get("percentile_rank"))
         peptide = row["peptide_sequence"]
-        wt_peptide = _str_or_empty(row.get("wt_peptide_sequence", ""))
-        method = _str_or_empty(row.get("prediction_method_name", ""))
-        version = _str_or_empty(row.get("predictor_version", ""))
-        allele = row["allele"]
-        kind = _kind_for_method(method)
+        wt_peptide = string_or_empty(row.get("wt_peptide_sequence", ""))
+        method = string_or_empty(row.get("prediction_method_name", ""))
+        version = string_or_empty(row.get("predictor_version", ""))
+        allele = string_or_empty(row.get("allele", ""))
+        if has_generic_predictions:
+            kind = string_or_empty(row.get("prediction_kind"))
+            if not kind:
+                raise ValueError(
+                    "Native epitope row is missing prediction_kind")
+            score = optional_float(row.get("prediction_score"))
+            if score is None:
+                raise ValueError(
+                    "Native epitope row is missing prediction_score")
+            value = optional_float(row.get("prediction_value"))
+            prediction_peptide = string_or_empty(
+                row.get("prediction_peptide")) or peptide
+        else:
+            # Legacy files only represented affinity IC50 and did not retain
+            # normalized scores. Keep that historical 0.0 compatibility
+            # behavior only when the generic schema is entirely absent.
+            kind = prediction_kind_for_method(method)
+            score = 0.0
+            value = float(row["ic50"])
+            prediction_peptide = peptide
         mutant = Prediction(
             kind=kind, predictor_name=method, predictor_version=version,
-            allele=allele, peptide=peptide, value=float(row["ic50"]),
-            score=0.0,
+            allele=allele, peptide=prediction_peptide, value=value,
+            score=score,
             percentile_rank=(
                 float(percentile_rank) if percentile_rank is not None
                 else None),
+            tcr=string_or_empty(row.get("prediction_tcr", "")),
+            n_flank=string_or_empty(row.get("prediction_n_flank", "")),
+            c_flank=string_or_empty(row.get("prediction_c_flank", "")),
+            source_sequence_name=(
+                string_or_empty(row.get("prediction_source_sequence_name"))
+                or None),
+            offset=int(optional_float(row.get("prediction_offset")) or 0),
         )
         wt = None
-        if wt_ic50 is not None:
+        wt_kind = string_or_empty(row.get("wt_prediction_kind", ""))
+        if wt_kind:
+            wt_score = optional_float(row.get("wt_prediction_score"))
+            if wt_score is None:
+                raise ValueError(
+                    "Native epitope row is missing wt_prediction_score")
+            wt = Prediction(
+                kind=wt_kind, predictor_name=method,
+                predictor_version=version, allele=allele,
+                peptide=wt_peptide,
+                value=optional_float(row.get("wt_prediction_value")),
+                score=wt_score,
+                percentile_rank=optional_float(row.get("wt_percentile_rank")),
+            )
+        elif wt_ic50 is not None:
             wt = Prediction(
                 kind=kind, predictor_name=method,
                 predictor_version=version, allele=allele,
-                peptide=wt_peptide, value=float(wt_ic50), score=0.0,
+                peptide=wt_peptide, value=wt_ic50, score=0.0,
                 percentile_rank=None,
             )
+        patient_alleles_raw = string_or_empty(row.get("patient_alleles", ""))
+        patient_alleles = (
+            tuple(json.loads(patient_alleles_raw))
+            if patient_alleles_raw else ())
+        per_allele_scores_raw = string_or_empty(
+            row.get("per_allele_scores", ""))
+        per_allele_scores = (
+            json.loads(per_allele_scores_raw)
+            if per_allele_scores_raw else {})
         occurs_in_ref = bool(row.get("occurs_in_reference", False))
         rows.append({
             'peptide': peptide,
-            'source': _str_or_empty(row.get("source_sequence", "")),
+            'source': string_or_empty(row.get("source_sequence", "")),
             'offset': int(row.get("offset", 0)),
             'mutant': mutant,
             'wt': wt,
-            'source_class': _str_or_empty(row.get("source_class", "")) or None,
+            'source_class': string_or_empty(
+                row.get("source_class", "")) or None,
             'overlaps_mutation': bool(row.get("overlaps_mutation", True)),
             'occurs_in_reference': occurs_in_ref,
             # Fall back to raw occurs_in_reference when the CSV is
             # from a pre-3.0 producer that didn't emit this column.
             'occurs_in_non_CTA_reference': bool(
                 row.get("occurs_in_non_CTA_reference", occurs_in_ref)),
+            'patient_alleles': patient_alleles,
+            'per_allele_scores': per_allele_scores,
         })
     return candidate_epitopes_from_rows(rows)
 
@@ -279,7 +406,9 @@ def _topiary_pvacseq_to_epitope_rows(df):
 
         method = _safe_str(row.get("prediction_method_name")) or "pvacseq"
         version = _safe_str(row.get("predictor_version"))
-        kind = _safe_str(row.get("kind")) or _kind_for_method(method)
+        kind = (
+            _safe_str(row.get("kind"))
+            or prediction_kind_for_method(method))
         percentile_rank = _safe_float(row.get("percentile_rank"))
         score = _safe_float(row.get("score"))
         mutant = Prediction(
@@ -355,7 +484,7 @@ def _build_pvacseq_report_row(row):
     return out
 
 
-def load_pvacseq(path):
+def load_pvacseq(path, epitope_config=None):
     """
     Import a pVACseq TSV and return a neoepitope report DataFrame ready
     for output.
@@ -366,6 +495,8 @@ def load_pvacseq(path):
     Parameters
     ----------
     path : str or Path
+    epitope_config : EpitopeConfig, optional
+        Effective DSL configuration to evaluate before returning candidates.
 
     Returns
     -------
@@ -394,7 +525,8 @@ def load_pvacseq(path):
     report_df.attrs["topiary_df"] = topiary_df
     epitopes = candidate_epitopes_from_rows(epitope_rows)
     from .epitope_dsl import attach_per_allele_scores
-    epitopes = attach_per_allele_scores(epitopes, topiary_df=topiary_df)
+    epitopes = attach_per_allele_scores(
+        epitopes, epitope_config, topiary_df=topiary_df)
     logger.info(
         "Loaded %d epitope(s) (%d row(s), %s flavor) from pVACseq file %s",
         len(epitopes), n_rows, result.extra.get("pvacseq_format"), path)
@@ -581,7 +713,7 @@ def normalize_hla_allele(allele):
     return re.sub(r"^(HLA-[A-Z]{1,3})(\d)", r"\1*\2", allele)
 
 
-def load_lens(path):
+def load_lens(path, epitope_config=None):
     """
     Import a LENS report TSV and return a neoepitope report DataFrame
     plus a list of ``vaxrank.candidate_epitope.CandidateEpitope`` objects.
@@ -600,6 +732,10 @@ def load_lens(path):
     Parameters
     ----------
     path : str or Path
+    epitope_config : EpitopeConfig, optional
+        Effective DSL configuration to evaluate before returning candidates.
+        Supplying it here ensures vaccine ranking and template reports consume
+        the same scores as the neoepitope CSV/XLSX report.
 
     Returns
     -------
@@ -837,7 +973,7 @@ def load_lens(path):
     # CandidateEpitope.per_allele_scores. Loaders must populate it or
     # downstream ranking sees zero-scored epitopes and drops everything.
     from .epitope_dsl import attach_per_allele_scores
-    epitopes = attach_per_allele_scores(epitopes)
+    epitopes = attach_per_allele_scores(epitopes, epitope_config)
     logger.info(
         "Loaded %d epitope(s) (%d row(s) × %d predictor(s)) from %s",
         len(epitopes), len(report_df), len(chosen), path)

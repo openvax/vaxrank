@@ -21,6 +21,7 @@ from mhctools.pred import Prediction
 
 from vaxrank.candidate_epitope import COMPARATOR_WT, CandidateEpitope, Peptide
 from vaxrank.epitope_io import (
+    epitope_prediction_rows,
     predictions_to_dataframe,
     save_predictions,
     load_predictions,
@@ -130,6 +131,77 @@ def test_roundtrip_preserves_values(tmp_path):
     assert _first_leaf(loaded).percentile_rank == pytest.approx(1.23)
     assert loaded.occurs_in_reference is True
     assert loaded.offset == 5
+
+
+def test_native_roundtrip_preserves_evidence_only_predictions(tmp_path):
+    """Native exports retain every evidence kind and its scoring provenance."""
+    predictions = (
+        Prediction(
+            kind="pMHC_presentation",
+            predictor_name="mhcflurry",
+            predictor_version="2.1.1",
+            allele="HLA-A*02:01",
+            peptide="SIINFEKL",
+            value=None,
+            score=0.85,
+            percentile_rank=0.28,
+            tcr="CASSIRSSYEQYF",
+            n_flank="AA",
+            c_flank="LL",
+            source_sequence_name="GENE1",
+            offset=2,
+        ),
+        Prediction(
+            kind="antigen_processing",
+            predictor_name="mhcflurry",
+            predictor_version="2.1.1",
+            allele="",
+            peptide="SIINFEKL",
+            value=None,
+            score=0.73,
+            percentile_rank=None,
+        ),
+    )
+    original = CandidateEpitope(
+        sequence="SIINFEKL",
+        source_sequence="XXSIINFEKLXX",
+        offset=2,
+        predictions=predictions,
+        patient_alleles=("HLA-A*02:01", "HLA-B*07:02"),
+        per_allele_scores={
+            "HLA-A*02:01": 1.58,
+            "HLA-B*07:02": 0.73,
+        },
+    )
+
+    rows = epitope_prediction_rows(original)
+    assert [row["prediction_kind"] for row in rows] == [
+        "antigen_processing", "pMHC_presentation"]
+
+    path = tmp_path / "evidence-only.csv"
+    save_predictions([original], path)
+    exported = predictions_to_dataframe([original])
+    assert len(exported) == 2
+    assert set(exported["prediction_kind"]) == {
+        "antigen_processing", "pMHC_presentation"}
+
+    loaded = load_predictions(path)
+    assert len(loaded) == 1
+    reloaded = loaded[0]
+    assert reloaded.patient_alleles == original.patient_alleles
+    assert reloaded.per_allele_scores == original.per_allele_scores
+    assert reloaded.predictions_flat() == original.predictions_flat()
+
+
+def test_native_reload_rejects_missing_explicit_prediction_score(tmp_path):
+    """New native rows never turn missing scientific evidence into zero."""
+    path = tmp_path / "missing-score.csv"
+    dataframe = predictions_to_dataframe([_make_prediction()])
+    dataframe.loc[0, "prediction_score"] = None
+    dataframe.to_csv(path, index=False)
+
+    with pytest.raises(ValueError, match="missing prediction_score"):
+        load_predictions(path)
 
 
 # ── pVACseq import ───────────────────────────────────────────────────────────

@@ -1399,7 +1399,7 @@ def patient_info_from_external(ranked, source_path, patient_id,
     )
 
 
-def load_external_ranked(args):
+def load_external_ranked(args, epitope_config=None):
     """Dispatch helper: load LENS / pVACseq based on args, return
     ``(ranked, report_df, predictions, patient_info)`` or ``None`` if
     neither flag is set.
@@ -1407,12 +1407,17 @@ def load_external_ranked(args):
     ``patient_info`` carries the variant-count metadata template
     reports (ASCII / HTML / PDF) need; counts are proxies derived
     from the ranked output (see :func:`patient_info_from_external`).
+
+    ``epitope_config`` is evaluated by the selected loader before vaccine
+    peptides are constructed, so ranking and template reports consume the
+    configured DSL scores rather than the default affinity score.
     """
     from .epitope_io import load_lens, load_pvacseq
     patient_id = getattr(args, 'output_patient_id', '') or ''
     vaccine_peptide_length = getattr(args, 'vaccine_peptide_length', None) or 25
     if getattr(args, 'input_lens', None):
-        report_df, predictions = load_lens(args.input_lens)
+        report_df, predictions = load_lens(
+            args.input_lens, epitope_config=epitope_config)
         ranked, dna_vaf_by_variant = ranked_from_lens_predictions(
             predictions, args.input_lens,
             genome=getattr(args, 'genome', None),
@@ -1424,7 +1429,8 @@ def load_external_ranked(args):
         return (ranked, report_df, predictions, patient_info,
                 dna_vaf_by_variant)
     if getattr(args, 'input_pvacseq', None):
-        report_df, predictions = load_pvacseq(args.input_pvacseq)
+        report_df, predictions = load_pvacseq(
+            args.input_pvacseq, epitope_config=epitope_config)
         ranked, dna_vaf_by_variant = ranked_from_pvacseq_predictions(
             predictions, args.input_pvacseq,
             genome=getattr(args, 'genome', None))

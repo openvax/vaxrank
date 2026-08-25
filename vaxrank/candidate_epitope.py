@@ -700,6 +700,8 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
       ``patient_alleles``            iterable[str], optional — alleles
                                      explicitly associated with this input
                                      row even when ``mutant.allele`` is empty.
+      ``per_allele_scores``          mapping[str, float], optional — scores
+                                     already evaluated by the configured DSL.
 
     Semantics:
 
@@ -749,6 +751,13 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             slot['patient_alleles'].add(row['mutant'].allele)
         slot['patient_alleles'].update(
             allele for allele in (row.get('patient_alleles') or ()) if allele)
+        for allele, score in (row.get('per_allele_scores') or {}).items():
+            score = float(score)
+            existing_score = slot['per_allele_scores'].get(allele)
+            if existing_score is not None and existing_score != score:
+                raise ValueError(
+                    "Conflicting per-allele scores for one candidate epitope")
+            slot['per_allele_scores'][allele] = score
         slot['overlaps_mutation'] |= bool(row.get('overlaps_mutation', False))
         overlaps_targetable = row.get('overlaps_targetable')
         if overlaps_targetable is not None:

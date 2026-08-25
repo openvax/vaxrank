@@ -282,18 +282,14 @@ def vaccine_target_dir(output_dir, vaccine_type, all_active_types):
     return output_dir
 
 
-def _emit_neoepitope_report_external(args, report_df, epitopes):
+def emit_external_neoepitope_report(
+        args, report_df, epitopes, epitope_config):
     """LENS / pVACseq specific report path: writes the per-(peptide,
     allele) neoepitope CSV / XLSX. Independent from the modality
     dispatch — these are *report* outputs, not vaccine-design outputs.
     """
     if report_df is None or report_df.empty:
         return
-    from ..epitope_config import EpitopeConfig
-    try:
-        epitope_config = epitope_config_from_args(args)
-    except Exception:
-        epitope_config = EpitopeConfig()
     write_neoepitope_report(
         report_df=report_df,
         epitopes=epitopes,
@@ -792,7 +788,7 @@ def emit_outputs(args, ranked, source):
 
     # Rank reports run for both sources; on the external-input path
     # the LENS-native per-(peptide, allele) report already consumed
-    # ``--output-csv`` (via _emit_neoepitope_report_external) so the
+    # ``--output-csv`` (via emit_external_neoepitope_report) so the
     # rank-report writer would collide — skip it there.
     if (args.output_csv or args.output_xlsx_report) and source != 'external':
         make_csv_report(
@@ -1172,7 +1168,11 @@ def main(args_list=None):
     if (
             getattr(args, 'input_pvacseq', None)
             or getattr(args, 'input_lens', None)):
-        loaded = load_external_ranked(args)
+        merged_config = load_vaxrank_config(args)
+        epitope_config = epitope_config_from_args(
+            args, merged_config=merged_config)
+        loaded = load_external_ranked(
+            args, epitope_config=epitope_config)
         if loaded is None:
             ranked_variants_with_vaccine_peptides = []
         else:
@@ -1210,7 +1210,8 @@ def main(args_list=None):
                     len(alleles), ", ".join(alleles))
         # Per-(peptide, allele) CSV / XLSX report is unique to the
         # external-input path; emit it before the shared dispatch.
-        _emit_neoepitope_report_external(args, report_df, predictions)
+        emit_external_neoepitope_report(
+            args, report_df, predictions, epitope_config)
         # Template reports want a dict here, not a Namespace —
         # ``vars(args)`` matches the pipeline path's
         # ``data['args']`` shape.

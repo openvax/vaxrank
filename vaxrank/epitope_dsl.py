@@ -76,7 +76,7 @@ def parse_epitope_expression(expr):
     return parse(expr)
 
 
-def _kind_for_method(method_name):
+def prediction_kind_for_method(method_name):
     """Topiary Kind string for a prediction_method_name.
 
     Unknown methods default to pMHC_affinity so that a plain

@@ -319,6 +319,44 @@ def test_real_lens_fixture_runs_end_to_end_via_cli(fixture_path, tmp_path):
     assert xlsx_path.exists(), f"XLSX not written for {fixture_path}"
 
 
+def test_cli_applies_external_score_config_before_ranking(
+        tmp_path, monkeypatch):
+    """Configured evidence-only scores drive ranking, not just CSV output."""
+    from vaxrank.cli import entry_point
+
+    lens_path = tmp_path / "processing-only.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t\t0.8\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "epitopes:\n"
+        "  score_expr: processing[mhcflurry].score\n")
+    csv_path = tmp_path / "neoepitopes.csv"
+    captured = {}
+
+    def capture_ranked(_args, ranked, source):
+        captured["ranked"] = ranked
+        captured["source"] = source
+
+    monkeypatch.setattr(entry_point, "emit_outputs", capture_ranked)
+    entry_point.main([
+        "--input-lens", str(lens_path),
+        "--config", str(config_path),
+        "--output-csv", str(csv_path),
+        "--no-processing-aware-annotation",
+    ])
+
+    assert captured["source"] == "external"
+    vaccine_peptide = captured["ranked"][0][1][0]
+    assert vaccine_peptide.target_epitope_score == pytest.approx(0.8)
+    assert vaccine_peptide.target_epitopes[0].per_allele_scores == {
+        "HLA-A*02:01": pytest.approx(0.8)}
+
+
 def test_real_lens_fixtures_present():
     """Pin that the fixture directory has the expected coverage:
     one fixture per known LENS version + one with stop-codon
