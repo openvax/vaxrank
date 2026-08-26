@@ -1657,3 +1657,62 @@ def test_external_prediction_key_rejects_an_impossible_position():
         ExternalPredictionKey(
             source_format="lens", peptide="SIINFEKL",
             source_sequence="XXSIINFEKLXX", offset=0)
+
+
+def test_vaccine_config_reaches_external_construct_assembly(tmp_path):
+    """``vaccine_peptides:`` config must apply to LENS runs, not just VCF ones.
+
+    It was resolved only inside ``run_vaxrank_from_parsed_args`` — the
+    pipeline-only entry point — so external runs silently used a hard-coded
+    25-aa window and kept every epitope regardless of configuration.
+    """
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+    from vaxrank.vaccine_config import VaccineConfig
+
+    context = (
+        "MAAAAAAAAA" "SIINFEKLQQ" "CCCCCCCCCC" "DDDDDDDDDD" "EEEEEEEEEE"
+        "FFFFFFFFFF" "GGGGGGGGGG" "YLLPAIVHIW" "HHHHHHHHHH")
+    path = tmp_path / "config_lens.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\ttranscript_id\t"
+        "mhcflurry_2.1.1.aff\n"
+        f"YLLPAIVHI\tHLA-A02:01\t{context}\tSNV\tchr1:100\tC\t[T]\tG\tENST1\t15\n"
+        f"YLLPAIVHIW\tHLA-B07:02\t{context}\tSNV\tchr1:100\tC\t[T]\tG\tENST1\t30\n")
+
+    def run(length, keep):
+        args = SimpleNamespace(
+            input_lens=str(path), input_pvacseq=None,
+            output_patient_id="", genome=None)
+        ranked, *_ = load_external_ranked(
+            args,
+            epitope_config=EpitopeConfig(),
+            vaccine_config=VaccineConfig(
+                preferred_peptide_length=length,
+                min_peptide_length=length,
+                max_peptide_length=length,
+                num_target_epitopes_to_keep=keep))
+        return ranked[0][1][0]
+
+    assert len(run(25, 0).amino_acids) == 25
+    assert len(run(41, 0).amino_acids) == 41
+
+    # num_target_epitopes_to_keep was never forwarded at all.
+    assert len(run(41, 0).target_epitopes) == 2
+    assert [e.sequence for e in run(41, 1).target_epitopes] == ["YLLPAIVHI"]
+
+
+def test_external_input_parser_accepts_vaccine_peptide_flags():
+    """The flags were rejected as unknown, not merely ignored."""
+    from vaxrank.cli.arg_parser import external_input_arg_parser
+
+    args = external_input_arg_parser().parse_args([
+        "--input-lens", "x.tsv",
+        "--vaccine-peptide-length", "31",
+        "--num-epitopes-per-vaccine-peptide", "2",
+    ])
+    assert args.vaccine_peptide_length == 31
+    assert args.num_epitopes_per_vaccine_peptide == 2

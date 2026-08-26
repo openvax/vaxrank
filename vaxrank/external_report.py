@@ -33,6 +33,7 @@ second derivation left to disagree.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -44,6 +45,8 @@ from .external_prediction import ExternalPredictionKey
 # separate from the row's *identity*: the two answer different questions and
 # conflating them is what makes a report load but rank nothing.
 GENOMIC_VARIANT_COLUMN = "vaxrank_genomic_variant"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -94,14 +97,39 @@ class ExternalReport:
             if not epitope.prediction_id:
                 raise ValueError(
                     "External construct ranking requires prediction "
-                    "provenance")
+                    "provenance, but the candidate for peptide %r in %s "
+                    "carries none. Candidates must come from a %s reader, "
+                    "not be constructed directly."
+                    % (epitope.sequence, self.path, self.source_format))
             if epitope.prediction_id in by_id:
+                # Reachable only if two candidates normalized to one identity
+                # while grouping kept them apart — i.e. a reader is using a
+                # different vocabulary for the identity than for the group
+                # key. Name both so the offending field is findable.
+                other = by_id[epitope.prediction_id]
                 raise ValueError(
-                    "Duplicate external prediction identity after loading")
+                    "Two %s candidates share prediction identity %s but were "
+                    "grouped separately: %r at offset %d of %r, and %r at "
+                    "offset %d of %r. The reader is normalizing the identity "
+                    "and the grouping key differently."
+                    % (self.source_format, epitope.prediction_id,
+                       other.sequence, other.offset, other.source_sequence,
+                       epitope.sequence, epitope.offset,
+                       epitope.source_sequence))
             by_id[epitope.prediction_id] = epitope
         bound = []
         for record in self.records:
             epitope = by_id.get(record.key.identifier)
             if epitope is not None:
                 bound.append(record.with_epitope(epitope))
+        if epitopes and not bound:
+            # Every candidate was eligible and none joined: the identities the
+            # reader produced do not match the identities on the candidates.
+            # Silence here is what F1 looked like in production.
+            logger.warning(
+                "None of the %d ranking-eligible %s candidate(s) matched a "
+                "row of %s, so this input will produce no vaccine peptides. "
+                "This means prediction identities were derived inconsistently "
+                "— it is a bug, not a property of the data.",
+                len(epitopes), self.source_format, self.path)
         return tuple(bound)
