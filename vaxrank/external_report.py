@@ -79,11 +79,6 @@ class ExternalReport:
     records: tuple = ()
     rows: tuple = ()
 
-    @property
-    def loaded(self):
-        """Back-compat view matching the historical loader return shape."""
-        return self.report_df, list(self.epitopes)
-
     def records_with_epitopes(self, epitopes):
         """Bind *epitopes* to the records whose identity selected them.
 

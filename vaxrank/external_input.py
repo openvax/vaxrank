@@ -830,16 +830,11 @@ def external_vaccine_peptide(variant, selection, context, mutant_start,
     )
 
 
-def lens_vaccine_entry(metadata, selection, genome=None, options=None,
-                       vaccine_peptide_length=25,
-                       num_target_epitopes_to_keep=None):
+def lens_vaccine_entry(metadata, selection, genome=None, options=None):
     """Build one LENS vaccine peptide from a DSL-selected source window."""
     if selection is None or metadata.variant is None:
         return metadata
-    if options is None:
-        options = ExternalConstructOptions(
-            vaccine_peptide_length=vaccine_peptide_length,
-            num_target_epitopes_to_keep=num_target_epitopes_to_keep)
+    options = options or ExternalConstructOptions()
     key = selection.representative.key
     peptide = truncate_at_stop_codon(key.peptide)
     pep_context = truncate_at_stop_codon(key.source_sequence or key.peptide)
@@ -884,9 +879,7 @@ def lens_vaccine_entry(metadata, selection, genome=None, options=None,
     return metadata
 
 
-def lens_ranking_result(report, epitopes, genome=None, options=None,
-                        num_target_epitopes_to_keep=None,
-                        vaccine_peptide_length=25):
+def lens_ranking_result(report, epitopes, genome=None, options=None):
     """Rank LENS constructs from an already-parsed report.
 
     Parameters
@@ -913,10 +906,7 @@ def lens_ranking_result(report, epitopes, genome=None, options=None,
     """
     if report is None or not report.rows:
         return ExternalRankingResult()
-    if options is None:
-        options = ExternalConstructOptions(
-            vaccine_peptide_length=vaccine_peptide_length,
-            num_target_epitopes_to_keep=num_target_epitopes_to_keep)
+    options = options or ExternalConstructOptions()
     rows = list(report.rows)
 
     # Every ranking-eligible candidate, already bound to the source row whose
@@ -1119,20 +1109,6 @@ def lens_ranking_result(report, epitopes, genome=None, options=None,
     return tally.result("LENS")
 
 
-def ranked_from_lens_predictions(epitopes, lens_tsv_path, genome=None,
-                                 num_target_epitopes_to_keep=None,
-                                 vaccine_peptide_length=25):
-    """Return the legacy ``(ranked, DNA VAF)`` view of a LENS result."""
-    from .epitope_io import read_lens_report
-    result = lens_ranking_result(
-        read_lens_report(lens_tsv_path) if lens_tsv_path else None,
-        epitopes,
-        genome=genome,
-        num_target_epitopes_to_keep=num_target_epitopes_to_keep,
-        vaccine_peptide_length=vaccine_peptide_length,
-    )
-    return result.ranked, result.dna_vaf_by_variant
-
 
 def parse_pvacseq_variant(variant_id, genome=None):
     """Parse a pVACseq aggregate ``ID`` field into a ``varcode.Variant``.
@@ -1183,15 +1159,13 @@ def parse_pvacseq_variant(variant_id, genome=None):
     return v
 
 
-# pVACseq spells the same fact differently per flavor, and topiary normalizes
-# both onto a third spelling. All three are listed in one place, in one
-# precedence order, so every reader agrees about what a row says.
-_PVACSEQ_RNA_DEPTH_COLUMNS = (
-    "rna_depth", "tumor_rna_depth", "RNA Depth", "Tumor RNA Depth")
-_PVACSEQ_RNA_VAF_COLUMNS = (
-    "rna_vaf", "tumor_rna_vaf", "RNA VAF", "Tumor RNA VAF")
-_PVACSEQ_DNA_VAF_COLUMNS = (
-    "dna_vaf", "tumor_dna_vaf", "DNA VAF", "Tumor DNA VAF")
+# pVACseq's two flavors spell the same fact differently; topiary normalizes
+# both onto one of these names. Rows only ever reach this module already
+# normalized, so the raw pVACseq spellings are deliberately absent — listing
+# them would imply a second vocabulary is still in play here.
+_PVACSEQ_RNA_DEPTH_COLUMNS = ("rna_depth", "tumor_rna_depth")
+_PVACSEQ_RNA_VAF_COLUMNS = ("rna_vaf", "tumor_rna_vaf")
+_PVACSEQ_DNA_VAF_COLUMNS = ("dna_vaf", "tumor_dna_vaf")
 
 
 def pvacseq_rna_depth(row):
@@ -1224,17 +1198,9 @@ def pvacseq_genomic_variant(variant_id, group_rows, genome=None):
     them, the ``ID`` / ``variant`` string (``chr1-100-A-T``) otherwise.
     """
     for row in group_rows:
-        genomic = cells.first_text(
-            row, GENOMIC_VARIANT_COLUMN, "Chromosome")
+        genomic = cells.text(row.get(GENOMIC_VARIANT_COLUMN))
         if not genomic:
             continue
-        if genomic == cells.text(row.get("Chromosome")):
-            parts = [
-                cells.text(row.get(column))
-                for column in ("Chromosome", "Start", "Reference", "Variant")]
-            if not all(parts):
-                continue
-            genomic = "-".join(parts)
         variant = parse_pvacseq_variant(genomic, genome=genome)
         if variant is not None:
             return variant
@@ -1288,14 +1254,11 @@ def pvacseq_variant_metadata(variant_id, group_rows, genome=None):
     return entry
 
 
-def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None,
-                          num_target_epitopes_to_keep=None):
+def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None):
     """Build one pVACseq vaccine peptide from a DSL-selected candidate."""
     if selection is None or metadata.variant is None:
         return metadata
-    if options is None:
-        options = ExternalConstructOptions(
-            num_target_epitopes_to_keep=num_target_epitopes_to_keep)
+    options = options or ExternalConstructOptions()
     key = selection.representative.key
     context = truncate_at_stop_codon(key.source_sequence or key.peptide)
     if not context or not has_only_standard_amino_acids(context):
@@ -1328,8 +1291,7 @@ def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None,
     return metadata
 
 
-def pvacseq_ranking_result(report, epitopes, genome=None, options=None,
-                           num_target_epitopes_to_keep=None):
+def pvacseq_ranking_result(report, epitopes, genome=None, options=None):
     """Rank pVACseq constructs from an already-parsed report.
 
     Consumes the topiary-normalized rows of ``report``: both pVACseq flavors
@@ -1344,9 +1306,7 @@ def pvacseq_ranking_result(report, epitopes, genome=None, options=None,
     """
     if report is None or not report.rows:
         return ExternalRankingResult()
-    if options is None:
-        options = ExternalConstructOptions(
-            num_target_epitopes_to_keep=num_target_epitopes_to_keep)
+    options = options or ExternalConstructOptions()
 
     rows = list(report.rows)
     groups = {}
@@ -1377,23 +1337,11 @@ def pvacseq_ranking_result(report, epitopes, genome=None, options=None,
     return tally.result("pVACseq", transcript_id_label="Best Transcript IDs")
 
 
-def ranked_from_pvacseq_predictions(epitopes, pvacseq_tsv_path,
-                                    genome=None,
-                                    num_target_epitopes_to_keep=None):
-    """Return the legacy ``(ranked, DNA VAF)`` view of a pVACseq result."""
-    from .epitope_io import read_pvacseq_report
-    result = pvacseq_ranking_result(
-        read_pvacseq_report(pvacseq_tsv_path) if pvacseq_tsv_path else None,
-        epitopes,
-        genome=genome,
-        num_target_epitopes_to_keep=num_target_epitopes_to_keep,
-    )
-    return result.ranked, result.dna_vaf_by_variant
-
 
 def patient_info_from_external(ranked, source_path, patient_id,
+                               input_summary,
                                input_label='External report',
-                               predictions=None, input_summary=None):
+                               predictions=None):
     """Build a :class:`PatientInfo` from external-input data.
 
     Input counts come from the filter-independent summary produced while
@@ -1414,33 +1362,12 @@ def patient_info_from_external(ranked, source_path, patient_id,
       - ``num_variants_with_vaccine_peptides`` = ``len(ranked)``,
         same definition as the pipeline path
 
-    ``input_summary`` defaults to the legacy ranked-derived counts for direct
-    callers that do not have an :class:`ExternalRankingResult`.
+    ``input_summary`` is required: deriving these counts from ``ranked``
+    instead would report post-filter design output as if it were input
+    composition, which is the opposite of what the header claims.
     """
     from .patient_info import PatientInfo
-    n_with_transcript = 0
-    n_with_rna = 0
-    n_with_peptides = 0
-    for _variant, vps in ranked:
-        if not vps:
-            continue
-        n_with_peptides += 1
-        # ``vps[0]`` is sufficient on the LENS / pVACseq paths because
-        # both loaders emit exactly one VaccinePeptide per variant
-        # (the ``MutantProteinFragment`` is built from the
-        # representative row's pep_context). If a future loader emits
-        # multiple VPs per variant, this should iterate ``vps``.
-        frag = vps[0].mutant_protein_fragment
-        if frag.supporting_reference_transcripts:
-            n_with_transcript += 1
-        if (frag.n_alt_reads or 0) > 0 or (frag.n_overlapping_reads or 0) > 0:
-            n_with_rna += 1
-    if input_summary is None:
-        input_summary = ExternalInputSummary(
-            num_somatic_variants=len(ranked),
-            num_coding_effect_variants=n_with_transcript,
-            num_variants_with_rna_support=n_with_rna,
-        )
+    n_with_peptides = sum(1 for _variant, vps in ranked if vps)
     # MHC alleles aren't carried as a separate header in LENS /
     # pVACseq files — they're implicit in the per-row predictions.
     # Infer the unique set from the predictions and mark "(inferred)"
@@ -1538,9 +1465,9 @@ def load_external_ranked(args, epitope_config=None, vaccine_config=None,
         )
         patient_info = patient_info_from_external(
             ranking_result.ranked, path, patient_id,
+            ranking_result.input_summary,
             input_label=label,
-            predictions=predictions,
-            input_summary=ranking_result.input_summary)
+            predictions=predictions)
         return (ranking_result.ranked, report.report_df, predictions,
                 patient_info, ranking_result.dna_vaf_by_variant)
     return None

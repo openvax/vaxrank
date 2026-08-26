@@ -218,13 +218,8 @@ def predictions_to_dataframe(epitopes):
 
     Parameters
     ----------
-    epitopes : list of CandidateEpitope, dict, or iterable
-        Most callers pass a plain ``list[CandidateEpitope]``. A ``dict`` is
-        accepted for back-compat with pre-3.0 call sites that keyed
-        an ordered map by ``(peptide, allele)`` — the values are used.
+    epitopes : iterable of CandidateEpitope
     """
-    if isinstance(epitopes, dict):
-        epitopes = list(epitopes.values())
     rows = []
     for e in epitopes:
         rows.extend(epitope_prediction_rows(e))
@@ -628,10 +623,8 @@ def read_pvacseq_report(path, epitope_config=None):
     """
     from topiary import read_pvacseq
 
-    from .epitope_dsl import drop_empty_sample_name
     result = read_pvacseq(path)
-    topiary_df = drop_empty_sample_name(result.df)
-    topiary_df = topiary_df.copy()
+    topiary_df = result.df.copy()
 
     # Topiary has already normalized both pVACseq flavors onto one column
     # vocabulary (``variant``, ``gene``, ``transcript``, ``rna_depth`` /
@@ -1133,16 +1126,6 @@ def read_lens_report(path, epitope_config=None):
     )
 
 
-def load_lens(path, epitope_config=None):
-    """Back-compat view of :func:`read_lens_report` as ``(df, epitopes)``."""
-    return read_lens_report(path, epitope_config=epitope_config).loaded
-
-
-def load_pvacseq(path, epitope_config=None):
-    """Back-compat view of :func:`read_pvacseq_report` as ``(df, epitopes)``."""
-    return read_pvacseq_report(path, epitope_config=epitope_config).loaded
-
-
 def _build_lens_report_row(row, allele, peptide, prediction_id,
                            source_sequence_name, peptide_offset, detected,
                            display_pred, chosen_tools):
@@ -1271,8 +1254,7 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     allele_col = 'Allele'
 
     # Duplicate peptide/allele pairs are expected across variants and
-    # transcripts. Current external loaders join them by Prediction identity;
-    # legacy frames without that column retain their historical broadcast.
+    # transcripts; the identity join keeps their scores distinct.
     if len(report_df) > 0 and logger.isEnabledFor(logging.DEBUG):
         dup_count = int(report_df.duplicated(
             subset=[peptide_col, allele_col]).sum())
@@ -1280,7 +1262,7 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
             logger.debug(
                 "report_df has %d duplicate (peptide, allele) row(s) "
                 "from multi-source input; explicit prediction identities "
-                "keep current-format scores source-specific.", dup_count)
+                "keep their scores source-specific.", dup_count)
 
     # Build the topiary DataFrame once and share it between validator and
     # scorer. pVACseq import keeps the loader-produced frame in
@@ -1303,38 +1285,34 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     # absent, the DSL filtered it out. Legacy report frames without an
     # explicit identity retain their source-position or peptide fallback.
     scores_by_key = {}
-    scores_by_pair = {}
     for idx_tuple, score in score_series.items():
-        source_name, peptide, offset, allele = idx_tuple
-        scores_by_key[(source_name, peptide, int(offset), allele)] = score
-        scores_by_pair[(peptide, allele)] = score
+        prediction_id, peptide, offset, allele = idx_tuple
+        scores_by_key[(prediction_id, peptide, int(offset), allele)] = score
 
     report_df = report_df.copy()
     identity_col = 'Prediction identity'
-    source_col = 'Source sequence name'
     offset_col = 'Peptide offset'
-    join_col = (
-        identity_col if identity_col in report_df.columns else source_col)
-    has_source_keys = (
-        join_col in report_df.columns and offset_col in report_df.columns)
+    missing = [
+        column for column in (identity_col, offset_col)
+        if column not in report_df.columns]
+    if missing:
+        raise ValueError(
+            "Neoepitope report frame is missing %s. Scores join on the exact "
+            "prediction identity; a (peptide, allele) fallback would "
+            "broadcast one source's score onto another source that happens "
+            "to share a sequence." % " and ".join(missing))
     scores = []
     filter_passed = []
     rank_eligible = []
     exclusion_reasons = []
     for _, row in report_df.iterrows():
-        score_key = None
-        if has_source_keys:
-            offset = cells.number(row.get(offset_col))
-            if offset is not None:
-                score_key = (
-                    row.get(join_col), row[peptide_col], int(offset),
-                    row[allele_col])
-            passed = score_key in scores_by_key
-            score = scores_by_key.get(score_key)
-        else:
-            score_key = (row[peptide_col], row[allele_col])
-            passed = score_key in scores_by_pair
-            score = scores_by_pair.get(score_key)
+        offset = cells.number(row.get(offset_col))
+        score_key = (
+            (row.get(identity_col), row[peptide_col], int(offset),
+             row[allele_col])
+            if offset is not None else None)
+        passed = score_key in scores_by_key
+        score = scores_by_key.get(score_key)
         eligible = (
             passed
             and score is not None

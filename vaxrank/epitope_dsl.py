@@ -97,24 +97,6 @@ def prediction_kind_for_method(method_name):
     return _METHOD_KIND_MAP.get(str(method_name).lower(), "pMHC_affinity")
 
 
-def drop_empty_sample_name(df):
-    """Drop ``sample_name`` when topiary emits it with no real values.
-
-    Topiary 5.16.2+ prepends ``sample_name`` to the group index whenever
-    the column is present with any non-NaN value — and topiary's
-    ``predict_*`` methods now always emit the column filled with empty
-    strings, which count as non-NaN. Vaxrank is single-sample and would
-    rather keep the group key 4-wide than carry a placeholder level
-    through every downstream lookup.
-    """
-    if "sample_name" not in df.columns:
-        return df
-    has_real_value = (
-        df["sample_name"].dropna().astype(str).str.strip().ne("").any())
-    if has_real_value:
-        return df
-    return df.drop(columns=["sample_name"])
-
 
 def epitopes_to_topiary_df(epitopes):
     """Convert a list of :class:`vaxrank.candidate_epitope.CandidateEpitope` into the
@@ -178,46 +160,23 @@ def epitopes_to_topiary_df(epitopes):
 
 
 def prediction_group_columns(topiary_df):
-    """Return explicit score-group columns when prediction IDs are present.
+    """Return the explicit score-group columns for a vaxrank frame.
 
-    Topiary's inferred grouping is retained for legacy frames. External and
-    vaxrank-generated frames use the stable prediction ID so two biological
-    sources can never be joined merely because their sequences are equal.
+    Every frame vaxrank builds carries all four. Naming them beats letting
+    topiary infer, because inference keys on ``source_sequence_name`` — so two
+    biological sources would join merely because their sequences are equal.
     """
-    if all(column in topiary_df.columns for column in PREDICTION_GROUP_COLUMNS):
-        return list(PREDICTION_GROUP_COLUMNS)
-    return None
+    missing = [
+        column for column in PREDICTION_GROUP_COLUMNS
+        if column not in topiary_df.columns]
+    if missing:
+        raise ValueError(
+            "Prediction frame is missing score-group column(s) %s. Frames "
+            "must come from epitopes_to_topiary_df or an external report "
+            "reader, both of which supply the complete identity."
+            % ", ".join(missing))
+    return list(PREDICTION_GROUP_COLUMNS)
 
-
-def filter_prediction_groups(topiary_df, node, default_methods=None):
-    """Apply a Topiary filter using vaxrank's explicit prediction identity.
-
-    Topiary issue #175 tracks adding ``group_keys`` directly to
-    ``apply_filter``; until then its public ``EvalContext`` supplies the same
-    DSL evaluation with an explicit group index here.
-    """
-    from topiary.ranking import EvalContext, apply_filter
-
-    if node is None or topiary_df.empty:
-        return topiary_df.reset_index(drop=True)
-    group_columns = prediction_group_columns(topiary_df)
-    if group_columns is None:
-        return apply_filter(
-            topiary_df, node, default_methods=default_methods)
-
-    context = EvalContext(
-        topiary_df,
-        group_keys=group_columns,
-        default_methods=default_methods,
-        filter_context=True,
-    )
-    values = node.eval(context).reindex(context.group_index)
-    nonmissing = values.dropna()
-    if not nonmissing.map(pd.api.types.is_bool).all():
-        raise TypeError("Filter expression must evaluate to booleans")
-    passing = set(values.fillna(False).astype(bool).loc[lambda x: x].index)
-    keep = context.row_group_tuples().isin(passing)
-    return topiary_df[keep].reset_index(drop=True)
 
 
 # Priority order for auto-picking a canonical method when the user hasn't
@@ -303,9 +262,8 @@ def validate_default_methods(cfg, topiary_df):
 def score_predictions(epitopes, cfg, *, topiary_df=None):
     """Score external-input epitopes using the configured Topiary DSL.
 
-    Returns a ``pandas.Series`` of per-(peptide, allele) scores. Current
-    vaxrank frames use ``(prediction_id, peptide, peptide_offset, allele)``;
-    legacy caller-supplied frames retain Topiary's inferred group keys.
+    Returns a ``pandas.Series`` of per-(peptide, allele) scores, indexed by
+    ``(prediction_id, peptide, peptide_offset, allele)``.
 
     Multi-model data (e.g. both MHCflurry and netMHCpan for
     ``pMHC_affinity``) is handled via topiary's
@@ -324,7 +282,7 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
     :func:`epitopes_to_topiary_df`) rather than rebuilding from
     ``epitopes``.
     """
-    from topiary.ranking import EvalContext
+    from topiary.ranking import EvalContext, apply_filter
 
     df = (epitopes_to_topiary_df(epitopes)
           if topiary_df is None else topiary_df)
@@ -336,8 +294,10 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
 
     filter_node = build_filter_node(cfg)
     if filter_node is not None:
-        df = filter_prediction_groups(
-            df, filter_node, default_methods=resolved)
+        df = apply_filter(
+            df, filter_node,
+            group_keys=prediction_group_columns(df),
+            default_methods=resolved)
         if df.empty:
             return pd.Series(dtype=float)
 
@@ -383,9 +343,7 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
     if cfg is None:
         cfg = EpitopeConfig()
     score_series = score_predictions(epitopes, cfg, topiary_df=topiary_df)
-    # score_series is keyed by the explicit prediction ID when available,
-    # followed by peptide, offset, and allele. Legacy frames retain Topiary's
-    # inferred first group column.
+    # score_series is keyed by prediction ID, peptide, offset, and allele.
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
         src_name, peptide, offset, allele = idx

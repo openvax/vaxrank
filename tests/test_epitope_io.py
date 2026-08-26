@@ -14,6 +14,7 @@
 Tests for epitope_io: serialization, deserialization, and external imports.
 """
 
+import dataclasses
 import os
 
 import pytest
@@ -26,8 +27,8 @@ from vaxrank.epitope_io import (
     save_predictions,
     lens_epitope_position,
     load_predictions,
-    load_pvacseq,
-    load_lens,
+    read_pvacseq_report,
+    read_lens_report,
     write_neoepitope_report,
 )
 from vaxrank.external_prediction import ExternalPredictionKey
@@ -316,7 +317,8 @@ def test_native_roundtrip_preserves_complete_wt_prediction(tmp_path):
 
 def test_load_pvacseq():
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
-    report_df, epitopes = load_pvacseq(path)
+    _loaded = read_pvacseq_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     # One CandidateEpitope per pVACseq row (each row has its own peptide).
     assert len(epitopes) == 3
     assert len(report_df) == 3
@@ -352,7 +354,8 @@ def test_load_pvacseq_populates_per_allele_scores():
     ranking as 'no epitopes for peptide'. Pin both ends: scores are
     non-empty and (for binding-affinity rows) non-zero."""
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
-    _, epitopes = load_pvacseq(path)
+    _loaded = read_pvacseq_report(path)
+    epitopes = list(_loaded.epitopes)
     assert epitopes
     # Every epitope has scores keyed by its actual allele(s).
     for e in epitopes:
@@ -372,7 +375,7 @@ def test_load_pvacseq_missing_columns(tmp_path):
     bad_file = tmp_path / "bad.tsv"
     bad_file.write_text("Gene\tAA Change\nTP53\tG245S\n")
     with pytest.raises(ValueError, match="Could not detect pVACseq format"):
-        load_pvacseq(bad_file)
+        read_pvacseq_report(bad_file)
 
 
 def _write_pvacseq_all_epitopes_fixture(tmp_path):
@@ -460,7 +463,8 @@ def _write_pvacseq_duplicate_peptide_fixture(tmp_path):
 
 def test_load_pvacseq_all_epitopes_flavor(tmp_path):
     path = _write_pvacseq_all_epitopes_fixture(tmp_path)
-    report_df, epitopes = load_pvacseq(path)
+    _loaded = read_pvacseq_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
 
     assert len(report_df) == 3
     # Same source + peptide groups the two AERMGFTVV alleles together.
@@ -483,7 +487,8 @@ def test_pvacseq_all_epitopes_per_algorithm_column_scores(tmp_path):
     import pandas as pd
 
     path = _write_pvacseq_all_epitopes_fixture(tmp_path)
-    report_df, epitopes = load_pvacseq(path)
+    _loaded = read_pvacseq_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     csv_path = tmp_path / "scored.csv"
     cfg = EpitopeConfig(score_expr="pvacseq_mhcflurry_ic50_mt")
 
@@ -505,7 +510,8 @@ def test_pvacseq_source_keyed_filtered_scores_do_not_broadcast(tmp_path):
     import pandas as pd
 
     path = _write_pvacseq_duplicate_peptide_fixture(tmp_path)
-    report_df, epitopes = load_pvacseq(path)
+    _loaded = read_pvacseq_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     csv_path = tmp_path / "filtered.csv"
     cfg = EpitopeConfig(
         filter_expr="tumor_dna_vaf > 0.5",
@@ -537,7 +543,8 @@ def test_load_lens_emits_one_epitope_per_position_with_multi_predictor_leaves():
     The fixture has three report rows and each CandidateEpitope carries
     separate MHCflurry affinity/presentation plus netMHCpan affinity leaves."""
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     assert len(epitopes) == 3
     assert len(report_df) == 3
 
@@ -592,7 +599,8 @@ def test_load_lens_populates_per_allele_scores():
     the LENS loader must populate per_allele_scores so downstream
     ranking doesn't drop every variant as zero-scoring."""
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    _, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    epitopes = list(_loaded.epitopes)
     assert epitopes
     for e in epitopes:
         assert e.per_allele_scores, (
@@ -606,7 +614,7 @@ def test_load_lens_report_display_uses_canonical_predictor():
     netmhcpan > alphabetical). Per-predictor raw values land in
     individual columns alongside."""
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, _ = load_lens(path)
+    report_df = read_lens_report(path).report_df
     # Display value = mhcflurry 95.4 nM (canonical)
     assert "95.40 nM" in report_df["Predicted mutant pMHC affinity"].iloc[0]
     # Both raw-value columns present
@@ -617,7 +625,8 @@ def test_load_lens_report_display_uses_canonical_predictor():
 def test_load_lens_mhcflurry_only_v19():
     """A v1.9-dev style file (no netmhcpan cols) emits only mhcflurry rows."""
     path = os.path.join(DATA_DIR, "lens_v1.9_mhcflurry_only.tsv")
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     assert len(epitopes) == 3
     leaves = [p for e in epitopes for p in e.predictions_flat()]
     methods = {p.predictor_name for p in leaves}
@@ -641,7 +650,7 @@ def test_load_lens_missing_required_columns(tmp_path):
     bad_file = tmp_path / "bad.tsv"
     bad_file.write_text("gene_name\tpos\nTP53\t5\n")
     with pytest.raises(ValueError, match="missing required columns"):
-        load_lens(bad_file)
+        read_lens_report(bad_file)
 
 
 def test_load_lens_no_predictor_columns(tmp_path):
@@ -650,13 +659,14 @@ def test_load_lens_no_predictor_columns(tmp_path):
     bad_file.write_text(
         "peptide\tallele\tgene_name\nSIINFEKL\tHLA-A*02:01\tOVA\n")
     with pytest.raises(ValueError, match="no recognized predictor"):
-        load_lens(bad_file)
+        read_lens_report(bad_file)
 
 
 def test_load_lens_detects_netmhcstabpan():
     """netmhcstabpan columns are detected as a pMHC_stability predictor."""
     path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     leaves = [p for e in epitopes for p in e.predictions_flat()]
     methods = {p.predictor_name for p in leaves}
     assert methods == {"mhcflurry", "netmhcpan", "netmhcstabpan"}
@@ -682,7 +692,8 @@ def test_load_lens_preserves_mhcflurry_axes_for_coverage_and_dsl():
     from vaxrank.epitope_dsl import score_predictions
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    _, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    epitopes = list(_loaded.epitopes)
     epitope = next(e for e in epitopes if e.sequence == "SVVGSSSSS")
 
     coverage = compute_coverage([epitope], ["HLA-A*02:01"])["HLA-A*02:01"]
@@ -701,7 +712,8 @@ def test_load_lens_preserves_allele_independent_processing_once():
     """Repeated LENS allele rows yield one canonical processing leaf."""
     path = os.path.join(
         DATA_DIR, "real_lens_subsets", "lens_v1.9_real_subset.tsv")
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     epitope = epitopes[0]
     processing = epitope.predictions_for(
         "antigen_processing", predictor="mhcflurry")
@@ -728,7 +740,8 @@ def test_lens_processing_dsl_scores_every_patient_allele(tmp_path):
         "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
         "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t60\t0.8\n")
 
-    _, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    epitopes = list(_loaded.epitopes)
     assert len(epitopes) == 1
     epitope = epitopes[0]
     processing = epitope.predictions_for(
@@ -768,7 +781,8 @@ def test_lens_processing_only_rows_preserve_alleles_scores_and_report_rows(
         "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t\t0.8\n"
         "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t\t0.8\n")
 
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     assert len(epitopes) == 1
     epitope = epitopes[0]
     assert epitope.patient_alleles == (
@@ -826,7 +840,8 @@ def test_lens_presentation_only_candidate_has_a_template_report_row(tmp_path):
         "mhcflurry_2.1.1.pres_score\tmhcflurry_2.1.1.pres_perc\n"
         "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t\t0.85\t0.28\n")
 
-    _, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    epitopes = list(_loaded.epitopes)
     config = EpitopeConfig(
         score_expr="presentation[mhcflurry].score")
     epitope = attach_per_allele_scores(epitopes, config)[0]
@@ -865,7 +880,8 @@ def test_lens_report_anchors_mixed_evidence_per_allele_and_predictor(tmp_path):
         "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t\t0.6\t0.7\t75\n"
         "SIINFEKL\tHLA-C07:02\tXXSIINFEKLXX\t\t\t0.7\t\n")
 
-    _, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    epitopes = list(_loaded.epitopes)
     epitope = attach_per_allele_scores(
         epitopes,
         EpitopeConfig(score_expr="processing[mhcflurry].score"),
@@ -916,7 +932,8 @@ def test_lens_context_scores_merge_by_source_position(tmp_path):
         "SIINFEKL\tHLA-A02:01\tXXSIINFEKLAA\t50\t0.2\t0.3\n"
         "SIINFEKL\tHLA-A02:01\tYYYYSIINFEKLZ\t60\t0.9\t0.8\n")
 
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     assert list(report_df["Source sequence name"]) == [
         "XXSIINFEKLAA", "YYYYSIINFEKLZ"]
     assert list(report_df["Peptide offset"]) == [2, 4]
@@ -947,7 +964,7 @@ def test_load_lens_rejects_conflicting_processing_scores(tmp_path):
         "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t60\t0.4\n")
 
     with pytest.raises(ValueError, match="Conflicting LENS processing"):
-        load_lens(path)
+        read_lens_report(path)
 
 
 def test_epitope_report_surfaces_integrated_mhcflurry_axes():
@@ -961,7 +978,8 @@ def test_epitope_report_surfaces_integrated_mhcflurry_axes():
 
     path = os.path.join(
         DATA_DIR, "real_lens_subsets", "lens_v1.4_real_subset.tsv")
-    _, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    epitopes = list(_loaded.epitopes)
     epitope = epitopes[0]
     mhcflurry_affinity = epitope.predictions_for(
         "pMHC_affinity", predictor="mhcflurry")[0]
@@ -995,7 +1013,8 @@ def test_default_methods_resolves_multi_model_affinity(tmp_path):
     from vaxrank.epitope_config import EpitopeConfig
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
 
     # Explicit default = netmhcpan → score reflects netmhcpan affinity.
     cfg = EpitopeConfig(default_methods={"pMHC_affinity": "netmhcpan"})
@@ -1027,7 +1046,8 @@ def test_default_methods_rejects_unknown_method(tmp_path):
     from vaxrank.epitope_config import EpitopeConfig
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     cfg = EpitopeConfig(default_methods={"pMHC_affinity": "mhcnuggets"})
     with pytest.raises(ValueError, match="default_methods.*mhcnuggets"):
         write_neoepitope_report(
@@ -1043,7 +1063,8 @@ def test_default_methods_partial_qualification_mixed_kinds(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     # Formula: affinity qualified (netmhcpan), stability unqualified.
     # default_methods settles the stability kind.
     cfg = EpitopeConfig(
@@ -1069,7 +1090,8 @@ def test_default_methods_partial_qualification_auto_picks_stability(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     # Only one stability method (netmhcstabpan) in this fixture, so
     # auto-pick is trivial but tests the path.
     cfg = EpitopeConfig(
@@ -1094,7 +1116,8 @@ def test_filter_expr_unqualified_on_multi_method_data(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     # fixture's mhcflurry affinities: 95.4, 180.2, 310.5. Cut at 200 keeps
     # 2 rows; with netmhcpan as the default, cut at 200 would keep rows
     # with IC50 < 200 from netmhcpan: 76.11, 120.50 (2 rows).
@@ -1132,7 +1155,8 @@ def test_resolve_default_methods_noop_on_single_method_data():
         epitopes_to_topiary_df, resolve_default_methods)
 
     path = os.path.join(DATA_DIR, "lens_v1.9_mhcflurry_only.tsv")
-    _, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    preds = list(_loaded.epitopes)
     df = epitopes_to_topiary_df(preds)
     assert resolve_default_methods(EpitopeConfig(), df) == {}
 
@@ -1145,7 +1169,8 @@ def test_resolve_default_methods_auto_picks_canonical():
         epitopes_to_topiary_df, resolve_default_methods)
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    _, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    preds = list(_loaded.epitopes)
     df = epitopes_to_topiary_df(preds)
     assert resolve_default_methods(EpitopeConfig(), df) == {
         "pMHC_affinity": "mhcflurry"}
@@ -1158,7 +1183,8 @@ def test_resolve_default_methods_user_override_wins():
         epitopes_to_topiary_df, resolve_default_methods)
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    _, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    preds = list(_loaded.epitopes)
     df = epitopes_to_topiary_df(preds)
     cfg = EpitopeConfig(default_methods={"pMHC_affinity": "netmhcpan"})
     assert resolve_default_methods(cfg, df) == {"pMHC_affinity": "netmhcpan"}
@@ -1176,29 +1202,31 @@ def test_default_methods_works_on_synthetic_main_pipeline_frame(tmp_path):
 
     # Build a minimal topiary-shaped frame with two models per group —
     # exactly what we'd get from a multi-model TopiaryPredictor in the
-    # main pipeline, no LENS loader involved.
+    # main pipeline, no LENS loader involved. ``prediction_id`` is present
+    # because ``epitopes_to_topiary_df`` always emits it: the score group is
+    # an explicit identity, never inferred from the sequence.
     df = pd.DataFrame([
         # group 1: SIINFEKL × HLA-A*02:01, two affinity predictors
-        {"sample_name": "", "source_sequence_name": "ovalbumin",
+        {"prediction_id": "ovalbumin", "source_sequence_name": "ovalbumin",
          "peptide": "SIINFEKL", "peptide_offset": 5, "peptide_length": 8,
          "allele": "HLA-A*02:01", "n_flank": "", "c_flank": "",
          "prediction_method_name": "mhcflurry", "predictor_version": "2.1.1",
          "kind": "pMHC_affinity", "value": 80.0, "affinity": 80.0,
          "percentile_rank": 0.4, "score": 0.0},
-        {"sample_name": "", "source_sequence_name": "ovalbumin",
+        {"prediction_id": "ovalbumin", "source_sequence_name": "ovalbumin",
          "peptide": "SIINFEKL", "peptide_offset": 5, "peptide_length": 8,
          "allele": "HLA-A*02:01", "n_flank": "", "c_flank": "",
          "prediction_method_name": "netmhcpan", "predictor_version": "4.1b",
          "kind": "pMHC_affinity", "value": 120.0, "affinity": 120.0,
          "percentile_rank": 0.7, "score": 0.0},
         # group 2: another peptide+allele
-        {"sample_name": "", "source_sequence_name": "p53",
+        {"prediction_id": "p53", "source_sequence_name": "p53",
          "peptide": "STPPPGTRV", "peptide_offset": 10, "peptide_length": 9,
          "allele": "HLA-B*07:02", "n_flank": "", "c_flank": "",
          "prediction_method_name": "mhcflurry", "predictor_version": "2.1.1",
          "kind": "pMHC_affinity", "value": 250.0, "affinity": 250.0,
          "percentile_rank": 1.5, "score": 0.0},
-        {"sample_name": "", "source_sequence_name": "p53",
+        {"prediction_id": "p53", "source_sequence_name": "p53",
          "peptide": "STPPPGTRV", "peptide_offset": 10, "peptide_length": 9,
          "allele": "HLA-B*07:02", "n_flank": "", "c_flank": "",
          "prediction_method_name": "netmhcpan", "predictor_version": "4.1b",
@@ -1233,7 +1261,8 @@ def test_resolve_default_methods_stability_plus_affinity():
         epitopes_to_topiary_df, resolve_default_methods)
 
     path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
-    _, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    preds = list(_loaded.epitopes)
     df = epitopes_to_topiary_df(preds)
     resolved = resolve_default_methods(EpitopeConfig(), df)
     # pMHC_affinity has mhcflurry + netmhcpan → needs default
@@ -1263,7 +1292,8 @@ def test_default_methods_mixed_valid_and_invalid_fails_fast(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     cfg = EpitopeConfig(default_methods={
         "pMHC_affinity": "mhcflurry",      # valid
         "pMHC_stability": "doesnotexist",  # invalid
@@ -1283,7 +1313,8 @@ def test_report_columns_expose_all_detected_predictors(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     cfg = EpitopeConfig(
         score_expr="affinity['mhcflurry'].logistic(350, 150)")
     csv_path = tmp_path / "out.csv"
@@ -1303,7 +1334,8 @@ def test_predictor_version_in_epitope_prediction_from_lens():
     """Every LENS-loaded leaf ``Prediction`` should carry the sniffed
     predictor version, so version-qualified DSL refs resolve."""
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    _, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    epitopes = list(_loaded.epitopes)
     leaves = [p for e in epitopes for p in e.predictions_flat()]
     by_method = {p.predictor_name: p.predictor_version for p in leaves}
     assert by_method["mhcflurry"] == "2.1.1"
@@ -1317,7 +1349,8 @@ def test_dsl_version_mismatch_validation_error(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     cfg = EpitopeConfig(
         score_expr="affinity['mhcflurry', '0.0.0'].logistic(350, 150)")
     with pytest.raises(ValueError, match="predictor version '0.0.0'"):
@@ -1342,7 +1375,8 @@ def test_validate_default_methods_no_defaults_is_noop():
     from vaxrank.epitope_dsl import (
         epitopes_to_topiary_df, validate_default_methods)
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    _, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    preds = list(_loaded.epitopes)
     df = epitopes_to_topiary_df(preds)
     validate_default_methods(EpitopeConfig(), df)  # no raise
 
@@ -1356,7 +1390,8 @@ def test_validate_default_methods_catches_typo_on_single_method_kind(tmp_path):
         epitopes_to_topiary_df, validate_default_methods)
     # Single-model fixture (v1.9 mhcflurry-only).
     path = os.path.join(DATA_DIR, "lens_v1.9_mhcflurry_only.tsv")
-    _, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    preds = list(_loaded.epitopes)
     df = epitopes_to_topiary_df(preds)
     cfg = EpitopeConfig(default_methods={"pMHC_affinity": "bogus"})
     with pytest.raises(ValueError,
@@ -1371,7 +1406,8 @@ def test_filter_plus_score_expr_both_bracketed(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     cfg = EpitopeConfig(
         filter_expr="affinity['netmhcpan'] <= 500",
         score_expr="affinity['mhcflurry'].logistic(350, 150)",
@@ -1393,7 +1429,8 @@ def test_filter_expr_drops_all_groups_marks_audit_rows_without_fake_scores(
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     # No affinity < 0 anywhere.
     cfg = EpitopeConfig(filter_expr="affinity <= 0")
     csv_path = tmp_path / "out.csv"
@@ -1412,7 +1449,8 @@ def test_report_distinguishes_below_minimum_from_dsl_filter(tmp_path):
     from vaxrank.epitope_config import EpitopeConfig
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     csv_path = tmp_path / "below-minimum.csv"
     write_neoepitope_report(
         report_df,
@@ -1438,7 +1476,8 @@ def test_mixed_bracketed_and_unqualified_evaluates_cleanly(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     # Brackets netmhcpan AND references affinity unqualified. Default
     # auto-picks mhcflurry for unqualified refs. Result: netmhcpan_value +
     # mhcflurry_value per row, evaluated cleanly.
@@ -1461,7 +1500,8 @@ def test_pvacseq_single_method_per_group_has_no_ambiguity(tmp_path):
     unambiguous — the default node should score without error."""
     from vaxrank.epitope_io import write_neoepitope_report
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
-    report_df, preds = load_pvacseq(path)
+    _loaded = read_pvacseq_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     csv_path = tmp_path / "out.csv"
     # Default EpitopeConfig, no default_methods set.
     write_neoepitope_report(
@@ -1483,7 +1523,8 @@ def test_unknown_column_in_lens_file_is_ignored(tmp_path):
         "random_non_matching_col\n"
         "SIINFEKL\tHLA-A*02:01\t100.0\t0.5\t42\thello\n"
     )
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    epitopes = list(_loaded.epitopes)
     assert len(epitopes) == 1
     leaf = _first_leaf(epitopes[0])
     assert leaf.predictor_name == "mhcflurry"
@@ -1496,7 +1537,8 @@ def test_default_methods_auto_picked_when_unset(tmp_path, caplog):
     import logging
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     cfg = EpitopeConfig()  # no default_methods
 
     with caplog.at_level(logging.INFO, logger="vaxrank.epitope_dsl"):
@@ -1537,33 +1579,64 @@ def test_load_predictions_empty_string_fields_become_empty_not_nan(tmp_path):
     assert leaf.predictor_version == ""
 
 
-def test_write_neoepitope_report_broadcasts_score_across_duplicate_rows(tmp_path):
-    """Real-world LENS / pVACseq files emit the same (peptide, allele)
-    pair from multiple sources (alternative transcripts, homologous
-    regions, multiple variants). The writer broadcasts the same score
-    across each duplicate row instead of raising — per-source provenance
-    lives in other columns."""
+def test_write_neoepitope_report_scores_duplicate_peptides_per_source(tmp_path):
+    """The same (peptide, allele) from two sources gets two scores, not one.
+
+    Real LENS / pVACseq files emit identical peptide-allele pairs from
+    alternative transcripts, homologous regions, and distinct variants. Those
+    are different biological candidates with different evidence, so each row
+    joins on its own prediction identity. Broadcasting one score across them —
+    the pre-identity behavior — silently attributed one source's evidence to
+    another.
+    """
+    import pandas as pd
+    from vaxrank.epitope_io import write_neoepitope_report
+
+    report_df = pd.DataFrame([
+        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL',
+         'Genomic variant': 'chr1:100', 'Gene name': 'GENEA',
+         'Prediction identity': 'src-a', 'Peptide offset': 2},
+        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL',
+         'Genomic variant': 'chr2:200', 'Gene name': 'GENEB',
+         'Prediction identity': 'src-b', 'Peptide offset': 2},
+    ])
+    # Same peptide and allele, different sources, different affinities.
+    preds = [
+        dataclasses.replace(
+            _make_prediction(peptide_sequence='SIINFEKL',
+                             allele='HLA-A*02:01', ic50=50.0),
+            prediction_id='src-a'),
+        dataclasses.replace(
+            _make_prediction(peptide_sequence='SIINFEKL',
+                             allele='HLA-A*02:01', ic50=4000.0),
+            prediction_id='src-b'),
+    ]
+    csv_path = tmp_path / "out.csv"
+    write_neoepitope_report(report_df, preds, csv_report_path=str(csv_path))
+    result = pd.read_csv(csv_path)
+
+    assert len(result) == 2
+    assert sorted(result['Genomic variant'].tolist()) == [
+        'chr1:100', 'chr2:200']
+    by_source = dict(zip(result['Prediction identity'],
+                         result['vaxrank_score']))
+    # The strong binder scores above the weak one; neither borrows the other's.
+    assert by_source['src-a'] > by_source['src-b']
+
+
+def test_write_neoepitope_report_requires_prediction_identity(tmp_path):
+    """A frame without identity columns is refused, not silently broadcast."""
     import pandas as pd
     from vaxrank.epitope_io import write_neoepitope_report
 
     report_df = pd.DataFrame([
         {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL',
          'Genomic variant': 'chr1:100', 'Gene name': 'GENEA'},
-        {'Allele': 'HLA-A*02:01', 'Mutant peptide sequence': 'SIINFEKL',
-         'Genomic variant': 'chr2:200', 'Gene name': 'GENEB'},  # same (pep, allele)
     ])
-    preds = [_make_prediction(peptide_sequence='SIINFEKL', allele='HLA-A*02:01')]
-    csv_path = tmp_path / "out.csv"
-    write_neoepitope_report(report_df, preds, csv_report_path=str(csv_path))
-    result = pd.read_csv(csv_path)
-    # Both source rows preserved with their per-source provenance
-    assert len(result) == 2
-    assert sorted(result['Genomic variant'].tolist()) == ['chr1:100', 'chr2:200']
-    # Same vaxrank_score broadcast to both
-    scores = result['vaxrank_score'].unique()
-    assert len(scores) == 1, (
-        "Expected the same score on both duplicate-(peptide, allele) "
-        "rows; got %r" % scores.tolist())
+    preds = [_make_prediction()]
+    with pytest.raises(ValueError, match="Prediction identity"):
+        write_neoepitope_report(
+            report_df, preds, csv_report_path=str(tmp_path / "out.csv"))
 
 
 def test_lens_dsl_combines_both_predictors(tmp_path):
@@ -1572,7 +1645,8 @@ def test_lens_dsl_combines_both_predictors(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
 
     # 50/50 blend of the two predictors' logistic-normalized affinity scores
     cfg = EpitopeConfig(
@@ -1598,7 +1672,8 @@ def test_lens_dsl_validation_catches_missing_predictor(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_v1.9_mhcflurry_only.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
 
     cfg = EpitopeConfig(
         score_expr="affinity['netmhcpan'].logistic(350, 150)"
@@ -1616,7 +1691,8 @@ def test_lens_dsl_validation_catches_missing_kind(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_v1.9_mhcflurry_only.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     cfg = EpitopeConfig(score_expr="stability['netmhcstabpan'].value")
     with pytest.raises(ValueError, match="references kind 'pMHC_stability'"):
         write_neoepitope_report(
@@ -1631,7 +1707,8 @@ def test_lens_dsl_validation_catches_missing_version(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_v1.9_mhcflurry_only.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     cfg = EpitopeConfig(
         score_expr="affinity['mhcflurry', '9.9.9'].logistic(350, 150)"
     )
@@ -1648,7 +1725,8 @@ def test_lens_dsl_version_qualified_formula(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     leaves = [p for e in epitopes for p in e.predictions_flat()]
     # Every LENS leaf should carry predictor_version from columns.
     assert all(p.predictor_version for p in leaves)
@@ -1687,7 +1765,8 @@ def test_real_lens_v14_detects_all_three_predictors():
     three should be detected and emit leaf predictions inside the
     loaded Epitopes."""
     path = os.path.join(REAL_LENS_DIR, "lens_v1.4_real_subset.tsv")
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     leaves = _leaves(epitopes)
     methods = {p.predictor_name for p in leaves}
     assert methods == {"mhcflurry", "netmhcpan", "netmhcstabpan"}
@@ -1704,7 +1783,8 @@ def test_real_lens_v15_emits_both_affinity_predictors():
     per-predictor predictions inside each CandidateEpitope. Canonical
     'mhcflurry' drives the report's display columns."""
     path = os.path.join(REAL_LENS_DIR, "lens_v1.5_real_subset.tsv")
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     leaves = _leaves(epitopes)
     methods = {p.predictor_name for p in leaves}
     assert methods == {"mhcflurry", "netmhcpan"}
@@ -1718,7 +1798,8 @@ def test_real_lens_v15_emits_both_affinity_predictors():
 def test_real_lens_v19_is_mhcflurry_only():
     """v1.9-dev emits only mhcflurry (netMHCpan was dropped)."""
     path = os.path.join(REAL_LENS_DIR, "lens_v1.9_real_subset.tsv")
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    epitopes = list(_loaded.epitopes)
     leaves = _leaves(epitopes)
     methods = {p.predictor_name for p in leaves}
     assert methods == {"mhcflurry"}
@@ -1752,7 +1833,8 @@ def test_real_lens_dsl_scoring_all_versions(tmp_path):
     import pandas as pd
     for name, cfg in cases:
         path = os.path.join(REAL_LENS_DIR, name)
-        report_df, preds = load_lens(path)
+        _loaded = read_lens_report(path)
+        report_df, preds = _loaded.report_df, list(_loaded.epitopes)
         csv_path = tmp_path / f"{name}.csv"
         write_neoepitope_report(
             report_df, preds, csv_report_path=str(csv_path),
@@ -1770,7 +1852,8 @@ def test_real_lens_v14_stability_formula(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(REAL_LENS_DIR, "lens_v1.4_real_subset.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     cfg = EpitopeConfig(score_expr=(
         "affinity['mhcflurry'].logistic(350, 150) * 0.7 + "
         "(stability['netmhcstabpan'].value / 24).clip(0, 1) * 0.3"))
@@ -1789,7 +1872,8 @@ def test_real_lens_version_qualified_auto_detects(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(REAL_LENS_DIR, "lens_v1.5_real_subset.tsv")
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     leaves = _leaves(epitopes)
     versions = {(p.predictor_name, p.predictor_version) for p in leaves}
     # Real v1.5.1 file: mhcflurry 2.1.1 + netmhcpan 4.1b
@@ -1813,7 +1897,8 @@ def test_lens_dsl_stability_and_affinity_combined(tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
 
     path = os.path.join(DATA_DIR, "lens_v1.4_with_stability.tsv")
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     leaves = [p for e in epitopes for p in e.predictions_flat()]
     kinds_seen = {p.kind for p in leaves}
     assert kinds_seen == {
@@ -1842,7 +1927,8 @@ def _assert_default_scores_match_legacy(cfg, path, tmp_path):
     from vaxrank.epitope_io import write_neoepitope_report
     from tests._legacy_score_reference import legacy_score_one as _legacy_score_one
 
-    report_df, epitopes = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     # Auto-picked default for pMHC_affinity is mhcflurry — that's what
     # resolves unqualified Affinity refs in topiary's EvalContext.
     legacy_scores = {}
@@ -1896,7 +1982,8 @@ def test_default_scoring_matches_legacy(tmp_path):
 
 def test_write_neoepitope_report_csv(tmp_path):
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
-    report_df, preds = load_pvacseq(path)
+    _loaded = read_pvacseq_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     csv_path = tmp_path / "report.csv"
     write_neoepitope_report(report_df, preds, csv_report_path=str(csv_path))
     assert csv_path.exists()
@@ -1912,7 +1999,8 @@ def test_write_neoepitope_report_csv(tmp_path):
 
 def test_write_neoepitope_report_xlsx(tmp_path):
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, preds = load_lens(path)
+    _loaded = read_lens_report(path)
+    report_df, preds = _loaded.report_df, list(_loaded.epitopes)
     xlsx_path = tmp_path / "report.xlsx"
     write_neoepitope_report(report_df, preds, excel_report_path=str(xlsx_path))
     assert xlsx_path.exists()

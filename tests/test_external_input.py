@@ -26,12 +26,13 @@ import os
 
 import pytest
 
-from vaxrank.epitope_io import load_lens
+from vaxrank.epitope_io import read_lens_report
 from vaxrank.external_input import (
+    ExternalConstructOptions,
     ExternalVariantEntry,
     peptide_offsets_in_context,
     parse_lens_variant_coordinates,
-    ranked_from_lens_predictions,
+    lens_ranking_result,
 )
 
 DATA_DIR = os.path.join(
@@ -284,8 +285,10 @@ def test_real_lens_v19_subset_produces_ranked_entries():
     produces a non-empty ranked list end-to-end."""
     path = os.path.join(
         DATA_DIR, "real_lens_subsets", "lens_v1.9_real_subset.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     # The fixture has at least one parseable variant_coords row.
     # Pre-fix: 0. Now: > 0.
     assert len(ranked) > 0, (
@@ -832,8 +835,10 @@ def test_lens_pep_context_with_stop_codon_truncates():
     path = os.path.join(
         DATA_DIR, "real_lens_subsets",
         "lens_v1.9_with_stop_codons.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     # No fragment carries a '*' or a non-standard residue.
     for _, peptides in ranked:
         for vp in peptides:
@@ -894,8 +899,10 @@ def test_lens_picks_strongest_binder_when_multiple_rows_per_variant():
     of binding strength. This test pins the fix.
     """
     path = os.path.join(DATA_DIR, "lens_multi_row_per_variant.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     assert len(ranked) == 1, (
         "Fixture has one variant with 3 peptides; got %d entries" % len(ranked))
     _, peptides = ranked[0]
@@ -917,10 +924,13 @@ def test_patient_info_from_external_proxy_counts():
     from vaxrank.external_input import patient_info_from_external
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     info = patient_info_from_external(
-        ranked, path, patient_id='Pt-X', input_label='LENS report')
+        ranked, path, 'Pt-X', _ranking.input_summary,
+        input_label='LENS report')
     assert info.patient_id == 'Pt-X'
     # PatientInfo on the external path no longer overloads
     # ``vcf_paths`` (LENS files aren't VCFs); the explicit
@@ -928,9 +938,10 @@ def test_patient_info_from_external_proxy_counts():
     assert info.vcf_paths == []
     assert info.inputs == [('LENS report', path)]
     assert info.bam_path is None
-    # All ranked variants are counted as somatic (LENS antigen-only
-    # files don't carry pre-pipeline silent variants).
-    assert info.num_somatic_variants == len(ranked)
+    # Input composition comes from the parse, not from the ranked output:
+    # every variant the file produced antigens for, before filtering.
+    assert info.num_somatic_variants == (
+        _ranking.input_summary.num_somatic_variants)
     # Without --ensembl-release the test fixture won't resolve
     # transcripts; coding-effect count drops to 0.
     assert info.num_coding_effect_variants == 0
@@ -943,7 +954,9 @@ def test_patient_info_from_external_proxy_counts():
 def test_patient_info_from_external_empty_ranked():
     """No ranked variants → all counts zero, no crash."""
     from vaxrank.external_input import patient_info_from_external
-    info = patient_info_from_external([], '/tmp/empty.tsv', patient_id='')
+    from vaxrank.external_input import ExternalInputSummary
+    info = patient_info_from_external(
+        [], '/tmp/empty.tsv', '', ExternalInputSummary())
     assert info.num_somatic_variants == 0
     assert info.num_coding_effect_variants == 0
     assert info.num_variants_with_rna_support == 0
@@ -1017,8 +1030,10 @@ def test_lens_to_ranked_vaccine_peptides_round_trip():
     peptides should produce one entry per unique variant, each
     carrying the pep_context as the antigen fragment."""
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, epitopes = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(epitopes, path)
+    _loaded = read_lens_report(path)
+    epitopes = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, epitopes)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     assert len(ranked) == 3, (
         "LENS fixture has 3 unique variants; got %d" % len(ranked))
     # Each ranked entry: (Variant, [VaccinePeptide])
@@ -1043,8 +1058,10 @@ def test_lens_drives_mrna_construct_assembly_end_to_end():
     from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     assert ranked, "Expected non-empty ranked list from LENS fixture"
 
     options = RNAConstructConfig(
@@ -1075,8 +1092,10 @@ def test_lens_drives_peptide_construct_assembly_end_to_end():
         PeptideConstructConfig, assemble_peptide_constructs)
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     options = PeptideConstructConfig(mode='slp')
     constructs = assemble_peptide_constructs(ranked, options=options)
@@ -1094,12 +1113,14 @@ def test_pvacseq_to_ranked_vaccine_peptides_round_trip():
     untested and the ID parser only handled dotted form, producing
     an empty ranked list end-to-end.
     """
-    from vaxrank.epitope_io import load_pvacseq
-    from vaxrank.external_input import ranked_from_pvacseq_predictions
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
 
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
-    report_df, predictions = load_pvacseq(path)
-    ranked, _dna_vaf = ranked_from_pvacseq_predictions(predictions, path)
+    _loaded = read_pvacseq_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = pvacseq_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     assert len(ranked) == 3, (
         "pVACseq fixture has 3 unique variants; got %d" % len(ranked))
     genes = sorted(
@@ -1139,13 +1160,15 @@ def test_pvacseq_drives_mrna_construct_assembly_end_to_end():
     """End-to-end: pVACseq report → ranked → mRNA constructs (mirror
     of the LENS end-to-end test). Pre-fix this produced zero
     constructs because the ranked list was empty."""
-    from vaxrank.epitope_io import load_pvacseq
-    from vaxrank.external_input import ranked_from_pvacseq_predictions
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
     from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
 
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
-    _, predictions = load_pvacseq(path)
-    ranked, _dna_vaf = ranked_from_pvacseq_predictions(predictions, path)
+    _loaded = read_pvacseq_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = pvacseq_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     assert ranked
 
     options = RNAConstructConfig(
@@ -1164,13 +1187,14 @@ def test_pvacseq_drives_mrna_construct_assembly_end_to_end():
 def test_pvacseq_all_epitopes_to_ranked_vaccine_peptides(tmp_path):
     """all_epitopes flavor uses MT Epitope Seq + chr/ref/alt columns."""
     from tests.test_epitope_io import _write_pvacseq_all_epitopes_fixture
-    from vaxrank.epitope_io import load_pvacseq
-    from vaxrank.external_input import ranked_from_pvacseq_predictions
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
 
     path = _write_pvacseq_all_epitopes_fixture(tmp_path)
-    _, predictions = load_pvacseq(path)
-    ranked, dna_vaf_by_variant = ranked_from_pvacseq_predictions(
-        predictions, path)
+    _loaded = read_pvacseq_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = pvacseq_ranking_result(_loaded, predictions)
+    ranked, dna_vaf_by_variant = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     assert len(ranked) == 1
     variant, vaccine_peptides = ranked[0]
@@ -1188,13 +1212,14 @@ def test_pvacseq_all_epitopes_to_ranked_vaccine_peptides(tmp_path):
 def test_pvacseq_duplicate_peptides_stay_variant_scoped(tmp_path):
     """Identical peptides from different pVACseq variants must not mix."""
     from tests.test_epitope_io import _write_pvacseq_duplicate_peptide_fixture
-    from vaxrank.epitope_io import load_pvacseq
-    from vaxrank.external_input import ranked_from_pvacseq_predictions
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
 
     path = _write_pvacseq_duplicate_peptide_fixture(tmp_path)
-    _, predictions = load_pvacseq(path)
-    ranked, _dna_vaf_by_variant = ranked_from_pvacseq_predictions(
-        predictions, path)
+    _loaded = read_pvacseq_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = pvacseq_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf_by_variant = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     assert len(ranked) == 2
     expected_source_by_variant = {
@@ -1224,8 +1249,8 @@ def test_lens_without_affinity_uses_dsl_score_without_fallback_warning(
         tmp_path, caplog):
     """Non-affinity evidence no longer triggers a raw-affinity fallback."""
     import logging
-    from vaxrank.epitope_io import load_lens
-    from vaxrank.external_input import ranked_from_lens_predictions
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
 
     no_aff = tmp_path / "no_affinity.tsv"
     no_aff.write_text(
@@ -1236,9 +1261,11 @@ def test_lens_without_affinity_uses_dsl_score_without_fallback_warning(
         "HLA-A02:01\tSVVGSSSSS\t12.5\t0.5\tSNV\t245\t"
         "chr17:7675088\tC\t[T]\tTP53\t42.5\tAASVVGSSSSSGTR\n")
 
-    _, predictions = load_lens(str(no_aff))
+    _loaded = read_lens_report(str(no_aff))
+    predictions = list(_loaded.epitopes)
     with caplog.at_level(logging.WARNING):
-        ranked, _dna_vaf = ranked_from_lens_predictions(predictions, str(no_aff))
+        _ranking = lens_ranking_result(_loaded, predictions)
+        ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     # The configured/default DSL is now the sole representative selector.
     assert len(ranked) == 1
     assert not any(
@@ -1306,8 +1333,10 @@ def test_emit_outputs_logs_active_and_fired_dispatch(caplog, tmp_path):
     from vaxrank.cli.entry_point import emit_outputs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     out_dir = str(tmp_path / "out")
     args = _mrna_args(out_dir)
@@ -1377,8 +1406,10 @@ def test_lens_with_vaccine_type_mrna_writes_three_fastas(tmp_path):
     from vaxrank.cli.entry_point import emit_outputs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     out_dir = str(tmp_path / "out")
     args = _mrna_args(out_dir)
@@ -1405,8 +1436,10 @@ def test_lens_with_multi_vaccine_type_uses_subdirs(tmp_path):
     from vaxrank.cli.entry_point import emit_outputs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     out_dir = str(tmp_path / "out")
     args = _vaccine_args(out_dir, vaccine_type=['peptide', 'mrna'])
@@ -1425,8 +1458,10 @@ def test_emit_outputs_skips_writer_when_no_output_dir(tmp_path):
     from vaxrank.cli.entry_point import emit_outputs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     out_dir = str(tmp_path / "out")
     args = _mrna_args(out_dir)
@@ -1611,7 +1646,7 @@ def test_lens_construct_excludes_epitopes_outside_its_window(tmp_path):
     result = lens_ranking_result(
         report,
         epitopes_for_ranking(list(report.epitopes), config),
-        vaccine_peptide_length=25)
+        options=ExternalConstructOptions(vaccine_peptide_length=25))
 
     assert len(result.ranked) == 1
     vaccine_peptide = result.ranked[0][1][0]
