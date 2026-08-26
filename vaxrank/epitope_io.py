@@ -683,6 +683,11 @@ def read_pvacseq_report(path, epitope_config=None):
 # to know which metric is the "value" and which are percentile ranks.
 _LENS_COLUMN_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*)_(\d[\w.]*)\.(.+)$")
 
+# Two printings of one processing score are "the same value" below this.
+# Wide enough to absorb a file that writes 0.8 on one row and 0.8000 on the
+# next, tight enough that a genuinely different score still gets reported.
+PROCESSING_SCORE_TOLERANCE = 1e-9
+
 # Registry describing how each LENS-emitted predictor maps into the Topiary
 # DSL. ``kind`` is the topiary prediction Kind (pMHC_affinity etc.).
 # ``value_cols`` and ``percentile_cols`` are LENS metric suffixes in
@@ -918,6 +923,9 @@ def read_lens_report(path, epitope_config=None):
     # constructs, or pepsickle); summarized once after the loop.
     n_dropped_peptide_context_mismatch = 0
     mismatch_examples = []
+    # (peptide, tool, kept score, conflicting score) for allele rows that
+    # disagreed about an allele-independent processing score.
+    processing_conflicts = []
     for row in rows:
         peptide = cells.text(row.get("peptide"))
         if not peptide:
@@ -1054,10 +1062,18 @@ def read_lens_report(path, epitope_config=None):
                 if processing_key in processing_rows_by_position:
                     processing_row = processing_rows_by_position[
                         processing_key]
-                    if processing_row['mutant'].score != processing_score:
-                        raise ValueError(
-                            "Conflicting LENS processing scores for one "
-                            "peptide position and predictor")
+                    kept = processing_row['mutant'].score
+                    if abs(kept - processing_score) > PROCESSING_SCORE_TOLERANCE:
+                        # The repeats *should* be identical — same peptide,
+                        # same flanks, no MHC involved — so a real difference
+                        # is worth surfacing. It is not worth aborting the
+                        # run over: the usual cause is a file printing the
+                        # same value at two precisions, and there is no way
+                        # for an operator to act on a hard failure here.
+                        # Keep the first-seen value (deterministic in file
+                        # order) and report the disagreement once at the end.
+                        processing_conflicts.append(
+                            (peptide, d.tool, kept, processing_score))
                     processing_row['patient_alleles'].add(allele)
                 else:
                     processing_row = {
@@ -1094,6 +1110,18 @@ def read_lens_report(path, epitope_config=None):
             display_pred=display_pred,
             chosen_tools=[d.tool for d in chosen],
         ))
+
+    if processing_conflicts:
+        ex_peptide, ex_tool, ex_kept, ex_other = processing_conflicts[0]
+        logger.warning(
+            "%d peptide/predictor pair(s) reported different %s processing "
+            "scores across their allele rows. That score depends on peptide "
+            "and flanks, not on MHC, so the repeats should agree; most often "
+            "the file printed one value at two precisions. Kept the "
+            "first-seen value. Example: peptide %s, %s scored %r on one row "
+            "and %r on another.",
+            len(processing_conflicts), ex_tool, ex_peptide, ex_tool,
+            ex_kept, ex_other)
 
     if n_dropped_peptide_context_mismatch:
         ex_peptide, ex_context = mismatch_examples[0]

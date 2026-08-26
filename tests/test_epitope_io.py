@@ -954,8 +954,17 @@ def test_lens_context_scores_merge_by_source_position(tmp_path):
     assert result.loc["YYYYSIINFEKLZ", "vaxrank_score"] == pytest.approx(1.7)
 
 
-def test_load_lens_rejects_conflicting_processing_scores(tmp_path):
-    """An allele-independent score may repeat, but may not disagree."""
+def test_load_lens_reports_conflicting_processing_scores_without_aborting(
+        tmp_path, caplog):
+    """A disagreement is surfaced, not fatal.
+
+    An allele-independent score repeated across allele rows should agree —
+    it depends on peptide and flanks, not on MHC. When it doesn't, aborting
+    the load gives the operator nothing to act on and costs them the whole
+    run; the usual cause is a file printing one value at two precisions.
+    """
+    import logging
+
     path = tmp_path / "conflicting-processing.tsv"
     path.write_text(
         "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
@@ -963,8 +972,47 @@ def test_load_lens_rejects_conflicting_processing_scores(tmp_path):
         "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
         "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t60\t0.4\n")
 
-    with pytest.raises(ValueError, match="Conflicting LENS processing"):
-        read_lens_report(path)
+    with caplog.at_level(logging.WARNING):
+        report = read_lens_report(path)
+
+    [epitope] = report.epitopes
+    [processing] = epitope.predictions_for(
+        "antigen_processing", predictor="mhcflurry")
+    # First-seen wins, so the result is deterministic in file order.
+    assert processing.score == pytest.approx(0.8)
+    assert epitope.patient_alleles == ("HLA-A*02:01", "HLA-B*07:02")
+
+    warning = "\n".join(
+        record.getMessage()
+        for record in caplog.records if record.levelno >= logging.WARNING)
+    assert "processing" in warning
+    # The operator needs the peptide and both values to chase it upstream.
+    assert "SIINFEKL" in warning
+    assert "0.8" in warning and "0.4" in warning
+
+
+def test_load_lens_tolerates_reprinted_processing_scores(tmp_path, caplog):
+    """The same value at two precisions is not a disagreement."""
+    import logging
+
+    path = tmp_path / "reprinted-processing.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t60\t0.8000\n")
+
+    with caplog.at_level(logging.WARNING):
+        report = read_lens_report(path)
+
+    [epitope] = report.epitopes
+    [processing] = epitope.predictions_for(
+        "antigen_processing", predictor="mhcflurry")
+    assert processing.score == pytest.approx(0.8)
+    assert not [
+        record for record in caplog.records
+        if record.levelno >= logging.WARNING
+        and "processing score" in record.getMessage()]
 
 
 def test_epitope_report_surfaces_integrated_mhcflurry_axes():
