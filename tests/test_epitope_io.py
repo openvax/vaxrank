@@ -30,8 +30,56 @@ from vaxrank.epitope_io import (
     load_lens,
     write_neoepitope_report,
 )
+from vaxrank.external_prediction import ExternalPredictionKey
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "epitope_fixtures")
+
+
+def test_external_prediction_key_is_legible_stable_and_round_trippable():
+    key = ExternalPredictionKey(
+        source_format="lens",
+        variant_id="chr1:1000",
+        antigen_source="SNV",
+        gene_ids=("ENSG2", "ENSG1"),
+        gene_names=("GENE2", "GENE1"),
+        transcript_ids=("ENST2", "ENST1"),
+        peptide="SIINFEKL",
+        source_sequence="AASIINFEKLLL",
+        offset=2,
+    )
+
+    identifier = key.identifier
+
+    assert '"variant_id":"chr1:1000"' in identifier
+    assert '"gene_ids":["ENSG1","ENSG2"]' in identifier
+    assert ExternalPredictionKey.from_identifier(identifier) == key
+    assert key.construct_identifier != key.identifier
+
+
+def test_native_round_trip_preserves_external_prediction_identity(tmp_path):
+    key = ExternalPredictionKey(
+        source_format="lens",
+        variant_id="chr1:1000",
+        gene_names=("GENE1",),
+        transcript_ids=("ENST1",),
+        peptide="SIINFEKL",
+        source_sequence="AASIINFEKLLL",
+        offset=2,
+    )
+    original = _make_prediction()
+    original = CandidateEpitope.from_peptide(
+        original,
+        comparators=original.comparators,
+        source_class=original.source_class,
+        overlaps_mutation=original.overlaps_mutation,
+        prediction_id=key.identifier,
+    )
+
+    path = tmp_path / "external-provenance.csv"
+    save_predictions([original], path)
+    reloaded = load_predictions(path)[0]
+
+    assert reloaded.prediction_id == key.identifier
 
 
 def test_lens_epitope_position_uses_source_context_and_offset():
@@ -468,9 +516,17 @@ def test_pvacseq_source_keyed_filtered_scores_do_not_broadcast(tmp_path):
         epitope_config=cfg)
 
     result = pd.read_csv(csv_path)
-    by_source = result.set_index("Source sequence name")["vaxrank_score"]
-    assert by_source["chr1-154590262-T-A"] == pytest.approx(76.11)
-    assert by_source["chr2-200000-G-C"] == 0.0
+    by_source = result.set_index("Source sequence name")
+    assert by_source.loc[
+        "chr1-154590262-T-A", "vaxrank_score"] == pytest.approx(76.11)
+    assert by_source.loc[
+        "chr1-154590262-T-A", "vaxrank_filter_passed"]
+    assert pd.isna(by_source.loc[
+        "chr2-200000-G-C", "vaxrank_score"])
+    assert not by_source.loc[
+        "chr2-200000-G-C", "vaxrank_filter_passed"]
+    assert by_source.loc[
+        "chr2-200000-G-C", "vaxrank_exclusion_reason"] == "dsl_filter"
 
 
 # ── LENS import ──────────────────────────────────────────────────────────────
@@ -1330,9 +1386,9 @@ def test_filter_plus_score_expr_both_bracketed(tmp_path):
     assert (result["vaxrank_score"] > 0).any()
 
 
-def test_filter_expr_drops_all_groups_yields_zero_scores(tmp_path):
-    """A filter that matches no rows should produce a report with all
-    scores = 0 (not crash)."""
+def test_filter_expr_drops_all_groups_marks_audit_rows_without_fake_scores(
+        tmp_path):
+    """Filtered audit rows are explicit and never acquire synthetic zeros."""
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_io import write_neoepitope_report
 
@@ -1345,7 +1401,32 @@ def test_filter_expr_drops_all_groups_yields_zero_scores(tmp_path):
         report_df, preds, csv_report_path=str(csv_path), epitope_config=cfg)
     import pandas as pd
     result = pd.read_csv(csv_path)
-    assert (result["vaxrank_score"] == 0).all()
+    assert result["vaxrank_score"].isna().all()
+    assert not result["vaxrank_filter_passed"].any()
+    assert not result["vaxrank_rank_eligible"].any()
+    assert set(result["vaxrank_exclusion_reason"]) == {"dsl_filter"}
+
+
+def test_report_distinguishes_below_minimum_from_dsl_filter(tmp_path):
+    """A real score below the ranking gate remains visible and classified."""
+    from vaxrank.epitope_config import EpitopeConfig
+
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df, preds = load_lens(path)
+    csv_path = tmp_path / "below-minimum.csv"
+    write_neoepitope_report(
+        report_df,
+        preds,
+        csv_report_path=str(csv_path),
+        epitope_config=EpitopeConfig(min_epitope_score=2.0),
+    )
+    import pandas as pd
+    result = pd.read_csv(csv_path)
+
+    assert result["vaxrank_score"].notna().all()
+    assert result["vaxrank_filter_passed"].all()
+    assert not result["vaxrank_rank_eligible"].any()
+    assert set(result["vaxrank_exclusion_reason"]) == {"min_epitope_score"}
 
 
 def test_mixed_bracketed_and_unqualified_evaluates_cleanly(tmp_path):

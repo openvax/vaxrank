@@ -534,6 +534,12 @@ class CandidateEpitope(Peptide):
     # allele-less.
     patient_alleles: tuple[str, ...] = ()
 
+    # Stable identity supplied by external prediction loaders. It encodes
+    # variant, gene/transcript, peptide context, peptide, and offset; see
+    # ``ExternalPredictionKey``. Empty for native pipeline predictions, whose
+    # position identity remains ``(source_sequence, sequence, offset)``.
+    prediction_id: str = ""
+
     # Per-allele score for this epitope as computed by the configured
     # :class:`~vaxrank.epitope_config.EpitopeConfig` ``score_expr``
     # (see :mod:`vaxrank.epitope_dsl`). Keys are allele names exactly
@@ -592,9 +598,22 @@ class CandidateEpitope(Peptide):
     def __hash__(self) -> int:
         # Inherited from Peptide in spirit, but ``@dataclass(frozen=True)``
         # regenerates ``__hash__`` on every subclass — and ours would
-        # include the mutable ``comparators`` dict. Re-define here to
-        # keep the same position-identity hash as the parent.
-        return hash((self.sequence, self.source_sequence, self.offset))
+        # include the mutable ``comparators`` dict. External candidates add
+        # their provenance ID to the normal peptide-position identity.
+        position = (self.sequence, self.source_sequence, self.offset)
+        if not self.prediction_id:
+            return hash(position)
+        return hash((self.prediction_id,) + position)
+
+    @property
+    def prediction_group_source(self) -> str:
+        """First component of the Topiary score-group identity."""
+        return self.prediction_id or self.source_sequence or self.sequence
+
+    @property
+    def prediction_group_key(self) -> tuple[str, str, int]:
+        """Exact source/peptide/offset identity used for score joins."""
+        return self.prediction_group_source, self.sequence, self.offset
 
     # Convenience: most call sites today read the WT alongside the
     # candidate. Common-case shortcut.
@@ -644,6 +663,7 @@ class CandidateEpitope(Peptide):
             occurs_in_non_CTA_reference=self.occurs_in_non_CTA_reference,
             self_reference_match=self.self_reference_match,
             patient_alleles=self.patient_alleles,
+            prediction_id=self.prediction_id,
             per_allele_scores=dict(self.per_allele_scores))
 
     @classmethod
@@ -675,8 +695,8 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
 
     Producers (``predict_epitopes``, LENS / pVACseq loaders) iterate
     row-shaped inputs (topiary frame, TSV) and build a flat list of
-    row dicts; this function groups them by ``(peptide, source,
-    offset)`` and emits one ``CandidateEpitope`` per group, in
+    row dicts; this function groups them by ``(prediction_id, peptide,
+    source, offset)`` and emits one ``CandidateEpitope`` per group, in
     first-seen order.
 
     Each row is a mapping with the following keys:
@@ -684,6 +704,7 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
       ``peptide``    str             — candidate peptide sequence
       ``source``     str             — source protein / transcript window
       ``offset``     int             — peptide offset within ``source``
+      ``prediction_id`` str, optional — complete external provenance key
       ``mutant``     Prediction      — leaf prediction for one (allele,
                                        predictor, version) cell
       ``wt``         Prediction|None — parallel WT prediction, optional
@@ -722,13 +743,15 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
     groups: dict = {}
     for row in rows:
         peptide = row['peptide']
-        key = (peptide, row['source'], row['offset'])
+        prediction_id = row.get('prediction_id') or ''
+        key = (prediction_id, peptide, row['source'], row['offset'])
         slot = groups.get(key)
         if slot is None:
             slot = {
                 'peptide': peptide,
                 'source': row['source'],
                 'offset': row['offset'],
+                'prediction_id': prediction_id,
                 'mutant_preds': [],
                 'wt_preds': [],
                 'wt_peptide': None,
@@ -816,6 +839,7 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             occurs_in_non_CTA_reference=slot['occurs_in_non_CTA_reference'],
             self_reference_match=slot['self_reference_match'],
             patient_alleles=tuple(sorted(slot['patient_alleles'])),
+            prediction_id=slot['prediction_id'],
             per_allele_scores=dict(slot['per_allele_scores']),
         ))
     return out

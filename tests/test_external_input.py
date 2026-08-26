@@ -575,6 +575,123 @@ def test_external_filter_does_not_cross_lens_source_contexts(tmp_path):
         "AASIINFEKLLL")
 
 
+def test_external_filter_does_not_cross_identical_lens_contexts(tmp_path):
+    """Variant provenance, not sequence context, controls eligibility."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    lens_path = tmp_path / "identical-context.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "antigen_source\tvariant_coords\tsnv_ref_allele\t"
+        "snv_alt_allele\tgene_name\tgene_id\ttranscript_id\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t50\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\tENSG1\tENST1\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t500\tSNV\t"
+        "chr1:2000\tG\t[C]\tGENE2\tENSG2\tENST2\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, report, loaded, _patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 100"),
+    )
+
+    assert len(report) == 2
+    assert len(loaded) == 2
+    assert loaded[0].prediction_id != loaded[1].prediction_id
+    assert len(ranked) == 1
+    assert ranked[0][0].start == 1000
+
+
+def test_lens_representative_uses_configured_dsl_score(tmp_path):
+    """The selected construct context is the highest DSL-scored context."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    lens_path = tmp_path / "presentation-ranked.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.pres_score\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\ttranscript_id\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t50\t0.1\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\tENST1\n"
+        "LATEKSRWS\tHLA-A02:01\tGGLATEKSRWSTT\t500\t0.9\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\tENST1\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, _report, _loaded, _patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(
+            score_expr="presentation[mhcflurry].score"),
+    )
+
+    vaccine_peptide = ranked[0][1][0]
+    assert vaccine_peptide.amino_acids == "GGLATEKSRWSTT"
+    assert [e.sequence for e in vaccine_peptide.target_epitopes] == [
+        "LATEKSRWS"]
+    assert vaccine_peptide.target_epitope_score == pytest.approx(0.9)
+
+
+def test_lens_input_summary_reduces_all_rows_before_construct_checks(
+        tmp_path, monkeypatch):
+    """Input facts survive an unconstructable affinity-winning row."""
+    from types import SimpleNamespace
+
+    from vaxrank import external_input
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    monkeypatch.setattr(
+        external_input,
+        "resolve_external_transcripts",
+        lambda transcript_ids, _genome: [object()] if transcript_ids else [],
+    )
+    lens_path = tmp_path / "all-row-summary.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "antigen_source\tvariant_coords\tsnv_ref_allele\t"
+        "snv_alt_allele\tgene_name\ttranscript_id\t"
+        "rna_reads_covering_genomic_origin\t"
+        "rna_reads_covering_genomic_origin_with_peptide_cds\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\t\t0\t0\n"
+        "LATEKSRWS\tHLA-A02:01\tGGLATEKSRWSTT\t500\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\tENST1\t10\t3\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    _ranked, _report, _loaded, patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 0"),
+    )
+
+    assert patient_info.num_somatic_variants == 1
+    assert patient_info.num_coding_effect_variants == 1
+    assert patient_info.num_variants_with_rna_support == 1
+    assert patient_info.num_variants_with_vaccine_peptides == 0
+
+
 def test_pvacseq_filter_excluding_every_group_produces_no_ranked_vaccine():
     """The shared external filtering contract also applies to pVACseq."""
     from types import SimpleNamespace
@@ -607,6 +724,88 @@ def test_pvacseq_filter_excluding_every_group_produces_no_ranked_vaccine():
     assert patient_info.num_somatic_variants == 3
     assert patient_info.num_coding_effect_variants == 0
     assert patient_info.num_variants_with_rna_support == 3
+    assert patient_info.num_variants_with_vaccine_peptides == 0
+
+
+def write_multi_peptide_pvacseq_fixture(path):
+    """Write one pVACseq variant with score axes that disagree."""
+    header = (
+        "ID\tIndex\tA*02:01\tGene\tAA Change\tNum Passing Transcripts\t"
+        "Best Peptide\tBest Transcript\tAllele\tIC50 MT\tIC50 WT\t"
+        "%ile MT\t%ile WT\tRNA Expr\tRNA VAF\tRNA Depth\tDNA VAF\t"
+        "Tier\tRef Match\tEvaluation\n")
+    path.write_text(
+        header
+        + "chr1-1000-1001-A-T\t1.GENE1.ENST1.missense.1A/T\t1\t"
+        "GENE1\tA1T\t1\tSIINFEKL\t\tHLA-A*02:01\t50\t5000\t"
+        "0.1\t10\t1\t0\t0\t0.4\tPass\tFalse\tPending\n"
+        + "chr1-1000-1001-A-T\t1.GENE1.ENST2.missense.1A/T\t1\t"
+        "GENE1\tA1T\t1\tLATEKSRWS\tENST2\tHLA-A*02:01\t500\t5000\t"
+        "1.0\t10\t1\t0.2\t100\t0.4\tPass\tFalse\tPending\n")
+    return path
+
+
+def test_pvacseq_representative_uses_configured_dsl_score(tmp_path):
+    """pVACseq construct selection consumes the same score as ranking."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    path = write_multi_peptide_pvacseq_fixture(
+        tmp_path / "multi-peptide-pvacseq.tsv")
+    args = SimpleNamespace(
+        input_lens=None,
+        input_pvacseq=str(path),
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, _report, _loaded, _patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(score_expr="affinity.value"),
+    )
+
+    vaccine_peptide = ranked[0][1][0]
+    assert vaccine_peptide.amino_acids == "LATEKSRWS"
+    assert [e.sequence for e in vaccine_peptide.target_epitopes] == [
+        "LATEKSRWS"]
+    assert vaccine_peptide.target_epitope_score == pytest.approx(500.0)
+
+
+def test_pvacseq_input_summary_reduces_all_rows_before_selection(
+        tmp_path, monkeypatch):
+    """pVACseq RNA/transcript facts are unions over the raw variant rows."""
+    from types import SimpleNamespace
+
+    from vaxrank import external_input
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    monkeypatch.setattr(
+        external_input,
+        "resolve_external_transcripts",
+        lambda transcript_ids, _genome: [object()] if transcript_ids else [],
+    )
+    path = write_multi_peptide_pvacseq_fixture(
+        tmp_path / "multi-row-summary-pvacseq.tsv")
+    args = SimpleNamespace(
+        input_lens=None,
+        input_pvacseq=str(path),
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    _ranked, _report, _loaded, patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 0"),
+    )
+
+    assert patient_info.num_somatic_variants == 1
+    assert patient_info.num_coding_effect_variants == 1
+    assert patient_info.num_variants_with_rna_support == 1
     assert patient_info.num_variants_with_vaccine_peptides == 0
 
 
@@ -978,7 +1177,11 @@ def test_pvacseq_all_epitopes_to_ranked_vaccine_peptides(tmp_path):
     assert (variant.contig, variant.start, variant.ref, variant.alt) == (
         "1", 154590262, "T", "A")
     assert vaccine_peptides[0].mutant_protein_fragment.gene_name == "ADAR"
-    assert len(vaccine_peptides[0].epitopes) == 2
+    # pVACseq has no longer source window that can honestly contain both
+    # minimal epitopes. The default DSL chooses AERMGFTVV; evidence from the
+    # other peptide cannot inflate this construct's target score.
+    assert [e.sequence for e in vaccine_peptides[0].epitopes] == [
+        "AERMGFTVV"]
     assert dna_vaf_by_variant[variant] == pytest.approx(0.302)
 
 
@@ -1009,27 +1212,13 @@ def test_pvacseq_duplicate_peptides_stay_variant_scoped(tmp_path):
 
 # ---- LENS scoring-column edge cases --------------------------------------
 
-def test_lens_warns_when_no_affinity_columns_detected(tmp_path, caplog):
-    """When no pMHC_affinity predictor is detected, the
-    representative-peptide pick is degenerate (every row ties at
-    (2, 0.0); file-order first row "wins"). Pin that we warn
-    instead of silently picking arbitrarily.
-
-    Today this can be triggered by a stability-only LENS file
-    (netmhcstabpan present without mhcflurry/netmhcpan). It can also
-    fire if LENS ever adds tools whose ``kind`` is something other
-    than ``pMHC_affinity`` (presentation-only, cleavage,
-    immunogenicity, etc.) and the registry classifies them
-    accordingly. The warning is kind-agnostic — it reports the
-    detected kinds in its message.
-    """
+def test_lens_without_affinity_uses_dsl_score_without_fallback_warning(
+        tmp_path, caplog):
+    """Non-affinity evidence no longer triggers a raw-affinity fallback."""
     import logging
     from vaxrank.epitope_io import load_lens
     from vaxrank.external_input import ranked_from_lens_predictions
 
-    # Stability-only fixture (the only "no affinity" case the
-    # current registry can produce). If new predictor kinds are added
-    # to _LENS_PREDICTOR_REGISTRY, add fixtures here covering them.
     no_aff = tmp_path / "no_affinity.tsv"
     no_aff.write_text(
         "allele\tpeptide\tnetmhcstabpan_1.0.halflife_hours\t"
@@ -1042,16 +1231,11 @@ def test_lens_warns_when_no_affinity_columns_detected(tmp_path, caplog):
     _, predictions = load_lens(str(no_aff))
     with caplog.at_level(logging.WARNING):
         ranked, _dna_vaf = ranked_from_lens_predictions(predictions, str(no_aff))
-    # Still produces output (the file-order representative)
+    # The configured/default DSL is now the sole representative selector.
     assert len(ranked) == 1
-    # Warning was emitted, mentions the detected non-affinity kinds
-    msg = next(
-        (r.message for r in caplog.records
-         if "no pMHC_affinity scoring columns" in r.message), None)
-    assert msg is not None, \
-        "Expected a warn-once for LENS input lacking affinity predictors"
-    assert "pMHC_stability" in msg, \
-        "Warning should report the detected non-affinity kinds; got %r" % msg
+    assert not any(
+        "no pMHC_affinity scoring columns" in record.message
+        for record in caplog.records)
 
 
 # ---- emit_outputs observability -------------------------------------------

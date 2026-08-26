@@ -19,8 +19,8 @@ Two entry points:
   to drop rows wholesale before scoring.
 
 - :func:`build_score_node` — returns a numeric ``DSLNode`` whose ``.eval(ctx)``
-  produces a ``pd.Series`` indexed by ``(source_sequence_name, peptide,
-  peptide_offset, allele)`` group tuples.
+  produces a ``pd.Series`` indexed by exact prediction identity, peptide,
+  peptide offset, and allele for current vaxrank frames.
 
 When ``filter_expr`` / ``score_expr`` are set on the config, each is parsed
 via :func:`topiary.ranking.parse`. When absent the nodes are built directly
@@ -49,6 +49,15 @@ import pandas as pd
 
 
 logger = logging.getLogger(__name__)
+
+
+PREDICTION_ID_COLUMN = "prediction_id"
+PREDICTION_GROUP_COLUMNS = (
+    PREDICTION_ID_COLUMN,
+    "peptide",
+    "peptide_offset",
+    "allele",
+)
 
 
 # Method name -> topiary Kind for external-input predictions (LENS / pVACseq
@@ -134,7 +143,7 @@ def epitopes_to_topiary_df(epitopes):
     rows = []
     for e in epitopes:
         ctx = e
-        source_name = ctx.source_sequence or ctx.sequence
+        prediction_id = ctx.prediction_group_source
         predictions = ctx.predictions_flat()
         patient_alleles = ctx.patient_alleles
         for p in predictions:
@@ -149,7 +158,8 @@ def epitopes_to_topiary_df(epitopes):
             )
             for allele in evaluation_alleles:
                 rows.append({
-                    "source_sequence_name": source_name,
+                    PREDICTION_ID_COLUMN: prediction_id,
+                    "source_sequence_name": ctx.source_sequence or ctx.sequence,
                     "peptide": p.peptide,
                     "peptide_offset": ctx.offset,
                     "peptide_length": len(p.peptide),
@@ -165,6 +175,49 @@ def epitopes_to_topiary_df(epitopes):
                     "score": p.score,
                 })
     return pd.DataFrame(rows)
+
+
+def prediction_group_columns(topiary_df):
+    """Return explicit score-group columns when prediction IDs are present.
+
+    Topiary's inferred grouping is retained for legacy frames. External and
+    vaxrank-generated frames use the stable prediction ID so two biological
+    sources can never be joined merely because their sequences are equal.
+    """
+    if all(column in topiary_df.columns for column in PREDICTION_GROUP_COLUMNS):
+        return list(PREDICTION_GROUP_COLUMNS)
+    return None
+
+
+def filter_prediction_groups(topiary_df, node, default_methods=None):
+    """Apply a Topiary filter using vaxrank's explicit prediction identity.
+
+    Topiary issue #175 tracks adding ``group_keys`` directly to
+    ``apply_filter``; until then its public ``EvalContext`` supplies the same
+    DSL evaluation with an explicit group index here.
+    """
+    from topiary.ranking import EvalContext, apply_filter
+
+    if node is None or topiary_df.empty:
+        return topiary_df.reset_index(drop=True)
+    group_columns = prediction_group_columns(topiary_df)
+    if group_columns is None:
+        return apply_filter(
+            topiary_df, node, default_methods=default_methods)
+
+    context = EvalContext(
+        topiary_df,
+        group_keys=group_columns,
+        default_methods=default_methods,
+        filter_context=True,
+    )
+    values = node.eval(context).reindex(context.group_index)
+    nonmissing = values.dropna()
+    if not nonmissing.map(pd.api.types.is_bool).all():
+        raise TypeError("Filter expression must evaluate to booleans")
+    passing = set(values.fillna(False).astype(bool).loc[lambda x: x].index)
+    keep = context.row_group_tuples().isin(passing)
+    return topiary_df[keep].reset_index(drop=True)
 
 
 # Priority order for auto-picking a canonical method when the user hasn't
@@ -250,15 +303,14 @@ def validate_default_methods(cfg, topiary_df):
 def score_predictions(epitopes, cfg, *, topiary_df=None):
     """Score external-input epitopes using the configured Topiary DSL.
 
-    Returns a ``pandas.Series`` of per-(peptide, allele) scores indexed
-    by the group-key MultiIndex topiary uses internally
-    (``source_sequence_name, peptide, peptide_offset, allele``). Callers
-    merge this back onto their report DataFrame.
+    Returns a ``pandas.Series`` of per-(peptide, allele) scores. Current
+    vaxrank frames use ``(prediction_id, peptide, peptide_offset, allele)``;
+    legacy caller-supplied frames retain Topiary's inferred group keys.
 
     Multi-model data (e.g. both MHCflurry and netMHCpan for
     ``pMHC_affinity``) is handled via topiary's
-    ``EvalContext(default_methods=...)`` and
-    ``apply_filter(default_methods=...)``: unqualified DSL references
+    ``EvalContext(default_methods=...)`` and the same context for filtering:
+    unqualified DSL references
     resolve to the per-Kind default (user-specified via
     ``cfg.default_methods`` or auto-picked canonical), while bracketed
     references like ``Affinity['netmhcpan']`` still pick up their
@@ -272,7 +324,7 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
     :func:`epitopes_to_topiary_df`) rather than rebuilding from
     ``epitopes``.
     """
-    from topiary.ranking import EvalContext, apply_filter
+    from topiary.ranking import EvalContext
 
     df = (epitopes_to_topiary_df(epitopes)
           if topiary_df is None else topiary_df)
@@ -284,12 +336,17 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
 
     filter_node = build_filter_node(cfg)
     if filter_node is not None:
-        df = apply_filter(df, filter_node, default_methods=resolved)
+        df = filter_prediction_groups(
+            df, filter_node, default_methods=resolved)
         if df.empty:
             return pd.Series(dtype=float)
 
     score_node = build_score_node(cfg)
-    ctx = EvalContext(df, default_methods=resolved)
+    ctx = EvalContext(
+        df,
+        group_keys=prediction_group_columns(df),
+        default_methods=resolved,
+    )
     return (
         score_node.eval(ctx)
         .reindex(ctx.group_index)
@@ -326,11 +383,9 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
     if cfg is None:
         cfg = EpitopeConfig()
     score_series = score_predictions(epitopes, cfg, topiary_df=topiary_df)
-    # score_series is keyed by topiary's group columns. For the rebuilt
-    # vaxrank frame the first key mirrors ``epitopes_to_topiary_df``;
-    # for a supplied loader frame (pVACseq) it matches that loader's
-    # source/variant grouping. ``CandidateEpitope.source_sequence`` is
-    # set to the same key by those loaders.
+    # score_series is keyed by the explicit prediction ID when available,
+    # followed by peptide, offset, and allele. Legacy frames retain Topiary's
+    # inferred first group column.
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
         src_name, peptide, offset, allele = idx
@@ -344,8 +399,7 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
         replace(
             e,
             per_allele_scores=by_position.get(
-                (e.source_sequence or e.sequence, e.sequence, e.offset),
-                {}))
+                e.prediction_group_key, {}))
         for e in epitopes
     ]
 

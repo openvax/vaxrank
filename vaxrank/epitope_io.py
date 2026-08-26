@@ -22,8 +22,8 @@ All loader functions emit ``list[vaxrank.candidate_epitope.CandidateEpitope]``;
 the flat per-(peptide, allele, predictor) row shape lives only inside
 the CSV / DataFrame layer for round-trip fidelity. Loaders feed each
 row to :func:`~vaxrank.candidate_epitope.candidate_epitopes_from_rows`,
-which groups by ``(peptide, source, offset)`` into ``CandidateEpitope``
-objects at the end.
+which groups native rows by position and external rows by their complete
+``ExternalPredictionKey`` identity into ``CandidateEpitope`` objects.
 """
 
 import json
@@ -36,6 +36,7 @@ import pandas as pd
 from mhctools.pred import Prediction
 
 from .epitope_dsl import prediction_kind_for_method
+from .external_prediction import ExternalPredictionKey
 from .candidate_epitope import (
     SOURCE_CLASS_MUTATION, candidate_epitopes_from_rows,
 )
@@ -56,6 +57,7 @@ VAXRANK_COLUMNS = [
     "source_class",
     "overlaps_mutation",
     "source_sequence",
+    "prediction_id",
     "offset",
     "occurs_in_reference",
     "occurs_in_non_CTA_reference",
@@ -131,6 +133,7 @@ def epitope_prediction_rows(epitope):
             "source_class": epitope.source_class,
             "overlaps_mutation": epitope.overlaps_mutation,
             "source_sequence": epitope.source_sequence,
+            "prediction_id": epitope.prediction_id,
             "offset": epitope.offset,
             "occurs_in_reference": epitope.occurs_in_reference,
             "occurs_in_non_CTA_reference": epitope.occurs_in_non_CTA_reference,
@@ -333,6 +336,7 @@ def load_predictions(path):
         rows.append({
             'peptide': peptide,
             'source': string_or_empty(row.get("source_sequence", "")),
+            'prediction_id': string_or_empty(row.get("prediction_id", "")),
             'offset': int(row.get("offset", 0)),
             'mutant': mutant,
             'wt': wt,
@@ -466,6 +470,7 @@ def _topiary_pvacseq_to_epitope_rows(df):
         epitope_rows.append({
             'peptide': peptide,
             'source': _topiary_group_source(row),
+            'prediction_id': _safe_str(row.get("prediction_id")),
             'offset': int(_safe_float(row.get("peptide_offset")) or 0),
             'mutant': mutant,
             'wt': wt,
@@ -503,6 +508,7 @@ def _build_pvacseq_report_row(row):
         'RNA VAF': rna_vaf,
         'DNA VAF': dna_vaf,
         '%ile MT': _safe_float(row.get("percentile_rank")),
+        'Prediction identity': _safe_str(row.get("prediction_id")),
         'Source sequence name': _topiary_group_source(row),
         'Peptide offset': int(_safe_float(row.get("peptide_offset")) or 0),
         'MHC class': _safe_str(row.get("mhc_class")),
@@ -539,13 +545,21 @@ def load_pvacseq(path, epitope_config=None):
         vaxrank_score
     list of CandidateEpitope
         One ``vaxrank.candidate_epitope.CandidateEpitope`` per unique
-        ``(peptide, source_sequence, offset)`` group.
+        external prediction identity.
     """
     from topiary import read_pvacseq
 
     from .epitope_dsl import drop_empty_sample_name
     result = read_pvacseq(path)
     topiary_df = drop_empty_sample_name(result.df)
+    topiary_df = topiary_df.copy()
+    topiary_df["prediction_id"] = [
+        key.identifier if key is not None else ""
+        for key in (
+            ExternalPredictionKey.from_pvacseq_row(row)
+            for _, row in topiary_df.iterrows()
+        )
+    ]
     epitope_rows, n_rows = _topiary_pvacseq_to_epitope_rows(topiary_df)
     report_rows = [
         _build_pvacseq_report_row(row)
@@ -774,8 +788,8 @@ def load_lens(path, epitope_config=None):
     which predictors a given file actually emits rather than requiring a
     fixed schema. Internally we build one flat per-(peptide, allele,
     detected predictor, prediction kind) record per row, then group them
-    into ``CandidateEpitope`` objects keyed by
-    ``(peptide, source_sequence, offset)`` so Topiary
+    into ``CandidateEpitope`` objects keyed by complete variant, gene,
+    transcript, and peptide-position provenance so Topiary
     DSL expressions can combine multi-predictor predictions via
     ``affinity['mhcflurry']`` / ``affinity['netmhcpan']`` or use an
     unqualified ``affinity`` fallback via the epitope config's
@@ -794,8 +808,8 @@ def load_lens(path, epitope_config=None):
     pandas.DataFrame
         Report-ready DataFrame (one row per peptide × allele).
     list of CandidateEpitope
-        One ``CandidateEpitope`` per ``(peptide, source_sequence, offset)``
-        group, each carrying its per-(allele, predictor, kind)
+        One ``CandidateEpitope`` per external prediction identity, each
+        carrying its per-(allele, predictor, kind)
         ``mhctools.Prediction`` records inside ``epitope``. MHCflurry
         inputs may carry distinct ``pMHC_affinity``, ``pMHC_presentation``,
         and allele-independent ``antigen_processing`` leaves.
@@ -875,10 +889,15 @@ def load_lens(path, epitope_config=None):
                 mismatch_examples.append((peptide, pep_context))
             continue
         peptide, pep_context, offset = position
+        prediction_key = ExternalPredictionKey.from_lens_row(row)
+        if prediction_key is None:
+            continue
+        prediction_id = prediction_key.identifier
         row_added = False
         shared_epitope_fields = {
             'peptide': str(peptide),
             'source': pep_context,
+            'prediction_id': prediction_id,
             'offset': offset,
             'source_class': SOURCE_CLASS_MUTATION,
             # LENS pre-curates rows as neoepitopes and pre-filters
@@ -965,7 +984,7 @@ def load_lens(path, epitope_config=None):
                 # one allele-less prediction per peptide position. Preserve
                 # that canonical shape and reject inconsistent repeats.
                 processing_key = (
-                    str(peptide), pep_context, offset, d.tool, d.version)
+                    prediction_id, d.tool, d.version)
                 if processing_key in processing_rows_by_position:
                     processing_row = processing_rows_by_position[
                         processing_key]
@@ -1002,6 +1021,7 @@ def load_lens(path, epitope_config=None):
             row=row,
             allele=allele,
             peptide=peptide,
+            prediction_id=prediction_id,
             source_sequence_name=pep_context or str(peptide),
             peptide_offset=offset,
             detected=detected,
@@ -1033,8 +1053,9 @@ def load_lens(path, epitope_config=None):
     return report_df, epitopes
 
 
-def _build_lens_report_row(row, allele, peptide, source_sequence_name,
-                           peptide_offset, detected, display_pred, chosen_tools):
+def _build_lens_report_row(row, allele, peptide, prediction_id,
+                           source_sequence_name, peptide_offset, detected,
+                           display_pred, chosen_tools):
     """Assemble one row of the LENS neoepitope report DataFrame.
 
     ``display_pred`` (if not None) drives the legacy Affinity / %ile
@@ -1065,6 +1086,7 @@ def _build_lens_report_row(row, allele, peptide, source_sequence_name,
         mutant_affinity=display_value, wt_peptide='', wt_affinity=None,
         gene_name=gene, variant=variant_pos)
     out.update({
+        'Prediction identity': prediction_id,
         'Antigen source': antigen_source,
         'Predictors used': ','.join(chosen_tools),
         '%ile rank': display_percentile,
@@ -1135,7 +1157,7 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
         (one row per (peptide, allele) pair).
     epitopes : list of CandidateEpitope
         Output of ``load_lens`` / ``load_pvacseq`` — one CandidateEpitope per
-        unique ``(peptide, source, offset)``.
+        complete external prediction identity.
     excel_report_path : str, optional
     csv_report_path : str, optional
     epitope_config : EpitopeConfig, optional
@@ -1158,24 +1180,17 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     peptide_col = 'Mutant peptide sequence'
     allele_col = 'Allele'
 
-    # The score-merge below keys by (peptide, allele) and broadcasts the
-    # score back across every matching report_df row. Real-world LENS
-    # files emit the same (peptide, allele) pair from multiple sources
-    # (alternative transcripts, homologous regions, multiple variants)
-    # — that's expected, not an error. Each row retains its own source
-    # provenance (variant_coords, gene_name, transcript) and gets the
-    # same score, which is the correct behavior for a per-row report.
-    # The duplicate count is only useful when chasing a downstream
-    # row-count mismatch — log at DEBUG, not INFO.
+    # Duplicate peptide/allele pairs are expected across variants and
+    # transcripts. Current external loaders join them by Prediction identity;
+    # legacy frames without that column retain their historical broadcast.
     if len(report_df) > 0 and logger.isEnabledFor(logging.DEBUG):
         dup_count = int(report_df.duplicated(
             subset=[peptide_col, allele_col]).sum())
         if dup_count:
             logger.debug(
                 "report_df has %d duplicate (peptide, allele) row(s) "
-                "from multi-source input; the same score broadcasts "
-                "across each duplicate. Per-source provenance is "
-                "preserved by the other columns.", dup_count)
+                "from multi-source input; explicit prediction identities "
+                "keep current-format scores source-specific.", dup_count)
 
     # Build the topiary DataFrame once and share it between validator and
     # scorer. pVACseq import keeps the loader-produced frame in
@@ -1193,12 +1208,10 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     score_series = score_predictions(
         epitopes, epitope_config, topiary_df=topiary_df)
 
-    # score_series is indexed by topiary's group key
-    # (source/variant, peptide, peptide_offset, allele). pVACseq reports
-    # carry that source key through for precise alignment. If an exact
-    # source-keyed row is absent, it was filtered out and must stay at 0.
-    # Older LENS-shaped reports lack source/offset columns and keep the
-    # legacy (peptide, allele) broadcast.
+    # score_series is indexed by the stable prediction identity, peptide,
+    # offset, and allele for current external loaders. If an exact row is
+    # absent, the DSL filtered it out. Legacy report frames without an
+    # explicit identity retain their source-position or peptide fallback.
     scores_by_key = {}
     scores_by_pair = {}
     for idx_tuple, score in score_series.items():
@@ -1207,27 +1220,49 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
         scores_by_pair[(peptide, allele)] = score
 
     report_df = report_df.copy()
+    identity_col = 'Prediction identity'
     source_col = 'Source sequence name'
     offset_col = 'Peptide offset'
+    join_col = (
+        identity_col if identity_col in report_df.columns else source_col)
     has_source_keys = (
-        source_col in report_df.columns and offset_col in report_df.columns)
+        join_col in report_df.columns and offset_col in report_df.columns)
     scores = []
+    filter_passed = []
+    rank_eligible = []
+    exclusion_reasons = []
     for _, row in report_df.iterrows():
-        score = None
+        score_key = None
         if has_source_keys:
             offset = _safe_float(row.get(offset_col))
             if offset is not None:
-                score = scores_by_key.get((
-                    row.get(source_col), row[peptide_col], int(offset),
-                    row[allele_col]))
-            if score is None:
-                score = 0.0
+                score_key = (
+                    row.get(join_col), row[peptide_col], int(offset),
+                    row[allele_col])
+            passed = score_key in scores_by_key
+            score = scores_by_key.get(score_key)
         else:
-            score = scores_by_pair.get((row[peptide_col], row[allele_col]), 0.0)
-        scores.append(round(float(score), 6))
+            score_key = (row[peptide_col], row[allele_col])
+            passed = score_key in scores_by_pair
+            score = scores_by_pair.get(score_key)
+        eligible = (
+            passed
+            and score is not None
+            and float(score) >= epitope_config.min_epitope_score
+        )
+        scores.append(round(float(score), 6) if passed else None)
+        filter_passed.append(passed)
+        rank_eligible.append(eligible)
+        exclusion_reasons.append(
+            "" if eligible else (
+                "dsl_filter" if not passed else "min_epitope_score"))
     report_df.insert(2, 'vaxrank_score', scores)
+    report_df.insert(3, 'vaxrank_filter_passed', filter_passed)
+    report_df.insert(4, 'vaxrank_rank_eligible', rank_eligible)
+    report_df.insert(5, 'vaxrank_exclusion_reason', exclusion_reasons)
 
-    report_df = report_df.sort_values('vaxrank_score', ascending=False)
+    report_df = report_df.sort_values(
+        'vaxrank_score', ascending=False, na_position='last')
     report_df.insert(0, 'rank', range(1, len(report_df) + 1))
 
     if csv_report_path:
