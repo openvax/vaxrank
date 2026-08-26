@@ -4,6 +4,8 @@ import json
 import pandas as pd
 import pytest
 
+from tests.common import STUB_ONCOREF_VERSION
+
 from vaxrank.tissue_risk import (
     DEFAULT_HPA_LEVELS,
     DEFAULT_HPA_RELIABILITIES,
@@ -18,7 +20,7 @@ from vaxrank.tissue_risk import (
 
 def _provenance(verification_status="verified"):
     return HPAReferenceProvenance(
-        oncoref_version="1.8.174",
+        oncoref_version=STUB_ONCOREF_VERSION,
         oncoref_data_version="5.23.17",
         oncoref_source_matrix_version="5.22.10",
         source_name="hpa_normal_tissue",

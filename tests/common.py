@@ -10,6 +10,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Fixtures must never carry a real dependency version. A literal that looks
+# like one invites the next person to "keep it current", which is how an
+# oncoref version pin ended up asserted in test_cta_admission and broke on
+# every upstream bump. This sentinel is obviously not a real release.
+STUB_ONCOREF_VERSION = "0.0.0-test"
+
+
 def ok_(a, s=None):
     if s is None:
         assert a
