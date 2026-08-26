@@ -35,8 +35,12 @@ from dataclasses import dataclass
 import pandas as pd
 from mhctools.pred import Prediction
 
+from . import cells
 from .epitope_dsl import prediction_kind_for_method
 from .external_prediction import ExternalPredictionKey
+from .external_report import (
+    GENOMIC_VARIANT_COLUMN, ExternalRecord, ExternalReport,
+)
 from .candidate_epitope import (
     SOURCE_CLASS_MUTATION, candidate_epitopes_from_rows,
 )
@@ -56,7 +60,18 @@ VAXRANK_COLUMNS = [
     "prediction_method_name",
     "source_class",
     "overlaps_mutation",
+    # Targetability and the antigen-aware exact-self result are *decisions*,
+    # not raw inputs: a reload that dropped them silently re-admitted
+    # held-out epitopes as vaccine targets, because both fields fall back to
+    # the permissive legacy behavior when absent.
+    "overlaps_targetable",
+    "self_reference_match",
     "source_sequence",
+    "source_name",
+    # Flanking residues drive processing/cleavage predictors, so a reload
+    # without them cannot reproduce the scores of the file it read.
+    "n_flank",
+    "c_flank",
     "prediction_id",
     "offset",
     "occurs_in_reference",
@@ -132,7 +147,14 @@ def epitope_prediction_rows(epitope):
             "prediction_method_name": p.predictor_name,
             "source_class": epitope.source_class,
             "overlaps_mutation": epitope.overlaps_mutation,
+            "overlaps_targetable": epitope.overlaps_targetable,
+            "self_reference_match": (
+                epitope.self_reference_match.to_json()
+                if epitope.self_reference_match is not None else ""),
             "source_sequence": epitope.source_sequence,
+            "source_name": epitope.source_name,
+            "n_flank": epitope.n_flank,
+            "c_flank": epitope.c_flank,
             "prediction_id": epitope.prediction_id,
             "offset": epitope.offset,
             "occurs_in_reference": epitope.occurs_in_reference,
@@ -333,11 +355,29 @@ def load_predictions(path):
             json.loads(per_allele_scores_raw)
             if per_allele_scores_raw else {})
         occurs_in_ref = bool(row.get("occurs_in_reference", False))
+        # ``overlaps_targetable`` is tri-state: True / False / "producer did
+        # not decide". A blank cell must reload as None, not as False.
+        targetable_raw = row.get("overlaps_targetable")
+        overlaps_targetable = (
+            None if cells.missing(targetable_raw)
+            else cells.boolean(targetable_raw))
+        self_reference_raw = string_or_empty(
+            row.get("self_reference_match", ""))
+        self_reference_match = None
+        if self_reference_raw:
+            from .vaccine_antigen import SelfReferenceMatch
+            self_reference_match = SelfReferenceMatch.from_json(
+                self_reference_raw)
         rows.append({
             'peptide': peptide,
             'source': string_or_empty(row.get("source_sequence", "")),
+            'source_name': string_or_empty(row.get("source_name", "")),
+            'n_flank': string_or_empty(row.get("n_flank", "")),
+            'c_flank': string_or_empty(row.get("c_flank", "")),
             'prediction_id': string_or_empty(row.get("prediction_id", "")),
             'offset': int(row.get("offset", 0)),
+            'overlaps_targetable': overlaps_targetable,
+            'self_reference_match': self_reference_match,
             'mutant': mutant,
             'wt': wt,
             'source_class': string_or_empty(
@@ -356,22 +396,12 @@ def load_predictions(path):
 
 # ── pVACseq import ───────────────────────────────────────────────────────────
 
-def _is_missing(val):
-    """True for scalar missing values from pandas / pVACseq TSVs."""
-    if val is None:
-        return True
-    try:
-        return bool(pd.isna(val))
-    except (TypeError, ValueError):
-        return False
-
-
 def _format_nm(value):
     # Missing affinity → blank, consistent with every other missing
     # value in the neoepitope CSVs (see _build_lens_report_row). A
     # blank cell in a "Predicted … affinity" column reads as "not
     # predicted" without mixing a string sentinel into numeric data.
-    value = _safe_float(value)
+    value = cells.number(value)
     return '%.2f nM' % value if value is not None else ''
 
 
@@ -414,7 +444,7 @@ def neoepitope_core_row(allele, mutant_peptide, mutant_affinity,
 
 def _first_float(*values):
     for value in values:
-        coerced = _safe_float(value)
+        coerced = cells.number(value)
         if coerced is not None:
             return coerced
     return None
@@ -423,30 +453,30 @@ def _first_float(*values):
 def _topiary_group_source(row):
     """Source key matching topiary.ranking.EvalContext grouping."""
     return (
-        _safe_str(row.get("variant"))
-        or _safe_str(row.get("source_sequence_name"))
-        or _safe_str(row.get("peptide"))
+        cells.text(row.get("variant"))
+        or cells.text(row.get("source_sequence_name"))
+        or cells.text(row.get("peptide"))
     )
 
 
-def _topiary_pvacseq_to_epitope_rows(df):
+def _topiary_pvacseq_to_epitope_rows(rows):
     """Convert topiary.read_pvacseq long-form rows to CandidateEpitope rows."""
     epitope_rows = []
     n_rows = 0
-    for _, row in df.iterrows():
-        peptide = _safe_str(row.get("peptide"))
-        allele = _safe_str(row.get("allele"))
-        value = _safe_float(row.get("value"))
+    for row in rows:
+        peptide = cells.text(row.get("peptide"))
+        allele = cells.text(row.get("allele"))
+        value = cells.number(row.get("value"))
         if not peptide or not allele or value is None:
             continue
 
-        method = _safe_str(row.get("prediction_method_name")) or "pvacseq"
-        version = _safe_str(row.get("predictor_version"))
+        method = cells.text(row.get("prediction_method_name")) or "pvacseq"
+        version = cells.text(row.get("predictor_version"))
         kind = (
-            _safe_str(row.get("kind"))
+            cells.text(row.get("kind"))
             or prediction_kind_for_method(method))
-        percentile_rank = _safe_float(row.get("percentile_rank"))
-        score = _safe_float(row.get("score"))
+        percentile_rank = cells.number(row.get("percentile_rank"))
+        score = cells.number(row.get("score"))
         mutant = Prediction(
             kind=kind, predictor_name=method, predictor_version=version,
             allele=allele, peptide=peptide, value=value,
@@ -455,30 +485,38 @@ def _topiary_pvacseq_to_epitope_rows(df):
         )
 
         wt = None
-        wt_value = _safe_float(row.get("wt_value"))
+        wt_value = cells.number(row.get("wt_value"))
         if wt_value is not None:
-            wt_method = _safe_str(row.get("wt_prediction_method_name")) or method
-            wt_version = _safe_str(row.get("wt_predictor_version")) or version
+            wt_method = cells.text(row.get("wt_prediction_method_name")) or method
+            wt_version = cells.text(row.get("wt_predictor_version")) or version
             wt = Prediction(
                 kind=kind, predictor_name=wt_method,
                 predictor_version=wt_version, allele=allele,
-                peptide=_safe_str(row.get("wt_peptide")),
+                peptide=cells.text(row.get("wt_peptide")),
                 value=wt_value, score=0.0,
-                percentile_rank=_safe_float(row.get("wt_percentile_rank")),
+                percentile_rank=cells.number(row.get("wt_percentile_rank")),
             )
 
         epitope_rows.append({
             'peptide': peptide,
-            'source': _topiary_group_source(row),
-            'prediction_id': _safe_str(row.get("prediction_id")),
-            'offset': int(_safe_float(row.get("peptide_offset")) or 0),
+            # pVACseq ships no source-protein context, so the peptide *is*
+            # its own source window — the same thing the prediction identity
+            # records. The variant string is provenance and belongs in
+            # ``source_name``; storing it in ``source_sequence`` made a
+            # non-sequence look like a sequence, and any consumer that
+            # sliced that window (construct assembly does) got a fragment of
+            # the variant's *name* back.
+            'source': peptide,
+            'source_name': _topiary_group_source(row),
+            'prediction_id': cells.text(row.get("prediction_id")),
+            'offset': int(cells.number(row.get("peptide_offset")) or 0),
             'mutant': mutant,
             'wt': wt,
             'source_class': SOURCE_CLASS_MUTATION,
-            'overlaps_mutation': _safe_bool(
+            'overlaps_mutation': cells.boolean(
                 row.get("contains_mutant_residues"), default=True),
-            'occurs_in_reference': _safe_bool(row.get("pvacseq_ref_match")),
-            'occurs_in_non_CTA_reference': _safe_bool(
+            'occurs_in_reference': cells.boolean(row.get("pvacseq_ref_match")),
+            'occurs_in_non_CTA_reference': cells.boolean(
                 row.get("pvacseq_ref_match")),
         })
         n_rows += 1
@@ -494,35 +532,76 @@ def _build_pvacseq_report_row(row):
     rna_vaf = _first_float(row.get("rna_vaf"), row.get("tumor_rna_vaf"))
     dna_vaf = _first_float(row.get("dna_vaf"), row.get("tumor_dna_vaf"))
     out = neoepitope_core_row(
-        allele=_safe_str(row.get("allele")),
-        mutant_peptide=_safe_str(row.get("peptide")),
+        allele=cells.text(row.get("allele")),
+        mutant_peptide=cells.text(row.get("peptide")),
         mutant_affinity=row.get("value"),
-        wt_peptide=_safe_str(row.get("wt_peptide")),
+        wt_peptide=cells.text(row.get("wt_peptide")),
         wt_affinity=row.get("wt_value"),
-        gene_name=_safe_str(row.get("gene")),
-        variant=_safe_str(row.get("variant")))
+        gene_name=cells.text(row.get("gene")),
+        variant=cells.text(row.get("variant")))
     out.update({
-        'Tier': _safe_str(row.get("pvacseq_tier")),
-        'Ref Match': _safe_bool(row.get("pvacseq_ref_match")),
+        'Tier': cells.text(row.get("pvacseq_tier")),
+        'Ref Match': cells.boolean(row.get("pvacseq_ref_match")),
         'RNA Expr': rna_expr,
         'RNA VAF': rna_vaf,
         'DNA VAF': dna_vaf,
-        '%ile MT': _safe_float(row.get("percentile_rank")),
-        'Prediction identity': _safe_str(row.get("prediction_id")),
+        '%ile MT': cells.number(row.get("percentile_rank")),
+        'Prediction identity': cells.text(row.get("prediction_id")),
         'Source sequence name': _topiary_group_source(row),
-        'Peptide offset': int(_safe_float(row.get("peptide_offset")) or 0),
-        'MHC class': _safe_str(row.get("mhc_class")),
-        'Contains mutant residues': _safe_bool(
+        'Peptide offset': int(cells.number(row.get("peptide_offset")) or 0),
+        'MHC class': cells.text(row.get("mhc_class")),
+        'Contains mutant residues': cells.boolean(
             row.get("contains_mutant_residues"), default=True),
     })
     for col, value in row.items():
         if col.startswith("pvacseq_") and col not in {
                 "pvacseq_ref_match", "pvacseq_tier"}:
-            out[col] = _safe_float(value)
+            out[col] = cells.number(value)
     return out
 
 
-def load_pvacseq(path, epitope_config=None):
+# pVACseq's all_epitopes flavor carries both a row key (``Index``) and genomic
+# coordinates. ``topiary.read_pvacseq`` prefers ``Index`` for its ``variant``
+# column and does not carry the coordinate columns through — so the identity
+# survives the normalization and the genome position does not. Construct
+# ranking needs the position, so we recover it here, at load, keyed by the
+# same identity topiary produced. This is the only place the raw TSV is
+# consulted, and what it recovers is stated rather than assumed.
+_PVACSEQ_COORDINATE_COLUMNS = ("Chromosome", "Start", "Reference", "Variant")
+
+
+def pvacseq_genomic_coordinates(path):
+    """Map each pVACseq row identity to its ``chrom-start-ref-alt`` string.
+
+    Returns an empty map for flavors that ship no coordinate columns (the
+    aggregated flavor encodes the position in its ``ID`` instead).
+    """
+    from .external_prediction import pvacseq_variant_id
+    try:
+        header = pd.read_csv(path, sep="\t", nrows=0)
+    except (ValueError, OSError):
+        return {}
+    if not set(_PVACSEQ_COORDINATE_COLUMNS) <= set(header.columns):
+        return {}
+    id_columns = [
+        column for column in ("Index", "ID")
+        if column in header.columns]
+    frame = pd.read_csv(
+        path, sep="\t", low_memory=False,
+        usecols=list(_PVACSEQ_COORDINATE_COLUMNS) + id_columns)
+    coordinates = {}
+    for _, raw in frame.iterrows():
+        row = dict(raw)
+        variant_id = pvacseq_variant_id(row)
+        if not variant_id:
+            continue
+        parts = [cells.text(row.get(c)) for c in _PVACSEQ_COORDINATE_COLUMNS]
+        if all(parts):
+            coordinates.setdefault(variant_id, "-".join(parts))
+    return coordinates
+
+
+def read_pvacseq_report(path, epitope_config=None):
     """
     Import a pVACseq TSV and return a neoepitope report DataFrame ready
     for output.
@@ -553,18 +632,34 @@ def load_pvacseq(path, epitope_config=None):
     result = read_pvacseq(path)
     topiary_df = drop_empty_sample_name(result.df)
     topiary_df = topiary_df.copy()
-    topiary_df["prediction_id"] = [
-        key.identifier if key is not None else ""
-        for key in (
-            ExternalPredictionKey.from_pvacseq_row(row)
-            for _, row in topiary_df.iterrows()
-        )
-    ]
-    epitope_rows, n_rows = _topiary_pvacseq_to_epitope_rows(topiary_df)
+
+    # Topiary has already normalized both pVACseq flavors onto one column
+    # vocabulary (``variant``, ``gene``, ``transcript``, ``rna_depth`` /
+    # ``tumor_rna_depth``, …). Every later stage reads these rows, never the
+    # raw TSV — so an identity built here and an identity used for construct
+    # ranking are the same object rather than two derivations that have to be
+    # kept in agreement.
+    rows = [dict(row) for _, row in topiary_df.iterrows()]
+    coordinates = pvacseq_genomic_coordinates(path)
+    records = []
+    prediction_ids = []
+    for row in rows:
+        genomic = coordinates.get(cells.text(row.get("variant")))
+        if genomic:
+            row[GENOMIC_VARIANT_COLUMN] = genomic
+        key = ExternalPredictionKey.from_pvacseq_row(row)
+        prediction_ids.append(key.identifier if key is not None else "")
+        if key is not None:
+            records.append(ExternalRecord(key=key, row=row))
+    topiary_df["prediction_id"] = prediction_ids
+    for row, prediction_id in zip(rows, prediction_ids):
+        row["prediction_id"] = prediction_id
+
+    epitope_rows, n_rows = _topiary_pvacseq_to_epitope_rows(rows)
     report_rows = [
         _build_pvacseq_report_row(row)
-        for _, row in topiary_df.iterrows()
-        if _safe_str(row.get("peptide")) and _safe_str(row.get("allele"))
+        for row in rows
+        if cells.text(row.get("peptide")) and cells.text(row.get("allele"))
     ]
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
@@ -576,43 +671,14 @@ def load_pvacseq(path, epitope_config=None):
     logger.info(
         "Loaded %d epitope(s) (%d row(s), %s flavor) from pVACseq file %s",
         len(epitopes), n_rows, result.extra.get("pvacseq_format"), path)
-    return report_df, epitopes
-
-
-# ── Shared cell-coercion helpers ─────────────────────────────────────────────
-
-def _safe_str(val):
-    """Coerce a cell to str, mapping NaN/None/'NA' to empty string."""
-    if _is_missing(val):
-        return ""
-    s = str(val)
-    if s == "NA":
-        return ""
-    return s
-
-
-def _safe_float(val):
-    """Convert to float, returning None for NaN/missing."""
-    if _is_missing(val):
-        return None
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return None
-
-
-def _safe_bool(val, default=False):
-    """Coerce common TSV boolean spellings; missing values use *default*."""
-    if _is_missing(val):
-        return default
-    if isinstance(val, str):
-        lowered = val.strip().lower()
-        if lowered in {"true", "t", "yes", "y", "1"}:
-            return True
-        if lowered in {"false", "f", "no", "n", "0"}:
-            return False
-        return default
-    return bool(val)
+    return ExternalReport(
+        source_format="pvacseq",
+        path=str(path),
+        report_df=report_df,
+        epitopes=tuple(epitopes),
+        records=tuple(records),
+        rows=tuple(rows),
+    )
 
 
 # ── LENS import ──────────────────────────────────────────────────────────────
@@ -766,8 +832,8 @@ def lens_epitope_position(peptide, peptide_context):
     represented by an empty source and offset zero; a peptide that does not
     occur in a non-empty context has no valid position and returns ``None``.
     """
-    peptide = _safe_str(peptide)
-    peptide_context = _safe_str(peptide_context)
+    peptide = cells.text(peptide)
+    peptide_context = cells.text(peptide_context)
     if not peptide:
         return None
     if peptide_context:
@@ -779,7 +845,7 @@ def lens_epitope_position(peptide, peptide_context):
     return peptide, peptide_context, offset
 
 
-def load_lens(path, epitope_config=None):
+def read_lens_report(path, epitope_config=None):
     """
     Import a LENS report TSV and return a neoepitope report DataFrame
     plus a list of ``vaxrank.candidate_epitope.CandidateEpitope`` objects.
@@ -845,6 +911,11 @@ def load_lens(path, epitope_config=None):
         _pick_canonical_predictor(affinity_preds) if affinity_preds else None)
     chosen = list(detected)
 
+    # One materialization of the source rows. Construct ranking consumes
+    # these same dicts, so LENS evidence columns (read counts, VAF, alleles)
+    # never require a second read of the file.
+    rows = [dict(row) for _, row in df.iterrows()]
+    records = []
     epitope_rows = []
     report_rows = []
     processing_rows_by_position = {}
@@ -854,8 +925,8 @@ def load_lens(path, epitope_config=None):
     # constructs, or pepsickle); summarized once after the loop.
     n_dropped_peptide_context_mismatch = 0
     mismatch_examples = []
-    for _, row in df.iterrows():
-        peptide = _safe_str(row.get("peptide"))
+    for row in rows:
+        peptide = cells.text(row.get("peptide"))
         if not peptide:
             continue
 
@@ -870,7 +941,7 @@ def load_lens(path, epitope_config=None):
         # way to recover wildtype affinity from a LENS row, since
         # LENS doesn't emit a WT IC50 column directly. Computed
         # once per row (shared across detected predictors).
-        agretopicity = _safe_float(row.get("mhcflurry_agretopicity"))
+        agretopicity = cells.number(row.get("mhcflurry_agretopicity"))
         # Locate the neoepitope inside its surrounding context once per
         # row (pep_context is a row-level column, not per-predictor).
         # LENS centers the peptide within pep_context but doesn't emit
@@ -881,7 +952,7 @@ def load_lens(path, epitope_config=None):
         # a fabricated offset downstream into the report, constructs,
         # and pepsickle. An empty pep_context is a different case (no
         # SLP window at all): keep it, offset 0, bare-neoepitope fallback.
-        pep_context = _safe_str(row.get("pep_context"))
+        pep_context = cells.text(row.get("pep_context"))
         position = lens_epitope_position(peptide, pep_context)
         if position is None:
             n_dropped_peptide_context_mismatch += 1
@@ -893,6 +964,8 @@ def load_lens(path, epitope_config=None):
         if prediction_key is None:
             continue
         prediction_id = prediction_key.identifier
+        row["prediction_id"] = prediction_id
+        records.append(ExternalRecord(key=prediction_key, row=row))
         row_added = False
         shared_epitope_fields = {
             'peptide': str(peptide),
@@ -908,9 +981,9 @@ def load_lens(path, epitope_config=None):
             'occurs_in_non_CTA_reference': False,
         }
         for d in chosen:
-            value = _safe_float(row.get(d.value_col))
+            value = cells.number(row.get(d.value_col))
             percentile_rank = (
-                _safe_float(row.get(d.percentile_col))
+                cells.number(row.get(d.percentile_col))
                 if d.percentile_col else None)
             # Derive WT IC50 from agretopicity, only for the
             # mhcflurry-affinity predictor (the value matches that
@@ -946,10 +1019,10 @@ def load_lens(path, epitope_config=None):
                 row_added = True
 
             presentation_score = (
-                _safe_float(row.get(d.presentation_score_col))
+                cells.number(row.get(d.presentation_score_col))
                 if d.presentation_score_col else None)
             presentation_percentile = (
-                _safe_float(row.get(d.presentation_percentile_col))
+                cells.number(row.get(d.presentation_percentile_col))
                 if d.presentation_percentile_col else None)
             if (presentation_score is not None
                     or presentation_percentile is not None):
@@ -976,7 +1049,7 @@ def load_lens(path, epitope_config=None):
                 row_added = True
 
             processing_score = (
-                _safe_float(row.get(d.processing_score_col))
+                cells.number(row.get(d.processing_score_col))
                 if d.processing_score_col else None)
             if processing_score is not None:
                 # MHCflurry processing depends on peptide + flanks, not MHC.
@@ -1050,7 +1123,24 @@ def load_lens(path, epitope_config=None):
     logger.info(
         "Loaded %d epitope(s) (%d row(s) × %d predictor(s)) from %s",
         len(epitopes), len(report_df), len(chosen), path)
-    return report_df, epitopes
+    return ExternalReport(
+        source_format="lens",
+        path=str(path),
+        report_df=report_df,
+        epitopes=tuple(epitopes),
+        records=tuple(records),
+        rows=tuple(rows),
+    )
+
+
+def load_lens(path, epitope_config=None):
+    """Back-compat view of :func:`read_lens_report` as ``(df, epitopes)``."""
+    return read_lens_report(path, epitope_config=epitope_config).loaded
+
+
+def load_pvacseq(path, epitope_config=None):
+    """Back-compat view of :func:`read_pvacseq_report` as ``(df, epitopes)``."""
+    return read_pvacseq_report(path, epitope_config=epitope_config).loaded
 
 
 def _build_lens_report_row(row, allele, peptide, prediction_id,
@@ -1062,21 +1152,21 @@ def _build_lens_report_row(row, allele, peptide, prediction_id,
     columns; every *detected* predictor's raw value is also exposed as
     '<Tool> value (nM/hours)' so downstream DSL / scripts can see both.
     """
-    antigen_source = _safe_str(row.get("antigen_source"))
-    gene = _safe_str(row.get("gene_name"))
-    variant_pos = _safe_str(row.get("variant_coords"))
+    antigen_source = cells.text(row.get("antigen_source"))
+    gene = cells.text(row.get("gene_name"))
+    variant_pos = cells.text(row.get("variant_coords"))
     if not variant_pos:
-        variant_pos = _safe_str(row.get("mut_aa_pos"))
+        variant_pos = cells.text(row.get("mut_aa_pos"))
     if not variant_pos:
-        variant_pos = _safe_str(row.get("origin_descriptor"))
+        variant_pos = cells.text(row.get("origin_descriptor"))
 
     display_value = (
-        _safe_float(row.get(display_pred.value_col)) if display_pred else None)
+        cells.number(row.get(display_pred.value_col)) if display_pred else None)
     display_percentile = (
-        _safe_float(row.get(display_pred.percentile_col))
+        cells.number(row.get(display_pred.percentile_col))
         if display_pred and display_pred.percentile_col else None)
     display_agretopicity = (
-        _safe_float(row.get(display_pred.agretopicity_col))
+        cells.number(row.get(display_pred.agretopicity_col))
         if display_pred and display_pred.agretopicity_col else None)
 
     # Shared core columns (WT affinity isn't predicted on the import
@@ -1091,7 +1181,7 @@ def _build_lens_report_row(row, allele, peptide, prediction_id,
         'Predictors used': ','.join(chosen_tools),
         '%ile rank': display_percentile,
         'Agretopicity': display_agretopicity,
-        'TPM': _safe_float(row.get("tpm")),
+        'TPM': cells.number(row.get("tpm")),
         'Source sequence name': source_sequence_name,
         'Peptide offset': peptide_offset,
     })
@@ -1102,18 +1192,18 @@ def _build_lens_report_row(row, allele, peptide, prediction_id,
     for d in detected:
         unit = unit_by_kind.get(d.kind, "")
         label = f"{d.tool} value ({unit})" if unit else f"{d.tool} value"
-        out[label] = _safe_float(row.get(d.value_col))
+        out[label] = cells.number(row.get(d.value_col))
         if d.kind == "pMHC_affinity" and d.percentile_col:
-            out[f"{d.tool} affinity percentile rank"] = _safe_float(
+            out[f"{d.tool} affinity percentile rank"] = cells.number(
                 row.get(d.percentile_col))
         if d.presentation_score_col:
-            out[f"{d.tool} presentation score"] = _safe_float(
+            out[f"{d.tool} presentation score"] = cells.number(
                 row.get(d.presentation_score_col))
         if d.presentation_percentile_col:
-            out[f"{d.tool} presentation percentile rank"] = _safe_float(
+            out[f"{d.tool} presentation percentile rank"] = cells.number(
                 row.get(d.presentation_percentile_col))
         if d.processing_score_col:
-            out[f"{d.tool} processing score"] = _safe_float(
+            out[f"{d.tool} processing score"] = cells.number(
                 row.get(d.processing_score_col))
     return out
 
@@ -1234,7 +1324,7 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     for _, row in report_df.iterrows():
         score_key = None
         if has_source_keys:
-            offset = _safe_float(row.get(offset_col))
+            offset = cells.number(row.get(offset_col))
             if offset is not None:
                 score_key = (
                     row.get(join_col), row[peptide_col], int(offset),

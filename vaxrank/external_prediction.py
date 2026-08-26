@@ -25,51 +25,38 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import json
 
-import pandas as pd
+from . import cells
 
-
-def external_text(value) -> str:
-    """Return a normalized external-report cell as text or ``""``."""
-    if value is None:
-        return ""
-    try:
-        if pd.isna(value):
-            return ""
-    except (TypeError, ValueError):
-        pass
-    text = str(value).strip()
-    if text.lower() in {"", "na", "nan", "none"}:
-        return ""
-    return text
-
-
-def external_values(*values) -> tuple[str, ...]:
-    """Return the sorted unique comma/semicolon-delimited cell values."""
-    result = set()
-    for value in values:
-        text = external_text(value)
-        if not text:
-            continue
-        for comma_part in text.split(","):
-            for part in comma_part.split(";"):
-                normalized = part.strip()
-                if normalized:
-                    result.add(normalized)
-    return tuple(sorted(result))
+# Re-exported under their historical names. :mod:`vaxrank.cells` is the one
+# normalization vocabulary; these aliases exist so the many external-report
+# call sites keep reading in the domain's language.
+external_text = cells.text
+external_values = cells.values
 
 
 def pvacseq_variant_id(row) -> str:
-    """Return one stable variant identifier from either pVACseq flavor."""
-    existing = external_text(row.get("variant")) or external_text(row.get("ID"))
-    if existing:
-        return existing
-    chrom = external_text(row.get("Chromosome"))
-    start = external_text(row.get("Start"))
-    ref = external_text(row.get("Reference"))
-    alt = external_text(row.get("Variant"))
+    """Return one stable variant identifier from either pVACseq flavor.
+
+    Precedence is **not** arbitrary: it mirrors ``topiary.read_pvacseq``,
+    which prefers pVACseq's own ``Index`` when the column exists and only
+    falls back to composing ``chrom-start-ref-alt`` when it does not. A reader
+    that chose coordinates first would build identities that never join
+    against topiary-normalized ones for any file carrying both.
+
+    ``variant`` / ``ID`` come first because those are the already-normalized
+    spellings (topiary's output column and pVACseq's aggregated-flavor column
+    respectively); they carry the same value ``Index`` would have produced.
+    """
+    normalized = cells.first_text(row, "variant", "ID", "Index")
+    if normalized:
+        return normalized
+    chrom = cells.text(row.get("Chromosome"))
+    start = cells.text(row.get("Start"))
+    ref = cells.text(row.get("Reference"))
+    alt = cells.text(row.get("Variant"))
     if all((chrom, start, ref, alt)):
         return f"{chrom}-{start}-{ref}-{alt}"
-    return external_text(row.get("Index"))
+    return ""
 
 
 def lens_variant_id(row) -> str:
@@ -119,6 +106,16 @@ class ExternalPredictionKey:
             raise ValueError("External prediction peptide is required")
         if self.offset < 0:
             raise ValueError("External prediction offset cannot be negative")
+        # The key is only a usable join target if its position fields describe
+        # a real position. Enforcing it here means every producer is held to
+        # the same invariant instead of each one re-checking (or forgetting).
+        if self.source_sequence:
+            window = self.source_sequence[
+                self.offset:self.offset + len(self.peptide)]
+            if window != self.peptide:
+                raise ValueError(
+                    "External prediction peptide %r is not at offset %d of "
+                    "its source sequence" % (self.peptide, self.offset))
         for name in ("gene_ids", "gene_names", "transcript_ids"):
             values = tuple(sorted(set(getattr(self, name))))
             object.__setattr__(self, name, values)
@@ -205,11 +202,7 @@ class ExternalPredictionKey:
         )
         if not peptide:
             return None
-        offset_text = external_text(row.get("peptide_offset"))
-        try:
-            offset = int(float(offset_text)) if offset_text else 0
-        except ValueError:
-            offset = 0
+        offset = cells.integer(row.get("peptide_offset"), default=0)
         return cls(
             source_format="pvacseq",
             variant_id=pvacseq_variant_id(row),

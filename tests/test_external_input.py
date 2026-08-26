@@ -1207,7 +1207,15 @@ def test_pvacseq_duplicate_peptides_stay_variant_scoped(tmp_path):
         epitopes = vaccine_peptides[0].epitopes
         assert len(epitopes) == 1
         assert epitopes[0].sequence == "AERMGFTVV"
-        assert epitopes[0].source_sequence == expected_source
+        # Variant provenance lives in ``source_name``. ``source_sequence`` is
+        # an amino-acid window and must stay one: pVACseq ships no source
+        # context, so the peptide is its own window. Storing the variant
+        # string there made construct assembly slice a variant *name*.
+        assert epitopes[0].source_name == expected_source
+        assert epitopes[0].source_sequence == "AERMGFTVV"
+        assert (
+            vaccine_peptides[0].mutant_protein_fragment.amino_acids
+            == epitopes[0].source_sequence)
 
 
 # ---- LENS scoring-column edge cases --------------------------------------
@@ -1517,3 +1525,135 @@ def test_log_varcode_agreement(caplog):
     with caplog.at_level(logging.INFO, logger='vaxrank.external_input'):
         log_varcode_agreement([(None, None, 'x')], 'LENS')
     assert not any('varcode' in r.getMessage() for r in caplog.records)
+
+
+# ---- identity / evidence separation regressions --------------------------
+
+def _write_pvacseq_all_epitopes_with_index(tmp_path):
+    """all_epitopes flavor carrying BOTH an Index and genomic coordinates."""
+    path = tmp_path / "pvacseq_all_epitopes_indexed.tsv"
+    columns = [
+        "Index", "Chromosome", "Start", "Stop", "Reference", "Variant",
+        "Transcript", "Variant Type", "Mutation", "Gene Name", "HLA Allele",
+        "Mutation Position", "MT Epitope Seq", "WT Epitope Seq",
+        "Median MT IC50 Score", "Median WT IC50 Score",
+        "Median MT Percentile", "Median WT Percentile",
+        "Tumor DNA Depth", "Tumor DNA VAF", "Tumor RNA Depth",
+        "Tumor RNA VAF", "Gene Expression", "Transcript Expression",
+    ]
+    row = [
+        "ADAR.ENST00000368474.9.missense.806E/V",
+        "chr1", "154590262", "154590263", "T", "A",
+        "ENST00000368474.9", "missense", "E806V", "ADAR",
+        "HLA-B*45:01", "5", "AERMGFTVV", "AERMGFTEV",
+        "76.11", "61.80", "0.10", "0.12",
+        "1233", "0.302", "1233", "0.348", "131.832", "84.961",
+    ]
+    path.write_text("\t".join(columns) + "\n" + "\t".join(row) + "\n")
+    return path
+
+
+def test_pvacseq_index_and_coordinates_both_yield_a_ranked_construct(tmp_path):
+    """An ``Index`` column must not cost the run its vaccine peptides.
+
+    topiary normalizes ``variant`` from ``Index`` when that column exists, so
+    an identity derived from genomic coordinates never joins. Aligning the
+    identity is only half the fix: the ``Index`` string carries no
+    coordinates, so the genomic variant has to come from the coordinate
+    columns independently.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import epitopes_for_ranking
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
+
+    path = _write_pvacseq_all_epitopes_with_index(tmp_path)
+    config = EpitopeConfig()
+    report = read_pvacseq_report(path, epitope_config=config)
+    assert len(report.epitopes) == 1
+
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+    assert len(result.ranked) == 1
+    variant, vaccine_peptides = result.ranked[0]
+    # Genomic placement comes from the coordinate columns, not the Index.
+    assert (variant.contig, variant.start, variant.ref, variant.alt) == (
+        "1", 154590262, "T", "A")
+    assert vaccine_peptides[0].amino_acids == "AERMGFTVV"
+
+
+def test_lens_construct_excludes_epitopes_outside_its_window(tmp_path):
+    """Only epitopes inside the synthesized peptide may score it.
+
+    A LENS ``pep_context`` can be far longer than the vaccine peptide. The
+    construct window is centered on the mutation, so a neoepitope elsewhere in
+    the context is not in the peptide that would be synthesized and must not
+    contribute to ``target_epitope_score`` or appear in its report table.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import epitopes_for_ranking
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
+
+    context = (
+        "MAAAAAAAAA" "SIINFEKLQQ" "CCCCCCCCCC" "DDDDDDDDDD" "EEEEEEEEEE"
+        "FFFFFFFFFF" "GGGGGGGGGG" "YLLPAIVHIW" "HHHHHHHHHH")
+    path = tmp_path / "lens_long_context.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\ttranscript_id\t"
+        "mhcflurry_2.1.1.aff\n"
+        f"SIINFEKL\tHLA-A02:01\t{context}\tSNV\tchr1:100\tC\t[T]\tG\tENST1\t20\n"
+        f"YLLPAIVHI\tHLA-A02:01\t{context}\tSNV\tchr1:100\tC\t[T]\tG\tENST1\t15\n")
+
+    config = EpitopeConfig()
+    report = read_lens_report(path, epitope_config=config)
+    result = lens_ranking_result(
+        report,
+        epitopes_for_ranking(list(report.epitopes), config),
+        vaccine_peptide_length=25)
+
+    assert len(result.ranked) == 1
+    vaccine_peptide = result.ranked[0][1][0]
+    assert len(vaccine_peptide.amino_acids) == 25
+    for epitope in vaccine_peptide.epitopes:
+        assert epitope.sequence in vaccine_peptide.amino_acids
+        # Offsets must be rebased into the window they now describe.
+        assert epitope.source_sequence == vaccine_peptide.amino_acids
+        assert (
+            vaccine_peptide.amino_acids[
+                epitope.offset:epitope.offset + len(epitope.sequence)]
+            == epitope.sequence)
+    assert vaccine_peptide.target_epitope_score == pytest.approx(
+        sum(e.epitope_score for e in vaccine_peptide.target_epitopes))
+
+
+def test_lens_whitespace_in_pep_context_does_not_split_an_identity(tmp_path):
+    """One normalization vocabulary, so a stray space cannot fork a group."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_lens_report
+
+    path = tmp_path / "lens_whitespace.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\tSNV\tchr1:100\tC\t[T]\tG\t20\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX \tSNV\tchr1:100\tC\t[T]\tG\t25\n")
+
+    report = read_lens_report(path, epitope_config=EpitopeConfig())
+    assert len(report.epitopes) == 1
+    assert report.epitopes[0].patient_alleles == (
+        "HLA-A*02:01", "HLA-B*07:02")
+    # The identity index is what construct ranking joins against; it must not
+    # raise on rows that only differ by whitespace.
+    assert len(report.records_with_epitopes(list(report.epitopes))) == 2
+
+
+def test_external_prediction_key_rejects_an_impossible_position():
+    """The key is a join target, so its position fields must be real."""
+    from vaxrank.external_prediction import ExternalPredictionKey
+
+    with pytest.raises(ValueError, match="not at offset"):
+        ExternalPredictionKey(
+            source_format="lens", peptide="SIINFEKL",
+            source_sequence="XXSIINFEKLXX", offset=0)

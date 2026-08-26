@@ -1171,8 +1171,29 @@ def main(args_list=None):
         merged_config = load_vaxrank_config(args)
         epitope_config = epitope_config_from_args(
             args, merged_config=merged_config)
+        # ``vaccine_peptides:`` config used to be resolved only inside
+        # ``run_vaxrank_from_parsed_args`` — the pipeline-only entry point —
+        # so peptide length, epitope retention, the combined-score
+        # expression, and manufacturability thresholds silently did nothing
+        # on LENS / pVACseq runs. Resolve them here too and hand them to the
+        # loader, which passes them to construct assembly.
+        vaccine_config = vaccine_config_from_args(
+            args, merged_config=merged_config)
+        if 'peptide' in resolve_vaccine_types(args):
+            manufacturability_config = manufacturability_config_from_args(
+                args, merged_config=merged_config)
+        else:
+            manufacturability_config = None
+        args.vaccine_peptide_length = vaccine_config.preferred_peptide_length
+        args.num_epitopes_per_vaccine_peptide = (
+            vaccine_config.num_target_epitopes_to_keep)
+        args.max_vaccine_peptides_per_variant = (
+            vaccine_config.max_vaccine_peptides_per_variant)
         loaded = load_external_ranked(
-            args, epitope_config=epitope_config)
+            args,
+            epitope_config=epitope_config,
+            vaccine_config=vaccine_config,
+            manufacturability_config=manufacturability_config)
         if loaded is None:
             ranked_variants_with_vaccine_peptides = []
         else:

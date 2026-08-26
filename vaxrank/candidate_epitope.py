@@ -703,6 +703,12 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
 
       ``peptide``    str             — candidate peptide sequence
       ``source``     str             — source protein / transcript window
+      ``source_name`` str, optional  — human-readable name of that window
+                                       (transcript, variant, contig …)
+      ``n_flank`` / ``c_flank``      str, optional — residues flanking the
+                                       peptide in its source protein; carried
+                                       because processing predictors score
+                                       them
       ``offset``     int             — peptide offset within ``source``
       ``prediction_id`` str, optional — complete external provenance key
       ``mutant``     Prediction      — leaf prediction for one (allele,
@@ -750,6 +756,9 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             slot = {
                 'peptide': peptide,
                 'source': row['source'],
+                'source_name': row.get('source_name') or '',
+                'n_flank': row.get('n_flank') or '',
+                'c_flank': row.get('c_flank') or '',
                 'offset': row['offset'],
                 'prediction_id': prediction_id,
                 'mutant_preds': [],
@@ -829,6 +838,9 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
         out.append(CandidateEpitope(
             sequence=slot['peptide'],
             source_sequence=slot['source'],
+            source_name=slot['source_name'],
+            n_flank=slot['n_flank'],
+            c_flank=slot['c_flank'],
             offset=slot['offset'],
             predictions=tuple(slot['mutant_preds']),
             comparators=comparators,

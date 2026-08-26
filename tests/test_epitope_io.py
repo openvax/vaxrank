@@ -2088,3 +2088,72 @@ def test_neoepitope_core_row_shared_contract():
         score=0.5)
     assert scored["Score"] == 0.5
     assert scored["Predicted mutant pMHC affinity"] == ""
+
+
+def test_native_roundtrip_preserves_targetability_and_self_reference(tmp_path):
+    """Safety decisions must survive a save/load cycle.
+
+    ``overlaps_targetable`` and ``self_reference_match`` both fall back to the
+    permissive legacy behavior when absent, so dropping them on write did not
+    fail loudly — it silently re-admitted a held-out epitope as a vaccine
+    target on reload.
+    """
+    from mhctools.pred import Prediction
+
+    from vaxrank.candidate_epitope import (
+        SOURCE_CLASS_MUTATION, CandidateEpitope,
+    )
+    from vaxrank.epitope_io import load_predictions, save_predictions
+    from vaxrank.vaccine_antigen import SelfReferenceMatch
+
+    prediction = Prediction(
+        kind="pMHC_affinity", predictor_name="mhcflurry",
+        predictor_version="2.1.1", allele="HLA-A*02:01",
+        peptide="SIINFEKL", value=50.0, score=0.9, percentile_rank=0.4)
+    epitope = CandidateEpitope(
+        sequence="SIINFEKL", n_flank="AAA", c_flank="CCC",
+        source_sequence="XXSIINFEKLXX", source_name="ENST00000123456",
+        offset=2, predictions=(prediction,),
+        source_class=SOURCE_CLASS_MUTATION, overlaps_mutation=True,
+        overlaps_targetable=False,
+        self_reference_match=SelfReferenceMatch(
+            peptide="SIINFEKL", occurs=False, antigen_kind="CTA",
+            excluded_gene_ids=("ENSG00000141510",),
+            genome_release="GRCh38"),
+        patient_alleles=("HLA-A*02:01",), prediction_id="pid-1",
+        per_allele_scores={"HLA-A*02:01": 0.9})
+
+    path = tmp_path / "native.csv"
+    save_predictions([epitope], path)
+    [reloaded] = load_predictions(path)
+
+    assert reloaded.overlaps_targetable is False
+    assert reloaded.is_targetable is False
+    assert reloaded.self_reference_match == epitope.self_reference_match
+    assert reloaded.occurs_in_self_reference is False
+    # Flanks drive processing predictors; a reload without them cannot
+    # reproduce the scores of the file it read.
+    assert (reloaded.n_flank, reloaded.c_flank) == ("AAA", "CCC")
+    assert reloaded.source_name == "ENST00000123456"
+
+
+def test_native_roundtrip_keeps_undecided_targetability_undecided(tmp_path):
+    """A blank cell reloads as "no decision", never as False."""
+    from mhctools.pred import Prediction
+
+    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.epitope_io import load_predictions, save_predictions
+
+    epitope = CandidateEpitope(
+        sequence="SIINFEKL", source_sequence="SIINFEKL", offset=0,
+        predictions=(Prediction(
+            kind="pMHC_affinity", predictor_name="mhcflurry",
+            predictor_version="2.1.1", allele="HLA-A*02:01",
+            peptide="SIINFEKL", value=50.0, score=0.9),),
+        prediction_id="pid-2")
+    path = tmp_path / "undecided.csv"
+    save_predictions([epitope], path)
+    [reloaded] = load_predictions(path)
+
+    assert reloaded.overlaps_targetable is None
+    assert reloaded.is_targetable is True
