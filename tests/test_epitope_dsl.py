@@ -487,3 +487,104 @@ def test_allele_free_evidence_is_projected_onto_patient_alleles():
         EpitopeConfig(score_expr="processing[mhcflurry].score"))
     assert set(scored.per_allele_scores) == set(alleles)
     assert scored.epitope_score > 0
+
+
+def test_pipeline_and_external_frames_each_group_on_their_own_identity():
+    """Both frame shapes name their group keys; neither is left to inference.
+
+    What topiary infers has changed twice (sample_name being prepended, then
+    the 5.17.1 group-index fixes). A frame whose grouping shifts underneath it
+    merges candidates that are not the same candidate, so vaxrank states the
+    identity for each shape instead of relying on the default.
+    """
+    import pandas as pd
+
+    from vaxrank.epitope_dsl import (
+        PIPELINE_GROUP_COLUMNS, PREDICTION_GROUP_COLUMNS,
+        prediction_group_columns,
+    )
+
+    common = {"peptide": ["SIINFEKL"], "peptide_offset": [0],
+              "allele": ["HLA-A*02:01"]}
+    # A TopiaryPredictor frame: identity is the source sequence name.
+    pipeline = pd.DataFrame({**common, "source_sequence_name": ["ovalbumin"]})
+    assert prediction_group_columns(pipeline) == list(PIPELINE_GROUP_COLUMNS)
+
+    # A vaxrank / external-reader frame: identity is the provenance key, and
+    # it wins even when a source name is also present.
+    external = pd.DataFrame({
+        **common, "source_sequence_name": ["ovalbumin"],
+        "prediction_id": ["lens:abc"]})
+    assert prediction_group_columns(external) == list(
+        PREDICTION_GROUP_COLUMNS)
+
+    # Neither identity present: refuse rather than group on sequence alone.
+    with pytest.raises(ValueError, match="no usable score-group identity"):
+        prediction_group_columns(pd.DataFrame(common))
+
+
+def test_kind_support_is_forwarded_to_the_dsl():
+    """A caller holding a predictor must not make topiary guess.
+
+    ``mhc_dependence`` guards resolve from kind_support when supplied and by
+    scanning rows otherwise. vaxrank's pipeline path holds the predictor that
+    knows the answer, so leaving it unset made every such guard a guess —
+    the same defect topiary fixed on its own --filter-by path.
+    """
+    from unittest import mock
+
+    import pandas as pd
+    import topiary.ranking
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import score_predictions
+
+    df = pd.DataFrame([{
+        "prediction_id": "p1", "source_sequence_name": "ctx",
+        "peptide": "SIINFEKL", "peptide_offset": 0, "peptide_length": 8,
+        "allele": "HLA-A*02:01", "n_flank": "", "c_flank": "",
+        "prediction_method_name": "mhcflurry", "predictor_version": "2.1.1",
+        "kind": "pMHC_affinity", "value": 50.0, "affinity": 50.0,
+        "percentile_rank": 0.4, "score": 0.0,
+    }])
+    support = {"mhcflurry": {
+        "pMHC_affinity": {"mhc_dependence": "single_allele",
+                          "mhc_class": "I"}}}
+
+    real_context = topiary.ranking.EvalContext
+    seen = {}
+
+    def spy(frame, **kwargs):
+        seen.update(kwargs)
+        return real_context(frame, **kwargs)
+
+    with mock.patch.object(topiary.ranking, "EvalContext", spy):
+        scores = score_predictions(
+            [], EpitopeConfig(), topiary_df=df, kind_support=support)
+
+    assert seen["kind_support"] is support
+    # The group identity is named too, not inferred.
+    assert seen["group_keys"][0] == "prediction_id"
+    assert len(scores) == 1
+
+
+def test_external_readers_leave_kind_support_unset():
+    """No predictor means no kind_support — absent, not fabricated."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_lens_report
+
+    import tempfile
+    import os
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "lens.tsv")
+        with open(path, "w") as handle:
+            handle.write(
+                "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\n"
+                "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\n")
+        report = read_lens_report(path, epitope_config=EpitopeConfig())
+
+    # Scores still land; dependence resolves from the rows, which is correct
+    # for a frame no predictor produced.
+    [epitope] = report.epitopes
+    assert epitope.per_allele_scores

@@ -21,7 +21,9 @@ from topiary import TopiaryPredictor
 from topiary.ranking import EvalContext, apply_filter
 
 from .epitope_config import EpitopeConfig
-from .epitope_dsl import build_filter_node, build_score_node
+from .epitope_dsl import (
+    build_filter_node, build_score_node, prediction_group_columns,
+)
 from .mutant_protein_fragment import MutantProteinFragment
 from .prediction_input import finite_prediction_value
 from .candidate_epitope import (
@@ -154,10 +156,19 @@ def predict_epitopes(
 
     # Apply the configured filter (default: affinity or percentile-rank cutoff)
     # so that rows dropped by the filter are never scored or WT-predicted.
+    # ``kind_support`` is per-(model, kind) MHC context — which kinds are
+    # allele-dependent, and for which class. topiary's DSL uses it to guard
+    # mhc_dependence, and without it those guards resolve by scanning rows,
+    # which is a guess. We are holding the predictor that knows the answer,
+    # so forward it rather than making topiary infer it (openvax/topiary#178).
+    kind_support = getattr(topiary_predictor, "kind_support", None)
     filter_node = build_filter_node(epitope_config)
     if filter_node is not None:
         predictions_df = apply_filter(
-            predictions_df, filter_node, default_methods=default_methods)
+            predictions_df, filter_node,
+            group_keys=prediction_group_columns(predictions_df),
+            default_methods=default_methods,
+            kind_support=kind_support)
         if predictions_df.empty:
             return []
 
@@ -189,7 +200,11 @@ def predict_epitopes(
     # Evaluate the score expression once; indexed by
     # (source_sequence_name, peptide, peptide_offset, allele) group tuple.
     score_node = build_score_node(epitope_config)
-    score_ctx = EvalContext(predictions_df, default_methods=default_methods)
+    score_ctx = EvalContext(
+        predictions_df,
+        group_keys=prediction_group_columns(predictions_df),
+        default_methods=default_methods,
+        kind_support=kind_support)
     score_series = (
         score_node.eval(score_ctx).reindex(score_ctx.group_index).fillna(0.0)
     )

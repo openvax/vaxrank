@@ -52,8 +52,25 @@ logger = logging.getLogger(__name__)
 
 
 PREDICTION_ID_COLUMN = "prediction_id"
+
+# Vaxrank works with two frame shapes, each with its own identity column.
+# Both are named explicitly rather than left to topiary's inference: what
+# inference keys on has changed twice (sample_name being prepended, then the
+# group-index fixes in 5.17.1), and a frame whose grouping shifts underneath
+# it merges candidates that are not the same candidate.
 PREDICTION_GROUP_COLUMNS = (
+    # Frames vaxrank builds from CandidateEpitope objects, and external
+    # report readers. Identity is the complete provenance key.
     PREDICTION_ID_COLUMN,
+    "peptide",
+    "peptide_offset",
+    "allele",
+)
+PIPELINE_GROUP_COLUMNS = (
+    # Frames a TopiaryPredictor produces directly. There is one protein
+    # fragment per variant, so the source sequence name *is* the identity;
+    # these rows never carry a prediction_id.
+    "source_sequence_name",
     "peptide",
     "peptide_offset",
     "allele",
@@ -178,20 +195,24 @@ def epitopes_to_topiary_df(epitopes):
 def prediction_group_columns(topiary_df):
     """Return the explicit score-group columns for a vaxrank frame.
 
-    Every frame vaxrank builds carries all four. Naming them beats letting
-    topiary infer, because inference keys on ``source_sequence_name`` — so two
-    biological sources would join merely because their sequences are equal.
+    Picks by which identity column the frame carries: ``prediction_id`` for
+    frames vaxrank built or an external reader produced, otherwise the
+    predictor's own ``source_sequence_name``. A frame carrying neither has no
+    identity to group on and is rejected rather than silently grouped by
+    sequence, which would merge two biological sources whose peptides happen
+    to be equal.
     """
-    missing = [
-        column for column in PREDICTION_GROUP_COLUMNS
-        if column not in topiary_df.columns]
-    if missing:
-        raise ValueError(
-            "Prediction frame is missing score-group column(s) %s. Frames "
-            "must come from epitopes_to_topiary_df or an external report "
-            "reader, both of which supply the complete identity."
-            % ", ".join(missing))
-    return list(PREDICTION_GROUP_COLUMNS)
+    columns = set(topiary_df.columns)
+    for candidate in (PREDICTION_GROUP_COLUMNS, PIPELINE_GROUP_COLUMNS):
+        if set(candidate) <= columns:
+            return list(candidate)
+    raise ValueError(
+        "Prediction frame carries no usable score-group identity. Expected "
+        "%s (vaxrank-built or external-reader frames) or %s (frames from a "
+        "TopiaryPredictor); got columns %s."
+        % (", ".join(PREDICTION_GROUP_COLUMNS),
+           ", ".join(PIPELINE_GROUP_COLUMNS),
+           ", ".join(sorted(columns)) or "(none)"))
 
 
 
@@ -275,7 +296,8 @@ def validate_default_methods(cfg, topiary_df):
                 f"(available for {kind}: {sorted(available)})")
 
 
-def score_predictions(epitopes, cfg, *, topiary_df=None):
+def score_predictions(epitopes, cfg, *, topiary_df=None,
+                      kind_support=None):
     """Score external-input epitopes using the configured Topiary DSL.
 
     Returns a ``pandas.Series`` of per-(peptide, allele) scores, indexed by
@@ -297,6 +319,12 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
     Pass ``topiary_df`` to reuse an already-built frame (see
     :func:`epitopes_to_topiary_df`) rather than rebuilding from
     ``epitopes``.
+
+    ``kind_support`` is topiary's per-(model, kind) MHC context, used to
+    resolve ``mhc_dependence`` guards. Callers holding a
+    ``TopiaryPredictor`` should forward its property; external report
+    readers have no predictor and correctly leave it ``None``, in which
+    case topiary resolves dependence from the rows.
     """
     from topiary.ranking import EvalContext, apply_filter
 
@@ -313,7 +341,8 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
         df = apply_filter(
             df, filter_node,
             group_keys=prediction_group_columns(df),
-            default_methods=resolved)
+            default_methods=resolved,
+            kind_support=kind_support)
         if df.empty:
             return pd.Series(dtype=float)
 
@@ -322,6 +351,7 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
         df,
         group_keys=prediction_group_columns(df),
         default_methods=resolved,
+        kind_support=kind_support,
     )
     return (
         score_node.eval(ctx)
@@ -330,7 +360,8 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
     )
 
 
-def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
+def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
+                             kind_support=None):
     """Score ``epitopes`` via the configured DSL and return a new list of
     :class:`~vaxrank.candidate_epitope.CandidateEpitope` instances with
     each one's ``per_allele_scores`` populated.
@@ -358,7 +389,8 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
         return epitopes
     if cfg is None:
         cfg = EpitopeConfig()
-    score_series = score_predictions(epitopes, cfg, topiary_df=topiary_df)
+    score_series = score_predictions(
+        epitopes, cfg, topiary_df=topiary_df, kind_support=kind_support)
     # score_series is keyed by prediction ID, peptide, offset, and allele.
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
