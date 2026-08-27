@@ -443,3 +443,47 @@ def test_epitopes_to_topiary_df_schema_pinned():
     by_peptide = df.set_index('peptide')['peptide_offset'].to_dict()
     assert by_peptide['SIINFEKL'] == 4
     assert by_peptide['SIINFEKM'] == 12
+
+
+def test_allele_free_evidence_is_projected_onto_patient_alleles():
+    """Processing-only evidence must still produce per-allele scores.
+
+    topiary 5.18's ``peptide_view()`` broadcasts an allele-free value across
+    allele groups that already exist, but a peptide whose only evidence is
+    allele-free has no such groups — its single group is keyed on an empty
+    allele, and the patient's genotype is not in the frame at all
+    (openvax/topiary#182). Dropping this projection in favor of
+    ``peptide_view()`` would silently score such candidates 0 and drop them,
+    which is the failure mode of vaxrank#295.
+    """
+    from mhctools.pred import Prediction
+
+    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import (
+        attach_per_allele_scores, epitopes_to_topiary_df,
+    )
+
+    alleles = ("HLA-A*02:01", "HLA-B*07:02")
+    epitope = CandidateEpitope(
+        sequence="SIINFEKL", source_sequence="XXSIINFEKLXX", offset=2,
+        prediction_id="processing-only",
+        patient_alleles=alleles,
+        predictions=(Prediction(
+            kind="antigen_processing", predictor_name="mhcflurry",
+            predictor_version="2.1.1", allele="", peptide="SIINFEKL",
+            value=None, score=0.77),))
+
+    # The canonical leaf stays allele-free on the object ...
+    [leaf] = epitope.predictions_for("antigen_processing", predictor="mhcflurry")
+    assert leaf.allele == ""
+
+    # ... and is projected onto both patient alleles in the evaluation frame.
+    frame = epitopes_to_topiary_df([epitope])
+    assert set(frame["allele"]) == set(alleles)
+
+    [scored] = attach_per_allele_scores(
+        [epitope],
+        EpitopeConfig(score_expr="processing[mhcflurry].score"))
+    assert set(scored.per_allele_scores) == set(alleles)
+    assert scored.epitope_score > 0

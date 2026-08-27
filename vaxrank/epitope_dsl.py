@@ -122,6 +122,22 @@ def epitopes_to_topiary_df(epitopes):
     are NOT emitted as rows. The DSL frame is mutant-only by
     convention — comparator data stays on the CandidateEpitope for display.
     """
+    # Allele-independent evidence is projected into every patient allele here
+    # while remaining one canonical leaf on the CandidateEpitope. topiary
+    # 5.18's ``peptide_view()`` broadcasts an allele-free value across the
+    # allele groups that already exist, which covers a peptide that also has
+    # affinity rows — but two gaps keep this projection necessary:
+    #
+    #   openvax/topiary#182 — a peptide whose *only* evidence is allele-free
+    #     has one group, keyed on an empty allele. The patient's genotype is
+    #     not in the frame, so per-allele scores cannot be produced and the
+    #     candidate scores 0 and is dropped. LENS emits such rows.
+    #   openvax/topiary#183 — an allele-free row is its own group, so any
+    #     filter predicated on an allele-scoped kind removes it; a later
+    #     ``peptide_view()`` in the score expression then reads NaN.
+    #
+    # Do not delete this projection in favor of ``peptide_view()`` until both
+    # are closed; the failure is silent in both cases.
     rows = []
     for e in epitopes:
         ctx = e
@@ -349,7 +365,9 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
         src_name, peptide, offset, allele = idx
         # Allele-independent processing predictions use ``allele=''``.
         # They belong in the nested prediction model, but never in a map
-        # whose public contract is explicitly per patient allele.
+        # whose public contract is explicitly per patient allele. This
+        # filter stays even once openvax/topiary#182 lands: an unprojected
+        # allele-free row still produces an empty-allele group.
         if allele:
             by_position.setdefault(
                 (src_name, peptide, offset), {})[allele] = float(val)
