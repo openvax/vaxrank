@@ -40,6 +40,12 @@ fields above define the default via :mod:`vaxrank.epitope_dsl`.
 
 from typing import Dict, Optional
 
+from .allele_evidence import (
+    NOMINATION_AUTO,
+    POLICY_NOMINATED,
+    AllelePolicy,
+)
+
 import msgspec
 
 from .config.defaults import (
@@ -123,7 +129,34 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     score_expr: Optional[str] = None
     default_methods: Optional[Dict[str, str]] = None
 
+    # How allele-independent evidence (antigen processing, proteasomal
+    # cleavage) is attributed to alleles. That evidence describes a peptide,
+    # not a peptide-MHC pair, but vaxrank scores per allele — so it has to be
+    # credited to one or more, and which ones is a choice worth stating.
+    # See :mod:`vaxrank.allele_evidence`; every attributed allele records why
+    # it was chosen, so a finished run can be reconstructed.
+    #   "nominated" (default) — the allele the model ranks best for this
+    #       peptide; falls back to the whole genotype when the peptide has no
+    #       allele-scoped evidence to rank on.
+    #   "all"       — every allele in the patient's genotype.
+    #   "top:N"     — the N best, same fallback as "nominated".
+    #   "observed"  — only alleles the input actually scored this peptide
+    #       against. Reproduces pre-3.3 behavior, which is row incidence
+    #       rather than a claim about presentation.
+    allele_free_evidence: str = POLICY_NOMINATED
+    # Which axis ranks alleles for "nominated" / "top:N". "auto" prefers
+    # presentation when the input carries it, else affinity.
+    allele_nomination_axis: str = NOMINATION_AUTO
+
+    @property
+    def allele_policy(self) -> AllelePolicy:
+        """The parsed :class:`AllelePolicy` for this configuration."""
+        return AllelePolicy.parse(
+            self.allele_free_evidence, axis=self.allele_nomination_axis)
+
     def __post_init__(self):
+        # Parse eagerly so a typo fails at config time, not mid-run.
+        self.allele_policy
         if self.logistic_epitope_score_midpoint <= 0:
             raise ValueError(
                 f"logistic_epitope_score_midpoint must be positive, "

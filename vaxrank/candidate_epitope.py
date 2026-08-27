@@ -552,6 +552,15 @@ class CandidateEpitope(Peptide):
     # of truth.
     per_allele_scores: dict = field(default_factory=dict)
 
+    # Why each allele was credited with this candidate's allele-independent
+    # evidence — observed in the input, taken from the patient's genotype, or
+    # nominated by ranking the peptide's own allele-scoped predictions (with
+    # the axis, predictor, value and rank that produced the nomination).
+    # Recorded rather than recomputed so a finished run can be reconstructed:
+    # see :mod:`vaxrank.allele_evidence`. Empty when a candidate carries no
+    # allele-independent evidence, which is the common case.
+    allele_attributions: tuple = ()
+
     def __post_init__(self):
         """Normalize predictions and retain every explicitly known allele."""
         super().__post_init__()
@@ -664,7 +673,8 @@ class CandidateEpitope(Peptide):
             self_reference_match=self.self_reference_match,
             patient_alleles=self.patient_alleles,
             prediction_id=self.prediction_id,
-            per_allele_scores=dict(self.per_allele_scores))
+            per_allele_scores=dict(self.per_allele_scores),
+            allele_attributions=self.allele_attributions)
 
     @classmethod
     def from_peptide(cls, peptide: "Peptide",
@@ -776,6 +786,7 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                 # all rows for one allele share the same score by
                 # construction of the DSL eval, so last-write-wins.
                 'per_allele_scores': {},
+                'allele_attributions': (),
             }
             groups[key] = slot
         slot['mutant_preds'].append(row['mutant'])
@@ -790,6 +801,14 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                 raise ValueError(
                     "Conflicting per-allele scores for one candidate epitope")
             slot['per_allele_scores'][allele] = score
+        attributions = row.get('allele_attributions') or ()
+        if attributions:
+            existing = slot['allele_attributions']
+            if existing and existing != tuple(attributions):
+                raise ValueError(
+                    "Conflicting allele attributions for one candidate "
+                    "epitope")
+            slot['allele_attributions'] = tuple(attributions)
         slot['overlaps_mutation'] |= bool(row.get('overlaps_mutation', False))
         overlaps_targetable = row.get('overlaps_targetable')
         if overlaps_targetable is not None:
@@ -865,5 +884,6 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             patient_alleles=tuple(sorted(slot['patient_alleles'])),
             prediction_id=slot['prediction_id'],
             per_allele_scores=dict(slot['per_allele_scores']),
+            allele_attributions=slot['allele_attributions'],
         ))
     return out

@@ -735,8 +735,17 @@ def test_load_lens_preserves_allele_independent_processing_once():
     assert all(epitope.per_allele_scores)
 
 
-def test_lens_processing_dsl_scores_every_patient_allele(tmp_path):
-    """Canonical processing evidence participates in allele-scoped DSL groups."""
+def test_lens_processing_evidence_is_attributed_by_the_configured_policy(
+        tmp_path):
+    """Which alleles get peptide-level evidence is a stated policy.
+
+    Antigen processing depends on the peptide and its flanks, not on MHC, so
+    crediting it to an allele is a choice. The default nominates the allele
+    the model ranks best; ``all`` broadcasts to the genotype; ``observed``
+    reproduces the pre-3.3 behavior of using whichever alleles the input
+    happened to score, which is row incidence rather than a claim about
+    presentation.
+    """
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_dsl import (
         attach_per_allele_scores,
@@ -747,31 +756,98 @@ def test_lens_processing_dsl_scores_every_patient_allele(tmp_path):
     path.write_text(
         "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
         "mhcflurry_2.1.1.proc_score\n"
+        # A*02:01 is the far stronger binder, so it is the model's nominee.
         "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
-        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t60\t0.8\n")
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t5000\t0.8\n")
 
-    _loaded = read_lens_report(path)
-    epitopes = list(_loaded.epitopes)
+    epitopes = list(read_lens_report(path).epitopes)
     assert len(epitopes) == 1
-    epitope = epitopes[0]
-    processing = epitope.predictions_for(
+    # The candidate keeps ONE canonical allele-free leaf regardless of policy;
+    # only the evaluation view repeats it.
+    processing = epitopes[0].predictions_for(
         "antigen_processing", predictor="mhcflurry")
     assert len(processing) == 1
     assert processing[0].allele == ""
 
-    topiary_df = epitopes_to_topiary_df(epitopes)
-    processing_rows = topiary_df[
-        topiary_df["kind"] == "antigen_processing"]
-    assert set(processing_rows["allele"]) == {
-        "HLA-A*02:01", "HLA-B*07:02"}
+    def credited(policy):
+        frame = epitopes_to_topiary_df(
+            epitopes, policy=EpitopeConfig(
+                allele_free_evidence=policy).allele_policy)
+        return set(frame[frame["kind"] == "antigen_processing"]["allele"])
 
-    scored = attach_per_allele_scores(
-        epitopes,
-        EpitopeConfig(score_expr="processing[mhcflurry].score"))
-    assert scored[0].per_allele_scores == {
+    assert credited("nominated") == {"HLA-A*02:01"}
+    assert credited("all") == {"HLA-A*02:01", "HLA-B*07:02"}
+    assert credited("observed") == {"HLA-A*02:01", "HLA-B*07:02"}
+    assert credited("top:2") == {"HLA-A*02:01", "HLA-B*07:02"}
+
+    # And the scores follow the policy. Note B*07:02 is still a scored group
+    # — it has its own affinity evidence — it simply was not credited with
+    # the peptide-level processing score, so a processing-only expression
+    # gives it nothing. Narrowing attribution does not delete allele groups.
+    nominated = attach_per_allele_scores(
+        epitopes, EpitopeConfig(score_expr="processing[mhcflurry].score"))
+    assert nominated[0].per_allele_scores == {
+        "HLA-A*02:01": pytest.approx(0.8),
+        "HLA-B*07:02": pytest.approx(0.0),
+    }
+
+    broadcast = attach_per_allele_scores(
+        epitopes, EpitopeConfig(
+            score_expr="processing[mhcflurry].score",
+            allele_free_evidence="all"))
+    assert broadcast[0].per_allele_scores == {
         "HLA-A*02:01": pytest.approx(0.8),
         "HLA-B*07:02": pytest.approx(0.8),
     }
+
+
+def test_allele_attribution_records_how_the_allele_was_chosen(tmp_path):
+    """A finished run must say why an allele was credited, not just that.
+
+    Without the provenance the attribution cannot be reconstructed: a reader
+    cannot tell whether an allele was scored by the input, carried by the
+    patient, or picked by us — nor, if picked, on what axis and at what value.
+    """
+    from vaxrank.allele_evidence import (
+        BASIS_GENOTYPE, BASIS_NOMINATED, BASIS_OBSERVED,
+    )
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import attach_per_allele_scores
+
+    path = tmp_path / "attribution.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t5000\t0.8\n")
+    epitopes = list(read_lens_report(path).epitopes)
+
+    [nominated] = attach_per_allele_scores(epitopes, EpitopeConfig())
+    [attribution] = nominated.allele_attributions
+    assert attribution.allele == "HLA-A*02:01"
+    assert attribution.basis == BASIS_NOMINATED
+    # Everything needed to redo the ranking by hand.
+    assert attribution.rank_kind == "pMHC_affinity"
+    assert attribution.rank_predictor == "mhcflurry"
+    assert attribution.rank_value == pytest.approx(50.0)
+    assert attribution.rank_position == 1
+    assert "ranked #1" in attribution.describe()
+
+    # Broadcasting distinguishes alleles the input scored from ones supplied
+    # only by the genotype.
+    [broadcast] = attach_per_allele_scores(
+        epitopes, EpitopeConfig(allele_free_evidence="all"),
+        genotype=["HLA-A*02:01", "HLA-B*07:02", "HLA-C*07:01"])
+    bases = {a.allele: a.basis for a in broadcast.allele_attributions}
+    assert bases == {
+        "HLA-A*02:01": BASIS_OBSERVED,
+        "HLA-B*07:02": BASIS_OBSERVED,
+        "HLA-C*07:01": BASIS_GENOTYPE,
+    }
+    # A candidate with no allele-free evidence records no attribution at all,
+    # rather than implying a decision was made.
+    assert not any(a.basis == BASIS_NOMINATED
+                   for a in broadcast.allele_attributions)
 
 
 def test_lens_processing_only_rows_preserve_alleles_scores_and_report_rows(
@@ -894,7 +970,12 @@ def test_lens_report_anchors_mixed_evidence_per_allele_and_predictor(tmp_path):
     epitopes = list(_loaded.epitopes)
     epitope = attach_per_allele_scores(
         epitopes,
-        EpitopeConfig(score_expr="processing[mhcflurry].score"),
+        # This test is about which report anchor each allele/predictor gets,
+        # not about how peptide-level evidence is attributed — so pin the
+        # broadcast policy rather than inheriting the default nomination and
+        # letting an unrelated change move these rows.
+        EpitopeConfig(score_expr="processing[mhcflurry].score",
+                      allele_free_evidence="all"),
     )[0]
     row_inputs = epitope_report_row_inputs(epitope)
     assert [
@@ -2303,3 +2384,67 @@ def test_native_roundtrip_keeps_undecided_targetability_undecided(tmp_path):
 
     assert reloaded.overlaps_targetable is None
     assert reloaded.is_targetable is True
+
+
+def _write_pvacseq_sparse_fixture(tmp_path):
+    """all_epitopes rows exercising the two paths fixtures never took.
+
+    Row 1 is complete. Row 2 has no WT columns filled — topiary leaves
+    ``wt_value`` NA — which is the shape an aggregate written without WT
+    prediction produces. Row 3 has no IC50 at all and must be dropped.
+    """
+    path = tmp_path / "pvacseq_sparse.tsv"
+    columns = [
+        "Chromosome", "Start", "Stop", "Reference", "Variant",
+        "Transcript", "Variant Type", "Mutation", "Gene Name", "HLA Allele",
+        "Mutation Position", "MT Epitope Seq", "WT Epitope Seq",
+        "Median MT IC50 Score", "Median WT IC50 Score",
+        "Median MT Percentile", "Median WT Percentile",
+    ]
+    rows = [
+        ["chr1", "100", "101", "T", "A", "ENST1", "missense", "E1V", "GENEA",
+         "HLA-A*02:01", "5", "AERMGFTVV", "AERMGFTEV",
+         "76.11", "61.80", "0.10", "0.12"],
+        # no WT IC50 -> the wt-absent branch
+        ["chr1", "100", "101", "T", "A", "ENST1", "missense", "E1V", "GENEA",
+         "HLA-B*07:02", "5", "AERMGFTVV", "NA",
+         "80.00", "NA", "0.20", "NA"],
+        # no MT IC50 -> the skip branch
+        ["chr1", "100", "101", "T", "A", "ENST1", "missense", "E1V", "GENEA",
+         "HLA-C*07:01", "5", "AERMGFTVV", "AERMGFTEV",
+         "NA", "NA", "NA", "NA"],
+    ]
+    path.write_text(
+        "\t".join(columns) + "\n"
+        + "\n".join("\t".join(r) for r in rows) + "\n")
+    return path
+
+
+def test_pvacseq_rows_without_wt_or_without_affinity(tmp_path):
+    """The two branches every existing pVACseq fixture happened to skip.
+
+    Both are real input shapes: an aggregate written without WT prediction,
+    and a row whose algorithm produced no IC50. Neither had ever executed,
+    so nothing said what they should do.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_pvacseq_report
+
+    report = read_pvacseq_report(
+        _write_pvacseq_sparse_fixture(tmp_path),
+        epitope_config=EpitopeConfig())
+
+    # The unscored row is dropped rather than carried as a zero.
+    alleles = {
+        prediction.allele
+        for epitope in report.epitopes
+        for prediction in epitope.predictions_flat()}
+    assert "HLA-C*07:01" not in alleles
+    assert alleles == {"HLA-A*02:01", "HLA-B*07:02"}
+
+    [epitope] = report.epitopes
+    # A WT comparator exists because one row supplied one; the row that did
+    # not simply contributes no WT leaf, rather than a fabricated zero.
+    wt_alleles = {p.allele for p in epitope.wt.predictions_flat()}
+    assert wt_alleles == {"HLA-A*02:01"}
+    assert epitope.wt.sequence == "AERMGFTEV"

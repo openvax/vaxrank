@@ -115,7 +115,21 @@ def prediction_kind_for_method(method_name):
 
 
 
-def epitopes_to_topiary_df(epitopes):
+def frame_genotype(epitopes, genotype=None):
+    """Resolve the patient allele set a frame should be evaluated against.
+
+    An explicit *genotype* wins — it is the patient's actual typing. Absent
+    one, fall back to the union of alleles the inputs scored, which is the
+    widest honest statement the data supports.
+    """
+    if genotype:
+        return tuple(sorted({a for a in genotype if a}))
+    return tuple(sorted({
+        allele for epitope in epitopes
+        for allele in epitope.patient_alleles if allele}))
+
+
+def epitopes_to_topiary_df(epitopes, policy=None, genotype=None):
     """Convert a list of :class:`vaxrank.candidate_epitope.CandidateEpitope` into the
     topiary long-format DataFrame consumed by
     :class:`topiary.ranking.EvalContext` and
@@ -139,38 +153,36 @@ def epitopes_to_topiary_df(epitopes):
     are NOT emitted as rows. The DSL frame is mutant-only by
     convention — comparator data stays on the CandidateEpitope for display.
     """
-    # Allele-independent evidence is projected into every patient allele here
-    # while remaining one canonical leaf on the CandidateEpitope. topiary
-    # 5.18's ``peptide_view()`` broadcasts an allele-free value across the
-    # allele groups that already exist, which covers a peptide that also has
-    # affinity rows — but two gaps keep this projection necessary:
+    # Allele-independent evidence (antigen processing, proteasomal cleavage)
+    # describes a peptide, not a peptide-MHC pair, so it is credited to the
+    # alleles the configured policy attributes it to — see
+    # :mod:`vaxrank.allele_evidence`. Each candidate keeps one canonical
+    # allele-free leaf; only this evaluation view repeats it per allele.
     #
-    #   openvax/topiary#182 — a peptide whose *only* evidence is allele-free
-    #     has one group, keyed on an empty allele. The patient's genotype is
-    #     not in the frame, so per-allele scores cannot be produced and the
-    #     candidate scores 0 and is dropped. LENS emits such rows.
-    #   openvax/topiary#183 — an allele-free row is its own group, so any
-    #     filter predicated on an allele-scoped kind removes it; a later
-    #     ``peptide_view()`` in the score expression then reads NaN.
-    #
-    # Do not delete this projection in favor of ``peptide_view()`` until both
-    # are closed; the failure is silent in both cases.
+    # This cannot be delegated to topiary's ``alleles=``: that declares one
+    # allele set for the whole frame, and every policy except "all" needs a
+    # different set per peptide.
+    from .allele_evidence import AllelePolicy, attribute_alleles
+
+    if policy is None:
+        policy = AllelePolicy.parse(None)
+    genotype = frame_genotype(epitopes, genotype)
+
     rows = []
     for e in epitopes:
         ctx = e
         prediction_id = ctx.prediction_group_source
         predictions = ctx.predictions_flat()
-        patient_alleles = ctx.patient_alleles
+        attributed = None
         for p in predictions:
-            evaluation_alleles = (
-                patient_alleles
-                if (
-                    p.kind == "antigen_processing"
-                    and not p.allele
-                    and patient_alleles
-                )
-                else (p.allele,)
-            )
+            if p.allele:
+                evaluation_alleles = (p.allele,)
+            else:
+                if attributed is None:
+                    attributed = tuple(
+                        a.allele for a in attribute_alleles(
+                            e, genotype, policy))
+                evaluation_alleles = attributed or (p.allele,)
             for allele in evaluation_alleles:
                 rows.append({
                     PREDICTION_ID_COLUMN: prediction_id,
@@ -297,7 +309,7 @@ def validate_default_methods(cfg, topiary_df):
 
 
 def score_predictions(epitopes, cfg, *, topiary_df=None,
-                      kind_support=None):
+                      kind_support=None, genotype=None):
     """Score external-input epitopes using the configured Topiary DSL.
 
     Returns a ``pandas.Series`` of per-(peptide, allele) scores, indexed by
@@ -328,7 +340,9 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
     """
     from topiary.ranking import EvalContext, apply_filter
 
-    df = (epitopes_to_topiary_df(epitopes)
+    df = (epitopes_to_topiary_df(
+              epitopes, policy=getattr(cfg, "allele_policy", None),
+              genotype=genotype)
           if topiary_df is None else topiary_df)
     if df.empty:
         return pd.Series(dtype=float)
@@ -361,7 +375,7 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
 
 
 def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
-                             kind_support=None):
+                             kind_support=None, genotype=None):
     """Score ``epitopes`` via the configured DSL and return a new list of
     :class:`~vaxrank.candidate_epitope.CandidateEpitope` instances with
     each one's ``per_allele_scores`` populated.
@@ -389,8 +403,13 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
         return epitopes
     if cfg is None:
         cfg = EpitopeConfig()
+    from .allele_evidence import attribute_alleles
+
     score_series = score_predictions(
-        epitopes, cfg, topiary_df=topiary_df, kind_support=kind_support)
+        epitopes, cfg, topiary_df=topiary_df, kind_support=kind_support,
+        genotype=genotype)
+    policy = cfg.allele_policy
+    resolved_genotype = frame_genotype(epitopes, genotype)
     # score_series is keyed by prediction ID, peptide, offset, and allele.
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
@@ -403,11 +422,19 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
         if allele:
             by_position.setdefault(
                 (src_name, peptide, offset), {})[allele] = float(val)
+    def _attributions(epitope):
+        # Only candidates carrying allele-independent evidence have anything
+        # to attribute; recording an attribution for the rest would imply a
+        # decision was made where none was needed.
+        if any(not p.allele for p in epitope.predictions_flat()):
+            return attribute_alleles(epitope, resolved_genotype, policy)
+        return ()
+
     return [
         replace(
             e,
-            per_allele_scores=by_position.get(
-                e.prediction_group_key, {}))
+            per_allele_scores=by_position.get(e.prediction_group_key, {}),
+            allele_attributions=_attributions(e))
         for e in epitopes
     ]
 

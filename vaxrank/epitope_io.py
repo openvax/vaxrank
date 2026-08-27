@@ -96,6 +96,11 @@ VAXRANK_COLUMNS = [
     # Explicit input-allele membership is necessary for canonical
     # allele-independent processing predictions.
     "patient_alleles",
+    # Why each allele was credited with this candidate's allele-independent
+    # evidence. Recorded rather than recomputed: the nomination depends on
+    # the config in force at predict time, so a reload under a different
+    # config would otherwise silently re-derive a different answer.
+    "allele_attributions",
     # Preserve the exact configured DSL result so a native reload does not
     # silently revert to an unrelated default scoring formula.
     "per_allele_scores",
@@ -175,6 +180,9 @@ def epitope_prediction_rows(epitope):
             "prediction_offset": p.offset,
             "patient_alleles": json.dumps(
                 list(epitope.patient_alleles), separators=(",", ":")),
+            "allele_attributions": json.dumps(
+                [a.to_dict() for a in epitope.allele_attributions],
+                sort_keys=True, separators=(",", ":")),
             "per_allele_scores": json.dumps(
                 epitope.per_allele_scores,
                 sort_keys=True,
@@ -344,6 +352,14 @@ def load_predictions(path):
                 peptide=wt_peptide, value=wt_ic50, score=0.0,
                 percentile_rank=None,
             )
+        attributions_raw = string_or_empty(
+            row.get("allele_attributions", ""))
+        allele_attributions = ()
+        if attributions_raw:
+            from .allele_evidence import AlleleAttribution
+            allele_attributions = tuple(
+                AlleleAttribution.from_dict(entry)
+                for entry in json.loads(attributions_raw))
         patient_alleles_raw = string_or_empty(row.get("patient_alleles", ""))
         patient_alleles = (
             tuple(json.loads(patient_alleles_raw))
@@ -389,6 +405,7 @@ def load_predictions(path):
                 row.get("occurs_in_non_CTA_reference", occurs_in_ref)),
             'patient_alleles': patient_alleles,
             'per_allele_scores': per_allele_scores,
+            'allele_attributions': allele_attributions,
         })
     return candidate_epitopes_from_rows(rows)
 
