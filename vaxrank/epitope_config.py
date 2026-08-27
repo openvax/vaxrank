@@ -41,8 +41,8 @@ fields above define the default via :mod:`vaxrank.epitope_dsl`.
 from typing import Dict, Optional
 
 from .allele_evidence import (
-    NOMINATION_AUTO,
-    POLICY_NOMINATED,
+    SELECTION_AUTO,
+    POLICY_SELECTED,
     AllelePolicy,
 )
 
@@ -135,24 +135,24 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     # credited to one or more, and which ones is a choice worth stating.
     # See :mod:`vaxrank.allele_evidence`; every attributed allele records why
     # it was chosen, so a finished run can be reconstructed.
-    #   "nominated" (default) — the allele the model ranks best for this
+    #   "selected" (default) — the allele the model ranks best for this
     #       peptide; falls back to the whole genotype when the peptide has no
     #       allele-scoped evidence to rank on.
     #   "all"       — every allele in the patient's genotype.
-    #   "top:N"     — the N best, same fallback as "nominated".
-    #   "observed"  — only alleles the input actually scored this peptide
+    #   "top:N"     — the N best, same fallback as "selected".
+    #   "reported"  — only alleles the input actually scored this peptide
     #       against. Reproduces pre-3.3 behavior, which is row incidence
     #       rather than a claim about presentation.
-    allele_free_evidence: str = POLICY_NOMINATED
-    # Which axis ranks alleles for "nominated" / "top:N". "auto" prefers
+    allele_free_evidence: str = POLICY_SELECTED
+    # Which axis ranks alleles for "selected" / "top:N". "auto" prefers
     # presentation when the input carries it, else affinity.
-    allele_nomination_axis: str = NOMINATION_AUTO
+    allele_selection_axis: str = SELECTION_AUTO
 
     @property
     def allele_policy(self) -> AllelePolicy:
         """The parsed :class:`AllelePolicy` for this configuration."""
         return AllelePolicy.parse(
-            self.allele_free_evidence, axis=self.allele_nomination_axis)
+            self.allele_free_evidence, axis=self.allele_selection_axis)
 
     def __post_init__(self):
         # Parse eagerly so a typo fails at config time, not mid-run.

@@ -28,8 +28,8 @@ its rows.
 
 This module makes the choice explicit and, crucially, **recordable**. Every
 attributed allele carries an :class:`AlleleAttribution` saying where it came
-from: observed in the input, part of the patient's genotype, or nominated by
-ranking the peptide's own allele-scoped evidence — and for a nomination, on
+from: reported by the input, carried in the patient's genotype, or selected by
+ranking the peptide's own allele-scoped evidence — and for a selection, on
 which axis, by which predictor, at what value and what rank. A reader of a
 finished run can therefore reconstruct exactly why a given allele was
 credited with a given processing score, rather than having to re-derive it.
@@ -47,25 +47,25 @@ from serializable import DataclassSerializable
 
 
 # Where an attributed allele came from.
-BASIS_OBSERVED = "observed"     # the input scored this peptide against it
+BASIS_REPORTED = "reported"     # the input carried a row for this pairing
 BASIS_GENOTYPE = "genotype"     # the patient carries it; evidence broadcast
-BASIS_NOMINATED = "nominated"   # ranked best by this peptide's own evidence
-ALLELE_BASES = frozenset({BASIS_OBSERVED, BASIS_GENOTYPE, BASIS_NOMINATED})
+BASIS_SELECTED = "selected"   # vaxrank ranked the genotype and picked it
+ALLELE_BASES = frozenset({BASIS_REPORTED, BASIS_GENOTYPE, BASIS_SELECTED})
 
 # Policies for attributing allele-independent evidence.
-POLICY_NOMINATED = "nominated"  # the model's best allele, else the genotype
+POLICY_SELECTED = "selected"  # the best-ranked allele, else the genotype
 POLICY_ALL = "all"              # every allele in the patient's genotype
-POLICY_OBSERVED = "observed"    # only alleles the input actually scored
+POLICY_REPORTED = "reported"    # only pairings the input actually carried
 POLICY_TOP_PREFIX = "top:"      # ``top:N`` — the N best, else the genotype
 
-# Ranking axes a nomination may use, with the direction that means "better".
+# Ranking axes a selection may use, with the direction that means "better".
 # Presentation is preferred over affinity when both are available: it is the
 # model's own statement about presentation, which is the question being asked.
-NOMINATION_AXES = (
+SELECTION_AXES = (
     ("pMHC_presentation", "score", True),   # higher score is better
     ("pMHC_affinity", "value", False),      # lower IC50 is better
 )
-NOMINATION_AUTO = "auto"
+SELECTION_AUTO = "auto"
 
 
 class AllelePolicyError(ValueError):
@@ -76,9 +76,9 @@ class AllelePolicyError(ValueError):
 class AlleleAttribution(DataclassSerializable):
     """Why one allele was credited with a peptide's allele-free evidence.
 
-    ``basis`` is one of :data:`BASIS_OBSERVED`, :data:`BASIS_GENOTYPE`, or
-    :data:`BASIS_NOMINATED`. The remaining fields are populated only for a
-    nomination and are what makes it reproducible: the axis that ranked the
+    ``basis`` is one of :data:`BASIS_REPORTED`, :data:`BASIS_GENOTYPE`, or
+    :data:`BASIS_SELECTED`. The remaining fields are populated only for a
+    selection and are what makes it reproducible: the axis that ranked the
     alleles, the predictor whose value was read, the value itself, and the
     resulting 1-based position.
     """
@@ -97,18 +97,18 @@ class AlleleAttribution(DataclassSerializable):
             raise ValueError(
                 "Unknown allele attribution basis %r (expected one of %s)"
                 % (self.basis, ", ".join(sorted(ALLELE_BASES))))
-        if self.basis == BASIS_NOMINATED and not self.rank_kind:
+        if self.basis == BASIS_SELECTED and not self.rank_kind:
             raise ValueError(
-                "A nominated allele must record the axis that ranked it, or "
-                "the nomination cannot be reconstructed")
-        if self.basis != BASIS_NOMINATED and self.rank_kind:
+                "A selected allele must record the axis that ranked it, or "
+                "the selection cannot be reconstructed")
+        if self.basis != BASIS_SELECTED and self.rank_kind:
             raise ValueError(
-                "Only a nominated allele carries ranking provenance")
+                "Only a selected allele carries ranking provenance")
 
     def describe(self) -> str:
         """One human-readable line, for reports and logs."""
-        if self.basis == BASIS_OBSERVED:
-            return "%s (scored in the input)" % self.allele
+        if self.basis == BASIS_REPORTED:
+            return "%s (carried by the input)" % self.allele
         if self.basis == BASIS_GENOTYPE:
             return "%s (patient genotype; no allele-specific evidence)" % (
                 self.allele,)
@@ -125,18 +125,18 @@ class AlleleAttribution(DataclassSerializable):
 class AllelePolicy:
     """A parsed allele-attribution policy."""
 
-    name: str = POLICY_NOMINATED
+    name: str = POLICY_SELECTED
     limit: object = None            # for ``top:N``
-    axis: str = NOMINATION_AUTO     # kind used to rank, or "auto"
+    axis: str = SELECTION_AUTO     # kind used to rank, or "auto"
 
     @classmethod
-    def parse(cls, value, axis=NOMINATION_AUTO) -> "AllelePolicy":
+    def parse(cls, value, axis=SELECTION_AUTO) -> "AllelePolicy":
         """Parse a config string into a policy.
 
-        Accepts ``nominated``, ``all``, ``observed``, and ``top:N``.
+        Accepts ``selected``, ``all``, ``reported``, and ``top:N``.
         """
-        text = (value or POLICY_NOMINATED).strip().lower()
-        if text in (POLICY_NOMINATED, POLICY_ALL, POLICY_OBSERVED):
+        text = (value or POLICY_SELECTED).strip().lower()
+        if text in (POLICY_SELECTED, POLICY_ALL, POLICY_REPORTED):
             return cls(name=text, axis=axis)
         if text.startswith(POLICY_TOP_PREFIX):
             suffix = text[len(POLICY_TOP_PREFIX):]
@@ -152,8 +152,8 @@ class AllelePolicy:
             return cls(name=POLICY_TOP_PREFIX.rstrip(":"), limit=limit,
                        axis=axis)
         raise AllelePolicyError(
-            "Unknown allele policy %r (expected 'nominated', 'all', "
-            "'observed', or 'top:N')" % value)
+            "Unknown allele policy %r (expected 'selected', 'all', "
+            "'reported', or 'top:N')" % value)
 
 
 def _ranked_alleles(epitope, alleles, axis):
@@ -164,13 +164,13 @@ def _ranked_alleles(epitope, alleles, axis):
     caller must fall back rather than invent a ranking.
     """
     candidates = (
-        NOMINATION_AXES if axis == NOMINATION_AUTO
-        else tuple(a for a in NOMINATION_AXES if a[0] == axis))
-    if axis != NOMINATION_AUTO and not candidates:
+        SELECTION_AXES if axis == SELECTION_AUTO
+        else tuple(a for a in SELECTION_AXES if a[0] == axis))
+    if axis != SELECTION_AUTO and not candidates:
         raise AllelePolicyError(
-            "Unknown allele nomination axis %r (expected one of %s or %r)"
-            % (axis, ", ".join(a[0] for a in NOMINATION_AXES),
-               NOMINATION_AUTO))
+            "Unknown allele selection axis %r (expected one of %s or %r)"
+            % (axis, ", ".join(a[0] for a in SELECTION_AXES),
+               SELECTION_AUTO))
 
     allowed = set(alleles)
     for kind, attribute, higher_is_better in candidates:
@@ -203,43 +203,43 @@ def attribute_alleles(epitope, genotype, policy) -> tuple:
     :class:`AllelePolicy`. The result is ordered and deterministic, and every
     entry records why that allele was chosen.
     """
-    observed = tuple(a for a in epitope.patient_alleles if a)
-    genotype = tuple(sorted({a for a in (genotype or ()) if a} | set(observed)))
+    reported = tuple(a for a in epitope.patient_alleles if a)
+    genotype = tuple(sorted({a for a in (genotype or ()) if a} | set(reported)))
     if not genotype:
         return ()
 
-    if policy.name == POLICY_OBSERVED:
+    if policy.name == POLICY_REPORTED:
         return tuple(
-            AlleleAttribution(allele=a, basis=BASIS_OBSERVED)
-            for a in sorted(observed))
+            AlleleAttribution(allele=a, basis=BASIS_REPORTED)
+            for a in sorted(reported))
 
     if policy.name == POLICY_ALL:
-        observed_set = set(observed)
+        reported_set = set(reported)
         return tuple(
             AlleleAttribution(
                 allele=a,
-                basis=BASIS_OBSERVED if a in observed_set else BASIS_GENOTYPE)
+                basis=BASIS_REPORTED if a in reported_set else BASIS_GENOTYPE)
             for a in genotype)
 
-    # nominated / top:N
+    # selected / top:N
     ordered, kind, predictor, values = _ranked_alleles(
         epitope, genotype, policy.axis)
     if ordered is None:
-        # No allele-scoped evidence to nominate from. "We don't know which
+        # No allele-scoped evidence to select from. "We don't know which
         # allele presents this" is not the same as "this allele does", so
         # keep the whole genotype rather than inventing a winner.
-        observed_set = set(observed)
+        reported_set = set(reported)
         return tuple(
             AlleleAttribution(
                 allele=a,
-                basis=BASIS_OBSERVED if a in observed_set else BASIS_GENOTYPE)
+                basis=BASIS_REPORTED if a in reported_set else BASIS_GENOTYPE)
             for a in genotype)
 
-    limit = 1 if policy.name == POLICY_NOMINATED else policy.limit
+    limit = 1 if policy.name == POLICY_SELECTED else policy.limit
     return tuple(
         AlleleAttribution(
             allele=allele,
-            basis=BASIS_NOMINATED,
+            basis=BASIS_SELECTED,
             rank_kind=kind,
             rank_predictor=predictor,
             rank_value=values[allele],

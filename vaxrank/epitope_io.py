@@ -97,7 +97,7 @@ VAXRANK_COLUMNS = [
     # allele-independent processing predictions.
     "patient_alleles",
     # Why each allele was credited with this candidate's allele-independent
-    # evidence. Recorded rather than recomputed: the nomination depends on
+    # evidence. Recorded rather than recomputed: the selection depends on
     # the config in force at predict time, so a reload under a different
     # config would otherwise silently re-derive a different answer.
     "allele_attributions",

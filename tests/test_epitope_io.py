@@ -740,7 +740,7 @@ def test_lens_processing_evidence_is_attributed_by_the_configured_policy(
     """Which alleles get peptide-level evidence is a stated policy.
 
     Antigen processing depends on the peptide and its flanks, not on MHC, so
-    crediting it to an allele is a choice. The default nominates the allele
+    crediting it to an allele is a choice. The default selects the allele
     the model ranks best; ``all`` broadcasts to the genotype; ``observed``
     reproduces the pre-3.3 behavior of using whichever alleles the input
     happened to score, which is row incidence rather than a claim about
@@ -775,18 +775,18 @@ def test_lens_processing_evidence_is_attributed_by_the_configured_policy(
                 allele_free_evidence=policy).allele_policy)
         return set(frame[frame["kind"] == "antigen_processing"]["allele"])
 
-    assert credited("nominated") == {"HLA-A*02:01"}
+    assert credited("selected") == {"HLA-A*02:01"}
     assert credited("all") == {"HLA-A*02:01", "HLA-B*07:02"}
-    assert credited("observed") == {"HLA-A*02:01", "HLA-B*07:02"}
+    assert credited("reported") == {"HLA-A*02:01", "HLA-B*07:02"}
     assert credited("top:2") == {"HLA-A*02:01", "HLA-B*07:02"}
 
     # And the scores follow the policy. Note B*07:02 is still a scored group
     # — it has its own affinity evidence — it simply was not credited with
     # the peptide-level processing score, so a processing-only expression
     # gives it nothing. Narrowing attribution does not delete allele groups.
-    nominated = attach_per_allele_scores(
+    selected = attach_per_allele_scores(
         epitopes, EpitopeConfig(score_expr="processing[mhcflurry].score"))
-    assert nominated[0].per_allele_scores == {
+    assert selected[0].per_allele_scores == {
         "HLA-A*02:01": pytest.approx(0.8),
         "HLA-B*07:02": pytest.approx(0.0),
     }
@@ -809,7 +809,7 @@ def test_allele_attribution_records_how_the_allele_was_chosen(tmp_path):
     patient, or picked by us — nor, if picked, on what axis and at what value.
     """
     from vaxrank.allele_evidence import (
-        BASIS_GENOTYPE, BASIS_NOMINATED, BASIS_OBSERVED,
+        BASIS_GENOTYPE, BASIS_SELECTED, BASIS_REPORTED,
     )
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_dsl import attach_per_allele_scores
@@ -822,10 +822,10 @@ def test_allele_attribution_records_how_the_allele_was_chosen(tmp_path):
         "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t5000\t0.8\n")
     epitopes = list(read_lens_report(path).epitopes)
 
-    [nominated] = attach_per_allele_scores(epitopes, EpitopeConfig())
-    [attribution] = nominated.allele_attributions
+    [selected] = attach_per_allele_scores(epitopes, EpitopeConfig())
+    [attribution] = selected.allele_attributions
     assert attribution.allele == "HLA-A*02:01"
-    assert attribution.basis == BASIS_NOMINATED
+    assert attribution.basis == BASIS_SELECTED
     # Everything needed to redo the ranking by hand.
     assert attribution.rank_kind == "pMHC_affinity"
     assert attribution.rank_predictor == "mhcflurry"
@@ -840,13 +840,13 @@ def test_allele_attribution_records_how_the_allele_was_chosen(tmp_path):
         genotype=["HLA-A*02:01", "HLA-B*07:02", "HLA-C*07:01"])
     bases = {a.allele: a.basis for a in broadcast.allele_attributions}
     assert bases == {
-        "HLA-A*02:01": BASIS_OBSERVED,
-        "HLA-B*07:02": BASIS_OBSERVED,
+        "HLA-A*02:01": BASIS_REPORTED,
+        "HLA-B*07:02": BASIS_REPORTED,
         "HLA-C*07:01": BASIS_GENOTYPE,
     }
     # A candidate with no allele-free evidence records no attribution at all,
     # rather than implying a decision was made.
-    assert not any(a.basis == BASIS_NOMINATED
+    assert not any(a.basis == BASIS_SELECTED
                    for a in broadcast.allele_attributions)
 
 
@@ -972,7 +972,7 @@ def test_lens_report_anchors_mixed_evidence_per_allele_and_predictor(tmp_path):
         epitopes,
         # This test is about which report anchor each allele/predictor gets,
         # not about how peptide-level evidence is attributed — so pin the
-        # broadcast policy rather than inheriting the default nomination and
+        # broadcast policy rather than inheriting the default selection and
         # letting an unrelated change move these rows.
         EpitopeConfig(score_expr="processing[mhcflurry].score",
                       allele_free_evidence="all"),

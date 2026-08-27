@@ -553,9 +553,9 @@ class CandidateEpitope(Peptide):
     per_allele_scores: dict = field(default_factory=dict)
 
     # Why each allele was credited with this candidate's allele-independent
-    # evidence — observed in the input, taken from the patient's genotype, or
-    # nominated by ranking the peptide's own allele-scoped predictions (with
-    # the axis, predictor, value and rank that produced the nomination).
+    # evidence — reported by the input, carried in the patient's genotype, or
+    # selected by ranking the peptide's own allele-scoped predictions (with
+    # the axis, predictor, value and rank that produced the selection).
     # Recorded rather than recomputed so a finished run can be reconstructed:
     # see :mod:`vaxrank.allele_evidence`. Empty when a candidate carries no
     # allele-independent evidence, which is the common case.
