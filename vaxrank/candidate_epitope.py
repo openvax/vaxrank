@@ -553,7 +553,7 @@ class CandidateEpitope(Peptide):
     per_allele_scores: dict = field(default_factory=dict)
 
     # Why each allele was credited with this candidate's allele-independent
-    # evidence — reported by the input, carried in the patient's genotype, or
+    # evidence — from the input file, broadcast across the genotype, or
     # selected by ranking the peptide's own allele-scoped predictions (with
     # the axis, predictor, value and rank that produced the selection).
     # Recorded rather than recomputed so a finished run can be reconstructed:

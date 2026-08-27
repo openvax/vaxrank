@@ -777,7 +777,7 @@ def test_lens_processing_evidence_is_attributed_by_the_configured_policy(
 
     assert credited("selected") == {"HLA-A*02:01"}
     assert credited("all") == {"HLA-A*02:01", "HLA-B*07:02"}
-    assert credited("reported") == {"HLA-A*02:01", "HLA-B*07:02"}
+    assert credited("from_input") == {"HLA-A*02:01", "HLA-B*07:02"}
     assert credited("top:2") == {"HLA-A*02:01", "HLA-B*07:02"}
 
     # And the scores follow the policy. Note B*07:02 is still a scored group
@@ -809,7 +809,7 @@ def test_allele_attribution_records_how_the_allele_was_chosen(tmp_path):
     patient, or picked by us — nor, if picked, on what axis and at what value.
     """
     from vaxrank.allele_evidence import (
-        BASIS_GENOTYPE, BASIS_SELECTED, BASIS_REPORTED,
+        ALLELE_SOURCE_BROADCAST, ALLELE_SOURCE_SELECTED, ALLELE_SOURCE_FROM_INPUT,
     )
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_dsl import attach_per_allele_scores
@@ -825,28 +825,28 @@ def test_allele_attribution_records_how_the_allele_was_chosen(tmp_path):
     [selected] = attach_per_allele_scores(epitopes, EpitopeConfig())
     [attribution] = selected.allele_attributions
     assert attribution.allele == "HLA-A*02:01"
-    assert attribution.basis == BASIS_SELECTED
+    assert attribution.source == ALLELE_SOURCE_SELECTED
     # Everything needed to redo the ranking by hand.
     assert attribution.rank_kind == "pMHC_affinity"
     assert attribution.rank_predictor == "mhcflurry"
     assert attribution.rank_value == pytest.approx(50.0)
     assert attribution.rank_position == 1
-    assert "ranked #1" in attribution.describe()
+    assert "selected: ranked #1" in attribution.describe()
 
     # Broadcasting distinguishes alleles the input scored from ones supplied
     # only by the genotype.
     [broadcast] = attach_per_allele_scores(
         epitopes, EpitopeConfig(allele_free_evidence="all"),
         genotype=["HLA-A*02:01", "HLA-B*07:02", "HLA-C*07:01"])
-    bases = {a.allele: a.basis for a in broadcast.allele_attributions}
+    bases = {a.allele: a.source for a in broadcast.allele_attributions}
     assert bases == {
-        "HLA-A*02:01": BASIS_REPORTED,
-        "HLA-B*07:02": BASIS_REPORTED,
-        "HLA-C*07:01": BASIS_GENOTYPE,
+        "HLA-A*02:01": ALLELE_SOURCE_FROM_INPUT,
+        "HLA-B*07:02": ALLELE_SOURCE_FROM_INPUT,
+        "HLA-C*07:01": ALLELE_SOURCE_BROADCAST,
     }
     # A candidate with no allele-free evidence records no attribution at all,
     # rather than implying a decision was made.
-    assert not any(a.basis == BASIS_SELECTED
+    assert not any(a.source == ALLELE_SOURCE_SELECTED
                    for a in broadcast.allele_attributions)
 
 

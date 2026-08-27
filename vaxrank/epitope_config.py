@@ -140,7 +140,7 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     #       allele-scoped evidence to rank on.
     #   "all"       — every allele in the patient's genotype.
     #   "top:N"     — the N best, same fallback as "selected".
-    #   "reported"  — only alleles the input actually scored this peptide
+    #   "from_input"  — only alleles the input actually scored this peptide
     #       against. Reproduces pre-3.3 behavior, which is row incidence
     #       rather than a claim about presentation.
     allele_free_evidence: str = POLICY_SELECTED
