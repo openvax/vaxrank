@@ -129,16 +129,21 @@ def frame_genotype(epitopes, genotype=None):
         for allele in epitope.patient_alleles if allele}))
 
 
-def epitopes_to_topiary_df(epitopes, policy=None, genotype=None):
+def epitopes_to_topiary_df(epitopes, policy=None, genotype=None,
+                           default_methods=None):
     """Convert a list of :class:`vaxrank.candidate_epitope.CandidateEpitope` into the
     topiary long-format DataFrame consumed by
     :class:`topiary.ranking.EvalContext` and
     :func:`topiary.ranking.apply_filter`.
 
     One row per allele-scoped leaf ``mhctools.Prediction`` in each
-    CandidateEpitope's mutant context. Allele-independent antigen-processing
-    evidence is projected into every allele group in this evaluation view while
-    remaining one canonical leaf on the CandidateEpitope. A single
+    CandidateEpitope's mutant context. Peptide-level evidence (antigen
+    processing, proteasomal cleavage) is credited to the alleles the
+    configured :class:`~vaxrank.allele_evidence.AllelePolicy` attributes it
+    to — by default the single best-ranked allele, **not** every allele — while
+    remaining one canonical leaf on the CandidateEpitope. Pass ``policy`` to
+    choose; a processing-based ``score_expr`` will otherwise give zero to
+    every allele but the selected one. A single
     CandidateEpitope can therefore emit N rows (one per allele x predictor x
     kind). When multiple predictions share a (peptide,
     allele) pair (e.g. MHCflurry and netMHCpan rows from a LENS file),
@@ -162,7 +167,9 @@ def epitopes_to_topiary_df(epitopes, policy=None, genotype=None):
     # This cannot be delegated to topiary's ``alleles=``: that declares one
     # allele set for the whole frame, and every policy except "all" needs a
     # different set per peptide.
-    from .allele_evidence import AllelePolicy, attribute_alleles
+    from .allele_evidence import (
+        AllelePolicy, attribute_alleles, is_peptide_level,
+    )
 
     if policy is None:
         policy = AllelePolicy.parse(None)
@@ -175,13 +182,18 @@ def epitopes_to_topiary_df(epitopes, policy=None, genotype=None):
         predictions = ctx.predictions_flat()
         attributed = None
         for p in predictions:
-            if p.allele:
+            if not is_peptide_level(p):
+                # Includes every allele-scoped prediction, and any blank-allele
+                # prediction of a kind that is not peptide-level — those are
+                # malformed rows, and projecting them would invent per-allele
+                # evidence for alleles they were never predicted against.
                 evaluation_alleles = (p.allele,)
             else:
                 if attributed is None:
                     attributed = tuple(
                         a.allele for a in attribute_alleles(
-                            e, genotype, policy))
+                            e, genotype, policy,
+                            default_methods=default_methods))
                 evaluation_alleles = attributed or (p.allele,)
             for allele in evaluation_alleles:
                 rows.append({
@@ -341,8 +353,8 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
     from topiary.ranking import EvalContext, apply_filter
 
     df = (epitopes_to_topiary_df(
-              epitopes, policy=getattr(cfg, "allele_policy", None),
-              genotype=genotype)
+              epitopes, policy=cfg.allele_policy, genotype=genotype,
+              default_methods=cfg.default_methods)
           if topiary_df is None else topiary_df)
     if df.empty:
         return pd.Series(dtype=float)
@@ -403,7 +415,7 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
         return epitopes
     if cfg is None:
         cfg = EpitopeConfig()
-    from .allele_evidence import attribute_alleles
+    from .allele_evidence import attribute_alleles, is_peptide_level
 
     score_series = score_predictions(
         epitopes, cfg, topiary_df=topiary_df, kind_support=kind_support,
@@ -423,11 +435,20 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
             by_position.setdefault(
                 (src_name, peptide, offset), {})[allele] = float(val)
     def _attributions(epitope):
-        # Only candidates carrying allele-independent evidence have anything
-        # to attribute; recording an attribution for the rest would imply a
-        # decision was made where none was needed.
-        if any(not p.allele for p in epitope.predictions_flat()):
-            return attribute_alleles(epitope, resolved_genotype, policy)
+        # Only candidates carrying peptide-level evidence have anything to
+        # attribute; recording one for the rest would imply a decision that
+        # was never made.
+        #
+        # And only when this call actually applied the policy. A caller that
+        # supplied its own frame (pVACseq passes topiary's) was scored
+        # without the policy ever running, so stamping an attribution would
+        # persist an audit record describing a decision that did not happen.
+        if topiary_df is not None:
+            return ()
+        if any(is_peptide_level(p) for p in epitope.predictions_flat()):
+            return attribute_alleles(
+                epitope, resolved_genotype, policy,
+                default_methods=cfg.default_methods)
         return ()
 
     return [
@@ -555,7 +576,9 @@ def validate_dsl_against_predictions(cfg, epitopes, *, topiary_df=None):
     if not nodes:
         return
 
-    df = (epitopes_to_topiary_df(epitopes)
+    df = (epitopes_to_topiary_df(
+              epitopes, policy=cfg.allele_policy,
+              default_methods=cfg.default_methods)
           if topiary_df is None else topiary_df)
     available_kinds = set(df["kind"].unique()) if not df.empty else set()
     available_methods = (

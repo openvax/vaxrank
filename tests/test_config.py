@@ -1626,3 +1626,58 @@ peptide:
     linker2 = coalesce_config_value(
         args2, 'peptide_linker', yaml_kwargs2, 'linker')
     assert linker2 == 'EAAAK'
+
+
+def test_allele_evidence_policy_is_reachable_from_yaml_and_cli(tmp_path):
+    """The policy must be settable through a supported path.
+
+    3.3.0 changes the default attribution of peptide-level evidence. A knob
+    that exists only on the dataclass leaves every user with no way to
+    restore the previous behavior short of editing Python.
+    """
+    from vaxrank.cli.epitope_config_args import epitope_config_from_args
+    from vaxrank.config.loader import load_vaxrank_config
+
+    path = tmp_path / "epitopes.yaml"
+    path.write_text(
+        "epitopes:\n"
+        "  allele_free_evidence: all\n"
+        "  allele_selection_axis: pMHC_affinity\n")
+
+    class _Args:
+        config = [str(path)]
+        config_set_overrides = None
+        config_expr_overrides = None
+
+        def __getattr__(self, name):
+            return None
+
+    from_yaml = epitope_config_from_args(
+        _Args(), merged_config=load_vaxrank_config(_Args()))
+    assert from_yaml.allele_free_evidence == "all"
+    assert from_yaml.allele_policy.name == "all"
+    assert from_yaml.allele_policy.axis == "pMHC_affinity"
+
+    class _FlagArgs(_Args):
+        config = None
+        allele_free_evidence = "top:2"
+        allele_selection_axis = "pMHC_presentation"
+
+    from_cli = epitope_config_from_args(_FlagArgs(), merged_config={})
+    assert from_cli.allele_policy.name == "top"
+    assert from_cli.allele_policy.limit == 2
+
+
+def test_allele_evidence_flags_exist_on_the_parsers():
+    """Both entry points accept the flags, not just the pipeline one."""
+    from vaxrank.cli.arg_parser import (
+        external_input_arg_parser, make_vaxrank_arg_parser,
+    )
+
+    for parser in (make_vaxrank_arg_parser(), external_input_arg_parser()):
+        options = {
+            option
+            for action in parser._actions
+            for option in action.option_strings}
+        assert "--allele-free-evidence" in options
+        assert "--allele-selection-axis" in options

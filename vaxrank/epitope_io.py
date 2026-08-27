@@ -1319,7 +1319,12 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     if topiary_df is None:
         topiary_df = report_df.attrs.get("topiary_df")
     if topiary_df is None:
-        topiary_df = epitopes_to_topiary_df(epitopes)
+        # Same policy the candidates were scored under. Rebuilding with the
+        # default instead made the written report disagree with the ranking
+        # substrate about the same epitope.
+        topiary_df = epitopes_to_topiary_df(
+            epitopes, policy=epitope_config.allele_policy,
+            default_methods=epitope_config.default_methods)
 
     validate_dsl_against_predictions(
         epitope_config, epitopes, topiary_df=topiary_df)

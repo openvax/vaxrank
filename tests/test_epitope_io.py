@@ -741,7 +741,7 @@ def test_lens_processing_evidence_is_attributed_by_the_configured_policy(
 
     Antigen processing depends on the peptide and its flanks, not on MHC, so
     crediting it to an allele is a choice. The default selects the allele
-    the model ranks best; ``all`` broadcasts to the genotype; ``observed``
+    the model ranks best; ``all`` broadcasts to the genotype; ``from_input``
     reproduces the pre-3.3 behavior of using whichever alleles the input
     happened to score, which is row incidence rather than a claim about
     presentation.

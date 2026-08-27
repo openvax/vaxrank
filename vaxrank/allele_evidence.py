@@ -56,7 +56,10 @@ ALLELE_SOURCES = frozenset({ALLELE_SOURCE_FROM_INPUT, ALLELE_SOURCE_BROADCAST, A
 POLICY_SELECTED = "selected"  # the best-ranked allele, else the genotype
 POLICY_ALL = "all"              # every allele in the patient's genotype
 POLICY_FROM_INPUT = "from_input"  # only pairings the source file carried
-POLICY_TOP_PREFIX = "top:"      # ``top:N`` — the N best, else the genotype
+POLICY_TOP = "top"              # ``top:N`` — the N best, else the genotype
+POLICY_TOP_PREFIX = "top:"
+ALLELE_POLICIES = frozenset({
+    POLICY_SELECTED, POLICY_ALL, POLICY_FROM_INPUT, POLICY_TOP})
 
 # Ranking axes a selection may use, with the direction that means "better".
 # Presentation is preferred over affinity when both are available: it is the
@@ -66,6 +69,18 @@ SELECTION_AXES = (
     ("pMHC_affinity", "value", False),      # lower IC50 is better
 )
 SELECTION_AUTO = "auto"
+
+# Kinds that describe a peptide rather than a peptide-MHC pair, and are
+# therefore the only ones this module may attribute to alleles. A prediction
+# of any other kind that arrives with a blank allele is malformed, not
+# peptide-level: projecting it would manufacture per-allele binding evidence
+# for alleles it was never predicted against.
+PEPTIDE_LEVEL_KINDS = frozenset({"antigen_processing", "proteasome_cleavage"})
+
+
+def is_peptide_level(prediction) -> bool:
+    """True when a prediction describes the peptide, not a peptide-MHC pair."""
+    return not prediction.allele and prediction.kind in PEPTIDE_LEVEL_KINDS
 
 
 class AllelePolicyError(ValueError):
@@ -134,6 +149,11 @@ class AllelePolicy:
 
         Accepts ``selected``, ``all``, ``from_input``, and ``top:N``.
         """
+        known_axes = {a[0] for a in SELECTION_AXES} | {SELECTION_AUTO}
+        if axis not in known_axes:
+            raise AllelePolicyError(
+                "Unknown allele selection axis %r (expected one of %s)"
+                % (axis, ", ".join(sorted(known_axes))))
         text = (value or POLICY_SELECTED).strip().lower()
         if text in (POLICY_SELECTED, POLICY_ALL, POLICY_FROM_INPUT):
             return cls(name=text, axis=axis)
@@ -155,12 +175,42 @@ class AllelePolicy:
             "'from_input', or 'top:N')" % value)
 
 
-def _ranked_alleles(epitope, alleles, axis):
+# Preference between predictors of one kind when the config names none.
+# Mirrors epitope_dsl._CANONICAL_METHOD_PREFERENCE so a selection and a score
+# resolve to the same model.
+_PREDICTOR_PREFERENCE = ("mhcflurry", "netmhcpan", "netmhcstabpan")
+
+
+def _pick_predictor(available, default_methods, kind):
+    """Choose the one predictor whose values will rank the alleles."""
+    named = (default_methods or {}).get(kind)
+    if named and named in available:
+        return named
+    for preferred in _PREDICTOR_PREFERENCE:
+        if preferred in available:
+            return preferred
+    return sorted(available)[0]
+
+
+def _ranked_alleles(epitope, alleles, axis, default_methods=None):
     """Rank *alleles* by the peptide's own allele-scoped evidence.
 
-    Returns ``(ordered, kind, predictor, values)``, or ``(None, ...)`` when
-    the peptide carries no usable allele-scoped evidence — in which case the
-    caller must fall back rather than invent a ranking.
+    Returns ``(ordered, kind, predictor, values)``, or ``(None, ...)`` when the
+    peptide carries no usable allele-scoped evidence — in which case the caller
+    must fall back rather than invent a ranking.
+
+    Two rules keep the recorded provenance true:
+
+    * Alleles are ranked using **one predictor's** values, never a per-allele
+      best taken across predictors. Two models' scales are independent, so a
+      cross-model minimum compares incomparable numbers *and* produces a
+      ``(predictor, value)`` pair the named predictor never emitted — which
+      would make the attribution unreconstructable, the one thing this module
+      exists to prevent.
+    * The axis is chosen by how many of the requested alleles it actually
+      covers, not by whether it covers any. A file carrying presentation for
+      one allele and affinity for six should rank on affinity; short-circuiting
+      on the first non-empty axis would silently drop five alleles.
     """
     candidates = (
         SELECTION_AXES if axis == SELECTION_AUTO
@@ -172,38 +222,63 @@ def _ranked_alleles(epitope, alleles, axis):
                SELECTION_AUTO))
 
     allowed = set(alleles)
-    for kind, attribute, higher_is_better in candidates:
-        by_allele = {}
-        predictor = ""
+    best = None
+    for rank, (kind, attribute, higher_is_better) in enumerate(candidates):
+        by_predictor = {}
         for prediction in epitope.predictions_flat():
             if prediction.kind != kind or prediction.allele not in allowed:
                 continue
             value = getattr(prediction, attribute, None)
             if value is None:
                 continue
-            predictor = predictor or prediction.predictor_name
-            best = by_allele.get(prediction.allele)
-            if best is None or (
-                    value > best if higher_is_better else value < best):
-                by_allele[prediction.allele] = value
-        if by_allele:
-            ordered = sorted(
-                by_allele,
-                key=lambda a: (-by_allele[a] if higher_is_better
-                               else by_allele[a], a))
-            return ordered, kind, predictor, by_allele
-    return None, "", "", {}
+            slot = by_predictor.setdefault(prediction.predictor_name, {})
+            current = slot.get(prediction.allele)
+            if current is None or (
+                    value > current if higher_is_better else value < current):
+                slot[prediction.allele] = value
+        if not by_predictor:
+            continue
+        predictor = _pick_predictor(by_predictor, default_methods, kind)
+        values = by_predictor[predictor]
+        # More alleles covered wins; ties go to the earlier (preferred) axis.
+        key = (len(values), -rank)
+        if best is None or key > best[0]:
+            best = (key, kind, predictor, values, higher_is_better)
+
+    if best is None:
+        return None, "", "", {}
+    _key, kind, predictor, values, higher_is_better = best
+    ordered = sorted(
+        values,
+        key=lambda a: (-values[a] if higher_is_better else values[a], a))
+    return ordered, kind, predictor, values
 
 
-def attribute_alleles(epitope, genotype, policy) -> tuple:
+def attribute_alleles(epitope, genotype, policy,
+                      default_methods=None) -> tuple:
     """Return the :class:`AlleleAttribution` list for one candidate.
 
     ``genotype`` is the patient's allele set. ``policy`` is an
     :class:`AllelePolicy`. The result is ordered and deterministic, and every
     entry records why that allele was chosen.
     """
-    from_input = tuple(a for a in epitope.patient_alleles if a)
-    genotype = tuple(sorted({a for a in (genotype or ()) if a} | set(from_input)))
+    # Derived from the allele-scoped predictions themselves, NOT from
+    # patient_alleles: CandidateEpitope.__post_init__ folds every scored
+    # allele back into patient_alleles, so a broadcast allele would be
+    # relabelled "from_input" on a second attribution pass and the audit
+    # record would claim the input paired a peptide with an allele it never
+    # mentioned.
+    from_input = tuple(sorted({
+        prediction.allele
+        for prediction in epitope.predictions_flat()
+        if prediction.allele}))
+    # An explicit genotype is the patient's actual typing and wins outright.
+    # Unioning the input's alleles in would mean an explicit genotype could
+    # only ever widen the attributed set, never narrow it — so it could not
+    # be used to correct an input produced with the wrong or a wider panel.
+    genotype = (
+        tuple(sorted({a for a in genotype if a})) if genotype
+        else from_input)
     if not genotype:
         return ()
 
@@ -220,9 +295,16 @@ def attribute_alleles(epitope, genotype, policy) -> tuple:
                 source=ALLELE_SOURCE_FROM_INPUT if a in from_input_set else ALLELE_SOURCE_BROADCAST)
             for a in genotype)
 
-    # selected / top:N
+    if policy.name not in (POLICY_SELECTED, POLICY_TOP):
+        raise AllelePolicyError(
+            "Unknown allele policy name %r; AllelePolicy must come from "
+            "AllelePolicy.parse" % policy.name)
+    if policy.name == POLICY_TOP and not policy.limit:
+        raise AllelePolicyError(
+            "A 'top:N' allele policy requires a positive limit")
+
     ordered, kind, predictor, values = _ranked_alleles(
-        epitope, genotype, policy.axis)
+        epitope, genotype, policy.axis, default_methods=default_methods)
     if ordered is None:
         # No allele-scoped evidence to select from. "We don't know which
         # allele presents this" is not the same as "this allele does", so
