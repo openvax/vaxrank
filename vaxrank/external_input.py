@@ -47,6 +47,9 @@ from . import cells
 from .amino_acids import has_only_standard_amino_acids
 from .epitope_logic import slice_epitopes
 from .external_prediction import (
+    _PVACSEQ_DNA_VAF_COLUMNS,
+    _PVACSEQ_RNA_DEPTH_COLUMNS,
+    _PVACSEQ_RNA_VAF_COLUMNS,
     external_text,
     external_values,
     lens_variant_id,
@@ -856,24 +859,27 @@ def lens_vaccine_entry(metadata, selection, genome=None, options=None):
         pep_context,
         variant_is_frameshift(metadata.variant),
     )
+    # One row's counts, not four independent maxima. Maximizing each field
+    # separately can assemble a tuple no row ever reported — total from a
+    # deep row, alt from a shallow one — and n_alt_reads feeds the
+    # combined-score DSL, so an incoherent count reorders the ranking.
+    # Best-supported row wins: most alt reads, then most coverage.
     counts = [_read_counts_from_lens_row(record.row)
               for record in selection.records]
-    n_total = max((value[0] for value in counts), default=0)
-    n_alt_reads = max((value[1] for value in counts), default=0)
+    n_total, n_alt_reads, _, n_alt_protein = max(
+        counts, key=lambda c: (c[1], c[0]), default=(0, 0, 0, 0))
     metadata.vaccine_peptide = external_vaccine_peptide(
         variant=metadata.variant,
         selection=selection,
         context=pep_context,
         mutant_start=start_off,
         mutant_end=end_off,
-        gene_name=key.gene_names[0] if key.gene_names else "",
-        transcripts=resolve_external_transcripts(key.transcript_ids, genome),
+        gene_name=key.primary_gene_name,
+        transcripts=resolve_external_transcripts(
+            key.ordered_transcript_ids, genome),
         counts=(
-            n_total,
-            n_alt_reads,
-            max(0, n_total - n_alt_reads),
-            max((value[3] for value in counts), default=0),
-        ),
+            n_total, n_alt_reads, max(0, n_total - n_alt_reads),
+            n_alt_protein),
         options=options,
     )
     return metadata
@@ -1009,17 +1015,12 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
         1 for r in rows
         if not (r.get('pep_context') and not (
             isinstance(r.get('pep_context'), float) and pd.isna(r.get('pep_context')))))
-    def _is_missing(v):
-        return v is None or v == '' or (
-            isinstance(v, float) and pd.isna(v)) or (
-            isinstance(v, str) and v.strip().lower() == 'nan')
-
     def _kind(r):
         k = r.get('antigen_source')
-        return ('(missing)' if _is_missing(k) else str(k).strip())
+        return ('(missing)' if cells.missing(k) else str(k).strip())
 
-    rows_no_gene_name = [r for r in rows if _is_missing(r.get('gene_name'))]
-    rows_no_transcript = [r for r in rows if _is_missing(r.get('transcript_id'))]
+    rows_no_gene_name = [r for r in rows if cells.missing(r.get('gene_name'))]
+    rows_no_transcript = [r for r in rows if cells.missing(r.get('transcript_id'))]
     if n_no_pep_context:
         logger.warning(
             "%d / %d LENS row(s) lack pep_context — antigens for those "
@@ -1036,7 +1037,7 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
     _SNV_OR_INDEL_KINDS = {'SNV', 'INDEL'}
     rows_no_reads = [
         r for r in rows
-        if _is_missing(r.get('rna_reads_covering_genomic_origin'))]
+        if cells.missing(r.get('rna_reads_covering_genomic_origin'))]
     n_snv_indel_no_gene = sum(
         1 for r in rows_no_gene_name if _kind(r).upper() in _SNV_OR_INDEL_KINDS)
     n_snv_indel_no_transcript = sum(
@@ -1159,15 +1160,6 @@ def parse_pvacseq_variant(variant_id, genome=None):
     return v
 
 
-# pVACseq's two flavors spell the same fact differently; topiary normalizes
-# both onto one of these names. Rows only ever reach this module already
-# normalized, so the raw pVACseq spellings are deliberately absent — listing
-# them would imply a second vocabulary is still in play here.
-_PVACSEQ_RNA_DEPTH_COLUMNS = ("rna_depth", "tumor_rna_depth")
-_PVACSEQ_RNA_VAF_COLUMNS = ("rna_vaf", "tumor_rna_vaf")
-_PVACSEQ_DNA_VAF_COLUMNS = ("dna_vaf", "tumor_dna_vaf")
-
-
 def pvacseq_rna_depth(row):
     """RNA coverage reported by either pVACseq TSV flavor."""
     return cells.integer(
@@ -1211,6 +1203,11 @@ def pvacseq_variant_metadata(variant_id, group_rows, genome=None):
     """Aggregate filter-independent facts from every raw pVACseq row."""
     variant = pvacseq_genomic_variant(variant_id, group_rows, genome=genome)
     if variant is None:
+        # The aggregate warning tells operators to check DEBUG for the
+        # offenders, so there has to be something here to find.
+        logger.debug(
+            "pVACseq group %r carried no genomic coordinates and its "
+            "identifier could not be parsed as one; skipping.", variant_id)
         return ExternalVariantEntry(unparseable=True)
     transcript_ids = external_values(*(
         value
@@ -1222,11 +1219,10 @@ def pvacseq_variant_metadata(variant_id, group_rows, genome=None):
         )
     ))
     transcripts = resolve_external_transcripts(transcript_ids, genome)
+    # depth * vaf can only exceed zero when depth already does (vaf is >= 0
+    # by construction), so the product added nothing but a second pass.
     has_rna_support = any(
-        pvacseq_rna_depth(row) > 0
-        or pvacseq_rna_depth(row) * pvacseq_rna_vaf(row) > 0
-        for row in group_rows
-    )
+        pvacseq_rna_depth(row) > 0 for row in group_rows)
     gene_names = external_values(*(
         value
         for row in group_rows
@@ -1267,13 +1263,13 @@ def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None):
             "is empty or contains non-standard residues.",
             key.variant_id, key.source_sequence)
         return metadata
+    # Same rule as the LENS path: both counts come from one row.
     counts = []
     for record in selection.records:
-        n_total = pvacseq_rna_depth(record.row)
-        n_alt = int(round(n_total * pvacseq_rna_vaf(record.row)))
-        counts.append((n_total, n_alt))
-    n_total = max((count[0] for count in counts), default=0)
-    n_alt_reads = max((count[1] for count in counts), default=0)
+        depth = pvacseq_rna_depth(record.row)
+        counts.append((depth, int(round(depth * pvacseq_rna_vaf(record.row)))))
+    n_total, n_alt_reads = max(
+        counts, key=lambda c: (c[1], c[0]), default=(0, 0))
     metadata.vaccine_peptide = external_vaccine_peptide(
         variant=metadata.variant,
         selection=selection,
@@ -1282,8 +1278,9 @@ def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None):
         context=context,
         mutant_start=0,
         mutant_end=len(context),
-        gene_name=key.gene_names[0] if key.gene_names else "",
-        transcripts=resolve_external_transcripts(key.transcript_ids, genome),
+        gene_name=key.primary_gene_name,
+        transcripts=resolve_external_transcripts(
+            key.ordered_transcript_ids, genome),
         counts=(
             n_total, n_alt_reads, max(0, n_total - n_alt_reads), n_alt_reads),
         options=options,

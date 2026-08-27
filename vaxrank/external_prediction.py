@@ -34,6 +34,15 @@ external_text = cells.text
 external_values = cells.values
 
 
+# pVACseq's two flavors spell the same fact differently; topiary normalizes
+# both onto one of these names. Rows only ever reach this module already
+# normalized, so the raw pVACseq spellings are deliberately absent — listing
+# them would imply a second vocabulary is still in play here.
+_PVACSEQ_RNA_DEPTH_COLUMNS = ("rna_depth", "tumor_rna_depth")
+_PVACSEQ_RNA_VAF_COLUMNS = ("rna_vaf", "tumor_rna_vaf")
+_PVACSEQ_DNA_VAF_COLUMNS = ("dna_vaf", "tumor_dna_vaf")
+
+
 def pvacseq_variant_id(row) -> str:
     """Return one stable variant identifier from either pVACseq flavor.
 
@@ -91,6 +100,13 @@ class ExternalPredictionKey:
     gene_ids: tuple[str, ...] = ()
     gene_names: tuple[str, ...] = ()
     transcript_ids: tuple[str, ...] = ()
+    # The row's own gene / transcript, before the multi-value columns are
+    # folded in. The sets above are sorted so that two rows listing the same
+    # genes in different orders resolve to one identity — which makes
+    # ``gene_names[0]`` alphabetical, not primary. Anything labelling a
+    # construct must use these instead.
+    primary_gene_name: str = ""
+    primary_transcript_id: str = ""
     species: str = ""
     peptide: str = ""
     source_sequence: str = ""
@@ -120,13 +136,36 @@ class ExternalPredictionKey:
             values = tuple(sorted(set(getattr(self, name))))
             object.__setattr__(self, name, values)
 
+    # Annotation carried alongside the key but deliberately outside its
+    # identity. Which gene a report *named first* for a row is presentation,
+    # not biology: two rows listing the same genes in different orders
+    # describe the same candidate, and folding order into the identity would
+    # split them — the exact fragility the sorted sets above prevent.
+    NON_IDENTITY_FIELDS = ("primary_gene_name", "primary_transcript_id")
+
     def payload(self, include_position=True) -> dict:
         """Return the canonical JSON-compatible identity fields."""
         result = asdict(self)
+        for name in self.NON_IDENTITY_FIELDS:
+            result.pop(name, None)
         if not include_position:
             result.pop("peptide")
             result.pop("offset")
         return result
+
+    @property
+    def ordered_transcript_ids(self) -> tuple[str, ...]:
+        """Transcript IDs with the row's own first.
+
+        ``transcript_ids`` is sorted for identity stability, so its first
+        element is alphabetical. Anything that treats one transcript as
+        representative — construct annotation, varcode cross-checks — wants
+        the one the report actually named for this row.
+        """
+        if not self.primary_transcript_id:
+            return self.transcript_ids
+        return (self.primary_transcript_id,) + tuple(
+            t for t in self.transcript_ids if t != self.primary_transcript_id)
 
     @property
     def identifier(self) -> str:
@@ -150,7 +189,12 @@ class ExternalPredictionKey:
 
     @classmethod
     def from_identifier(cls, identifier: str) -> "ExternalPredictionKey":
-        """Reconstruct a key from :attr:`identifier`."""
+        """Reconstruct a key from :attr:`identifier`.
+
+        The annotation fields in :data:`NON_IDENTITY_FIELDS` are absent from
+        the identifier by design, so a reconstructed key carries the identity
+        but not the report's own naming order.
+        """
         payload = json.loads(identifier)
         for name in ("gene_ids", "gene_names", "transcript_ids"):
             payload[name] = tuple(payload.get(name) or ())
@@ -186,6 +230,8 @@ class ExternalPredictionKey:
                 row.get("transcript_id"),
                 row.get("all_transcript_ids_encoding_peptide"),
             ),
+            primary_gene_name=cells.text(row.get("gene_name")),
+            primary_transcript_id=cells.text(row.get("transcript_id")),
             species=external_text(row.get("species")),
             peptide=peptide,
             source_sequence=source_sequence,
@@ -202,7 +248,6 @@ class ExternalPredictionKey:
         )
         if not peptide:
             return None
-        offset = cells.integer(row.get("peptide_offset"), default=0)
         return cls(
             source_format="pvacseq",
             variant_id=pvacseq_variant_id(row),
@@ -217,8 +262,19 @@ class ExternalPredictionKey:
                 row.get("Best Transcript"),
                 row.get("Transcript"),
             ),
+            primary_gene_name=cells.first_text(
+                row, "gene", "Gene", "Gene Name"),
+            primary_transcript_id=cells.first_text(
+                row, "transcript", "Best Transcript", "Transcript"),
             species=external_text(row.get("species")),
             peptide=peptide,
+            # pVACseq ships no source-protein context, so the peptide is its
+            # own window and its offset within that window is 0 by
+            # definition. Carrying a source-protein offset here instead would
+            # describe the peptide as sitting partway inside itself, which
+            # the position invariant rejects — and rejecting it mid-load
+            # would take down the whole run, where every other malformed-row
+            # case skips the row.
             source_sequence=peptide,
-            offset=offset,
+            offset=0,
         )

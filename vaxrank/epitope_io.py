@@ -37,7 +37,11 @@ from mhctools.pred import Prediction
 
 from . import cells
 from .epitope_dsl import prediction_kind_for_method
-from .external_prediction import ExternalPredictionKey
+from .external_prediction import (
+    _PVACSEQ_DNA_VAF_COLUMNS,
+    _PVACSEQ_RNA_VAF_COLUMNS,
+    ExternalPredictionKey,
+)
 from .external_report import (
     GENOMIC_VARIANT_COLUMN, ExternalRecord, ExternalReport,
 )
@@ -437,14 +441,6 @@ def neoepitope_core_row(allele, mutant_peptide, mutant_affinity,
     return row
 
 
-def _first_float(*values):
-    for value in values:
-        coerced = cells.number(value)
-        if coerced is not None:
-            return coerced
-    return None
-
-
 def _topiary_group_source(row):
     """Source key matching topiary.ranking.EvalContext grouping."""
     return (
@@ -520,12 +516,13 @@ def _topiary_pvacseq_to_epitope_rows(rows):
 
 def _build_pvacseq_report_row(row):
     """Build one user-facing report row from a topiary pVACseq row."""
-    rna_expr = _first_float(
-        row.get("rna_transcript_expression"),
-        row.get("transcript_expression"),
-        row.get("gene_expression"))
-    rna_vaf = _first_float(row.get("rna_vaf"), row.get("tumor_rna_vaf"))
-    dna_vaf = _first_float(row.get("dna_vaf"), row.get("tumor_dna_vaf"))
+    # Same helper, same precedence, as the ranking path uses for these
+    # fields — so the report and the ranking cannot disagree about a row.
+    rna_expr = cells.first_number(
+        row, "rna_transcript_expression", "transcript_expression",
+        "gene_expression")
+    rna_vaf = cells.first_number(row, *_PVACSEQ_RNA_VAF_COLUMNS)
+    dna_vaf = cells.first_number(row, *_PVACSEQ_DNA_VAF_COLUMNS)
     out = neoepitope_core_row(
         allele=cells.text(row.get("allele")),
         mutant_peptide=cells.text(row.get("peptide")),
@@ -1309,9 +1306,11 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
         epitopes, epitope_config, topiary_df=topiary_df)
 
     # score_series is indexed by the stable prediction identity, peptide,
-    # offset, and allele for current external loaders. If an exact row is
-    # absent, the DSL filtered it out. Legacy report frames without an
-    # explicit identity retain their source-position or peptide fallback.
+    # offset, and allele. If an exact row is absent, the DSL filtered it out.
+    # There is no (peptide, allele) fallback: it broadcast one source's score
+    # onto every row sharing a sequence, which is the merge the identity
+    # exists to prevent. A frame without the identity columns is refused
+    # below rather than silently broadcast.
     scores_by_key = {}
     for idx_tuple, score in score_series.items():
         prediction_id, peptide, offset, allele = idx_tuple

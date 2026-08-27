@@ -1751,3 +1751,87 @@ def test_external_input_parser_accepts_vaccine_peptide_flags():
     ])
     assert args.vaccine_peptide_length == 31
     assert args.num_epitopes_per_vaccine_peptide == 2
+
+
+# ---- code-review regressions ---------------------------------------------
+
+def test_construct_is_labelled_with_the_row_s_own_gene_not_the_alphabetical_one(
+        tmp_path):
+    """A vaccine peptide must carry the gene the report named for its row.
+
+    ``gene_names`` is sorted so two rows listing the same genes in different
+    orders resolve to one identity — which makes ``gene_names[0]``
+    alphabetical, not primary. Labelling constructs from it put the wrong
+    gene on every template report and produced spurious varcode
+    gene-disagreement warnings.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import epitopes_for_ranking
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
+
+    path = tmp_path / "gene_precedence.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\t"
+        "all_gene_names_encoding_peptide\ttranscript_id\t"
+        "all_transcript_ids_encoding_peptide\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLAA\tSNV\tchr17:7577120\tC\t[T]\t"
+        "TP53\tATXN7,TP53\tENST00000269305\t"
+        "ENST00000000233,ENST00000269305\t20\n")
+
+    config = EpitopeConfig()
+    report = read_lens_report(path, epitope_config=config)
+    key = report.records[0].key
+    # The identity keeps both, sorted, so row order cannot fork it ...
+    assert key.gene_names == ("ATXN7", "TP53")
+    # ... while the row's own naming is preserved separately.
+    assert key.primary_gene_name == "TP53"
+    assert key.ordered_transcript_ids[0] == "ENST00000269305"
+    # Annotation must stay out of the identity, or two rows naming the same
+    # genes in different orders would become different candidates.
+    assert "primary_gene_name" not in key.identifier
+
+    result = lens_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+    fragment = result.ranked[0][1][0].mutant_protein_fragment
+    assert fragment.gene_name == "TP53"
+
+
+def test_lens_read_counts_come_from_one_row(tmp_path):
+    """Counts must describe one observation, not per-field maxima.
+
+    Maximizing each field independently can assemble a tuple no row ever
+    reported — total from a deep row, alt from a shallow one — and
+    n_alt_reads feeds the combined-score DSL, so an incoherent count
+    reorders the construct ranking.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import epitopes_for_ranking
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
+
+    path = tmp_path / "counts.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\t"
+        "rna_reads_covering_genomic_origin\t"
+        "rna_reads_covering_genomic_origin_with_peptide_cds\t"
+        "mhcflurry_2.1.1.aff\n"
+        # deep coverage, few supporting reads
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
+        "100\t5\t20\n"
+        # shallow coverage, many supporting reads
+        "SIINFEKL\tHLA-B07:02\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
+        "10\t9\t25\n")
+
+    config = EpitopeConfig()
+    report = read_lens_report(path, epitope_config=config)
+    result = lens_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+    fragment = result.ranked[0][1][0].mutant_protein_fragment
+
+    # The best-supported row wins outright: (10, 9), never the cross-product
+    # (100, 9) that no row reported.
+    assert (fragment.n_overlapping_reads, fragment.n_alt_reads) == (10, 9)
+    assert fragment.n_ref_reads == 1

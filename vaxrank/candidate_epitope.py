@@ -813,9 +813,21 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                     "Conflicting self-reference matches for one candidate epitope"
                 )
             slot['self_reference_match'] = self_reference_match
-        if 'allele_score' in row:
-            slot['per_allele_scores'][row['mutant'].allele] = float(
-                row['allele_score'])
+        if 'allele_score' in row and row['mutant'].allele:
+            # Allele-free leaves (antigen_processing, proteasome_cleavage)
+            # carry a score for the peptide, not for an allele. Writing it
+            # under '' would put a non-allele entry in a map whose contract
+            # is explicitly per patient allele, and epitope_score sums the
+            # map — so the candidate would score its processing evidence as
+            # if it were an extra allele. attach_per_allele_scores applies
+            # the same rule on the loader path.
+            allele = row['mutant'].allele
+            score = float(row['allele_score'])
+            existing = slot['per_allele_scores'].get(allele)
+            if existing is not None and existing != score:
+                raise ValueError(
+                    "Conflicting per-allele scores for one candidate epitope")
+            slot['per_allele_scores'][allele] = score
         wt = row.get('wt')
         if wt is not None and wt.peptide and wt.peptide == peptide:
             # Self-WT: comparing the candidate against itself is meaningless.

@@ -145,5 +145,16 @@ def first_text(row, *names) -> str:
 
 
 def first_number(row, *names, default=None):
-    """:func:`first` coerced through :func:`number`."""
-    return number(first(row, *names), default=default)
+    """Return the first value among *names* that parses as a number.
+
+    Note the rule: a present-but-unparseable cell does *not* stop the search.
+    A report that writes ``rna_vaf='high'`` and ``tumor_rna_vaf=0.3`` has one
+    usable number, and both the ranking path and the report path must find
+    the same one — reading "first non-missing, then coerce" in one place and
+    "first that coerces" in another is how the two disagreed about a row.
+    """
+    for name in names:
+        parsed = number(row.get(name))
+        if parsed is not None:
+            return parsed
+    return default
