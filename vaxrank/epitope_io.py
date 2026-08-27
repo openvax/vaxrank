@@ -500,7 +500,12 @@ def _topiary_pvacseq_to_epitope_rows(rows):
             'source': peptide,
             'source_name': _topiary_group_source(row),
             'prediction_id': cells.text(row.get("prediction_id")),
-            'offset': int(cells.number(row.get("peptide_offset")) or 0),
+            # 0, not the frame's peptide_offset, and for the same reason
+            # ExternalPredictionKey.from_pvacseq_row pins it: the peptide is
+            # its own source window, so it sits at offset 0 of that window.
+            # Reading a source-protein offset here would let the epitope and
+            # the identity that names it disagree about the same position.
+            'offset': 0,
             'mutant': mutant,
             'wt': wt,
             'source_class': SOURCE_CLASS_MUTATION,

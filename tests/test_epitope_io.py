@@ -56,6 +56,16 @@ def test_external_prediction_key_is_legible_stable_and_round_trippable():
     assert ExternalPredictionKey.from_identifier(identifier) == key
     assert key.construct_identifier != key.identifier
 
+    # Annotation is carried but deliberately excluded from the identity:
+    # which gene a report named first is presentation, and folding it in
+    # would make two rows describing one candidate into two candidates.
+    annotated = dataclasses.replace(
+        key, primary_gene_name="GENE2", primary_transcript_id="ENST2")
+    assert annotated.identifier == identifier
+    # So a reconstructed key carries the identity but not that annotation —
+    # equality holds against the un-annotated key, not the annotated one.
+    assert ExternalPredictionKey.from_identifier(identifier) != annotated
+
 
 def test_native_round_trip_preserves_external_prediction_identity(tmp_path):
     key = ExternalPredictionKey(
