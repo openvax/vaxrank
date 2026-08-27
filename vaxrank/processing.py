@@ -308,7 +308,7 @@ def annotate_processing(epitopes, predictor=None,
             n_annotated, len(epitopes_list), len(by_source))
     if n_skipped_peptide_not_in_context:
         # LENS-import mismatches are already dropped at load
-        # (epitope_io.load_lens); reaching here means a pipeline-path
+        # (epitope_io.read_lens_report); reaching here means a pipeline-path
         # peptide wasn't locatable in its source, which is unexpected.
         ex_peptide, ex_source = skipped_examples[0]
         logger.warning(

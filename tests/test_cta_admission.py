@@ -3,6 +3,8 @@ import json
 import pandas as pd
 import pytest
 
+from tests.common import STUB_ONCOREF_VERSION
+
 from vaxrank.cta_admission import (
     CTA_REASON_CANONICAL_EXPRESSION_PASS,
     CTA_REASON_EXPLICIT_OVERRIDE,
@@ -59,7 +61,14 @@ def _frame():
     return pd.DataFrame(rows)
 
 
+# These tests stub oncoref's data, so they stub its version too. Asserting
+# the real installed version pinned the suite to one release of a dependency
+# it does not otherwise care about, and every oncoref bump broke this test.
+# What is worth asserting is that the recorded provenance comes from
+# ``oncoref.__version__`` rather than being fabricated — which a sentinel
+# checks and a literal cannot.
 def _patch_oncoref(monkeypatch, *, frame=None, canonical=None, unfiltered=None):
+    monkeypatch.setattr("oncoref.__version__", STUB_ONCOREF_VERSION)
     monkeypatch.setattr(
         "oncoref.cta.cta_evidence", lambda: _frame() if frame is None else frame
     )
@@ -118,7 +127,7 @@ def test_canonical_cta_at_expression_threshold_is_admitted(monkeypatch):
         PRAME, HELD_OUT, OTHER_CTA
     }))
     assert result.reference_evidence.canonical_default
-    assert result.reference_evidence.oncoref_version == "1.8.174"
+    assert result.reference_evidence.oncoref_version == STUB_ONCOREF_VERSION
     records = result.antigen.tumor_specificity.evidence_records
     assert [record.evidence_kind for record in records] == [
         "oncoref_cta_membership", "patient_tumor_expression"

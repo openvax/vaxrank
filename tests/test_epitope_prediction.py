@@ -310,3 +310,36 @@ def test_mhc_predictor_error(mouse_genome):
         genome=mouse_genome)
 
     eq_(0, len(epitope_predictions))
+
+
+def test_allele_free_leaf_does_not_become_a_per_allele_score():
+    """Processing evidence scores the peptide, not an extra allele.
+
+    ``per_allele_scores`` is summed into ``epitope_score``, and its contract
+    is explicitly per patient allele. Writing an allele-free leaf's score
+    under '' inflated the candidate's score as though it had one more allele.
+    """
+    import pytest
+    from mhctools.pred import Prediction
+
+    from vaxrank.candidate_epitope import candidate_epitopes_from_rows
+
+    def leaf(allele, kind):
+        return Prediction(
+            kind=kind, predictor_name="mhcflurry", predictor_version="2.1.1",
+            allele=allele, peptide="SIINFEKL", value=50.0, score=0.7)
+
+    [epitope] = candidate_epitopes_from_rows([
+        {"peptide": "SIINFEKL", "source": "AASIINFEKLAA", "offset": 2,
+         "prediction_id": "", "wt": None, "allele_score": 0.9,
+         "mutant": leaf("HLA-A*02:01", "pMHC_affinity")},
+        {"peptide": "SIINFEKL", "source": "AASIINFEKLAA", "offset": 2,
+         "prediction_id": "", "wt": None, "allele_score": 0.7,
+         "mutant": leaf("", "antigen_processing")},
+    ])
+
+    assert epitope.per_allele_scores == {"HLA-A*02:01": 0.9}
+    assert epitope.epitope_score == pytest.approx(0.9)
+    # The evidence itself is still on the candidate, just not as an allele.
+    assert len(epitope.predictions_for(
+        "antigen_processing", predictor="mhcflurry")) == 1

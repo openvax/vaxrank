@@ -361,17 +361,18 @@ def test_lens_funnel_summarizes_input_composition():
     in one block (so the operator isn't left correlating drop counts
     across multiple lines)."""
     import os
-    from vaxrank.epitope_io import load_lens
-    from vaxrank.external_input import ranked_from_lens_predictions
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
     from .testing_helpers import data_path
 
     lens_path = data_path("epitope_fixtures/lens_example.tsv")
     if not os.path.exists(lens_path):
         pytest.skip("lens_example.tsv fixture not found")
 
-    _df, predictions = load_lens(lens_path)
+    _loaded = read_lens_report(lens_path)
+    predictions = list(_loaded.epitopes)
     with _capture_logger('vaxrank.external_input', logging.INFO) as records:
-        ranked_from_lens_predictions(predictions, lens_path)
+        lens_ranking_result(_loaded, predictions)
 
     funnel = [r.getMessage() for r in records
               if 'LENS load funnel' in r.getMessage()]
@@ -379,7 +380,7 @@ def test_lens_funnel_summarizes_input_composition():
         "Expected exactly one consolidated funnel line; got %d" % len(funnel))
     msg = funnel[0]
     assert 'rows in:' in msg
-    assert 'candidate epitopes scored' in msg
+    assert 'candidate epitopes eligible for construct ranking' in msg
     # The old per-stage lines must be gone (no double-counting).
     assert not any('LENS report contains' in r.getMessage() for r in records)
     assert not any(
@@ -393,17 +394,18 @@ def test_lens_antigen_source_breakdown_orders_snv_indel_first():
     pure-alphabetical."""
     import os
     import re
-    from vaxrank.epitope_io import load_lens
-    from vaxrank.external_input import ranked_from_lens_predictions
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
     from .testing_helpers import data_path
 
     lens_path = data_path("epitope_fixtures/lens_example.tsv")
     if not os.path.exists(lens_path):
         pytest.skip("lens_example.tsv fixture not found")
 
-    _df, predictions = load_lens(lens_path)
+    _loaded = read_lens_report(lens_path)
+    predictions = list(_loaded.epitopes)
     with _capture_logger('vaxrank.external_input', logging.INFO) as records:
-        ranked_from_lens_predictions(predictions, lens_path)
+        lens_ranking_result(_loaded, predictions)
 
     msgs = [
         r.getMessage() for r in records

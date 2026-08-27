@@ -410,6 +410,19 @@ def test_epitope_data_renders_missing_mutant_ic50_placeholder():
         assert row['IC50'] == 'No prediction'
 
 
+def test_epitope_data_renders_missing_dsl_score_as_unavailable():
+    """An absent per-allele score must not silently become zero."""
+    from vaxrank.report import TemplateDataCreator
+
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.processing_predictions_by_key = {}
+    epitope = _ep("SIINFEKL", "SSIINFEKL", offset=1)
+
+    row = creator.epitope_data(epitope, epitope.best_affinity())
+
+    assert row['Score'] == '—'
+
+
 def test_epitope_data_surfaces_processing_columns_when_annotated():
     """``TemplateDataCreator.epitope_data`` adds three extra
     columns (Processing: C-term, Processing: max internal,

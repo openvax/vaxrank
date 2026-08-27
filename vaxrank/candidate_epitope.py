@@ -526,6 +526,20 @@ class CandidateEpitope(Peptide):
     # raw-reference behavior for legacy files and external-input loaders.
     self_reference_match: Optional["SelfReferenceMatch"] = None
 
+    # Patient alleles for which this candidate has input evidence. This is
+    # usually identical to the non-empty alleles on prediction leaves, but
+    # must be retained separately for allele-independent evidence such as
+    # antigen processing. External formats like LENS repeat that evidence on
+    # one row per patient allele while the canonical Prediction remains
+    # allele-less.
+    patient_alleles: tuple[str, ...] = ()
+
+    # Stable identity supplied by external prediction loaders. It encodes
+    # variant, gene/transcript, peptide context, peptide, and offset; see
+    # ``ExternalPredictionKey``. Empty for native pipeline predictions, whose
+    # position identity remains ``(source_sequence, sequence, offset)``.
+    prediction_id: str = ""
+
     # Per-allele score for this epitope as computed by the configured
     # :class:`~vaxrank.epitope_config.EpitopeConfig` ``score_expr``
     # (see :mod:`vaxrank.epitope_dsl`). Keys are allele names exactly
@@ -537,6 +551,23 @@ class CandidateEpitope(Peptide):
     # from here and never recompute — the DSL is the single source
     # of truth.
     per_allele_scores: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        """Normalize predictions and retain every explicitly known allele."""
+        super().__post_init__()
+        alleles = {
+            allele
+            for allele in self.patient_alleles
+            if allele
+        }
+        alleles.update(
+            prediction.allele
+            for prediction in self.predictions_flat()
+            if prediction.allele
+        )
+        alleles.update(
+            allele for allele in self.per_allele_scores if allele)
+        object.__setattr__(self, 'patient_alleles', tuple(sorted(alleles)))
 
     @property
     def epitope_score(self) -> float:
@@ -567,9 +598,22 @@ class CandidateEpitope(Peptide):
     def __hash__(self) -> int:
         # Inherited from Peptide in spirit, but ``@dataclass(frozen=True)``
         # regenerates ``__hash__`` on every subclass — and ours would
-        # include the mutable ``comparators`` dict. Re-define here to
-        # keep the same position-identity hash as the parent.
-        return hash((self.sequence, self.source_sequence, self.offset))
+        # include the mutable ``comparators`` dict. External candidates add
+        # their provenance ID to the normal peptide-position identity.
+        position = (self.sequence, self.source_sequence, self.offset)
+        if not self.prediction_id:
+            return hash(position)
+        return hash((self.prediction_id,) + position)
+
+    @property
+    def prediction_group_source(self) -> str:
+        """First component of the Topiary score-group identity."""
+        return self.prediction_id or self.source_sequence or self.sequence
+
+    @property
+    def prediction_group_key(self) -> tuple[str, str, int]:
+        """Exact source/peptide/offset identity used for score joins."""
+        return self.prediction_group_source, self.sequence, self.offset
 
     # Convenience: most call sites today read the WT alongside the
     # candidate. Common-case shortcut.
@@ -618,6 +662,8 @@ class CandidateEpitope(Peptide):
             occurs_in_reference=self.occurs_in_reference,
             occurs_in_non_CTA_reference=self.occurs_in_non_CTA_reference,
             self_reference_match=self.self_reference_match,
+            patient_alleles=self.patient_alleles,
+            prediction_id=self.prediction_id,
             per_allele_scores=dict(self.per_allele_scores))
 
     @classmethod
@@ -649,15 +695,22 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
 
     Producers (``predict_epitopes``, LENS / pVACseq loaders) iterate
     row-shaped inputs (topiary frame, TSV) and build a flat list of
-    row dicts; this function groups them by ``(peptide, source,
-    offset)`` and emits one ``CandidateEpitope`` per group, in
+    row dicts; this function groups them by ``(prediction_id, peptide,
+    source, offset)`` and emits one ``CandidateEpitope`` per group, in
     first-seen order.
 
     Each row is a mapping with the following keys:
 
       ``peptide``    str             — candidate peptide sequence
       ``source``     str             — source protein / transcript window
+      ``source_name`` str, optional  — human-readable name of that window
+                                       (transcript, variant, contig …)
+      ``n_flank`` / ``c_flank``      str, optional — residues flanking the
+                                       peptide in its source protein; carried
+                                       because processing predictors score
+                                       them
       ``offset``     int             — peptide offset within ``source``
+      ``prediction_id`` str, optional — complete external provenance key
       ``mutant``     Prediction      — leaf prediction for one (allele,
                                        predictor, version) cell
       ``wt``         Prediction|None — parallel WT prediction, optional
@@ -671,6 +724,11 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                                      value as ``occurs_in_reference``.
       ``self_reference_match``       SelfReferenceMatch|None — explicit
                                      antigen-aware exact-self result.
+      ``patient_alleles``            iterable[str], optional — alleles
+                                     explicitly associated with this input
+                                     row even when ``mutant.allele`` is empty.
+      ``per_allele_scores``          mapping[str, float], optional — scores
+                                     already evaluated by the configured DSL.
 
     Semantics:
 
@@ -691,13 +749,18 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
     groups: dict = {}
     for row in rows:
         peptide = row['peptide']
-        key = (peptide, row['source'], row['offset'])
+        prediction_id = row.get('prediction_id') or ''
+        key = (prediction_id, peptide, row['source'], row['offset'])
         slot = groups.get(key)
         if slot is None:
             slot = {
                 'peptide': peptide,
                 'source': row['source'],
+                'source_name': row.get('source_name') or '',
+                'n_flank': row.get('n_flank') or '',
+                'c_flank': row.get('c_flank') or '',
                 'offset': row['offset'],
+                'prediction_id': prediction_id,
                 'mutant_preds': [],
                 'wt_preds': [],
                 'wt_peptide': None,
@@ -707,6 +770,7 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                 'occurs_in_reference': False,
                 'occurs_in_non_CTA_reference': False,
                 'self_reference_match': None,
+                'patient_alleles': set(),
                 # Accumulator for per-allele DSL scores. Same allele
                 # may appear in multiple rows (different predictors);
                 # all rows for one allele share the same score by
@@ -715,6 +779,17 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             }
             groups[key] = slot
         slot['mutant_preds'].append(row['mutant'])
+        if row['mutant'].allele:
+            slot['patient_alleles'].add(row['mutant'].allele)
+        slot['patient_alleles'].update(
+            allele for allele in (row.get('patient_alleles') or ()) if allele)
+        for allele, score in (row.get('per_allele_scores') or {}).items():
+            score = float(score)
+            existing_score = slot['per_allele_scores'].get(allele)
+            if existing_score is not None and existing_score != score:
+                raise ValueError(
+                    "Conflicting per-allele scores for one candidate epitope")
+            slot['per_allele_scores'][allele] = score
         slot['overlaps_mutation'] |= bool(row.get('overlaps_mutation', False))
         overlaps_targetable = row.get('overlaps_targetable')
         if overlaps_targetable is not None:
@@ -738,9 +813,21 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                     "Conflicting self-reference matches for one candidate epitope"
                 )
             slot['self_reference_match'] = self_reference_match
-        if 'allele_score' in row:
-            slot['per_allele_scores'][row['mutant'].allele] = float(
-                row['allele_score'])
+        if 'allele_score' in row and row['mutant'].allele:
+            # Allele-free leaves (antigen_processing, proteasome_cleavage)
+            # carry a score for the peptide, not for an allele. Writing it
+            # under '' would put a non-allele entry in a map whose contract
+            # is explicitly per patient allele, and epitope_score sums the
+            # map — so the candidate would score its processing evidence as
+            # if it were an extra allele. attach_per_allele_scores applies
+            # the same rule on the loader path.
+            allele = row['mutant'].allele
+            score = float(row['allele_score'])
+            existing = slot['per_allele_scores'].get(allele)
+            if existing is not None and existing != score:
+                raise ValueError(
+                    "Conflicting per-allele scores for one candidate epitope")
+            slot['per_allele_scores'][allele] = score
         wt = row.get('wt')
         if wt is not None and wt.peptide and wt.peptide == peptide:
             # Self-WT: comparing the candidate against itself is meaningless.
@@ -763,6 +850,9 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
         out.append(CandidateEpitope(
             sequence=slot['peptide'],
             source_sequence=slot['source'],
+            source_name=slot['source_name'],
+            n_flank=slot['n_flank'],
+            c_flank=slot['c_flank'],
             offset=slot['offset'],
             predictions=tuple(slot['mutant_preds']),
             comparators=comparators,
@@ -772,6 +862,8 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             occurs_in_reference=slot['occurs_in_reference'],
             occurs_in_non_CTA_reference=slot['occurs_in_non_CTA_reference'],
             self_reference_match=slot['self_reference_match'],
+            patient_alleles=tuple(sorted(slot['patient_alleles'])),
+            prediction_id=slot['prediction_id'],
             per_allele_scores=dict(slot['per_allele_scores']),
         ))
     return out

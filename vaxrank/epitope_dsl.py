@@ -19,8 +19,8 @@ Two entry points:
   to drop rows wholesale before scoring.
 
 - :func:`build_score_node` — returns a numeric ``DSLNode`` whose ``.eval(ctx)``
-  produces a ``pd.Series`` indexed by ``(source_sequence_name, peptide,
-  peptide_offset, allele)`` group tuples.
+  produces a ``pd.Series`` indexed by exact prediction identity, peptide,
+  peptide offset, and allele for current vaxrank frames.
 
 When ``filter_expr`` / ``score_expr`` are set on the config, each is parsed
 via :func:`topiary.ranking.parse`. When absent the nodes are built directly
@@ -51,8 +51,34 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+PREDICTION_ID_COLUMN = "prediction_id"
+
+# Vaxrank works with two frame shapes, each with its own identity column.
+# Both are named explicitly rather than left to topiary's inference: what
+# inference keys on has changed twice (sample_name being prepended, then the
+# group-index fixes in 5.17.1), and a frame whose grouping shifts underneath
+# it merges candidates that are not the same candidate.
+PREDICTION_GROUP_COLUMNS = (
+    # Frames vaxrank builds from CandidateEpitope objects, and external
+    # report readers. Identity is the complete provenance key.
+    PREDICTION_ID_COLUMN,
+    "peptide",
+    "peptide_offset",
+    "allele",
+)
+PIPELINE_GROUP_COLUMNS = (
+    # Frames a TopiaryPredictor produces directly. There is one protein
+    # fragment per variant, so the source sequence name *is* the identity;
+    # these rows never carry a prediction_id.
+    "source_sequence_name",
+    "peptide",
+    "peptide_offset",
+    "allele",
+)
+
+
 # Method name -> topiary Kind for external-input predictions (LENS / pVACseq
-# import). Listed methods come from ``load_lens`` / ``load_pvacseq``;
+# import). Listed methods come from the external report readers;
 # anything not in this map is assumed to be a pMHC_affinity predictor.
 _METHOD_KIND_MAP = {
     "mhcflurry": "pMHC_affinity",
@@ -76,7 +102,7 @@ def parse_epitope_expression(expr):
     return parse(expr)
 
 
-def _kind_for_method(method_name):
+def prediction_kind_for_method(method_name):
     """Topiary Kind string for a prediction_method_name.
 
     Unknown methods default to pMHC_affinity so that a plain
@@ -88,24 +114,6 @@ def _kind_for_method(method_name):
     return _METHOD_KIND_MAP.get(str(method_name).lower(), "pMHC_affinity")
 
 
-def drop_empty_sample_name(df):
-    """Drop ``sample_name`` when topiary emits it with no real values.
-
-    Topiary 5.16.2+ prepends ``sample_name`` to the group index whenever
-    the column is present with any non-NaN value — and topiary's
-    ``predict_*`` methods now always emit the column filled with empty
-    strings, which count as non-NaN. Vaxrank is single-sample and would
-    rather keep the group key 4-wide than carry a placeholder level
-    through every downstream lookup.
-    """
-    if "sample_name" not in df.columns:
-        return df
-    has_real_value = (
-        df["sample_name"].dropna().astype(str).str.strip().ne("").any())
-    if has_real_value:
-        return df
-    return df.drop(columns=["sample_name"])
-
 
 def epitopes_to_topiary_df(epitopes):
     """Convert a list of :class:`vaxrank.candidate_epitope.CandidateEpitope` into the
@@ -113,9 +121,12 @@ def epitopes_to_topiary_df(epitopes):
     :class:`topiary.ranking.EvalContext` and
     :func:`topiary.ranking.apply_filter`.
 
-    One row per leaf ``mhctools.Prediction`` in each CandidateEpitope's mutant
-    context — a single CandidateEpitope can emit N rows (one per allele x
-    predictor x kind). When multiple predictions share a (peptide,
+    One row per allele-scoped leaf ``mhctools.Prediction`` in each
+    CandidateEpitope's mutant context. Allele-independent antigen-processing
+    evidence is projected into every allele group in this evaluation view while
+    remaining one canonical leaf on the CandidateEpitope. A single
+    CandidateEpitope can therefore emit N rows (one per allele x predictor x
+    kind). When multiple predictions share a (peptide,
     allele) pair (e.g. MHCflurry and netMHCpan rows from a LENS file),
     DSL expressions can select between them via
     ``affinity['mhcflurry']`` / ``affinity['netmhcpan']``, and when
@@ -128,28 +139,81 @@ def epitopes_to_topiary_df(epitopes):
     are NOT emitted as rows. The DSL frame is mutant-only by
     convention — comparator data stays on the CandidateEpitope for display.
     """
+    # Allele-independent evidence is projected into every patient allele here
+    # while remaining one canonical leaf on the CandidateEpitope. topiary
+    # 5.18's ``peptide_view()`` broadcasts an allele-free value across the
+    # allele groups that already exist, which covers a peptide that also has
+    # affinity rows — but two gaps keep this projection necessary:
+    #
+    #   openvax/topiary#182 — a peptide whose *only* evidence is allele-free
+    #     has one group, keyed on an empty allele. The patient's genotype is
+    #     not in the frame, so per-allele scores cannot be produced and the
+    #     candidate scores 0 and is dropped. LENS emits such rows.
+    #   openvax/topiary#183 — an allele-free row is its own group, so any
+    #     filter predicated on an allele-scoped kind removes it; a later
+    #     ``peptide_view()`` in the score expression then reads NaN.
+    #
+    # Do not delete this projection in favor of ``peptide_view()`` until both
+    # are closed; the failure is silent in both cases.
     rows = []
     for e in epitopes:
         ctx = e
-        source_name = ctx.source_sequence or ctx.sequence
-        for p in ctx.predictions_flat():
-            rows.append({
-                "source_sequence_name": source_name,
-                "peptide": p.peptide,
-                "peptide_offset": ctx.offset,
-                "peptide_length": len(p.peptide),
-                "allele": p.allele,
-                "n_flank": ctx.n_flank,
-                "c_flank": ctx.c_flank,
-                "prediction_method_name": p.predictor_name,
-                "predictor_version": p.predictor_version or "",
-                "kind": p.kind,
-                "value": p.value,
-                "affinity": p.value,
-                "percentile_rank": p.percentile_rank,
-                "score": p.score,
-            })
+        prediction_id = ctx.prediction_group_source
+        predictions = ctx.predictions_flat()
+        patient_alleles = ctx.patient_alleles
+        for p in predictions:
+            evaluation_alleles = (
+                patient_alleles
+                if (
+                    p.kind == "antigen_processing"
+                    and not p.allele
+                    and patient_alleles
+                )
+                else (p.allele,)
+            )
+            for allele in evaluation_alleles:
+                rows.append({
+                    PREDICTION_ID_COLUMN: prediction_id,
+                    "source_sequence_name": ctx.source_sequence or ctx.sequence,
+                    "peptide": p.peptide,
+                    "peptide_offset": ctx.offset,
+                    "peptide_length": len(p.peptide),
+                    "allele": allele,
+                    "n_flank": ctx.n_flank,
+                    "c_flank": ctx.c_flank,
+                    "prediction_method_name": p.predictor_name,
+                    "predictor_version": p.predictor_version or "",
+                    "kind": p.kind,
+                    "value": p.value,
+                    "affinity": p.value,
+                    "percentile_rank": p.percentile_rank,
+                    "score": p.score,
+                })
     return pd.DataFrame(rows)
+
+
+def prediction_group_columns(topiary_df):
+    """Return the explicit score-group columns for a vaxrank frame.
+
+    Picks by which identity column the frame carries: ``prediction_id`` for
+    frames vaxrank built or an external reader produced, otherwise the
+    predictor's own ``source_sequence_name``. A frame carrying neither has no
+    identity to group on and is rejected rather than silently grouped by
+    sequence, which would merge two biological sources whose peptides happen
+    to be equal.
+    """
+    columns = set(topiary_df.columns)
+    for candidate in (PREDICTION_GROUP_COLUMNS, PIPELINE_GROUP_COLUMNS):
+        if set(candidate) <= columns:
+            return list(candidate)
+    raise ValueError(
+        "Prediction frame carries no usable score-group identity. Expected "
+        "%s (vaxrank-built or external-reader frames) or %s (frames from a "
+        "TopiaryPredictor); got columns %s."
+        % (", ".join(PREDICTION_GROUP_COLUMNS),
+           ", ".join(PIPELINE_GROUP_COLUMNS),
+           ", ".join(sorted(columns)) or "(none)"))
+
 
 
 # Priority order for auto-picking a canonical method when the user hasn't
@@ -232,18 +296,17 @@ def validate_default_methods(cfg, topiary_df):
                 f"(available for {kind}: {sorted(available)})")
 
 
-def score_predictions(epitopes, cfg, *, topiary_df=None):
+def score_predictions(epitopes, cfg, *, topiary_df=None,
+                      kind_support=None):
     """Score external-input epitopes using the configured Topiary DSL.
 
-    Returns a ``pandas.Series`` of per-(peptide, allele) scores indexed
-    by the group-key MultiIndex topiary uses internally
-    (``source_sequence_name, peptide, peptide_offset, allele``). Callers
-    merge this back onto their report DataFrame.
+    Returns a ``pandas.Series`` of per-(peptide, allele) scores, indexed by
+    ``(prediction_id, peptide, peptide_offset, allele)``.
 
     Multi-model data (e.g. both MHCflurry and netMHCpan for
     ``pMHC_affinity``) is handled via topiary's
-    ``EvalContext(default_methods=...)`` and
-    ``apply_filter(default_methods=...)``: unqualified DSL references
+    ``EvalContext(default_methods=...)`` and the same context for filtering:
+    unqualified DSL references
     resolve to the per-Kind default (user-specified via
     ``cfg.default_methods`` or auto-picked canonical), while bracketed
     references like ``Affinity['netmhcpan']`` still pick up their
@@ -256,6 +319,12 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
     Pass ``topiary_df`` to reuse an already-built frame (see
     :func:`epitopes_to_topiary_df`) rather than rebuilding from
     ``epitopes``.
+
+    ``kind_support`` is topiary's per-(model, kind) MHC context, used to
+    resolve ``mhc_dependence`` guards. Callers holding a
+    ``TopiaryPredictor`` should forward its property; external report
+    readers have no predictor and correctly leave it ``None``, in which
+    case topiary resolves dependence from the rows.
     """
     from topiary.ranking import EvalContext, apply_filter
 
@@ -269,12 +338,21 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
 
     filter_node = build_filter_node(cfg)
     if filter_node is not None:
-        df = apply_filter(df, filter_node, default_methods=resolved)
+        df = apply_filter(
+            df, filter_node,
+            group_keys=prediction_group_columns(df),
+            default_methods=resolved,
+            kind_support=kind_support)
         if df.empty:
             return pd.Series(dtype=float)
 
     score_node = build_score_node(cfg)
-    ctx = EvalContext(df, default_methods=resolved)
+    ctx = EvalContext(
+        df,
+        group_keys=prediction_group_columns(df),
+        default_methods=resolved,
+        kind_support=kind_support,
+    )
     return (
         score_node.eval(ctx)
         .reindex(ctx.group_index)
@@ -282,12 +360,13 @@ def score_predictions(epitopes, cfg, *, topiary_df=None):
     )
 
 
-def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
+def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
+                             kind_support=None):
     """Score ``epitopes`` via the configured DSL and return a new list of
     :class:`~vaxrank.candidate_epitope.CandidateEpitope` instances with
     each one's ``per_allele_scores`` populated.
 
-    External-input loaders (``load_pvacseq`` / ``load_lens``) build
+    External report readers (``read_pvacseq_report`` / ``read_lens_report``) build
     unscored CandidateEpitopes from a TSV. The upstream pipeline path
     populates ``per_allele_scores`` inside ``predict_epitopes`` from the
     DSL eval; this helper is the equivalent step for the loader path so
@@ -310,24 +389,89 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None):
         return epitopes
     if cfg is None:
         cfg = EpitopeConfig()
-    score_series = score_predictions(epitopes, cfg, topiary_df=topiary_df)
-    # score_series is keyed by topiary's group columns. For the rebuilt
-    # vaxrank frame the first key mirrors ``epitopes_to_topiary_df``;
-    # for a supplied loader frame (pVACseq) it matches that loader's
-    # source/variant grouping. ``CandidateEpitope.source_sequence`` is
-    # set to the same key by those loaders.
+    score_series = score_predictions(
+        epitopes, cfg, topiary_df=topiary_df, kind_support=kind_support)
+    # score_series is keyed by prediction ID, peptide, offset, and allele.
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
         src_name, peptide, offset, allele = idx
-        by_position.setdefault((src_name, peptide, offset), {})[allele] = float(val)
+        # Allele-independent processing predictions use ``allele=''``.
+        # They belong in the nested prediction model, but never in a map
+        # whose public contract is explicitly per patient allele. This
+        # filter stays even once openvax/topiary#182 lands: an unprojected
+        # allele-free row still produces an empty-allele group.
+        if allele:
+            by_position.setdefault(
+                (src_name, peptide, offset), {})[allele] = float(val)
     return [
         replace(
             e,
             per_allele_scores=by_position.get(
-                (e.source_sequence or e.sequence, e.sequence, e.offset),
-                {}))
+                e.prediction_group_key, {}))
         for e in epitopes
     ]
+
+
+def epitopes_for_ranking(epitopes, cfg=None):
+    """Materialize external prediction groups eligible for ranking.
+
+    :func:`attach_per_allele_scores` records one key for every retained
+    peptide-allele group. This function applies the configured
+    ``min_epitope_score`` to those retained groups and returns ranking-only
+    copies containing the eligible allele-scoped mutant and comparator
+    leaves. Groups below the minimum remain on the input objects for audit
+    reporting but cannot become vaccine targets.
+
+    The input objects remain unchanged and retain their complete
+    ``patient_alleles`` membership. Callers must infer the patient genotype
+    from that pre-filter collection; filtering target evidence must never
+    redefine which alleles the patient has.
+    """
+    from dataclasses import replace
+    from .epitope_config import EpitopeConfig
+
+    if cfg is None:
+        cfg = EpitopeConfig()
+
+    retained_epitopes = []
+    for epitope in epitopes:
+        retained_alleles = {
+            allele
+            for allele, score in epitope.per_allele_scores.items()
+            if score >= cfg.min_epitope_score
+        }
+        if not retained_alleles:
+            continue
+        retained_predictions = tuple(
+            prediction
+            for prediction in epitope.predictions_flat()
+            if not prediction.allele
+            or prediction.allele in retained_alleles
+        )
+        if not retained_predictions:
+            continue
+        retained_comparators = {}
+        for name, comparator in epitope.comparators.items():
+            retained_comparators[name] = replace(
+                comparator,
+                predictions=tuple(
+                    prediction
+                    for prediction in comparator.predictions_flat()
+                    if not prediction.allele
+                    or prediction.allele in retained_alleles
+                ),
+            )
+        retained_epitopes.append(replace(
+            epitope,
+            predictions=retained_predictions,
+            comparators=retained_comparators,
+            patient_alleles=tuple(sorted(retained_alleles)),
+            per_allele_scores={
+                allele: epitope.per_allele_scores[allele]
+                for allele in sorted(retained_alleles)
+            },
+        ))
+    return retained_epitopes
 
 
 def collect_dsl_references(node):

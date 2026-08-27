@@ -439,7 +439,8 @@ def add_output_args(arg_parser):
         "--output-epitopes",
         default="",
         help="Path to save epitope predictions as a TSV/CSV file (format inferred "
-             "from extension). This file can later be loaded with --input-epitopes.")
+             "from extension). Written as a record of what was predicted; "
+             "there is no CLI flag to load one back yet (openvax/vaxrank#346).")
 
     output_args_group.add_argument(
         "--output-isovar-csv",
@@ -985,6 +986,11 @@ def external_input_arg_parser():
              "By default pyensembl picks the most recent locally installed "
              "release. Match the release LENS / pVACseq used.")
     add_output_args(arg_parser)
+    # Vaccine-peptide options apply to external inputs exactly as they do to
+    # the VCF pipeline: the construct window, how many target epitopes it
+    # keeps, and how it is scored are all vaccine-design decisions, not
+    # properties of where the predictions came from.
+    add_vaccine_peptide_args(arg_parser)
     # Template reports (ASCII / HTML / PDF) work on this path too once
     # transcripts are resolved (#268). The supplemental + optional groups
     # contribute the namespace shape ``TemplateDataCreator`` expects

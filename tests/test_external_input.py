@@ -26,12 +26,13 @@ import os
 
 import pytest
 
-from vaxrank.epitope_io import load_lens
+from vaxrank.epitope_io import read_lens_report
 from vaxrank.external_input import (
+    ExternalConstructOptions,
     ExternalVariantEntry,
     peptide_offsets_in_context,
     parse_lens_variant_coordinates,
-    ranked_from_lens_predictions,
+    lens_ranking_result,
 )
 
 DATA_DIR = os.path.join(
@@ -47,6 +48,7 @@ def test_external_variant_entry_defaults_describe_an_empty_result():
     assert entry.resolved_transcript is False
     assert entry.annotation is None
     assert entry.dna_vaf is None
+    assert entry.has_rna_support is False
     assert entry.unparseable is False
 
 
@@ -283,8 +285,10 @@ def test_real_lens_v19_subset_produces_ranked_entries():
     produces a non-empty ranked list end-to-end."""
     path = os.path.join(
         DATA_DIR, "real_lens_subsets", "lens_v1.9_real_subset.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     # The fixture has at least one parseable variant_coords row.
     # Pre-fix: 0. Now: > 0.
     assert len(ranked) > 0, (
@@ -319,6 +323,495 @@ def test_real_lens_fixture_runs_end_to_end_via_cli(fixture_path, tmp_path):
     assert xlsx_path.exists(), f"XLSX not written for {fixture_path}"
 
 
+def test_cli_applies_external_score_config_before_ranking(
+        tmp_path, monkeypatch):
+    """Configured evidence-only scores drive ranking, not just CSV output."""
+    from vaxrank.cli import entry_point
+
+    lens_path = tmp_path / "processing-only.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t\t0.8\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "epitopes:\n"
+        "  score_expr: processing[mhcflurry].score\n")
+    csv_path = tmp_path / "neoepitopes.csv"
+    captured = {}
+
+    def capture_ranked(_args, ranked, source):
+        captured["ranked"] = ranked
+        captured["source"] = source
+
+    monkeypatch.setattr(entry_point, "emit_outputs", capture_ranked)
+    entry_point.main([
+        "--input-lens", str(lens_path),
+        "--config", str(config_path),
+        "--output-csv", str(csv_path),
+        "--no-processing-aware-annotation",
+    ])
+
+    assert captured["source"] == "external"
+    vaccine_peptide = captured["ranked"][0][1][0]
+    assert vaccine_peptide.target_epitope_score == pytest.approx(0.8)
+    assert vaccine_peptide.target_epitopes[0].per_allele_scores == {
+        "HLA-A*02:01": pytest.approx(0.8)}
+
+
+def test_external_ranking_applies_default_minimum_epitope_score(tmp_path):
+    """Zero-score evidence stays auditable but cannot become a target."""
+    from types import SimpleNamespace
+
+    from vaxrank.external_input import (
+        LENS_PROVENANCE_MARKER,
+        load_external_ranked,
+    )
+
+    lens_path = tmp_path / "processing-only.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t\t0.8\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, report, loaded, patient_info, _vafs = load_external_ranked(args)
+
+    assert ranked == []
+    assert len(report) == 1
+    assert loaded[0].per_allele_scores == {"HLA-A*02:01": 0.0}
+    assert patient_info.mhc_alleles == [
+        "HLA-A*02:01", LENS_PROVENANCE_MARKER]
+
+
+def test_external_filter_prunes_ranked_groups_but_preserves_patient_genotype(
+        tmp_path):
+    """Topiary filtering controls targets without redefining the patient."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import (
+        LENS_PROVENANCE_MARKER,
+        load_external_ranked,
+    )
+
+    lens_path = tmp_path / "partially-filtered.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\t"
+        "snv_alt_allele\tgene_name\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t50\t0.7\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n"
+        "SIINFEKL\tHLA-B07:02\tAASIINFEKLLL\t500\t0.7\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, _report, loaded, patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 100"),
+    )
+
+    # Genotype comes from the complete input membership, before filtering.
+    assert loaded[0].patient_alleles == (
+        "HLA-A*02:01", "HLA-B*07:02")
+    assert patient_info.mhc_alleles == [
+        "HLA-A*02:01", "HLA-B*07:02", LENS_PROVENANCE_MARKER]
+
+    # The filtered B*07:02 group cannot enter ranking, coverage, or design.
+    target = ranked[0][1][0].target_epitopes[0]
+    assert target.patient_alleles == ("HLA-A*02:01",)
+    assert target.per_allele_scores.keys() == {"HLA-A*02:01"}
+    assert {
+        p.allele for p in target.predictions_flat() if p.allele
+    } == {"HLA-A*02:01"}
+    processing = target.predictions_for(
+        "antigen_processing", predictor="mhcflurry")
+    assert len(processing) == 1
+    assert processing[0].allele == ""
+
+
+def test_external_minimum_score_prunes_all_ranking_state_for_rejected_allele(
+        tmp_path):
+    """A below-threshold allele cannot survive through the score map."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    lens_path = tmp_path / "mixed-presentation.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.pres_score\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t\t0.8\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n"
+        "SIINFEKL\tHLA-B07:02\tAASIINFEKLLL\t\t0.2\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+    config = EpitopeConfig(
+        score_expr="presentation[mhcflurry].score",
+        min_epitope_score=0.5,
+    )
+
+    ranked, _report, loaded, _patient_info, _vafs = load_external_ranked(
+        args, epitope_config=config)
+
+    assert loaded[0].per_allele_scores == {
+        "HLA-A*02:01": pytest.approx(0.8),
+        "HLA-B*07:02": pytest.approx(0.2),
+    }
+    target = ranked[0][1][0].target_epitopes[0]
+    assert target.patient_alleles == ("HLA-A*02:01",)
+    assert target.per_allele_scores == {
+        "HLA-A*02:01": pytest.approx(0.8)}
+    assert target.epitope_score == pytest.approx(0.8)
+
+
+def test_external_filter_excluding_every_group_produces_no_ranked_vaccine(
+        tmp_path, monkeypatch):
+    """A hard Topiary filter cannot leave zero-scored construct targets."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank import external_input
+    from vaxrank.external_input import (
+        LENS_PROVENANCE_MARKER,
+        load_external_ranked,
+    )
+
+    monkeypatch.setattr(
+        external_input,
+        "resolve_external_transcripts",
+        lambda transcript_ids, _genome: [object()] if transcript_ids else [],
+    )
+
+    lens_path = tmp_path / "fully-filtered.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "antigen_source\tvariant_coords\tsnv_ref_allele\t"
+        "snv_alt_allele\tgene_name\ttranscript_id\t"
+        "rna_reads_covering_genomic_origin\t"
+        "rna_reads_covering_genomic_origin_with_peptide_cds\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t50\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\tENST1\t10\t3\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, _report, loaded, patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 0"),
+    )
+
+    assert ranked == []
+    assert loaded[0].per_allele_scores == {}
+    assert patient_info.mhc_alleles == [
+        "HLA-A*02:01", LENS_PROVENANCE_MARKER]
+    assert patient_info.num_somatic_variants == 1
+    assert patient_info.num_coding_effect_variants == 1
+    assert patient_info.num_variants_with_rna_support == 1
+    assert patient_info.num_variants_with_vaccine_peptides == 0
+
+
+def test_external_filter_does_not_cross_lens_source_contexts(tmp_path):
+    """A shared sequence cannot transfer eligibility between variants."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    lens_path = tmp_path / "shared-peptide.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "antigen_source\tvariant_coords\tsnv_ref_allele\t"
+        "snv_alt_allele\tgene_name\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t50\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\n"
+        "SIINFEKL\tHLA-A02:01\tGGSIINFEKLTT\t500\tSNV\t"
+        "chr1:2000\tG\t[C]\tGENE2\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, report, loaded, _patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 100"),
+    )
+
+    assert len(report) == 2
+    assert len(loaded) == 2
+    assert len(ranked) == 1
+    variant, vaccine_peptides = ranked[0]
+    assert variant.start == 1000
+    assert vaccine_peptides[0].target_epitopes[0].source_sequence == (
+        "AASIINFEKLLL")
+
+
+def test_external_filter_does_not_cross_identical_lens_contexts(tmp_path):
+    """Variant provenance, not sequence context, controls eligibility."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    lens_path = tmp_path / "identical-context.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "antigen_source\tvariant_coords\tsnv_ref_allele\t"
+        "snv_alt_allele\tgene_name\tgene_id\ttranscript_id\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t50\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\tENSG1\tENST1\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t500\tSNV\t"
+        "chr1:2000\tG\t[C]\tGENE2\tENSG2\tENST2\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, report, loaded, _patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 100"),
+    )
+
+    assert len(report) == 2
+    assert len(loaded) == 2
+    assert loaded[0].prediction_id != loaded[1].prediction_id
+    assert len(ranked) == 1
+    assert ranked[0][0].start == 1000
+
+
+def test_lens_representative_uses_configured_dsl_score(tmp_path):
+    """The selected construct context is the highest DSL-scored context."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    lens_path = tmp_path / "presentation-ranked.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.pres_score\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\ttranscript_id\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLLL\t50\t0.1\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\tENST1\n"
+        "LATEKSRWS\tHLA-A02:01\tGGLATEKSRWSTT\t500\t0.9\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\tENST1\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, _report, _loaded, _patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(
+            score_expr="presentation[mhcflurry].score"),
+    )
+
+    vaccine_peptide = ranked[0][1][0]
+    assert vaccine_peptide.amino_acids == "GGLATEKSRWSTT"
+    assert [e.sequence for e in vaccine_peptide.target_epitopes] == [
+        "LATEKSRWS"]
+    assert vaccine_peptide.target_epitope_score == pytest.approx(0.9)
+
+
+def test_lens_input_summary_reduces_all_rows_before_construct_checks(
+        tmp_path, monkeypatch):
+    """Input facts survive an unconstructable affinity-winning row."""
+    from types import SimpleNamespace
+
+    from vaxrank import external_input
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    monkeypatch.setattr(
+        external_input,
+        "resolve_external_transcripts",
+        lambda transcript_ids, _genome: [object()] if transcript_ids else [],
+    )
+    lens_path = tmp_path / "all-row-summary.tsv"
+    lens_path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "antigen_source\tvariant_coords\tsnv_ref_allele\t"
+        "snv_alt_allele\tgene_name\ttranscript_id\t"
+        "rna_reads_covering_genomic_origin\t"
+        "rna_reads_covering_genomic_origin_with_peptide_cds\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\t\t0\t0\n"
+        "LATEKSRWS\tHLA-A02:01\tGGLATEKSRWSTT\t500\tSNV\t"
+        "chr1:1000\tA\t[T]\tGENE1\tENST1\t10\t3\n")
+    args = SimpleNamespace(
+        input_lens=str(lens_path),
+        input_pvacseq=None,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    _ranked, _report, _loaded, patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 0"),
+    )
+
+    assert patient_info.num_somatic_variants == 1
+    assert patient_info.num_coding_effect_variants == 1
+    assert patient_info.num_variants_with_rna_support == 1
+    assert patient_info.num_variants_with_vaccine_peptides == 0
+
+
+def test_pvacseq_filter_excluding_every_group_produces_no_ranked_vaccine():
+    """The shared external filtering contract also applies to pVACseq."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
+    args = SimpleNamespace(
+        input_lens=None,
+        input_pvacseq=path,
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, _report, loaded, patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 0"),
+    )
+
+    assert ranked == []
+    assert loaded
+    assert all(epitope.per_allele_scores == {} for epitope in loaded)
+    assert set(patient_info.mhc_alleles[:-1]) == {
+        allele
+        for epitope in loaded
+        for allele in epitope.patient_alleles
+    }
+    assert patient_info.num_somatic_variants == 3
+    assert patient_info.num_coding_effect_variants == 0
+    assert patient_info.num_variants_with_rna_support == 3
+    assert patient_info.num_variants_with_vaccine_peptides == 0
+
+
+def write_multi_peptide_pvacseq_fixture(path):
+    """Write one pVACseq variant with score axes that disagree."""
+    header = (
+        "ID\tIndex\tA*02:01\tGene\tAA Change\tNum Passing Transcripts\t"
+        "Best Peptide\tBest Transcript\tAllele\tIC50 MT\tIC50 WT\t"
+        "%ile MT\t%ile WT\tRNA Expr\tRNA VAF\tRNA Depth\tDNA VAF\t"
+        "Tier\tRef Match\tEvaluation\n")
+    path.write_text(
+        header
+        + "chr1-1000-1001-A-T\t1.GENE1.ENST1.missense.1A/T\t1\t"
+        "GENE1\tA1T\t1\tSIINFEKL\t\tHLA-A*02:01\t50\t5000\t"
+        "0.1\t10\t1\t0\t0\t0.4\tPass\tFalse\tPending\n"
+        + "chr1-1000-1001-A-T\t1.GENE1.ENST2.missense.1A/T\t1\t"
+        "GENE1\tA1T\t1\tLATEKSRWS\tENST2\tHLA-A*02:01\t500\t5000\t"
+        "1.0\t10\t1\t0.2\t100\t0.4\tPass\tFalse\tPending\n")
+    return path
+
+
+def test_pvacseq_representative_uses_configured_dsl_score(tmp_path):
+    """pVACseq construct selection consumes the same score as ranking."""
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    path = write_multi_peptide_pvacseq_fixture(
+        tmp_path / "multi-peptide-pvacseq.tsv")
+    args = SimpleNamespace(
+        input_lens=None,
+        input_pvacseq=str(path),
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    ranked, _report, _loaded, _patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(score_expr="affinity.value"),
+    )
+
+    vaccine_peptide = ranked[0][1][0]
+    assert vaccine_peptide.amino_acids == "LATEKSRWS"
+    assert [e.sequence for e in vaccine_peptide.target_epitopes] == [
+        "LATEKSRWS"]
+    assert vaccine_peptide.target_epitope_score == pytest.approx(500.0)
+
+
+def test_pvacseq_input_summary_reduces_all_rows_before_selection(
+        tmp_path, monkeypatch):
+    """pVACseq RNA/transcript facts are unions over the raw variant rows."""
+    from types import SimpleNamespace
+
+    from vaxrank import external_input
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+
+    monkeypatch.setattr(
+        external_input,
+        "resolve_external_transcripts",
+        lambda transcript_ids, _genome: [object()] if transcript_ids else [],
+    )
+    path = write_multi_peptide_pvacseq_fixture(
+        tmp_path / "multi-row-summary-pvacseq.tsv")
+    args = SimpleNamespace(
+        input_lens=None,
+        input_pvacseq=str(path),
+        output_patient_id="",
+        vaccine_peptide_length=25,
+        genome=None,
+    )
+
+    _ranked, _report, _loaded, patient_info, _vafs = load_external_ranked(
+        args,
+        epitope_config=EpitopeConfig(filter_expr="affinity <= 0"),
+    )
+
+    assert patient_info.num_somatic_variants == 1
+    assert patient_info.num_coding_effect_variants == 1
+    assert patient_info.num_variants_with_rna_support == 1
+    assert patient_info.num_variants_with_vaccine_peptides == 0
+
+
 def test_real_lens_fixtures_present():
     """Pin that the fixture directory has the expected coverage:
     one fixture per known LENS version + one with stop-codon
@@ -342,8 +835,10 @@ def test_lens_pep_context_with_stop_codon_truncates():
     path = os.path.join(
         DATA_DIR, "real_lens_subsets",
         "lens_v1.9_with_stop_codons.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     # No fragment carries a '*' or a non-standard residue.
     for _, peptides in ranked:
         for vp in peptides:
@@ -404,8 +899,10 @@ def test_lens_picks_strongest_binder_when_multiple_rows_per_variant():
     of binding strength. This test pins the fix.
     """
     path = os.path.join(DATA_DIR, "lens_multi_row_per_variant.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     assert len(ranked) == 1, (
         "Fixture has one variant with 3 peptides; got %d entries" % len(ranked))
     _, peptides = ranked[0]
@@ -427,10 +924,13 @@ def test_patient_info_from_external_proxy_counts():
     from vaxrank.external_input import patient_info_from_external
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     info = patient_info_from_external(
-        ranked, path, patient_id='Pt-X', input_label='LENS report')
+        ranked, path, 'Pt-X', _ranking.input_summary,
+        input_label='LENS report')
     assert info.patient_id == 'Pt-X'
     # PatientInfo on the external path no longer overloads
     # ``vcf_paths`` (LENS files aren't VCFs); the explicit
@@ -438,9 +938,10 @@ def test_patient_info_from_external_proxy_counts():
     assert info.vcf_paths == []
     assert info.inputs == [('LENS report', path)]
     assert info.bam_path is None
-    # All ranked variants are counted as somatic (LENS antigen-only
-    # files don't carry pre-pipeline silent variants).
-    assert info.num_somatic_variants == len(ranked)
+    # Input composition comes from the parse, not from the ranked output:
+    # every variant the file produced antigens for, before filtering.
+    assert info.num_somatic_variants == (
+        _ranking.input_summary.num_somatic_variants)
     # Without --ensembl-release the test fixture won't resolve
     # transcripts; coding-effect count drops to 0.
     assert info.num_coding_effect_variants == 0
@@ -453,7 +954,9 @@ def test_patient_info_from_external_proxy_counts():
 def test_patient_info_from_external_empty_ranked():
     """No ranked variants → all counts zero, no crash."""
     from vaxrank.external_input import patient_info_from_external
-    info = patient_info_from_external([], '/tmp/empty.tsv', patient_id='')
+    from vaxrank.external_input import ExternalInputSummary
+    info = patient_info_from_external(
+        [], '/tmp/empty.tsv', '', ExternalInputSummary())
     assert info.num_somatic_variants == 0
     assert info.num_coding_effect_variants == 0
     assert info.num_variants_with_rna_support == 0
@@ -527,8 +1030,10 @@ def test_lens_to_ranked_vaccine_peptides_round_trip():
     peptides should produce one entry per unique variant, each
     carrying the pep_context as the antigen fragment."""
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, epitopes = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(epitopes, path)
+    _loaded = read_lens_report(path)
+    epitopes = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, epitopes)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     assert len(ranked) == 3, (
         "LENS fixture has 3 unique variants; got %d" % len(ranked))
     # Each ranked entry: (Variant, [VaccinePeptide])
@@ -553,8 +1058,10 @@ def test_lens_drives_mrna_construct_assembly_end_to_end():
     from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     assert ranked, "Expected non-empty ranked list from LENS fixture"
 
     options = RNAConstructConfig(
@@ -585,8 +1092,10 @@ def test_lens_drives_peptide_construct_assembly_end_to_end():
         PeptideConstructConfig, assemble_peptide_constructs)
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     options = PeptideConstructConfig(mode='slp')
     constructs = assemble_peptide_constructs(ranked, options=options)
@@ -604,12 +1113,14 @@ def test_pvacseq_to_ranked_vaccine_peptides_round_trip():
     untested and the ID parser only handled dotted form, producing
     an empty ranked list end-to-end.
     """
-    from vaxrank.epitope_io import load_pvacseq
-    from vaxrank.external_input import ranked_from_pvacseq_predictions
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
 
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
-    report_df, predictions = load_pvacseq(path)
-    ranked, _dna_vaf = ranked_from_pvacseq_predictions(predictions, path)
+    _loaded = read_pvacseq_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = pvacseq_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     assert len(ranked) == 3, (
         "pVACseq fixture has 3 unique variants; got %d" % len(ranked))
     genes = sorted(
@@ -649,13 +1160,15 @@ def test_pvacseq_drives_mrna_construct_assembly_end_to_end():
     """End-to-end: pVACseq report → ranked → mRNA constructs (mirror
     of the LENS end-to-end test). Pre-fix this produced zero
     constructs because the ranked list was empty."""
-    from vaxrank.epitope_io import load_pvacseq
-    from vaxrank.external_input import ranked_from_pvacseq_predictions
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
     from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
 
     path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
-    _, predictions = load_pvacseq(path)
-    ranked, _dna_vaf = ranked_from_pvacseq_predictions(predictions, path)
+    _loaded = read_pvacseq_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = pvacseq_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
     assert ranked
 
     options = RNAConstructConfig(
@@ -674,33 +1187,39 @@ def test_pvacseq_drives_mrna_construct_assembly_end_to_end():
 def test_pvacseq_all_epitopes_to_ranked_vaccine_peptides(tmp_path):
     """all_epitopes flavor uses MT Epitope Seq + chr/ref/alt columns."""
     from tests.test_epitope_io import _write_pvacseq_all_epitopes_fixture
-    from vaxrank.epitope_io import load_pvacseq
-    from vaxrank.external_input import ranked_from_pvacseq_predictions
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
 
     path = _write_pvacseq_all_epitopes_fixture(tmp_path)
-    _, predictions = load_pvacseq(path)
-    ranked, dna_vaf_by_variant = ranked_from_pvacseq_predictions(
-        predictions, path)
+    _loaded = read_pvacseq_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = pvacseq_ranking_result(_loaded, predictions)
+    ranked, dna_vaf_by_variant = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     assert len(ranked) == 1
     variant, vaccine_peptides = ranked[0]
     assert (variant.contig, variant.start, variant.ref, variant.alt) == (
         "1", 154590262, "T", "A")
     assert vaccine_peptides[0].mutant_protein_fragment.gene_name == "ADAR"
-    assert len(vaccine_peptides[0].epitopes) == 2
+    # pVACseq has no longer source window that can honestly contain both
+    # minimal epitopes. The default DSL chooses AERMGFTVV; evidence from the
+    # other peptide cannot inflate this construct's target score.
+    assert [e.sequence for e in vaccine_peptides[0].epitopes] == [
+        "AERMGFTVV"]
     assert dna_vaf_by_variant[variant] == pytest.approx(0.302)
 
 
 def test_pvacseq_duplicate_peptides_stay_variant_scoped(tmp_path):
     """Identical peptides from different pVACseq variants must not mix."""
     from tests.test_epitope_io import _write_pvacseq_duplicate_peptide_fixture
-    from vaxrank.epitope_io import load_pvacseq
-    from vaxrank.external_input import ranked_from_pvacseq_predictions
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
 
     path = _write_pvacseq_duplicate_peptide_fixture(tmp_path)
-    _, predictions = load_pvacseq(path)
-    ranked, _dna_vaf_by_variant = ranked_from_pvacseq_predictions(
-        predictions, path)
+    _loaded = read_pvacseq_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = pvacseq_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf_by_variant = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     assert len(ranked) == 2
     expected_source_by_variant = {
@@ -713,32 +1232,26 @@ def test_pvacseq_duplicate_peptides_stay_variant_scoped(tmp_path):
         epitopes = vaccine_peptides[0].epitopes
         assert len(epitopes) == 1
         assert epitopes[0].sequence == "AERMGFTVV"
-        assert epitopes[0].source_sequence == expected_source
+        # Variant provenance lives in ``source_name``. ``source_sequence`` is
+        # an amino-acid window and must stay one: pVACseq ships no source
+        # context, so the peptide is its own window. Storing the variant
+        # string there made construct assembly slice a variant *name*.
+        assert epitopes[0].source_name == expected_source
+        assert epitopes[0].source_sequence == "AERMGFTVV"
+        assert (
+            vaccine_peptides[0].mutant_protein_fragment.amino_acids
+            == epitopes[0].source_sequence)
 
 
 # ---- LENS scoring-column edge cases --------------------------------------
 
-def test_lens_warns_when_no_affinity_columns_detected(tmp_path, caplog):
-    """When no pMHC_affinity predictor is detected, the
-    representative-peptide pick is degenerate (every row ties at
-    (2, 0.0); file-order first row "wins"). Pin that we warn
-    instead of silently picking arbitrarily.
-
-    Today this can be triggered by a stability-only LENS file
-    (netmhcstabpan present without mhcflurry/netmhcpan). It can also
-    fire if LENS ever adds tools whose ``kind`` is something other
-    than ``pMHC_affinity`` (presentation-only, cleavage,
-    immunogenicity, etc.) and the registry classifies them
-    accordingly. The warning is kind-agnostic — it reports the
-    detected kinds in its message.
-    """
+def test_lens_without_affinity_uses_dsl_score_without_fallback_warning(
+        tmp_path, caplog):
+    """Non-affinity evidence no longer triggers a raw-affinity fallback."""
     import logging
-    from vaxrank.epitope_io import load_lens
-    from vaxrank.external_input import ranked_from_lens_predictions
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
 
-    # Stability-only fixture (the only "no affinity" case the
-    # current registry can produce). If new predictor kinds are added
-    # to _LENS_PREDICTOR_REGISTRY, add fixtures here covering them.
     no_aff = tmp_path / "no_affinity.tsv"
     no_aff.write_text(
         "allele\tpeptide\tnetmhcstabpan_1.0.halflife_hours\t"
@@ -748,19 +1261,16 @@ def test_lens_warns_when_no_affinity_columns_detected(tmp_path, caplog):
         "HLA-A02:01\tSVVGSSSSS\t12.5\t0.5\tSNV\t245\t"
         "chr17:7675088\tC\t[T]\tTP53\t42.5\tAASVVGSSSSSGTR\n")
 
-    _, predictions = load_lens(str(no_aff))
+    _loaded = read_lens_report(str(no_aff))
+    predictions = list(_loaded.epitopes)
     with caplog.at_level(logging.WARNING):
-        ranked, _dna_vaf = ranked_from_lens_predictions(predictions, str(no_aff))
-    # Still produces output (the file-order representative)
+        _ranking = lens_ranking_result(_loaded, predictions)
+        ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
+    # The configured/default DSL is now the sole representative selector.
     assert len(ranked) == 1
-    # Warning was emitted, mentions the detected non-affinity kinds
-    msg = next(
-        (r.message for r in caplog.records
-         if "no pMHC_affinity scoring columns" in r.message), None)
-    assert msg is not None, \
-        "Expected a warn-once for LENS input lacking affinity predictors"
-    assert "pMHC_stability" in msg, \
-        "Warning should report the detected non-affinity kinds; got %r" % msg
+    assert not any(
+        "no pMHC_affinity scoring columns" in record.message
+        for record in caplog.records)
 
 
 # ---- emit_outputs observability -------------------------------------------
@@ -823,8 +1333,10 @@ def test_emit_outputs_logs_active_and_fired_dispatch(caplog, tmp_path):
     from vaxrank.cli.entry_point import emit_outputs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     out_dir = str(tmp_path / "out")
     args = _mrna_args(out_dir)
@@ -894,8 +1406,10 @@ def test_lens_with_vaccine_type_mrna_writes_three_fastas(tmp_path):
     from vaxrank.cli.entry_point import emit_outputs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     out_dir = str(tmp_path / "out")
     args = _mrna_args(out_dir)
@@ -922,8 +1436,10 @@ def test_lens_with_multi_vaccine_type_uses_subdirs(tmp_path):
     from vaxrank.cli.entry_point import emit_outputs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     out_dir = str(tmp_path / "out")
     args = _vaccine_args(out_dir, vaccine_type=['peptide', 'mrna'])
@@ -942,8 +1458,10 @@ def test_emit_outputs_skips_writer_when_no_output_dir(tmp_path):
     from vaxrank.cli.entry_point import emit_outputs
 
     path = os.path.join(DATA_DIR, "lens_example.tsv")
-    report_df, predictions = load_lens(path)
-    ranked, _dna_vaf = ranked_from_lens_predictions(predictions, path)
+    _loaded = read_lens_report(path)
+    predictions = list(_loaded.epitopes)
+    _ranking = lens_ranking_result(_loaded, predictions)
+    ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
 
     out_dir = str(tmp_path / "out")
     args = _mrna_args(out_dir)
@@ -1042,3 +1560,278 @@ def test_log_varcode_agreement(caplog):
     with caplog.at_level(logging.INFO, logger='vaxrank.external_input'):
         log_varcode_agreement([(None, None, 'x')], 'LENS')
     assert not any('varcode' in r.getMessage() for r in caplog.records)
+
+
+# ---- identity / evidence separation regressions --------------------------
+
+def _write_pvacseq_all_epitopes_with_index(tmp_path):
+    """all_epitopes flavor carrying BOTH an Index and genomic coordinates."""
+    path = tmp_path / "pvacseq_all_epitopes_indexed.tsv"
+    columns = [
+        "Index", "Chromosome", "Start", "Stop", "Reference", "Variant",
+        "Transcript", "Variant Type", "Mutation", "Gene Name", "HLA Allele",
+        "Mutation Position", "MT Epitope Seq", "WT Epitope Seq",
+        "Median MT IC50 Score", "Median WT IC50 Score",
+        "Median MT Percentile", "Median WT Percentile",
+        "Tumor DNA Depth", "Tumor DNA VAF", "Tumor RNA Depth",
+        "Tumor RNA VAF", "Gene Expression", "Transcript Expression",
+    ]
+    row = [
+        "ADAR.ENST00000368474.9.missense.806E/V",
+        "chr1", "154590262", "154590263", "T", "A",
+        "ENST00000368474.9", "missense", "E806V", "ADAR",
+        "HLA-B*45:01", "5", "AERMGFTVV", "AERMGFTEV",
+        "76.11", "61.80", "0.10", "0.12",
+        "1233", "0.302", "1233", "0.348", "131.832", "84.961",
+    ]
+    path.write_text("\t".join(columns) + "\n" + "\t".join(row) + "\n")
+    return path
+
+
+def test_pvacseq_index_and_coordinates_both_yield_a_ranked_construct(tmp_path):
+    """An ``Index`` column must not cost the run its vaccine peptides.
+
+    topiary normalizes ``variant`` from ``Index`` when that column exists, so
+    an identity derived from genomic coordinates never joins. Aligning the
+    identity is only half the fix: the ``Index`` string carries no
+    coordinates, so the genomic variant has to come from the coordinate
+    columns independently.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import epitopes_for_ranking
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
+
+    path = _write_pvacseq_all_epitopes_with_index(tmp_path)
+    config = EpitopeConfig()
+    report = read_pvacseq_report(path, epitope_config=config)
+    assert len(report.epitopes) == 1
+
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+    assert len(result.ranked) == 1
+    variant, vaccine_peptides = result.ranked[0]
+    # Genomic placement comes from the coordinate columns, not the Index.
+    assert (variant.contig, variant.start, variant.ref, variant.alt) == (
+        "1", 154590262, "T", "A")
+    assert vaccine_peptides[0].amino_acids == "AERMGFTVV"
+
+
+def test_lens_construct_excludes_epitopes_outside_its_window(tmp_path):
+    """Only epitopes inside the synthesized peptide may score it.
+
+    A LENS ``pep_context`` can be far longer than the vaccine peptide. The
+    construct window is centered on the mutation, so a neoepitope elsewhere in
+    the context is not in the peptide that would be synthesized and must not
+    contribute to ``target_epitope_score`` or appear in its report table.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import epitopes_for_ranking
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
+
+    context = (
+        "MAAAAAAAAA" "SIINFEKLQQ" "CCCCCCCCCC" "DDDDDDDDDD" "EEEEEEEEEE"
+        "FFFFFFFFFF" "GGGGGGGGGG" "YLLPAIVHIW" "HHHHHHHHHH")
+    path = tmp_path / "lens_long_context.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\ttranscript_id\t"
+        "mhcflurry_2.1.1.aff\n"
+        f"SIINFEKL\tHLA-A02:01\t{context}\tSNV\tchr1:100\tC\t[T]\tG\tENST1\t20\n"
+        f"YLLPAIVHI\tHLA-A02:01\t{context}\tSNV\tchr1:100\tC\t[T]\tG\tENST1\t15\n")
+
+    config = EpitopeConfig()
+    report = read_lens_report(path, epitope_config=config)
+    result = lens_ranking_result(
+        report,
+        epitopes_for_ranking(list(report.epitopes), config),
+        options=ExternalConstructOptions(vaccine_peptide_length=25))
+
+    assert len(result.ranked) == 1
+    vaccine_peptide = result.ranked[0][1][0]
+    assert len(vaccine_peptide.amino_acids) == 25
+    for epitope in vaccine_peptide.epitopes:
+        assert epitope.sequence in vaccine_peptide.amino_acids
+        # Offsets must be rebased into the window they now describe.
+        assert epitope.source_sequence == vaccine_peptide.amino_acids
+        assert (
+            vaccine_peptide.amino_acids[
+                epitope.offset:epitope.offset + len(epitope.sequence)]
+            == epitope.sequence)
+    assert vaccine_peptide.target_epitope_score == pytest.approx(
+        sum(e.epitope_score for e in vaccine_peptide.target_epitopes))
+
+
+def test_lens_whitespace_in_pep_context_does_not_split_an_identity(tmp_path):
+    """One normalization vocabulary, so a stray space cannot fork a group."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_lens_report
+
+    path = tmp_path / "lens_whitespace.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\tSNV\tchr1:100\tC\t[T]\tG\t20\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX \tSNV\tchr1:100\tC\t[T]\tG\t25\n")
+
+    report = read_lens_report(path, epitope_config=EpitopeConfig())
+    assert len(report.epitopes) == 1
+    assert report.epitopes[0].patient_alleles == (
+        "HLA-A*02:01", "HLA-B*07:02")
+    # The identity index is what construct ranking joins against; it must not
+    # raise on rows that only differ by whitespace.
+    assert len(report.records_with_epitopes(list(report.epitopes))) == 2
+
+
+def test_external_prediction_key_rejects_an_impossible_position():
+    """The key is a join target, so its position fields must be real."""
+    from vaxrank.external_prediction import ExternalPredictionKey
+
+    with pytest.raises(ValueError, match="not at offset"):
+        ExternalPredictionKey(
+            source_format="lens", peptide="SIINFEKL",
+            source_sequence="XXSIINFEKLXX", offset=0)
+
+
+def test_vaccine_config_reaches_external_construct_assembly(tmp_path):
+    """``vaccine_peptides:`` config must apply to LENS runs, not just VCF ones.
+
+    It was resolved only inside ``run_vaxrank_from_parsed_args`` — the
+    pipeline-only entry point — so external runs silently used a hard-coded
+    25-aa window and kept every epitope regardless of configuration.
+    """
+    from types import SimpleNamespace
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_input import load_external_ranked
+    from vaxrank.vaccine_config import VaccineConfig
+
+    context = (
+        "MAAAAAAAAA" "SIINFEKLQQ" "CCCCCCCCCC" "DDDDDDDDDD" "EEEEEEEEEE"
+        "FFFFFFFFFF" "GGGGGGGGGG" "YLLPAIVHIW" "HHHHHHHHHH")
+    path = tmp_path / "config_lens.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\ttranscript_id\t"
+        "mhcflurry_2.1.1.aff\n"
+        f"YLLPAIVHI\tHLA-A02:01\t{context}\tSNV\tchr1:100\tC\t[T]\tG\tENST1\t15\n"
+        f"YLLPAIVHIW\tHLA-B07:02\t{context}\tSNV\tchr1:100\tC\t[T]\tG\tENST1\t30\n")
+
+    def run(length, keep):
+        args = SimpleNamespace(
+            input_lens=str(path), input_pvacseq=None,
+            output_patient_id="", genome=None)
+        ranked, *_ = load_external_ranked(
+            args,
+            epitope_config=EpitopeConfig(),
+            vaccine_config=VaccineConfig(
+                preferred_peptide_length=length,
+                min_peptide_length=length,
+                max_peptide_length=length,
+                num_target_epitopes_to_keep=keep))
+        return ranked[0][1][0]
+
+    assert len(run(25, 0).amino_acids) == 25
+    assert len(run(41, 0).amino_acids) == 41
+
+    # num_target_epitopes_to_keep was never forwarded at all.
+    assert len(run(41, 0).target_epitopes) == 2
+    assert [e.sequence for e in run(41, 1).target_epitopes] == ["YLLPAIVHI"]
+
+
+def test_external_input_parser_accepts_vaccine_peptide_flags():
+    """The flags were rejected as unknown, not merely ignored."""
+    from vaxrank.cli.arg_parser import external_input_arg_parser
+
+    args = external_input_arg_parser().parse_args([
+        "--input-lens", "x.tsv",
+        "--vaccine-peptide-length", "31",
+        "--num-epitopes-per-vaccine-peptide", "2",
+    ])
+    assert args.vaccine_peptide_length == 31
+    assert args.num_epitopes_per_vaccine_peptide == 2
+
+
+# ---- code-review regressions ---------------------------------------------
+
+def test_construct_is_labelled_with_the_row_s_own_gene_not_the_alphabetical_one(
+        tmp_path):
+    """A vaccine peptide must carry the gene the report named for its row.
+
+    ``gene_names`` is sorted so two rows listing the same genes in different
+    orders resolve to one identity — which makes ``gene_names[0]``
+    alphabetical, not primary. Labelling constructs from it put the wrong
+    gene on every template report and produced spurious varcode
+    gene-disagreement warnings.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import epitopes_for_ranking
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
+
+    path = tmp_path / "gene_precedence.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\t"
+        "all_gene_names_encoding_peptide\ttranscript_id\t"
+        "all_transcript_ids_encoding_peptide\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLAA\tSNV\tchr17:7577120\tC\t[T]\t"
+        "TP53\tATXN7,TP53\tENST00000269305\t"
+        "ENST00000000233,ENST00000269305\t20\n")
+
+    config = EpitopeConfig()
+    report = read_lens_report(path, epitope_config=config)
+    key = report.records[0].key
+    # The identity keeps both, sorted, so row order cannot fork it ...
+    assert key.gene_names == ("ATXN7", "TP53")
+    # ... while the row's own naming is preserved separately.
+    assert key.primary_gene_name == "TP53"
+    assert key.ordered_transcript_ids[0] == "ENST00000269305"
+    # Annotation must stay out of the identity, or two rows naming the same
+    # genes in different orders would become different candidates.
+    assert "primary_gene_name" not in key.identifier
+
+    result = lens_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+    fragment = result.ranked[0][1][0].mutant_protein_fragment
+    assert fragment.gene_name == "TP53"
+
+
+def test_lens_read_counts_come_from_one_row(tmp_path):
+    """Counts must describe one observation, not per-field maxima.
+
+    Maximizing each field independently can assemble a tuple no row ever
+    reported — total from a deep row, alt from a shallow one — and
+    n_alt_reads feeds the combined-score DSL, so an incoherent count
+    reorders the construct ranking.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import epitopes_for_ranking
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
+
+    path = tmp_path / "counts.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\t"
+        "rna_reads_covering_genomic_origin\t"
+        "rna_reads_covering_genomic_origin_with_peptide_cds\t"
+        "mhcflurry_2.1.1.aff\n"
+        # deep coverage, few supporting reads
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
+        "100\t5\t20\n"
+        # shallow coverage, many supporting reads
+        "SIINFEKL\tHLA-B07:02\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
+        "10\t9\t25\n")
+
+    config = EpitopeConfig()
+    report = read_lens_report(path, epitope_config=config)
+    result = lens_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+    fragment = result.ranked[0][1][0].mutant_protein_fragment
+
+    # The best-supported row wins outright: (10, 9), never the cross-product
+    # (100, 9) that no row reported.
+    assert (fragment.n_overlapping_reads, fragment.n_alt_reads) == (10, 9)
+    assert fragment.n_ref_reads == 1

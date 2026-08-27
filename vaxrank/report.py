@@ -11,6 +11,7 @@
 # limitations under the License.
 
 from collections import OrderedDict
+from dataclasses import dataclass
 from importlib import import_module
 import logging
 import os
@@ -21,6 +22,7 @@ from astropy.io import ascii as asc
 import jinja2
 import pandas as pd
 import roman
+from mhctools.pred import Prediction
 from varcode import load_vcf_fast
 
 from .cancer_hotspots import get_hotspot_url
@@ -42,6 +44,63 @@ JINJA_ENVIRONMENT = jinja2.Environment(
     trim_blocks=True,
     lstrip_blocks=True,
 )
+
+
+@dataclass(frozen=True)
+class EpitopeReportRowInput:
+    """Prediction evidence and patient allele used for one report row."""
+
+    prediction: Prediction
+    allele: str
+
+
+def epitope_report_row_inputs(epitope):
+    """Return explicit row inputs for a candidate's template table.
+
+    Select one anchor per ``(patient allele, predictor, version)``. Affinity
+    is preferred, followed by presentation, followed by allele-independent
+    processing for combinations not covered by either allele-specific kind.
+    This preserves every scored allele and predictor in mixed-evidence inputs
+    without duplicating the canonical processing Prediction.
+    """
+    predictions = epitope.predictions_flat()
+    row_inputs_by_key = {}
+    for kind in ('pMHC_affinity', 'pMHC_presentation'):
+        for prediction in predictions:
+            if prediction.kind != kind:
+                continue
+            if not prediction.allele:
+                raise ValueError(
+                    f"{kind} report evidence requires a patient allele")
+            key = (
+                prediction.allele,
+                prediction.predictor_name,
+                prediction.predictor_version,
+            )
+            row_inputs_by_key.setdefault(
+                key,
+                EpitopeReportRowInput(prediction, prediction.allele),
+            )
+
+    processing_predictions = tuple(
+        prediction for prediction in predictions
+        if prediction.kind == 'antigen_processing')
+    if processing_predictions and not epitope.patient_alleles:
+        raise ValueError(
+            "Cannot render allele-independent antigen-processing evidence "
+            "without explicit patient alleles")
+    for prediction in processing_predictions:
+        for allele in epitope.patient_alleles:
+            key = (
+                allele,
+                prediction.predictor_name,
+                prediction.predictor_version,
+            )
+            row_inputs_by_key.setdefault(
+                key,
+                EpitopeReportRowInput(prediction, allele),
+            )
+    return tuple(row_inputs_by_key.values())
 
 
 class TemplateDataCreator(object):
@@ -362,15 +421,20 @@ class TemplateDataCreator(object):
                 return p.value
         return None
 
-    def epitope_data(self, epitope, prediction, include_processing=False):
+    def epitope_data(self, epitope, prediction, include_processing=False,
+                     include_additional_prediction_axes=False, allele=None):
         """Returns an OrderedDict with epitope data for one
         (CandidateEpitope, mutant Prediction) row.
 
         One mutant ``CandidateEpitope`` carries N per-allele × per-predictor
-        ``mhctools.Prediction`` records. The report keeps the legacy
-        one-row-per-(peptide, allele, predictor) shape, so the caller
-        iterates over ``epitope.predictions_for('pMHC_affinity')``
-        and passes each leaf record here alongside its parent CandidateEpitope.
+        ``mhctools.Prediction`` records. The report keeps one row per explicit
+        :func:`epitope_report_row_inputs` result, using affinity as the
+        preferred anchor and presentation or processing when affinity is
+        absent.
+
+        ``allele`` defaults to ``prediction.allele``. Report rows anchored by
+        canonical allele-independent processing evidence pass an explicitly
+        retained patient allele here.
 
         ``include_processing``: when True, always emit the three
         proteasomal-cleavage credibility columns
@@ -392,9 +456,18 @@ class TemplateDataCreator(object):
         by ``(peptide, source, predictor_name)``. Pre-2.23 these
         lived as ``pepsickle_*`` attributes on the flat record
         itself; the join is the new contract (#272).
+
+        ``include_additional_prediction_axes`` appends presentation
+        score/percentile and integrated antigen-processing score leaves
+        from the same predictor/version. Missing axes render as ``'—'``
+        so mixed-predictor tables retain consistent columns.
         """
+        row_allele = prediction.allele if allele is None else allele
+        if not row_allele:
+            raise ValueError(
+                "Template epitope rows require an explicit patient allele")
         wt_ic50 = self._wt_ic50_for_allele(
-            epitope, prediction.allele, predictor=prediction.predictor_name)
+            epitope, row_allele, predictor=prediction.predictor_name)
         wt_ic50_str = _format_ic50(wt_ic50)
         ic50_str = _format_ic50(prediction.value)
         wt_peptide_sequence = (
@@ -417,12 +490,43 @@ class TemplateDataCreator(object):
             # from ``epitope.per_allele_scores`` — the single source
             # of truth — rather than recomputing from the raw IC50.
             ('Score',
-                _sanitize(epitope.per_allele_scores.get(
-                    prediction.allele, 0.0))),
-            ('Allele', prediction.allele.replace('HLA-', '')),
+                _sanitize(epitope.per_allele_scores[row_allele])
+                if row_allele in epitope.per_allele_scores else '—'),
+            ('Allele', row_allele.replace('HLA-', '')),
             ('WT sequence', wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
         ])
+        if include_additional_prediction_axes:
+            presentation = None
+            antigen_processing = None
+            for related in epitope.predictions_flat():
+                if (
+                    related.predictor_name != prediction.predictor_name
+                    or related.predictor_version != prediction.predictor_version
+                ):
+                    continue
+                if (
+                    related.kind == 'pMHC_presentation'
+                    and related.allele == row_allele
+                ):
+                    presentation = related
+                elif (
+                    related.kind == 'antigen_processing'
+                    and not related.allele
+                ):
+                    antigen_processing = related
+            epitope_data['Presentation score'] = (
+                '%.3f' % presentation.score
+                if presentation is not None else '—')
+            epitope_data['Presentation %ile'] = (
+                '%.3f' % presentation.percentile_rank
+                if (
+                    presentation is not None
+                    and presentation.percentile_rank is not None
+                ) else '—')
+            epitope_data['Integrated processing score'] = (
+                '%.3f' % antigen_processing.score
+                if antigen_processing is not None else '—')
         if include_processing:
             # Column headers are predictor-agnostic ("Processing: …")
             # so a future per-position predictor (NetChop, PAProC)
@@ -553,27 +657,30 @@ class TemplateDataCreator(object):
                 any_processing = any(
                     _has_processing(e)
                     for e in vaccine_peptide.target_epitopes)
+                any_additional_prediction_axes = any(
+                    prediction.kind in {
+                        'pMHC_presentation', 'antigen_processing'}
+                    for epitope in vaccine_peptide.target_epitopes
+                    for prediction in epitope.predictions_flat())
 
                 epitopes = []
                 wt_epitopes = []
-                # One report row per (CandidateEpitope, allele × predictor)
-                # leaf record. Keeps today's table shape: one row per
-                # (peptide, allele) in single-predictor runs; multiple
-                # rows per (peptide, allele) when multi-predictor data
-                # is in play (mhcflurry + netmhcpan), with the
-                # Predictor column distinguishing them.
-                def _affinity_leaves(e):
-                    return [
-                        p for p in e.predictions_flat()
-                        if p.kind == 'pMHC_affinity']
-
+                # One row per explicit report input. Affinity remains the
+                # preferred anchor; presentation-only and processing-only
+                # candidates still render rather than disappearing.
                 for e in vaccine_peptide.target_epitopes:
-                    for p in _affinity_leaves(e):
+                    for row_input in epitope_report_row_inputs(e):
                         epitopes.append(self.epitope_data(
-                            e, p, include_processing=any_processing))
+                            e, row_input.prediction,
+                            include_processing=any_processing,
+                            include_additional_prediction_axes=(
+                                any_additional_prediction_axes),
+                            allele=row_input.allele))
 
                 for e in vaccine_peptide.self_epitopes:
-                    for p in _affinity_leaves(e):
+                    for p in e.predictions_flat():
+                        if p.kind != 'pMHC_affinity':
+                            continue
                         epitope_data = self.epitope_data(e, p)
                         key_list = ['Allele', 'IC50', 'Sequence']
                         wt_epitopes.append(

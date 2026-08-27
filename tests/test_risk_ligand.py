@@ -3,6 +3,8 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+
+from tests.common import STUB_ONCOREF_VERSION
 from topiary import TopiaryPredictor
 
 from vaxrank.risk_ligand import (
@@ -59,7 +61,7 @@ def _tissue_risk():
             cta_source_rows_excluded=0,
         ),
         hpa_provenance=HPAReferenceProvenance(
-            oncoref_version="1.8.174",
+            oncoref_version=STUB_ONCOREF_VERSION,
             oncoref_data_version="5.23.17",
             oncoref_source_matrix_version="5.22.10",
             source_name="hpa_normal_tissue",
