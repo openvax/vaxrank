@@ -439,7 +439,8 @@ def add_output_args(arg_parser):
         "--output-epitopes",
         default="",
         help="Path to save epitope predictions as a TSV/CSV file (format inferred "
-             "from extension). This file can later be loaded with --input-epitopes.")
+             "from extension). Written as a record of what was predicted; "
+             "there is no CLI flag to load one back yet (openvax/vaxrank#346).")
 
     output_args_group.add_argument(
         "--output-isovar-csv",

@@ -1135,7 +1135,7 @@ def read_lens_report(path, epitope_config=None):
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()
     epitopes = candidate_epitopes_from_rows(epitope_rows)
-    # See load_pvacseq for the parallel rationale: the 3.1 refactor moved
+    # See read_pvacseq_report for the parallel rationale: the 3.1 refactor moved
     # per-(peptide, allele) scoring to the DSL and stored the result on
     # CandidateEpitope.per_allele_scores. Loaders must populate it or
     # downstream ranking sees zero-scored epitopes and drops everything.
@@ -1254,17 +1254,17 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     Parameters
     ----------
     report_df : pandas.DataFrame
-        Report-ready DataFrame from load_pvacseq or load_lens
+        Report-ready DataFrame from an external report reader
         (one row per (peptide, allele) pair).
     epitopes : list of CandidateEpitope
-        Output of ``load_lens`` / ``load_pvacseq`` — one CandidateEpitope per
+        Output of ``read_lens_report`` / ``read_pvacseq_report`` — one per
         complete external prediction identity.
     excel_report_path : str, optional
     csv_report_path : str, optional
     epitope_config : EpitopeConfig, optional
     topiary_df : pandas.DataFrame, optional
         Pre-built topiary long-form rows to use for DSL validation and
-        scoring. ``load_pvacseq`` stores this on ``report_df.attrs`` so
+        scoring. ``read_pvacseq_report`` stores this on ``report_df.attrs`` so
         pVACseq annotation columns remain available to custom DSL
         expressions.
     """

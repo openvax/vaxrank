@@ -78,7 +78,7 @@ PIPELINE_GROUP_COLUMNS = (
 
 
 # Method name -> topiary Kind for external-input predictions (LENS / pVACseq
-# import). Listed methods come from ``load_lens`` / ``load_pvacseq``;
+# import). Listed methods come from the external report readers;
 # anything not in this map is assumed to be a pMHC_affinity predictor.
 _METHOD_KIND_MAP = {
     "mhcflurry": "pMHC_affinity",
@@ -366,7 +366,7 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
     :class:`~vaxrank.candidate_epitope.CandidateEpitope` instances with
     each one's ``per_allele_scores`` populated.
 
-    External-input loaders (``load_pvacseq`` / ``load_lens``) build
+    External report readers (``read_pvacseq_report`` / ``read_lens_report``) build
     unscored CandidateEpitopes from a TSV. The upstream pipeline path
     populates ``per_allele_scores`` inside ``predict_epitopes`` from the
     DSL eval; this helper is the equivalent step for the loader path so

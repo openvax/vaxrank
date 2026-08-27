@@ -889,7 +889,7 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
         already pair every source row with the identity derived from it, so
         no row is re-read and no identity is re-derived here.
     epitopes : list of CandidateEpitope
-        Output of ``load_lens(path)``. Each CandidateEpitope groups all
+        Output of ``read_lens_report(path)``. Each CandidateEpitope groups all
         per-(allele, predictor) ``mhctools.Prediction`` records for
         one ``(peptide, source_sequence, offset)`` position.
     genome : varcode-compatible genome reference, optional
@@ -1003,7 +1003,7 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
 
     # Per-load summary of missing essential / important per-row data.
     # Essential = blocked the row (already counted as "skipped" above
-    # or in load_lens itself). Important-but-recoverable = warns so
+    # or in the reader itself). Important-but-recoverable = warns so
     # users know what's degraded.
     n_no_pep_context = sum(
         1 for r in rows
