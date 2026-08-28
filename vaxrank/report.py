@@ -70,6 +70,9 @@ def epitope_report_row_inputs(epitope):
             if prediction.kind != kind:
                 continue
             if not prediction.allele:
+                # An allele-scoped kind that arrived blank is malformed; see
+                # vaxrank.allele_evidence for the one definition of which
+                # kinds carry an allele.
                 raise ValueError(
                     f"{kind} report evidence requires a patient allele")
             key = (

@@ -212,3 +212,96 @@ def test_attribution_requires_reconstructable_provenance():
         AlleleAttribution(
             allele="HLA-A*02:01", source=ALLELE_SOURCE_BROADCAST,
             rank_kind="pMHC_affinity")
+
+
+def test_predictor_is_chosen_by_coverage_unless_the_config_names_one():
+    """A predictor covering one allele must not silently reduce a top:3.
+
+    Preference order alone picked the canonical name even when it could rank
+    a single allele out of six — the same silent reduction as choosing the
+    axis by presence rather than coverage, arriving through a second door.
+    """
+    genotype = ["HLA-A*02:01", "HLA-B*07:02", "HLA-C*07:01"]
+    epitope = _epitope(
+        _affinity("HLA-A*02:01", 50.0, "mhcflurry"),      # covers 1
+        _affinity("HLA-A*02:01", 900.0, "netmhcpan"),     # covers 3
+        _affinity("HLA-B*07:02", 10.0, "netmhcpan"),
+        _affinity("HLA-C*07:01", 20.0, "netmhcpan"),
+        _processing(),
+        patient_alleles=tuple(genotype))
+
+    got = attribute_alleles(epitope, genotype, AllelePolicy.parse("top:3"))
+    assert [a.allele for a in got] == [
+        "HLA-B*07:02", "HLA-C*07:01", "HLA-A*02:01"]
+    assert {a.rank_predictor for a in got} == {"netmhcpan"}
+
+    # An explicit choice is the user's, and still wins over coverage.
+    named = attribute_alleles(
+        epitope, genotype, AllelePolicy.parse("top:3"),
+        default_methods={"pMHC_affinity": "mhcflurry"})
+    assert [(a.allele, a.rank_predictor) for a in named] == [
+        ("HLA-A*02:01", "mhcflurry")]
+
+
+def test_recorded_values_survive_serialization():
+    """Predictions from a pandas frame carry numpy scalars.
+
+    A recorded value has to round-trip to stay reconstructable, and the
+    serializer refuses numpy types outright, so the coercion happens where
+    the value is captured.
+    """
+    import numpy as np
+
+    from vaxrank.allele_evidence import AlleleAttribution
+
+    epitope = _epitope(
+        _affinity("HLA-A*02:01", np.float64(50.0)), _processing(),
+        patient_alleles=("HLA-A*02:01",))
+    [attribution] = attribute_alleles(
+        epitope, ["HLA-A*02:01"], AllelePolicy.parse("selected"))
+
+    assert type(attribution.rank_value) is float
+    assert AlleleAttribution.from_json(attribution.to_json()) == attribution
+
+
+def test_mhc_dependence_table_covers_every_topiary_kind():
+    """A new prediction kind must be classified, not silently un-attributable.
+
+    "Is this prediction allele-scoped?" used to be re-derived inline at four
+    call sites, two of them testing only for a blank allele — which is also
+    what a malformed row looks like. The table is the single answer, and it
+    is checked against topiary at import.
+    """
+    from topiary.ranking import KIND_ALIASES
+
+    from vaxrank.allele_evidence import (
+        ALLELE_SCOPED_KINDS, PEPTIDE_LEVEL_KINDS,
+    )
+
+    classified = PEPTIDE_LEVEL_KINDS | ALLELE_SCOPED_KINDS
+    assert not set(KIND_ALIASES.values()) - classified
+    # The two sets are a partition, not overlapping guesses.
+    assert not PEPTIDE_LEVEL_KINDS & ALLELE_SCOPED_KINDS
+
+
+def test_peptide_level_requires_both_the_kind_and_a_blank_allele():
+    """Neither half of the predicate is sufficient alone."""
+    from vaxrank.allele_evidence import is_allele_scoped, is_peptide_level
+
+    # Blank allele, but an allele-scoped kind: malformed, not peptide-level.
+    malformed = Prediction(
+        kind="pMHC_affinity", predictor_name="mhcflurry",
+        predictor_version="1", allele="", peptide="SIINFEKL",
+        value=50.0, score=0.0)
+    assert not is_peptide_level(malformed)
+    assert not is_allele_scoped(malformed)
+
+    # Peptide-level kind that already carries an allele: already attributed.
+    attributed = Prediction(
+        kind="antigen_processing", predictor_name="mhcflurry",
+        predictor_version="1", allele="HLA-A*02:01", peptide="SIINFEKL",
+        value=None, score=0.7)
+    assert not is_peptide_level(attributed)
+
+    assert is_peptide_level(_processing())
+    assert is_allele_scoped(_affinity("HLA-A*02:01", 50.0))

@@ -426,11 +426,10 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
         src_name, peptide, offset, allele = idx
-        # Allele-independent processing predictions use ``allele=''``.
-        # They belong in the nested prediction model, but never in a map
-        # whose public contract is explicitly per patient allele. This
-        # filter stays even once openvax/topiary#182 lands: an unprojected
-        # allele-free row still produces an empty-allele group.
+        # Peptide-level evidence evaluates under ``allele=''``. It belongs
+        # in the nested prediction model, but never in a map whose public
+        # contract is explicitly per patient allele — and an empty-allele
+        # group exists whether or not the evidence was projected.
         if allele:
             by_position.setdefault(
                 (src_name, peptide, offset), {})[allele] = float(val)
@@ -445,7 +444,7 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
         # persist an audit record describing a decision that did not happen.
         if topiary_df is not None:
             return ()
-        if any(is_peptide_level(p) for p in epitope.predictions_flat()):
+        if any(map(is_peptide_level, epitope.predictions_flat())):
             return attribute_alleles(
                 epitope, resolved_genotype, policy,
                 default_methods=cfg.default_methods)
