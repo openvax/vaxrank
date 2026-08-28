@@ -279,7 +279,13 @@ def test_mhc_dependence_table_covers_every_topiary_kind():
     )
 
     classified = PEPTIDE_LEVEL_KINDS | ALLELE_SCOPED_KINDS
-    assert not set(KIND_ALIASES.values()) - classified
+    unclassified = sorted(set(KIND_ALIASES.values()) - classified)
+    # CI is where this drift should surface. At runtime an unclassified kind
+    # is treated as not peptide-level (never projected, so nothing is
+    # fabricated) and warned about, rather than refusing to import.
+    assert not unclassified, (
+        "topiary knows prediction kind(s) %s that vaxrank.allele_evidence "
+        "does not classify" % ", ".join(unclassified))
     # The two sets are a partition, not overlapping guesses.
     assert not PEPTIDE_LEVEL_KINDS & ALLELE_SCOPED_KINDS
 

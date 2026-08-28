@@ -41,9 +41,12 @@ that declares one allele set for a whole frame, while every policy except
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from serializable import DataclassSerializable
+
+logger = logging.getLogger(__name__)
 
 
 # How the evidence reached this allele.
@@ -102,23 +105,36 @@ ALLELE_SCOPED_KINDS = frozenset({
 })
 
 
-def _assert_dependence_table_is_complete():
-    """Fail loudly if topiary knows a kind this module has not classified."""
+def unclassified_kinds() -> tuple:
+    """Canonical topiary kinds this module has not classified."""
     try:
         from topiary.ranking import KIND_ALIASES
     except Exception:  # pragma: no cover - topiary always present in practice
-        return
+        return ()
     known = PEPTIDE_LEVEL_KINDS | ALLELE_SCOPED_KINDS
-    unclassified = sorted(set(KIND_ALIASES.values()) - known)
-    if unclassified:
-        raise RuntimeError(
-            "vaxrank.allele_evidence does not classify prediction kind(s) %s "
-            "as allele-scoped or peptide-level. Add them to one of the two "
-            "sets above; leaving a kind unclassified would make it silently "
-            "un-attributable." % ", ".join(unclassified))
+    return tuple(sorted(set(KIND_ALIASES.values()) - known))
 
 
-_assert_dependence_table_is_complete()
+def _warn_about_unclassified_kinds():
+    """Report kinds we cannot classify, without refusing to run.
+
+    Raising here would mean a topiary release that adds a prediction kind
+    breaks ``import vaxrank`` outright — a worse failure than the one being
+    guarded against. Unclassified kinds are instead treated as *not*
+    peptide-level, which is the safe direction: they are never projected
+    across alleles, so nothing is fabricated. A test pins the table against
+    the pinned topiary, so drift surfaces in CI rather than in a run.
+    """
+    missing = unclassified_kinds()
+    if missing:
+        logger.warning(
+            "Prediction kind(s) %s are not classified as allele-scoped or "
+            "peptide-level by vaxrank.allele_evidence. They will not be "
+            "attributed to alleles. Add them to one of the two sets there.",
+            ", ".join(missing))
+
+
+_warn_about_unclassified_kinds()
 
 
 def is_peptide_level(prediction) -> bool:
