@@ -143,6 +143,10 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     #   "from_input"  — only alleles the input actually scored this peptide
     #       against. Reproduces pre-3.3 behavior, which is row incidence
     #       rather than a claim about presentation.
+    # NOTE: currently applied on external-input runs only. The native
+    # VCF/BAM pipeline builds its own evaluation frame and does not attribute
+    # peptide-level evidence at all; it warns when such evidence is present.
+    # Tracked in openvax/vaxrank#349.
     allele_free_evidence: str = POLICY_SELECTED
     # Which axis ranks alleles for "selected" / "top:N". "auto" prefers
     # presentation when the input carries it, else affinity.

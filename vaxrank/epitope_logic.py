@@ -21,6 +21,7 @@ from topiary import TopiaryPredictor
 from topiary.ranking import EvalContext, apply_filter
 
 from .epitope_config import EpitopeConfig
+from .allele_evidence import PEPTIDE_LEVEL_KINDS
 from .epitope_dsl import (
     build_filter_node, build_score_node, prediction_group_columns,
 )
@@ -162,6 +163,26 @@ def predict_epitopes(
     # which is a guess. We are holding the predictor that knows the answer,
     # so forward it rather than making topiary infer it (openvax/topiary#178).
     kind_support = getattr(topiary_predictor, "kind_support", None)
+
+    # Peptide-level evidence (antigen processing, cleavage) forms its own
+    # empty-allele group in this frame and is never attributed to an allele,
+    # so it contributes to no per-allele score. EpitopeConfig's attribution
+    # policy is applied by epitopes_to_topiary_df, which this path does not
+    # use — see openvax/vaxrank#349. Say so rather than letting a configured
+    # policy look like it took effect.
+    if "kind" in predictions_df.columns:
+        unattributed = sorted({
+            kind for kind in predictions_df["kind"].dropna().unique()
+            if kind in PEPTIDE_LEVEL_KINDS})
+        if unattributed:
+            logger.warning(
+                "Prediction kind(s) %s describe the peptide rather than a "
+                "peptide-MHC pair, and this pipeline does not attribute them "
+                "to alleles — they will contribute to no per-allele score. "
+                "EpitopeConfig.allele_free_evidence=%r is not applied here "
+                "(openvax/vaxrank#349); it currently takes effect only on "
+                "external-input runs.",
+                ", ".join(unattributed), epitope_config.allele_free_evidence)
     filter_node = build_filter_node(epitope_config)
     if filter_node is not None:
         predictions_df = apply_filter(

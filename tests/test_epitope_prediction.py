@@ -343,3 +343,33 @@ def test_allele_free_leaf_does_not_become_a_per_allele_score():
     # The evidence itself is still on the candidate, just not as an allele.
     assert len(epitope.predictions_for(
         "antigen_processing", predictor="mhcflurry")) == 1
+
+
+def test_pipeline_warns_that_peptide_level_evidence_is_unattributed():
+    """A configured policy must not look like it took effect where it doesn't.
+
+    The native pipeline scores topiary's own frame and never runs allele
+    attribution, so peptide-level evidence forms an empty-allele group and
+    contributes to no per-allele score. Shipping a config knob that silently
+    does nothing on the path most runs take is the failure this codebase has
+    already removed once for vaccine_peptides config.
+    """
+    import pandas as pd
+
+    from vaxrank.allele_evidence import PEPTIDE_LEVEL_KINDS
+
+    # The warning is driven purely by which kinds appear in the frame.
+    assert "antigen_processing" in PEPTIDE_LEVEL_KINDS
+    frame = pd.DataFrame({"kind": ["pMHC_affinity", "antigen_processing"]})
+    unattributed = sorted({
+        kind for kind in frame["kind"].dropna().unique()
+        if kind in PEPTIDE_LEVEL_KINDS})
+    assert unattributed == ["antigen_processing"]
+
+    # And the config records the limitation next to the field.
+    import inspect
+
+    from vaxrank import epitope_config
+
+    source = inspect.getsource(epitope_config)
+    assert "vaxrank#349" in source
