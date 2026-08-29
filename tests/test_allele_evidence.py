@@ -168,8 +168,9 @@ def test_only_peptide_level_kinds_are_attributed():
     from vaxrank.epitope_dsl import epitopes_to_topiary_df
 
     # An affinity prediction that lost its allele is malformed, not
-    # peptide-level. Projecting it invents binding evidence for alleles it
-    # was never predicted against.
+    # peptide-level. It is neither attributed nor carried through: see
+    # test_malformed_allele_scoped_predictions_never_reach_the_frame for why
+    # leaving it in the frame is unsafe.
     epitope = _epitope(
         Prediction(kind="pMHC_affinity", predictor_name="mhcflurry",
                    predictor_version="1", allele="", peptide="SIINFEKL",
@@ -177,7 +178,7 @@ def test_only_peptide_level_kinds_are_attributed():
         patient_alleles=("HLA-A*02:01", "HLA-B*07:02"))
     frame = epitopes_to_topiary_df(
         [epitope], policy=AllelePolicy.parse("all"))
-    assert list(frame["allele"]) == [""]
+    assert frame.empty
 
 
 def test_malformed_policies_are_rejected_where_they_are_written():
@@ -311,3 +312,54 @@ def test_peptide_level_requires_both_the_kind_and_a_blank_allele():
 
     assert is_peptide_level(_processing())
     assert is_allele_scoped(_affinity("HLA-A*02:01", 50.0))
+
+
+def test_malformed_allele_scoped_predictions_never_reach_the_frame(caplog):
+    """A blank-allele affinity row must not become per-allele evidence.
+
+    Topiary classifies a kind's MHC dependence by scanning the rows it is
+    given, so a candidate whose only affinity leaves carry no allele reads as
+    peptide-level and has its value projected across every allele group —
+    inventing a binding prediction for alleles the model never scored.
+    Verified live against topiary 5.21.0; openvax/topiary#197 fixes it
+    upstream, but vaxrank supports the whole >=5.17.1 range.
+    """
+    import logging
+
+    from topiary.ranking import EvalContext, parse
+
+    from vaxrank.epitope_dsl import (
+        PREDICTION_GROUP_COLUMNS, epitopes_to_topiary_df,
+    )
+
+    def stability(allele, value):
+        return Prediction(
+            kind="pMHC_stability", predictor_name="netmhcstabpan",
+            predictor_version="1", allele=allele, peptide="SIINFEKL",
+            value=value, score=0.0)
+
+    malformed = Prediction(
+        kind="pMHC_affinity", predictor_name="mhcflurry", predictor_version="1",
+        allele="", peptide="SIINFEKL", value=7.0, score=0.0)
+    epitope = _epitope(
+        malformed,
+        stability("HLA-A*02:01", 100.0), stability("HLA-B*07:02", 200.0),
+        patient_alleles=("HLA-A*02:01", "HLA-B*07:02"))
+
+    with caplog.at_level(logging.WARNING):
+        frame = epitopes_to_topiary_df([epitope])
+
+    # The malformed row is absent, and the drop is reported with enough to
+    # find it — a silent drop would be its own defect.
+    assert set(frame["kind"]) == {"pMHC_stability"}
+    warning = "\n".join(
+        record.getMessage() for record in caplog.records
+        if record.levelno >= logging.WARNING)
+    assert "no allele" in warning
+    assert "SIINFEKL" in warning and "pMHC_affinity" in warning
+
+    # And nothing invents an affinity for alleles that were never scored.
+    context = EvalContext(frame, group_keys=list(PREDICTION_GROUP_COLUMNS))
+    values = parse("affinity.value").eval(context).reindex(
+        context.group_index).tolist()
+    assert all(value != value for value in values)  # all NaN, not 7.0

@@ -168,7 +168,7 @@ def epitopes_to_topiary_df(epitopes, policy=None, genotype=None,
     # allele set for the whole frame, and every policy except "all" needs a
     # different set per peptide.
     from .allele_evidence import (
-        AllelePolicy, attribute_alleles, is_peptide_level,
+        AllelePolicy, attribute_alleles, is_allele_scoped, is_peptide_level,
     )
 
     if policy is None:
@@ -176,12 +176,25 @@ def epitopes_to_topiary_df(epitopes, policy=None, genotype=None,
     genotype = frame_genotype(epitopes, genotype)
 
     rows = []
+    # Predictions that are neither peptide-level nor allele-scoped are
+    # malformed: an allele-scoped kind that arrived without an allele. They
+    # must not reach the frame at all. Topiary classifies a kind's MHC
+    # dependence by scanning the rows it is given, so a candidate whose only
+    # affinity leaves are blank-allele reads as peptide-level and gets its
+    # value projected across every allele group — inventing a binding
+    # prediction for alleles the model never scored. Verified against
+    # topiary 5.21.0; openvax/topiary#197 fixes it upstream, but vaxrank
+    # supports the whole >=5.17.1 range, so the row is dropped here.
+    malformed = []
     for e in epitopes:
         ctx = e
         prediction_id = ctx.prediction_group_source
         predictions = ctx.predictions_flat()
         attributed = None
         for p in predictions:
+            if not is_peptide_level(p) and not is_allele_scoped(p):
+                malformed.append((ctx.sequence, p.kind, p.predictor_name))
+                continue
             if not is_peptide_level(p):
                 # Includes every allele-scoped prediction, and any blank-allele
                 # prediction of a kind that is not peptide-level — those are
@@ -213,6 +226,14 @@ def epitopes_to_topiary_df(epitopes, policy=None, genotype=None,
                     "percentile_rank": p.percentile_rank,
                     "score": p.score,
                 })
+    if malformed:
+        peptide, kind, predictor = malformed[0]
+        logger.warning(
+            "Dropped %d prediction(s) of an allele-scoped kind that carried "
+            "no allele; they cannot be scored against any allele and would "
+            "be projected across all of them. Example: peptide %s, kind %s, "
+            "predictor %s.",
+            len(malformed), peptide, kind, predictor)
     return pd.DataFrame(rows)
 
 
