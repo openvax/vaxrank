@@ -44,6 +44,10 @@ class EpitopesConfigSchema(
     filter_expr: Optional[str] = None
     score_expr: Optional[str] = None
     default_methods: Optional[dict[str, str]] = None
+    # How peptide-level evidence (antigen processing, proteasomal cleavage)
+    # is attributed to alleles — see vaxrank.allele_evidence.
+    allele_free_evidence: Optional[str] = None
+    allele_selection_axis: Optional[str] = None
 
 
 class ManufacturabilityConfigSchema(

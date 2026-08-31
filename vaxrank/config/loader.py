@@ -310,6 +310,8 @@ _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("epitopes.filter_expr", "filter_expr"),
     ("epitopes.score_expr", "score_expr"),
     ("epitopes.default_methods", "default_methods"),
+    ("epitopes.allele_free_evidence", "allele_free_evidence"),
+    ("epitopes.allele_selection_axis", "allele_selection_axis"),
 ]
 
 # Declarative mapping: (dotted config path) → (VaccineConfig kwarg name)

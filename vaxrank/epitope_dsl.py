@@ -308,6 +308,21 @@ def resolve_default_versions(cfg, topiary_df):
     return resolved
 
 
+def genotype_map(epitopes):
+    """``{prediction_group_key: genotype}`` for a list of CandidateEpitopes.
+
+    The identity is the group columns other than ``allele``, in order, so
+    this joins to a topiary frame built from the same epitopes. Shared by
+    :func:`genotype_lookup`, which tells topiary which allele groups to
+    create, and by allele attribution, which decides which of them get
+    credited with allele-free evidence — one mapping so the two cannot
+    disagree about a peptide's genotype.
+    """
+    return {
+        e.prediction_group_key: tuple(e.patient_alleles or ())
+        for e in epitopes or ()}
+
+
 def genotype_lookup(epitopes, group_columns):
     """Return a per-peptide genotype callable for topiary's ``alleles=``.
 
@@ -330,9 +345,7 @@ def genotype_lookup(epitopes, group_columns):
     topiary to take the groups from the rows alone.
     """
     identity_column = group_columns[0]
-    by_identity = {
-        e.prediction_group_key: tuple(e.patient_alleles or ())
-        for e in epitopes or ()}
+    by_identity = genotype_map(epitopes)
     if not any(by_identity.values()):
         return None
 
@@ -380,6 +393,9 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
     """
     from topiary.ranking import EvalContext, apply_filter
 
+    from .allele_evidence import (
+        attribute_frame, warn_if_scoring_ignores_policy)
+
     df = (epitopes_to_topiary_df(epitopes)
           if topiary_df is None else topiary_df)
     if df.empty:
@@ -390,6 +406,19 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
     resolved_versions = resolve_default_versions(cfg, df)
     group_columns = prediction_group_columns(df)
     alleles = genotype_lookup(epitopes, group_columns)
+
+    # Attribution before filtering, so the policy sees the evidence the
+    # input actually carried rather than what survived a cutoff — a filter
+    # on affinity would otherwise silently change which allele is ranked
+    # best for a peptide's processing score.
+    policy = cfg.allele_policy
+    genotypes = genotype_map(epitopes)
+    attributions = attribute_frame(
+        df, policy,
+        genotype_for=lambda key: genotypes.get(key, ()),
+        default_methods=resolved,
+        group_columns=group_columns)
+    warn_if_scoring_ignores_policy(policy, attributions)
 
     filter_node = build_filter_node(cfg)
     if filter_node is not None:

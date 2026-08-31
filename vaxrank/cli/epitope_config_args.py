@@ -43,6 +43,29 @@ def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
     # ``affinity['netmhcpan']`` still pick up their specific model. If
     # omitted and the data has multiple models, vaxrank auto-picks a
     # canonical method (mhcflurry > netmhcpan > alphabetical).
+    # Antigen processing and proteasomal cleavage describe a peptide, not a
+    # peptide-MHC pair, so crediting them to an allele is a choice. See
+    # :mod:`vaxrank.allele_evidence`; every attributed allele records why.
+    allele_evidence_args = arg_parser.add_argument_group(
+        "Attribution of peptide-level evidence to alleles")
+    allele_evidence_args.add_argument(
+        "--allele-free-evidence",
+        default=None,
+        metavar="POLICY",
+        help="How peptide-level evidence (antigen processing, proteasomal "
+             "cleavage) is credited to MHC alleles: 'all' (default, every "
+             "genotype allele), 'selected' (the best-ranked allele, "
+             "falling back to the whole genotype when there is nothing to "
+             "rank on), 'top:N', or 'from_input' (only pairings the source "
+             "file already carried).")
+    allele_evidence_args.add_argument(
+        "--allele-selection-axis",
+        default=None,
+        metavar="KIND",
+        help="Which prediction kind ranks alleles for 'selected' / 'top:N'. "
+             "'auto' (default) prefers pMHC_presentation when the input "
+             "carries it, else pMHC_affinity.")
+
     default_method_args = arg_parser.add_argument_group(
         "Default predictor methods (for unqualified DSL references)")
     default_method_args.add_argument(
@@ -84,6 +107,12 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
 
     if args.min_epitope_score is not None:
         epitope_config_kwargs["min_epitope_score"] = args.min_epitope_score
+    if getattr(args, "allele_free_evidence", None) is not None:
+        epitope_config_kwargs["allele_free_evidence"] = (
+            args.allele_free_evidence)
+    if getattr(args, "allele_selection_axis", None) is not None:
+        epitope_config_kwargs["allele_selection_axis"] = (
+            args.allele_selection_axis)
     if getattr(args, 'scoring_mode', None) is not None:
         epitope_config_kwargs["scoring_mode"] = args.scoring_mode
 
