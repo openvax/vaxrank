@@ -616,6 +616,15 @@ class CandidateEpitope(Peptide):
     # of truth.
     per_allele_scores: dict = field(default_factory=dict)
 
+    # Why each allele was credited with this candidate's allele-free
+    # evidence — from the input file, broadcast across the genotype, or
+    # selected by ranking the peptide's own allele-scoped predictions, with
+    # the axis, predictor, value and rank that produced the selection.
+    # Recorded rather than recomputed, so a finished run can be explained
+    # without rerunning it: see :mod:`vaxrank.allele_evidence`. Empty when a
+    # candidate carries no allele-free evidence, which is the common case.
+    allele_attributions: tuple = ()
+
     def __post_init__(self):
         """Normalize predictions and retain every explicitly known allele."""
         super().__post_init__()
@@ -735,7 +744,8 @@ class CandidateEpitope(Peptide):
             self_reference_match=self.self_reference_match,
             patient_alleles=self.patient_alleles,
             prediction_id=self.prediction_id,
-            per_allele_scores=dict(self.per_allele_scores))
+            per_allele_scores=dict(self.per_allele_scores),
+            allele_attributions=self.allele_attributions)
 
     @classmethod
     def from_peptide(cls, peptide: "Peptide",
@@ -852,9 +862,12 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                 # all rows for one allele share the same score by
                 # construction of the DSL eval, so last-write-wins.
                 'per_allele_scores': {},
+                'allele_attributions': (),
             }
             groups[key] = slot
         slot['mutant_preds'].append(row['mutant'])
+        if row.get('allele_attributions'):
+            slot['allele_attributions'] = tuple(row['allele_attributions'])
         if row['mutant'].allele:
             slot['patient_alleles'].add(row['mutant'].allele)
         slot['patient_alleles'].update(
@@ -943,5 +956,6 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             patient_alleles=tuple(sorted(slot['patient_alleles'])),
             prediction_id=slot['prediction_id'],
             per_allele_scores=dict(slot['per_allele_scores']),
+            allele_attributions=slot['allele_attributions'],
         ))
     return out

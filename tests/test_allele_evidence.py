@@ -203,3 +203,62 @@ def test_the_policy_is_reachable_from_yaml_and_the_cli():
 
     assert ("epitopes.allele_free_evidence",
             "allele_free_evidence") in _EPITOPE_CONFIG_MAPPING
+
+
+def test_attributions_are_recorded_on_the_candidate(tmp_path):
+    """The computed attribution has to land somewhere or it is waste.
+
+    Review of the first cut found it computed on every scoring pass and
+    used only to decide whether to warn — a full pass over the frame whose
+    result was discarded. It is recorded on the candidate now, which is
+    both what makes it observable and what the report layer reads.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_lens_report
+
+    path = tmp_path / "processing.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t900\t0.8\n")
+
+    [selected] = read_lens_report(
+        path,
+        epitope_config=EpitopeConfig(allele_free_evidence="selected")).epitopes
+    [every] = read_lens_report(
+        path,
+        epitope_config=EpitopeConfig(allele_free_evidence="all")).epitopes
+
+    assert [a.allele for a in selected.allele_attributions] == [A]
+    assert selected.allele_attributions[0].source == ALLELE_SOURCE_SELECTED
+    assert [a.allele for a in every.allele_attributions] == [A, B]
+
+    # Per-allele scores are deliberately unchanged between the two: topiary
+    # projects a peptide-level value across every allele group keyed on the
+    # kind (openvax/topiary#232), so a narrowing policy records the credited
+    # allele without yet narrowing the score. The warning says so; this pins
+    # that the two really do still agree, so the claim is not stale.
+    assert selected.per_allele_scores == every.per_allele_scores
+
+
+def test_a_frame_with_no_allele_free_evidence_is_not_walked():
+    """The common frame must not pay for a feature it cannot use.
+
+    Turning a large frame into dicts to discover there is nothing to
+    attribute cost real time on every scoring pass — 0.4s on a 200k-row
+    frame, for an empty result.
+    """
+    frame = _frame("prediction_id", processing=False)
+    calls = []
+
+    class CountingFrame(type(frame)):
+        def to_dict(self, *args, **kwargs):
+            calls.append(1)
+            return super().to_dict(*args, **kwargs)
+
+    counting = CountingFrame(frame)
+    assert attribute_frame(
+        counting, AllelePolicy.parse("selected"),
+        group_columns=list(PREDICTION_GROUP_COLUMNS)) == {}
+    assert calls == []

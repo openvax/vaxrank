@@ -176,11 +176,11 @@ def predict_epitopes(
     # a peptide *are* the genotype; deriving it from the rows avoids
     # threading a second, possibly disagreeing, copy through.
     policy = epitope_config.allele_policy
-    attributions = attribute_frame(
+    allele_attributions = attribute_frame(
         predictions_df, policy,
         default_methods=default_methods,
         group_columns=prediction_group_columns(predictions_df))
-    warn_if_scoring_ignores_policy(policy, attributions)
+    warn_if_scoring_ignores_policy(policy, allele_attributions)
 
     filter_node = build_filter_node(epitope_config)
     if filter_node is not None:
@@ -368,6 +368,12 @@ def predict_epitopes(
             'peptide': peptide,
             'source': antigen.amino_acids,
             'offset': peptide_start_offset,
+            # Keyed by the same identity attribute_frame grouped on, so the
+            # native path records the credited alleles exactly as the
+            # external report path does.
+            'allele_attributions': allele_attributions.get(
+                (row["source_sequence_name"], peptide, peptide_start_offset),
+                ()),
             'mutant': mutant_pred,
             'wt': wt_pred,
             'source_class': source_class,

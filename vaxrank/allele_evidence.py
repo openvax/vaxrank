@@ -444,6 +444,16 @@ def attribute_frame(df, policy, *, genotype_for=None, default_methods=None,
     """
     if df is None or len(df) == 0:
         return {}
+    # Cheap vectorized pre-check before materializing records. Most frames
+    # carry no allele-free evidence at all, and turning a large frame into
+    # dicts to discover that costs real time on every scoring pass.
+    if "kind" not in df.columns:
+        return {}
+    allele_free = df["allele"].map(lambda a: not (a or "")) if (
+        "allele" in df.columns) else True
+    peptide_level = df["kind"].map(is_peptide_level_kind)
+    if not bool((peptide_level & allele_free).any()):
+        return {}
     group_columns = list(group_columns or ())
     identity = _identity_columns(group_columns)
     if not identity:
