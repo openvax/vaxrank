@@ -329,3 +329,97 @@ def test_a_reload_does_not_re_derive_under_the_default_policy(tmp_path):
     # And the ranking provenance is intact, not just the allele name.
     assert reloaded.allele_attributions[0].rank_predictor == "mhcflurry"
     assert reloaded.allele_attributions[0].rank_value == 50.0
+
+
+def _processing_report(tmp_path, policy_text):
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_lens_report
+
+    source = tmp_path / "processing.tsv"
+    source.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t900\t0.8\n")
+    return read_lens_report(
+        source,
+        epitope_config=EpitopeConfig(allele_free_evidence=policy_text))
+
+
+def test_the_report_says_which_allele_the_processing_score_counts_for(tmp_path):
+    """The number alone cannot tell a credited allele from a shown one.
+
+    A peptide's processing score is printed on every allele row, because
+    that is what an allele-free value is. Under a narrowing policy only one
+    of those alleles is credited with it, and without a column saying so the
+    two rows look identical.
+    """
+    from vaxrank.epitope_io import ALLELE_CREDIT_COLUMN
+
+    report = _processing_report(tmp_path, "selected").report_df
+    by_allele = {
+        row["Allele"]: row[ALLELE_CREDIT_COLUMN]
+        for _, row in report.iterrows()}
+
+    # Both rows still print the same processing score ...
+    assert list(report["mhcflurry processing score"]) == [
+        pytest.approx(0.8), pytest.approx(0.8)]
+    # ... and the report now distinguishes them.
+    assert by_allele[A].startswith("selected: ranked #1 on pMHC_affinity")
+    assert by_allele[B] == "no"
+
+
+def test_the_credit_column_reports_the_reason_not_just_the_verdict(tmp_path):
+    """An attribution the reader cannot check is an assertion.
+
+    The axis, predictor and value that produced the selection travel into
+    the report, so a ranking can be argued with rather than trusted.
+    """
+    from vaxrank.epitope_io import ALLELE_CREDIT_COLUMN
+
+    report = _processing_report(tmp_path, "selected").report_df
+    credited = next(
+        row[ALLELE_CREDIT_COLUMN] for _, row in report.iterrows()
+        if row["Allele"] == A)
+
+    assert "pMHC_affinity" in credited
+    assert "mhcflurry" in credited
+    assert "50.0" in credited
+
+
+def test_no_credit_column_when_there_is_nothing_to_attribute(tmp_path):
+    """Do not add a column of "n/a" to every report that has no such evidence.
+
+    Matches how the per-predictor value columns already behave: present when
+    the input carries that signal, absent otherwise.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import ALLELE_CREDIT_COLUMN, read_lens_report
+
+    source = tmp_path / "affinity-only.tsv"
+    source.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\n")
+
+    report = read_lens_report(
+        source, epitope_config=EpitopeConfig()).report_df
+
+    assert ALLELE_CREDIT_COLUMN not in report.columns
+
+
+def test_annotating_the_report_keeps_the_frame_stored_on_it(tmp_path):
+    """``report_df.attrs['topiary_df']`` must survive the annotation.
+
+    pVACseq stores its own topiary frame there, and the scorer reads it
+    back; losing it would silently rebuild from CandidateEpitopes and drop
+    the passthrough annotation columns that only exist on the stored frame.
+    """
+    from vaxrank.epitope_io import annotate_credited_alleles
+
+    loaded = _processing_report(tmp_path, "selected")
+    report = loaded.report_df
+    report.attrs["topiary_df"] = "sentinel"
+
+    annotated = annotate_credited_alleles(report, list(loaded.epitopes))
+
+    assert annotated.attrs.get("topiary_df") == "sentinel"

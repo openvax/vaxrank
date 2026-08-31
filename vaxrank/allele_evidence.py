@@ -199,19 +199,28 @@ class AlleleAttribution(DataclassSerializable):
             raise ValueError(
                 "Only a selected allele carries ranking provenance")
 
-    def describe(self) -> str:
-        """One human-readable line, for reports and logs."""
+    def reason(self) -> str:
+        """Why this allele was credited, without naming it.
+
+        Separate from :meth:`describe` because the report already has an
+        Allele column, and the alternative was slicing the allele back off
+        the front of ``describe()`` — string surgery that would break
+        silently the first time the sentence changed.
+        """
         if self.source == ALLELE_SOURCE_FROM_INPUT:
-            return "%s (from the input file)" % self.allele
+            return "from the input file"
         if self.source == ALLELE_SOURCE_BROADCAST:
-            return "%s (broadcast: no allele-specific evidence)" % self.allele
-        return "%s (selected: ranked #%s on %s%s = %s)" % (
-            self.allele,
+            return "broadcast: no allele-specific evidence"
+        return "selected: ranked #%s on %s%s = %s" % (
             self.rank_position if self.rank_position is not None else "?",
             self.rank_kind,
             " [%s]" % self.rank_predictor if self.rank_predictor else "",
             self.rank_value,
         )
+
+    def describe(self) -> str:
+        """One human-readable line, for reports and logs."""
+        return "%s (%s)" % (self.allele, self.reason())
 
 
 @dataclass(frozen=True)
