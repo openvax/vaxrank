@@ -1805,6 +1805,10 @@ def test_lens_read_counts_come_from_one_row(tmp_path):
     reported — total from a deep row, alt from a shallow one — and
     n_alt_reads feeds the combined-score DSL, so an incoherent count
     reorders the construct ranking.
+
+    The alt count is depth x VAF, which is why both rows carry a VAF. It
+    used to be the CDS-overlap column, which counts reads overlapping the
+    peptide's coding sequence rather than reads supporting the variant.
     """
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_dsl import epitopes_for_ranking
@@ -1816,14 +1820,14 @@ def test_lens_read_counts_come_from_one_row(tmp_path):
         "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
         "snv_ref_allele\tsnv_alt_allele\tgene_name\t"
         "rna_reads_covering_genomic_origin\t"
-        "rna_reads_covering_genomic_origin_with_peptide_cds\t"
+        "rna_reads_covering_genomic_origin_with_peptide_cds\tvaf\t"
         "mhcflurry_2.1.1.aff\n"
-        # deep coverage, few supporting reads
+        # deep coverage, few supporting reads: 100 x 0.05 = 5 alt
         "SIINFEKL\tHLA-A02:01\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
-        "100\t5\t20\n"
-        # shallow coverage, many supporting reads
+        "100\t5\t0.05\t20\n"
+        # shallow coverage, many supporting reads: 10 x 0.9 = 9 alt
         "SIINFEKL\tHLA-B07:02\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
-        "10\t9\t25\n")
+        "10\t9\t0.9\t25\n")
 
     config = EpitopeConfig()
     report = read_lens_report(path, epitope_config=config)
@@ -1835,3 +1839,74 @@ def test_lens_read_counts_come_from_one_row(tmp_path):
     # (100, 9) that no row reported.
     assert (fragment.n_overlapping_reads, fragment.n_alt_reads) == (10, 9)
     assert fragment.n_ref_reads == 1
+
+
+def _lens_counts_file(tmp_path, name, *, depth, cds_overlap, vaf):
+    """One LENS row with the two read columns and an optional VAF."""
+    path = tmp_path / name
+    vaf_header = "\tvaf" if vaf is not None else ""
+    vaf_cell = "\t%s" % vaf if vaf is not None else ""
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\t"
+        "rna_reads_covering_genomic_origin\t"
+        "rna_reads_covering_genomic_origin_with_peptide_cds"
+        + vaf_header + "\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
+        "%s\t%s" % (depth, cds_overlap) + vaf_cell + "\t20\n")
+    return path
+
+
+def _fragment_for(path):
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import epitopes_for_ranking
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
+
+    config = EpitopeConfig()
+    report = read_lens_report(path, epitope_config=config)
+    result = lens_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+    return result.ranked[0][1][0].mutant_protein_fragment
+
+
+def test_alt_reads_are_depth_times_vaf_not_the_cds_overlap_count(tmp_path):
+    """The CDS-overlap column is not variant support.
+
+    ``rna_reads_covering_genomic_origin_with_peptide_cds`` counts reads
+    overlapping the peptide's coding sequence, not reads carrying the
+    variant allele. vaxrank assigned it straight to ``n_alt_reads``, which
+    feeds the combined-score DSL — ``sqrt(n_alt_reads) *
+    target_epitope_score`` is the documented canonical form.
+
+    The two disagree in both directions on real files: 2337x0.022 gives 51
+    alt reads where the CDS count says 2, and 291x0.258 gives 75 where it
+    says 166.
+    """
+    path = _lens_counts_file(
+        tmp_path, "split.tsv", depth=2337, cds_overlap=2, vaf=0.022)
+
+    fragment = _fragment_for(path)
+
+    assert fragment.n_overlapping_reads == 2337
+    assert fragment.n_alt_reads == 51        # 2337 x 0.022, not 2
+    assert fragment.n_ref_reads == 2286      # and the remainder, not 2335
+    # The CDS count is kept, under the name that describes it.
+    assert fragment.n_alt_reads_supporting_protein_sequence == 2
+
+
+def test_no_vaf_means_no_alt_estimate_rather_than_the_cds_count(tmp_path):
+    """A source that cannot answer must not be answered for.
+
+    An estimate needs both depth and VAF. Substituting the CDS-overlap
+    count because it is the only other number present is how a missing
+    value becomes a number nobody measured.
+    """
+    path = _lens_counts_file(
+        tmp_path, "no-vaf.tsv", depth=100, cds_overlap=40, vaf=None)
+
+    fragment = _fragment_for(path)
+
+    assert fragment.n_overlapping_reads == 100
+    assert fragment.n_alt_reads == 0
+    assert fragment.n_alt_reads_supporting_protein_sequence == 40
