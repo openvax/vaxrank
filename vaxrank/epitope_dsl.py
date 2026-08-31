@@ -115,6 +115,23 @@ def prediction_kind_for_method(method_name):
 
 
 
+def is_peptide_level_kind(kind):
+    """True when a kind describes the peptide itself, not a peptide-MHC pair.
+
+    Reads topiary's ``KIND_MHC_DEPENDENCE``, which is the one place that
+    knows which kinds are allele-free. vaxrank named a single kind here for
+    as long as that table was private, and the four other allele-free kinds
+    were left out of the projection below (openvax/topiary#195).
+
+    An unrecognized kind is *not* treated as peptide-level. That is the safe
+    direction: it is never projected across alleles, so a topiary release
+    adding a kind cannot make vaxrank fabricate per-allele evidence for it.
+    """
+    from topiary import KIND_MHC_DEPENDENCE
+
+    return KIND_MHC_DEPENDENCE.get(kind) == "none"
+
+
 def epitopes_to_topiary_df(epitopes):
     """Convert a list of :class:`vaxrank.candidate_epitope.CandidateEpitope` into the
     topiary long-format DataFrame consumed by
@@ -122,8 +139,8 @@ def epitopes_to_topiary_df(epitopes):
     :func:`topiary.ranking.apply_filter`.
 
     One row per allele-scoped leaf ``mhctools.Prediction`` in each
-    CandidateEpitope's mutant context. Allele-independent antigen-processing
-    evidence is projected into every allele group in this evaluation view while
+    CandidateEpitope's mutant context. Allele-independent evidence — any
+    kind topiary reports as MHC-independent — is projected into every allele group in this evaluation view while
     remaining one canonical leaf on the CandidateEpitope. A single
     CandidateEpitope can therefore emit N rows (one per allele x predictor x
     kind). When multiple predictions share a (peptide,
@@ -165,7 +182,7 @@ def epitopes_to_topiary_df(epitopes):
             evaluation_alleles = (
                 patient_alleles
                 if (
-                    p.kind == "antigen_processing"
+                    is_peptide_level_kind(p.kind)
                     and not p.allele
                     and patient_alleles
                 )
