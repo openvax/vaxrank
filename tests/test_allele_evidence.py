@@ -262,3 +262,70 @@ def test_a_frame_with_no_allele_free_evidence_is_not_walked():
         counting, AllelePolicy.parse("selected"),
         group_columns=list(PREDICTION_GROUP_COLUMNS)) == {}
     assert calls == []
+
+
+@pytest.mark.parametrize("policy_text", ["all", "selected", "top:2", "from_input"])
+def test_attributions_survive_a_native_round_trip(tmp_path, policy_text):
+    """A saved run must reload with the attribution it actually made.
+
+    The attribution depends on the policy in force when the candidate was
+    scored, and ``load_predictions`` takes no config — so recomputing on
+    load would silently answer a different question and present it as what
+    the run produced. Recording it is what makes a finished ranking
+    explainable later.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import (
+        load_predictions, read_lens_report, save_predictions)
+
+    source = tmp_path / "processing.tsv"
+    source.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t900\t0.8\n")
+
+    [scored] = read_lens_report(
+        source,
+        epitope_config=EpitopeConfig(
+            allele_free_evidence=policy_text)).epitopes
+    assert scored.allele_attributions  # the test would pass vacuously otherwise
+
+    path = tmp_path / "native.csv"
+    save_predictions([scored], str(path))
+    [reloaded] = load_predictions(str(path))
+
+    assert reloaded.allele_attributions == scored.allele_attributions
+
+
+def test_a_reload_does_not_re_derive_under_the_default_policy(tmp_path):
+    """The recorded answer wins over what the loader would compute.
+
+    A run scored under 'selected' credits one allele. Reloading it must not
+    quietly produce the two-allele answer the default policy would give,
+    which is what recomputation on load would do.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import (
+        load_predictions, read_lens_report, save_predictions)
+
+    source = tmp_path / "processing.tsv"
+    source.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t900\t0.8\n")
+
+    [scored] = read_lens_report(
+        source,
+        epitope_config=EpitopeConfig(allele_free_evidence="selected")).epitopes
+    path = tmp_path / "native.csv"
+    save_predictions([scored], str(path))
+
+    [reloaded] = load_predictions(str(path))
+
+    assert [a.allele for a in reloaded.allele_attributions] == [A]
+    assert reloaded.allele_attributions[0].source == ALLELE_SOURCE_SELECTED
+    # And the ranking provenance is intact, not just the allele name.
+    assert reloaded.allele_attributions[0].rank_predictor == "mhcflurry"
+    assert reloaded.allele_attributions[0].rank_value == 50.0
