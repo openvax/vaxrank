@@ -588,3 +588,154 @@ def test_external_readers_leave_kind_support_unset():
     # for a frame no predictor produced.
     [epitope] = report.epitopes
     assert epitope.per_allele_scores
+
+
+def test_canonical_method_preference_is_topiary_s_not_a_local_copy():
+    """vaxrank must not carry its own idea of which model is canonical.
+
+    It used to, and the two had already drifted: vaxrank ordered
+    ``netmhcstabpan`` ahead of ``netmhcpan_el`` / ``netmhcpan_ba`` where
+    topiary orders it last. The same frame could therefore resolve to
+    different models depending on which table was consulted — exactly the
+    disagreement topiary's own docstring warns consumers about.
+    """
+    import vaxrank.epitope_dsl as dsl
+
+    assert not hasattr(dsl, "_CANONICAL_METHOD_PREFERENCE")
+    assert not hasattr(dsl, "_auto_pick_canonical_method")
+
+
+def test_default_methods_resolution_delegates_but_keeps_the_user_s_choice():
+    """topiary picks the canonical model; an explicit config entry overrides.
+
+    The auto-pick is topiary's to define. Which entry the *user* wrote is
+    vaxrank's config, and has to win — that is the half topiary has no
+    opinion about.
+    """
+    import pandas as pd
+    from topiary.ranking import resolve_default_methods as topiary_resolve
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import resolve_default_methods
+
+    def row(method, kind="pMHC_affinity", value=50.0):
+        return {
+            "prediction_id": "p", "source_sequence_name": "ctx",
+            "peptide": "SIINFEKL", "peptide_offset": 0, "peptide_length": 8,
+            "allele": "HLA-A*02:01", "n_flank": "", "c_flank": "",
+            "prediction_method_name": method, "predictor_version": "1",
+            "kind": kind, "value": value, "affinity": value,
+            "percentile_rank": None, "score": 0.0,
+        }
+
+    frame = pd.DataFrame([row("mhcflurry"), row("netmhcpan", value=60.0)])
+
+    # With nothing configured, the answer is topiary's, verbatim.
+    assert resolve_default_methods(EpitopeConfig(), frame) == dict(
+        topiary_resolve(frame))
+
+    # An explicit entry overrides the canonical pick.
+    configured = resolve_default_methods(
+        EpitopeConfig(default_methods={"pMHC_affinity": "netmhcpan"}), frame)
+    assert configured["pMHC_affinity"] == "netmhcpan"
+
+
+def test_invalid_default_methods_names_the_config_key():
+    """The error must say which setting to edit, not only what is missing.
+
+    topiary reports what the data lacks — the half it can know. Which config
+    key produced it is the half it cannot, and is what the user needs.
+    """
+    import pandas as pd
+    import pytest
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import validate_default_methods
+
+    frame = pd.DataFrame([{
+        "prediction_id": "p", "source_sequence_name": "ctx",
+        "peptide": "SIINFEKL", "peptide_offset": 0, "peptide_length": 8,
+        "allele": "HLA-A*02:01", "n_flank": "", "c_flank": "",
+        "prediction_method_name": "mhcflurry", "predictor_version": "1",
+        "kind": "pMHC_affinity", "value": 50.0, "affinity": 50.0,
+        "percentile_rank": None, "score": 0.0,
+    }])
+    cfg = EpitopeConfig(default_methods={"pMHC_affinity": "mhcnuggets"})
+    with pytest.raises(
+            ValueError,
+            match=r"default_methods\['pMHC_affinity'\]='mhcnuggets'"):
+        validate_default_methods(cfg, frame)
+
+
+def test_canonical_pick_is_announced_only_when_the_user_did_not_choose():
+    """Don't tell someone to set an entry they have already set.
+
+    The log exists to make an implicit choice explicit. For a kind the user
+    configured there is no implicit choice, and saying "no default_methods
+    entry names one" is simply false.
+    """
+    import logging
+
+    import pandas as pd
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import resolve_default_methods
+
+    def row(method, value):
+        return {
+            "prediction_id": "p", "source_sequence_name": "ctx",
+            "peptide": "SIINFEKL", "peptide_offset": 0, "peptide_length": 8,
+            "allele": "HLA-A*02:01", "n_flank": "", "c_flank": "",
+            "prediction_method_name": method, "predictor_version": "1",
+            "kind": "pMHC_affinity", "value": value, "affinity": value,
+            "percentile_rank": None, "score": 0.0,
+        }
+
+    frame = pd.DataFrame([row("mhcflurry", 50.0), row("netmhcpan", 60.0)])
+    messages = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record):
+            messages.append(record.getMessage())
+
+    logger = logging.getLogger("vaxrank.epitope_dsl")
+    handler = _Capture()
+    logger.addHandler(handler)
+    previous = logger.level
+    logger.setLevel(logging.INFO)
+    try:
+        configured = resolve_default_methods(
+            EpitopeConfig(default_methods={"pMHC_affinity": "netmhcpan"}),
+            frame)
+        assert configured == {"pMHC_affinity": "netmhcpan"}
+        assert not messages
+
+        messages.clear()
+        auto = resolve_default_methods(EpitopeConfig(), frame)
+        assert auto == {"pMHC_affinity": "mhcflurry"}
+        assert any("canonical pick" in message for message in messages)
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(previous)
+
+
+def test_typo_in_a_default_methods_kind_is_rejected():
+    """A kind the data does not have is a config error, not a no-op."""
+    import pandas as pd
+    import pytest
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import validate_default_methods
+
+    frame = pd.DataFrame([{
+        "prediction_id": "p", "source_sequence_name": "ctx",
+        "peptide": "SIINFEKL", "peptide_offset": 0, "peptide_length": 8,
+        "allele": "HLA-A*02:01", "n_flank": "", "c_flank": "",
+        "prediction_method_name": "mhcflurry", "predictor_version": "1",
+        "kind": "pMHC_affinity", "value": 50.0, "affinity": 50.0,
+        "percentile_rank": None, "score": 0.0,
+    }])
+    with pytest.raises(ValueError, match=r"pMHC_affinty"):
+        validate_default_methods(
+            EpitopeConfig(default_methods={"pMHC_affinty": "mhcflurry"}),
+            frame)

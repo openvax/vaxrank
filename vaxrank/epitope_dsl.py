@@ -216,84 +216,77 @@ def prediction_group_columns(topiary_df):
 
 
 
-# Priority order for auto-picking a canonical method when the user hasn't
-# set ``default_methods[kind]`` and the data exposes multiple models for
-# that Kind. Listed by decreasing preference; any method not listed falls
-# back to alphabetical.
-_CANONICAL_METHOD_PREFERENCE = (
-    "mhcflurry",
-    "netmhcpan",
-    "netmhcstabpan",
-    "netmhcpan_el",
-    "netmhcpan_ba",
-)
-
-
-def _auto_pick_canonical_method(methods):
-    """Pick one method name from a non-empty set by priority order."""
-    for pref in _CANONICAL_METHOD_PREFERENCE:
-        if pref in methods:
-            return pref
-    return sorted(methods)[0]
-
-
 def resolve_default_methods(cfg, topiary_df):
     """Return the ``default_methods`` dict to pass to topiary's
     :class:`~topiary.ranking.EvalContext` / :func:`apply_filter`.
 
-    For every Kind with multiple models in ``topiary_df``:
+    The auto-pick — which model is "canonical" for a kind produced by
+    several — is topiary's :func:`~topiary.ranking.resolve_default_methods`
+    and its ``CANONICAL_METHOD_PREFERENCE``. vaxrank used to carry its own
+    copy of that preference tuple, and the two had already drifted: ours
+    ordered ``netmhcstabpan`` ahead of ``netmhcpan_el`` / ``netmhcpan_ba``
+    where topiary orders it last, so the same frame could resolve to
+    different models depending on which table was consulted.
 
-    - if ``cfg.default_methods[kind]`` is set, use it;
-    - otherwise auto-pick the canonical method (``mhcflurry`` >
-      ``netmhcpan`` > ``netmhcstabpan`` > alphabetical) and log
-      INFO so the user can make it explicit.
-
-    Kinds with a single model are omitted (topiary doesn't need a
-    default for them). Assumes ``validate_default_methods`` has
-    already caught any typos in ``cfg.default_methods``.
+    What stays here is the part topiary has no opinion about: an explicit
+    ``cfg.default_methods`` entry is the user's stated choice and overrides
+    the canonical pick. Kinds with a single model are omitted by topiary —
+    the result only speaks where there is a real choice.
     """
+    from topiary.ranking import resolve_default_methods as topiary_resolve
+
     if topiary_df.empty:
         return {}
-    user_defaults = dict(cfg.default_methods or {})
-    resolved = {}
-    for kind, group in topiary_df.groupby("kind", sort=False):
-        methods = set(group["prediction_method_name"].dropna().unique())
-        if len(methods) <= 1:
+    resolved = dict(topiary_resolve(topiary_df))
+    configured = dict(cfg.default_methods or {})
+    # Only announce a pick the user did not make. Logging it for a kind they
+    # configured would tell them to set an entry they have already set.
+    for kind, picked in sorted(resolved.items()):
+        if kind in configured:
             continue
-        if kind in user_defaults:
-            resolved[kind] = user_defaults[kind]
-        else:
-            picked = _auto_pick_canonical_method(methods)
-            logger.info(
-                "Kind %s has multiple methods %s and no default_methods "
-                "entry; auto-picking %r. Set default_methods[%r] in the "
-                "epitope config to override.",
-                kind, sorted(methods), picked, kind)
-            resolved[kind] = picked
+        logger.info(
+            "Kind %s was produced by more than one model and no "
+            "default_methods entry names one; topiary's canonical pick is "
+            "%r. Set default_methods[%r] in the epitope config to override.",
+            kind, picked, kind)
+    # The user's explicit choice wins. An entry for a kind topiary did not
+    # consider ambiguous is dropped: topiary only consults a default where
+    # there is a real choice, so carrying it would change nothing, and
+    # validate_default_methods has already rejected a name the data lacks.
+    resolved.update({
+        kind: method
+        for kind, method in configured.items()
+        if kind in resolved
+    })
     return resolved
 
 
 def validate_default_methods(cfg, topiary_df):
-    """Error if ``cfg.default_methods`` names a method that isn't in the data.
+    """Error if ``cfg.default_methods`` names a kind or model absent from the
+    data.
 
-    Runs even for Kinds with a single model (where the default isn't
-    actually consulted by topiary) so typos are caught eagerly.
+    Delegates to topiary's
+    :func:`~topiary.ranking.validate_default_methods`, which checks the same
+    thing for the same reason: an entry naming a model that never ran is
+    silently inert, and stays inert until the day two models do produce that
+    kind — at which point it starts deciding.
     """
-    if not cfg.default_methods:
+    from topiary.ranking import validate_default_methods as topiary_validate
+
+    if not cfg.default_methods or topiary_df.empty:
         return
-    if topiary_df.empty:
-        return
-    methods_by_kind = (
-        topiary_df.groupby("kind")["prediction_method_name"]
-        .apply(lambda s: set(s.dropna().unique()))
-        .to_dict())
-    for kind, method in cfg.default_methods.items():
-        available = methods_by_kind.get(kind, set())
-        if method not in available:
+    # Checked one entry at a time so the failure can name the exact config
+    # key and value. topiary reports what is missing from the *data*, which
+    # is the half it can know; which setting to edit is the half it cannot,
+    # and is what the user actually needs in order to fix it.
+    for kind, method in dict(cfg.default_methods).items():
+        try:
+            topiary_validate(topiary_df, {kind: method})
+        except ValueError as error:
             raise ValueError(
-                f"default_methods[{kind!r}]={method!r} but that method "
-                f"is not present in the loaded predictions "
-                f"(available for {kind}: {sorted(available)})")
+                "default_methods[%r]=%r is not usable: %s Name a method "
+                "present in the loaded predictions, or remove the entry."
+                % (kind, method, error)) from error
 
 
 def score_predictions(epitopes, cfg, *, topiary_df=None,

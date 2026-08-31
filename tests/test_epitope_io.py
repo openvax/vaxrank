@@ -1605,7 +1605,7 @@ def test_default_methods_auto_picked_when_unset(tmp_path, caplog):
             csv_report_path=str(tmp_path / "out.csv"), epitope_config=cfg)
 
     assert any(
-        "auto-picking 'mhcflurry'" in rec.getMessage()
+        "canonical pick is 'mhcflurry'" in rec.getMessage()
         for rec in caplog.records), (
         f"Expected auto-pick info log; got: "
         f"{[r.getMessage() for r in caplog.records]}")
