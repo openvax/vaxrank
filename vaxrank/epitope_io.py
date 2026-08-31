@@ -726,47 +726,76 @@ class DetectedPredictor:
     version: str = ""
 
 
+def _parse_lens_binding_column(column):
+    """Split a topiary-normalized LENS binding column into its parts.
+
+    Returns ``(tool, version, kind, field)`` or ``None``. Two shapes exist:
+
+        mhcflurry_affinity_value             tool, kind, metric
+        netmhcpan_4.1b_affinity_value        tool, VERSION, kind, metric
+
+    topiary qualifies with the version only when two versions of one tool
+    would otherwise claim the same column name (openvax/topiary#208), so
+    both forms appear — sometimes in the same frame. Parsing from the right
+    handles that without guessing: the metric and kind are a known suffix,
+    and whatever precedes them is the tool, optionally followed by a
+    version. Splitting from the left cannot work, because a version segment
+    is indistinguishable from part of a tool name until you know where the
+    kind starts.
+    """
+    text = str(column)
+    for metric, kind in _LENS_KIND_METRICS:
+        for field in ("value", "score", "rank"):
+            suffix = "_%s_%s" % (metric, field)
+            if not text.endswith(suffix):
+                continue
+            prefix = text[:-len(suffix)]
+            if not prefix:
+                return None
+            head, _, tail = prefix.rpartition("_")
+            # A trailing segment starting with a digit is a version, not
+            # part of the tool name — the convention LENS itself uses.
+            if head and tail[:1].isdigit():
+                return head, tail, kind, field
+            return prefix, "", kind, field
+    return None
+
+
 def detect_lens_predictors(columns, versions=None):
-    """Return a :class:`DetectedPredictor` per ``(tool, kind)`` present.
+    """Return a :class:`DetectedPredictor` per ``(tool, version, kind)``.
 
     ``columns`` are the columns of a ``topiary.read_lens`` frame; ``versions``
-    is topiary's ``{method: version}`` map when available. Tools are whatever
-    topiary emitted — vaxrank no longer keeps its own list, so a predictor
-    topiary learns to read needs no change here.
+    is topiary's ``{method: version}`` map. A version parsed out of a column
+    name wins over that map, which cannot represent two versions of one tool
+    — it is a plain ``{tool: version}`` dict, so on a multi-version table it
+    reports only one of them and every leaf would be stamped with it.
+
+    Tools are whatever topiary emitted; vaxrank keeps no list of its own, so
+    a predictor topiary learns to read needs no change here.
     """
-    columns = set(columns)
     versions = versions or {}
+    parsed = {}
+    for column in columns:
+        fields = _parse_lens_binding_column(column)
+        if fields is None:
+            continue
+        tool, version, kind, field = fields
+        parsed.setdefault((tool, version, kind), {})[field] = str(column)
+
     detected = []
-    tools = sorted({
-        column.split("_", 1)[0]
-        for column in columns
-        for metric, _kind in _LENS_KIND_METRICS
-        if column.startswith(("%s_" % metric,)) is False
-        and ("_%s_" % metric) in column
-    })
-    for tool in tools:
-        for metric, kind in _LENS_KIND_METRICS:
-            names = {
-                field: "%s_%s_%s" % (tool, metric, field)
-                for field in ("value", "score", "rank")
-            }
-            present = {
-                field: name for field, name in names.items()
-                if name in columns}
-            if not present:
-                continue
-            agretopicity = "%s_agretopicity" % tool
-            detected.append(DetectedPredictor(
-                tool=tool,
-                kind=kind,
-                value_col=present.get("value"),
-                score_col=present.get("score"),
-                rank_col=present.get("rank"),
-                agretopicity_col=(
-                    agretopicity if agretopicity in columns else None),
-                version=str(versions.get(tool, "") or ""),
-            ))
-    detected.sort(key=lambda d: (d.tool, d.kind))
+    for (tool, version, kind), present in parsed.items():
+        agretopicity = "%s_agretopicity" % tool
+        detected.append(DetectedPredictor(
+            tool=tool,
+            kind=kind,
+            value_col=present.get("value"),
+            score_col=present.get("score"),
+            rank_col=present.get("rank"),
+            agretopicity_col=(
+                agretopicity if agretopicity in set(columns) else None),
+            version=version or str(versions.get(tool, "") or ""),
+        ))
+    detected.sort(key=lambda d: (d.tool, d.version, d.kind))
     return detected
 
 

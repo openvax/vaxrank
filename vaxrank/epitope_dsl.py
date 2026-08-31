@@ -289,6 +289,71 @@ def validate_default_methods(cfg, topiary_df):
                 % (kind, method, error)) from error
 
 
+def dsl_pins_a_version(cfg):
+    """True when a configured expression names an explicit predictor version."""
+    for expr in (cfg.filter_expr, cfg.score_expr):
+        if expr is None:
+            continue
+        refs = collect_dsl_references(parse_epitope_expression(expr))
+        if any(version for _kind, _method, version in refs["kinds"]):
+            return True
+    return False
+
+
+def resolve_default_versions(cfg, topiary_df):
+    """Narrow a frame to one predictor version per ``(kind, model)``.
+
+    topiary raises on an unqualified reference when a model appears at more
+    than one version, and offers no ``default_versions`` to resolve it the
+    way ``default_methods`` resolves an ambiguous model
+    (openvax/topiary#214). Without this a multi-version LENS table cannot be
+    scored with a default configuration at all — the default ``score_expr``
+    references ``affinity.value``, which is exactly the unqualified form.
+
+    Newest wins, by PEP 440 ordering. That is not an arbitrary pick: it is
+    what ``CandidateEpitope`` already does for unqualified access, so
+    resolving the same way makes the DSL and the object API agree where they
+    currently disagree (openvax/vaxrank#362).
+
+    Left alone when a configured expression pins a version — that caller has
+    said which one they want, and dropping rows would break the reference
+    they wrote.
+    """
+    if topiary_df.empty or "predictor_version" not in topiary_df.columns:
+        return topiary_df
+    versions_by_model = {}
+    for (kind, method), group in topiary_df.groupby(
+            ["kind", "prediction_method_name"], sort=False):
+        found = {v for v in group["predictor_version"].dropna().unique() if v}
+        if len(found) > 1:
+            versions_by_model[(kind, method)] = found
+    if not versions_by_model:
+        return topiary_df
+    if dsl_pins_a_version(cfg):
+        return topiary_df
+
+    from .candidate_epitope import _sort_versions
+
+    keep = {}
+    for (kind, method), found in versions_by_model.items():
+        newest = _sort_versions(found)[-1]
+        keep[(kind, method)] = newest
+        logger.warning(
+            "%s appears at versions %s for kind %s. No configured expression "
+            "names one, so the newest (%r) is used and the others are "
+            "excluded from scoring — matching how CandidateEpitope resolves "
+            "unqualified access. Write affinity[%r, %r] to choose "
+            "explicitly.",
+            method, sorted(found), kind, newest, method, sorted(found)[0])
+
+    def _row_kept(row):
+        chosen = keep.get((row["kind"], row["prediction_method_name"]))
+        return chosen is None or row["predictor_version"] == chosen
+
+    return topiary_df[topiary_df.apply(_row_kept, axis=1)].reset_index(
+        drop=True)
+
+
 def score_predictions(epitopes, cfg, *, topiary_df=None,
                       kind_support=None):
     """Score external-input epitopes using the configured Topiary DSL.
@@ -326,6 +391,7 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
     if df.empty:
         return pd.Series(dtype=float)
 
+    df = resolve_default_versions(cfg, df)
     validate_default_methods(cfg, df)
     resolved = resolve_default_methods(cfg, df)
 

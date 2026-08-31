@@ -2394,11 +2394,10 @@ def test_unrecognized_predictor_version_still_yields_its_predictor(tmp_path):
 def test_two_versions_of_one_tool_are_kept_apart(tmp_path):
     """A LENS file may carry two versions of the same predictor.
 
-    vaxrank's DSL addresses them individually — ``affinity['netmhcpan',
-    '4.2']`` — so collapsing them is a loss of capability, not just of a
-    column. topiary's normalized column name strips the version, which makes
-    two versions collide into one name (openvax/topiary#208); this pins the
-    behaviour vaxrank has to preserve regardless of how that is resolved.
+    topiary qualifies the column names when two versions would otherwise
+    collide (openvax/topiary#208), so both survive the read. vaxrank's DSL
+    addresses them individually — ``affinity['netmhcpan', '4.2']`` — so
+    collapsing them would be a loss of capability, not just of a column.
     """
     from vaxrank.epitope_config import EpitopeConfig
 
@@ -2408,10 +2407,58 @@ def test_two_versions_of_one_tool_are_kept_apart(tmp_path):
         "netmhcpan_4.2.aff_nm\n"
         "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t75\t120\n")
 
-    [epitope] = read_lens_report(path, epitope_config=EpitopeConfig()).epitopes
+    [epitope] = read_lens_report(
+        path, epitope_config=EpitopeConfig()).epitopes
     by_version = {
         p.predictor_version: p.value
         for p in epitope.predictions_flat()
         if p.predictor_name == "netmhcpan"}
+    # Both leaves stay on the candidate. Only the evaluation frame is
+    # narrowed, so nothing is lost from the data itself.
     assert by_version == {"4.1b": pytest.approx(75.0),
                           "4.2": pytest.approx(120.0)}
+
+
+def test_unqualified_scoring_resolves_to_the_newest_version(tmp_path, caplog):
+    """An ambiguous version must not make the file unscoreable.
+
+    topiary raises on an unqualified reference when a model appears at two
+    versions and offers no ``default_versions`` to resolve it
+    (openvax/topiary#214) — so with the default ``score_expr``, which is
+    unqualified, the whole run would fail. vaxrank resolves to the newest by
+    PEP 440, which is what ``CandidateEpitope`` already does for unqualified
+    access, and says so.
+    """
+    import logging
+
+    from vaxrank.epitope_config import EpitopeConfig
+
+    path = tmp_path / "two_versions.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tnetmhcpan_4.1b.aff_nm\t"
+        "netmhcpan_4.2.aff_nm\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t75\t120\n")
+
+    with caplog.at_level(logging.WARNING):
+        [default_scored] = read_lens_report(
+            path, epitope_config=EpitopeConfig()).epitopes
+    assert default_scored.per_allele_scores  # scored at all, rather than raising
+
+    warning = "\n".join(
+        record.getMessage() for record in caplog.records
+        if record.levelno >= logging.WARNING)
+    assert "4.1b" in warning and "4.2" in warning
+    assert "newest" in warning
+
+    # An expression that pins a version is left alone — dropping rows would
+    # break the reference the caller wrote.
+    [pinned] = read_lens_report(
+        path,
+        epitope_config=EpitopeConfig(
+            score_expr=(
+                "affinity['netmhcpan', '4.1b']"
+                ".value.logistic_normalized(350,150)"))).epitopes
+    # 4.1b is the stronger binder (75 nM vs 120), so pinning it scores higher
+    # than the newest-version default — proving the pin was honored.
+    assert (list(pinned.per_allele_scores.values())[0]
+            > list(default_scored.per_allele_scores.values())[0])
