@@ -23,6 +23,7 @@ import math
 import numpy as np
 import pandas as pd
 import pytest
+import topiary
 from topiary.ranking import EvalContext, apply_filter
 
 from vaxrank.epitope_config import EpitopeConfig
@@ -739,3 +740,64 @@ def test_typo_in_a_default_methods_kind_is_rejected():
         validate_default_methods(
             EpitopeConfig(default_methods={"pMHC_affinty": "mhcflurry"}),
             frame)
+
+
+@pytest.mark.parametrize("kind", sorted(
+    k for k, v in topiary.KIND_MHC_DEPENDENCE.items() if v == "none"))
+def test_every_allele_free_kind_reaches_every_patient_allele(kind):
+    """Allele-free evidence must score against the patient's alleles.
+
+    A prediction that describes the peptide rather than a peptide-MHC pair
+    carries no allele, so it forms a group keyed on the empty string and
+    contributes to no per-allele score — the candidate scores 0 and is
+    dropped (openvax/topiary#182). vaxrank sidesteps that by projecting such
+    evidence across the patient's alleles when it builds the frame.
+
+    That projection used to name ``antigen_processing`` literally, because
+    the set of allele-free kinds lived in a private topiary table. There are
+    five, so the other four were silently dropped from scoring: mhctools
+    ships netcleave, deeptap, eramer and proteasome_predictor, all of which
+    emit them. No LENS fixture carries one, which is why nothing caught it.
+    """
+    from mhctools import Prediction
+
+    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.epitope_dsl import attach_per_allele_scores
+
+    alleles = ("HLA-A*02:01", "HLA-B*07:02")
+    epitope = CandidateEpitope(
+        sequence="SIINFEKL", offset=0, patient_alleles=alleles,
+        predictions=(Prediction(
+            kind=kind, score=0.8, peptide="SIINFEKL", allele="",
+            predictor_name="mhcflurry", predictor_version="2.1.1"),))
+
+    [scored] = attach_per_allele_scores(
+        [epitope],
+        EpitopeConfig(score_expr="%s[mhcflurry].score" % kind))
+
+    assert dict(scored.per_allele_scores) == {a: 0.8 for a in alleles}
+
+
+def test_an_unrecognized_kind_is_not_projected_across_alleles():
+    """A kind topiary does not classify must not be broadcast.
+
+    Projecting an unknown kind would invent per-allele evidence a model
+    never produced, so a topiary release adding a kind fails by scoring
+    nothing rather than by fabricating a number.
+    """
+    from mhctools import Prediction
+
+    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.epitope_dsl import epitopes_to_topiary_df
+
+    epitope = CandidateEpitope(
+        sequence="SIINFEKL", offset=0,
+        patient_alleles=("HLA-A*02:01", "HLA-B*07:02"),
+        predictions=(Prediction(
+            kind="a_kind_topiary_has_not_defined", score=0.8,
+            peptide="SIINFEKL", allele="", predictor_name="x",
+            predictor_version="1"),))
+
+    df = epitopes_to_topiary_df([epitope])
+
+    assert sorted(set(df["allele"])) == [""]
