@@ -562,28 +562,41 @@ def peptide_offsets_in_context(peptide, peptide_context):
 
 
 def _read_counts_from_lens_row(row):
-    """Extract real RNA-read counts from a LENS row.
-
-    LENS columns:
-      - ``rna_reads_covering_genomic_origin``           → total reads at locus
-      - ``rna_reads_covering_genomic_origin_with_peptide_cds`` → reads
-        whose CDS produces this neoepitope (the alt-supporting count)
-      - ``vaf``                                          → variant allele
-        frequency (used only as a sanity check, not as a stand-in)
+    """Read the counts topiary derived from a LENS row.
 
     Returns ``(n_overlapping_reads, n_alt_reads, n_ref_reads,
-    n_alt_reads_supporting_protein_sequence)``. Missing columns yield
-    0 — honest "no read signal" rather than a fabricated 1.
+    n_alt_reads_supporting_protein_sequence)``.
+
+    vaxrank used to derive these itself, and got the central one wrong.
+    ``rna_reads_covering_genomic_origin_with_peptide_cds`` is a genuine
+    count, but of reads overlapping the peptide's coding sequence — not of
+    reads supporting the variant allele — and it was assigned straight to
+    ``n_alt_reads``, with ``n_ref_reads`` derived from that. The two are
+    different quantities and disagree in both directions:
+
+      depth   cds_overlap   vaf      was n_alt   depth x vaf
+       2337             2   0.022           2            51
+        765            12   0.008          12             6
+        291           166   0.258         166            75
+
+    ``n_alt_reads`` feeds the combined-score DSL — ``sqrt(n_alt_reads) *
+    target_epitope_score`` is the documented canonical form — so this
+    reordered vaccine peptides.
+
+    topiary populates the fields with the derivation named per field
+    (``read_count_method``): depth x VAF for the alt/ref split, and the
+    CDS-overlap count kept where it belongs, in
+    ``n_alt_reads_supporting_protein_sequence``. A row whose source could
+    not answer carries no estimate rather than a zero standing in for one;
+    the zero appears here only because the fragment field is not nullable.
     """
-    n_total = cells.integer(
-        row.get('rna_reads_covering_genomic_origin'), default=0)
-    n_alt_cds = cells.integer(
-        row.get('rna_reads_covering_genomic_origin_with_peptide_cds'),
-        default=0)
-    n_alt_reads = n_alt_cds
-    n_ref_reads = max(0, n_total - n_alt_reads)
-    n_alt_supporting_protein = n_alt_cds
-    return n_total, n_alt_reads, n_ref_reads, n_alt_supporting_protein
+    return (
+        cells.integer(row.get('n_overlapping_reads'), default=0),
+        cells.integer(row.get('n_alt_reads'), default=0),
+        cells.integer(row.get('n_ref_reads'), default=0),
+        cells.integer(
+            row.get('n_alt_reads_supporting_protein_sequence'), default=0),
+    )
 
 
 @dataclasses.dataclass
@@ -866,7 +879,7 @@ def lens_vaccine_entry(metadata, selection, genome=None, options=None):
     # Best-supported row wins: most alt reads, then most coverage.
     counts = [_read_counts_from_lens_row(record.row)
               for record in selection.records]
-    n_total, n_alt_reads, _, n_alt_protein = max(
+    n_total, n_alt_reads, n_ref_reads, n_alt_protein = max(
         counts, key=lambda c: (c[1], c[0]), default=(0, 0, 0, 0))
     metadata.vaccine_peptide = external_vaccine_peptide(
         variant=metadata.variant,
@@ -877,9 +890,10 @@ def lens_vaccine_entry(metadata, selection, genome=None, options=None):
         gene_name=key.primary_gene_name,
         transcripts=resolve_external_transcripts(
             key.ordered_transcript_ids, genome),
-        counts=(
-            n_total, n_alt_reads, max(0, n_total - n_alt_reads),
-            n_alt_protein),
+        # Use the reference count topiary derived rather than recomputing
+        # it as depth minus alt: that subtraction was only ever correct if
+        # the alt count was variant support, which is exactly what was wrong.
+        counts=(n_total, n_alt_reads, n_ref_reads, n_alt_protein),
         options=options,
     )
     return metadata
