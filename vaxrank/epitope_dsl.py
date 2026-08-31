@@ -238,17 +238,24 @@ def resolve_default_methods(cfg, topiary_df):
     if topiary_df.empty:
         return {}
     resolved = dict(topiary_resolve(topiary_df))
+    configured = dict(cfg.default_methods or {})
+    # Only announce a pick the user did not make. Logging it for a kind they
+    # configured would tell them to set an entry they have already set.
     for kind, picked in sorted(resolved.items()):
+        if kind in configured:
+            continue
         logger.info(
             "Kind %s was produced by more than one model and no "
             "default_methods entry names one; topiary's canonical pick is "
             "%r. Set default_methods[%r] in the epitope config to override.",
             kind, picked, kind)
-    # The user's explicit choice wins, and may name a kind topiary did not
-    # consider ambiguous — harmless, and validated separately.
+    # The user's explicit choice wins. An entry for a kind topiary did not
+    # consider ambiguous is dropped: topiary only consults a default where
+    # there is a real choice, so carrying it would change nothing, and
+    # validate_default_methods has already rejected a name the data lacks.
     resolved.update({
         kind: method
-        for kind, method in (cfg.default_methods or {}).items()
+        for kind, method in configured.items()
         if kind in resolved
     })
     return resolved
