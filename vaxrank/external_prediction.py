@@ -70,7 +70,7 @@ def pvacseq_variant_id(row) -> str:
 
 def lens_variant_id(row) -> str:
     """Return a LENS variant identity including alleles when available."""
-    coords = external_text(row.get("variant_coords"))
+    coords = external_text(row.get("variant"))
     ref = (
         external_text(row.get("snv_ref_allele"))
         or external_text(row.get("indel_ref_allele"))
@@ -223,14 +223,14 @@ class ExternalPredictionKey:
                 row.get("all_gene_ids_encoding_peptide"),
             ),
             gene_names=external_values(
-                row.get("gene_name"),
+                row.get("gene"),
                 row.get("all_gene_names_encoding_peptide"),
             ),
             transcript_ids=external_values(
                 row.get("transcript_id"),
                 row.get("all_transcript_ids_encoding_peptide"),
             ),
-            primary_gene_name=cells.text(row.get("gene_name")),
+            primary_gene_name=cells.text(row.get("gene")),
             primary_transcript_id=cells.text(row.get("transcript_id")),
             species=external_text(row.get("species")),
             peptide=peptide,

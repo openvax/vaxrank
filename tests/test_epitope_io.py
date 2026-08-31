@@ -707,9 +707,16 @@ def test_load_lens_preserves_mhcflurry_axes_for_coverage_and_dsl():
     epitope = next(e for e in epitopes if e.sequence == "SVVGSSSSS")
 
     coverage = compute_coverage([epitope], ["HLA-A*02:01"])["HLA-A*02:01"]
-    # Coverage aggregates the best affinity evidence across models;
-    # netMHCpan's 0.30 beats MHCflurry's independently preserved 0.45.
-    assert coverage.best_affinity_pct == pytest.approx(0.30)
+    # netMHCpan emits two percentiles that mean different things:
+    # ``perc_rank_el`` is eluted-ligand (presentation) and ``perc_rank_ba``
+    # is binding affinity. vaxrank's own column registry listed
+    # ``perc_rank_el`` first among the *affinity* percentiles, so netMHCpan's
+    # 0.30 EL percentile was reported as an affinity percentile and beat
+    # MHCflurry's real 0.45. Reading topiary's normalized frame files each
+    # under its own kind, so the best affinity percentile is now MHCflurry's
+    # 0.45 (netMHCpan's real affinity rank is 0.50) and the EL value joins
+    # the presentation axis where it belongs.
+    assert coverage.best_affinity_pct == pytest.approx(0.45)
     assert coverage.best_presentation_pct == pytest.approx(0.28)
 
     scores = score_predictions(
@@ -1056,8 +1063,14 @@ def test_epitope_report_surfaces_integrated_mhcflurry_axes():
     assert mhcflurry_row["Presentation score"] != "—"
     assert mhcflurry_row["Presentation %ile"] != "—"
     assert mhcflurry_row["Integrated processing score"] != "—"
-    assert netmhcpan_row["Presentation score"] == "—"
-    assert netmhcpan_row["Presentation %ile"] == "—"
+    # netMHCpan's eluted-ligand score IS a presentation signal; vaxrank's
+    # own column registry never read it, so this used to be blank. topiary
+    # files score_el / perc_rank_el under presentation, so the axis is
+    # populated for netMHCpan too.
+    assert netmhcpan_row["Presentation score"] != "—"
+    assert netmhcpan_row["Presentation %ile"] != "—"
+    # Integrated antigen processing stays MHCflurry-only — netMHCpan emits
+    # no such axis, so this one is still blank and the columns stay aligned.
     assert netmhcpan_row["Integrated processing score"] == "—"
     assert tuple(mhcflurry_row) == tuple(netmhcpan_row)
 
@@ -1230,8 +1243,10 @@ def test_resolve_default_methods_auto_picks_canonical():
     _loaded = read_lens_report(path)
     preds = list(_loaded.epitopes)
     df = epitopes_to_topiary_df(preds)
+    # netMHCpan's eluted-ligand columns now land on the presentation axis,
+    # so presentation is multi-model here too and gets a canonical default.
     assert resolve_default_methods(EpitopeConfig(), df) == {
-        "pMHC_affinity": "mhcflurry"}
+        "pMHC_affinity": "mhcflurry", "pMHC_presentation": "mhcflurry"}
 
 
 def test_resolve_default_methods_user_override_wins():
@@ -1245,7 +1260,10 @@ def test_resolve_default_methods_user_override_wins():
     preds = list(_loaded.epitopes)
     df = epitopes_to_topiary_df(preds)
     cfg = EpitopeConfig(default_methods={"pMHC_affinity": "netmhcpan"})
-    assert resolve_default_methods(cfg, df) == {"pMHC_affinity": "netmhcpan"}
+    # Presentation is multi-model here too now that netMHCpan's eluted-ligand
+    # columns land on that axis, so it also gets a canonical default.
+    assert resolve_default_methods(cfg, df) == {
+        "pMHC_affinity": "netmhcpan", "pMHC_presentation": "mhcflurry"}
 
 
 def test_default_methods_works_on_synthetic_main_pipeline_frame(tmp_path):
@@ -1848,7 +1866,8 @@ def test_real_lens_v15_emits_both_affinity_predictors():
     assert methods == {"mhcflurry", "netmhcpan"}
     # MHCflurry contributes affinity + presentation + processing while
     # netMHCpan contributes affinity. NA cells produce fewer leaves.
-    assert len(leaves) <= 4 * len(report_df)
+    # affinity + presentation per tool, plus one processing leaf.
+    assert len(leaves) <= 6 * len(report_df)
     predictors_used = report_df["Predictors used"].iloc[0]
     assert predictors_used.startswith("mhcflurry")
 
@@ -2303,3 +2322,143 @@ def test_native_roundtrip_keeps_undecided_targetability_undecided(tmp_path):
 
     assert reloaded.overlaps_targetable is None
     assert reloaded.is_targetable is True
+
+
+def test_netmhcpan_eluted_ligand_percentile_is_presentation_not_affinity(
+        tmp_path):
+    """netMHCpan's two percentiles mean different things.
+
+    ``perc_rank_el`` is the eluted-ligand percentile — a presentation
+    signal — and ``perc_rank_ba`` is the binding-affinity percentile.
+    vaxrank's own column registry listed ``perc_rank_el`` first among the
+    *affinity* percentiles, so an EL percentile was reported as an affinity
+    percentile and could win "best affinity" over a real one. Reading
+    topiary's normalized frame files each under its own kind.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+
+    path = tmp_path / "netmhcpan_axes.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tnetmhcpan_4.1b.aff_nm\t"
+        "netmhcpan_4.1b.perc_rank_ba\tnetmhcpan_4.1b.perc_rank_el\t"
+        "netmhcpan_4.1b.score_el\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t76.11\t0.5\t0.3\t0.92\n")
+
+    [epitope] = read_lens_report(path, epitope_config=EpitopeConfig()).epitopes
+    by_kind = {
+        p.kind: p for p in epitope.predictions_flat()
+        if p.predictor_name == "netmhcpan"}
+
+    # The affinity leaf carries the BA percentile, not the EL one.
+    assert by_kind["pMHC_affinity"].value == pytest.approx(76.11)
+    assert by_kind["pMHC_affinity"].percentile_rank == pytest.approx(0.5)
+    # The EL signal is a presentation leaf of its own.
+    assert by_kind["pMHC_presentation"].percentile_rank == pytest.approx(0.3)
+    assert by_kind["pMHC_presentation"].score == pytest.approx(0.92)
+
+
+def test_unrecognized_predictor_version_still_yields_its_predictor(tmp_path):
+    """A version string topiary has not seen must not lose the predictor.
+
+    ``read_lens`` used to normalize a binding column only when it recognized
+    the version, passing an unrecognized one through verbatim — so
+    ``netmhcpan_4.1.aff_nm`` (no ``b``) dropped netMHCpan's entire affinity
+    axis with nothing in the logs. vaxrank carried a bridge that remapped
+    such columns by metric; topiary 5.28.0 matches structurally
+    (openvax/topiary#206) and the bridge is gone.
+
+    This pins the capability rather than the bridge: if a future topiary
+    reverts to version-keyed matching, a whole predictor disappears from
+    scoring and the report, and nothing else in the suite would notice.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+
+    path = tmp_path / "unknown_version.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "netmhcpan_4.1.aff_nm\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t75\n")
+
+    [epitope] = read_lens_report(
+        path, epitope_config=EpitopeConfig()).epitopes
+    predictors = {
+        (p.predictor_name, p.kind) for p in epitope.predictions_flat()}
+    assert ("netmhcpan", "pMHC_affinity") in predictors
+    assert ("mhcflurry", "pMHC_affinity") in predictors
+    [netmhcpan] = [
+        p for p in epitope.predictions_flat()
+        if p.predictor_name == "netmhcpan"]
+    assert netmhcpan.value == pytest.approx(75.0)
+
+
+def test_two_versions_of_one_tool_are_kept_apart(tmp_path):
+    """A LENS file may carry two versions of the same predictor.
+
+    topiary qualifies the column names when two versions would otherwise
+    collide (openvax/topiary#208), so both survive the read. vaxrank's DSL
+    addresses them individually — ``affinity['netmhcpan', '4.2']`` — so
+    collapsing them would be a loss of capability, not just of a column.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+
+    path = tmp_path / "two_versions.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tnetmhcpan_4.1b.aff_nm\t"
+        "netmhcpan_4.2.aff_nm\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t75\t120\n")
+
+    [epitope] = read_lens_report(
+        path, epitope_config=EpitopeConfig()).epitopes
+    by_version = {
+        p.predictor_version: p.value
+        for p in epitope.predictions_flat()
+        if p.predictor_name == "netmhcpan"}
+    # Both leaves stay on the candidate. Only the evaluation frame is
+    # narrowed, so nothing is lost from the data itself.
+    assert by_version == {"4.1b": pytest.approx(75.0),
+                          "4.2": pytest.approx(120.0)}
+
+
+def test_unqualified_scoring_resolves_to_the_newest_version(tmp_path, caplog):
+    """An ambiguous version must not make the file unscoreable.
+
+    topiary raises on an unqualified reference when a model appears at two
+    versions and offers no ``default_versions`` to resolve it
+    (openvax/topiary#214) — so with the default ``score_expr``, which is
+    unqualified, the whole run would fail. vaxrank resolves to the newest by
+    PEP 440, which is what ``CandidateEpitope`` already does for unqualified
+    access, and says so.
+    """
+    import logging
+
+    from vaxrank.epitope_config import EpitopeConfig
+
+    path = tmp_path / "two_versions.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tnetmhcpan_4.1b.aff_nm\t"
+        "netmhcpan_4.2.aff_nm\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t75\t120\n")
+
+    with caplog.at_level(logging.WARNING):
+        [default_scored] = read_lens_report(
+            path, epitope_config=EpitopeConfig()).epitopes
+    assert default_scored.per_allele_scores  # scored at all, rather than raising
+
+    warning = "\n".join(
+        record.getMessage() for record in caplog.records
+        if record.levelno >= logging.WARNING)
+    assert "4.1b" in warning and "4.2" in warning
+    assert "newest" in warning
+
+    # An expression that pins a version is left alone — dropping rows would
+    # break the reference the caller wrote.
+    [pinned] = read_lens_report(
+        path,
+        epitope_config=EpitopeConfig(
+            score_expr=(
+                "affinity['netmhcpan', '4.1b']"
+                ".value.logistic_normalized(350,150)"))).epitopes
+    # 4.1b is the stronger binder (75 nM vs 120), so pinning it scores higher
+    # than the newest-version default — proving the pin was honored.
+    assert (list(pinned.per_allele_scores.values())[0]
+            > list(default_scored.per_allele_scores.values())[0])

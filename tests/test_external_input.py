@@ -214,7 +214,7 @@ def test_variant_from_lens_row_uses_real_snv_alleles():
     biology so it can be fed to varcode-effect annotation safely."""
     from vaxrank.external_input import variant_from_lens_row
     row = {
-        'variant_coords': 'chr1:1624824',
+        'variant': 'chr1:1624824',
         'antigen_source': 'SNV',
         'snv_ref_allele': 'C',
         'snv_alt_allele': '[T]',  # LENS's bracketed format
@@ -236,7 +236,7 @@ def test_variant_from_lens_row_uses_real_indel_alleles():
     representation a downstream caller would expect."""
     from vaxrank.external_input import variant_from_lens_row
     row = {
-        'variant_coords': 'chr3:150742445',
+        'variant': 'chr3:150742445',
         'antigen_source': 'INDEL',
         'indel_ref_allele': 'CA',
         'indel_alt_allele': '[C]',
@@ -259,7 +259,7 @@ def test_variant_from_lens_row_skips_non_snv_indel():
     from vaxrank.external_input import variant_from_lens_row
     for src in ('SPLICE', 'FUSION', 'CTA/SELF', 'ERV'):
         row = {
-            'variant_coords': None,
+            'variant': None,
             'antigen_source': src,
         }
         assert variant_from_lens_row(row) is None
@@ -270,7 +270,7 @@ def test_variant_from_lens_row_skips_when_alleles_missing():
     rather than fabricate a placeholder."""
     from vaxrank.external_input import variant_from_lens_row
     row = {
-        'variant_coords': 'chr1:1000',
+        'variant': 'chr1:1000',
         'antigen_source': 'SNV',
         'snv_ref_allele': None,
         'snv_alt_allele': None,

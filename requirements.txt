@@ -12,7 +12,7 @@ mhctools>=3.13.3,<4.0.0
 # netmhcpan) without pre-subsetting the frame.
 # 5.16.0 adds read_pvacseq for both pVACseq all_epitopes flavors and
 # categorical DSL helpers used by pVACseq external-input scoring.
-topiary>=5.26.0,<6.0.0
+topiary>=5.28.2,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0

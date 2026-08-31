@@ -510,7 +510,7 @@ def variant_from_lens_row(row, genome=None):
     NaN ``variant_coords`` and are skipped upstream.
     """
     from varcode import Variant
-    coords_parsed = parse_lens_variant_coordinates(row.get('variant_coords'))
+    coords_parsed = parse_lens_variant_coordinates(row.get('variant'))
     if coords_parsed is None:
         return None
     contig, pos = coords_parsed
@@ -676,13 +676,13 @@ def lens_variant_metadata(variant_id, group_rows, genome=None):
         value
         for row in group_rows
         for value in (
-            row.get("gene_name"),
+            row.get("gene"),
             row.get("all_gene_names_encoding_peptide"),
         )
     ))
     lens_is_frameshift = any(
         external_text(row.get("indel_type")).lower() == "frameshift"
-        or "fs" in external_text(row.get("variant_effect")).lower()
+        or "fs" in external_text(row.get("effect")).lower()
         for row in group_rows
     )
     entry = ExternalVariantEntry(
@@ -953,7 +953,7 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
     # an upstream bug worth surfacing distinctly.
     skipped_kinds = {}  # antigen_source value → count
     for r in rows:
-        coords = r.get('variant_coords')
+        coords = r.get('variant')
         if coords is None or (
                 isinstance(coords, float) and pd.isna(coords)) or (
                 isinstance(coords, str) and (
@@ -1019,7 +1019,7 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
         k = r.get('antigen_source')
         return ('(missing)' if cells.missing(k) else str(k).strip())
 
-    rows_no_gene_name = [r for r in rows if cells.missing(r.get('gene_name'))]
+    rows_no_gene_name = [r for r in rows if cells.missing(r.get('gene'))]
     rows_no_transcript = [r for r in rows if cells.missing(r.get('transcript_id'))]
     if n_no_pep_context:
         logger.warning(
