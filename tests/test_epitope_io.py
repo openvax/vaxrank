@@ -766,11 +766,12 @@ def test_lens_processing_dsl_scores_every_patient_allele(tmp_path):
     assert len(processing) == 1
     assert processing[0].allele == ""
 
+    # One allele-free row in the frame, not one per allele: the frame
+    # states what was predicted and topiary adds the per-allele groups.
     topiary_df = epitopes_to_topiary_df(epitopes)
     processing_rows = topiary_df[
         topiary_df["kind"] == "antigen_processing"]
-    assert set(processing_rows["allele"]) == {
-        "HLA-A*02:01", "HLA-B*07:02"}
+    assert set(processing_rows["allele"]) == {""}
 
     scored = attach_per_allele_scores(
         epitopes,
@@ -809,9 +810,11 @@ def test_lens_processing_only_rows_preserve_alleles_scores_and_report_rows(
     assert len(processing) == 1
     assert processing[0].allele == ""
 
+    # The whole file is allele-free evidence, so the frame is one
+    # allele-free row. The genotype reaches it via topiary's alleles=,
+    # which is why the scores below are per-allele anyway.
     topiary_df = epitopes_to_topiary_df(epitopes)
-    assert set(topiary_df["allele"]) == {
-        "HLA-A*02:01", "HLA-B*07:02"}
+    assert set(topiary_df["allele"]) == {""}
     config = EpitopeConfig(
         score_expr="processing[mhcflurry].score")
     scored = attach_per_allele_scores(epitopes, config)
