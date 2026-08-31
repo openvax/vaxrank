@@ -332,11 +332,11 @@ def resolve_default_versions(cfg, topiary_df):
     if dsl_pins_a_version(cfg):
         return topiary_df
 
-    from .candidate_epitope import _sort_versions
+    from .candidate_epitope import sort_versions
 
     keep = {}
     for (kind, method), found in versions_by_model.items():
-        newest = _sort_versions(found)[-1]
+        newest = sort_versions(found)[-1]
         keep[(kind, method)] = newest
         logger.warning(
             "%s appears at versions %s for kind %s. No configured expression "
@@ -346,12 +346,14 @@ def resolve_default_versions(cfg, topiary_df):
             "explicitly.",
             method, sorted(found), kind, newest, method, sorted(found)[0])
 
-    def _row_kept(row):
-        chosen = keep.get((row["kind"], row["prediction_method_name"]))
-        return chosen is None or row["predictor_version"] == chosen
-
-    return topiary_df[topiary_df.apply(_row_kept, axis=1)].reset_index(
-        drop=True)
+    # Vectorized rather than a row-wise apply: this runs on every scoring
+    # pass, and the frames are one row per prediction leaf.
+    chosen = pd.Series(
+        list(zip(topiary_df["kind"], topiary_df["prediction_method_name"]))
+    ).map(keep)
+    keep_mask = chosen.isna().to_numpy() | (
+        chosen.to_numpy() == topiary_df["predictor_version"].to_numpy())
+    return topiary_df[keep_mask].reset_index(drop=True)
 
 
 def score_predictions(epitopes, cfg, *, topiary_df=None,

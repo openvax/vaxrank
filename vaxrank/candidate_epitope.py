@@ -120,8 +120,17 @@ def _nan_safe(x) -> tuple[bool, float]:
     return (is_nan, 0.0 if is_nan else x)
 
 
-def _sort_versions(versions) -> list:
-    """Sort ``predictor_version`` strings: legacy / unparseable
+def sort_versions(versions) -> list:
+    """Canonical ordering for ``predictor_version`` strings.
+
+    Public because two layers now depend on it agreeing: the leaf accessors
+    below, and :func:`vaxrank.epitope_dsl.resolve_default_versions`, which
+    resolves an unqualified DSL reference. If those two ordered versions
+    differently the object API and the DSL would disagree about the same
+    candidate — which is openvax/vaxrank#362, and is what resolving through
+    one function prevents.
+
+    Sorts ``predictor_version`` strings: legacy / unparseable
     strings come first (lex-sorted), valid PEP 440 versions follow
     oldest → newest. The last element is therefore the *most recent*
     valid version when any are valid, else the last legacy string
@@ -265,7 +274,7 @@ class Peptide:
         """
         canonical = _resolve_kind(kind)
         by_version = self.predictions.get(canonical, {}).get(predictor, {})
-        return tuple(_sort_versions(by_version))
+        return tuple(sort_versions(by_version))
 
     def alleles_for(self, kind: str, *,
                     predictor: Optional[str] = None,
@@ -354,7 +363,7 @@ class Peptide:
         if not by_version:
             return ()
         if version is None:
-            version = _sort_versions(by_version)[-1]
+            version = sort_versions(by_version)[-1]
         return by_version.get(version, ())
 
     def best(self, kind: str, *,
