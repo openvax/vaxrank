@@ -2389,3 +2389,29 @@ def test_unrecognized_predictor_version_still_yields_its_predictor(tmp_path):
         p for p in epitope.predictions_flat()
         if p.predictor_name == "netmhcpan"]
     assert netmhcpan.value == pytest.approx(75.0)
+
+
+def test_two_versions_of_one_tool_are_kept_apart(tmp_path):
+    """A LENS file may carry two versions of the same predictor.
+
+    vaxrank's DSL addresses them individually — ``affinity['netmhcpan',
+    '4.2']`` — so collapsing them is a loss of capability, not just of a
+    column. topiary's normalized column name strips the version, which makes
+    two versions collide into one name (openvax/topiary#208); this pins the
+    behaviour vaxrank has to preserve regardless of how that is resolved.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+
+    path = tmp_path / "two_versions.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tnetmhcpan_4.1b.aff_nm\t"
+        "netmhcpan_4.2.aff_nm\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t75\t120\n")
+
+    [epitope] = read_lens_report(path, epitope_config=EpitopeConfig()).epitopes
+    by_version = {
+        p.predictor_version: p.value
+        for p in epitope.predictions_flat()
+        if p.predictor_name == "netmhcpan"}
+    assert by_version == {"4.1b": pytest.approx(75.0),
+                          "4.2": pytest.approx(120.0)}
