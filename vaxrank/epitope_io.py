@@ -682,6 +682,7 @@ def read_pvacseq_report(path, epitope_config=None):
     from .epitope_dsl import attach_per_allele_scores
     epitopes = attach_per_allele_scores(
         epitopes, epitope_config, topiary_df=topiary_df)
+    report_df = annotate_credited_alleles(report_df, epitopes)
     logger.info(
         "Loaded %d epitope(s) (%d row(s), %s flavor) from pVACseq file %s",
         len(epitopes), n_rows, result.extra.get("pvacseq_format"), path)
@@ -1141,6 +1142,7 @@ def read_lens_report(path, epitope_config=None):
     # downstream ranking sees zero-scored epitopes and drops everything.
     from .epitope_dsl import attach_per_allele_scores
     epitopes = attach_per_allele_scores(epitopes, epitope_config)
+    report_df = annotate_credited_alleles(report_df, epitopes)
     logger.info(
         "Loaded %d epitope(s) (%d row(s) × %d predictor(s)) from %s",
         len(epitopes), len(report_df), len(chosen), path)
@@ -1223,6 +1225,54 @@ def _build_lens_report_row(row, allele, peptide, prediction_id,
 
 
 # ── Shared report writer ─────────────────────────────────────────────────────
+
+ALLELE_CREDIT_COLUMN = "Peptide-level evidence credited"
+
+
+def annotate_credited_alleles(report_df, epitopes):
+    """Add a column saying whether this row's allele was credited, and why.
+
+    The report already prints a peptide's allele-free evidence — the
+    processing score — on *every* allele row, because that is what an
+    allele-free value is. Which of those alleles vaxrank actually credits is
+    a decision (``allele_free_evidence``), and until it appears next to the
+    number the reader cannot tell a credited allele from one that is merely
+    being shown the same value.
+
+    Blank where there is no allele-free evidence to attribute, which is the
+    common case and not worth a column of "n/a".
+    """
+    if report_df is None or len(report_df) == 0:
+        return report_df
+    by_position = {
+        e.prediction_group_key: {a.allele: a for a in e.allele_attributions}
+        for e in epitopes or ()
+        if e.allele_attributions}
+    if not by_position:
+        return report_df
+
+    def describe(row):
+        attributed = by_position.get((
+            cells.text(row.get("Prediction identity")),
+            cells.text(row.get("Mutant peptide sequence")),
+            int(cells.number(row.get("Peptide offset")) or 0)))
+        if not attributed:
+            return ""
+        allele = cells.text(row.get("Allele"))
+        entry = attributed.get(allele)
+        if entry is None:
+            # Attributed, but not to this allele. Saying so is the point:
+            # the processing score printed on this row is not credited here.
+            return "no"
+        # describe() leads with the allele, which is already this row's
+        # Allele column.
+        return entry.describe().split(" ", 1)[1].strip("()")
+
+    report_df = report_df.copy()
+    report_df[ALLELE_CREDIT_COLUMN] = [
+        describe(row) for _, row in report_df.iterrows()]
+    return report_df
+
 
 def _ensure_parent_dir(path):
     """Create the parent directory of an output file if it's missing.
