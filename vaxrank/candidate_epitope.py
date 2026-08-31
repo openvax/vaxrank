@@ -144,6 +144,25 @@ def sort_versions(versions) -> list:
     return sorted(fallback) + [v for _, v in sorted(parsed)]
 
 
+def canonical_predictor_version(value):
+    """Collapse every spelling of "no version" onto one.
+
+    A missing ``predictor_version`` arrives as ``None`` from mhctools, as
+    ``NaN`` from a frame, as ``""`` from vaxrank's own builders, and as the
+    literal string ``"nan"`` from anything that has been through
+    ``astype(str)``. They all mean the same thing and were behaving three
+    different ways: separate buckets in the nested store, three spellings in
+    the DSL frame, and a ``TypeError`` from :meth:`predictions_flat` when two
+    types met in the sort key.
+
+    ``topiary.is_named_version`` decides what counts as named, so vaxrank and
+    topiary cannot disagree about which pins are real.
+    """
+    from topiary import is_named_version
+
+    return value if is_named_version(value) else ""
+
+
 def _group_predictions(predictions) -> dict:
     """Flat ``Sequence[Prediction]`` → nested
     ``{kind: {predictor: {version: tuple}}}``. Producer-friendly:
@@ -153,7 +172,8 @@ def _group_predictions(predictions) -> dict:
     for p in predictions:
         (nested.setdefault(p.kind, {})
                .setdefault(p.predictor_name, {})
-               .setdefault(p.predictor_version, [])
+               .setdefault(canonical_predictor_version(
+                   p.predictor_version), [])
                .append(p))
     return {
         k: {pn: {pv: tuple(records) for pv, records in by_version.items()}
@@ -413,7 +433,11 @@ class Peptide:
         records, the score / value / %-rank tail breaks ties
         without falling back on input order. Float keys are wrapped
         with ``_nan_safe`` because mhctools sometimes emits NaN
-        for ``percentile_rank`` and ``sorted`` is undefined on NaN."""
+        for ``percentile_rank`` and ``sorted`` is undefined on NaN;
+        the version goes through
+        :func:`canonical_predictor_version` because a missing one
+        arrives as ``None``, ``NaN`` or ``""`` depending on the
+        producer, and ``sorted`` cannot compare those to a string."""
         flat = (
             p
             for by_predictor in self.predictions.values()
@@ -421,7 +445,8 @@ class Peptide:
             for records in by_version.values()
             for p in records)
         return tuple(sorted(flat, key=lambda p: (
-            p.kind, p.predictor_name, p.predictor_version, p.allele,
+            p.kind, p.predictor_name,
+            canonical_predictor_version(p.predictor_version), p.allele,
             _nan_safe(p.score), _nan_safe(p.value),
             _nan_safe(p.percentile_rank))))
 

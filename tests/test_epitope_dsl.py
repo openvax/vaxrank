@@ -860,28 +860,75 @@ def test_a_pin_matching_no_named_version_is_rejected(stored):
             EpitopeConfig(score_expr="affinity['netmhcpan', 'nan'].value"),
             [], topiary_df=df)
 
+NO_VERSION_SPELLINGS = [
+    pytest.param(None, id="None"),          # mhctools
+    pytest.param(np.nan, id="NaN"),         # a frame column
+    pytest.param("", id="empty"),           # vaxrank's own builders
+    pytest.param("nan", id="nan-string"),   # anything through astype(str)
+]
 
-def test_vaxrank_and_topiary_agree_on_what_names_a_version():
-    """The local rule must match topiary's, since a pin crosses both.
 
-    vaxrank decides whether a pin is valid; topiary decides whether it
-    selects any rows. If the two disagree, an expression either validates
-    and matches nothing or is rejected for a version that would have
-    worked. topiary 5.31.0 fixed its resolver and 5.34.0 its selection path
-    for exactly this string, so the rule is only safe while it is one rule.
+def _affinity(version, value):
+    from mhctools.pred import Prediction
+
+    return Prediction(
+        kind="pMHC_affinity", predictor_name="netmhcpan",
+        predictor_version=version, allele="HLA-A*02:01",
+        peptide="SIINFEKL", value=value, score=None)
+
+
+def _candidate(*predictions):
+    from vaxrank.candidate_epitope import CandidateEpitope
+
+    return CandidateEpitope(
+        sequence="SIINFEKL", offset=0, prediction_id="x",
+        patient_alleles=("HLA-A*02:01",), predictions=predictions)
+
+
+@pytest.mark.parametrize("missing", NO_VERSION_SPELLINGS)
+def test_every_spelling_of_no_version_reaches_the_frame_the_same_way(missing):
+    """One meaning, one representation.
+
+    Four producers spell "this prediction has no version" four ways, and
+    they used to reach the frame as three different values:
+    ``p.predictor_version or ""`` passes NaN straight through, because NaN
+    is truthy, and passes the string "nan" through as if it named a version.
     """
-    from topiary import describe_default_versions
+    from vaxrank.epitope_dsl import epitopes_to_topiary_df
 
-    from vaxrank.epitope_dsl import names_a_version
+    frame = epitopes_to_topiary_df([_candidate(_affinity(missing, 50.0))])
 
-    for candidate in ["4.2", "nan", "NaN", "", "   ", None, np.nan, "1.0.0"]:
-        # describe_default_versions reports a model as ambiguous only when it
-        # sees two *named* versions, so pairing the candidate with one known
-        # version asks topiary the same question directly.
-        df = pd.DataFrame([{
-            "prediction_id": "p", "peptide": "SIINFEKL", "peptide_offset": 0,
-            "allele": "HLA-A*02:01", "kind": "pMHC_affinity",
-            "prediction_method_name": "netmhcpan", "predictor_version": v,
-            "value": 50.0} for v in ("9.9", candidate)])
-        topiary_says = bool(describe_default_versions(df))
-        assert names_a_version(candidate) is topiary_says, candidate
+    assert list(frame["predictor_version"]) == [""]
+
+
+@pytest.mark.parametrize("second", NO_VERSION_SPELLINGS)
+@pytest.mark.parametrize("first", NO_VERSION_SPELLINGS)
+def test_two_spellings_of_no_version_are_one_bucket(first, second):
+    """Unversioned predictions from two producers form one group.
+
+    The nested store keys on ``predictor_version`` directly, so each
+    spelling opened its own bucket — one predictor's evidence split in two,
+    where unqualified access resolves to a single version and sees one half.
+    """
+    epitope = _candidate(_affinity(first, 50.0), _affinity(second, 60.0))
+
+    buckets = epitope.predictions["pMHC_affinity"]["netmhcpan"]
+    assert list(buckets) == [""]
+    assert len(buckets[""]) == 2
+
+
+@pytest.mark.parametrize("missing", NO_VERSION_SPELLINGS)
+def test_a_named_version_beside_an_unnamed_one_does_not_raise(missing):
+    """Mixed version types must not break candidate construction.
+
+    ``predictions_flat`` sorts on ``predictor_version``, so a predictor
+    reporting a version on one record and nothing on another raised
+    ``TypeError: '<' not supported between instances of 'NoneType' and
+    'str'`` from the constructor, before any scoring happened.
+    """
+    epitope = _candidate(_affinity("4.1b", 50.0), _affinity(missing, 60.0))
+
+    # The named version keeps its own bucket; only the unnamed collapse.
+    assert sorted(epitope.predictions["pMHC_affinity"]["netmhcpan"]) == [
+        "", "4.1b"]
+    assert len(epitope.predictions_flat()) == 2
