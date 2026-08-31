@@ -563,6 +563,27 @@ def collect_dsl_references(node):
     return {"columns": columns, "kinds": kinds}
 
 
+def names_a_version(value):
+    """True when a ``predictor_version`` cell actually names a version.
+
+    NaN, None and blank are the obvious absences. The literal string
+    ``"nan"`` is the one that gets through: it survives ``dropna()`` and a
+    truthiness test, which is how it once counted as a real version in
+    vaxrank's own resolver and dropped every row carrying it from scoring.
+
+    Same rule topiary applies, so a pin either validates here and selects
+    there or fails in both. Kept in agreement by a test, not by care.
+
+    Temporary. topiary 5.35.0 exports ``is_named_version``; this goes away
+    and the import takes its place, because one rule in two repos is how
+    the last three version bugs happened.
+    """
+    if value is None:
+        return False
+    text = str(value).strip()
+    return bool(text) and text.lower() != "nan"
+
+
 def validate_dsl_against_predictions(cfg, epitopes, *, topiary_df=None):
     """Error early when ``filter_expr`` / ``score_expr`` references a
     predictor the loaded epitopes don't expose.
@@ -590,14 +611,15 @@ def validate_dsl_against_predictions(cfg, epitopes, *, topiary_df=None):
     available_methods = (
         set(df["prediction_method_name"].dropna().unique())
         if not df.empty else set())
-    # Drop the "no version known" sentinel so a formula pinning a specific
+    # Drop the "no version known" sentinels so a formula pinning a specific
     # version against predictions that don't carry any version errors out,
     # and so the error message's version list matches what we actually
     # checked against.
     available_versions = set()
     if not df.empty:
         available_versions = {
-            v for v in df["predictor_version"].dropna().unique() if v
+            v for v in df["predictor_version"].dropna().unique()
+            if names_a_version(v)
         }
 
     for node in nodes:
