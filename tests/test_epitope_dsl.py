@@ -860,7 +860,7 @@ def test_a_pin_matching_no_named_version_is_rejected(stored):
             EpitopeConfig(score_expr="affinity['netmhcpan', 'nan'].value"),
             [], topiary_df=df)
 
-NO_VERSION_SPELLINGS = [
+UNSTATED_SPELLINGS = [
     pytest.param(None, id="None"),          # mhctools
     pytest.param(np.nan, id="NaN"),         # a frame column
     pytest.param("", id="empty"),           # vaxrank's own builders
@@ -885,7 +885,7 @@ def _candidate(*predictions):
         patient_alleles=("HLA-A*02:01",), predictions=predictions)
 
 
-@pytest.mark.parametrize("missing", NO_VERSION_SPELLINGS)
+@pytest.mark.parametrize("missing", UNSTATED_SPELLINGS)
 def test_every_spelling_of_no_version_reaches_the_frame_the_same_way(missing):
     """One meaning, one representation.
 
@@ -901,8 +901,8 @@ def test_every_spelling_of_no_version_reaches_the_frame_the_same_way(missing):
     assert list(frame["predictor_version"]) == [""]
 
 
-@pytest.mark.parametrize("second", NO_VERSION_SPELLINGS)
-@pytest.mark.parametrize("first", NO_VERSION_SPELLINGS)
+@pytest.mark.parametrize("second", UNSTATED_SPELLINGS)
+@pytest.mark.parametrize("first", UNSTATED_SPELLINGS)
 def test_two_spellings_of_no_version_are_one_bucket(first, second):
     """Unversioned predictions from two producers form one group.
 
@@ -917,7 +917,7 @@ def test_two_spellings_of_no_version_are_one_bucket(first, second):
     assert len(buckets[""]) == 2
 
 
-@pytest.mark.parametrize("missing", NO_VERSION_SPELLINGS)
+@pytest.mark.parametrize("missing", UNSTATED_SPELLINGS)
 def test_a_named_version_beside_an_unnamed_one_does_not_raise(missing):
     """Mixed version types must not break candidate construction.
 
@@ -931,4 +931,73 @@ def test_a_named_version_beside_an_unnamed_one_does_not_raise(missing):
     # The named version keeps its own bucket; only the unnamed collapse.
     assert sorted(epitope.predictions["pMHC_affinity"]["netmhcpan"]) == [
         "", "4.1b"]
+    assert len(epitope.predictions_flat()) == 2
+
+
+def _processing(allele, score):
+    from mhctools.pred import Prediction
+
+    return Prediction(
+        kind="antigen_processing", predictor_name="mhcflurry",
+        predictor_version="2.1.1", allele=allele, peptide="SIINFEKL",
+        value=None, score=score)
+
+
+@pytest.mark.parametrize("unstated", UNSTATED_SPELLINGS)
+def test_an_unstated_allele_never_becomes_a_patient_allele(unstated):
+    """A blank allele means peptide-level evidence, not a genotype entry.
+
+    ``__post_init__`` derives ``patient_alleles`` from the alleles its
+    predictions carry, filtered on truthiness — and two spellings of blank
+    are truthy. NaN sorted against the real allele names and raised
+    ``TypeError``; the string "nan" became a patient allele that no model
+    ever scored, which is a per-allele score for a peptide-MHC pair that was
+    never predicted.
+    """
+    from vaxrank.candidate_epitope import CandidateEpitope
+
+    epitope = CandidateEpitope(
+        sequence="SIINFEKL", offset=0, prediction_id="x",
+        patient_alleles=("HLA-A*02:01",),
+        predictions=(_processing(unstated, 0.8),))
+
+    assert epitope.patient_alleles == ("HLA-A*02:01",)
+
+
+@pytest.mark.parametrize("unstated", UNSTATED_SPELLINGS)
+def test_an_unstated_allele_reaches_the_frame_as_blank(unstated):
+    """One spelling in the frame, so one group.
+
+    topiary keys its groups on the allele column, so a stringified null
+    there is a group of its own — allele-free evidence split across buckets
+    that peptide_view cannot broadcast from.
+    """
+    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.epitope_dsl import epitopes_to_topiary_df
+
+    epitope = CandidateEpitope(
+        sequence="SIINFEKL", offset=0, prediction_id="x",
+        patient_alleles=("HLA-A*02:01",),
+        predictions=(_processing(unstated, 0.8),))
+
+    assert list(epitopes_to_topiary_df([epitope])["allele"]) == [""]
+
+
+@pytest.mark.parametrize("unstated", UNSTATED_SPELLINGS)
+def test_a_named_allele_beside_an_unstated_one_does_not_raise(unstated):
+    """Mixed allele types must not break candidate construction.
+
+    Same shape as the version axis: both are sorted, and a producer that
+    spells blank differently from vaxrank's own builders made ``sorted``
+    compare a float to a string.
+    """
+    from vaxrank.candidate_epitope import CandidateEpitope
+
+    epitope = CandidateEpitope(
+        sequence="SIINFEKL", offset=0, prediction_id="x",
+        patient_alleles=(),
+        predictions=(_processing("HLA-A*02:01", 0.9),
+                     _processing(unstated, 0.8)))
+
+    assert epitope.patient_alleles == ("HLA-A*02:01",)
     assert len(epitope.predictions_flat()) == 2
