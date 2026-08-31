@@ -42,6 +42,8 @@ from typing import Dict, Optional
 
 import msgspec
 
+from .allele_evidence import POLICY_ALL, SELECTION_AUTO
+
 from .config.defaults import (
     DEFAULT_BINDING_AFFINITY_CUTOFF,
     DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT,
@@ -111,6 +113,32 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
               default_methods:
                 pMHC_affinity: mhcflurry
                 pMHC_stability: netmhcstabpan
+
+    allele_free_evidence : str
+        Which alleles are credited with evidence that carries no allele —
+        proteasome cleavage, TAP transport, ERAP trimming, mhcflurry's
+        integrated processing score. One of:
+
+        ``all``
+            Every allele in the patient's genotype. The default, and what
+            vaxrank has always done.
+        ``selected``
+            Only the best-ranked allele, on the axis named by
+            ``allele_selection_axis``. Falls back to ``all`` for a peptide
+            with no allele-scoped evidence to rank by, since "we do not know
+            which allele presents this" is not "this allele does".
+        ``top:N``
+            The N best-ranked, same fallback.
+        ``from_input``
+            Only pairings the source file actually carried.
+
+        Applies on both input paths — the native predictor pipeline and the
+        external report readers.
+
+    allele_selection_axis : str
+        Which kind ranks alleles for ``selected`` / ``top:N``. ``auto``
+        (default) prefers whichever of presentation and affinity covers more
+        of the genotype, and presentation on a tie.
     """
 
     logistic_epitope_score_midpoint: float = DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT
@@ -122,8 +150,20 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     filter_expr: Optional[str] = None
     score_expr: Optional[str] = None
     default_methods: Optional[Dict[str, str]] = None
+    allele_free_evidence: str = POLICY_ALL
+    allele_selection_axis: str = SELECTION_AUTO
+
+    @property
+    def allele_policy(self):
+        """The parsed :class:`~vaxrank.allele_evidence.AllelePolicy`."""
+        from .allele_evidence import AllelePolicy
+
+        return AllelePolicy.parse(
+            self.allele_free_evidence, axis=self.allele_selection_axis)
 
     def __post_init__(self):
+        # Parse eagerly so a typo fails at config time, not mid-run.
+        self.allele_policy
         if self.logistic_epitope_score_midpoint <= 0:
             raise ValueError(
                 f"logistic_epitope_score_midpoint must be positive, "

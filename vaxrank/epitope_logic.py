@@ -21,6 +21,7 @@ from topiary import TopiaryPredictor
 from topiary.ranking import EvalContext, apply_filter
 
 from .epitope_config import EpitopeConfig
+from .allele_evidence import attribute_frame, warn_if_scoring_ignores_policy
 from .epitope_dsl import (
     build_filter_node, build_score_node, prediction_group_columns,
 )
@@ -162,6 +163,25 @@ def predict_epitopes(
     # which is a guess. We are holding the predictor that knows the answer,
     # so forward it rather than making topiary infer it (openvax/topiary#178).
     kind_support = getattr(topiary_predictor, "kind_support", None)
+
+    # Attribute peptide-level evidence to alleles before filtering, so the
+    # policy ranks on the evidence the predictor produced rather than on
+    # whatever survived a cutoff. This is the same call the external report
+    # path makes: the two share a topiary frame, which is why attribution
+    # lives at the frame layer rather than on CandidateEpitope, where it
+    # applied to LENS runs and silently did nothing here (#349).
+    #
+    # No genotype is passed. This pipeline predicts every peptide against
+    # the patient's full typing, so the alleles the frame already names for
+    # a peptide *are* the genotype; deriving it from the rows avoids
+    # threading a second, possibly disagreeing, copy through.
+    policy = epitope_config.allele_policy
+    allele_attributions = attribute_frame(
+        predictions_df, policy,
+        default_methods=default_methods,
+        group_columns=prediction_group_columns(predictions_df))
+    warn_if_scoring_ignores_policy(policy, allele_attributions)
+
     filter_node = build_filter_node(epitope_config)
     if filter_node is not None:
         predictions_df = apply_filter(
@@ -348,6 +368,12 @@ def predict_epitopes(
             'peptide': peptide,
             'source': antigen.amino_acids,
             'offset': peptide_start_offset,
+            # Keyed by the same identity attribute_frame grouped on, so the
+            # native path records the credited alleles exactly as the
+            # external report path does.
+            'allele_attributions': allele_attributions.get(
+                (row["source_sequence_name"], peptide, peptide_start_offset),
+                ()),
             'mutant': mutant_pred,
             'wt': wt_pred,
             'source_class': source_class,

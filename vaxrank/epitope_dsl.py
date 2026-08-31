@@ -308,6 +308,21 @@ def resolve_default_versions(cfg, topiary_df):
     return resolved
 
 
+def genotype_map(epitopes):
+    """``{prediction_group_key: genotype}`` for a list of CandidateEpitopes.
+
+    The identity is the group columns other than ``allele``, in order, so
+    this joins to a topiary frame built from the same epitopes. Shared by
+    :func:`genotype_lookup`, which tells topiary which allele groups to
+    create, and by allele attribution, which decides which of them get
+    credited with allele-free evidence — one mapping so the two cannot
+    disagree about a peptide's genotype.
+    """
+    return {
+        e.prediction_group_key: tuple(e.patient_alleles or ())
+        for e in epitopes or ()}
+
+
 def genotype_lookup(epitopes, group_columns):
     """Return a per-peptide genotype callable for topiary's ``alleles=``.
 
@@ -330,9 +345,7 @@ def genotype_lookup(epitopes, group_columns):
     topiary to take the groups from the rows alone.
     """
     identity_column = group_columns[0]
-    by_identity = {
-        e.prediction_group_key: tuple(e.patient_alleles or ())
-        for e in epitopes or ()}
+    by_identity = genotype_map(epitopes)
     if not any(by_identity.values()):
         return None
 
@@ -445,12 +458,32 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
     from .candidate_epitope import stated_or_blank
     from .epitope_config import EpitopeConfig
 
+    from .allele_evidence import (
+        attribute_frame, warn_if_scoring_ignores_policy)
+
     if not epitopes:
         return epitopes
     if cfg is None:
         cfg = EpitopeConfig()
+    # Build the frame once and share it: attribution and scoring must see
+    # the same rows, and rebuilding is not free.
+    if topiary_df is None:
+        topiary_df = epitopes_to_topiary_df(epitopes)
     score_series = score_predictions(
         epitopes, cfg, topiary_df=topiary_df, kind_support=kind_support)
+
+    # Attribution runs on the unfiltered frame, so the policy ranks on the
+    # evidence the input carried rather than on whatever survived a cutoff:
+    # a filter on affinity would otherwise change which allele is credited
+    # with a peptide's processing score.
+    policy = cfg.allele_policy
+    genotypes = genotype_map(epitopes)
+    attributions = attribute_frame(
+        topiary_df, policy,
+        genotype_for=lambda key: genotypes.get(key, ()),
+        default_methods=resolve_default_methods(cfg, topiary_df),
+        group_columns=prediction_group_columns(topiary_df))
+    warn_if_scoring_ignores_policy(policy, attributions)
     # score_series is keyed by prediction ID, peptide, offset, and allele.
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
@@ -471,8 +504,9 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
     return [
         replace(
             e,
-            per_allele_scores=by_position.get(
-                e.prediction_group_key, {}))
+            per_allele_scores=by_position.get(e.prediction_group_key, {}),
+            allele_attributions=attributions.get(
+                e.prediction_group_key, ()))
         for e in epitopes
     ]
 
