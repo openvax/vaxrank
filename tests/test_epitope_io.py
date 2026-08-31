@@ -2462,3 +2462,75 @@ def test_unqualified_scoring_resolves_to_the_newest_version(tmp_path, caplog):
     # than the newest-version default — proving the pin was honored.
     assert (list(pinned.per_allele_scores.values())[0]
             > list(default_scored.per_allele_scores.values())[0])
+
+
+def test_pinning_one_version_still_resolves_an_unqualified_reference(tmp_path):
+    """Pinning a version must not disable resolution for everything else.
+
+    vaxrank used to resolve ambiguity by narrowing the frame to the winning
+    version, so any expression that pinned a version had to skip narrowing
+    altogether — otherwise the pinned rows would have been the ones removed.
+    That coupling meant one pin disabled resolution for every other kind in
+    the same expression, and an unqualified reference alongside it raised.
+
+    topiary resolves through ``default_versions`` instead of by dropping
+    rows, so the two coexist: this expression pins netMHCpan 4.1b for
+    affinity while leaving presentation unqualified.
+    """
+    path = tmp_path / "two_versions_two_kinds.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tnetmhcpan_4.1b.aff_nm\t"
+        "netmhcpan_4.2.aff_nm\tnetmhcpan_4.1b.score_el\t"
+        "netmhcpan_4.2.score_el\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t75\t120\t0.9\t0.4\n")
+
+    from vaxrank.epitope_config import EpitopeConfig
+
+    [epitope] = read_lens_report(
+        path,
+        epitope_config=EpitopeConfig(score_expr=(
+            "affinity['netmhcpan', '4.1b'].value.logistic_normalized(350,150)"
+            " * presentation.score"))).epitopes
+
+    # Presentation resolved to 4.2 (newest, score 0.4) rather than raising,
+    # and the pinned 4.1b affinity is what the first factor scored.
+    assert epitope.per_allele_scores
+
+
+@pytest.mark.parametrize("versions,ambiguous", [
+    (["4.1b", "4.2"], True),
+    (["4.2", ""], False),
+    (["4.2", float("nan")], False),
+    (["4.2", "nan"], False),
+    (["4.2", None], False),
+])
+def test_only_a_named_version_makes_a_model_ambiguous(versions, ambiguous):
+    """Rows recording no version must not read as a version.
+
+    vaxrank's interim resolver compared version strings, and ``dropna()``
+    plus a truthiness check let the literal text ``"nan"`` through — so a
+    frame mixing one real version with ``"nan"`` looked ambiguous, resolved
+    to the real version, and dropped the ``"nan"`` rows from scoring
+    entirely. topiary's resolver treats NaN, None, blank and ``"nan"``
+    alike: no version was named, so there is nothing to disambiguate.
+    """
+    import pandas as pd
+
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import resolve_default_versions
+
+    df = pd.DataFrame({
+        "prediction_id": ["p"] * len(versions),
+        "peptide": ["SIINFEKL"] * len(versions),
+        "peptide_offset": [0] * len(versions),
+        "allele": ["HLA-A*02:01"] * len(versions),
+        "kind": ["pMHC_affinity"] * len(versions),
+        "prediction_method_name": ["netmhcpan"] * len(versions),
+        "predictor_version": versions,
+        "value": [50.0] * len(versions)})
+
+    resolved = resolve_default_versions(EpitopeConfig(), df)
+    assert bool(resolved) is ambiguous
+    if ambiguous:
+        assert resolved[("pMHC_affinity", "netmhcpan")] == "4.2"
+
