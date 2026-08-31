@@ -115,35 +115,18 @@ def prediction_kind_for_method(method_name):
 
 
 
-def is_peptide_level_kind(kind):
-    """True when a kind describes the peptide itself, not a peptide-MHC pair.
-
-    Reads topiary's ``KIND_MHC_DEPENDENCE``, which is the one place that
-    knows which kinds are allele-free. vaxrank named a single kind here for
-    as long as that table was private, and the four other allele-free kinds
-    were left out of the projection below (openvax/topiary#195).
-
-    An unrecognized kind is *not* treated as peptide-level. That is the safe
-    direction: it is never projected across alleles, so a topiary release
-    adding a kind cannot make vaxrank fabricate per-allele evidence for it.
-    """
-    from topiary import KIND_MHC_DEPENDENCE
-
-    return KIND_MHC_DEPENDENCE.get(kind) == "none"
-
-
 def epitopes_to_topiary_df(epitopes):
     """Convert a list of :class:`vaxrank.candidate_epitope.CandidateEpitope` into the
     topiary long-format DataFrame consumed by
     :class:`topiary.ranking.EvalContext` and
     :func:`topiary.ranking.apply_filter`.
 
-    One row per allele-scoped leaf ``mhctools.Prediction`` in each
-    CandidateEpitope's mutant context. Allele-independent evidence — any
-    kind topiary reports as MHC-independent — is projected into every allele group in this evaluation view while
-    remaining one canonical leaf on the CandidateEpitope. A single
-    CandidateEpitope can therefore emit N rows (one per allele x predictor x
-    kind). When multiple predictions share a (peptide,
+    One row per leaf ``mhctools.Prediction`` in each CandidateEpitope's
+    mutant context — the frame says what was predicted, and nothing else.
+    Allele-free evidence stays one allele-free row; the patient's genotype
+    reaches it through :func:`genotype_lookup`, which
+    :func:`score_predictions` hands to topiary. When multiple predictions
+    share a (peptide,
     allele) pair (e.g. MHCflurry and netMHCpan rows from a LENS file),
     DSL expressions can select between them via
     ``affinity['mhcflurry']`` / ``affinity['netmhcpan']``, and when
@@ -156,56 +139,29 @@ def epitopes_to_topiary_df(epitopes):
     are NOT emitted as rows. The DSL frame is mutant-only by
     convention — comparator data stays on the CandidateEpitope for display.
     """
-    # Allele-independent evidence is projected into every patient allele here
-    # while remaining one canonical leaf on the CandidateEpitope. topiary
-    # 5.18's ``peptide_view()`` broadcasts an allele-free value across the
-    # allele groups that already exist, which covers a peptide that also has
-    # affinity rows — but two gaps keep this projection necessary:
-    #
-    #   openvax/topiary#182 — a peptide whose *only* evidence is allele-free
-    #     has one group, keyed on an empty allele. The patient's genotype is
-    #     not in the frame, so per-allele scores cannot be produced and the
-    #     candidate scores 0 and is dropped. LENS emits such rows.
-    #   openvax/topiary#183 — an allele-free row is its own group, so any
-    #     filter predicated on an allele-scoped kind removes it; a later
-    #     ``peptide_view()`` in the score expression then reads NaN.
-    #
-    # Do not delete this projection in favor of ``peptide_view()`` until both
-    # are closed; the failure is silent in both cases.
     rows = []
     for e in epitopes:
         ctx = e
         prediction_id = ctx.prediction_group_source
         predictions = ctx.predictions_flat()
-        patient_alleles = ctx.patient_alleles
         for p in predictions:
-            evaluation_alleles = (
-                patient_alleles
-                if (
-                    is_peptide_level_kind(p.kind)
-                    and not p.allele
-                    and patient_alleles
-                )
-                else (p.allele,)
-            )
-            for allele in evaluation_alleles:
-                rows.append({
-                    PREDICTION_ID_COLUMN: prediction_id,
-                    "source_sequence_name": ctx.source_sequence or ctx.sequence,
-                    "peptide": p.peptide,
-                    "peptide_offset": ctx.offset,
-                    "peptide_length": len(p.peptide),
-                    "allele": allele,
-                    "n_flank": ctx.n_flank,
-                    "c_flank": ctx.c_flank,
-                    "prediction_method_name": p.predictor_name,
-                    "predictor_version": p.predictor_version or "",
-                    "kind": p.kind,
-                    "value": p.value,
-                    "affinity": p.value,
-                    "percentile_rank": p.percentile_rank,
-                    "score": p.score,
-                })
+            rows.append({
+                PREDICTION_ID_COLUMN: prediction_id,
+                "source_sequence_name": ctx.source_sequence or ctx.sequence,
+                "peptide": p.peptide,
+                "peptide_offset": ctx.offset,
+                "peptide_length": len(p.peptide),
+                "allele": p.allele,
+                "n_flank": ctx.n_flank,
+                "c_flank": ctx.c_flank,
+                "prediction_method_name": p.predictor_name,
+                "predictor_version": p.predictor_version or "",
+                "kind": p.kind,
+                "value": p.value,
+                "affinity": p.value,
+                "percentile_rank": p.percentile_rank,
+                "score": p.score,
+            })
     return pd.DataFrame(rows)
 
 
@@ -334,25 +290,59 @@ def resolve_default_versions(cfg, topiary_df):
     so the three resolvers read the same and so that setting, when it
     arrives, has an obvious home.
     """
-    from topiary import resolve_default_versions as topiary_resolve
+    from topiary import describe_default_versions, resolve_default_versions
 
     if topiary_df.empty:
         return {}
-    resolved = dict(topiary_resolve(topiary_df))
+    resolved = dict(resolve_default_versions(topiary_df))
+    candidates = describe_default_versions(topiary_df)
     for (kind, method), version in sorted(resolved.items()):
-        available = sorted(
-            str(v) for v in
-            topiary_df.loc[
-                (topiary_df["kind"] == kind)
-                & (topiary_df["prediction_method_name"] == method),
-                "predictor_version"].dropna().unique()
-            if str(v).strip())
         logger.warning(
             "%s reports %s at versions %s; scoring an unqualified reference "
             "with %s (newest). Name a version in the expression to pin one — "
             "every version stays available.",
-            method, kind, ", ".join(available), version)
+            method, kind, ", ".join(candidates[(kind, method)]), version)
     return resolved
+
+
+def genotype_lookup(epitopes, group_columns):
+    """Return a per-peptide genotype callable for topiary's ``alleles=``.
+
+    Evidence that describes the peptide rather than a peptide-MHC pair
+    carries no allele, so it forms a group keyed on the empty string and
+    contributes to no per-allele score. topiary closes that by taking the
+    genotype each peptide should be evaluated against and adding the groups
+    itself (openvax/topiary#182, #219).
+
+    The genotype has to be *per peptide*, not per frame. LENS emits one row
+    per (peptide, allele) that passed its own threshold, so each candidate
+    arrives having been reported against only some of the patient's
+    alleles — every LENS fixture in this repo holds between two and eight
+    distinct allele sets. Declaring the union instead would add groups
+    pairing a peptide with alleles it was never scored against, and any
+    expression reading only peptide-level evidence would put a real number
+    in every one of them.
+
+    Returns ``None`` when no epitope declares a genotype, which leaves
+    topiary to take the groups from the rows alone.
+    """
+    identity_column = group_columns[0]
+    by_identity = {
+        e.prediction_group_key: tuple(e.patient_alleles or ())
+        for e in epitopes or ()}
+    if not any(by_identity.values()):
+        return None
+
+    def lookup(keys):
+        # An identity absent from the map declares nothing rather than
+        # inheriting another candidate's genotype: the frame may have been
+        # built elsewhere (pVACseq passes its own), and borrowing a genotype
+        # is the failure this signature exists to prevent.
+        return by_identity.get(
+            (keys[identity_column], keys["peptide"], keys["peptide_offset"]),
+            ())
+
+    return lookup
 
 
 def score_predictions(epitopes, cfg, *, topiary_df=None,
@@ -395,14 +385,17 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
     validate_default_methods(cfg, df)
     resolved = resolve_default_methods(cfg, df)
     resolved_versions = resolve_default_versions(cfg, df)
+    group_columns = prediction_group_columns(df)
+    alleles = genotype_lookup(epitopes, group_columns)
 
     filter_node = build_filter_node(cfg)
     if filter_node is not None:
         df = apply_filter(
             df, filter_node,
-            group_keys=prediction_group_columns(df),
+            group_keys=group_columns,
             default_methods=resolved,
             default_versions=resolved_versions,
+            alleles=alleles,
             kind_support=kind_support)
         if df.empty:
             return pd.Series(dtype=float)
@@ -410,9 +403,10 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
     score_node = build_score_node(cfg)
     ctx = EvalContext(
         df,
-        group_keys=prediction_group_columns(df),
+        group_keys=group_columns,
         default_methods=resolved,
         default_versions=resolved_versions,
+        alleles=alleles,
         kind_support=kind_support,
     )
     return (

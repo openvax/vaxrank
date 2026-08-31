@@ -446,16 +446,19 @@ def test_epitopes_to_topiary_df_schema_pinned():
     assert by_peptide['SIINFEKM'] == 12
 
 
-def test_allele_free_evidence_is_projected_onto_patient_alleles():
+def test_allele_free_evidence_still_produces_per_allele_scores():
     """Processing-only evidence must still produce per-allele scores.
 
-    topiary 5.18's ``peptide_view()`` broadcasts an allele-free value across
-    allele groups that already exist, but a peptide whose only evidence is
-    allele-free has no such groups — its single group is keyed on an empty
-    allele, and the patient's genotype is not in the frame at all
-    (openvax/topiary#182). Dropping this projection in favor of
-    ``peptide_view()`` would silently score such candidates 0 and drop them,
-    which is the failure mode of vaxrank#295.
+    A peptide whose only evidence is allele-free has one group, keyed on an
+    empty allele, and the patient's genotype is not in the frame at all — so
+    it would score 0 and be dropped, which is the failure mode of
+    vaxrank#295. topiary takes the genotype and adds the groups
+    (openvax/topiary#182, #219); vaxrank used to duplicate the rows itself.
+
+    The assertion is on the scores rather than on the frame's shape: which
+    rows exist is topiary's business and changed once already, while "a
+    processing-only candidate scores against both alleles" is the property
+    that has to hold either way.
     """
     from mhctools.pred import Prediction
 
@@ -475,13 +478,11 @@ def test_allele_free_evidence_is_projected_onto_patient_alleles():
             predictor_version="2.1.1", allele="", peptide="SIINFEKL",
             value=None, score=0.77),))
 
-    # The canonical leaf stays allele-free on the object ...
+    # The canonical leaf stays allele-free, on the object and in the frame:
+    # vaxrank states what was predicted and lets topiary add the groups.
     [leaf] = epitope.predictions_for("antigen_processing", predictor="mhcflurry")
     assert leaf.allele == ""
-
-    # ... and is projected onto both patient alleles in the evaluation frame.
-    frame = epitopes_to_topiary_df([epitope])
-    assert set(frame["allele"]) == set(alleles)
+    assert set(epitopes_to_topiary_df([epitope])["allele"]) == {""}
 
     [scored] = attach_per_allele_scores(
         [epitope],
@@ -778,26 +779,54 @@ def test_every_allele_free_kind_reaches_every_patient_allele(kind):
     assert dict(scored.per_allele_scores) == {a: 0.8 for a in alleles}
 
 
-def test_an_unrecognized_kind_is_not_projected_across_alleles():
-    """A kind topiary does not classify must not be broadcast.
+def test_a_candidate_is_never_scored_against_another_candidates_alleles():
+    """Each candidate's genotype is its own, not the frame's union.
 
-    Projecting an unknown kind would invent per-allele evidence a model
-    never produced, so a topiary release adding a kind fails by scoring
-    nothing rather than by fabricating a number.
+    LENS emits one row per (peptide, allele) that passed its own threshold,
+    so candidates in one file arrive having been reported against different
+    alleles — every LENS fixture here holds between two and eight distinct
+    sets. Declaring the union frame-wide would add a group pairing each
+    peptide with alleles it was never scored against.
+
+    The union is invisible under the default score expression, because it
+    contains an affinity term and the invented groups carry no affinity
+    rows, so they read NaN and score nothing. An expression reading only
+    peptide-level evidence puts a real number in every one of them, which
+    is what this pins.
     """
-    from mhctools import Prediction
+    from mhctools.pred import Prediction
 
     from vaxrank.candidate_epitope import CandidateEpitope
-    from vaxrank.epitope_dsl import epitopes_to_topiary_df
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import attach_per_allele_scores
 
-    epitope = CandidateEpitope(
-        sequence="SIINFEKL", offset=0,
-        patient_alleles=("HLA-A*02:01", "HLA-B*07:02"),
-        predictions=(Prediction(
-            kind="a_kind_topiary_has_not_defined", score=0.8,
-            peptide="SIINFEKL", allele="", predictor_name="x",
-            predictor_version="1"),))
+    def candidate(name, peptide, allele):
+        return CandidateEpitope(
+            sequence=peptide, offset=0, prediction_id=name,
+            patient_alleles=(allele,),
+            predictions=(
+                Prediction(
+                    kind="pMHC_affinity", predictor_name="mhcflurry",
+                    predictor_version="2.1.1", allele=allele, peptide=peptide,
+                    value=50.0, score=None),
+                Prediction(
+                    kind="proteasome_cleavage", predictor_name="mhcflurry",
+                    predictor_version="2.1.1", allele="", peptide=peptide,
+                    value=None, score=0.8)))
 
-    df = epitopes_to_topiary_df([epitope])
+    epitopes = [
+        candidate("a", "SIINFEKLA", "HLA-A*02:01"),
+        candidate("b", "AAAAAAAAA", "HLA-B*07:02"),
+    ]
 
-    assert sorted(set(df["allele"])) == [""]
+    scored = attach_per_allele_scores(
+        epitopes,
+        EpitopeConfig(score_expr="proteasome_cleavage[mhcflurry].score"))
+
+    # Each candidate scores against its own allele only. Under a frame-wide
+    # union both would carry both alleles — four scores, two of them for
+    # pairings no model ever saw.
+    assert [dict(e.per_allele_scores) for e in scored] == [
+        {"HLA-A*02:01": pytest.approx(0.8)},
+        {"HLA-B*07:02": pytest.approx(0.8)},
+    ]
