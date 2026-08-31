@@ -1264,9 +1264,7 @@ def annotate_credited_alleles(report_df, epitopes):
             # Attributed, but not to this allele. Saying so is the point:
             # the processing score printed on this row is not credited here.
             return "no"
-        # describe() leads with the allele, which is already this row's
-        # Allele column.
-        return entry.describe().split(" ", 1)[1].strip("()")
+        return entry.reason()
 
     report_df = report_df.copy()
     report_df[ALLELE_CREDIT_COLUMN] = [
