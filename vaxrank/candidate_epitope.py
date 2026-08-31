@@ -144,23 +144,30 @@ def sort_versions(versions) -> list:
     return sorted(fallback) + [v for _, v in sorted(parsed)]
 
 
-def canonical_predictor_version(value):
-    """Collapse every spelling of "no version" onto one.
+def stated_or_blank(value):
+    """Collapse every spelling of "the source stated nothing" onto ``""``.
 
-    A missing ``predictor_version`` arrives as ``None`` from mhctools, as
-    ``NaN`` from a frame, as ``""`` from vaxrank's own builders, and as the
-    literal string ``"nan"`` from anything that has been through
-    ``astype(str)``. They all mean the same thing and were behaving three
-    different ways: separate buckets in the nested store, three spellings in
-    the DSL frame, and a ``TypeError`` from :meth:`predictions_flat` when two
-    types met in the sort key.
+    A missing identity field arrives as ``None`` from mhctools, as ``NaN``
+    from a frame, as ``""`` from vaxrank's own builders, and as the literal
+    string ``"nan"`` from anything through ``astype(str)``. They mean one
+    thing and have to behave as one thing, because vaxrank both *keys* on
+    these fields (the nested prediction store, the DSL frame's group
+    columns) and *orders* on them (:meth:`predictions_flat`). Four spellings
+    meant one predictor's evidence split across buckets that unqualified
+    access could not reach, and ``sorted`` raising ``TypeError`` as soon as
+    two of the spellings had different types.
 
-    ``topiary.is_named_version`` decides what counts as named, so vaxrank and
-    topiary cannot disagree about which pins are real.
+    ``topiary.is_stated`` decides what counts as stated, so the two packages
+    cannot disagree about which values are real.
+
+    ``""`` is the right target on both axes, for different reasons. A
+    version nobody stated is simply absent. An allele nobody stated is
+    *allele-free* — a legitimate, load-bearing value: peptide-level
+    predictions have no allele, and ``""`` is the group they live in.
     """
-    from topiary import is_named_version
+    from topiary import is_stated
 
-    return value if is_named_version(value) else ""
+    return value if is_stated(value) else ""
 
 
 def _group_predictions(predictions) -> dict:
@@ -172,8 +179,7 @@ def _group_predictions(predictions) -> dict:
     for p in predictions:
         (nested.setdefault(p.kind, {})
                .setdefault(p.predictor_name, {})
-               .setdefault(canonical_predictor_version(
-                   p.predictor_version), [])
+               .setdefault(stated_or_blank(p.predictor_version), [])
                .append(p))
     return {
         k: {pn: {pv: tuple(records) for pv, records in by_version.items()}
@@ -434,10 +440,10 @@ class Peptide:
         without falling back on input order. Float keys are wrapped
         with ``_nan_safe`` because mhctools sometimes emits NaN
         for ``percentile_rank`` and ``sorted`` is undefined on NaN;
-        the version goes through
-        :func:`canonical_predictor_version` because a missing one
-        arrives as ``None``, ``NaN`` or ``""`` depending on the
-        producer, and ``sorted`` cannot compare those to a string."""
+        the version and allele go through
+        :func:`stated_or_blank` because a missing one arrives as
+        ``None``, ``NaN`` or ``""`` depending on the producer, and
+        ``sorted`` cannot compare those to a string."""
         flat = (
             p
             for by_predictor in self.predictions.values()
@@ -446,7 +452,7 @@ class Peptide:
             for p in records)
         return tuple(sorted(flat, key=lambda p: (
             p.kind, p.predictor_name,
-            canonical_predictor_version(p.predictor_version), p.allele,
+            stated_or_blank(p.predictor_version), stated_or_blank(p.allele),
             _nan_safe(p.score), _nan_safe(p.value),
             _nan_safe(p.percentile_rank))))
 
@@ -589,18 +595,25 @@ class CandidateEpitope(Peptide):
     def __post_init__(self):
         """Normalize predictions and retain every explicitly known allele."""
         super().__post_init__()
+        # Every source goes through stated_or_blank before the truthiness
+        # test. A blank allele means peptide-level evidence and is not a
+        # genotype entry, but "blank" has four spellings and two of them are
+        # truthy: NaN sorts against the real names and raises, and the string
+        # "nan" becomes a patient allele that no model ever scored.
         alleles = {
-            allele
+            stated
             for allele in self.patient_alleles
-            if allele
+            if (stated := stated_or_blank(allele))
         }
         alleles.update(
-            prediction.allele
+            stated
             for prediction in self.predictions_flat()
-            if prediction.allele
+            if (stated := stated_or_blank(prediction.allele))
         )
         alleles.update(
-            allele for allele in self.per_allele_scores if allele)
+            stated
+            for allele in self.per_allele_scores
+            if (stated := stated_or_blank(allele)))
         object.__setattr__(self, 'patient_alleles', tuple(sorted(alleles)))
 
     @property

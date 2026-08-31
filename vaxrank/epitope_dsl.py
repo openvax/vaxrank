@@ -139,7 +139,7 @@ def epitopes_to_topiary_df(epitopes):
     are NOT emitted as rows. The DSL frame is mutant-only by
     convention — comparator data stays on the CandidateEpitope for display.
     """
-    from .candidate_epitope import canonical_predictor_version
+    from .candidate_epitope import stated_or_blank
 
     rows = []
     for e in epitopes:
@@ -153,11 +153,11 @@ def epitopes_to_topiary_df(epitopes):
                 "peptide": p.peptide,
                 "peptide_offset": ctx.offset,
                 "peptide_length": len(p.peptide),
-                "allele": p.allele,
+                "allele": stated_or_blank(p.allele),
                 "n_flank": ctx.n_flank,
                 "c_flank": ctx.c_flank,
                 "prediction_method_name": p.predictor_name,
-                "predictor_version": canonical_predictor_version(
+                "predictor_version": stated_or_blank(
                     p.predictor_version),
                 "kind": p.kind,
                 "value": p.value,
