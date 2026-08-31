@@ -830,3 +830,58 @@ def test_a_candidate_is_never_scored_against_another_candidates_alleles():
         {"HLA-A*02:01": pytest.approx(0.8)},
         {"HLA-B*07:02": pytest.approx(0.8)},
     ]
+
+
+@pytest.mark.parametrize("stored", ["nan", "NaN", "", "   ", None, np.nan])
+def test_a_pin_matching_no_named_version_is_rejected(stored):
+    """Validation must not accept a pin that selects nothing.
+
+    A cell that records no version is NaN, None, blank — or the literal
+    string "nan", which survives dropna() and a truthiness test. That last
+    shape once counted as a real version in vaxrank's resolver and dropped
+    the rows carrying it from scoring.
+
+    Here the consequence is the shape this validator exists to prevent:
+    ``affinity['netmhcpan', 'nan']`` would pass validation and then select
+    nothing, so the run reports a score of zero for a formula that looked
+    checked.
+    """
+    from vaxrank.epitope_dsl import validate_dsl_against_predictions
+
+    df = pd.DataFrame([{
+        "prediction_id": "p", "source_sequence_name": "s",
+        "peptide": "SIINFEKL", "peptide_offset": 0, "peptide_length": 8,
+        "allele": "HLA-A*02:01", "prediction_method_name": "netmhcpan",
+        "predictor_version": stored, "kind": "pMHC_affinity",
+        "value": 50.0, "score": None}])
+
+    with pytest.raises(ValueError, match="predictor version"):
+        validate_dsl_against_predictions(
+            EpitopeConfig(score_expr="affinity['netmhcpan', 'nan'].value"),
+            [], topiary_df=df)
+
+
+def test_vaxrank_and_topiary_agree_on_what_names_a_version():
+    """The local rule must match topiary's, since a pin crosses both.
+
+    vaxrank decides whether a pin is valid; topiary decides whether it
+    selects any rows. If the two disagree, an expression either validates
+    and matches nothing or is rejected for a version that would have
+    worked. topiary 5.31.0 fixed its resolver and 5.34.0 its selection path
+    for exactly this string, so the rule is only safe while it is one rule.
+    """
+    from topiary import describe_default_versions
+
+    from vaxrank.epitope_dsl import names_a_version
+
+    for candidate in ["4.2", "nan", "NaN", "", "   ", None, np.nan, "1.0.0"]:
+        # describe_default_versions reports a model as ambiguous only when it
+        # sees two *named* versions, so pairing the candidate with one known
+        # version asks topiary the same question directly.
+        df = pd.DataFrame([{
+            "prediction_id": "p", "peptide": "SIINFEKL", "peptide_offset": 0,
+            "allele": "HLA-A*02:01", "kind": "pMHC_affinity",
+            "prediction_method_name": "netmhcpan", "predictor_version": v,
+            "value": 50.0} for v in ("9.9", candidate)])
+        topiary_says = bool(describe_default_versions(df))
+        assert names_a_version(candidate) is topiary_says, candidate
