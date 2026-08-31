@@ -2357,19 +2357,20 @@ def test_netmhcpan_eluted_ligand_percentile_is_presentation_not_affinity(
     assert by_kind["pMHC_presentation"].score == pytest.approx(0.92)
 
 
-def test_unrecognized_predictor_version_is_bridged_not_dropped(
-        tmp_path, caplog):
-    """A version topiary does not recognize must not lose the predictor.
+def test_unrecognized_predictor_version_still_yields_its_predictor(tmp_path):
+    """A version string topiary has not seen must not lose the predictor.
 
-    ``read_lens`` normalizes a binding column only when it recognizes the
-    version string, passing an unrecognized one through verbatim — so
-    ``netmhcpan_4.1.aff_nm`` (no ``b``) would drop netMHCpan's whole
-    affinity axis with nothing in the logs. Tracked as
-    openvax/topiary#206; bridged here by mapping on the metric, which is
-    what determines meaning, and saying so.
+    ``read_lens`` used to normalize a binding column only when it recognized
+    the version, passing an unrecognized one through verbatim — so
+    ``netmhcpan_4.1.aff_nm`` (no ``b``) dropped netMHCpan's entire affinity
+    axis with nothing in the logs. vaxrank carried a bridge that remapped
+    such columns by metric; topiary 5.28.0 matches structurally
+    (openvax/topiary#206) and the bridge is gone.
+
+    This pins the capability rather than the bridge: if a future topiary
+    reverts to version-keyed matching, a whole predictor disappears from
+    scoring and the report, and nothing else in the suite would notice.
     """
-    import logging
-
     from vaxrank.epitope_config import EpitopeConfig
 
     path = tmp_path / "unknown_version.tsv"
@@ -2378,19 +2379,13 @@ def test_unrecognized_predictor_version_is_bridged_not_dropped(
         "netmhcpan_4.1.aff_nm\n"
         "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t75\n")
 
-    with caplog.at_level(logging.WARNING):
-        [epitope] = read_lens_report(
-            path, epitope_config=EpitopeConfig()).epitopes
-
+    [epitope] = read_lens_report(
+        path, epitope_config=EpitopeConfig()).epitopes
     predictors = {
         (p.predictor_name, p.kind) for p in epitope.predictions_flat()}
     assert ("netmhcpan", "pMHC_affinity") in predictors
     assert ("mhcflurry", "pMHC_affinity") in predictors
-
-    warning = "\n".join(
-        record.getMessage() for record in caplog.records
-        if record.levelno >= logging.WARNING)
-    # Recovering it silently would be its own defect — the file is unusual
-    # and the operator should know why we had to guess.
-    assert "netmhcpan_4.1.aff_nm" in warning
-    assert "topiary#206" in warning
+    [netmhcpan] = [
+        p for p in epitope.predictions_flat()
+        if p.predictor_name == "netmhcpan"]
+    assert netmhcpan.value == pytest.approx(75.0)

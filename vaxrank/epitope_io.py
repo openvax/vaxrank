@@ -726,65 +726,6 @@ class DetectedPredictor:
     version: str = ""
 
 
-# Bridge for openvax/topiary#206: read_lens normalizes a binding column only
-# when it recognizes the version string, and passes an unrecognized one
-# through verbatim — so a LENS file written by netMHCpan "4.1" rather than
-# "4.1b" would lose its entire affinity axis with nothing in the logs. Map
-# any residual predictor-shaped column by its metric, which is what actually
-# determines meaning, and say so. Delete once topiary matches structurally.
-_RESIDUAL_LENS_COLUMN_RE = re.compile(
-    r"^([A-Za-z][A-Za-z0-9]*)_(\d[\w.]*)\.(.+)$")
-
-# LENS metric suffix -> (topiary kind segment, metric field).
-_RESIDUAL_METRIC_MAP = {
-    "aff": ("affinity", "value"),
-    "aff_nm": ("affinity", "value"),
-    "aff_perc": ("affinity", "rank"),
-    "perc_rank_ba": ("affinity", "rank"),
-    "score_ba": ("affinity", "score"),
-    "perc_rank_el": ("presentation", "rank"),
-    "score_el": ("presentation", "score"),
-    "pres_score": ("presentation", "score"),
-    "pres_perc": ("presentation", "rank"),
-    "proc_score": ("antigen_processing", "score"),
-    "halflife_hours": ("stability", "value"),
-    "perc_rank_stab": ("stability", "rank"),
-}
-
-
-def _map_residual_lens_columns(df):
-    """Normalize predictor columns topiary left unmapped, and report them."""
-    renames = {}
-    unmapped = []
-    for column in df.columns:
-        match = _RESIDUAL_LENS_COLUMN_RE.match(str(column))
-        if not match:
-            continue
-        tool, version, metric = match.groups()
-        mapped = _RESIDUAL_METRIC_MAP.get(metric)
-        if mapped is None:
-            unmapped.append(str(column))
-            continue
-        kind, field = mapped
-        target = "%s_%s_%s" % (tool, kind, field)
-        if target not in df.columns:
-            renames[column] = target
-    if renames:
-        logger.warning(
-            "topiary did not normalize %d LENS binding column(s), most "
-            "likely an unrecognized predictor version (openvax/topiary#206). "
-            "Mapping them by metric so the signal is not lost: %s",
-            len(renames),
-            ", ".join("%s -> %s" % kv for kv in sorted(renames.items())))
-        df = df.rename(columns=renames)
-    if unmapped:
-        logger.warning(
-            "LENS column(s) %s look like predictor output but their metric "
-            "is unknown to vaxrank and to topiary; they are ignored.",
-            ", ".join(sorted(unmapped)))
-    return df
-
-
 def detect_lens_predictors(columns, versions=None):
     """Return a :class:`DetectedPredictor` per ``(tool, kind)`` present.
 
@@ -923,7 +864,7 @@ def read_lens_report(path, epitope_config=None):
     # names too — ``gene``, ``variant``, ``effect``, ``gene_tpm`` — which is
     # the vocabulary the rest of this module now reads.
     result = read_lens(path)
-    df = _map_residual_lens_columns(result.df)
+    df = result.df
     # topiary detects each binding model's version while parsing and records
     # it on the metadata. vaxrank's version-qualified DSL references
     # (``affinity['mhcflurry', '2.1.1']``) depend on those reaching the
