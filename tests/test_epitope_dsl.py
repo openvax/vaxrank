@@ -1001,3 +1001,59 @@ def test_a_named_allele_beside_an_unstated_one_does_not_raise(unstated):
 
     assert epitope.patient_alleles == ("HLA-A*02:01",)
     assert len(epitope.predictions_flat()) == 2
+
+
+@pytest.mark.parametrize("unstated", UNSTATED_SPELLINGS)
+def test_the_record_itself_is_normalized_not_just_the_keys(unstated):
+    """Every reader of ``p.allele`` must see a stated value or blank.
+
+    The first pass applied the rule only where vaxrank keyed or ordered on
+    these fields, which fixed the buckets and the sorts and nothing else —
+    around sixty call sites read ``p.allele`` directly, and every one that
+    asks ``if p.allele`` to mean "is this allele-scoped" is wrong for NaN
+    and for the string "nan", both truthy. ``alleles_for`` is one: it
+    returned a phantom allele rather than the empty tuple.
+    """
+    from vaxrank.candidate_epitope import CandidateEpitope
+
+    epitope = CandidateEpitope(
+        sequence="SIINFEKL", offset=0, prediction_id="x",
+        patient_alleles=("HLA-A*02:01",),
+        predictions=(_processing(unstated, 0.8),))
+
+    [leaf] = epitope.predictions_flat()
+    assert leaf.allele == ""
+    assert epitope.alleles_for("antigen_processing") == ()
+
+
+@pytest.mark.parametrize("unstated", UNSTATED_SPELLINGS)
+def test_a_caller_supplied_frame_cannot_add_a_phantom_allele(unstated):
+    """per_allele_scores must reject an unstated allele from any frame.
+
+    Normalizing predictions on the way into a CandidateEpitope does not
+    cover this path: pVACseq passes its own topiary frame, which never went
+    through that boundary. topiary collapses a stringified null in a group
+    key to a real null, and NaN is truthy, so a bare ``if allele`` wrote it
+    into a map whose contract is per patient allele.
+    """
+    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.epitope_dsl import attach_per_allele_scores
+
+    frame = pd.DataFrame([{
+        "prediction_id": "x", "source_sequence_name": "s",
+        "peptide": "SIINFEKL", "peptide_offset": 0, "peptide_length": 8,
+        "allele": unstated, "prediction_method_name": "mhcflurry",
+        "predictor_version": "2.1.1", "kind": "antigen_processing",
+        "value": None, "score": 0.8}])
+    epitope = CandidateEpitope(
+        sequence="SIINFEKL", offset=0, prediction_id="x",
+        patient_alleles=("HLA-A*02:01",), predictions=())
+
+    [scored] = attach_per_allele_scores(
+        [epitope],
+        EpitopeConfig(
+            score_expr="peptide_view(processing[mhcflurry].score)"),
+        topiary_df=frame)
+
+    assert dict(scored.per_allele_scores) == {
+        "HLA-A*02:01": pytest.approx(0.8)}

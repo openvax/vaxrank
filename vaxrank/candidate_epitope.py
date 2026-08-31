@@ -86,7 +86,7 @@ from __future__ import annotations
 
 import copy
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as _dc_replace
 from typing import TYPE_CHECKING, Optional
 
 from packaging.version import InvalidVersion, Version
@@ -170,6 +170,30 @@ def stated_or_blank(value):
     return value if is_stated(value) else ""
 
 
+def canonical_prediction(prediction):
+    """Return ``prediction`` with its identity fields stated or blank.
+
+    :func:`stated_or_blank` was first applied only where vaxrank keyed or
+    ordered on these fields, leaving the record itself carrying whatever
+    the producer wrote. That fixed the buckets and the sorts and nothing
+    else: roughly sixty call sites read ``p.allele`` directly, and each one
+    that asks ``if p.allele`` to mean "is this allele-scoped" gets the wrong
+    answer for NaN and for the string "nan", both of which are truthy.
+
+    Normalizing the record once, on the way in, makes the invariant hold
+    everywhere instead of at whichever call sites were remembered. Nothing
+    is lost: the four spellings carry no information beyond "the producer
+    stated nothing", and which way it said nothing is not a fact worth
+    keeping.
+    """
+    allele = stated_or_blank(prediction.allele)
+    version = stated_or_blank(prediction.predictor_version)
+    if allele == prediction.allele and version == prediction.predictor_version:
+        return prediction
+    return _dc_replace(
+        prediction, allele=allele, predictor_version=version)
+
+
 def _group_predictions(predictions) -> dict:
     """Flat ``Sequence[Prediction]`` → nested
     ``{kind: {predictor: {version: tuple}}}``. Producer-friendly:
@@ -177,9 +201,10 @@ def _group_predictions(predictions) -> dict:
     coming out of mhctools / topiary."""
     nested: dict = {}
     for p in predictions:
+        p = canonical_prediction(p)
         (nested.setdefault(p.kind, {})
                .setdefault(p.predictor_name, {})
-               .setdefault(stated_or_blank(p.predictor_version), [])
+               .setdefault(p.predictor_version, [])
                .append(p))
     return {
         k: {pn: {pv: tuple(records) for pv, records in by_version.items()}
@@ -451,8 +476,7 @@ class Peptide:
             for records in by_version.values()
             for p in records)
         return tuple(sorted(flat, key=lambda p: (
-            p.kind, p.predictor_name,
-            stated_or_blank(p.predictor_version), stated_or_blank(p.allele),
+            p.kind, p.predictor_name, p.predictor_version, p.allele,
             _nan_safe(p.score), _nan_safe(p.value),
             _nan_safe(p.percentile_rank))))
 
@@ -795,6 +819,11 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
     """
     groups: dict = {}
     for row in rows:
+        # Normalize before anything reads mutant.allele. The group's
+        # patient_alleles and allele_score are both decided by a truthiness
+        # test on it below, and two spellings of blank are truthy.
+        if row.get('mutant') is not None:
+            row = {**row, 'mutant': canonical_prediction(row['mutant'])}
         peptide = row['peptide']
         prediction_id = row.get('prediction_id') or ''
         key = (prediction_id, peptide, row['source'], row['offset'])
@@ -829,7 +858,9 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
         if row['mutant'].allele:
             slot['patient_alleles'].add(row['mutant'].allele)
         slot['patient_alleles'].update(
-            allele for allele in (row.get('patient_alleles') or ()) if allele)
+            stated
+            for allele in (row.get('patient_alleles') or ())
+            if (stated := stated_or_blank(allele)))
         for allele, score in (row.get('per_allele_scores') or {}).items():
             score = float(score)
             existing_score = slot['per_allele_scores'].get(allele)

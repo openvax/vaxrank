@@ -442,6 +442,7 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
     objects alone, e.g. pVACseq passthrough annotation columns.
     """
     from dataclasses import replace
+    from .candidate_epitope import stated_or_blank
     from .epitope_config import EpitopeConfig
 
     if not epitopes:
@@ -454,11 +455,16 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
         src_name, peptide, offset, allele = idx
-        # Allele-independent processing predictions use ``allele=''``.
-        # They belong in the nested prediction model, but never in a map
-        # whose public contract is explicitly per patient allele. This
-        # filter stays even once openvax/topiary#182 lands: an unprojected
-        # allele-free row still produces an empty-allele group.
+        # Allele-independent predictions use a blank allele. They belong in
+        # the nested prediction model, but never in a map whose public
+        # contract is explicitly per patient allele.
+        #
+        # stated_or_blank rather than a truthiness test: this index comes
+        # from the frame, which a caller may have built (pVACseq passes its
+        # own), and topiary collapses a stringified null in a group key to a
+        # real null — which is truthy. A bare ``if allele`` let NaN through
+        # as a patient allele.
+        allele = stated_or_blank(allele)
         if allele:
             by_position.setdefault(
                 (src_name, peptide, offset), {})[allele] = float(val)
