@@ -21,7 +21,7 @@ from topiary import TopiaryPredictor
 from topiary.ranking import EvalContext, apply_filter
 
 from .epitope_config import EpitopeConfig
-from .allele_evidence import attribute_frame, warn_if_scoring_ignores_policy
+from .allele_evidence import apply_attribution, attribute_frame
 from .epitope_dsl import (
     build_filter_node, build_score_node, prediction_group_columns,
 )
@@ -180,7 +180,9 @@ def predict_epitopes(
         predictions_df, policy,
         default_methods=default_methods,
         group_columns=prediction_group_columns(predictions_df))
-    warn_if_scoring_ignores_policy(policy, allele_attributions)
+    predictions_df = apply_attribution(
+        predictions_df, allele_attributions, policy,
+        group_columns=prediction_group_columns(predictions_df))
 
     filter_node = build_filter_node(epitope_config)
     if filter_node is not None:
