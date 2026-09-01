@@ -42,7 +42,6 @@ import logging
 import os
 
 import pandas as pd
-from topiary import READS
 
 from . import cells
 from .amino_acids import has_only_standard_amino_acids
@@ -238,7 +237,12 @@ class ExternalVariantEntry:
     had_transcript_ids: bool = False
     resolved_transcript: bool = False
     annotation: object = None       # (gene_ok, effect_ok, label) or None
-    dna_vaf: object = None          # float or None
+    dna_vaf: object = None          # float or None, from a DNA-qualified column
+    # A variant fraction whose assay the source did not state. LENS names
+    # its read columns rna_* and leaves `vaf` bare, so filing it as DNA
+    # asserts something the file never said. Kept apart from dna_vaf so the
+    # report can label it honestly rather than by guess.
+    source_vaf: object = None       # float or None
     has_rna_support: bool = False
     unparseable: bool = False
 
@@ -258,6 +262,7 @@ class ExternalRankingResult:
 
     ranked: list = dataclasses.field(default_factory=list)
     dna_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
+    source_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
     input_summary: ExternalInputSummary = dataclasses.field(
         default_factory=ExternalInputSummary)
 
@@ -585,31 +590,39 @@ def _read_counts_from_lens_row(row):
     reordered vaccine peptides.
 
     topiary populates the fields with the derivation named per field
-    (``read_count_method``): depth x VAF for the alt/ref split, and the
+    (``rna_evidence_method``): depth x VAF for the alt/ref split, and the
     CDS-overlap count kept where it belongs, in
     ``n_alt_reads_supporting_protein_sequence``. A row whose source could
     not answer carries no estimate rather than a zero standing in for one;
     the zero appears here only because the fragment field is not nullable.
     """
     return (
-        cells.integer(row.get('n_overlapping_reads'), default=0),
-        cells.integer(row.get('n_alt_reads'), default=0),
-        cells.integer(row.get('n_ref_reads'), default=0),
+        cells.integer(row.get('n_rna_overlapping'), default=0),
+        cells.integer(row.get('n_rna_alt'), default=0),
+        cells.integer(row.get('n_rna_ref'), default=0),
+        # topiary dropped its supporting-count column as duplicative of
+        # n_rna_* for single-unit sources, so this comes from the LENS
+        # column directly. It is a pass-through of a number the file
+        # states, not a derivation — and it counts reads overlapping the
+        # peptide's CDS, which is why it lives in this field and not in
+        # n_rna_alt.
         cells.integer(
-            row.get('n_alt_reads_supporting_protein_sequence'), default=0),
+            row.get('rna_reads_covering_genomic_origin_with_peptide_cds'),
+            default=0),
     )
 
 
 def _read_provenance_from_lens_row(row):
-    """``(read_count_method, sequence_source)`` for a LENS row.
+    """``(rna_evidence_method, sequence_source, rna_evidence_subject)``.
 
     Read alongside the counts rather than derived: topiary labels each
     field with how it was obtained, and dropping the label leaves an
     estimate indistinguishable from a measurement (#375).
     """
     return (
-        cells.text(row.get('read_count_method')),
+        cells.text(row.get('rna_evidence_method')),
         cells.text(row.get('sequence_source')),
+        cells.text(row.get('rna_evidence_subject')),
     )
 
 
@@ -627,6 +640,7 @@ class ExternalRankingAccumulator:
 
     ranked: list = dataclasses.field(default_factory=list)
     dna_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
+    source_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
     annotation_results: list = dataclasses.field(default_factory=list)
     n_unparseable: int = 0
     n_parseable: int = 0
@@ -652,6 +666,8 @@ class ExternalRankingAccumulator:
             self.n_with_rna += 1
         if entry.dna_vaf is not None:
             self.dna_vaf_by_variant[entry.variant] = entry.dna_vaf
+        if entry.source_vaf is not None:
+            self.source_vaf_by_variant[entry.variant] = entry.source_vaf
         if entry.vaccine_peptide is not None:
             self.ranked.append((entry.variant, [entry.vaccine_peptide]))
 
@@ -664,6 +680,7 @@ class ExternalRankingAccumulator:
         return ExternalRankingResult(
             ranked=ranked_sorted_by_target_score(self.ranked),
             dna_vaf_by_variant=self.dna_vaf_by_variant,
+            source_vaf_by_variant=self.source_vaf_by_variant,
             input_summary=ExternalInputSummary(
                 num_somatic_variants=self.n_parseable,
                 num_coding_effect_variants=self.n_resolved_transcripts,
@@ -729,7 +746,14 @@ def lens_variant_metadata(variant_id, group_rows, genome=None):
         if cells.missing(value):
             continue
         try:
-            entry.dna_vaf = float(value)
+            # LENS names its read columns rna_* explicitly and leaves this
+            # one bare, so the assay is unstated. Recorded as the source's
+            # own fraction rather than as a DNA VAF: calling it DNA asserts
+            # an assay the file never claimed, and the report printed it
+            # under "DNA VAF" on that basis. topiary reached the same
+            # conclusion for its own use of this column, which is why the
+            # LENS split is rna_depth_x_source_vaf.
+            entry.source_vaf = float(value)
             break
         except (TypeError, ValueError):
             continue
@@ -792,7 +816,7 @@ class ExternalConstructOptions:
 
 def external_vaccine_peptide(variant, selection, context, mutant_start,
                              mutant_end, gene_name, transcripts, counts,
-                             options, provenance=("", "")):
+                             options, provenance=("", "", "")):
     """Assemble one ``VaccinePeptide`` from an external construct window.
 
     Shared by every external format so a construct built from a LENS
@@ -836,12 +860,10 @@ def external_vaccine_peptide(variant, selection, context, mutant_start,
         for epitope in epitopes
     ]
     n_total, n_alt, n_ref, n_alt_protein = counts
-    read_count_method, sequence_source = provenance
-    # Both external readers estimate from a depth and a fraction, or count
-    # CDS overlap; either way the unit is reads. Stated rather than left
-    # blank so a threshold copied from a native run can tell it is a
-    # different bar (openvax/topiary#239).
-    read_count_subject = READS if read_count_method else ""
+    # The subject comes from the reader rather than being assumed here:
+    # both external sources happen to count reads, but that is a fact about
+    # them, not something this function should assert on their behalf.
+    rna_evidence_method, sequence_source, rna_evidence_subject = provenance
     fragment = MutantProteinFragment(
         variant=variant,
         gene_name=gene_name,
@@ -854,8 +876,8 @@ def external_vaccine_peptide(variant, selection, context, mutant_start,
         n_ref_reads=n_ref,
         n_alt_reads_supporting_protein_sequence=n_alt_protein,
         placeholder_alleles=False,
-        read_count_method=read_count_method,
-        read_count_subject=read_count_subject,
+        rna_evidence_method=rna_evidence_method,
+        rna_evidence_subject=rna_evidence_subject,
         sequence_source=sequence_source,
     )
     return VaccinePeptide(
@@ -1335,11 +1357,12 @@ def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None):
             (int(depths[index] or 0),
              int(alt) if stated else 0,
              int(ref) if not pd.isna(ref) else 0),
-            ("rna_depth_x_vaf" if stated else "",
-             cells.text(record.row.get("sequence_source")))))
+            (cells.text(record.row.get("rna_evidence_method")),
+             cells.text(record.row.get("sequence_source")),
+             cells.text(record.row.get("rna_evidence_subject")))))
     (n_total, n_alt_reads, n_ref_reads), provenance = max(
         observations, key=lambda o: (o[0][1], o[0][0]),
-        default=((0, 0, 0), ("", "")))
+        default=((0, 0, 0), ("", "", "")))
     metadata.vaccine_peptide = external_vaccine_peptide(
         variant=metadata.variant,
         selection=selection,
