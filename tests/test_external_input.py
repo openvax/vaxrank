@@ -1910,3 +1910,107 @@ def test_no_vaf_means_no_alt_estimate_rather_than_the_cds_count(tmp_path):
     assert fragment.n_overlapping_reads == 100
     assert fragment.n_alt_reads == 0
     assert fragment.n_alt_reads_supporting_protein_sequence == 40
+
+
+def test_read_counts_arrive_with_the_derivation_that_produced_them(tmp_path):
+    """An estimate and a measurement are the same integer, not the same claim.
+
+    After #374 a LENS ``n_alt_reads`` is depth x VAF, rounded. On another
+    source the same field may be counted from an alignment. The report
+    prints the same number either way and ``sqrt(n_alt_reads)`` weights
+    them identically, so the label is what lets a reader tell them apart.
+    """
+    path = _lens_counts_file(
+        tmp_path, "labelled.tsv", depth=2337, cds_overlap=2, vaf=0.022)
+
+    fragment = _fragment_for(path)
+
+    assert fragment.n_alt_reads == 51
+    assert fragment.read_count_method == "rna_depth_x_vaf"
+    assert fragment.sequence_source == "lens_pep_context"
+
+
+def test_no_estimate_means_no_method_rather_than_a_confident_zero(tmp_path):
+    """A row that could not be split must not claim a derivation.
+
+    Labelling a zero ``rna_depth_x_vaf`` would assert that the estimate was
+    made and came out zero, which is a different statement from "the source
+    did not carry a VAF".
+    """
+    path = _lens_counts_file(
+        tmp_path, "unlabelled.tsv", depth=100, cds_overlap=40, vaf=None)
+
+    fragment = _fragment_for(path)
+
+    assert fragment.n_alt_reads == 0
+    assert fragment.read_count_method == ""
+    # The sequence still has a known source; only the split is missing.
+    assert fragment.sequence_source == "lens_pep_context"
+
+
+def test_the_method_describes_the_row_whose_counts_were_used(tmp_path):
+    """Provenance travels with the counts, from one observation.
+
+    The counts already come from a single best-supported row rather than
+    per-field maxima. Reading the label separately would reintroduce that
+    problem one field over: a method describing a row whose numbers were
+    not the ones used.
+    """
+    path = tmp_path / "two-rows.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\t"
+        "rna_reads_covering_genomic_origin\t"
+        "rna_reads_covering_genomic_origin_with_peptide_cds\tvaf\t"
+        "mhcflurry_2.1.1.aff\n"
+        # deep row, no VAF: no estimate, so no method
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
+        "1000\t5\t\t20\n"
+        # shallow row with a VAF: 10 x 0.9 = 9 alt, and it wins
+        "SIINFEKL\tHLA-B07:02\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
+        "10\t9\t0.9\t25\n")
+
+    fragment = _fragment_for(path)
+
+    # The winning row is the shallow one, so its depth and its label.
+    assert (fragment.n_overlapping_reads, fragment.n_alt_reads) == (10, 9)
+    assert fragment.read_count_method == "rna_depth_x_vaf"
+
+
+def test_pvacseq_estimates_are_labelled_too(tmp_path):
+    """pVACseq reports a depth and a fraction, never an alt-read count.
+
+    vaxrank multiplies them, which is the same estimate the LENS path
+    makes — so it carries the same label. It was computing it inline and
+    unlabelled, which is the bug #375 describes, one path over.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import epitopes_for_ranking
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
+
+    config = EpitopeConfig()
+    report = read_pvacseq_report(
+        os.path.join(DATA_DIR, "pvacseq_example.tsv"), epitope_config=config)
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+
+    fragment = result.ranked[0][1][0].mutant_protein_fragment
+
+    assert fragment.n_alt_reads > 0
+    assert fragment.read_count_method == "rna_depth_x_vaf"
+
+
+def test_a_pvacseq_row_with_no_rna_vaf_claims_no_derivation():
+    """Absent is not zero.
+
+    ``pvacseq_rna_vaf`` used to default to 0.0, which made "the variant was
+    looked for and not seen" indistinguishable from "no RNA data" — and
+    would have labelled the second one ``rna_depth_x_vaf``, asserting an
+    estimate that was never made.
+    """
+    from vaxrank.external_input import pvacseq_rna_vaf
+
+    assert pvacseq_rna_vaf({"rna_vaf": 0.0}) == 0.0
+    assert pvacseq_rna_vaf({}) is None
+    assert pvacseq_rna_vaf({"rna_vaf": ""}) is None
