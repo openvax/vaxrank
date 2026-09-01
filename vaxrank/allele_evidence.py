@@ -159,9 +159,10 @@ class AllelePolicy:
     def narrows(self) -> bool:
         """True when this policy can credit fewer alleles than the genotype.
 
-        ``all`` cannot, so what is recorded and what is scored agree.
-        Anything else can differ from the scores until openvax/topiary#232
-        lands, which is what :func:`warn_if_scoring_ignores_policy` says.
+        ``all`` cannot, so the frame is left alone and topiary broadcasts
+        as it already does. Anything else needs the allele-free rows
+        written onto the credited alleles, because broadcasting reaches
+        every group a peptide has and cannot be told to reach only some.
         """
         return self.name != POLICY_ALL
 
@@ -491,41 +492,44 @@ def attribute_frame(df, policy, *, genotype_for=None, default_methods=None,
     return attributions
 
 
-_WARNED_ABOUT_SCORING = set()
+def apply_attribution(df, attributions, policy, *, group_columns=None):
+    """Write allele-free rows onto the alleles they were attributed to.
 
+    Only when the policy narrows. Under ``all`` the frame is returned
+    unchanged and topiary broadcasts, which is both the historical
+    behaviour and the honest one: the frame keeps saying what was
+    predicted, and the broadcast stays data shape rather than a claim in
+    the data.
 
-def warn_if_scoring_ignores_policy(policy, attributions):
-    """Say plainly that a narrowing policy does not yet change scores.
+    A narrowing policy has to be written into the frame, because
+    broadcasting has no way to reach only some of a peptide's alleles.
+    Naming the allele on the row is how the policy says "credit this
+    evidence here"; topiary then lands it in that group and nowhere else.
 
-    Attribution records which alleles are credited with a peptide's
-    allele-free evidence. It does not currently change the per-allele
-    scores, because topiary projects a peptide-level value across every
-    allele group a peptide has, keyed on the *kind* — a row that names an
-    allele is projected onto the others anyway (openvax/topiary#232). So
-    "credit this to the best allele" is recorded and reported, and every
-    allele still receives the value when the score expression reads it.
-
-    Writing the row onto the attributed alleles was tried and does nothing:
-    the frame changes and the scores do not, which is worse than the gap
-    itself. Better to state the limitation than to ship a frame that says
-    something the evaluation discards.
-
-    The default policy is ``all``, where recorded and scored agree and
-    there is nothing to warn about.
+    This was implemented, measured as a no-op and removed once already:
+    topiary projected a peptide-level value across every allele group keyed
+    on the *kind*, so a row naming an allele was projected onto the others
+    anyway and every policy produced identical scores (openvax/topiary#232).
+    Shipping the frame rewrite then would have meant the frame stating
+    something the evaluation discarded. It is honest as of topiary 5.39.0,
+    which is why the floor moved.
     """
     if not policy.narrows or not attributions:
-        return
-    key = (policy.name, policy.limit)
-    if key in _WARNED_ABOUT_SCORING:
-        return
-    _WARNED_ABOUT_SCORING.add(key)
-    logger.warning(
-        "allele_free_evidence=%s records which allele is credited with "
-        "peptide-level evidence, and is reported per candidate, but does "
-        "not yet change per-allele scores: topiary projects a peptide-level "
-        "value across every allele group regardless of the allele on the "
-        "row (openvax/topiary#232). Per-allele scores currently match "
-        "allele_free_evidence=%s.",
-        policy.name if policy.limit is None
-        else "%s%s" % (POLICY_TOP_PREFIX, policy.limit),
-        POLICY_ALL)
+        return df
+
+    import pandas as pd
+
+    group_columns = list(group_columns or ())
+    identity = _identity_columns(group_columns)
+    out = []
+    for row in df.to_dict("records"):
+        key = tuple(row.get(column) for column in identity)
+        attributed = attributions.get(key)
+        if (attributed is None
+                or not is_peptide_level_kind(row.get("kind"))
+                or (row.get("allele") or "")):
+            out.append(row)
+            continue
+        for attribution in attributed:
+            out.append({**row, "allele": attribution.allele})
+    return pd.DataFrame(out, columns=df.columns)

@@ -234,12 +234,12 @@ def test_attributions_are_recorded_on_the_candidate(tmp_path):
     assert selected.allele_attributions[0].source == ALLELE_SOURCE_SELECTED
     assert [a.allele for a in every.allele_attributions] == [A, B]
 
-    # Per-allele scores are deliberately unchanged between the two: topiary
-    # projects a peptide-level value across every allele group keyed on the
-    # kind (openvax/topiary#232), so a narrowing policy records the credited
-    # allele without yet narrowing the score. The warning says so; this pins
-    # that the two really do still agree, so the claim is not stale.
-    assert selected.per_allele_scores == every.per_allele_scores
+    # The default score expression reads pMHC_affinity and nothing else, so
+    # it cannot see this policy at all — both alleles keep their affinity
+    # score either way. Asserting the two agree here would pass forever
+    # while saying nothing; what the policy changes is pinned in
+    # test_a_narrowing_policy_changes_the_scores.
+    assert set(selected.per_allele_scores) == {A, B}
 
 
 def test_a_frame_with_no_allele_free_evidence_is_not_walked():
@@ -423,3 +423,45 @@ def test_annotating_the_report_keeps_the_frame_stored_on_it(tmp_path):
     annotated = annotate_credited_alleles(report, list(loaded.epitopes))
 
     assert annotated.attrs.get("topiary_df") == "sentinel"
+
+
+@pytest.mark.parametrize("policy_text,expected_b", [
+    ("all", 0.8),          # broadcast to the whole genotype
+    ("top:2", 0.8),        # both alleles ranked and credited
+    ("from_input", 0.8),   # the file paired the peptide with both
+    ("selected", 0.0),     # only the best-ranked allele is credited
+])
+def test_a_narrowing_policy_changes_the_scores(tmp_path, policy_text,
+                                               expected_b):
+    """The policy has to reach the scores, or it is a note on a result.
+
+    This shipped unable to do that: topiary projected a peptide-level value
+    across every allele group keyed on the *kind*, so writing the row onto
+    the credited allele was discarded and every policy produced identical
+    per-allele scores (openvax/topiary#232, fixed in 5.39.0).
+
+    The score expression reads only the peptide-level evidence, because
+    that is the evidence the policy governs. The default expression reads
+    pMHC_affinity alone and is unaffected by any of these settings — which
+    is why a test written against the default would pass under every policy
+    and pin nothing.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_lens_report
+
+    source = tmp_path / "processing.tsv"
+    source.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\t"
+        "mhcflurry_2.1.1.proc_score\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.8\n"
+        "SIINFEKL\tHLA-B07:02\tXXSIINFEKLXX\t900\t0.8\n")
+
+    [scored] = read_lens_report(
+        source,
+        epitope_config=EpitopeConfig(
+            allele_free_evidence=policy_text,
+            score_expr="processing[mhcflurry].score")).epitopes
+
+    # A*02:01 is the better binder, so it is the one 'selected' credits.
+    assert scored.per_allele_scores[A] == pytest.approx(0.8)
+    assert scored.per_allele_scores[B] == pytest.approx(expected_b)

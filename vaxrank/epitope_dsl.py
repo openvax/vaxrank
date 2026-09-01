@@ -458,8 +458,7 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
     from .candidate_epitope import stated_or_blank
     from .epitope_config import EpitopeConfig
 
-    from .allele_evidence import (
-        attribute_frame, warn_if_scoring_ignores_policy)
+    from .allele_evidence import apply_attribution, attribute_frame
 
     if not epitopes:
         return epitopes
@@ -469,21 +468,28 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
     # the same rows, and rebuilding is not free.
     if topiary_df is None:
         topiary_df = epitopes_to_topiary_df(epitopes)
-    score_series = score_predictions(
-        epitopes, cfg, topiary_df=topiary_df, kind_support=kind_support)
 
     # Attribution runs on the unfiltered frame, so the policy ranks on the
     # evidence the input carried rather than on whatever survived a cutoff:
     # a filter on affinity would otherwise change which allele is credited
     # with a peptide's processing score.
+    #
+    # And it runs before scoring, because a narrowing policy rewrites the
+    # frame the scores are computed from — that is what makes it a policy
+    # about scoring rather than a note attached to the result.
     policy = cfg.allele_policy
     genotypes = genotype_map(epitopes)
+    group_columns = prediction_group_columns(topiary_df)
     attributions = attribute_frame(
         topiary_df, policy,
         genotype_for=lambda key: genotypes.get(key, ()),
         default_methods=resolve_default_methods(cfg, topiary_df),
-        group_columns=prediction_group_columns(topiary_df))
-    warn_if_scoring_ignores_policy(policy, attributions)
+        group_columns=group_columns)
+    scoring_df = apply_attribution(
+        topiary_df, attributions, policy, group_columns=group_columns)
+
+    score_series = score_predictions(
+        epitopes, cfg, topiary_df=scoring_df, kind_support=kind_support)
     # score_series is keyed by prediction ID, peptide, offset, and allele.
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
