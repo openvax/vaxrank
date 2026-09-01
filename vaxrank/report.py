@@ -285,6 +285,11 @@ class TemplateDataCreator(object):
         if mutant_protein_fragment.read_count_method:
             variant_data['RNA read count method'] = (
                 mutant_protein_fragment.read_count_method)
+        # What those counts counted. Five fragments and five reads are
+        # different bars, and the rows above say neither on their own.
+        if mutant_protein_fragment.read_count_subject:
+            variant_data['RNA read count subject'] = (
+                mutant_protein_fragment.read_count_subject)
         if mutant_protein_fragment.sequence_source:
             variant_data['Protein sequence source'] = (
                 mutant_protein_fragment.sequence_source)

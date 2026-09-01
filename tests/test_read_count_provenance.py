@@ -25,8 +25,10 @@ from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.epitope_dsl import epitopes_for_ranking
 from vaxrank.epitope_io import read_pvacseq_report
 from vaxrank.external_input import pvacseq_ranking_result
+from topiary import FRAGMENTS, READS
+
 from vaxrank.mutant_protein_fragment import (
-    READ_COUNT_METHOD_RNA_FRAGMENTS,
+    READ_COUNT_METHOD_RNA_READS,
     SEQUENCE_SOURCE_ISOVAR_ASSEMBLY,
     SEQUENCE_SOURCE_VARCODE_TRANSLATION,
     MutantProteinFragment,
@@ -59,7 +61,10 @@ def test_isovar_counts_are_labelled_as_fragments():
     fragment = MutantProteinFragment.from_isovar_result(_fake_isovar_result())
 
     assert fragment.n_alt_reads == 8            # fragments, per isovar
-    assert fragment.read_count_method == READ_COUNT_METHOD_RNA_FRAGMENTS
+    # Two axes, not one. rna_reads says the count came from an alignment
+    # and deliberately fixes no subject; the subject says what was counted.
+    assert fragment.read_count_method == READ_COUNT_METHOD_RNA_READS
+    assert fragment.read_count_subject == FRAGMENTS
     assert fragment.sequence_source == SEQUENCE_SOURCE_ISOVAR_ASSEMBLY
 
 
@@ -75,17 +80,19 @@ def test_the_sequence_source_terms_are_read_from_topiary():
     assert SEQUENCE_SOURCE_VARCODE_TRANSLATION in SEQUENCE_SOURCES
 
 
-def test_the_fragments_term_is_marked_as_not_yet_upstream():
-    """``rna_fragments`` is a local extension, and should stay a visible one.
+def test_a_count_cannot_be_read_in_the_wrong_subject():
+    """Asking for the other unit returns nothing, never a conversion.
 
-    topiary's READ_COUNT_METHODS has no term for fragment counts
-    (openvax/topiary#239). Until it does, this constant is vaxrank's, and
-    the test exists so that adopting the upstream term is a deliberate
-    change rather than something nobody notices is still pending.
+    vaxrank asked topiary for an ``rna_fragments`` *method* and that was
+    the wrong shape (openvax/topiary#239): a subject is not a derivation,
+    and a term alongside the methods would have left n_alt_reads ambiguous
+    on the isovar path while looking resolved. The subject is its own axis
+    now, and ``count_in`` is how a caller states which bar it means.
     """
-    from topiary import READ_COUNT_METHODS
+    fragment = MutantProteinFragment.from_isovar_result(_fake_isovar_result())
 
-    assert READ_COUNT_METHOD_RNA_FRAGMENTS not in READ_COUNT_METHODS
+    assert fragment.count_in("n_alt_reads", FRAGMENTS) == 8
+    assert fragment.count_in("n_alt_reads", READS) is None
 
 
 def test_pvacseq_reference_reads_come_from_the_same_split_as_the_alt():
@@ -169,3 +176,44 @@ def test_an_absent_vaf_yields_no_split_rather_than_zero():
 
     assert pd.isna(alt.iloc[0])
     assert pd.isna(ref.iloc[0])
+
+
+def test_the_external_paths_state_reads():
+    """A depth x VAF estimate is in reads, and says so.
+
+    Without this, a threshold written against a native run and copied to a
+    LENS run silently changes what it means — the portability harm the
+    subject axis exists to prevent. Within one run the unit is consistent
+    and the ranking is unaffected either way.
+    """
+    config = EpitopeConfig()
+    report = read_pvacseq_report(
+        os.path.join(DATA_DIR, "pvacseq_example.tsv"), epitope_config=config)
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+
+    fragment = result.ranked[0][1][0].mutant_protein_fragment
+
+    assert fragment.read_count_subject == READS
+    assert fragment.count_in("n_alt_reads", READS) == fragment.n_alt_reads
+    assert fragment.count_in("n_alt_reads", FRAGMENTS) is None
+
+
+def test_a_fragment_that_states_no_subject_answers_either():
+    """Silence is not a claim about the unit.
+
+    The varcode path consulted no RNA, so its zeros have no subject. A
+    caller asking for one gets the value rather than None, because there is
+    no competing claim to contradict — refusing would treat "not stated" as
+    "stated to be the other thing".
+    """
+    fragment = MutantProteinFragment(
+        variant=object(), gene_name="BRAF", amino_acids="SIINFEKL",
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=1,
+        supporting_reference_transcripts=[],
+        n_overlapping_reads=0, n_alt_reads=0, n_ref_reads=0,
+        n_alt_reads_supporting_protein_sequence=0)
+
+    assert fragment.read_count_subject == ""
+    assert fragment.count_in("n_alt_reads", READS) == 0
+    assert fragment.count_in("n_alt_reads", FRAGMENTS) == 0

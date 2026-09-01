@@ -17,6 +17,7 @@ from typing import Any
 
 from serializable import DataclassSerializable
 from varcode.effects import top_priority_effect
+from topiary import FRAGMENTS
 
 from .varcode_effects import (
     OUTCOME_SELECTION_HIGHEST_PRIORITY,
@@ -61,20 +62,22 @@ def find_mutation_region(reference_protein, mutant_protein):
     return start, mut_i
 
 
-# Read-count derivations. topiary owns this vocabulary
-# (``topiary.READ_COUNT_METHODS``) and vaxrank uses its terms rather than
-# inventing parallel ones.
+# Read-count vocabulary, all of it topiary's. Two orthogonal axes:
 #
-# ``rna_fragments`` is the exception, and deliberately marked as one:
-# isovar counts fragments, topiary has no term for that yet, and a
-# fragment count is a different quantity from a read count rather than a
-# different way of obtaining one. Requested upstream as
-# openvax/topiary#239; when it lands this constant should become an
-# import, the way ``is_named_version`` replaced a local stand-in.
-READ_COUNT_METHOD_RNA_FRAGMENTS = "rna_fragments"
-
-# Sequence provenance. This one topiary already defines, so it is read
-# from there rather than restated.
+#   read_count_method    how the number was obtained -- rna_reads,
+#                        rna_depth_x_vaf, cds_overlap_reads, ...
+#   read_count_subject   what it counted -- reads or fragments
+#
+# vaxrank asked for an ``rna_fragments`` *method* and that was the wrong
+# shape (openvax/topiary#239): a subject is not a derivation, and a term
+# alongside the methods would have left n_alt_reads ambiguous on the
+# isovar path while looking resolved. ``rna_reads`` deliberately fixes no
+# subject -- it says a count came from an alignment, not whether the
+# aligner counted reads or fragments -- so the producer states the
+# subject separately.
+#
+# Read from topiary rather than restated, so a rename upstream fails at
+# import instead of stamping a term nothing recognizes.
 def _sequence_source(name):
     """Return a topiary sequence-source term, failing loudly if it is gone.
 
@@ -93,6 +96,20 @@ def _sequence_source(name):
 
 SEQUENCE_SOURCE_ISOVAR_ASSEMBLY = _sequence_source("isovar_assembly")
 SEQUENCE_SOURCE_VARCODE_TRANSLATION = _sequence_source("varcode_translation")
+
+
+def _read_count_method(name):
+    """Return a topiary read-count method term, failing loudly if it is gone."""
+    from topiary import READ_COUNT_METHODS
+
+    if name not in READ_COUNT_METHODS:
+        raise ValueError(
+            "topiary.READ_COUNT_METHODS no longer defines %r, which vaxrank "
+            "stamps on the fragments it builds" % name)
+    return name
+
+
+READ_COUNT_METHOD_RNA_READS = _read_count_method("rna_reads")
 
 
 @dataclass
@@ -169,6 +186,14 @@ class MutantProteinFragment(DataclassSerializable):
     # sqrt(n_alt_reads) does not know that 51 was arithmetic rather than
     # observation. Carrying the label is what lets a reader tell.
     read_count_method: str = ""
+
+    # What those counts counted: topiary's FRAGMENTS or READS, blank when
+    # the source did not say. Separate from the method because how a number
+    # was obtained and what it counted are independent — an alignment-derived
+    # count may be either. Five fragments and five reads are different bars,
+    # and converting between them needs library information no source
+    # carries, so this is stated rather than normalized.
+    read_count_subject: str = ""
 
     # How the protein sequence was obtained: "lens_pep_context",
     # "pvacseq_epitope", "varcode_translation", "isovar_assembly",
@@ -256,7 +281,11 @@ class MutantProteinFragment(DataclassSerializable):
             n_alt_reads=isovar_result.num_alt_fragments,
             n_ref_reads=isovar_result.num_ref_fragments,
             n_alt_reads_supporting_protein_sequence=protein_sequence.num_supporting_fragments,
-            read_count_method=READ_COUNT_METHOD_RNA_FRAGMENTS,
+            # Counted from an alignment (rna_reads), and what it counted
+            # is fragments. Two axes, because "how" and "what" are
+            # independent: another aligner-derived count could be reads.
+            read_count_method=READ_COUNT_METHOD_RNA_READS,
+            read_count_subject=FRAGMENTS,
             sequence_source=SEQUENCE_SOURCE_ISOVAR_ASSEMBLY,
             supporting_reference_transcripts=protein_sequence.transcripts)
 
@@ -370,6 +399,23 @@ class MutantProteinFragment(DataclassSerializable):
             sequence_source=SEQUENCE_SOURCE_VARCODE_TRANSLATION,
             supporting_reference_transcripts=[transcript],
         )
+
+    def count_in(self, name, subject):
+        """``name``'s value if it counts ``subject``, else ``None``.
+
+        Mirrors ``topiary.ProteinFragment.count_in`` so a caller holding
+        either kind of fragment asks the same question the same way.
+
+        ``None`` rather than a converted number: turning a read estimate
+        into fragments needs library information no source carries, so a
+        fragment whose counts are in the other unit says it cannot answer.
+        Callers weighting these must decide what an unanswerable count
+        means for them — treating it as zero would reintroduce exactly the
+        substitution this exists to prevent.
+        """
+        if self.read_count_subject and self.read_count_subject != subject:
+            return None
+        return getattr(self, name)
 
     def __len__(self):
         return len(self.amino_acids)
