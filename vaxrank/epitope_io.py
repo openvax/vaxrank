@@ -1140,8 +1140,17 @@ def read_lens_report(path, epitope_config=None):
     # per-(peptide, allele) scoring to the DSL and stored the result on
     # CandidateEpitope.per_allele_scores. Loaders must populate it or
     # downstream ranking sees zero-scored epitopes and drops everything.
-    from .epitope_dsl import attach_per_allele_scores
-    epitopes = attach_per_allele_scores(epitopes, epitope_config)
+    from .epitope_dsl import attach_per_allele_scores, epitopes_to_topiary_df
+    # Build the evaluation frame here rather than letting the scorer rebuild
+    # it, so the source file's own columns can be carried onto it before
+    # anything reads it. Stored on report_df.attrs the way pVACseq already
+    # does, so the validator, the scorer and the report writer all see one
+    # frame.
+    scoring_df = attach_source_annotations(
+        epitopes_to_topiary_df(epitopes), records)
+    report_df.attrs["topiary_df"] = scoring_df
+    epitopes = attach_per_allele_scores(
+        epitopes, epitope_config, topiary_df=scoring_df)
     report_df = annotate_credited_alleles(report_df, epitopes)
     logger.info(
         "Loaded %d epitope(s) (%d row(s) × %d predictor(s)) from %s",
@@ -1227,6 +1236,55 @@ def _build_lens_report_row(row, allele, peptide, prediction_id,
 # ── Shared report writer ─────────────────────────────────────────────────────
 
 ALLELE_CREDIT_COLUMN = "Peptide-level evidence credited"
+
+
+def attach_source_annotations(df, records):
+    """Carry a source file's own columns onto the DSL frame.
+
+    vaxrank builds its evaluation frame from ``CandidateEpitope`` objects,
+    which know about predictions and nothing else — so every annotation the
+    reader had in hand was dropped before any expression could name it, and
+    ``gene_tpm > 1`` failed against a file that carries ``gene_tpm``
+    (openvax/vaxrank#353).
+
+    Joined on ``prediction_id``, which is the identity the frame already
+    groups on, so a column lands on exactly the rows it described.
+
+    Columns already on the frame are skipped rather than overwritten. A
+    prediction column and an annotation column can share a name, and
+    letting the source win would replace a value the DSL depends on with a
+    lookalike — the collision openvax/topiary#217 was about, arriving from
+    the other side.
+    """
+    if df is None or len(df) == 0 or not records:
+        return df
+    existing = set(df.columns)
+    by_id = {}
+    for record in records:
+        prediction_id = cells.text(record.row.get("prediction_id"))
+        if prediction_id and prediction_id not in by_id:
+            by_id[prediction_id] = record.row
+    if not by_id:
+        return df
+
+    names = []
+    for row in by_id.values():
+        for name in row:
+            if name not in existing and name not in names:
+                names.append(name)
+    if not names:
+        return df
+
+    from .epitope_dsl import PREDICTION_ID_COLUMN
+
+    # One concat rather than a column at a time: a LENS file can carry
+    # dozens of annotation columns, and inserting them individually
+    # fragments the frame badly enough that pandas warns about it.
+    ids = list(df[PREDICTION_ID_COLUMN])
+    added = pd.DataFrame(
+        {name: [by_id.get(i, {}).get(name) for i in ids] for name in names},
+        index=df.index)
+    return pd.concat([df, added], axis=1)
 
 
 def annotate_credited_alleles(report_df, epitopes):
