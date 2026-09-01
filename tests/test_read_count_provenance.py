@@ -127,3 +127,45 @@ def test_pvacseq_claims_no_protein_supporting_count():
     fragment = result.ranked[0][1][0].mutant_protein_fragment
 
     assert fragment.n_alt_reads_supporting_protein_sequence == 0
+
+
+def test_delegating_the_split_did_not_move_any_number():
+    """Migrating to topiary's arithmetic must be value-preserving.
+
+    The local copy was ``int(round(depth * vaf))``. Python's ``round`` is
+    banker's rounding, and nothing had checked that topiary agrees — so
+    this pins that it does, at the ``.5`` boundaries where the two could
+    differ. The reason to delegate is that a private copy of an upstream
+    rule drifts, not that this one had drifted.
+    """
+    import pandas as pd
+    from topiary import split_reads_by_vaf
+
+    cases = [(1, 0.5), (3, 0.5), (5, 0.5), (7, 0.5),
+             (2, 0.25), (10, 0.05), (100, 0.005)]
+    depth = pd.Series([c[0] for c in cases], dtype="Float64")
+    vaf = pd.Series([c[1] for c in cases], dtype="Float64")
+
+    alt, _ref = split_reads_by_vaf(depth, vaf)
+
+    assert [int(a) for a in alt] == [
+        int(round(d * v)) for d, v in cases]
+
+
+def test_an_absent_vaf_yields_no_split_rather_than_zero():
+    """Both halves are NA when either input is missing.
+
+    The local copy returned 0 for a missing VAF and derived the reference
+    count as ``max(0, depth - 0)`` — the whole depth, as if every read
+    supported the reference. topiary returns NA for both, which is what
+    lets the caller record "no estimate" instead of a confident zero.
+    """
+    import pandas as pd
+    from topiary import split_reads_by_vaf
+
+    alt, ref = split_reads_by_vaf(
+        pd.Series([100.0], dtype="Float64"),
+        pd.Series([None], dtype="Float64"))
+
+    assert pd.isna(alt.iloc[0])
+    assert pd.isna(ref.iloc[0])
