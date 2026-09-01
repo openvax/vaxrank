@@ -42,6 +42,7 @@ import logging
 import os
 
 import pandas as pd
+from topiary import READS
 
 from . import cells
 from .amino_acids import has_only_standard_amino_acids
@@ -836,6 +837,11 @@ def external_vaccine_peptide(variant, selection, context, mutant_start,
     ]
     n_total, n_alt, n_ref, n_alt_protein = counts
     read_count_method, sequence_source = provenance
+    # Both external readers estimate from a depth and a fraction, or count
+    # CDS overlap; either way the unit is reads. Stated rather than left
+    # blank so a threshold copied from a native run can tell it is a
+    # different bar (openvax/topiary#239).
+    read_count_subject = READS if read_count_method else ""
     fragment = MutantProteinFragment(
         variant=variant,
         gene_name=gene_name,
@@ -849,6 +855,7 @@ def external_vaccine_peptide(variant, selection, context, mutant_start,
         n_alt_reads_supporting_protein_sequence=n_alt_protein,
         placeholder_alleles=False,
         read_count_method=read_count_method,
+        read_count_subject=read_count_subject,
         sequence_source=sequence_source,
     )
     return VaccinePeptide(
