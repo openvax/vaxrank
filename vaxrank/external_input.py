@@ -599,6 +599,19 @@ def _read_counts_from_lens_row(row):
     )
 
 
+def _read_provenance_from_lens_row(row):
+    """``(read_count_method, sequence_source)`` for a LENS row.
+
+    Read alongside the counts rather than derived: topiary labels each
+    field with how it was obtained, and dropping the label leaves an
+    estimate indistinguishable from a measurement (#375).
+    """
+    return (
+        cells.text(row.get('read_count_method')),
+        cells.text(row.get('sequence_source')),
+    )
+
+
 @dataclasses.dataclass
 class ExternalRankingAccumulator:
     """Fold per-variant entries into a ranking result.
@@ -778,7 +791,7 @@ class ExternalConstructOptions:
 
 def external_vaccine_peptide(variant, selection, context, mutant_start,
                              mutant_end, gene_name, transcripts, counts,
-                             options):
+                             options, provenance=("", "")):
     """Assemble one ``VaccinePeptide`` from an external construct window.
 
     Shared by every external format so a construct built from a LENS
@@ -822,6 +835,7 @@ def external_vaccine_peptide(variant, selection, context, mutant_start,
         for epitope in epitopes
     ]
     n_total, n_alt, n_ref, n_alt_protein = counts
+    read_count_method, sequence_source = provenance
     fragment = MutantProteinFragment(
         variant=variant,
         gene_name=gene_name,
@@ -834,6 +848,8 @@ def external_vaccine_peptide(variant, selection, context, mutant_start,
         n_ref_reads=n_ref,
         n_alt_reads_supporting_protein_sequence=n_alt_protein,
         placeholder_alleles=False,
+        read_count_method=read_count_method,
+        sequence_source=sequence_source,
     )
     return VaccinePeptide(
         mutant_protein_fragment=fragment,
@@ -877,10 +893,16 @@ def lens_vaccine_entry(metadata, selection, genome=None, options=None):
     # deep row, alt from a shallow one — and n_alt_reads feeds the
     # combined-score DSL, so an incoherent count reorders the ranking.
     # Best-supported row wins: most alt reads, then most coverage.
-    counts = [_read_counts_from_lens_row(record.row)
-              for record in selection.records]
-    n_total, n_alt_reads, n_ref_reads, n_alt_protein = max(
-        counts, key=lambda c: (c[1], c[0]), default=(0, 0, 0, 0))
+    # The provenance travels with the counts, from the same row. Reading
+    # it separately would be the per-field maximum problem again, one field
+    # over: a method label describing a row whose numbers were not used.
+    observations = [
+        (_read_counts_from_lens_row(record.row),
+         _read_provenance_from_lens_row(record.row))
+        for record in selection.records]
+    (n_total, n_alt_reads, n_ref_reads, n_alt_protein), provenance = max(
+        observations, key=lambda o: (o[0][1], o[0][0]),
+        default=((0, 0, 0, 0), ("", "")))
     metadata.vaccine_peptide = external_vaccine_peptide(
         variant=metadata.variant,
         selection=selection,
@@ -894,6 +916,7 @@ def lens_vaccine_entry(metadata, selection, genome=None, options=None):
         # it as depth minus alt: that subtraction was only ever correct if
         # the alt count was variant support, which is exactly what was wrong.
         counts=(n_total, n_alt_reads, n_ref_reads, n_alt_protein),
+        provenance=provenance,
         options=options,
     )
     return metadata

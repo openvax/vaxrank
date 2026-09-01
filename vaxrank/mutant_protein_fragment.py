@@ -124,6 +124,26 @@ class MutantProteinFragment(DataclassSerializable):
     # supplies real alleles.
     placeholder_alleles: bool = False
 
+    # How the read counts above were obtained, in topiary's vocabulary:
+    # "rna_reads" (counted from an alignment), "rna_depth_x_vaf" (depth
+    # times VAF, rounded — an estimate), "cds_overlap_reads" (counted, but
+    # of CDS overlap rather than variant support), "tpm_x_dna_vaf" (an
+    # expression proxy). Blank when the source did not say.
+    #
+    # The number alone cannot distinguish a measurement from an estimate,
+    # and the combined-score DSL weights them identically —
+    # sqrt(n_alt_reads) does not know that 51 was arithmetic rather than
+    # observation. Carrying the label is what lets a reader tell.
+    read_count_method: str = ""
+
+    # How the protein sequence was obtained: "lens_pep_context",
+    # "pvacseq_epitope", "varcode_translation", "isovar_assembly",
+    # "caller_supplied". Distinct from the antigen's biological kind —
+    # this is method, not biology. "Assembled from RNA" versus "translated
+    # from reference" is the first question when auditing a ranking, and
+    # was previously answerable only for a whole file.
+    sequence_source: str = ""
+
     @staticmethod
     def slp_window_around_mutation(
             protein_aa, mut_start, mut_end, target_length):

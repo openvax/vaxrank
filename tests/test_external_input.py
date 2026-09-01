@@ -1910,3 +1910,68 @@ def test_no_vaf_means_no_alt_estimate_rather_than_the_cds_count(tmp_path):
     assert fragment.n_overlapping_reads == 100
     assert fragment.n_alt_reads == 0
     assert fragment.n_alt_reads_supporting_protein_sequence == 40
+
+
+def test_read_counts_arrive_with_the_derivation_that_produced_them(tmp_path):
+    """An estimate and a measurement are the same integer, not the same claim.
+
+    After #374 a LENS ``n_alt_reads`` is depth x VAF, rounded. On another
+    source the same field may be counted from an alignment. The report
+    prints the same number either way and ``sqrt(n_alt_reads)`` weights
+    them identically, so the label is what lets a reader tell them apart.
+    """
+    path = _lens_counts_file(
+        tmp_path, "labelled.tsv", depth=2337, cds_overlap=2, vaf=0.022)
+
+    fragment = _fragment_for(path)
+
+    assert fragment.n_alt_reads == 51
+    assert fragment.read_count_method == "rna_depth_x_vaf"
+    assert fragment.sequence_source == "lens_pep_context"
+
+
+def test_no_estimate_means_no_method_rather_than_a_confident_zero(tmp_path):
+    """A row that could not be split must not claim a derivation.
+
+    Labelling a zero ``rna_depth_x_vaf`` would assert that the estimate was
+    made and came out zero, which is a different statement from "the source
+    did not carry a VAF".
+    """
+    path = _lens_counts_file(
+        tmp_path, "unlabelled.tsv", depth=100, cds_overlap=40, vaf=None)
+
+    fragment = _fragment_for(path)
+
+    assert fragment.n_alt_reads == 0
+    assert fragment.read_count_method == ""
+    # The sequence still has a known source; only the split is missing.
+    assert fragment.sequence_source == "lens_pep_context"
+
+
+def test_the_method_describes_the_row_whose_counts_were_used(tmp_path):
+    """Provenance travels with the counts, from one observation.
+
+    The counts already come from a single best-supported row rather than
+    per-field maxima. Reading the label separately would reintroduce that
+    problem one field over: a method describing a row whose numbers were
+    not the ones used.
+    """
+    path = tmp_path / "two-rows.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\t"
+        "rna_reads_covering_genomic_origin\t"
+        "rna_reads_covering_genomic_origin_with_peptide_cds\tvaf\t"
+        "mhcflurry_2.1.1.aff\n"
+        # deep row, no VAF: no estimate, so no method
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
+        "1000\t5\t\t20\n"
+        # shallow row with a VAF: 10 x 0.9 = 9 alt, and it wins
+        "SIINFEKL\tHLA-B07:02\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
+        "10\t9\t0.9\t25\n")
+
+    fragment = _fragment_for(path)
+
+    # The winning row is the shallow one, so its depth and its label.
+    assert (fragment.n_overlapping_reads, fragment.n_alt_reads) == (10, 9)
+    assert fragment.read_count_method == "rna_depth_x_vaf"

@@ -279,6 +279,15 @@ class TemplateDataCreator(object):
             ('RNA reads supporting reference allele', mutant_protein_fragment.n_ref_reads),
             ('RNA reads supporting other alleles', mutant_protein_fragment.n_other_reads),
         ])
+        # Say how those counts were obtained. "51 reads" from an alignment
+        # and "51" from depth x VAF are the same integer and not the same
+        # claim, and the combined-score DSL weights them identically.
+        if mutant_protein_fragment.read_count_method:
+            variant_data['RNA read count method'] = (
+                mutant_protein_fragment.read_count_method)
+        if mutant_protein_fragment.sequence_source:
+            variant_data['Protein sequence source'] = (
+                mutant_protein_fragment.sequence_source)
         return variant_data
 
     def effect_data(self, predicted_effect, selected_effect=None):
