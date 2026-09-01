@@ -61,6 +61,40 @@ def find_mutation_region(reference_protein, mutant_protein):
     return start, mut_i
 
 
+# Read-count derivations. topiary owns this vocabulary
+# (``topiary.READ_COUNT_METHODS``) and vaxrank uses its terms rather than
+# inventing parallel ones.
+#
+# ``rna_fragments`` is the exception, and deliberately marked as one:
+# isovar counts fragments, topiary has no term for that yet, and a
+# fragment count is a different quantity from a read count rather than a
+# different way of obtaining one. Requested upstream as
+# openvax/topiary#239; when it lands this constant should become an
+# import, the way ``is_named_version`` replaced a local stand-in.
+READ_COUNT_METHOD_RNA_FRAGMENTS = "rna_fragments"
+
+# Sequence provenance. This one topiary already defines, so it is read
+# from there rather than restated.
+def _sequence_source(name):
+    """Return a topiary sequence-source term, failing loudly if it is gone.
+
+    Reading the name from topiary rather than restating it, so a rename
+    upstream surfaces here as an import-time error instead of silently
+    stamping fragments with a term nothing recognizes.
+    """
+    from topiary import SEQUENCE_SOURCES
+
+    if name not in SEQUENCE_SOURCES:
+        raise ValueError(
+            "topiary.SEQUENCE_SOURCES no longer defines %r, which vaxrank "
+            "stamps on the fragments it builds" % name)
+    return name
+
+
+SEQUENCE_SOURCE_ISOVAR_ASSEMBLY = _sequence_source("isovar_assembly")
+SEQUENCE_SOURCE_VARCODE_TRANSLATION = _sequence_source("varcode_translation")
+
+
 @dataclass
 class MutantProteinFragment(DataclassSerializable):
     """
@@ -208,11 +242,22 @@ class MutantProteinFragment(DataclassSerializable):
             mutant_amino_acid_start_offset=protein_sequence.mutation_start_idx,
             mutant_amino_acid_end_offset=protein_sequence.mutation_end_idx,
 
-            # TODO: distinguish reads and fragments in Vaxrank?
+            # These are FRAGMENT counts, and the fields are named for
+            # reads. For paired-end data a fragment is two reads, so these
+            # are roughly half the read count for the same evidence.
+            #
+            # Not converted, because the conversion needs to know whether
+            # the library was paired-end and isovar does not say. Labelled
+            # instead: read_count_method carries the subject so a consumer
+            # comparing this against a LENS estimate can see they are
+            # different quantities rather than inferring it from the field
+            # name, which asserts the wrong one (#382).
             n_overlapping_reads=isovar_result.num_total_fragments,
             n_alt_reads=isovar_result.num_alt_fragments,
             n_ref_reads=isovar_result.num_ref_fragments,
             n_alt_reads_supporting_protein_sequence=protein_sequence.num_supporting_fragments,
+            read_count_method=READ_COUNT_METHOD_RNA_FRAGMENTS,
+            sequence_source=SEQUENCE_SOURCE_ISOVAR_ASSEMBLY,
             supporting_reference_transcripts=protein_sequence.transcripts)
 
     @classmethod
@@ -315,10 +360,14 @@ class MutantProteinFragment(DataclassSerializable):
             amino_acids=amino_acids,
             mutant_amino_acid_start_offset=local_mut_start,
             mutant_amino_acid_end_offset=local_mut_end,
+            # No RNA was consulted, so there is nothing to label: zero
+            # here means "no reads counted", and read_count_method stays
+            # blank rather than claiming a derivation produced the zeros.
             n_overlapping_reads=0,
             n_alt_reads=0,
             n_ref_reads=0,
             n_alt_reads_supporting_protein_sequence=0,
+            sequence_source=SEQUENCE_SOURCE_VARCODE_TRANSLATION,
             supporting_reference_transcripts=[transcript],
         )
 
