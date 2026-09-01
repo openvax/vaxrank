@@ -1975,3 +1975,42 @@ def test_the_method_describes_the_row_whose_counts_were_used(tmp_path):
     # The winning row is the shallow one, so its depth and its label.
     assert (fragment.n_overlapping_reads, fragment.n_alt_reads) == (10, 9)
     assert fragment.read_count_method == "rna_depth_x_vaf"
+
+
+def test_pvacseq_estimates_are_labelled_too(tmp_path):
+    """pVACseq reports a depth and a fraction, never an alt-read count.
+
+    vaxrank multiplies them, which is the same estimate the LENS path
+    makes — so it carries the same label. It was computing it inline and
+    unlabelled, which is the bug #375 describes, one path over.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_dsl import epitopes_for_ranking
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
+
+    config = EpitopeConfig()
+    report = read_pvacseq_report(
+        os.path.join(DATA_DIR, "pvacseq_example.tsv"), epitope_config=config)
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+
+    fragment = result.ranked[0][1][0].mutant_protein_fragment
+
+    assert fragment.n_alt_reads > 0
+    assert fragment.read_count_method == "rna_depth_x_vaf"
+
+
+def test_a_pvacseq_row_with_no_rna_vaf_claims_no_derivation():
+    """Absent is not zero.
+
+    ``pvacseq_rna_vaf`` used to default to 0.0, which made "the variant was
+    looked for and not seen" indistinguishable from "no RNA data" — and
+    would have labelled the second one ``rna_depth_x_vaf``, asserting an
+    estimate that was never made.
+    """
+    from vaxrank.external_input import pvacseq_rna_vaf
+
+    assert pvacseq_rna_vaf({"rna_vaf": 0.0}) == 0.0
+    assert pvacseq_rna_vaf({}) is None
+    assert pvacseq_rna_vaf({"rna_vaf": ""}) is None

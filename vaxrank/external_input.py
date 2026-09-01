@@ -1204,8 +1204,14 @@ def pvacseq_rna_depth(row):
 
 
 def pvacseq_rna_vaf(row):
-    """RNA variant allele fraction reported by either pVACseq flavor."""
-    return cells.first_number(row, *_PVACSEQ_RNA_VAF_COLUMNS, default=0.0)
+    """RNA variant allele fraction reported by either pVACseq flavor.
+
+    ``None`` when neither flavor's column carries one. Not 0.0: a fraction
+    of zero says the variant was looked for and not seen, and an absent
+    fraction says it was not looked for, and the two produce different
+    read-count provenance.
+    """
+    return cells.first_number(row, *_PVACSEQ_RNA_VAF_COLUMNS)
 
 
 def pvacseq_dna_vaf(row):
@@ -1300,13 +1306,21 @@ def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None):
             "is empty or contains non-standard residues.",
             key.variant_id, key.source_sequence)
         return metadata
-    # Same rule as the LENS path: both counts come from one row.
-    counts = []
+    # Same rule as the LENS path: the counts and the label describing them
+    # come from one row.
+    observations = []
     for record in selection.records:
         depth = pvacseq_rna_depth(record.row)
-        counts.append((depth, int(round(depth * pvacseq_rna_vaf(record.row)))))
-    n_total, n_alt_reads = max(
-        counts, key=lambda c: (c[1], c[0]), default=(0, 0))
+        vaf = pvacseq_rna_vaf(record.row)
+        # depth x VAF is an estimate, not a count, and says so. pVACseq
+        # reports a depth and a fraction; it does not report alt reads.
+        alt = int(round(depth * vaf)) if vaf is not None else 0
+        method = "rna_depth_x_vaf" if vaf is not None else ""
+        source = cells.text(record.row.get("sequence_source"))
+        observations.append(((depth, alt), (method, source)))
+    (n_total, n_alt_reads), provenance = max(
+        observations, key=lambda o: (o[0][1], o[0][0]),
+        default=((0, 0), ("", "")))
     metadata.vaccine_peptide = external_vaccine_peptide(
         variant=metadata.variant,
         selection=selection,
@@ -1320,6 +1334,7 @@ def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None):
             key.ordered_transcript_ids, genome),
         counts=(
             n_total, n_alt_reads, max(0, n_total - n_alt_reads), n_alt_reads),
+        provenance=provenance,
         options=options,
     )
     return metadata
