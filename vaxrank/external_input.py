@@ -1308,19 +1308,31 @@ def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None):
         return metadata
     # Same rule as the LENS path: the counts and the label describing them
     # come from one row.
+    # depth x VAF is an estimate, not a count: pVACseq reports a depth and
+    # a fraction and never an alt-read count. The arithmetic is topiary's
+    # rather than ours — the LENS path already reads its derived columns,
+    # and a local copy of an upstream rule is the shape that produced every
+    # version bug in this file's history (#383).
+    from topiary import split_reads_by_vaf
+
+    depths = [pvacseq_rna_depth(record.row) for record in selection.records]
+    vafs = [pvacseq_rna_vaf(record.row) for record in selection.records]
+    alt_series, ref_series = split_reads_by_vaf(
+        pd.Series(depths, dtype="Float64"), pd.Series(vafs, dtype="Float64"))
     observations = []
-    for record in selection.records:
-        depth = pvacseq_rna_depth(record.row)
-        vaf = pvacseq_rna_vaf(record.row)
-        # depth x VAF is an estimate, not a count, and says so. pVACseq
-        # reports a depth and a fraction; it does not report alt reads.
-        alt = int(round(depth * vaf)) if vaf is not None else 0
-        method = "rna_depth_x_vaf" if vaf is not None else ""
-        source = cells.text(record.row.get("sequence_source"))
-        observations.append(((depth, alt), (method, source)))
-    (n_total, n_alt_reads), provenance = max(
+    for index, record in enumerate(selection.records):
+        alt = alt_series.iloc[index]
+        ref = ref_series.iloc[index]
+        stated = not pd.isna(alt)
+        observations.append((
+            (int(depths[index] or 0),
+             int(alt) if stated else 0,
+             int(ref) if not pd.isna(ref) else 0),
+            ("rna_depth_x_vaf" if stated else "",
+             cells.text(record.row.get("sequence_source")))))
+    (n_total, n_alt_reads, n_ref_reads), provenance = max(
         observations, key=lambda o: (o[0][1], o[0][0]),
-        default=((0, 0), ("", "")))
+        default=((0, 0, 0), ("", "")))
     metadata.vaccine_peptide = external_vaccine_peptide(
         variant=metadata.variant,
         selection=selection,
@@ -1332,8 +1344,13 @@ def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None):
         gene_name=key.primary_gene_name,
         transcripts=resolve_external_transcripts(
             key.ordered_transcript_ids, genome),
-        counts=(
-            n_total, n_alt_reads, max(0, n_total - n_alt_reads), n_alt_reads),
+        # The fourth count is reads spanning the assembled protein
+        # sequence. pVACseq does not report one, and setting it to
+        # n_alt_reads asserted that every variant-supporting read also
+        # spans the peptide — a measurement this source never made. Zero
+        # says it was not measured; on the LENS path the field holds a
+        # genuinely different count (cds_overlap_reads).
+        counts=(n_total, n_alt_reads, n_ref_reads, 0),
         provenance=provenance,
         options=options,
     )
