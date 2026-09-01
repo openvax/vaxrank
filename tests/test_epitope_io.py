@@ -2537,3 +2537,81 @@ def test_only_a_named_version_makes_a_model_ambiguous(versions, ambiguous):
     if ambiguous:
         assert resolved[("pMHC_affinity", "netmhcpan")] == "4.2"
 
+
+
+def test_lens_annotations_are_addressable_in_dsl_expressions(tmp_path):
+    """A file's own columns must be nameable in an expression.
+
+    vaxrank built its evaluation frame from CandidateEpitope objects, which
+    know about predictions and nothing else — so every annotation the
+    reader had in hand was dropped before an expression could reach it, and
+    a filter on expression or VAF failed against a file that carries both.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+
+    path = tmp_path / "annotated.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\ttpm\tvaf\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t0.4\t20\n"
+        "AAAAAAAAA\tHLA-A02:01\tXXAAAAAAAAAXX\t0.2\t0.01\t20\n")
+
+    scored = list(read_lens_report(
+        path,
+        epitope_config=EpitopeConfig(
+            score_expr=(
+                "affinity.value.logistic_normalized(350,150) * "
+                "(gene_tpm > 1)"))).epitopes)
+
+    by_peptide = {e.sequence: e for e in scored}
+    # The expressed peptide keeps its score; the one below the cutoff is
+    # zeroed by its own annotation, not by anything about its binding.
+    assert any(by_peptide["SIINFEKL"].per_allele_scores.values())
+    assert not any(by_peptide["AAAAAAAAA"].per_allele_scores.values())
+
+
+def test_the_annotation_column_is_gene_tpm_not_tpm(tmp_path):
+    """topiary renames on the way in, and the rename is load-bearing.
+
+    LENS writes fusion rows as composite strings like
+    ``ENST...:14.54-ENST...:33.84``, so ``tpm`` cannot be numeric for every
+    row. topiary coerces to ``gene_tpm`` and keeps the original text as
+    ``gene_tpm_raw``, which is why the DSL name is ``gene_tpm`` — a filter
+    written against ``tpm`` finds nothing.
+    """
+    path = tmp_path / "renamed.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\ttpm\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t20\n")
+
+    frame = read_lens_report(path).report_df.attrs["topiary_df"]
+
+    assert "gene_tpm" in frame.columns
+    assert "tpm" not in frame.columns
+
+
+def test_an_annotation_never_overwrites_a_prediction_column(tmp_path):
+    """A source column that shares a name with a frame column must not win.
+
+    Prediction and annotation columns can collide, and letting the source
+    replace a value the DSL depends on would swap it for a lookalike —
+    openvax/topiary#217, arriving from the other side.
+    """
+    from vaxrank.epitope_dsl import epitopes_to_topiary_df
+    from vaxrank.epitope_io import attach_source_annotations
+    from vaxrank.external_report import ExternalRecord
+
+    path = tmp_path / "collide.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t20\n")
+    loaded = read_lens_report(path)
+    epitopes = list(loaded.epitopes)
+    frame = epitopes_to_topiary_df(epitopes)
+    original = list(frame["value"])
+
+    hostile = [
+        ExternalRecord(key=record.key,
+                       row={**record.row, "value": "clobbered"})
+        for record in loaded.records]
+
+    assert list(attach_source_annotations(frame, hostile)["value"]) == original
