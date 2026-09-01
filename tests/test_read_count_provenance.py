@@ -28,7 +28,7 @@ from vaxrank.external_input import pvacseq_ranking_result
 from topiary import FRAGMENTS, READS
 
 from vaxrank.mutant_protein_fragment import (
-    READ_COUNT_METHOD_RNA_READS,
+    RNA_EVIDENCE_METHOD_ALIGNMENT,
     SEQUENCE_SOURCE_ISOVAR_ASSEMBLY,
     SEQUENCE_SOURCE_VARCODE_TRANSLATION,
     MutantProteinFragment,
@@ -43,28 +43,28 @@ def _fake_isovar_result():
     protein_sequence = types.SimpleNamespace(
         gene_name="BRAF", amino_acids="SIINFEKLAA",
         mutation_start_idx=2, mutation_end_idx=3,
-        num_supporting_fragments=7, transcripts=[])
+        num_supporting_fragments=7, num_supporting_reads=13, transcripts=[])
     return types.SimpleNamespace(
         variant=object(), top_protein_sequence=protein_sequence,
-        num_total_fragments=20, num_alt_fragments=8, num_ref_fragments=12)
+        num_total_fragments=20, num_alt_fragments=8, num_ref_fragments=12,
+        num_total_reads=38, num_alt_reads=15, num_ref_reads=23)
 
 
-def test_isovar_counts_are_labelled_as_fragments():
-    """The field says reads and the value is fragments, so the label must say.
+def test_isovar_counts_are_carried_in_both_units():
+    """Both units, each in the field named for it.
 
-    For paired-end data a fragment is two reads, so this is roughly half
-    the read count for the same evidence — a different quantity from a
-    LENS depth x VAF estimate, not a different way of obtaining one.
-    Nothing converts, because the conversion needs to know whether the
-    library was paired-end and isovar does not say.
+    vaxrank stored isovar's *fragment* counts in the fields named for
+    reads, and then described the discrepancy as a subject a caller had to
+    ask about. isovar reports every count in both units — the reads were
+    never unavailable, and the accessor that explained their absence was
+    describing a lie rather than a limitation (openvax/topiary#239).
     """
     fragment = MutantProteinFragment.from_isovar_result(_fake_isovar_result())
 
-    assert fragment.n_alt_reads == 8            # fragments, per isovar
-    # Two axes, not one. rna_reads says the count came from an alignment
-    # and deliberately fixes no subject; the subject says what was counted.
-    assert fragment.read_count_method == READ_COUNT_METHOD_RNA_READS
-    assert fragment.read_count_subject == FRAGMENTS
+    assert fragment.n_alt_reads == 15           # isovar's num_alt_reads
+    assert fragment.n_alt_fragments == 8        # isovar's num_alt_fragments
+    assert fragment.rna_evidence_method == RNA_EVIDENCE_METHOD_ALIGNMENT
+    assert fragment.rna_evidence_subject == FRAGMENTS
     assert fragment.sequence_source == SEQUENCE_SOURCE_ISOVAR_ASSEMBLY
 
 
@@ -80,19 +80,21 @@ def test_the_sequence_source_terms_are_read_from_topiary():
     assert SEQUENCE_SOURCE_VARCODE_TRANSLATION in SEQUENCE_SOURCES
 
 
-def test_a_count_cannot_be_read_in_the_wrong_subject():
-    """Asking for the other unit returns nothing, never a conversion.
+def test_the_rna_accessors_prefer_fragments():
+    """``n_rna_alt`` is the number to weight, and it prefers fragments.
 
-    vaxrank asked topiary for an ``rna_fragments`` *method* and that was
-    the wrong shape (openvax/topiary#239): a subject is not a derivation,
-    and a term alongside the methods would have left n_alt_reads ambiguous
-    on the isovar path while looking resolved. The subject is its own axis
-    now, and ``count_in`` is how a caller states which bar it means.
+    Two mates of one fragment are one piece of evidence, so a read count
+    overstates paired-end support by roughly two — the wrong input to a
+    diminishing-returns weight like sqrt(). Where a source has only reads,
+    reads are what n_rna_alt reports, and the subject says which.
     """
     fragment = MutantProteinFragment.from_isovar_result(_fake_isovar_result())
 
-    assert fragment.count_in("n_alt_reads", FRAGMENTS) == 8
-    assert fragment.count_in("n_alt_reads", READS) is None
+    assert fragment.n_rna_alt == 8              # fragments win
+    assert fragment.n_rna_ref == 12
+    assert fragment.n_rna_overlapping == 20
+    assert fragment.n_rna_supporting_protein_sequence == 7
+    assert fragment.rna_evidence_subject == FRAGMENTS
 
 
 def test_pvacseq_reference_reads_come_from_the_same_split_as_the_alt():
@@ -114,7 +116,7 @@ def test_pvacseq_reference_reads_come_from_the_same_split_as_the_alt():
     assert fragment.n_alt_reads > 0
     assert fragment.n_alt_reads + fragment.n_ref_reads == (
         fragment.n_overlapping_reads)
-    assert fragment.read_count_method == "rna_depth_x_vaf"
+    assert fragment.rna_evidence_method == "rna_depth_x_vaf"
 
 
 def test_pvacseq_claims_no_protein_supporting_count():
@@ -194,18 +196,19 @@ def test_the_external_paths_state_reads():
 
     fragment = result.ranked[0][1][0].mutant_protein_fragment
 
-    assert fragment.read_count_subject == READS
-    assert fragment.count_in("n_alt_reads", READS) == fragment.n_alt_reads
-    assert fragment.count_in("n_alt_reads", FRAGMENTS) is None
+    assert fragment.rna_evidence_subject == READS
+    # No fragment counts, so the accessors report the reads.
+    assert fragment.n_alt_fragments is None
+    assert fragment.n_rna_alt == fragment.n_alt_reads
 
 
-def test_a_fragment_that_states_no_subject_answers_either():
-    """Silence is not a claim about the unit.
+def test_a_fragment_that_states_no_subject_still_reports_its_counts():
+    """Silence about the unit does not hide the numbers.
 
-    The varcode path consulted no RNA, so its zeros have no subject. A
-    caller asking for one gets the value rather than None, because there is
-    no competing claim to contradict — refusing would treat "not stated" as
-    "stated to be the other thing".
+    The varcode path consulted no RNA, so its zeros have no subject. The
+    accessors still answer, because there is no competing claim to
+    contradict — treating "not stated" as "stated to be the other thing"
+    would make an unlabelled zero unreadable.
     """
     fragment = MutantProteinFragment(
         variant=object(), gene_name="BRAF", amino_acids="SIINFEKL",
@@ -214,6 +217,61 @@ def test_a_fragment_that_states_no_subject_answers_either():
         n_overlapping_reads=0, n_alt_reads=0, n_ref_reads=0,
         n_alt_reads_supporting_protein_sequence=0)
 
-    assert fragment.read_count_subject == ""
-    assert fragment.count_in("n_alt_reads", READS) == 0
-    assert fragment.count_in("n_alt_reads", FRAGMENTS) == 0
+    assert fragment.rna_evidence_subject == ""
+    assert fragment.n_rna_alt == 0
+
+
+def test_lens_vaf_is_not_recorded_as_a_dna_fraction(tmp_path):
+    """LENS leaves `vaf` unqualified, so nothing may call it DNA.
+
+    LENS names its read columns ``rna_*`` explicitly and leaves ``vaf``
+    bare. vaxrank filed it as ``dna_vaf`` and the report printed it under
+    "DNA VAF", asserting an assay the file never stated — and topiary was
+    using the same column as both an RNA and a DNA fraction, which is how
+    the ambiguity surfaced.
+
+    It is kept under its own name now, and the split that uses it says
+    ``rna_depth_x_source_vaf`` rather than claiming the fraction was RNA.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
+
+    path = tmp_path / "vaf.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\tantigen_source\tvariant_coords\t"
+        "snv_ref_allele\tsnv_alt_allele\tgene_name\t"
+        "rna_reads_covering_genomic_origin\tvaf\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tAASIINFEKLAA\tSNV\tchr1:100\tC\t[T]\tG\t"
+        "100\t0.4\t20\n")
+
+    config = EpitopeConfig()
+    report = read_lens_report(path, epitope_config=config)
+    result = lens_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+
+    assert result.dna_vaf_by_variant == {}
+    assert set(result.source_vaf_by_variant.values()) == {0.4}
+
+    fragment = result.ranked[0][1][0].mutant_protein_fragment
+    assert fragment.rna_evidence_method == "rna_depth_x_source_vaf"
+
+
+def test_pvacseq_keeps_its_qualified_dna_vaf():
+    """pVACseq names the assay, so the DNA fraction stays a DNA fraction.
+
+    The LENS fix must not collapse a source that *did* say which assay it
+    measured into the same unqualified bucket.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_pvacseq_report
+    from vaxrank.external_input import pvacseq_ranking_result
+
+    config = EpitopeConfig()
+    report = read_pvacseq_report(
+        os.path.join(DATA_DIR, "pvacseq_example.tsv"), epitope_config=config)
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+
+    assert result.dna_vaf_by_variant
+    assert result.source_vaf_by_variant == {}

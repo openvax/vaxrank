@@ -64,9 +64,9 @@ def find_mutation_region(reference_protein, mutant_protein):
 
 # Read-count vocabulary, all of it topiary's. Two orthogonal axes:
 #
-#   read_count_method    how the number was obtained -- rna_reads,
+#   rna_evidence_method    how the number was obtained -- rna_reads,
 #                        rna_depth_x_vaf, cds_overlap_reads, ...
-#   read_count_subject   what it counted -- reads or fragments
+#   rna_evidence_subject   what it counted -- reads or fragments
 #
 # vaxrank asked for an ``rna_fragments`` *method* and that was the wrong
 # shape (openvax/topiary#239): a subject is not a derivation, and a term
@@ -98,8 +98,13 @@ SEQUENCE_SOURCE_ISOVAR_ASSEMBLY = _sequence_source("isovar_assembly")
 SEQUENCE_SOURCE_VARCODE_TRANSLATION = _sequence_source("varcode_translation")
 
 
-def _read_count_method(name):
-    """Return a topiary read-count method term, failing loudly if it is gone."""
+def _rna_evidence_method(name):
+    """Return a topiary RNA-evidence method term, failing loudly if it is gone.
+
+    The guard earned itself: ``rna_reads`` was renamed to ``rna_alignment``
+    in topiary 5.45.0, and this raised at import across the whole test suite
+    rather than stamping fragments with a term nothing recognizes.
+    """
     from topiary import READ_COUNT_METHODS
 
     if name not in READ_COUNT_METHODS:
@@ -109,7 +114,9 @@ def _read_count_method(name):
     return name
 
 
-READ_COUNT_METHOD_RNA_READS = _read_count_method("rna_reads")
+# Counted from an alignment. Says how, not what — the subject is separate,
+# because an aligner can count either reads or fragments.
+RNA_EVIDENCE_METHOD_ALIGNMENT = _rna_evidence_method("rna_alignment")
 
 
 @dataclass
@@ -185,7 +192,7 @@ class MutantProteinFragment(DataclassSerializable):
     # and the combined-score DSL weights them identically —
     # sqrt(n_alt_reads) does not know that 51 was arithmetic rather than
     # observation. Carrying the label is what lets a reader tell.
-    read_count_method: str = ""
+    rna_evidence_method: str = ""
 
     # What those counts counted: topiary's FRAGMENTS or READS, blank when
     # the source did not say. Separate from the method because how a number
@@ -193,7 +200,18 @@ class MutantProteinFragment(DataclassSerializable):
     # count may be either. Five fragments and five reads are different bars,
     # and converting between them needs library information no source
     # carries, so this is stated rather than normalized.
-    read_count_subject: str = ""
+    rna_evidence_subject: str = ""
+
+    # The same counts in fragments, where the source has them. isovar
+    # reports every count in both units; vaxrank stored only the fragment
+    # numbers, in the fields named for reads, and then described that as a
+    # subject the caller had to ask about. The reads were never
+    # unavailable — carrying both is what makes the subject a fact about
+    # the source rather than a workaround for a lie (openvax/topiary#239).
+    n_overlapping_fragments: Any = None
+    n_alt_fragments: Any = None
+    n_ref_fragments: Any = None
+    n_alt_fragments_supporting_protein_sequence: Any = None
 
     # How the protein sequence was obtained: "lens_pep_context",
     # "pvacseq_epitope", "varcode_translation", "isovar_assembly",
@@ -267,25 +285,22 @@ class MutantProteinFragment(DataclassSerializable):
             mutant_amino_acid_start_offset=protein_sequence.mutation_start_idx,
             mutant_amino_acid_end_offset=protein_sequence.mutation_end_idx,
 
-            # These are FRAGMENT counts, and the fields are named for
-            # reads. For paired-end data a fragment is two reads, so these
-            # are roughly half the read count for the same evidence.
-            #
-            # Not converted, because the conversion needs to know whether
-            # the library was paired-end and isovar does not say. Labelled
-            # instead: read_count_method carries the subject so a consumer
-            # comparing this against a LENS estimate can see they are
-            # different quantities rather than inferring it from the field
-            # name, which asserts the wrong one (#382).
-            n_overlapping_reads=isovar_result.num_total_fragments,
-            n_alt_reads=isovar_result.num_alt_fragments,
-            n_ref_reads=isovar_result.num_ref_fragments,
-            n_alt_reads_supporting_protein_sequence=protein_sequence.num_supporting_fragments,
-            # Counted from an alignment (rna_reads), and what it counted
-            # is fragments. Two axes, because "how" and "what" are
-            # independent: another aligner-derived count could be reads.
-            read_count_method=READ_COUNT_METHOD_RNA_READS,
-            read_count_subject=FRAGMENTS,
+            # isovar reports every count in both units, so carry both.
+            # vaxrank used to store the fragment numbers in the read fields
+            # and call the discrepancy a subject the caller had to ask
+            # about — but the reads were there the whole time.
+            n_overlapping_reads=isovar_result.num_total_reads,
+            n_alt_reads=isovar_result.num_alt_reads,
+            n_ref_reads=isovar_result.num_ref_reads,
+            n_alt_reads_supporting_protein_sequence=protein_sequence.num_supporting_reads,
+            n_overlapping_fragments=isovar_result.num_total_fragments,
+            n_alt_fragments=isovar_result.num_alt_fragments,
+            n_ref_fragments=isovar_result.num_ref_fragments,
+            n_alt_fragments_supporting_protein_sequence=protein_sequence.num_supporting_fragments,
+            # Counted from an alignment; the subject says which unit the
+            # n_rna_* accessors report, which is fragments when both exist.
+            rna_evidence_method=RNA_EVIDENCE_METHOD_ALIGNMENT,
+            rna_evidence_subject=FRAGMENTS,
             sequence_source=SEQUENCE_SOURCE_ISOVAR_ASSEMBLY,
             supporting_reference_transcripts=protein_sequence.transcripts)
 
@@ -390,7 +405,7 @@ class MutantProteinFragment(DataclassSerializable):
             mutant_amino_acid_start_offset=local_mut_start,
             mutant_amino_acid_end_offset=local_mut_end,
             # No RNA was consulted, so there is nothing to label: zero
-            # here means "no reads counted", and read_count_method stays
+            # here means "no reads counted", and rna_evidence_method stays
             # blank rather than claiming a derivation produced the zeros.
             n_overlapping_reads=0,
             n_alt_reads=0,
@@ -400,22 +415,42 @@ class MutantProteinFragment(DataclassSerializable):
             supporting_reference_transcripts=[transcript],
         )
 
-    def count_in(self, name, subject):
-        """``name``'s value if it counts ``subject``, else ``None``.
+    # ── RNA evidence, in whichever unit the source actually has ──────────
+    #
+    # Fragments where a source reports them, reads otherwise. Fragments win
+    # because two mates of one fragment are one piece of evidence, so a
+    # read count overstates paired-end support by roughly two — the wrong
+    # thing to feed a diminishing-returns weight like sqrt().
+    #
+    # These replace a ``count_in(name, subject)`` accessor, which existed
+    # only because fragments were stored under the reads name and something
+    # had to explain that reads were unavailable. They were not
+    # unavailable. Naming both is what isovar always did.
 
-        Mirrors ``topiary.ProteinFragment.count_in`` so a caller holding
-        either kind of fragment asks the same question the same way.
+    def _rna(self, fragments_value, reads_value):
+        return fragments_value if fragments_value is not None else reads_value
 
-        ``None`` rather than a converted number: turning a read estimate
-        into fragments needs library information no source carries, so a
-        fragment whose counts are in the other unit says it cannot answer.
-        Callers weighting these must decide what an unanswerable count
-        means for them — treating it as zero would reintroduce exactly the
-        substitution this exists to prevent.
-        """
-        if self.read_count_subject and self.read_count_subject != subject:
-            return None
-        return getattr(self, name)
+    @property
+    def n_rna_alt(self):
+        """Alt-supporting RNA evidence, fragments preferred."""
+        return self._rna(self.n_alt_fragments, self.n_alt_reads)
+
+    @property
+    def n_rna_ref(self):
+        """Reference-supporting RNA evidence, fragments preferred."""
+        return self._rna(self.n_ref_fragments, self.n_ref_reads)
+
+    @property
+    def n_rna_overlapping(self):
+        """RNA evidence covering the position, fragments preferred."""
+        return self._rna(self.n_overlapping_fragments,
+                         self.n_overlapping_reads)
+
+    @property
+    def n_rna_supporting_protein_sequence(self):
+        """RNA evidence spanning the assembled sequence, fragments preferred."""
+        return self._rna(self.n_alt_fragments_supporting_protein_sequence,
+                         self.n_alt_reads_supporting_protein_sequence)
 
     def __len__(self):
         return len(self.amino_acids)

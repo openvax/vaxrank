@@ -118,6 +118,7 @@ class TemplateDataCreator(object):
             input_json_file,
             cosmic_vcf_filename=None,
             dna_vaf_by_variant=None,
+            source_vaf_by_variant=None,
             processing_predictions_by_key=None,
             mrna_ranking_decisions=None,
             vaccine_constructions=None,
@@ -136,6 +137,7 @@ class TemplateDataCreator(object):
         self.ranked_variants_with_vaccine_peptides = ranked_variants_with_vaccine_peptides
         self.patient_info = patient_info
         self.dna_vaf_by_variant = dna_vaf_by_variant or {}
+        self.source_vaf_by_variant = source_vaf_by_variant or {}
         self.processing_predictions_by_key = (
             processing_predictions_by_key or {})
         # Issue #270: mRNA ranking-decisions section. Legacy field;
@@ -269,6 +271,7 @@ class TemplateDataCreator(object):
         igv_locus = "chr%s:%d" % (variant.contig, variant.start)
         rna_vaf = mutant_protein_fragment.rna_vaf
         dna_vaf = self.dna_vaf_by_variant.get(variant)
+        source_vaf = self.source_vaf_by_variant.get(variant)
         variant_data = OrderedDict([
             ('IGV locus', igv_locus),
             ('Gene name', mutant_protein_fragment.gene_name),
@@ -279,17 +282,24 @@ class TemplateDataCreator(object):
             ('RNA reads supporting reference allele', mutant_protein_fragment.n_ref_reads),
             ('RNA reads supporting other alleles', mutant_protein_fragment.n_other_reads),
         ])
+        # A variant fraction the source did not qualify. Shown under its
+        # own label rather than as DNA VAF, which is what LENS's bare
+        # `vaf` used to be printed as — asserting an assay the file never
+        # stated.
+        if source_vaf is not None:
+            variant_data['Variant fraction (assay unstated)'] = (
+                '%.3f' % source_vaf)
         # Say how those counts were obtained. "51 reads" from an alignment
         # and "51" from depth x VAF are the same integer and not the same
         # claim, and the combined-score DSL weights them identically.
-        if mutant_protein_fragment.read_count_method:
+        if mutant_protein_fragment.rna_evidence_method:
             variant_data['RNA read count method'] = (
-                mutant_protein_fragment.read_count_method)
+                mutant_protein_fragment.rna_evidence_method)
         # What those counts counted. Five fragments and five reads are
         # different bars, and the rows above say neither on their own.
-        if mutant_protein_fragment.read_count_subject:
+        if mutant_protein_fragment.rna_evidence_subject:
             variant_data['RNA read count subject'] = (
-                mutant_protein_fragment.read_count_subject)
+                mutant_protein_fragment.rna_evidence_subject)
         if mutant_protein_fragment.sequence_source:
             variant_data['Protein sequence source'] = (
                 mutant_protein_fragment.sequence_source)

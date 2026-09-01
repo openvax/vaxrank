@@ -1926,7 +1926,11 @@ def test_read_counts_arrive_with_the_derivation_that_produced_them(tmp_path):
     fragment = _fragment_for(path)
 
     assert fragment.n_alt_reads == 51
-    assert fragment.read_count_method == "rna_depth_x_vaf"
+    # rna_depth_x_source_vaf, not rna_depth_x_vaf: LENS names its read
+    # columns rna_* explicitly and leaves `vaf` bare, so the fraction's
+    # assay is unstated. The method says the split used the source's own
+    # VAF rather than asserting it was an RNA one.
+    assert fragment.rna_evidence_method == "rna_depth_x_source_vaf"
     assert fragment.sequence_source == "lens_pep_context"
 
 
@@ -1943,7 +1947,7 @@ def test_no_estimate_means_no_method_rather_than_a_confident_zero(tmp_path):
     fragment = _fragment_for(path)
 
     assert fragment.n_alt_reads == 0
-    assert fragment.read_count_method == ""
+    assert fragment.rna_evidence_method == ""
     # The sequence still has a known source; only the split is missing.
     assert fragment.sequence_source == "lens_pep_context"
 
@@ -1974,7 +1978,7 @@ def test_the_method_describes_the_row_whose_counts_were_used(tmp_path):
 
     # The winning row is the shallow one, so its depth and its label.
     assert (fragment.n_overlapping_reads, fragment.n_alt_reads) == (10, 9)
-    assert fragment.read_count_method == "rna_depth_x_vaf"
+    assert fragment.rna_evidence_method == "rna_depth_x_source_vaf"
 
 
 def test_pvacseq_estimates_are_labelled_too(tmp_path):
@@ -1998,7 +2002,7 @@ def test_pvacseq_estimates_are_labelled_too(tmp_path):
     fragment = result.ranked[0][1][0].mutant_protein_fragment
 
     assert fragment.n_alt_reads > 0
-    assert fragment.read_count_method == "rna_depth_x_vaf"
+    assert fragment.rna_evidence_method == "rna_depth_x_vaf"
 
 
 def test_a_pvacseq_row_with_no_rna_vaf_claims_no_derivation():
