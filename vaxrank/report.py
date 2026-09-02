@@ -281,6 +281,24 @@ class TemplateDataCreator(object):
             ('RNA reads supporting variant allele', mutant_protein_fragment.n_alt_reads),
             ('RNA reads supporting reference allele', mutant_protein_fragment.n_ref_reads),
         ])
+        # DNA support for the call itself, where the source reports a
+        # depth to derive it from. A fraction alone cannot say how well a
+        # variant is backed: 0.45 from two reads and 0.45 from two hundred
+        # are not the same claim, and until now the report showed only the
+        # fraction. Absent where the source did not answer — LENS never
+        # does, since its single fraction states no assay.
+        if mutant_protein_fragment.n_dna_alt is not None:
+            variant_data['DNA reads supporting variant allele'] = (
+                mutant_protein_fragment.n_dna_alt)
+        if mutant_protein_fragment.n_dna_ref is not None:
+            variant_data['DNA reads supporting reference allele'] = (
+                mutant_protein_fragment.n_dna_ref)
+        if mutant_protein_fragment.n_dna_overlapping is not None:
+            variant_data['DNA reads covering the position'] = (
+                mutant_protein_fragment.n_dna_overlapping)
+        if mutant_protein_fragment.dna_evidence_method:
+            variant_data['DNA read count method'] = (
+                mutant_protein_fragment.dna_evidence_method)
         # Only when the reference count was counted rather than derived.
         # Where a source reports a depth and a fraction, ref is depth minus
         # alt, so this subtraction is structurally zero — and the whole

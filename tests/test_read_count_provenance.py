@@ -349,3 +349,119 @@ def test_what_counts_as_measured_is_topiarys_rule():
         fragment = dataclasses.replace(base, rna_evidence_method=method)
         assert fragment.reference_count_was_measured is (
             provenance_for_method(method) == "measured"), method
+
+
+def _all_epitopes_fragment():
+    import pathlib
+    import tempfile
+
+    from tests.test_epitope_io import _write_pvacseq_all_epitopes_fixture
+
+    path = _write_pvacseq_all_epitopes_fixture(
+        pathlib.Path(tempfile.mkdtemp()))
+    config = EpitopeConfig()
+    report = read_pvacseq_report(path, epitope_config=config)
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+    return result.ranked[0][1][0].mutant_protein_fragment
+
+
+def test_dna_evidence_mirrors_rna_where_the_source_reports_a_depth():
+    """A variant fraction alone cannot say how well a call is backed.
+
+    0.45 from two reads and 0.45 from two hundred are not the same claim,
+    and the report carried only the fraction. pVACseq's all_epitopes
+    flavour reports a DNA depth, so the same depth x VAF split that
+    produces the RNA counts produces these (openvax/topiary#248).
+    """
+    fragment = _all_epitopes_fragment()
+
+    assert (fragment.n_dna_overlapping, fragment.n_dna_alt,
+            fragment.n_dna_ref) == (1233, 372, 861)
+    assert fragment.n_dna_alt + fragment.n_dna_ref == fragment.n_dna_overlapping
+    assert fragment.dna_evidence_method == "dna_depth_x_vaf"
+    assert fragment.dna_evidence_subject == "reads"
+
+
+def test_a_fraction_without_a_depth_yields_no_dna_counts():
+    """The aggregated flavour reports a DNA VAF and no DNA depth.
+
+    Deriving counts from the fraction alone would invent the denominator,
+    which is the substitution this whole series exists to prevent.
+    """
+    config = EpitopeConfig()
+    report = read_pvacseq_report(
+        os.path.join(DATA_DIR, "pvacseq_example.tsv"), epitope_config=config)
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+
+    fragment = result.ranked[0][1][0].mutant_protein_fragment
+
+    assert fragment.dna_vaf is not None      # the fraction is reported
+    assert fragment.n_dna_alt is None        # the depth is not
+    assert fragment.n_dna_overlapping is None
+    assert fragment.dna_evidence_method == ""
+
+
+def test_lens_gets_no_dna_evidence_at_all():
+    """LENS states no assay for its one fraction, so nothing may be DNA.
+
+    Populating DNA counts from an unqualified fraction asserts the assay
+    the file declined to name — the same reason its RNA split is labelled
+    rna_depth_x_source_vaf rather than rna_depth_x_vaf.
+    """
+    from vaxrank.epitope_io import read_lens_report
+    from vaxrank.external_input import lens_ranking_result
+
+    config = EpitopeConfig()
+    report = read_lens_report(
+        os.path.join(DATA_DIR, "real_lens_subsets",
+                     "lens_v1.4_real_subset.tsv"), epitope_config=config)
+    result = lens_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+
+    fragment = result.ranked[0][1][0].mutant_protein_fragment
+
+    assert fragment.dna_vaf is None
+    assert fragment.n_dna_alt is None
+    assert fragment.dna_evidence_method == ""
+
+
+def test_the_report_shows_dna_counts_only_where_they_exist():
+    """Mirrors the RNA rows, and omits rather than zero-fills."""
+    from vaxrank.report import TemplateDataCreator
+
+    def variant_data_for(fragment, peptide):
+        creator = TemplateDataCreator.__new__(TemplateDataCreator)
+        creator.dna_vaf_by_variant = {}
+        creator.source_vaf_by_variant = {}
+        creator.gene_pathway_check = None
+        return creator._variant_data(fragment.variant, peptide)
+
+    import pathlib
+    import tempfile
+
+    from tests.test_epitope_io import _write_pvacseq_all_epitopes_fixture
+
+    config = EpitopeConfig()
+    path = _write_pvacseq_all_epitopes_fixture(
+        pathlib.Path(tempfile.mkdtemp()))
+    report = read_pvacseq_report(path, epitope_config=config)
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+    peptide = result.ranked[0][1][0]
+
+    rows = variant_data_for(peptide.mutant_protein_fragment, peptide)
+    assert rows['DNA reads supporting variant allele'] == 372
+    assert rows['DNA read count method'] == 'dna_depth_x_vaf'
+
+    aggregated_report = read_pvacseq_report(
+        os.path.join(DATA_DIR, "pvacseq_example.tsv"), epitope_config=config)
+    aggregated = pvacseq_ranking_result(
+        aggregated_report,
+        epitopes_for_ranking(list(aggregated_report.epitopes), config))
+    aggregated_peptide = aggregated.ranked[0][1][0]
+
+    rows = variant_data_for(
+        aggregated_peptide.mutant_protein_fragment, aggregated_peptide)
+    assert 'DNA reads supporting variant allele' not in rows

@@ -213,6 +213,23 @@ class MutantProteinFragment(DataclassSerializable):
     n_ref_fragments: Any = None
     n_alt_fragments_supporting_protein_sequence: Any = None
 
+    # DNA evidence, mirroring the RNA fields above. A variant's DNA support
+    # says how well the call itself is backed, which is a different question
+    # from how well it is expressed — and until now vaxrank carried only a
+    # DNA VAF, so a report could show a fraction with no idea what depth it
+    # came from. 0.5 from two reads and 0.5 from two hundred are not the
+    # same claim.
+    #
+    # ``None`` rather than 0 throughout: absent means the source did not
+    # answer. LENS never does — its single fraction states no assay, so
+    # deriving DNA counts from it would assert one (openvax/topiary#248).
+    n_dna_overlapping: Any = None
+    n_dna_alt: Any = None
+    n_dna_ref: Any = None
+    dna_vaf: Any = None
+    dna_evidence_method: str = ""
+    dna_evidence_subject: str = ""
+
     # How the protein sequence was obtained: "lens_pep_context",
     # "pvacseq_epitope", "varcode_translation", "isovar_assembly",
     # "caller_supplied". Distinct from the antigen's biological kind —
