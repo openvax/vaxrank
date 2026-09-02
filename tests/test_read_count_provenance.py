@@ -330,3 +330,22 @@ def test_the_report_omits_the_row_when_there_is_nothing_to_report():
 
     assert 'RNA reads supporting other alleles' not in variant_data
     assert 'RNA reads supporting variant allele' in variant_data
+
+
+def test_what_counts_as_measured_is_topiarys_rule():
+    """No local copy of which methods count.
+
+    Only a direct count qualifies today, so naming ``rna_alignment`` here
+    would agree — and would silently exclude any measured method topiary
+    adds later, which is the drift this series has spent its length
+    removing.
+    """
+    import dataclasses
+
+    from topiary import READ_COUNT_METHODS, provenance_for_method
+
+    base = MutantProteinFragment.from_isovar_result(_fake_isovar_result())
+    for method in sorted(READ_COUNT_METHODS):
+        fragment = dataclasses.replace(base, rna_evidence_method=method)
+        assert fragment.reference_count_was_measured is (
+            provenance_for_method(method) == "measured"), method
