@@ -270,7 +270,15 @@ class TemplateDataCreator(object):
         top_score = _sanitize(top_vaccine_peptide.combined_score)
         igv_locus = "chr%s:%d" % (variant.contig, variant.start)
         rna_vaf = mutant_protein_fragment.rna_vaf
-        dna_vaf = self.dna_vaf_by_variant.get(variant)
+        # The fragment's own DNA VAF wins: it comes from the same row as
+        # the DNA counts below, so the fraction and the depth it came from
+        # describe one observation. The per-variant map is the fallback for
+        # sources that report a fraction without counts, and taking it
+        # first would let a report show a VAF from one row beside counts
+        # from another.
+        dna_vaf = mutant_protein_fragment.dna_vaf
+        if dna_vaf is None:
+            dna_vaf = self.dna_vaf_by_variant.get(variant)
         source_vaf = self.source_vaf_by_variant.get(variant)
         variant_data = OrderedDict([
             ('IGV locus', igv_locus),

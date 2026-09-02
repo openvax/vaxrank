@@ -465,3 +465,31 @@ def test_the_report_shows_dna_counts_only_where_they_exist():
     rows = variant_data_for(
         aggregated_peptide.mutant_protein_fragment, aggregated_peptide)
     assert 'DNA reads supporting variant allele' not in rows
+
+
+def test_the_reported_dna_vaf_comes_from_the_row_its_counts_came_from():
+    """One observation, not a fraction and a depth from different rows.
+
+    The report used to read the DNA VAF from a per-variant map while the
+    counts came from a specific row. They agree today, and nothing enforced
+    it — a variant group whose rows disagreed would print a fraction beside
+    a depth that never produced it, which is the per-field maximum problem
+    one field over.
+    """
+    from vaxrank.report import TemplateDataCreator
+
+    fragment = _all_epitopes_fragment()
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    # A deliberately contradictory map: the fragment's own value must win.
+    creator.dna_vaf_by_variant = {fragment.variant: 0.999}
+    creator.source_vaf_by_variant = {}
+    creator.gene_pathway_check = None
+
+    class _Peptide:
+        mutant_protein_fragment = fragment
+        combined_score = 1.0
+
+    rows = creator._variant_data(fragment.variant, _Peptide())
+
+    assert rows['DNA VAF'] == '%.3f' % fragment.dna_vaf
+    assert rows['DNA reads covering the position'] == fragment.n_dna_overlapping
