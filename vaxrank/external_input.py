@@ -617,6 +617,26 @@ def _read_counts_from_lens_row(row):
     )
 
 
+def _dna_evidence_from_row(row):
+    """DNA counts and their labels, or blanks when the source has none.
+
+    Only pVACseq answers this, and only its all_epitopes flavour, which
+    reports a DNA depth alongside the fraction. The aggregated flavour
+    carries a fraction with no depth, so the counts stay absent rather than
+    being invented from the fraction alone. LENS states no assay for its
+    single fraction and gets no DNA evidence at all.
+    """
+    return {
+        "n_dna_overlapping": cells.integer(
+            row.get("n_dna_overlapping"), default=None),
+        "n_dna_alt": cells.integer(row.get("n_dna_alt"), default=None),
+        "n_dna_ref": cells.integer(row.get("n_dna_ref"), default=None),
+        "dna_vaf": cells.number(row.get("dna_vaf")),
+        "dna_evidence_method": cells.text(row.get("dna_evidence_method")),
+        "dna_evidence_subject": cells.text(row.get("dna_evidence_subject")),
+    }
+
+
 def _read_provenance_from_lens_row(row):
     """``(rna_evidence_method, sequence_source, rna_evidence_subject)``.
 
@@ -826,7 +846,8 @@ class ExternalConstructOptions:
 
 def external_vaccine_peptide(variant, selection, context, mutant_start,
                              mutant_end, gene_name, transcripts, counts,
-                             options, provenance=("", "", "")):
+                             options, provenance=("", "", ""),
+                             dna_evidence=None):
     """Assemble one ``VaccinePeptide`` from an external construct window.
 
     Shared by every external format so a construct built from a LENS
@@ -874,6 +895,7 @@ def external_vaccine_peptide(variant, selection, context, mutant_start,
     # both external sources happen to count reads, but that is a fact about
     # them, not something this function should assert on their behalf.
     rna_evidence_method, sequence_source, rna_evidence_subject = provenance
+    dna_evidence = dna_evidence or {}
     fragment = MutantProteinFragment(
         variant=variant,
         gene_name=gene_name,
@@ -889,6 +911,7 @@ def external_vaccine_peptide(variant, selection, context, mutant_start,
         rna_evidence_method=rna_evidence_method,
         rna_evidence_subject=rna_evidence_subject,
         sequence_source=sequence_source,
+        **dna_evidence,
     )
     return VaccinePeptide(
         mutant_protein_fragment=fragment,
@@ -1359,11 +1382,12 @@ def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None):
           cells.integer(record.row.get("n_rna_ref"), default=0)),
          (cells.text(record.row.get("rna_evidence_method")),
           cells.text(record.row.get("sequence_source")),
-          cells.text(record.row.get("rna_evidence_subject"))))
+          cells.text(record.row.get("rna_evidence_subject"))),
+         _dna_evidence_from_row(record.row))
         for record in selection.records]
-    (n_total, n_alt_reads, n_ref_reads), provenance = max(
+    (n_total, n_alt_reads, n_ref_reads), provenance, dna_evidence = max(
         observations, key=lambda o: (o[0][1], o[0][0]),
-        default=((0, 0, 0), ("", "", "")))
+        default=((0, 0, 0), ("", "", ""), {}))
     metadata.vaccine_peptide = external_vaccine_peptide(
         variant=metadata.variant,
         selection=selection,
@@ -1383,6 +1407,7 @@ def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None):
         # genuinely different count (cds_overlap_reads).
         counts=(n_total, n_alt_reads, n_ref_reads, 0),
         provenance=provenance,
+        dna_evidence=dna_evidence,
         options=options,
     )
     return metadata
