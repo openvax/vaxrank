@@ -43,6 +43,9 @@ external_values = cells.values
 # because it means the same thing from every reader; the originals are the
 # fallback for a frame that carries only what the tool printed.
 _PVACSEQ_RNA_DEPTH_COLUMNS = (
+    # Canonical first. "depth" presumes reads, and topiary's count may be
+    # fragments, which is why its own name for this is n_rna_overlapping.
+    "n_rna_overlapping",
     "pvacseq_tumor_rna_depth", "rna_depth", "tumor_rna_depth")
 _PVACSEQ_RNA_VAF_COLUMNS = (
     "rna_vaf", "pvacseq_tumor_rna_vaf", "tumor_rna_vaf")
