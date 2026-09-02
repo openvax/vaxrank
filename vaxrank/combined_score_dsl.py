@@ -41,11 +41,32 @@ their expression references one of these unavailable mutation fields.
       ``sqrt_reads_times_epitope`` mode is exactly
       ``expression_score * target_epitope_score``.
 
+  ``n_rna_alt``, ``n_rna_ref``, ``n_rna_overlapping``,
+  ``n_rna_supporting_protein_sequence``
+      RNA evidence in whatever unit the source counted: fragments
+      where it reports them, reads otherwise. **Prefer these.** A
+      threshold written against one means the same thing on every
+      input path, which is not true of the ``*_reads`` names below.
+      The unit is on the fragment as ``rna_evidence_subject`` and in
+      the report, so a config that travels can record which bar it
+      was written for — five fragments and five reads are different
+      bars.
+
+  ``n_dna_alt``, ``n_dna_ref``, ``n_dna_overlapping``
+      DNA support for the variant call itself, where the source
+      reports a depth to derive it from. 0 where it does not: LENS
+      states no assay for its one fraction, and pVACseq's aggregated
+      flavour reports a fraction with no depth.
+
   ``n_alt_reads``
-      RNA reads supporting the variant allele.
+      RNA *reads* supporting the variant allele — but on the isovar
+      path this field holds fragments, which is roughly half the read
+      count for the same paired-end evidence. Kept because existing
+      configs name it; ``n_rna_alt`` is the portable one.
 
   ``n_ref_reads``
-      RNA reads supporting the reference allele at the locus.
+      RNA reads supporting the reference allele at the locus. Derived
+      as depth minus alt on both external paths rather than counted.
 
   ``n_overlapping_reads``
       Total reads spanning the locus (ref + alt + other).
@@ -208,6 +229,11 @@ def combined_score_binding_names(expr_or_tree):
     )
 
 
+def _count(fragment, name):
+    """A fragment count as a float, 0 when absent or unknown."""
+    return float(getattr(fragment, name, None) or 0)
+
+
 def combined_score_bindings(vp):
     """Read-only namespace of the scalars exposed to the DSL.
 
@@ -226,11 +252,36 @@ def combined_score_bindings(vp):
         return bindings
     bindings.update({
         'expression_score': float(vp.expression_score),
+        # Unit-specific, and only meaningful once you know which unit the
+        # run counted. Kept because existing configs name them.
         'n_alt_reads': float(frag.n_alt_reads or 0),
         'n_ref_reads': float(frag.n_ref_reads or 0),
         'n_overlapping_reads': float(frag.n_overlapping_reads or 0),
         'n_alt_reads_supporting_protein_sequence': float(
             frag.n_alt_reads_supporting_protein_sequence or 0),
+        # Portable. n_rna_alt is whatever the source counted -- fragments
+        # where it has them, reads otherwise -- so a threshold written
+        # against it means the same thing on every input path, which
+        # n_alt_reads does not: it holds isovar fragments on the native
+        # path and read estimates on both external ones, and sqrt() weights
+        # them identically (#385).
+        #
+        # The unit itself is not bound here: this grammar is arithmetic
+        # only, so a string would be a name no expression could use.
+        # rna_evidence_subject is on the fragment and in the report, which
+        # is where a config author reads which bar their threshold cleared.
+        # getattr because callers pass stand-ins for the fragment as well
+        # as the real dataclass, and these names are newer than some of
+        # them. A missing one binds 0 rather than raising, which matches
+        # how a real fragment with no RNA behaves.
+        'n_rna_alt': _count(frag, 'n_rna_alt'),
+        'n_rna_ref': _count(frag, 'n_rna_ref'),
+        'n_rna_overlapping': _count(frag, 'n_rna_overlapping'),
+        'n_rna_supporting_protein_sequence': _count(
+            frag, 'n_rna_supporting_protein_sequence'),
+        'n_dna_alt': _count(frag, 'n_dna_alt'),
+        'n_dna_ref': _count(frag, 'n_dna_ref'),
+        'n_dna_overlapping': _count(frag, 'n_dna_overlapping'),
         'n_mutant_amino_acids': float(
             frag.mutant_amino_acid_end_offset
             - frag.mutant_amino_acid_start_offset),

@@ -315,3 +315,73 @@ def test_dsl_eval_error_warns_when_headline_binding_missing():
                 "binding; got: %r" % [r.getMessage() for r in warnings])
     finally:
         dsl_mod.combined_score_bindings = real_extractor
+
+
+def _isovar_backed_peptide():
+    """A stub vaccine peptide whose fragment came from isovar.
+
+    Only the attributes ``combined_score_bindings`` reads are needed, and
+    a real VaccinePeptide would drag in epitope selection irrelevant here.
+    """
+    import types
+
+    from vaxrank.mutant_protein_fragment import MutantProteinFragment
+
+    protein_sequence = types.SimpleNamespace(
+        gene_name="BRAF", amino_acids="SIINFEKLAA",
+        mutation_start_idx=2, mutation_end_idx=3,
+        num_supporting_fragments=7, num_supporting_reads=13, transcripts=[])
+    fragment = MutantProteinFragment.from_isovar_result(types.SimpleNamespace(
+        variant=object(), top_protein_sequence=protein_sequence,
+        num_total_fragments=20, num_alt_fragments=8, num_ref_fragments=12,
+        num_total_reads=38, num_alt_reads=15, num_ref_reads=23))
+    return types.SimpleNamespace(
+        target_epitope_score=1.0, self_epitope_score=0.0,
+        expression_score=1.0, mutant_protein_fragment=fragment)
+
+
+def test_the_portable_name_reports_what_the_source_counted():
+    """``n_rna_alt`` is the unit the run actually has; ``n_alt_reads`` is not.
+
+    On the isovar path the two are different numbers for the same
+    evidence — 8 fragments and 15 reads — and ``sqrt()`` weights whichever
+    it is given identically. A threshold naming ``n_alt_reads`` therefore
+    means a different bar depending on where the file came from, which is
+    the portability problem (#385). ``n_rna_alt`` means one thing
+    everywhere: what the source counted.
+    """
+    from vaxrank.combined_score_dsl import combined_score_bindings
+
+    bindings = combined_score_bindings(_isovar_backed_peptide())
+
+    assert bindings['n_alt_reads'] == 15.0     # reads, isovar's own
+    assert bindings['n_rna_alt'] == 8.0        # fragments, what it counted
+
+
+def test_a_fragment_with_no_rna_binds_zeros_rather_than_failing():
+    """The varcode path consults no RNA, and must still score.
+
+    n_rna_alt is None there rather than 0, so binding it unguarded would
+    raise on exactly the runs that have no RNA — a config that works until
+    someone runs without a BAM.
+    """
+    import types
+
+    from vaxrank.combined_score_dsl import combined_score_bindings
+    from vaxrank.mutant_protein_fragment import MutantProteinFragment
+
+    fragment = MutantProteinFragment(
+        variant=object(), gene_name="BRAF", amino_acids="SIINFEKL",
+        mutant_amino_acid_start_offset=0, mutant_amino_acid_end_offset=1,
+        supporting_reference_transcripts=[], n_overlapping_reads=0,
+        n_alt_reads=0, n_ref_reads=0,
+        n_alt_reads_supporting_protein_sequence=0)
+    peptide = types.SimpleNamespace(
+        target_epitope_score=1.0, self_epitope_score=0.0,
+        expression_score=0.0, mutant_protein_fragment=fragment)
+
+    bindings = combined_score_bindings(peptide)
+
+    assert bindings['n_rna_alt'] == 0.0
+    assert bindings['n_dna_alt'] == 0.0
+    assert 'rna_evidence_subject' not in bindings
