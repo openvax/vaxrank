@@ -469,6 +469,13 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
     if topiary_df is None:
         topiary_df = epitopes_to_topiary_df(epitopes)
 
+    # Validate before scoring, not only in the report writer. topiary
+    # raises on a bad reference too, with a good "did you mean" list, but
+    # mid-run and without naming the setting — and the reader path scores
+    # long before any report is written, so that is where a user meets the
+    # error (#388).
+    validate_dsl_against_predictions(cfg, epitopes, topiary_df=topiary_df)
+
     # Attribution runs on the unfiltered frame, so the policy ranks on the
     # evidence the input carried rather than on whatever survived a cutoff:
     # a filter on affinity would otherwise change which allele is credited
@@ -625,12 +632,18 @@ def validate_dsl_against_predictions(cfg, epitopes, *, topiary_df=None):
     Pass ``topiary_df`` to reuse an already-built frame rather than
     rebuilding it from ``epitopes``.
     """
-    nodes = []
+    # Paired with the setting each came from, so an error can name the key
+    # to edit. topiary reports what the data lacks, which is the half it
+    # can know; which config key produced the reference is the half it
+    # cannot, and is the half the user needs.
+    sources = []
     if cfg.filter_expr is not None:
-        nodes.append(parse_epitope_expression(cfg.filter_expr))
+        sources.append(("epitopes.filter_expr", cfg.filter_expr,
+                        parse_epitope_expression(cfg.filter_expr)))
     if cfg.score_expr is not None:
-        nodes.append(parse_epitope_expression(cfg.score_expr))
-    if not nodes:
+        sources.append(("epitopes.score_expr", cfg.score_expr,
+                        parse_epitope_expression(cfg.score_expr)))
+    if not sources:
         return
 
     df = (epitopes_to_topiary_df(epitopes)
@@ -652,8 +665,27 @@ def validate_dsl_against_predictions(cfg, epitopes, *, topiary_df=None):
             if is_named_version(v)
         }
 
-    for node in nodes:
+    available_columns = set(df.columns)
+
+    for setting, expr, node in sources:
         refs = collect_dsl_references(node)
+        # Column references. topiary raises on these too, at eval time and
+        # with a good "did you mean" list — but mid-run rather than when
+        # the config is read, and without naming the setting. Which columns
+        # exist depends on the source: pVACseq's aggregated flavour carries
+        # no gene_expression where all_epitopes does, so one export makes a
+        # working config and another makes a crash (#388).
+        for column in sorted(refs["columns"]):
+            if column in available_columns:
+                continue
+            raise ValueError(
+                f"{setting} references column {column!r}, which the loaded "
+                f"input does not carry. Expression: {expr!r}. Columns "
+                f"available on this input: {sorted(available_columns)}. "
+                f"Which columns exist depends on the source and its "
+                f"flavour, so an expression that works on one export may "
+                f"not on another."
+            )
         for kind, method, version in refs["kinds"]:
             if kind not in available_kinds:
                 raise ValueError(
