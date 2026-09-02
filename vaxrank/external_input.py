@@ -1136,7 +1136,15 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
     _SNV_OR_INDEL_KINDS = {'SNV', 'INDEL'}
     rows_no_reads = [
         r for r in rows
-        if cells.missing(r.get('rna_reads_covering_genomic_origin'))]
+        if cells.missing(cells.first(
+            r,
+            # topiary 5.47.0 prefixes each tool's own columns with the tool
+            # name. Reading only the bare spelling counted every row as
+            # lacking RNA reads and warned about data that was present
+            # under the other name — a rename reported as a defect in the
+            # input file (#390).
+            'lens_rna_reads_covering_genomic_origin',
+            'rna_reads_covering_genomic_origin'))]
     n_snv_indel_no_gene = sum(
         1 for r in rows_no_gene_name if _kind(r).upper() in _SNV_OR_INDEL_KINDS)
     n_snv_indel_no_transcript = sum(
@@ -1156,8 +1164,9 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
             n_snv_indel_no_transcript)
     if n_snv_indel_no_reads:
         logger.warning(
-            "%d SNV / INDEL row(s) lack rna_reads_covering_genomic_origin "
-            "— those kinds are expected to carry RNA-read counts.",
+            "%d SNV / INDEL row(s) lack RNA-read counts "
+            "(lens_rna_reads_covering_genomic_origin) — those kinds are "
+            "expected to carry them.",
             n_snv_indel_no_reads)
 
     # ── Load funnel summary ──────────────────────────────────────────

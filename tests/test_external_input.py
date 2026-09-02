@@ -2018,3 +2018,45 @@ def test_a_pvacseq_row_with_no_rna_vaf_claims_no_derivation():
     assert pvacseq_rna_vaf({"rna_vaf": 0.0}) == 0.0
     assert pvacseq_rna_vaf({}) is None
     assert pvacseq_rna_vaf({"rna_vaf": ""}) is None
+
+
+def test_present_rna_read_counts_are_not_reported_as_missing():
+    """A renamed column must not be reported as absent data.
+
+    topiary 5.47.0 prefixes each tool's own columns with the tool name.
+    Reading only the bare spelling counted every SNV/INDEL row as lacking
+    RNA reads and warned about it — a rename surfaced as a defect in the
+    input file, which is the worst kind of wrong: it sends the reader
+    upstream to look for a bug that is not there (#390).
+    """
+    from topiary import read_lens
+
+    from vaxrank import cells
+
+    frame = read_lens(os.path.join(
+        DATA_DIR, "real_lens_subsets", "lens_v1.9_real_subset.tsv")).df
+    rows = [
+        row for row in frame.to_dict("records")
+        if str(row.get("antigen_source", "")).upper() in {"SNV", "INDEL"}]
+    assert rows, "fixture must contain SNV/INDEL rows for this to mean anything"
+
+    missing = [
+        row for row in rows
+        if cells.missing(cells.first(
+            row,
+            "lens_rna_reads_covering_genomic_origin",
+            "rna_reads_covering_genomic_origin"))]
+
+    assert missing == []
+
+
+def test_the_pvacseq_depth_lookup_prefers_the_canonical_name():
+    """``n_rna_overlapping`` first, because "depth" presumes reads.
+
+    topiary's count may be fragments, which is why its own name for this
+    is not "depth". Reading the canonical column first means the lookup
+    keeps working when a source's own spelling changes again.
+    """
+    from vaxrank.external_prediction import _PVACSEQ_RNA_DEPTH_COLUMNS
+
+    assert _PVACSEQ_RNA_DEPTH_COLUMNS[0] == "n_rna_overlapping"
