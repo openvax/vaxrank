@@ -1057,3 +1057,75 @@ def test_a_caller_supplied_frame_cannot_add_a_phantom_allele(unstated):
 
     assert dict(scored.per_allele_scores) == {
         "HLA-A*02:01": pytest.approx(0.8)}
+
+
+def test_an_unavailable_column_fails_when_the_config_is_read(tmp_path):
+    """Naming a column the input lacks must fail early and name the setting.
+
+    topiary raises on this too, with a better "did you mean" list than
+    vaxrank would generate — but at eval time, mid-run, and without saying
+    which config key produced the reference. That is the half topiary
+    cannot know and the half the user needs (#388).
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_lens_report
+
+    path = tmp_path / "annotated.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\ttpm\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t20\n")
+
+    config = EpitopeConfig(
+        score_expr=(
+            "affinity.value.logistic_normalized(350,150) * (nope > 1)"))
+
+    with pytest.raises(ValueError) as excinfo:
+        read_lens_report(path, epitope_config=config)
+
+    message = str(excinfo.value)
+    assert "epitopes.score_expr" in message      # which key to edit
+    assert "nope" in message                     # what was wrong
+    assert "gene_tpm" in message                 # what is available
+
+
+def test_a_column_the_input_does_carry_is_accepted(tmp_path):
+    """The check must not reject a working expression.
+
+    ``gene_tpm`` is on a LENS frame, so a filter naming it is valid — the
+    point is to reject references the input cannot answer, not to narrow
+    what an expression may name.
+    """
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_lens_report
+
+    path = tmp_path / "annotated.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\ttpm\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t20\n")
+
+    loaded = read_lens_report(
+        path,
+        epitope_config=EpitopeConfig(
+            score_expr=(
+                "affinity.value.logistic_normalized(350,150) * "
+                "(gene_tpm > 1)")))
+
+    assert list(loaded.epitopes)
+
+
+def test_the_failing_setting_is_named_even_when_both_are_set(tmp_path):
+    """filter_expr and score_expr are distinguished, not conflated."""
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.epitope_io import read_lens_report
+
+    path = tmp_path / "annotated.tsv"
+    path.write_text(
+        "peptide\tallele\tpep_context\ttpm\tmhcflurry_2.1.1.aff\n"
+        "SIINFEKL\tHLA-A02:01\tXXSIINFEKLXX\t50\t20\n")
+
+    config = EpitopeConfig(
+        filter_expr="missing_here > 0",
+        score_expr="affinity.value.logistic_normalized(350,150)")
+
+    with pytest.raises(ValueError, match="epitopes.filter_expr"):
+        read_lens_report(path, epitope_config=config)
