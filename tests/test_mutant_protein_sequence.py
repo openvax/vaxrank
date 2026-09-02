@@ -13,9 +13,14 @@
 from dataclasses import fields
 
 from mhctools import RandomBindingPredictor
+from topiary import FRAGMENTS
 
 from vaxrank.cli import make_vaxrank_arg_parser, run_vaxrank_from_parsed_args
-from vaxrank.mutant_protein_fragment import MutantProteinFragment
+from vaxrank.mutant_protein_fragment import (
+    RNA_EVIDENCE_METHOD_ALIGNMENT,
+    SEQUENCE_SOURCE_ISOVAR_ASSEMBLY,
+    MutantProteinFragment,
+)
 
 from .common import eq_, almost_eq_
 from .testing_helpers import data_path
@@ -90,6 +95,44 @@ def check_mutant_amino_acids(variant, mutant_protein_fragment):
         mutant_protein_fragment.supporting_reference_transcripts), \
         "Wrong gene names for %s" % (mutant_protein_fragment.supporting_reference_transcripts,)
 
+
+def check_native_rna_evidence(
+        fragment,
+        *,
+        reads,
+        fragments,
+        protein_support):
+    """Check native Isovar evidence after vaccine-peptide slicing."""
+    assert (
+        fragment.n_overlapping_reads,
+        fragment.n_alt_reads,
+        fragment.n_ref_reads,
+    ) == reads
+    assert (
+        fragment.n_overlapping_fragments,
+        fragment.n_alt_fragments,
+        fragment.n_ref_fragments,
+    ) == fragments
+    assert (
+        fragment.n_alt_reads_supporting_protein_sequence,
+        fragment.n_alt_fragments_supporting_protein_sequence,
+    ) == protein_support
+    assert (
+        fragment.n_rna_overlapping,
+        fragment.n_rna_alt,
+        fragment.n_rna_ref,
+        fragment.n_rna_supporting_protein_sequence,
+    ) == (
+        fragments[0],
+        fragments[1],
+        fragments[2],
+        protein_support[1],
+    )
+    assert fragment.rna_evidence_method == RNA_EVIDENCE_METHOD_ALIGNMENT
+    assert fragment.rna_evidence_subject == FRAGMENTS
+    assert fragment.sequence_source == SEQUENCE_SOURCE_ISOVAR_ASSEMBLY
+
+
 def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
     # there are two co-occurring variants in the RNAseq data but since
     # they don't happen in the same codon then we're considering the Varcode
@@ -118,6 +161,11 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
         vaccine_peptide = vaccine_peptides[0]
         mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
         check_mutant_amino_acids(variant, mutant_protein_fragment)
+        check_native_rna_evidence(
+            mutant_protein_fragment,
+            reads=(73, 25, 48),
+            fragments=(65, 21, 44),
+            protein_support=(25, 21))
 
 def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
     # In the Isovar repository this test is weird because the VCF only
@@ -142,6 +190,11 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
         check_mutant_amino_acids(
             variant,
             mutant_protein_fragment)
+        check_native_rna_evidence(
+            mutant_protein_fragment,
+            reads=(56, 17, 39),
+            fragments=(52, 15, 37),
+            protein_support=(17, 15))
 
 def test_keep_top_k_epitopes():
     arg_parser = make_vaxrank_arg_parser()
