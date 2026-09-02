@@ -524,7 +524,7 @@ def test_pvacseq_source_keyed_filtered_scores_do_not_broadcast(tmp_path):
     report_df, epitopes = _loaded.report_df, list(_loaded.epitopes)
     csv_path = tmp_path / "filtered.csv"
     cfg = EpitopeConfig(
-        filter_expr="tumor_dna_vaf > 0.5",
+        filter_expr="pvacseq_tumor_dna_vaf > 0.5",
         score_expr="affinity.value")
 
     write_neoepitope_report(

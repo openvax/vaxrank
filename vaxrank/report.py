@@ -280,8 +280,15 @@ class TemplateDataCreator(object):
             ('RNA VAF', '%.3f' % rna_vaf if rna_vaf is not None else 'n/a'),
             ('RNA reads supporting variant allele', mutant_protein_fragment.n_alt_reads),
             ('RNA reads supporting reference allele', mutant_protein_fragment.n_ref_reads),
-            ('RNA reads supporting other alleles', mutant_protein_fragment.n_other_reads),
         ])
+        # Only when the reference count was counted rather than derived.
+        # Where a source reports a depth and a fraction, ref is depth minus
+        # alt, so this subtraction is structurally zero — and the whole
+        # depth when no fraction was reported at all. Printing either as
+        # "reads supporting other alleles" describes the locus wrongly.
+        if mutant_protein_fragment.n_other_reads is not None:
+            variant_data['RNA reads supporting other alleles'] = (
+                mutant_protein_fragment.n_other_reads)
         # A variant fraction the source did not qualify. Shown under its
         # own label rather than as DNA VAF, which is what LENS's bare
         # `vaf` used to be printed as — asserting an assay the file never

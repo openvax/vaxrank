@@ -275,3 +275,58 @@ def test_pvacseq_keeps_its_qualified_dna_vaf():
 
     assert result.dna_vaf_by_variant
     assert result.source_vaf_by_variant == {}
+
+
+def test_other_allele_reads_are_absent_when_the_reference_was_derived():
+    """A subtraction of a subtraction is not an observation.
+
+    Where a source reports a depth and a fraction, the reference count is
+    ``depth - alt``, so ``depth - (ref + alt)`` is structurally zero — and
+    the report printed that zero as a fact about the locus. Worse when the
+    source reports no fraction: alt and ref are both 0 and the subtraction
+    returns the whole depth, rendering a clean locus as one where every
+    read supports a third allele.
+    """
+    config = EpitopeConfig()
+    report = read_pvacseq_report(
+        os.path.join(DATA_DIR, "pvacseq_example.tsv"), epitope_config=config)
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+
+    fragment = result.ranked[0][1][0].mutant_protein_fragment
+
+    assert fragment.n_ref_reads > 0        # derived, not counted
+    assert fragment.reference_count_was_measured is False
+    assert fragment.n_other_reads is None
+
+
+def test_other_allele_reads_survive_where_the_reference_was_counted():
+    """isovar counts the reference independently, so the number is real."""
+    fragment = MutantProteinFragment.from_isovar_result(_fake_isovar_result())
+
+    assert fragment.reference_count_was_measured is True
+    # 38 total reads, 15 alt, 23 ref — nothing left for a third allele here,
+    # but the zero is an observation rather than an artifact of the method.
+    assert fragment.n_other_reads == 0
+
+
+def test_the_report_omits_the_row_when_there_is_nothing_to_report():
+    """An absent measurement is not a zero on the page."""
+    from vaxrank.report import TemplateDataCreator
+
+    config = EpitopeConfig()
+    report = read_pvacseq_report(
+        os.path.join(DATA_DIR, "pvacseq_example.tsv"), epitope_config=config)
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+    vaccine_peptide = result.ranked[0][1][0]
+
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.dna_vaf_by_variant = {}
+    creator.source_vaf_by_variant = {}
+    creator.gene_pathway_check = None
+    variant_data = creator._variant_data(
+        vaccine_peptide.mutant_protein_fragment.variant, vaccine_peptide)
+
+    assert 'RNA reads supporting other alleles' not in variant_data
+    assert 'RNA reads supporting variant allele' in variant_data

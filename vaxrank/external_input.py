@@ -607,7 +607,12 @@ def _read_counts_from_lens_row(row):
         # peptide's CDS, which is why it lives in this field and not in
         # n_rna_alt.
         cells.integer(
-            row.get('rna_reads_covering_genomic_origin_with_peptide_cds'),
+            cells.first(
+                row,
+                # topiary 5.47.0 prefixes each tool's own columns with the
+                # tool name; the bare spelling is the pre-5.47 one.
+                'lens_rna_reads_covering_genomic_origin_with_peptide_cds',
+                'rna_reads_covering_genomic_origin_with_peptide_cds'),
             default=0),
     )
 
@@ -742,7 +747,12 @@ def lens_variant_metadata(variant_id, group_rows, genome=None):
         ) + (str(variant_id),)),
     )
     for row in group_rows:
-        value = row.get("vaf")
+        # lens_vaf is topiary's source-prefixed original; `vaf` is the
+        # pre-5.47 spelling. Deliberately not `rna_vaf`, which topiary also
+        # publishes on LENS frames as a verbatim copy of this column —
+        # reading that would inherit an assay assertion the file never made
+        # and this function exists to avoid.
+        value = cells.first(row, "lens_vaf", "vaf")
         if cells.missing(value):
             continue
         try:
@@ -1335,31 +1345,22 @@ def pvacseq_vaccine_entry(metadata, selection, genome=None, options=None):
             "is empty or contains non-standard residues.",
             key.variant_id, key.source_sequence)
         return metadata
-    # Same rule as the LENS path: the counts and the label describing them
-    # come from one row.
-    # depth x VAF is an estimate, not a count: pVACseq reports a depth and
-    # a fraction and never an alt-read count. The arithmetic is topiary's
-    # rather than ours — the LENS path already reads its derived columns,
-    # and a local copy of an upstream rule is the shape that produced every
-    # version bug in this file's history (#383).
-    from topiary import split_reads_by_vaf
-
-    depths = [pvacseq_rna_depth(record.row) for record in selection.records]
-    vafs = [pvacseq_rna_vaf(record.row) for record in selection.records]
-    alt_series, ref_series = split_reads_by_vaf(
-        pd.Series(depths, dtype="Float64"), pd.Series(vafs, dtype="Float64"))
-    observations = []
-    for index, record in enumerate(selection.records):
-        alt = alt_series.iloc[index]
-        ref = ref_series.iloc[index]
-        stated = not pd.isna(alt)
-        observations.append((
-            (int(depths[index] or 0),
-             int(alt) if stated else 0,
-             int(ref) if not pd.isna(ref) else 0),
-            (cells.text(record.row.get("rna_evidence_method")),
-             cells.text(record.row.get("sequence_source")),
-             cells.text(record.row.get("rna_evidence_subject")))))
+    # Read the counts topiary derived rather than deriving them here. The
+    # LENS path has done this since #374; pVACseq kept a local depth x VAF
+    # because topiary published no derived counts for it. topiary 5.47.0
+    # does, so the last hand-rolled split goes (#383).
+    #
+    # The counts and the label describing them still come from one row: a
+    # method describing a row whose numbers were not used is the per-field
+    # maximum problem one field over.
+    observations = [
+        ((cells.integer(record.row.get("n_rna_overlapping"), default=0),
+          cells.integer(record.row.get("n_rna_alt"), default=0),
+          cells.integer(record.row.get("n_rna_ref"), default=0)),
+         (cells.text(record.row.get("rna_evidence_method")),
+          cells.text(record.row.get("sequence_source")),
+          cells.text(record.row.get("rna_evidence_subject"))))
+        for record in selection.records]
     (n_total, n_alt_reads, n_ref_reads), provenance = max(
         observations, key=lambda o: (o[0][1], o[0][0]),
         default=((0, 0, 0), ("", "", "")))
