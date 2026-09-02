@@ -474,12 +474,18 @@ class MutantProteinFragment(DataclassSerializable):
     def reference_count_was_measured(self) -> bool:
         """True when the reference count was counted, not derived.
 
-        Only an alignment counts reference support independently. Every
-        other method reaches the reference side by subtracting the alt
-        estimate from a depth, which makes anything derived from it a
-        restatement of that subtraction rather than a new observation.
+        Asks ``topiary.provenance_for_method`` rather than naming the
+        measured method here. Only a direct count qualifies today, so the
+        two agree — but which methods count is topiary's rule, and a local
+        copy of it would silently exclude any measured method added later.
+        An unstated method is not measured: the varcode path consults no
+        RNA, so its zeros are unknowns rather than observations.
         """
-        return self.rna_evidence_method == RNA_EVIDENCE_METHOD_ALIGNMENT
+        from topiary import provenance_for_method
+
+        if not self.rna_evidence_method:
+            return False
+        return provenance_for_method(self.rna_evidence_method) == "measured"
 
     @property
     def n_other_reads(self):
