@@ -471,10 +471,45 @@ class MutantProteinFragment(DataclassSerializable):
         return self.n_mutant_amino_acids == 0 and self.variant.is_deletion
 
     @property
+    def reference_count_was_measured(self) -> bool:
+        """True when the reference count was counted, not derived.
+
+        Asks ``topiary.provenance_for_method`` rather than naming the
+        measured method here. Only a direct count qualifies today, so the
+        two agree — but which methods count is topiary's rule, and a local
+        copy of it would silently exclude any measured method added later.
+        An unstated method is not measured: the varcode path consults no
+        RNA, so its zeros are unknowns rather than observations.
+        """
+        from topiary import provenance_for_method
+
+        if not self.rna_evidence_method:
+            return False
+        return provenance_for_method(self.rna_evidence_method) == "measured"
+
+    @property
     def n_other_reads(self):
+        """Reads supporting alleles which are neither ref nor alt.
+
+        ``None`` when the reference count was derived rather than counted,
+        because the subtraction then has no content. Where a source reports
+        a depth and a fraction, topiary splits it as ``ref = depth - alt``,
+        so:
+
+            other = depth - (ref + alt) = depth - ((depth - alt) + alt) = 0
+
+        A structural zero, printed as an observation about the locus. Worse
+        when the source reports no fraction at all: alt and ref are both 0,
+        and the subtraction returns the entire depth — a clean locus
+        rendered as one where every read supports a third allele.
+
+        topiary reached the same conclusion for its frames, where
+        ``n_rna_other`` is absent unless the source counted the reference
+        independently. The native isovar path does count it, and keeps
+        this number.
         """
-        Number of reads supporting alleles which are neither ref nor alt
-        """
+        if not self.reference_count_was_measured:
+            return None
         return self.n_overlapping_reads - (self.n_ref_reads + self.n_alt_reads)
 
     @property

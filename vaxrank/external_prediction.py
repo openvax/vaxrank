@@ -38,9 +38,16 @@ external_values = cells.values
 # both onto one of these names. Rows only ever reach this module already
 # normalized, so the raw pVACseq spellings are deliberately absent — listing
 # them would imply a second vocabulary is still in play here.
-_PVACSEQ_RNA_DEPTH_COLUMNS = ("rna_depth", "tumor_rna_depth")
-_PVACSEQ_RNA_VAF_COLUMNS = ("rna_vaf", "tumor_rna_vaf")
-_PVACSEQ_DNA_VAF_COLUMNS = ("dna_vaf", "tumor_dna_vaf")
+# Canonical names first, then the source-prefixed originals topiary 5.47.0
+# publishes alongside them, then the pre-5.47 spellings. Canonical first
+# because it means the same thing from every reader; the originals are the
+# fallback for a frame that carries only what the tool printed.
+_PVACSEQ_RNA_DEPTH_COLUMNS = (
+    "pvacseq_tumor_rna_depth", "rna_depth", "tumor_rna_depth")
+_PVACSEQ_RNA_VAF_COLUMNS = (
+    "rna_vaf", "pvacseq_tumor_rna_vaf", "tumor_rna_vaf")
+_PVACSEQ_DNA_VAF_COLUMNS = (
+    "dna_vaf", "pvacseq_tumor_dna_vaf", "tumor_dna_vaf")
 
 
 def pvacseq_variant_id(row) -> str:
