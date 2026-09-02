@@ -411,10 +411,11 @@ def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):
 
     Variants are ranked by their top vaccine peptide using a three-level
     tiebreak (see vaxrank#151): primarily by ``combined_score``, then by
-    ``n_alt_reads`` (RNA support), then by ``target_epitope_score`` (MHC
-    binding). The extra tiers matter when ``combined_score`` ties (common
-    when either factor is zero) so that the downstream report order is
-    stable and intuitively favors better-supported variants.
+    ``n_rna_alt`` (independent RNA support), then by
+    ``target_epitope_score`` (MHC binding). The extra tiers matter when
+    ``combined_score`` ties (common when either factor is zero) so that the
+    downstream report order is stable and intuitively favors
+    better-supported variants.
 
     Parameters
     ----------
@@ -430,12 +431,14 @@ def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):
         if len(vaccine_peptides) == 0:
             return (0.0, 0, 0.0)
         top_vaccine_peptide = vaccine_peptides[0]
+        fragment = top_vaccine_peptide.mutant_protein_fragment
+        n_rna_alt = getattr(fragment, "n_rna_alt", fragment.n_alt_reads)
         return (
             top_vaccine_peptide.combined_score,
-            top_vaccine_peptide.mutant_protein_fragment.n_alt_reads,
+            n_rna_alt or 0,
             top_vaccine_peptide.target_epitope_score,
         )
 
-    # sort in descending order by (combined_score, n_alt_reads, target_epitope_score)
+    # Descending by (combined score, independent RNA evidence, epitope score).
     result_list.sort(key=sort_key, reverse=True)
     return result_list

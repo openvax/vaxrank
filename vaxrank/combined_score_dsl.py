@@ -15,7 +15,7 @@
 Mirrors the per-epitope DSL in :mod:`vaxrank.epitope_dsl` but at the
 ``VaccinePeptide`` scope. Lets users write expressions like::
 
-    combined_score_expr: "sqrt(n_alt_reads) * target_epitope_score"
+    combined_score_expr: "sqrt(n_rna_alt) * target_epitope_score"
     combined_score_expr: "n_alt_reads * target_epitope_score"
     combined_score_expr: "log1p(n_alt_reads) * target_epitope_score
                           + 0.1 * n_alt_reads_supporting_protein_sequence"
@@ -36,9 +36,8 @@ mutation-specific and exist only when the VaccinePeptide carries a real
 their expression references one of these unavailable mutation fields.
 
   ``expression_score``
-      ``sqrt(n_alt_reads)`` — the canonical "expression strength"
-      surrogate; available so the legacy
-      ``sqrt_reads_times_epitope`` mode is exactly
+      ``sqrt(n_rna_alt)`` — the canonical "expression strength"
+      surrogate; available so the default score is exactly
       ``expression_score * target_epitope_score``.
 
   ``n_rna_alt``, ``n_rna_ref``, ``n_rna_overlapping``,
@@ -59,10 +58,10 @@ their expression references one of these unavailable mutation fields.
       flavour reports a fraction with no depth.
 
   ``n_alt_reads``
-      RNA *reads* supporting the variant allele — but on the isovar
-      path this field holds fragments, which is roughly half the read
-      count for the same paired-end evidence. Kept because existing
-      configs name it; ``n_rna_alt`` is the portable one.
+      RNA reads supporting the variant allele. Kept as a distinct binding
+      for configs that intentionally want to weight reads;
+      ``n_rna_alt`` is the independent-evidence binding because it prefers
+      fragments when the source reports them.
 
   ``n_ref_reads``
       RNA reads supporting the reference allele at the locus. Derived
@@ -96,13 +95,15 @@ all rejected. The whole expression must be a single
 
 Same precedence relationship as the per-epitope DSL: when
 ``vaccine_peptides.combined_score_expr`` is set, it supersedes
-``combined_score_mode``. The three legacy modes are equivalent to
+``combined_score_mode``. The old modes can be written explicitly as
 these expressions:
 
   ``epitope_only``               ≡ ``target_epitope_score``
   ``reads_times_epitope``        ≡ ``n_alt_reads * target_epitope_score``
-  ``sqrt_reads_times_epitope``   ≡ ``expression_score * target_epitope_score``
-                                 ≡ ``sqrt(n_alt_reads) * target_epitope_score``
+  ``sqrt_reads_times_epitope``   ≡ ``sqrt(n_alt_reads) * target_epitope_score``
+
+The current default is ``expression_score * target_epitope_score``, where
+``expression_score`` is ``sqrt(n_rna_alt)``.
 """
 
 import ast
@@ -252,19 +253,16 @@ def combined_score_bindings(vp):
         return bindings
     bindings.update({
         'expression_score': float(vp.expression_score),
-        # Unit-specific, and only meaningful once you know which unit the
-        # run counted. Kept because existing configs name them.
+        # Unit-specific. Kept because existing configs name them and some
+        # users may intentionally want to weight read observations.
         'n_alt_reads': float(frag.n_alt_reads or 0),
         'n_ref_reads': float(frag.n_ref_reads or 0),
         'n_overlapping_reads': float(frag.n_overlapping_reads or 0),
         'n_alt_reads_supporting_protein_sequence': float(
             frag.n_alt_reads_supporting_protein_sequence or 0),
-        # Portable. n_rna_alt is whatever the source counted -- fragments
-        # where it has them, reads otherwise -- so a threshold written
-        # against it means the same thing on every input path, which
-        # n_alt_reads does not: it holds isovar fragments on the native
-        # path and read estimates on both external ones, and sqrt() weights
-        # them identically (#385).
+        # Portable. n_rna_alt is the independent-evidence unit -- fragments
+        # where the source has them, reads otherwise -- so paired mates do
+        # not receive double weight on the native Isovar path (#394).
         #
         # The unit itself is not bound here: this grammar is arithmetic
         # only, so a string would be a name no expression could use.

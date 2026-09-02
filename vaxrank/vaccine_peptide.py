@@ -348,15 +348,21 @@ class VaccinePeptide(DataclassSerializable):
 
     @property
     def expression_score(self):
-        # Honest expression metric. ``sqrt(n_alt_reads)`` is a binding
-        # the default combined-score expression uses; if the user
-        # writes a different ``combined_score_expr`` that doesn't
-        # reference it, this property is still queryable for reports.
+        # Honest expression metric. Prefer fragments when the source reports
+        # them: paired mates are one independent observation, and rewarding
+        # both would bias the score toward duplicate-heavy loci. If the user
+        # writes a different ``combined_score_expr`` that doesn't reference
+        # this property, it is still queryable for reports.
         if self.mutant_protein_fragment is None:
             raise ValueError(
                 "Mutation RNA expression_score is unavailable for this antigen"
             )
-        return np.sqrt(self.mutant_protein_fragment.n_alt_reads)
+        fragment = self.mutant_protein_fragment
+        # ``VaccinePeptide`` has long supported fragment-like inputs in the
+        # public API. Fall back for callers built against the older shape;
+        # current MutantProteinFragment instances always expose n_rna_alt.
+        n_rna_alt = getattr(fragment, "n_rna_alt", fragment.n_alt_reads)
+        return np.sqrt(n_rna_alt or 0)
 
     @property
     def combined_score(self):

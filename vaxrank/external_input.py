@@ -585,9 +585,9 @@ def _read_counts_from_lens_row(row):
         765            12   0.008          12             6
         291           166   0.258         166            75
 
-    ``n_alt_reads`` feeds the combined-score DSL — ``sqrt(n_alt_reads) *
-    target_epitope_score`` is the documented canonical form — so this
-    reordered vaccine peptides.
+    ``n_alt_reads`` fed the default combined score at the time, so this
+    reordered vaccine peptides. It remains available for explicit read-based
+    score expressions; the current default uses ``n_rna_alt``.
 
     topiary populates the fields with the derivation named per field
     (``rna_evidence_method``): depth x VAF for the alt/ref split, and the

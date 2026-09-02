@@ -10,12 +10,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""What ``n_alt_reads`` holds, and how a consumer can tell.
+"""What RNA evidence fields hold, and how a consumer can tell.
 
-The field feeds the combined-score DSL, where ``sqrt(n_alt_reads) *
-target_epitope_score`` is the documented canonical form. It holds a
-different quantity per input path, and these tests pin that each one says
-which (openvax/vaxrank#379, #382, #383).
+The default combined score uses ``n_rna_alt``, which prefers independent
+fragments and falls back to reads. Explicit read-based expressions can still
+use ``n_alt_reads``. These tests pin both values and their provenance
+(openvax/vaxrank#379, #382, #383, #394).
 """
 
 import os

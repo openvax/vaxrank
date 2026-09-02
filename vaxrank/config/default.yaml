@@ -157,15 +157,18 @@ vaccine_peptides:
   # DSL expression evaluated per VaccinePeptide to produce
   # combined_score (used to rank variants).
   # Bindings: target_epitope_score, self_epitope_score,
-  # expression_score, n_alt_reads, n_ref_reads, n_overlapping_reads,
-  # n_alt_reads_supporting_protein_sequence, n_mutant_amino_acids.
+  # expression_score, n_rna_alt, n_rna_ref, n_rna_overlapping,
+  # n_rna_supporting_protein_sequence, n_alt_reads, n_ref_reads,
+  # n_overlapping_reads, n_alt_reads_supporting_protein_sequence,
+  # n_dna_alt, n_dna_ref, n_dna_overlapping, n_mutant_amino_acids.
   # Functions: sqrt, log, log1p, exp, min, max, abs, pow.
   # The default below IS the canonical formula — there is no
   # separate mode enum. Sample alternatives:
   #   "target_epitope_score"                        (epitope-only)
-  #   "n_alt_reads * target_epitope_score"          (linear in reads)
-  #   "log1p(n_alt_reads) * target_epitope_score"   (log-compressed)
-  combined_score_expr: "sqrt(n_alt_reads) * target_epitope_score"
+  #   "n_rna_alt * target_epitope_score"            (linear in RNA evidence)
+  #   "sqrt(n_alt_reads) * target_epitope_score"    (explicit read weighting)
+  #   "log1p(n_rna_alt) * target_epitope_score"     (log-compressed)
+  combined_score_expr: "sqrt(n_rna_alt) * target_epitope_score"
   # Keep candidates whose score is at least this fraction of the best
   # before lexicographic tie-breaking.
   score_fraction_of_best: 0.99
