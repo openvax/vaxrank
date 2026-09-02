@@ -12,7 +12,7 @@
 
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from serializable import DataclassSerializable
@@ -583,18 +583,11 @@ class MutantProteinFragment(DataclassSerializable):
                     max(
                         0,
                         self.mutant_amino_acid_end_offset - subsequence_start_offset))
-                n_supporting_reads = self.n_alt_reads_supporting_protein_sequence
-                subsequence_mutant_protein_fragment = MutantProteinFragment(
-                    variant=self.variant,
-                    gene_name=self.gene_name,
+                subsequence_mutant_protein_fragment = replace(
+                    self,
                     amino_acids=amino_acids,
                     mutant_amino_acid_start_offset=mutant_amino_acid_start_offset,
-                    mutant_amino_acid_end_offset=mutant_amino_acid_end_offset,
-                    n_overlapping_reads=self.n_overlapping_reads,
-                    n_ref_reads=self.n_ref_reads,
-                    n_alt_reads=self.n_alt_reads,
-                    n_alt_reads_supporting_protein_sequence=n_supporting_reads,
-                    supporting_reference_transcripts=self.supporting_reference_transcripts)
+                    mutant_amino_acid_end_offset=mutant_amino_acid_end_offset)
                 yield subsequence_start_offset, subsequence_mutant_protein_fragment
 
     def sorted_subsequences(

@@ -10,6 +10,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import fields
+
 from mhctools import RandomBindingPredictor
 
 from vaxrank.cli import make_vaxrank_arg_parser, run_vaxrank_from_parsed_args
@@ -19,6 +21,52 @@ from .common import eq_, almost_eq_
 from .testing_helpers import data_path
 
 random_binding_predictor = RandomBindingPredictor(["H-2-Kb", "H-2-Db"])
+
+
+def test_generate_subsequences_preserves_evidence_and_provenance():
+    from varcode import Variant
+
+    fragment = MutantProteinFragment(
+        variant=Variant("1", 1000, "A", "G", ensembl=None),
+        gene_name="GENE1",
+        amino_acids="ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        mutant_amino_acid_start_offset=12,
+        mutant_amino_acid_end_offset=13,
+        supporting_reference_transcripts=["ENST000001"],
+        n_overlapping_reads=101,
+        n_alt_reads=31,
+        n_ref_reads=61,
+        n_alt_reads_supporting_protein_sequence=29,
+        placeholder_alleles=True,
+        rna_evidence_method="rna_alignment",
+        rna_evidence_subject="fragments",
+        n_overlapping_fragments=55,
+        n_alt_fragments=21,
+        n_ref_fragments=30,
+        n_alt_fragments_supporting_protein_sequence=20,
+        n_dna_overlapping=80,
+        n_dna_alt=32,
+        n_dna_ref=48,
+        dna_vaf=0.4,
+        dna_evidence_method="dna_depth_x_vaf",
+        dna_evidence_subject="reads",
+        sequence_source="isovar_assembly")
+
+    offset, subsequence = list(fragment.generate_subsequences(15))[5]
+
+    assert offset == 5
+    assert subsequence.amino_acids == fragment.amino_acids[5:20]
+    assert subsequence.mutant_amino_acid_start_offset == 7
+    assert subsequence.mutant_amino_acid_end_offset == 8
+
+    changed_fields = {
+        "amino_acids",
+        "mutant_amino_acid_start_offset",
+        "mutant_amino_acid_end_offset",
+    }
+    for field in fields(MutantProteinFragment):
+        if field.name not in changed_fields:
+            assert getattr(subsequence, field.name) == getattr(fragment, field.name)
 
 
 def check_mutant_amino_acids(variant, mutant_protein_fragment):
