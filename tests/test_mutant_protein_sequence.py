@@ -11,6 +11,7 @@
 # limitations under the License.
 
 from dataclasses import fields
+from math import sqrt
 
 from mhctools import RandomBindingPredictor
 from topiary import FRAGMENTS
@@ -166,6 +167,11 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
             reads=(73, 25, 48),
             fragments=(65, 21, 44),
             protein_support=(25, 21))
+        almost_eq_(vaccine_peptide.expression_score, sqrt(21))
+        almost_eq_(
+            vaccine_peptide.combined_score,
+            sqrt(21) * vaccine_peptide.target_epitope_score)
+
 
 def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
     # In the Isovar repository this test is weird because the VCF only
@@ -195,6 +201,11 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
             reads=(56, 17, 39),
             fragments=(52, 15, 37),
             protein_support=(17, 15))
+        almost_eq_(vaccine_peptide.expression_score, sqrt(15))
+        almost_eq_(
+            vaccine_peptide.combined_score,
+            sqrt(15) * vaccine_peptide.target_epitope_score)
+
 
 def test_keep_top_k_epitopes():
     arg_parser = make_vaxrank_arg_parser()

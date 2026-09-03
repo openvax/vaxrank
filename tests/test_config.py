@@ -761,14 +761,12 @@ def test_manufacturability_config_rejects_unknown_rule():
         ManufacturabilityConfig(rules=("bogus_rule",))
 
 
-def test_vaccine_config_combined_score_expr_default_is_legacy_formula():
-    """The default must be the canonical legacy formula expressed as a
-    DSL string — single source of truth for the default combined score.
-    """
+def test_vaccine_config_combined_score_expr_default_uses_rna_evidence():
+    """The default weights the portable independent-evidence binding."""
     from vaxrank.vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
     config = VaccineConfig()
     eq_(config.combined_score_expr, DEFAULT_COMBINED_SCORE_EXPR)
-    eq_(config.combined_score_expr, "sqrt(n_alt_reads) * target_epitope_score")
+    eq_(config.combined_score_expr, "sqrt(n_rna_alt) * target_epitope_score")
 
 
 def test_vaccine_config_combined_score_expr_accepts_legacy_equivalents():

@@ -29,7 +29,7 @@ from vaxrank.candidate_epitope import CandidateEpitope, Peptide
 from vaxrank.vaccine_peptide import VaccinePeptide
 
 
-def _make_fragment(seq="A" * 25, n_alt_reads=9):
+def _make_fragment(seq="A" * 25, n_alt_reads=9, n_alt_fragments=None):
     """Minimal duck-typed MutantProteinFragment for VaccinePeptide tests.
 
     Must expose every binding the combined_score DSL evaluator looks up
@@ -40,6 +40,8 @@ def _make_fragment(seq="A" * 25, n_alt_reads=9):
     return SimpleNamespace(
         amino_acids=seq,
         n_alt_reads=n_alt_reads,
+        n_rna_alt=(
+            n_alt_reads if n_alt_fragments is None else n_alt_fragments),
         n_ref_reads=0,
         n_overlapping_reads=n_alt_reads,
         n_alt_reads_supporting_protein_sequence=n_alt_reads,
@@ -143,13 +145,13 @@ def test_custom_rules_shorten_tuple():
     assert len(tup) == 2
 
 
-def test_combined_score_default_mode_is_legacy():
-    fragment = _make_fragment(n_alt_reads=9)
+def test_combined_score_default_uses_fragments_when_available():
+    fragment = _make_fragment(n_alt_reads=16, n_alt_fragments=9)
     vp = VaccinePeptide(
         mutant_protein_fragment=fragment,
         epitopes=[_make_mutant_epitope()],
     )
-    # Legacy: sqrt(9) * target_epitope_score
+    # Independent fragments, not paired reads, weight the default score.
     assert vp.expression_score == pytest.approx(np.sqrt(9))
     assert vp.combined_score == pytest.approx(np.sqrt(9) * vp.target_epitope_score)
 

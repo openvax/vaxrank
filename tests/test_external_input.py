@@ -1876,8 +1876,8 @@ def test_alt_reads_are_depth_times_vaf_not_the_cds_overlap_count(tmp_path):
     ``rna_reads_covering_genomic_origin_with_peptide_cds`` counts reads
     overlapping the peptide's coding sequence, not reads carrying the
     variant allele. vaxrank assigned it straight to ``n_alt_reads``, which
-    feeds the combined-score DSL — ``sqrt(n_alt_reads) *
-    target_epitope_score`` is the documented canonical form.
+    fed the default combined score at the time. It remains available for
+    explicit read-based score expressions.
 
     The two disagree in both directions on real files: 2337x0.022 gives 51
     alt reads where the CDS count says 2, and 291x0.258 gives 75 where it
@@ -1917,8 +1917,9 @@ def test_read_counts_arrive_with_the_derivation_that_produced_them(tmp_path):
 
     After #374 a LENS ``n_alt_reads`` is depth x VAF, rounded. On another
     source the same field may be counted from an alignment. The report
-    prints the same number either way and ``sqrt(n_alt_reads)`` weights
-    them identically, so the label is what lets a reader tell them apart.
+    prints the same number either way and an explicit ``sqrt(n_alt_reads)``
+    expression weights them identically, so the label is what lets a reader
+    tell them apart.
     """
     path = _lens_counts_file(
         tmp_path, "labelled.tsv", depth=2337, cds_overlap=2, vaf=0.022)

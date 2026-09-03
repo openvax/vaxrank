@@ -8,10 +8,10 @@
 
 Pins:
 - The grammar (allowed nodes / functions; rejected constructs).
-- Parity between the documented default expression and the three
-  legacy pre-3.1 mode formulas, all expressed as DSL strings.
-- That a user-supplied expression is the only mechanism — the
-  default formula travels the same code path.
+- The fragment-aware default and the three legacy pre-3.1 mode formulas,
+  all expressed as DSL strings.
+- That a user-supplied expression is the only mechanism — the default
+  formula travels the same code path.
 """
 
 import math
@@ -20,6 +20,7 @@ import pytest
 
 def _make_vp(
         n_alt_reads=10,
+        n_alt_fragments=None,
         n_overlapping_reads=20,
         target_epitope_score=2.5,
         n_alt_reads_supporting_protein_sequence=8,
@@ -44,6 +45,7 @@ def _make_vp(
         n_ref_reads=max(0, n_overlapping_reads - n_alt_reads),
         n_alt_reads_supporting_protein_sequence=
             n_alt_reads_supporting_protein_sequence,
+        n_alt_fragments=n_alt_fragments,
     )
     vp = VaccinePeptide(
         mutant_protein_fragment=frag,
@@ -63,7 +65,8 @@ def test_dsl_legacy_formulas_round_trip_as_expressions():
     ``n_alt_reads``) or the arithmetic semantics."""
     n_alt = 16
     epitope = 3.0
-    # sqrt_reads_times_epitope ≡ default (DEFAULT_COMBINED_SCORE_EXPR)
+    # On a reads-only source, the historical reads expression and the
+    # fragment-aware default see the same evidence count.
     vp_default = _make_vp(
         n_alt_reads=n_alt, target_epitope_score=epitope,
         combined_score_expr=None)
@@ -85,20 +88,68 @@ def test_dsl_legacy_formulas_round_trip_as_expressions():
     assert vp_only.combined_score == pytest.approx(3.0)
 
 
-def test_default_expression_is_canonical_legacy_formula():
-    """The default ``combined_score_expr`` resolves to the canonical
-    pre-3.1 ``sqrt_reads_times_epitope`` formula. Single source of
-    truth: ``DEFAULT_COMBINED_SCORE_EXPR`` is what every default
-    VaccinePeptide evaluates."""
+def test_default_expression_uses_portable_rna_evidence():
+    """The default weights independent RNA evidence, not raw reads."""
     from vaxrank.vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
     assert DEFAULT_COMBINED_SCORE_EXPR == (
-        "sqrt(n_alt_reads) * target_epitope_score")
+        "sqrt(n_rna_alt) * target_epitope_score")
     vp = _make_vp(n_alt_reads=9, target_epitope_score=2.0,
                   combined_score_expr=None)
     # __post_init__ resolved the default
     assert vp.combined_score_expr == DEFAULT_COMBINED_SCORE_EXPR
     # And the score is sqrt(9) * 2 = 6
     assert vp.combined_score == pytest.approx(6.0)
+
+
+def test_default_reorders_duplicate_heavy_locus_behind_clean_locus():
+    """Fragments prevent paired reads and duplicates receiving extra weight.
+
+    Both candidates have the same epitope score. The duplicate-heavy locus
+    wins under explicit read weighting (40 > 25), while the default correctly
+    ranks the clean locus first because it has more independent fragments
+    (16 > 9). This is the between-variant reordering that settled #394.
+    """
+    duplicate_heavy = _make_vp(
+        n_alt_reads=40,
+        n_alt_fragments=9,
+        target_epitope_score=1.0,
+    )
+    clean = _make_vp(
+        n_alt_reads=25,
+        n_alt_fragments=16,
+        target_epitope_score=1.0,
+    )
+
+    from vaxrank.core_logic import ranked_vaccine_peptides
+
+    assert duplicate_heavy.expression_score == pytest.approx(3.0)
+    assert clean.expression_score == pytest.approx(4.0)
+    default_ranked = ranked_vaccine_peptides({
+        "duplicate-heavy": [duplicate_heavy],
+        "clean": [clean],
+    })
+    assert [variant for variant, _ in default_ranked] == [
+        "clean", "duplicate-heavy"]
+
+    read_weighted = "sqrt(n_alt_reads) * target_epitope_score"
+    duplicate_heavy_reads = _make_vp(
+        n_alt_reads=40,
+        n_alt_fragments=9,
+        target_epitope_score=1.0,
+        combined_score_expr=read_weighted,
+    )
+    clean_reads = _make_vp(
+        n_alt_reads=25,
+        n_alt_fragments=16,
+        target_epitope_score=1.0,
+        combined_score_expr=read_weighted,
+    )
+    read_ranked = ranked_vaccine_peptides({
+        "duplicate-heavy": [duplicate_heavy_reads],
+        "clean": [clean_reads],
+    })
+    assert [variant for variant, _ in read_ranked] == [
+        "duplicate-heavy", "clean"]
 
 
 def test_dsl_supports_math_functions():

@@ -45,7 +45,7 @@ from .ranking import RANKING_RULE_REGISTRY
 # Single source of truth for the default vaccine-peptide combined score.
 # Everything that computes ``combined_score`` reads this constant (or a
 # user-supplied override) via the DSL — no parallel hardcoded branch.
-DEFAULT_COMBINED_SCORE_EXPR = "sqrt(n_alt_reads) * target_epitope_score"
+DEFAULT_COMBINED_SCORE_EXPR = "sqrt(n_rna_alt) * target_epitope_score"
 
 
 class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
@@ -126,11 +126,11 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     score_fraction_of_best: float = DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST
     # DSL expression evaluated to produce each vaccine peptide's
     # ``combined_score``. See :mod:`vaxrank.combined_score_dsl` for
-    # grammar + bindings (``target_epitope_score``, ``n_alt_reads``,
-    # ``expression_score``, etc.). The default is
-    # :data:`DEFAULT_COMBINED_SCORE_EXPR` — the legacy
-    # ``sqrt(n_alt_reads) * target_epitope_score`` formula. There is
-    # no separate mode enum: the expression IS the mechanism.
+    # grammar + bindings (``target_epitope_score``, ``n_rna_alt``,
+    # ``n_alt_reads``, ``expression_score``, etc.). The default is
+    # :data:`DEFAULT_COMBINED_SCORE_EXPR` — the fragment-aware
+    # ``sqrt(n_rna_alt) * target_epitope_score`` formula. There is no
+    # separate mode enum: the expression IS the mechanism.
     combined_score_expr: str = DEFAULT_COMBINED_SCORE_EXPR
     ranking_rules: Optional[tuple[str, ...]] = None
     # When True (default, legacy behavior), variants whose vaccine peptides

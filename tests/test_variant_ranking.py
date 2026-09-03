@@ -11,19 +11,26 @@
 # limitations under the License.
 
 """Tests for the variant-level sort in ``ranked_vaccine_peptides`` —
-verifies the three-level tiebreak (combined_score, n_alt_reads,
-target_epitope_score) introduced for vaxrank#151."""
+verifies the three-level tiebreak (combined_score, n_rna_alt,
+target_epitope_score) introduced for vaxrank#151 and refined in #394."""
 
 from types import SimpleNamespace
 
 from vaxrank.core_logic import ranked_vaccine_peptides
 
 
-def _fake_peptide(combined_score, n_alt_reads, target_epitope_score):
+def _fake_peptide(
+        combined_score,
+        n_alt_reads,
+        target_epitope_score,
+        n_rna_alt=None):
     return SimpleNamespace(
         combined_score=combined_score,
         target_epitope_score=target_epitope_score,
-        mutant_protein_fragment=SimpleNamespace(n_alt_reads=n_alt_reads),
+        mutant_protein_fragment=SimpleNamespace(
+            n_alt_reads=n_alt_reads,
+            n_rna_alt=n_alt_reads if n_rna_alt is None else n_rna_alt,
+        ),
     )
 
 
@@ -38,21 +45,30 @@ def test_primary_sort_by_combined_score():
     assert [variant for variant, _ in ranked] == [v_high, v_low]
 
 
-def test_tiebreak_by_n_alt_reads_when_combined_score_ties():
-    """When combined_score ties (e.g. both zero because one factor is
-    zero), n_alt_reads is the first tiebreak — high RNA support wins."""
-    v_reads = "v_reads"
-    v_no_reads = "v_no_reads"
+def test_tiebreak_uses_independent_rna_evidence_when_combined_score_ties():
+    """A duplicate-heavy locus does not win an otherwise tied score."""
+    v_duplicate_heavy = "v_duplicate_heavy"
+    v_clean = "v_clean"
     d = {
-        v_no_reads: [_fake_peptide(combined_score=0.0, n_alt_reads=0, target_epitope_score=0.5)],
-        v_reads: [_fake_peptide(combined_score=0.0, n_alt_reads=50, target_epitope_score=0.5)],
+        v_duplicate_heavy: [_fake_peptide(
+            combined_score=0.0,
+            n_alt_reads=40,
+            n_rna_alt=9,
+            target_epitope_score=0.5,
+        )],
+        v_clean: [_fake_peptide(
+            combined_score=0.0,
+            n_alt_reads=25,
+            n_rna_alt=16,
+            target_epitope_score=0.5,
+        )],
     }
     ranked = ranked_vaccine_peptides(d)
-    assert [variant for variant, _ in ranked] == [v_reads, v_no_reads]
+    assert [variant for variant, _ in ranked] == [v_clean, v_duplicate_heavy]
 
 
 def test_tiebreak_by_target_epitope_score_when_higher_tiers_tie():
-    """When combined_score and n_alt_reads both tie, target_epitope_score
+    """When combined_score and n_rna_alt both tie, target_epitope_score
     breaks the tie — higher MHC binding score wins."""
     v_low_epitope = "v_low_epitope"
     v_high_epitope = "v_high_epitope"
