@@ -530,6 +530,25 @@ class MutantProteinFragment(DataclassSerializable):
         return self.n_overlapping_reads - (self.n_ref_reads + self.n_alt_reads)
 
     @property
+    def n_other_fragments(self):
+        """Fragments supporting alleles which are neither ref nor alt.
+
+        Mirrors :attr:`n_other_reads` when the source reports fragment
+        counts. ``None`` means the source did not measure enough of the
+        split to make the subtraction an observation.
+        """
+        if not self.reference_count_was_measured:
+            return None
+        counts = (
+            self.n_overlapping_fragments,
+            self.n_ref_fragments,
+            self.n_alt_fragments,
+        )
+        if any(value is None for value in counts):
+            return None
+        return counts[0] - (counts[1] + counts[2])
+
+    @property
     def rna_vaf(self):
         """
         RNA variant allele frequency.
