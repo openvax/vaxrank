@@ -171,6 +171,8 @@ def test_predict_epitopes_does_not_emit_nan_value_for_presentation():
     assert presentation_preds, "expected pMHC_presentation leaf in output"
     assert all(p.value is None for p in presentation_preds), (
         "pMHC_presentation rows should have value=None, not NaN")
+    assert all(p.score == pytest.approx(0.42) for p in presentation_preds), (
+        "pMHC_presentation rows should preserve Topiary's score")
 
 
 # ---- serialize_json_nan_tolerant ---------------------------------------

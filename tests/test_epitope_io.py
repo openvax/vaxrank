@@ -381,6 +381,85 @@ def test_load_pvacseq_populates_per_allele_scores():
     assert e_strong.epitope_score > 0.0
 
 
+def test_load_pvacseq_preserves_upstream_presentation_rows():
+    """A multi-kind Topiary result keeps pVACseq presentation evidence."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    import pandas as pd
+
+    from vaxrank.coverage import compute_coverage
+    from vaxrank.epitope_config import EpitopeConfig
+
+    shared = {
+        "source_sequence_name": "chr1-100000-100001-A-T",
+        "variant": "chr1-100000-100001-A-T",
+        "gene": "TP53",
+        "transcript": "ENST00000269305",
+        "peptide": "SVVGSSSSS",
+        "peptide_length": 9,
+        "peptide_offset": 0,
+        "contains_mutant_residues": True,
+        "allele": "HLA-A*02:01",
+        "mhc_class": "I",
+        "predictor_version": "2.1.1",
+        "wt_peptide": "SVVGSSGSS",
+        "pvacseq_ref_match": False,
+    }
+    topiary_df = pd.DataFrame([
+        {
+            **shared,
+            "kind": "pMHC_presentation",
+            "prediction_method_name": "mhcflurry",
+            "value": None,
+            "affinity": None,
+            "score": 0.92,
+            "percentile_rank": 0.3,
+            "wt_value": None,
+            "wt_score": 0.41,
+            "wt_percentile_rank": 4.2,
+        },
+        {
+            **shared,
+            "kind": "pMHC_affinity",
+            "prediction_method_name": "mhcflurry",
+            "value": 76.11,
+            "affinity": 76.11,
+            "score": 76.11,
+            "percentile_rank": 0.5,
+            "wt_value": 4520.3,
+            "wt_score": 4520.3,
+            "wt_percentile_rank": 12.3,
+        },
+    ])
+    fake_result = SimpleNamespace(
+        df=topiary_df, extra={"pvacseq_format": "aggregated"})
+    path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
+    config = EpitopeConfig(
+        score_expr="presentation[mhcflurry].score")
+
+    with patch("topiary.read_pvacseq", return_value=fake_result):
+        loaded = read_pvacseq_report(path, epitope_config=config)
+
+    assert len(loaded.report_df) == 1
+    assert "76.11 nM" in loaded.report_df.iloc[0][
+        "Predicted mutant pMHC affinity"]
+    assert len(loaded.epitopes) == 1
+    [epitope] = loaded.epitopes
+    [presentation] = epitope.predictions_for(
+        "pMHC_presentation", predictor="mhcflurry")
+    assert presentation.value is None
+    assert presentation.score == pytest.approx(0.92)
+    assert presentation.percentile_rank == pytest.approx(0.3)
+    [wt_presentation] = epitope.wt.predictions_for(
+        "pMHC_presentation", predictor="mhcflurry")
+    assert wt_presentation.score == pytest.approx(0.41)
+    assert wt_presentation.percentile_rank == pytest.approx(4.2)
+    coverage = compute_coverage(
+        loaded.epitopes, ["HLA-A*02:01"])["HLA-A*02:01"]
+    assert coverage.best_presentation_pct == pytest.approx(0.3)
+
+
 def test_load_pvacseq_missing_columns(tmp_path):
     bad_file = tmp_path / "bad.tsv"
     bad_file.write_text("Gene\tAA Change\nTP53\tG245S\n")

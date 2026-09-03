@@ -269,7 +269,13 @@ def predict_epitopes(
         try:
             wt_df = topiary_predictor.predict_from_named_peptides(valid_wt_peptides)
             for _, row in wt_df.iterrows():
-                key = (row["source_sequence_name"], row["allele"])
+                key = (
+                    row["source_sequence_name"],
+                    row["allele"],
+                    row.get("kind") or "pMHC_affinity",
+                    row.get("prediction_method_name", "") or "",
+                    row.get("predictor_version", "") or "",
+                )
                 wt_predictions_grouped[key] = row
         except Exception:
             logger.error(
@@ -332,7 +338,14 @@ def predict_epitopes(
         # don't get a meaningful WT pair.
         wt_pred = None
         if overlaps_mutation:
-            wt_row = wt_predictions_grouped.get((peptide, row["allele"]))
+            wt_key = (
+                peptide,
+                row["allele"],
+                row.get("kind") or "pMHC_affinity",
+                row.get("prediction_method_name", "") or "",
+                row.get("predictor_version", "") or "",
+            )
+            wt_row = wt_predictions_grouped.get(wt_key)
             if wt_row is None:
                 wt_peptide = wt_peptides[peptide]
                 if len(wt_peptide) < min_peptide_length:
@@ -343,6 +356,12 @@ def predict_epitopes(
                 wt_ic50 = finite_prediction_value(wt_row.get("affinity"))
                 if wt_ic50 is None:
                     wt_ic50 = finite_prediction_value(wt_row.get("value"))
+                wt_score = finite_prediction_value(wt_row.get("score"))
+                if wt_score is None:
+                    raise ValueError(
+                        "Topiary WT prediction row is missing a finite score")
+                wt_percentile_rank = finite_prediction_value(
+                    wt_row.get("percentile_rank"))
                 tool = row.get("prediction_method_name", "")
                 wt_pred = Prediction(
                     kind=row.get("kind") or "pMHC_affinity",
@@ -351,11 +370,15 @@ def predict_epitopes(
                     allele=row["allele"],
                     peptide=wt_row["peptide"],
                     value=wt_ic50,
-                    score=0.0,
-                    percentile_rank=None,
+                    score=wt_score,
+                    percentile_rank=wt_percentile_rank,
                 )
 
         tool = row.get("prediction_method_name", "")
+        prediction_score = finite_prediction_value(row.get("score"))
+        if prediction_score is None:
+            raise ValueError(
+                "Topiary prediction row is missing a finite score")
         mutant_pred = Prediction(
             kind=row.get("kind") or "pMHC_affinity",
             predictor_name=tool,
@@ -363,7 +386,7 @@ def predict_epitopes(
             allele=row["allele"],
             peptide=peptide,
             value=ic50,
-            score=0.0,
+            score=prediction_score,
             percentile_rank=percentile_rank,
         )
         rows.append({
