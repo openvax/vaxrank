@@ -120,9 +120,16 @@ def test_default_reorders_duplicate_heavy_locus_behind_clean_locus():
         target_epitope_score=1.0,
     )
 
+    from vaxrank.core_logic import ranked_vaccine_peptides
+
     assert duplicate_heavy.expression_score == pytest.approx(3.0)
     assert clean.expression_score == pytest.approx(4.0)
-    assert clean.combined_score > duplicate_heavy.combined_score
+    default_ranked = ranked_vaccine_peptides({
+        "duplicate-heavy": [duplicate_heavy],
+        "clean": [clean],
+    })
+    assert [variant for variant, _ in default_ranked] == [
+        "clean", "duplicate-heavy"]
 
     read_weighted = "sqrt(n_alt_reads) * target_epitope_score"
     duplicate_heavy_reads = _make_vp(
@@ -137,7 +144,12 @@ def test_default_reorders_duplicate_heavy_locus_behind_clean_locus():
         target_epitope_score=1.0,
         combined_score_expr=read_weighted,
     )
-    assert duplicate_heavy_reads.combined_score > clean_reads.combined_score
+    read_ranked = ranked_vaccine_peptides({
+        "duplicate-heavy": [duplicate_heavy_reads],
+        "clean": [clean_reads],
+    })
+    assert [variant for variant, _ in read_ranked] == [
+        "duplicate-heavy", "clean"]
 
 
 def test_dsl_supports_math_functions():

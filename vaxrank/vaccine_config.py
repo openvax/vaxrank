@@ -126,8 +126,8 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     score_fraction_of_best: float = DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST
     # DSL expression evaluated to produce each vaccine peptide's
     # ``combined_score``. See :mod:`vaxrank.combined_score_dsl` for
-    # grammar + bindings (``target_epitope_score``, ``n_alt_reads``,
-    # ``expression_score``, etc.). The default is
+    # grammar + bindings (``target_epitope_score``, ``n_rna_alt``,
+    # ``n_alt_reads``, ``expression_score``, etc.). The default is
     # :data:`DEFAULT_COMBINED_SCORE_EXPR` — the fragment-aware
     # ``sqrt(n_rna_alt) * target_epitope_score`` formula. There is no
     # separate mode enum: the expression IS the mechanism.
