@@ -477,9 +477,6 @@ def _topiary_pvacseq_to_epitope_rows(rows):
         peptide = cells.text(row.get("peptide"))
         allele = cells.text(row.get("allele"))
         value = cells.number(row.get("value"))
-        if not peptide or not allele or value is None:
-            continue
-
         method = cells.text(row.get("prediction_method_name")) or "pvacseq"
         version = cells.text(row.get("predictor_version"))
         kind = (
@@ -487,6 +484,10 @@ def _topiary_pvacseq_to_epitope_rows(rows):
             or prediction_kind_for_method(method))
         percentile_rank = cells.number(row.get("percentile_rank"))
         score = cells.number(row.get("score"))
+        if (not peptide or not allele
+                or (value is None and score is None
+                    and percentile_rank is None)):
+            continue
         mutant = Prediction(
             kind=kind, predictor_name=method, predictor_version=version,
             allele=allele, peptide=peptide, value=value,
@@ -496,15 +497,19 @@ def _topiary_pvacseq_to_epitope_rows(rows):
 
         wt = None
         wt_value = cells.number(row.get("wt_value"))
-        if wt_value is not None:
+        wt_score = cells.number(row.get("wt_score"))
+        wt_percentile_rank = cells.number(row.get("wt_percentile_rank"))
+        if (wt_value is not None or wt_score is not None
+                or wt_percentile_rank is not None):
             wt_method = cells.text(row.get("wt_prediction_method_name")) or method
             wt_version = cells.text(row.get("wt_predictor_version")) or version
             wt = Prediction(
                 kind=kind, predictor_name=wt_method,
                 predictor_version=wt_version, allele=allele,
                 peptide=cells.text(row.get("wt_peptide")),
-                value=wt_value, score=0.0,
-                percentile_rank=cells.number(row.get("wt_percentile_rank")),
+                value=wt_value,
+                score=wt_score if wt_score is not None else 0.0,
+                percentile_rank=wt_percentile_rank,
             )
 
         epitope_rows.append({
@@ -670,10 +675,23 @@ def read_pvacseq_report(path, epitope_config=None):
         row["prediction_id"] = prediction_id
 
     epitope_rows, n_rows = _topiary_pvacseq_to_epitope_rows(rows)
+    # A normalized pVACseq result can carry several evidence kinds for one
+    # source row. Keep all of those prediction rows above, but retain one
+    # user-facing report row per source identity and allele.
+    report_source_rows = {}
+    for row in rows:
+        allele = cells.text(row.get("allele"))
+        if not cells.text(row.get("peptide")) or not allele:
+            continue
+        key = (cells.text(row.get("prediction_id")), allele)
+        # Prefer the affinity row for the legacy affinity columns regardless
+        # of the normalized multi-kind row order.
+        if (key not in report_source_rows
+                or cells.text(row.get("kind")) == "pMHC_affinity"):
+            report_source_rows[key] = row
     report_rows = [
         _build_pvacseq_report_row(row)
-        for row in rows
-        if cells.text(row.get("peptide")) and cells.text(row.get("allele"))
+        for row in report_source_rows.values()
     ]
 
     report_df = pd.DataFrame(report_rows) if report_rows else pd.DataFrame()

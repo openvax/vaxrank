@@ -220,14 +220,24 @@ def test_wt_prediction_uses_named_peptides_keyed_by_mutant(mouse_genome):
 
     # 9-mer at offset 8 covers [8, 17) — overlaps mutation at [12, 13).
     mutant_peptide = protein_fragment.amino_acids[8:17]
-    mutant_df = pd.DataFrame([{
+    mutant_shared = {
         'peptide': mutant_peptide, 'peptide_length': 9,
         'peptide_offset': 8, 'allele': 'H-2-Kb',
-        'affinity': 100.0, 'percentile_rank': 0.5,
-        'value': 100.0, 'prediction_method_name': 'mhcflurry',
-        'source_sequence_name': 'Wdr13', 'kind': 'pMHC_affinity',
-        'predictor_version': '', 'score': 0.5,
-    }])
+        'prediction_method_name': 'mhcflurry',
+        'source_sequence_name': 'Wdr13', 'predictor_version': '',
+    }
+    mutant_df = pd.DataFrame([
+        {
+            **mutant_shared, 'kind': 'pMHC_affinity',
+            'affinity': 100.0, 'value': 100.0,
+            'percentile_rank': 0.5, 'score': 0.5,
+        },
+        {
+            **mutant_shared, 'kind': 'pMHC_presentation',
+            'affinity': None, 'value': None,
+            'percentile_rank': 0.3, 'score': 0.8,
+        },
+    ])
 
     # Distinct WT string so we can verify the consumer reads it from
     # the row, not from a side dict.
@@ -236,15 +246,28 @@ def test_wt_prediction_uses_named_peptides_keyed_by_mutant(mouse_genome):
 
     def _stub_predict_wt(name_to_peptide):
         captured_calls.append(dict(name_to_peptide))
-        return pd.DataFrame([{
-            'source_sequence_name': name, 'peptide': stub_wt_sequence,
-            'peptide_length': 9, 'peptide_offset': 0,
-            'allele': 'H-2-Kb', 'affinity': 1000.0,
-            'percentile_rank': 5.0, 'value': 1000.0,
-            'prediction_method_name': 'mhcflurry',
-            'predictor_version': '', 'score': 0.1,
-            'kind': 'pMHC_affinity',
-        } for name in name_to_peptide])
+        rows = []
+        for name in name_to_peptide:
+            shared = {
+                'source_sequence_name': name, 'peptide': stub_wt_sequence,
+                'peptide_length': 9, 'peptide_offset': 0,
+                'allele': 'H-2-Kb',
+                'prediction_method_name': 'mhcflurry',
+                'predictor_version': '',
+            }
+            rows.extend([
+                {
+                    **shared, 'kind': 'pMHC_affinity',
+                    'affinity': 1000.0, 'value': 1000.0,
+                    'percentile_rank': 5.0, 'score': 0.1,
+                },
+                {
+                    **shared, 'kind': 'pMHC_presentation',
+                    'affinity': None, 'value': None,
+                    'percentile_rank': 4.0, 'score': 0.4,
+                },
+            ])
+        return pd.DataFrame(rows)
 
     class _StubTopiary(TopiaryPredictor):
         def __init__(self):
@@ -276,9 +299,14 @@ def test_wt_prediction_uses_named_peptides_keyed_by_mutant(mouse_genome):
     wt = epitopes[0].wt
     assert wt is not None
     assert wt.sequence == stub_wt_sequence
-    wt_leaves = wt.predictions_flat()
-    assert len(wt_leaves) == 1
-    assert wt_leaves[0].value == 1000.0
+    wt_by_kind = {p.kind: p for p in wt.predictions_flat()}
+    assert set(wt_by_kind) == {'pMHC_affinity', 'pMHC_presentation'}
+    assert wt_by_kind['pMHC_affinity'].value == 1000.0
+    assert wt_by_kind['pMHC_affinity'].score == 0.1
+    assert wt_by_kind['pMHC_affinity'].percentile_rank == 5.0
+    assert wt_by_kind['pMHC_presentation'].value is None
+    assert wt_by_kind['pMHC_presentation'].score == 0.4
+    assert wt_by_kind['pMHC_presentation'].percentile_rank == 4.0
 
 
 def test_mhc_predictor_error(mouse_genome):
