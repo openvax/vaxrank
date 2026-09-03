@@ -355,6 +355,20 @@ def test_load_pvacseq():
     assert any(ep.occurs_in_reference for ep in epitopes)
 
 
+def test_pvacseq_aggregated_report_names_expression_level_and_derivation():
+    """Aggregated RNA Expr is gene-level and Allele Expr keeps provenance."""
+    path = os.path.join(DATA_DIR, "pvacseq_example.tsv")
+    report_df = read_pvacseq_report(path).report_df
+    row = report_df.iloc[0]
+
+    assert "RNA Expr" not in report_df.columns
+    assert "TPM" not in report_df.columns
+    assert "Transcript expression" not in report_df.columns
+    assert row["Gene expression"] == pytest.approx(45.2)
+    assert row["RNA alternate-allele expression"] == pytest.approx(15.4)
+    assert row["RNA alternate-allele expression method"] == "source_reported"
+
+
 def test_load_pvacseq_populates_per_allele_scores():
     """Regression: the 3.1.0 single-mechanism refactor moved
     per-(peptide, allele) scoring to the DSL and stored the result on
@@ -570,6 +584,20 @@ def test_load_pvacseq_all_epitopes_flavor(tmp_path):
     assert set(report_df["MHC class"]) == {"I"}
 
 
+def test_pvacseq_all_epitopes_report_keeps_expression_levels_separate(tmp_path):
+    path = _write_pvacseq_all_epitopes_fixture(tmp_path)
+    report_df = read_pvacseq_report(path).report_df
+    row = report_df.iloc[0]
+
+    assert row["Gene expression"] == pytest.approx(131.832)
+    assert row["Transcript expression"] == pytest.approx(84.961)
+    assert row["RNA alternate-allele expression"] == pytest.approx(
+        84.961 * 0.302)
+    assert row["RNA alternate-allele expression method"] == "tpm_x_dna_vaf"
+    assert "RNA Expr" not in report_df.columns
+    assert "TPM" not in report_df.columns
+
+
 def test_pvacseq_all_epitopes_per_algorithm_column_scores(tmp_path):
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_io import write_neoepitope_report
@@ -709,6 +737,17 @@ def test_load_lens_report_display_uses_canonical_predictor():
     # Both raw-value columns present
     assert report_df["mhcflurry value (nM)"].iloc[0] == pytest.approx(95.4)
     assert report_df["netmhcpan value (nM)"].iloc[0] == pytest.approx(76.11)
+
+
+def test_lens_report_identifies_gene_level_expression():
+    path = os.path.join(DATA_DIR, "lens_example.tsv")
+    report_df = read_lens_report(path).report_df
+
+    assert report_df["Gene expression"].iloc[0] == pytest.approx(42.5)
+    assert "Transcript expression" not in report_df.columns
+    assert "RNA alternate-allele expression" not in report_df.columns
+    assert "RNA Expr" not in report_df.columns
+    assert "TPM" not in report_df.columns
 
 
 def test_load_lens_mhcflurry_only_v19():

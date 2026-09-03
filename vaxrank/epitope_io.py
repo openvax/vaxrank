@@ -543,13 +543,34 @@ def _topiary_pvacseq_to_epitope_rows(rows):
     return epitope_rows, n_rows
 
 
+_EXPRESSION_REPORT_COLUMNS = (
+    ("gene_expression", "Gene expression", cells.number),
+    ("transcript_expression", "Transcript expression", cells.number),
+    ("rna_alt_expression", "RNA alternate-allele expression", cells.number),
+    (
+        "rna_alt_expression_method",
+        "RNA alternate-allele expression method",
+        cells.text,
+    ),
+)
+
+
+def _expression_report_fields(row):
+    """Project Topiary's level-explicit expression evidence into a report.
+
+    A missing source column stays absent. In particular, gene- and
+    transcript-level abundance are never substituted for one another, and an
+    alternate-allele estimate remains paired with the method that produced it.
+    """
+    return {
+        report_column: converter(row.get(source_column))
+        for source_column, report_column, converter in _EXPRESSION_REPORT_COLUMNS
+        if source_column in row
+    }
+
+
 def _build_pvacseq_report_row(row):
     """Build one user-facing report row from a topiary pVACseq row."""
-    # Same helper, same precedence, as the ranking path uses for these
-    # fields — so the report and the ranking cannot disagree about a row.
-    rna_expr = cells.first_number(
-        row, "rna_transcript_expression", "transcript_expression",
-        "gene_expression")
     rna_vaf = cells.first_number(row, *_PVACSEQ_RNA_VAF_COLUMNS)
     dna_vaf = cells.first_number(row, *_PVACSEQ_DNA_VAF_COLUMNS)
     out = neoepitope_core_row(
@@ -563,7 +584,6 @@ def _build_pvacseq_report_row(row):
     out.update({
         'Tier': cells.text(row.get("pvacseq_tier")),
         'Ref Match': cells.boolean(row.get("pvacseq_ref_match")),
-        'RNA Expr': rna_expr,
         'RNA VAF': rna_vaf,
         'DNA VAF': dna_vaf,
         '%ile MT': cells.number(row.get("percentile_rank")),
@@ -574,6 +594,7 @@ def _build_pvacseq_report_row(row):
         'Contains mutant residues': cells.boolean(
             row.get("contains_mutant_residues"), default=True),
     })
+    out.update(_expression_report_fields(row))
     for col, value in row.items():
         if col.startswith("pvacseq_") and col not in {
                 "pvacseq_ref_match", "pvacseq_tier"}:
@@ -641,8 +662,8 @@ def read_pvacseq_report(path, epitope_config=None):
     pandas.DataFrame
         Columns: Allele, Mutant peptide sequence, Predicted mutant pMHC
         affinity, Wildtype sequence, Predicted wildtype pMHC affinity,
-        Gene name, Genomic variant, Tier, Ref Match, RNA Expr, DNA VAF,
-        vaxrank_score
+        Gene name, Genomic variant, Tier, Ref Match, level-explicit expression
+        evidence, DNA VAF, vaxrank_score
     list of CandidateEpitope
         One ``vaxrank.candidate_epitope.CandidateEpitope`` per unique
         external prediction identity.
@@ -1222,10 +1243,10 @@ def _build_lens_report_row(row, allele, peptide, prediction_id,
         'Predictors used': ','.join(chosen_tools),
         '%ile rank': display_percentile,
         'Agretopicity': display_agretopicity,
-        'TPM': cells.number(row.get("gene_tpm")),
         'Source sequence name': source_sequence_name,
         'Peptide offset': peptide_offset,
     })
+    out.update(_expression_report_fields(row))
     # Every detected predictor gets a raw-value column so users can see
     # per-tool signals side-by-side in the report, even if not chosen
     # for DSL scoring.

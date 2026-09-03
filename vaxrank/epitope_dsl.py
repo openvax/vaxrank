@@ -673,8 +673,8 @@ def validate_dsl_against_predictions(cfg, epitopes, *, topiary_df=None):
         # with a good "did you mean" list — but mid-run rather than when
         # the config is read, and without naming the setting. Which columns
         # exist depends on the source: pVACseq's aggregated flavour carries
-        # no gene_expression where all_epitopes does, so one export makes a
-        # working config and another makes a crash (#388).
+        # no transcript_expression where all_epitopes does, so one export can
+        # make a working config and another a clear error (#388).
         for column in sorted(refs["columns"]):
             if column in available_columns:
                 continue
