@@ -40,12 +40,16 @@ DATA_DIR = os.path.join(
 
 def _fake_isovar_result():
     """Minimal stand-in exposing only what from_isovar_result reads."""
+    class VariantStub:
+        contig = "7"
+        start = 140453136
+
     protein_sequence = types.SimpleNamespace(
         gene_name="BRAF", amino_acids="SIINFEKLAA",
         mutation_start_idx=2, mutation_end_idx=3,
         num_supporting_fragments=7, num_supporting_reads=13, transcripts=[])
     return types.SimpleNamespace(
-        variant=object(), top_protein_sequence=protein_sequence,
+        variant=VariantStub(), top_protein_sequence=protein_sequence,
         num_total_fragments=20, num_alt_fragments=8, num_ref_fragments=12,
         num_total_reads=38, num_alt_reads=15, num_ref_reads=23)
 
@@ -330,6 +334,57 @@ def test_the_report_omits_the_row_when_there_is_nothing_to_report():
 
     assert 'RNA reads supporting other alleles' not in variant_data
     assert 'RNA reads supporting variant allele' in variant_data
+
+
+def test_the_report_separates_isovar_read_and_fragment_counts():
+    """Native RNA evidence must not label read values as fragments."""
+    from vaxrank.report import TemplateDataCreator
+
+    fragment = MutantProteinFragment.from_isovar_result(_fake_isovar_result())
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.dna_vaf_by_variant = {}
+    creator.source_vaf_by_variant = {}
+    creator.gene_pathway_check = None
+
+    class _Peptide:
+        mutant_protein_fragment = fragment
+        combined_score = 1.0
+
+    rows = creator._variant_data(fragment.variant, _Peptide())
+
+    assert rows['RNA reads supporting variant allele'] == 15
+    assert rows['RNA reads supporting reference allele'] == 23
+    assert rows['RNA reads supporting other alleles'] == 0
+    assert rows['RNA fragments supporting variant allele'] == 8
+    assert rows['RNA fragments supporting reference allele'] == 12
+    assert rows['RNA fragments supporting other alleles'] == 0
+    assert rows['RNA evidence method'] == RNA_EVIDENCE_METHOD_ALIGNMENT
+    assert rows['Preferred RNA evidence unit'] == FRAGMENTS
+    assert 'RNA read count method' not in rows
+    assert 'RNA read count subject' not in rows
+
+
+def test_the_report_does_not_invent_fragments_for_external_inputs():
+    """A reads-only source prints only rows for evidence it supplies."""
+    from vaxrank.report import TemplateDataCreator
+
+    config = EpitopeConfig()
+    report = read_pvacseq_report(
+        os.path.join(DATA_DIR, "pvacseq_example.tsv"), epitope_config=config)
+    result = pvacseq_ranking_result(
+        report, epitopes_for_ranking(list(report.epitopes), config))
+    vaccine_peptide = result.ranked[0][1][0]
+    fragment = vaccine_peptide.mutant_protein_fragment
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.dna_vaf_by_variant = {}
+    creator.source_vaf_by_variant = {}
+    creator.gene_pathway_check = None
+
+    rows = creator._variant_data(fragment.variant, vaccine_peptide)
+
+    assert rows['RNA reads supporting variant allele'] == fragment.n_alt_reads
+    assert not any(key.startswith('RNA fragments') for key in rows)
+    assert rows['Preferred RNA evidence unit'] == READS
 
 
 def test_what_counts_as_measured_is_topiarys_rule():

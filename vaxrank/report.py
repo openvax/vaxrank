@@ -315,6 +315,15 @@ class TemplateDataCreator(object):
         if mutant_protein_fragment.n_other_reads is not None:
             variant_data['RNA reads supporting other alleles'] = (
                 mutant_protein_fragment.n_other_reads)
+        if mutant_protein_fragment.n_alt_fragments is not None:
+            variant_data['RNA fragments supporting variant allele'] = (
+                mutant_protein_fragment.n_alt_fragments)
+        if mutant_protein_fragment.n_ref_fragments is not None:
+            variant_data['RNA fragments supporting reference allele'] = (
+                mutant_protein_fragment.n_ref_fragments)
+        if mutant_protein_fragment.n_other_fragments is not None:
+            variant_data['RNA fragments supporting other alleles'] = (
+                mutant_protein_fragment.n_other_fragments)
         # A variant fraction the source did not qualify. Shown under its
         # own label rather than as DNA VAF, which is what LENS's bare
         # `vaf` used to be printed as — asserting an assay the file never
@@ -326,12 +335,12 @@ class TemplateDataCreator(object):
         # and "51" from depth x VAF are the same integer and not the same
         # claim, and the combined-score DSL weights them identically.
         if mutant_protein_fragment.rna_evidence_method:
-            variant_data['RNA read count method'] = (
+            variant_data['RNA evidence method'] = (
                 mutant_protein_fragment.rna_evidence_method)
-        # What those counts counted. Five fragments and five reads are
-        # different bars, and the rows above say neither on their own.
+        # Which unit backs the canonical n_rna_* accessors. Counts above name
+        # their own units, so don't attach this preference to read-valued rows.
         if mutant_protein_fragment.rna_evidence_subject:
-            variant_data['RNA read count subject'] = (
+            variant_data['Preferred RNA evidence unit'] = (
                 mutant_protein_fragment.rna_evidence_subject)
         if mutant_protein_fragment.sequence_source:
             variant_data['Protein sequence source'] = (
