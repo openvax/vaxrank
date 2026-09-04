@@ -2,8 +2,9 @@ numpy>=2.0.0,<3.0.0
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.6.4,<3.0.0
 varcode>=5.0.0,<6.0.0
-# 1.7.2 replaces the removed pkg_resources logging lookup.
-isovar>=1.7.2,<2.0.0
+# 1.7.5 preserves contained and intermediate RNA assemblies until transcript
+# compatibility is known (and includes the 1.7.2 logging-resource fix).
+isovar>=1.7.5,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.33.5,<4.0.0
 mhctools>=3.13.3,<4.0.0
