@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from secrets import token_hex
@@ -10,7 +11,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Mapping
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import urlopen
@@ -35,14 +36,14 @@ def expected_release_filenames(project: str, version: str) -> frozenset[str]:
     })
 
 
-def pypi_release_filenames(
+def pypi_release_artifacts(
     project: str,
     version: str,
     *,
     json_base_url: str = PYPI_JSON_BASE_URL,
     request_timeout_seconds: float = 10.0,
-) -> frozenset[str]:
-    """Return one release's filenames from PyPI's project metadata."""
+) -> dict[str, str]:
+    """Return one release's filename-to-SHA-256 map from PyPI metadata."""
     url = "%s/%s/json?cache_bust=%s" % (
         json_base_url.rstrip("/"),
         quote(project, safe=""),
@@ -53,10 +54,40 @@ def pypi_release_filenames(
             payload = json.load(response)
     except HTTPError as error:
         if error.code == 404:
-            return frozenset()
+            return {}
         raise
     releases = payload.get("releases", {})
-    return frozenset(item["filename"] for item in releases.get(version, ()))
+    return {
+        item["filename"]: item.get("digests", {}).get("sha256", "")
+        for item in releases.get(version, ())
+    }
+
+
+def file_sha256(path: str | Path) -> str:
+    """Return the SHA-256 digest of an artifact's exact bytes."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as artifact:
+        for chunk in iter(lambda: artifact.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _has_matching_artifact(
+    filename: str,
+    expected_sha256: str,
+    published: Mapping[str, str],
+) -> bool:
+    """Return true for byte-identical artifacts and false when absent."""
+    if filename not in published:
+        return False
+    observed_sha256 = published[filename]
+    if observed_sha256 != expected_sha256:
+        raise ReleaseUploadError(
+            f"PyPI artifact {filename} has SHA-256 "
+            f"{observed_sha256 or '<missing>'}, but the local artifact "
+            f"has {expected_sha256}"
+        )
+    return True
 
 
 def upload_distribution(
@@ -82,15 +113,17 @@ def upload_distribution(
 
 def wait_for_release_file(
     filename: str,
-    fetch_release_filenames: Callable[[], Iterable[str]],
+    expected_sha256: str,
+    fetch_release_artifacts: Callable[[], Mapping[str, str]],
     *,
     timeout_seconds: float = DEFAULT_VERIFY_TIMEOUT_SECONDS,
     poll_seconds: float = DEFAULT_VERIFY_POLL_SECONDS,
 ) -> bool:
-    """Poll release metadata until ``filename`` is visible or time expires."""
+    """Poll until ``filename`` is visible with the expected exact bytes."""
     deadline = time.monotonic() + timeout_seconds
     while True:
-        if filename in set(fetch_release_filenames()):
+        published = dict(fetch_release_artifacts())
+        if _has_matching_artifact(filename, expected_sha256, published):
             return True
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -98,21 +131,49 @@ def wait_for_release_file(
         time.sleep(min(poll_seconds, remaining))
 
 
+def wait_for_complete_release(
+    expected_artifacts: Mapping[str, str],
+    fetch_release_artifacts: Callable[[], Mapping[str, str]],
+    *,
+    timeout_seconds: float = DEFAULT_VERIFY_TIMEOUT_SECONDS,
+    poll_seconds: float = DEFAULT_VERIFY_POLL_SECONDS,
+) -> dict[str, str]:
+    """Return the latest metadata after waiting for a complete release."""
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        published = dict(fetch_release_artifacts())
+        complete = True
+        for filename, expected_sha256 in expected_artifacts.items():
+            if not _has_matching_artifact(
+                filename,
+                expected_sha256,
+                published,
+            ):
+                complete = False
+        if complete:
+            return published
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return published
+        time.sleep(min(poll_seconds, remaining))
+
+
 def publish_release(
     distribution_paths: Iterable[str | Path],
     *,
     expected_filenames: Iterable[str],
-    fetch_release_filenames: Callable[[], Iterable[str]],
+    fetch_release_artifacts: Callable[[], Mapping[str, str]],
     upload_file: Callable[[Path], None],
     verify_timeout_seconds: float = DEFAULT_VERIFY_TIMEOUT_SECONDS,
     verify_poll_seconds: float = DEFAULT_VERIFY_POLL_SECONDS,
-) -> frozenset[str]:
+) -> dict[str, str]:
     """Upload missing artifacts and reconcile every response with PyPI state.
 
     A timeout or nonzero Twine exit is ambiguous: the server may have accepted
     the immutable file before the client lost its response. This operation
-    therefore verifies server state after every attempt and treats the file as
-    published only when its exact filename appears in release metadata.
+    therefore verifies server state after every attempt. A file is treated as
+    published only when both its filename and SHA-256 digest match the local
+    artifact, so a retry cannot combine distributions from different builds.
     """
     paths_by_name = {
         Path(distribution_path).name: Path(distribution_path)
@@ -124,11 +185,19 @@ def publish_release(
             "Distribution files do not match the expected release set: "
             f"expected={sorted(expected)}, observed={sorted(paths_by_name)}"
         )
+    local_artifacts = {
+        filename: file_sha256(path)
+        for filename, path in paths_by_name.items()
+    }
 
-    published = frozenset(fetch_release_filenames())
+    published = dict(fetch_release_artifacts())
     for filename in sorted(expected):
-        if filename in published:
-            print(f"Already published: {filename}")
+        if _has_matching_artifact(
+            filename,
+            local_artifacts[filename],
+            published,
+        ):
+            print(f"Already published with matching SHA-256: {filename}")
             continue
 
         upload_error = None
@@ -139,7 +208,8 @@ def publish_release(
 
         if not wait_for_release_file(
             filename,
-            fetch_release_filenames,
+            local_artifacts[filename],
+            fetch_release_artifacts,
             timeout_seconds=verify_timeout_seconds,
             poll_seconds=verify_poll_seconds,
         ):
@@ -151,10 +221,15 @@ def publish_release(
             print(f"Reconciled ambiguous upload from PyPI state: {filename}")
         else:
             print(f"Published: {filename}")
-        published = frozenset(fetch_release_filenames())
+        published = dict(fetch_release_artifacts())
 
-    published = frozenset(fetch_release_filenames())
-    missing = expected - published
+    published = wait_for_complete_release(
+        local_artifacts,
+        fetch_release_artifacts,
+        timeout_seconds=verify_timeout_seconds,
+        poll_seconds=verify_poll_seconds,
+    )
+    missing = expected - set(published)
     if missing:
         raise ReleaseUploadError(
             f"PyPI release is missing expected files: {sorted(missing)}"
@@ -190,8 +265,8 @@ def main(argv: list[str] | None = None) -> int:
 
     expected = expected_release_filenames(args.project, args.version)
 
-    def fetch_release_filenames():
-        return pypi_release_filenames(
+    def fetch_release_artifacts():
+        return pypi_release_artifacts(
             args.project,
             args.version,
             json_base_url=args.json_base_url,
@@ -208,13 +283,13 @@ def main(argv: list[str] | None = None) -> int:
     published = publish_release(
         args.distributions,
         expected_filenames=expected,
-        fetch_release_filenames=fetch_release_filenames,
+        fetch_release_artifacts=fetch_release_artifacts,
         upload_file=upload_file,
         verify_timeout_seconds=args.verify_timeout_seconds,
     )
     print(
         "Verified PyPI release files: %s"
-        % ", ".join(sorted(expected & published))
+        % ", ".join(sorted(expected & set(published)))
     )
     return 0
 

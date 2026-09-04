@@ -10,4 +10,14 @@ if [[ "$(uname)" == "Darwin" && -d /opt/homebrew/lib \
   export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 fi
 
-exec pytest tests "$@"
+if [[ -z "${PYTHON:-}" ]]; then
+  if [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python" ]]; then
+    PYTHON="${VIRTUAL_ENV}/bin/python"
+  elif [[ -x ".venv/bin/python" ]]; then
+    PYTHON=".venv/bin/python"
+  else
+    PYTHON="python3"
+  fi
+fi
+
+exec "${PYTHON}" -m pytest tests "$@"

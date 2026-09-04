@@ -880,4 +880,7 @@ The first run of the tests may take a while to build the reference proteome kmer
 - `develop.sh`: installs the package in editable mode and sets `PYTHONPATH` to the repo root.
 - `lint.sh`: runs ruff on `vaxrank` and `tests`.
 - `test.sh`: runs pytest with coverage.
-- `deploy.sh`: runs lint/tests, builds a distribution with `build`, uploads via `twine`, and tags the release (`vX.Y.Z`). Deploy is restricted to the `main`/`master` branch.
+- `deploy.sh`: runs lint/tests/build/upload through one Python environment,
+  verifies PyPI artifacts by SHA-256, and safely resumes an interrupted upload
+  from its original artifacts. Deploy is restricted to synchronized
+  `main`/`master`.

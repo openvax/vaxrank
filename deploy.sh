@@ -42,10 +42,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-PYTHON="${PYTHON:-python3}"
-if [[ -x ".venv/bin/python" ]]; then
+if [[ -n "${PYTHON:-}" ]]; then
+  :
+elif [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python" ]]; then
+  PYTHON="${VIRTUAL_ENV}/bin/python"
+elif [[ -x ".venv/bin/python" ]]; then
   PYTHON=".venv/bin/python"
+else
+  PYTHON="python3"
 fi
+export PYTHON
 
 CURRENT_VERSION="$(
   "$PYTHON" - <<'PY'
@@ -80,12 +86,6 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
-# Ensure the tag doesn't already exist.
-if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-  echo "Tag ${TAG} already exists; aborting." >&2
-  exit 1
-fi
-
 ./lint.sh
 ./test.sh
 
@@ -114,10 +114,44 @@ PY
   git push
 fi
 
+HEAD_COMMIT="$(git rev-parse HEAD)"
+if ! UPSTREAM_COMMIT="$(git rev-parse '@{upstream}')"; then
+  echo "Release branch has no upstream; pull and verify main before deploying." >&2
+  exit 1
+fi
+if [[ "${HEAD_COMMIT}" != "${UPSTREAM_COMMIT}" ]]; then
+  echo "Release branch is not synchronized with its upstream." >&2
+  echo "HEAD=${HEAD_COMMIT} upstream=${UPSTREAM_COMMIT}" >&2
+  exit 1
+fi
+
+RESUMING=0
+if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+  TAG_COMMIT="$(git rev-list -n 1 "${TAG}")"
+  if [[ "${TAG_COMMIT}" != "${HEAD_COMMIT}" ]]; then
+    echo "Tag ${TAG} points to ${TAG_COMMIT}, not HEAD ${HEAD_COMMIT}." >&2
+    exit 1
+  fi
+  RESUMING=1
+fi
+
+WHEEL="dist/vaxrank-${VERSION}-py3-none-any.whl"
+SDIST="dist/vaxrank-${VERSION}.tar.gz"
+DISTRIBUTIONS=("${WHEEL}" "${SDIST}")
+
 "$PYTHON" -m pip install --upgrade build twine
-rm -rf dist
-"$PYTHON" -m build
-git --version
+if [[ "${RESUMING}" -eq 1 ]]; then
+  for distribution in "${DISTRIBUTIONS[@]}"; do
+    if [[ ! -f "${distribution}" ]]; then
+      echo "Cannot safely resume ${TAG}: original artifact is missing: ${distribution}" >&2
+      exit 1
+    fi
+  done
+  echo "Resuming release from ${TAG} with its original artifacts."
+else
+  rm -rf dist
+  "$PYTHON" -m build
+fi
 
 if [[ "${DRY_RUN}" -eq 1 ]]; then
   if [[ -n "${VERSION_INPUT}" && "${VERSION}" != "${CURRENT_VERSION}" ]]; then
@@ -127,10 +161,14 @@ if [[ "${DRY_RUN}" -eq 1 ]]; then
   exit 0
 fi
 
-"$PYTHON" -m twine check dist/*
+"$PYTHON" -m twine check "${DISTRIBUTIONS[@]}"
+
+if [[ "${RESUMING}" -eq 0 ]]; then
+  git tag "${TAG}"
+fi
+
 "$PYTHON" release_upload.py \
   --project vaxrank \
   --version "${VERSION}" \
-  dist/*
-git tag "${TAG}"
-git push --tags
+  "${DISTRIBUTIONS[@]}"
+git push origin "refs/tags/${TAG}"
