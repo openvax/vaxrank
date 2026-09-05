@@ -11,10 +11,9 @@ mhctools>=3.13.3,<4.0.0
 # 5.10.0 adds EvalContext(default_methods=...) and apply_filter(default_methods=...)
 # which vaxrank uses to score multi-model inputs (e.g. LENS with mhcflurry +
 # netmhcpan) without pre-subsetting the frame.
-# 5.48.0 correctly identifies aggregated pVACseq RNA Expr as gene-level,
-# exposes the shared gene/transcript/RNA-alt expression vocabulary, and omits
-# unavailable evidence instead of emitting all-null columns.
-topiary>=5.48.0,<6.0.0
+# 5.52.0 preserves pVACtools presentation metrics as native prediction rows,
+# completing Vaxrank's presentation-aware coverage path.
+topiary>=5.52.0,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0

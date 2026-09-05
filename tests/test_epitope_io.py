@@ -474,6 +474,48 @@ def test_load_pvacseq_preserves_upstream_presentation_rows():
     assert coverage.best_presentation_pct == pytest.approx(0.3)
 
 
+def test_pvacseq_presentation_reaches_coverage_end_to_end(tmp_path):
+    """Raw pVACtools presentation data can independently cover an allele."""
+    from vaxrank.coverage import compute_coverage
+
+    path = tmp_path / "pvacseq-presentation.all_epitopes.tsv"
+    path.write_text(
+        "Chromosome\tStart\tStop\tReference\tVariant\tTranscript\t"
+        "Variant Type\tMutation\tGene Name\tHLA Allele\tMutation Position\t"
+        "MT Epitope Seq\tWT Epitope Seq\tMedian MT IC50 Score\t"
+        "Median WT IC50 Score\tMedian MT Percentile\tMedian WT Percentile\t"
+        "MHCflurryEL Presentation MT Score\t"
+        "MHCflurryEL Presentation WT Score\t"
+        "MHCflurryEL Presentation MT Percentile\t"
+        "MHCflurryEL Presentation WT Percentile\n"
+        "chr1\t100000\t100001\tA\tT\tENST00000269305\tmissense\tG7S\t"
+        "TP53\tHLA-A*02:01\t7\tSVVGSSSSS\tSVVGSSGSS\t850\t5000\t"
+        "4.0\t10.0\t0.92\t0.41\t0.3\t4.2\n"
+    )
+
+    loaded = read_pvacseq_report(path)
+
+    assert len(loaded.report_df) == 1
+    assert "850.00 nM" in loaded.report_df.iloc[0][
+        "Predicted mutant pMHC affinity"]
+    assert len(loaded.epitopes) == 1
+    [epitope] = loaded.epitopes
+    [presentation] = epitope.predictions_for(
+        "pMHC_presentation", predictor="mhcflurry")
+    assert presentation.score == pytest.approx(0.92)
+    assert presentation.percentile_rank == pytest.approx(0.3)
+    [wt_presentation] = epitope.wt.predictions_for(
+        "pMHC_presentation", predictor="mhcflurry")
+    assert wt_presentation.score == pytest.approx(0.41)
+    assert wt_presentation.percentile_rank == pytest.approx(4.2)
+    coverage = compute_coverage(
+        loaded.epitopes, ["HLA-A*02:01"])["HLA-A*02:01"]
+    assert coverage.best_presentation_pct == pytest.approx(0.3)
+    assert coverage.best_affinity_pct == pytest.approx(4.0)
+    assert coverage.tier == "strong"
+    assert coverage.n_peptides == 1
+
+
 def test_load_pvacseq_missing_columns(tmp_path):
     bad_file = tmp_path / "bad.tsv"
     bad_file.write_text("Gene\tAA Change\nTP53\tG245S\n")
