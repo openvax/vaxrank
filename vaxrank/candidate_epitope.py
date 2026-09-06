@@ -90,7 +90,10 @@ from dataclasses import dataclass, field, replace as _dc_replace
 from typing import TYPE_CHECKING, Optional
 
 from packaging.version import InvalidVersion, Version
+from serializable import DataclassSerializable
 from topiary.ranking import KIND_ALIASES as _KIND_ALIASES
+
+from .native_serialization import from_native_json, to_native_json
 
 if TYPE_CHECKING:
     from mhctools.pred import Prediction
@@ -234,7 +237,7 @@ SOURCE_CLASS_SELF = 'self'          # self-protein-derived (CTAs, overexpressed
 
 
 @dataclass(frozen=True)
-class Peptide:
+class Peptide(DataclassSerializable):
     """One peptide sequence + flanking residues + (optional) MHC
     binding predictions.
 
@@ -286,6 +289,15 @@ class Peptide:
         if isinstance(self.predictions, (list, tuple)):
             object.__setattr__(
                 self, 'predictions', _group_predictions(self.predictions))
+
+    def to_json(self) -> str:
+        """Serialize this peptide graph using the native class allowlist."""
+        return to_native_json(self)
+
+    @classmethod
+    def from_json(cls, json_string: str):
+        """Load this peptide graph after validating every encoded class."""
+        return from_native_json(json_string, cls)
 
     def __hash__(self) -> int:
         # Position identity. The dataclass-generated hash would
