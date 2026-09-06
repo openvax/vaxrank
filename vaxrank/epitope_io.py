@@ -18,12 +18,12 @@ Supports:
   - pVACseq aggregated TSV (all_epitopes.aggregated.tsv)
   - LENS report TSV
 
-All loader functions emit ``list[vaxrank.candidate_epitope.CandidateEpitope]``;
-the flat per-(peptide, allele, predictor) row shape lives only inside
-the CSV / DataFrame layer for round-trip fidelity. Loaders feed each
-row to :func:`~vaxrank.candidate_epitope.candidate_epitopes_from_rows`,
-which groups native rows by position and external rows by their complete
-``ExternalPredictionKey`` identity into ``CandidateEpitope`` objects.
+All loader functions emit ``list[vaxrank.candidate_epitope.CandidateEpitope]``.
+Native CSV/TSV files carry one canonical serialized dataclass payload per
+candidate alongside their flat prediction columns; older files retain their
+field-by-field compatibility loader. External loaders feed normalized rows to
+:func:`~vaxrank.candidate_epitope.candidate_epitopes_from_rows`, which groups
+them by complete ``ExternalPredictionKey`` identity.
 """
 
 import json
@@ -45,14 +45,18 @@ from .external_prediction import (
 from .external_report import (
     GENOMIC_VARIANT_COLUMN, ExternalRecord, ExternalReport,
 )
+from .native_serialization import from_native_json, to_native_json
 from .candidate_epitope import (
-    SOURCE_CLASS_MUTATION, candidate_epitopes_from_rows,
+    SOURCE_CLASS_MUTATION, CandidateEpitope, candidate_epitopes_from_rows,
 )
 
 logger = logging.getLogger(__name__)
 
 
 # ── Vaxrank native format ────────────────────────────────────────────────────
+
+NATIVE_EPITOPE_COLUMN = "candidate_epitope_json"
+
 
 VAXRANK_COLUMNS = [
     "allele",
@@ -117,16 +121,23 @@ VAXRANK_COLUMNS = [
     "wt_prediction_c_flank",
     "wt_prediction_source_sequence_name",
     "wt_prediction_offset",
+    # The canonical record. Append it so existing positional readers retain
+    # the historical column order. It appears once, on the first flat
+    # prediction row for each candidate; the preceding columns are a stable
+    # compatibility and inspection view. Future dataclass fields round-trip
+    # through this payload without another hand-maintained load branch.
+    NATIVE_EPITOPE_COLUMN,
 ]
 
 
 def epitope_prediction_rows(epitope):
-    """Serialize one candidate to one native row per mutant prediction.
+    """Project one serialized candidate onto flat prediction rows.
 
-    Every prediction kind is emitted. Affinity values are duplicated into
-    the legacy ``ic50`` column for compatibility; the generic prediction
-    columns retain the kind, value, normalized score, percentile, and
-    provenance needed to reconstruct the original ``Prediction`` records.
+    The serialized dataclass payload on the first row is authoritative. Every
+    mutant prediction kind is also emitted in the historical flat shape for
+    compatibility and inspection; affinity values remain duplicated into the
+    legacy ``ic50`` column. A candidate with no mutant predictions gets one
+    payload-only row rather than disappearing from the file.
     """
     wt = epitope.wt
     wt_peptide_sequence = wt.sequence if wt is not None else ""
@@ -212,22 +223,17 @@ def epitope_prediction_rows(epitope):
             "wt_prediction_offset": (
                 wt_prediction.offset if wt_prediction is not None else None),
         })
-    unpaired_wt = [
-        prediction
-        for predictions in wt_by_key.values()
-        for prediction in predictions
-    ]
-    if unpaired_wt:
-        raise ValueError(
-            "Cannot serialize WT predictions without matching mutant "
-            "prediction leaves; refusing to lose comparator evidence")
+    if not rows:
+        rows.append({})
+    rows[0][NATIVE_EPITOPE_COLUMN] = to_native_json(epitope)
     return rows
 
 
 def predictions_to_dataframe(epitopes):
     """Convert a collection of ``CandidateEpitope`` objects to a flat DataFrame
-    matching :data:`VAXRANK_COLUMNS` — one row per mutant prediction leaf,
-    regardless of prediction kind.
+    matching :data:`VAXRANK_COLUMNS` — normally one row per mutant prediction
+    leaf, regardless of prediction kind. Candidates without predictions retain
+    one payload-only row.
 
     Parameters
     ----------
@@ -240,27 +246,49 @@ def predictions_to_dataframe(epitopes):
 
 
 def save_predictions(epitopes, path):
-    """Save ``CandidateEpitope`` objects to a CSV/TSV file. One row per
-    ``(epitope, allele, predictor)`` leaf prediction.
+    """Save ``CandidateEpitope`` objects to a native CSV/TSV file.
+
+    The canonical dataclass payload round-trips the complete object. Flat
+    prediction columns remain alongside it for existing readers and audits.
 
     Format is inferred from the file extension (.tsv -> tab, else comma).
     """
     df = predictions_to_dataframe(epitopes)
     sep = "\t" if str(path).endswith(".tsv") else ","
     df.to_csv(path, sep=sep, index=False)
-    logger.info("Saved %d prediction row(s) to %s", len(df), path)
+    logger.info("Saved %d native epitope row(s) to %s", len(df), path)
 
 
 def load_predictions(path):
     """Load a vaxrank-native CSV/TSV file.
 
-    Files written before generic prediction columns were introduced remain
-    supported as affinity-only inputs. New-format rows must carry an explicit
-    prediction kind and score; missing scientific values are not converted to
-    implicit zeros.
+    Current files reconstruct each complete ``CandidateEpitope`` from its
+    canonical dataclass payload. Files written before that payload was added
+    remain supported through the flat compatibility columns; generic legacy
+    rows must carry an explicit prediction kind and score, while the oldest
+    affinity-only rows retain their historical defaults.
     """
     sep = "\t" if str(path).endswith(".tsv") else ","
     df = pd.read_csv(path, sep=sep)
+
+    if NATIVE_EPITOPE_COLUMN in df.columns:
+        epitopes = []
+        for row_index, payload in df[NATIVE_EPITOPE_COLUMN].items():
+            if cells.missing(payload):
+                continue
+            try:
+                epitopes.append(from_native_json(
+                    str(payload), CandidateEpitope))
+            except (ImportError, KeyError, TypeError, ValueError) as error:
+                raise ValueError(
+                    "Invalid serialized CandidateEpitope at native row %d"
+                    % (row_index + 2)
+                ) from error
+        if len(df) and not epitopes:
+            raise ValueError(
+                "Native epitope file has no serialized CandidateEpitope payload"
+            )
+        return epitopes
 
     def string_or_empty(val):
         if val is None or (isinstance(val, float) and pd.isna(val)):
@@ -383,8 +411,8 @@ def load_predictions(path):
         self_reference_match = None
         if self_reference_raw:
             from .vaccine_antigen import SelfReferenceMatch
-            self_reference_match = SelfReferenceMatch.from_json(
-                self_reference_raw)
+            self_reference_match = from_native_json(
+                self_reference_raw, SelfReferenceMatch)
         rows.append({
             'peptide': peptide,
             'source': string_or_empty(row.get("source_sequence", "")),

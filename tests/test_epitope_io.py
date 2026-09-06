@@ -15,13 +15,21 @@ Tests for epitope_io: serialization, deserialization, and external imports.
 """
 
 import dataclasses
+import json
 import os
 
+import pandas as pd
 import pytest
 from mhctools.pred import Prediction
 
-from vaxrank.candidate_epitope import COMPARATOR_WT, CandidateEpitope, Peptide
+from vaxrank.candidate_epitope import (
+    COMPARATOR_NEAREST_SELF,
+    COMPARATOR_WT,
+    CandidateEpitope,
+    Peptide,
+)
 from vaxrank.epitope_io import (
+    NATIVE_EPITOPE_COLUMN,
     epitope_prediction_rows,
     predictions_to_dataframe,
     save_predictions,
@@ -263,9 +271,10 @@ def test_native_roundtrip_preserves_evidence_only_predictions(tmp_path):
 
 
 def test_native_reload_rejects_missing_explicit_prediction_score(tmp_path):
-    """New native rows never turn missing scientific evidence into zero."""
+    """Pre-payload generic rows never turn missing evidence into zero."""
     path = tmp_path / "missing-score.csv"
-    dataframe = predictions_to_dataframe([_make_prediction()])
+    dataframe = predictions_to_dataframe([_make_prediction()]).drop(
+        columns=[NATIVE_EPITOPE_COLUMN])
     dataframe.loc[0, "prediction_score"] = None
     dataframe.to_csv(path, index=False)
 
@@ -321,6 +330,221 @@ def test_native_roundtrip_preserves_complete_wt_prediction(tmp_path):
 
     assert reloaded.wt is not None
     assert reloaded.wt.predictions_flat() == (wt_prediction,)
+
+
+def test_native_roundtrip_preserves_arbitrary_comparators(tmp_path):
+    """The canonical payload retains comparator names, contexts, and evidence."""
+    mutant_predictions = (
+        Prediction(
+            kind="pMHC_affinity",
+            predictor_name="mhcflurry",
+            predictor_version="2.1.1",
+            allele="HLA-A*02:01",
+            peptide="SIINFEKL",
+            value=50.0,
+            score=0.91,
+            percentile_rank=0.5,
+        ),
+        Prediction(
+            kind="pMHC_presentation",
+            predictor_name="mhcflurry",
+            predictor_version="2.1.1",
+            allele="HLA-A*02:01",
+            peptide="SIINFEKL",
+            value=0.85,
+            score=0.85,
+            percentile_rank=0.28,
+        ),
+    )
+    nearest_prediction = Prediction(
+        kind="pMHC_affinity",
+        predictor_name="mhcflurry",
+        predictor_version="2.1.1",
+        allele="HLA-A*02:01",
+        peptide="SIINFEKM",
+        value=500.0,
+        score=0.42,
+        percentile_rank=4.8,
+    )
+    original = CandidateEpitope(
+        sequence="SIINFEKL",
+        source_sequence="AASIINFEKLLL",
+        source_name="TP53",
+        offset=2,
+        predictions=mutant_predictions,
+        comparators={
+            COMPARATOR_NEAREST_SELF: Peptide(
+                sequence="SIINFEKM",
+                n_flank="NN",
+                c_flank="CC",
+                source_sequence="NNSIINFEKMCC",
+                source_name="SELF_TRANSCRIPT_1",
+                offset=2,
+                predictions=(nearest_prediction,),
+            ),
+            "assay_control": Peptide(sequence="AAAAAAAAA"),
+        },
+        patient_alleles=("HLA-A*02:01",),
+        per_allele_scores={"HLA-A*02:01": 1.76},
+    )
+
+    path = tmp_path / "all-comparators.csv"
+    save_predictions([original], path)
+
+    exported = pd.read_csv(path)
+    assert len(exported) == len(mutant_predictions)
+    assert exported[NATIVE_EPITOPE_COLUMN].notna().sum() == 1
+    payload = json.loads(exported[NATIVE_EPITOPE_COLUMN].dropna().iloc[0])
+    assert {field.name for field in dataclasses.fields(CandidateEpitope)} <= set(
+        payload)
+    [reloaded] = load_predictions(path)
+    assert reloaded == original
+    assert set(reloaded.comparators) == {
+        COMPARATOR_NEAREST_SELF, "assay_control"}
+
+
+def test_native_roundtrip_preserves_candidate_without_predictions(tmp_path):
+    """A payload-only candidate must not disappear from the native file."""
+    original = CandidateEpitope(
+        sequence="SIINFEKL",
+        comparators={
+            COMPARATOR_NEAREST_SELF: Peptide(sequence="SIINFEKM"),
+        },
+    )
+    path = tmp_path / "no-predictions.tsv"
+
+    save_predictions([original], path)
+
+    exported = pd.read_csv(path, sep="\t")
+    assert len(exported) == 1
+    assert exported[NATIVE_EPITOPE_COLUMN].notna().all()
+    assert load_predictions(path) == [original]
+
+
+def test_native_roundtrip_empty_collection(tmp_path):
+    """An empty native file keeps its schema and reloads as no candidates."""
+    path = tmp_path / "empty.csv"
+
+    save_predictions([], path)
+
+    assert NATIVE_EPITOPE_COLUMN in pd.read_csv(path).columns
+    assert load_predictions(path) == []
+
+
+def test_native_roundtrip_preserves_unpaired_wt_prediction(tmp_path):
+    """WT evidence need not have a matching mutant kind to survive export."""
+    mutant = Prediction(
+        kind="pMHC_affinity",
+        predictor_name="mhcflurry",
+        predictor_version="2.1.1",
+        allele="HLA-A*02:01",
+        peptide="SIINFEKL",
+        value=50.0,
+        score=0.91,
+    )
+    wt_presentation = Prediction(
+        kind="pMHC_presentation",
+        predictor_name="mhcflurry",
+        predictor_version="2.1.1",
+        allele="HLA-A*02:01",
+        peptide="SIINFEKM",
+        value=0.4,
+        score=0.4,
+        percentile_rank=4.8,
+    )
+    original = CandidateEpitope(
+        sequence="SIINFEKL",
+        predictions=(mutant,),
+        comparators={
+            COMPARATOR_WT: Peptide(
+                sequence="SIINFEKM",
+                predictions=(wt_presentation,),
+            ),
+        },
+    )
+    path = tmp_path / "unpaired-wt.csv"
+
+    save_predictions([original], path)
+
+    [reloaded] = load_predictions(path)
+    assert reloaded == original
+    assert reloaded.wt.predictions_flat() == (wt_presentation,)
+
+
+def test_legacy_native_projection_loads_self_reference_sources(tmp_path):
+    """Pre-payload files retain nested exact-self provenance on reload."""
+    from vaxrank.vaccine_antigen import SelfReferenceMatch, SelfReferenceSource
+
+    original = _make_prediction()
+    original = dataclasses.replace(
+        original,
+        self_reference_match=SelfReferenceMatch(
+            peptide=original.sequence,
+            occurs=True,
+            antigen_kind="mutation",
+            sources=(SelfReferenceSource(
+                gene_id="ENSG00000146648",
+                transcript_id="ENST00000275493",
+                gene_name="EGFR",
+                species="human",
+            ),),
+            source_provenance_complete=True,
+            genome_release="GRCh38",
+        ),
+    )
+    path = tmp_path / "legacy-self-reference.csv"
+    predictions_to_dataframe([original]).drop(
+        columns=[NATIVE_EPITOPE_COLUMN]).to_csv(path, index=False)
+
+    [reloaded] = load_predictions(path)
+
+    assert reloaded.self_reference_match == original.self_reference_match
+
+
+def test_native_payload_rejects_unapproved_serialized_class(tmp_path):
+    """Native payloads accept only types in the candidate object graph."""
+    path = tmp_path / "unapproved-class.csv"
+    pd.DataFrame({
+        NATIVE_EPITOPE_COLUMN: [json.dumps({
+            "unexpected": 1,
+            "__class__": {
+                "__module__": "collections",
+                "__name__": "Counter",
+            },
+        })],
+    }).to_csv(path, index=False)
+
+    with pytest.raises(ValueError, match="Invalid serialized CandidateEpitope"):
+        load_predictions(path)
+
+
+def test_native_payload_rejects_wrong_root_type(tmp_path):
+    """An allowlisted nested type is not a valid top-level candidate."""
+    path = tmp_path / "wrong-root.csv"
+    pd.DataFrame({
+        NATIVE_EPITOPE_COLUMN: [Peptide(sequence="SIINFEKL").to_json()],
+    }).to_csv(path, index=False)
+
+    with pytest.raises(ValueError, match="Invalid serialized CandidateEpitope"):
+        load_predictions(path)
+
+
+def test_native_payload_rejects_standalone_type_metadata(tmp_path):
+    """Standalone type metadata is not part of a candidate field schema."""
+    payload = json.loads(CandidateEpitope(sequence="SIINFEKL").to_json())
+    payload["per_allele_scores"] = {
+        "HLA-A*02:01": {
+            "__module__": "collections",
+            "__name__": "Counter",
+        },
+    }
+    path = tmp_path / "standalone-type.csv"
+    pd.DataFrame({
+        NATIVE_EPITOPE_COLUMN: [json.dumps(payload)],
+    }).to_csv(path, index=False)
+
+    with pytest.raises(ValueError, match="Invalid serialized CandidateEpitope"):
+        load_predictions(path)
 
 
 # ── pVACseq import ───────────────────────────────────────────────────────────

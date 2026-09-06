@@ -70,5 +70,14 @@ def test_contained_rna_assembly_reaches_transcript_matching():
     )
 
     assert {candidate.prefix for candidate in candidates} == set(prefixes)
-    assert len(translations) == 1
-    assert translations[0].untrimmed_variant_sequence.prefix == "AAA"
+    # Isovar 1.7.9 also lets longer candidates trim to this same compatible
+    # core. The downstream contract is that the original core reaches
+    # translation exactly once; equivalent translations may accompany it and
+    # are deduplicated later when Isovar groups protein sequences.
+    assert {translation.amino_acids for translation in translations} == {"KQKK"}
+    core_translation, = [
+        translation
+        for translation in translations
+        if translation.untrimmed_variant_sequence.prefix == "AAA"
+    ]
+    assert core_translation.contains_mutation

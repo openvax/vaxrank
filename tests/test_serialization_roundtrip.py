@@ -23,7 +23,11 @@ from varcode import Variant
 
 from vaxrank.mutant_protein_fragment import MutantProteinFragment
 from vaxrank.candidate_epitope import COMPARATOR_WT, CandidateEpitope, Peptide
-from vaxrank.vaccine_antigen import VaccineAntigen
+from vaxrank.vaccine_antigen import (
+    SelfReferenceMatch,
+    SelfReferenceSource,
+    VaccineAntigen,
+)
 from vaxrank.vaccine_peptide import VaccinePeptide
 
 
@@ -105,6 +109,28 @@ class _FakeFragment:
 
 
 # ---- CandidateEpitope -----------------------------------------------------------
+
+
+def test_epitope_json_roundtrip():
+    """CandidateEpitope and its nested Peptide graph use one dataclass schema."""
+    self_reference_match = SelfReferenceMatch(
+        peptide="SIINFEQL",
+        occurs=True,
+        antigen_kind="mutation",
+        excluded_gene_ids=("ENSG00000141510",),
+        sources=(SelfReferenceSource(
+            gene_id="ENSG00000146648",
+            transcript_id="ENST00000275493",
+            protein_id="ENSP00000275493",
+            gene_name="EGFR",
+            species="human",
+        ),),
+        source_provenance_complete=True,
+        genome_release="GRCh38",
+    )
+    epitope = _sample_epitope(self_reference_match=self_reference_match)
+    restored = CandidateEpitope.from_json(epitope.to_json())
+    assert restored == epitope
 
 
 def test_epitope_pickle_roundtrip():
