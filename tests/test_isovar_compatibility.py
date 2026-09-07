@@ -12,11 +12,50 @@
 
 """Downstream contracts required from Vaxrank's Isovar dependency."""
 
+from types import SimpleNamespace
+
 from isovar.allele_read import AlleleRead
 from isovar.protein_sequence_creator import ProteinSequenceCreator
+from isovar.protein_sequence_helpers import group_equivalent_translations
 from isovar.reference_context import ReferenceContext
 from isovar.variant_sequence_creator import VariantSequenceCreator
 from varcode import Variant
+
+from vaxrank.mutant_protein_fragment import MutantProteinFragment
+from vaxrank.vaccine_antigen import VaccineAntigen
+from vaxrank.vaccine_config import VaccineConfig
+
+
+def _isovar_result(variant, protein_sequence):
+    """Minimal Isovar result carrying the fields Vaxrank consumes."""
+    n_reads = protein_sequence.num_supporting_reads
+    n_fragments = protein_sequence.num_supporting_fragments
+    return SimpleNamespace(
+        variant=variant,
+        top_protein_sequence=protein_sequence,
+        num_total_reads=n_reads,
+        num_alt_reads=n_reads,
+        num_ref_reads=0,
+        num_total_fragments=n_fragments,
+        num_alt_fragments=n_fragments,
+        num_ref_fragments=0,
+    )
+
+
+def _reference_context(variant, prefix, suffix):
+    return ReferenceContext(
+        strand="+",
+        sequence_before_variant_locus=prefix,
+        sequence_at_variant_locus=variant.ref,
+        sequence_after_variant_locus=suffix,
+        offset_to_first_complete_codon=0,
+        contains_start_codon=False,
+        overlaps_start_codon=False,
+        contains_five_prime_utr=False,
+        amino_acids_before_variant="",
+        variant=variant,
+        transcripts=(),
+    )
 
 
 def test_contained_rna_assembly_reaches_transcript_matching():
@@ -44,18 +83,10 @@ def test_contained_rna_assembly_reaches_transcript_matching():
         variant=variant,
         reads=reads,
     )
-    reference_context = ReferenceContext(
-        strand="+",
-        sequence_before_variant_locus="A" * len(prefixes[-1]),
-        sequence_at_variant_locus=variant.ref,
-        sequence_after_variant_locus="A" * 8,
-        offset_to_first_complete_codon=0,
-        contains_start_codon=False,
-        overlaps_start_codon=False,
-        contains_five_prime_utr=False,
-        amino_acids_before_variant="",
+    reference_context = _reference_context(
         variant=variant,
-        transcripts=(),
+        prefix="A" * len(prefixes[-1]),
+        suffix="A" * 8,
     )
     protein_creator = ProteinSequenceCreator(
         protein_sequence_length=8,
@@ -81,3 +112,72 @@ def test_contained_rna_assembly_reaches_transcript_matching():
         if translation.untrimmed_variant_sequence.prefix == "AAA"
     ]
     assert core_translation.contains_mutation
+
+    protein_sequence, = group_equivalent_translations(translations)
+    fragment = MutantProteinFragment.from_isovar_result(
+        _isovar_result(variant, protein_sequence)
+    )
+    assert fragment.n_alt_reads_supporting_protein_sequence == 8
+    assert fragment.n_alt_fragments_supporting_protein_sequence == 8
+
+
+def test_multibase_substitution_marks_every_targetable_amino_acid():
+    """An alternate interval crossing a codon boundary changes both codons."""
+    variant = Variant("1", 100, "GAA", "TCC", "GRCh38")
+    prefix = "AAA" * 4 + "AT"
+    suffix = "AGGG"
+    reads = [
+        AlleleRead(prefix=prefix, allele=variant.alt, suffix=suffix, name=str(i))
+        for i in range(2)
+    ]
+    sequences = VariantSequenceCreator().reads_to_variant_sequences(variant, reads)
+    translations = ProteinSequenceCreator().all_pairs_translations(
+        sequences,
+        [_reference_context(variant, prefix, suffix)],
+    )
+    protein_sequence, = group_equivalent_translations(translations)
+
+    fragment = MutantProteinFragment.from_isovar_result(
+        _isovar_result(variant, protein_sequence)
+    )
+    antigen = VaccineAntigen.from_mutant_protein_fragment(fragment)
+
+    assert fragment.amino_acids == "KKKKIPG"
+    assert (
+        fragment.mutant_amino_acid_start_offset,
+        fragment.mutant_amino_acid_end_offset,
+    ) == (4, 6)
+    assert antigen.interval_is_targetable(5, 6)
+
+
+def test_vaxrank_length_keeps_context_for_long_alternate(monkeypatch):
+    """A long alternate must not consume context required to establish its ORF."""
+    variant = Variant("1", 100, "", "A" * 90, "GRCh38")
+    prefix = "ACG" * 4
+    suffix = "G" * 30
+    reads = [
+        AlleleRead(prefix=prefix, allele=variant.alt, suffix=suffix, name=str(i))
+        for i in range(2)
+    ]
+    reference_context = _reference_context(variant, prefix, suffix)
+    monkeypatch.setattr(
+        "isovar.protein_sequence_creator.reference_contexts_for_variant",
+        lambda *args, **kwargs: [reference_context],
+    )
+    vaccine_config = VaccineConfig()
+    # Match the translation length the CLI derives from Vaxrank's defaults.
+    protein_sequence_length = (
+        vaccine_config.preferred_peptide_length
+        + 2 * vaccine_config.padding_around_mutation
+    )
+    creator = ProteinSequenceCreator(protein_sequence_length=protein_sequence_length)
+
+    translations = creator.translate_variant_reads(variant, reads)
+    protein_sequence, = group_equivalent_translations(translations)
+    fragment = MutantProteinFragment.from_isovar_result(
+        _isovar_result(variant, protein_sequence)
+    )
+
+    assert len(fragment.amino_acids) == 35
+    assert fragment.mutant_amino_acid_start_offset == 3
+    assert fragment.mutant_amino_acid_end_offset == 33
