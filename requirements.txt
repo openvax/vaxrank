@@ -1,7 +1,9 @@
 numpy>=2.0.0,<3.0.0
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.6.4,<3.0.0
-varcode>=5.0.0,<6.0.0
+# Varcode 7 supplies splice outcome sets unconditionally and defaults to fast
+# annotation. Vaxrank uses its keyword-free effect API and outcome selection.
+varcode>=7.0.0,<8.0.0
 # 1.7.10 preserves required reference context for long alternate alleles and
 # includes corrected mutation intervals and complete shared RNA support.
 isovar>=1.7.10,<2.0.0
@@ -25,9 +27,9 @@ platformdirs
 msgspec>=0.18.6,<1.0.0
 dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
-# 1.8.174 is the direct authority for HPA-backed CTA identity and the full
-# candidate CTA universe used by antigen-specific self references.
-oncoref==1.8.174
+# oncoref is the direct authority for HPA-backed CTA identity and the full
+# candidate CTA universe. Keep this reference pin aligned with PirlyGenes.
+oncoref==1.8.194
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
 # of predictor_version strings. Always pulled in transitively via setuptools
 # / pip, but pinned explicitly so minimal / --no-deps installs don't break

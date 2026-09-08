@@ -150,6 +150,44 @@ def test_mutant_protein_fragment_predicted_effect_selects_outcome():
         outcome_selection=OUTCOME_SELECTION_MULTI_OUTCOME) is outcomes
 
 
+def test_real_splice_outcomes_survive_dna_fallback_and_reporting(human_genome_grch37):
+    """Exercise Varcode's always-on outcomes through both annotation doors.
+
+    The last base of CFTR exon 4 is G in Ensembl 75 (GRCh37). Its G>T
+    substitution has a coding consequence if normal splicing persists, and
+    a distinct exon-skipping candidate. This checks API composition, not
+    which predicted splice mechanism occurs in a patient.
+    """
+    from varcode import ExonSkipping, NormalSplicing, SpliceOutcomeSet, Variant
+    from vaxrank.gene_pathway_check import GenePathwayCheck
+
+    variant = Variant("7", 117171168, "G", "T", human_genome_grch37)
+    fragment = MutantProteinFragment.from_variant_dna(variant, 35)
+    assert fragment is not None
+    assert fragment.gene_name == "CFTR"
+
+    outcomes = fragment.predicted_effect(OUTCOME_SELECTION_MULTI_OUTCOME)
+    assert isinstance(outcomes, SpliceOutcomeSet)
+    likely = fragment.predicted_effect(OUTCOME_SELECTION_MOST_LIKELY)
+    priority = fragment.predicted_effect(OUTCOME_SELECTION_HIGHEST_PRIORITY)
+    assert isinstance(likely, NormalSplicing)
+    assert isinstance(priority, ExonSkipping)
+    assert likely.mutant_protein_sequence != priority.mutant_protein_sequence
+    assert fragment.amino_acids in priority.mutant_protein_sequence
+    assert fragment.amino_acids not in likely.mutant_protein_sequence
+    # Exon skipping retains a zero-width target at the deletion junction.
+    assert fragment.mutant_amino_acid_start_offset == 17
+    assert fragment.mutant_amino_acid_end_offset == 17
+
+    summary = summarize_varcode_effect_outcomes(outcomes)
+    assert summary["Outcome set type"] == "SpliceOutcomeSet"
+    assert "NormalSplicing" in summary["Candidate effects"]
+    assert "ExonSkipping" in summary["Candidate effects"]
+    # Driver annotation uses Variant.effects(), while report metadata uses
+    # effect_on_transcript(). Neither may require the removed keyword.
+    assert GenePathwayCheck().make_variant_dict(variant)
+
+
 def test_template_data_include_manufacturability_override():
     """The split-report layout (#17) toggles manufacturability per
     report via the include_manufacturability override: forced off for
