@@ -328,7 +328,7 @@ class MutantProteinFragment(DataclassSerializable):
         using varcode's MutantTranscript.  Used as an opt-in fallback when
         isovar has no RNA support for a variant.
 
-        Transcript selection: ask varcode 5 for splice outcome sets, collapse
+        Transcript selection: varcode returns splice outcome sets; collapse
         each to its highest-priority concrete outcome, then choose the most
         protein-disruptive effect. Within that tier, pick the longest mutant
         protein, breaking ties by lex-sorted transcript ID.
@@ -346,7 +346,7 @@ class MutantProteinFragment(DataclassSerializable):
         from varcode.effects.effect_ordering import effect_priority
         from varcode.mutant_transcript import apply_variant_to_transcript
 
-        effects = variant.effects(splice_outcomes=True)
+        effects = variant.effects()
         coding_effects = [
             select_varcode_effect_outcome(e, OUTCOME_SELECTION_HIGHEST_PRIORITY)
             for e in effects
@@ -633,7 +633,7 @@ class MutantProteinFragment(DataclassSerializable):
             outcome_selection=OUTCOME_SELECTION_HIGHEST_PRIORITY):
         """Top-priority varcode effect across the supporting transcripts.
 
-        Varcode 5 can represent splice-disrupting variants as multi-outcome
+        Varcode represents splice-disrupting variants as multi-outcome
         sets. By default vaxrank collapses those sets to the highest-priority
         concrete outcome so peptide mechanics keep working with a single
         protein effect. Use ``outcome_selection="most_likely"`` for producer
@@ -666,25 +666,34 @@ class MutantProteinFragment(DataclassSerializable):
         # Imported here to keep the module-load cost down and avoid a
         # circular-ish import (varcode is heavy).
         from varcode.errors import ReferenceMismatchError
-        from varcode.splice_outcomes import enumerate_splice_outcomes
-        effects = []
+        effect_pairs = []
+        selection = (
+            OUTCOME_SELECTION_HIGHEST_PRIORITY
+            if outcome_selection == OUTCOME_SELECTION_MULTI_OUTCOME
+            else outcome_selection)
         for t in self.supporting_reference_transcripts:
             try:
                 effect = self.variant.effect_on_transcript(t)
-                effect = enumerate_splice_outcomes(effect)
-                effect = select_varcode_effect_outcome(
+                selected = select_varcode_effect_outcome(
                     effect,
-                    outcome_selection=outcome_selection)
-                if effect is not None:
-                    effects.append(effect)
+                    outcome_selection=selection)
+                if selected is not None:
+                    effect_pairs.append((effect, selected))
             except (ReferenceMismatchError, ValueError, KeyError) as e:
                 logger.debug(
                     "varcode.effect_on_transcript failed for %s on %s: "
                     "%s — skipping that transcript.",
                     self.variant, t, e)
-        if not effects:
+        if not effect_pairs:
             return None
-        return top_priority_effect(effects)
+        best = top_priority_effect([selected for _, selected in effect_pairs])
+        if outcome_selection == OUTCOME_SELECTION_MULTI_OUTCOME:
+            # Rank the same concrete effects as the default peptide path,
+            # then return the selected transcript's full outcome set. Passing
+            # a splice set directly to top_priority_effect can collapse it to
+            # its normal-splicing coding alternate and discard report data.
+            return next(original for original, selected in effect_pairs if selected is best)
+        return best
 
     def global_start_pos(self):
         # position of mutation start relative to the full amino acid sequence
