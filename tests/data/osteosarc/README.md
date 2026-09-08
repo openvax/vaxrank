@@ -37,5 +37,13 @@ or grounds for silently enabling DNA fallback. PIP5K1A's frameshift and the
 historically selected vaccine sequences require separate selection-level
 expectations under Vaxrank #414.
 
+The small fixtures intentionally do not reproduce full-region read counts:
+ONT DYNC1H1 has 16 alternate names, but the 20-aa candidate has 11 compatible
+names and all full 25mer contexts have at most 9 (below 85% of 11). Bulk H1-2
+has three alternate read objects / two names; after mate merging its longest
+two-object-supported context is 24 aa. These produce no eligible default
+25-aa vaccine peptide. Explicitly permitting a shorter peptide is distinct
+from weakening either RNA support threshold (Vaxrank #419).
+
 Tests check fixture integrity and build their small reference/BAM indices in
 temporary directories. They perform no network requests or model downloads.

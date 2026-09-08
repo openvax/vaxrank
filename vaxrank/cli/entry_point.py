@@ -1435,6 +1435,12 @@ def run_vaxrank_from_parsed_args(args):
     resolve_isovar_args(args, vaccine_config, merged_config)
     protein_sequence_creator = protein_sequence_creator_from_args(args)
     args.protein_sequence_length = protein_sequence_creator.protein_sequence_length
+    logger.info(
+        "RNA context target: %d aa for %d-aa peptides; selection=%s, "
+        "compatible read-name support fraction=%s, minimum coverage=%d read objects/base",
+        args.protein_sequence_length, args.protein_context_peptide_length,
+        args.protein_sequence_preference, args.min_protein_sequence_support_fraction,
+        args.min_variant_sequence_coverage)
     # Manufacturability config rides separately. We pass it to the
     # ranker only when peptide is an active vaccine modality —
     # otherwise the ``manufacturability`` sentinel inside

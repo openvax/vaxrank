@@ -1,6 +1,7 @@
 """Exercise the actual Isovar factory through Vaxrank's public RNA entry point."""
 
 from importlib.resources import files
+import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -170,3 +171,36 @@ def test_python_callers_explicit_requests_survive_resolution():
     creator = protein_sequence_creator_from_args(args)
     assert creator.protein_sequence_length == 40
     assert creator.min_variant_sequence_coverage == 5
+
+
+def test_prediction_cache_does_not_change_rna_context_and_provenance(run_config, monkeypatch):
+    from topiary import CachedPredictor
+
+    cached = Mock()
+    loader = Mock(return_value=cached)
+    monkeypatch.setattr(CachedPredictor, "from_topiary_output", loader)
+    args, creator, result = run_config([
+        "--prediction-cache", "predictions.tsv", "--vaccine-peptide-length", "30",
+        "--min-variant-sequence-coverage", "5"])
+    assert result["mhc_predictor"] is cached
+    assert creator.protein_sequence_length == 59
+    loader.assert_called_once()
+    saved_args = json.loads(json.dumps(vars(args)))
+    assert saved_args["protein_sequence_length"] == 59
+    assert saved_args["protein_context_peptide_length"] == 30
+    assert saved_args["protein_sequence_preference"] == "balanced"
+    assert saved_args["min_protein_sequence_support_fraction"] == .85
+    assert saved_args["min_variant_sequence_coverage"] == 5
+
+
+def test_cached_report_parser_does_not_overwrite_saved_rna_policy():
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+
+    # Cached reporting updates saved arguments with only report-time options.
+    # It must not introduce fresh RNA defaults into the old run's provenance.
+    args = parse_vaxrank_args(["--input-json-file", "old-run.json"])
+    saved = {"protein_sequence_length": 40, "protein_context_peptide_length": 30,
+             "protein_sequence_preference": "support", "min_variant_sequence_coverage": 5,
+             "min_protein_sequence_support_fraction": .95}
+    updated = dict(saved, **vars(args))
+    assert {key: updated[key] for key in saved} == saved

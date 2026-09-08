@@ -323,6 +323,16 @@ def vaccine_peptides_from_epitopes(
     for offset, candidate_fragment in long_protein_fragment.sorted_subsequences(
         subsequence_length=vaccine_config.preferred_peptide_length
     ):
+        # Isovar can legitimately return a shorter protein when no full
+        # context meets its support/coverage requirements. Window generation
+        # retains such fragments, but they are not eligible vaccine peptides
+        # unless the caller explicitly permits that length.
+        if len(candidate_fragment) < vaccine_config.min_peptide_length:
+            logger.info(
+                "Skipping %d-aa RNA/antigen fragment below minimum peptide length %d for %s",
+                len(candidate_fragment), vaccine_config.min_peptide_length,
+                variant.short_description)
+            continue
 
         subsequence_epitopes = slice_epitopes(
             epitopes,

@@ -552,6 +552,9 @@ support-first selection, pass `--protein-sequence-length 20
 The target includes all placements for a centered single-residue mutation,
 not necessarily wider mutations; deletions require windows spanning their
 junction. Short outputs are not evidence of a full-length vaccine window.
+Vaxrank rejects candidate windows shorter than `vaccine_peptides.min_length`
+(25 by default); explicitly lower that minimum only when shorter peptides
+are part of the intended design. The RNA support thresholds remain unchanged.
 RNA settings are saved with run arguments and do not rerun reconstruction
 when rendering cached reports or ranking external pVACseq/LENS predictions.
 DNA-only fallback remains opt-in, with its existing separate padding default.
