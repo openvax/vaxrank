@@ -42,9 +42,10 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         default=None,
         type=int,
         help=(
-            "Number of off-center windows around the mutation to consider "
-            "as vaccine peptides. "
-            f"(default: {default_vaccine_config.padding_around_mutation})"
+            "Explicit legacy context request: vaccine peptide length + 2*padding. "
+            "Without this option, RNA context adapts to peptide size via Isovar. "
+            "--protein-sequence-length takes precedence for RNA. "
+            f"DNA-only fallback padding defaults to {default_vaccine_config.padding_around_mutation}."
         ))
 
     vaccine_peptide_group.add_argument(

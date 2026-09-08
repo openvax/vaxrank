@@ -143,12 +143,26 @@ epitopes:
   # top_epitopes_per_candidate: 1000
 
 
+isovar:
+  # RNA-only reconstruction; null derives the target from resolved peptide size K.
+  # Target 2*K-1 (49 for 25mers); actual output can be shorter. No reference padding.
+  protein_sequence_length: null
+  protein_context_peptide_length: null
+  protein_sequence_preference: balanced  # support / context are explicit alternatives
+  # Relative compatible read-name support, not all alternate reads or per-base depth.
+  min_protein_sequence_support_fraction: 0.85
+  # Independent absolute floor at every retained cDNA base (read objects, not names).
+  min_variant_sequence_coverage: 2
+
 vaccine_peptides:
   # ---- Length / position ----
   preferred_length: 25
   min_length: 25
   max_length: 25
-  padding_around_mutation: 5
+  # Explicit legacy RNA request: preferred_length + 2*padding; null uses adaptive
+  # RNA context. Explicit isovar.protein_sequence_length takes precedence.
+  # DNA-only fallback retains its separate built-in padding of 5.
+  padding_around_mutation: null
 
   # ---- How many to keep per variant ----
   per_mutation: 1

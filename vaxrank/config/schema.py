@@ -168,12 +168,28 @@ class MrnaConstructConfigSchema(
     junction_rank_mild: Optional[float] = None
 
 
+class IsovarConfigSchema(
+    msgspec.Struct,
+    frozen=True,
+    kw_only=True,
+    forbid_unknown_fields=True,
+):
+    """RNA context controls; null means use the resolved default."""
+
+    protein_sequence_length: Optional[int] = None
+    protein_context_peptide_length: Optional[int] = None
+    protein_sequence_preference: Optional[str] = None
+    min_protein_sequence_support_fraction: Optional[float] = None
+    min_variant_sequence_coverage: Optional[int] = None
+
+
 class VaxrankConfigSchema(
     msgspec.Struct,
     frozen=True,
     kw_only=True,
     forbid_unknown_fields=True,
 ):
+    isovar: Optional[IsovarConfigSchema] = None
     epitopes: Optional[EpitopesConfigSchema] = None
     vaccine_peptides: Optional[VaccinePeptidesConfigSchema] = None
     peptide: Optional[PeptideConstructConfigSchema] = None

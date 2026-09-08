@@ -81,6 +81,14 @@ def make_vaxrank_arg_parser():
             "reports, peptide constructs, or mRNA constructs."),
         parents=[parent_parser],
     )
+    # None distinguishes omission from explicitly passing even the upstream
+    # default (e.g. --min-variant-sequence-coverage 2) over a YAML override.
+    # Resolve these only in the RNA entry point, after merging configuration.
+    arg_parser.set_defaults(
+        protein_sequence_preference=None,
+        min_protein_sequence_support_fraction=None,
+        min_variant_sequence_coverage=None,
+    )
     
     arg_parser.add_argument(
         "--config",
@@ -88,7 +96,7 @@ def make_vaxrank_arg_parser():
         default=None,
         help="Path to YAML config. May be repeated; later files deep-merge "
              "over earlier ones. Each file may contain any of the top-level "
-             "sections 'epitopes', 'vaccine_peptides', and 'manufacturability'; "
+             "sections 'isovar', 'epitopes', 'vaccine_peptides', 'peptide', and 'mrna'; "
              "split them across files or keep them together.")
     add_config_override_args(arg_parser)
 

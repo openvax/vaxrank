@@ -70,9 +70,6 @@ def test_config_overrides_defaults_for_protein_sequence_length(tmp_path):
         "vaxrank.cli.entry_point.read_collector_from_args",
         return_value=MagicMock(),
     ), patch(
-        "vaxrank.cli.entry_point.protein_sequence_creator_from_args",
-        return_value=MagicMock(),
-    ), patch(
         "vaxrank.cli.entry_point.filter_threshold_dict_from_args",
         return_value={},
     ), patch(
