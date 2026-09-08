@@ -21,7 +21,7 @@ def is_multi_outcome_effect(effect):
 def select_varcode_effect_outcome(
         effect,
         outcome_selection=OUTCOME_SELECTION_HIGHEST_PRIORITY):
-    """Collapse a varcode 5 multi-outcome effect to one concrete effect.
+    """Collapse a varcode multi-outcome effect to one concrete effect.
 
     ``most_likely_effect`` is producer-order-first; ``highest_priority_effect``
     is varcode's most protein-disruptive candidate. Vaxrank's peptide
@@ -61,7 +61,7 @@ def format_varcode_candidate(candidate):
 
 
 def summarize_varcode_effect_outcomes(effect):
-    """Report rows for varcode 5 multi-outcome effects."""
+    """Report rows for varcode multi-outcome effects."""
     if not is_multi_outcome_effect(effect):
         return OrderedDict()
     return OrderedDict([
