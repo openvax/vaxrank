@@ -33,6 +33,20 @@ from .vaccine_antigen import (
     VaccineAntigen,
 )
 from .vaccine_peptide import VaccinePeptide
+from .construct_sequence import (
+    ConstructChemicalModification,
+    ConstructEvidence,
+    ConstructPlacement,
+    ConstructSequence,
+    ConstructSequenceEdit,
+)
+from .construct_audit import (
+    ConstructAudit,
+    audit_construct_sequence,
+    load_construct_sequences,
+    save_construct_sequences,
+    write_construct_audits,
+)
 from .vaccine_library import antigen_construct_name, select_antigen_window
 from .safety_assessment import (
     AntigenSafetyAssessment,
@@ -127,6 +141,16 @@ from .version import __version__
 
 __all__ = [
     "__version__",
+    "ConstructChemicalModification",
+    "ConstructEvidence",
+    "ConstructPlacement",
+    "ConstructAudit",
+    "audit_construct_sequence",
+    "load_construct_sequences",
+    "save_construct_sequences",
+    "write_construct_audits",
+    "ConstructSequence",
+    "ConstructSequenceEdit",
     "AminoAcidInterval",
     "AminoAcidSubstitutionMatrix",
     "AntigenSafetyAssessment",

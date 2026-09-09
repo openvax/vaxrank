@@ -1,1 +1,2 @@
 include LICENSE README.md requirements.txt
+include CONSTRUCT_AUDIT.md

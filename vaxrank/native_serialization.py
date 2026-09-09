@@ -34,7 +34,30 @@ def _native_serializable_classes():
 
     from .allele_evidence import AlleleAttribution
     from .candidate_epitope import CandidateEpitope, Peptide
-    from .vaccine_antigen import SelfReferenceMatch, SelfReferenceSource
+    from .construct_sequence import (
+        ConstructChemicalModification,
+        ConstructEvidence,
+        ConstructPlacement,
+        ConstructSequence,
+        ConstructSequenceEdit,
+    )
+    from .construct_audit import ConstructAudit
+    from .safety_assessment import (
+        ConstructBoundary,
+        EmittedSafetyLigand,
+        SafetyPrediction,
+        SafetyPredictionCoverage,
+        WindowSafetyAssessment,
+    )
+    from .vaccine_antigen import (
+        AminoAcidInterval,
+        SelfReferenceMatch,
+        SelfReferenceSource,
+        TargetableMask,
+        TumorSpecificityAttestation,
+        TumorSpecificityEvidence,
+        VaccineAntigen,
+    )
 
     return {
         ("builtins", "set"): set,
@@ -45,6 +68,22 @@ def _native_serializable_classes():
         ("vaxrank.candidate_epitope", "Peptide"): Peptide,
         ("vaxrank.vaccine_antigen", "SelfReferenceMatch"): SelfReferenceMatch,
         ("vaxrank.vaccine_antigen", "SelfReferenceSource"): SelfReferenceSource,
+        ("vaxrank.vaccine_antigen", "AminoAcidInterval"): AminoAcidInterval,
+        ("vaxrank.vaccine_antigen", "TargetableMask"): TargetableMask,
+        ("vaxrank.vaccine_antigen", "TumorSpecificityAttestation"): TumorSpecificityAttestation,
+        ("vaxrank.vaccine_antigen", "TumorSpecificityEvidence"): TumorSpecificityEvidence,
+        ("vaxrank.vaccine_antigen", "VaccineAntigen"): VaccineAntigen,
+        ("vaxrank.construct_sequence", "ConstructEvidence"): ConstructEvidence,
+        ("vaxrank.construct_sequence", "ConstructPlacement"): ConstructPlacement,
+        ("vaxrank.construct_sequence", "ConstructSequenceEdit"): ConstructSequenceEdit,
+        ("vaxrank.construct_sequence", "ConstructChemicalModification"): ConstructChemicalModification,
+        ("vaxrank.construct_sequence", "ConstructSequence"): ConstructSequence,
+        ("vaxrank.construct_audit", "ConstructAudit"): ConstructAudit,
+        ("vaxrank.safety_assessment", "ConstructBoundary"): ConstructBoundary,
+        ("vaxrank.safety_assessment", "EmittedSafetyLigand"): EmittedSafetyLigand,
+        ("vaxrank.safety_assessment", "SafetyPrediction"): SafetyPrediction,
+        ("vaxrank.safety_assessment", "SafetyPredictionCoverage"): SafetyPredictionCoverage,
+        ("vaxrank.safety_assessment", "WindowSafetyAssessment"): WindowSafetyAssessment,
     }
 
 

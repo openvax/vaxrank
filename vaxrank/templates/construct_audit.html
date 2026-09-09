@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Construct sequence audit</title>
+<style>
+body { font: 15px sans-serif; margin: 2rem; line-height: 1.5; }
+code { overflow-wrap: anywhere; }
+table { border-collapse: collapse; margin: 1rem 0; }
+td, th { border: 1px solid #bbb; padding: .35rem .6rem; text-align: left; }
+section { border-top: 2px solid #555; margin-top: 2rem; }
+.notice { background: #fff4d6; padding: .8rem; }
+</style></head>
+<body><h1>Construct sequence audit</h1>
+<p class="notice">This is an evidence inventory, not a safety verdict or proof of
+historical vaccine selection. Native means the unmodified antigen, including
+any tumor variant. Native coordinate correspondence alone does not establish
+RNA coverage. Missing assessments are not negative results.</p>
+{% for audit in audits %}{% set c = audit.construct %}
+<section><h2>{{ c.name }}</h2>
+<p>Product: {{ c.modality }}. Mapping: {{ c.mapping_status }} {{ c.mapping_reason }}</p>
+{% if c.native_antigen %}<p>Antigen kind: {{ c.native_antigen.kind }};
+gene: {{ c.native_antigen.gene_name }} ({{ c.native_antigen.gene_id }});
+transcripts: {{ c.native_antigen.transcript_ids|join(', ') }};
+proteins: {{ c.native_antigen.protein_ids|join(', ') }};
+species: {{ c.native_antigen.species }}.</p>{% endif %}
+<p>Native antigen window [{{ c.native_start }}, {{ c.native_end }}):
+<code>{{ c.native_sequence if c.native_sequence is not none else 'Unresolved' }}</code></p>
+<p>Final amino-acid sequence ({{ c.sequence|length }} residues): <code>{{ c.sequence }}</code></p>
+<p>Sequence evidence: {{ c.evidence.source }}; {{ c.evidence.evidence_level }};
+{{ c.evidence.provider }} {{ c.evidence.vaccine_version }}. {{ c.evidence.description }}</p>
+<p>Record identity: <code>{{ c.cache_identity }}</code></p>
+<table><thead><tr><th>Change</th><th>Coordinates</th><th>Final content</th>
+<th>Evidence</th><th>Rationale</th></tr></thead><tbody>
+{% for edit in c.sequence_edits %}<tr><td>{{ edit.kind }}</td>
+<td>Native [{{ edit.start }}, {{ edit.end }})</td><td><code>{{ edit.replacement }}</code></td>
+<td>{{ edit.evidence.source }} ({{ edit.evidence.evidence_level }})</td>
+<td>{% if edit.rationale %}{{ edit.rationale.description }} — {{ edit.rationale.source }}
+({{ edit.rationale.evidence_level }}){% else %}Unknown{% endif %}</td></tr>{% endfor %}
+{% for edit in c.chemical_modifications %}<tr><td>Chemical</td>
+<td>Final [{{ edit.start }}, {{ edit.end }})</td><td>{{ edit.name }}</td>
+<td>{{ edit.evidence.source }} ({{ edit.evidence.evidence_level }})</td>
+<td>{% if edit.rationale %}{{ edit.rationale.description }} — {{ edit.rationale.source }}
+({{ edit.rationale.evidence_level }}){% else %}Unknown{% endif %}</td></tr>{% endfor %}
+</tbody></table>
+<p>Final residue → native antigen offsets (zero-based; None = no native correspondence):
+<code>{{ c.native_residue_offsets|join(', ') }}</code></p>
+<p>Removed or incompletely retained native target intervals:
+{{ c.removed_target_intervals if c.removed_target_intervals is not none else 'Unresolved' }}.</p>
+<p>Retained final targetable intervals: {{ c.targetable_mask.intervals }}.
+Target-mask overlap is not proof that a previously selected ligand is intact.</p>
+<h3>Assessment coverage</h3>
+<p>MHC: {{ audit.mhc_status }}. {{ audit.reason_codes|join(', ') }} {{ audit.error_message }}</p>
+<p class="notice">Unassessed processing compartments:
+{{ audit.unassessed_processing_compartments|join(', ') }}.
+MHC predictions do not establish cleavage, serum stability, presentation or clinical safety.</p>
+{% if audit.mhc_assessment %}
+<p>Every returned ligand occurrence is retained below. Returned predictions do
+not establish complete coverage of all patient alleles, lengths or models.</p>
+<table><thead><tr><th>Ligand</th><th>Final interval</th><th>Target overlap</th>
+<th>Crosses edit boundary</th><th>Exact self</th><th>Self-source provenance</th>
+<th>Prediction evidence</th></tr></thead><tbody>
+{% for ligand in audit.mhc_assessment.ligands %}<tr>
+<td><code>{{ ligand.peptide }}</code></td>
+<td>[{{ ligand.window_start_offset }}, {{ ligand.window_end_offset }})</td>
+<td>{{ ligand.overlaps_targetable }}</td><td>{{ ligand.crosses_construct_boundary }}</td>
+<td>{{ ligand.occurs_in_self_reference }}</td><td>
+{% if not ligand.self_reference_match.source_provenance_complete %}Incomplete{% endif %}
+{% for source in ligand.self_reference_match.sources %}
+{{ source.gene_name }} {{ source.gene_id }} / {{ source.transcript_id }} /
+{{ source.protein_id }} / {{ source.species }}<br>{% endfor %}</td>
+<td>{% for p in ligand.predictions %}{{ p.kind }} / {{ p.allele }} /
+{{ p.predictor_name }} {{ p.predictor_version }}: score={{ p.score }},
+value={{ p.value }}, rank={{ p.percentile_rank }}<br>{% endfor %}</td>
+</tr>{% endfor %}</tbody></table>{% endif %}
+</section>{% endfor %}</body></html>

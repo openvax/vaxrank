@@ -27,7 +27,7 @@ from .near_self import (
     NearSelfQuery,
     assess_near_self_queries,
 )
-from .reference_proteome import ReferenceProteome
+from .reference_proteome import ReferenceProteome, self_reference_matches
 from .prediction_input import finite_prediction_value, prediction_integer
 from .risk_ligand import PatientHLARiskLigandIndex, RiskLigandIndexProvenance
 from .vaccine_antigen import SelfReferenceMatch, VaccineAntigen
@@ -617,7 +617,8 @@ def safety_assessment_from_prediction_frame(
     predictions_df,
     *,
     antigen: VaccineAntigen,
-    reference_proteome: ReferenceProteome,
+    reference_proteome: Optional[ReferenceProteome] = None,
+    self_reference_results: Optional[dict[str, SelfReferenceMatch]] = None,
     window_start: int = 0,
     window_end: Optional[int] = None,
     construct_boundaries: tuple[ConstructBoundary, ...] = (),
@@ -625,6 +626,10 @@ def safety_assessment_from_prediction_frame(
     expected_source_name: Optional[str] = None,
 ) -> WindowSafetyAssessment:
     """Convert an unfiltered topiary prediction frame into safety evidence."""
+    if reference_proteome is None and self_reference_results is None:
+        raise ValueError("Safety inventory requires explicit self-reference evidence")
+    if reference_proteome is not None and self_reference_results is not None:
+        raise ValueError("Pass membership reference or attributed self results, not both")
     if window_end is None:
         window_end = len(antigen.amino_acids)
     if window_start < 0 or window_end > len(antigen.amino_acids):
@@ -715,7 +720,20 @@ def safety_assessment_from_prediction_frame(
             for boundary in boundaries
             if offset < boundary.offset < end
         )
-        occurs = reference_proteome.contains(peptide)
+        if self_reference_results is not None:
+            match = self_reference_results.get(peptide)
+            if not isinstance(match, SelfReferenceMatch) or (
+                match.peptide != peptide
+                or match.antigen_kind != antigen.kind
+                or match.excluded_gene_ids != antigen.self_reference_excluded_gene_ids
+                or (genome_release and match.genome_release != genome_release)
+            ):
+                raise SafetyAssessmentError(
+                    "Self-reference evidence is missing or disagrees with antigen policy")
+        else:
+            match = antigen.self_reference_match(
+                peptide, reference_proteome.contains(peptide),
+                genome_release=genome_release)
         ligands.append(EmittedSafetyLigand(
             peptide=peptide,
             window_start_offset=offset,
@@ -725,11 +743,7 @@ def safety_assessment_from_prediction_frame(
             overlaps_targetable=antigen.interval_is_targetable(
                 antigen_start, antigen_end
             ),
-            self_reference_match=antigen.self_reference_match(
-                peptide,
-                occurs,
-                genome_release=genome_release,
-            ),
+            self_reference_match=match,
             predictions=tuple(group["predictions"]),
             crossed_construct_boundaries=crossed_boundaries,
         ))
@@ -809,35 +823,19 @@ def assess_vaccine_antigen_window(
             f"MHC safety prediction failed for {source_name!r}"
         ) from error
 
-    if reference_proteome is None:
-        if predictions_df.empty:
-            # No ligand can match self, so do not build an unused genome index.
-            reference_proteome = ReferenceProteome(None)
-        else:
-            peptide_lengths = tuple(sorted({
-                len(str(peptide)) for peptide in predictions_df["peptide"]
-            }))
-            min_peptide_length = peptide_lengths[0]
-            max_peptide_length = peptide_lengths[-1]
-            if antigen.self_reference_excluded_gene_ids:
-                reference_proteome = ReferenceProteome.from_genome(
-                    genome,
-                    exclude_gene_ids=antigen.self_reference_excluded_gene_ids,
-                    min_kmer_length=min_peptide_length,
-                    max_kmer_length=max_peptide_length,
-                )
-            else:
-                reference_proteome = ReferenceProteome(
-                    genome,
-                    min_kmer_length=min_peptide_length,
-                    max_kmer_length=max_peptide_length,
-                )
+    matches = None
+    if genome is not None:
+        # Use the existing provenance-complete batch matcher, not a membership
+        # index followed by a second full proteome traversal for source names.
+        peptides = () if predictions_df.empty else tuple(dict.fromkeys(predictions_df["peptide"]))
+        matches = self_reference_matches(peptides, antigen, genome)
 
     genome_release = str(getattr(genome, "release", "") or "")
     return safety_assessment_from_prediction_frame(
         predictions_df,
         antigen=antigen,
         reference_proteome=reference_proteome,
+        self_reference_results=matches,
         window_start=window_start,
         window_end=window_end,
         construct_boundaries=construct_boundaries,
