@@ -14,7 +14,7 @@
 
 For each predicted MHC ligand, build a
 :class:`vaxrank.processing_prediction.ProcessingPrediction` record
-keyed on ``(peptide, source_sequence, predictor_name)``. Each carries
+keyed on ``(peptide, source_sequence, peptide_offset, predictor_name)``. Each carries
 three scores:
 
   c_term_cleavage_prob              pepsickle's probability the
@@ -35,7 +35,7 @@ three scores:
 
 ``ProcessingPrediction`` is the canonical record (see
 :mod:`vaxrank.processing_prediction`). Report writers join in by
-``(peptide, source, predictor_name)`` at render time. Pre-2.22
+``(peptide, source, peptide_offset, predictor_name)`` at render time. Pre-2.22
 vaxrank mutated pre-3.0 flat records in place with
 ``pepsickle_*`` fields; that mutation was removed in 2.23 (closes
 #272). All readers consume the ``processing_predictions_by_key``
@@ -156,7 +156,7 @@ def annotate_processing(epitopes, predictor=None,
     Parameters
     ----------
     epitopes : iterable of CandidateEpitope
-        Each epitope is processed against its mutant
+        Each ligand occurrence is processed against its
         ``source_sequence`` to compute one ProcessingPrediction.
         CandidateEpitope objects are NOT mutated — readers consume the
         returned map.
@@ -181,7 +181,7 @@ def annotate_processing(epitopes, predictor=None,
         * ``n_annotated`` (int): number of epitopes successfully
           scored.
         * ``processing_predictions_by_key`` (dict): keyed on
-          ``(peptide_sequence, source_sequence, predictor_name)`` —
+          ``(peptide_sequence, source_sequence, peptide_offset, predictor_name)`` —
           the canonical record. Empty dict when nothing was annotated.
     """
     epitopes_list = list(epitopes)
@@ -286,12 +286,13 @@ def annotate_processing(epitopes, predictor=None,
             processing_score = math.sqrt(c_term * anti_max)
             # Build the canonical ProcessingPrediction record (the
             # post-2.22 source of truth — keyed on
-            # ``(peptide, source, predictor_name)`` so future
+            # ``(peptide, source, peptide_offset, predictor_name)`` so future
             # per-position cleavage predictors land alongside).
             pp = ProcessingPrediction(
                 peptide_sequence=peptide,
                 source_sequence=source,
                 predictor_name=PEPSICKLE_PREDICTOR_NAME,
+                peptide_offset=offset,
                 predictor_version=getattr(
                     predictor, 'version', None),
                 c_term_cleavage_prob=c_term,
@@ -324,7 +325,7 @@ def annotate_processing(epitopes, predictor=None,
 def resolve_peptide_offset(source, peptide, mutant_context):
     """Locate the peptide's offset within its source.
 
-    Trust the mutant ``Peptide.offset`` first; re-locate via
+    Trust the source ``Peptide.offset`` first; re-locate via
     closest-substring search when the declared offset doesn't match.
     Warn when re-location moves the offset by more than the
     drift threshold (3aa absolute, 5% of source length, whichever is

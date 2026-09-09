@@ -27,7 +27,7 @@ from varcode import load_vcf_fast
 
 from .cancer_hotspots import get_hotspot_url
 from .manufacturability import ManufacturabilityScores
-from .processing import PEPSICKLE_PREDICTOR_NAME
+from .processing import PEPSICKLE_PREDICTOR_NAME, resolve_peptide_offset
 from .varcode_effects import (
     OUTCOME_SELECTION_MULTI_OUTCOME,
     is_multi_outcome_effect,
@@ -129,7 +129,7 @@ class TemplateDataCreator(object):
 
         ``processing_predictions_by_key`` is the map returned by
         :func:`vaxrank.processing.annotate_processing` —
-        ``(peptide, source, predictor_name) -> ProcessingPrediction``.
+        ``(peptide, source, peptide_offset, predictor_name) -> ProcessingPrediction``.
         Report writers join this in at render time. ``None`` means
         the processing-aware annotation pass didn't run; the
         per-epitope tables then omit the processing columns.
@@ -451,7 +451,7 @@ class TemplateDataCreator(object):
 
     def _processing_prediction_for(self, epitope, prediction):
         """Look up the ProcessingPrediction for this epitope+prediction
-        by ``(peptide, source, predictor_name)``. Returns ``None`` when
+        by ``(peptide, source, peptide_offset, predictor_name)``. Returns ``None`` when
         no record exists (annotation pass didn't run, or this
         prediction had no usable source sequence).
 
@@ -461,11 +461,16 @@ class TemplateDataCreator(object):
         lands, this method becomes the swap point — read the
         predictor name from a config knob and fall back as needed.
         """
-        key = (
-            epitope.sequence or '',
-            epitope.source_sequence or '',
-            PEPSICKLE_PREDICTOR_NAME,
-        )
+        if not self.processing_predictions_by_key:
+            return None
+        peptide = epitope.sequence or ''
+        source = epitope.source_sequence or ''
+        if not peptide or not source:
+            return None
+        offset = resolve_peptide_offset(source, peptide, epitope)
+        if offset is None:
+            return None
+        key = (peptide, source, offset, PEPSICKLE_PREDICTOR_NAME)
         return self.processing_predictions_by_key.get(key)
 
     def _wt_ic50_for_allele(self, epitope, allele, predictor=None):
@@ -523,7 +528,7 @@ class TemplateDataCreator(object):
         Processing scores come from
         ``self.processing_predictions_by_key`` (built by
         :func:`vaxrank.processing.annotate_processing`), looked up
-        by ``(peptide, source, predictor_name)``. Pre-2.23 these
+        by ``(peptide, source, peptide_offset, predictor_name)``. Pre-2.23 these
         lived as ``pepsickle_*`` attributes on the flat record
         itself; the join is the new contract (#272).
 

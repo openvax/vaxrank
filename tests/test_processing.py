@@ -129,7 +129,7 @@ def test_annotate_processing_attaches_continuous_scores():
     n, by_key = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
     assert n == 1
-    pp = by_key[(pred.sequence, source, 'pepsickle')]
+    pp = by_key[(pred.sequence, source, 4, 'pepsickle')]
     # C-term = probs at index 9 = 0.85 (clean release)
     assert abs(pp.c_term_cleavage_prob - 0.85) < 1e-9
     # max internal = max of probs[4..8] = max(0.10, 0.20, 0.05, 0.50, 0.30) = 0.50
@@ -146,7 +146,7 @@ def test_annotate_processing_returns_processing_prediction_map():
     ``(n_annotated, processing_predictions_by_key)`` — the map is
     the canonical record (decoupled from flat record).
     Each entry is a ``ProcessingPrediction`` keyed on
-    ``(peptide, source, predictor_name)``."""
+    ``(peptide, source, peptide_offset, predictor_name)``."""
     from vaxrank.processing_prediction import ProcessingPrediction
     source = "AAAAKLMNPVAAAA"
     probs = [0.0] * 4 + [0.10, 0.20, 0.05, 0.50, 0.30, 0.85] + [0.0] * 4
@@ -155,9 +155,9 @@ def test_annotate_processing_returns_processing_prediction_map():
         [pred], predictor=StubPepsickle({source: probs}))
     assert n == 1
     # Map carries one ProcessingPrediction keyed on
-    # (peptide, source, 'pepsickle').
+    # (peptide, source, peptide_offset, 'pepsickle').
     assert len(by_key) == 1
-    key = ('KLMNPV', source, 'pepsickle')
+    key = ('KLMNPV', source, 4, 'pepsickle')
     assert key in by_key
     pp = by_key[key]
     assert isinstance(pp, ProcessingPrediction)
@@ -218,7 +218,7 @@ def test_annotate_processing_relocates_peptide_when_offset_off():
     n, by_key = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
     assert n == 1
-    pp = by_key[(pred.sequence, source, 'pepsickle')]
+    pp = by_key[(pred.sequence, source, 3, 'pepsickle')]
     # C-term should pick up probs[8] = 0.95 (re-located, not probs[1+5]=0.05)
     assert abs(pp.c_term_cleavage_prob - 0.95) < 1e-9
 
@@ -237,7 +237,7 @@ def test_annotate_processing_does_not_touch_ranking_score():
     # ProcessingPrediction landed in the map (post-2.23, the
     # canonical record).
     assert n == 1
-    assert (pred.sequence, source, 'pepsickle') in by_key
+    assert (pred.sequence, source, 4, 'pepsickle') in by_key
     # Ranking-driving fields untouched (frozen CandidateEpitope, can't be mutated).
     leaf_after = pred.best_affinity()
     assert leaf_after.value == pre_ic50
@@ -261,8 +261,8 @@ def test_annotate_processing_predictor_failure_degrades_gracefully():
         [pred_ok, pred_fail], predictor=FlakyPredictor())
     # Only the OK one annotated; the failing source skipped, no crash.
     assert n == 1
-    assert (pred_ok.sequence, "AAAAAAAAAA", 'pepsickle') in by_key
-    assert (pred_fail.sequence, "FFAILFFFFFF", 'pepsickle') not in by_key
+    assert (pred_ok.sequence, "AAAAAAAAAA", 2, 'pepsickle') in by_key
+    assert (pred_fail.sequence, "FFAILFFFFFF", 0, 'pepsickle') not in by_key
 
 
 def test_annotate_processing_empty_input_returns_zero():
@@ -428,7 +428,7 @@ def test_epitope_data_surfaces_processing_columns_when_annotated():
     columns (Processing: C-term, Processing: max internal,
     Processing: combined) when ``include_processing=True`` — the
     values come from the ProcessingPrediction map by joining on
-    ``(peptide, source, predictor_name)``. Default
+    ``(peptide, source, peptide_offset, predictor_name)``. Default
     ``include_processing=False`` keeps the original 6-column shape
     so unannotated reports don't change."""
     from collections import OrderedDict
@@ -568,8 +568,8 @@ def test_epitope_data_header_consistent_when_some_predictions_unannotated():
         predictor=StubPepsickle(
             {source: [0.1] * 9 + [0.85] + [0.0] * 4}))
     # Verify mixed state: only one of the two has a record in the map.
-    assert (annotated.sequence, source, 'pepsickle') in by_key
-    assert (unannotated.sequence, source, 'pepsickle') not in by_key
+    assert (annotated.sequence, source, 4, 'pepsickle') in by_key
+    assert (unannotated.sequence, source, 0, 'pepsickle') not in by_key
     creator.processing_predictions_by_key = by_key
 
     # When the caller turns include_processing on, BOTH rows have
@@ -602,7 +602,7 @@ def test_re_location_picks_closest_to_declared_offset():
              0.0, 0.0, 0.0, 0.0, 0.95]  # cleavage at last position only
     n, by_key = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
-    pp = by_key[(pred.sequence, source, 'pepsickle')]
+    pp = by_key[(pred.sequence, source, 8, 'pepsickle')]
     # If re-location snapped to position 0 (first occurrence), c_term
     # would be probs[4] = 0.0; if it correctly snapped to position 8,
     # c_term = probs[12] = 0.95.
