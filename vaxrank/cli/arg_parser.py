@@ -333,7 +333,7 @@ def add_output_args(arg_parser):
              "max_internal_cut_prob, processing_score). On by default. "
              "Scores live on a separate ProcessingPrediction record "
              "joined into the per-epitope report tables at render "
-             "time by (peptide, source, predictor); see "
+             "time by (peptide, source, peptide_offset, predictor); see "
              "vaxrank/processing_prediction.py. Pepsickle runs in an "
              "isolated subprocess (issue #266) so torch's libomp "
              "doesn't clash with the parent's pandas / numpy / "

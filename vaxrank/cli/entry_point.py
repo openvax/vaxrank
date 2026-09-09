@@ -134,7 +134,7 @@ def annotate_predictions_with_processing(ranked_vaccine_peptides,
     LENS/pVACseq epitopes list (which is the union).
 
     The result is a map of ``ProcessingPrediction`` records keyed by
-    ``(peptide, source, predictor_name)``; report writers join in at
+    ``(peptide, source, peptide_offset, predictor_name)``; report writers join in at
     render time. CandidateEpitope objects are not mutated.
 
     Dedup strategy: identity (``id()``) wins when the two paths share
@@ -1248,7 +1248,7 @@ def main(args_list=None):
     # Issue #249 / #272: build per-(peptide, source) ProcessingPrediction
     # records via pepsickle. Doesn't affect ranking — purely additional
     # information surfaced in the per-epitope report tables, joined in
-    # at render time by ``(peptide, source, predictor_name)``. On by
+    # at render time by ``(peptide, source, peptide_offset, predictor_name)``. On by
     # default; opt-out via --no-processing-aware-annotation.
     processing_predictions_by_key = {}
     if getattr(args, 'processing_aware_annotation', True):
