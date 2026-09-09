@@ -155,8 +155,12 @@ class MutantProteinFragment(DataclassSerializable):
         Number of reads supporting the reference allele.
 
     n_alt_reads_supporting_protein_sequence : int
-        Number of RNA reads fully spanning the cDNA sequence(s) from which
-        we translated this amino acid sequence.
+        Number of RNA read objects compatible with the cDNA sequence(s)
+        translated into this protein. Reads may cover only part of the
+        sequence; this is not full-length peptide or independent molecule
+        evidence. Distinct compatible read names are counted separately in
+        n_alt_fragments_supporting_protein_sequence, not in n_alt_fragments
+        (which counts all alternate-supporting names at the locus).
     """
 
     variant: Any

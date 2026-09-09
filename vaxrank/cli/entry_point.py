@@ -1425,9 +1425,22 @@ def main(args_list=None):
 
 
 def run_vaxrank_from_parsed_args(args):
+    from .isovar_config_args import resolve_isovar_args
+
     merged_config = load_vaxrank_config(args)
     epitope_config = epitope_config_from_args(args, merged_config=merged_config)
     vaccine_config = vaccine_config_from_args(args, merged_config=merged_config)
+    # Resolve before syncing args: the built-in DNA fallback padding is not
+    # an explicit RNA reconstruction request. Isovar owns context derivation.
+    resolve_isovar_args(args, vaccine_config, merged_config)
+    protein_sequence_creator = protein_sequence_creator_from_args(args)
+    args.protein_sequence_length = protein_sequence_creator.protein_sequence_length
+    logger.info(
+        "RNA context target: %d aa for %d-aa peptides; selection=%s, "
+        "compatible read-name support fraction=%s, minimum coverage=%d read objects/base",
+        args.protein_sequence_length, args.protein_context_peptide_length,
+        args.protein_sequence_preference, args.min_protein_sequence_support_fraction,
+        args.min_variant_sequence_coverage)
     # Manufacturability config rides separately. We pass it to the
     # ranker only when peptide is an active vaccine modality —
     # otherwise the ``manufacturability`` sentinel inside
@@ -1480,10 +1493,6 @@ def run_vaxrank_from_parsed_args(args):
         logger.info("Loaded prediction cache from %s", prediction_cache)
         mhc_predictor = cached
 
-    args.protein_sequence_length = (
-            args.vaccine_peptide_length + 2 * args.padding_around_mutation
-    )
-
     # Vaxrank is going to evaluate multiple vaccine peptides containing
     # the same mutation so need a longer sequence from Isovar.
     # We load variants ourselves (instead of run_isovar_from_parsed_args)
@@ -1494,7 +1503,7 @@ def run_vaxrank_from_parsed_args(args):
         variants=variants,
         alignment_file=alignment_file_from_args(args),
         read_collector=read_collector_from_args(args),
-        protein_sequence_creator=protein_sequence_creator_from_args(args),
+        protein_sequence_creator=protein_sequence_creator,
         filter_thresholds=filter_threshold_dict_from_args(args),
     )
 

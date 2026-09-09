@@ -504,7 +504,7 @@ vaccine_peptides:
   preferred_length: 25                      # target amino acids per vaccine peptide
   min_length: 25                            # minimum vaccine peptide length
   max_length: 25                            # maximum vaccine peptide length
-  padding_around_mutation: 5                # off-centre windows to consider
+  padding_around_mutation: null             # adaptive RNA context; explicit legacy override
   per_mutation: 1                           # peptides to keep per variant
   max_epitopes_per_candidate: 1000          # 0 = keep all
   score_fraction_of_best: 0.99              # drop candidates scoring < 99% of best
@@ -514,6 +514,50 @@ vaccine_peptides:
     max_kmer_hydropathy_low_priority: 1.5   # low-priority max-7mer GRAVY cap
     max_kmer_hydropathy_high_priority: 2.5  # high-priority max-7mer GRAVY cap
 ```
+
+### RNA reconstruction context
+
+Vaxrank 3.14 requires Isovar ≥1.8.0. By default, the resolved vaccine peptide
+size K drives a `2*K-1` amino-acid context request: 29 for 15mers, 49 for
+25mers, and 59 for 30mers. Actual RNA-supported context may be shorter.
+Isovar's `balanced` policy maximizes mutation-containing peptide windows
+among candidates retaining at least 85% of the best candidate's compatible
+read-name support. Independently, every retained cDNA base must meet a
+two-read-object coverage floor. The fraction is a configurable selection
+tolerance, not biological confidence or per-base depth; compatible reads
+need not span a whole vaccine peptide. No reference sequence is added to
+fill missing RNA context. This is a reconstruction policy, not a change to
+Vaxrank's MHC scoring or ranking model (see the
+[PGV pipeline methods](https://doi.org/10.3389/fimmu.2017.01807)).
+
+```yaml
+isovar:
+  protein_sequence_length: null            # derive from peptide size
+  protein_context_peptide_length: null     # use vaccine_peptides.preferred_length
+  protein_sequence_preference: balanced    # or support / context
+  min_protein_sequence_support_fraction: 0.85
+  min_variant_sequence_coverage: 2
+```
+
+Each setting also has a same-named CLI flag with hyphens in place of
+underscores, or can be set using `--config-value isovar.<name>=<value>`. Explicit
+CLI values win over YAML, including values equal to the defaults and a
+coverage floor of zero (which explicitly disables that floor). An explicit
+protein length wins over legacy `--padding-around-mutation` / YAML padding;
+otherwise explicit padding requests `K + 2*padding`. With neither, Isovar
+derives the adaptive target. To reproduce historical Isovar extraction and
+support-first selection, pass `--protein-sequence-length 20
+--protein-sequence-preference support`.
+
+The target includes all placements for a centered single-residue mutation,
+not necessarily wider mutations; deletions require windows spanning their
+junction. Short outputs are not evidence of a full-length vaccine window.
+Vaxrank rejects candidate windows shorter than `vaccine_peptides.min_length`
+(25 by default); explicitly lower that minimum only when shorter peptides
+are part of the intended design. The RNA support thresholds remain unchanged.
+RNA settings are saved with run arguments and do not rerun reconstruction
+when rendering cached reports or ranking external pVACseq/LENS predictions.
+DNA-only fallback remains opt-in, with its existing separate padding default.
 
 ### Custom filtering and scoring with the topiary DSL
 
@@ -751,8 +795,9 @@ ranked_variants_with_vaccine_peptides = [
 
 For each variant, vaxrank can emit multiple alternate constructs:
 
-- `--vaccine-peptide-length` + `--padding-around-mutation` — control
-  how the SLP window slides over the mutation site.
+- `--vaccine-peptide-length` — controls SLP size and the default RNA context
+  request; `--protein-sequence-length` or legacy `--padding-around-mutation`
+  can explicitly override the reconstruction context.
 - `max_vaccine_peptides_per_variant` (config) — controls how many
   alternate windows per variant make it into the ranked output.
 - `--peptide-candidates-per-slot` / `--mrna-candidates-per-slot`

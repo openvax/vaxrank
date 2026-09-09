@@ -1,0 +1,22 @@
+{
+  "variants": [
+    {"variant_id": "PIP5K1A-chr1-151242178", "gene": "PIP5K1A", "chrom": "chr1", "pos": "151242178", "ref": "AG", "alt": "A", "protein_change": "p.Gly474fs"},
+    {"variant_id": "MAP2-chr2-209694768", "gene": "MAP2", "chrom": "chr2", "pos": "209694768", "ref": "CCTGGGCTACTGTGTGTTCAATA", "alt": "C", "protein_change": "p.Leu867fs"},
+    {"variant_id": "H1_2-chr6-26055824", "gene": "H1-2", "chrom": "chr6", "pos": "26055824", "ref": "ACCTTGGGCTTAGCGG", "alt": "A", "protein_change": "p.Ala197_Lys201del"},
+    {"variant_id": "EXOC4-chr7-133274996", "gene": "EXOC4", "chrom": "chr7", "pos": "133274996", "ref": "G", "alt": "T", "protein_change": "p.Ser34Ile"},
+    {"variant_id": "GTF3C5-chr9-133057893", "gene": "GTF3C5", "chrom": "chr9", "pos": "133057893", "ref": "GGAGGAGGAGGAA", "alt": "G", "protein_change": "p.Glu503_Glu506del"},
+    {"variant_id": "DYNC1H1-chr14-101980529", "gene": "DYNC1H1", "chrom": "chr14", "pos": "101980529", "ref": "G", "alt": "A", "protein_change": "p.Val314Ile"}
+  ],
+  "sources": {
+    "bulk_star_t0": {
+      "name": "T0 BostonGene Tumor RNA 2022-12 (BG003082 reprocessed)",
+      "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam",
+      "size": "6.30 GiB", "tissue": "tumor"
+    },
+    "ont_t1": {
+      "name": "T1 UCSF Tumor ONT 2024-06",
+      "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam",
+      "size": "34.76 GiB", "tissue": "tumor"
+    }
+  }
+}
