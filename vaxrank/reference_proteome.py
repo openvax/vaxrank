@@ -69,7 +69,7 @@ def cta_source_gene_ids_for_genome(genome) -> frozenset[str]:
     return oncoref_cta_source_gene_ids()
 
 # In-memory cache for loaded kmer sets to avoid repeated disk reads
-# Key: (species, release, min_len, max_len) -> set of kmers
+# Key: (content identity, min_len, max_len) -> set of kmers
 _kmer_set_cache: dict[tuple, set[str]] = {}
 _kmer_set_cache_lock = threading.Lock()
 
@@ -267,12 +267,18 @@ def get_cache_dir() -> str:
 
 
 def kmer_set_index_path(genome, min_len: int, max_len: int) -> str:
-    """Returns path for the cached kmer set index."""
+    """Content-keyed path; subsets must never reuse a full-reference index."""
+    identity = _kmer_dataset_identity(genome)
     return os.path.join(
         get_cache_dir(),
-        "%s_%d_kmer_set_%d_%d.pkl.gz"
-        % (genome.species.latin_name, genome.release, min_len, max_len),
+        "content_%s_kmer_set_%d_%d.pkl.gz" % (identity, min_len, max_len),
     )
+
+
+def _kmer_dataset_identity(genome):
+    """Reuse installed dataset hashes, otherwise identify actual proteins."""
+    return (ensembl_dataset_cache_identity(genome)
+            or _protein_content_digest(genome_protein_dict(genome)))
 
 
 def build_kmer_set_index(
@@ -300,9 +306,8 @@ def build_kmer_set_index(
         Set of all kmers found in the reference proteome
     """
     logger.info(
-        "Building kmer set index for %s release %d (lengths %d-%d)",
-        genome.species.latin_name,
-        genome.release,
+        "Building kmer set index for reference content %s (lengths %d-%d)",
+        _kmer_dataset_identity(genome),
         min_len,
         max_len,
     )
@@ -366,7 +371,7 @@ def load_kmer_set_index(
     set[str]
         Set of all kmers found in the reference proteome
     """
-    cache_key = (genome.species.latin_name, genome.release, min_len, max_len)
+    cache_key = (_kmer_dataset_identity(genome), min_len, max_len)
 
     with _kmer_set_cache_lock:
         # Check in-memory cache first to avoid repeated disk reads

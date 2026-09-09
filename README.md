@@ -920,6 +920,13 @@ Run linting and tests:
 
 The first run of the tests may take a while to build the reference proteome kmer index, but subsequent runs will use the cached index.
 
+Reference membership caches are keyed by the installed annotation/sequence
+content (or actual protein content for custom reference providers), not only
+species and release. This supports explicit offline PyEnsembl `Genome`
+references and prevents a subset from sharing a full-reference cache. Upgrading
+from species/release-only caches triggers a one-time rebuild; old cache files
+are not trusted or automatically deleted.
+
 ### Scripts
 
 - `develop.sh`: installs the package in editable mode and sets `PYTHONPATH` to the repo root.
