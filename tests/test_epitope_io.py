@@ -1228,7 +1228,7 @@ def test_lens_processing_only_rows_preserve_alleles_scores_and_report_rows(
         for row_input in row_inputs
     ]
     assert [row["Allele"] for row in rows] == ["A*02:01", "B*07:02"]
-    assert [row["Score"] for row in rows] == ["0.8", "0.8"]
+    assert [row["Score"] for row in rows] == [0.8, 0.8]
     assert all(row["Integrated processing score"] == "0.800" for row in rows)
 
 
@@ -1263,7 +1263,7 @@ def test_lens_presentation_only_candidate_has_a_template_report_row(tmp_path):
         include_additional_prediction_axes=True,
     )
     assert row["Allele"] == "A*02:01"
-    assert row["Score"] == "0.85"
+    assert row["Score"] == 0.85
     assert row["IC50"] == "No prediction"
     assert row["Presentation score"] == "0.850"
     assert row["Presentation %ile"] == "0.280"
@@ -1322,7 +1322,7 @@ def test_lens_report_anchors_mixed_evidence_per_allele_and_predictor(tmp_path):
         "Presentation score"] == "0.600"
     assert by_key[("C*07:02", "mhcflurry")][
         "Integrated processing score"] == "0.700"
-    assert all(row["Score"] == "0.7" for row in report_rows)
+    assert all(row["Score"] == 0.7 for row in report_rows)
 
 
 def test_lens_context_scores_merge_by_source_position(tmp_path):

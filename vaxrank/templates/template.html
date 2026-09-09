@@ -133,7 +133,7 @@
                                         {% for e in p.epitopes %}
                                         <tr>
                                             {% for _, val in e.items() %}
-                                            <td>{{ val }}</td>
+                                            <td>{{ val|display_epitope_value }}</td>
                                             {% endfor %}
                                         </tr>
                                         {% endfor %}
