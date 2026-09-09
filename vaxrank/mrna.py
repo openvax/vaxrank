@@ -60,6 +60,8 @@ from .vaccine_library import (
     select_antigen_window,
     top_target_epitopes,
 )
+from .construct_sequence import validate_construct_placements
+from .native_serialization import to_native_json
 
 logger = logging.getLogger(__name__)
 
@@ -223,6 +225,11 @@ class RNAConstruct:
     poly_a_nt: str = ""
     elements: dict = field(default_factory=dict)
     antigens: list = field(default_factory=list)
+    construct_placements: tuple = field(default_factory=tuple)
+
+    def __post_init__(self):
+        self.construct_placements = tuple(self.construct_placements)
+        validate_construct_placements(self.construct_placements, self.cds_aa, "mrna")
 
 
 def resolve_named_mrna_element(table, name, kind):
@@ -980,6 +987,7 @@ def _validate_output_dir(output_dir):
     directory. Silently creating ``out.fasta/`` when the user meant a
     file is a sharp footgun, so block it loudly.
     """
+    output_dir = os.fspath(output_dir)
     if os.path.isfile(output_dir):
         raise ValueError(
             "--output-dir for --vaccine-type=mrna is a *directory* (writes cds.fasta / "
@@ -1024,6 +1032,27 @@ def write_mrna_outputs(constructs, output_dir, manifest_path=None,
     readers must null-check both. ``elements['linkers_per_junction']``
     is always a list (possibly empty for a single-antigen construct).
     """
+    constructs = tuple(constructs)
+    if any(c.construct_placements for c in constructs) and not manifest_path:
+        raise ValueError("Provenance-bearing mRNA output requires a manifest_path sidecar")
+    for c in constructs:
+        validate_construct_placements(c.construct_placements, c.cds_aa, "mrna")
+        if c.construct_placements:
+            from Bio.Data.CodonTable import TranslationError
+            from Bio.Seq import Seq
+
+            try:
+                translated = str(Seq(c.cds_nt).translate(cds=True))
+            except TranslationError as error:
+                raise ValueError("Construct provenance requires a complete valid CDS") from error
+            if translated != c.cds_aa:
+                raise ValueError("Encoded construct provenance disagrees with actual CDS translation")
+            utr_5p = c.elements.get('utr_5p', {}).get('nt', '')
+            utr_3p = c.elements.get('utr_3p', {}).get('nt', '')
+            if (c.no_polya_nt != utr_5p + c.cds_nt + utr_3p
+                    or c.full_nt != c.no_polya_nt + c.poly_a_nt
+                    or c.sequence != c.full_nt):
+                raise ValueError("Construct provenance disagrees with emitted full mRNA sequence")
     _validate_output_dir(output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -1076,6 +1105,8 @@ def write_mrna_outputs(constructs, output_dir, manifest_path=None,
                 'elements': c.elements,
                 'components': c.components,  # legacy 2.12 schema for back-compat
                 'manufacturability': {},
+                **({'construct_provenance': json.loads(to_native_json(c.construct_placements))}
+                   if c.construct_placements else {}),
             }
             for c in constructs
         ]

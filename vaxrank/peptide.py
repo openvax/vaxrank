@@ -35,6 +35,8 @@ import logging
 from dataclasses import dataclass, field
 
 from .manufacturability import ManufacturabilityScores
+from .construct_sequence import ConstructPlacement, validate_construct_placements
+from .native_serialization import to_native_json
 from .vaccine_library import (
     gene_names_from_antigen_names,
     get_linker,
@@ -152,6 +154,26 @@ class PeptideConstruct:
     antigen_names: list
     components: dict = field(default_factory=dict)
     manufacturability: dict = field(default_factory=dict)
+    construct_placements: tuple = field(default_factory=tuple)
+
+    def __post_init__(self):
+        self.construct_placements = tuple(self.construct_placements)
+        validate_construct_placements(self.construct_placements, self.sequence, "peptide")
+
+
+def peptide_construct_from_sequence(record):
+    """Export an explicitly supplied construct without designing or changing it.
+
+    The record is provenance, not a claim that this sequence passed selection
+    or a safety policy. Use the construct audit before interpreting predictions.
+    """
+    return PeptideConstruct(
+        name=record.name, sequence=record.sequence,
+        antigen_names=[record.native_antigen.display_gene_name
+                       if record.native_antigen else record.name],
+        manufacturability=_manufacturability_for(record.sequence),
+        construct_placements=(ConstructPlacement(record, 0),),
+    )
 
 
 def _antigen_records(ranked_vaccine_peptides, antigen_content,
@@ -391,7 +413,19 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
     consume both modalities uniformly.
     """
     options = options or PeptideConstructConfig()
-    has_mods = options.n_terminal_acetylation or options.c_terminal_amidation
+    constructs = tuple(constructs)
+    has_provenance = any(c.construct_placements for c in constructs)
+    if has_provenance and not manifest_path:
+        raise ValueError("Provenance-bearing peptide output requires a manifest_path sidecar")
+    option_mods = options.n_terminal_acetylation or options.c_terminal_amidation
+    for c in constructs:
+        validate_construct_placements(c.construct_placements, c.sequence, "peptide")
+        if c.construct_placements and option_mods:
+            raise ValueError(
+                "Declare chemical modifications in construct provenance, not writer options")
+    has_mods = option_mods or any(
+        placement.construct.chemical_modifications
+        for c in constructs for placement in c.construct_placements)
 
     with open(fasta_path, 'w') as f:
         for c in constructs:
@@ -407,11 +441,14 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
             {
                 'modality': 'peptide',
                 'name': c.name,
+                'sequence': c.sequence,
                 'length': len(c.sequence),
                 'length_unit': 'aa',
                 'antigen_names': c.antigen_names,
                 'components': c.components,
                 'manufacturability': c.manufacturability,
+                **({'construct_provenance': json.loads(to_native_json(c.construct_placements))}
+                   if c.construct_placements else {}),
             }
             for c in constructs
         ]
@@ -427,6 +464,8 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
                 header.append('displayed_sequence')
             header += ['scale_mg', 'purity_percent', 'counterion',
                        'antigen_names', 'notes']
+            if has_provenance:
+                header.append('construct_provenance_json')
             writer.writerow(header)
             n_term = 'Acetyl' if options.n_terminal_acetylation else 'Free'
             c_term = 'Amide' if options.c_terminal_amidation else 'Free'
@@ -437,13 +476,30 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
                         "Construct contains a 2A linker; ribosomal "
                         "skipping is co-translational and does not "
                         "occur in synthesized peptides.")
-                row = [c.name, c.sequence, len(c.sequence), n_term, c_term]
+                displayed = _modification_label(
+                    options.n_terminal_acetylation, options.c_terminal_amidation,
+                    c.sequence) or c.sequence
+                row_n_term, row_c_term = n_term, c_term
+                if c.construct_placements:
+                    n_changes, c_changes = [], []
+                    for placement in c.construct_placements:
+                        for chemical in placement.construct.chemical_modifications:
+                            if chemical.start == chemical.end:
+                                final_offset = placement.offset + chemical.start
+                                (n_changes if final_offset == 0 else c_changes).append(chemical.name)
+                    row_n_term = '; '.join(n_changes) or 'Free'
+                    row_c_term = '; '.join(c_changes) or 'Free'
+                    displayed = (("[" + row_n_term + "]-") if n_changes else "") + c.sequence
+                    if c_changes:
+                        displayed += "-[" + row_c_term + "]"
+                    notes = (notes + " Explicit construct; see full modification/provenance record. "
+                             "Sequence-only predictions do not assess chemical modifications.").strip()
+                row = [c.name, c.sequence, len(c.sequence), row_n_term, row_c_term]
                 if has_mods:
-                    row.append(_modification_label(
-                        options.n_terminal_acetylation,
-                        options.c_terminal_amidation,
-                        c.sequence))
+                    row.append(displayed)
                 row += [options.scale_mg, options.purity_percent,
                         options.counterion,
                         ';'.join(c.antigen_names), notes]
+                if has_provenance:
+                    row.append(to_native_json(c.construct_placements))
                 writer.writerow(row)

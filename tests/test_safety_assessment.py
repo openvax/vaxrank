@@ -274,7 +274,50 @@ def test_high_level_api_checks_reference_exclusions_and_serializes():
     assert WindowSafetyAssessment.from_json(result.to_json()) == result
 
 
-def test_high_level_api_indexes_only_predicted_peptide_lengths():
+def test_complete_window_retains_non_cta_shared_source_provenance():
+    from dataclasses import replace
+    from .test_reference_proteome import create_mock_genome, create_mock_transcript
+
+    cta_gene = "ENSG00000185686"
+    antigen = replace(_antigen((cta_gene,)), kind="CTA")
+    peptide = antigen.amino_acids[:9]
+    genome = create_mock_genome([
+        create_mock_transcript("CTA_TX", peptide, gene_id=cta_gene),
+        create_mock_transcript("SELF_TX", "M" + peptide, gene_id="ENSG_SELF"),
+    ], species_name="Homo sapiens", release=114)
+
+    class Predictor(TopiaryPredictor):
+        def __init__(self):
+            pass
+
+        def predict_from_named_sequences(self, sequences):
+            return pd.DataFrame([_row(peptide, 0)])
+
+    result = assess_vaccine_antigen_window(Predictor(), antigen, genome=genome)
+    match = result.ligands[0].self_reference_match
+    assert match.occurs
+    assert match.source_provenance_complete
+    assert [(source.gene_id, source.transcript_id) for source in match.sources] == [
+        ("ENSG_SELF", "SELF_TX")]
+
+
+@pytest.mark.parametrize("change", [
+    {"peptide": "CCCCCCCCC"}, {"antigen_kind": "CTA"},
+    {"excluded_gene_ids": ("ENSG_OTHER",)}, {"genome_release": "old"},
+])
+def test_attributed_self_results_must_match_sequence_policy_and_release(change):
+    from dataclasses import replace
+
+    antigen = _antigen()
+    peptide = antigen.amino_acids[:9]
+    match = replace(antigen.self_reference_match(peptide, False, genome_release="114"), **change)
+    with pytest.raises(SafetyAssessmentError, match="disagrees"):
+        safety_assessment_from_prediction_frame(
+            pd.DataFrame([_row(peptide, 0)]), antigen=antigen,
+            self_reference_results={peptide: match}, genome_release="114")
+
+
+def test_high_level_api_batches_only_predicted_peptides_for_source_lookup():
     from unittest.mock import patch
 
     class StubPredictor(TopiaryPredictor):
@@ -286,22 +329,20 @@ def test_high_level_api_indexes_only_predicted_peptide_lengths():
             return pd.DataFrame([_row(sequence[:9], 0)])
 
     genome = object()
+    antigen = _antigen()
+    peptide = antigen.amino_acids[:9]
     with patch(
-        "vaxrank.safety_assessment.ReferenceProteome"
-    ) as reference_proteome_cls:
-        reference_proteome_cls.return_value.contains.return_value = False
+        "vaxrank.safety_assessment.self_reference_matches",
+        return_value={peptide: antigen.self_reference_match(peptide, False)},
+    ) as lookup:
         result = assess_vaccine_antigen_window(
             StubPredictor(),
-            _antigen(),
+            antigen,
             genome=genome,
         )
 
     assert result.ligands
-    reference_proteome_cls.assert_called_once_with(
-        genome,
-        min_kmer_length=9,
-        max_kmer_length=9,
-    )
+    lookup.assert_called_once_with((peptide,), antigen, genome)
 
 
 def test_construct_boundary_must_be_internal_to_window():
