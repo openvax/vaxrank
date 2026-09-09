@@ -259,8 +259,8 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
     class DummyLongFragment:
         def sorted_subsequences(self, subsequence_length):
             return [
-                (0, DummyCandidateFragment("AAAA")),
-                (1, DummyCandidateFragment("BBBB")),
+                (0, DummyCandidateFragment("A" * subsequence_length)),
+                (1, DummyCandidateFragment("C" * subsequence_length)),
             ]
 
     class FakeVaccinePeptide:
@@ -275,14 +275,14 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
             ranking_rules=None,
         ):
             self.mutant_protein_fragment = mutant_protein_fragment
-            self.combined_score = 10.0 if mutant_protein_fragment.amino_acids == "AAAA" else 8.5
+            self.combined_score = 10.0 if mutant_protein_fragment.amino_acids == "A" * 25 else 8.5
 
         @staticmethod
         def lexicographic_sort_key(obj):
             return (-obj.combined_score,)
 
     def fake_slice_epitopes(epitopes, start_offset, end_offset):
-        amino_acids = "AAAA" if start_offset == 0 else "BBBB"
+        amino_acids = ("A" if start_offset == 0 else "C") * (end_offset - start_offset)
         return [SimpleNamespace(
             source_sequence=amino_acids)]
 
@@ -520,7 +520,11 @@ def test_manufacturability_thresholds_flow_from_manufacturability_config():
     epitope = _make_epitope("ACDEFGHIK", ic50=100.0, wt_ic50=200.0,
                             source_sequence="ACDEFGHIK")
 
-    vaccine_config = VaccineConfig()
+    # This propagation test intentionally uses a 9-aa candidate; request
+    # that length instead of relying on the formerly ignored 25-aa minimum.
+    vaccine_config = VaccineConfig(
+        preferred_peptide_length=len(fragment), min_peptide_length=len(fragment),
+        max_peptide_length=len(fragment))
     manufacturability_config = ManufacturabilityConfig(
         max_kmer_hydropathy_high_priority=3.0)
 
