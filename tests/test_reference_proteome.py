@@ -269,7 +269,7 @@ def test_load_kmer_set_builds_index_when_not_cached():
             ok_("ABCDEFGH" in kmers)
 
             # Cache file should now exist (compressed)
-            cache_path = os.path.join(tmpdir, "test_species_100_kmer_set_8_8.pkl.gz")
+            cache_path = kmer_set_index_path(genome, 8, 8)
             ok_(os.path.exists(cache_path))
 
 
@@ -278,11 +278,11 @@ def test_load_kmer_set_loads_from_cache_when_exists():
     with tempfile.TemporaryDirectory() as tmpdir:
         # Pre-create a cache file
         cached_kmers = {"CACHED01", "CACHED02"}
-        cache_path = os.path.join(tmpdir, "test_species_100_kmer_set_8_8.pkl")
+        genome = create_mock_genome([], species_name="test_species", release=100)
+        with patch('vaxrank.reference_proteome.get_cache_dir', return_value=tmpdir):
+            cache_path = kmer_set_index_path(genome, 8, 8).removesuffix(".gz")
         with open(cache_path, 'wb') as f:
             pickle.dump(cached_kmers, f)
-
-        genome = create_mock_genome([], species_name="test_species", release=100)
 
         # Clear in-memory cache to test disk cache loading
         clear_reference_proteome_caches()
@@ -305,7 +305,8 @@ def test_load_kmer_set_force_reload_rebuilds_index():
     with tempfile.TemporaryDirectory() as tmpdir:
         # Pre-create a cache file with different content
         cached_kmers = {"OLDKMERS"}
-        cache_path = os.path.join(tmpdir, "test_species_100_kmer_set_8_8.pkl")
+        with patch('vaxrank.reference_proteome.get_cache_dir', return_value=tmpdir):
+            cache_path = kmer_set_index_path(genome, 8, 8).removesuffix(".gz")
         with open(cache_path, 'wb') as f:
             pickle.dump(cached_kmers, f)
 
@@ -329,7 +330,50 @@ def test_kmer_set_index_path_format():
     with patch('vaxrank.reference_proteome.get_cache_dir', return_value="/cache"):
         path = kmer_set_index_path(genome, min_len=8, max_len=15)
 
-        eq_(path, "/cache/homo_sapiens_104_kmer_set_8_15.pkl.gz")
+        import hashlib
+        digest = hashlib.sha256(b"").hexdigest()
+        eq_(path, "/cache/content_%s_kmer_set_8_15.pkl.gz" % digest)
+
+
+def test_reference_cache_separates_content_with_same_species_release(tmp_path, monkeypatch):
+    monkeypatch.setenv("VAXRANK_REF_PEPTIDES_DIR", str(tmp_path))
+    first = create_mock_genome([create_mock_transcript("T1", "ACDEFGHIKL")])
+    second = create_mock_genome([create_mock_transcript("T1", "LMNPQRSTVW")])
+    assert kmer_set_index_path(first, 8, 8) != kmer_set_index_path(second, 8, 8)
+    a = load_kmer_set_index(first, 8, 8)
+    b = load_kmer_set_index(second, 8, 8)
+    assert "ACDEFGHI" in a and "ACDEFGHI" not in b
+    assert "LMNPQRST" in b and "LMNPQRST" not in a
+    clear_reference_proteome_caches()
+    assert load_kmer_set_index(first, 8, 8) == a
+    assert load_kmer_set_index(second, 8, 8) == b
+
+
+def test_legacy_species_only_cache_is_not_trusted(tmp_path, monkeypatch):
+    monkeypatch.setenv("VAXRANK_REF_PEPTIDES_DIR", str(tmp_path))
+    clear_reference_proteome_caches()
+    genome = create_mock_genome([create_mock_transcript("T1", "ACDEFGHIKL")])
+    with (tmp_path / "test_species_100_kmer_set_8_8.pkl").open("wb") as f:
+        pickle.dump({"WRONGSEQ"}, f)
+    assert "WRONGSEQ" not in load_kmer_set_index(genome, 8, 8)
+    assert "ACDEFGHI" in load_kmer_set_index(genome, 8, 8)
+
+
+def test_offline_pyensembl_genome_can_index_real_sid_reference(tmp_path, monkeypatch):
+    from .osteosarc_helpers import load_osteosarc
+
+    monkeypatch.setenv("VAXRANK_REF_PEPTIDES_DIR", str(tmp_path / "kmers"))
+    variants, _, _ = load_osteosarc(tmp_path)
+    genome = variants["DYNC1H1"].ensembl
+    assert isinstance(genome, Genome)
+    assert not hasattr(genome, "species") and not hasattr(genome, "release")
+    reference = ReferenceProteome(genome, min_kmer_length=9, max_kmer_length=9)
+    assert reference.contains("KRFHATVSF")
+    assert not reference.contains("KRFHATISF")
+    clear_reference_proteome_caches()
+    reloaded = ReferenceProteome(genome, min_kmer_length=9, max_kmer_length=9)
+    assert reloaded.contains("KRFHATVSF")
+    assert not reloaded.contains("KRFHATISF")
 
 
 def test_kmer_set_index_path_different_kmer_lengths():
