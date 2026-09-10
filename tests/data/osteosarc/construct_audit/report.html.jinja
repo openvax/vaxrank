@@ -1,0 +1,70 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Sid DYNC1H1 construct audit</title>
+<style>body{font:15px system-ui,sans-serif;max-width:1250px;margin:2rem auto;padding:0 1rem;color:#24363b}table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:13px}td,th{border:1px solid #c4d0d3;padding:.5rem;text-align:left;vertical-align:top}th{background:#eef3f4}code{overflow-wrap:anywhere}section{border-top:2px solid #496a72;margin-top:2rem}aside{background:#fff1cd;padding:1rem}details{margin:1rem 0}a{color:#16576c}</style>
+</head><body><h1>Sid DYNC1H1: native RNA and documented vaccine constructs</h1>
+<aside>This is a reproducible model-evidence pilot, not historical selection reproduction or a clinical safety verdict.
+Reconstructability, selection gates, manufacturing changes, cleavage, pMHC prediction and tissue-risk hypotheses are separate.
+No score establishes antigen presentation, TCR cross-reactivity, toxicity, serum half-life or delivery.</aside>
+<p>Independent sequence source: <a href="{{ documented.source }}">published DYNC1H1 page</a>.
+Intended ligand <code>{{ documented.intended_ligand }}</code> is independently documented, not inferred from model scores.
+{{ documented.assay_only_comparators|join(', ') }} are assay-only comparators in this pilot.</p>
+<p>Clinical typing: <a href="{{ documented.clinical_hla_source }}">{{ documented.clinical_class_i|join(', ') }}</a>.
+Only the five non-null class-I alleles were predicted, at lengths {{ metadata.peptide_lengths }}.
+<a href="{{ documented.typing_discrepancy_source }}">Typing discrepancy</a>: {{ documented.typing_discrepancy }}</p>
+<p>All coordinates are zero-based, half-open. Bond b divides residues b−1 and b; endpoints are not peptide bonds.
+<a href="full-contexts.html">Every per-bond map, target mask, ligand prediction and coverage request</a> ·
+<a href="full-contexts.json">Native machine-readable context graphs</a>.</p>
+<h2>RNA evidence: nine products, not nine independent biological replicates</h2>
+<p>The table and model maps use complete original regional BAMs, verified against released Isovar acquisition receipts.
+Offline reconstruction tests use separately labelled selected-read fixtures; their contexts can differ from full-data contexts.
+Neither processed products nor barcode counts are independent biological replicates or proof of tumor-cell identity.
+The two-read per-base reconstruction floor is independent of Vaxrank's three-alternate-read selection minimum.
+Native contexts use a 25-aa vaccine-size request with adaptive reconstruction, balanced selection and 85% compatible read-name support.
+The four final constructs are mapped to the earliest bulk T0 anchor; no tail acquires RNA evidence.</p>
+<table><tr><th>Source / attribution</th><th>Full-region alternate reads / fragments</th><th>Selection gates</th><th>Documented native windows</th></tr>
+{% for row in evidence.rna_results %}<tr><td>{{ row.modality }} {{ row.timepoint }}<br><a href="{{ sources[row.source_id].url }}">{{ row.source_id }}</a><br>{{ row.attribution }}</td>
+<td>{{ row.n_alt_reads }} / {{ row.n_alt_fragments }}<br>{{ row.input_scope }}; Vaxrank default filters, not cell counts.</td>
+<td>{{ row.passes_all_filters }}{% for name, passed in row.filter_values.items() %}{% if not passed %}<br>{{ name }} failed{% endif %}{% endfor %}</td>
+<td>{% for window in row.windows %}{{ window.construct_id }}: {{ window.status }} {{ window.native_occurrence_offsets }}<br>{% endfor %}</td></tr>{% endfor %}</table>
+<h2>Full-reference self assessment</h2>
+<p>Human {{ evidence.self_reference.assembly }}, Ensembl {{ evidence.self_reference.release }};
+{{ evidence.self_reference.protein_coding_transcripts }} annotated protein-coding transcripts.
+{{ evidence.self_reference.policy }}. Reference identity <code>{{ evidence.self_reference.dataset_identity }}</code>.</p>
+<p>{{ evidence.cta_catalog.policy }} (oncoref {{ evidence.cta_catalog.package_version }}).
+{{ evidence.cta_catalog.interpretation }}. All matching source genes/transcripts are retained, including CTA/non-CTA shared matches.
+An exact reference match is not evidence that the corresponding tissue presents the peptide.</p>
+<p>Strong-prediction flag: {{ policy }}. <a href="{{ policy_source }}">Primary model threshold documentation</a>.
+Affinity and EL ranks remain separate; this threshold flags report rows only.</p>
+{% for row in rows %}{% set audit=row.audit %}{% set ctx=audit.context %}<section><h2>{{ ctx.name }} — {{ ctx.kind }}</h2>
+<p><code>{{ ctx.sequence }}</code> ({{ ctx.sequence|length }} aa).</p>
+{% if ctx.construct %}<p>{{ ctx.construct.evidence.provider }} {{ ctx.construct.evidence.vaccine_version }} / {{ ctx.construct.modality }};
+native <code>{{ ctx.construct.native_sequence }}</code>; native offsets {{ ctx.construct.native_residue_offsets }}.
+{% for edit in ctx.construct.sequence_edits %}Addition <code>{{ edit.replacement }}</code> at native boundary {{ edit.start }}.
+{{ edit.rationale.description }} ({{ edit.rationale.evidence_level }}).{% endfor %}</p>{% endif %}
+<p>Input termini N={{ ctx.n_term }}, C={{ ctx.c_term }}. {{ ctx.chemistry_basis or 'Molecular termini not established; RNA windows and mRNA segments are not exposed peptide substrates.' }}</p>
+<h3>Exact cuts relative to intended target {{ documented.intended_ligand }} [{{ row.target_start }},{{ row.target_end }})</h3>
+{% for profile, interval in row.target_profiles %}<p>{{ profile.model.name }} {{ profile.model.version }} — {{ profile.status }}.
+Score: {{ profile.model.score_name or 'qualitative only' }}; units {{ profile.model.score_units or 'none' }}.
+{{ profile.reason_codes|join(', ') }}. {{ profile.model.limitations }}</p>
+<table><tr><th>Role</th><th>Exact bond / observation</th><th>Missing context</th></tr>
+<tr><td>N boundary</td><td>{{ interval.n_boundary_status }}{% if interval.n_boundary %}: {{ interval.n_boundary.bond }} / {{ interval.n_boundary.score }} / {{ interval.n_boundary.status }}{% endif %}</td><td>{{ row.target_start in profile.padded_bonds }}</td></tr>
+{% for site in interval.internal_sites %}<tr><td>Internal to intended target</td><td>{{ site.bond }} <code>{{ ctx.sequence[site.bond-1] }}|{{ ctx.sequence[site.bond] }}</code> / {{ site.score }} / {{ site.status }}</td><td>{{ site.bond in profile.padded_bonds }}</td></tr>{% endfor %}
+{% for bond in interval.unassessed_internal_bonds %}<tr><td>Internal to intended target</td><td>{{ bond }}: unassessed</td><td>Not assessed</td></tr>{% endfor %}
+<tr><td>C boundary</td><td>{{ interval.c_boundary_status }}{% if interval.c_boundary %}: {{ interval.c_boundary.bond }} / {{ interval.c_boundary.score }} / {{ interval.c_boundary.status }}{% endif %}</td><td>{{ row.target_end in profile.padded_bonds }}</td></tr></table>{% endfor %}
+<p>Padded-context model differences are not experimentally established processing differences. No terminal sentinel is treated as a cleavage probability.</p>
+<h3>Strong non-target ligands with non-CTA reference sources</h3>
+<table><tr><th>Ligand / exact occurrence</th><th>Flagged model observations</th><th>Every reference source</th></tr>
+{% for finding in row.non_target_self_findings %}<tr><td><code>{{ finding.ligand.peptide }}</code> [{{ finding.ligand.start }},{{ finding.ligand.end }})<br>Overlaps intended ligand: {{ finding.overlaps_intended }}</td>
+<td>{% for p in finding.predictions %}{{ p.kind }} / {{ p.allele }} / {{ p.predictor_name }} {{ p.predictor_version }}<br>percentile={{ p.percentile_rank }}, score={{ p.score }}, value={{ p.value }} {{ value_unit(p.kind) or '(no linear unit)' }}<br>{% endfor %}</td>
+<td>{% for source in finding.self_match.sources %}{{ source.gene_name }} / {{ source.gene_id }} / {{ source.transcript_id }} / {{ source.protein_id }} / {{ source.species }} / biotype: {{ source.transcript_biotype or 'unknown' }} / {% if source in finding.cta_sources %}CTA candidate{% else %}non-CTA catalog source{% endif %}<br>{% endfor %}</td></tr>
+{% else %}<tr><td colspan="3">No such flag in the requested model/HLA/length scope. This is not a safety clearance or an assessment of near-self/TCR cross-reactivity.</td></tr>{% endfor %}</table></section>{% endfor %}
+<section><h2>Unassessed constructs, models and sources</h2>
+<p>The four documented DYNC1H1 entries are the pilot, not the entire historical vaccine set. DYNC1H1 JLF V1's exact construct, manufacturer order sheets/chemical termini, complete historical mRNA CDS/products/linkers and provider-version mapping for the mRNA entries are not established.
+Class II, near-self/tissue-specific presentation, non-proteasomal cytosolic/ER/endolysosomal processing, serum kinetics, serum half-life, clearance and organ/DC delivery remain unassessed. CPN is an initial exposed-terminal recognition rule under conditional chemistry, not an iterative trimming simulation or serum stability estimate.</p>
+<details><summary>Every other vaccine variant: all constructs unassessed</summary><table><tr><th>Variant</th><th>Published vaccine count (not pinned construct definitions)</th></tr>
+{% for variant in inventory.variants %}{% if variant.variant_id != documented.variant_id %}<tr><td><a href="{{ variant.source_url }}">{{ variant.variant_id }}</a></td><td>{{ variant.vaccine_count }}</td></tr>{% endif %}{% endfor %}</table></details>
+<details><summary>All {{ inventory.source_ids|length }} released RNA-product outcomes for DYNC1H1</summary>
+<p>Only the nine named products above were reconstructed in this Vaxrank pilot. Remaining products retain upstream outcomes; missing/failed acquisitions are not zero-expression evidence. Pooled PBMC donor assignments and barcode-to-tumor-cell labels are not inferred.</p>
+<table><tr><th>Source / label / attribution</th><th>Upstream status</th><th>Upstream default full-region counts</th></tr>
+{% for entry in inventory.rows %}<tr><td><a href="{{ sources[entry.source_id].url }}">{{ entry.source_id }}</a><br>{{ sources[entry.source_id].name }}<br>{{ sources[entry.source_id].attribution }}</td><td>{{ entry.status }}</td><td>{% if entry.defaults %}{{ entry.defaults.counts }}{% else %}Unassessed / no default counts{% endif %}</td></tr>{% endfor %}</table></details>
+<details><summary>Software, model and artifact provenance</summary><p>{{ metadata.package_versions }}</p><p>Prediction artifact SHA-256 <code>{{ metadata.output_sha256 }}</code>.</p><p>Reference file hashes {{ evidence.self_reference.files }}. Full NetMHCpan weight hashes are retained in the fixture manifest; each Pepsickle profile retains its actual weight hash and settings.</p></details>
+</section></body></html>

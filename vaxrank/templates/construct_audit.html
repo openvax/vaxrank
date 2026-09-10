@@ -66,7 +66,7 @@ not establish complete coverage of all patient alleles, lengths or models.</p>
 {% if not ligand.self_reference_match.source_provenance_complete %}Incomplete{% endif %}
 {% for source in ligand.self_reference_match.sources %}
 {{ source.gene_name }} {{ source.gene_id }} / {{ source.transcript_id }} /
-{{ source.protein_id }} / {{ source.species }}<br>{% endfor %}</td>
+{{ source.protein_id }} / {{ source.species }} / biotype: {{ source.transcript_biotype or 'unknown' }}<br>{% endfor %}</td>
 <td>{% for p in ligand.predictions %}{{ p.kind }} / {{ p.allele }} /
 {{ p.predictor_name }} {{ p.predictor_version }}: score={{ p.score }},
 value={{ p.value }}, rank={{ p.percentile_rank }}<br>{% endfor %}</td>

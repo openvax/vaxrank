@@ -19,7 +19,8 @@ import pickle
 import tempfile
 from unittest.mock import MagicMock, patch
 
-from pyensembl import Genome
+from pyensembl import EnsemblRelease, Genome
+import pytest
 
 from vaxrank.reference_proteome import (
     ReferenceProteome,
@@ -55,13 +56,14 @@ from .common import eq_, ok_
 # =============================================================================
 
 def create_mock_transcript(transcript_id, protein_sequence, is_protein_coding=True,
-                           gene_id=None):
+                           gene_id=None, biotype=None):
     """Create a mock transcript object"""
     transcript = MagicMock()
     transcript.id = transcript_id
     transcript.transcript_id = transcript_id
     transcript.protein_sequence = protein_sequence
     transcript.is_protein_coding = is_protein_coding
+    transcript.biotype = biotype or ("protein_coding" if is_protein_coding else "nonsense_mediated_decay")
     transcript.gene_id = gene_id or f"GENE_{transcript_id}"
     transcript.gene_name = transcript.gene_id
     transcript.protein_id = f"PROTEIN_{transcript_id}"
@@ -178,8 +180,8 @@ def test_build_kmer_set_multiple_proteins():
     ok_("CCCCCCCC" not in kmers)
 
 
-def test_build_kmer_set_skip_non_coding_transcripts():
-    """Test that non-coding transcripts are skipped"""
+def test_build_kmer_set_includes_annotated_noncanonical_translations():
+    """Biotype does not veto a sequence actually in the protein reference."""
     transcripts = [
         create_mock_transcript("T1", "ABCDEFGH", is_protein_coding=True),
         create_mock_transcript("T2", "ZZZZZZZZ", is_protein_coding=False),
@@ -189,7 +191,7 @@ def test_build_kmer_set_skip_non_coding_transcripts():
     kmers = build_kmer_set_index(genome, min_len=8, max_len=8)
 
     ok_("ABCDEFGH" in kmers)
-    ok_("ZZZZZZZZ" not in kmers)  # Non-coding, should be skipped
+    ok_("ZZZZZZZZ" in kmers)
 
 
 def test_build_kmer_set_skip_none_protein_sequence():
@@ -332,7 +334,7 @@ def test_kmer_set_index_path_format():
 
         import hashlib
         digest = hashlib.sha256(b"").hexdigest()
-        eq_(path, "/cache/content_%s_kmer_set_8_15.pkl.gz" % digest)
+        eq_(path, "/cache/content_annotated-protein-sequences-v2_%s_kmer_set_8_15.pkl.gz" % digest)
 
 
 def test_reference_cache_separates_content_with_same_species_release(tmp_path, monkeypatch):
@@ -597,13 +599,13 @@ def test_genome_protein_dict_excludes_gene_ids():
     assert proteins == {"T2": "GHIJKL"}
 
 
-def test_genome_protein_dict_skips_non_coding():
+def test_genome_protein_dict_includes_annotated_noncanonical_translations():
     t1 = create_mock_transcript("T1", "ABCDEF", gene_id="G1")
     t2 = create_mock_transcript("T2", "GHIJKL", gene_id="G2", is_protein_coding=False)
     genome = create_mock_genome([t1, t2])
     proteins = genome_protein_dict(genome)
     assert "T1" in proteins
-    assert "T2" not in proteins
+    assert proteins["T2"] == "GHIJKL"
 
 
 def test_genome_protein_dict_exclude_unknown_gene_id():
@@ -887,6 +889,64 @@ def test_ensembl_dataset_identity_depends_on_content_not_install_path(tmp_path):
 
     assert identities[0] == identities[1]
     assert ensembl_dataset_cache_identity(object()) is None
+
+
+def _standard_release_with_local_sources(directory, release=93):
+    """Real subclass/remote definitions, resolved to tiny offline file inputs."""
+    directory.mkdir()
+    genome = EnsemblRelease(release)
+    files = [directory / name for name in ("annotation.gtf", "cdna.fa", "ncrna.fa", "protein.fa")]
+    for path in files:
+        path.write_text("original-" + path.name)
+    genome.required_local_files = MagicMock(return_value=[str(p) for p in files])
+    assert "gtf_path_or_url" not in genome.to_dict()
+    return genome, files
+
+
+def test_standard_ensembl_release_identity_is_content_based_and_release_specific(tmp_path):
+    first, _ = _standard_release_with_local_sources(tmp_path / "first")
+    relocated, _ = _standard_release_with_local_sources(tmp_path / "relocated")
+    other_release, _ = _standard_release_with_local_sources(tmp_path / "other", release=92)
+    identity = ensembl_dataset_cache_identity(first)
+    assert identity is not None
+    assert len(identity) == 64
+    assert ensembl_dataset_cache_identity(relocated) == identity
+    assert ensembl_dataset_cache_identity(other_release) != identity
+
+
+@pytest.mark.parametrize("file_index", range(4))
+def test_standard_ensembl_release_identity_tracks_every_required_file(tmp_path, file_index):
+    genome, files = _standard_release_with_local_sources(tmp_path / "reference")
+    original = ensembl_dataset_cache_identity(genome)
+    assert original is not None
+    files[file_index].write_text("changed-source-content")
+    assert ensembl_dataset_cache_identity(genome) != original
+
+
+def test_standard_ensembl_release_missing_file_does_not_claim_identity(tmp_path):
+    genome, files = _standard_release_with_local_sources(tmp_path / "reference")
+    assert ensembl_dataset_cache_identity(genome) is not None
+    files[-1].unlink()
+    assert ensembl_dataset_cache_identity(genome) is None
+
+
+def test_standard_ensembl_release_reuses_source_snapshot(tmp_path):
+    clear_reference_proteome_caches()
+    genome, files = _standard_release_with_local_sources(tmp_path / "reference")
+    genome.transcripts = MagicMock(return_value=[create_mock_transcript("T1", "ACDEFGHIKL", gene_id="G1")])
+    antigen = VaccineAntigen(
+        kind="mutation", amino_acids="ACDEFGHIKL",
+        targetable_mask=TargetableMask((AminoAcidInterval(0, 1),)),
+        tumor_specificity=TumorSpecificityAttestation(
+            status=ATTESTATION_ADMITTED, evidence_kind="test", evidence_source="offline fixture"))
+    first = self_reference_matches(["ACDEFGHI"], antigen, genome)
+    assert self_reference_matches(["ACDEFGHI"], antigen, genome) == first
+    assert genome.transcripts.call_count == 1
+    files[-1].write_text("changed-protein-file")
+    genome.transcripts.return_value = [create_mock_transcript("T2", "LMNPQRSTVW", gene_id="G2")]
+    changed = self_reference_matches(["LMNPQRST"], antigen, genome)
+    assert changed["LMNPQRST"].sources[0].gene_id == "G2"
+    assert genome.transcripts.call_count == 2
 
 
 def test_filtered_reference_proteome_is_cached_per_genome_and_policy():
