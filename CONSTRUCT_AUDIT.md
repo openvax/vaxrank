@@ -71,6 +71,34 @@ issues.
 
 ## Following PRs
 
+### #414 pilot specification
+
+Import five original-read cases and the GRCh38 reference from the immutable
+Isovar 1.8.1 commit. Keep both DYNC1H1 loci distinct, ONT T1/T2 distinct, and
+MAP2's insufficient evidence explicit. Independently record DYNC1H1, EXOC4
+and H1-2 provider sequences. Run real NetMHCpan 4.2 predictions once, pin their
+inputs and outputs, and exercise offline Topiary cache -> filtering -> ranking
+for multiple competing windows. The clinical typing table, null HLA allele,
+class-I-only scope, incomplete reference proteome, and unknown historical
+selection settings must be visible. Compare exact sequence and target offsets;
+do not call a present-day output snapshot historical agreement. Native peptide
+lengths are compared separately from documented manufacturing additions.
+
+Draft-review correction: record modality explicitly on each independent source
+record; provider/display labels must not decide whether a construct is mRNA or
+a manufactured peptide. Regress the mRNA minimal-epitope case. Regenerate real
+prediction artifacts into a new directory and compare their observations before
+adopting updated metadata; do not change RNA gates or historical expectations.
+This local preparation does not authorize publication of genomic fixtures.
+
+Topiary #296, the cached-coordinate blocker, is fixed upstream by Topiary #299,
+commit `2c9f867`, and all 18 pilot tests now pass against it. The fix is not on
+PyPI yet, so the topiary floor stays at `>=5.52.0` until it is released. Topiary
+#300 is a separate, newly filed upstream gap: `serum_half_life` and
+`blood_half_life` are declared kinds that the ranking DSL cannot parse, which
+fails two `tests/test_epitope_dsl.py` cases. That gap is unrelated to this
+pilot's selection path.
+
 - #414: pin Isovar >=1.8.1 fixtures with their original sample/timepoint metadata;
   independently snapshot documented provider-specific sequences; compare actual
   reconstruction, candidate generation and final selection. Missing historical

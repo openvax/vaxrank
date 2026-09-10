@@ -1,0 +1,362 @@
+{
+  "assembly": "GRCh38",
+  "dataset_identity": "GRCh38-osteosarc-vaccine-cohort-ensembl87",
+  "ensembl_release": 87,
+  "files": {
+    "models.json.gz": "f579a53633bd0e7f2bf8e62c3ac147a33909ff7dbf678ea2b33e349ff35727c2",
+    "reference.cdna.fa.gz": "6a88b30246cea10a2bf763a09c82e932960f6b70d20b52094312d20fc2281054",
+    "reference.gtf.gz": "098d0f71e178aabacf8cf07306d615c27e6c481828887997fb5955fd57eeec78",
+    "reference.pep.fa.gz": "5b179f645dc1e2591ee99dff7f3cc7418eaf395a6c3fc33cb9958ad0c6b6ee58"
+  },
+  "scope": "all independently validated complete coding models at the pinned variant loci; explicit model exclusions",
+  "sources": {
+    "cdna": {
+      "filename": "Homo_sapiens.GRCh38.cdna.all.fa.gz",
+      "sha256": "9d77df788bc30aa86d6aa8d4b8d5bbe9d9c2a0ae6c0a8eda600524685aa11875",
+      "url": "https://ftp.ensembl.org/pub/release-87/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh38.cdna.all.fa.gz"
+    },
+    "gtf": {
+      "filename": "Homo_sapiens.GRCh38.87.gtf.gz",
+      "sha256": "9e8643982742980f81277865b5a1d543a02fa2bfe889acffaf797436950d9ebe",
+      "url": "https://ftp.ensembl.org/pub/release-87/gtf/homo_sapiens/Homo_sapiens.GRCh38.87.gtf.gz"
+    },
+    "pep": {
+      "filename": "Homo_sapiens.GRCh38.pep.all.fa.gz",
+      "sha256": "d873c199d5dbf20869db3f2cbd6ac726259215d91c2782f9f1ddcad4bb117cf9",
+      "url": "https://ftp.ensembl.org/pub/release-87/fasta/homo_sapiens/pep/Homo_sapiens.GRCh38.pep.all.fa.gz"
+    }
+  },
+  "transcript_count": 131,
+  "unavailable_transcripts": {
+    "ENST00000375117": "incomplete_or_noncoding_reference_model",
+    "ENST00000393895": "incomplete_or_noncoding_reference_model",
+    "ENST00000445340": "incomplete_or_noncoding_reference_model",
+    "ENST00000448451": "incomplete_or_noncoding_reference_model",
+    "ENST00000451399": "incomplete_or_noncoding_reference_model",
+    "ENST00000452717": "incomplete_or_noncoding_reference_model",
+    "ENST00000460816": "incomplete_or_noncoding_reference_model",
+    "ENST00000461870": "incomplete_or_noncoding_reference_model",
+    "ENST00000462055": "incomplete_or_noncoding_reference_model",
+    "ENST00000463470": "incomplete_or_noncoding_reference_model",
+    "ENST00000463648": "incomplete_or_noncoding_reference_model",
+    "ENST00000465188": "incomplete_or_noncoding_reference_model",
+    "ENST00000467497": "incomplete_or_noncoding_reference_model",
+    "ENST00000469233": "incomplete_or_noncoding_reference_model",
+    "ENST00000471397": "incomplete_or_noncoding_reference_model",
+    "ENST00000471423": "incomplete_or_noncoding_reference_model",
+    "ENST00000471619": "incomplete_or_noncoding_reference_model",
+    "ENST00000471893": "incomplete_or_noncoding_reference_model",
+    "ENST00000473434": "incomplete_or_noncoding_reference_model",
+    "ENST00000478126": "incomplete_or_noncoding_reference_model",
+    "ENST00000479159": "incomplete_or_noncoding_reference_model",
+    "ENST00000482864": "incomplete_or_noncoding_reference_model",
+    "ENST00000484920": "incomplete_or_noncoding_reference_model",
+    "ENST00000486013": "incomplete_or_noncoding_reference_model",
+    "ENST00000487481": "incomplete_or_noncoding_reference_model",
+    "ENST00000489625": "incomplete_or_noncoding_reference_model",
+    "ENST00000490109": "incomplete_or_noncoding_reference_model",
+    "ENST00000490991": "incomplete_or_noncoding_reference_model",
+    "ENST00000491094": "incomplete_or_noncoding_reference_model",
+    "ENST00000492326": "incomplete_or_noncoding_reference_model",
+    "ENST00000493233": "incomplete_or_noncoding_reference_model",
+    "ENST00000496683": "incomplete_or_noncoding_reference_model",
+    "ENST00000496809": "incomplete_or_noncoding_reference_model",
+    "ENST00000507996": "incomplete_or_noncoding_reference_model",
+    "ENST00000510866": "incomplete_or_noncoding_reference_model",
+    "ENST00000512768": "incomplete_or_noncoding_reference_model",
+    "ENST00000515773": "incomplete_or_noncoding_reference_model",
+    "ENST00000523043": "incomplete_or_noncoding_reference_model",
+    "ENST00000523457": "incomplete_or_noncoding_reference_model",
+    "ENST00000535299": "incomplete_or_noncoding_reference_model",
+    "ENST00000543548": "incomplete_or_noncoding_reference_model",
+    "ENST00000546656": "incomplete_or_noncoding_reference_model",
+    "ENST00000548496": "incomplete_or_noncoding_reference_model",
+    "ENST00000549078": "incomplete_or_noncoding_reference_model",
+    "ENST00000559070": "incomplete_or_noncoding_reference_model",
+    "ENST00000563542": "incomplete_or_noncoding_reference_model",
+    "ENST00000567560": "incomplete_or_noncoding_reference_model",
+    "ENST00000568333": "incomplete_or_noncoding_reference_model",
+    "ENST00000568391": "incomplete_or_noncoding_reference_model",
+    "ENST00000587974": "incomplete_or_noncoding_reference_model",
+    "ENST00000606893": "incomplete_or_noncoding_reference_model",
+    "ENST00000614793": "incomplete_or_noncoding_reference_model",
+    "ENST00000623316": "incomplete_or_noncoding_reference_model"
+  },
+  "variant_transcript_gaps": {
+    "ABCF2-chr7-151218156": {},
+    "ADGRF5-chr6-46856758": {},
+    "ATRX-chrX-77599465": {
+      "ENST00000480283": "Variant is outside the annotated coding region"
+    },
+    "BMP1-chr8-22192067": {
+      "ENST00000354870": "Variant is outside the annotated coding region",
+      "ENST00000483364": "Variant is outside the annotated coding region",
+      "ENST00000518913": "Variant is outside the annotated coding region",
+      "ENST00000520626": "Variant is outside the annotated coding region",
+      "ENST00000520982": "Variant is outside the annotated coding region"
+    },
+    "BTD-chr3-15645183": {},
+    "CD109-chr6-73818405": {},
+    "CDC40-chr6-110228838": {},
+    "CENPL-chr1-173811223": {},
+    "CUL9-chr6-43186384": {},
+    "DIAPH1-chr5-141526090": {},
+    "DYNC1H1-chr14-101980529": {},
+    "DYNC1H1-chr14-102030200": {},
+    "EPG5-chr18-45925851": {},
+    "EXOC4-chr7-133274996": {},
+    "F8-chrX-154930861": {},
+    "FBXO33-chr14-39431722": {},
+    "GLIS3-chr9-3856149": {},
+    "H1_2-chr6-26055824": {},
+    "KDM3B-chr5-138391529": {
+      "ENST00000542866": "Position 138391529 is outside the pinned transcript exons"
+    },
+    "KIF1C-chr17-5007293": {},
+    "KRT18-chr12-52951767": {},
+    "MAP2-chr2-209694768": {
+      "ENST00000199940": "Position 209694769 is outside the pinned transcript exons",
+      "ENST00000361559": "Position 209694769 is outside the pinned transcript exons",
+      "ENST00000392194": "Position 209694769 is outside the pinned transcript exons"
+    },
+    "MT_ND5-chrM-12994": {},
+    "MYO15B-chr17-75589953": {},
+    "MYO9A-chr15-71994488": {},
+    "NAV2-chr11-20080142": {},
+    "NME1-chr17-51154443": {
+      "ENST00000376392": "Position 51154443 is outside the pinned transcript exons",
+      "ENST00000393193": "Position 51154443 is outside the pinned transcript exons",
+      "ENST00000393196": "Position 51154443 is outside the pinned transcript exons",
+      "ENST00000475573": "Position 51154443 is outside the pinned transcript exons",
+      "ENST00000511355": "Position 51154443 is outside the pinned transcript exons"
+    },
+    "NR2F2-chr15-96332299": {
+      "ENST00000421109": "Position 96332299 is outside the pinned transcript exons"
+    },
+    "NTF3-chr12-5494381": {},
+    "PIP5K1A-chr1-151242178": {
+      "ENST00000368890": "Position 151242179 is outside the pinned transcript exons"
+    },
+    "PRICKLE2-chr3-64198863": {},
+    "PTH1R-chr3-46898732": {},
+    "RNF213-chr17-80327830": {},
+    "ROBO2-chr3-77607853": {
+      "ENST00000473767": "Variant is outside the annotated coding region"
+    },
+    "SLC25A12-chr2-171813470": {
+      "ENST00000263812": "Variant is outside the annotated coding region"
+    },
+    "SMC5-chr9-70298024": {},
+    "TECPR1-chr7-98241127": {},
+    "TMRO-chr9-97910412": {},
+    "VPS13B-chr8-99861923": {},
+    "VPS72-chr1-151185547": {},
+    "WWC1-chr5-168399513": {},
+    "ZNF436-chr1-23362762": {},
+    "ZNF674-chrX-46501045": {},
+    "ZNF764-chr16-30557995": {}
+  },
+  "variant_transcripts": {
+    "ABCF2-chr7-151218156": [
+      "ENST00000222388",
+      "ENST00000287844"
+    ],
+    "ADGRF5-chr6-46856758": [
+      "ENST00000265417",
+      "ENST00000283296"
+    ],
+    "ATRX-chrX-77599465": [
+      "ENST00000373344",
+      "ENST00000395603"
+    ],
+    "BMP1-chr8-22192067": [
+      "ENST00000306349",
+      "ENST00000306385",
+      "ENST00000471755",
+      "ENST00000520970",
+      "ENST00000521385"
+    ],
+    "BTD-chr3-15645183": [
+      "ENST00000303498",
+      "ENST00000383778",
+      "ENST00000437172",
+      "ENST00000449107"
+    ],
+    "CD109-chr6-73818405": [
+      "ENST00000287097",
+      "ENST00000422508",
+      "ENST00000437994"
+    ],
+    "CDC40-chr6-110228838": [
+      "ENST00000307731",
+      "ENST00000368930",
+      "ENST00000368932"
+    ],
+    "CENPL-chr1-173811223": [
+      "ENST00000345664",
+      "ENST00000356198",
+      "ENST00000367710"
+    ],
+    "CUL9-chr6-43186384": [
+      "ENST00000252050",
+      "ENST00000372647"
+    ],
+    "DIAPH1-chr5-141526090": [
+      "ENST00000253811",
+      "ENST00000389054",
+      "ENST00000389057",
+      "ENST00000398557",
+      "ENST00000518047"
+    ],
+    "DYNC1H1-chr14-101980529": [
+      "ENST00000360184"
+    ],
+    "DYNC1H1-chr14-102030200": [
+      "ENST00000360184"
+    ],
+    "EPG5-chr18-45925851": [
+      "ENST00000282041"
+    ],
+    "EXOC4-chr7-133274996": [
+      "ENST00000253861",
+      "ENST00000393161"
+    ],
+    "F8-chrX-154930861": [
+      "ENST00000360256"
+    ],
+    "FBXO33-chr14-39431722": [
+      "ENST00000298097",
+      "ENST00000554190"
+    ],
+    "GLIS3-chr9-3856149": [
+      "ENST00000324333",
+      "ENST00000381971"
+    ],
+    "H1_2-chr6-26055824": [
+      "ENST00000343677"
+    ],
+    "KDM3B-chr5-138391529": [
+      "ENST00000314358"
+    ],
+    "KIF1C-chr17-5007293": [
+      "ENST00000320785"
+    ],
+    "KRT18-chr12-52951767": [
+      "ENST00000388835",
+      "ENST00000388837",
+      "ENST00000550600"
+    ],
+    "MAP2-chr2-209694768": [
+      "ENST00000360351",
+      "ENST00000447185"
+    ],
+    "MT_ND5-chrM-12994": [
+      "ENST00000361567"
+    ],
+    "MYO15B-chr17-75589953": [
+      "ENST00000584516",
+      "ENST00000610510",
+      "ENST00000619501",
+      "ENST00000621743"
+    ],
+    "MYO9A-chr15-71994488": [
+      "ENST00000356056",
+      "ENST00000424560",
+      "ENST00000444904",
+      "ENST00000564571",
+      "ENST00000566885"
+    ],
+    "NAV2-chr11-20080142": [
+      "ENST00000349880",
+      "ENST00000360655",
+      "ENST00000396085",
+      "ENST00000396087",
+      "ENST00000525322",
+      "ENST00000527559",
+      "ENST00000533917",
+      "ENST00000540292"
+    ],
+    "NME1-chr17-51154443": [
+      "ENST00000013034",
+      "ENST00000336097",
+      "ENST00000456492",
+      "ENST00000480143",
+      "ENST00000555572"
+    ],
+    "NR2F2-chr15-96332299": [
+      "ENST00000394166"
+    ],
+    "NTF3-chr12-5494381": [
+      "ENST00000331010",
+      "ENST00000423158"
+    ],
+    "PIP5K1A-chr1-151242178": [
+      "ENST00000349792",
+      "ENST00000368888",
+      "ENST00000409426",
+      "ENST00000441902"
+    ],
+    "PRICKLE2-chr3-64198863": [
+      "ENST00000295902",
+      "ENST00000498162",
+      "ENST00000564377",
+      "ENST00000569824"
+    ],
+    "PTH1R-chr3-46898732": [
+      "ENST00000313049",
+      "ENST00000418619",
+      "ENST00000427125",
+      "ENST00000428220",
+      "ENST00000430002",
+      "ENST00000449590"
+    ],
+    "RNF213-chr17-80327830": [
+      "ENST00000508628",
+      "ENST00000582970"
+    ],
+    "ROBO2-chr3-77607853": [
+      "ENST00000332191",
+      "ENST00000461745",
+      "ENST00000487694"
+    ],
+    "SLC25A12-chr2-171813470": [
+      "ENST00000422440"
+    ],
+    "SMC5-chr9-70298024": [
+      "ENST00000361138"
+    ],
+    "TECPR1-chr7-98241127": [
+      "ENST00000447648"
+    ],
+    "TMRO-chr9-97910412": [
+      "ENST00000375118",
+      "ENST00000375119",
+      "ENST00000611338"
+    ],
+    "VPS13B-chr8-99861923": [
+      "ENST00000357162",
+      "ENST00000358544"
+    ],
+    "VPS72-chr1-151185547": [
+      "ENST00000354473",
+      "ENST00000368892"
+    ],
+    "WWC1-chr5-168399513": [
+      "ENST00000265293",
+      "ENST00000521089"
+    ],
+    "ZNF436-chr1-23362762": [
+      "ENST00000314011",
+      "ENST00000374608"
+    ],
+    "ZNF674-chrX-46501045": [
+      "ENST00000414387",
+      "ENST00000523374"
+    ],
+    "ZNF764-chr16-30557995": [
+      "ENST00000252797",
+      "ENST00000395091",
+      "ENST00000568114"
+    ]
+  }
+}
