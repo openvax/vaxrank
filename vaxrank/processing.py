@@ -21,14 +21,14 @@ three scores:
                                     proteasome cuts at the ligand's
                                     C-terminus (clean release)
   max_internal_cut_prob             peak cleavage probability strictly
-                                    inside the ligand (high → ligand
-                                    is destroyed before reaching MHC)
+                                    inside the ligand (a model-based
+                                    warning, not proof of destruction)
   processing_score                  composite ``sqrt(c_term *
                                     (1 - max_internal))`` — the
                                     geometric mean of the two factors;
-                                    1.0 = ideal release, 0.0 = no
-                                    clean release OR near-certain
-                                    destruction. Geometric mean
+                                    not a calibrated probability of
+                                    release, destruction or presentation.
+                                    Geometric mean
                                     rather than the raw product so
                                     a balanced (0.6, 0.6) row scores
                                     ~0.6 instead of 0.36.
@@ -42,6 +42,10 @@ vaxrank mutated pre-3.0 flat records in place with
 map returned here.
 
 The annotations are purely additive — vaccine ranking is unaffected.
+For complete site-resolved evidence, use ``audit_pepsickle_inputs`` and
+``write_cleavage_profiles``. Those APIs distinguish actual internal peptide
+bonds from a sequence endpoint; this legacy summary does not establish full
+sequence coverage.
 Reports surface the three columns when at least one prediction in
 the per-VaccinePeptide list has been annotated.
 
