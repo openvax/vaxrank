@@ -47,6 +47,14 @@ from .construct_audit import (
     save_construct_sequences,
     write_construct_audits,
 )
+from .cleavage_profile import (
+    CleavageProfile,
+    CleavageIntervalEvidence,
+    profile_from_cleavage_result,
+    profile_from_residue_scores,
+)
+from .cleavage_inference import audit_pepsickle_inputs, audit_peptidase_inputs
+from .cleavage_report import write_cleavage_profiles
 from .vaccine_library import antigen_construct_name, select_antigen_window
 from .safety_assessment import (
     AntigenSafetyAssessment,
@@ -140,6 +148,13 @@ from .reference_proteome import (
 from .version import __version__
 
 __all__ = [
+    "CleavageProfile",
+    "CleavageIntervalEvidence",
+    "profile_from_cleavage_result",
+    "profile_from_residue_scores",
+    "audit_pepsickle_inputs",
+    "audit_peptidase_inputs",
+    "write_cleavage_profiles",
     "__version__",
     "ConstructChemicalModification",
     "ConstructEvidence",

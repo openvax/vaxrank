@@ -1,3 +1,4 @@
 include LICENSE README.md requirements.txt
 include CONSTRUCT_AUDIT.md
 include ALLELE_VALIDATION.md
+include CLEAVAGE_AUDIT.md

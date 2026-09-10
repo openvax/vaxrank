@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Full-sequence cleavage evidence</title>
+<style>
+body { font: 15px sans-serif; margin: 2rem; line-height: 1.5; }
+code { overflow-wrap: anywhere; }
+table { border-collapse: collapse; margin: 1rem 0; }
+td, th { border: 1px solid #bbb; padding: .35rem .6rem; text-align: left; }
+section { border-top: 2px solid #555; margin-top: 2rem; }
+.notice { background: #fff4d6; padding: .8rem; }
+</style></head><body><h1>Full-sequence cleavage evidence</h1>
+<p class="notice">An evidence inventory, not a safety verdict. A high model score
+does not prove a target antigen will be destroyed. A motif non-match does not
+establish resistance. Unreturned bonds are unassessed, never assigned zero.
+Enzyme location does not establish calibration in serum or another compartment.
+Cleavage evidence is not whole-peptide half-life, presentation or T-cell recognition.</p>
+{% if not records %}<p>No sequence profiles supplied; processing is unassessed.</p>{% endif %}
+{% for record in records %}{% set p = record.profile %}{% set n = p.peptide.sequence|length %}
+<section><h2>{{ p.peptide.source_id or 'Unnamed context' }} — {{ p.model.name }}</h2>
+<p>Exact input ({{ n }} residues): <code>{{ p.peptide.sequence }}</code></p>
+<p>Source start: {{ p.peptide.source_start }} (zero-based).
+N terminus: {{ p.peptide.n_term }}; C terminus: {{ p.peptide.c_term }}.
+Chemistry describes the supplied model input, not independently verified manufacture.</p>
+<p>Status: {{ p.status }}. {{ p.reason_codes|join('; ') }} {{ p.error_message }}</p>
+<p>Enzyme: {{ p.model.enzyme }} {{ p.model.uniprot }}. Species: {{ p.model.species or 'Not specified' }}.
+Compartments: {{ p.model.compartments|join(', ') }}. Evidence: {{ p.model.evidence }}.</p>
+<p>Model: {{ p.model.name }} {{ p.model.version }}; mhctools: {{ p.backend_version or 'Unknown' }}.
+Score: {{ p.model.score_name or 'No numeric score' }};
+native units: {{ p.model.score_units or 'Not applicable' }}.
+Asset SHA-256: <code>{{ p.model_asset_sha256 or 'Not recorded' }}</code>.</p>
+<p>Settings: {% for key, value in p.settings %}{{ key }}={{ value }}; {% endfor %}</p>
+<p>Assay/training: {{ p.model.assay }}. Limitations: {{ p.model.limitations }}</p>
+<p>Sources: {% for source in p.model.references %}{{ source }}<br>{% endfor %}</p>
+<p class="notice">Target masks and patient-HLA ligand overlays are not included in
+this low-level site inventory. Other models and processing compartments remain
+unassessed unless explicitly reported. Padded context is missing sequence context,
+not measured flanking sequence. A complete vector is not complete biological coverage.</p>
+<table><thead><tr><th>Input bond b</th><th>Source bond</th><th>Residues</th>
+<th>Status</th><th>Native score</th><th>Context</th><th>Reason</th></tr></thead><tbody>
+{% for b in range(1, n) %}{% set site = record.by_bond.get(b) %}<tr>
+<td>{{ b }}</td><td>{{ p.peptide.source_start + b }}</td>
+<td><code>{{ p.peptide.sequence[b - 1] }}|{{ p.peptide.sequence[b] }}</code></td>
+<td>{{ site.status if site else 'unassessed' }}</td>
+<td>{{ site.score if site and site.score is not none else '' }}</td>
+<td>{{ 'terminal context padded' if b in record.padded else 'see model/input scope' }}</td>
+<td>{{ site.reason if site else 'No observation returned for this bond' }}</td>
+</tr>{% endfor %}</tbody></table>
+{% if n == 1 %}<p>The sequence has no internal peptide bonds.</p>{% endif %}
+<p>Bond b splits sequence[:b] | sequence[b:]. Positions 0 and {{ n }} are sequence
+endpoints, not internal peptide bonds.</p>
+{% if p.raw_residue_scores %}<p>Complete residue-indexed backend output:
+<code>{{ p.raw_residue_scores|join(', ') }}</code>.</p>
+<p>Final residue output: {{ p.terminal_output }} — retained endpoint sentinel,
+excluded from internal cleavage evidence.</p>{% endif %}
+</section>{% endfor %}</body></html>
