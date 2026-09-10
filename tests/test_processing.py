@@ -99,7 +99,7 @@ def test_processing_component_probabilities_rejects_out_of_range_span():
 
 def test_processing_component_probabilities_extracts_requested_span():
     c_term, max_internal = processing_component_probabilities(
-        [0.1, 0.2, 0.3, 0.4], start=1, length=3)
+        [0.1, 0.2, 0.3, 0.4, 0.0], start=1, length=3)
 
     assert c_term == 0.4
     assert max_internal == 0.3
@@ -594,12 +594,12 @@ def test_re_location_picks_closest_to_declared_offset():
     # Source has 'AAAAA' at offsets 0 and 8. Declared offset says
     # the peptide is the second occurrence; re-location should snap
     # to position 8, not position 0.
-    source = "AAAAA" + "BBB" + "AAAAA"  # length 13
+    source = "AAAAA" + "BBB" + "AAAAA" + "G"  # final G keeps the requested bond internal
     pred = _ep("AAAAA", source, offset=7)  # off-by-one near the second occurrence
     # probs distinguish position 0 (low cleavage) from position 12 (high)
     probs = [0.0, 0.0, 0.0, 0.0, 0.0,
              0.0, 0.0, 0.0,
-             0.0, 0.0, 0.0, 0.0, 0.95]  # cleavage at last position only
+             0.0, 0.0, 0.0, 0.0, 0.95, 0.0]  # cleavage after the second occurrence
     n, by_key = annotate_processing(
         [pred], predictor=StubPepsickle({source: probs}))
     pp = by_key[(pred.sequence, source, 8, 'pepsickle')]

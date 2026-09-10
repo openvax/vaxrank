@@ -77,3 +77,13 @@ half-open interval; the follow-up construct orchestration supplies validated
 native/final/product contexts and patient-MHC overlays. The report lists every
 internal bond, including those no model assessed. A terminal-only enzyme rule
 does not become a full-sequence prediction or a serum-stability estimate.
+
+## Complete-context API (3.17.0)
+
+`audit_sequence_contexts` and `write_sequence_context_audits` now provide native,
+final and validated complete-CDS contexts, full target/ligand overlays, and
+explicit missing model/HLA/length/occurrence coverage. See
+[CONSTRUCT_PROCESSING.md](CONSTRUCT_PROCESSING.md) for source-preserving inputs,
+conditional chemistry, requested prediction provenance and JSON/report usage.
+Historical Sid selection validation and the independent actual-construct audit
+remain separate work under #414 and #423.

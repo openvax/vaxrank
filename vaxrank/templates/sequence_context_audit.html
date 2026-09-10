@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Full-sequence context audit</title>
+<style>body{font:15px system-ui,sans-serif;margin:2rem;color:#152b35}table{border-collapse:collapse;font-size:13px;width:100%;margin:1rem 0}th,td{border:1px solid #c7d0d5;padding:.35rem;text-align:left;vertical-align:top}th{background:#eef2f3}code{overflow-wrap:anywhere;white-space:pre-wrap}section{border-top:2px solid #36586a;margin-top:2rem}.notice{padding:1rem;background:#fff4d6}.muted{color:#52626a}</style>
+</head><body><h1>Full-sequence context audit</h1>
+<p class="notice">Evidence inventory, not a ranking or clinical safety verdict. Target masks,
+MHC predictions, cleavage observations, independently documented intended ligands and historical
+selection agreement are different facts. This report overlays masks and all returned MHC
+predictions; it does not establish intended-ligand identity, recognition or presentation.</p>
+<p>All intervals are zero-based, half-open [start,end). Bond b separates residues b−1 and b.
+Sequence endpoints 0 and N are not peptide bonds. A native context may be a cropped RNA-backed
+window, not a complete protein or an exposed molecule. A translated product is the complete
+CDS translation, not necessarily its mature processed form.</p>
+<p>Self-source/CTA policy and near-self assessment are not performed here. Use attributed
+construct safety assessments separately; unassessed self evidence is not absence of self ligands.
+No serum half-life, clearance, localization or intact-delivery conclusion is made.</p>
+{% for record in records %}{% set audit=record.audit %}{% set ctx=audit.context %}
+<section><h2>{{ ctx.name }} — {{ ctx.kind }}</h2>
+<p>{{ ctx.sequence|length }} aa; identity <code>{{ ctx.source_id }}</code></p>
+<p><code>{{ ctx.sequence }}</code></p>
+<p>Terminal chemistry: N={{ ctx.n_term }}, C={{ ctx.c_term }}.
+Basis: {{ ctx.chemistry_basis or 'not established' }}. Model assumptions never replace manufacture provenance.</p>
+<p>Target mapping: {{ ctx.target_mapping_status }}.
+{% if ctx.construct %}Manufacture evidence: {{ ctx.construct.evidence }}.
+Native window: [{{ ctx.construct.native_start }},{{ ctx.construct.native_end }}).
+Native residue offsets (None = added/replaced/unresolved): {{ ctx.construct.native_residue_offsets }}.
+Edits: {{ ctx.construct.sequence_edits }}. Chemical modifications: {{ ctx.construct.chemical_modifications }}.
+Removed target intervals: {{ ctx.construct.removed_target_intervals }}.{% endif %}</p>
+{% if ctx.product %}<p>Complete CDS and emitted nucleotide views validated. Evidence: {{ ctx.evidence }}.</p>
+<details><summary>Complete translated product and nucleotide provenance</summary>
+<p>CDS nt: <code>{{ ctx.product.cds_nt }}</code></p><p>Full nt: <code>{{ ctx.product.full_nt }}</code></p>
+<p>Elements: {{ ctx.product.elements }}</p><p>All construct placements: {{ ctx.product.construct_placements }}</p></details>{% endif %}
+<h3>Source provenance — every occurrence retained</h3>
+<table><tr><th>Kind</th><th>Gene / ID</th><th>Transcripts / proteins</th><th>Species / source</th></tr>
+{% for source in ctx.source_antigens %}<tr><td>{{ source.kind }}</td><td>{{ source.gene_name }} / {{ source.gene_id }}</td>
+<td>{{ source.transcript_ids|join(', ') }} / {{ source.protein_ids|join(', ') }}</td><td>{{ source.species }} / {{ source.source_identifier }}</td></tr>
+{% else %}<tr><td colspan="4">Source provenance unassessed</td></tr>{% endfor %}</table>
+<h3>Target masks</h3><table><tr><th>ID</th><th>Source</th><th>Interval</th><th>Sequence / junction</th></tr>
+{% for target in ctx.targets %}<tr><td>T{{ loop.index }}</td><td>{{ target.source_name }}</td><td>[{{ target.start }},{{ target.end }})</td>
+<td><code>{{ ctx.sequence[target.start:target.end] or 'zero-width target junction' }}</code></td></tr>
+{% else %}<tr><td colspan="4">No mapped target intervals; see mapping status above.</td></tr>{% endfor %}</table>
+<h3>Patient-MHC inventory: {{ audit.mhc_status }}</h3>
+<p>{{ audit.reason_codes|join(', ') }} {{ audit.error_message }} {{ audit.mhc_backend_version }}</p>
+<p>Coverage refers only to the explicit requests below, not all patient alleles or all models.
+Unrequested class II or other combinations remain unassessed. A returned row is not necessarily
+a strong binder. All output is retained without ranking or immunogenicity filters.</p>
+<table><tr><th>Kind / model / version</th><th>Allele / length</th><th>Observed offsets</th><th>Missing offsets</th></tr>
+{% for req, observed, missing in audit.coverage %}<tr><td>{{ req.kind }} / {{ req.predictor_name }} / {{ req.predictor_version }}</td>
+<td>{{ req.allele }} / {{ req.peptide_length }}</td><td>{{ observed }}</td><td>{{ missing }}{% if req.peptide_length > ctx.sequence|length %} (no fitting windows){% endif %}</td></tr>
+{% else %}<tr><td colspan="4">Requested MHC coverage unassessed</td></tr>{% endfor %}</table>
+{% if audit.unrequested_predictions %}<p class="notice">{{ audit.unrequested_predictions|length }} unrequested model/HLA/length outputs retained; check request provenance.</p>{% endif %}
+<table><tr><th>ID / interval / peptide</th><th>Target-mask overlaps</th><th>Every model observation (native scales)</th></tr>
+{% for ligand in audit.ligands %}<tr><td>L{{ loop.index }} [{{ ligand.start }},{{ ligand.end }}) <code>{{ ligand.peptide }}</code></td>
+<td>{% for target in ctx.targets %}{% if target.overlaps(ligand.start,ligand.end) %}T{{ loop.index }} {% endif %}{% endfor %}</td>
+<td>{% for pred in ligand.predictions %}{{ pred.kind }} / {{ pred.allele }} / {{ pred.predictor_name }} {{ pred.predictor_version }}:
+score={{ pred.score }}, value={{ pred.value }} {{ value_unit(pred.kind) or '(unitless/no linear unit)' }}, percentile={{ pred.percentile_rank }}<br>{% endfor %}</td></tr>
+{% else %}<tr><td colspan="3">No ligand observations; see status and missing coverage above.</td></tr>{% endfor %}</table>
+<h3>Full-sequence processing evidence</h3>
+<p>Proteasomal, other cytosolic, ER, endolysosomal and extracellular/serum evidence remain
+separate. Only the model/bond observations below were assessed. Other models and compartments
+remain unassessed. An enzyme compartment annotation does not establish matrix calibration or
+delivery into that compartment. Motif non-match is not resistance; native scores are not interchangeable.</p>
+{% for view in record.profiles %}{% set p=view.profile %}
+<h4>{{ p.model.name }} {{ p.model.version }} — {{ p.status }}</h4>
+<p>Enzyme {{ p.model.enzyme }} / UniProt {{ p.model.uniprot }} / species {{ p.model.species }} /
+compartments {{ p.model.compartments }}. Evidence: {{ p.model.evidence }}. Assay: {{ p.model.assay }}.</p>
+<p>Score: {{ p.model.score_name or 'qualitative observation only' }}; units: {{ p.model.score_units or 'none' }}.
+Limitations: {{ p.model.limitations }}. References: {{ p.model.references }}.</p>
+<p>Model input: N={{ p.peptide.n_term }}, C={{ p.peptide.c_term }}. Settings {{ p.settings }};
+backend {{ p.backend_version }}; model-asset SHA-256 <code>{{ p.model_asset_sha256 or 'not supplied' }}</code>.</p>
+<p>{{ p.reason_codes|join(', ') }} {{ p.error_message }}</p>
+<p>Raw terminal output: {{ p.terminal_output }} (endpoint sentinel, never a bond or a cleavage probability).
+Raw residue vector: {{ p.raw_residue_scores }}.</p>
+<table><tr><th>Bond / residues</th><th>Observation / reason / native score</th><th>Padded context</th>
+<th>Target masks: internal / boundary</th><th>Ligands: internal / N-boundary / C-boundary</th></tr>
+{% for b, roles in view.roles.items() %}{% set site=view.sites.get(b) %}<tr>
+<td>{{ b }} <code>{{ ctx.sequence[b-1] }}|{{ ctx.sequence[b] }}</code></td>
+<td>{% if site %}{{ site.status }} / {{ site.reason }} / {{ site.score }}{% else %}unassessed{% endif %}</td>
+<td>{{ b in p.padded_bonds }}</td><td>{{ roles.target_internal }} / {{ roles.target_boundary }}</td>
+<td>{{ roles.ligand_internal }} / {{ roles.ligand_n }} / {{ roles.ligand_c }}</td></tr>{% endfor %}</table>
+{% else %}<p>No processing models requested; every compartment is unassessed.</p>{% endfor %}
+</section>{% else %}<p>No sequence contexts supplied.</p>{% endfor %}
+</body></html>

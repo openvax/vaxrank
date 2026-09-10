@@ -622,7 +622,8 @@ class TemplateDataCreator(object):
                 max_int = pp.max_internal_cut_prob
                 proc = pp.processing_score
             epitope_data['Processing: C-term'] = (
-                '%.2f' % c_term if c_term is not None else '—')
+                'sequence endpoint' if pp is not None and pp.c_boundary_status == 'sequence_endpoint'
+                else ('%.2f' % c_term if c_term is not None else '—'))
             epitope_data['Processing: max internal'] = (
                 '%.2f' % max_int if max_int is not None else '—')
             epitope_data['Processing: combined'] = (

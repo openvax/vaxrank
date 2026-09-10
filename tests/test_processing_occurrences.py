@@ -60,7 +60,7 @@ def test_resolved_occurrence_is_shared_between_annotation_and_report(offset):
     creator.processing_predictions_by_key = records
     row = creator.epitope_data(
         epitope, epitope.best_affinity(), include_processing=True)
-    assert row["Processing: C-term"] == ("0.20" if resolved == 0 else "0.90")
+    assert row["Processing: C-term"] == ("0.20" if resolved == 0 else "sequence endpoint")
 
 
 def test_one_occurrence_can_share_processing_across_alleles():
