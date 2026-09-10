@@ -19,7 +19,8 @@ import pickle
 import tempfile
 from unittest.mock import MagicMock, patch
 
-from pyensembl import Genome
+from pyensembl import EnsemblRelease, Genome
+import pytest
 
 from vaxrank.reference_proteome import (
     ReferenceProteome,
@@ -887,6 +888,64 @@ def test_ensembl_dataset_identity_depends_on_content_not_install_path(tmp_path):
 
     assert identities[0] == identities[1]
     assert ensembl_dataset_cache_identity(object()) is None
+
+
+def _standard_release_with_local_sources(directory, release=93):
+    """Real subclass/remote definitions, resolved to tiny offline file inputs."""
+    directory.mkdir()
+    genome = EnsemblRelease(release)
+    files = [directory / name for name in ("annotation.gtf", "cdna.fa", "ncrna.fa", "protein.fa")]
+    for path in files:
+        path.write_text("original-" + path.name)
+    genome.required_local_files = MagicMock(return_value=[str(p) for p in files])
+    assert "gtf_path_or_url" not in genome.to_dict()
+    return genome, files
+
+
+def test_standard_ensembl_release_identity_is_content_based_and_release_specific(tmp_path):
+    first, _ = _standard_release_with_local_sources(tmp_path / "first")
+    relocated, _ = _standard_release_with_local_sources(tmp_path / "relocated")
+    other_release, _ = _standard_release_with_local_sources(tmp_path / "other", release=92)
+    identity = ensembl_dataset_cache_identity(first)
+    assert identity is not None
+    assert len(identity) == 64
+    assert ensembl_dataset_cache_identity(relocated) == identity
+    assert ensembl_dataset_cache_identity(other_release) != identity
+
+
+@pytest.mark.parametrize("file_index", range(4))
+def test_standard_ensembl_release_identity_tracks_every_required_file(tmp_path, file_index):
+    genome, files = _standard_release_with_local_sources(tmp_path / "reference")
+    original = ensembl_dataset_cache_identity(genome)
+    assert original is not None
+    files[file_index].write_text("changed-source-content")
+    assert ensembl_dataset_cache_identity(genome) != original
+
+
+def test_standard_ensembl_release_missing_file_does_not_claim_identity(tmp_path):
+    genome, files = _standard_release_with_local_sources(tmp_path / "reference")
+    assert ensembl_dataset_cache_identity(genome) is not None
+    files[-1].unlink()
+    assert ensembl_dataset_cache_identity(genome) is None
+
+
+def test_standard_ensembl_release_reuses_source_snapshot(tmp_path):
+    clear_reference_proteome_caches()
+    genome, files = _standard_release_with_local_sources(tmp_path / "reference")
+    genome.transcripts = MagicMock(return_value=[create_mock_transcript("T1", "ACDEFGHIKL", gene_id="G1")])
+    antigen = VaccineAntigen(
+        kind="mutation", amino_acids="ACDEFGHIKL",
+        targetable_mask=TargetableMask((AminoAcidInterval(0, 1),)),
+        tumor_specificity=TumorSpecificityAttestation(
+            status=ATTESTATION_ADMITTED, evidence_kind="test", evidence_source="offline fixture"))
+    first = self_reference_matches(["ACDEFGHI"], antigen, genome)
+    assert self_reference_matches(["ACDEFGHI"], antigen, genome) == first
+    assert genome.transcripts.call_count == 1
+    files[-1].write_text("changed-protein-file")
+    genome.transcripts.return_value = [create_mock_transcript("T2", "LMNPQRSTVW", gene_id="G2")]
+    changed = self_reference_matches(["LMNPQRST"], antigen, genome)
+    assert changed["LMNPQRST"].sources[0].gene_id == "G2"
+    assert genome.transcripts.call_count == 2
 
 
 def test_filtered_reference_proteome_is_cached_per_genome_and_policy():

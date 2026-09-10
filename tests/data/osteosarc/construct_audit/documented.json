@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "variant_id": "DYNC1H1-chr14-101980529",
+  "source": "https://osteosarc.com/variant/DYNC1H1-chr14-101980529/",
+  "retrieved": "2026-09-09",
+  "source_protein_context": "KRESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLMKDFP",
+  "source_mutation_interval": [23, 24],
+  "intended_ligand": "KRFHATISF",
+  "intended_ligand_basis": "The published page identifies the mRNA minimal epitope and highlights it within the longer vaccine sequences.",
+  "assay_only_comparators": ["ISFDTDTGL", "RFHATISF"],
+  "historical_ranking_settings": null,
+  "complete_historical_mrna_product": null,
+  "clinical_hla_source": "https://osteosarc.com/data/",
+  "clinical_class_i": ["HLA-A*01:01", "HLA-A*01:11N", "HLA-B*08:01", "HLA-B*27:05", "HLA-C*01:02", "HLA-C*07:01"],
+  "prediction_alleles": ["HLA-A*01:01", "HLA-B*08:01", "HLA-B*27:05", "HLA-C*01:02", "HLA-C*07:01"],
+  "typing_discrepancy_source": "https://osteosarc.com/dragen/hla/",
+  "typing_discrepancy": "Computational A*01:01 homozygosity differs from the clinical A*01:01/A*01:11N call. Not adjudicated here; do not replace the clinical null allele with an expressed allele.",
+  "class_ii_status": "unassessed",
+  "records": [
+    {
+      "id": "dync1h1-mrna-minimal",
+      "provider": "mRNA",
+      "vaccine_version": null,
+      "modality": "mrna",
+      "sequence_scope": "documented_antigen_segment_not_complete_product",
+      "sequence": "KRFHATISF",
+      "native_sequence": "KRFHATISF",
+      "native_mutation_interval": [6, 7],
+      "intended_ligand_interval": [0, 9],
+      "n_terminal_addition": "",
+      "c_terminal_addition": "",
+      "chemical_modifications": null
+    },
+    {
+      "id": "dync1h1-mrna-long",
+      "provider": "mRNA",
+      "vaccine_version": null,
+      "modality": "mrna",
+      "sequence_scope": "documented_antigen_segment_not_complete_product",
+      "sequence": "VLLTLDILKHGKRFHATISFDTDTGLKQAL",
+      "native_sequence": "VLLTLDILKHGKRFHATISFDTDTGLKQAL",
+      "native_mutation_interval": [17, 18],
+      "intended_ligand_interval": [11, 20],
+      "n_terminal_addition": "",
+      "c_terminal_addition": "",
+      "chemical_modifications": null
+    },
+    {
+      "id": "dync1h1-jlf-v2-v3",
+      "provider": "JLF",
+      "vaccine_version": "V2/V3",
+      "modality": "peptide",
+      "sequence_scope": "documented_final_amino_acid_sequence_chemistry_unresolved",
+      "sequence": "GKRFHATISFDTDTGLKQALETKK",
+      "native_sequence": "GKRFHATISFDTDTGLKQALET",
+      "native_mutation_interval": [7, 8],
+      "intended_ligand_interval": [1, 10],
+      "n_terminal_addition": "",
+      "c_terminal_addition": "KK",
+      "chemical_modifications": null,
+      "addition_rationale": {
+        "source": "User report, 2026-09-09",
+        "evidence_level": "reported",
+        "description": "JLF uses terminal lysines as solubility extras. CSBio's role and any other added residue type remain unconfirmed."
+      }
+    },
+    {
+      "id": "dync1h1-cegat",
+      "provider": "CeGaT",
+      "vaccine_version": null,
+      "modality": "peptide",
+      "sequence_scope": "documented_final_amino_acid_sequence_chemistry_unresolved",
+      "sequence": "KHGKRFHATISFDTDTGL",
+      "native_sequence": "KHGKRFHATISFDTDTGL",
+      "native_mutation_interval": [9, 10],
+      "intended_ligand_interval": [3, 12],
+      "n_terminal_addition": "",
+      "c_terminal_addition": "",
+      "chemical_modifications": null
+    }
+  ]
+}

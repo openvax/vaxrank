@@ -119,7 +119,9 @@ def ensembl_dataset_cache_identity(genome) -> Optional[str]:
         return None
     files = []
     try:
-        definition = genome.to_dict()
+        # EnsemblRelease.to_dict() is a compact constructor definition without
+        # source paths. Read the base Genome definition for both concrete types.
+        definition = Genome.to_dict(genome)
         source_paths = [definition.get("gtf_path_or_url")]
         source_paths.extend(
             definition.get("transcript_fasta_paths_or_urls") or []
@@ -172,6 +174,8 @@ def ensembl_dataset_cache_identity(genome) -> Optional[str]:
         key: value for key, value in definition.items()
         if key not in location_keys
     }
+    content_definition["species"] = str(
+        getattr(getattr(genome, "species", None), "latin_name", "") or "")
     payload = json.dumps(
         {
             "genome": content_definition,
