@@ -32,6 +32,8 @@ Issue: openvax/vaxrank#272.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
+from numbers import Real
 from typing import Optional
 
 
@@ -42,8 +44,9 @@ class ProcessingPrediction:
 
     The composite ``processing_score`` is the geometric mean of
     ``c_term_cleavage_prob`` and ``(1 - max_internal_cut_prob)`` —
-    bounded [0, 1], 1 = ideal release, 0 = no clean release OR
-    near-certain internal destruction. Geometric mean rather than
+    bounded [0, 1] but not a calibrated probability of release,
+    destruction or presentation. It is unavailable at sequence endpoints.
+    Geometric mean rather than
     raw product so a balanced ``(0.6, 0.6)`` row scores ~0.6
     instead of 0.36.
 
@@ -64,14 +67,14 @@ class ProcessingPrediction:
     predictor_version : Optional[str]
         Predictor version string when the predictor exposes one,
         else ``None``.
-    c_term_cleavage_prob : float
+    c_term_cleavage_prob : Optional[float]
         Probability the proteasome cuts at the ligand's C-terminus
-        (clean release). Range [0, 1].
+        boundary. Range [0, 1]; None at a sequence endpoint. An endpoint
+        may be a cropped window, not an exposed molecular terminus.
     max_internal_cut_prob : float
         Peak cleavage probability strictly inside the ligand
-        (high → ligand is destroyed before reaching MHC). Range
-        [0, 1].
-    processing_score : float
+        (model evidence, not proof of ligand destruction). Range [0, 1].
+    processing_score : Optional[float]
         Composite ``sqrt(c_term_cleavage_prob *
         (1 - max_internal_cut_prob))``.
     """
@@ -81,9 +84,30 @@ class ProcessingPrediction:
     predictor_name: str
     peptide_offset: int
     predictor_version: Optional[str] = None
-    c_term_cleavage_prob: float = 0.0
+    c_term_cleavage_prob: Optional[float] = None
     max_internal_cut_prob: float = 0.0
-    processing_score: float = 0.0
+    processing_score: Optional[float] = None
+    c_boundary_status: str = ""
+
+    def __post_init__(self):
+        end = self.peptide_offset + len(self.peptide_sequence)
+        if (type(self.peptide_offset) is not int or self.peptide_offset < 0
+                or not self.peptide_sequence
+                or self.source_sequence[self.peptide_offset:end] != self.peptide_sequence):
+            raise ValueError("Processing prediction must match its exact source occurrence")
+        status = ("sequence_endpoint" if end == len(self.source_sequence) else
+                  ("observed" if self.c_term_cleavage_prob is not None else "unassessed"))
+        if self.c_boundary_status and self.c_boundary_status != status:
+            raise ValueError("Processing boundary status disagrees with its source occurrence")
+        object.__setattr__(self, "c_boundary_status", status)
+        if status == "sequence_endpoint" and self.c_term_cleavage_prob is not None:
+            raise ValueError("Sequence endpoint cannot claim a C-boundary cleavage probability")
+        if self.c_term_cleavage_prob is None and self.processing_score is not None:
+            raise ValueError("Missing C-boundary evidence cannot produce a composite score")
+        for value in (self.c_term_cleavage_prob, self.max_internal_cut_prob, self.processing_score):
+            if value is not None and (isinstance(value, bool) or not isinstance(value, Real)
+                                      or not math.isfinite(value) or not 0 <= value <= 1):
+                raise ValueError("Processing scores must be finite probabilities in [0, 1] or None")
 
     def key(self) -> tuple:
         """Stable join key used by report writers to look up the

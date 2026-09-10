@@ -1001,6 +1001,26 @@ def _validate_output_dir(output_dir):
             "(e.g. drop the .fasta suffix)." % output_dir)
 
 
+def validate_translated_construct(construct):
+    """Check complete CDS translation, placements and all emitted nt views."""
+    from Bio.Data.CodonTable import TranslationError
+    from Bio.Seq import Seq
+
+    validate_construct_placements(construct.construct_placements, construct.cds_aa, "mrna")
+    try:
+        translated = str(Seq(construct.cds_nt).translate(cds=True))
+    except TranslationError as error:
+        raise ValueError("Construct provenance requires a complete valid CDS") from error
+    if translated != construct.cds_aa:
+        raise ValueError("Encoded construct provenance disagrees with actual CDS translation")
+    utr_5p = construct.elements.get('utr_5p', {}).get('nt', '')
+    utr_3p = construct.elements.get('utr_3p', {}).get('nt', '')
+    if (construct.no_polya_nt != utr_5p + construct.cds_nt + utr_3p
+            or construct.full_nt != construct.no_polya_nt + construct.poly_a_nt
+            or construct.sequence != construct.full_nt):
+        raise ValueError("Construct provenance disagrees with emitted full mRNA sequence")
+
+
 def write_mrna_outputs(constructs, output_dir, manifest_path=None,
                        csv_path=None, csv_include_full_rows=True):
     """Write three FASTAs (cds / full / no_polyA) + optional manifest + CSV.
@@ -1038,21 +1058,7 @@ def write_mrna_outputs(constructs, output_dir, manifest_path=None,
     for c in constructs:
         validate_construct_placements(c.construct_placements, c.cds_aa, "mrna")
         if c.construct_placements:
-            from Bio.Data.CodonTable import TranslationError
-            from Bio.Seq import Seq
-
-            try:
-                translated = str(Seq(c.cds_nt).translate(cds=True))
-            except TranslationError as error:
-                raise ValueError("Construct provenance requires a complete valid CDS") from error
-            if translated != c.cds_aa:
-                raise ValueError("Encoded construct provenance disagrees with actual CDS translation")
-            utr_5p = c.elements.get('utr_5p', {}).get('nt', '')
-            utr_3p = c.elements.get('utr_3p', {}).get('nt', '')
-            if (c.no_polya_nt != utr_5p + c.cds_nt + utr_3p
-                    or c.full_nt != c.no_polya_nt + c.poly_a_nt
-                    or c.sequence != c.full_nt):
-                raise ValueError("Construct provenance disagrees with emitted full mRNA sequence")
+            validate_translated_construct(c)
     _validate_output_dir(output_dir)
     os.makedirs(output_dir, exist_ok=True)
 

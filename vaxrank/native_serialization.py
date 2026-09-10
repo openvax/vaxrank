@@ -44,6 +44,10 @@ def _native_serializable_classes():
     )
     from .construct_audit import ConstructAudit
     from .cleavage_profile import CleavageProfile, CleavageIntervalEvidence
+    from .processing_prediction import ProcessingPrediction
+    from .mrna import RNAConstruct
+    from .sequence_context import ContextTarget, SequenceContext
+    from .context_audit import MHCRequest, ContextLigand, SequenceContextAudit
     from .safety_assessment import (
         ConstructBoundary,
         EmittedSafetyLigand,
@@ -70,6 +74,13 @@ def _native_serializable_classes():
         ("mhctools.cleavage", "CleavageSite"): CleavageSite,
         ("vaxrank.cleavage_profile", "CleavageProfile"): CleavageProfile,
         ("vaxrank.cleavage_profile", "CleavageIntervalEvidence"): CleavageIntervalEvidence,
+        ("vaxrank.processing_prediction", "ProcessingPrediction"): ProcessingPrediction,
+        ("vaxrank.mrna", "RNAConstruct"): RNAConstruct,
+        ("vaxrank.sequence_context", "ContextTarget"): ContextTarget,
+        ("vaxrank.sequence_context", "SequenceContext"): SequenceContext,
+        ("vaxrank.context_audit", "MHCRequest"): MHCRequest,
+        ("vaxrank.context_audit", "ContextLigand"): ContextLigand,
+        ("vaxrank.context_audit", "SequenceContextAudit"): SequenceContextAudit,
         ("vaxrank.allele_evidence", "AlleleAttribution"): AlleleAttribution,
         ("vaxrank.candidate_epitope", "CandidateEpitope"): CandidateEpitope,
         ("vaxrank.candidate_epitope", "Peptide"): Peptide,

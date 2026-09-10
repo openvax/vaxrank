@@ -613,6 +613,48 @@ def assess_antigen_safety(
     )
 
 
+def prediction_occurrences_from_frame(predictions_df, sequence, *, expected_source_name=None):
+    """Validate unfiltered Topiary rows without assuming one antigen or gene.
+
+    Shared by complete-window self assessments and multi-antigen construct
+    audits. Repeated peptides retain every offset; conflicting rows fail closed.
+    """
+    if predictions_df is None:
+        raise SafetyAssessmentError("Prediction frame is missing")
+    if not predictions_df.columns.is_unique:
+        raise SafetyAssessmentError("Prediction frame has duplicate column names")
+    groups, coverage_records = {}, {}
+    for _, row in predictions_df.iterrows():
+        if (expected_source_name is not None
+                and row.get("source_sequence_name") != expected_source_name):
+            raise SafetyAssessmentError("Prediction source does not match the scanned window")
+        peptide = str(row.get("peptide") or "")
+        try:
+            offset = prediction_integer(row.get("peptide_offset"), "Peptide offset")
+            length = prediction_integer(row.get("peptide_length"), "Peptide length")
+            prediction = SafetyPrediction.from_prediction_row(row)
+        except ValueError as error:
+            raise SafetyAssessmentError(str(error)) from error
+        if not peptide or length != len(peptide):
+            raise SafetyAssessmentError("Prediction peptide length does not match its sequence")
+        if offset < 0 or offset + length > len(sequence):
+            raise SafetyAssessmentError("Prediction coordinates lie outside the scanned window")
+        if sequence[offset:offset + length] != peptide:
+            raise SafetyAssessmentError("Prediction peptide does not match the scanned window")
+        group = groups.setdefault((peptide, offset), {"predictions": [], "identities": set()})
+        if prediction.identity in group["identities"]:
+            raise SafetyAssessmentError("Duplicate predictor/kind/allele evidence for one ligand")
+        group["identities"].add(prediction.identity)
+        group["predictions"].append(prediction)
+        key = (prediction.kind, prediction.predictor_name, prediction.predictor_version)
+        coverage = coverage_records.setdefault(
+            key, {"alleles": set(), "peptide_lengths": set(), "count": 0})
+        coverage["alleles"].add(prediction.allele)
+        coverage["peptide_lengths"].add(length)
+        coverage["count"] += 1
+    return groups, coverage_records
+
+
 def safety_assessment_from_prediction_frame(
     predictions_df,
     *,
@@ -653,62 +695,8 @@ def safety_assessment_from_prediction_frame(
             reason_codes=(SAFETY_REASON_NO_PREDICTIONS,),
         )
 
-    groups: dict[tuple[str, int], dict[str, Any]] = {}
-    coverage_records: dict[tuple[str, str, str], dict[str, Any]] = {}
-    for _, row in predictions_df.iterrows():
-        if expected_source_name is not None:
-            observed_source_name = row.get("source_sequence_name")
-            if observed_source_name != expected_source_name:
-                raise SafetyAssessmentError(
-                    "Prediction source does not match the scanned window"
-                )
-        peptide = str(row.get("peptide") or "")
-        try:
-            offset = prediction_integer(row.get("peptide_offset"), "Peptide offset")
-            peptide_length = prediction_integer(
-                row.get("peptide_length"), "Peptide length"
-            )
-        except ValueError as error:
-            raise SafetyAssessmentError(str(error)) from error
-        if peptide_length != len(peptide):
-            raise SafetyAssessmentError(
-                "Prediction peptide length does not match its sequence"
-            )
-        end = offset + peptide_length
-        if offset < 0 or end > len(window_sequence):
-            raise SafetyAssessmentError(
-                "Prediction coordinates lie outside the scanned window"
-            )
-        if window_sequence[offset:end] != peptide:
-            raise SafetyAssessmentError(
-                "Prediction peptide does not match the scanned window"
-            )
-
-        try:
-            prediction = SafetyPrediction.from_prediction_row(row)
-        except ValueError as error:
-            raise SafetyAssessmentError(str(error)) from error
-        key = (peptide, offset)
-        group = groups.setdefault(key, {"predictions": [], "identities": set()})
-        if prediction.identity in group["identities"]:
-            raise SafetyAssessmentError(
-                "Duplicate predictor/kind/allele evidence for one ligand"
-            )
-        group["identities"].add(prediction.identity)
-        group["predictions"].append(prediction)
-
-        coverage_key = (
-            prediction.kind,
-            prediction.predictor_name,
-            prediction.predictor_version,
-        )
-        coverage = coverage_records.setdefault(
-            coverage_key,
-            {"alleles": set(), "peptide_lengths": set(), "count": 0},
-        )
-        coverage["alleles"].add(prediction.allele)
-        coverage["peptide_lengths"].add(peptide_length)
-        coverage["count"] += 1
+    groups, coverage_records = prediction_occurrences_from_frame(
+        predictions_df, window_sequence, expected_source_name=expected_source_name)
 
     ligands = []
     for (peptide, offset), group in groups.items():
