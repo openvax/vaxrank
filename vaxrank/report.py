@@ -16,6 +16,7 @@ from importlib import import_module
 import logging
 import math
 import os
+import subprocess
 import sys
 import tempfile
 
@@ -871,8 +872,22 @@ def _pdf_via_pdfkit(html_path, pdf_report_path):
         # https://github.com/wkhtmltopdf/wkhtmltopdf/issues/2037#issuecomment-62019521
         from xvfbwrapper import Xvfb
         logger.info('Running pdfkit inside xvfb wrapper')
-        with Xvfb():
+        display = Xvfb()
+        try:
+            display.start()
             pdfkit.from_file(html_path, pdf_report_path, options=options)
+        finally:
+            try:
+                display.stop()
+            except subprocess.TimeoutExpired:
+                # xvfbwrapper restores DISPLAY/releases its lock, but leaves
+                # the child alive on timeout. Reap only our owned child; never
+                # turn a rendering error into success or ignore failed cleanup.
+                logger.warning('Xvfb graceful shutdown timed out; killing owned PDF display')
+                process = display.proc
+                process.kill()
+                process.wait(timeout=10)
+                display.proc = None
     else:
         pdfkit.from_file(html_path, pdf_report_path, options=options)
 

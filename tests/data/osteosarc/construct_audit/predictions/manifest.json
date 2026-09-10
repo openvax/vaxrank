@@ -9,7 +9,7 @@
   "documented_sha256": "791d258a57729b2dbe67f2645bea290a7340750d247f5bf4373b646c03ea1662",
   "executable_name": "netMHCpan",
   "executable_sha256": "675cde924f3c19ecb6314383a3fc4052e07a33573ac03e7631f3d57637c52ffc",
-  "generator_sha256": "ade6ecbb4ffbdfad419484f66c4c8d9c480faf00c17f36240dc4ddc52ca7baba",
+  "generator_sha256": "afbbc92401769147bfef41d21d1f3a50df4717bffbedf653a1b4604d9997d8b7",
   "method": "NetMHCpan 4.2c -BA affinity and EL, all observations; Pepsickle 0.1.3 default proteasome model; CPN initial-terminal qualitative rule",
   "model_assets_sha256": {
     "Darwin_arm64/bin/netMHCpan-4.2": "7242029eddef5e6e58c65724eae515e1c6b0655a6c377e09a57cded6c0413eae",
@@ -24893,7 +24893,7 @@
     "data/training.pseudo": "34eb9ba40b70aac59d78080348bf9e9723b9b28126196fda27cef57283fbd93c",
     "data/version": "d178911e90c4f477606678985e095afe87384b9a6c2b206cd3eb3ba4c8a0b2af"
   },
-  "output_sha256": "aa728bfe7c746c4d9981b03c1cc09c834d2f44484e213cb1cb34751c4855984e",
+  "output_sha256": "48fb0ec5497a557443b232aa352e5bb23f61cada2bb30230021ed5cb8f2189d5",
   "package_versions": {
     "isovar": "1.8.1",
     "mhctools": "3.41.0",

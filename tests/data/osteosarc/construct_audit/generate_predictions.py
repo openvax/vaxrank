@@ -7,6 +7,7 @@ and Pepsickle 0.1.3. Reproduction uses the recorded settings, not latest models.
 """
 
 import argparse
+from collections import Counter
 from dataclasses import replace
 import gzip
 from hashlib import sha256
@@ -25,7 +26,8 @@ from pyensembl import EnsemblRelease
 from vaxrank import MHCRequest, audit_sequence_contexts, final_sequence_context, native_sequence_context
 from vaxrank.native_serialization import to_native_json
 from vaxrank.reference_proteome import (
-    ensembl_dataset_cache_identity, oncoref_cta_source_gene_ids, self_reference_matches,
+    REFERENCE_TRANSLATION_POLICY, ensembl_dataset_cache_identity,
+    oncoref_cta_source_gene_ids, self_reference_matches,
 )
 
 from tests.osteosarc_construct_helpers import (
@@ -148,7 +150,7 @@ def main(output, regional_cache):
         # to establish absence of a self match. index() resolves existing files.
         genome = EnsemblRelease(114)
         genome.index()
-        print("Matching full human Ensembl 114 proteins and every source gene", flush=True)
+        print("Matching all annotated human Ensembl 114 protein sequences and sources", flush=True)
         peptides = sorted({ligand.peptide for audit in audits for ligand in audit.ligands})
         antigen = contexts[0].native_antigen
         if antigen.self_reference_excluded_gene_ids:
@@ -162,9 +164,13 @@ def main(output, regional_cache):
             dataset_identity=ensembl_dataset_cache_identity(genome),
             annotated_protein_ids=len(genome.protein_ids()),
             protein_coding_transcripts=len(genome.transcript_ids(biotype="protein_coding")),
+            indexed_transcripts_by_biotype=dict(sorted(Counter(
+                t.biotype for t in genome.transcripts() if t.protein_sequence).items())),
             files={Path(p).name: digest(p) for p in reference_paths},
             source="https://ftp.ensembl.org/pub/release-114/",
-            policy="All protein-coding transcripts with a protein sequence; no gene exclusions")
+            policy_id=REFERENCE_TRANSLATION_POLICY,
+            policy="Every annotated protein sequence regardless of transcript biotype; no gene exclusions. "
+                   "Sequence membership is not proof of expression or presentation; NMD/NSD/LoF and IG/TR labels are retained.")
         if reference["dataset_identity"] is None or reference["protein_coding_transcripts"] < 80000:
             raise ValueError("Expected a fingerprinted full Ensembl 114 human reference, not a subset")
         cta_ids = sorted(oncoref_cta_source_gene_ids())

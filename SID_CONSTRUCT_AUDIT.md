@@ -52,6 +52,21 @@ RNA products and unassessed models are enumerated in the report.
 This work follows #421 and the complete-context API in #422 / PR #435.
 It also fixes #436: standard EnsemblRelease objects must retain a full
 content-based reference identity and reuse source snapshots safely.
+Review also found #438: the self-reference policy omitted available annotated
+translations outside the literal protein_coding biotype. All reference paths now
+retain every annotated protein sequence and preserve source transcript biotype;
+older disk indexes are invalidated by policy. The pilot self flag has eight
+protein_coding and 22 NMD-labelled DYNC1H1 source transcripts. Annotation is not
+proof of normal-tissue expression, tolerance or antigen presentation; reference
+LoF and IG/TR records also retain their distinct labels. See Ensembl's
+[biotype definitions](https://mart.ensembl.org/info/genome/genebuild/biotypes.html)
+and [primary NMD-targeted transcript/MHC-I experiments](https://doi.org/10.1073/pnas.1309956110).
+The latter support not treating predicted NMD as an absolute absence criterion;
+they do not establish processing or presentation of the Sid sequences.
+
+CI also exposed #439, an owned Xvfb child surviving graceful PDF cleanup. Bounded
+forced cleanup is tested without dropping the real Linux PDF test; the underlying
+wrapper gap is tracked at cgoldberg/xvfbwrapper#76.
 It does not replace historical selection validation in #414 or invent the
 missing historical ranking settings. Start with DYNC1H1 p.Val314Ile as expressly
 required by #423; report the pilot's limits instead of whole-cohort coverage.

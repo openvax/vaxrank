@@ -172,13 +172,18 @@ class TumorSpecificityAttestation(DataclassSerializable):
 
 @dataclass(frozen=True)
 class SelfReferenceSource(DataclassSerializable):
-    """One non-excluded protein source for an exact peptide match."""
+    """One annotated sequence source, not proof of expression/presentation.
+
+    Biotype preserves distinctions such as predicted NMD and reference LoF.
+    An empty value denotes missing annotation, including older saved sources.
+    """
 
     gene_id: str
     transcript_id: str = ""
     protein_id: str = ""
     gene_name: str = ""
     species: str = ""
+    transcript_biotype: str = ""
 
     def __post_init__(self):
         if not self.gene_id:

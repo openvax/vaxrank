@@ -56,13 +56,14 @@ from .common import eq_, ok_
 # =============================================================================
 
 def create_mock_transcript(transcript_id, protein_sequence, is_protein_coding=True,
-                           gene_id=None):
+                           gene_id=None, biotype=None):
     """Create a mock transcript object"""
     transcript = MagicMock()
     transcript.id = transcript_id
     transcript.transcript_id = transcript_id
     transcript.protein_sequence = protein_sequence
     transcript.is_protein_coding = is_protein_coding
+    transcript.biotype = biotype or ("protein_coding" if is_protein_coding else "nonsense_mediated_decay")
     transcript.gene_id = gene_id or f"GENE_{transcript_id}"
     transcript.gene_name = transcript.gene_id
     transcript.protein_id = f"PROTEIN_{transcript_id}"
@@ -179,8 +180,8 @@ def test_build_kmer_set_multiple_proteins():
     ok_("CCCCCCCC" not in kmers)
 
 
-def test_build_kmer_set_skip_non_coding_transcripts():
-    """Test that non-coding transcripts are skipped"""
+def test_build_kmer_set_includes_annotated_noncanonical_translations():
+    """Biotype does not veto a sequence actually in the protein reference."""
     transcripts = [
         create_mock_transcript("T1", "ABCDEFGH", is_protein_coding=True),
         create_mock_transcript("T2", "ZZZZZZZZ", is_protein_coding=False),
@@ -190,7 +191,7 @@ def test_build_kmer_set_skip_non_coding_transcripts():
     kmers = build_kmer_set_index(genome, min_len=8, max_len=8)
 
     ok_("ABCDEFGH" in kmers)
-    ok_("ZZZZZZZZ" not in kmers)  # Non-coding, should be skipped
+    ok_("ZZZZZZZZ" in kmers)
 
 
 def test_build_kmer_set_skip_none_protein_sequence():
@@ -333,7 +334,7 @@ def test_kmer_set_index_path_format():
 
         import hashlib
         digest = hashlib.sha256(b"").hexdigest()
-        eq_(path, "/cache/content_%s_kmer_set_8_15.pkl.gz" % digest)
+        eq_(path, "/cache/content_annotated-protein-sequences-v2_%s_kmer_set_8_15.pkl.gz" % digest)
 
 
 def test_reference_cache_separates_content_with_same_species_release(tmp_path, monkeypatch):
@@ -598,13 +599,13 @@ def test_genome_protein_dict_excludes_gene_ids():
     assert proteins == {"T2": "GHIJKL"}
 
 
-def test_genome_protein_dict_skips_non_coding():
+def test_genome_protein_dict_includes_annotated_noncanonical_translations():
     t1 = create_mock_transcript("T1", "ABCDEF", gene_id="G1")
     t2 = create_mock_transcript("T2", "GHIJKL", gene_id="G2", is_protein_coding=False)
     genome = create_mock_genome([t1, t2])
     proteins = genome_protein_dict(genome)
     assert "T1" in proteins
-    assert "T2" not in proteins
+    assert proteins["T2"] == "GHIJKL"
 
 
 def test_genome_protein_dict_exclude_unknown_gene_id():

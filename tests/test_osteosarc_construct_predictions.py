@@ -37,6 +37,9 @@ def test_real_cache_has_full_reference_and_actual_model_provenance(cached):
     assert reference["release"] == 114 and len(reference["dataset_identity"]) == 64
     assert reference["annotated_protein_ids"] == 112375
     assert reference["protein_coding_transcripts"] == 89872
+    assert reference["policy_id"] == "annotated-protein-sequences-v2"
+    assert reference["indexed_transcripts_by_biotype"]["nonsense_mediated_decay"] == 21902
+    assert sum(reference["indexed_transcripts_by_biotype"].values()) == 112375
     assert len(reference["files"]) == 2
     catalog = evidence["cta_catalog"]
     assert len(catalog["gene_ids"]) == 390
@@ -112,7 +115,9 @@ def test_real_non_target_self_flag_retains_all_source_transcripts(cached):
         assert prediction.kind == "pMHC_presentation" and prediction.allele == "HLA-B*08:01"
         assert prediction.percentile_rank == .47  # Real model output, not biological truth.
         assert not finding["overlaps_intended"]
-        assert len(finding["non_cta_sources"]) == 8
+        assert len(finding["non_cta_sources"]) == 30
+        assert sum(s.transcript_biotype == "protein_coding" for s in finding["non_cta_sources"]) == 8
+        assert sum(s.transcript_biotype == "nonsense_mediated_decay" for s in finding["non_cta_sources"]) == 22
         assert {s.gene_id for s in finding["non_cta_sources"]} == {"ENSG00000197102"}
         assert all(s.transcript_id and s.protein_id and s.species == "homo_sapiens"
                    for s in finding["non_cta_sources"])
@@ -161,7 +166,8 @@ def test_report_renders_all_contexts_and_unassessed_scopes(cached, tmp_path):
     for audit in cached[0]["audits"]:
         assert audit.context.name in html
     for text in ("DTGLKQAL", "0.47", "ENSG00000197102", "Class II", "serum kinetics",
-                 "JLF V1", "three-alternate-read", "CSBio", "164", "not a safety clearance"):
+                 "JLF V1", "three-alternate-read", "CSBio", "164", "not a safety clearance",
+                 "biotype: nonsense_mediated_decay"):
         assert text in html
     assert (tmp_path / "full-contexts.html").is_file()
     restored = from_native_json((tmp_path / "full-contexts.json").read_text(), dict)
