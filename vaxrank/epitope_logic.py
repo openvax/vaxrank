@@ -148,6 +148,9 @@ def predict_epitopes(
     if predictions_df.empty:
         return []
 
+    from .allele_validation import validate_prediction_frame
+    validate_prediction_frame(predictions_df, f"MHC output for {source_name!r}")
+
     # ``default_methods`` (per-kind ``prediction_method_name`` defaults
     # for unqualified DSL refs) is required when multi-predictor data
     # is in play — without it, ``affinity.value`` is ambiguous and
@@ -268,6 +271,12 @@ def predict_epitopes(
     if valid_wt_peptides:
         try:
             wt_df = topiary_predictor.predict_from_named_peptides(valid_wt_peptides)
+        except Exception:
+            logger.error(
+                'MHC prediction for WT peptides errored, with traceback: %s',
+                traceback.format_exc())
+        else:
+            validate_prediction_frame(wt_df, f"WT MHC output for {source_name!r}")
             for _, row in wt_df.iterrows():
                 key = (
                     row["source_sequence_name"],
@@ -277,11 +286,6 @@ def predict_epitopes(
                     row.get("predictor_version", "") or "",
                 )
                 wt_predictions_grouped[key] = row
-        except Exception:
-            logger.error(
-                'MHC prediction for WT peptides errored, with traceback: %s',
-                traceback.format_exc())
-
     # Walk topiary frame rows; build per-(allele, predictor) leaf
     # ``Prediction`` records into a flat list of row dicts.
     # ``candidate_epitopes_from_rows`` groups them by

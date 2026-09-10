@@ -29,13 +29,16 @@ them by complete ``ExternalPredictionKey`` identity.
 import json
 import logging
 import os
-import re
 from dataclasses import dataclass
 
 import pandas as pd
 from mhctools.pred import Prediction
 
 from . import cells
+from .allele_validation import (
+    parse_prediction_allele, validate_peptide_alleles,
+    validate_prediction_allele, validate_prediction_frame,
+)
 from .epitope_dsl import prediction_kind_for_method
 from .external_prediction import (
     _PVACSEQ_DNA_VAF_COLUMNS,
@@ -277,12 +280,13 @@ def load_predictions(path):
             if cells.missing(payload):
                 continue
             try:
-                epitopes.append(from_native_json(
-                    str(payload), CandidateEpitope))
+                epitope = from_native_json(str(payload), CandidateEpitope)
+                validate_peptide_alleles(epitope, f"{path}, native row {row_index + 2}")
+                epitopes.append(epitope)
             except (ImportError, KeyError, TypeError, ValueError) as error:
                 raise ValueError(
-                    "Invalid serialized CandidateEpitope at native row %d"
-                    % (row_index + 2)
+                    "Invalid serialized CandidateEpitope in %s at native row %d: %s"
+                    % (path, row_index + 2, error)
                 ) from error
         if len(df) and not epitopes:
             raise ValueError(
@@ -303,7 +307,7 @@ def load_predictions(path):
     has_generic_predictions = "prediction_kind" in df.columns
 
     rows = []
-    for _, row in df.iterrows():
+    for row_number, (_, row) in enumerate(df.iterrows(), start=2):
         wt_ic50 = optional_float(row.get("wt_ic50"))
         percentile_rank = optional_float(row.get("percentile_rank"))
         peptide = row["peptide_sequence"]
@@ -331,6 +335,7 @@ def load_predictions(path):
             score = 0.0
             value = float(row["ic50"])
             prediction_peptide = peptide
+        validate_prediction_allele(kind, allele, f"{path}, native row {row_number}")
         mutant = Prediction(
             kind=kind, predictor_name=method, predictor_version=version,
             allele=allele, peptide=prediction_peptide, value=value,
@@ -349,6 +354,7 @@ def load_predictions(path):
         wt = None
         wt_kind = string_or_empty(row.get("wt_prediction_kind", ""))
         if wt_kind:
+            validate_prediction_allele(wt_kind, allele, f"{path}, native row {row_number}, WT comparator")
             wt_score = optional_float(row.get("wt_prediction_score"))
             if wt_score is None:
                 raise ValueError(
@@ -700,6 +706,7 @@ def read_pvacseq_report(path, epitope_config=None):
 
     result = read_pvacseq(path)
     topiary_df = result.df.copy()
+    validate_prediction_frame(topiary_df, str(path))
 
     # Topiary has already normalized both pVACseq flavors onto one column
     # vocabulary (``variant``, ``gene``, ``transcript``, ``rna_depth`` /
@@ -912,7 +919,7 @@ def normalize_hla_allele(allele):
     """LENS emits alleles as 'HLA-A01:01'; vaxrank output uses 'HLA-A*01:01'."""
     if not allele:
         return allele
-    return re.sub(r"^(HLA-[A-Z]{1,3})(\d)", r"\1*\2", allele)
+    return parse_prediction_allele(allele)
 
 
 def lens_epitope_position(peptide, peptide_context):
@@ -1033,15 +1040,18 @@ def read_lens_report(path, epitope_config=None):
     # (peptide, tool, kept score, conflicting score) for allele rows that
     # disagreed about an allele-independent processing score.
     processing_conflicts = []
-    for row in rows:
+    for row_number, row in enumerate(rows, start=2):
         peptide = cells.text(row.get("peptide"))
         if not peptide:
             continue
 
         allele_raw = row.get("allele", "")
-        if pd.isna(allele_raw) or not allele_raw:
-            continue
-        allele = normalize_hla_allele(str(allele_raw))
+        for prediction in chosen:
+            columns = (prediction.value_col, prediction.score_col, prediction.rank_col)
+            if any(column and not cells.missing(row.get(column)) for column in columns):
+                validate_prediction_allele(
+                    prediction.kind, allele_raw, f"{path}, LENS row {row_number}")
+        allele = normalize_hla_allele(cells.text(allele_raw))
 
         # mhcflurry_agretopicity = MT_IC50 / WT_IC50 in LENS's
         # convention (small values ≪ 1 = mutation strengthened
@@ -1113,7 +1123,8 @@ def read_lens_report(path, epitope_config=None):
                     if abs(kept - score) > PROCESSING_SCORE_TOLERANCE:
                         processing_conflicts.append(
                             (peptide, d.tool, kept, score))
-                    existing['patient_alleles'].add(allele)
+                    if allele:
+                        existing['patient_alleles'].add(allele)
                 else:
                     processing_row = {
                         **shared_epitope_fields,
@@ -1124,7 +1135,7 @@ def read_lens_report(path, epitope_config=None):
                             percentile_rank=None,
                         ),
                         'wt': None,
-                        'patient_alleles': {allele},
+                        'patient_alleles': {allele} if allele else set(),
                     }
                     processing_rows_by_position[processing_key] = (
                         processing_row)

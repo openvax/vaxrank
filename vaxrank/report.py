@@ -14,6 +14,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from importlib import import_module
 import logging
+import math
 import os
 import sys
 import tempfile
@@ -26,7 +27,9 @@ from mhctools.pred import Prediction
 from varcode import load_vcf_fast
 
 from .cancer_hotspots import get_hotspot_url
+from . import cells
 from .manufacturability import ManufacturabilityScores
+from .prediction_input import finite_prediction_value
 from .processing import PEPSICKLE_PREDICTOR_NAME, resolve_peptide_offset
 from .varcode_effects import (
     OUTCOME_SELECTION_MULTI_OUTCOME,
@@ -44,6 +47,18 @@ JINJA_ENVIRONMENT = jinja2.Environment(
     trim_blocks=True,
     lstrip_blocks=True,
 )
+
+
+def display_epitope_value(value):
+    """Format missing numeric evidence only at the presentation boundary."""
+    if cells.missing(value):
+        return ""
+    if isinstance(value, float):
+        return _sanitize(value) if math.isfinite(value) else ""
+    return value
+
+
+JINJA_ENVIRONMENT.filters["display_epitope_value"] = display_epitope_value
 
 
 @dataclass(frozen=True)
@@ -69,32 +84,25 @@ def epitope_report_row_inputs(epitope):
         for prediction in predictions:
             if prediction.kind != kind:
                 continue
-            if not prediction.allele:
-                # An allele-scoped kind that arrived blank is malformed —
-                # see vaxrank.allele_evidence for the one definition of
-                # which kinds carry an allele, and epitope.allele_attributions
-                # for which alleles the allele-free kinds were credited to.
-                raise ValueError(
-                    f"{kind} report evidence requires a patient allele")
+            # Loaders reject malformed allele-scoped data with file/row
+            # provenance. Directly supplied legacy objects can still display
+            # unavailable evidence without destroying the rest of the report.
+            allele = cells.text(prediction.allele)
             key = (
-                prediction.allele,
+                allele,
                 prediction.predictor_name,
                 prediction.predictor_version,
             )
             row_inputs_by_key.setdefault(
                 key,
-                EpitopeReportRowInput(prediction, prediction.allele),
+                EpitopeReportRowInput(prediction, allele),
             )
 
     processing_predictions = tuple(
         prediction for prediction in predictions
         if prediction.kind == 'antigen_processing')
-    if processing_predictions and not epitope.patient_alleles:
-        raise ValueError(
-            "Cannot render allele-independent antigen-processing evidence "
-            "without explicit patient alleles")
     for prediction in processing_predictions:
-        for allele in epitope.patient_alleles:
+        for allele in epitope.patient_alleles or ("",):
             key = (
                 allele,
                 prediction.predictor_name,
@@ -537,10 +545,7 @@ class TemplateDataCreator(object):
         from the same predictor/version. Missing axes render as ``'—'``
         so mixed-predictor tables retain consistent columns.
         """
-        row_allele = prediction.allele if allele is None else allele
-        if not row_allele:
-            raise ValueError(
-                "Template epitope rows require an explicit patient allele")
+        row_allele = cells.text(prediction.allele if allele is None else allele)
         wt_ic50 = self._wt_ic50_for_allele(
             epitope, row_allele, predictor=prediction.predictor_name)
         wt_ic50_str = _format_ic50(wt_ic50)
@@ -565,8 +570,8 @@ class TemplateDataCreator(object):
             # from ``epitope.per_allele_scores`` — the single source
             # of truth — rather than recomputing from the raw IC50.
             ('Score',
-                _sanitize(epitope.per_allele_scores[row_allele])
-                if row_allele in epitope.per_allele_scores else '—'),
+                finite_prediction_value(cells.number(epitope.per_allele_scores.get(row_allele)))
+                if row_allele else None),
             ('Allele', row_allele.replace('HLA-', '')),
             ('WT sequence', wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
@@ -763,7 +768,9 @@ class TemplateDataCreator(object):
 
                 # hack: make a nicely-formatted fixed width table for epitopes, used in ASCII report
                 with tempfile.TemporaryFile(mode='r+') as temp:
-                    asc.write(epitopes, temp, format='fixed_width_two_line', delimiter_pad=' ')
+                    display_rows = [{key: display_epitope_value(value)
+                                     for key, value in row.items()} for row in epitopes]
+                    asc.write(display_rows, temp, format='fixed_width_two_line', delimiter_pad=' ')
                     temp.seek(0)
                     ascii_epitopes = temp.read()
 

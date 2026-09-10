@@ -1552,6 +1552,13 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
         with open(args.input_json_file) as f:
 
             data = serializable.from_json(f.read())
+            from ..allele_validation import validate_peptide_alleles
+            for variant_index, (_, peptides) in enumerate(data["variants"], start=1):
+                for peptide_index, peptide in enumerate(peptides, start=1):
+                    for epitope in peptide.epitopes:
+                        validate_peptide_alleles(
+                            epitope, f"{args.input_json_file}, variant {variant_index}, "
+                            f"vaccine peptide {peptide_index}")
             # the JSON data from the previous run will have the older args saved, which may need to
             # be overridden with args from this run (which all be output related)
             data['args'].update(vars(args))

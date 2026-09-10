@@ -420,7 +420,7 @@ def test_epitope_data_renders_missing_dsl_score_as_unavailable():
 
     row = creator.epitope_data(epitope, epitope.best_affinity())
 
-    assert row['Score'] == '—'
+    assert row['Score'] is None
 
 
 def test_epitope_data_surfaces_processing_columns_when_annotated():
