@@ -75,17 +75,22 @@ to force agreement. H1-2 retains its deletion sequence and the actual filter fai
 Expanded MAP2 has one alternate read object and no protein meeting the two-read
 floor; it is never converted into a DNA-backed vaccine selection silently.
 
-**Upstream blocker, resolved 2026-09-10:** Topiary #296 duplicated cache
+**Upstream blocker, resolved 2026-09-11:** Topiary #296 duplicated cache
 occurrence coordinates, and six end-to-end cache tests failed with that
 diagnosis. It is fixed upstream by Topiary #299, commit `2c9f867`, which rebinds
-a cached protein scan to the occurrence it was asked about. All 18 pilot tests
-now pass against that commit, and the offline path composes end to end.
+a cached protein scan to the occurrence it was asked about, and released as
+Topiary 5.55.1 on PyPI. `requirements.txt` floors topiary at `>=5.55.1`
+accordingly. All 18 pilot tests pass against the real published release,
+installed non-editable and verified directly against PyPI's index rather than
+the topiary source tree, and the offline path composes end to end.
 
-The fix is not released yet. Topiary master is `5.54.0` while PyPI still serves
-`5.53.0`, so `requirements.txt` still floors topiary at `>=5.52.0`. Raise that
-floor to the released version before opening the Vaxrank #414 PR; raising it
-earlier would fail CI, which installs from PyPI. Do not close Vaxrank #414 until
-that release lands and these results have been reviewed.
+A second upstream gap surfaced while chasing this one: Topiary #300,
+`serum_half_life`/`blood_half_life` declared as kinds but unreachable from the
+ranking DSL, also fixed in 5.55.1. Reaching that fix additionally required
+raising vaxrank's own `requirements.txt` mhctools floor from `>=3.13.3` to
+`>=3.39.0`, matching topiary's real requirement; below that floor mhctools'
+`Kind` class predates both kinds, so `KIND_ALIASES` never sees them regardless
+of the topiary version installed.
 
 ## Limits and follow-up
 

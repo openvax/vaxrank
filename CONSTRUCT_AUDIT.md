@@ -91,13 +91,16 @@ prediction artifacts into a new directory and compare their observations before
 adopting updated metadata; do not change RNA gates or historical expectations.
 This local preparation does not authorize publication of genomic fixtures.
 
-Topiary #296, the cached-coordinate blocker, is fixed upstream by Topiary #299,
-commit `2c9f867`, and all 18 pilot tests now pass against it. The fix is not on
-PyPI yet, so the topiary floor stays at `>=5.52.0` until it is released. Topiary
-#300 is a separate, newly filed upstream gap: `serum_half_life` and
-`blood_half_life` are declared kinds that the ranking DSL cannot parse, which
-fails two `tests/test_epitope_dsl.py` cases. That gap is unrelated to this
-pilot's selection path.
+Topiary #296, the cached-coordinate blocker, is fixed upstream by Topiary #299
+and released as Topiary 5.55.1 on PyPI (2026-09-11); the topiary floor is
+raised to `>=5.55.1` accordingly. Topiary #300, a separate gap this pilot
+surfaced (`serum_half_life`/`blood_half_life` declared but unreachable from
+the ranking DSL), is fixed in the same release. Reaching that fix also
+required raising vaxrank's own mhctools floor to `>=3.39.0` to match
+topiary's real requirement; below that floor mhctools' `Kind` class predates
+both kinds, so topiary's fix was reachable but not exercised. All 18 pilot
+tests and the full suite pass against the real published release, verified
+directly against PyPI's index rather than the topiary source tree.
 
 - #414: pin Isovar >=1.8.1 fixtures with their original sample/timepoint metadata;
   independently snapshot documented provider-specific sequences; compare actual

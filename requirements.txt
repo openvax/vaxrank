@@ -19,7 +19,12 @@ mhctools>=3.39.0,<4.0.0
 # netmhcpan) without pre-subsetting the frame.
 # 5.52.0 preserves pVACtools presentation metrics as native prediction rows,
 # completing Vaxrank's presentation-aware coverage path.
-topiary>=5.52.0,<6.0.0
+# 5.55.1 rebinds a cached protein scan's coordinate and flanks to the
+# occurrence actually requested (openvax/topiary#296) instead of the one the
+# cache was built from; below this floor CachedPredictor can emit duplicate
+# peptide_offset columns and crash TopiaryPredictor.predict_from_named_sequences,
+# which vaxrank#414's real-cache selection regression exercises directly.
+topiary>=5.55.1,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0
