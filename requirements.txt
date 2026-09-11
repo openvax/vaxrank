@@ -9,7 +9,11 @@ varcode>=7.0.0,<8.0.0
 isovar>=1.8.1,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.33.5,<4.0.0
-mhctools>=3.13.3,<4.0.0
+# 3.39.0 adds serum_half_life/blood_half_life to mhctools' Kind class, which
+# Topiary's ranking DSL enumerates to build its kind registry; below this
+# floor those two kinds fail to parse (openvax/topiary#300) despite being
+# declared. Also topiary's own floor as of 5.55.0.
+mhctools>=3.39.0,<4.0.0
 # 5.10.0 adds EvalContext(default_methods=...) and apply_filter(default_methods=...)
 # which vaxrank uses to score multi-model inputs (e.g. LENS with mhcflurry +
 # netmhcpan) without pre-subsetting the frame.
