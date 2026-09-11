@@ -21,14 +21,14 @@ three scores:
                                     proteasome cuts at the ligand's
                                     C-terminus (clean release)
   max_internal_cut_prob             peak cleavage probability strictly
-                                    inside the ligand (high → ligand
-                                    is destroyed before reaching MHC)
+                                    inside the ligand (a model-based
+                                    warning, not proof of destruction)
   processing_score                  composite ``sqrt(c_term *
                                     (1 - max_internal))`` — the
                                     geometric mean of the two factors;
-                                    1.0 = ideal release, 0.0 = no
-                                    clean release OR near-certain
-                                    destruction. Geometric mean
+                                    not a calibrated probability of
+                                    release, destruction or presentation.
+                                    Geometric mean
                                     rather than the raw product so
                                     a balanced (0.6, 0.6) row scores
                                     ~0.6 instead of 0.36.
@@ -42,6 +42,10 @@ vaxrank mutated pre-3.0 flat records in place with
 map returned here.
 
 The annotations are purely additive — vaccine ranking is unaffected.
+For complete site-resolved evidence, use ``audit_pepsickle_inputs`` and
+``write_cleavage_profiles``. Those APIs distinguish actual internal peptide
+bonds from a sequence endpoint; this legacy summary does not establish full
+sequence coverage.
 Reports surface the three columns when at least one prediction in
 the per-VaccinePeptide list has been annotated.
 
@@ -68,10 +72,12 @@ Issue: openvax/vaxrank#249.
 """
 
 import logging
+import math
 
 from mhctools.processing_predictor import ProcessingPredictor
 
 from .processing_prediction import ProcessingPrediction
+from .cleavage_profile import _residue_scores
 
 logger = logging.getLogger(__name__)
 
@@ -98,12 +104,15 @@ PEPSICKLE_PREDICTOR_NAME = 'pepsickle'
 def processing_component_probabilities(seq_probs, start, length):
     """Return ``(c_term, max_internal)`` for a peptide at
     ``seq_probs[start:start+length]``, or ``(None, None)`` when the
-    span doesn't fit. Both components come straight from the public
-    mhctools helpers — we just guard the array bounds.
+    span doesn't fit. The final residue output is a sequence-end sentinel,
+    not an actual C-boundary bond. At that endpoint return ``None`` for the
+    C-boundary while retaining internal-bond evidence. The source can be a
+    cropped context; this does not establish an exposed molecular terminus.
     """
     if length < 1 or start < 0 or start + length > len(seq_probs):
         return None, None
-    c_term = float(ProcessingPredictor.c_term_prob(seq_probs, start, length))
+    c_term = (None if start + length == len(seq_probs) else
+              float(ProcessingPredictor.c_term_prob(seq_probs, start, length)))
     max_internal = float(
         ProcessingPredictor.max_internal_prob(seq_probs, start, length))
     return c_term, max_internal
@@ -256,7 +265,12 @@ def annotate_processing(epitopes, predictor=None,
     skipped_examples = []
     for source, epis in by_source.items():
         seq_probs = probs_by_source.get(source)
-        if not seq_probs or len(seq_probs) < len(source):
+        if seq_probs is None:
+            continue
+        try:
+            seq_probs = _residue_scores(seq_probs, len(source))
+        except (TypeError, ValueError) as error:
+            logger.warning("Invalid cleavage output for source %r: %s", source, error)
             continue
         for e in epis:
             peptide = e.sequence or ''
@@ -270,20 +284,19 @@ def annotate_processing(epitopes, predictor=None,
                 continue
             c_term, max_internal = processing_component_probabilities(
                 seq_probs, offset, len(peptide))
-            if c_term is None:
+            if max_internal is None:
                 continue
             # Composite score is the **geometric mean** of the two
             # factors — ``sqrt(c_term * (1 - max_internal))``. Range
-            # [0, 1]; 1 = ideal release, 0 = no clean release OR
-            # near-certain internal destruction. Geometric mean
+            # [0, 1], not a calibrated probability of release,
+            # destruction or presentation. Geometric mean
             # penalizes both factors symmetrically and is more
             # forgiving than the raw product when one factor is
             # mid-range, which better matches the "credibility tag"
             # reading: a peptide with c_term=0.6 and (1 -
             # max_internal)=0.6 should score ~0.6, not 0.36.
-            import math
             anti_max = max(0.0, 1.0 - max_internal)
-            processing_score = math.sqrt(c_term * anti_max)
+            processing_score = None if c_term is None else math.sqrt(c_term * anti_max)
             # Build the canonical ProcessingPrediction record (the
             # post-2.22 source of truth — keyed on
             # ``(peptide, source, peptide_offset, predictor_name)`` so future

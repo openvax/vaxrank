@@ -297,7 +297,11 @@ class Peptide(DataclassSerializable):
     @classmethod
     def from_json(cls, json_string: str):
         """Load this peptide graph after validating every encoded class."""
-        return from_native_json(json_string, cls)
+        from .allele_validation import validate_peptide_alleles
+
+        peptide = from_native_json(json_string, cls)
+        validate_peptide_alleles(peptide, "Native peptide JSON")
+        return peptide
 
     def __hash__(self) -> int:
         # Position identity. The dataclass-generated hash would

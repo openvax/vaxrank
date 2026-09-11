@@ -31,6 +31,7 @@ _SERIALIZED_KEY_PREFIX = _SERIALIZED_KEYS_FIELD + "element_"
 def _native_serializable_classes():
     """Return the native class registry without creating an import cycle."""
     from mhctools.pred import Prediction
+    from mhctools.cleavage import CleavageInput, CleavageModel, CleavageSite
 
     from .allele_evidence import AlleleAttribution
     from .candidate_epitope import CandidateEpitope, Peptide
@@ -42,6 +43,11 @@ def _native_serializable_classes():
         ConstructSequenceEdit,
     )
     from .construct_audit import ConstructAudit
+    from .cleavage_profile import CleavageProfile, CleavageIntervalEvidence
+    from .processing_prediction import ProcessingPrediction
+    from .mrna import RNAConstruct
+    from .sequence_context import ContextTarget, SequenceContext
+    from .context_audit import MHCRequest, ContextLigand, SequenceContextAudit
     from .safety_assessment import (
         ConstructBoundary,
         EmittedSafetyLigand,
@@ -63,6 +69,18 @@ def _native_serializable_classes():
         ("builtins", "set"): set,
         ("builtins", "tuple"): tuple,
         ("mhctools.pred", "Prediction"): Prediction,
+        ("mhctools.cleavage", "CleavageInput"): CleavageInput,
+        ("mhctools.cleavage", "CleavageModel"): CleavageModel,
+        ("mhctools.cleavage", "CleavageSite"): CleavageSite,
+        ("vaxrank.cleavage_profile", "CleavageProfile"): CleavageProfile,
+        ("vaxrank.cleavage_profile", "CleavageIntervalEvidence"): CleavageIntervalEvidence,
+        ("vaxrank.processing_prediction", "ProcessingPrediction"): ProcessingPrediction,
+        ("vaxrank.mrna", "RNAConstruct"): RNAConstruct,
+        ("vaxrank.sequence_context", "ContextTarget"): ContextTarget,
+        ("vaxrank.sequence_context", "SequenceContext"): SequenceContext,
+        ("vaxrank.context_audit", "MHCRequest"): MHCRequest,
+        ("vaxrank.context_audit", "ContextLigand"): ContextLigand,
+        ("vaxrank.context_audit", "SequenceContextAudit"): SequenceContextAudit,
         ("vaxrank.allele_evidence", "AlleleAttribution"): AlleleAttribution,
         ("vaxrank.candidate_epitope", "CandidateEpitope"): CandidateEpitope,
         ("vaxrank.candidate_epitope", "Peptide"): Peptide,

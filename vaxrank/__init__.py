@@ -47,6 +47,20 @@ from .construct_audit import (
     save_construct_sequences,
     write_construct_audits,
 )
+from .cleavage_profile import (
+    CleavageProfile,
+    CleavageIntervalEvidence,
+    profile_from_cleavage_result,
+    profile_from_residue_scores,
+)
+from .cleavage_inference import audit_pepsickle_inputs, audit_peptidase_inputs
+from .cleavage_report import write_cleavage_profiles
+from .sequence_context import (
+    ContextTarget, SequenceContext, final_sequence_context,
+    native_sequence_context, translated_sequence_context,
+)
+from .context_audit import MHCRequest, ContextLigand, SequenceContextAudit, audit_sequence_contexts
+from .context_report import write_sequence_context_audits
 from .vaccine_library import antigen_construct_name, select_antigen_window
 from .safety_assessment import (
     AntigenSafetyAssessment,
@@ -140,6 +154,23 @@ from .reference_proteome import (
 from .version import __version__
 
 __all__ = [
+    "CleavageProfile",
+    "CleavageIntervalEvidence",
+    "profile_from_cleavage_result",
+    "profile_from_residue_scores",
+    "audit_pepsickle_inputs",
+    "audit_peptidase_inputs",
+    "write_cleavage_profiles",
+    "ContextTarget",
+    "SequenceContext",
+    "MHCRequest",
+    "ContextLigand",
+    "SequenceContextAudit",
+    "final_sequence_context",
+    "native_sequence_context",
+    "translated_sequence_context",
+    "audit_sequence_contexts",
+    "write_sequence_context_audits",
     "__version__",
     "ConstructChemicalModification",
     "ConstructEvidence",

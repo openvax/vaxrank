@@ -9,11 +9,13 @@ varcode>=7.0.0,<8.0.0
 isovar>=1.8.1,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.33.5,<4.0.0
-# 3.39.0 adds serum_half_life/blood_half_life to mhctools' Kind class, which
-# Topiary's ranking DSL enumerates to build its kind registry; below this
-# floor those two kinds fail to parse (openvax/topiary#300) despite being
-# declared. Also topiary's own floor as of 5.55.0.
-mhctools>=3.39.0,<4.0.0
+# 3.41.0 supplies mhctools.cleavage (CleavageInput/CleavageModel/CleavageResult/
+# CleavageSite) and mhctools.peptidases.get_cleavage_model, which the Pepsickle
+# cleavage-profile integration uses directly. It also satisfies the separate
+# floor of >=3.39.0: below that, mhctools' Kind class predates
+# serum_half_life/blood_half_life, so Topiary's ranking DSL cannot reach either
+# kind (openvax/topiary#300) regardless of the topiary version installed.
+mhctools>=3.41.0,<4.0.0
 # 5.10.0 adds EvalContext(default_methods=...) and apply_filter(default_methods=...)
 # which vaxrank uses to score multi-model inputs (e.g. LENS with mhcflurry +
 # netmhcpan) without pre-subsetting the frame.
