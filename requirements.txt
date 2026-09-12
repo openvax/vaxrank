@@ -15,7 +15,13 @@ mhcgnomes>=3.33.5,<4.0.0
 # floor of >=3.39.0: below that, mhctools' Kind class predates
 # serum_half_life/blood_half_life, so Topiary's ranking DSL cannot reach either
 # kind (openvax/topiary#300) regardless of the topiary version installed.
-mhctools>=3.41.0,<4.0.0
+# 3.44.0 makes CleavageModel.scored_endpoint required for quantitative_model
+# evidence and adds motif_strictness/strictness_basis for motif_rule evidence;
+# vaxrank's own CleavageModel constructions (vaxrank/cleavage_inference.py,
+# tests/test_cleavage_profile.py, tests/test_cleavage_report.py) pass these
+# fields, so importing them against an older mhctools raises TypeError for an
+# unexpected keyword argument, not just a validation gap.
+mhctools>=3.44.0,<4.0.0
 # 5.10.0 adds EvalContext(default_methods=...) and apply_filter(default_methods=...)
 # which vaxrank uses to score multi-model inputs (e.g. LENS with mhcflurry +
 # netmhcpan) without pre-subsetting the frame.

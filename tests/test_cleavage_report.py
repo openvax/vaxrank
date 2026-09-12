@@ -14,7 +14,9 @@ from .test_cleavage_profile import MODEL, profile
 def test_complete_profiles_roundtrip_and_render_all_sites(tmp_path):
     p = profile(backend_version="3.41.0", upstream_context=8, downstream_context=8)
     p = replace(p, peptide=replace(p.peptide, source_id="<script>bad()</script>", source_start=40))
-    motif = replace(MODEL, evidence="motif_rule", score_name=None, score_units=None)
+    motif = replace(MODEL, evidence="motif_rule", score_name=None, score_units=None,
+                     scored_endpoint=None, motif_strictness="permissive",
+                     strictness_basis="Not biological evidence")
     partial = profile_from_cleavage_result(CleavageResult(
         CleavageInput("ACDEFG"), motif, (CleavageSite(5, "not_matched", "partial rule"),)))
     json_path, html_path = tmp_path / "sites.json", tmp_path / "sites.html"
