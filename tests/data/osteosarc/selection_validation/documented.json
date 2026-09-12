@@ -1,0 +1,21 @@
+{
+  "retrieved": "2026-09-09",
+  "historical_ranking_settings": null,
+  "historical_ranking_gap": "Provider prediction versions, candidate pools, filters, tie breaks and manual selection decisions are not published on these pages.",
+  "hla_source": "https://osteosarc.com/data/",
+  "hla_source_description": "Red Cross HLA typing table, not a genotype inferred from predictions",
+  "clinical_class_i": ["HLA-A*01:01", "HLA-A*01:11N", "HLA-B*08:01", "HLA-B*27:05", "HLA-C*01:02", "HLA-C*07:01"],
+  "prediction_alleles": ["HLA-A*01:01", "HLA-B*08:01", "HLA-B*27:05", "HLA-C*01:02", "HLA-C*07:01"],
+  "unassessed_hla": {"HLA-A*01:11N": "Clinical table labels a null allele; not substituted with another allele or treated as an expressed presenter.", "class_II": "This initial comparison uses class-I affinity only. CeGaT class-II selections are documented comparators, not expected class-I ranking agreement."},
+  "typing_discrepancy": {"source": "https://osteosarc.com/dragen/hla/", "description": "Computational HLA callers report A*01:01 homozygosity, unlike the clinical A*01:11N call. This fixture preserves the clinical table; it does not adjudicate genotype."},
+  "prediction_peptide_lengths": [8, 9, 10, 11],
+  "records": [
+    {"id": "dync1h1-mrna-minimal", "variant_id": "DYNC1H1-chr14-101980529", "provider": "mRNA minimal epitope", "modality": "mrna", "versions": [], "source": "https://osteosarc.com/variant/DYNC1H1-chr14-101980529/", "sequence": "KRFHATISF", "native_sequence": "KRFHATISF", "native_mutation_interval": [6, 7], "n_terminal_addition": "", "c_terminal_addition": ""},
+    {"id": "dync1h1-mrna-long", "variant_id": "DYNC1H1-chr14-101980529", "provider": "mRNA", "modality": "mrna", "versions": [], "source": "https://osteosarc.com/variant/DYNC1H1-chr14-101980529/", "sequence": "VLLTLDILKHGKRFHATISFDTDTGLKQAL", "native_sequence": "VLLTLDILKHGKRFHATISFDTDTGLKQAL", "native_mutation_interval": [17, 18], "n_terminal_addition": "", "c_terminal_addition": ""},
+    {"id": "dync1h1-jlf", "variant_id": "DYNC1H1-chr14-101980529", "provider": "JLF", "modality": "peptide", "versions": ["V2", "V3"], "source": "https://osteosarc.com/variant/DYNC1H1-chr14-101980529/", "sequence": "GKRFHATISFDTDTGLKQALETKK", "native_sequence": "GKRFHATISFDTDTGLKQALET", "native_mutation_interval": [7, 8], "n_terminal_addition": "", "c_terminal_addition": "KK"},
+    {"id": "dync1h1-cegat", "variant_id": "DYNC1H1-chr14-101980529", "provider": "CeGaT", "modality": "peptide", "versions": [], "source": "https://osteosarc.com/variant/DYNC1H1-chr14-101980529/", "sequence": "KHGKRFHATISFDTDTGL", "native_sequence": "KHGKRFHATISFDTDTGL", "native_mutation_interval": [9, 10], "n_terminal_addition": "", "c_terminal_addition": ""},
+    {"id": "exoc4-jlf", "variant_id": "EXOC4-chr7-133274996", "provider": "JLF", "modality": "peptide", "versions": ["V2", "V3"], "source": "https://osteosarc.com/variant/EXOC4-chr7-133274996/", "sequence": "KKSVIRTLSTIDDVEDRENEKGR", "native_sequence": "SVIRTLSTIDDVEDRENEKGR", "native_mutation_interval": [8, 9], "n_terminal_addition": "KK", "c_terminal_addition": ""},
+    {"id": "exoc4-cegat", "variant_id": "EXOC4-chr7-133274996", "provider": "CeGaT", "modality": "peptide", "versions": [], "source": "https://osteosarc.com/variant/EXOC4-chr7-133274996/", "sequence": "SVIRTLSTIDDVEDREN", "native_sequence": "SVIRTLSTIDDVEDREN", "native_mutation_interval": [8, 9], "n_terminal_addition": "", "c_terminal_addition": ""},
+    {"id": "h1-2-cegat", "variant_id": "H1_2-chr6-26055824", "provider": "CeGaT", "modality": "peptide", "versions": [], "source": "https://osteosarc.com/variant/H1_2-chr6-26055824/", "sequence": "AAKAVKPKVVKPKKAA", "native_sequence": "AAKAVKPKVVKPKKAA", "native_mutation_interval": [8, 9], "n_terminal_addition": "", "c_terminal_addition": ""}
+  ]
+}

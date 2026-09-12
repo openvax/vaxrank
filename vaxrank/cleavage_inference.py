@@ -61,7 +61,8 @@ def _pepsickle_model_identity(human_only):
         limitations="Proteasome-type agnostic. Missing terminal context is padded; "
                     "not proof of cleavage, presentation, serum stability or clinical safety. "
                     "Human-only training is experimental and uses fewer observations.",
-        score_name="cleavage_probability", score_units="dimensionless")
+        score_name="cleavage_probability", score_units="dimensionless",
+        scored_endpoint="site_cleavage")
     return model, digest, identity_error
 
 
