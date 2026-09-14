@@ -86,11 +86,28 @@ the topiary source tree, and the offline path composes end to end.
 
 A second upstream gap surfaced while chasing this one: Topiary #300,
 `serum_half_life`/`blood_half_life` declared as kinds but unreachable from the
-ranking DSL, also fixed in 5.55.1. Reaching that fix additionally required
-raising vaxrank's own `requirements.txt` mhctools floor from `>=3.13.3` to
-`>=3.39.0`, matching topiary's real requirement; below that floor mhctools'
-`Kind` class predates both kinds, so `KIND_ALIASES` never sees them regardless
-of the topiary version installed.
+ranking DSL, also fixed in 5.55.1. Reaching that fix required raising
+vaxrank's own `requirements.txt` mhctools floor, which now reads `>=3.44.0`
+and stands on two separate reasons. From 3.39.0 mhctools' `Kind` class carries
+both half-life kinds, without which `KIND_ALIASES` never sees them whatever
+topiary version is installed. From 3.44.0 `CleavageModel` requires
+`scored_endpoint` for quantitative evidence and a strictness grade for motif
+rules, which vaxrank now supplies. `tests/test_declared_dependencies.py`
+holds both reasons so relaxing the pin for one cannot silently drop the other.
+
+## Wild-type comparators
+
+A comparator is emitted only where the mutant window is genuinely index
+aligned with the reference protein, verified residue by residue outside the
+mutated interval rather than assumed. An insertion or deletion shifts every
+downstream reference position, so windows straddling or following the indel
+have no length-matched reference counterpart; those record no comparator
+instead of a shifted slice. The earlier generator sliced the reference at the
+mutant's own offsets unconditionally, which cached `AAKPKVVKP` — reference
+residues spanning H1-2's deleted `AAKPK` — as a wild-type peptide for a
+window that covers none of them. `unaligned_wt_comparators` in the manifest
+counts the skipped windows per context so the omission is visible rather than
+silent.
 
 ## Limits and follow-up
 

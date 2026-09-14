@@ -1,7 +1,15 @@
 """Maintainer-only real NetMHCpan cache generation, never run by CI.
 
-Run from the repository root with published Isovar 1.8.1 and NetMHCpan 4.2:
+Run from the repository root with a licensed local NetMHCpan 4.2 on PATH:
+
     python -m tests.data.osteosarc.selection_validation.generate_predictions --output NEW_DIRECTORY
+
+The pinned read fixtures come from the Isovar 1.8.1 commit named in
+isovar/manifest.json. The runtime Isovar that reconstructs them is whatever
+satisfies the floor requirements.txt declares, and the generated manifest
+records which versions actually ran, so a later reader compares recorded
+provenance against the declared floors rather than a hardcoded expectation.
+
 Does not generate or rewrite the independent documented sequence expectations.
 """
 
@@ -26,12 +34,37 @@ from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.vaccine_config import VaccineConfig
 
 
+def netmhcpan_layout():
+    """Locate the netmhc-bundle 4.2 install and its model assets.
+
+    Checked before any reconstruction or prediction runs: the alternative
+    is paying for the full RNA rebuild and a real NetMHCpan batch and only
+    then failing on provenance discovery.
+    """
+    discovered = shutil.which("netMHCpan")
+    if discovered is None:
+        raise ValueError(
+            "netMHCpan is not on PATH; expected the netmhc-bundle 4.2 layout "
+            "for model-asset provenance")
+    executable = Path(discovered).resolve()
+    model_root = executable.parent
+    binary = model_root / (platform.system() + "_" + platform.machine()) / "bin/netMHCpan-4.2"
+    if not (model_root / "data").is_dir() or not binary.is_file():
+        raise ValueError("Expected the netmhc-bundle 4.2 layout for model-asset provenance")
+    return executable, model_root, binary
+
+
 def main(output_directory):
     if output_directory.exists():
         raise ValueError("Choose a new output directory; existing real predictions are never overwritten")
+    executable, model_root, binary = netmhcpan_layout()
     logging.disable(logging.INFO)
     documented = json.loads((DATA / "documented.json").read_text())
     contexts = {}
+    # Windows with no length-matched wild-type comparator, per context.
+    # Recorded rather than silently dropped so the cache states where
+    # an indel made a position-aligned comparison impossible.
+    unaligned_comparators = {}
     requests = {(r["variant_id"], len(r["native_sequence"])) for r in documented["records"]}
     with tempfile.TemporaryDirectory(prefix="vaxrank-sid-prediction-") as directory:
         inputs = load_selection_inputs(Path(directory))
@@ -47,13 +80,19 @@ def main(output_directory):
             contexts[name] = fragment.amino_acids
             # Include every candidate k-mer and every position-aligned WT
             # comparator, before filtering, not only the eventual winners.
-            reference = fragment.predicted_effect().original_protein_sequence
-            start = fragment.global_start_pos()
+            # wildtype_peptide_at returns None where no length-matched
+            # comparator exists, which is every window straddling or
+            # following an indel: the reference coordinates shift there, so
+            # slicing at the mutant's own offsets would cache an unrelated
+            # reference peptide labelled as wild type.
             for length in lengths:
                 for offset in range(len(fragment) - length + 1):
                     peptides.add(fragment.amino_acids[offset:offset + length])
-                    wt = reference[start + offset:start + offset + length]
-                    if len(wt) == length:
+                    wt = fragment.wildtype_peptide_at(offset, length)
+                    if wt is None:
+                        unaligned_comparators[name] = (
+                            unaligned_comparators.get(name, 0) + 1)
+                    else:
                         peptides.add(wt)
         model = NetMHCpan42(alleles=documented["prediction_alleles"],
                            default_peptide_lengths=lengths, process_limit=1)
@@ -64,11 +103,6 @@ def main(output_directory):
         output_directory.mkdir(parents=True)
         output = output_directory / "netmhcpan42.tsv"
         cache.save(str(output))
-        executable = Path(shutil.which("netMHCpan")).resolve()
-        model_root = executable.parent
-        binary = model_root / (platform.system() + "_" + platform.machine()) / "bin/netMHCpan-4.2"
-        if not (model_root / "data").is_dir() or not binary.is_file():
-            raise ValueError("Expected the netmhc-bundle 4.2 layout for model-asset provenance")
         asset_paths = [binary, *(p for p in (model_root / "data").rglob("*") if p.is_file())]
         assets = {str(p.relative_to(model_root)): sha256(p.read_bytes()).hexdigest()
                   for p in sorted(asset_paths)}
@@ -86,6 +120,7 @@ def main(output_directory):
             input_manifest_sha256=sha256((DATA / "isovar/manifest.json").read_bytes()).hexdigest(),
             output_sha256=sha256(output.read_bytes()).hexdigest(),
             contexts=contexts, requested_peptides=sorted(peptides),
+            unaligned_wt_comparators=unaligned_comparators,
             alleles=documented["prediction_alleles"], peptide_lengths=lengths,
             reconstruction="Vaxrank adaptive context for each native peptide size; balanced, support fraction 0.85, coverage floor 2, assembly enabled; no DNA fallback",
             vaccine_config=msgspec.to_builtins(VaccineConfig()),

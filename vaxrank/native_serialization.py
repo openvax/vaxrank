@@ -200,7 +200,40 @@ def _decode_native_repr(value, registry):
         raise ValueError("Unexpected value wrapper for native serialized class")
     if hasattr(class_object, "from_dict"):
         return class_object.from_dict(state)
+    state = _migrate_state(class_object, state)
     return class_object(**state)
+
+
+def _migrate_state(class_object, state):
+    """Fill fields a newer dependency requires but an older archive lacks.
+
+    A dependency can add a required field to a class vaxrank persists, which
+    makes every previously written archive of that class unloadable through
+    ``class_object(**state)``. Only migrations whose correct value is
+    determined by the archive itself belong here; anything requiring a guess
+    about provenance must fail loudly instead, because a wrong default is
+    indistinguishable from recorded evidence once it round-trips.
+    """
+    if class_object.__name__ != "CleavageModel":
+        return state
+    if state.get("evidence") != "quantitative_model":
+        return state
+    if state.get("scored_endpoint"):
+        return state
+    # mhctools 3.44.0 made scored_endpoint required for quantitative models.
+    # vaxrank has only ever written one such model, Pepsickle's per-bond
+    # cleavage probability, whose endpoint is known; see
+    # vaxrank.cleavage_inference. Anything else predates the field with no
+    # recoverable answer.
+    name = str(state.get("name", ""))
+    if name.startswith("pepsickle-epitope-"):
+        return dict(state, scored_endpoint="site_cleavage")
+    raise ValueError(
+        "Archived CleavageModel %r records quantitative_model evidence with no "
+        "scored_endpoint. mhctools >=3.44.0 requires the benchmark endpoint the "
+        "native score answers, and it cannot be inferred for this model. "
+        "Regenerate the archive, or add the endpoint the source model reports."
+        % (name or "<unnamed>",))
 
 
 def to_native_json(value):

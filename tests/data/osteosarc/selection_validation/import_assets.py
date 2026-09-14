@@ -30,7 +30,16 @@ def main(repo):
     manifest_bytes = read("corpus/manifest.json")
     manifest = json.loads(manifest_bytes)
     cases = [c for c in manifest["cases"] if c["variant"]["variant_id"] in VARIANTS]
-    assert len(cases) == len(VARIANTS)
+    # Identity, not cardinality: a duplicated case for one target plus a
+    # missing case for another still totals len(VARIANTS), and would import
+    # a fixture set that silently drops a variant and double-counts another.
+    matched = [c["variant"]["variant_id"] for c in cases]
+    if sorted(matched) != sorted(VARIANTS):
+        raise ValueError(
+            "Upstream cases do not match the target variants exactly; "
+            "missing %s, duplicated %s" % (
+                sorted(VARIANTS.difference(matched)) or "none",
+                sorted({v for v in matched if matched.count(v) > 1}) or "none"))
     reference_path = "corpus/references/GRCh38/"
     reference_bytes = read(reference_path + "manifest.json")
     reference = json.loads(reference_bytes)

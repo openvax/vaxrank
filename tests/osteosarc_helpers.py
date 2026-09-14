@@ -6,8 +6,9 @@ import json
 from pathlib import Path
 
 import pysam
-from pyensembl import Genome
 from varcode import Variant
+
+from .osteosarc_fixture_support import indexed_genome, verify_gzip_digests
 
 
 DATA = Path(__file__).parent / "data" / "osteosarc"
@@ -20,19 +21,14 @@ def load_osteosarc(directory):
     reference = DATA / "protein_reference"
     metadata = json.loads((reference / "protein_reference_manifest.json").read_text())
     for filename, checksums in metadata["files"].items():
-        data = (reference / filename).read_bytes()
-        assert sha256(data).hexdigest() == checksums["subset_sha256"]
-        assert sha256(gzip.decompress(data)).hexdigest() == checksums["uncompressed_sha256"]
-    genome = Genome(
+        verify_gzip_digests(
+            reference / filename, checksums["subset_sha256"],
+            checksums["uncompressed_sha256"], label="protein_reference/" + filename)
+    genome = indexed_genome(
+        reference,
         reference_name="GRCh38-osteosarc-six-transcript-subset",
         annotation_name="osteosarc-ensembl-subset", annotation_version=87,
-        gtf_path_or_url=str(reference / "reference.gtf.gz"),
-        transcript_fasta_paths_or_urls=[str(reference / "reference.cdna.fa.gz")],
-        protein_fasta_paths_or_urls=[str(reference / "reference.pep.fa.gz")],
-        copy_local_files_to_cache=True,
-        cache_directory_path=str(directory / "reference"),
-    )
-    genome.index()
+        cache_directory=directory / "reference")
     variants = {
         record["gene"]: Variant(
             record["chrom"].removeprefix("chr"), int(record["pos"]),
@@ -42,7 +38,11 @@ def load_osteosarc(directory):
     bams = {}
     for name, dataset in MANIFEST["datasets"].items():
         sam_data = gzip.decompress((DATA / dataset["file"]).read_bytes())
-        assert sha256(sam_data).hexdigest() == dataset["sam_sha256"]
+        digest = sha256(sam_data).hexdigest()
+        if digest != dataset["sam_sha256"]:
+            raise ValueError(
+                "Fixture checksum mismatch for %s: manifest expects %s, found %s"
+                % (dataset["file"], dataset["sam_sha256"], digest))
         sam = directory / (name + ".sam")
         sam.write_bytes(sam_data)
         bam = directory / (name + ".bam")
@@ -62,6 +62,9 @@ def load_osteosarc(directory):
     expected = {}
     for gene, (start, ref, alt) in edits.items():
         protein = proteins[metadata["transcripts"][gene]]
-        assert protein[start:start + len(ref)] == ref
+        if protein[start:start + len(ref)] != ref:
+            raise ValueError(
+                "Reference protein for %s does not carry %r at %d; the pinned "
+                "annotation and the documented edit disagree" % (gene, ref, start))
         expected[gene] = protein[:start] + alt + protein[start + len(ref):]
     return variants, bams, expected

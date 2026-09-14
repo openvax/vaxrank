@@ -249,15 +249,16 @@ def predict_epitopes(
         )
 
         if overlaps_mutation and peptide not in wt_peptides:
-            full_reference_protein_sequence = (
-                protein_fragment.predicted_effect().original_protein_sequence
-            )
-            global_epitope_start_pos = (
-                protein_fragment.global_start_pos() + peptide_start_offset
-            )
-            wt_peptide = full_reference_protein_sequence[
-                global_epitope_start_pos:global_epitope_start_pos + peptide_length]
-            wt_peptides[peptide] = wt_peptide
+            # Only records a comparator the reference actually supports at
+            # these positions. An indel shifts downstream reference
+            # coordinates, so slicing at the mutant's own offsets used to
+            # yield an unrelated reference peptide and label it wild type.
+            # None means no length-matched comparator exists; the mutant
+            # peptide then simply carries no WT entry.
+            wt_peptide = protein_fragment.wildtype_peptide_at(
+                peptide_start_offset, peptide_length)
+            if wt_peptide is not None:
+                wt_peptides[peptide] = wt_peptide
 
     # Name each WT entry after its mutant peptide so the prediction
     # frame keys cleanly by mutant peptide. ``predict_from_named_peptides``
@@ -351,8 +352,18 @@ def predict_epitopes(
             )
             wt_row = wt_predictions_grouped.get(wt_key)
             if wt_row is None:
-                wt_peptide = wt_peptides[peptide]
-                if len(wt_peptide) < min_peptide_length:
+                # Absent, not merely unpredicted: an indel or frameshift
+                # leaves some windows with no length-matched reference
+                # counterpart at all, so there was never a comparator to
+                # predict. Distinct from a comparator that exists but is
+                # too short to score.
+                wt_peptide = wt_peptides.get(peptide)
+                if wt_peptide is None:
+                    logger.info(
+                        'No position-aligned WT comparator for %s: the variant '
+                        'shifts reference coordinates across this window',
+                        peptide)
+                elif len(wt_peptide) < min_peptide_length:
                     logger.info(
                         'No prediction for too-short WT epitope %s: possible stop-loss variant',
                         wt_peptide)

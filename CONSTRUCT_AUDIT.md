@@ -95,12 +95,25 @@ Topiary #296, the cached-coordinate blocker, is fixed upstream by Topiary #299
 and released as Topiary 5.55.1 on PyPI (2026-09-11); the topiary floor is
 raised to `>=5.55.1` accordingly. Topiary #300, a separate gap this pilot
 surfaced (`serum_half_life`/`blood_half_life` declared but unreachable from
-the ranking DSL), is fixed in the same release. Reaching that fix also
-required raising vaxrank's own mhctools floor to `>=3.39.0` to match
-topiary's real requirement; below that floor mhctools' `Kind` class predates
-both kinds, so topiary's fix was reachable but not exercised. All 18 pilot
-tests and the full suite pass against the real published release, verified
-directly against PyPI's index rather than the topiary source tree.
+the ranking DSL), is fixed in the same release.
+
+The mhctools floor is `>=3.44.0`, and it carries two independent reasons that
+must both keep holding. 3.39.0 is where mhctools' `Kind` class gained
+`serum_half_life`/`blood_half_life`; below it, topiary's fix for #300 is
+present but unreachable, because the DSL builds its kind registry from that
+class. 3.44.0 is stricter and is what the floor actually states: it makes
+`CleavageModel.scored_endpoint` required for quantitative evidence and adds
+`motif_strictness`/`strictness_basis` for motif rules, all of which vaxrank
+now passes, so an older mhctools raises `TypeError` on construction rather
+than merely failing a validation. `tests/test_declared_dependencies.py`
+enforces both reasons so neither can be relaxed by way of the other, and
+checks that the installed environment satisfies every declared requirement.
+
+All pilot tests and the full suite pass against the real published releases,
+installed non-editable and verified against PyPI's index rather than a source
+tree. The prediction cache records the versions that produced it, and
+`test_pinned_predictions_are_complete_real_model_outputs` compares that
+recorded provenance against these declared floors.
 
 - #414: pin Isovar >=1.8.1 fixtures with their original sample/timepoint metadata;
   independently snapshot documented provider-specific sequences; compare actual
