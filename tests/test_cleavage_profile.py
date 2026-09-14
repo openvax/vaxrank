@@ -13,7 +13,9 @@ from vaxrank.native_serialization import from_native_json, to_native_json
 
 MODEL = CleavageModel(
     "fixture", "1", "proteasome", "", "", ("proteasomal",),
-    "quantitative_model", ("synthetic-unit-test",), "synthetic",
+    "quantitative_model", (
+        "https://github.com/openvax/vaxrank/blob/main/tests/test_cleavage_profile.py",
+    ), "synthetic",
     "Not biological evidence", "fixture_probability", "dimensionless",
     scored_endpoint="site_cleavage")
 

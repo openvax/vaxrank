@@ -18,6 +18,10 @@ import pytest
 
 
 REQUIREMENTS = Path(__file__).resolve().parent.parent / "requirements.txt"
+TEST_SOURCE_URL = (
+    "https://github.com/openvax/vaxrank/blob/main/"
+    "tests/test_declared_dependencies.py"
+)
 
 
 def declared_requirements():
@@ -126,14 +130,14 @@ def test_mhctools_floor_matches_the_cleavage_contract_it_claims():
 
     model = CleavageModel(
         "floor-check", "1", "proteasome", "", "", ("proteasomal",),
-        "quantitative_model", ("declared-dependency-test",), "synthetic",
+        "quantitative_model", (TEST_SOURCE_URL,), "synthetic",
         "Not biological evidence", "probability", "dimensionless",
         scored_endpoint="site_cleavage")
     assert model.scored_endpoint == "site_cleavage"
     with pytest.raises(ValueError):
         CleavageModel(
             "floor-check", "1", "proteasome", "", "", ("proteasomal",),
-            "quantitative_model", ("declared-dependency-test",), "synthetic",
+            "quantitative_model", (TEST_SOURCE_URL,), "synthetic",
             "Not biological evidence", "probability", "dimensionless")
 
 
