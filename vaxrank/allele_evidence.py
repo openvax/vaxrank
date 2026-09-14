@@ -70,8 +70,6 @@ POLICY_SELECTED = "selected"      # the best-ranked allele, else the genotype
 POLICY_FROM_INPUT = "from_input"  # only pairings the source file carried
 POLICY_TOP = "top"                # ``top:N`` — the N best, else the genotype
 POLICY_TOP_PREFIX = "top:"
-ALLELE_POLICIES = frozenset({
-    POLICY_ALL, POLICY_SELECTED, POLICY_FROM_INPUT, POLICY_TOP})
 
 # Ranking axes a selection may use, with the direction that means "better"
 # and the frame column carrying the value. Presentation is preferred over
