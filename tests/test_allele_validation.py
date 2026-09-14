@@ -170,7 +170,14 @@ def test_predictor_output_validation_is_not_swallowed_as_a_backend_failure(bad_o
         n_alt_reads_supporting_protein_sequence=5)
     with patch("vaxrank.epitope_logic.ReferenceProteome"), patch.object(
             MutantProteinFragment, "predicted_effect",
-            return_value=SimpleNamespace(original_protein_sequence="SIISFEKL")), patch.object(
+            # SIINFEKL against SIISFEKL is a single-residue substitution, so
+            # the stub states the aa_ref/aa_alt a real varcode effect carries.
+            # wildtype_peptide_at reads those to decide whether the variant
+            # preserves downstream reference coordinates; without them it
+            # cannot tell a substitution from an indel and withholds the
+            # comparator, leaving the WT path unexercised.
+            return_value=SimpleNamespace(
+                original_protein_sequence="SIISFEKL", aa_ref="S", aa_alt="N")), patch.object(
                 MutantProteinFragment, "global_start_pos", return_value=0):
         prefix = "WT MHC" if bad_output == "WT" else "MHC"
         with pytest.raises(ValueError, match=prefix + " output.*normalized row 2.*requires"):

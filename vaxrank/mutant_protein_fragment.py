@@ -119,6 +119,25 @@ def _rna_evidence_method(name):
 RNA_EVIDENCE_METHOD_ALIGNMENT = _rna_evidence_method("rna_alignment")
 
 
+def _preserves_downstream_alignment(effect):
+    """Does this effect leave reference coordinates after it unchanged?
+
+    Only when it consumed as many reference residues as it produced. A
+    length-preserving substitution does; an insertion, a deletion and a
+    frameshift all shift every downstream position, so no equal-length
+    reference window covers the same residues as the mutant window.
+    """
+    if effect is None:
+        return False
+    if "frameshift" in type(effect).__name__.lower():
+        return False
+    aa_ref = getattr(effect, "aa_ref", None)
+    aa_alt = getattr(effect, "aa_alt", None)
+    if aa_ref is None or aa_alt is None:
+        return False
+    return len(aa_ref) == len(aa_alt)
+
+
 @dataclass
 class MutantProteinFragment(DataclassSerializable):
     """
@@ -701,7 +720,16 @@ class MutantProteinFragment(DataclassSerializable):
 
     def global_start_pos(self):
         # position of mutation start relative to the full amino acid sequence
-        global_mutation_start_pos = self.predicted_effect().aa_mutation_start_offset
+        effect = self.predicted_effect()
+        if effect is None:
+            # predicted_effect() returns None whenever no Transcript objects
+            # resolved. Callers do arithmetic on this result, so return the
+            # same sentinel as a missing offset rather than raising an
+            # AttributeError from deep inside the expression.
+            logger.error(
+                'No predicted effect available for variant %s', self.variant)
+            return -1
+        global_mutation_start_pos = effect.aa_mutation_start_offset
         if global_mutation_start_pos is None:
             logger.error(
                 'Could not find mutation start pos for variant %s',
@@ -713,3 +741,50 @@ class MutantProteinFragment(DataclassSerializable):
         return (
             global_mutation_start_pos - self.mutant_amino_acid_start_offset
         )
+
+    def wildtype_peptide_at(self, offset, length):
+        """Reference peptide covering the same protein positions, or None.
+
+        A position-aligned wild-type comparator only exists where the
+        mutant sequence is still index-aligned with the reference protein.
+        That holds for a length-preserving substitution, but not for an
+        insertion or deletion: an indel shifts every downstream reference
+        position, so no equal-length reference window covers the same
+        residues. Slicing the reference at the mutant's own offsets
+        returns a real but unrelated peptide in that case, which is
+        indistinguishable from a genuine comparator once cached.
+
+        Alignment is decided by the annotated effect, not by comparing
+        residues. A mutant window may legitimately differ from the
+        reference at more than the annotated position: co-occurring
+        variants in the same RNA context appear in the reconstructed
+        fragment while varcode annotates only one of them. Those windows
+        are still correctly aligned, and their reference counterpart is
+        exactly the comparator a reviewer wants.
+
+        The residues upstream of the mutation are still checked, because
+        those must agree for the computed start to be right at all. A
+        caller that needs a comparator for every window must treat None
+        as "no length-matched wild-type peptide exists", not as a zero or
+        an empty string.
+        """
+        effect = self.predicted_effect()
+        reference = getattr(effect, "original_protein_sequence", None)
+        start = self.global_start_pos()
+        if not reference or start < 0 or offset < 0 or length <= 0:
+            return None
+        window = self.amino_acids[offset:offset + length]
+        wildtype = reference[start + offset:start + offset + length]
+        if len(window) != length or len(wildtype) != length:
+            return None
+        mutation_start = self.mutant_amino_acid_start_offset
+        if (offset + length > mutation_start
+                and not _preserves_downstream_alignment(effect)):
+            return None
+        # Upstream of the mutation the fragment is unmutated reference
+        # sequence, so a mismatch there means the computed start is wrong
+        # and nothing about this window can be trusted.
+        upstream = min(length, max(0, mutation_start - offset))
+        if window[:upstream] != wildtype[:upstream]:
+            return None
+        return wildtype

@@ -13,8 +13,20 @@ from vaxrank.native_serialization import from_native_json, to_native_json
 
 MODEL = CleavageModel(
     "fixture", "1", "proteasome", "", "", ("proteasomal",),
-    "quantitative_model", ("synthetic-unit-test",), "synthetic",
-    "Not biological evidence", "fixture_probability", "dimensionless")
+    "quantitative_model", (
+        "https://github.com/openvax/vaxrank/blob/main/tests/test_cleavage_profile.py",
+    ), "synthetic",
+    "Not biological evidence", "fixture_probability", "dimensionless",
+    scored_endpoint="site_cleavage")
+
+# The motif-rule counterpart of MODEL, shared rather than re-derived per test
+# file. mhctools requires a different field set for each evidence type, and
+# that set has changed; deriving it once means a future contract change is one
+# edit instead of one per copy.
+MOTIF_MODEL = replace(
+    MODEL, evidence="motif_rule", score_name=None, score_units=None,
+    scored_endpoint=None, motif_strictness="permissive",
+    strictness_basis="Not biological evidence")
 
 
 def profile(sequence="ACDEFG", scores=(.1, .2, .3, .4, .5, 0.), **kw):
@@ -66,8 +78,7 @@ def test_no_internal_bond_is_not_a_negative_cleavage_prediction():
 
 
 def test_partial_motif_rule_preserves_native_semantics_and_unknown_bonds():
-    motif = replace(MODEL, evidence="motif_rule", score_name=None, score_units=None)
-    result = CleavageResult(CleavageInput("ACDEFG"), motif,
+    result = CleavageResult(CleavageInput("ACDEFG"), MOTIF_MODEL,
                             (CleavageSite(5, "not_matched", "limited terminal rule"),))
     p = profile_from_cleavage_result(result)
     assert p.status == "observations_returned"

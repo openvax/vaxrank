@@ -27,6 +27,20 @@ Compartments: {{ p.model.compartments|join(', ') }}. Evidence: {{ p.model.eviden
 Score: {{ p.model.score_name or 'No numeric score' }};
 native units: {{ p.model.score_units or 'Not applicable' }}.
 Asset SHA-256: <code>{{ p.model_asset_sha256 or 'Not recorded' }}</code>.</p>
+{% if p.model.scored_endpoint %}<p>Benchmark endpoint the native score answers:
+{{ p.model.scored_endpoint }}. The score is a model output for that measurement
+type, not a measurement.</p>{% endif %}
+{% if p.model.motif_strictness %}<p>Motif strictness: {{ p.model.motif_strictness }} —
+{% if p.model.motif_strictness == 'required' %}the source establishes this pattern as
+necessary for the activity, so a non-match is meaningful evidence against cleavage by
+this enzyme through this route, and still not proof of resistance.
+{% elif p.model.motif_strictness == 'preferred' %}the source reports a favoured context;
+non-matching bonds can still be cleaved, usually more slowly, so a non-match is weak
+evidence.
+{% else %}a broad flag with many exceptions: a match constrains little and a non-match
+almost nothing.
+{% endif %}
+Grade basis: {{ p.model.strictness_basis or 'Not recorded' }}.</p>{% endif %}
 <p>Settings: {% for key, value in p.settings %}{{ key }}={{ value }}; {% endfor %}</p>
 <p>Assay/training: {{ p.model.assay }}. Limitations: {{ p.model.limitations }}</p>
 <p>Sources: {% for source in p.model.references %}{{ source }}<br>{% endfor %}</p>

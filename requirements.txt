@@ -6,16 +6,33 @@ pyensembl>=2.6.4,<3.0.0
 varcode>=7.0.0,<8.0.0
 # 1.8.0 derives RNA context from peptide size and balances useful mutation
 # windows against compatible read-name support and an independent coverage floor.
-isovar>=1.8.0,<2.0.0
+isovar>=1.8.1,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.33.5,<4.0.0
-mhctools>=3.41.0,<4.0.0
+# 3.41.0 supplies mhctools.cleavage (CleavageInput/CleavageModel/CleavageResult/
+# CleavageSite) and mhctools.peptidases.get_cleavage_model, which the Pepsickle
+# cleavage-profile integration uses directly. It also satisfies the separate
+# floor of >=3.39.0: below that, mhctools' Kind class predates
+# serum_half_life/blood_half_life, so Topiary's ranking DSL cannot reach either
+# kind (openvax/topiary#300) regardless of the topiary version installed.
+# 3.44.0 makes CleavageModel.scored_endpoint required for quantitative_model
+# evidence and adds motif_strictness/strictness_basis for motif_rule evidence;
+# vaxrank's own CleavageModel constructions (vaxrank/cleavage_inference.py,
+# tests/test_cleavage_profile.py, tests/test_cleavage_report.py) pass these
+# fields, so importing them against an older mhctools raises TypeError for an
+# unexpected keyword argument, not just a validation gap.
+mhctools>=3.44.0,<4.0.0
 # 5.10.0 adds EvalContext(default_methods=...) and apply_filter(default_methods=...)
 # which vaxrank uses to score multi-model inputs (e.g. LENS with mhcflurry +
 # netmhcpan) without pre-subsetting the frame.
 # 5.52.0 preserves pVACtools presentation metrics as native prediction rows,
 # completing Vaxrank's presentation-aware coverage path.
-topiary>=5.52.0,<6.0.0
+# 5.55.1 rebinds a cached protein scan's coordinate and flanks to the
+# occurrence actually requested (openvax/topiary#296) instead of the one the
+# cache was built from; below this floor CachedPredictor can emit duplicate
+# peptide_offset columns and crash TopiaryPredictor.predict_from_named_sequences,
+# which vaxrank#414's real-cache selection regression exercises directly.
+topiary>=5.55.1,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0

@@ -71,6 +71,50 @@ issues.
 
 ## Following PRs
 
+### #414 pilot specification
+
+Import five original-read cases and the GRCh38 reference from the immutable
+Isovar 1.8.1 commit. Keep both DYNC1H1 loci distinct, ONT T1/T2 distinct, and
+MAP2's insufficient evidence explicit. Independently record DYNC1H1, EXOC4
+and H1-2 provider sequences. Run real NetMHCpan 4.2 predictions once, pin their
+inputs and outputs, and exercise offline Topiary cache -> filtering -> ranking
+for multiple competing windows. The clinical typing table, null HLA allele,
+class-I-only scope, incomplete reference proteome, and unknown historical
+selection settings must be visible. Compare exact sequence and target offsets;
+do not call a present-day output snapshot historical agreement. Native peptide
+lengths are compared separately from documented manufacturing additions.
+
+Draft-review correction: record modality explicitly on each independent source
+record; provider/display labels must not decide whether a construct is mRNA or
+a manufactured peptide. Regress the mRNA minimal-epitope case. Regenerate real
+prediction artifacts into a new directory and compare their observations before
+adopting updated metadata; do not change RNA gates or historical expectations.
+This local preparation does not authorize publication of genomic fixtures.
+
+Topiary #296, the cached-coordinate blocker, is fixed upstream by Topiary #299
+and released as Topiary 5.55.1 on PyPI (2026-09-11); the topiary floor is
+raised to `>=5.55.1` accordingly. Topiary #300, a separate gap this pilot
+surfaced (`serum_half_life`/`blood_half_life` declared but unreachable from
+the ranking DSL), is fixed in the same release.
+
+The mhctools floor is `>=3.44.0`, and it carries two independent reasons that
+must both keep holding. 3.39.0 is where mhctools' `Kind` class gained
+`serum_half_life`/`blood_half_life`; below it, topiary's fix for #300 is
+present but unreachable, because the DSL builds its kind registry from that
+class. 3.44.0 is stricter and is what the floor actually states: it makes
+`CleavageModel.scored_endpoint` required for quantitative evidence and adds
+`motif_strictness`/`strictness_basis` for motif rules, all of which vaxrank
+now passes, so an older mhctools raises `TypeError` on construction rather
+than merely failing a validation. `tests/test_declared_dependencies.py`
+enforces both reasons so neither can be relaxed by way of the other, and
+checks that the installed environment satisfies every declared requirement.
+
+All pilot tests and the full suite pass against the real published releases,
+installed non-editable and verified against PyPI's index rather than a source
+tree. The prediction cache records the versions that produced it, and
+`test_pinned_predictions_are_complete_real_model_outputs` compares that
+recorded provenance against these declared floors.
+
 - #414: pin Isovar >=1.8.1 fixtures with their original sample/timepoint metadata;
   independently snapshot documented provider-specific sequences; compare actual
   reconstruction, candidate generation and final selection. Missing historical
