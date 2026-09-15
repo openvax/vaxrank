@@ -173,7 +173,10 @@ class TemplateDataCreator(object):
         # Show the *effective* run parameters, not the raw argparse
         # Namespace. We drop: output-path args (covered by the Inputs /
         # file listing), the argparse ``version`` SUPPRESS sentinel,
-        # internal config-plumbing keys, and any value that is unset
+        # internal config-plumbing keys, underscore-prefixed internal
+        # state that ``parse_vaxrank_args`` stashes on the namespace
+        # (``_parser_defaults`` is a ~110-key dict whose repr filled the
+        # first page of every PDF report), and any value that is unset
         # (None / ''). A None here means "not set / inherits a default"
         # — noise in a record of what actually ran, and the source of
         # the confusing ``manufacturability: None`` / ``version:
@@ -185,6 +188,7 @@ class TemplateDataCreator(object):
         args_to_display_in_report = {
             k: v for k, v in args_for_report.items()
             if not k.startswith("output")
+            and not k.startswith("_")
             and k not in _internal_keys
             and v is not None
             and v != ''

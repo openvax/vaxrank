@@ -294,3 +294,37 @@ def test_default_mrna_linker_is_unambiguous_and_canonical():
     linker = get_linker(args.mrna_linker)
     assert linker.amino_acids == "GGGGSGGGGS"
     assert len(linker.amino_acids) == 10
+
+
+def test_report_args_table_omits_internal_parser_state(tmp_path):
+    """``parse_vaxrank_args`` stashes the parser-defaults snapshot on the
+    namespace as ``_parser_defaults``; ``vars(args)`` is what the template
+    reports render as COMMAND LINE ARGUMENTS. Internal underscore keys must
+    not reach the report — the dict's repr used to fill the first page of
+    every HTML / PDF report."""
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    from vaxrank.patient_info import PatientInfo
+    from vaxrank.report import TemplateDataCreator, make_ascii_report, make_html_report
+
+    args = parse_vaxrank_args([
+        "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+        "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+        "--output-csv", "out.csv",
+    ])
+    assert "_parser_defaults" in vars(args), "test no longer exercises the leak"
+    args.manufacturability = True
+
+    template_data = TemplateDataCreator(
+        ranked_variants_with_vaccine_peptides=[],
+        patient_info=PatientInfo("TEST"),
+        final_review="",
+        reviewers="",
+        args_for_report=vars(args),
+        input_json_file=None,
+    ).compute_template_data()
+
+    assert all(not key.startswith("_") for key, _ in template_data["args"])
+    for suffix, writer in (("html", make_html_report), ("txt", make_ascii_report)):
+        path = tmp_path / ("report." + suffix)
+        writer(template_data, path)
+        assert "_parser_defaults" not in path.read_text()
