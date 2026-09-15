@@ -28,6 +28,7 @@ from varcode import load_vcf_fast
 
 from .cancer_hotspots import get_hotspot_url
 from . import cells
+from .epitope_io import ensure_parent_dir
 from .manufacturability import ManufacturabilityScores
 from .prediction_input import finite_prediction_value
 from .processing import PEPSICKLE_PREDICTOR_NAME, resolve_peptide_offset
@@ -846,6 +847,7 @@ def render_report(
 def make_ascii_report(
         template_data,
         ascii_report_path):
+    ensure_parent_dir(ascii_report_path)
     with open(ascii_report_path, "w") as f:
         render_report(template_data, f, 'templates/template.txt')
     logger.info('Wrote ASCII report to %s', ascii_report_path)
@@ -853,6 +855,7 @@ def make_ascii_report(
 def make_html_report(
         template_data,
         html_report_path):
+    ensure_parent_dir(html_report_path)
     with open(html_report_path, "w") as f:
         render_report(template_data, f, 'templates/template.html')
     logger.info('Wrote HTML report to %s', html_report_path)
@@ -887,6 +890,7 @@ def make_pdf_report(
         template_data,
         pdf_report_path,
         backend='pdfkit'):
+    ensure_parent_dir(pdf_report_path)
     with tempfile.NamedTemporaryFile(mode='w', suffix='.html') as f:
         render_report(template_data, f, 'templates/template.html')
         f.flush()
@@ -1013,6 +1017,7 @@ def make_minimal_neoepitope_report(
 
     if len(rows) > 0:
         df = pd.DataFrame.from_dict(rows)
+        ensure_parent_dir(excel_report_path)
         writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
         df.to_excel(writer, sheet_name='Neoepitopes', index=False)
 
@@ -1087,10 +1092,12 @@ def make_csv_report(
 
     all_dfs = pd.concat(frames.values())
     if csv_report_path:
+        ensure_parent_dir(csv_report_path)
         all_dfs.to_csv(csv_report_path, index=False)
         logger.info('Wrote CSV report file to %s', csv_report_path)
 
     if excel_report_path:
+        ensure_parent_dir(excel_report_path)
         writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
 
         # copy the variant rank column to position 0, make first sheet called "All"

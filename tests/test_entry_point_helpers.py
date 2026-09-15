@@ -510,3 +510,44 @@ def test_write_run_summary_noop_without_output_dir(tmp_path):
     args = SimpleNamespace(output_dir='', input_lens=None, input_pvacseq=None)
     write_run_summary(args, None, source='external')
     assert not list(tmp_path.iterdir())
+
+
+# -- output paths inside a not-yet-created directory -------------------
+
+
+def test_ensure_parent_dir_creates_nested_path_and_tolerates_bare_name(tmp_path):
+    """Every writer routes through this helper, so it has to handle a
+    nested path, a bare filename (no parent to create) and an existing
+    directory without complaining."""
+    from vaxrank.epitope_io import ensure_parent_dir
+    nested = tmp_path / "run" / "reports" / "out.csv"
+    ensure_parent_dir(str(nested))
+    assert nested.parent.is_dir()
+    ensure_parent_dir(str(nested))  # idempotent
+    ensure_parent_dir("out.csv")  # no parent component
+
+
+def test_template_reports_create_their_parent_directory(tmp_path):
+    """``--output-dir DIR`` auto-populates report paths inside DIR, and
+    the writers run before any construct writer has created it. Writing
+    a report into a missing directory used to raise FileNotFoundError
+    after the whole pipeline had already run."""
+    from vaxrank.patient_info import PatientInfo
+    from vaxrank.report import (
+        TemplateDataCreator, make_ascii_report, make_html_report,
+    )
+
+    template_data = TemplateDataCreator(
+        ranked_variants_with_vaccine_peptides=[],
+        patient_info=PatientInfo("TEST"),
+        final_review="",
+        reviewers="",
+        args_for_report={"manufacturability": False, "wt_epitopes": False},
+        input_json_file=None,
+    ).compute_template_data()
+
+    out_dir = tmp_path / "does-not-exist-yet"
+    make_ascii_report(template_data, str(out_dir / "vaccine_report.txt"))
+    make_html_report(template_data, str(out_dir / "vaccine_report.html"))
+    assert (out_dir / "vaccine_report.txt").exists()
+    assert (out_dir / "vaccine_report.html").exists()
