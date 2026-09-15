@@ -1,8 +1,13 @@
 numpy>=2.0.0,<3.0.0
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.6.4,<3.0.0
-# Varcode 7 supplies splice outcome sets unconditionally and defaults to fast
-# annotation. Vaxrank uses its keyword-free effect API and outcome selection.
+# 7.0.0 supplies splice outcome sets unconditionally and makes `fast` the
+# default annotator; vaxrank uses that keyword-free effect API and collapses
+# the outcome sets itself (vaxrank/varcode_effects.py). 8.x keeps both and
+# changes only the annotator plugin contract — partial annotators returning
+# NotImplemented, surfaced as Unresolved, and germline context routed through
+# annotate_with_context. Vaxrank exercises none of it: it selects no annotator
+# and passes no germline context, so `fast` stays the annotator on every path.
 varcode>=7.0.0,<9.0.0
 # 1.8.0 derives RNA context from peptide size and balances useful mutation
 # windows against compatible read-name support and an independent coverage floor.
