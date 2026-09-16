@@ -8,8 +8,8 @@ from ..mutation_visualization import generate_mutation_figures
 def make_parser():
     parser = argparse.ArgumentParser(
         description=(
-            "Render reference, annotation-only, and RNA-assembled protein context "
-            "from a Vaxrank --output-isovar-csv file."
+            "Render reference, annotation-only, and RNA-assembled transcript and "
+            "protein context from a Vaxrank --output-isovar-csv file."
         ))
     parser.add_argument("input_isovar_csv", help="CSV produced by --output-isovar-csv")
     parser.add_argument(

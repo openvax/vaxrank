@@ -1,0 +1,40 @@
+{
+  "conclusion": "DNA ONLY \u00b7 NO TRANSCRIBED PRODUCT ESTABLISHED",
+  "evidence": {
+    "dna": {
+      "detail": "106 split reads across the prioritized DNA catalog; seen in four samples.",
+      "status": "detected"
+    },
+    "long_read": {
+      "detail": "No matching CTAT-LR-Fusion call in the osteosarc catalog.",
+      "status": "not_detected"
+    },
+    "short_read": {
+      "detail": "Zero RNA split reads in the prioritized fusion catalog.",
+      "status": "not_detected"
+    },
+    "short_read_assembly": {
+      "detail": "No RNA junction exists to assemble into a transcript haplotype.",
+      "status": "not_assessed"
+    }
+  },
+  "id": "DSCAML1-ESRRG-dna-only",
+  "interpretation": "DNA establishes a somatic rearrangement, but not expression, transcript structure, or a fusion protein.",
+  "kind": "Interchromosomal structural variant",
+  "locus": "chr1:216833625 to chr11:117581568 (GRCh38)",
+  "nucleotide": {
+    "left_label": "DSCAML1 / chr1",
+    "left_sequence": "GCCAATTAGTACCATCATTTGTTGTTCTTTTCCTACTCCTCTTTAAAAAGAGCAGCCAAT",
+    "right_label": "ESRRG / chr11",
+    "right_sequence": "CTGGCTTCTTTCACTTAGTACAATGCATCTGAACATTAAGCATTGTGATGAACACAGGTA"
+  },
+  "protein": {
+    "reason": "No RNA-supported transcript junction; genomic breakends alone do not define a spliced coding frame.",
+    "sequence": null
+  },
+  "source_urls": [
+    "https://osteosarc.com/fusions/dscaml1--esrrg/",
+    "https://osteosarc.com/fusions/tables/prioritized.tsv"
+  ],
+  "title": "DSCAML1 :: ESRRG"
+}

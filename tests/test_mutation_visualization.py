@@ -11,6 +11,7 @@ from vaxrank.mutation_visualization import (
     generate_mutation_figures,
     global_alignment,
     render_mutation_svg,
+    render_transcript_svg,
 )
 
 
@@ -33,6 +34,15 @@ def example_records():
         "num_ref_fragments": 8,
         "num_other_fragments": 1,
         "figure_source_url": "https://example.org/variant",
+        "reference_cdna_sequence": "AACCGGTTAAACCCGGG",
+        "reference_cdna_variant_start": 8,
+        "reference_cdna_variant_end": 9,
+        "annotation_cdna_sequence": "AACCGGTTAATCCCGGG",
+        "annotation_cdna_variant_start": 8,
+        "annotation_cdna_variant_end": 9,
+        "rna_assembled_cdna_sequence": "AACCGGTTAATCCCGGG",
+        "rna_assembled_cdna_variant_start": 8,
+        "rna_assembled_cdna_variant_end": 9,
     }
     return [
         {
@@ -93,6 +103,28 @@ def test_missing_protein_with_alt_fragments_does_not_claim_zero_alt():
     assert "No alternate RNA fragments" not in svg
 
 
+def test_transcript_svg_compares_annotation_and_assembly():
+    svg = render_transcript_svg(example_records()[0])
+    ElementTree.fromstring(svg)
+    assert "transcript nucleotide context" in svg
+    assert "Reference transcript" in svg
+    assert "RNA assembled" in svg
+    assert "5-prime to 3-prime" in svg
+
+
+def test_unassessed_rna_is_not_presented_as_zero_alt_evidence():
+    record = {
+        **example_records()[2],
+        "figure_rna_status": "not_assessed",
+        "rna_assembled_cdna_sequence": None,
+    }
+    svg = render_transcript_svg(record)
+    assert "ANNOTATION ONLY" in svg
+    assert "RNA evidence not assessed" in svg
+    assert "No alternate RNA fragments" not in svg
+    assert "ALT fragments  0" not in svg
+
+
 def test_figure_keeps_annotation_and_multi_source_assembly_provenance_separate():
     svg = render_mutation_svg(example_records()[0])
     assert "genes  REPEAT1" in svg
@@ -118,6 +150,7 @@ def test_generate_timestamped_figure_run(tmp_path):
     for figure in manifest["figures"]:
         directory = run / figure["directory"]
         assert (directory / "protein-context.svg").is_file()
+        assert (directory / "transcript-context.svg").is_file()
         record = json.loads((directory / "record.json").read_text())
         assert record["figure_label"] == figure["label"]
         assert record["displayed_sequences"]["annotation_only"] == "VVKPK"

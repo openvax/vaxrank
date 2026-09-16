@@ -267,10 +267,13 @@ dispatch — runs whenever any report flag is set.
 ### Mutation and assembly figures
 
 `vaxrank-mutation-figure` turns the Isovar table produced by
-`--output-isovar-csv` into publication-ready, white-background protein-context
-figures. Each figure separates the reference transcript, annotation-only mutant
-prediction, and RNA-assembled protein so unsupported or assembly-refined
-sequences remain explicit.
+`--output-isovar-csv` into publication-ready, white-background transcript and
+protein context figures. When the input includes the optional
+`*_cdna_sequence` and `*_cdna_variant_{start,end}` columns, each variant gets a
+5-prime-to-3-prime nucleotide comparison in addition to the protein view. Both
+views separate the reference transcript, annotation-only mutant prediction,
+and RNA-assembled sequence so unsupported or assembly-refined claims remain
+explicit.
 
 ```bash
 vaxrank --vcf variants.vcf --bam tumor-rna.bam \
@@ -291,6 +294,21 @@ provenance from RNA-assembly provenance. The run manifest records the input
 checksum, Vaxrank version, formats, raster dimensions, and file inventory. Omit
 `--variant` to render every row. Use `--timestamp` for reproducible builds or
 tests; an existing run is never overwritten.
+
+For structural variants and fusion junctions, use a cross-platform evidence
+JSON rather than an Isovar table:
+
+```bash
+vaxrank-evidence-figure evidence.json \
+  --output-root evidence-figures \
+  --format svg --format pdf --format png
+```
+
+This view keeps DNA, short-read RNA, short-read assembly, and long-read RNA as
+separate evidence stages. It displays the junction nucleotide sequence and
+withholds a protein unless the input supplies an established coding sequence.
+See `examples/osteosarc_evidence_figures/` for DNA-only, cross-platform,
+matched-sample long-read rescue, and unresolved long-read-only examples.
 
 ### Neoepitope report
 

@@ -72,5 +72,6 @@ if __name__ == "__main__":
         entry_points={"console_scripts": [
             "vaxrank = vaxrank.cli.entry_point:main",
             "vaxrank-mutation-figure = vaxrank.cli.mutation_visualization:main",
+            "vaxrank-evidence-figure = vaxrank.cli.evidence_visualization:main",
         ]},
     )

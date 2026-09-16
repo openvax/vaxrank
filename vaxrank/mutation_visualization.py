@@ -88,6 +88,17 @@ def _bounded_context(sequence, start, flank=24):
     return sequence[left:right]
 
 
+def _bounded_variant_context(sequence, start, end, flank=33):
+    """Return sequence around a nucleotide variant and its adjusted interval."""
+    if not sequence:
+        return "", 0, 0
+    start = min(max(0, start), len(sequence))
+    end = min(max(start, end), len(sequence))
+    left = max(0, start - flank)
+    right = min(len(sequence), end + flank)
+    return sequence[left:right], start - left, end - left
+
+
 def _protein_context(record, sequence_column, flank=24):
     sequence = _text(record, sequence_column)
     start = _integer(record, "predicted_effect_aa_mutation_start_offset")
@@ -173,16 +184,29 @@ def _sequence_row(label, sequence, comparison, y, x=252, residue_width=14):
     return "".join(parts)
 
 
-def _comparison_panel(title, left_label, left, right_label, right, y):
+def _comparison_panel(
+        title, left_label, left, right_label, right, y, x=252,
+        residue_width=14):
     aligned_left, aligned_right = global_alignment(left, right)
     return "".join([
         f'<text x="32" y="{y}" class="panel-title">{escape(title)}</text>',
-        _sequence_row(left_label, aligned_left, aligned_right, y + 18),
-        _sequence_row(right_label, aligned_right, aligned_left, y + 48),
+        _sequence_row(
+            left_label, aligned_left, aligned_right, y + 18,
+            x=x, residue_width=residue_width),
+        _sequence_row(
+            right_label, aligned_right, aligned_left, y + 48,
+            x=x, residue_width=residue_width),
     ])
 
 
-def _classification(annotation, assembled):
+def _classification(annotation, assembled, rna_status="assessed"):
+    if rna_status == "not_assessed":
+        return (
+            "ANNOTATION ONLY",
+            "No RNA sample was assessed in this reproducible figure fixture",
+            "#755400",
+            "#fff2c2",
+        )
     if not assembled:
         return (
             "WITHHELD",
@@ -224,6 +248,13 @@ def _source_provenance(record, assembled):
             "transcript_ids": _text(
                 record, "protein_sequence_transcript_ids", "unavailable"),
         }
+    elif _text(record, "figure_rna_status", "assessed") == "not_assessed":
+        assembly = {
+            "gene_names": "RNA not assessed",
+            "gene_ids": "not applicable",
+            "transcript_names": "not applicable",
+            "transcript_ids": "not applicable",
+        }
     else:
         assembly = {
             "gene_names": "no assembled protein",
@@ -247,6 +278,11 @@ def _source_block(label, provenance, x):
 
 
 def _no_assembly_message(record):
+    if _text(record, "figure_rna_status", "assessed") == "not_assessed":
+        return (
+            "RNA evidence not assessed in this figure fixture.",
+            "The mutant sequence is an annotation-only prediction, not an RNA-negative result.",
+        )
     num_alt_fragments = _integer(record, "num_alt_fragments")
     if num_alt_fragments:
         return (
@@ -265,7 +301,7 @@ def render_mutation_svg(record):
     """Render one Isovar CSV record as a self-contained SVG string."""
     reference, annotation, assembled = _display_sequences(record)
     state, state_detail, state_color, state_background = _classification(
-        annotation, assembled)
+        annotation, assembled, _text(record, "figure_rna_status", "assessed"))
     gene = _text(record, "figure_label") or _text(
         record, "predicted_effect_gene_name", "Unknown gene")
     effect = _text(record, "predicted_effect", "Unknown effect")
@@ -291,12 +327,16 @@ def render_mutation_svg(record):
             f'<text x="52" y="544" class="body">{escape(no_assembly_detail)}</text>',
         ])
     )
-    evidence = (
-        f"ALT fragments  {_integer(record, 'num_alt_fragments')}     "
-        f"REF fragments  {_integer(record, 'num_ref_fragments')}     "
-        f"OTHER  {_integer(record, 'num_other_fragments')}     "
-        f"Top protein support  {_integer(record, 'num_fragments_supporting_top_protein_sequence')}"
-    )
+    if _text(record, "figure_rna_status", "assessed") == "not_assessed":
+        evidence = "RNA evidence not assessed in the pinned figure fixture"
+    else:
+        evidence = (
+            f"ALT fragments  {_integer(record, 'num_alt_fragments')}     "
+            f"REF fragments  {_integer(record, 'num_ref_fragments')}     "
+            f"OTHER  {_integer(record, 'num_other_fragments')}     "
+            f"Top protein support  "
+            f"{_integer(record, 'num_fragments_supporting_top_protein_sequence')}"
+        )
     footer = " · ".join(part for part in [note, source] if part)
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
 <rect width="1200" height="700" fill="#ffffff"/>
@@ -331,6 +371,86 @@ text {{ font-family: Inter, Helvetica, Arial, sans-serif; }}
 <line x1="32" y1="632" x2="1168" y2="632" stroke="#d8e0e7"/>
 <rect x="32" y="653" width="12" height="12" rx="2" fill="#fde7df"/>
 <text x="52" y="663" class="footer">mismatch or gap</text>
+<text x="1168" y="663" text-anchor="end" class="footer">{escape(footer)}</text>
+<text x="1168" y="682" text-anchor="end" class="footer">Vaxrank {escape(__version__)} · sequence evidence, not a clinical recommendation</text>
+</svg>'''
+
+
+def _display_cdna_sequences(record):
+    sequences = []
+    for prefix in ("reference", "annotation", "rna_assembled"):
+        sequence = _text(record, "%s_cdna_sequence" % prefix)
+        start = _integer(record, "%s_cdna_variant_start" % prefix)
+        end = _integer(record, "%s_cdna_variant_end" % prefix, start)
+        sequences.append(_bounded_variant_context(sequence, start, end))
+    return sequences
+
+
+def render_transcript_svg(record):
+    """Render transcript-oriented nucleotide context for one mutation record."""
+    ((reference, _, _), (annotation, _, _),
+     (assembled, _, _)) = _display_cdna_sequences(record)
+    state, state_detail, state_color, state_background = _classification(
+        annotation, assembled, _text(record, "figure_rna_status", "assessed"))
+    gene = _text(record, "figure_label") or _text(
+        record, "predicted_effect_gene_name", "Unknown gene")
+    effect = _text(record, "predicted_effect", "Unknown effect")
+    variant = _text(record, "variant", "Unknown variant")
+    transcript = _text(record, "predicted_effect_transcript_id", "unavailable")
+    note = _text(record, "figure_note")
+    source = _text(record, "figure_source_url")
+    no_assembly_title, no_assembly_detail = _no_assembly_message(record)
+    second_panel = (
+        _comparison_panel(
+            "2 · WHAT RNA ASSEMBLY CHANGES", "Annotation only", annotation,
+            "RNA assembled", assembled, 470, x=210, residue_width=10)
+        if assembled
+        else "".join([
+            '<text x="32" y="470" class="panel-title">2 · RNA ASSEMBLY DECISION</text>',
+            '<rect x="32" y="491" width="1136" height="66" rx="7" fill="#fff7dc"/>',
+            f'<text x="52" y="520" class="empty-title">{escape(no_assembly_title)}</text>',
+            f'<text x="52" y="544" class="body">{escape(no_assembly_detail)}</text>',
+        ]))
+    if _text(record, "figure_rna_status", "assessed") == "not_assessed":
+        evidence = (
+            f"RNA evidence not assessed in the pinned figure fixture     "
+            f"Transcript  {transcript}")
+    else:
+        evidence = (
+            f"ALT fragments  {_integer(record, 'num_alt_fragments')}     "
+            f"REF fragments  {_integer(record, 'num_ref_fragments')}     "
+            f"OTHER  {_integer(record, 'num_other_fragments')}     "
+            f"Transcript  {transcript}"
+        )
+    footer = " · ".join(part for part in [note, source] if part)
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
+<rect width="1200" height="700" fill="#ffffff"/>
+<style>
+text {{ font-family: Inter, Helvetica, Arial, sans-serif; }}
+.title {{ font-size: 26px; font-weight: 700; fill: #17212b; }}
+.subtitle {{ font-size: 14px; fill: #445364; }}
+.status {{ font-size: 13px; font-weight: 700; letter-spacing: 1px; }}
+.status-detail {{ font-size: 13px; font-weight: 600; }}
+.panel-title {{ font-size: 12px; font-weight: 700; letter-spacing: 1.2px; fill: #526273; }}
+.track-label {{ font-size: 13px; font-weight: 600; fill: #263544; }}
+.residue {{ font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; font-weight: 600; text-anchor: middle; }}
+.evidence {{ font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; fill: #253443; }}
+.empty-title {{ font-size: 15px; font-weight: 700; fill: #755400; }}
+.body {{ font-size: 13px; fill: #526273; }}
+.footer {{ font-size: 10px; fill: #687786; }}
+</style>
+<text x="32" y="48" class="title">{escape(gene)} · transcript nucleotide context</text>
+<text x="32" y="75" class="subtitle">{escape(effect)} · {escape(variant)} · 5-prime to 3-prime transcript orientation</text>
+<rect x="32" y="103" width="1136" height="52" rx="7" fill="{state_background}"/>
+<text x="52" y="125" class="status" fill="{state_color}">{state}</text>
+<text x="52" y="143" class="status-detail" fill="{state_color}">{escape(state_detail)}</text>
+<rect x="32" y="175" width="1136" height="47" rx="7" fill="#eef3f7"/>
+<text x="52" y="204" class="evidence">{escape(evidence)}</text>
+{_comparison_panel("1 · WHAT ANNOTATION PREDICTS", "Reference transcript", reference, "Annotation only", annotation, 294, x=210, residue_width=10)}
+{second_panel}
+<line x1="32" y1="632" x2="1168" y2="632" stroke="#d8e0e7"/>
+<rect x="32" y="653" width="12" height="12" rx="2" fill="#fde7df"/>
+<text x="52" y="663" class="footer">mismatch or gap · bases are transcript-oriented, not genomic-strand oriented</text>
 <text x="1168" y="663" text-anchor="end" class="footer">{escape(footer)}</text>
 <text x="1168" y="682" text-anchor="end" class="footer">Vaxrank {escape(__version__)} · sequence evidence, not a clinical recommendation</text>
 </svg>'''
@@ -395,6 +515,16 @@ def _record_for_json(record):
         "figure_note",
         "figure_source_url",
         "figure_rna_sample",
+        "figure_rna_status",
+        "reference_cdna_sequence",
+        "reference_cdna_variant_start",
+        "reference_cdna_variant_end",
+        "annotation_cdna_sequence",
+        "annotation_cdna_variant_start",
+        "annotation_cdna_variant_end",
+        "rna_assembled_cdna_sequence",
+        "rna_assembled_cdna_variant_start",
+        "rna_assembled_cdna_variant_end",
     ]
     result = {name: _json_value(record.get(name)) for name in fields if name in record}
     for name in (
@@ -415,7 +545,9 @@ def _record_for_json(record):
     annotation_source, assembly_source = _source_provenance(record, assembled)
     result["annotation_source"] = annotation_source
     result["rna_assembly_source"] = assembly_source if assembled else None
-    result["assembly_outcome"] = _classification(annotation, assembled)[0].lower()
+    result["assembly_outcome"] = _classification(
+        annotation, assembled, _text(record, "figure_rna_status", "assessed")
+    )[0].lower().replace(" ", "_")
     return result
 
 
@@ -472,19 +604,35 @@ def generate_mutation_figures(
             variant_directory = staging_directory / slug
             variant_directory.mkdir()
             svg = render_mutation_svg(record)
+            transcript_svg = None
+            if (_text(record, "reference_cdna_sequence") and
+                    _text(record, "annotation_cdna_sequence")):
+                transcript_svg = render_transcript_svg(record)
             files = []
             if "svg" in formats:
                 svg_path = variant_directory / "protein-context.svg"
                 svg_path.write_text(svg)
                 files.append(str(svg_path.relative_to(staging_directory)))
+                if transcript_svg:
+                    transcript_path = variant_directory / "transcript-context.svg"
+                    transcript_path.write_text(transcript_svg)
+                    files.append(str(transcript_path.relative_to(staging_directory)))
             if "pdf" in formats:
                 pdf_path = variant_directory / "protein-context.pdf"
                 _write_pdf(svg, pdf_path)
                 files.append(str(pdf_path.relative_to(staging_directory)))
+                if transcript_svg:
+                    transcript_path = variant_directory / "transcript-context.pdf"
+                    _write_pdf(transcript_svg, transcript_path)
+                    files.append(str(transcript_path.relative_to(staging_directory)))
             if "png" in formats:
                 png_path = variant_directory / "protein-context.png"
                 _write_png(svg, png_path, png_scale)
                 files.append(str(png_path.relative_to(staging_directory)))
+                if transcript_svg:
+                    transcript_path = variant_directory / "transcript-context.png"
+                    _write_png(transcript_svg, transcript_path, png_scale)
+                    files.append(str(transcript_path.relative_to(staging_directory)))
             record_path = variant_directory / "record.json"
             record_path.write_text(
                 json.dumps(_record_for_json(record), indent=2, sort_keys=True) + "\n")

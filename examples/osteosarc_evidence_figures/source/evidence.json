@@ -1,0 +1,162 @@
+[
+  {
+    "id": "DSCAML1-ESRRG-dna-only",
+    "title": "DSCAML1 :: ESRRG",
+    "kind": "Interchromosomal structural variant",
+    "locus": "chr1:216833625 to chr11:117581568 (GRCh38)",
+    "conclusion": "DNA ONLY · NO TRANSCRIBED PRODUCT ESTABLISHED",
+    "evidence": {
+      "dna": {
+        "status": "detected",
+        "detail": "106 split reads across the prioritized DNA catalog; seen in four samples."
+      },
+      "short_read": {
+        "status": "not_detected",
+        "detail": "Zero RNA split reads in the prioritized fusion catalog."
+      },
+      "short_read_assembly": {
+        "status": "not_assessed",
+        "detail": "No RNA junction exists to assemble into a transcript haplotype."
+      },
+      "long_read": {
+        "status": "not_detected",
+        "detail": "No matching CTAT-LR-Fusion call in the osteosarc catalog."
+      }
+    },
+    "nucleotide": {
+      "left_label": "DSCAML1 / chr1",
+      "right_label": "ESRRG / chr11",
+      "left_sequence": "GCCAATTAGTACCATCATTTGTTGTTCTTTTCCTACTCCTCTTTAAAAAGAGCAGCCAAT",
+      "right_sequence": "CTGGCTTCTTTCACTTAGTACAATGCATCTGAACATTAAGCATTGTGATGAACACAGGTA"
+    },
+    "protein": {
+      "sequence": null,
+      "reason": "No RNA-supported transcript junction; genomic breakends alone do not define a spliced coding frame."
+    },
+    "interpretation": "DNA establishes a somatic rearrangement, but not expression, transcript structure, or a fusion protein.",
+    "source_urls": [
+      "https://osteosarc.com/fusions/dscaml1--esrrg/",
+      "https://osteosarc.com/fusions/tables/prioritized.tsv"
+    ]
+  },
+  {
+    "id": "TPST1-CRCP-t1-cross-platform",
+    "title": "TPST1 :: CRCP · T1",
+    "kind": "Intrachromosomal expressed rearrangement",
+    "locus": "chr7:66205522 to chr7:66127704 (GRCh38)",
+    "conclusion": "CROSS-PLATFORM · SHORT AND LONG RNA AGREE ON THE JUNCTION",
+    "evidence": {
+      "dna": {
+        "status": "detected",
+        "detail": "PASS duplication pair; 14 variant fragments in the matched T1 DNA record."
+      },
+      "short_read": {
+        "status": "detected",
+        "detail": "Isofox reports 3 junction fragments in T1 short-read RNA."
+      },
+      "short_read_assembly": {
+        "status": "unresolved",
+        "detail": "A junction is resolved, but the source does not provide a phased full-length coding transcript."
+      },
+      "long_read": {
+        "status": "detected",
+        "detail": "CTAT-LR-Fusion reports 27 ONT reads spanning the same splice junction."
+      }
+    },
+    "nucleotide": {
+      "left_label": "TPST1",
+      "right_label": "CRCP",
+      "left_sequence": "GACCAGCGGCTGAGGCCAGGATGCCGTCCAGGCGGCGCGGCGGCTCCTCACTCATCCCAG",
+      "right_sequence": "GAAGGATGCCAATTCTGCGCTTCTCAGTAACTACGAGGTAAATTGGATTGTTACATTTTC"
+    },
+    "protein": {
+      "sequence": null,
+      "reason": "The source establishes a splice junction, not a transcript-resolved CDS or validated fusion ORF."
+    },
+    "interpretation": "Short and long reads corroborate expression; neither caller output alone establishes the fusion reading frame.",
+    "source_urls": [
+      "https://osteosarc.com/ctat_lr_fusion/TPST1--CRCP/",
+      "https://osteosarc.com/ctat_lr_fusion/tables/lr_fusions_concordance.tsv"
+    ]
+  },
+  {
+    "id": "TPST1-CRCP-t2-long-read-rescue",
+    "title": "TPST1 :: CRCP · T2",
+    "kind": "Matched-sample long-read rescue",
+    "locus": "chr7:66205522 to chr7:66127704 (GRCh38)",
+    "conclusion": "LONG-READ RESCUE · DNA POSITIVE, MATCHED SHORT-READ CALL NEGATIVE",
+    "evidence": {
+      "dna": {
+        "status": "detected",
+        "detail": "PASS duplication pair; 10 variant fragments and 0.057 tumor allele fraction."
+      },
+      "short_read": {
+        "status": "not_detected",
+        "detail": "No Isofox match in the matched T2 short-read RNA callset."
+      },
+      "short_read_assembly": {
+        "status": "not_assessed",
+        "detail": "No short-read fusion call was available to seed a transcript assembly."
+      },
+      "long_read": {
+        "status": "detected",
+        "detail": "CTAT-LR-Fusion reports 22 ONT reads spanning the reference-splice junction."
+      }
+    },
+    "nucleotide": {
+      "left_label": "TPST1",
+      "right_label": "CRCP",
+      "left_sequence": "GACCAGCGGCTGAGGCCAGGATGCCGTCCAGGCGGCGCGGCGGCTCCTCACTCATCCCAG",
+      "right_sequence": "GAAGGATGCCAATTCTGCGCTTCTCAGTAACTACGAGGTAAATTGGATTGTTACATTTTC"
+    },
+    "protein": {
+      "sequence": null,
+      "reason": "Long reads establish the expressed junction, but the catalog does not provide a validated coding frame."
+    },
+    "interpretation": "At T2, long reads recover an expressed DNA-supported junction missed by the matched short-read caller.",
+    "source_urls": [
+      "https://osteosarc.com/ctat_lr_fusion/TPST1--CRCP/",
+      "https://osteosarc.com/ctat_lr_fusion/tables/lr_fusions_concordance.tsv"
+    ]
+  },
+  {
+    "id": "MAF-ENSG00000261722-long-read-only",
+    "title": "MAF :: ENSG00000261722 · T2",
+    "kind": "Long-read-only candidate",
+    "locus": "chr16:79585880 to chr16:79212901 (GRCh38)",
+    "conclusion": "LONG-READ ONLY · UNRESOLVED, NOT A CONFIRMED STRUCTURAL VARIANT",
+    "evidence": {
+      "dna": {
+        "status": "not_detected",
+        "detail": "No matched DNA breakend pair supports this junction."
+      },
+      "short_read": {
+        "status": "not_detected",
+        "detail": "No Isofox match despite an available matched short-read sample."
+      },
+      "short_read_assembly": {
+        "status": "not_assessed",
+        "detail": "No short-read junction call was available for transcript reconstruction."
+      },
+      "long_read": {
+        "status": "detected",
+        "detail": "CTAT-LR-Fusion reports 31 T2 ONT reads with a non-reference splice."
+      }
+    },
+    "nucleotide": {
+      "left_label": "MAF",
+      "right_label": "ENSG00000261722",
+      "left_sequence": "ACCCAAGGGAATCCTCTACATCAGTGATGTGAAAAAATCCAGTTGCCTGAAGTCAAAGAG",
+      "right_sequence": "AAAATATGCTGGCATGCTAATCGCGTGAGACAACTTGGCCCACGGACAGCCACAAAGCAC"
+    },
+    "protein": {
+      "sequence": null,
+      "reason": "Without orthogonal DNA or short-read support, no fusion ORF is asserted from the long-read call alone."
+    },
+    "interpretation": "Long-read support can reveal candidates, but without orthogonal support this remains compatible with RNA artifact.",
+    "source_urls": [
+      "https://osteosarc.com/ctat_lr_fusion/MAF--ENSG00000261722/",
+      "https://github.com/TrinityCTAT/CTAT-LR-fusion"
+    ]
+  }
+]

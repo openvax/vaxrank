@@ -1,0 +1,40 @@
+{
+  "conclusion": "CROSS-PLATFORM \u00b7 SHORT AND LONG RNA AGREE ON THE JUNCTION",
+  "evidence": {
+    "dna": {
+      "detail": "PASS duplication pair; 14 variant fragments in the matched T1 DNA record.",
+      "status": "detected"
+    },
+    "long_read": {
+      "detail": "CTAT-LR-Fusion reports 27 ONT reads spanning the same splice junction.",
+      "status": "detected"
+    },
+    "short_read": {
+      "detail": "Isofox reports 3 junction fragments in T1 short-read RNA.",
+      "status": "detected"
+    },
+    "short_read_assembly": {
+      "detail": "A junction is resolved, but the source does not provide a phased full-length coding transcript.",
+      "status": "unresolved"
+    }
+  },
+  "id": "TPST1-CRCP-t1-cross-platform",
+  "interpretation": "Short and long reads corroborate expression; neither caller output alone establishes the fusion reading frame.",
+  "kind": "Intrachromosomal expressed rearrangement",
+  "locus": "chr7:66205522 to chr7:66127704 (GRCh38)",
+  "nucleotide": {
+    "left_label": "TPST1",
+    "left_sequence": "GACCAGCGGCTGAGGCCAGGATGCCGTCCAGGCGGCGCGGCGGCTCCTCACTCATCCCAG",
+    "right_label": "CRCP",
+    "right_sequence": "GAAGGATGCCAATTCTGCGCTTCTCAGTAACTACGAGGTAAATTGGATTGTTACATTTTC"
+  },
+  "protein": {
+    "reason": "The source establishes a splice junction, not a transcript-resolved CDS or validated fusion ORF.",
+    "sequence": null
+  },
+  "source_urls": [
+    "https://osteosarc.com/ctat_lr_fusion/TPST1--CRCP/",
+    "https://osteosarc.com/ctat_lr_fusion/tables/lr_fusions_concordance.tsv"
+  ],
+  "title": "TPST1 :: CRCP \u00b7 T1"
+}

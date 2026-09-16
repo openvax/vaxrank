@@ -4,7 +4,7 @@ These figures use the repository's small, checksum-pinned RNA fixtures to show
 why variant annotation is not a substitute for RNA assembly around a mutation.
 They are software regression examples, not clinical recommendations.
 
-The six curated cases cover distinct assembly outcomes:
+The eight curated cases cover distinct assembly outcomes:
 
 - **DYNC1H1 p.Val314Ile:** short-read RNA assembly confirms the annotation-only
   protein sequence.
@@ -20,6 +20,11 @@ The six curated cases cover distinct assembly outcomes:
   RNA-supported.
 - **PIP5K1A p.Gly474fs:** a second annotation-predicted frameshift is withheld
   when the selected RNA fixture has no alternate fragments.
+- **DYNC1H1 p.Gln3267His:** the second DYNC1H1 locus is independently confirmed
+  by 34 alternate short-read RNA fragments on ENST00000360184.
+- **NAV2 p.Ala1809Val:** the transcript-specific site representation is shown on
+  ENST00000396087. RNA is explicitly not assessed in the pinned fixture, rather
+  than being mislabeled as zero alternate fragments.
 
 Rebuild the source CSV and a new UTC-stamped SVG/PDF/PNG run from the
 repository root:
@@ -35,8 +40,9 @@ python examples/osteosarc_mutation_figures/generate.py \
   --timestamp 2026-09-15T230000Z
 ```
 
-Each run contains one directory per variant, with a white-background SVG, PDF,
-3600×2100 PNG, and the compact input record used for the figure. `manifest.json`
+Each run contains one directory per variant, with white-background transcript
+and protein SVG/PDF figures, 3600×2100 PNGs, and the compact input record used
+for the figure. `manifest.json`
 records the Vaxrank version, source CSV checksum, timestamp, raster dimensions,
 and every generated file.
 The source CSV is retained under `source/`; the timestamped outputs live under

@@ -1,0 +1,59 @@
+{
+  "created_utc": "2026-09-16T054501Z",
+  "figures": [
+    {
+      "directory": "DSCAML1-ESRRG-dna-only",
+      "files": [
+        "DSCAML1-ESRRG-dna-only/evidence-context.svg",
+        "DSCAML1-ESRRG-dna-only/evidence-context.pdf",
+        "DSCAML1-ESRRG-dna-only/evidence-context.png",
+        "DSCAML1-ESRRG-dna-only/record.json"
+      ],
+      "id": "DSCAML1-ESRRG-dna-only"
+    },
+    {
+      "directory": "TPST1-CRCP-t1-cross-platform",
+      "files": [
+        "TPST1-CRCP-t1-cross-platform/evidence-context.svg",
+        "TPST1-CRCP-t1-cross-platform/evidence-context.pdf",
+        "TPST1-CRCP-t1-cross-platform/evidence-context.png",
+        "TPST1-CRCP-t1-cross-platform/record.json"
+      ],
+      "id": "TPST1-CRCP-t1-cross-platform"
+    },
+    {
+      "directory": "TPST1-CRCP-t2-long-read-rescue",
+      "files": [
+        "TPST1-CRCP-t2-long-read-rescue/evidence-context.svg",
+        "TPST1-CRCP-t2-long-read-rescue/evidence-context.pdf",
+        "TPST1-CRCP-t2-long-read-rescue/evidence-context.png",
+        "TPST1-CRCP-t2-long-read-rescue/record.json"
+      ],
+      "id": "TPST1-CRCP-t2-long-read-rescue"
+    },
+    {
+      "directory": "MAF-ENSG00000261722-long-read-only",
+      "files": [
+        "MAF-ENSG00000261722-long-read-only/evidence-context.svg",
+        "MAF-ENSG00000261722-long-read-only/evidence-context.pdf",
+        "MAF-ENSG00000261722-long-read-only/evidence-context.png",
+        "MAF-ENSG00000261722-long-read-only/record.json"
+      ],
+      "id": "MAF-ENSG00000261722-long-read-only"
+    }
+  ],
+  "formats": [
+    "svg",
+    "pdf",
+    "png"
+  ],
+  "png_dimensions": {
+    "height": 2280,
+    "width": 3600
+  },
+  "png_scale": 3,
+  "schema_version": 1,
+  "source_json": "/Users/iskander/code/vaxrank/examples/osteosarc_evidence_figures/source/evidence.json",
+  "source_json_sha256": "0702ae0a35641844853e427f43c796de98fb57b85a514aeb5db26c68356861f0",
+  "vaxrank_version": "3.17.4"
+}

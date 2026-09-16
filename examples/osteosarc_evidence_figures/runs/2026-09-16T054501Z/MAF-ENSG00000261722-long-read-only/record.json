@@ -1,0 +1,40 @@
+{
+  "conclusion": "LONG-READ ONLY \u00b7 UNRESOLVED, NOT A CONFIRMED STRUCTURAL VARIANT",
+  "evidence": {
+    "dna": {
+      "detail": "No matched DNA breakend pair supports this junction.",
+      "status": "not_detected"
+    },
+    "long_read": {
+      "detail": "CTAT-LR-Fusion reports 31 T2 ONT reads with a non-reference splice.",
+      "status": "detected"
+    },
+    "short_read": {
+      "detail": "No Isofox match despite an available matched short-read sample.",
+      "status": "not_detected"
+    },
+    "short_read_assembly": {
+      "detail": "No short-read junction call was available for transcript reconstruction.",
+      "status": "not_assessed"
+    }
+  },
+  "id": "MAF-ENSG00000261722-long-read-only",
+  "interpretation": "Long-read support can reveal candidates, but without orthogonal support this remains compatible with RNA artifact.",
+  "kind": "Long-read-only candidate",
+  "locus": "chr16:79585880 to chr16:79212901 (GRCh38)",
+  "nucleotide": {
+    "left_label": "MAF",
+    "left_sequence": "ACCCAAGGGAATCCTCTACATCAGTGATGTGAAAAAATCCAGTTGCCTGAAGTCAAAGAG",
+    "right_label": "ENSG00000261722",
+    "right_sequence": "AAAATATGCTGGCATGCTAATCGCGTGAGACAACTTGGCCCACGGACAGCCACAAAGCAC"
+  },
+  "protein": {
+    "reason": "Without orthogonal DNA or short-read support, no fusion ORF is asserted from the long-read call alone.",
+    "sequence": null
+  },
+  "source_urls": [
+    "https://osteosarc.com/ctat_lr_fusion/MAF--ENSG00000261722/",
+    "https://github.com/TrinityCTAT/CTAT-LR-fusion"
+  ],
+  "title": "MAF :: ENSG00000261722 \u00b7 T2"
+}

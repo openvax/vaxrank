@@ -1,0 +1,40 @@
+{
+  "conclusion": "LONG-READ RESCUE \u00b7 DNA POSITIVE, MATCHED SHORT-READ CALL NEGATIVE",
+  "evidence": {
+    "dna": {
+      "detail": "PASS duplication pair; 10 variant fragments and 0.057 tumor allele fraction.",
+      "status": "detected"
+    },
+    "long_read": {
+      "detail": "CTAT-LR-Fusion reports 22 ONT reads spanning the reference-splice junction.",
+      "status": "detected"
+    },
+    "short_read": {
+      "detail": "No Isofox match in the matched T2 short-read RNA callset.",
+      "status": "not_detected"
+    },
+    "short_read_assembly": {
+      "detail": "No short-read fusion call was available to seed a transcript assembly.",
+      "status": "not_assessed"
+    }
+  },
+  "id": "TPST1-CRCP-t2-long-read-rescue",
+  "interpretation": "At T2, long reads recover an expressed DNA-supported junction missed by the matched short-read caller.",
+  "kind": "Matched-sample long-read rescue",
+  "locus": "chr7:66205522 to chr7:66127704 (GRCh38)",
+  "nucleotide": {
+    "left_label": "TPST1",
+    "left_sequence": "GACCAGCGGCTGAGGCCAGGATGCCGTCCAGGCGGCGCGGCGGCTCCTCACTCATCCCAG",
+    "right_label": "CRCP",
+    "right_sequence": "GAAGGATGCCAATTCTGCGCTTCTCAGTAACTACGAGGTAAATTGGATTGTTACATTTTC"
+  },
+  "protein": {
+    "reason": "Long reads establish the expressed junction, but the catalog does not provide a validated coding frame.",
+    "sequence": null
+  },
+  "source_urls": [
+    "https://osteosarc.com/ctat_lr_fusion/TPST1--CRCP/",
+    "https://osteosarc.com/ctat_lr_fusion/tables/lr_fusions_concordance.tsv"
+  ],
+  "title": "TPST1 :: CRCP \u00b7 T2"
+}
