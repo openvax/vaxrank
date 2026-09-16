@@ -79,7 +79,12 @@ def pvacseq_variant_id(row) -> str:
 
 
 def lens_variant_id(row) -> str:
-    """Return a LENS variant identity including alleles when available."""
+    """Return a stable LENS antigen identity.
+
+    Point variants use coordinates plus alleles. Fusion rows deliberately have
+    no ``variant_coords``; identify those by their caller fusion ID and paired
+    breakpoints instead of collapsing every fusion in a report onto ``""``.
+    """
     coords = external_text(row.get("variant"))
     ref = (
         external_text(row.get("snv_ref_allele"))
@@ -91,6 +96,13 @@ def lens_variant_id(row) -> str:
     )
     if ref or alt:
         return f"{coords}:{ref}>{alt}"
+    if external_text(row.get("antigen_source")).upper() == "FUSION":
+        fusion_id = external_text(row.get("fusion_id"))
+        left = external_text(row.get("fusion_left_breakpoint"))
+        right = external_text(row.get("fusion_right_breakpoint"))
+        parts = tuple(value for value in (fusion_id, left, right) if value)
+        if parts:
+            return "FUSION:" + "|".join(parts)
     return coords
 
 

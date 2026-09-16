@@ -24,6 +24,7 @@ from .epitope_logic import predict_epitopes
 from .candidate_epitope import CandidateEpitope, Peptide
 from .vaccine_config import VaccineConfig
 from .vaccine_antigen import (
+    ANTIGEN_KIND_FUSION,
     AminoAcidInterval,
     SelfReferenceMatch,
     SelfReferenceSource,
@@ -248,6 +249,7 @@ __all__ = [
     "TumorSpecificityAttestation",
     "TumorSpecificityEvidence",
     "VaccineAntigen",
+    "ANTIGEN_KIND_FUSION",
     "VaccineConfig",
     "VaccinePeptide",
     "WindowSafetyAssessment",

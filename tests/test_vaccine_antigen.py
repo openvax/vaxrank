@@ -10,11 +10,16 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from mhctools import RandomBindingPredictor
 
-from vaxrank.candidate_epitope import CandidateEpitope, SOURCE_CLASS_SELF
+from vaxrank.candidate_epitope import (
+    CandidateEpitope,
+    SOURCE_CLASS_MUTATION,
+    SOURCE_CLASS_SELF,
+)
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.epitope_logic import predict_epitopes
 from vaxrank.vaccine_antigen import (
     ANTIGEN_KIND_CTA,
+    ANTIGEN_KIND_FUSION,
     ANTIGEN_KIND_MUTATION,
     ATTESTATION_ADMITTED,
     ATTESTATION_HELD_OUT,
@@ -286,6 +291,52 @@ def test_prediction_accepts_cta_antigen_without_fake_mutation_fragment():
         )
         for epitope in epitopes
     )
+
+
+def test_prediction_accepts_fusion_antigen_without_fake_wild_type():
+    antigen = VaccineAntigen.from_fusion_sequence(
+        amino_acids="ACDEFGHIKLMNPQRSTVWYACDEFGHIKL",
+        junction_offset=15,
+        tumor_specificity=admitted_attestation(),
+        gene_name="LEFT::RIGHT",
+        transcript_ids=("ENSTLEFT", "ENSTRIGHT"),
+        source_identifier="LEFT--RIGHT",
+        source_metadata=(("sequence_source", "assembled fusion transcript"),),
+    )
+
+    epitopes = predict_epitopes(
+        mhc_predictor=RandomBindingPredictor(["HLA-A*02:01"]),
+        epitope_config=EpitopeConfig(min_epitope_score=0),
+        antigen=antigen,
+    )
+
+    assert epitopes
+    assert any(epitope.overlaps_targetable for epitope in epitopes)
+    assert any(not epitope.overlaps_targetable for epitope in epitopes)
+    assert all(
+        epitope.overlaps_targetable
+        == (epitope.offset < 15 < epitope.offset + len(epitope.sequence))
+        for epitope in epitopes
+    )
+    assert all(epitope.source_class == SOURCE_CLASS_MUTATION
+               for epitope in epitopes)
+    assert all(not epitope.overlaps_mutation for epitope in epitopes)
+    assert all("wt" not in epitope.comparators for epitope in epitopes)
+    assert all(
+        epitope.self_reference_match.antigen_kind == ANTIGEN_KIND_FUSION
+        for epitope in epitopes
+    )
+    assert VaccineAntigen.from_json(antigen.to_json()) == antigen
+
+
+@pytest.mark.parametrize("junction_offset", [-1, 0, 20, 21])
+def test_fusion_antigen_requires_sequence_on_both_sides(junction_offset):
+    with pytest.raises(ValueError, match="amino acids on both sides"):
+        VaccineAntigen.from_fusion_sequence(
+            amino_acids="ACDEFGHIKLMNPQRSTVWY",
+            junction_offset=junction_offset,
+            tumor_specificity=admitted_attestation(),
+        )
 
 
 def test_cta_prediction_uses_antigen_specific_self_reference():

@@ -773,6 +773,22 @@ per-row `pep_context` (LENS) or `Best Peptide` / `MT Epitope Seq`
 full pipeline. pVACseq parsing is delegated to topiary, so both
 `all_epitopes.tsv` and `all_epitopes.aggregated.tsv` are accepted.
 
+LENS `FUSION` rows are also eligible for construct ranking. Vaxrank treats
+their caller-supplied `pep_context` as an assembled fusion antigen rather than
+fabricating a single-locus genomic variant. Fusion ID, both partner genes,
+breakpoints, transcript IDs, fusion type, RNA evidence fields, and sequence
+source are preserved in the report; ranked fusion antigens can be included in
+both peptide and mRNA constructs. This path imports LENS's peptide predictions.
+It does not infer a coding frame or translate raw breakpoints when the upstream
+report has not supplied an established protein context.
+
+For an upstream assembler that supplies the translated sequence and exact
+amino-acid junction, `VaccineAntigen.from_fusion_sequence(...)` records the
+junction as a zero-width target mask. `predict_epitopes(..., antigen=antigen)`
+then enumerates the predictor's peptide lengths and marks only peptides that
+contain residues from both fusion partners as targetable; no fictitious
+wild-type comparator is generated.
+
 ### Mutant transcript assembly (Isovar)
 
 For each somatic variant, [Isovar](https://github.com/openvax/isovar)

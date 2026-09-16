@@ -475,7 +475,12 @@ def test_lens_gets_no_dna_evidence_at_all():
     result = lens_ranking_result(
         report, epitopes_for_ranking(list(report.epitopes), config))
 
-    fragment = result.ranked[0][1][0].mutant_protein_fragment
+    fragment = next(
+        peptide.mutant_protein_fragment
+        for _source, peptides in result.ranked
+        for peptide in peptides
+        if peptide.mutant_protein_fragment is not None
+    )
 
     assert fragment.dna_vaf is None
     assert fragment.n_dna_alt is None

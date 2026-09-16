@@ -16,12 +16,12 @@ LENS and pVACseq files carry pre-computed (peptide, allele) MHC
 predictions plus a peptide-context column (the SLP-style window
 surrounding each neoepitope). Vaxrank's downstream code (reports,
 peptide constructs, mRNA constructs) consumes a list of
-``(varcode.Variant, list[VaccinePeptide])`` tuples — the same shape
+``(source, list[VaccinePeptide])`` tuples — the same shape
 the VCF/BAM pipeline emits.
 
 This module bridges the two: it groups external predictions by
-variant, picks one representative peptide per variant, and wraps the
-context window in a ``MutantProteinFragment`` + ``VaccinePeptide`` so
+source antigen, picks one representative peptide per source, and wraps the
+context window in a ``VaccinePeptide`` so
 **the same output dispatch** runs whether the input was a VCF or a
 LENS report. Without this bridge the CLI hard-short-circuits external
 inputs into a one-line CSV and never reaches the construct writers
@@ -57,6 +57,17 @@ from .external_prediction import (
 )
 from .external_report import GENOMIC_VARIANT_COLUMN, ExternalRecord
 from .mutant_protein_fragment import MutantProteinFragment
+from .ranking import DEFAULT_RANKING_RULES
+from .vaccine_antigen import (
+    ANTIGEN_KIND_FUSION,
+    ATTESTATION_ADMITTED,
+    AminoAcidInterval,
+    TargetableMask,
+    TumorSpecificityAttestation,
+    TumorSpecificityEvidence,
+    VaccineAntigen,
+)
+from .vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
 from .vaccine_library import truncate_at_stop_codon
 from .vaccine_peptide import VaccinePeptide
 
@@ -233,9 +244,11 @@ class ExternalVariantEntry:
     aggregated into the final external-input report.
     """
     variant: object = None
+    source: object = None
     vaccine_peptide: object = None
     had_transcript_ids: bool = False
     resolved_transcript: bool = False
+    resolved_protein_context: bool = False
     annotation: object = None       # (gene_ok, effect_ok, label) or None
     dna_vaf: object = None          # float or None, from a DNA-qualified column
     # A variant fraction whose assay the source did not state. LENS names
@@ -245,6 +258,11 @@ class ExternalVariantEntry:
     source_vaf: object = None       # float or None
     has_rna_support: bool = False
     unparseable: bool = False
+
+    @property
+    def ranking_source(self):
+        """Opaque key carried beside this entry's vaccine peptides."""
+        return self.source if self.source is not None else self.variant
 
 
 @dataclasses.dataclass(frozen=True)
@@ -672,13 +690,15 @@ class ExternalRankingAccumulator:
     n_with_rna: int = 0
     n_with_transcript_ids: int = 0
     n_resolved_transcripts: int = 0
+    n_resolved_protein_contexts: int = 0
 
     def add(self, entry):
         """Record one variant's metadata and construct outcome."""
         if entry is None or entry.unparseable:
             self.n_unparseable += 1
             return
-        if entry.variant is None:
+        source = entry.ranking_source
+        if source is None:
             return
         self.n_parseable += 1
         if entry.annotation is not None:
@@ -687,14 +707,16 @@ class ExternalRankingAccumulator:
             self.n_with_transcript_ids += 1
             if entry.resolved_transcript:
                 self.n_resolved_transcripts += 1
+        if entry.resolved_protein_context:
+            self.n_resolved_protein_contexts += 1
         if entry.has_rna_support:
             self.n_with_rna += 1
-        if entry.dna_vaf is not None:
+        if entry.dna_vaf is not None and entry.variant is not None:
             self.dna_vaf_by_variant[entry.variant] = entry.dna_vaf
-        if entry.source_vaf is not None:
+        if entry.source_vaf is not None and entry.variant is not None:
             self.source_vaf_by_variant[entry.variant] = entry.source_vaf
         if entry.vaccine_peptide is not None:
-            self.ranked.append((entry.variant, [entry.vaccine_peptide]))
+            self.ranked.append((source, [entry.vaccine_peptide]))
 
     def result(self, source_name, transcript_id_label="transcript IDs"):
         """Emit the summaries every external format owes its caller."""
@@ -708,7 +730,9 @@ class ExternalRankingAccumulator:
             source_vaf_by_variant=self.source_vaf_by_variant,
             input_summary=ExternalInputSummary(
                 num_somatic_variants=self.n_parseable,
-                num_coding_effect_variants=self.n_resolved_transcripts,
+                # Legacy field name. For source-agnostic inputs this counts
+                # sources with a usable protein context, including fusions.
+                num_coding_effect_variants=self.n_resolved_protein_contexts,
                 num_variants_with_rna_support=self.n_with_rna,
             ),
         )
@@ -758,6 +782,7 @@ def lens_variant_metadata(variant_id, group_rows, genome=None):
         variant=variant,
         had_transcript_ids=bool(transcript_ids),
         resolved_transcript=bool(transcripts),
+        resolved_protein_context=bool(transcripts),
         has_rna_support=has_rna_support,
         annotation=(check_varcode_annotation(
             variant,
@@ -788,6 +813,35 @@ def lens_variant_metadata(variant_id, group_rows, genome=None):
         except (TypeError, ValueError):
             continue
     return entry
+
+
+def lens_fusion_metadata(fusion_id, group_rows, genome=None):
+    """Aggregate filter-independent facts for one caller-supplied fusion."""
+    if not fusion_id:
+        return ExternalVariantEntry(unparseable=True)
+    transcript_ids = external_values(*(
+        value
+        for row in group_rows
+        for value in (
+            row.get("fusion_left_transcript"),
+            row.get("fusion_right_transcript"),
+            row.get("transcript_id"),
+            row.get("all_transcript_ids_encoding_peptide"),
+        )
+    ))
+    has_protein_context = any(
+        bool(external_text(row.get("pep_context"))) for row in group_rows)
+    transcripts = resolve_external_transcripts(transcript_ids, genome)
+    # A LENS FUSION row is itself an RNA-derived antigen observation. Some
+    # report versions do not populate the SNV-oriented rna_reads_* columns,
+    # so absence there must not relabel the fusion as DNA-only.
+    return ExternalVariantEntry(
+        source=str(fusion_id),
+        had_transcript_ids=bool(transcript_ids),
+        resolved_transcript=bool(transcripts),
+        resolved_protein_context=has_protein_context,
+        has_rna_support=True,
+    )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -842,6 +896,170 @@ class ExternalConstructOptions:
             manufacturability_thresholds=thresholds,
             manufacturability_rules=mfg_rules,
         )
+
+
+_SOURCE_AGNOSTIC_RANKING_RULES = (
+    "target_epitope_score",
+    "manufacturability",
+    "self_epitope_score",
+)
+
+
+def source_agnostic_construct_options(options):
+    """Use safe defaults for antigens with no mutation read-count fields.
+
+    A source-agnostic expression supplied by the user is retained. The legacy
+    mutation defaults are translated to their antigen equivalents; custom
+    expressions that name mutation-only fields still fail explicitly in
+    :class:`VaccinePeptide` instead of being silently rewritten.
+    """
+    expression = options.combined_score_expr
+    if expression in (None, DEFAULT_COMBINED_SCORE_EXPR):
+        expression = "target_epitope_score"
+    rules = options.ranking_rules
+    if rules is None or tuple(rules) == tuple(DEFAULT_RANKING_RULES):
+        rules = _SOURCE_AGNOSTIC_RANKING_RULES
+    return dataclasses.replace(
+        options,
+        combined_score_expr=expression,
+        ranking_rules=tuple(rules),
+    )
+
+
+def _merged_epitope_intervals(epitopes):
+    """Merge overlapping/adjacent candidate spans into a targetable mask."""
+    spans = sorted(
+        (epitope.offset, epitope.offset + len(epitope.sequence))
+        for epitope in epitopes)
+    merged = []
+    for start, end in spans:
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return tuple(AminoAcidInterval(start, end) for start, end in merged)
+
+
+def _fusion_partner(value):
+    """Split LENS's ``GENE^ENSG...`` partner spelling."""
+    text = external_text(value)
+    if not text:
+        return "", ""
+    gene, separator, gene_id = text.partition("^")
+    return gene, gene_id if separator else ""
+
+
+def lens_fusion_vaccine_entry(metadata, selection, options=None):
+    """Build a source-agnostic fusion antigen from one LENS context."""
+    if selection is None:
+        return metadata
+    options = source_agnostic_construct_options(
+        options or ExternalConstructOptions())
+    key = selection.representative.key
+    peptide = truncate_at_stop_codon(key.peptide)
+    context = truncate_at_stop_codon(key.source_sequence or key.peptide)
+    if not peptide or not context:
+        return metadata
+    if not has_only_standard_amino_acids(context):
+        logger.warning(
+            "Dropped LENS fusion construct %r: pep_context %r contains "
+            "non-standard residues (allowed: 20 canonical AAs).",
+            key.variant_id, context)
+        return metadata
+    start, end = peptide_offsets_in_context(peptide, context)
+    if start is None:
+        return metadata
+    windowed, new_start, new_end = MutantProteinFragment.slp_window_around_mutation(
+        context, start, end, options.vaccine_peptide_length)
+    window_start = start - new_start
+    window_end = window_start + len(windowed)
+    if context[window_start:window_end] != windowed:
+        raise ValueError("Could not locate the fusion SLP window in its context")
+    epitopes = slice_epitopes(selection.epitopes, window_start, window_end)
+    if not epitopes:
+        return metadata
+
+    row = selection.representative.row
+    left_gene, left_gene_id = _fusion_partner(row.get("fusion_left_gene"))
+    right_gene, right_gene_id = _fusion_partner(row.get("fusion_right_gene"))
+    left_transcript = external_text(row.get("fusion_left_transcript"))
+    right_transcript = external_text(row.get("fusion_right_transcript"))
+    source_identifier = (
+        external_text(row.get("fusion_id"))
+        or key.variant_id
+    )
+    counts = _read_counts_from_lens_row(row)
+    rna_method, sequence_source, rna_subject = (
+        _read_provenance_from_lens_row(row))
+    source_metadata = tuple(
+        (name, value)
+        for name, value in (
+            ("fusion_id", source_identifier),
+            ("fusion_type", external_text(row.get("fusion_type"))),
+            ("fusion_annotation", external_text(row.get("fusion_annotation"))),
+            ("left_breakpoint", external_text(row.get("fusion_left_breakpoint"))),
+            ("left_gene", left_gene),
+            ("left_gene_id", left_gene_id),
+            ("left_transcript", left_transcript),
+            ("right_breakpoint", external_text(row.get("fusion_right_breakpoint"))),
+            ("right_gene", right_gene),
+            ("right_gene_id", right_gene_id),
+            ("right_transcript", right_transcript),
+            ("rna_reads_covering_breakpoint", str(counts[0]) if counts[0] else ""),
+            ("rna_reads_supporting_fusion", str(counts[1]) if counts[1] else ""),
+            ("rna_evidence_method", rna_method),
+            ("rna_evidence_subject", rna_subject),
+            ("sequence_source", sequence_source),
+        )
+        if value
+    )
+    antigen = VaccineAntigen(
+        kind=ANTIGEN_KIND_FUSION,
+        amino_acids=windowed,
+        targetable_mask=TargetableMask(_merged_epitope_intervals(epitopes)),
+        tumor_specificity=TumorSpecificityAttestation(
+            status=ATTESTATION_ADMITTED,
+            evidence_kind="caller_curated_fusion_neoantigen",
+            evidence_source="LENS report",
+            patient_specific=True,
+            rationale_code="lens_fusion_neoantigen",
+            evidence_records=(TumorSpecificityEvidence(
+                evidence_kind="fusion_peptide_context",
+                evidence_source="LENS report",
+                subject_id=source_identifier,
+                patient_specific=True,
+                passed=True,
+                details=source_metadata,
+            ),),
+        ),
+        gene_name="::".join(
+            value for value in (left_gene, right_gene) if value),
+        transcript_ids=external_values(left_transcript, right_transcript),
+        species=key.species,
+        source_identifier=source_identifier,
+        source_metadata=source_metadata,
+    )
+    epitopes = [
+        dataclasses.replace(
+            epitope,
+            overlaps_mutation=False,
+            overlaps_targetable=True,
+            self_reference_match=antigen.self_reference_match(
+                epitope.sequence, epitope.occurs_in_reference),
+        )
+        for epitope in epitopes
+    ]
+    metadata.source = antigen
+    metadata.vaccine_peptide = VaccinePeptide(
+        antigen=antigen,
+        epitopes=epitopes,
+        num_target_epitopes_to_keep=options.num_target_epitopes_to_keep,
+        manufacturability_thresholds=options.manufacturability_thresholds,
+        manufacturability_rules=options.manufacturability_rules,
+        combined_score_expr=options.combined_score_expr,
+        ranking_rules=options.ranking_rules,
+    )
+    return metadata
 
 
 def external_vaccine_peptide(variant, selection, context, mutant_start,
@@ -926,7 +1144,11 @@ def external_vaccine_peptide(variant, selection, context, mutant_start,
 
 def lens_vaccine_entry(metadata, selection, genome=None, options=None):
     """Build one LENS vaccine peptide from a DSL-selected source window."""
-    if selection is None or metadata.variant is None:
+    if selection is None:
+        return metadata
+    if selection.representative.key.antigen_source.upper() == "FUSION":
+        return lens_fusion_vaccine_entry(metadata, selection, options=options)
+    if metadata.variant is None:
         return metadata
     options = options or ExternalConstructOptions()
     key = selection.representative.key
@@ -1053,10 +1275,17 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
     skipped_kinds = {}  # antigen_source value → count
     for r in rows:
         coords = r.get('variant')
+        kind = external_text(r.get('antigen_source')).upper()
         if coords is None or (
                 isinstance(coords, float) and pd.isna(coords)) or (
                 isinstance(coords, str) and (
                     not coords.strip() or coords.strip().lower() == 'nan')):
+            # Fusion identity lives in paired breakpoint columns rather than
+            # variant_coords. It is a first-class antigen source even though
+            # it cannot be represented by a single varcode.Variant.
+            if kind == 'FUSION' and lens_variant_id(r):
+                groups.setdefault(lens_variant_id(r), []).append(r)
+                continue
             n_skipped_empty_coords += 1
             kind = r.get('antigen_source')
             kind_key = (
@@ -1072,11 +1301,9 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
     if n_skipped_empty_coords:
         # SNV / INDEL rows are *expected* to carry coords; flag them
         # separately so the user can chase upstream rather than assume
-        # "typical". (The non-coord rows aren't dropped from the run —
-        # they're still scored as candidate epitopes for the neoepitope
-        # report; they just can't be placed on the genome for the
-        # variant-based vaccine-construct ranking. The funnel below
-        # spells this out.)
+        # "typical". Remaining unsupported non-coordinate categories are
+        # still scored in the neoepitope report but cannot yet enter construct
+        # ranking. FUSION rows took the explicit source-antigen path above.
         unexpected = {k: v for k, v in skipped_kinds.items()
                       if k.upper() in ('SNV', 'INDEL')}
         if unexpected:
@@ -1090,8 +1317,15 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
 
     tally = ExternalRankingAccumulator()
     for variant_id, group_rows in groups.items():
+        antigen_source = external_text(
+            group_rows[0].get('antigen_source')).upper()
+        metadata = (
+            lens_fusion_metadata(variant_id, group_rows, genome=genome)
+            if antigen_source == 'FUSION'
+            else lens_variant_metadata(variant_id, group_rows, genome=genome)
+        )
         tally.add(lens_vaccine_entry(
-            lens_variant_metadata(variant_id, group_rows, genome=genome),
+            metadata,
             select_external_construct(records_by_variant.get(variant_id, [])),
             genome=genome,
             options=options,
@@ -1175,11 +1409,11 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
     # "skipped" from variant ranking were the same rows re-counted as
     # "lack gene_name / transcript_id"). The rows feed two independent
     # uses: (1) every row minus mismatches is scored as a candidate
-    # epitope for the neoepitope report; (2) only rows with genomic
-    # variant_coords can be placed on the genome for variant-based
-    # vaccine-construct ranking. Spelling that out here is what makes
-    # the "skipped, then counted again" confusion go away.
-    n_coord_rows = len(rows) - n_skipped_empty_coords
+    # epitope for the neoepitope report; (2) rows with genomic coordinates
+    # enter variant-based construct ranking, while fusion rows enter through
+    # their paired-breakpoint antigen identity. Spelling that out here is what
+    # makes the "skipped, then counted again" confusion go away.
+    n_construct_source_rows = len(rows) - n_skipped_empty_coords
     n_variants_ranked = sum(1 for _v, vps in ranked if vps)
     kept_kinds = {
         k: full_kinds.get(k, 0) - skipped_kinds.get(k, 0) for k in full_kinds}
@@ -1200,9 +1434,10 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
         "  %d rows in: %s" % (len(rows), breakdown or '(none)'),
         "  → %d candidate epitopes eligible for construct ranking after "
         "epitope DSL filtering and the minimum-score gate" % len(epitopes),
-        "  → %d row(s) with genomic variant_coords (%s) → %d unique "
-        "variant(s) → %d ranked with vaccine peptide(s) for constructs" % (
-            n_coord_rows, coord_breakdown, len(groups), n_variants_ranked),
+        "  → %d construct-source row(s) (%s) → %d unique source(s) → "
+        "%d ranked with vaccine peptide(s) for constructs" % (
+            n_construct_source_rows, coord_breakdown, len(groups),
+            n_variants_ranked),
     ]
     if n_skipped_empty_coords:
         funnel.append(
@@ -1353,6 +1588,7 @@ def pvacseq_variant_metadata(variant_id, group_rows, genome=None):
         variant=variant,
         had_transcript_ids=bool(transcript_ids),
         resolved_transcript=bool(transcripts),
+        resolved_protein_context=bool(transcripts),
         annotation=annotation,
         has_rna_support=has_rna_support,
     )
@@ -1482,9 +1718,9 @@ def patient_info_from_external(ranked, source_path, patient_id,
         produced antigens for (LENS / pVACseq are antigen-only files,
         so this is "variants that survived their pipeline"; silent
         / non-antigenic somatic calls aren't recoverable here)
-      - ``num_coding_effect_variants`` = unique variants whose
-        representative fragment resolved at least one Transcript
-        (the rest are ERV / non-genic / unresolvable IDs)
+      - ``num_coding_effect_variants`` = unique sources with a usable protein
+        context (legacy field name): a resolved Transcript for point variants,
+        or a caller-supplied translated context for fusion antigens
       - ``num_variants_with_rna_support`` = unique variants with at
         least one row carrying a non-zero RNA-read count
 

@@ -23,12 +23,14 @@ from .identifiers import normalize_ensembl_gene_id
 
 
 ANTIGEN_KIND_MUTATION = "mutation"
+ANTIGEN_KIND_FUSION = "fusion"
 ANTIGEN_KIND_CTA = "CTA"
 ANTIGEN_KIND_ERV = "ERV"
 ANTIGEN_KIND_SPLICE = "splice"
 ANTIGEN_KIND_VIRAL = "viral"
 ANTIGEN_KINDS = frozenset({
     ANTIGEN_KIND_MUTATION,
+    ANTIGEN_KIND_FUSION,
     ANTIGEN_KIND_CTA,
     ANTIGEN_KIND_ERV,
     ANTIGEN_KIND_SPLICE,
@@ -242,6 +244,7 @@ class VaccineAntigen(DataclassSerializable):
     protein_ids: tuple[str, ...] = field(default_factory=tuple)
     species: str = ""
     source_identifier: str = ""
+    source_metadata: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
     def __post_init__(self):
         if self.kind not in ANTIGEN_KINDS:
@@ -269,6 +272,12 @@ class VaccineAntigen(DataclassSerializable):
             )
         object.__setattr__(self, "transcript_ids", tuple(self.transcript_ids))
         object.__setattr__(self, "protein_ids", tuple(self.protein_ids))
+        source_metadata = tuple(sorted({
+            (str(name), str(value))
+            for name, value in self.source_metadata
+            if str(name) and str(value)
+        }))
+        object.__setattr__(self, "source_metadata", source_metadata)
 
     def interval_is_targetable(self, start: int, end: int) -> bool:
         return self.targetable_mask.overlaps(start, end)
@@ -295,6 +304,48 @@ class VaccineAntigen(DataclassSerializable):
     def display_gene_name(self) -> str:
         """Best available gene label for reports and construct labels."""
         return self.gene_name or self.gene_id or "unknown"
+
+    @classmethod
+    def from_fusion_sequence(
+            cls,
+            amino_acids: str,
+            junction_offset: int,
+            tumor_specificity: TumorSpecificityAttestation,
+            gene_name: str = "",
+            transcript_ids: tuple[str, ...] = (),
+            species: str = "",
+            source_identifier: str = "",
+            source_metadata: tuple[tuple[str, str], ...] = (),
+    ) -> "VaccineAntigen":
+        """Represent an assembled fusion translation and its exact junction.
+
+        ``junction_offset`` is the zero-based boundary between the last amino
+        acid from the left partner and the first amino acid from the right
+        partner. A zero-width target interval makes an epitope targetable only
+        when it contains residues from both sides of that boundary.
+        """
+        if not isinstance(junction_offset, int):
+            raise TypeError("Fusion junction offset must be an integer")
+        if junction_offset <= 0 or junction_offset >= len(amino_acids):
+            raise ValueError(
+                "Fusion junction offset must have amino acids on both sides"
+            )
+        metadata = tuple(source_metadata) + (
+            ("junction_offset_aa", str(junction_offset)),
+        )
+        return cls(
+            kind=ANTIGEN_KIND_FUSION,
+            amino_acids=amino_acids,
+            targetable_mask=TargetableMask((AminoAcidInterval(
+                junction_offset, junction_offset,
+            ),)),
+            tumor_specificity=tumor_specificity,
+            gene_name=gene_name,
+            transcript_ids=transcript_ids,
+            species=species,
+            source_identifier=source_identifier,
+            source_metadata=metadata,
+        )
 
     @classmethod
     def from_mutant_protein_fragment(cls, fragment: Any) -> "VaccineAntigen":

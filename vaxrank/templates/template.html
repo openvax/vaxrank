@@ -51,7 +51,7 @@
                         </colgroup>
                         <thead class="variant-head">
                             <tr>
-                                <td class="variant-head">Variant</td>
+                                <td class="variant-head">{{ v.entity_label | default('Variant') }}</td>
                                 <td class="variant-head">{{ v.short_description }}</td>
                             </tr>
                         </thead>
@@ -61,7 +61,7 @@
                     </table>
                     <br>
 
-                    <h4 id="effects">Predicted Effect</h4>
+                    <h4 id="effects">{{ v.effect_label | default('Predicted Effect') }}</h4>
                     <table class="pure-table pure-table-bordered">
                         {% for key, val in v.effect_data.items() %}
                         <tr><td>{{ key }}</td><td>{{ val }}</td></tr>
