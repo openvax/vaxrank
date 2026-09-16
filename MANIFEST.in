@@ -3,3 +3,8 @@ include CONSTRUCT_AUDIT.md
 include ALLELE_VALIDATION.md
 include CLEAVAGE_AUDIT.md
 include CONSTRUCT_PROCESSING.md
+
+# Tests require repository-only helpers and genomic fixtures. Setuptools adds
+# test_*.py files to sdists by default; exclude the whole partial tree rather
+# than publishing test modules that cannot run from the archive.
+prune tests

@@ -918,6 +918,11 @@ Run linting and tests:
 ./lint.sh && ./test.sh
 ```
 
+The test suite is intentionally repository-only and is not included in source
+distributions. Its integration tests depend on helpers and genomic fixtures
+that are not package payloads, so run tests from a Git checkout rather than an
+unpacked PyPI archive.
+
 The first run of the tests may take a while to build the reference proteome kmer index, but subsequent runs will use the cached index.
 
 Reference membership caches are keyed by the installed annotation/sequence
