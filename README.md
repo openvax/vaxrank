@@ -264,6 +264,31 @@ dispatch — runs whenever any report flag is set.
 | `--output-csv` | Flat CSV |
 | `--output-json-file` | Full ranked-vaccine-peptides graph as JSON |
 
+### Mutation and assembly figures
+
+`vaxrank-mutation-figure` turns the Isovar table produced by
+`--output-isovar-csv` into publication-ready, white-background protein-context
+figures. Each figure separates the reference transcript, annotation-only mutant
+prediction, and RNA-assembled protein so unsupported or assembly-refined
+sequences remain explicit.
+
+```bash
+vaxrank --vcf variants.vcf --bam tumor-rna.bam \
+  --mhc-predictor random --mhc-alleles HLA-A*02:01 \
+  --output-isovar-csv patient-isovar.csv
+
+vaxrank-mutation-figure patient-isovar.csv \
+  --output-root figures \
+  --variant DYNC1H1 \
+  --format svg --format pdf
+```
+
+Outputs are grouped under `figures/YYYY-MM-DDTHHMMSSZ/`. Every variant gets an
+SVG, PDF, and compact JSON record; the run manifest records the input checksum,
+Vaxrank version, formats, and file inventory. Omit `--variant` to render every
+row. Use `--timestamp` for reproducible builds or tests; an existing run is
+never overwritten.
+
 ### Neoepitope report
 
 Per-(peptide, allele) report (XLSX/CSV). Default output of the

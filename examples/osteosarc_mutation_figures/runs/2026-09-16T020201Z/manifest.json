@@ -1,0 +1,43 @@
+{
+  "created_utc": "2026-09-16T020201Z",
+  "figures": [
+    {
+      "directory": "DYNC1H1-chr14-g-101980529G-A",
+      "files": [
+        "DYNC1H1-chr14-g-101980529G-A/protein-context.svg",
+        "DYNC1H1-chr14-g-101980529G-A/protein-context.pdf",
+        "DYNC1H1-chr14-g-101980529G-A/record.json"
+      ],
+      "label": "DYNC1H1",
+      "variant": "chr14 g.101980529G>A"
+    },
+    {
+      "directory": "H1-2-chr6-g-26055825-26055839delCCTTGGGCTTAGCGG",
+      "files": [
+        "H1-2-chr6-g-26055825-26055839delCCTTGGGCTTAGCGG/protein-context.svg",
+        "H1-2-chr6-g-26055825-26055839delCCTTGGGCTTAGCGG/protein-context.pdf",
+        "H1-2-chr6-g-26055825-26055839delCCTTGGGCTTAGCGG/record.json"
+      ],
+      "label": "H1-2",
+      "variant": "chr6 g.26055825_26055839delCCTTGGGCTTAGCGG"
+    },
+    {
+      "directory": "MAP2-chr2-g-209694769-209694790delCTGGGCTACTGTGTGTTCAATA",
+      "files": [
+        "MAP2-chr2-g-209694769-209694790delCTGGGCTACTGTGTGTTCAATA/protein-context.svg",
+        "MAP2-chr2-g-209694769-209694790delCTGGGCTACTGTGTGTTCAATA/protein-context.pdf",
+        "MAP2-chr2-g-209694769-209694790delCTGGGCTACTGTGTGTTCAATA/record.json"
+      ],
+      "label": "MAP2",
+      "variant": "chr2 g.209694769_209694790delCTGGGCTACTGTGTGTTCAATA"
+    }
+  ],
+  "formats": [
+    "svg",
+    "pdf"
+  ],
+  "schema_version": 1,
+  "source_csv": "examples/osteosarc_mutation_figures/source/osteosarc-isovar.csv",
+  "source_csv_sha256": "63fe31115a41b643b4106e7dde80f15d0d12f1ea5ced0c8bf8284c5627c7cc2a",
+  "vaxrank_version": "3.17.4"
+}

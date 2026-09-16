@@ -1,0 +1,26 @@
+{
+  "assembly_outcome": "withheld",
+  "displayed_sequences": {
+    "annotation_only": "SRTGLPPVTDENHVIVKTDSQLEDSTQSHCHHLFKTVRIYQGRVVPFTK",
+    "reference": "SRTGLPPVTDENHVIVKTDSQLEDLGYCVFNKYTVPLPSPVQDSENLSG",
+    "rna_assembled": null
+  },
+  "figure_label": "MAP2",
+  "figure_note": "T0 short-read RNA: annotation predicts a frameshift, but no alternate fragments assemble",
+  "figure_source_url": "https://osteosarc.com/variant/MAP2-chr2-209694768/",
+  "num_alt_fragments": 0,
+  "num_fragments_supporting_top_protein_sequence": 0,
+  "num_other_fragments": 1,
+  "num_ref_fragments": 3,
+  "predicted_effect": "p.L867fs",
+  "predicted_effect_gene_id": "ENSG00000078018",
+  "predicted_effect_gene_name": "MAP2",
+  "predicted_effect_transcript_id": "ENST00000360351",
+  "predicted_effect_transcript_name": "MAP2-001",
+  "protein_sequence": null,
+  "protein_sequence_mutation_end_idx": null,
+  "protein_sequence_mutation_start_idx": null,
+  "trimmed_predicted_mutant_protein_sequence": null,
+  "trimmed_reference_protein_sequence": null,
+  "variant": "chr2 g.209694769_209694790delCTGGGCTACTGTGTGTTCAATA"
+}
