@@ -1418,10 +1418,17 @@ def ensure_parent_dir(path):
     ``--output-csv foo/bar.csv`` (and every path auto-populated inside
     a not-yet-created ``--output-dir``) works without the user
     pre-creating the directory.
+
+    Missing intermediate components are created too, so a mistyped path
+    lands in a new tree rather than failing. That's the same trade the
+    construct writers already make, and it's why creation is logged: a
+    typo is then visible in the run log and the run summary instead of
+    being silent.
     """
     parent = os.path.dirname(path)
-    if parent:
+    if parent and not os.path.isdir(parent):
         os.makedirs(parent, exist_ok=True)
+        logger.info("Created output directory %s", parent)
 
 
 def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
