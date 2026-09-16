@@ -1,4 +1,5 @@
 import json
+import struct
 from xml.etree import ElementTree
 
 import pandas as pd
@@ -25,6 +26,10 @@ def example_records():
         "trimmed_predicted_mutant_protein_sequence": "VVKPK",
         "protein_sequence_mutation_start_idx": 0,
         "protein_sequence_mutation_end_idx": 1,
+        "protein_sequence_gene_names": "RNA_GENE_A;RNA_GENE_B",
+        "protein_sequence_gene_ids": "ENSGRNA1;ENSGRNA2",
+        "protein_sequence_transcript_names": "RNA-201;RNA-202",
+        "protein_sequence_transcript_ids": "ENSTRNA1;ENSTRNA2",
         "num_ref_fragments": 8,
         "num_other_fragments": 1,
         "figure_source_url": "https://example.org/variant",
@@ -50,6 +55,10 @@ def example_records():
             **shared,
             "variant": "chr1 g.30_34delAAKPK",
             "protein_sequence": None,
+            "protein_sequence_gene_names": None,
+            "protein_sequence_gene_ids": None,
+            "protein_sequence_transcript_names": None,
+            "protein_sequence_transcript_ids": None,
             "num_alt_fragments": 0,
             "num_fragments_supporting_top_protein_sequence": 0,
             "figure_label": "WITHHELD1",
@@ -73,6 +82,22 @@ def test_svg_classifies_rna_assembly_outcome(index, state):
     assert state in svg
     assert "sequence evidence, not a clinical recommendation" in svg
     assert "https://example.org/variant" in svg
+    assert "ANNOTATION SOURCE" in svg
+    assert "RNA-ASSEMBLY SOURCE" in svg
+
+
+def test_missing_protein_with_alt_fragments_does_not_claim_zero_alt():
+    record = {**example_records()[2], "num_alt_fragments": 4}
+    svg = render_mutation_svg(record)
+    assert "4 alternate RNA fragments observed; no protein assembled" in svg
+    assert "No alternate RNA fragments" not in svg
+
+
+def test_figure_keeps_annotation_and_multi_source_assembly_provenance_separate():
+    svg = render_mutation_svg(example_records()[0])
+    assert "genes  REPEAT1" in svg
+    assert "genes  RNA_GENE_A;RNA_GENE_B" in svg
+    assert "transcripts  ENSTRNA1;ENSTRNA2" in svg
 
 
 def test_generate_timestamped_figure_run(tmp_path):
@@ -97,6 +122,16 @@ def test_generate_timestamped_figure_run(tmp_path):
         assert record["figure_label"] == figure["label"]
         assert record["displayed_sequences"]["annotation_only"] == "VVKPK"
         assert record["assembly_outcome"] in {"refined", "withheld"}
+        if record["assembly_outcome"] == "refined":
+            assert record["protein_sequence_gene_names"] == "RNA_GENE_A;RNA_GENE_B"
+            assert record["protein_sequence_transcript_ids"] == "ENSTRNA1;ENSTRNA2"
+            assert record["annotation_source"]["gene_names"] == "REPEAT1"
+            assert record["rna_assembly_source"] == {
+                "gene_ids": "ENSGRNA1;ENSGRNA2",
+                "gene_names": "RNA_GENE_A;RNA_GENE_B",
+                "transcript_ids": "ENSTRNA1;ENSTRNA2",
+                "transcript_names": "RNA-201;RNA-202",
+            }
 
     with pytest.raises(FileExistsError, match="already exists"):
         generate_mutation_figures(
@@ -113,6 +148,24 @@ def test_command_prints_generated_directory(tmp_path, capsys):
         "--timestamp", "2026-09-15T221500Z",
     ])
     assert capsys.readouterr().out.strip() == str(output_root / "2026-09-15T221500Z")
+
+
+def test_high_resolution_png_is_three_times_svg_dimensions(tmp_path):
+    input_csv = tmp_path / "isovar.csv"
+    pd.DataFrame(example_records()[:1]).to_csv(input_csv, index=False)
+    run = generate_mutation_figures(
+        input_csv,
+        tmp_path / "figures",
+        formats=("png",),
+        timestamp="2026-09-15T223000Z",
+    )
+    png, = run.glob("*/protein-context.png")
+    data = png.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    assert struct.unpack(">II", data[16:24]) == (3600, 2100)
+    manifest = json.loads((run / "manifest.json").read_text())
+    assert manifest["png_scale"] == 3
+    assert manifest["png_dimensions"] == {"width": 3600, "height": 2100}
 
 
 def test_missing_required_columns_are_reported(tmp_path):

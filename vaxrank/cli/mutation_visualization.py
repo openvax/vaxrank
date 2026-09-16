@@ -19,8 +19,11 @@ def make_parser():
         "--variant", action="append", default=[],
         help="Case-insensitive row substring to include; may be repeated")
     parser.add_argument(
-        "--format", action="append", choices=("svg", "pdf"), dest="formats",
-        help="Output format; may be repeated (default: svg and pdf)")
+        "--format", action="append", choices=("svg", "pdf", "png"), dest="formats",
+        help="Output format; may be repeated (default: svg, pdf, and png)")
+    parser.add_argument(
+        "--png-scale", type=float, default=3,
+        help="PNG scale relative to 1200x700 (default: 3, or 3600x2100)")
     parser.add_argument(
         "--timestamp",
         help="Reproducible UTC run name in YYYY-MM-DDTHHMMSSZ form")
@@ -33,8 +36,9 @@ def main(argv=None):
         args.input_isovar_csv,
         args.output_root,
         variants=args.variant,
-        formats=args.formats or ("svg", "pdf"),
+        formats=args.formats or ("svg", "pdf", "png"),
         timestamp=args.timestamp,
+        png_scale=args.png_scale,
     )
     print(run_directory)
 

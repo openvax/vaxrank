@@ -1,29 +1,29 @@
 {
   "annotation_source": {
-    "gene_ids": "ENSG00000078018",
-    "gene_names": "MAP2",
-    "transcript_ids": "ENST00000360351",
-    "transcript_names": "MAP2-001"
+    "gene_ids": "ENSG00000143398",
+    "gene_names": "PIP5K1A",
+    "transcript_ids": "ENST00000368888",
+    "transcript_names": "PIP5K1A-003"
   },
   "assembly_outcome": "withheld",
   "displayed_sequences": {
-    "annotation_only": "SRTGLPPVTDENHVIVKTDSQLEDSTQSHCHHLFKTVRIYQGRVVPFTK",
-    "reference": "SRTGLPPVTDENHVIVKTDSQLEDLGYCVFNKYTVPLPSPVQDSENLSG",
+    "annotation_only": "FKKIPLKPSPSKKFRSGSSFSRRAAPVATPALLTSHRSLGNTRHK",
+    "reference": "FKKIPLKPSPSKKFRSGSSFSRRAGSSGNSCITYQPSVSGEHKAQVTTK",
     "rna_assembled": null
   },
-  "figure_label": "MAP2",
+  "figure_label": "PIP5K1A",
   "figure_note": "T0 short-read RNA: annotation predicts a frameshift, but no alternate fragments assemble",
   "figure_rna_sample": "bulk_star_t0",
-  "figure_source_url": "https://osteosarc.com/variant/MAP2-chr2-209694768/",
+  "figure_source_url": "https://osteosarc.com/variant/PIP5K1A-chr1-151242178/",
   "num_alt_fragments": 0,
   "num_fragments_supporting_top_protein_sequence": 0,
-  "num_other_fragments": 1,
-  "num_ref_fragments": 3,
-  "predicted_effect": "p.L867fs",
-  "predicted_effect_gene_id": "ENSG00000078018",
-  "predicted_effect_gene_name": "MAP2",
-  "predicted_effect_transcript_id": "ENST00000360351",
-  "predicted_effect_transcript_name": "MAP2-001",
+  "num_other_fragments": 0,
+  "num_ref_fragments": 19,
+  "predicted_effect": "p.G474fs",
+  "predicted_effect_gene_id": "ENSG00000143398",
+  "predicted_effect_gene_name": "PIP5K1A",
+  "predicted_effect_transcript_id": "ENST00000368888",
+  "predicted_effect_transcript_name": "PIP5K1A-003",
   "protein_sequence": null,
   "protein_sequence_gene_ids": null,
   "protein_sequence_gene_names": null,
@@ -34,5 +34,5 @@
   "rna_assembly_source": null,
   "trimmed_predicted_mutant_protein_sequence": null,
   "trimmed_reference_protein_sequence": null,
-  "variant": "chr2 g.209694769_209694790delCTGGGCTACTGTGTGTTCAATA"
+  "variant": "chr1 g.151242179_151242179delG"
 }

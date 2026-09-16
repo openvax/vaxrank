@@ -33,6 +33,13 @@ CASES = [
         "url": "https://osteosarc.com/variant/DYNC1H1-chr14-101980529/",
     },
     {
+        "sample": "bulk_star_t0",
+        "gene": "EXOC4",
+        "label": "EXOC4",
+        "note": "T0 short-read RNA: assembly confirms p.Ser34Ile",
+        "url": "https://osteosarc.com/variant/EXOC4-chr7-133274996/",
+    },
+    {
         "sample": "ont_t1",
         "gene": "H1-2",
         "label": "H1-2",
@@ -40,11 +47,25 @@ CASES = [
         "url": "https://osteosarc.com/variant/H1_2-chr6-26055824/",
     },
     {
+        "sample": "ont_t1",
+        "gene": "GTF3C5",
+        "label": "GTF3C5",
+        "note": "T1 long-read RNA: assembly resolves a repetitive glutamate deletion context",
+        "url": "https://osteosarc.com/variant/GTF3C5-chr9-133057893/",
+    },
+    {
         "sample": "bulk_star_t0",
         "gene": "MAP2",
         "label": "MAP2",
         "note": "T0 short-read RNA: annotation predicts a frameshift, but no alternate fragments assemble",
         "url": "https://osteosarc.com/variant/MAP2-chr2-209694768/",
+    },
+    {
+        "sample": "bulk_star_t0",
+        "gene": "PIP5K1A",
+        "label": "PIP5K1A",
+        "note": "T0 short-read RNA: annotation predicts a frameshift, but no alternate fragments assemble",
+        "url": "https://osteosarc.com/variant/PIP5K1A-chr1-151242178/",
     },
 ]
 

@@ -36,6 +36,9 @@ topiary>=5.55.1,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0
+# Vector figures remain the source of truth; CairoSVG provides explicit,
+# resolution-controlled PNG export for publication and slide workflows.
+cairosvg>=2.7,<3.0
 pdfkit  # legacy: needs wkhtmltopdf, use --pdf-backend=pdfkit to enable
 openpyxl
 xvfbwrapper  # legacy: only needed with --pdf-backend=pdfkit on headless Linux

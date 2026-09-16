@@ -1,4 +1,10 @@
 {
+  "annotation_source": {
+    "gene_ids": "ENSG00000187837",
+    "gene_names": "HIST1H1C",
+    "transcript_ids": "ENST00000343677",
+    "transcript_names": "HIST1H1C-001"
+  },
   "assembly_outcome": "refined",
   "displayed_sequences": {
     "annotation_only": "VAKPKKAAKSAAKAVKPKVVKPKKAAPKK",
@@ -7,6 +13,7 @@
   },
   "figure_label": "H1-2",
   "figure_note": "T1 long-read RNA: assembly refines a repetitive deletion junction",
+  "figure_rna_sample": "ont_t1",
   "figure_source_url": "https://osteosarc.com/variant/H1_2-chr6-26055824/",
   "num_alt_fragments": 13,
   "num_fragments_supporting_top_protein_sequence": 11,
@@ -18,8 +25,18 @@
   "predicted_effect_transcript_id": "ENST00000343677",
   "predicted_effect_transcript_name": "HIST1H1C-001",
   "protein_sequence": "VAKPKKAAKSAAKAVKPKVVKPKKAAPKKK",
+  "protein_sequence_gene_ids": "ENSG00000187837",
+  "protein_sequence_gene_names": "HIST1H1C",
   "protein_sequence_mutation_end_idx": 19,
   "protein_sequence_mutation_start_idx": 18,
+  "protein_sequence_transcript_ids": "ENST00000343677",
+  "protein_sequence_transcript_names": "HIST1H1C-001",
+  "rna_assembly_source": {
+    "gene_ids": "ENSG00000187837",
+    "gene_names": "HIST1H1C",
+    "transcript_ids": "ENST00000343677",
+    "transcript_names": "HIST1H1C-001"
+  },
   "trimmed_predicted_mutant_protein_sequence": "VAKPKKAAKSAAKAVKPKVVKPKKAAPKK",
   "trimmed_reference_protein_sequence": "VAKPKKAAKSAAKAVKPKAAKPKVVKPKKA",
   "variant": "chr6 g.26055825_26055839delCCTTGGGCTTAGCGG"

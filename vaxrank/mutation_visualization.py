@@ -28,6 +28,10 @@ REQUIRED_COLUMNS = {
     "predicted_effect_mutant_protein_sequence",
     "predicted_effect_aa_mutation_start_offset",
     "protein_sequence",
+    "protein_sequence_gene_names",
+    "protein_sequence_gene_ids",
+    "protein_sequence_transcript_names",
+    "protein_sequence_transcript_ids",
     "num_alt_fragments",
     "num_ref_fragments",
     "num_other_fragments",
@@ -201,6 +205,62 @@ def _classification(annotation, assembled):
     )
 
 
+def _source_provenance(record, assembled):
+    annotation = {
+        "gene_names": _text(record, "predicted_effect_gene_name", "unavailable"),
+        "gene_ids": _text(record, "predicted_effect_gene_id", "unavailable"),
+        "transcript_names": _text(
+            record, "predicted_effect_transcript_name", "unavailable"),
+        "transcript_ids": _text(
+            record, "predicted_effect_transcript_id", "unavailable"),
+    }
+    if assembled:
+        assembly = {
+            "gene_names": _text(
+                record, "protein_sequence_gene_names", "unavailable"),
+            "gene_ids": _text(record, "protein_sequence_gene_ids", "unavailable"),
+            "transcript_names": _text(
+                record, "protein_sequence_transcript_names", "unavailable"),
+            "transcript_ids": _text(
+                record, "protein_sequence_transcript_ids", "unavailable"),
+        }
+    else:
+        assembly = {
+            "gene_names": "no assembled protein",
+            "gene_ids": "not applicable",
+            "transcript_names": "not applicable",
+            "transcript_ids": "not applicable",
+        }
+    return annotation, assembly
+
+
+def _source_block(label, provenance, x):
+    return "".join([
+        f'<text x="{x}" y="88" class="source-label">{escape(label)}</text>',
+        f'<text x="{x}" y="106" class="source-text">genes  '
+        f'{escape(provenance["gene_names"])}  ·  transcripts  '
+        f'{escape(provenance["transcript_ids"])}</text>',
+        f'<text x="{x}" y="122" class="source-ids">gene IDs  '
+        f'{escape(provenance["gene_ids"])}  ·  transcript names  '
+        f'{escape(provenance["transcript_names"])}</text>',
+    ])
+
+
+def _no_assembly_message(record):
+    num_alt_fragments = _integer(record, "num_alt_fragments")
+    if num_alt_fragments:
+        return (
+            "%d alternate RNA fragments observed; no protein assembled."
+            % num_alt_fragments,
+            "Assembly or translation produced no top protein; the annotation-only "
+            "sequence is not labeled RNA-supported.",
+        )
+    return (
+        "No alternate RNA fragments; no protein could be assembled.",
+        "The annotation-only mutant is not presented as RNA-supported sequence.",
+    )
+
+
 def render_mutation_svg(record):
     """Render one Isovar CSV record as a self-contained SVG string."""
     reference, annotation, assembled = _display_sequences(record)
@@ -209,10 +269,11 @@ def render_mutation_svg(record):
     gene = _text(record, "figure_label") or _text(
         record, "predicted_effect_gene_name", "Unknown gene")
     effect = _text(record, "predicted_effect", "Unknown effect")
-    transcript = _text(record, "predicted_effect_transcript_id", "Unknown transcript")
     variant = _text(record, "variant", "Unknown variant")
     note = _text(record, "figure_note")
     source = _text(record, "figure_source_url")
+    annotation_source, assembly_source = _source_provenance(record, assembled)
+    no_assembly_title, no_assembly_detail = _no_assembly_message(record)
     second_panel = (
         _comparison_panel(
             "2 · WHAT RNA ASSEMBLY CHANGES",
@@ -220,14 +281,14 @@ def render_mutation_svg(record):
             annotation,
             "RNA assembled",
             assembled,
-            455,
+            470,
         )
         if assembled
         else "".join([
-            '<text x="32" y="455" class="panel-title">2 · RNA ASSEMBLY DECISION</text>',
-            '<rect x="32" y="476" width="1136" height="66" rx="7" fill="#fff7dc"/>',
-            '<text x="52" y="505" class="empty-title">No alternate RNA fragments; no assembled protein.</text>',
-            '<text x="52" y="529" class="body">The annotation-only mutant is not presented as RNA-supported sequence.</text>',
+            '<text x="32" y="470" class="panel-title">2 · RNA ASSEMBLY DECISION</text>',
+            '<rect x="32" y="491" width="1136" height="66" rx="7" fill="#fff7dc"/>',
+            f'<text x="52" y="520" class="empty-title">{escape(no_assembly_title)}</text>',
+            f'<text x="52" y="544" class="body">{escape(no_assembly_detail)}</text>',
         ])
     )
     evidence = (
@@ -243,6 +304,9 @@ def render_mutation_svg(record):
 text {{ font-family: Inter, Helvetica, Arial, sans-serif; }}
 .title {{ font-size: 26px; font-weight: 700; fill: #17212b; }}
 .subtitle {{ font-size: 14px; fill: #445364; }}
+.source-label {{ font-size: 10px; font-weight: 700; letter-spacing: 1px; fill: #526273; }}
+.source-text {{ font-size: 11px; font-weight: 600; fill: #263544; }}
+.source-ids {{ font-size: 9px; fill: #687786; }}
 .status {{ font-size: 13px; font-weight: 700; letter-spacing: 1px; }}
 .status-detail {{ font-size: 13px; font-weight: 600; }}
 .panel-title {{ font-size: 12px; font-weight: 700; letter-spacing: 1.2px; fill: #526273; }}
@@ -255,13 +319,14 @@ text {{ font-family: Inter, Helvetica, Arial, sans-serif; }}
 </style>
 <text x="32" y="48" class="title">{escape(gene)} · {escape(effect)}</text>
 <text x="32" y="75" class="subtitle">{escape(variant)}</text>
-<text x="32" y="98" class="subtitle">Transcript {escape(transcript)}</text>
-<rect x="32" y="121" width="1136" height="52" rx="7" fill="{state_background}"/>
-<text x="52" y="143" class="status" fill="{state_color}">{state}</text>
-<text x="52" y="161" class="status-detail" fill="{state_color}">{escape(state_detail)}</text>
-<rect x="32" y="193" width="1136" height="47" rx="7" fill="#eef3f7"/>
-<text x="52" y="222" class="evidence">{escape(evidence)}</text>
-{_comparison_panel("1 · WHAT ANNOTATION PREDICTS", "Reference", reference, "Annotation only", annotation, 279)}
+{_source_block("ANNOTATION SOURCE", annotation_source, 32)}
+{_source_block("RNA-ASSEMBLY SOURCE", assembly_source, 620)}
+<rect x="32" y="139" width="1136" height="52" rx="7" fill="{state_background}"/>
+<text x="52" y="161" class="status" fill="{state_color}">{state}</text>
+<text x="52" y="179" class="status-detail" fill="{state_color}">{escape(state_detail)}</text>
+<rect x="32" y="211" width="1136" height="47" rx="7" fill="#eef3f7"/>
+<text x="52" y="240" class="evidence">{escape(evidence)}</text>
+{_comparison_panel("1 · WHAT ANNOTATION PREDICTS", "Reference", reference, "Annotation only", annotation, 294)}
 {second_panel}
 <line x1="32" y1="632" x2="1168" y2="632" stroke="#d8e0e7"/>
 <rect x="32" y="653" width="12" height="12" rx="2" fill="#fde7df"/>
@@ -271,7 +336,7 @@ text {{ font-family: Inter, Helvetica, Arial, sans-serif; }}
 </svg>'''
 
 
-def _write_pdf(svg, path):
+def _configure_native_library_path():
     if platform.system() == "Darwin" and platform.machine() == "arm64":
         homebrew_lib = "/opt/homebrew/lib"
         existing = os.environ.get("DYLD_FALLBACK_LIBRARY_PATH", "")
@@ -279,6 +344,10 @@ def _write_pdf(svg, path):
         if homebrew_lib not in paths:
             os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = ":".join(
                 [homebrew_lib, *paths])
+
+
+def _write_pdf(svg, path):
+    _configure_native_library_path()
     from weasyprint import HTML
 
     html = (
@@ -287,6 +356,18 @@ def _write_pdf(svg, path):
         f'</style></head><body>{svg}</body></html>'
     )
     HTML(string=html).write_pdf(path)
+
+
+def _write_png(svg, path, scale):
+    _configure_native_library_path()
+    from cairosvg import svg2png
+
+    svg2png(
+        bytestring=svg.encode("utf-8"),
+        write_to=str(path),
+        scale=scale,
+        background_color="#ffffff",
+    )
 
 
 def _record_for_json(record):
@@ -298,6 +379,10 @@ def _record_for_json(record):
         "predicted_effect_transcript_id",
         "predicted_effect_transcript_name",
         "protein_sequence",
+        "protein_sequence_gene_names",
+        "protein_sequence_gene_ids",
+        "protein_sequence_transcript_names",
+        "protein_sequence_transcript_ids",
         "protein_sequence_mutation_start_idx",
         "protein_sequence_mutation_end_idx",
         "trimmed_reference_protein_sequence",
@@ -309,6 +394,7 @@ def _record_for_json(record):
         "figure_label",
         "figure_note",
         "figure_source_url",
+        "figure_rna_sample",
     ]
     result = {name: _json_value(record.get(name)) for name in fields if name in record}
     for name in (
@@ -326,12 +412,16 @@ def _record_for_json(record):
         "annotation_only": annotation,
         "rna_assembled": assembled or None,
     }
+    annotation_source, assembly_source = _source_provenance(record, assembled)
+    result["annotation_source"] = annotation_source
+    result["rna_assembly_source"] = assembly_source if assembled else None
     result["assembly_outcome"] = _classification(annotation, assembled)[0].lower()
     return result
 
 
 def generate_mutation_figures(
-        input_csv, output_root, variants=(), formats=("svg", "pdf"), timestamp=None):
+        input_csv, output_root, variants=(), formats=("svg", "pdf", "png"),
+        timestamp=None, png_scale=3):
     """Create a timestamped figure run from a Vaxrank/Isovar CSV."""
     input_csv = Path(input_csv)
     output_root = Path(output_root)
@@ -355,9 +445,12 @@ def generate_mutation_figures(
         dataframe = dataframe[keep]
     if dataframe.empty:
         raise ValueError("No variants matched the requested figure selection")
-    unknown_formats = set(formats).difference({"svg", "pdf"})
+    formats = tuple(dict.fromkeys(formats))
+    unknown_formats = set(formats).difference({"svg", "pdf", "png"})
     if unknown_formats:
         raise ValueError("Unsupported figure formats: %s" % sorted(unknown_formats))
+    if not 0 < png_scale <= 10:
+        raise ValueError("PNG scale must be greater than 0 and at most 10")
 
     output_root.mkdir(parents=True, exist_ok=True)
     staging_directory = Path(tempfile.mkdtemp(
@@ -388,6 +481,10 @@ def generate_mutation_figures(
                 pdf_path = variant_directory / "protein-context.pdf"
                 _write_pdf(svg, pdf_path)
                 files.append(str(pdf_path.relative_to(staging_directory)))
+            if "png" in formats:
+                png_path = variant_directory / "protein-context.png"
+                _write_png(svg, png_path, png_scale)
+                files.append(str(png_path.relative_to(staging_directory)))
             record_path = variant_directory / "record.json"
             record_path.write_text(
                 json.dumps(_record_for_json(record), indent=2, sort_keys=True) + "\n")
@@ -405,6 +502,11 @@ def generate_mutation_figures(
             "source_csv": str(input_csv),
             "source_csv_sha256": sha256(input_csv.read_bytes()).hexdigest(),
             "formats": list(formats),
+            "png_scale": png_scale if "png" in formats else None,
+            "png_dimensions": ({
+                "width": round(1200 * png_scale),
+                "height": round(700 * png_scale),
+            } if "png" in formats else None),
             "figures": figures,
         }
         (staging_directory / "manifest.json").write_text(

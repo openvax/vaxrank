@@ -280,14 +280,17 @@ vaxrank --vcf variants.vcf --bam tumor-rna.bam \
 vaxrank-mutation-figure patient-isovar.csv \
   --output-root figures \
   --variant DYNC1H1 \
-  --format svg --format pdf
+  --format svg --format pdf --format png \
+  --png-scale 3
 ```
 
 Outputs are grouped under `figures/YYYY-MM-DDTHHMMSSZ/`. Every variant gets an
-SVG, PDF, and compact JSON record; the run manifest records the input checksum,
-Vaxrank version, formats, and file inventory. Omit `--variant` to render every
-row. Use `--timestamp` for reproducible builds or tests; an existing run is
-never overwritten.
+SVG, PDF, high-resolution PNG (3600×2100 at the default 3× scale), and compact
+JSON record. The figure and JSON distinguish annotation gene/transcript
+provenance from RNA-assembly provenance. The run manifest records the input
+checksum, Vaxrank version, formats, raster dimensions, and file inventory. Omit
+`--variant` to render every row. Use `--timestamp` for reproducible builds or
+tests; an existing run is never overwritten.
 
 ### Neoepitope report
 
