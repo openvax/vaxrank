@@ -1189,6 +1189,9 @@ def main(args_list=None):
             vaccine_config.num_target_epitopes_to_keep)
         args.max_vaccine_peptides_per_variant = (
             vaccine_config.max_vaccine_peptides_per_variant)
+        args.included_antigen_sources = list(
+            vaccine_config.included_antigen_sources
+        )
         loaded = load_external_ranked(
             args,
             epitope_config=epitope_config,

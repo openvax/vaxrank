@@ -103,6 +103,26 @@ def lens_variant_id(row) -> str:
         parts = tuple(value for value in (fusion_id, left, right) if value)
         if parts:
             return "FUSION:" + "|".join(parts)
+    antigen_source = external_text(row.get("antigen_source")).upper()
+    if antigen_source == "SPLICE":
+        parts = tuple(filter(None, (
+            external_text(row.get("splice_description")),
+            external_text(row.get("splice_coords")),
+            external_text(row.get("gene_id")),
+            external_text(row.get("origin_descriptor")),
+        )))
+        if parts:
+            return "SPLICE:" + "|".join(parts)
+    if antigen_source == "CTA/SELF":
+        source = cells.first_text(
+            row, "origin_descriptor", "gene_id", "gene_name", "gene"
+        )
+        if source:
+            return "CTA/SELF:" + source
+    if antigen_source == "ERV":
+        source = cells.first_text(row, "erv_orf_id", "origin_descriptor")
+        if source:
+            return "ERV:" + source
     return coords
 
 

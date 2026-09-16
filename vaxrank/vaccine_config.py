@@ -47,6 +47,16 @@ from .ranking import RANKING_RULE_REGISTRY
 # user-supplied override) via the DSL — no parallel hardcoded branch.
 DEFAULT_COMBINED_SCORE_EXPR = "sqrt(n_rna_alt) * target_epitope_score"
 
+# LENS source categories admitted to construct ranking by default.  The
+# expression-derived self targets need an explicit opt-in: a CTA/SELF or ERV
+# label says where a peptide came from, not that its tumor specificity has
+# been clinically reviewed.  SPLICE likewise remains opt-in until the caller
+# supplies an exact translated junction rather than only a selected peptide.
+DEFAULT_INCLUDED_ANTIGEN_SOURCES = ("SNV", "INDEL", "FUSION")
+LENS_ANTIGEN_SOURCES = frozenset({
+    "SNV", "INDEL", "FUSION", "SPLICE", "CTA/SELF", "ERV",
+})
+
 
 class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """
@@ -89,6 +99,11 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
         but may capture more potential vaccine targets. Set to 0 to
         keep all predicted mutant epitopes.
         Default: 1000
+
+    included_antigen_sources : tuple[str, ...]
+        LENS antigen-source categories admitted to construct ranking. SNV,
+        INDEL, and FUSION are enabled by default; SPLICE, CTA/SELF, and ERV
+        require explicit inclusion.
 
     score_fraction_of_best : float
         Keep vaccine peptide candidates whose score is at least this fraction
@@ -133,6 +148,9 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     # separate mode enum: the expression IS the mechanism.
     combined_score_expr: str = DEFAULT_COMBINED_SCORE_EXPR
     ranking_rules: Optional[tuple[str, ...]] = None
+    included_antigen_sources: tuple[str, ...] = (
+        DEFAULT_INCLUDED_ANTIGEN_SOURCES
+    )
     # When True (default, legacy behavior), variants whose vaccine peptides
     # contain no mutant-overlapping epitopes are dropped from the report
     # entirely. Set False to keep every variant for which any vaccine
@@ -202,3 +220,17 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
                         f"Unknown ranking rule '{rule_name}'. "
                         f"Available: {sorted(RANKING_RULE_REGISTRY)}"
                     )
+        unknown_sources = (
+            set(self.included_antigen_sources) - LENS_ANTIGEN_SOURCES
+        )
+        if unknown_sources:
+            raise ValueError(
+                "Unknown included_antigen_sources value(s): %s. Available: %s"
+                % (
+                    ", ".join(sorted(unknown_sources)),
+                    ", ".join(sorted(LENS_ANTIGEN_SOURCES)),
+                )
+            )
+        if len(set(self.included_antigen_sources)) != len(
+                self.included_antigen_sources):
+            raise ValueError("included_antigen_sources must not contain duplicates")
