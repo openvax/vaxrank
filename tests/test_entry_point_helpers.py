@@ -510,3 +510,229 @@ def test_write_run_summary_noop_without_output_dir(tmp_path):
     args = SimpleNamespace(output_dir='', input_lens=None, input_pvacseq=None)
     write_run_summary(args, None, source='external')
     assert not list(tmp_path.iterdir())
+
+
+# -- output paths inside a not-yet-created directory -------------------
+
+
+def test_ensure_parent_dir_creates_nested_path_and_tolerates_bare_name(tmp_path):
+    """Every writer routes through this helper, so it has to handle a
+    nested path, a bare filename (no parent to create) and an existing
+    directory without complaining. Creation is logged exactly once, so a
+    mistyped path shows up in the run log instead of quietly producing a
+    new tree."""
+    from vaxrank.epitope_io import ensure_parent_dir
+    nested = tmp_path / "run" / "reports" / "out.csv"
+    with _capture_logger("vaxrank.epitope_io", logging.INFO) as records:
+        ensure_parent_dir(str(nested))
+        assert nested.parent.is_dir()
+        ensure_parent_dir(str(nested))  # idempotent
+        ensure_parent_dir("out.csv")  # no parent component
+    created = [r for r in records if "Created output directory" in r.getMessage()]
+    assert len(created) == 1
+    assert str(nested.parent) in created[0].getMessage()
+
+
+def test_template_reports_create_their_parent_directory(tmp_path):
+    """``--output-dir DIR`` auto-populates report paths inside DIR, and
+    the writers run before any construct writer has created it. Writing
+    a report into a missing directory used to raise FileNotFoundError
+    after the whole pipeline had already run."""
+    from vaxrank.patient_info import PatientInfo
+    from vaxrank.report import (
+        TemplateDataCreator, make_ascii_report, make_html_report,
+    )
+
+    template_data = TemplateDataCreator(
+        ranked_variants_with_vaccine_peptides=[],
+        patient_info=PatientInfo("TEST"),
+        final_review="",
+        reviewers="",
+        args_for_report={"manufacturability": False, "wt_epitopes": False},
+        input_json_file=None,
+    ).compute_template_data()
+
+    out_dir = tmp_path / "does-not-exist-yet"
+    make_ascii_report(template_data, str(out_dir / "vaccine_report.txt"))
+    make_html_report(template_data, str(out_dir / "vaccine_report.html"))
+    assert (out_dir / "vaccine_report.txt").exists()
+    assert (out_dir / "vaccine_report.html").exists()
+
+
+def _stub_epitope():
+    from mhctools.pred import Prediction
+    from vaxrank.candidate_epitope import CandidateEpitope, Peptide
+    prediction = Prediction(
+        kind='pMHC_affinity', predictor_name='test', predictor_version='',
+        allele='HLA-A*02:01', peptide='SIINFEKL', value=100.0, score=0.0,
+        percentile_rank=0.5)
+    return CandidateEpitope.from_peptide(
+        Peptide(sequence='SIINFEKL', source_sequence='SIINFEKL', offset=0,
+                predictions=(prediction,)),
+        comparators={}, overlaps_mutation=True, occurs_in_reference=False)
+
+
+def _stub_vaccine_peptide():
+    """Smallest object ``make_csv_report`` / ``make_minimal_neoepitope_report``
+    will actually emit a row for — both skip peptides with no target epitopes
+    and return without writing anything when every peptide is skipped, so a
+    writer test needs one that survives the filter."""
+    from vaxrank.manufacturability import ManufacturabilityScores
+    fragment = SimpleNamespace(
+        gene_name="GENE1", amino_acids="SIINFEKLSIINFEKL",
+        mutant_amino_acid_start_offset=3, mutant_amino_acid_end_offset=4,
+        n_alt_reads=10)
+    return SimpleNamespace(
+        mutant_protein_fragment=fragment,
+        contains_target_epitopes=lambda: True,
+        target_epitopes=[_stub_epitope()],
+        combined_score=1.0, expression_score=1.0, target_epitope_score=1.0,
+        manufacturability_scores=ManufacturabilityScores(
+            *([0.0] * len(ManufacturabilityScores._fields))))
+
+
+def _stub_variant():
+    return SimpleNamespace(
+        contig="1", start=1, ref="A", alt="G",
+        original_start=1, original_ref="A", original_alt="G",
+        short_description="chr1:1 A>G")
+
+
+def _write_ranked_csv(path):
+    from vaxrank.report import make_csv_report
+    make_csv_report(
+        [(_stub_variant(), [_stub_vaccine_peptide()])], csv_report_path=path)
+
+
+def _write_ranked_xlsx(path):
+    from vaxrank.report import make_csv_report
+    make_csv_report(
+        [(_stub_variant(), [_stub_vaccine_peptide()])], excel_report_path=path)
+
+
+def _write_minimal_neoepitope_xlsx(path):
+    from vaxrank.report import make_minimal_neoepitope_report
+    make_minimal_neoepitope_report(
+        ranked_variants_with_vaccine_peptides=[
+            (_stub_variant(), [_stub_vaccine_peptide()])],
+        num_epitopes_per_peptide=None, excel_report_path=path)
+
+
+def _write_predictions_tsv(path):
+    from vaxrank.epitope_io import save_predictions
+    save_predictions([], path)
+
+
+@pytest.mark.parametrize("filename,writer", [
+    ("ranked_vaccine_peptides.csv", _write_ranked_csv),
+    ("ranked_vaccine_peptides.xlsx", _write_ranked_xlsx),
+    ("neoepitopes.xlsx", _write_minimal_neoepitope_xlsx),
+    ("epitopes.tsv", _write_predictions_tsv),
+])
+def test_tabular_writers_create_their_parent_directory(tmp_path, filename, writer):
+    """Every ``--output-*`` writer has to create its own parent, not just
+    the template reports: ``--output-csv sub/out.csv`` used to fail with
+    pandas' "Cannot save file into a non-existent directory" only after the
+    whole pipeline had run. One case per writer so removing any single
+    ``ensure_parent_dir`` call fails a test."""
+    target = tmp_path / "missing" / "deeper" / filename
+    writer(str(target))
+    assert target.exists()
+
+
+def _pipeline_args(tmp_path, monkeypatch, **overrides):
+    """Parsed args plus stubs for everything upstream of the writers, so
+    ``ranked_vaccine_peptides_with_metadata_from_parsed_args`` runs the
+    output block without a genome, a BAM or a predictor."""
+    from vaxrank.cli import entry_point
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+
+    class _EmptyVariantCollection(list):
+        sources = []
+
+    variants = _EmptyVariantCollection()
+    results = SimpleNamespace(
+        variant_counts=lambda: {
+            'num_total_variants': 0, 'num_coding_effect_variants': 0,
+            'num_variants_with_rna_support': 0,
+            'num_variants_with_vaccine_peptides': 0},
+        variant_properties=lambda **kwargs: [],
+        ranked_vaccine_peptides=[])
+    monkeypatch.setattr(entry_point, "mhc_alleles_from_args", lambda args: [])
+    monkeypatch.setattr(entry_point, "variant_collection_from_args", lambda args: [])
+    monkeypatch.setattr(entry_point, "filter_unannotatable_variants", lambda v: variants)
+    monkeypatch.setattr(
+        entry_point, "extract_dna_vaf_by_variant", lambda v, **kwargs: {})
+    monkeypatch.setattr(
+        entry_point, "run_vaxrank_from_parsed_args", lambda args: results)
+    monkeypatch.setattr(entry_point, "GenePathwayCheck", lambda: None)
+
+    args = parse_vaxrank_args([
+        "--vcf", "unused.vcf", "--bam", "unused.bam",
+        "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+        "--output-csv", str(tmp_path / "ranked.csv"),
+    ])
+    for key, value in overrides.items():
+        setattr(args, key, value)
+    return entry_point, args
+
+
+def test_json_dump_creates_its_parent_directory(tmp_path, monkeypatch):
+    """The reported crash: ``--output-json-file`` is written straight from
+    ``open(path, 'w')`` before any construct writer has run, so a path in a
+    missing directory raised FileNotFoundError after the full pipeline."""
+    entry_point, args = _pipeline_args(
+        tmp_path, monkeypatch,
+        output_json_file=str(tmp_path / "js" / "ranked_vaccine_peptides.json"),
+        output_passing_variants_csv=str(tmp_path / "pv" / "passing.csv"))
+
+    entry_point.ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
+
+    assert (tmp_path / "js" / "ranked_vaccine_peptides.json").exists()
+    assert (tmp_path / "pv" / "passing.csv").exists()
+
+
+def test_output_dir_bundle_is_written_into_a_missing_directory(
+        tmp_path, monkeypatch):
+    """``--output-dir DIR`` is the documented way to get the full bundle and
+    ``populate_default_output_paths`` fills in paths inside DIR. Nothing
+    creates DIR before the JSON dump, so the whole flow used to die on a
+    directory the operator hadn't pre-created."""
+    entry_point, args = _pipeline_args(tmp_path, monkeypatch)
+    out_dir = tmp_path / "brand" / "new" / "dir"
+    args.output_dir = str(out_dir)
+    args.output_csv = ''
+    args.input_lens = None
+    args.input_pvacseq = None
+    entry_point.populate_default_output_paths(args)
+    assert args.output_json_file == str(out_dir / "ranked_vaccine_peptides.json")
+
+    entry_point.ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
+
+    assert (out_dir / "ranked_vaccine_peptides.json").exists()
+
+
+def test_isovar_csv_creates_its_parent_directory(tmp_path, monkeypatch):
+    """``--output-isovar-csv`` is written from ``run_vaxrank_from_parsed_args``,
+    the earliest of the output writers."""
+    from unittest.mock import Mock
+    from vaxrank.cli import entry_point
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+
+    monkeypatch.setattr(entry_point, "variant_collection_from_args", lambda args: [])
+    monkeypatch.setattr(entry_point, "filter_unannotatable_variants", lambda v: v)
+    monkeypatch.setattr(entry_point, "alignment_file_from_args", lambda args: None)
+    monkeypatch.setattr(entry_point, "read_collector_from_args", lambda args: None)
+    monkeypatch.setattr(entry_point, "predictors_from_args", lambda args: [Mock()])
+    monkeypatch.setattr(entry_point, "run_isovar", lambda **kwargs: [])
+    monkeypatch.setattr(entry_point, "run_vaxrank", lambda **kwargs: kwargs)
+
+    target = tmp_path / "iso" / "nested" / "isovar.csv"
+    args = parse_vaxrank_args([
+        "--vcf", "unused.vcf", "--bam", "unused.bam",
+        "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+        "--output-isovar-csv", str(target),
+    ])
+    entry_point.run_vaxrank_from_parsed_args(args)
+
+    assert target.exists()

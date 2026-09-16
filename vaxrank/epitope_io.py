@@ -258,6 +258,7 @@ def save_predictions(epitopes, path):
     """
     df = predictions_to_dataframe(epitopes)
     sep = "\t" if str(path).endswith(".tsv") else ","
+    ensure_parent_dir(path)
     df.to_csv(path, sep=sep, index=False)
     logger.info("Saved %d native epitope row(s) to %s", len(df), path)
 
@@ -1408,17 +1409,26 @@ def annotate_credited_alleles(report_df, epitopes):
     return report_df
 
 
-def _ensure_parent_dir(path):
+def ensure_parent_dir(path):
     """Create the parent directory of an output file if it's missing.
 
-    pandas' ``to_csv`` / ``to_excel`` refuse to write into a
-    non-existent directory; mirror the vaccine writers, which already
-    ``os.makedirs`` their target dir, so ``--output-csv foo/bar.csv``
-    works without the user pre-creating ``foo/``.
+    pandas' ``to_csv`` / ``to_excel`` and plain ``open(path, 'w')``
+    refuse to write into a non-existent directory; mirror the vaccine
+    writers, which already ``os.makedirs`` their target dir, so
+    ``--output-csv foo/bar.csv`` (and every path auto-populated inside
+    a not-yet-created ``--output-dir``) works without the user
+    pre-creating the directory.
+
+    Missing intermediate components are created too, so a mistyped path
+    lands in a new tree rather than failing. That's the same trade the
+    construct writers already make, and it's why creation is logged: a
+    typo is then visible in the run log and the run summary instead of
+    being silent.
     """
     parent = os.path.dirname(path)
-    if parent:
+    if parent and not os.path.isdir(parent):
         os.makedirs(parent, exist_ok=True)
+        logger.info("Created output directory %s", parent)
 
 
 def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
@@ -1551,12 +1561,12 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     report_df.insert(0, 'rank', range(1, len(report_df) + 1))
 
     if csv_report_path:
-        _ensure_parent_dir(csv_report_path)
+        ensure_parent_dir(csv_report_path)
         report_df.to_csv(csv_report_path, index=False)
         logger.info('Wrote CSV neoepitope report to %s', csv_report_path)
 
     if excel_report_path:
-        _ensure_parent_dir(excel_report_path)
+        ensure_parent_dir(excel_report_path)
         writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
         report_df.to_excel(writer, sheet_name='Neoepitopes', index=False)
         worksheet = writer.sheets['Neoepitopes']
