@@ -294,3 +294,65 @@ def test_default_mrna_linker_is_unambiguous_and_canonical():
     linker = get_linker(args.mrna_linker)
     assert linker.amino_acids == "GGGGSGGGGS"
     assert len(linker.amino_acids) == 10
+
+
+def _template_data_for_args(args):
+    from vaxrank.patient_info import PatientInfo
+    from vaxrank.report import TemplateDataCreator
+
+    return TemplateDataCreator(
+        ranked_variants_with_vaccine_peptides=[],
+        patient_info=PatientInfo("TEST"),
+        final_review="",
+        reviewers="",
+        args_for_report=vars(args),
+        input_json_file=None,
+    ).compute_template_data()
+
+
+def _args_for_report_test():
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+
+    args = parse_vaxrank_args([
+        "--vcf", "dummy.vcf", "--bam", "dummy.bam",
+        "--mhc-predictor", "random", "--mhc-alleles", "HLA-A*02:01",
+        "--output-csv", "out.csv",
+    ])
+    assert "_parser_defaults" in vars(args), "test no longer exercises the leak"
+    args.manufacturability = True
+    return args
+
+
+def test_report_args_table_omits_internal_parser_state(tmp_path):
+    """``parse_vaxrank_args`` stashes the parser-defaults snapshot on the
+    namespace as ``_parser_defaults``; ``vars(args)`` is what the template
+    reports render as COMMAND LINE ARGUMENTS. That snapshot must not reach
+    the report — the dict's repr used to fill the first page of every HTML /
+    PDF report."""
+    from vaxrank.report import make_ascii_report, make_html_report
+
+    template_data = _template_data_for_args(_args_for_report_test())
+
+    assert "_parser_defaults" not in dict(template_data["args"])
+    for suffix, writer in (("html", make_html_report), ("txt", make_ascii_report)):
+        path = tmp_path / ("report." + suffix)
+        writer(template_data, path)
+        assert "_parser_defaults" not in path.read_text()
+
+
+def test_report_args_table_keeps_auto_wired_provenance():
+    """Dropping ``_parser_defaults`` must not take the auto-wired keys with
+    it. On the LENS / pVACseq path the MHC alleles are inferred from the
+    report rather than passed on the command line, and stashed as
+    ``_inferred_mhc_alleles_from_lens`` (vaxrank/cli/entry_point.py). The
+    console surfaces those in its own auto-wired block; a report of what
+    actually ran needs them for the same reason. An empty one means nothing
+    was wired, so it stays out."""
+    args = _args_for_report_test()
+    args._inferred_mhc_alleles_from_lens = ["HLA-A*02:01", "HLA-B*07:02"]
+    rows = dict(_template_data_for_args(args)["args"])
+    assert rows["_inferred_mhc_alleles_from_lens"] == ["HLA-A*02:01", "HLA-B*07:02"]
+
+    args._inferred_mhc_alleles_from_lens = []
+    rows = dict(_template_data_for_args(args)["args"])
+    assert "_inferred_mhc_alleles_from_lens" not in rows

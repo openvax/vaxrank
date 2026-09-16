@@ -1625,7 +1625,12 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
         'args': vars(args),
         'dna_vaf_by_variant': dna_vaf_by_variant,
     }
-    logger.info('About to save args: %s', data['args'])
+    # Console-level summary of the resolved arguments already went out
+    # through ``log_args_summary``; keep the raw namespace at DEBUG so
+    # it lands in --log-path for provenance without dumping a ~110-key
+    # dict (including the internal ``_parser_defaults`` snapshot) into
+    # the operator's terminal.
+    logger.debug('Saving args: %s', data['args'])
 
     # save JSON data if necessary. as of time of writing, vaxrank takes ~25 min to run,
     # most of which is core logic. the formatting is super fast, and it can
