@@ -24,7 +24,7 @@ reproduction of an undocumented historical ranking protocol.
 - The clinical HLA table is preserved verbatim in structured form. The null
   A*01:11N allele is not replaced or scored as an expressed allele. Computational
   A*01:01 homozygosity is recorded as a discrepant source claim, not adjudicated.
-- `netmhcpan42.tsv` contains **6,560 actual model rows for 656 peptides**, from
+- `netmhcpan42.tsv` contains **6,140 actual model rows for 614 peptides**, from
   NetMHCpan **4.2c**, `-BA`, five class-I alleles, lengths 8–11. Both binding
   and elution-score leaves are retained. Every requested RNA-context k-mer and
   position-aligned WT comparator is included before filtering. The manifest
@@ -39,6 +39,14 @@ python -m tests.data.osteosarc.selection_validation.generate_predictions --outpu
 ```
 
 The independent source records are never generated from prediction outputs.
+
+Regenerated on 2026-09-16 with Isovar 1.16.0 and Vaxrank 3.18.0 after the
+alignment-aware frame fix and fusion-adapter dependency update. All 11 RNA
+contexts, 614 requested peptides and 6,140 prediction values are unchanged
+from the preceding cache after matching peptide/allele/kind/occurrence keys.
+The newer mhctools records the explicit method name `netMHCpan-4.2` and a
+different row order; these are not changed model scores. The manifest records
+the actual new runtime versions, generation time and output checksum.
 
 ## Comparison configuration
 
