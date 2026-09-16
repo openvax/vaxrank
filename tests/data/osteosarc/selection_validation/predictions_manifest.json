@@ -25562,6 +25562,11 @@
   },
   "vaccine_config": {
     "combined_score_expr": "sqrt(n_rna_alt) * target_epitope_score",
+    "included_antigen_sources": [
+      "SNV",
+      "INDEL",
+      "FUSION"
+    ],
     "max_peptide_length": 25,
     "max_vaccine_peptides_per_variant": 1,
     "min_peptide_length": 25,

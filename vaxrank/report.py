@@ -383,7 +383,16 @@ class TemplateDataCreator(object):
             ('Top score', _sanitize(top_vaccine_peptide.combined_score)),
             ('Transcript IDs', ', '.join(antigen.transcript_ids) or '—'),
             ('Evidence source', antigen.tumor_specificity.evidence_source),
+            ('Tumor specificity status', antigen.tumor_specificity.status),
+            ('Tumor specificity rationale',
+             antigen.tumor_specificity.rationale_code or '—'),
+            ('Requires review',
+             'yes' if antigen.tumor_specificity.requires_review else 'no'),
         ])
+        if antigen.tumor_specificity.override_reason:
+            result['Override reason'] = (
+                antigen.tumor_specificity.override_reason
+            )
         if source_metadata.get('sequence_source'):
             result['Protein sequence source'] = source_metadata['sequence_source']
         return result

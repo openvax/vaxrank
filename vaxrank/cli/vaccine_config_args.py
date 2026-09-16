@@ -21,6 +21,7 @@ from ..config.loader import (
 )
 from ..manufacturability_config import ManufacturabilityConfig
 from ..vaccine_config import VaccineConfig
+from ..vaccine_config import LENS_ANTIGEN_SOURCES
 
 
 
@@ -69,6 +70,31 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
             f"(default: {default_vaccine_config.num_target_epitopes_to_keep})"
         ))
 
+    vaccine_peptide_group.add_argument(
+        "--include-antigen-source",
+        dest="included_antigen_sources",
+        action="append",
+        choices=sorted(LENS_ANTIGEN_SOURCES),
+        default=None,
+        help=(
+            "Add a LENS antigen source to construct ranking. Repeat for "
+            "multiple sources. SNV, INDEL, and FUSION are included by "
+            "default; SPLICE, CTA/SELF, and ERV require explicit inclusion."
+        ),
+    )
+    vaccine_peptide_group.add_argument(
+        "--exclude-antigen-source",
+        dest="excluded_antigen_sources",
+        action="append",
+        choices=sorted(LENS_ANTIGEN_SOURCES),
+        default=None,
+        help=(
+            "Remove a LENS antigen source from construct ranking. Repeat for "
+            "multiple sources. Exclusion wins if a source is both included "
+            "and excluded."
+        ),
+    )
+
 
 
     
@@ -107,6 +133,20 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
         )
     if args.num_epitopes_per_vaccine_peptide is not None:
         vaccine_config_kwargs["num_target_epitopes_to_keep"] = args.num_epitopes_per_vaccine_peptide
+    included_antigen_sources = getattr(args, "included_antigen_sources", None)
+    excluded_antigen_sources = getattr(args, "excluded_antigen_sources", None)
+    if included_antigen_sources or excluded_antigen_sources:
+        selected_sources = set(vaccine_config_kwargs.get(
+            "included_antigen_sources",
+            VaccineConfig().included_antigen_sources,
+        ))
+        selected_sources.update(included_antigen_sources or ())
+        selected_sources.difference_update(excluded_antigen_sources or ())
+        vaccine_config_kwargs["included_antigen_sources"] = tuple(
+            source
+            for source in sorted(LENS_ANTIGEN_SOURCES)
+            if source in selected_sources
+        )
 
     vaccine_config = msgspec.convert(vaccine_config_kwargs, VaccineConfig)
     return vaccine_config

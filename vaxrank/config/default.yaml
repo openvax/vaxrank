@@ -202,6 +202,15 @@ vaccine_peptides:
     - n_mutant_amino_acids
     - mutation_distance_from_edge
 
+  # LENS source categories admitted to vaccine-construct ranking. CTA/SELF,
+  # ERV, and SPLICE are visible in the neoepitope report but require an
+  # explicit opt-in because a source label alone does not establish a safe
+  # tumor-specific target or an exact translated junction.
+  included_antigen_sources:
+    - SNV
+    - INDEL
+    - FUSION
+
   # When true (legacy default), drop variants whose vaccine peptides cover
   # zero mutant epitopes from the report. Set false to keep every variant
   # for which any vaccine peptide could be assembled — useful when the

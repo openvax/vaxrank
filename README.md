@@ -782,6 +782,27 @@ both peptide and mRNA constructs. This path imports LENS's peptide predictions.
 It does not infer a coding frame or translate raw breakpoints when the upstream
 report has not supplied an established protein context.
 
+LENS `SPLICE`, `CTA/SELF`, and `ERV` rows are preserved in the neoepitope
+report but require an explicit opt-in before they enter construct ranking:
+
+```sh
+vaxrank --input-lens patient.lens.tsv \
+  --include-antigen-source SPLICE \
+  --include-antigen-source CTA/SELF \
+  --include-antigen-source ERV
+```
+
+`--exclude-antigen-source` removes a default or configured category (for
+example, `--exclude-antigen-source FUSION`). The same exact selection can be
+set with `vaccine_peptides.included_antigen_sources` in YAML. Splice targets
+retain their genomic junction, description, coding sequence, and RNA evidence;
+CTA/self targets retain gene, transcript, normal-tissue, mTEC, and expression
+evidence; ERV targets retain the ORF identifier and all `erv_*` evidence.
+Only caller-designated peptide intervals are targetable because these LENS
+rows do not state an exact amino-acid junction offset. CTA/self and ERV opt-ins
+are recorded as review-required tumor-specificity overrides, not as proof of
+sequence novelty or absence from normal tissue.
+
 For an upstream assembler that supplies the translated sequence and exact
 amino-acid junction, `VaccineAntigen.from_fusion_sequence(...)` records the
 junction as a zero-width target mask. `predict_epitopes(..., antigen=antigen)`
@@ -832,12 +853,13 @@ then filtered and ranked by:
 ### Data model
 
 Vaxrank's central data unit is the **VaccinePeptide** (VP) — one ranked
-candidate of "this is a vaccine peptide we should consider for this
-variant." A VP bundles:
+candidate of "this is a vaccine peptide we should consider for this antigen."
+A VP bundles:
 
-- a **`MutantProteinFragment`** — the SLP-style amino-acid sequence
-  with mutation positions, gene name, source variant, and the
-  ranking-driving expression metrics (`n_alt_reads`, etc.);
+- a source-agnostic **`VaccineAntigen`** — the amino-acid sequence,
+  targetable intervals, source provenance, and tumor-specificity attestation;
+- for ordinary SNV/indel antigens, a **`MutantProteinFragment`** with mutation
+  positions, gene name, source variant, and RNA evidence metrics;
 - a list of **`EpitopePrediction`** records — per-(k-mer, HLA-allele)
   MHC binding predictions, sorted into a mutant set (overlapping the
   mutation, drives ranking) and a wildtype set (cross-reactivity

@@ -407,6 +407,188 @@ def test_lens_fusion_identity_uses_both_breakpoints():
     assert lens_variant_id(base).startswith("FUSION:LEFT--RIGHT|")
 
 
+@pytest.mark.parametrize(
+    "antigen_source, fields, prefix",
+    [
+        (
+            "SPLICE",
+            {
+                "splice_coords": "chr1:10-20(+)",
+                "splice_description": "ENSG1:E1-E2",
+            },
+            "SPLICE:ENSG1:E1-E2|chr1:10-20(+)",
+        ),
+        (
+            "CTA/SELF",
+            {"origin_descriptor": "ENSG2:MAGEA1"},
+            "CTA/SELF:ENSG2:MAGEA1",
+        ),
+        (
+            "ERV",
+            {"erv_orf_id": "Hsap38.chr1.10.90.+"},
+            "ERV:Hsap38.chr1.10.90.+",
+        ),
+    ],
+)
+def test_lens_noncoordinate_source_identity(antigen_source, fields, prefix):
+    from vaxrank.external_prediction import lens_variant_id
+
+    row = {"antigen_source": antigen_source, "variant": None, **fields}
+
+    assert lens_variant_id(row).startswith(prefix)
+
+
+def test_lens_nonvariant_antigens_require_opt_in_and_retain_provenance():
+    from vaxrank.patient_info import PatientInfo
+    from vaxrank.report import TemplateDataCreator
+    from vaxrank.vaccine_antigen import (
+        ANTIGEN_KIND_CTA,
+        ANTIGEN_KIND_ERV,
+        ANTIGEN_KIND_SPLICE,
+        VaccineAntigen,
+    )
+
+    path = os.path.join(
+        DATA_DIR, "real_lens_subsets", "lens_v1.9_real_subset.tsv")
+    report = read_lens_report(path)
+    default_result = lens_ranking_result(report, list(report.epitopes))
+    assert not any(
+        isinstance(source, VaccineAntigen)
+        and source.kind in {
+            ANTIGEN_KIND_SPLICE, ANTIGEN_KIND_CTA, ANTIGEN_KIND_ERV,
+        }
+        for source, _ in default_result.ranked
+    )
+
+    options = ExternalConstructOptions(included_antigen_sources=(
+        "SNV", "INDEL", "FUSION", "SPLICE", "CTA/SELF", "ERV",
+    ))
+    result = lens_ranking_result(
+        report, list(report.epitopes), options=options)
+    antigens = [
+        source
+        for source, _ in result.ranked
+        if isinstance(source, VaccineAntigen)
+    ]
+    assert {antigen.kind for antigen in antigens} >= {
+        ANTIGEN_KIND_SPLICE, ANTIGEN_KIND_CTA, ANTIGEN_KIND_ERV,
+    }
+
+    splice = next(
+        antigen for antigen in antigens
+        if antigen.kind == ANTIGEN_KIND_SPLICE
+    )
+    splice_metadata = dict(splice.source_metadata)
+    assert splice_metadata["splice_coords"].startswith("chr")
+    assert splice_metadata["splice_description"]
+    assert splice_metadata["coding_sequence"]
+    assert splice.tumor_specificity.admits_construct
+    assert not splice.tumor_specificity.requires_review
+
+    cta = next(
+        antigen for antigen in antigens
+        if antigen.kind == ANTIGEN_KIND_CTA
+    )
+    cta_metadata = dict(cta.source_metadata)
+    assert cta.gene_id
+    assert cta.self_reference_excluded_gene_ids == (cta.gene_id,)
+    assert cta_metadata["origin_descriptor"]
+    assert cta_metadata["gene_tpm"]
+    assert cta_metadata["lens_rna_reads_covering_genomic_origin"]
+    assert cta.tumor_specificity.admits_construct
+    assert cta.tumor_specificity.requires_review
+    assert cta.tumor_specificity.override_reason == (
+        "explicit inclusion by antigen-source policy"
+    )
+
+    erv = next(
+        antigen for antigen in antigens
+        if antigen.kind == ANTIGEN_KIND_ERV
+    )
+    erv_metadata = dict(erv.source_metadata)
+    assert erv.source_identifier == erv_metadata["erv_orf_id"]
+    assert erv_metadata["erv_norm_exp_status"]
+    assert erv_metadata["erv_tumor_cpm"]
+    assert erv_metadata["rna_reads_supporting_protein_sequence"]
+    assert erv.tumor_specificity.requires_review
+
+    for source, peptides in result.ranked:
+        if not isinstance(source, VaccineAntigen):
+            continue
+        if source.kind not in {
+            ANTIGEN_KIND_SPLICE, ANTIGEN_KIND_CTA, ANTIGEN_KIND_ERV,
+        }:
+            continue
+        assert peptides[0].mutant_protein_fragment is None
+        assert peptides[0].target_epitopes
+        assert all(
+            epitope.overlaps_targetable
+            for epitope in peptides[0].target_epitopes
+        )
+        assert all(epitope.wt is None for epitope in peptides[0].epitopes)
+
+    report_pairs = [
+        pair for pair in result.ranked
+        if isinstance(pair[0], VaccineAntigen)
+        and pair[0].kind in {
+            ANTIGEN_KIND_SPLICE, ANTIGEN_KIND_CTA, ANTIGEN_KIND_ERV,
+        }
+    ]
+    template_data = TemplateDataCreator(
+        ranked_variants_with_vaccine_peptides=report_pairs,
+        patient_info=PatientInfo(patient_id="source-policy-test"),
+        final_review=None,
+        reviewers=None,
+        args_for_report={
+            "manufacturability": True,
+            "wt_epitopes": True,
+        },
+        input_json_file=None,
+    ).compute_template_data()
+    assert {section["effect_data"]["Antigen Source"] for section in (
+        template_data["variants"]
+    )} == {"SPLICE", "CTA/SELF", "ERV"}
+    by_kind = {
+        section["effect_data"]["Antigen Source"]: section
+        for section in template_data["variants"]
+    }
+    assert by_kind["CTA/SELF"]["variant_data"]["Requires review"] == "yes"
+    assert by_kind["ERV"]["variant_data"]["Requires review"] == "yes"
+    assert by_kind["SPLICE"]["variant_data"]["Requires review"] == "no"
+
+
+def test_lens_source_antigens_degrade_explicitly_without_ensembl_database():
+    class MissingEnsemblDatabase:
+        release = 102
+
+        def transcript_by_id(self, _transcript_id):
+            raise ValueError("GTF database needs to be created")
+
+        def transcripts(self):
+            raise ValueError("GTF database needs to be created")
+
+    path = os.path.join(
+        DATA_DIR, "real_lens_subsets", "lens_v1.9_real_subset.tsv")
+    report = read_lens_report(path)
+    result = lens_ranking_result(
+        report,
+        list(report.epitopes),
+        genome=MissingEnsemblDatabase(),
+        options=ExternalConstructOptions(
+            included_antigen_sources=("SPLICE",)
+        ),
+    )
+
+    assert result.ranked
+    for antigen, peptides in result.ranked:
+        assert antigen.kind == "splice"
+        assert all(
+            epitope.self_reference_match is not None
+            and not epitope.self_reference_match.source_provenance_complete
+            for epitope in peptides[0].epitopes
+        )
+
+
 # ---- Parametrized end-to-end coverage of every real LENS fixture --------
 
 _REAL_LENS_FIXTURES = sorted(glob.glob(
@@ -1860,9 +2042,14 @@ def test_external_input_parser_accepts_vaccine_peptide_flags():
         "--input-lens", "x.tsv",
         "--vaccine-peptide-length", "31",
         "--num-epitopes-per-vaccine-peptide", "2",
+        "--include-antigen-source", "SPLICE",
+        "--include-antigen-source", "CTA/SELF",
+        "--exclude-antigen-source", "FUSION",
     ])
     assert args.vaccine_peptide_length == 31
     assert args.num_epitopes_per_vaccine_peptide == 2
+    assert args.included_antigen_sources == ["SPLICE", "CTA/SELF"]
+    assert args.excluded_antigen_sources == ["FUSION"]
 
 
 # ---- code-review regressions ---------------------------------------------

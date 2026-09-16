@@ -330,6 +330,7 @@ _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.score_fraction_of_best", "score_fraction_of_best"),
     ("vaccine_peptides.combined_score_expr", "combined_score_expr"),
     ("vaccine_peptides.ranking_rules", "ranking_rules"),
+    ("vaccine_peptides.included_antigen_sources", "included_antigen_sources"),
     ("vaccine_peptides.require_target_epitopes_in_variant",
      "require_target_epitopes_in_variant"),
 ]
@@ -439,6 +440,13 @@ def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     # ``extract_manufacturability_config_kwargs``.
     if "ranking_rules" in kwargs and kwargs["ranking_rules"] is not None:
         kwargs["ranking_rules"] = tuple(kwargs["ranking_rules"])
+    if (
+        "included_antigen_sources" in kwargs
+        and kwargs["included_antigen_sources"] is not None
+    ):
+        kwargs["included_antigen_sources"] = tuple(
+            kwargs["included_antigen_sources"]
+        )
 
     # When preferred_peptide_length is set but min/max are not,
     # default them to match preferred so the range is consistent.

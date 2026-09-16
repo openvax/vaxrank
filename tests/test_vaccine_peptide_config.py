@@ -348,6 +348,67 @@ def test_vaccine_config_rejects_unknown_ranking_rule():
         VaccineConfig(ranking_rules=("not_a_real_rule",))
 
 
+def test_vaccine_config_validates_lens_antigen_source_policy():
+    from vaxrank.vaccine_config import (
+        DEFAULT_INCLUDED_ANTIGEN_SOURCES,
+        VaccineConfig,
+    )
+
+    assert (
+        VaccineConfig().included_antigen_sources
+        == DEFAULT_INCLUDED_ANTIGEN_SOURCES
+    )
+    with pytest.raises(ValueError, match="Unknown included_antigen_sources"):
+        VaccineConfig(included_antigen_sources=("SNV", "NOT_REAL"))
+    with pytest.raises(ValueError, match="must not contain duplicates"):
+        VaccineConfig(included_antigen_sources=("SNV", "SNV"))
+
+
+def test_included_antigen_sources_yaml_override(tmp_path):
+    import argparse
+    import yaml
+
+    from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
+    from vaxrank.config.loader import load_vaxrank_config
+
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.safe_dump({
+        "vaccine_peptides": {
+            "included_antigen_sources": ["SPLICE", "CTA/SELF", "ERV"],
+        },
+    }))
+    args = argparse.Namespace(
+        config=[str(cfg_path)],
+        config_set_overrides=None,
+        config_expr_overrides=None,
+        vaccine_peptide_length=None,
+        padding_around_mutation=None,
+        max_vaccine_peptides_per_mutation=None,
+        num_epitopes_per_vaccine_peptide=None,
+        included_antigen_sources=None,
+    )
+    merged = load_vaxrank_config(args)
+
+    assert vaccine_config_from_args(
+        args, merged_config=merged
+    ).included_antigen_sources == ("SPLICE", "CTA/SELF", "ERV")
+
+
+def test_antigen_source_cli_adds_and_removes_from_policy():
+    from vaxrank.cli.arg_parser import external_input_arg_parser
+    from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
+
+    args = external_input_arg_parser().parse_args([
+        "--input-lens", "x.tsv",
+        "--include-antigen-source", "SPLICE",
+        "--exclude-antigen-source", "FUSION",
+    ])
+
+    assert set(vaccine_config_from_args(args).included_antigen_sources) == {
+        "SNV", "INDEL", "SPLICE",
+    }
+
+
 # ── require_target_epitopes_in_variant ───────────────────────────────────────
 
 def test_vaccine_config_default_requires_target_epitopes():
@@ -474,7 +535,7 @@ def test_bundled_default_yaml_round_trips_to_default_configs(tmp_path):
         "max_peptide_length", "padding_around_mutation",
         "max_vaccine_peptides_per_variant", "num_target_epitopes_to_keep",
         "score_fraction_of_best", "combined_score_expr",
-        "require_target_epitopes_in_variant",
+        "included_antigen_sources", "require_target_epitopes_in_variant",
     ):
         assert getattr(vc, field) == getattr(vc_defaults, field), (
             f"default.yaml VaccineConfig drift: {field}")
