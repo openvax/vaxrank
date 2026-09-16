@@ -40,12 +40,13 @@ python -m tests.data.osteosarc.selection_validation.generate_predictions --outpu
 
 The independent source records are never generated from prediction outputs.
 
-Regenerated on 2026-09-16 with Isovar 1.16.0 and Vaxrank 3.18.0 after the
-alignment-aware frame fix and fusion-adapter dependency update. All 11 RNA
+Regenerated on 2026-09-16 with Isovar 1.17.0 and Vaxrank 3.18.1 after the
+read-identity correction and coordinated dependency update. All 11 RNA
 contexts, 614 requested peptides and 6,140 prediction values are unchanged
 from the preceding cache after matching peptide/allele/kind/occurrence keys.
-The newer mhctools records the explicit method name `netMHCpan-4.2` and a
-different row order; these are not changed model scores. The manifest records
+The regenerated cache has a different row order, not changed model scores.
+The H1-2 ONT T2 fixture here is distinct from the ambiguous bulk T0 fixture
+held out by the RNA-context tests. The manifest records
 the actual new runtime versions, generation time and output checksum.
 
 ## Comparison configuration

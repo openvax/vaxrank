@@ -39,11 +39,15 @@ expectations under Vaxrank #414.
 
 The small fixtures intentionally do not reproduce full-region read counts:
 ONT DYNC1H1 has 16 alternate names, but the 20-aa candidate has 11 compatible
-names and all full 25mer contexts have at most 9 (below 85% of 11). Bulk H1-2
-has three alternate read objects / two names; after mate merging its longest
-two-object-supported context is 24 aa. These produce no eligible default
-25-aa vaccine peptide. Explicitly permitting a shorter peptide is distinct
-from weakening either RNA support threshold (Vaxrank #419).
+names and all full 25mer contexts have at most 9 (below 85% of 11). With Isovar
+1.17.0, bulk H1-2 has only one unambiguous merged pair (two sequenced segments):
+a second template's read2 has competing primary `99M15D46M4S` and secondary
+`118M31S` allele calls and is retained as uncertain, not definitive alternate
+support (Isovar #264, Vaxrank #476). The unchanged two-observation floor yields
+no default protein. Explicit coverage-one reconstruction is a diagnostic
+opt-in; context-first ranking cannot bypass the absolute floor. A separate
+short-peptide test explicitly requests both coverage one and 24-aa context,
+without changing any defaults or claiming that RNA uncertainty was resolved.
 
 Tests check fixture integrity and build their small reference/BAM indices in
 temporary directories. They perform no network requests or model downloads.
