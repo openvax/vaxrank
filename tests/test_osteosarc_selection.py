@@ -107,7 +107,12 @@ def test_pinned_predictions_are_complete_real_model_outputs():
             % (name, recorded[name], requirement))
     assert metadata["predictor_name"] == "netMHCpan"
     assert metadata["predictor_version"] == "4.2c"
-    assert metadata["vaccine_config"] == msgspec.to_builtins(VaccineConfig())
+    # Compare the manifest to the JSON representation the generator writes.
+    # Immutable config tuples necessarily round-trip through JSON as lists.
+    expected_vaccine_config = json.loads(json.dumps(
+        msgspec.to_builtins(VaccineConfig())
+    ))
+    assert metadata["vaccine_config"] == expected_vaccine_config
     assert metadata["epitope_config"] == msgspec.to_builtins(EpitopeConfig())
     cache = CachedPredictor.from_topiary_output(str(DATA / "netmhcpan42.tsv"))
     assert cache.fallback is None

@@ -46,6 +46,11 @@ import pandas as pd
 from . import cells
 from .amino_acids import has_only_standard_amino_acids
 from .epitope_logic import slice_epitopes
+from .candidate_epitope import (
+    COMPARATOR_WT,
+    SOURCE_CLASS_MUTATION,
+    SOURCE_CLASS_SELF,
+)
 from .external_prediction import (
     _PVACSEQ_DNA_VAF_COLUMNS,
     _PVACSEQ_RNA_DEPTH_COLUMNS,
@@ -58,16 +63,24 @@ from .external_prediction import (
 from .external_report import GENOMIC_VARIANT_COLUMN, ExternalRecord
 from .mutant_protein_fragment import MutantProteinFragment
 from .ranking import DEFAULT_RANKING_RULES
+from .reference_proteome import self_reference_matches
 from .vaccine_antigen import (
+    ANTIGEN_KIND_CTA,
+    ANTIGEN_KIND_ERV,
     ANTIGEN_KIND_FUSION,
+    ANTIGEN_KIND_SPLICE,
     ATTESTATION_ADMITTED,
+    ATTESTATION_OVERRIDDEN,
     AminoAcidInterval,
     TargetableMask,
     TumorSpecificityAttestation,
     TumorSpecificityEvidence,
     VaccineAntigen,
 )
-from .vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
+from .vaccine_config import (
+    DEFAULT_COMBINED_SCORE_EXPR,
+    DEFAULT_INCLUDED_ANTIGEN_SOURCES,
+)
 from .vaccine_library import truncate_at_stop_codon
 from .vaccine_peptide import VaccinePeptide
 
@@ -844,6 +857,40 @@ def lens_fusion_metadata(fusion_id, group_rows, genome=None):
     )
 
 
+def lens_source_antigen_metadata(source_id, group_rows, genome=None):
+    """Aggregate filter-independent facts for a non-coordinate antigen."""
+    if not source_id:
+        return ExternalVariantEntry(unparseable=True)
+    transcript_ids = external_values(*(
+        value
+        for row in group_rows
+        for value in (
+            row.get("transcript_id"),
+            row.get("all_transcript_ids_encoding_peptide"),
+        )
+    ))
+    transcripts = resolve_external_transcripts(transcript_ids, genome)
+    has_protein_context = any(
+        bool(external_text(row.get("pep_context"))) for row in group_rows
+    )
+    has_rna_support = any(
+        counts[0] > 0 or counts[1] > 0
+        for counts in map(_read_counts_from_lens_row, group_rows)
+    ) or any(
+        not cells.missing(cells.first(
+            row, "tpm", "erv_tumor_cpm", "snaf_exp"
+        ))
+        for row in group_rows
+    )
+    return ExternalVariantEntry(
+        source=str(source_id),
+        had_transcript_ids=bool(transcript_ids),
+        resolved_transcript=bool(transcripts),
+        resolved_protein_context=has_protein_context,
+        has_rna_support=has_rna_support,
+    )
+
+
 @dataclasses.dataclass(frozen=True)
 class ExternalConstructOptions:
     """Everything the vaccine-config layer contributes to one construct.
@@ -862,6 +909,9 @@ class ExternalConstructOptions:
     manufacturability_thresholds: dict = dataclasses.field(
         default_factory=dict)
     manufacturability_rules: object = None
+    included_antigen_sources: tuple[str, ...] = (
+        DEFAULT_INCLUDED_ANTIGEN_SOURCES
+    )
 
     @classmethod
     def from_configs(cls, vaccine_config=None, manufacturability_config=None,
@@ -873,6 +923,7 @@ class ExternalConstructOptions:
             keep = num_target_epitopes_to_keep
             expr = None
             rules = None
+            included_sources = DEFAULT_INCLUDED_ANTIGEN_SOURCES
         else:
             length = (
                 vaccine_peptide_length
@@ -883,6 +934,7 @@ class ExternalConstructOptions:
                 else vaccine_config.num_target_epitopes_to_keep)
             expr = vaccine_config.combined_score_expr
             rules = vaccine_config.ranking_rules
+            included_sources = vaccine_config.included_antigen_sources
         if manufacturability_config is None:
             thresholds, mfg_rules = {}, None
         else:
@@ -895,6 +947,7 @@ class ExternalConstructOptions:
             ranking_rules=rules,
             manufacturability_thresholds=thresholds,
             manufacturability_rules=mfg_rules,
+            included_antigen_sources=tuple(included_sources),
         )
 
 
@@ -949,22 +1002,164 @@ def _fusion_partner(value):
     return gene, gene_id if separator else ""
 
 
-def lens_fusion_vaccine_entry(metadata, selection, options=None):
-    """Build a source-agnostic fusion antigen from one LENS context."""
+_LENS_ANTIGEN_KINDS = {
+    "FUSION": ANTIGEN_KIND_FUSION,
+    "SPLICE": ANTIGEN_KIND_SPLICE,
+    "CTA/SELF": ANTIGEN_KIND_CTA,
+    "ERV": ANTIGEN_KIND_ERV,
+}
+
+
+def _lens_source_metadata(row, antigen_source, *, sequence_source=""):
+    """Retain the source fields needed to audit a LENS antigen."""
+    names = {
+        "antigen_source",
+        "gene_detectable_normal_tissues",
+        "gene_expression",
+        "gene_id",
+        "gene_main_subcellular_location",
+        "gene_name",
+        "gene_tpm",
+        "gene_tpm_raw",
+        "all_gene_ids_encoding_peptide",
+        "all_gene_names_encoding_peptide",
+        "all_transcript_ids_encoding_peptide",
+        "lens_proportion_rna_reads_covering_genomic_origin_with_peptide_cds",
+        "lens_rna_reads_covering_genomic_origin",
+        "lens_rna_reads_covering_genomic_origin_with_peptide_cds",
+        "mean_mtec_num_reads",
+        "mean_mtec_tpm",
+        "median_mtec_num_reads",
+        "median_mtec_tpm",
+        "mtec_p95_tpm",
+        "norm_tissue_p95_tpm",
+        "origin_descriptor",
+        "primary_aln_rna_reads_covering_genomic_origin_with_peptide_cds",
+        "snaf_exp",
+        "source_sequence_name",
+        "stdev_mtec_num_reads",
+        "stdev_mtec_tpm",
+        "tpm",
+        "transcript_id",
+    }
+    if antigen_source == "FUSION":
+        names.update({"fusion_annotation", "fusion_id", "fusion_type"})
+    elif antigen_source == "SPLICE":
+        names.update({
+            "coding_sequence", "nt_context", "splice_coords",
+            "splice_description",
+        })
+    elif antigen_source == "ERV":
+        names.update(name for name in row if name.startswith("erv_"))
+    metadata = {
+        name: external_text(row.get(name))
+        for name in names
+        if external_text(row.get(name))
+    }
+    counts = _read_counts_from_lens_row(row)
+    rna_method, stated_sequence_source, rna_subject = (
+        _read_provenance_from_lens_row(row)
+    )
+    metadata.update({
+        name: value
+        for name, value in (
+            ("rna_reads_covering_source", str(counts[0]) if counts[0] else ""),
+            ("rna_reads_supporting_source", str(counts[1]) if counts[1] else ""),
+            ("rna_reads_supporting_protein_sequence",
+             str(counts[3]) if counts[3] else ""),
+            ("rna_evidence_method", rna_method),
+            ("rna_evidence_subject", rna_subject),
+            ("sequence_source", stated_sequence_source or sequence_source),
+        )
+        if value
+    })
+    if antigen_source == "FUSION":
+        left_gene, left_gene_id = _fusion_partner(
+            row.get("fusion_left_gene")
+        )
+        right_gene, right_gene_id = _fusion_partner(
+            row.get("fusion_right_gene")
+        )
+        metadata.update({
+            name: value
+            for name, value in (
+                ("left_breakpoint", external_text(
+                    row.get("fusion_left_breakpoint"))),
+                ("left_gene", left_gene),
+                ("left_gene_id", left_gene_id),
+                ("left_transcript", external_text(
+                    row.get("fusion_left_transcript"))),
+                ("right_breakpoint", external_text(
+                    row.get("fusion_right_breakpoint"))),
+                ("right_gene", right_gene),
+                ("right_gene_id", right_gene_id),
+                ("right_transcript", external_text(
+                    row.get("fusion_right_transcript"))),
+                ("rna_reads_covering_breakpoint",
+                 str(counts[0]) if counts[0] else ""),
+                ("rna_reads_supporting_fusion",
+                 str(counts[1]) if counts[1] else ""),
+            )
+            if value
+        })
+    metadata["antigen_source"] = antigen_source
+    return tuple(sorted(metadata.items()))
+
+
+def _lens_self_reference_matches(epitopes, antigen, genome):
+    """Resolve exact self when Ensembl is installed; stay explicit otherwise."""
+    peptides = tuple(dict.fromkeys(
+        epitope.sequence for epitope in epitopes
+    ))
+    try:
+        return self_reference_matches(peptides, antigen, genome)
+    except ValueError as error:
+        # External report mode can name an Ensembl release for annotation
+        # provenance even when pyensembl's local GTF database is absent.
+        # Transcript resolution already degrades to unresolved in that case;
+        # exact-self must do the same rather than making an otherwise usable
+        # LENS run fail.  The result remains provenance-incomplete, never a
+        # claim that the reference was exhaustively searched.
+        if "database needs to be created" not in str(error):
+            raise
+        logger.debug(
+            "Could not build exact-self provenance for LENS antigen %s: %s",
+            antigen.display_identifier,
+            error,
+        )
+        return {
+            peptide: antigen.self_reference_match(peptide, False)
+            for peptide in peptides
+        }
+
+
+def lens_source_antigen_vaccine_entry(
+        metadata, selection, genome=None, options=None):
+    """Build a typed LENS fusion, splice, CTA, or ERV antigen.
+
+    LENS identifies the caller-selected peptide but does not provide an exact
+    amino-acid junction offset for fusion or splice rows.  Consequently only
+    the supplied candidate intervals are marked targetable; this function
+    never infers a junction or expands targetability to the full context.
+    """
     if selection is None:
         return metadata
     options = source_agnostic_construct_options(
         options or ExternalConstructOptions())
     key = selection.representative.key
+    antigen_source = key.antigen_source.upper()
+    antigen_kind = _LENS_ANTIGEN_KINDS.get(antigen_source)
+    if antigen_kind is None:
+        return metadata
     peptide = truncate_at_stop_codon(key.peptide)
     context = truncate_at_stop_codon(key.source_sequence or key.peptide)
     if not peptide or not context:
         return metadata
     if not has_only_standard_amino_acids(context):
         logger.warning(
-            "Dropped LENS fusion construct %r: pep_context %r contains "
+            "Dropped LENS %s construct %r: pep_context %r contains "
             "non-standard residues (allowed: 20 canonical AAs).",
-            key.variant_id, context)
+            antigen_source, key.variant_id, context)
         return metadata
     start, end = peptide_offsets_in_context(peptide, context)
     if start is None:
@@ -974,78 +1169,126 @@ def lens_fusion_vaccine_entry(metadata, selection, options=None):
     window_start = start - new_start
     window_end = window_start + len(windowed)
     if context[window_start:window_end] != windowed:
-        raise ValueError("Could not locate the fusion SLP window in its context")
+        raise ValueError("Could not locate the antigen SLP window in its context")
     epitopes = slice_epitopes(selection.epitopes, window_start, window_end)
     if not epitopes:
         return metadata
 
     row = selection.representative.row
-    left_gene, left_gene_id = _fusion_partner(row.get("fusion_left_gene"))
-    right_gene, right_gene_id = _fusion_partner(row.get("fusion_right_gene"))
-    left_transcript = external_text(row.get("fusion_left_transcript"))
-    right_transcript = external_text(row.get("fusion_right_transcript"))
-    source_identifier = (
-        external_text(row.get("fusion_id"))
-        or key.variant_id
+    source_identifier = key.variant_id
+    gene_name = key.primary_gene_name or (
+        key.gene_names[0] if len(key.gene_names) == 1 else ""
     )
-    counts = _read_counts_from_lens_row(row)
-    rna_method, sequence_source, rna_subject = (
-        _read_provenance_from_lens_row(row))
-    source_metadata = tuple(
-        (name, value)
-        for name, value in (
-            ("fusion_id", source_identifier),
-            ("fusion_type", external_text(row.get("fusion_type"))),
-            ("fusion_annotation", external_text(row.get("fusion_annotation"))),
-            ("left_breakpoint", external_text(row.get("fusion_left_breakpoint"))),
-            ("left_gene", left_gene),
-            ("left_gene_id", left_gene_id),
-            ("left_transcript", left_transcript),
-            ("right_breakpoint", external_text(row.get("fusion_right_breakpoint"))),
-            ("right_gene", right_gene),
-            ("right_gene_id", right_gene_id),
-            ("right_transcript", right_transcript),
-            ("rna_reads_covering_breakpoint", str(counts[0]) if counts[0] else ""),
-            ("rna_reads_supporting_fusion", str(counts[1]) if counts[1] else ""),
-            ("rna_evidence_method", rna_method),
-            ("rna_evidence_subject", rna_subject),
-            ("sequence_source", sequence_source),
+    gene_id = external_text(row.get("gene_id")) or (
+        key.gene_ids[0] if len(key.gene_ids) == 1 else ""
+    )
+    transcript_ids = key.ordered_transcript_ids
+    if antigen_source == "FUSION":
+        left_gene, _left_gene_id = _fusion_partner(
+            row.get("fusion_left_gene")
         )
-        if value
+        right_gene, _right_gene_id = _fusion_partner(
+            row.get("fusion_right_gene")
+        )
+        gene_name = "::".join(
+            value for value in (left_gene, right_gene) if value
+        )
+        transcript_ids = external_values(
+            row.get("fusion_left_transcript"),
+            row.get("fusion_right_transcript"),
+            *transcript_ids,
+        )
+        source_identifier = (
+            external_text(row.get("fusion_id")) or source_identifier
+        )
+    elif antigen_source == "SPLICE":
+        source_identifier = (
+            external_text(row.get("splice_description"))
+            or external_text(row.get("splice_coords"))
+            or source_identifier
+        )
+    elif antigen_source == "CTA/SELF":
+        source_identifier = (
+            external_text(row.get("origin_descriptor"))
+            or gene_id
+            or gene_name
+            or source_identifier
+        )
+    elif antigen_source == "ERV":
+        source_identifier = (
+            external_text(row.get("erv_orf_id"))
+            or external_text(row.get("origin_descriptor"))
+            or source_identifier
+        )
+    source_metadata = _lens_source_metadata(
+        row,
+        antigen_source,
+        sequence_source="caller-supplied LENS pep_context",
     )
+    expression_derived = antigen_source in {"CTA/SELF", "ERV"}
+    evidence_kind = {
+        "FUSION": "caller_curated_fusion_neoantigen",
+        "SPLICE": "caller_curated_aberrant_splice_neoantigen",
+        "CTA/SELF": "caller_curated_CTA_self_expression",
+        "ERV": "caller_curated_ERV_expression",
+    }[antigen_source]
     antigen = VaccineAntigen(
-        kind=ANTIGEN_KIND_FUSION,
+        kind=antigen_kind,
         amino_acids=windowed,
         targetable_mask=TargetableMask(_merged_epitope_intervals(epitopes)),
         tumor_specificity=TumorSpecificityAttestation(
-            status=ATTESTATION_ADMITTED,
-            evidence_kind="caller_curated_fusion_neoantigen",
+            status=(
+                ATTESTATION_OVERRIDDEN
+                if expression_derived
+                else ATTESTATION_ADMITTED
+            ),
+            evidence_kind=evidence_kind,
             evidence_source="LENS report",
             patient_specific=True,
-            rationale_code="lens_fusion_neoantigen",
+            rationale_code="lens_%s_antigen" % antigen_kind,
+            requires_review=expression_derived,
+            override_reason=(
+                "explicit inclusion by antigen-source policy"
+                if expression_derived
+                else ""
+            ),
             evidence_records=(TumorSpecificityEvidence(
-                evidence_kind="fusion_peptide_context",
+                evidence_kind=evidence_kind,
                 evidence_source="LENS report",
                 subject_id=source_identifier,
                 patient_specific=True,
-                passed=True,
+                passed=None if expression_derived else True,
                 details=source_metadata,
             ),),
         ),
-        gene_name="::".join(
-            value for value in (left_gene, right_gene) if value),
-        transcript_ids=external_values(left_transcript, right_transcript),
+        self_reference_excluded_gene_ids=(
+            (gene_id,) if antigen_source == "CTA/SELF" and gene_id else ()
+        ),
+        gene_name=gene_name,
+        gene_id=gene_id,
+        transcript_ids=transcript_ids,
         species=key.species,
         source_identifier=source_identifier,
         source_metadata=source_metadata,
     )
+    self_matches = _lens_self_reference_matches(epitopes, antigen, genome)
+    source_class = (
+        SOURCE_CLASS_SELF
+        if antigen_source in {"CTA/SELF", "ERV"}
+        else SOURCE_CLASS_MUTATION
+    )
     epitopes = [
         dataclasses.replace(
             epitope,
+            comparators={
+                name: comparator
+                for name, comparator in epitope.comparators.items()
+                if name != COMPARATOR_WT
+            },
+            source_class=source_class,
             overlaps_mutation=False,
             overlaps_targetable=True,
-            self_reference_match=antigen.self_reference_match(
-                epitope.sequence, epitope.occurs_in_reference),
+            self_reference_match=self_matches[epitope.sequence],
         )
         for epitope in epitopes
     ]
@@ -1060,6 +1303,13 @@ def lens_fusion_vaccine_entry(metadata, selection, options=None):
         ranking_rules=options.ranking_rules,
     )
     return metadata
+
+
+def lens_fusion_vaccine_entry(metadata, selection, options=None, genome=None):
+    """Backward-compatible fusion wrapper around the typed source path."""
+    return lens_source_antigen_vaccine_entry(
+        metadata, selection, genome=genome, options=options
+    )
 
 
 def external_vaccine_peptide(variant, selection, context, mutant_start,
@@ -1146,8 +1396,10 @@ def lens_vaccine_entry(metadata, selection, genome=None, options=None):
     """Build one LENS vaccine peptide from a DSL-selected source window."""
     if selection is None:
         return metadata
-    if selection.representative.key.antigen_source.upper() == "FUSION":
-        return lens_fusion_vaccine_entry(metadata, selection, options=options)
+    if selection.representative.key.antigen_source.upper() in _LENS_ANTIGEN_KINDS:
+        return lens_source_antigen_vaccine_entry(
+            metadata, selection, genome=genome, options=options
+        )
     if metadata.variant is None:
         return metadata
     options = options or ExternalConstructOptions()
@@ -1267,23 +1519,31 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
 
     groups = {}
     n_skipped_empty_coords = 0
+    n_policy_excluded = 0
     # When a row has no variant_coords, the only sensible explanation
     # is a non-SNV / non-INDEL antigen kind (splice / fusion / ERV /
     # CTA-self / intron-retention). Verify that hypothesis instead of
     # asserting it — if any SNV / INDEL rows are missing coords, that's
     # an upstream bug worth surfacing distinctly.
     skipped_kinds = {}  # antigen_source value → count
+    policy_excluded_kinds = {}
     for r in rows:
         coords = r.get('variant')
         kind = external_text(r.get('antigen_source')).upper()
+        if kind and kind not in options.included_antigen_sources:
+            n_policy_excluded += 1
+            policy_excluded_kinds[kind] = (
+                policy_excluded_kinds.get(kind, 0) + 1
+            )
+            continue
         if coords is None or (
                 isinstance(coords, float) and pd.isna(coords)) or (
                 isinstance(coords, str) and (
                     not coords.strip() or coords.strip().lower() == 'nan')):
-            # Fusion identity lives in paired breakpoint columns rather than
-            # variant_coords. It is a first-class antigen source even though
-            # it cannot be represented by a single varcode.Variant.
-            if kind == 'FUSION' and lens_variant_id(r):
+            # Source identity lives outside variant_coords for these antigen
+            # categories. They are first-class construct sources when the
+            # explicit source-selection policy admits them.
+            if kind in _LENS_ANTIGEN_KINDS and lens_variant_id(r):
                 groups.setdefault(lens_variant_id(r), []).append(r)
                 continue
             n_skipped_empty_coords += 1
@@ -1298,6 +1558,11 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
     skipped_breakdown = ', '.join(
         "%s=%d" % (k, v) for k, v in sorted(
             skipped_kinds.items(), key=lambda kv: -kv[1]))
+    policy_excluded_breakdown = ', '.join(
+        "%s=%d" % (k, v) for k, v in sorted(
+            policy_excluded_kinds.items(), key=lambda kv: -kv[1]
+        )
+    )
     if n_skipped_empty_coords:
         # SNV / INDEL rows are *expected* to carry coords; flag them
         # separately so the user can chase upstream rather than assume
@@ -1322,6 +1587,10 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
         metadata = (
             lens_fusion_metadata(variant_id, group_rows, genome=genome)
             if antigen_source == 'FUSION'
+            else lens_source_antigen_metadata(
+                variant_id, group_rows, genome=genome
+            )
+            if antigen_source in _LENS_ANTIGEN_KINDS
             else lens_variant_metadata(variant_id, group_rows, genome=genome)
         )
         tally.add(lens_vaccine_entry(
@@ -1413,10 +1682,18 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
     # enter variant-based construct ranking, while fusion rows enter through
     # their paired-breakpoint antigen identity. Spelling that out here is what
     # makes the "skipped, then counted again" confusion go away.
-    n_construct_source_rows = len(rows) - n_skipped_empty_coords
+    n_construct_source_rows = (
+        len(rows) - n_skipped_empty_coords - n_policy_excluded
+    )
     n_variants_ranked = sum(1 for _v, vps in ranked if vps)
     kept_kinds = {
-        k: full_kinds.get(k, 0) - skipped_kinds.get(k, 0) for k in full_kinds}
+        k: (
+            full_kinds.get(k, 0)
+            - skipped_kinds.get(k, 0)
+            - policy_excluded_kinds.get(k.upper(), 0)
+        )
+        for k in full_kinds
+    }
     coord_breakdown = ', '.join(
         "%s=%d" % (k, kept_kinds[k]) for k in sorted(
             kept_kinds, key=lambda k: _antigen_kind_sort_key(k, kept_kinds[k]))
@@ -1444,6 +1721,13 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
             "  → %d non-coord row(s) (%s) are report-only — no genome "
             "placement, so excluded from construct ranking" % (
                 n_skipped_empty_coords, skipped_breakdown))
+    if n_policy_excluded:
+        funnel.append(
+            "  → %d row(s) (%s) excluded from construct ranking by "
+            "included_antigen_sources policy" % (
+                n_policy_excluded, policy_excluded_breakdown
+            )
+        )
     funnel.append("  note (SNV/INDEL anomalies): %s" % note)
     logger.info("\n".join(funnel))
 
