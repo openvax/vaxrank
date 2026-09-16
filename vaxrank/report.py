@@ -173,26 +173,33 @@ class TemplateDataCreator(object):
         # Show the *effective* run parameters, not the raw argparse
         # Namespace. We drop: output-path args (covered by the Inputs /
         # file listing), the argparse ``version`` SUPPRESS sentinel,
-        # internal config-plumbing keys, underscore-prefixed internal
-        # state that ``parse_vaxrank_args`` stashes on the namespace
-        # (``_parser_defaults`` is a ~110-key dict whose repr filled the
-        # first page of every PDF report), and any value that is unset
-        # (None / ''). A None here means "not set / inherits a default"
-        # — noise in a record of what actually ran, and the source of
-        # the confusing ``manufacturability: None`` / ``version:
-        # ==SUPPRESS==`` lines.
+        # internal config-plumbing keys, the ``_parser_defaults``
+        # snapshot that ``parse_vaxrank_args`` stashes on the namespace
+        # (a ~110-key dict whose repr filled the first page of every PDF
+        # report), and any value that is unset (None / ''). A None here
+        # means "not set / inherits a default" — noise in a record of
+        # what actually ran, and the source of the confusing
+        # ``manufacturability: None`` / ``version: ==SUPPRESS==`` lines.
         _internal_keys = {
             'version', 'config', 'config_set_overrides',
-            'config_expr_overrides',
+            'config_expr_overrides', '_parser_defaults',
         }
         args_to_display_in_report = {
             k: v for k, v in args_for_report.items()
             if not k.startswith("output")
-            and not k.startswith("_")
             and k not in _internal_keys
             and v is not None
             and v != ''
             and v != '==SUPPRESS=='
+            # Other underscore keys are state vaxrank wired up itself
+            # rather than state the user passed —
+            # ``_inferred_mhc_alleles_from_lens`` on the LENS / pVACseq
+            # path, where the alleles never appear on the command line.
+            # That belongs in a record of what ran, so keep it when
+            # something was actually inferred. Same rule
+            # ``log_args_summary`` applies to its auto-wired console
+            # block (vaxrank/cli/entry_point.py).
+            and (not k.startswith("_") or bool(v))
         }
 
         self.template_data = {
