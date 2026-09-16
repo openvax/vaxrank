@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="47" class="kicker">OSTEOSARCOMA COMPLEX-VARIANT RESULTS</text>
+<text x="32" y="84" class="title">Assembly changes what Vaxrank can claim</text>
+<text x="32" y="112" class="subtitle">Actual RNA reconstruction, translation, epitope prediction, and vaccine-selection outcomes</text>
+<rect x="32" y="139" width="1136" height="48" rx="8" fill="#dceefa"/>
+<text x="52" y="168" class="strong">A DNA event is not an antigen. Vaxrank requires a defensible mutant protein before ranking epitopes.</text>
+<text x="52" y="207" class="panel-title">VARIANT</text>
+<text x="480" y="207" class="panel-title">RNA / TRANSLATION EVIDENCE</text>
+<text x="1115" y="207" text-anchor="end" class="panel-title">VAXRANK OUTCOME</text>
+<rect x="32" y="215" width="1136" height="68" rx="7" fill="#dff4e9"/><text x="52" y="244" class="strong">PIP5K1A p.G474fs</text><text x="52" y="266" class="muted">Assembly-dependent frameshift indel</text><text x="480" y="255" class="body">ONT assembly: 3 ALT, 0 OTHER; 49-aa mutant protein </text><text x="1115" y="255" text-anchor="end" class="outcome" fill="#176b4d">SELECTED</text><rect x="32" y="298" width="1136" height="68" rx="7" fill="#fff2c2"/><text x="52" y="327" class="strong">H1-2 repetitive 15-nt deletion</text><text x="52" y="349" class="muted">Large in-frame deletion</text><text x="480" y="338" class="body">ONT assembly: 13 ALT, 2 OTHER; no passing target binder </text><text x="1115" y="338" text-anchor="end" class="outcome" fill="#755400">NO TARGET BINDER</text><rect x="32" y="381" width="1136" height="68" rx="7" fill="#fde9d5"/><text x="52" y="410" class="strong">ATP5MG::KMT2A</text><text x="52" y="432" class="muted">Structural variant / gene fusion</text><text x="480" y="421" class="body">One coding hypothesis; five donor-CDS-unavailable alternatives </text><text x="1115" y="421" text-anchor="end" class="outcome" fill="#8a4b16">HELD OUT</text><rect x="32" y="464" width="1136" height="68" rx="7" fill="#f8e3e7"/><text x="52" y="493" class="strong">TPST1::CRCP T2</text><text x="52" y="515" class="muted">Structural variant / gene fusion</text><text x="480" y="504" class="body">22 long reads rescue expression; CDS/frame remains unresolved </text><text x="1115" y="504" text-anchor="end" class="outcome" fill="#7a2938">NO TRANSLATION</text>
+<rect x="32" y="575" width="1136" height="91" rx="8" fill="#eef3f7"/>
+<text x="52" y="603" class="panel-title">PREDICTION CONTEXT</text>
+<text x="52" y="630" class="body">NetMHCpan 4.2c; patient class-I alleles: HLA-A*01:01, HLA-B*08:01, HLA-B*27:05, HLA-C*01:02, HLA-C*07:01</text>
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Generated 2026-09-16 from committed evidence records</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.18.2 | research use only</text>
+</svg>

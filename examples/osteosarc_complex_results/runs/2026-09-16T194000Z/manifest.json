@@ -1,0 +1,52 @@
+{
+  "combined_pdf": "vaxrank-complex-variant-results.pdf",
+  "created_utc": "2026-09-16T194000Z",
+  "page_count": 6,
+  "pages": [
+    {
+      "name": "summary",
+      "page": 1,
+      "png": "01-summary/result.png",
+      "svg": "01-summary/result.svg"
+    },
+    {
+      "name": "PIP5K1A-p-G474fs-ONT-T1",
+      "page": 2,
+      "png": "02-PIP5K1A-p-G474fs-ONT-T1/result.png",
+      "svg": "02-PIP5K1A-p-G474fs-ONT-T1/result.svg"
+    },
+    {
+      "name": "H1-2-15nt-deletion-ONT-T1",
+      "page": 3,
+      "png": "03-H1-2-15nt-deletion-ONT-T1/result.png",
+      "svg": "03-H1-2-15nt-deletion-ONT-T1/result.svg"
+    },
+    {
+      "name": "ATP5MG-KMT2A-T0",
+      "page": 4,
+      "png": "04-ATP5MG-KMT2A-T0/result.png",
+      "svg": "04-ATP5MG-KMT2A-T0/result.svg"
+    },
+    {
+      "name": "TPST1-CRCP-T2-long-read-rescue",
+      "page": 5,
+      "png": "05-TPST1-CRCP-T2-long-read-rescue/result.png",
+      "svg": "05-TPST1-CRCP-T2-long-read-rescue/result.svg"
+    },
+    {
+      "name": "provenance",
+      "page": 6,
+      "png": "06-provenance/result.png",
+      "svg": "06-provenance/result.svg"
+    }
+  ],
+  "png_dimensions": {
+    "height": 2280,
+    "width": 3600
+  },
+  "png_scale": 3,
+  "schema_version": 1,
+  "source_json": "/Users/iskander/code/vaxrank/examples/osteosarc_complex_results/source/results.json",
+  "source_json_sha256": "a6f14623d53cc2694be10d15810c59edc08a88938a98d86750848a24fe7e8b58",
+  "vaxrank_version": "3.18.2"
+}
