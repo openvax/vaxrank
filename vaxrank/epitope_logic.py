@@ -13,6 +13,7 @@
 
 import traceback
 import logging
+from collections.abc import Mapping
 from typing import Optional
 
 from mhctools.pred import Prediction
@@ -26,7 +27,9 @@ from .epitope_dsl import (
     build_filter_node, build_score_node, prediction_group_columns,
 )
 from .mutant_protein_fragment import MutantProteinFragment
-from .prediction_input import finite_prediction_value
+from .prediction_input import (
+    finite_prediction_value, physical_prediction_value,
+)
 from .candidate_epitope import (
     CandidateEpitope, SOURCE_CLASS_MUTATION, SOURCE_CLASS_SELF,
     candidate_epitopes_from_rows,
@@ -39,6 +42,41 @@ from .vaccine_antigen import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _measurement_context(row):
+    """Return a real mhctools context from a prediction frame, if present."""
+    context = row.get("measurement_context")
+    if isinstance(context, Mapping) or hasattr(context, "unit"):
+        return context
+    return None
+
+
+def _physical_value(row, kind):
+    """Recover the units-bearing value represented by a topiary row."""
+    context = _measurement_context(row)
+    raw_value = row.get("value")
+    if kind == "pMHC_affinity":
+        affinity = finite_prediction_value(row.get("affinity"))
+        if affinity is not None:
+            raw_value = affinity
+    return physical_prediction_value(kind, raw_value, context)
+
+
+def _prediction_from_row(row, *, peptide, score, percentile_rank):
+    """Rebuild one mhctools prediction without dropping value semantics."""
+    kind = row.get("kind") or "pMHC_affinity"
+    return Prediction(
+        kind=kind,
+        predictor_name=row.get("prediction_method_name", "") or "",
+        predictor_version=row.get("predictor_version", "") or "",
+        allele=row["allele"],
+        peptide=peptide,
+        value=_physical_value(row, kind),
+        score=score,
+        percentile_rank=percentile_rank,
+        measurement_context=_measurement_context(row),
+    )
 
 
 def slice_epitopes(epitopes, start_offset, end_offset):
@@ -327,15 +365,6 @@ def predict_epitopes(
             num_low_scoring += 1
             continue
 
-        # IC50 value: use the "affinity" column when present (affinity
-        # rows), otherwise fall back to "value". For non-affinity kinds
-        # (e.g. pMHC_presentation), both columns are legitimately NaN
-        # in the topiary frame — coerce to None so the Prediction
-        # carries an honest "no IC50" instead of a NaN poison pill.
-        ic50 = finite_prediction_value(row.get("affinity"))
-        if ic50 is None:
-            ic50 = finite_prediction_value(row.get("value"))
-
         percentile_rank = finite_prediction_value(row.get("percentile_rank"))
 
         # Resolve WT comparator only when the peptide overlaps the
@@ -368,39 +397,26 @@ def predict_epitopes(
                         'No prediction for too-short WT epitope %s: possible stop-loss variant',
                         wt_peptide)
             else:
-                wt_ic50 = finite_prediction_value(wt_row.get("affinity"))
-                if wt_ic50 is None:
-                    wt_ic50 = finite_prediction_value(wt_row.get("value"))
                 wt_score = finite_prediction_value(wt_row.get("score"))
                 if wt_score is None:
                     raise ValueError(
                         "Topiary WT prediction row is missing a finite score")
                 wt_percentile_rank = finite_prediction_value(
                     wt_row.get("percentile_rank"))
-                tool = row.get("prediction_method_name", "")
-                wt_pred = Prediction(
-                    kind=row.get("kind") or "pMHC_affinity",
-                    predictor_name=tool,
-                    predictor_version=row.get("predictor_version", "") or "",
-                    allele=row["allele"],
+                wt_pred = _prediction_from_row(
+                    wt_row,
                     peptide=wt_row["peptide"],
-                    value=wt_ic50,
                     score=wt_score,
                     percentile_rank=wt_percentile_rank,
                 )
 
-        tool = row.get("prediction_method_name", "")
         prediction_score = finite_prediction_value(row.get("score"))
         if prediction_score is None:
             raise ValueError(
                 "Topiary prediction row is missing a finite score")
-        mutant_pred = Prediction(
-            kind=row.get("kind") or "pMHC_affinity",
-            predictor_name=tool,
-            predictor_version=row.get("predictor_version", "") or "",
-            allele=row["allele"],
+        mutant_pred = _prediction_from_row(
+            row,
             peptide=peptide,
-            value=ic50,
             score=prediction_score,
             percentile_rank=percentile_rank,
         )

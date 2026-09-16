@@ -8,12 +8,10 @@
 
 Two layered guarantees:
 
-1. ``finite_prediction_value`` coerces NaN / Inf to ``None`` so
-   ``Prediction.value`` never carries NaN coming out of the topiary
-   frame. The topiary frame legitimately emits NaN in the ``value``
-   column for non-affinity kinds (``pMHC_presentation`` carries its
-   probability in ``score``, not ``value``); the producer must
-   normalize these on the way in or every downstream consumer pays.
+1. Prediction-input normalization coerces NaN / Inf to ``None`` and rejects
+   unitless generic values. ``pMHC_presentation`` carries its dimensionless
+   probability in ``score``, not in the units-bearing ``value`` field; older
+   caches duplicated it into both columns.
 
 2. ``cli.entry_point.serialize_json_nan_tolerant`` renders NaN / Inf as
    JSON ``null`` rather than crashing the writer. Defense in depth:
@@ -98,12 +96,13 @@ def _stub_topiary_predictions_df():
         'predictor_version': '2.1.1',
         'source_sequence_name': 'gene',
     })
-    # Presentation row — value/affinity NaN; score carries the signal
+    # Legacy caches duplicated the dimensionless presentation score into
+    # ``value``. It is finite, but it is not a physical quantity.
     rows.append({
         'peptide': 'KLQGHSAPV', 'peptide_length': 9,
         'peptide_offset': 0, 'allele': 'HLA-A*02:01',
         'kind': 'pMHC_presentation',
-        'value': float('nan'), 'affinity': float('nan'),
+        'value': 0.42, 'affinity': float('nan'),
         'score': 0.42, 'percentile_rank': 1.7,
         'prediction_method_name': 'mhcflurry',
         'predictor_version': '2.1.1',
@@ -113,9 +112,7 @@ def _stub_topiary_predictions_df():
 
 
 def test_predict_epitopes_does_not_emit_nan_value_for_presentation():
-    """Regression for #289: a topiary frame with NaN in ``value``
-    for ``pMHC_presentation`` rows must yield ``Prediction.value=None``,
-    not ``Prediction.value=NaN``."""
+    """Dimensionless presentation output stays in ``score``, not ``value``."""
     from topiary import TopiaryPredictor
     from varcode import Variant
 
@@ -163,8 +160,8 @@ def test_predict_epitopes_does_not_emit_nan_value_for_presentation():
         f'Expected no NaN in Prediction.value; found {len(nan_records)}: '
         f'{nan_records[:3]}')
 
-    # And the presentation prediction must come through as None (we
-    # dropped the NaN, we didn't replace it with the affinity value).
+    # The presentation prediction comes through as None: its finite legacy
+    # value is a score duplicate without a physical unit.
     presentation_preds = [
         p for e in epitopes for p in e.predictions_flat()
         if p.kind == 'pMHC_presentation']
@@ -173,6 +170,16 @@ def test_predict_epitopes_does_not_emit_nan_value_for_presentation():
         "pMHC_presentation rows should have value=None, not NaN")
     assert all(p.score == pytest.approx(0.42) for p in presentation_preds), (
         "pMHC_presentation rows should preserve Topiary's score")
+
+
+def test_physical_prediction_value_requires_known_units():
+    from vaxrank.prediction_input import physical_prediction_value
+
+    assert physical_prediction_value("pMHC_affinity", 50.0) == 50.0
+    assert physical_prediction_value("pMHC_presentation", 0.42) is None
+    assert physical_prediction_value(
+        "pMHC_presentation", 0.42,
+        {"unit": "arbitrary assay units"}) == 0.42
 
 
 # ---- serialize_json_nan_tolerant ---------------------------------------

@@ -49,6 +49,7 @@ from .external_report import (
     GENOMIC_VARIANT_COLUMN, ExternalRecord, ExternalReport,
 )
 from .native_serialization import from_native_json, to_native_json
+from .prediction_input import physical_prediction_value
 from .candidate_epitope import (
     SOURCE_CLASS_MUTATION, CandidateEpitope, candidate_epitopes_from_rows,
 )
@@ -324,7 +325,8 @@ def load_predictions(path):
             if score is None:
                 raise ValueError(
                     "Native epitope row is missing prediction_score")
-            value = optional_float(row.get("prediction_value"))
+            value = physical_prediction_value(
+                kind, optional_float(row.get("prediction_value")))
             prediction_peptide = string_or_empty(
                 row.get("prediction_peptide")) or peptide
         else:
@@ -365,7 +367,8 @@ def load_predictions(path):
                 peptide=(
                     string_or_empty(row.get("wt_prediction_peptide"))
                     or wt_peptide),
-                value=optional_float(row.get("wt_prediction_value")),
+                value=physical_prediction_value(
+                    wt_kind, optional_float(row.get("wt_prediction_value"))),
                 score=wt_score,
                 percentile_rank=optional_float(row.get("wt_percentile_rank")),
                 tcr=string_or_empty(row.get("wt_prediction_tcr", "")),
@@ -384,7 +387,8 @@ def load_predictions(path):
             wt = Prediction(
                 kind=kind, predictor_name=method,
                 predictor_version=version, allele=allele,
-                peptide=wt_peptide, value=wt_ic50, score=0.0,
+                peptide=wt_peptide,
+                value=physical_prediction_value(kind, wt_ic50), score=0.0,
                 percentile_rank=None,
             )
         attributions_raw = string_or_empty(
@@ -522,6 +526,7 @@ def _topiary_pvacseq_to_epitope_rows(rows):
                 or (value is None and score is None
                     and percentile_rank is None)):
             continue
+        value = physical_prediction_value(kind, value)
         mutant = Prediction(
             kind=kind, predictor_name=method, predictor_version=version,
             allele=allele, peptide=peptide, value=value,
@@ -537,6 +542,7 @@ def _topiary_pvacseq_to_epitope_rows(rows):
                 or wt_percentile_rank is not None):
             wt_method = cells.text(row.get("wt_prediction_method_name")) or method
             wt_version = cells.text(row.get("wt_predictor_version")) or version
+            wt_value = physical_prediction_value(kind, wt_value)
             wt = Prediction(
                 kind=kind, predictor_name=wt_method,
                 predictor_version=wt_version, allele=allele,
@@ -1146,6 +1152,7 @@ def read_lens_report(path, epitope_config=None):
             # Allele-scoped kinds. ``Prediction.score`` is required, so a
             # signal that only carries a percentile keeps a neutral 0.0
             # rather than discarding the percentile evidence.
+            value = physical_prediction_value(d.kind, value)
             mutant = Prediction(
                 kind=d.kind, predictor_name=d.tool,
                 predictor_version=d.version, allele=allele,

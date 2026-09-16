@@ -355,7 +355,8 @@ def test_allele_free_leaf_does_not_become_a_per_allele_score():
     def leaf(allele, kind):
         return Prediction(
             kind=kind, predictor_name="mhcflurry", predictor_version="2.1.1",
-            allele=allele, peptide="SIINFEKL", value=50.0, score=0.7)
+            allele=allele, peptide="SIINFEKL",
+            value=50.0 if kind == "pMHC_affinity" else None, score=0.7)
 
     [epitope] = candidate_epitopes_from_rows([
         {"peptide": "SIINFEKL", "source": "AASIINFEKLAA", "offset": 2,

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mhctools import Prediction
+from mhctools.pred import value_unit
 import pandas as pd
 import pytest
 from topiary import KIND_MHC_DEPENDENCE
@@ -22,8 +23,10 @@ from vaxrank.report import JINJA_ENVIRONMENT, TemplateDataCreator, epitope_repor
 def candidate(allele="HLA-A*02:01", kind="pMHC_affinity"):
     return CandidateEpitope(
         sequence="SIINFEKL", source_sequence="SIINFEKL", offset=0,
-        predictions=(Prediction(kind=kind, predictor_name="example", predictor_version="1",
-                                peptide="SIINFEKL", allele=allele, score=.3, value=100.),))
+        predictions=(Prediction(
+            kind=kind, predictor_name="example", predictor_version="1",
+            peptide="SIINFEKL", allele=allele, score=.3,
+            value=100. if value_unit(kind) else None),))
 
 
 @pytest.mark.parametrize("kind", [k for k, scope in KIND_MHC_DEPENDENCE.items() if scope == "single_allele"])

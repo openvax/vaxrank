@@ -761,20 +761,44 @@ def test_every_allele_free_kind_reaches_every_patient_allele(kind):
     emit them. No LENS fixture carries one, which is why nothing caught it.
     """
     from mhctools import Prediction
+    from mhctools.pred import (
+        MeasurementContext, PHYSICAL_VALUE_KINDS, canonical_kind,
+    )
 
     from vaxrank.candidate_epitope import CandidateEpitope
     from vaxrank.epitope_dsl import attach_per_allele_scores
 
     alleles = ("HLA-A*02:01", "HLA-B*07:02")
+    canonical = canonical_kind(kind)
+    kwargs = {}
+    if canonical in PHYSICAL_VALUE_KINDS:
+        units = {
+            "cellular_uptake": "pmol/mg",
+            "distribution_volume": "L/kg",
+            "systemic_clearance": "mL/min/kg",
+            "systemic_exposure": "nM*h",
+            "tissue_concentration": "nM",
+        }
+        kwargs.update(
+            value=1.0,
+            measurement_context=MeasurementContext(
+                estimate_type="ml_predicted", unit=units[canonical],
+                transform="linear"),
+        )
+    elif canonical == "cpp_classification":
+        kwargs["measurement_context"] = MeasurementContext(
+            estimate_type="ml_predicted", class_label="permeable",
+            score_semantics="probability")
     epitope = CandidateEpitope(
         sequence="SIINFEKL", offset=0, patient_alleles=alleles,
         predictions=(Prediction(
             kind=kind, score=0.8, peptide="SIINFEKL", allele="",
-            predictor_name="mhcflurry", predictor_version="2.1.1"),))
+            predictor_name="mhcflurry", predictor_version="2.1.1",
+            **kwargs),))
 
     [scored] = attach_per_allele_scores(
         [epitope],
-        EpitopeConfig(score_expr="%s[mhcflurry].score" % kind))
+        EpitopeConfig(score_expr="%s[mhcflurry].score" % canonical))
 
     assert dict(scored.per_allele_scores) == {a: 0.8 for a in alleles}
 

@@ -25,7 +25,7 @@ Pins:
 
 import pytest
 
-from mhctools.pred import Prediction
+from mhctools.pred import Prediction, value_unit
 
 from vaxrank.candidate_epitope import (
     COMPARATOR_NEAREST_SELF,
@@ -38,6 +38,8 @@ from vaxrank.candidate_epitope import (
 def _pred(kind, *, predictor='mhcflurry', version='', allele='HLA-A*02:01',
           score=0.7, value=100.0, percentile_rank=0.5):
     """Concise factory for an ``mhctools.Prediction``."""
+    if value_unit(kind) is None:
+        value = None
     return Prediction(
         kind=kind, predictor_name=predictor, predictor_version=version,
         allele=allele, peptide='SIINFEKL',
@@ -208,18 +210,13 @@ def test_predictions_flat_tiebreaker_for_duplicate_keys():
     assert [p.score for p in a.predictions_flat()] == [0.3, 0.5, 0.9]
 
 
-def test_predictions_flat_handles_nan_in_float_keys():
-    """mhctools sometimes emits NaN for ``percentile_rank``.
-    Python's ``sorted`` is undefined on NaN — wrap floats so
-    NaN-bearing entries sort consistently rather than producing
-    nondeterministic order."""
-    import math
-    nan = float('nan')
+def test_predictions_flat_handles_missing_float_keys():
+    """Missing numeric fields sort consistently and deterministically."""
     a = Peptide(
         sequence='SIINFEKL',
         predictions=(
             _pred('pMHC_affinity', allele='HLA-A*02:01',
-                  score=0.5, percentile_rank=nan),
+                  score=0.5, percentile_rank=None),
             _pred('pMHC_affinity', allele='HLA-B*07:02',
                   score=0.7, percentile_rank=2.5),
         ))
@@ -229,15 +226,14 @@ def test_predictions_flat_handles_nan_in_float_keys():
             _pred('pMHC_affinity', allele='HLA-B*07:02',
                   score=0.7, percentile_rank=2.5),
             _pred('pMHC_affinity', allele='HLA-A*02:01',
-                  score=0.5, percentile_rank=nan),
+                  score=0.5, percentile_rank=None),
         ))
     flat_a = a.predictions_flat()
     flat_b = b.predictions_flat()
     # Allele order matches between shuffled inputs.
     assert ([p.allele for p in flat_a]
             == [p.allele for p in flat_b])
-    # NaN-bearing entries didn't crash the sort.
-    assert any(math.isnan(p.percentile_rank) for p in flat_a)
+    assert any(p.percentile_rank is None for p in flat_a)
 
 
 # ---- Structured views --------------------------------------------------

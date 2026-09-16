@@ -400,14 +400,13 @@ def test_epitope_data_renders_missing_mutant_ic50_placeholder():
 
     creator = TemplateDataCreator.__new__(TemplateDataCreator)
     creator.processing_predictions_by_key = {}
-    for missing_value in (None, float('nan')):
-        epitope = _ep(
-            "SIINFEKL", "SSIINFEKL", offset=1, ic50=missing_value,
-            percentile_rank=None)
+    epitope = _ep(
+        "SIINFEKL", "SSIINFEKL", offset=1, ic50=None,
+        percentile_rank=None)
 
-        row = creator.epitope_data(epitope, epitope.best_affinity())
+    row = creator.epitope_data(epitope, epitope.best_affinity())
 
-        assert row['IC50'] == 'No prediction'
+    assert row['IC50'] == 'No prediction'
 
 
 def test_epitope_data_renders_missing_dsl_score_as_unavailable():
