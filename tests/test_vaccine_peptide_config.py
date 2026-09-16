@@ -120,9 +120,9 @@ def test_vaccine_peptide_sort_ignores_missing_ic50_values():
     """IC50 sorting should use finite affinity values and send
     missing-only epitopes to the end."""
     mixed_missing = _make_mutant_epitope_with_affinities(
-        [None, np.nan, 10.0], peptide="A" * 9)
+        [None, None, 10.0], peptide="A" * 9)
     finite = _make_mutant_epitope(ic50=50.0, peptide="C" * 9)
-    missing_only = _make_mutant_epitope(ic50=np.nan, peptide="D" * 9)
+    missing_only = _make_mutant_epitope(ic50=None, peptide="D" * 9)
 
     vp = VaccinePeptide(
         mutant_protein_fragment=_make_fragment(),

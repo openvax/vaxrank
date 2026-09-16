@@ -351,7 +351,7 @@ def test_native_roundtrip_preserves_arbitrary_comparators(tmp_path):
             predictor_version="2.1.1",
             allele="HLA-A*02:01",
             peptide="SIINFEKL",
-            value=0.85,
+            value=None,
             score=0.85,
             percentile_rank=0.28,
         ),
@@ -448,7 +448,7 @@ def test_native_roundtrip_preserves_unpaired_wt_prediction(tmp_path):
         predictor_version="2.1.1",
         allele="HLA-A*02:01",
         peptide="SIINFEKM",
-        value=0.4,
+        value=None,
         score=0.4,
         percentile_rank=4.8,
     )
