@@ -1,0 +1,43 @@
+{
+  "annotation_source": {
+    "gene_ids": "ENSG00000197102",
+    "gene_names": "DYNC1H1",
+    "transcript_ids": "ENST00000360184",
+    "transcript_names": "DYNC1H1-001"
+  },
+  "assembly_outcome": "confirmed",
+  "displayed_sequences": {
+    "annotation_only": "EKRESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLMKD",
+    "reference": "EKRESPEVLLTLDILKHGKRFHATVSFDTDTGLKQALETVNDYNPLMKD",
+    "rna_assembled": "EKRESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLMKD"
+  },
+  "figure_label": "DYNC1H1",
+  "figure_note": "T0 short-read RNA: assembly confirms p.Val314Ile",
+  "figure_rna_sample": "bulk_star_t0",
+  "figure_source_url": "https://osteosarc.com/variant/DYNC1H1-chr14-101980529/",
+  "num_alt_fragments": 6,
+  "num_fragments_supporting_top_protein_sequence": 6,
+  "num_other_fragments": 0,
+  "num_ref_fragments": 2,
+  "predicted_effect": "p.V314I",
+  "predicted_effect_gene_id": "ENSG00000197102",
+  "predicted_effect_gene_name": "DYNC1H1",
+  "predicted_effect_transcript_id": "ENST00000360184",
+  "predicted_effect_transcript_name": "DYNC1H1-001",
+  "protein_sequence": "EKRESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLMKD",
+  "protein_sequence_gene_ids": "ENSG00000197102",
+  "protein_sequence_gene_names": "DYNC1H1",
+  "protein_sequence_mutation_end_idx": 25,
+  "protein_sequence_mutation_start_idx": 24,
+  "protein_sequence_transcript_ids": "ENST00000360184",
+  "protein_sequence_transcript_names": "DYNC1H1-001",
+  "rna_assembly_source": {
+    "gene_ids": "ENSG00000197102",
+    "gene_names": "DYNC1H1",
+    "transcript_ids": "ENST00000360184",
+    "transcript_names": "DYNC1H1-001"
+  },
+  "trimmed_predicted_mutant_protein_sequence": "EKRESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLMKD",
+  "trimmed_reference_protein_sequence": "EKRESPEVLLTLDILKHGKRFHATVSFDTDTGLKQALETVNDYNPLMKD",
+  "variant": "chr14 g.101980529G>A"
+}

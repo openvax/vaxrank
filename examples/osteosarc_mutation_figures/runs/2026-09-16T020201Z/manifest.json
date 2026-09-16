@@ -1,0 +1,85 @@
+{
+  "created_utc": "2026-09-16T020201Z",
+  "figures": [
+    {
+      "directory": "DYNC1H1-chr14-g-101980529G-A",
+      "files": [
+        "DYNC1H1-chr14-g-101980529G-A/protein-context.svg",
+        "DYNC1H1-chr14-g-101980529G-A/protein-context.pdf",
+        "DYNC1H1-chr14-g-101980529G-A/protein-context.png",
+        "DYNC1H1-chr14-g-101980529G-A/record.json"
+      ],
+      "label": "DYNC1H1",
+      "variant": "chr14 g.101980529G>A"
+    },
+    {
+      "directory": "EXOC4-chr7-g-133274996G-T",
+      "files": [
+        "EXOC4-chr7-g-133274996G-T/protein-context.svg",
+        "EXOC4-chr7-g-133274996G-T/protein-context.pdf",
+        "EXOC4-chr7-g-133274996G-T/protein-context.png",
+        "EXOC4-chr7-g-133274996G-T/record.json"
+      ],
+      "label": "EXOC4",
+      "variant": "chr7 g.133274996G>T"
+    },
+    {
+      "directory": "H1-2-chr6-g-26055825-26055839delCCTTGGGCTTAGCGG",
+      "files": [
+        "H1-2-chr6-g-26055825-26055839delCCTTGGGCTTAGCGG/protein-context.svg",
+        "H1-2-chr6-g-26055825-26055839delCCTTGGGCTTAGCGG/protein-context.pdf",
+        "H1-2-chr6-g-26055825-26055839delCCTTGGGCTTAGCGG/protein-context.png",
+        "H1-2-chr6-g-26055825-26055839delCCTTGGGCTTAGCGG/record.json"
+      ],
+      "label": "H1-2",
+      "variant": "chr6 g.26055825_26055839delCCTTGGGCTTAGCGG"
+    },
+    {
+      "directory": "GTF3C5-chr9-g-133057894-133057905delGAGGAGGAGGAA",
+      "files": [
+        "GTF3C5-chr9-g-133057894-133057905delGAGGAGGAGGAA/protein-context.svg",
+        "GTF3C5-chr9-g-133057894-133057905delGAGGAGGAGGAA/protein-context.pdf",
+        "GTF3C5-chr9-g-133057894-133057905delGAGGAGGAGGAA/protein-context.png",
+        "GTF3C5-chr9-g-133057894-133057905delGAGGAGGAGGAA/record.json"
+      ],
+      "label": "GTF3C5",
+      "variant": "chr9 g.133057894_133057905delGAGGAGGAGGAA"
+    },
+    {
+      "directory": "MAP2-chr2-g-209694769-209694790delCTGGGCTACTGTGTGTTCAATA",
+      "files": [
+        "MAP2-chr2-g-209694769-209694790delCTGGGCTACTGTGTGTTCAATA/protein-context.svg",
+        "MAP2-chr2-g-209694769-209694790delCTGGGCTACTGTGTGTTCAATA/protein-context.pdf",
+        "MAP2-chr2-g-209694769-209694790delCTGGGCTACTGTGTGTTCAATA/protein-context.png",
+        "MAP2-chr2-g-209694769-209694790delCTGGGCTACTGTGTGTTCAATA/record.json"
+      ],
+      "label": "MAP2",
+      "variant": "chr2 g.209694769_209694790delCTGGGCTACTGTGTGTTCAATA"
+    },
+    {
+      "directory": "PIP5K1A-chr1-g-151242179-151242179delG",
+      "files": [
+        "PIP5K1A-chr1-g-151242179-151242179delG/protein-context.svg",
+        "PIP5K1A-chr1-g-151242179-151242179delG/protein-context.pdf",
+        "PIP5K1A-chr1-g-151242179-151242179delG/protein-context.png",
+        "PIP5K1A-chr1-g-151242179-151242179delG/record.json"
+      ],
+      "label": "PIP5K1A",
+      "variant": "chr1 g.151242179_151242179delG"
+    }
+  ],
+  "formats": [
+    "svg",
+    "pdf",
+    "png"
+  ],
+  "png_dimensions": {
+    "height": 2100,
+    "width": 3600
+  },
+  "png_scale": 3,
+  "schema_version": 1,
+  "source_csv": "examples/osteosarc_mutation_figures/source/osteosarc-isovar.csv",
+  "source_csv_sha256": "6f532a41422fb7f2a18600fc638822c4676edd425ae538e877202e2ee5370504",
+  "vaxrank_version": "3.17.4"
+}

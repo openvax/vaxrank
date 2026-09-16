@@ -69,5 +69,9 @@ if __name__ == "__main__":
         packages=find_packages(exclude=["tests", "tests.*"]),
         package_data={"vaxrank": [
             "templates/*", "data/*", "logging.conf", "config/*.yaml"]},
-        entry_points={"console_scripts": ["vaxrank = vaxrank.cli.entry_point:main"]},
+        entry_points={"console_scripts": [
+            "vaxrank = vaxrank.cli.entry_point:main",
+            "vaxrank-mutation-figure = vaxrank.cli.mutation_visualization:main",
+            "vaxrank-evidence-figure = vaxrank.cli.evidence_visualization:main",
+        ]},
     )

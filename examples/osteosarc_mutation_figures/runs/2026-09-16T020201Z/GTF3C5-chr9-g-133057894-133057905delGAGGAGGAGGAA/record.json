@@ -1,0 +1,43 @@
+{
+  "annotation_source": {
+    "gene_ids": "ENSG00000148308",
+    "gene_names": "GTF3C5",
+    "transcript_ids": "ENST00000372108",
+    "transcript_names": "GTF3C5-004"
+  },
+  "assembly_outcome": "refined",
+  "displayed_sequences": {
+    "annotation_only": "TYESGEDEEDEEEEEDFKPSDGSENEMET",
+    "reference": "TYESGEDEEDEEEEEEEEEDFKPSDGSEN",
+    "rna_assembled": "KEQLTYESGEDEEDEEEEEDFKPSDGSEN"
+  },
+  "figure_label": "GTF3C5",
+  "figure_note": "T1 long-read RNA: assembly resolves a repetitive glutamate deletion context",
+  "figure_rna_sample": "ont_t1",
+  "figure_source_url": "https://osteosarc.com/variant/GTF3C5-chr9-133057893/",
+  "num_alt_fragments": 13,
+  "num_fragments_supporting_top_protein_sequence": 7,
+  "num_other_fragments": 5,
+  "num_ref_fragments": 29,
+  "predicted_effect": "p.EEEE502del",
+  "predicted_effect_gene_id": "ENSG00000148308",
+  "predicted_effect_gene_name": "GTF3C5",
+  "predicted_effect_transcript_id": "ENST00000372108",
+  "predicted_effect_transcript_name": "GTF3C5-004",
+  "protein_sequence": "KEQLTYESGEDEEDEEEEEDFKPSDGSEN",
+  "protein_sequence_gene_ids": "ENSG00000148308",
+  "protein_sequence_gene_names": "GTF3C5",
+  "protein_sequence_mutation_end_idx": 15,
+  "protein_sequence_mutation_start_idx": 15,
+  "protein_sequence_transcript_ids": "ENST00000372108",
+  "protein_sequence_transcript_names": "GTF3C5-004",
+  "rna_assembly_source": {
+    "gene_ids": "ENSG00000148308",
+    "gene_names": "GTF3C5",
+    "transcript_ids": "ENST00000372108",
+    "transcript_names": "GTF3C5-004"
+  },
+  "trimmed_predicted_mutant_protein_sequence": "TYESGEDEEDEEEEEDFKPSDGSENEMET",
+  "trimmed_reference_protein_sequence": "TYESGEDEEDEEEEEEEEEDFKPSDGSEN",
+  "variant": "chr9 g.133057894_133057905delGAGGAGGAGGAA"
+}
