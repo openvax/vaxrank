@@ -46,6 +46,7 @@ def test_external_variant_entry_defaults_describe_an_empty_result():
     assert entry.vaccine_peptide is None
     assert entry.had_transcript_ids is False
     assert entry.resolved_transcript is False
+    assert entry.resolved_protein_context is False
     assert entry.annotation is None
     assert entry.dna_vaf is None
     assert entry.has_rna_support is False
@@ -294,6 +295,116 @@ def test_real_lens_v19_subset_produces_ranked_entries():
     assert len(ranked) > 0, (
         "Expected real LENS v1.9 fixture to produce a non-empty ranked "
         "list after the variant_coords parser fix")
+
+
+def test_real_lens_fusion_becomes_ranked_construct_with_provenance(tmp_path):
+    """A caller-resolved fusion is a real antigen, not an invalid Variant."""
+    from vaxrank.peptide import (
+        PeptideConstructConfig,
+        assemble_peptide_constructs,
+    )
+    from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
+    from vaxrank.patient_info import PatientInfo
+    from vaxrank.report import (
+        TemplateDataCreator,
+        make_ascii_report,
+        make_html_report,
+    )
+    from vaxrank.vaccine_antigen import (
+        ANTIGEN_KIND_FUSION,
+        VaccineAntigen,
+    )
+
+    path = os.path.join(
+        DATA_DIR, "real_lens_subsets", "lens_v1.9_real_subset.tsv")
+    report = read_lens_report(path)
+    result = lens_ranking_result(report, list(report.epitopes))
+    fusion_pairs = [
+        pair for pair in result.ranked
+        if isinstance(pair[0], VaccineAntigen)
+        and pair[0].kind == ANTIGEN_KIND_FUSION
+    ]
+
+    assert len(fusion_pairs) == 1
+    antigen, [peptide] = fusion_pairs[0]
+    metadata = dict(antigen.source_metadata)
+    assert antigen.source_identifier == "ANKLE2--CRY1"
+    assert antigen.gene_name == "ANKLE2::CRY1"
+    assert set(antigen.transcript_ids) == {
+        "ENST00000357997.10", "ENST00000008527.10"}
+    assert metadata["left_breakpoint"] == "chr12:132761618:-"
+    assert metadata["right_breakpoint"] == "chr12:107022192:-"
+    assert metadata["fusion_type"] == "FRAMESHIFT"
+    assert metadata["sequence_source"] == "lens_pep_context"
+    assert peptide.mutant_protein_fragment is None
+    assert peptide.combined_score == peptide.target_epitope_score
+    assert peptide.target_epitopes
+    assert all(epitope.overlaps_targetable for epitope in peptide.target_epitopes)
+    assert all(not epitope.overlaps_mutation for epitope in peptide.epitopes)
+    assert all(epitope.wt is None for epitope in peptide.epitopes)
+
+    constructs = assemble_peptide_constructs(
+        fusion_pairs, options=PeptideConstructConfig(mode="slp"))
+    assert len(constructs) == 1
+    assert constructs[0].antigen_names == ["ANKLE2::CRY1 (fusion)"]
+    assert constructs[0].sequence in antigen.amino_acids
+
+    mrna_constructs = assemble_mrna_constructs(
+        fusion_pairs,
+        options=RNAConstructConfig(
+            signal_peptide=None,
+            include_mitd=False,
+            utr_3p="HBB",
+            poly_a_length=10,
+            antigens_per_construct=1,
+            max_constructs=1,
+            max_antigen_length_aa=25,
+            optimize_linkers=False,
+        ),
+    )
+    assert len(mrna_constructs) == 1
+    assert mrna_constructs[0].antigen_names == ["ANKLE2::CRY1 (fusion)"]
+
+    creator = TemplateDataCreator(
+        ranked_variants_with_vaccine_peptides=fusion_pairs,
+        patient_info=PatientInfo(patient_id="fusion-test"),
+        final_review=None,
+        reviewers=None,
+        args_for_report={
+            "manufacturability": True,
+            "wt_epitopes": True,
+            "vaccine_type": ["peptide", "mrna"],
+        },
+        input_json_file=None,
+    )
+    template_data = creator.compute_template_data()
+    [fusion_section] = template_data["variants"]
+    assert fusion_section["entity_label"] == "Antigen"
+    assert fusion_section["effect_label"] == "Source provenance"
+    assert fusion_section["effect_data"]["Left Breakpoint"] == (
+        "chr12:132761618:-")
+    for writer, suffix in ((make_ascii_report, "txt"), (make_html_report, "html")):
+        output_path = tmp_path / ("fusion-report." + suffix)
+        writer(template_data, output_path)
+        rendered = output_path.read_text()
+        assert "ANKLE2--CRY1" in rendered
+        assert "chr12:132761618:-" in rendered
+
+
+def test_lens_fusion_identity_uses_both_breakpoints():
+    from vaxrank.external_prediction import lens_variant_id
+
+    base = {
+        "antigen_source": "FUSION",
+        "variant": None,
+        "fusion_id": "LEFT--RIGHT",
+        "fusion_left_breakpoint": "chr1:100:+",
+        "fusion_right_breakpoint": "chr2:200:-",
+    }
+    shifted = dict(base, fusion_right_breakpoint="chr2:201:-")
+
+    assert lens_variant_id(base) != lens_variant_id(shifted)
+    assert lens_variant_id(base).startswith("FUSION:LEFT--RIGHT|")
 
 
 # ---- Parametrized end-to-end coverage of every real LENS fixture --------
@@ -839,10 +950,11 @@ def test_lens_pep_context_with_stop_codon_truncates():
     predictions = list(_loaded.epitopes)
     _ranking = lens_ranking_result(_loaded, predictions)
     ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
-    # No fragment carries a '*' or a non-standard residue.
+    # No construct window carries a '*' or a non-standard residue. Fusion
+    # antigens deliberately have no fake MutantProteinFragment.
     for _, peptides in ranked:
         for vp in peptides:
-            assert '*' not in vp.mutant_protein_fragment.amino_acids
+            assert '*' not in vp.amino_acids
 
 
 def test_truncate_at_stop_codon_helper():

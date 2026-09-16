@@ -10,7 +10,7 @@ Package version info
 
 {% if variants %}
 === Antigen ranking ===
-Per-variant ranked antigen windows by combined_score. Modality-agnostic;
+Per-antigen ranked windows by combined_score. Modality-agnostic;
 modality-specific decisions (which antigens land in the vaccine, the
 manufacturability tuple, allele coverage) are in the
 {% if vaccine_constructions %}"Vaccine construction" sections below.{% else %}per-modality reports (peptide/, mrna/).{% endif %}

@@ -36,6 +36,7 @@ from .varcode_effects import (
     is_multi_outcome_effect,
     summarize_varcode_effect_outcomes,
 )
+from .vaccine_antigen import ANTIGEN_KIND_MUTATION
 
 logger = logging.getLogger(__name__)
 
@@ -257,17 +258,33 @@ class TemplateDataCreator(object):
         # plugged in via the same flat record fields would
         # show its own name here.
         patient_info['Processing predictor'] = PEPSICKLE_PREDICTOR_NAME
-        patient_info['Total number of somatic variants'] = (
-            self.patient_info.num_somatic_variants)
-        patient_info['Somatic variants with predicted coding effects'] = (
-            self.patient_info.num_coding_effect_variants)
-        patient_info[
-            'Somatic variants with predicted coding effects and RNA support'
-        ] = self.patient_info.num_variants_with_rna_support
-        patient_info[
-            'Somatic variants with predicted coding effects, RNA support and '
-            'predicted MHC ligands'
-        ] = self.patient_info.num_variants_with_vaccine_peptides
+        has_nonmutation_antigen = any(
+            getattr(getattr(peptide, 'antigen', None), 'kind',
+                    ANTIGEN_KIND_MUTATION) != ANTIGEN_KIND_MUTATION
+            for _source, peptides in self.ranked_variants_with_vaccine_peptides
+            for peptide in peptides[:1]
+        )
+        if has_nonmutation_antigen:
+            patient_info['Total number of input antigens'] = (
+                self.patient_info.num_somatic_variants)
+            patient_info['Input antigens with resolved protein context'] = (
+                self.patient_info.num_coding_effect_variants)
+            patient_info['Input antigens with RNA support'] = (
+                self.patient_info.num_variants_with_rna_support)
+            patient_info['Input antigens with predicted MHC ligands'] = (
+                self.patient_info.num_variants_with_vaccine_peptides)
+        else:
+            patient_info['Total number of somatic variants'] = (
+                self.patient_info.num_somatic_variants)
+            patient_info['Somatic variants with predicted coding effects'] = (
+                self.patient_info.num_coding_effect_variants)
+            patient_info[
+                'Somatic variants with predicted coding effects and RNA support'
+            ] = self.patient_info.num_variants_with_rna_support
+            patient_info[
+                'Somatic variants with predicted coding effects, RNA support and '
+                'predicted MHC ligands'
+            ] = self.patient_info.num_variants_with_vaccine_peptides
         return patient_info
 
     def _variant_data(self, variant, top_vaccine_peptide):
@@ -355,6 +372,33 @@ class TemplateDataCreator(object):
                 mutant_protein_fragment.sequence_source)
         return variant_data
 
+    def _antigen_data(self, top_vaccine_peptide):
+        """Report summary for a source that is not a single-locus variant."""
+        antigen = top_vaccine_peptide.antigen
+        source_metadata = dict(antigen.source_metadata)
+        result = OrderedDict([
+            ('Antigen source', antigen.kind),
+            ('Gene name', antigen.display_gene_name),
+            ('Source identifier', antigen.display_identifier),
+            ('Top score', _sanitize(top_vaccine_peptide.combined_score)),
+            ('Transcript IDs', ', '.join(antigen.transcript_ids) or '—'),
+            ('Evidence source', antigen.tumor_specificity.evidence_source),
+        ])
+        if source_metadata.get('sequence_source'):
+            result['Protein sequence source'] = source_metadata['sequence_source']
+        return result
+
+    @staticmethod
+    def _antigen_effect_data(antigen):
+        """Render caller provenance where a varcode effect does not exist."""
+        result = OrderedDict([
+            ('Effect type', antigen.kind),
+            ('Source identifier', antigen.display_identifier),
+        ])
+        for name, value in antigen.source_metadata:
+            result[name.replace('_', ' ').title()] = value
+        return result
+
     def effect_data(self, predicted_effect, selected_effect=None):
         """OrderedDict with info about the given varcode effect.
 
@@ -396,9 +440,15 @@ class TemplateDataCreator(object):
           Rank of vaccine peptide in list
         """
         mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
-        amino_acids = mutant_protein_fragment.amino_acids
-        mutation_start = mutant_protein_fragment.mutant_amino_acid_start_offset
-        mutation_end = mutant_protein_fragment.mutant_amino_acid_end_offset
+        if mutant_protein_fragment is None:
+            amino_acids = vaccine_peptide.antigen.amino_acids
+            targetable_span = vaccine_peptide.antigen.targetable_span()
+            mutation_start = targetable_span.start
+            mutation_end = targetable_span.end
+        else:
+            amino_acids = mutant_protein_fragment.amino_acids
+            mutation_start = mutant_protein_fragment.mutant_amino_acid_start_offset
+            mutation_end = mutant_protein_fragment.mutant_amino_acid_end_offset
         aa_before_mutation = amino_acids[:mutation_start]
         aa_mutant = amino_acids[mutation_start:mutation_end]
         aa_after_mutation = amino_acids[mutation_end:]
@@ -424,6 +474,22 @@ class TemplateDataCreator(object):
             RNA transcript name (should match that displayed in effect section)
         """
         mutant_protein_fragment = vaccine_peptide.mutant_protein_fragment
+        if mutant_protein_fragment is None:
+            antigen = vaccine_peptide.antigen
+            targetable_span = antigen.targetable_span()
+            return OrderedDict([
+                ('Transcript name', transcript_name),
+                ('Length', len(antigen.amino_acids)),
+                ('Target epitope score', _sanitize(
+                    vaccine_peptide.target_epitope_score)),
+                ('Combined score', _sanitize(vaccine_peptide.combined_score)),
+                ('Targetable amino acids', sum(
+                    interval.end - interval.start
+                    for interval in antigen.targetable_mask.intervals)),
+                ('Targetable distance from edge', min(
+                    targetable_span.start,
+                    len(antigen.amino_acids) - targetable_span.end)),
+            ])
         amino_acids = mutant_protein_fragment.amino_acids
         peptide_data = OrderedDict([
             ('Transcript name', transcript_name),
@@ -679,30 +745,48 @@ class TemplateDataCreator(object):
         variants = []
         num = 0
         for (variant, vaccine_peptides) in self.ranked_variants_with_vaccine_peptides:
-            variant_short_description = variant.short_description
             if len(vaccine_peptides) == 0:
                 try:
                     gene_names = variant.gene_names
-                except ValueError:
+                except (AttributeError, ValueError):
                     gene_names = ["(unknown — invalid contig)"]
+                source_description = (
+                    getattr(variant, 'short_description', None)
+                    or getattr(variant, 'display_identifier', None)
+                    or str(variant))
                 logger.info(
-                    "Skipping gene(s) %s, variant %s: no vaccine peptides",
-                    gene_names, variant_short_description)
+                    "Skipping gene(s) %s, source %s: no vaccine peptides",
+                    gene_names, source_description)
                 continue
             num += 1
 
             top_peptide = vaccine_peptides[0]
-            variant_data = self._variant_data(variant, top_peptide)
             mutant_protein_fragment = top_peptide.mutant_protein_fragment
-            predicted_effect = mutant_protein_fragment.predicted_effect()
-            predicted_effect_outcomes = mutant_protein_fragment.predicted_effect(
-                outcome_selection=OUTCOME_SELECTION_MULTI_OUTCOME)
-            effect_data = self.effect_data(
-                predicted_effect_outcomes,
-                selected_effect=predicted_effect)
-
-            databases = self._databases(
-                variant, predicted_effect, mutant_protein_fragment.gene_name)
+            antigen = getattr(top_peptide, 'antigen', None)
+            if antigen is None or antigen.kind == ANTIGEN_KIND_MUTATION:
+                variant_short_description = variant.short_description
+                variant_data = self._variant_data(variant, top_peptide)
+                predicted_effect = mutant_protein_fragment.predicted_effect()
+                predicted_effect_outcomes = mutant_protein_fragment.predicted_effect(
+                    outcome_selection=OUTCOME_SELECTION_MULTI_OUTCOME)
+                effect_data = self.effect_data(
+                    predicted_effect_outcomes,
+                    selected_effect=predicted_effect)
+                databases = self._databases(
+                    variant, predicted_effect, mutant_protein_fragment.gene_name)
+                transcript_name = (
+                    predicted_effect.transcript_name
+                    if predicted_effect is not None else '—')
+                entity_label = 'Variant'
+                effect_label = 'Predicted Effect'
+            else:
+                variant_short_description = antigen.display_identifier
+                variant_data = self._antigen_data(top_peptide)
+                effect_data = self._antigen_effect_data(antigen)
+                databases = {}
+                transcript_name = ', '.join(antigen.transcript_ids) or '—'
+                entity_label = 'Antigen'
+                effect_label = 'Source provenance'
 
             peptides = []
             for j, vaccine_peptide in enumerate(vaccine_peptides):
@@ -711,9 +795,6 @@ class TemplateDataCreator(object):
                     continue
 
                 header_display_data = self._peptide_header_display_data(vaccine_peptide, j)
-                transcript_name = (
-                    predicted_effect.transcript_name
-                    if predicted_effect is not None else '—')
                 peptide_data = self._peptide_data(vaccine_peptide, transcript_name)
                 manufacturability_data = self._manufacturability_data(vaccine_peptide)
 
@@ -801,6 +882,8 @@ class TemplateDataCreator(object):
             variant_dict = {
                 'num': num,
                 'short_description': variant_short_description,
+                'entity_label': entity_label,
+                'effect_label': effect_label,
                 'variant_data': variant_data,
                 'effect_data': effect_data,
                 'peptides': peptides,

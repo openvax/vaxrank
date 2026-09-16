@@ -37,6 +37,7 @@ from .candidate_epitope import (
 from .reference_proteome import ReferenceProteome, self_reference_matches
 from .vaccine_antigen import (
     ANTIGEN_KIND_CTA,
+    ANTIGEN_KIND_FUSION,
     ANTIGEN_KIND_MUTATION,
     VaccineAntigen,
 )
@@ -150,7 +151,8 @@ def predict_epitopes(
             "Mutation antigen prediction requires a mutation fragment for "
             "WT comparator coordinates"
         )
-    if antigen.kind not in {ANTIGEN_KIND_MUTATION, ANTIGEN_KIND_CTA}:
+    if antigen.kind not in {
+            ANTIGEN_KIND_MUTATION, ANTIGEN_KIND_FUSION, ANTIGEN_KIND_CTA}:
         raise NotImplementedError(
             f"Prediction for {antigen.kind!r} antigens is not implemented"
         )
@@ -163,7 +165,7 @@ def predict_epitopes(
     )
     source_class = (
         SOURCE_CLASS_MUTATION
-        if antigen.kind == ANTIGEN_KIND_MUTATION
+        if antigen.kind in {ANTIGEN_KIND_MUTATION, ANTIGEN_KIND_FUSION}
         else SOURCE_CLASS_SELF
     )
 
