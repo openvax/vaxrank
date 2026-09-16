@@ -1,0 +1,36 @@
+{
+  "decision_reason": "DNA and 22 long reads support the junction, but the donor joins before its annotated CDS; no defensible fusion protein exists.",
+  "dna_only": "The rearrangement is real enough to investigate, but a breakpoint is not a coding transcript and does not define a junction-spanning antigen.",
+  "epitope_message": "Not predicted because no translated sequence exists.",
+  "id": "TPST1-CRCP-T2-long-read-rescue",
+  "interpretation": "This is a genuine long-read rescue of expression, not a Vaxrank antigen. The protein and peptide claims remain withheld until the coding frame is established.",
+  "limitation": "No translated sequence means no epitope prediction or vaccine ranking is scientifically valid.",
+  "outcome": "no_translation",
+  "protein_sequence": null,
+  "rna_evidence": {
+    "alt_fragments": 22,
+    "counts_text": "22 junction-spanning long reads; no translated protein",
+    "gate_status": "NOT APPLICABLE: NO PROTEIN",
+    "other_fragments": "n/a",
+    "passes_vaxrank_filters": false,
+    "platform": "Oxford Nanopore long-read RNA",
+    "ref_fragments": "n/a",
+    "source": "T2 CTAT-LR-Fusion",
+    "top_protein_fragments": 0
+  },
+  "sample": "Osteosarcoma T2",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com fusion catalog",
+    "Isovar unresolved-frame fixture"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/ctat_lr_fusion/TPST1--CRCP/",
+    "tests/data/isovar_fusions/README.md"
+  ],
+  "summary_rna": "22 long reads rescue expression; CDS/frame remains unresolved",
+  "title": "TPST1::CRCP T2",
+  "top_epitopes": [],
+  "variant": "DNA-positive, matched short-read-call-negative junction",
+  "variant_class": "Structural variant / gene fusion"
+}

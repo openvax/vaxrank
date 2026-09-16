@@ -1,0 +1,170 @@
+{
+  "metadata": {
+    "analysis_date": "2026-09-16",
+    "hla_alleles": [
+      "HLA-A*01:01",
+      "HLA-B*08:01",
+      "HLA-B*27:05",
+      "HLA-C*01:02",
+      "HLA-C*07:01"
+    ],
+    "predictor_version": "4.2c",
+    "software_versions": {
+      "isovar": "1.17.0",
+      "mhctools": "3.44.0",
+      "netMHCpan": "4.2c",
+      "topiary": "5.55.1",
+      "vaxrank": "3.18.2"
+    }
+  },
+  "records": [
+    {
+      "combined_score": 14.674333740719533,
+      "decision_reason": "Long-read RNA assembly establishes an expressed frameshift protein and Vaxrank selects a supported long peptide.",
+      "dna_only": "The genomic deletion predicts a frameshift, but DNA alone cannot establish the expressed haplotype, mutant protein extent, or junction-spanning peptide sequence.",
+      "id": "PIP5K1A-p-G474fs-ONT-T1",
+      "interpretation": "This is the positive assembly-dependent result: RNA reconstruction changes an abstract frameshift call into a ranked vaccine candidate with multiple class-I binders.",
+      "limitation": "Selection is computational and is not a clinical recommendation.",
+      "outcome": "selected",
+      "protein_sequence": "VFKKIPLKPSPSKKFRSGSSFSRRAAPVATPALLTSHRSLGNTRHK",
+      "rna_evidence": {
+        "alt_fragments": 3,
+        "other_fragments": 0,
+        "passes_vaxrank_filters": true,
+        "platform": "Oxford Nanopore long-read RNA",
+        "ref_fragments": 36,
+        "source": "T1 ONT RNA window",
+        "top_protein_fragments": 2
+      },
+      "sample": "Osteosarcoma T1",
+      "selected_long_peptide": "SSFSRRAAPVATPALLTSHRSLGNT",
+      "source_labels": [
+        "Isovar T1 ONT fixture",
+        "NetMHCpan 4.2c",
+        "patient class-I HLA"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variant/PIP5K1A-chr1-151242178/",
+        "tests/data/osteosarc/selection_validation/documented.json"
+      ],
+      "summary_rna": "ONT assembly: 3 ALT, 0 OTHER; 49-aa mutant protein",
+      "target_epitope_score": 8.472231,
+      "title": "PIP5K1A p.G474fs",
+      "top_epitopes": [
+        {"allele": "HLA-C*01:02", "epitope_score": 1.253860, "ic50_nm": 116.92, "percentile_rank": 0.352, "sequence": "RRAAPVATPAL"},
+        {"allele": "HLA-C*01:02", "epitope_score": 0.998163, "ic50_nm": 3.09, "percentile_rank": 0.007, "sequence": "AAPVATPAL"},
+        {"allele": "HLA-C*01:02", "epitope_score": 0.988223, "ic50_nm": 18.97, "percentile_rank": 0.080, "sequence": "AAPVATPALL"},
+        {"allele": "HLA-C*01:02", "epitope_score": 0.987883, "ic50_nm": 19.49, "percentile_rank": 0.082, "sequence": "RAAPVATPAL"},
+        {"allele": "HLA-C*01:02", "epitope_score": 0.943630, "ic50_nm": 77.44, "percentile_rank": 0.254, "sequence": "APVATPAL"},
+        {"allele": "HLA-B*08:01", "epitope_score": 0.874997, "ic50_nm": 148.99, "percentile_rank": 0.182, "sequence": "LLTSHRSL"}
+      ],
+      "variant": "chr1:g.151242179delG (PIP5K1A p.G474fs)",
+      "variant_class": "Assembly-dependent frameshift indel"
+    },
+    {
+      "decision_reason": "RNA assembly succeeds and passes Vaxrank's evidence gates, but no target epitope passes the default prediction filters.",
+      "dna_only": "A 15-nt deletion inside a repetitive histone sequence does not by itself identify the expressed protein context or a useful class-I target.",
+      "id": "H1-2-15nt-deletion-ONT-T1",
+      "interpretation": "Assembly is necessary but not sufficient. The expressed sequence is resolved, yet Vaxrank correctly returns no vaccine candidate for the configured patient HLA set.",
+      "limitation": "A zero-target result is retained rather than hidden or forced into selection.",
+      "outcome": "no_target_binder",
+      "protein_sequence": "VAKPKKAAKSAAKAVKPKVVKPKKAAPKKK",
+      "rna_evidence": {
+        "alt_fragments": 13,
+        "other_fragments": 2,
+        "passes_vaxrank_filters": true,
+        "platform": "Oxford Nanopore long-read RNA",
+        "ref_fragments": 33,
+        "source": "T1 ONT RNA window",
+        "top_protein_fragments": 11
+      },
+      "sample": "Osteosarcoma T1",
+      "selected_long_peptide": null,
+      "source_labels": [
+        "Isovar T1 ONT fixture",
+        "NetMHCpan 4.2c",
+        "patient class-I HLA"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/",
+        "tests/data/osteosarc/selection_validation/documented.json"
+      ],
+      "summary_rna": "ONT assembly: 13 ALT, 2 OTHER; no passing target binder",
+      "title": "H1-2 repetitive 15-nt deletion",
+      "top_epitopes": [],
+      "variant": "chr6:g.26055825_26055839delCCTTGGGCTTAGCGG",
+      "variant_class": "Large in-frame deletion"
+    },
+    {
+      "decision_reason": "A coding fusion hypothesis exists, but competing noncoding donor hypotheses make the translated product ambiguous; Vaxrank holds it out.",
+      "dna_only": "The DNA rearrangement supports a junction but cannot choose the sample-specific transcript, CDS start, reading frame, or translated junction product.",
+      "id": "ATP5MG-KMT2A-T0",
+      "interpretation": "The adapter preserves the plausible 18-aa translation for audit while preventing an ambiguous fusion from entering vaccine ranking.",
+      "limitation": "Default NetMHCpan filtering also produced no targetable epitope for the coding hypothesis.",
+      "outcome": "held_out",
+      "protein_sequence": "MAQFVRNLVEKTPALVNG",
+      "rna_evidence": {
+        "alt_fragments": "n/a",
+        "counts_text": "Junction assembly evaluated; allele-fragment counts are not available",
+        "gate_status": "HELD OUT BEFORE RANKING",
+        "other_fragments": "n/a",
+        "passes_vaxrank_filters": false,
+        "platform": "Illumina short-read RNA assembly",
+        "ref_fragments": "n/a",
+        "source": "T0 Personalis junction window",
+        "top_protein_fragments": "n/a"
+      },
+      "sample": "Osteosarcoma T0",
+      "selected_long_peptide": null,
+      "source_labels": [
+        "Isovar fusion fixture",
+        "ambiguous translation status"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/fusions/",
+        "tests/data/isovar_fusions/README.md"
+      ],
+      "summary_rna": "One coding hypothesis; five donor-CDS-unavailable alternatives",
+      "title": "ATP5MG::KMT2A",
+      "top_epitopes": [],
+      "variant": "sample-specific fusion junction",
+      "variant_class": "Structural variant / gene fusion"
+    },
+    {
+      "decision_reason": "DNA and 22 long reads support the junction, but the donor joins before its annotated CDS; no defensible fusion protein exists.",
+      "dna_only": "The rearrangement is real enough to investigate, but a breakpoint is not a coding transcript and does not define a junction-spanning antigen.",
+      "id": "TPST1-CRCP-T2-long-read-rescue",
+      "interpretation": "This is a genuine long-read rescue of expression, not a Vaxrank antigen. The protein and peptide claims remain withheld until the coding frame is established.",
+      "limitation": "No translated sequence means no epitope prediction or vaccine ranking is scientifically valid.",
+      "outcome": "no_translation",
+      "epitope_message": "Not predicted because no translated sequence exists.",
+      "protein_sequence": null,
+      "rna_evidence": {
+        "alt_fragments": 22,
+        "counts_text": "22 junction-spanning long reads; no translated protein",
+        "gate_status": "NOT APPLICABLE: NO PROTEIN",
+        "other_fragments": "n/a",
+        "passes_vaxrank_filters": false,
+        "platform": "Oxford Nanopore long-read RNA",
+        "ref_fragments": "n/a",
+        "source": "T2 CTAT-LR-Fusion",
+        "top_protein_fragments": 0
+      },
+      "sample": "Osteosarcoma T2",
+      "selected_long_peptide": null,
+      "source_labels": [
+        "osteosarc.com fusion catalog",
+        "Isovar unresolved-frame fixture"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/ctat_lr_fusion/TPST1--CRCP/",
+        "tests/data/isovar_fusions/README.md"
+      ],
+      "summary_rna": "22 long reads rescue expression; CDS/frame remains unresolved",
+      "title": "TPST1::CRCP T2",
+      "top_epitopes": [],
+      "variant": "DNA-positive, matched short-read-call-negative junction",
+      "variant_class": "Structural variant / gene fusion"
+    }
+  ]
+}

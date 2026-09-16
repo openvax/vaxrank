@@ -310,6 +310,22 @@ withholds a protein unless the input supplies an established coding sequence.
 See `examples/osteosarc_evidence_figures/` for DNA-only, cross-platform,
 matched-sample long-read rescue, and unresolved long-read-only examples.
 
+To show the downstream Vaxrank decision rather than evidence alone, use a
+complex-result record. This view separates DNA interpretation, RNA support,
+translated protein, target epitopes, and final vaccine-construct selection:
+
+```bash
+vaxrank-complex-result-figure results.json \
+  --output-root result-figures \
+  --combined-output vaxrank-complex-variant-results.pdf
+```
+
+The timestamped run contains a compact combined PDF and one high-resolution
+PNG/SVG page per result. See `examples/osteosarc_complex_results/` for a real
+assembly-dependent frameshift selection, an assembled indel with no passing
+binder, an ambiguous fusion held out of ranking, and an unresolved long-read
+fusion whose protein is deliberately withheld.
+
 ### Neoepitope report
 
 Per-(peptide, allele) report (XLSX/CSV). Default output of the

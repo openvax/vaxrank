@@ -1,0 +1,35 @@
+{
+  "decision_reason": "A coding fusion hypothesis exists, but competing noncoding donor hypotheses make the translated product ambiguous; Vaxrank holds it out.",
+  "dna_only": "The DNA rearrangement supports a junction but cannot choose the sample-specific transcript, CDS start, reading frame, or translated junction product.",
+  "id": "ATP5MG-KMT2A-T0",
+  "interpretation": "The adapter preserves the plausible 18-aa translation for audit while preventing an ambiguous fusion from entering vaccine ranking.",
+  "limitation": "Default NetMHCpan filtering also produced no targetable epitope for the coding hypothesis.",
+  "outcome": "held_out",
+  "protein_sequence": "MAQFVRNLVEKTPALVNG",
+  "rna_evidence": {
+    "alt_fragments": "n/a",
+    "counts_text": "Junction assembly evaluated; allele-fragment counts are not available",
+    "gate_status": "HELD OUT BEFORE RANKING",
+    "other_fragments": "n/a",
+    "passes_vaxrank_filters": false,
+    "platform": "Illumina short-read RNA assembly",
+    "ref_fragments": "n/a",
+    "source": "T0 Personalis junction window",
+    "top_protein_fragments": "n/a"
+  },
+  "sample": "Osteosarcoma T0",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "Isovar fusion fixture",
+    "ambiguous translation status"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/fusions/",
+    "tests/data/isovar_fusions/README.md"
+  ],
+  "summary_rna": "One coding hypothesis; five donor-CDS-unavailable alternatives",
+  "title": "ATP5MG::KMT2A",
+  "top_epitopes": [],
+  "variant": "sample-specific fusion junction",
+  "variant_class": "Structural variant / gene fusion"
+}
