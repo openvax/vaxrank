@@ -810,6 +810,43 @@ then enumerates the predictor's peptide lengths and marks only peptides that
 contain residues from both fusion partners as targetable; no fictitious
 wild-type comparator is generated.
 
+For validated results from `isovar.reconstruct_fusion(...)` or `isovar fusion`,
+use `fusion_antigens_from_isovar(result, tumor_specificity=attestation,
+gene_name="DONOR::ACCEPTOR", species="Homo sapiens")`. It returns an
+`IsovarFusionAntigens` containing every coding hypothesis in `.antigens`,
+the complete JSON-normalized result in `.reconstruction`, and the eligible
+subset in `.admitted_antigens`. No best transcript is selected. Nucleotide
+junctions are mapped exactly: a mixed codon is targetable, while peptides
+entirely inside an inserted sequence are not junction-spanning.
+
+RNA validation is not tumor-specificity evidence: absent a separate
+`TumorSpecificityAttestation`, every hypothesis is held out. Ambiguous,
+unsupported and partial-CDS reconstructions remain held out even with an
+admission attestation; their reasons, alternatives, RNA support and provenance
+are preserved. Exploratory predictions can use any hypothesis, but only
+admitted antigens can enter `VaccinePeptide`. This adapter expects trusted
+Isovar output; it does not validate arbitrary caller declarations against
+reference annotation or discover fusions from BAM files.
+
+```python
+from vaxrank import fusion_antigens_from_isovar, predict_epitopes, VaccinePeptide
+
+adapted = fusion_antigens_from_isovar(result, tumor_specificity=attestation)
+for antigen in adapted.admitted_antigens:
+    epitopes = predict_epitopes(mhc_predictor=predictor, antigen=antigen, genome=genome)
+    candidate = VaccinePeptide(
+        antigen=antigen, epitopes=epitopes,
+        combined_score_expr="target_epitope_score",
+        ranking_rules=("target_epitope_score", "manufacturability", "self_epitope_score"),
+    )
+```
+
+Use source-agnostic scoring as above, not the small-variant default's
+`n_rna_alt` binding. Full reconstruction provenance travels in each antigen's
+`source_metadata`; no wild-type protein, self-proteome exclusion or clinical
+neoantigen status is invented. The existing small-variant `run_vaxrank` API
+and the LENS CLI path are unchanged.
+
 ### Mutant transcript assembly (Isovar)
 
 For each somatic variant, [Isovar](https://github.com/openvax/isovar)

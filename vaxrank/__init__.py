@@ -37,6 +37,7 @@ from .vaccine_antigen import (
     VaccineAntigen,
 )
 from .vaccine_peptide import VaccinePeptide
+from .isovar_fusion import IsovarFusionAntigens, fusion_antigens_from_isovar
 from .construct_sequence import (
     ConstructChemicalModification,
     ConstructEvidence,
@@ -252,6 +253,8 @@ __all__ = [
     "TumorSpecificityAttestation",
     "TumorSpecificityEvidence",
     "VaccineAntigen",
+    "IsovarFusionAntigens",
+    "fusion_antigens_from_isovar",
     "ANTIGEN_KIND_CTA",
     "ANTIGEN_KIND_ERV",
     "ANTIGEN_KIND_FUSION",

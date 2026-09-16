@@ -105,7 +105,7 @@ def test_pinned_predictions_are_complete_real_model_outputs():
             "declared requirement %s; regenerate it against the declared "
             "versions rather than trusting its recorded provenance"
             % (name, recorded[name], requirement))
-    assert metadata["predictor_name"] == "netMHCpan"
+    assert metadata["predictor_name"] == "netMHCpan-4.2"
     assert metadata["predictor_version"] == "4.2c"
     # Compare the manifest to the JSON representation the generator writes.
     # Immutable config tuples necessarily round-trip through JSON as lists.
