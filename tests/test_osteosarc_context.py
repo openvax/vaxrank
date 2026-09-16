@@ -42,12 +42,19 @@ def reconstruct(osteosarc, sample, gene, flags=()):
 @pytest.mark.parametrize("sample,gene,window_count", [
     ("bulk_star_t0", "DYNC1H1", 25), ("ont_t1", "DYNC1H1", 0),
     ("bulk_star_t0", "EXOC4", 25), ("ont_t1", "EXOC4", 1),
-    ("bulk_star_t0", "H1-2", 0), ("ont_t1", "H1-2", 6),
+    ("bulk_star_t0", "H1-2", None), ("ont_t1", "H1-2", 6),
     ("bulk_star_t0", "GTF3C5", 24), ("ont_t1", "GTF3C5", 5),
 ])
 def test_original_rna_yields_expected_mutation_windows(osteosarc, sample, gene, window_count):
     result = reconstruct(osteosarc, sample, gene)
     protein = result.top_protein_sequence
+    if window_count is None:
+        # Isovar #264: one putative template has competing deletion/nondeletion
+        # placements. One unambiguous merged pair is below default coverage.
+        assert protein is None
+        assert result.num_alt_reads == 2 and result.num_alt_fragments == 1
+        assert MutantProteinFragment.from_isovar_result(result) is None
+        return
     assert protein is not None
     assert protein.amino_acids in osteosarc[2][gene]
     fragment = MutantProteinFragment.from_isovar_result(result)
@@ -95,22 +102,24 @@ def test_small_ont_fixture_cannot_silently_relax_relative_support_budget(osteosa
 
 def test_absolute_coverage_floor_is_independent_of_relative_budget(osteosarc):
     default = reconstruct(osteosarc, "bulk_star_t0", "H1-2")
-    assert len(default.top_protein_sequence.amino_acids) == 24
-    assert default.top_protein_sequence.num_supporting_fragments == 2
-    # Three raw alternate read objects include paired mates; after merging
-    # only two objects cover the mutant RNA. A floor of three rejects it,
-    # even if we explicitly remove the relative budget with context-first.
-    assert default.num_alt_reads == 3
-    strict = reconstruct(osteosarc, "bulk_star_t0", "H1-2", [
-        "--min-variant-sequence-coverage", "3", "--protein-sequence-preference", "context"])
-    assert strict.num_alt_reads == 3
-    assert strict.top_protein_sequence is None
+    assert default.top_protein_sequence is None
+    assert default.num_alt_reads == 2 and default.num_alt_fragments == 1
+    # Context-first cannot bypass the unchanged absolute coverage floor.
+    context = reconstruct(osteosarc, "bulk_star_t0", "H1-2", [
+        "--protein-sequence-preference", "context"])
+    assert context.top_protein_sequence is None
+    # Only an explicit lower floor admits this single unambiguous template.
+    permissive = reconstruct(osteosarc, "bulk_star_t0", "H1-2", [
+        "--min-variant-sequence-coverage", "1"])
+    assert permissive.top_protein_sequence.num_supporting_fragments == 1
+    assert permissive.top_protein_sequence.amino_acids in osteosarc[2]["H1-2"]
 
 
-@pytest.mark.parametrize("sample,gene,length", [
-    ("ont_t1", "DYNC1H1", 20), ("bulk_star_t0", "H1-2", 24)])
-def test_short_rna_context_is_not_selected_below_configured_minimum(osteosarc, sample, gene, length):
-    result = reconstruct(osteosarc, sample, gene)
+@pytest.mark.parametrize("sample,gene,length,flags", [
+    ("ont_t1", "DYNC1H1", 20, []),
+    ("bulk_star_t0", "H1-2", 24, ["--min-variant-sequence-coverage", "1", "--protein-sequence-length", "24"])])
+def test_short_rna_context_is_not_selected_below_configured_minimum(osteosarc, sample, gene, length, flags):
+    result = reconstruct(osteosarc, sample, gene, flags)
     fragment = MutantProteinFragment.from_isovar_result(result)
     assert len(fragment) == length
     # Deliberately synthetic scores isolate the length boundary; these are

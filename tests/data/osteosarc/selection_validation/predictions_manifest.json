@@ -35,7 +35,7 @@
   },
   "executable_name": "netMHCpan",
   "executable_sha256": "675cde924f3c19ecb6314383a3fc4052e07a33573ac03e7631f3d57637c52ffc",
-  "generated": "2026-09-16T14:16:03+00:00",
+  "generated": "2026-09-16T15:48:46+00:00",
   "generator_sha256": "1d0a04c0ac1141ca39cfcbdafe3d882c9e234bb271fabcf5674cdd390ef83cef",
   "input_manifest_sha256": "9352019de2b55cf5f4d01ec07ee158688c6799e85c8be1b09109937a923a9499",
   "method": "NetMHCpan 4.2c -BA binding-affinity and elution-score outputs, default model settings",
@@ -24921,13 +24921,13 @@
     "data/training.pseudo": "34eb9ba40b70aac59d78080348bf9e9723b9b28126196fda27cef57283fbd93c",
     "data/version": "d178911e90c4f477606678985e095afe87384b9a6c2b206cd3eb3ba4c8a0b2af"
   },
-  "output_sha256": "7e185a44040d19c6ddfc429c9c255d6a65a282f86468004e446676e6597a1b65",
+  "output_sha256": "54572a137705f202b82b9c8d15c1f89ac6434e671010f49d8536ed8e003a4524",
   "package_versions": {
-    "isovar": "1.16.0",
-    "mhctools": "3.44.31",
+    "isovar": "1.17.0",
+    "mhctools": "3.44.32",
     "topiary": "5.55.1",
     "varcode": "7.0.0",
-    "vaxrank": "3.18.0"
+    "vaxrank": "3.18.1"
   },
   "peptide_lengths": [
     8,
