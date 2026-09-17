@@ -4,9 +4,15 @@ import struct
 from xml.etree import ElementTree
 
 from vaxrank.complex_variant_visualization import (
+    _balanced_chunks,
     generate_complex_variant_results,
     render_complex_result_svg,
 )
+
+
+def test_summary_chunks_are_balanced_without_exceeding_page_capacity():
+    chunks = _balanced_chunks(list(range(22)))
+    assert [len(chunk) for chunk in chunks] == [6, 6, 5, 5]
 
 
 def example_record(outcome="selected"):
@@ -159,10 +165,12 @@ def test_committed_complex_inputs_cover_requested_cases_and_provenance():
     antigens = json.loads((source / "assembled_antigens.json").read_text())
     rankings = json.loads((source / "assembled_rankings.json").read_text())
     sv_audits = json.loads((source / "sv_audits.json").read_text())
+    audit = json.loads((source / "additional_candidate_audit.json").read_text())
     by_id = {record["id"]: record for record in antigens["antigens"]}
     ranked_by_id = {record["id"]: record for record in rankings["records"]}
 
     expected = {
+        "GTF3C5-p-Glu503_Glu506del",
         "TECPR1-p-Thr259fs",
         "GLIS3-p-Ser775fs",
         "RNF213-p-Ile1070delLeu",
@@ -191,8 +199,21 @@ def test_committed_complex_inputs_cover_requested_cases_and_provenance():
         "PARD3B-CDKN2B-unresolved",
         "AMPH-internal-deletion-DNA-only",
         "chr21-unnamed-long-read-rich-unresolved",
+        "KTN1-p-Leu340fs-unresolved",
+        "GABBR1-SLC29A1-unresolved",
+        "OTUD7A-FMN1-unresolved",
     }
     inventory = {
         record["id"]: record for record in sv_audits["inventory_only"]}
     assert inventory["MYO15B-chr17-75589953"][
         "published_vaccine_peptide"] == "AGRRAQAPTRVLGLAPP"
+    assert inventory["DLG5--DLG5"]["class"] == "79.5-kb same-gene deletion"
+    assert by_id["GTF3C5-p-Glu503_Glu506del"]["source_metadata"][
+        "direct_alt_fragments_t2_ont"] == "128"
+    audit_indels = {record["gene"]: record for record in audit["indels"]}
+    assert audit_indels["KTN1"]["fragment_counts"]["2bc1fc291308debb"][
+        "alt"] == 10
+    audit_svs = {
+        record["id"]: record for record in audit["structural_variants"]}
+    assert audit_svs["OTUD7A--FMN1"]["tagged_ont_paths"][
+        "2bc1fc291308debb"]["cell_umi_keys"] == 6

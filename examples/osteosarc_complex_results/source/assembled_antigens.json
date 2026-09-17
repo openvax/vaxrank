@@ -3,6 +3,29 @@
   "description": "Evidence-gated protein inputs used for the expanded osteosarcoma Vaxrank panels.",
   "antigens": [
     {
+      "id": "GTF3C5-p-Glu503_Glu506del",
+      "gene_name": "GTF3C5",
+      "amino_acids": "KEQLTYESGEDEEDEEEEEDFKPSDGSEN",
+      "targetable_intervals": [[14, 16]],
+      "transcript_ids": ["ENST00000372108"],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/GTF3C5-chr9-133057893/",
+      "osteosarc_protein_context": "TYESGEDEEDEEEEEDFKPSDGSENEMET",
+      "source_metadata": {
+        "platform": "Oxford Nanopore and Illumina RNA",
+        "source_id": "53f498a544883d51",
+        "assembly_alt_fragments": "13",
+        "assembly_ref_fragments": "29",
+        "assembly_other_fragments": "5",
+        "assembly_supporting_fragments": "7",
+        "direct_alt_fragments_t1_ont": "117",
+        "direct_alt_fragments_t2_ont": "128",
+        "direct_alt_fragments_t1_short_rna": "7",
+        "direct_alt_fragments_t2_short_rna": "12",
+        "validation": "assembled translation and reference-plus-12-nt-deletion translation agree"
+      }
+    },
+    {
       "id": "DYNC1H1-p-Val314Ile",
       "gene_name": "DYNC1H1",
       "amino_acids": "RESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLM",
@@ -90,6 +113,7 @@
         "alt_observations": "10",
         "ref_observations": "19",
         "other_observations": "1",
+        "independent_exact_allele_audit": "9 T1 short-read alternate fragments",
         "validation": "RNA translation matches the nominated 8-bp deletion"
       }
     },
@@ -109,6 +133,10 @@
         "alt_templates": "38",
         "ref_observations": "17",
         "other_observations": "16",
+        "direct_alt_fragments_t1_ont": "5",
+        "direct_alt_fragments_t2_ont": "14",
+        "direct_alt_fragments_t1_short_rna": "42",
+        "direct_alt_fragments_t2_short_rna": "11",
         "validation": "RNA translation matches the nominated in-frame deletion"
       }
     },

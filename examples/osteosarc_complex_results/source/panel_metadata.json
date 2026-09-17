@@ -1,6 +1,21 @@
 {
   "records": [
     {
+      "id": "GTF3C5-p-Glu503_Glu506del",
+      "title": "GTF3C5 p.Glu503_Glu506del",
+      "variant": "chr9:g.133057894_133057905delGAGGAGGAGGAA",
+      "variant_class": "Cross-platform 12-nt in-frame deletion",
+      "sample": "Osteosarcoma T1/T2",
+      "dna_only": "The repetitive 12-nt deletion predicts loss of four glutamates, but DNA alone cannot establish which low-complexity transcript sequence is expressed.",
+      "decision_reason": "Isovar reconstructs a 29-aa protein context whose deletion junction agrees with the reference-plus-edit translation; independent RNA scans support the exact allele in ONT and short-read data from T1 and T2.",
+      "interpretation": "GTF3C5 is the strongest additional cross-platform indel: 117/128 ONT and 7/12 short-read alternate fragments support T1/T2, while assembly resolves the repetitive protein context used for ranking.",
+      "limitation": "Direct audit counts measure exact allele-spanning fragments and are distinct from the pinned T1 ONT fragments used to assemble the ranked protein.",
+      "summary_rna": "ONT ALT: 117 T1 / 128 T2; short-read ALT: 7 T1 / 12 T2",
+      "rna_evidence": {"platform": "Oxford Nanopore and Illumina RNA", "source": "T1 ONT assembly plus four-product exact-allele audit", "counts_text": "assembly corpus: 13 ALT / 29 REF / 5 OTHER; direct audit: ONT 117 T1 + 128 T2, short-read 7 T1 + 12 T2", "gate_status": "PASS: ASSEMBLED TRANSLATION VALIDATED", "alt_fragments": 13, "ref_fragments": 29, "other_fragments": 5, "top_protein_fragments": 7, "passes_vaxrank_filters": true, "transcript_ids": ["ENST00000372108"]},
+      "source_labels": ["osteosarc.com protein context", "Isovar ONT assembly", "cross-platform exact-allele audit", "NetMHCpan 4.2c"],
+      "source_urls": ["https://osteosarc.com/variant/GTF3C5-chr9-133057893/", "examples/osteosarc_mutation_figures/source/osteosarc-isovar.csv", "examples/osteosarc_complex_results/source/assembled_antigens.json", "examples/osteosarc_complex_results/source/additional_candidate_audit.json"]
+    },
+    {
       "id": "TECPR1-p-Thr259fs",
       "title": "TECPR1 p.Thr259fs",
       "variant": "chr7:g.98241128delG (TECPR1 p.Thr259fs)",
@@ -23,12 +38,12 @@
       "sample": "Osteosarcoma T1",
       "dna_only": "The 8-bp deletion predicts a new reading frame but cannot prove that the resulting transcript and mutant tail are expressed.",
       "decision_reason": "Illumina RNA reconstructs a validated 43-aa mutant context and Vaxrank selects a target-bearing long peptide.",
-      "interpretation": "RNA agrees with the nominated complex deletion, making GLIS3 a positive reconstruction control rather than a disagreement with Varcode.",
+      "interpretation": "RNA agrees with the nominated complex deletion, making GLIS3 a positive reconstruction control rather than a disagreement with Varcode. An independent exact-allele audit found nine T1 short-read alternate fragments.",
       "limitation": "The website's 80-aa vaccine sequence extends beyond the 43-aa RNA context ranked here and is retained separately in the source record.",
-      "summary_rna": "Illumina: 10 ALT, 1 OTHER; validated 43-aa frameshift context",
-      "rna_evidence": {"platform": "Illumina bulk RNA", "source": "T1 BostonGene; source 1b66c15da594a3ef", "alt_fragments": 10, "ref_fragments": 19, "other_fragments": 1, "top_protein_fragments": 10, "passes_vaxrank_filters": true, "validation": "reference plus nominated edit"},
+      "summary_rna": "T1 Illumina: 9 exact-allele fragments; validated 43-aa frameshift context",
+      "rna_evidence": {"platform": "Illumina bulk RNA", "source": "T1 BostonGene; source 1b66c15da594a3ef", "counts_text": "selected assembly corpus: 10 ALT observations; independent exact-allele audit: 9 T1 short-read fragments", "alt_fragments": 10, "ref_fragments": 19, "other_fragments": 1, "top_protein_fragments": 10, "passes_vaxrank_filters": true, "validation": "reference plus nominated edit"},
       "source_labels": ["osteosarc.com vaccine sequence", "Isovar RNA translation", "NetMHCpan 4.2c"],
-      "source_urls": ["https://osteosarc.com/variant/GLIS3-chr9-3856149/", "examples/osteosarc_complex_results/source/assembled_antigens.json"]
+      "source_urls": ["https://osteosarc.com/variant/GLIS3-chr9-3856149/", "examples/osteosarc_complex_results/source/assembled_antigens.json", "examples/osteosarc_complex_results/source/additional_candidate_audit.json"]
     },
     {
       "id": "RNF213-p-Ile1070delLeu",
@@ -38,12 +53,12 @@
       "sample": "Osteosarcoma T1",
       "dna_only": "The genomic allele predicts loss of one leucine; RNA is needed to establish expression and its local translated context.",
       "decision_reason": "Illumina RNA supports the in-frame deletion and Vaxrank selects a target-bearing 25-aa construct.",
-      "interpretation": "The RNA and nominated edit agree, providing a robust complex-indel reconstruction control across the DNA, RNA, protein, and epitope layers.",
+      "interpretation": "The RNA and nominated edit agree, providing a robust complex-indel reconstruction control across the DNA, RNA, protein, and epitope layers. A separate audit found alternate fragments in both technologies and both samples.",
       "limitation": "The rank is specific to the five assessed patient class-I alleles and default filters.",
-      "summary_rna": "Illumina: 39 ALT observations / 38 templates; validated 49-aa context",
-      "rna_evidence": {"platform": "Illumina bulk RNA", "source": "T1 BostonGene; source 1b66c15da594a3ef", "alt_fragments": 39, "ref_fragments": 17, "other_fragments": 16, "top_protein_fragments": 38, "passes_vaxrank_filters": true, "validation": "reference plus nominated edit"},
+      "summary_rna": "RNA ALT audit: ONT 5/14 and short-read 42/11 in T1/T2",
+      "rna_evidence": {"platform": "Oxford Nanopore and Illumina RNA", "source": "T1 BostonGene assembly plus four-product exact-allele audit", "counts_text": "selected assembly corpus: 39 ALT observations / 38 templates; direct audit: ONT 5 T1 + 14 T2, short-read 42 T1 + 11 T2", "alt_fragments": 39, "ref_fragments": 17, "other_fragments": 16, "top_protein_fragments": 38, "passes_vaxrank_filters": true, "validation": "reference plus nominated edit"},
       "source_labels": ["osteosarc.com protein context", "Isovar RNA translation", "NetMHCpan 4.2c"],
-      "source_urls": ["https://osteosarc.com/variant/RNF213-chr17-80327830/", "examples/osteosarc_complex_results/source/assembled_antigens.json"]
+      "source_urls": ["https://osteosarc.com/variant/RNF213-chr17-80327830/", "examples/osteosarc_complex_results/source/assembled_antigens.json", "examples/osteosarc_complex_results/source/additional_candidate_audit.json"]
     },
     {
       "id": "DYNC1H1-p-Val314Ile",

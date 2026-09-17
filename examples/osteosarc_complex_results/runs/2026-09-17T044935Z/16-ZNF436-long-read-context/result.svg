@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="45" class="kicker">COMPLEX-VARIANT VAXRANK RESULT</text>
+<text x="32" y="78" class="title">ZNF436 p.Ser207Cys long-read context</text>
+<text x="32" y="103" class="subtitle">chr1:g.23362762G&gt;C | Osteosarcoma T1 | Long-read-expanded antigen context</text>
+<rect x="32" y="122" width="1136" height="55" rx="8" fill="#dff4e9"/>
+<text x="52" y="146" class="outcome" fill="#176b4d">SELECTED</text>
+<text x="238" y="145" class="body">ONT reconstructs 49 aa versus 30 aa with Illumina assembly and 29 aa without it, expanding the candidate</text><text x="238" y="162" class="body">pool and yielding a selected construct.</text>
+
+<text x="32" y="208" class="panel-title">1  DNA-ONLY INTERPRETATION</text>
+<rect x="32" y="222" width="552" height="101" rx="8" fill="#eef3f7"/>
+<text x="52" y="248" class="body">The SNV predicts p.Ser207Cys but says nothing about how much contiguous</text><text x="52" y="266" class="body">expressed sequence is available for antigen-window enumeration.</text>
+
+<text x="616" y="208" class="panel-title">2  SAMPLE-SPECIFIC RNA EVIDENCE</text>
+<rect x="616" y="222" width="552" height="101" rx="8" fill="#eef3f7"/>
+<text x="636" y="248" class="strong">Oxford Nanopore versus Illumina RNA | matched T1 comparison</text>
+<text x="636" y="272" class="body">ONT 3 ALT UMI groups; ILMN 8 ALT observations / 7 supporting templates</text>
+<text x="636" y="307" class="body">Vaxrank RNA gates: </text>
+<text x="771" y="307" class="strong" fill="#176b4d">PASS: LONG-READ CONTEXT</text>
+
+<text x="32" y="353" class="panel-title">3  ASSEMBLED OR TRANSLATED PROTEIN</text>
+<rect x="32" y="367" width="1136" height="73" rx="8" fill="#f8fafb"/>
+<text x="52" y="396" class="sequence">QHQRTHTGERPYDCNECGKSFGRSCHLIQHQTIHTGEKPHKCNECGKSF</text>
+
+<rect x="32" y="479" width="552" height="186" rx="8" fill="#f5f8fa"/>
+<text x="52" y="505" class="panel-title">4  VACCINE-CONSTRUCT DECISION</text>
+<text x="52" y="526" class="sequence">KSFGRSCHLIQHQTIHTGEKPHKCN</text><text x="52" y="551" class="body">Rank score 0.517 | target epitope score 0.517</text><text x="52" y="570" class="muted">source-agnostic target epitope score</text>
+<text x="52" y="585" class="body">The mutation identity is unchanged; long reads expand the defensible</text><text x="52" y="603" class="body">flanking sequence and therefore the set of junction-overlapping long</text><text x="52" y="621" class="body">peptides Vaxrank can consider.</text>
+
+<text x="616" y="493" class="panel-title">5  TARGET EPITOPES PASSING DEFAULT FILTERS</text>
+<text x="642" y="511" class="table-head">PEPTIDE</text>
+<text x="786" y="511" class="table-head">ALLELE</text>
+<text x="930" y="511" class="table-head">IC50 NM</text>
+<text x="1022" y="511" class="table-head">RANK %</text>
+<text x="1115" y="511" text-anchor="end" class="table-head">SCORE</text>
+<rect x="628" y="516" width="540" height="22" fill="#ffffff"/><text x="642" y="531" class="table-mono">KSFGRSCHL</text><text x="786" y="531" class="table">HLA-C*01:02</text><text x="930" y="531" class="table">444.04</text><text x="1022" y="531" class="table">0.996</text><text x="1115" y="531" text-anchor="end" class="table">0.382</text><rect x="628" y="538" width="540" height="22" fill="#f5f8fa"/><text x="642" y="553" class="table-mono">GRSCHLIQH</text><text x="786" y="553" class="table">HLA-B*27:05</text><text x="930" y="553" class="table">645.26</text><text x="1022" y="553" class="table">1.050</text><text x="1115" y="553" text-anchor="end" class="table">0.134</text><rect x="628" y="560" width="540" height="22" fill="#ffffff"/><text x="642" y="575" class="table-mono">GRSCHLIQHQ</text><text x="786" y="575" class="table">HLA-B*27:05</text><text x="930" y="575" class="table">1802.13</text><text x="1022" y="575" class="table">2.081</text><text x="1115" y="575" text-anchor="end" class="table">0.000</text><rect x="628" y="582" width="540" height="22" fill="#f5f8fa"/><text x="642" y="597" class="table-mono">FGRSCHLI</text><text x="786" y="597" class="table">HLA-B*08:01</text><text x="930" y="597" class="table">2051.23</text><text x="1022" y="597" class="table">1.915</text><text x="1115" y="597" text-anchor="end" class="table">0.000</text>
+
+<text x="52" y="646" class="muted">Three ALT UMI groups support the ONT context; platform-dependent context length is shown as evidence, not interpreted as differential abundance.</text>
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">osteosarc.com protein/vaccine sequence | matched ONT/Illumina audit | NetMHCpan 4.2c</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.1 | research use only</text>
+</svg>

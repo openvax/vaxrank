@@ -15,6 +15,7 @@ def build_results():
         "results.json",
         "assembled_antigens.json",
         "assembled_rankings.json",
+        "additional_candidate_audit.json",
         "panel_metadata.json",
         "sv_audits.json",
     )

@@ -9,13 +9,15 @@ and translation are defensible.
 The expanded comparison contains:
 
 - assembly-dependent frameshifts: PIP5K1A and TECPR1;
-- validated complex-indel controls: GLIS3, RNF213, and H1-2;
+- cross-platform and validated complex-indel controls: GTF3C5, GLIS3,
+  RNF213, and H1-2;
 - both DYNC1H1 loci and the multi-transcript NAV2 result;
 - explicit RNA compound haplotypes for MAP2 and NTF3;
 - long-read phasing/context results for CD109 and ZNF436; and
 - fusion/SV audits for ATP5MG::KMT2A, TPST1::CRCP,
   FOXO3::STRADA/CCDC47, PARD3B::CDKN2B, the AMPH internal deletion, and a
-  long-read-rich unnamed chr21 junction.
+  long-read-rich unnamed chr21 junction, KTN1, GABBR1::SLC29A1, and
+  OTUD7A::FMN1.
 
 `source/assembled_antigens.json` is the machine-readable bridge between RNA
 evidence and Vaxrank. It records exact translated sequence, targetable amino
@@ -30,10 +32,16 @@ evidence rather than to the website.
 `source/sv_audits.json` retains junction nucleotide sequences and reasons for
 withholding translation. It also inventories additional calls that are not
 ready for panels: GAPVD1, MUC3A, FAM157A, MYO15B, SPRED1, ITM2B::RB1,
-GABBR1::SLC29A1, and internal PTPRD, EYS, and EDA structural junctions.
+DLG5, AFF3, KEAP1, and internal PTPRD, EYS, and EDA structural junctions.
 MYO15B includes the 17-aa vaccine peptide published by osteosarc.com, but it
 is not reranked because the page does not establish sample-specific RNA
 translation provenance.
+
+`source/additional_candidate_audit.json` preserves the exact GTF3C5, RNF213,
+GLIS3, and KTN1 alleles and per-BAM fragment counts, the four source BAM URLs,
+validated tagged-ONT paths for GABBR1::SLC29A1 and OTUD7A::FMN1, and the
+unresolved DLG5, AFF3, and KEAP1 leads. Its checksum is included in every
+generated flattened result.
 
 `rank_assembled_antigens.py` admits only inputs whose evidence gate is `pass`,
 constructs explicit `VaccineAntigen` objects, and runs NetMHCpan through the

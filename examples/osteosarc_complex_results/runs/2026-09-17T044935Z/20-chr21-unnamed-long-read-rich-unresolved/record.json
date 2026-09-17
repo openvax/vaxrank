@@ -1,0 +1,41 @@
+{
+  "decision_reason": "The junction has 32 RNA split reads, including 29 across ONT and PacBio, yet both partners are unnamed and no CDS start or frame is justified; translation is withheld.",
+  "dna_only": "Two tumor-DNA split reads across T1 and T2 meet the site's multi-sample somatic threshold, but the breakends do not identify a coding transcript.",
+  "epitope_message": "Not predicted because neither partner has an identified coding transcript or reading frame.",
+  "id": "chr21-unnamed-long-read-rich-unresolved",
+  "interpretation": "This is the clearest additional long-read-dependent expression example: long reads dominate the RNA evidence, but abundant support still cannot substitute for a defensible coding model.",
+  "junction_cdna_sequence": "CGGCGGTGGCGGCGGCGGCGGCGGCGGCGGGACCGAAACCCCCCCCGAGTGTTACAGCCCCCCCGGCAGCAGCACTCGCCGAATCCCGGGGCCGAGGGAGCGAGACCCGTCGCCGCGCTCTCCCCCCTCCCGGCGCCCACCCCCGCGGGGAATCCCCCGCGAGGGGGGTCTCCCCCGCGGGGGCGCGCCGGCGTCTCCTTGTGGGGGGGCCGGGCCACCCCTCCCACGGCGCGACCGCTCTCCCACCCCTCCTCCCCGCGCCCCCGCCCCGGCGACGGGGGGGGTGCCGCGCGCGGGTCGGGGGGCGGGGCGGACTGTCCCCAGTGCGCCCCGGGCGGGTCGCGCCGTCGGGCCCGGGGGAGGTTCTCTCGGGGCCACGCGCGCGTCCCCCGAAGAGGGG",
+  "junction_interval_nt": [
+    200,
+    200
+  ],
+  "limitation": "The GC-rich chr21 locus has many nearby junction calls and unnamed partners, so mapping complexity and transcript identity must be resolved before antigen construction.",
+  "outcome": "no_translation",
+  "protein_sequence": null,
+  "rna_evidence": {
+    "alt_fragments": 32,
+    "counts_text": "2 tumor-DNA split reads; 32 RNA split reads; 29 long-read witnesses",
+    "gate_status": "HELD OUT: UNNAMED PARTNERS / NO CDS",
+    "other_fragments": "n/a",
+    "passes_vaxrank_filters": false,
+    "platform": "Oxford Nanopore, PacBio, and short-read RNA",
+    "ref_fragments": "n/a",
+    "source": "fusion-wide 43-BAM junction audit",
+    "top_protein_fragments": 0
+  },
+  "sample": "Osteosarcoma T0-T3",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com fusion rank 21",
+    "cross-platform junction evidence"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/fusions/unknown--unknown/",
+    "https://osteosarc.com/fusions/"
+  ],
+  "summary_rna": "29 ONT/PacBio + 3 short-read RNA witnesses; unnamed CDS/frame",
+  "title": "chr21 unnamed long-read-rich junction",
+  "top_epitopes": [],
+  "variant": "chr21:8397976 \u2194 chr21:8442207",
+  "variant_class": "Long-read-dominant expressed structural junction"
+}
