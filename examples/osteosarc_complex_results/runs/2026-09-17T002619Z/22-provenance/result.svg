@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="47" class="kicker">METHODS AND PROVENANCE</text>
+<text x="32" y="84" class="title">What is measured, inferred, and withheld</text>
+
+<rect x="32" y="121" width="355" height="330" rx="8" fill="#eef3f7"/>
+<text x="52" y="151" class="panel-title">1  RECONSTRUCT</text>
+<text x="52" y="183" class="body">Isovar groups RNA fragments by allele,</text><text x="52" y="203" class="body">assembles supported sequence, and</text><text x="52" y="223" class="body">translates only when the coding frame is</text><text x="52" y="243" class="body">defensible.</text>
+<text x="52" y="322" class="panel-title">EVIDENCE RETAINED</text>
+<text x="52" y="351" class="body">ALT, REF, and OTHER fragment counts;</text><text x="52" y="371" class="body">supporting-fragment count; platform;</text><text x="52" y="391" class="body">sample; transcript or junction provenance.</text>
+
+<rect x="423" y="121" width="355" height="330" rx="8" fill="#e8f3fa"/>
+<text x="443" y="151" class="panel-title">2  PREDICT AND RANK</text>
+<text x="443" y="183" class="body">Vaxrank enumerates mutant-protein windows</text><text x="443" y="203" class="body">and predicts class-I binding through</text><text x="443" y="223" class="body">mhctools and Topiary. Explicit</text><text x="443" y="243" class="body">assembled-antigen panels use target epitope</text><text x="443" y="263" class="body">score and do not claim a full-proteome</text><text x="443" y="283" class="body">exact-self screen.</text>
+<text x="443" y="362" class="panel-title">ALLELE POLICY</text>
+<text x="443" y="391" class="body">The clinical null allele HLA-A*01:11N is</text><text x="443" y="411" class="body">not assessed. The five expressed class-I</text><text x="443" y="431" class="body">alleles are evaluated.</text>
+
+<rect x="814" y="121" width="354" height="330" rx="8" fill="#f8e9e5"/>
+<text x="834" y="151" class="panel-title">3  WITHHOLD WHEN NEEDED</text>
+<text x="834" y="183" class="body">Junction support alone does not establish a</text><text x="834" y="203" class="body">CDS, reading frame, translated product, or</text><text x="834" y="223" class="body">junction-spanning peptide. Ambiguous and</text><text x="834" y="243" class="body">unresolved fusion hypotheses remain outside</text><text x="834" y="263" class="body">vaccine selection.</text>
+<text x="834" y="362" class="panel-title">NO EMPTY-CATEGORY FUDGING</text>
+<text x="834" y="391" class="body">Assembly success may still produce no</text><text x="834" y="411" class="body">target binder. That is a negative Vaxrank</text><text x="834" y="431" class="body">result, not a missing result.</text>
+
+<text x="32" y="486" class="panel-title">SOFTWARE AND MODEL</text>
+<text x="52" y="507" class="body">isovar 1.17.0 | mhctools 3.44.0 | netMHCpan 4.2c | topiary 5.55.1 | vaxrank 3.19.0</text>
+<text x="52" y="532" class="footer">https://osteosarc.com/variant/PIP5K1A-chr1-151242178/</text><text x="52" y="551" class="footer">tests/data/osteosarc/selection_validation/documented.json</text><text x="52" y="570" class="footer">https://osteosarc.com/variant/TECPR1-chr7-98241127/</text><text x="52" y="589" class="footer">examples/osteosarc_complex_results/source/assembled_antigens.json</text><text x="52" y="608" class="footer">https://osteosarc.com/variant/GLIS3-chr9-3856149/</text><text x="52" y="627" class="footer">https://osteosarc.com/variant/RNF213-chr17-80327830/</text><text x="52" y="646" class="footer">https://osteosarc.com/variant/DYNC1H1-chr14-101980529/</text>
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Exact evidence and scores are stored beside every figure in record.json.</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.0 | research use only</text>
+</svg>

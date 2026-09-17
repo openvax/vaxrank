@@ -1,0 +1,34 @@
+{
+  "decision_reason": "RNA assembly succeeds and passes Vaxrank's evidence gates, but no target epitope passes the default prediction filters.",
+  "dna_only": "A 15-nt deletion inside a repetitive histone sequence does not by itself identify the expressed protein context or a useful class-I target.",
+  "id": "H1-2-15nt-deletion-ONT-T1",
+  "interpretation": "Assembly is necessary but not sufficient. The expressed sequence is resolved, yet Vaxrank correctly returns no vaccine candidate for the configured patient HLA set.",
+  "limitation": "A zero-target result is retained rather than hidden or forced into selection.",
+  "outcome": "no_target_binder",
+  "protein_sequence": "VAKPKKAAKSAAKAVKPKVVKPKKAAPKKK",
+  "rna_evidence": {
+    "alt_fragments": 13,
+    "other_fragments": 2,
+    "passes_vaxrank_filters": true,
+    "platform": "Oxford Nanopore long-read RNA",
+    "ref_fragments": 33,
+    "source": "T1 ONT RNA window",
+    "top_protein_fragments": 11
+  },
+  "sample": "Osteosarcoma T1",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "Isovar T1 ONT fixture",
+    "NetMHCpan 4.2c",
+    "patient class-I HLA"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/",
+    "tests/data/osteosarc/selection_validation/documented.json"
+  ],
+  "summary_rna": "ONT assembly: 13 ALT, 2 OTHER; no passing target binder",
+  "title": "H1-2 repetitive 15-nt deletion",
+  "top_epitopes": [],
+  "variant": "chr6:g.26055825_26055839delCCTTGGGCTTAGCGG",
+  "variant_class": "Large in-frame deletion"
+}

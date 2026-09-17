@@ -94,7 +94,9 @@ def render_complex_result_svg(record):
         "#176b4d" if rna.get("passes_vaxrank_filters") else "#7a2938")
 
     epitope_rows = []
-    for index, epitope in enumerate(record.get("top_epitopes", ())[:8]):
+    # Keep the publication panel legible while preserving every ranked row in
+    # the adjacent record.json.
+    for index, epitope in enumerate(record.get("top_epitopes", ())[:5]):
         y = 531 + index * 22
         fill = "#f5f8fa" if index % 2 else "#ffffff"
         epitope_rows.append(
@@ -119,9 +121,13 @@ def render_complex_result_svg(record):
         '<text x="52" y="526" class="muted">No peptide selected for a vaccine construct.</text>')
     scores = ""
     if peptide:
+        score_basis = record.get(
+            "score_basis", "RNA support × target epitope score")
         scores = (
-            '<text x="52" y="551" class="body">Combined score %.3f | target epitope score %.3f</text>' %
-            (record["combined_score"], record["target_epitope_score"]))
+            '<text x="52" y="551" class="body">Rank score %.3f | target epitope score %.3f</text>'
+            '<text x="52" y="570" class="muted">%s</text>' %
+            (record["combined_score"], record["target_epitope_score"],
+             escape(score_basis)))
 
     reason = record.get("decision_reason", "")
     sources = " | ".join(record.get("source_labels", ()))
@@ -171,34 +177,40 @@ def render_complex_result_svg(record):
 </svg>'''
 
 
-def render_summary_svg(records, metadata):
+def render_summary_svg(records, metadata, page_index=1, page_count=1):
     """Render the decision-matrix cover page."""
+    if len(records) > 7:
+        raise ValueError("Summary pages support at most seven result rows")
     rows = []
     for index, record in enumerate(records):
         label, color, background = OUTCOME_STYLE[record["outcome"]]
-        y = 247 + index * 83
+        y = 241 + index * 52
         rows.append(
-            f'<rect x="32" y="{y - 32}" width="1136" height="68" rx="7" fill="{background}"/>'
-            f'<text x="52" y="{y - 3}" class="strong">{escape(record["title"])}</text>'
-            f'<text x="52" y="{y + 19}" class="muted">{escape(record["variant_class"])}</text>'
-            f'<text x="480" y="{y + 8}" class="body">{escape(record["summary_rna"])} </text>'
-            f'<text x="1115" y="{y + 8}" text-anchor="end" class="outcome" fill="{color}">{label}</text>')
+            f'<rect x="32" y="{y - 27}" width="1136" height="46" rx="7" fill="{background}"/>'
+            f'<text x="52" y="{y - 6}" class="strong">{escape(record["title"])}</text>'
+            f'<text x="52" y="{y + 11}" class="footer">{escape(record["variant_class"])}</text>'
+            f'<text x="420" y="{y + 3}" class="body">{escape(record["summary_rna"])} </text>'
+            f'<text x="1138" y="{y + 3}" text-anchor="end" class="outcome" fill="{color}">{label}</text>')
     alleles = ", ".join(metadata["hla_alleles"])
+    page_label = (
+        "" if page_count == 1 else " | decision matrix %d of %d" % (
+            page_index, page_count))
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
 <rect width="1200" height="760" fill="#ffffff"/>
 <style>{_base_style()}</style>
 <text x="32" y="47" class="kicker">OSTEOSARCOMA COMPLEX-VARIANT RESULTS</text>
 <text x="32" y="84" class="title">Assembly changes what Vaxrank can claim</text>
-<text x="32" y="112" class="subtitle">Actual RNA reconstruction, translation, epitope prediction, and vaccine-selection outcomes</text>
+<text x="32" y="112" class="subtitle">Actual RNA reconstruction, translation, epitope prediction, and vaccine-selection outcomes{page_label}</text>
 <rect x="32" y="139" width="1136" height="48" rx="8" fill="#dceefa"/>
 <text x="52" y="168" class="strong">A DNA event is not an antigen. Vaxrank requires a defensible mutant protein before ranking epitopes.</text>
 <text x="52" y="207" class="panel-title">VARIANT</text>
-<text x="480" y="207" class="panel-title">RNA / TRANSLATION EVIDENCE</text>
+<text x="420" y="207" class="panel-title">RNA / TRANSLATION EVIDENCE</text>
 <text x="1115" y="207" text-anchor="end" class="panel-title">VAXRANK OUTCOME</text>
 {''.join(rows)}
-<rect x="32" y="575" width="1136" height="91" rx="8" fill="#eef3f7"/>
-<text x="52" y="603" class="panel-title">PREDICTION CONTEXT</text>
-{_text_lines('NetMHCpan %s; patient class-I alleles: %s' % (metadata['predictor_version'], alleles), 52, 630, width=150, limit=2)}
+<rect x="32" y="595" width="1136" height="71" rx="8" fill="#eef3f7"/>
+<text x="52" y="620" class="panel-title">PREDICTION CONTEXT</text>
+{_text_lines('NetMHCpan %s; patient class-I alleles: %s' % (metadata['predictor_version'], alleles), 52, 646, width=150, limit=1)}
+<text x="52" y="662" class="footer">Exploratory binding ranks: full-proteome exact-self screening was not run for explicit assembled-antigen inputs.</text>
 <line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
 <text x="32" y="714" class="footer">Generated {escape(metadata["analysis_date"])} from committed evidence records</text>
 <text x="1168" y="737" text-anchor="end" class="footer">Vaxrank {escape(__version__)} | research use only</text>
@@ -230,9 +242,9 @@ def render_provenance_svg(records, metadata):
 
 <rect x="423" y="121" width="355" height="330" rx="8" fill="#e8f3fa"/>
 <text x="443" y="151" class="panel-title">2  PREDICT AND RANK</text>
-{_text_lines('Vaxrank enumerates mutant-protein windows, predicts class-I binding through mhctools and Topiary, and applies the configured RNA and epitope gates.', 443, 183, width=43, limit=7, step=20)}
-<text x="443" y="342" class="panel-title">ALLELE POLICY</text>
-{_text_lines('The clinical null allele HLA-A*01:11N is not assessed. The five expressed class-I alleles are evaluated.', 443, 371, width=43, limit=3, step=20)}
+{_text_lines('Vaxrank enumerates mutant-protein windows and predicts class-I binding through mhctools and Topiary. Explicit assembled-antigen panels use target epitope score and do not claim a full-proteome exact-self screen.', 443, 183, width=43, limit=8, step=20)}
+<text x="443" y="362" class="panel-title">ALLELE POLICY</text>
+{_text_lines('The clinical null allele HLA-A*01:11N is not assessed. The five expressed class-I alleles are evaluated.', 443, 391, width=43, limit=3, step=20)}
 
 <rect x="814" y="121" width="354" height="330" rx="8" fill="#f8e9e5"/>
 <text x="834" y="151" class="panel-title">3  WITHHOLD WHEN NEEDED</text>
@@ -267,7 +279,7 @@ def _write_multipage_pdf(svgs, path):
 def generate_complex_variant_results(
         input_json, output_root, timestamp=None, png_scale=3,
         combined_output=None):
-    """Create a timestamped six-page result set and combined PDF."""
+    """Create timestamped result pages and a combined PDF."""
     input_json = Path(input_json)
     output_root = Path(output_root)
     timestamp = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
@@ -287,13 +299,25 @@ def generate_complex_variant_results(
     output_root.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".%s-" % timestamp, dir=output_root))
     try:
-        summary_svg = render_summary_svg(records, metadata)
-        result_svgs = [render_complex_result_svg(record) for record in records]
+        summary_chunks = [records[i:i + 7] for i in range(0, len(records), 7)]
+        summary_svgs = [
+            render_summary_svg(
+                chunk, metadata, page_index=index,
+                page_count=len(summary_chunks))
+            for index, chunk in enumerate(summary_chunks, start=1)
+        ]
         provenance_svg = render_provenance_svg(records, metadata)
-        pages = [summary_svg, *result_svgs, provenance_svg]
-        page_names = ["summary", *[_slug(record["id"]) for record in records], "provenance"]
+        page_entries = [
+            ("summary" if index == 1 else "summary-%d" % index, svg, None)
+            for index, svg in enumerate(summary_svgs, start=1)
+        ]
+        page_entries.extend(
+            (_slug(record["id"]), render_complex_result_svg(record), record)
+            for record in records)
+        page_entries.append(("provenance", provenance_svg, None))
+        pages = [svg for _, svg, _ in page_entries]
         page_files = []
-        for index, (name, svg) in enumerate(zip(page_names, pages), start=1):
+        for index, (name, svg, record) in enumerate(page_entries, start=1):
             directory = staging / ("%02d-%s" % (index, name))
             directory.mkdir()
             svg_path = directory / "result.svg"
@@ -306,11 +330,11 @@ def generate_complex_variant_results(
                 "svg": str(svg_path.relative_to(staging)),
                 "png": str(png_path.relative_to(staging)),
             })
-            if 1 < index < len(pages):
+            if record is not None:
                 record_path = directory / "record.json"
                 record_path.write_text(
-                    json.dumps(records[index - 2], indent=2, sort_keys=True) + "\n")
-        pdf_path = staging / "vaxrank-complex-variant-results.pdf"
+                    json.dumps(record, indent=2, sort_keys=True) + "\n")
+        pdf_path = staging / "vaxrank-all-figures.pdf"
         _write_multipage_pdf(pages, pdf_path)
         manifest = {
             "schema_version": 1,

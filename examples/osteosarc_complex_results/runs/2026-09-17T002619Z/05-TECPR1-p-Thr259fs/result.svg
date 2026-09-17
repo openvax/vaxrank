@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="45" class="kicker">COMPLEX-VARIANT VAXRANK RESULT</text>
+<text x="32" y="78" class="title">TECPR1 p.Thr259fs</text>
+<text x="32" y="103" class="subtitle">chr7:g.98241128delG (TECPR1 p.Thr259fs) | Osteosarcoma T2 | Assembly-extended frameshift indel</text>
+<rect x="32" y="122" width="1136" height="55" rx="8" fill="#dff4e9"/>
+<text x="52" y="146" class="outcome" fill="#176b4d">SELECTED</text>
+<text x="238" y="145" class="body">Illumina overlap assembly extends the supported protein from 37 to 49 aa and Vaxrank identifies a</text><text x="238" y="162" class="body">target-bearing 25-aa construct.</text>
+
+<text x="32" y="208" class="panel-title">1  DNA-ONLY INTERPRETATION</text>
+<rect x="32" y="222" width="552" height="101" rx="8" fill="#eef3f7"/>
+<text x="52" y="248" class="body">The one-base deletion predicts a frameshift, but DNA alone does not</text><text x="52" y="266" class="body">establish how much expressed mutant reading frame is supported.</text>
+
+<text x="616" y="208" class="panel-title">2  SAMPLE-SPECIFIC RNA EVIDENCE</text>
+<rect x="616" y="222" width="552" height="101" rx="8" fill="#eef3f7"/>
+<text x="636" y="248" class="strong">Illumina short-read RNA | T2 SARC0277; source 8fda918141cedf55</text>
+<text x="636" y="272" class="body">ALT 19 | REF 20 | OTHER 0 | top protein 15</text>
+<text x="636" y="298" class="body">Vaxrank RNA gates: </text>
+<text x="771" y="298" class="strong" fill="#176b4d">PASS</text>
+
+<text x="32" y="353" class="panel-title">3  ASSEMBLED OR TRANSLATED PROTEIN</text>
+<rect x="32" y="367" width="1136" height="73" rx="8" fill="#f8fafb"/>
+<text x="52" y="396" class="sequence">SSWSLLDTPGEVVQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGP</text>
+
+<rect x="32" y="479" width="552" height="186" rx="8" fill="#f5f8fa"/>
+<text x="52" y="505" class="panel-title">4  VACCINE-CONSTRUCT DECISION</text>
+<text x="52" y="526" class="sequence">GPHDLLWAHSGRDRPWSGKESTGAI</text><text x="52" y="551" class="body">Rank score 0.252 | target epitope score 0.252</text><text x="52" y="570" class="muted">source-agnostic target epitope score</text>
+<text x="52" y="585" class="body">This is the strongest short-read assembly example: both translations</text><text x="52" y="603" class="body">validate, while assembly adds twelve supported upstream residues and</text><text x="52" y="621" class="body">changes the candidate-window pool.</text>
+
+<text x="616" y="493" class="panel-title">5  TARGET EPITOPES PASSING DEFAULT FILTERS</text>
+<text x="642" y="511" class="table-head">PEPTIDE</text>
+<text x="786" y="511" class="table-head">ALLELE</text>
+<text x="930" y="511" class="table-head">IC50 NM</text>
+<text x="1022" y="511" class="table-head">RANK %</text>
+<text x="1115" y="511" text-anchor="end" class="table-head">SCORE</text>
+<rect x="628" y="516" width="540" height="22" fill="#ffffff"/><text x="642" y="531" class="table-mono">GRDRPWSGK</text><text x="786" y="531" class="table">HLA-B*27:05</text><text x="930" y="531" class="table">531.38</text><text x="1022" y="531" class="table">0.919</text><text x="1115" y="531" text-anchor="end" class="table">0.252</text><rect x="628" y="538" width="540" height="22" fill="#f5f8fa"/><text x="642" y="553" class="table-mono">SGKESTGAI</text><text x="786" y="553" class="table">HLA-C*01:02</text><text x="930" y="553" class="table">1881.61</text><text x="1022" y="553" class="table">3.088</text><text x="1115" y="553" text-anchor="end" class="table">0.000</text>
+
+<text x="52" y="646" class="muted">The osteosarc.com page publishes a longer predicted context; this panel ranks only the 49 aa directly reconstructed from the selected RNA evidence.</text>
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">osteosarc.com protein context | Isovar assembly evidence | NetMHCpan 4.2c</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.0 | research use only</text>
+</svg>

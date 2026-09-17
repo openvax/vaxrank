@@ -1,0 +1,41 @@
+{
+  "decision_reason": "The positive-control fusion has 119 DNA and 48 RNA split reads; two direct T1 ONT witnesses include a 12-nt junction insertion, but no exact annotated donor CDS is established.",
+  "dna_only": "The recurrent t(2;9) is a compelling somatic rearrangement but DNA does not specify the expressed transcript or reading frame.",
+  "epitope_message": "Not predicted because the sample-specific junction CDS/frame is unresolved.",
+  "id": "PARD3B-CDKN2B-unresolved",
+  "interpretation": "The event is biologically credible and transcribed across timepoints, while its antigen sequence remains unresolved. Vaxrank therefore reports evidence but performs no peptide ranking.",
+  "junction_cdna_sequence": "TGGTGAGAACACTTAAAATCTACTCTTTTTTTTTTTTTTTTTTTGTGTGCTGATATGAATATTAGAAATGTTCATTTCATCTCTTAAAAACCGTGATAAGTT",
+  "junction_interval_nt": [
+    45,
+    57
+  ],
+  "limitation": "The 12 inserted junction nucleotides and absent donor-frame assignment make naive reference-splicing translation unsafe.",
+  "outcome": "no_translation",
+  "protein_sequence": null,
+  "rna_evidence": {
+    "alt_fragments": 2,
+    "counts_text": "119 tumor-DNA split reads; 48 RNA split reads; 2 direct T1 ONT junction fragments",
+    "gate_status": "HELD OUT: NO ANNOTATED DONOR FRAME",
+    "other_fragments": "n/a",
+    "passes_vaxrank_filters": false,
+    "platform": "Short- and long-read RNA",
+    "ref_fragments": "n/a",
+    "source": "fusion scan plus direct T1 ONT witnesses",
+    "top_protein_fragments": 0
+  },
+  "sample": "Osteosarcoma T0-T3",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com fusion positive control",
+    "Isovar direct ONT junction evidence"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/fusions/pard3b--cdkn2b-as1-cdkn2b/",
+    "https://osteosarc.com/fusions/"
+  ],
+  "summary_rna": "119 DNA + 48 RNA split reads; direct ONT junction includes 12 inserted nt",
+  "title": "PARD3B::CDKN2B-AS1/CDKN2B",
+  "top_epitopes": [],
+  "variant": "chr2:205310103 \u2194 chr9:22007648",
+  "variant_class": "Recurrent somatic translocation"
+}

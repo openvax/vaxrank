@@ -1,0 +1,57 @@
+{
+  "assembled_transcript_ids": [],
+  "combined_score": 0.841564014754058,
+  "decision_reason": "The explicit compound allele is independently observed in Illumina and ONT RNA, passes the evidence gate, and yields a target-bearing peptide.",
+  "dna_only": "Treating A>G alone predicts Lys-to-Arg. RNA carries the adjacent base change too, so the expressed AG>GT haplotype encodes serine.",
+  "id": "NTF3-compound-haplotype",
+  "interpretation": "NTF3 is the cleanest RNA-versus-single-edit correction: the amino acid changes because the true local haplotype spans two adjacent bases.",
+  "limitation": "osteosarc.com lists p.Lys69Ser but does not currently publish a protein context; the displayed window comes from the RNA reconstruction.",
+  "osteosarc_protein_context": null,
+  "osteosarc_sequence_status": "The variants table annotates p.Lys69Ser; the page does not publish a protein sequence context.",
+  "osteosarc_vaccine_sequence": null,
+  "outcome": "selected",
+  "protein_sequence": "NKLSKQMVDVSENYQSTLPK",
+  "rna_evidence": {
+    "alt_fragments": 4,
+    "counts_text": "4 ALT templates and 4 REF templates in the selected Illumina reconstruction",
+    "gate_status": "PASS: EXPLICIT COMPOUND HAPLOTYPE",
+    "other_fragments": 0,
+    "passes_vaxrank_filters": true,
+    "platform": "Illumina and Oxford Nanopore RNA",
+    "ref_fragments": 4,
+    "source": "explicit compound stress corpus",
+    "top_protein_fragments": 4
+  },
+  "sample": "Osteosarcoma T0/T1",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": "NKLSKQMVDVSENYQSTLPK",
+  "source_labels": [
+    "osteosarc.com p.Lys69Ser annotation",
+    "Isovar compound-allele corpus",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variants/",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json"
+  ],
+  "summary_rna": "Illumina and ONT reproduce AG>GT; single-edit Lys\u2192Arg is rejected",
+  "target_epitope_score": 0.841564014754058,
+  "targetable_intervals": [
+    [
+      10,
+      11
+    ]
+  ],
+  "title": "NTF3 compound p.Lys69Ser haplotype",
+  "top_epitopes": [
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.841564014754058,
+      "ic50_nm": 171.14,
+      "percentile_rank": 0.47,
+      "sequence": "VSENYQSTL"
+    }
+  ],
+  "variant": "chr12:g.5494381_5494382delinsGT",
+  "variant_class": "RNA correction of isolated SNV effect"
+}

@@ -20,7 +20,7 @@ def main(argv=None):
     parser.add_argument("--timestamp")
     parser.add_argument("--combined-output")
     args = parser.parse_args(argv)
-    source = Path(__file__).parent / "source" / "results.json"
+    source = Path(__file__).parent / "source" / "all_results.json"
     run = generate_complex_variant_results(
         source,
         args.output_root,

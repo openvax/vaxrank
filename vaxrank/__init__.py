@@ -11,7 +11,7 @@
 # limitations under the License.
 
 
-from .core_logic import run_vaxrank
+from .core_logic import run_vaxrank, vaccine_peptides_for_antigen
 from .amino_acids import (
     STANDARD_AMINO_ACIDS,
     has_only_standard_amino_acids,
@@ -283,6 +283,7 @@ __all__ = [
     "predict_epitopes",
     "prediction_integer",
     "run_vaxrank",
+    "vaccine_peptides_for_antigen",
     "resolve_tissue_risk_policy",
     "resolve_cta_reference_evidence",
     "resolve_tissue_risk_protein_sequences",

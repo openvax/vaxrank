@@ -109,8 +109,9 @@ def predict_epitopes(
         rolled into each CandidateEpitope's mutant context.
 
     protein_fragment
-        Legacy mutation fragment. Required for mutation antigens so WT
-        comparator coordinates can be reconstructed; omitted for CTA antigens.
+        Legacy mutation fragment. When present for a mutation antigen, its
+        coordinates are used to reconstruct WT comparators. Explicit assembled
+        mutation antigens may omit it and consequently carry no inferred WT.
 
     epitope_config
         Configuration object with parameters for scoring epitopes, if
@@ -146,11 +147,6 @@ def predict_epitopes(
         and antigen.amino_acids != protein_fragment.amino_acids
     ):
         raise ValueError("Antigen and protein fragment amino-acid sequences differ")
-    if antigen.kind == ANTIGEN_KIND_MUTATION and protein_fragment is None:
-        raise ValueError(
-            "Mutation antigen prediction requires a mutation fragment for "
-            "WT comparator coordinates"
-        )
     if antigen.kind not in {
             ANTIGEN_KIND_MUTATION, ANTIGEN_KIND_FUSION, ANTIGEN_KIND_CTA}:
         raise NotImplementedError(
@@ -288,7 +284,11 @@ def predict_epitopes(
             antigen.kind == ANTIGEN_KIND_MUTATION and overlaps_targetable
         )
 
-        if overlaps_mutation and peptide not in wt_peptides:
+        if (
+            overlaps_mutation
+            and protein_fragment is not None
+            and peptide not in wt_peptides
+        ):
             # Only records a comparator the reference actually supports at
             # these positions. An indel shifts downstream reference
             # coordinates, so slicing at the mutant's own offsets used to
@@ -390,10 +390,15 @@ def predict_epitopes(
                 # too short to score.
                 wt_peptide = wt_peptides.get(peptide)
                 if wt_peptide is None:
-                    logger.info(
-                        'No position-aligned WT comparator for %s: the variant '
-                        'shifts reference coordinates across this window',
-                        peptide)
+                    if protein_fragment is None:
+                        logger.info(
+                            'No inferred WT comparator for explicit assembled '
+                            'mutation antigen peptide %s', peptide)
+                    else:
+                        logger.info(
+                            'No position-aligned WT comparator for %s: the variant '
+                            'shifts reference coordinates across this window',
+                            peptide)
                 elif len(wt_peptide) < min_peptide_length:
                     logger.info(
                         'No prediction for too-short WT epitope %s: possible stop-loss variant',
