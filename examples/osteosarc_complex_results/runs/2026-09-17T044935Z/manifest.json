@@ -173,6 +173,6 @@
   "png_scale": 3,
   "schema_version": 1,
   "source_json": "/Users/iskander/code/vaxrank/examples/osteosarc_complex_results/source/all_results.json",
-  "source_json_sha256": "0e9dd8d497cabc25527bef304f3cf3535cbc20f2cfc987869002ad137a859a97",
+  "source_json_sha256": "db3eaf4e33fa9cccb83e2c70ef3d15513962bb1232f57f92eca1722367242a85",
   "vaxrank_version": "3.19.1"
 }

@@ -41,7 +41,8 @@ translation provenance.
 GLIS3, and KTN1 alleles and per-BAM fragment counts, the four source BAM URLs,
 validated tagged-ONT paths for GABBR1::SLC29A1 and OTUD7A::FMN1, and the
 unresolved DLG5, AFF3, and KEAP1 leads. Its checksum is included in every
-generated flattened result.
+generated flattened result. PAVE annotations and the transcript-specific
+annotations used by the assembled panels remain separate where they differ.
 
 `rank_assembled_antigens.py` admits only inputs whose evidence gate is `pass`,
 constructs explicit `VaccineAntigen` objects, and runs NetMHCpan through the

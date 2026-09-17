@@ -35,7 +35,8 @@
       "locus": "chr9:133057893",
       "ref": "GGAGGAGGAGGAA",
       "alt": "G",
-      "protein_annotation": "p.Glu493_Glu496del",
+      "pave_protein_annotation": "p.Glu493_Glu496del",
+      "assembled_transcript_annotation": "p.Glu503_Glu506del on ENST00000372108",
       "fragment_counts": {
         "7010dd389c50467d": {"ref": 302, "alt": 117, "other": 20},
         "2bc1fc291308debb": {"ref": 408, "alt": 128, "other": 28},
@@ -48,7 +49,8 @@
       "locus": "chr17:80327830",
       "ref": "ATAC",
       "alt": "A",
-      "protein_annotation": "p.Leu1071del",
+      "pave_protein_annotation": "p.Leu1071del",
+      "assembled_transcript_annotation": "p.Ile1070Ile (del Leu) in the ranked context",
       "fragment_counts": {
         "7010dd389c50467d": {"ref": 136, "alt": 5, "other": 3},
         "2bc1fc291308debb": {"ref": 488, "alt": 14, "other": 15},
@@ -61,7 +63,8 @@
       "locus": "chr9:3856149",
       "ref": "CTGATGTGG",
       "alt": "C",
-      "protein_annotation": "p.His775fs",
+      "pave_protein_annotation": "p.His775fs",
+      "assembled_transcript_annotation": "p.Ser775fs in the ranked context",
       "fragment_counts": {
         "7010dd389c50467d": {"ref": 2, "alt": 0, "other": 0},
         "2bc1fc291308debb": {"ref": 1, "alt": 0, "other": 1},
@@ -74,7 +77,7 @@
       "locus": "chr14:55627965",
       "ref": "G",
       "alt": "GTT",
-      "protein_annotation": "p.Leu340fs",
+      "pave_protein_annotation": "p.Leu340fs",
       "fragment_counts": {
         "7010dd389c50467d": {"ref": 637, "alt": 0, "other": 4},
         "2bc1fc291308debb": {"ref": 1388, "alt": 10, "other": 8},

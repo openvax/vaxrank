@@ -19,7 +19,7 @@
       "vaxrank": "3.19.1"
     },
     "source_component_sha256": {
-      "additional_candidate_audit.json": "dfe819c130088f8b3c7b1aac9fe0a4c3843820067aeb1b0ff334ee9261e9ca15",
+      "additional_candidate_audit.json": "a4b4476849b7ae39ec574073dccd17caad7bc4a584162e1ccb28733c3b275a1a",
       "assembled_antigens.json": "a002f226eba5f3cb8f5f83872417c86a583bff135e984bba866e7913b8153f09",
       "assembled_rankings.json": "adfa2bfe0b108f59bdf44a0d9005e2cf3828b0bb1a52cc83053b64305e0ae0f4",
       "panel_metadata.json": "16da0197099661915fcd176ef0995891d8ee7e2385a764f866f24ce2c70c35c8",
