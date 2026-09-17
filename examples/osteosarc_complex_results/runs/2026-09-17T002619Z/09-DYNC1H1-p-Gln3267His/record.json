@@ -1,0 +1,74 @@
+{
+  "assembled_transcript_ids": [
+    "ENST00000360184"
+  ],
+  "combined_score": 0.007233796687807715,
+  "decision_reason": "Illumina assembly adds one supported upstream residue and Vaxrank retains a low-scoring but filter-passing target-bearing construct.",
+  "dna_only": "The second DYNC1H1 SNV predicts p.Gln3267His but does not establish the expressed sequence context.",
+  "id": "DYNC1H1-p-Gln3267His",
+  "interpretation": "This locus is distinct from the strong p.Val314Ile result. Its predicted class-I signal is weak, which is visible rather than hidden.",
+  "limitation": "osteosarc.com annotates this locus but does not currently publish a protein sequence context; the displayed sequence is RNA-derived.",
+  "osteosarc_protein_context": null,
+  "osteosarc_sequence_status": "The page annotates p.Gln3267His but does not publish a protein sequence context.",
+  "osteosarc_vaccine_sequence": null,
+  "outcome": "selected",
+  "protein_sequence": "MVKDQQEAEKKKVMSQEIQEQLHKHQEVIADKQMSVKEDLDKVEPAVIE",
+  "rna_evidence": {
+    "alt_fragments": 34,
+    "other_fragments": 0,
+    "passes_vaxrank_filters": true,
+    "platform": "Illumina bulk RNA",
+    "ref_fragments": 17,
+    "source": "T0 BostonGene; source 1b66c15da594a3ef",
+    "top_protein_fragments": 33,
+    "transcript_ids": [
+      "ENST00000360184"
+    ]
+  },
+  "sample": "Osteosarcoma T1",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": "KKKVMSQEIQEQLHKHQEVIADKQM",
+  "source_labels": [
+    "osteosarc.com variant annotation",
+    "Isovar RNA assembly",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variant/DYNC1H1-chr14-102030200/",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json"
+  ],
+  "summary_rna": "Illumina: 34 ALT, 0 OTHER; assembly adds one upstream residue",
+  "target_epitope_score": 0.007233796687807715,
+  "targetable_intervals": [
+    [
+      24,
+      25
+    ]
+  ],
+  "title": "DYNC1H1 p.Gln3267His",
+  "top_epitopes": [
+    {
+      "allele": "HLA-B*08:01",
+      "epitope_score": 0.006362524766319259,
+      "ic50_nm": 1121.61,
+      "percentile_rank": 1.099,
+      "sequence": "EQLHKHQEV"
+    },
+    {
+      "allele": "HLA-B*08:01",
+      "epitope_score": 0.00045979387107963665,
+      "ic50_nm": 1516.53,
+      "percentile_rank": 1.456,
+      "sequence": "QLHKHQEVI"
+    },
+    {
+      "allele": "HLA-B*08:01",
+      "epitope_score": 0.00041147805040881873,
+      "ic50_nm": 1533.19,
+      "percentile_rank": 1.47,
+      "sequence": "QLHKHQEV"
+    }
+  ],
+  "variant": "chr14:g.102030200G>T",
+  "variant_class": "Second RNA-supported DYNC1H1 locus"
+}

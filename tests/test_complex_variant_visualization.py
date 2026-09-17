@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import struct
 from xml.etree import ElementTree
 
@@ -79,6 +80,26 @@ def test_result_svg_keeps_negative_result_explicit():
     assert "No target epitope passed the configured filters." in svg
 
 
+def test_result_svg_limits_table_to_five_rows_but_source_keeps_all():
+    record = example_record()
+    record["top_epitopes"] = [
+        {
+            "allele": "HLA-A*02:01",
+            "epitope_score": 0.9 - index / 10,
+            "ic50_nm": 32.1 + index,
+            "percentile_rank": 0.2 + index,
+            "sequence": "PEPTIDE%02d" % index,
+        }
+        for index in range(6)
+    ]
+
+    svg = render_complex_result_svg(record)
+
+    assert "PEPTIDE04" in svg
+    assert "PEPTIDE05" not in svg
+    assert len(record["top_epitopes"]) == 6
+
+
 def test_generate_compact_pdf_and_high_resolution_pages(tmp_path):
     records = [
         example_record("selected"),
@@ -108,3 +129,70 @@ def test_generate_compact_pdf_and_high_resolution_pages(tmp_path):
     assert struct.unpack(">II", pngs[0].read_bytes()[16:24]) == (3600, 2280)
     records = sorted(run.glob("*/record.json"))
     assert len(records) == 4
+
+
+def test_generate_paginates_large_decision_matrix(tmp_path):
+    records = [example_record() for _ in range(8)]
+    for index, record in enumerate(records):
+        record["id"] += "-%s" % index
+    source = tmp_path / "results.json"
+    source.write_text(json.dumps(example_payload(records)))
+
+    run = generate_complex_variant_results(
+        source,
+        tmp_path / "runs",
+        timestamp="2026-09-16T120001Z",
+        png_scale=1,
+    )
+
+    manifest = json.loads((run / "manifest.json").read_text())
+    assert manifest["page_count"] == 11
+    assert [page["name"] for page in manifest["pages"][:2]] == [
+        "summary", "summary-2"]
+    assert len(list(run.glob("*/record.json"))) == 8
+
+
+def test_committed_complex_inputs_cover_requested_cases_and_provenance():
+    source = (
+        Path(__file__).parents[1]
+        / "examples" / "osteosarc_complex_results" / "source")
+    antigens = json.loads((source / "assembled_antigens.json").read_text())
+    rankings = json.loads((source / "assembled_rankings.json").read_text())
+    sv_audits = json.loads((source / "sv_audits.json").read_text())
+    by_id = {record["id"]: record for record in antigens["antigens"]}
+    ranked_by_id = {record["id"]: record for record in rankings["records"]}
+
+    expected = {
+        "TECPR1-p-Thr259fs",
+        "GLIS3-p-Ser775fs",
+        "RNF213-p-Ile1070delLeu",
+        "DYNC1H1-p-Val314Ile",
+        "DYNC1H1-p-Gln3267His",
+        "NAV2-p-Ala1809Val",
+        "MAP2-compound-haplotype",
+        "NTF3-compound-haplotype",
+        "CD109-long-read-phased",
+        "ZNF436-long-read-context",
+    }
+    assert set(by_id) == expected
+    assert set(ranked_by_id) == expected
+    assert all(record["evidence_gate"] == "pass" for record in by_id.values())
+    assert all(record["source_metadata"] for record in by_id.values())
+    assert by_id["CD109-long-read-phased"]["targetable_intervals"] == [
+        [2, 3], [71, 72]]
+    assert ranked_by_id["CD109-long-read-phased"][
+        "selected_long_peptide"] is None
+    assert "DRAH" in by_id["MAP2-compound-haplotype"]["amino_acids"]
+    assert "DVSENY" in by_id["NTF3-compound-haplotype"]["amino_acids"]
+    assert {
+        record["id"] for record in sv_audits["records"]
+    } == {
+        "FOXO3-STRADA-CCDC47-unresolved",
+        "PARD3B-CDKN2B-unresolved",
+        "AMPH-internal-deletion-DNA-only",
+        "chr21-unnamed-long-read-rich-unresolved",
+    }
+    inventory = {
+        record["id"]: record for record in sv_audits["inventory_only"]}
+    assert inventory["MYO15B-chr17-75589953"][
+        "published_vaccine_peptide"] == "AGRRAQAPTRVLGLAPP"

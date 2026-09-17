@@ -1,0 +1,102 @@
+{
+  "assembled_transcript_ids": [
+    "ENST00000360184"
+  ],
+  "combined_score": 4.908489631981229,
+  "decision_reason": "RNA assembly and non-assembly modes agree on the same 45-aa context; Vaxrank recovers the strong KRFHATISF-centered candidate.",
+  "dna_only": "The SNV predicts p.Val314Ile, but does not by itself establish expression or the sample-specific transcript context.",
+  "id": "DYNC1H1-p-Val314Ile",
+  "interpretation": "This is a concordant control. Assembly does not change the sequence, and the selected window overlaps vaccine sequences published on osteosarc.com.",
+  "limitation": "RNA observations in the pinned primary corpus are evidence for reconstruction, not a full-sample abundance estimate.",
+  "osteosarc_protein_context": "KRESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLMKDFP",
+  "osteosarc_sequence_status": null,
+  "osteosarc_vaccine_sequence": null,
+  "outcome": "selected",
+  "protein_sequence": "RESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLM",
+  "rna_evidence": {
+    "alt_fragments": 48,
+    "other_fragments": 7,
+    "passes_vaxrank_filters": true,
+    "platform": "Oxford Nanopore long-read RNA",
+    "ref_fragments": 16,
+    "source": "T1 ONT; source 53f498a544883d51",
+    "top_protein_fragments": 39,
+    "transcript_ids": [
+      "ENST00000360184"
+    ]
+  },
+  "sample": "Osteosarcoma T1",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": "LTLDILKHGKRFHATISFDTDTGLK",
+  "source_labels": [
+    "osteosarc.com protein/vaccine sequence",
+    "Isovar ONT evidence",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variant/DYNC1H1-chr14-101980529/",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json"
+  ],
+  "summary_rna": "ONT: 48 ALT, 7 OTHER; assembly and no-assembly sequences agree",
+  "target_epitope_score": 4.908489631981229,
+  "targetable_intervals": [
+    [
+      22,
+      23
+    ]
+  ],
+  "title": "DYNC1H1 p.Val314Ile",
+  "top_epitopes": [
+    {
+      "allele": "HLA-C*07:01",
+      "epitope_score": 0.9752621531841718,
+      "ic50_nm": 37.84,
+      "percentile_rank": 0.008,
+      "sequence": "KRFHATISF"
+    },
+    {
+      "allele": "HLA-B*08:01",
+      "epitope_score": 0.8552866244991775,
+      "ic50_nm": 160.43,
+      "percentile_rank": 0.201,
+      "sequence": "HGKRFHATI"
+    },
+    {
+      "allele": "HLA-B*27:05",
+      "epitope_score": 0.7163759648377619,
+      "ic50_nm": 255.13,
+      "percentile_rank": 0.558,
+      "sequence": "GKRFHATISF"
+    },
+    {
+      "allele": "HLA-B*27:05",
+      "epitope_score": 0.6536476020700343,
+      "ic50_nm": 291.76,
+      "percentile_rank": 0.618,
+      "sequence": "KRFHATISFD"
+    },
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.5458167065504831,
+      "ic50_nm": 351.46,
+      "percentile_rank": 0.844,
+      "sequence": "ISFDTDTGL"
+    },
+    {
+      "allele": "HLA-B*27:05",
+      "epitope_score": 0.18790742623063053,
+      "ic50_nm": 586.47,
+      "percentile_rank": 0.983,
+      "sequence": "HGKRFHATISF"
+    },
+    {
+      "allele": "HLA-B*27:05",
+      "epitope_score": 0.031571026325438706,
+      "ic50_nm": 877.83,
+      "percentile_rank": 1.291,
+      "sequence": "KRFHATISFDT"
+    }
+  ],
+  "variant": "chr14:g.101980529G>A",
+  "variant_class": "RNA-supported missense control"
+}

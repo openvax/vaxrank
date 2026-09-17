@@ -1,0 +1,91 @@
+{
+  "assembled_transcript_ids": [],
+  "combined_score": 3.454926900776676,
+  "decision_reason": "Illumina RNA reconstructs a validated 43-aa mutant context and Vaxrank selects a target-bearing long peptide.",
+  "dna_only": "The 8-bp deletion predicts a new reading frame but cannot prove that the resulting transcript and mutant tail are expressed.",
+  "id": "GLIS3-p-Ser775fs",
+  "interpretation": "RNA agrees with the nominated complex deletion, making GLIS3 a positive reconstruction control rather than a disagreement with Varcode.",
+  "limitation": "The website's 80-aa vaccine sequence extends beyond the 43-aa RNA context ranked here and is retained separately in the source record.",
+  "osteosarc_protein_context": null,
+  "osteosarc_sequence_status": null,
+  "osteosarc_vaccine_sequence": "QPPESSSSFFNTAKNTASLYPAAIRFTPEVLSARNKLFFSTKWYPCPWILWAAAEVLSPTLPRFPENCAACQLLQCGAFV",
+  "outcome": "selected",
+  "protein_sequence": "QLPPLTAVDAGAERFAPSAPSPQPPESSSSFFNTAKNTASLYP",
+  "rna_evidence": {
+    "alt_fragments": 10,
+    "other_fragments": 1,
+    "passes_vaxrank_filters": true,
+    "platform": "Illumina bulk RNA",
+    "ref_fragments": 19,
+    "source": "T1 BostonGene; source 1b66c15da594a3ef",
+    "top_protein_fragments": 10,
+    "validation": "reference plus nominated edit"
+  },
+  "sample": "Osteosarcoma T1",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": "SAPSPQPPESSSSFFNTAKNTASLY",
+  "source_labels": [
+    "osteosarc.com vaccine sequence",
+    "Isovar RNA translation",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variant/GLIS3-chr9-3856149/",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json"
+  ],
+  "summary_rna": "Illumina: 10 ALT, 1 OTHER; validated 43-aa frameshift context",
+  "target_epitope_score": 3.454926900776676,
+  "targetable_intervals": [
+    [
+      22,
+      43
+    ]
+  ],
+  "title": "GLIS3 p.Ser775fs",
+  "top_epitopes": [
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.9618957246240452,
+      "ic50_nm": 55.54,
+      "percentile_rank": 0.19,
+      "sequence": "NTAKNTASL"
+    },
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.8372015613813002,
+      "ic50_nm": 174.46,
+      "percentile_rank": 0.477,
+      "sequence": "FNTAKNTASL"
+    },
+    {
+      "allele": "HLA-A*01:01",
+      "epitope_score": 0.819671083439449,
+      "ic50_nm": 187.43,
+      "percentile_rank": 0.058,
+      "sequence": "NTAKNTASLY"
+    },
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.7334695172233867,
+      "ic50_nm": 244.7,
+      "percentile_rank": 0.627,
+      "sequence": "FFNTAKNTASL"
+    },
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.08487500606308875,
+      "ic50_nm": 721.79,
+      "percentile_rank": 1.5,
+      "sequence": "TAKNTASL"
+    },
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.009833266185763889,
+      "ic50_nm": 1055.83,
+      "percentile_rank": 1.984,
+      "sequence": "QPPESSSSF"
+    }
+  ],
+  "variant": "chr9:g.3856149_3856156delTGATGTGG",
+  "variant_class": "Expressed 8-bp frameshift deletion"
+}

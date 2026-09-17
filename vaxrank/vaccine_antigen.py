@@ -99,6 +99,19 @@ class TargetableMask(DataclassSerializable):
                     "Targetable interval extends beyond antigen amino-acid sequence"
                 )
 
+    def sliced(self, start: int, end: int) -> "TargetableMask":
+        """Clip targetable intervals to a sequence slice and rebase them."""
+        if start < 0 or end < start:
+            raise ValueError("Sequence slice must be a valid half-open interval")
+        intervals = []
+        for interval in self.intervals:
+            if not interval.overlaps(start, end):
+                continue
+            clipped_start = max(interval.start, start) - start
+            clipped_end = min(interval.end, end) - start
+            intervals.append(AminoAcidInterval(clipped_start, clipped_end))
+        return TargetableMask(tuple(intervals))
+
 
 @dataclass(frozen=True)
 class TumorSpecificityEvidence(DataclassSerializable):
@@ -288,6 +301,64 @@ class VaccineAntigen(DataclassSerializable):
         if not intervals:
             raise ValueError("Vaccine antigen has no targetable content")
         return AminoAcidInterval(intervals[0].start, intervals[-1].end)
+
+    def sliced(self, start: int, end: int) -> "VaccineAntigen":
+        """Return a peptide-window antigen with target coordinates rebased."""
+        if start < 0 or end > len(self.amino_acids) or end <= start:
+            raise ValueError("Antigen slice must be non-empty and in bounds")
+        targetable_mask = self.targetable_mask.sliced(start, end)
+        if self.tumor_specificity.admits_construct and not targetable_mask.intervals:
+            raise ValueError("Antigen slice does not overlap targetable content")
+        return VaccineAntigen(
+            kind=self.kind,
+            amino_acids=self.amino_acids[start:end],
+            targetable_mask=targetable_mask,
+            tumor_specificity=self.tumor_specificity,
+            self_reference_excluded_gene_ids=self.self_reference_excluded_gene_ids,
+            gene_name=self.gene_name,
+            gene_id=self.gene_id,
+            transcript_ids=self.transcript_ids,
+            protein_ids=self.protein_ids,
+            species=self.species,
+            source_identifier=self.source_identifier,
+            source_metadata=self.source_metadata,
+        )
+
+    @classmethod
+    def from_assembled_mutation_sequence(
+            cls,
+            amino_acids: str,
+            targetable_intervals: tuple[AminoAcidInterval, ...],
+            tumor_specificity: TumorSpecificityAttestation,
+            gene_name: str = "",
+            gene_id: str = "",
+            transcript_ids: tuple[str, ...] = (),
+            protein_ids: tuple[str, ...] = (),
+            species: str = "",
+            source_identifier: str = "",
+            source_metadata: tuple[tuple[str, str], ...] = (),
+    ) -> "VaccineAntigen":
+        """Represent a sample-specific RNA translation of mutation(s).
+
+        This constructor is for compound, phased, or otherwise assembled
+        mutation products whose protein coordinates cannot be represented by
+        one Varcode effect. It intentionally carries no inferred wild-type
+        comparator; callers must provide the translated sequence and every
+        targetable amino-acid interval explicitly.
+        """
+        return cls(
+            kind=ANTIGEN_KIND_MUTATION,
+            amino_acids=amino_acids,
+            targetable_mask=TargetableMask(tuple(targetable_intervals)),
+            tumor_specificity=tumor_specificity,
+            gene_name=gene_name,
+            gene_id=gene_id,
+            transcript_ids=transcript_ids,
+            protein_ids=protein_ids,
+            species=species,
+            source_identifier=source_identifier,
+            source_metadata=source_metadata,
+        )
 
     @property
     def display_identifier(self) -> str:

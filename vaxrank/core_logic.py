@@ -27,10 +27,17 @@ from .vaccine_config import VaccineConfig
 from .manufacturability_config import ManufacturabilityConfig
 from .epitope_logic import slice_epitopes, predict_epitopes
 from .mutant_protein_fragment import MutantProteinFragment
+from .vaccine_antigen import VaccineAntigen
 from .vaccine_peptide import VaccinePeptide
 from .vaxrank_results import VaxrankResults
 
 logger = logging.getLogger(__name__)
+
+SOURCE_AGNOSTIC_RANKING_RULES = (
+    "target_epitope_score",
+    "manufacturability",
+    "self_epitope_score",
+)
 
 
 def run_vaxrank(
@@ -249,6 +256,80 @@ def vaccine_peptides_for_variant(
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config,
     )
+
+
+def vaccine_peptides_for_antigen(
+    antigen: VaccineAntigen,
+    mhc_predictor: Union[BasePredictor, TopiaryPredictor],
+    genome=None,
+    vaccine_peptide_length: int = 25,
+    max_vaccine_peptides: int = 1,
+    num_target_epitopes_to_keep: int = 1000,
+    epitope_config: Optional[EpitopeConfig] = None,
+    manufacturability_config: Optional[ManufacturabilityConfig] = None,
+    require_target_epitopes: bool = True,
+):
+    """Predict and rank windows from an explicit assembled antigen.
+
+    This path is intended for compound/phased mutation products and other
+    antigens whose translated sequence and targetable intervals are known but
+    which do not have one position-aligned ``MutantProteinFragment``. Its score
+    and ranking rules are consequently source-agnostic; RNA support remains
+    attached to ``antigen.source_metadata`` rather than being fabricated as a
+    single-variant read count.
+
+    Pass a full reference ``genome`` to evaluate exact-self peptide matches.
+    With ``genome=None``, reference provenance is explicitly incomplete and
+    the output should be treated as an exploratory binding rank.
+    """
+    if not antigen.tumor_specificity.admits_construct:
+        return []
+    if vaccine_peptide_length <= 0:
+        raise ValueError("Vaccine peptide length must be positive")
+    if max_vaccine_peptides <= 0:
+        raise ValueError("Maximum vaccine peptide count must be positive")
+    epitopes = predict_epitopes(
+        mhc_predictor=mhc_predictor,
+        epitope_config=epitope_config,
+        genome=genome,
+        antigen=antigen,
+    )
+    if not epitopes:
+        return []
+    sequence_length = len(antigen.amino_acids)
+    window_length = min(vaccine_peptide_length, sequence_length)
+    candidates = []
+    mfg = manufacturability_config or ManufacturabilityConfig()
+    for start in range(sequence_length - window_length + 1):
+        end = start + window_length
+        if not antigen.interval_is_targetable(start, end):
+            continue
+        candidate_antigen = antigen.sliced(start, end)
+        candidate_epitopes = slice_epitopes(epitopes, start, end)
+        if not candidate_epitopes:
+            continue
+        candidate = VaccinePeptide(
+            antigen=candidate_antigen,
+            epitopes=candidate_epitopes,
+            num_target_epitopes_to_keep=num_target_epitopes_to_keep,
+            manufacturability_thresholds=mfg.thresholds_dict(),
+            manufacturability_rules=mfg.rules,
+            combined_score_expr="target_epitope_score",
+            ranking_rules=SOURCE_AGNOSTIC_RANKING_RULES,
+        )
+        if require_target_epitopes and not candidate.contains_target_epitopes():
+            continue
+        candidates.append(candidate)
+    if not candidates:
+        return []
+    max_score = max(candidate.combined_score for candidate in candidates)
+    if not isclose(max_score, 0.0):
+        candidates = [
+            candidate for candidate in candidates
+            if candidate.combined_score / max_score >= 0.99
+        ]
+    candidates.sort(key=VaccinePeptide.lexicographic_sort_key)
+    return candidates[:max_vaccine_peptides]
 
 
 def vaccine_peptides_from_epitopes(

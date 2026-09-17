@@ -1,0 +1,85 @@
+{
+  "assembled_transcript_ids": [
+    "ENST00000314011",
+    "ENST00000374608"
+  ],
+  "combined_score": 0.516769689273848,
+  "decision_reason": "ONT reconstructs 49 aa versus 30 aa with Illumina assembly and 29 aa without it, expanding the candidate pool and yielding a selected construct.",
+  "dna_only": "The SNV predicts p.Ser207Cys but says nothing about how much contiguous expressed sequence is available for antigen-window enumeration.",
+  "id": "ZNF436-long-read-context",
+  "interpretation": "The mutation identity is unchanged; long reads expand the defensible flanking sequence and therefore the set of junction-overlapping long peptides Vaxrank can consider.",
+  "limitation": "Three ALT UMI groups support the ONT context; platform-dependent context length is shown as evidence, not interpreted as differential abundance.",
+  "osteosarc_protein_context": "LIQHQRTHTGERPYDCNECGKSFGRSCHLIQHQTIHTGEKPHKCNECGKS",
+  "osteosarc_sequence_status": null,
+  "osteosarc_vaccine_sequence": null,
+  "outcome": "selected",
+  "protein_sequence": "QHQRTHTGERPYDCNECGKSFGRSCHLIQHQTIHTGEKPHKCNECGKSF",
+  "rna_evidence": {
+    "alt_fragments": 3,
+    "counts_text": "ONT 3 ALT UMI groups; ILMN 8 ALT observations / 7 supporting templates",
+    "gate_status": "PASS: LONG-READ CONTEXT",
+    "other_fragments": 2,
+    "passes_vaxrank_filters": true,
+    "platform": "Oxford Nanopore versus Illumina RNA",
+    "ref_fragments": 24,
+    "source": "matched T1 comparison",
+    "top_protein_fragments": 3,
+    "transcript_ids": [
+      "ENST00000314011",
+      "ENST00000374608"
+    ]
+  },
+  "sample": "Osteosarcoma T1",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": "KSFGRSCHLIQHQTIHTGEKPHKCN",
+  "source_labels": [
+    "osteosarc.com protein/vaccine sequence",
+    "matched ONT/Illumina audit",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variant/ZNF436-chr1-23362762/",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json"
+  ],
+  "summary_rna": "ONT 49 aa; Illumina assembly 30 aa; Illumina unassembled 29 aa",
+  "target_epitope_score": 0.516769689273848,
+  "targetable_intervals": [
+    [
+      24,
+      25
+    ]
+  ],
+  "title": "ZNF436 p.Ser207Cys long-read context",
+  "top_epitopes": [
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.3819724623134246,
+      "ic50_nm": 444.04,
+      "percentile_rank": 0.996,
+      "sequence": "KSFGRSCHL"
+    },
+    {
+      "allele": "HLA-B*27:05",
+      "epitope_score": 0.13444581289810284,
+      "ic50_nm": 645.26,
+      "percentile_rank": 1.05,
+      "sequence": "GRSCHLIQH"
+    },
+    {
+      "allele": "HLA-B*27:05",
+      "epitope_score": 6.852064271831775e-05,
+      "ic50_nm": 1802.13,
+      "percentile_rank": 2.081,
+      "sequence": "GRSCHLIQHQ"
+    },
+    {
+      "allele": "HLA-B*08:01",
+      "epitope_score": 1.3020421150112677e-05,
+      "ic50_nm": 2051.23,
+      "percentile_rank": 1.915,
+      "sequence": "FGRSCHLI"
+    }
+  ],
+  "variant": "chr1:g.23362762G>C",
+  "variant_class": "Long-read-expanded antigen context"
+}

@@ -1,0 +1,1105 @@
+{
+  "metadata": {
+    "analysis_date": "2026-09-16",
+    "hla_alleles": [
+      "HLA-A*01:01",
+      "HLA-B*08:01",
+      "HLA-B*27:05",
+      "HLA-C*01:02",
+      "HLA-C*07:01"
+    ],
+    "predictor_version": "4.2c",
+    "ranking_note": "Expanded explicit-antigen panels rank windows by source-agnostic target epitope score; RNA evidence is retained separately.",
+    "self_reference_screen": "Not evaluated for explicit assembled-antigen rankings because no full human reference proteome was supplied; exploratory binding ranks only.",
+    "software_versions": {
+      "isovar": "1.17.0",
+      "mhctools": "3.44.0",
+      "netMHCpan": "4.2c",
+      "topiary": "5.55.1",
+      "vaxrank": "3.19.0"
+    },
+    "source_component_sha256": {
+      "assembled_antigens.json": "cf74850cdcb887f9d44b7d9891b728e96100838621047e5208d8bc72d655b955",
+      "assembled_rankings.json": "74b7822b03e765621206abd44bf854bb0a80d1a78cd547ff519b107f400dd2c3",
+      "panel_metadata.json": "5d1a3ea5d21a97efb8710d336464977fbe0fec5da579efe9788578cb1d4e092e",
+      "results.json": "27a2c32099ff931d10e1bc7162a2266b4fe6b43ed8a432a09d4abc8a11521d5b",
+      "sv_audits.json": "2eecee5a9eadd892a0356db71e08bec834d16354b9d35b85c685fe418efd5501"
+    }
+  },
+  "records": [
+    {
+      "combined_score": 14.674333740719533,
+      "decision_reason": "Long-read RNA assembly establishes an expressed frameshift protein and Vaxrank selects a supported long peptide.",
+      "dna_only": "The genomic deletion predicts a frameshift, but DNA alone cannot establish the expressed haplotype, mutant protein extent, or junction-spanning peptide sequence.",
+      "id": "PIP5K1A-p-G474fs-ONT-T1",
+      "interpretation": "This is the positive assembly-dependent result: RNA reconstruction changes an abstract frameshift call into a ranked vaccine candidate with multiple class-I binders.",
+      "limitation": "Selection is computational and is not a clinical recommendation.",
+      "outcome": "selected",
+      "protein_sequence": "VFKKIPLKPSPSKKFRSGSSFSRRAAPVATPALLTSHRSLGNTRHK",
+      "rna_evidence": {
+        "alt_fragments": 3,
+        "other_fragments": 0,
+        "passes_vaxrank_filters": true,
+        "platform": "Oxford Nanopore long-read RNA",
+        "ref_fragments": 36,
+        "source": "T1 ONT RNA window",
+        "top_protein_fragments": 2
+      },
+      "sample": "Osteosarcoma T1",
+      "selected_long_peptide": "SSFSRRAAPVATPALLTSHRSLGNT",
+      "source_labels": [
+        "Isovar T1 ONT fixture",
+        "NetMHCpan 4.2c",
+        "patient class-I HLA"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variant/PIP5K1A-chr1-151242178/",
+        "tests/data/osteosarc/selection_validation/documented.json"
+      ],
+      "summary_rna": "ONT assembly: 3 ALT, 0 OTHER; 49-aa mutant protein",
+      "target_epitope_score": 8.472231,
+      "title": "PIP5K1A p.G474fs",
+      "top_epitopes": [
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 1.25386,
+          "ic50_nm": 116.92,
+          "percentile_rank": 0.352,
+          "sequence": "RRAAPVATPAL"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.998163,
+          "ic50_nm": 3.09,
+          "percentile_rank": 0.007,
+          "sequence": "AAPVATPAL"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.988223,
+          "ic50_nm": 18.97,
+          "percentile_rank": 0.08,
+          "sequence": "AAPVATPALL"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.987883,
+          "ic50_nm": 19.49,
+          "percentile_rank": 0.082,
+          "sequence": "RAAPVATPAL"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.94363,
+          "ic50_nm": 77.44,
+          "percentile_rank": 0.254,
+          "sequence": "APVATPAL"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.874997,
+          "ic50_nm": 148.99,
+          "percentile_rank": 0.182,
+          "sequence": "LLTSHRSL"
+        }
+      ],
+      "variant": "chr1:g.151242179delG (PIP5K1A p.G474fs)",
+      "variant_class": "Assembly-dependent frameshift indel"
+    },
+    {
+      "assembled_transcript_ids": [
+        "ENST00000447648"
+      ],
+      "combined_score": 0.2521712627064244,
+      "decision_reason": "Illumina overlap assembly extends the supported protein from 37 to 49 aa and Vaxrank identifies a target-bearing 25-aa construct.",
+      "dna_only": "The one-base deletion predicts a frameshift, but DNA alone does not establish how much expressed mutant reading frame is supported.",
+      "id": "TECPR1-p-Thr259fs",
+      "interpretation": "This is the strongest short-read assembly example: both translations validate, while assembly adds twelve supported upstream residues and changes the candidate-window pool.",
+      "limitation": "The osteosarc.com page publishes a longer predicted context; this panel ranks only the 49 aa directly reconstructed from the selected RNA evidence.",
+      "osteosarc_protein_context": "PEGSSWSLLDTPGEVVQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGPSWSLLDLKTGSCTSRWESAWSGLSPRTGRCGSEEASTLTIPAAPVGLRWLVR",
+      "osteosarc_sequence_status": null,
+      "osteosarc_vaccine_sequence": null,
+      "outcome": "selected",
+      "protein_sequence": "SSWSLLDTPGEVVQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGP",
+      "rna_evidence": {
+        "alt_fragments": 19,
+        "other_fragments": 0,
+        "passes_vaxrank_filters": true,
+        "platform": "Illumina short-read RNA",
+        "ref_fragments": 20,
+        "source": "T2 SARC0277; source 8fda918141cedf55",
+        "top_protein_fragments": 15,
+        "transcript_ids": [
+          "ENST00000447648"
+        ]
+      },
+      "sample": "Osteosarcoma T2",
+      "score_basis": "source-agnostic target epitope score",
+      "selected_long_peptide": "GPHDLLWAHSGRDRPWSGKESTGAI",
+      "source_labels": [
+        "osteosarc.com protein context",
+        "Isovar assembly evidence",
+        "NetMHCpan 4.2c"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variant/TECPR1-chr7-98241127/",
+        "examples/osteosarc_complex_results/source/assembled_antigens.json"
+      ],
+      "summary_rna": "Illumina assembly: 49 aa versus 37 aa without overlap assembly",
+      "target_epitope_score": 0.2521712627064244,
+      "targetable_intervals": [
+        [
+          24,
+          49
+        ]
+      ],
+      "title": "TECPR1 p.Thr259fs",
+      "top_epitopes": [
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.2521309247013169,
+          "ic50_nm": 531.38,
+          "percentile_rank": 0.919,
+          "sequence": "GRDRPWSGK"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 4.0338005107482355e-05,
+          "ic50_nm": 1881.61,
+          "percentile_rank": 3.088,
+          "sequence": "SGKESTGAI"
+        }
+      ],
+      "variant": "chr7:g.98241128delG (TECPR1 p.Thr259fs)",
+      "variant_class": "Assembly-extended frameshift indel"
+    },
+    {
+      "assembled_transcript_ids": [],
+      "combined_score": 3.454926900776676,
+      "decision_reason": "Illumina RNA reconstructs a validated 43-aa mutant context and Vaxrank selects a target-bearing long peptide.",
+      "dna_only": "The 8-bp deletion predicts a new reading frame but cannot prove that the resulting transcript and mutant tail are expressed.",
+      "id": "GLIS3-p-Ser775fs",
+      "interpretation": "RNA agrees with the nominated complex deletion, making GLIS3 a positive reconstruction control rather than a disagreement with Varcode.",
+      "limitation": "The website's 80-aa vaccine sequence extends beyond the 43-aa RNA context ranked here and is retained separately in the source record.",
+      "osteosarc_protein_context": null,
+      "osteosarc_sequence_status": null,
+      "osteosarc_vaccine_sequence": "QPPESSSSFFNTAKNTASLYPAAIRFTPEVLSARNKLFFSTKWYPCPWILWAAAEVLSPTLPRFPENCAACQLLQCGAFV",
+      "outcome": "selected",
+      "protein_sequence": "QLPPLTAVDAGAERFAPSAPSPQPPESSSSFFNTAKNTASLYP",
+      "rna_evidence": {
+        "alt_fragments": 10,
+        "other_fragments": 1,
+        "passes_vaxrank_filters": true,
+        "platform": "Illumina bulk RNA",
+        "ref_fragments": 19,
+        "source": "T1 BostonGene; source 1b66c15da594a3ef",
+        "top_protein_fragments": 10,
+        "validation": "reference plus nominated edit"
+      },
+      "sample": "Osteosarcoma T1",
+      "score_basis": "source-agnostic target epitope score",
+      "selected_long_peptide": "SAPSPQPPESSSSFFNTAKNTASLY",
+      "source_labels": [
+        "osteosarc.com vaccine sequence",
+        "Isovar RNA translation",
+        "NetMHCpan 4.2c"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variant/GLIS3-chr9-3856149/",
+        "examples/osteosarc_complex_results/source/assembled_antigens.json"
+      ],
+      "summary_rna": "Illumina: 10 ALT, 1 OTHER; validated 43-aa frameshift context",
+      "target_epitope_score": 3.454926900776676,
+      "targetable_intervals": [
+        [
+          22,
+          43
+        ]
+      ],
+      "title": "GLIS3 p.Ser775fs",
+      "top_epitopes": [
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.9618957246240452,
+          "ic50_nm": 55.54,
+          "percentile_rank": 0.19,
+          "sequence": "NTAKNTASL"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.8372015613813002,
+          "ic50_nm": 174.46,
+          "percentile_rank": 0.477,
+          "sequence": "FNTAKNTASL"
+        },
+        {
+          "allele": "HLA-A*01:01",
+          "epitope_score": 0.819671083439449,
+          "ic50_nm": 187.43,
+          "percentile_rank": 0.058,
+          "sequence": "NTAKNTASLY"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.7334695172233867,
+          "ic50_nm": 244.7,
+          "percentile_rank": 0.627,
+          "sequence": "FFNTAKNTASL"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.08487500606308875,
+          "ic50_nm": 721.79,
+          "percentile_rank": 1.5,
+          "sequence": "TAKNTASL"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.009833266185763889,
+          "ic50_nm": 1055.83,
+          "percentile_rank": 1.984,
+          "sequence": "QPPESSSSF"
+        }
+      ],
+      "variant": "chr9:g.3856149_3856156delTGATGTGG",
+      "variant_class": "Expressed 8-bp frameshift deletion"
+    },
+    {
+      "assembled_transcript_ids": [],
+      "combined_score": 0.06648564926043199,
+      "decision_reason": "Illumina RNA supports the in-frame deletion and Vaxrank selects a target-bearing 25-aa construct.",
+      "dna_only": "The genomic allele predicts loss of one leucine; RNA is needed to establish expression and its local translated context.",
+      "id": "RNF213-p-Ile1070delLeu",
+      "interpretation": "The RNA and nominated edit agree, providing a robust complex-indel reconstruction control across the DNA, RNA, protein, and epitope layers.",
+      "limitation": "The rank is specific to the five assessed patient class-I alleles and default filters.",
+      "osteosarc_protein_context": "ADNFNDILKHLLTLADVKHVFRLCGTDEKILANVTEDAKRLIAVADSVLTKVVGDLLSGT",
+      "osteosarc_sequence_status": null,
+      "osteosarc_vaccine_sequence": null,
+      "outcome": "selected",
+      "protein_sequence": "DILKHLLTLADVKHVFRLCGTDEKIANVTEDAKRLIAVADSVLTKVVGD",
+      "rna_evidence": {
+        "alt_fragments": 39,
+        "other_fragments": 16,
+        "passes_vaxrank_filters": true,
+        "platform": "Illumina bulk RNA",
+        "ref_fragments": 17,
+        "source": "T1 BostonGene; source 1b66c15da594a3ef",
+        "top_protein_fragments": 38,
+        "validation": "reference plus nominated edit"
+      },
+      "sample": "Osteosarcoma T1",
+      "score_basis": "source-agnostic target epitope score",
+      "selected_long_peptide": "LTLADVKHVFRLCGTDEKIANVTED",
+      "source_labels": [
+        "osteosarc.com protein context",
+        "Isovar RNA translation",
+        "NetMHCpan 4.2c"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variant/RNF213-chr17-80327830/",
+        "examples/osteosarc_complex_results/source/assembled_antigens.json"
+      ],
+      "summary_rna": "Illumina: 39 ALT observations / 38 templates; validated 49-aa context",
+      "target_epitope_score": 0.06648564926043199,
+      "targetable_intervals": [
+        [
+          24,
+          25
+        ]
+      ],
+      "title": "RNF213 p.Ile1070Ile (del Leu)",
+      "top_epitopes": [
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.06648564926043199,
+          "ic50_nm": 761.12,
+          "percentile_rank": 1.173,
+          "sequence": "FRLCGTDEKI"
+        }
+      ],
+      "variant": "chr17:g.80327830_80327832delTAC",
+      "variant_class": "Expressed in-frame deletion"
+    },
+    {
+      "assembled_transcript_ids": [
+        "ENST00000360184"
+      ],
+      "combined_score": 4.908489631981229,
+      "decision_reason": "RNA assembly and non-assembly modes agree on the same 45-aa context; Vaxrank recovers the strong KRFHATISF-centered candidate.",
+      "dna_only": "The SNV predicts p.Val314Ile, but does not by itself establish expression or the sample-specific transcript context.",
+      "id": "DYNC1H1-p-Val314Ile",
+      "interpretation": "This is a concordant control. Assembly does not change the sequence, and the selected window overlaps vaccine sequences published on osteosarc.com.",
+      "limitation": "RNA observations in the pinned primary corpus are evidence for reconstruction, not a full-sample abundance estimate.",
+      "osteosarc_protein_context": "KRESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLMKDFP",
+      "osteosarc_sequence_status": null,
+      "osteosarc_vaccine_sequence": null,
+      "outcome": "selected",
+      "protein_sequence": "RESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLM",
+      "rna_evidence": {
+        "alt_fragments": 48,
+        "other_fragments": 7,
+        "passes_vaxrank_filters": true,
+        "platform": "Oxford Nanopore long-read RNA",
+        "ref_fragments": 16,
+        "source": "T1 ONT; source 53f498a544883d51",
+        "top_protein_fragments": 39,
+        "transcript_ids": [
+          "ENST00000360184"
+        ]
+      },
+      "sample": "Osteosarcoma T1",
+      "score_basis": "source-agnostic target epitope score",
+      "selected_long_peptide": "LTLDILKHGKRFHATISFDTDTGLK",
+      "source_labels": [
+        "osteosarc.com protein/vaccine sequence",
+        "Isovar ONT evidence",
+        "NetMHCpan 4.2c"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variant/DYNC1H1-chr14-101980529/",
+        "examples/osteosarc_complex_results/source/assembled_antigens.json"
+      ],
+      "summary_rna": "ONT: 48 ALT, 7 OTHER; assembly and no-assembly sequences agree",
+      "target_epitope_score": 4.908489631981229,
+      "targetable_intervals": [
+        [
+          22,
+          23
+        ]
+      ],
+      "title": "DYNC1H1 p.Val314Ile",
+      "top_epitopes": [
+        {
+          "allele": "HLA-C*07:01",
+          "epitope_score": 0.9752621531841718,
+          "ic50_nm": 37.84,
+          "percentile_rank": 0.008,
+          "sequence": "KRFHATISF"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.8552866244991775,
+          "ic50_nm": 160.43,
+          "percentile_rank": 0.201,
+          "sequence": "HGKRFHATI"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.7163759648377619,
+          "ic50_nm": 255.13,
+          "percentile_rank": 0.558,
+          "sequence": "GKRFHATISF"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.6536476020700343,
+          "ic50_nm": 291.76,
+          "percentile_rank": 0.618,
+          "sequence": "KRFHATISFD"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.5458167065504831,
+          "ic50_nm": 351.46,
+          "percentile_rank": 0.844,
+          "sequence": "ISFDTDTGL"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.18790742623063053,
+          "ic50_nm": 586.47,
+          "percentile_rank": 0.983,
+          "sequence": "HGKRFHATISF"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.031571026325438706,
+          "ic50_nm": 877.83,
+          "percentile_rank": 1.291,
+          "sequence": "KRFHATISFDT"
+        }
+      ],
+      "variant": "chr14:g.101980529G>A",
+      "variant_class": "RNA-supported missense control"
+    },
+    {
+      "assembled_transcript_ids": [
+        "ENST00000360184"
+      ],
+      "combined_score": 0.007233796687807715,
+      "decision_reason": "Illumina assembly adds one supported upstream residue and Vaxrank retains a low-scoring but filter-passing target-bearing construct.",
+      "dna_only": "The second DYNC1H1 SNV predicts p.Gln3267His but does not establish the expressed sequence context.",
+      "id": "DYNC1H1-p-Gln3267His",
+      "interpretation": "This locus is distinct from the strong p.Val314Ile result. Its predicted class-I signal is weak, which is visible rather than hidden.",
+      "limitation": "osteosarc.com annotates this locus but does not currently publish a protein sequence context; the displayed sequence is RNA-derived.",
+      "osteosarc_protein_context": null,
+      "osteosarc_sequence_status": "The page annotates p.Gln3267His but does not publish a protein sequence context.",
+      "osteosarc_vaccine_sequence": null,
+      "outcome": "selected",
+      "protein_sequence": "MVKDQQEAEKKKVMSQEIQEQLHKHQEVIADKQMSVKEDLDKVEPAVIE",
+      "rna_evidence": {
+        "alt_fragments": 34,
+        "other_fragments": 0,
+        "passes_vaxrank_filters": true,
+        "platform": "Illumina bulk RNA",
+        "ref_fragments": 17,
+        "source": "T0 BostonGene; source 1b66c15da594a3ef",
+        "top_protein_fragments": 33,
+        "transcript_ids": [
+          "ENST00000360184"
+        ]
+      },
+      "sample": "Osteosarcoma T1",
+      "score_basis": "source-agnostic target epitope score",
+      "selected_long_peptide": "KKKVMSQEIQEQLHKHQEVIADKQM",
+      "source_labels": [
+        "osteosarc.com variant annotation",
+        "Isovar RNA assembly",
+        "NetMHCpan 4.2c"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variant/DYNC1H1-chr14-102030200/",
+        "examples/osteosarc_complex_results/source/assembled_antigens.json"
+      ],
+      "summary_rna": "Illumina: 34 ALT, 0 OTHER; assembly adds one upstream residue",
+      "target_epitope_score": 0.007233796687807715,
+      "targetable_intervals": [
+        [
+          24,
+          25
+        ]
+      ],
+      "title": "DYNC1H1 p.Gln3267His",
+      "top_epitopes": [
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.006362524766319259,
+          "ic50_nm": 1121.61,
+          "percentile_rank": 1.099,
+          "sequence": "EQLHKHQEV"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.00045979387107963665,
+          "ic50_nm": 1516.53,
+          "percentile_rank": 1.456,
+          "sequence": "QLHKHQEVI"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.00041147805040881873,
+          "ic50_nm": 1533.19,
+          "percentile_rank": 1.47,
+          "sequence": "QLHKHQEV"
+        }
+      ],
+      "variant": "chr14:g.102030200G>T",
+      "variant_class": "Second RNA-supported DYNC1H1 locus"
+    },
+    {
+      "assembled_transcript_ids": [
+        "ENST00000527559",
+        "ENST00000540292"
+      ],
+      "combined_score": 0.011670678442314621,
+      "decision_reason": "Illumina RNA yields one validated 47-aa sequence compatible with two contributing transcript models and a target-bearing construct.",
+      "dna_only": "The SNV maps to multiple transcript consequences; DNA alone cannot choose the RNA-contributing transcript model.",
+      "id": "NAV2-p-Ala1809Val",
+      "interpretation": "The sequence is resolved while isoform identity remains non-unique. Both assembled transcript IDs are preserved instead of reporting one guessed source.",
+      "limitation": "The RNA window ends before reference transcript predictions diverge, so this result does not claim unique isoform resolution.",
+      "osteosarc_protein_context": "CKGNGTAQSADLRIRRQHSSDSVSSINSVTSHSSVGSNIESDSKKKKRKN",
+      "osteosarc_sequence_status": null,
+      "osteosarc_vaccine_sequence": null,
+      "outcome": "selected",
+      "protein_sequence": "GTAQSADLRIRRQHSSDSVSSINSVTSHSSVGSNIESDSKKKKRKNW",
+      "rna_evidence": {
+        "alt_fragments": 18,
+        "other_fragments": 0,
+        "passes_vaxrank_filters": true,
+        "platform": "Illumina short-read RNA",
+        "ref_fragments": 16,
+        "source": "T2 SARC0277; source 8fda918141cedf55",
+        "top_protein_fragments": 13,
+        "transcript_ids": [
+          "ENST00000527559",
+          "ENST00000540292"
+        ]
+      },
+      "sample": "Osteosarcoma T2",
+      "score_basis": "source-agnostic target epitope score",
+      "selected_long_peptide": "DLRIRRQHSSDSVSSINSVTSHSSV",
+      "source_labels": [
+        "osteosarc.com protein context",
+        "Isovar splice-aware translation",
+        "NetMHCpan 4.2c"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variant/NAV2-chr11-20080142/",
+        "examples/osteosarc_complex_results/source/assembled_antigens.json"
+      ],
+      "summary_rna": "Illumina: 18 ALT; one sequence, two compatible transcript models",
+      "target_epitope_score": 0.011670678442314621,
+      "targetable_intervals": [
+        [
+          24,
+          25
+        ]
+      ],
+      "title": "NAV2 p.Ala1809Val",
+      "top_epitopes": [
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.011670678442314621,
+          "ic50_nm": 1029.88,
+          "percentile_rank": 1.951,
+          "sequence": "NSVTSHSSV"
+        }
+      ],
+      "variant": "chr11:g.20080142C>T",
+      "variant_class": "Multi-transcript RNA-supported missense"
+    },
+    {
+      "assembled_transcript_ids": [
+        "ENST00000360351",
+        "ENST00000447185"
+      ],
+      "combined_score": 0.01463124052921849,
+      "decision_reason": "Four exact Q20 T1 Illumina reads establish the compound haplotype; its translation passes the evidence gate and is ranked as an explicit assembled antigen.",
+      "dna_only": "The historical isolated 22-bp deletion predicts a different protein. Full evidence instead supports adjacent substitutions plus a 28-nt deletion on one haplotype.",
+      "id": "MAP2-compound-haplotype",
+      "interpretation": "The compound protein encodes ...DRAH..., not the listed-only ...DSTQ... or deletion-only ...DLAH... alternatives. The website now publishes the same compound protein context.",
+      "limitation": "This is a transcript-aware reference-plus-compound-edit translation, not a whole-RNA Isovar protein reconstruction; that distinction is retained in the source metadata.",
+      "osteosarc_protein_context": "EDSRTGLPPVTDENHVIVKTDSQLEDRAHCHHLFKTVRIYQGRVVPFTKALMIKFEEIWPQTFH",
+      "osteosarc_sequence_status": null,
+      "osteosarc_vaccine_sequence": null,
+      "outcome": "selected",
+      "protein_sequence": "SQLEDRAHCHHLFKTVRIYQGRVVP",
+      "rna_evidence": {
+        "alt_fragments": 4,
+        "counts_text": "4 Q20 T1 ILMN + 2 Q20 T2 ILMN + 1 Q20 T2 ONT compound witnesses",
+        "gate_status": "PASS: EXPLICIT COMPOUND HAPLOTYPE",
+        "other_fragments": 1,
+        "passes_vaxrank_filters": true,
+        "platform": "Illumina RNA with ONT corroboration",
+        "ref_fragments": 5,
+        "source": "T1 UCLA; source 261f8be4ce5aa8c8",
+        "top_protein_fragments": 4,
+        "transcript_ids": [
+          "ENST00000360351",
+          "ENST00000447185"
+        ]
+      },
+      "sample": "Osteosarcoma T1",
+      "score_basis": "source-agnostic target epitope score",
+      "selected_long_peptide": "SQLEDRAHCHHLFKTVRIYQGRVVP",
+      "source_labels": [
+        "osteosarc.com compound protein context",
+        "full cross-platform haplotype audit",
+        "NetMHCpan 4.2c"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variant/MAP2-chr2-209694768/",
+        "https://osteosarc.com/oncoanalyser/longitudinal/",
+        "examples/osteosarc_complex_results/source/assembled_antigens.json"
+      ],
+      "summary_rna": "T1 Illumina: 4 exact Q20 compound reads; T2 Illumina and ONT corroborate",
+      "target_epitope_score": 0.01463124052921849,
+      "targetable_intervals": [
+        [
+          5,
+          25
+        ]
+      ],
+      "title": "MAP2 compound frameshift haplotype",
+      "top_epitopes": [
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.007708500610938202,
+          "ic50_nm": 1092.64,
+          "percentile_rank": 1.502,
+          "sequence": "VRIYQGRVV"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.0068595108973308104,
+          "ic50_nm": 1110.26,
+          "percentile_rank": 1.516,
+          "sequence": "DRAHCHHLFK"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 3.493534280365264e-05,
+          "ic50_nm": 1903.18,
+          "percentile_rank": 2.16,
+          "sequence": "DRAHCHHLF"
+        }
+      ],
+      "variant": "chr2:g.209694769_209694800delinsAGGG",
+      "variant_class": "RNA-resolved compound frameshift"
+    },
+    {
+      "assembled_transcript_ids": [],
+      "combined_score": 0.841564014754058,
+      "decision_reason": "The explicit compound allele is independently observed in Illumina and ONT RNA, passes the evidence gate, and yields a target-bearing peptide.",
+      "dna_only": "Treating A>G alone predicts Lys-to-Arg. RNA carries the adjacent base change too, so the expressed AG>GT haplotype encodes serine.",
+      "id": "NTF3-compound-haplotype",
+      "interpretation": "NTF3 is the cleanest RNA-versus-single-edit correction: the amino acid changes because the true local haplotype spans two adjacent bases.",
+      "limitation": "osteosarc.com lists p.Lys69Ser but does not currently publish a protein context; the displayed window comes from the RNA reconstruction.",
+      "osteosarc_protein_context": null,
+      "osteosarc_sequence_status": "The variants table annotates p.Lys69Ser; the page does not publish a protein sequence context.",
+      "osteosarc_vaccine_sequence": null,
+      "outcome": "selected",
+      "protein_sequence": "NKLSKQMVDVSENYQSTLPK",
+      "rna_evidence": {
+        "alt_fragments": 4,
+        "counts_text": "4 ALT templates and 4 REF templates in the selected Illumina reconstruction",
+        "gate_status": "PASS: EXPLICIT COMPOUND HAPLOTYPE",
+        "other_fragments": 0,
+        "passes_vaxrank_filters": true,
+        "platform": "Illumina and Oxford Nanopore RNA",
+        "ref_fragments": 4,
+        "source": "explicit compound stress corpus",
+        "top_protein_fragments": 4
+      },
+      "sample": "Osteosarcoma T0/T1",
+      "score_basis": "source-agnostic target epitope score",
+      "selected_long_peptide": "NKLSKQMVDVSENYQSTLPK",
+      "source_labels": [
+        "osteosarc.com p.Lys69Ser annotation",
+        "Isovar compound-allele corpus",
+        "NetMHCpan 4.2c"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variants/",
+        "examples/osteosarc_complex_results/source/assembled_antigens.json"
+      ],
+      "summary_rna": "Illumina and ONT reproduce AG>GT; single-edit Lys\u2192Arg is rejected",
+      "target_epitope_score": 0.841564014754058,
+      "targetable_intervals": [
+        [
+          10,
+          11
+        ]
+      ],
+      "title": "NTF3 compound p.Lys69Ser haplotype",
+      "top_epitopes": [
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.841564014754058,
+          "ic50_nm": 171.14,
+          "percentile_rank": 0.47,
+          "sequence": "VSENYQSTL"
+        }
+      ],
+      "variant": "chr12:g.5494381_5494382delinsGT",
+      "variant_class": "RNA correction of isolated SNV effect"
+    },
+    {
+      "assembled_transcript_ids": [
+        "ENST00000287097"
+      ],
+      "combined_score": null,
+      "decision_reason": "Twenty-one ONT UMI groups and three exact 222-nt Q20 reads phase the alleles, but no target epitope passes the configured class-I filters.",
+      "dna_only": "Two variants 6,181 bp apart cannot be assigned to one expressed molecule from independent DNA calls or site-local short reads.",
+      "id": "CD109-long-read-phased",
+      "interpretation": "Long reads change the protein claim by linking two substitutions 207 coding nucleotides apart. Vaxrank retains the negative epitope result without forcing selection.",
+      "limitation": "No 25-mer spans both amino-acid changes; long reads prove molecular phase, while each local antigen remains independently targetable.",
+      "osteosarc_protein_context": null,
+      "osteosarc_sequence_status": "The page annotates p.Arg1310Met but does not publish a protein sequence context.",
+      "osteosarc_vaccine_sequence": null,
+      "outcome": "no_target_binder",
+      "protein_sequence": "QPMAVNISANGFGFAICQLNVVYNVKASGSSRRRRSIQNQEAFDLDVAVKENKDDLNHVDLNVCTSFSGPGMSG",
+      "rna_evidence": {
+        "alt_fragments": 21,
+        "counts_text": "21 ALT/ALT UMI groups; 3 exact full-interval Q20 reads; 0 linked Illumina reads",
+        "gate_status": "PASS: LONG-READ PHASE",
+        "other_fragments": 4,
+        "passes_vaxrank_filters": true,
+        "platform": "Oxford Nanopore long-read RNA",
+        "ref_fragments": 43,
+        "source": "T2 ONT phased interval",
+        "top_protein_fragments": 3,
+        "transcript_ids": [
+          "ENST00000287097"
+        ]
+      },
+      "sample": "Osteosarcoma T2",
+      "score_basis": "source-agnostic target epitope score",
+      "selected_long_peptide": null,
+      "source_labels": [
+        "osteosarc.com focal variant",
+        "ONT phased-interval audit",
+        "NetMHCpan 4.2c"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variant/CD109-chr6-73818405/",
+        "examples/osteosarc_complex_results/source/assembled_antigens.json"
+      ],
+      "summary_rna": "ONT links both alleles in 21 UMIs; Illumina links neither",
+      "target_epitope_score": null,
+      "targetable_intervals": [
+        [
+          2,
+          3
+        ],
+        [
+          71,
+          72
+        ]
+      ],
+      "title": "CD109 long-read phased alleles",
+      "top_epitopes": [],
+      "variant": "chr6:g.73812224C>T phased with chr6:g.73818405G>T",
+      "variant_class": "Long-read-resolved compound protein"
+    },
+    {
+      "assembled_transcript_ids": [
+        "ENST00000314011",
+        "ENST00000374608"
+      ],
+      "combined_score": 0.516769689273848,
+      "decision_reason": "ONT reconstructs 49 aa versus 30 aa with Illumina assembly and 29 aa without it, expanding the candidate pool and yielding a selected construct.",
+      "dna_only": "The SNV predicts p.Ser207Cys but says nothing about how much contiguous expressed sequence is available for antigen-window enumeration.",
+      "id": "ZNF436-long-read-context",
+      "interpretation": "The mutation identity is unchanged; long reads expand the defensible flanking sequence and therefore the set of junction-overlapping long peptides Vaxrank can consider.",
+      "limitation": "Three ALT UMI groups support the ONT context; platform-dependent context length is shown as evidence, not interpreted as differential abundance.",
+      "osteosarc_protein_context": "LIQHQRTHTGERPYDCNECGKSFGRSCHLIQHQTIHTGEKPHKCNECGKS",
+      "osteosarc_sequence_status": null,
+      "osteosarc_vaccine_sequence": null,
+      "outcome": "selected",
+      "protein_sequence": "QHQRTHTGERPYDCNECGKSFGRSCHLIQHQTIHTGEKPHKCNECGKSF",
+      "rna_evidence": {
+        "alt_fragments": 3,
+        "counts_text": "ONT 3 ALT UMI groups; ILMN 8 ALT observations / 7 supporting templates",
+        "gate_status": "PASS: LONG-READ CONTEXT",
+        "other_fragments": 2,
+        "passes_vaxrank_filters": true,
+        "platform": "Oxford Nanopore versus Illumina RNA",
+        "ref_fragments": 24,
+        "source": "matched T1 comparison",
+        "top_protein_fragments": 3,
+        "transcript_ids": [
+          "ENST00000314011",
+          "ENST00000374608"
+        ]
+      },
+      "sample": "Osteosarcoma T1",
+      "score_basis": "source-agnostic target epitope score",
+      "selected_long_peptide": "KSFGRSCHLIQHQTIHTGEKPHKCN",
+      "source_labels": [
+        "osteosarc.com protein/vaccine sequence",
+        "matched ONT/Illumina audit",
+        "NetMHCpan 4.2c"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/variant/ZNF436-chr1-23362762/",
+        "examples/osteosarc_complex_results/source/assembled_antigens.json"
+      ],
+      "summary_rna": "ONT 49 aa; Illumina assembly 30 aa; Illumina unassembled 29 aa",
+      "target_epitope_score": 0.516769689273848,
+      "targetable_intervals": [
+        [
+          24,
+          25
+        ]
+      ],
+      "title": "ZNF436 p.Ser207Cys long-read context",
+      "top_epitopes": [
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.3819724623134246,
+          "ic50_nm": 444.04,
+          "percentile_rank": 0.996,
+          "sequence": "KSFGRSCHL"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.13444581289810284,
+          "ic50_nm": 645.26,
+          "percentile_rank": 1.05,
+          "sequence": "GRSCHLIQH"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 6.852064271831775e-05,
+          "ic50_nm": 1802.13,
+          "percentile_rank": 2.081,
+          "sequence": "GRSCHLIQHQ"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 1.3020421150112677e-05,
+          "ic50_nm": 2051.23,
+          "percentile_rank": 1.915,
+          "sequence": "FGRSCHLI"
+        }
+      ],
+      "variant": "chr1:g.23362762G>C",
+      "variant_class": "Long-read-expanded antigen context"
+    },
+    {
+      "decision_reason": "The top-ranked fusion has 55 DNA and 31 RNA split reads, yet the directly observed ONT junction window has no exact collinear annotated donor; translation is withheld.",
+      "dna_only": "DNA split reads establish a recurrent somatic rearrangement, but breakends alone do not identify the expressed splice path, CDS start, or junction reading frame.",
+      "epitope_message": "Not predicted because the observed junction has no justified donor CDS/frame.",
+      "id": "FOXO3-STRADA-CCDC47-unresolved",
+      "interpretation": "Strong cross-platform support establishes an expressed rearrangement, not an antigen. This is the clearest example of evidence strength and peptide readiness being separate questions.",
+      "junction_cdna_sequence": "TTTTAATTGCTGAGAAGTATGCCATTGTTGTATGGATATTCTGTTATAGAAATATACCGGAGAAGCAACGGCACACAGCCATAATATAGAGAACAGAGCTTCTCCATGAACATCCACCAG",
+      "junction_interval_nt": [
+        60,
+        60
+      ],
+      "limitation": "A longer assembled transcript with justified CDS/frame is required before junction-spanning peptides can be enumerated.",
+      "outcome": "no_translation",
+      "protein_sequence": null,
+      "rna_evidence": {
+        "alt_fragments": 3,
+        "counts_text": "55 tumor-DNA split reads; 31 RNA split reads; 3 direct T2 ONT junction fragments",
+        "gate_status": "HELD OUT: NO ANNOTATED DONOR FRAME",
+        "other_fragments": "n/a",
+        "passes_vaxrank_filters": false,
+        "platform": "Short- and long-read RNA",
+        "ref_fragments": "n/a",
+        "source": "fusion scan plus direct T2 ONT witnesses",
+        "top_protein_fragments": 0
+      },
+      "sample": "Osteosarcoma T1/T2",
+      "selected_long_peptide": null,
+      "source_labels": [
+        "osteosarc.com fusion rank 1",
+        "Isovar direct ONT junction evidence"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/fusions/foxo3--strada-ccdc47/",
+        "https://osteosarc.com/fusions/"
+      ],
+      "summary_rna": "55 DNA + 31 RNA split reads across four timepoints; donor frame unresolved",
+      "title": "FOXO3::STRADA/CCDC47",
+      "top_epitopes": [],
+      "variant": "chr6:108611245 \u2194 chr17:63745980",
+      "variant_class": "Cross-platform structural variant / fusion"
+    },
+    {
+      "decision_reason": "The positive-control fusion has 119 DNA and 48 RNA split reads; two direct T1 ONT witnesses include a 12-nt junction insertion, but no exact annotated donor CDS is established.",
+      "dna_only": "The recurrent t(2;9) is a compelling somatic rearrangement but DNA does not specify the expressed transcript or reading frame.",
+      "epitope_message": "Not predicted because the sample-specific junction CDS/frame is unresolved.",
+      "id": "PARD3B-CDKN2B-unresolved",
+      "interpretation": "The event is biologically credible and transcribed across timepoints, while its antigen sequence remains unresolved. Vaxrank therefore reports evidence but performs no peptide ranking.",
+      "junction_cdna_sequence": "TGGTGAGAACACTTAAAATCTACTCTTTTTTTTTTTTTTTTTTTGTGTGCTGATATGAATATTAGAAATGTTCATTTCATCTCTTAAAAACCGTGATAAGTT",
+      "junction_interval_nt": [
+        45,
+        57
+      ],
+      "limitation": "The 12 inserted junction nucleotides and absent donor-frame assignment make naive reference-splicing translation unsafe.",
+      "outcome": "no_translation",
+      "protein_sequence": null,
+      "rna_evidence": {
+        "alt_fragments": 2,
+        "counts_text": "119 tumor-DNA split reads; 48 RNA split reads; 2 direct T1 ONT junction fragments",
+        "gate_status": "HELD OUT: NO ANNOTATED DONOR FRAME",
+        "other_fragments": "n/a",
+        "passes_vaxrank_filters": false,
+        "platform": "Short- and long-read RNA",
+        "ref_fragments": "n/a",
+        "source": "fusion scan plus direct T1 ONT witnesses",
+        "top_protein_fragments": 0
+      },
+      "sample": "Osteosarcoma T0-T3",
+      "selected_long_peptide": null,
+      "source_labels": [
+        "osteosarc.com fusion positive control",
+        "Isovar direct ONT junction evidence"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/fusions/pard3b--cdkn2b-as1-cdkn2b/",
+        "https://osteosarc.com/fusions/"
+      ],
+      "summary_rna": "119 DNA + 48 RNA split reads; direct ONT junction includes 12 inserted nt",
+      "title": "PARD3B::CDKN2B-AS1/CDKN2B",
+      "top_epitopes": [],
+      "variant": "chr2:205310103 \u2194 chr9:22007648",
+      "variant_class": "Recurrent somatic translocation"
+    },
+    {
+      "decision_reason": "No RNA split read supports the junction, so no sample-specific transcript, exon consequence, reading frame, or mutant protein is admitted.",
+      "dna_only": "LINX/ESVEE resolves a 4.3-kb deletion with both breakends in AMPH and junction copy number 1.87.",
+      "epitope_message": "Not predicted because no expressed junction sequence is available.",
+      "id": "AMPH-internal-deletion-DNA-only",
+      "interpretation": "This DNA-only event is a useful negative control: structural resolution at the genome level is insufficient for Vaxrank antigen construction.",
+      "limitation": "Absence of RNA split reads may reflect absent expression or assay sensitivity; it is not proof that the DNA event is false.",
+      "outcome": "no_translation",
+      "protein_sequence": null,
+      "rna_evidence": {
+        "alt_fragments": 0,
+        "counts_text": "4.3-kb AMPH deletion; JCN 1.87; 0 RNA split reads",
+        "gate_status": "HELD OUT: NO RNA JUNCTION",
+        "other_fragments": "n/a",
+        "passes_vaxrank_filters": false,
+        "platform": "DNA WGS; RNA junction audit",
+        "ref_fragments": "n/a",
+        "source": "T0 oncoanalyser SV",
+        "top_protein_fragments": 0
+      },
+      "sample": "Osteosarcoma T0",
+      "selected_long_peptide": null,
+      "source_labels": [
+        "osteosarc.com oncoanalyser SV",
+        "fusion-wide RNA split-read audit"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/oncoanalyser/sv/",
+        "https://osteosarc.com/fusions/"
+      ],
+      "summary_rna": "DNA-supported 4.3-kb deletion; no RNA split reads",
+      "title": "AMPH 4.3-kb internal deletion",
+      "top_epitopes": [],
+      "variant": "chr7:g.38543151_38547476del",
+      "variant_class": "DNA-supported intragenic structural deletion"
+    },
+    {
+      "decision_reason": "The junction has 32 RNA split reads, including 29 across ONT and PacBio, yet both partners are unnamed and no CDS start or frame is justified; translation is withheld.",
+      "dna_only": "Two tumor-DNA split reads across T1 and T2 meet the site's multi-sample somatic threshold, but the breakends do not identify a coding transcript.",
+      "epitope_message": "Not predicted because neither partner has an identified coding transcript or reading frame.",
+      "id": "chr21-unnamed-long-read-rich-unresolved",
+      "interpretation": "This is the clearest additional long-read-dependent expression example: long reads dominate the RNA evidence, but abundant support still cannot substitute for a defensible coding model.",
+      "junction_cdna_sequence": "CGGCGGTGGCGGCGGCGGCGGCGGCGGCGGGACCGAAACCCCCCCCGAGTGTTACAGCCCCCCCGGCAGCAGCACTCGCCGAATCCCGGGGCCGAGGGAGCGAGACCCGTCGCCGCGCTCTCCCCCCTCCCGGCGCCCACCCCCGCGGGGAATCCCCCGCGAGGGGGGTCTCCCCCGCGGGGGCGCGCCGGCGTCTCCTTGTGGGGGGGCCGGGCCACCCCTCCCACGGCGCGACCGCTCTCCCACCCCTCCTCCCCGCGCCCCCGCCCCGGCGACGGGGGGGGTGCCGCGCGCGGGTCGGGGGGCGGGGCGGACTGTCCCCAGTGCGCCCCGGGCGGGTCGCGCCGTCGGGCCCGGGGGAGGTTCTCTCGGGGCCACGCGCGCGTCCCCCGAAGAGGGG",
+      "junction_interval_nt": [
+        200,
+        200
+      ],
+      "limitation": "The GC-rich chr21 locus has many nearby junction calls and unnamed partners, so mapping complexity and transcript identity must be resolved before antigen construction.",
+      "outcome": "no_translation",
+      "protein_sequence": null,
+      "rna_evidence": {
+        "alt_fragments": 32,
+        "counts_text": "2 tumor-DNA split reads; 32 RNA split reads; 29 long-read witnesses",
+        "gate_status": "HELD OUT: UNNAMED PARTNERS / NO CDS",
+        "other_fragments": "n/a",
+        "passes_vaxrank_filters": false,
+        "platform": "Oxford Nanopore, PacBio, and short-read RNA",
+        "ref_fragments": "n/a",
+        "source": "fusion-wide 43-BAM junction audit",
+        "top_protein_fragments": 0
+      },
+      "sample": "Osteosarcoma T0-T3",
+      "selected_long_peptide": null,
+      "source_labels": [
+        "osteosarc.com fusion rank 21",
+        "cross-platform junction evidence"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/fusions/unknown--unknown/",
+        "https://osteosarc.com/fusions/"
+      ],
+      "summary_rna": "29 ONT/PacBio + 3 short-read RNA witnesses; unnamed CDS/frame",
+      "title": "chr21 unnamed long-read-rich junction",
+      "top_epitopes": [],
+      "variant": "chr21:8397976 \u2194 chr21:8442207",
+      "variant_class": "Long-read-dominant expressed structural junction"
+    },
+    {
+      "decision_reason": "RNA assembly succeeds and passes Vaxrank's evidence gates, but no target epitope passes the default prediction filters.",
+      "dna_only": "A 15-nt deletion inside a repetitive histone sequence does not by itself identify the expressed protein context or a useful class-I target.",
+      "id": "H1-2-15nt-deletion-ONT-T1",
+      "interpretation": "Assembly is necessary but not sufficient. The expressed sequence is resolved, yet Vaxrank correctly returns no vaccine candidate for the configured patient HLA set.",
+      "limitation": "A zero-target result is retained rather than hidden or forced into selection.",
+      "outcome": "no_target_binder",
+      "protein_sequence": "VAKPKKAAKSAAKAVKPKVVKPKKAAPKKK",
+      "rna_evidence": {
+        "alt_fragments": 13,
+        "other_fragments": 2,
+        "passes_vaxrank_filters": true,
+        "platform": "Oxford Nanopore long-read RNA",
+        "ref_fragments": 33,
+        "source": "T1 ONT RNA window",
+        "top_protein_fragments": 11
+      },
+      "sample": "Osteosarcoma T1",
+      "selected_long_peptide": null,
+      "source_labels": [
+        "Isovar T1 ONT fixture",
+        "NetMHCpan 4.2c",
+        "patient class-I HLA"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/",
+        "tests/data/osteosarc/selection_validation/documented.json"
+      ],
+      "summary_rna": "ONT assembly: 13 ALT, 2 OTHER; no passing target binder",
+      "title": "H1-2 repetitive 15-nt deletion",
+      "top_epitopes": [],
+      "variant": "chr6:g.26055825_26055839delCCTTGGGCTTAGCGG",
+      "variant_class": "Large in-frame deletion"
+    },
+    {
+      "decision_reason": "A coding fusion hypothesis exists, but competing noncoding donor hypotheses make the translated product ambiguous; Vaxrank holds it out.",
+      "dna_only": "The DNA rearrangement supports a junction but cannot choose the sample-specific transcript, CDS start, reading frame, or translated junction product.",
+      "id": "ATP5MG-KMT2A-T0",
+      "interpretation": "The adapter preserves the plausible 18-aa translation for audit while preventing an ambiguous fusion from entering vaccine ranking.",
+      "limitation": "Default NetMHCpan filtering also produced no targetable epitope for the coding hypothesis.",
+      "outcome": "held_out",
+      "protein_sequence": "MAQFVRNLVEKTPALVNG",
+      "rna_evidence": {
+        "alt_fragments": "n/a",
+        "counts_text": "Junction assembly evaluated; allele-fragment counts are not available",
+        "gate_status": "HELD OUT BEFORE RANKING",
+        "other_fragments": "n/a",
+        "passes_vaxrank_filters": false,
+        "platform": "Illumina short-read RNA assembly",
+        "ref_fragments": "n/a",
+        "source": "T0 Personalis junction window",
+        "top_protein_fragments": "n/a"
+      },
+      "sample": "Osteosarcoma T0",
+      "selected_long_peptide": null,
+      "source_labels": [
+        "Isovar fusion fixture",
+        "ambiguous translation status"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/fusions/",
+        "tests/data/isovar_fusions/README.md"
+      ],
+      "summary_rna": "One coding hypothesis; five donor-CDS-unavailable alternatives",
+      "title": "ATP5MG::KMT2A",
+      "top_epitopes": [],
+      "variant": "sample-specific fusion junction",
+      "variant_class": "Structural variant / gene fusion"
+    },
+    {
+      "decision_reason": "DNA and 22 long reads support the junction, but the donor joins before its annotated CDS; no defensible fusion protein exists.",
+      "dna_only": "The rearrangement is real enough to investigate, but a breakpoint is not a coding transcript and does not define a junction-spanning antigen.",
+      "epitope_message": "Not predicted because no translated sequence exists.",
+      "id": "TPST1-CRCP-T2-long-read-rescue",
+      "interpretation": "This is a genuine long-read rescue of expression, not a Vaxrank antigen. The protein and peptide claims remain withheld until the coding frame is established.",
+      "limitation": "No translated sequence means no epitope prediction or vaccine ranking is scientifically valid.",
+      "outcome": "no_translation",
+      "protein_sequence": null,
+      "rna_evidence": {
+        "alt_fragments": 22,
+        "counts_text": "22 junction-spanning long reads; no translated protein",
+        "gate_status": "NOT APPLICABLE: NO PROTEIN",
+        "other_fragments": "n/a",
+        "passes_vaxrank_filters": false,
+        "platform": "Oxford Nanopore long-read RNA",
+        "ref_fragments": "n/a",
+        "source": "T2 CTAT-LR-Fusion",
+        "top_protein_fragments": 0
+      },
+      "sample": "Osteosarcoma T2",
+      "selected_long_peptide": null,
+      "source_labels": [
+        "osteosarc.com fusion catalog",
+        "Isovar unresolved-frame fixture"
+      ],
+      "source_urls": [
+        "https://osteosarc.com/ctat_lr_fusion/TPST1--CRCP/",
+        "tests/data/isovar_fusions/README.md"
+      ],
+      "summary_rna": "22 long reads rescue expression; CDS/frame remains unresolved",
+      "title": "TPST1::CRCP T2",
+      "top_epitopes": [],
+      "variant": "DNA-positive, matched short-read-call-negative junction",
+      "variant_class": "Structural variant / gene fusion"
+    }
+  ]
+}

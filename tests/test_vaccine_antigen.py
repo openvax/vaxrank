@@ -17,6 +17,7 @@ from vaxrank.candidate_epitope import (
 )
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.epitope_logic import predict_epitopes
+from vaxrank.core_logic import vaccine_peptides_for_antigen
 from vaxrank.vaccine_antigen import (
     ANTIGEN_KIND_CTA,
     ANTIGEN_KIND_FUSION,
@@ -369,16 +370,56 @@ def test_cta_prediction_uses_antigen_specific_self_reference():
     ]
 
 
-def test_mutation_prediction_requires_fragment_for_wt_coordinates():
-    antigen = VaccineAntigen(
-        kind=ANTIGEN_KIND_MUTATION,
-        amino_acids="ACDEFGHIKL",
-        targetable_mask=TargetableMask((AminoAcidInterval(4, 5),)),
+def test_assembled_mutation_prediction_and_ranking_need_no_fake_wild_type():
+    antigen = VaccineAntigen.from_assembled_mutation_sequence(
+        amino_acids="ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQR",
+        targetable_intervals=(
+            AminoAcidInterval(4, 5),
+            AminoAcidInterval(29, 30),
+        ),
         tumor_specificity=admitted_attestation(),
+        gene_name="COMPOUND",
+        transcript_ids=("ENSTCOMPOUND",),
+        source_identifier="two-phased-sites",
+        source_metadata=(("phasing", "three exact long reads"),),
     )
 
-    with pytest.raises(ValueError, match="requires a mutation fragment"):
-        predict_epitopes(mhc_predictor=None, antigen=antigen)
+    predictor = RandomBindingPredictor(["HLA-A*02:01"])
+    epitopes = predict_epitopes(
+        mhc_predictor=predictor,
+        epitope_config=EpitopeConfig(min_epitope_score=0),
+        antigen=antigen,
+    )
+    peptides = vaccine_peptides_for_antigen(
+        antigen=antigen,
+        mhc_predictor=predictor,
+        vaccine_peptide_length=25,
+        max_vaccine_peptides=2,
+        epitope_config=EpitopeConfig(min_epitope_score=0),
+    )
+
+    assert epitopes
+    assert all(epitope.overlaps_mutation == epitope.overlaps_targetable
+               for epitope in epitopes)
+    assert all("wt" not in epitope.comparators for epitope in epitopes)
+    assert peptides
+    assert all(peptide.mutant_protein_fragment is None for peptide in peptides)
+    assert all(peptide.antigen.source_metadata == antigen.source_metadata
+               for peptide in peptides)
+    assert all(peptide.antigen.targetable_mask.intervals for peptide in peptides)
+
+
+def test_targetable_mask_slice_preserves_phased_and_junction_targets():
+    mask = TargetableMask((
+        AminoAcidInterval(3, 4),
+        AminoAcidInterval(8, 8),
+        AminoAcidInterval(12, 14),
+    ))
+
+    assert mask.sliced(2, 10) == TargetableMask((
+        AminoAcidInterval(1, 2),
+        AminoAcidInterval(6, 6),
+    ))
 
 
 def test_vaccine_antigen_json_roundtrip_preserves_policy():

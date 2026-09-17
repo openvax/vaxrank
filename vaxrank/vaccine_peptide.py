@@ -47,7 +47,8 @@ class VaccinePeptide(DataclassSerializable):
     Parameters
     ----------
     mutant_protein_fragment : MutantProteinFragment, optional
-        Required for mutation antigens and omitted for other antigen kinds.
+        Carries single-variant RNA support and a position-aligned WT comparator
+        when available. Explicit assembled mutation antigens may omit it.
 
     epitopes : list of CandidateEpitope
 
@@ -141,10 +142,6 @@ class VaccinePeptide(DataclassSerializable):
         if not self.antigen.tumor_specificity.admits_construct:
             raise ValueError(
                 "A held-out antigen cannot be used to construct a VaccinePeptide"
-            )
-        if self.antigen.kind == ANTIGEN_KIND_MUTATION and fragment is None:
-            raise ValueError(
-                "A mutation VaccinePeptide requires its MutantProteinFragment"
             )
         if self.antigen.kind != ANTIGEN_KIND_MUTATION and fragment is not None:
             raise ValueError(
