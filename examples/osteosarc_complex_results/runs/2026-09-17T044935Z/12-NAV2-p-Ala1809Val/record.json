@@ -1,0 +1,62 @@
+{
+  "assembled_transcript_ids": [
+    "ENST00000527559",
+    "ENST00000540292"
+  ],
+  "combined_score": 0.011670678442314621,
+  "decision_reason": "Illumina RNA yields one validated 47-aa sequence compatible with two contributing transcript models and a target-bearing construct.",
+  "dna_only": "The SNV maps to multiple transcript consequences; DNA alone cannot choose the RNA-contributing transcript model.",
+  "id": "NAV2-p-Ala1809Val",
+  "interpretation": "The sequence is resolved while isoform identity remains non-unique. Both assembled transcript IDs are preserved instead of reporting one guessed source.",
+  "limitation": "The RNA window ends before reference transcript predictions diverge, so this result does not claim unique isoform resolution.",
+  "osteosarc_protein_context": "CKGNGTAQSADLRIRRQHSSDSVSSINSVTSHSSVGSNIESDSKKKKRKN",
+  "osteosarc_sequence_status": null,
+  "osteosarc_vaccine_sequence": null,
+  "outcome": "selected",
+  "protein_sequence": "GTAQSADLRIRRQHSSDSVSSINSVTSHSSVGSNIESDSKKKKRKNW",
+  "rna_evidence": {
+    "alt_fragments": 18,
+    "other_fragments": 0,
+    "passes_vaxrank_filters": true,
+    "platform": "Illumina short-read RNA",
+    "ref_fragments": 16,
+    "source": "T2 SARC0277; source 8fda918141cedf55",
+    "top_protein_fragments": 13,
+    "transcript_ids": [
+      "ENST00000527559",
+      "ENST00000540292"
+    ]
+  },
+  "sample": "Osteosarcoma T2",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": "DLRIRRQHSSDSVSSINSVTSHSSV",
+  "source_labels": [
+    "osteosarc.com protein context",
+    "Isovar splice-aware translation",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variant/NAV2-chr11-20080142/",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json"
+  ],
+  "summary_rna": "Illumina: 18 ALT; one sequence, two compatible transcript models",
+  "target_epitope_score": 0.011670678442314621,
+  "targetable_intervals": [
+    [
+      24,
+      25
+    ]
+  ],
+  "title": "NAV2 p.Ala1809Val",
+  "top_epitopes": [
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.011670678442314621,
+      "ic50_nm": 1029.88,
+      "percentile_rank": 1.951,
+      "sequence": "NSVTSHSSV"
+    }
+  ],
+  "variant": "chr11:g.20080142C>T",
+  "variant_class": "Multi-transcript RNA-supported missense"
+}

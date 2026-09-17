@@ -1,0 +1,36 @@
+{
+  "decision_reason": "No RNA split read supports the junction, so no sample-specific transcript, exon consequence, reading frame, or mutant protein is admitted.",
+  "dna_only": "LINX/ESVEE resolves a 4.3-kb deletion with both breakends in AMPH and junction copy number 1.87.",
+  "epitope_message": "Not predicted because no expressed junction sequence is available.",
+  "id": "AMPH-internal-deletion-DNA-only",
+  "interpretation": "This DNA-only event is a useful negative control: structural resolution at the genome level is insufficient for Vaxrank antigen construction.",
+  "limitation": "Absence of RNA split reads may reflect absent expression or assay sensitivity; it is not proof that the DNA event is false.",
+  "outcome": "no_translation",
+  "protein_sequence": null,
+  "rna_evidence": {
+    "alt_fragments": 0,
+    "counts_text": "4.3-kb AMPH deletion; JCN 1.87; 0 RNA split reads",
+    "gate_status": "HELD OUT: NO RNA JUNCTION",
+    "other_fragments": "n/a",
+    "passes_vaxrank_filters": false,
+    "platform": "DNA WGS; RNA junction audit",
+    "ref_fragments": "n/a",
+    "source": "T0 oncoanalyser SV",
+    "top_protein_fragments": 0
+  },
+  "sample": "Osteosarcoma T0",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com oncoanalyser SV",
+    "fusion-wide RNA split-read audit"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/oncoanalyser/sv/",
+    "https://osteosarc.com/fusions/"
+  ],
+  "summary_rna": "DNA-supported 4.3-kb deletion; no RNA split reads",
+  "title": "AMPH 4.3-kb internal deletion",
+  "top_epitopes": [],
+  "variant": "chr7:g.38543151_38547476del",
+  "variant_class": "DNA-supported intragenic structural deletion"
+}

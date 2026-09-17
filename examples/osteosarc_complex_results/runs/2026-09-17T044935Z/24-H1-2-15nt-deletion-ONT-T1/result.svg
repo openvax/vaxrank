@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="45" class="kicker">COMPLEX-VARIANT VAXRANK RESULT</text>
+<text x="32" y="78" class="title">H1-2 repetitive 15-nt deletion</text>
+<text x="32" y="103" class="subtitle">chr6:g.26055825_26055839delCCTTGGGCTTAGCGG | Osteosarcoma T1 | Large in-frame deletion</text>
+<rect x="32" y="122" width="1136" height="55" rx="8" fill="#fff2c2"/>
+<text x="52" y="146" class="outcome" fill="#755400">NO TARGET BINDER</text>
+<text x="238" y="145" class="body">RNA assembly succeeds and passes Vaxrank&#x27;s evidence gates, but no target epitope passes the default</text><text x="238" y="162" class="body">prediction filters.</text>
+
+<text x="32" y="208" class="panel-title">1  DNA-ONLY INTERPRETATION</text>
+<rect x="32" y="222" width="552" height="101" rx="8" fill="#eef3f7"/>
+<text x="52" y="248" class="body">A 15-nt deletion inside a repetitive histone sequence does not by itself</text><text x="52" y="266" class="body">identify the expressed protein context or a useful class-I target.</text>
+
+<text x="616" y="208" class="panel-title">2  SAMPLE-SPECIFIC RNA EVIDENCE</text>
+<rect x="616" y="222" width="552" height="101" rx="8" fill="#eef3f7"/>
+<text x="636" y="248" class="strong">Oxford Nanopore long-read RNA | T1 ONT RNA window</text>
+<text x="636" y="272" class="body">ALT 13 | REF 33 | OTHER 2 | top protein 11</text>
+<text x="636" y="307" class="body">Vaxrank RNA gates: </text>
+<text x="771" y="307" class="strong" fill="#176b4d">PASS</text>
+
+<text x="32" y="353" class="panel-title">3  ASSEMBLED OR TRANSLATED PROTEIN</text>
+<rect x="32" y="367" width="1136" height="73" rx="8" fill="#f8fafb"/>
+<text x="52" y="396" class="sequence">VAKPKKAAKSAAKAVKPKVVKPKKAAPKKK</text>
+
+<rect x="32" y="479" width="552" height="186" rx="8" fill="#f5f8fa"/>
+<text x="52" y="505" class="panel-title">4  VACCINE-CONSTRUCT DECISION</text>
+<text x="52" y="526" class="muted">No peptide selected for a vaccine construct.</text>
+<text x="52" y="585" class="body">Assembly is necessary but not sufficient. The expressed sequence is</text><text x="52" y="603" class="body">resolved, yet Vaxrank correctly returns no vaccine candidate for the</text><text x="52" y="621" class="body">configured patient HLA set.</text>
+
+<text x="616" y="493" class="panel-title">5  TARGET EPITOPES PASSING DEFAULT FILTERS</text>
+<text x="642" y="511" class="table-head">PEPTIDE</text>
+<text x="786" y="511" class="table-head">ALLELE</text>
+<text x="930" y="511" class="table-head">IC50 NM</text>
+<text x="1022" y="511" class="table-head">RANK %</text>
+<text x="1115" y="511" text-anchor="end" class="table-head">SCORE</text>
+<rect x="628" y="516" width="540" height="58" rx="6" fill="#f5f8fa"/><text x="648" y="548" class="muted">No target epitope passed the configured filters.</text>
+
+<text x="52" y="646" class="muted">A zero-target result is retained rather than hidden or forced into selection.</text>
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Isovar T1 ONT fixture | NetMHCpan 4.2c | patient class-I HLA</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.1 | research use only</text>
+</svg>

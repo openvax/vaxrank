@@ -1,0 +1,37 @@
+{
+  "decision_reason": "Ten T2 ONT and two T2 short-read fragments support the exact insertion, but no evidence-backed assembled protein was recovered in this audit; translation is withheld.",
+  "dna_only": "The two-base insertion predicts a frameshift, but the DNA call does not establish the expressed mutant tail.",
+  "epitope_message": "Not predicted because no evidence-backed translated mutant tail is available.",
+  "id": "KTN1-p-Leu340fs-unresolved",
+  "interpretation": "KTN1 is a strong reconstruction candidate because the allele is reproduced across RNA technologies, but allele support alone is not a license to infer a reading frame or peptide sequence.",
+  "limitation": "An assembled transcript with transcript assignment, CDS start and translated insertion junction is required before Vaxrank ranking.",
+  "outcome": "no_translation",
+  "protein_sequence": null,
+  "rna_evidence": {
+    "alt_fragments": 12,
+    "counts_text": "10 T2 ONT and 2 T2 short-read alternate fragments",
+    "gate_status": "HELD OUT: NO ASSEMBLED PROTEIN",
+    "other_fragments": "not pooled",
+    "passes_vaxrank_filters": false,
+    "platform": "Oxford Nanopore and Illumina RNA",
+    "ref_fragments": "not pooled",
+    "source": "direct exact-allele audit",
+    "top_protein_fragments": 0
+  },
+  "sample": "Osteosarcoma T2",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "oncoanalyser somatic allele",
+    "cross-platform exact-allele audit"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/oncoanalyser/snv/",
+    "https://osteosarc.com/oncoanalyser/tables/snv_top.tsv",
+    "examples/osteosarc_complex_results/source/additional_candidate_audit.json"
+  ],
+  "summary_rna": "T2 exact ALT: 10 ONT + 2 short-read fragments; protein unresolved",
+  "title": "KTN1 p.Leu340fs",
+  "top_epitopes": [],
+  "variant": "chr14:g.55627965_55627966insTT",
+  "variant_class": "RNA-supported 2-nt frameshift insertion"
+}

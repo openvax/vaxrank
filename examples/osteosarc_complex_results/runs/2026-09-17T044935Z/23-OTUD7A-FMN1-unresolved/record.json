@@ -1,0 +1,37 @@
+{
+  "decision_reason": "Eight compatible complete T2 ONT paths were recovered, carrying six distinct cell/UMI labels; the coding orientation and frame remain unresolved.",
+  "dna_only": "The DNA junction includes a reported 2-nt CT insertion, but genomic donor/acceptor labels and inserted bases cannot be transferred blindly into a transcript translation.",
+  "epitope_message": "Not predicted because no evidence-backed coding orientation or reading frame is available.",
+  "id": "OTUD7A-FMN1-unresolved",
+  "interpretation": "OTUD7A::FMN1 is the strongest new single-sample long-read SV lead. The molecule labels improve provenance, but neither read count nor labels substitute for a reconstructed coding transcript.",
+  "limitation": "Eight paths are not eight proven independent molecules because some share cell/UMI labels; no translated junction peptide is claimed.",
+  "outcome": "no_translation",
+  "protein_sequence": null,
+  "rna_evidence": {
+    "alt_fragments": 8,
+    "counts_text": "8 complete T2 ONT paths with 6 distinct cell/UMI labels",
+    "gate_status": "HELD OUT: CODING ORIENTATION / FRAME UNRESOLVED",
+    "other_fragments": "n/a",
+    "passes_vaxrank_filters": false,
+    "platform": "Oxford Nanopore single-cell RNA",
+    "ref_fragments": "n/a",
+    "source": "tagged-BAM reciprocal-SA audit",
+    "top_protein_fragments": 0
+  },
+  "sample": "Osteosarcoma T2",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com fusion evidence",
+    "direct tagged-BAM path validation"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/fusions/otud7a--fmn1/",
+    "https://osteosarc.com/fusions/",
+    "examples/osteosarc_complex_results/source/additional_candidate_audit.json"
+  ],
+  "summary_rna": "8 complete T2 ONT paths; 6 cell/UMI labels; CDS/frame unresolved",
+  "title": "OTUD7A::FMN1",
+  "top_epitopes": [],
+  "variant": "chr15:31743670 \u2194 chr15:33043479",
+  "variant_class": "Long-read-supported intrachromosomal rearrangement"
+}

@@ -147,10 +147,10 @@ def render_complex_result_svg(record):
 
 <text x="616" y="208" class="panel-title">2  SAMPLE-SPECIFIC RNA EVIDENCE</text>
 <rect x="616" y="222" width="552" height="101" rx="8" fill="#eef3f7"/>
-<text x="636" y="248" class="strong">{escape(rna["platform"])} | {escape(rna["source"])}</text>
-<text x="636" y="272" class="body">{escape(counts)}</text>
-<text x="636" y="298" class="body">Vaxrank RNA gates: </text>
-<text x="771" y="298" class="strong" fill="{filter_color}">{filters}</text>
+{_text_lines('%s | %s' % (rna['platform'], rna['source']), 636, 248, css_class='strong', width=76, limit=1)}
+{_text_lines(counts, 636, 272, width=82, limit=2, step=15)}
+<text x="636" y="307" class="body">Vaxrank RNA gates: </text>
+<text x="771" y="307" class="strong" fill="{filter_color}">{filters}</text>
 
 <text x="32" y="353" class="panel-title">3  ASSEMBLED OR TRANSLATED PROTEIN</text>
 <rect x="32" y="367" width="1136" height="73" rx="8" fill="#f8fafb"/>
@@ -169,7 +169,7 @@ def render_complex_result_svg(record):
 <text x="1115" y="511" text-anchor="end" class="table-head">SCORE</text>
 {''.join(epitope_rows)}
 
-<text x="52" y="646" class="muted">{escape(record.get("limitation", ""))}</text>
+{_text_lines(record.get('limitation', ''), 52, 646, css_class='muted', width=168, limit=2, step=15)}
 
 <line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
 <text x="32" y="714" class="footer">{escape(sources)}</text>
@@ -261,6 +261,19 @@ def render_provenance_svg(records, metadata):
 </svg>'''
 
 
+def _balanced_chunks(records, maximum_size=7):
+    """Split records into the fewest summary pages with balanced row counts."""
+    page_count = (len(records) + maximum_size - 1) // maximum_size
+    base_size, extra = divmod(len(records), page_count)
+    sizes = [base_size + (index < extra) for index in range(page_count)]
+    chunks = []
+    start = 0
+    for size in sizes:
+        chunks.append(records[start:start + size])
+        start += size
+    return chunks
+
+
 def _write_multipage_pdf(svgs, path):
     _configure_native_library_path()
     from weasyprint import HTML
@@ -299,7 +312,7 @@ def generate_complex_variant_results(
     output_root.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".%s-" % timestamp, dir=output_root))
     try:
-        summary_chunks = [records[i:i + 7] for i in range(0, len(records), 7)]
+        summary_chunks = _balanced_chunks(records)
         summary_svgs = [
             render_summary_svg(
                 chunk, metadata, page_index=index,

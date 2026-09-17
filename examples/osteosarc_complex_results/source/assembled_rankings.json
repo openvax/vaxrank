@@ -9,6 +9,14 @@
   "records": [
     {
       "evidence_gate": "pass",
+      "id": "GTF3C5-p-Glu503_Glu506del",
+      "rank_score": null,
+      "selected_long_peptide": null,
+      "target_epitope_score": null,
+      "top_epitopes": []
+    },
+    {
+      "evidence_gate": "pass",
       "id": "DYNC1H1-p-Val314Ile",
       "rank_score": 4.908489631981229,
       "selected_long_peptide": "LTLDILKHGKRFHATISFDTDTGLK",

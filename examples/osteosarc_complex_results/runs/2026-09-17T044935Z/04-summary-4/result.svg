@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="47" class="kicker">OSTEOSARCOMA COMPLEX-VARIANT RESULTS</text>
+<text x="32" y="84" class="title">Assembly changes what Vaxrank can claim</text>
+<text x="32" y="112" class="subtitle">Actual RNA reconstruction, translation, epitope prediction, and vaccine-selection outcomes | decision matrix 4 of 4</text>
+<rect x="32" y="139" width="1136" height="48" rx="8" fill="#dceefa"/>
+<text x="52" y="168" class="strong">A DNA event is not an antigen. Vaxrank requires a defensible mutant protein before ranking epitopes.</text>
+<text x="52" y="207" class="panel-title">VARIANT</text>
+<text x="420" y="207" class="panel-title">RNA / TRANSLATION EVIDENCE</text>
+<text x="1115" y="207" text-anchor="end" class="panel-title">VAXRANK OUTCOME</text>
+<rect x="32" y="214" width="1136" height="46" rx="7" fill="#f8e3e7"/><text x="52" y="235" class="strong">GABBR1::SLC29A1</text><text x="52" y="252" class="footer">Cross-platform intrachromosomal rearrangement</text><text x="420" y="244" class="body">Complete ONT paths: 2 T1 + 3 T2; CDS/frame unresolved </text><text x="1138" y="244" text-anchor="end" class="outcome" fill="#7a2938">NO TRANSLATION</text><rect x="32" y="266" width="1136" height="46" rx="7" fill="#f8e3e7"/><text x="52" y="287" class="strong">OTUD7A::FMN1</text><text x="52" y="304" class="footer">Long-read-supported intrachromosomal rearrangement</text><text x="420" y="296" class="body">8 complete T2 ONT paths; 6 cell/UMI labels; CDS/frame unresolved </text><text x="1138" y="296" text-anchor="end" class="outcome" fill="#7a2938">NO TRANSLATION</text><rect x="32" y="318" width="1136" height="46" rx="7" fill="#fff2c2"/><text x="52" y="339" class="strong">H1-2 repetitive 15-nt deletion</text><text x="52" y="356" class="footer">Large in-frame deletion</text><text x="420" y="348" class="body">ONT assembly: 13 ALT, 2 OTHER; no passing target binder </text><text x="1138" y="348" text-anchor="end" class="outcome" fill="#755400">NO TARGET BINDER</text><rect x="32" y="370" width="1136" height="46" rx="7" fill="#fde9d5"/><text x="52" y="391" class="strong">ATP5MG::KMT2A</text><text x="52" y="408" class="footer">Structural variant / gene fusion</text><text x="420" y="400" class="body">One coding hypothesis; five donor-CDS-unavailable alternatives </text><text x="1138" y="400" text-anchor="end" class="outcome" fill="#8a4b16">HELD OUT</text><rect x="32" y="422" width="1136" height="46" rx="7" fill="#f8e3e7"/><text x="52" y="443" class="strong">TPST1::CRCP T2</text><text x="52" y="460" class="footer">Structural variant / gene fusion</text><text x="420" y="452" class="body">22 long reads rescue expression; CDS/frame remains unresolved </text><text x="1138" y="452" text-anchor="end" class="outcome" fill="#7a2938">NO TRANSLATION</text>
+<rect x="32" y="595" width="1136" height="71" rx="8" fill="#eef3f7"/>
+<text x="52" y="620" class="panel-title">PREDICTION CONTEXT</text>
+<text x="52" y="646" class="body">NetMHCpan 4.2c; patient class-I alleles: HLA-A*01:01, HLA-B*08:01, HLA-B*27:05, HLA-C*01:02, HLA-C*07:01</text>
+<text x="52" y="662" class="footer">Exploratory binding ranks: full-proteome exact-self screening was not run for explicit assembled-antigen inputs.</text>
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Generated 2026-09-17 from committed evidence records</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.1 | research use only</text>
+</svg>

@@ -1,0 +1,79 @@
+{
+  "assembled_transcript_ids": [
+    "ENST00000360351",
+    "ENST00000447185"
+  ],
+  "combined_score": 0.01463124052921849,
+  "decision_reason": "Four exact Q20 T1 Illumina reads establish the compound haplotype; its translation passes the evidence gate and is ranked as an explicit assembled antigen.",
+  "dna_only": "The historical isolated 22-bp deletion predicts a different protein. Full evidence instead supports adjacent substitutions plus a 28-nt deletion on one haplotype.",
+  "id": "MAP2-compound-haplotype",
+  "interpretation": "The compound protein encodes ...DRAH..., not the listed-only ...DSTQ... or deletion-only ...DLAH... alternatives. The website now publishes the same compound protein context.",
+  "limitation": "This is a transcript-aware reference-plus-compound-edit translation, not a whole-RNA Isovar protein reconstruction; that distinction is retained in the source metadata.",
+  "osteosarc_protein_context": "EDSRTGLPPVTDENHVIVKTDSQLEDRAHCHHLFKTVRIYQGRVVPFTKALMIKFEEIWPQTFH",
+  "osteosarc_sequence_status": null,
+  "osteosarc_vaccine_sequence": null,
+  "outcome": "selected",
+  "protein_sequence": "SQLEDRAHCHHLFKTVRIYQGRVVP",
+  "rna_evidence": {
+    "alt_fragments": 4,
+    "counts_text": "4 Q20 T1 ILMN + 2 Q20 T2 ILMN + 1 Q20 T2 ONT compound witnesses",
+    "gate_status": "PASS: EXPLICIT COMPOUND HAPLOTYPE",
+    "other_fragments": 1,
+    "passes_vaxrank_filters": true,
+    "platform": "Illumina RNA with ONT corroboration",
+    "ref_fragments": 5,
+    "source": "T1 UCLA; source 261f8be4ce5aa8c8",
+    "top_protein_fragments": 4,
+    "transcript_ids": [
+      "ENST00000360351",
+      "ENST00000447185"
+    ]
+  },
+  "sample": "Osteosarcoma T1",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": "SQLEDRAHCHHLFKTVRIYQGRVVP",
+  "source_labels": [
+    "osteosarc.com compound protein context",
+    "full cross-platform haplotype audit",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variant/MAP2-chr2-209694768/",
+    "https://osteosarc.com/oncoanalyser/longitudinal/",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json"
+  ],
+  "summary_rna": "T1 Illumina: 4 exact Q20 compound reads; T2 Illumina and ONT corroborate",
+  "target_epitope_score": 0.01463124052921849,
+  "targetable_intervals": [
+    [
+      5,
+      25
+    ]
+  ],
+  "title": "MAP2 compound frameshift haplotype",
+  "top_epitopes": [
+    {
+      "allele": "HLA-B*27:05",
+      "epitope_score": 0.007708500610938202,
+      "ic50_nm": 1092.64,
+      "percentile_rank": 1.502,
+      "sequence": "VRIYQGRVV"
+    },
+    {
+      "allele": "HLA-B*27:05",
+      "epitope_score": 0.0068595108973308104,
+      "ic50_nm": 1110.26,
+      "percentile_rank": 1.516,
+      "sequence": "DRAHCHHLFK"
+    },
+    {
+      "allele": "HLA-B*27:05",
+      "epitope_score": 3.493534280365264e-05,
+      "ic50_nm": 1903.18,
+      "percentile_rank": 2.16,
+      "sequence": "DRAHCHHLF"
+    }
+  ],
+  "variant": "chr2:g.209694769_209694800delinsAGGG",
+  "variant_class": "RNA-resolved compound frameshift"
+}

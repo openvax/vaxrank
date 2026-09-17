@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="47" class="kicker">OSTEOSARCOMA COMPLEX-VARIANT RESULTS</text>
+<text x="32" y="84" class="title">Assembly changes what Vaxrank can claim</text>
+<text x="32" y="112" class="subtitle">Actual RNA reconstruction, translation, epitope prediction, and vaccine-selection outcomes | decision matrix 2 of 4</text>
+<rect x="32" y="139" width="1136" height="48" rx="8" fill="#dceefa"/>
+<text x="52" y="168" class="strong">A DNA event is not an antigen. Vaxrank requires a defensible mutant protein before ranking epitopes.</text>
+<text x="52" y="207" class="panel-title">VARIANT</text>
+<text x="420" y="207" class="panel-title">RNA / TRANSLATION EVIDENCE</text>
+<text x="1115" y="207" text-anchor="end" class="panel-title">VAXRANK OUTCOME</text>
+<rect x="32" y="214" width="1136" height="46" rx="7" fill="#dff4e9"/><text x="52" y="235" class="strong">DYNC1H1 p.Gln3267His</text><text x="52" y="252" class="footer">Second RNA-supported DYNC1H1 locus</text><text x="420" y="244" class="body">Illumina: 34 ALT, 0 OTHER; assembly adds one upstream residue </text><text x="1138" y="244" text-anchor="end" class="outcome" fill="#176b4d">SELECTED</text><rect x="32" y="266" width="1136" height="46" rx="7" fill="#dff4e9"/><text x="52" y="287" class="strong">NAV2 p.Ala1809Val</text><text x="52" y="304" class="footer">Multi-transcript RNA-supported missense</text><text x="420" y="296" class="body">Illumina: 18 ALT; one sequence, two compatible transcript models </text><text x="1138" y="296" text-anchor="end" class="outcome" fill="#176b4d">SELECTED</text><rect x="32" y="318" width="1136" height="46" rx="7" fill="#dff4e9"/><text x="52" y="339" class="strong">MAP2 compound frameshift haplotype</text><text x="52" y="356" class="footer">RNA-resolved compound frameshift</text><text x="420" y="348" class="body">T1 Illumina: 4 exact Q20 compound reads; T2 Illumina and ONT corroborate </text><text x="1138" y="348" text-anchor="end" class="outcome" fill="#176b4d">SELECTED</text><rect x="32" y="370" width="1136" height="46" rx="7" fill="#dff4e9"/><text x="52" y="391" class="strong">NTF3 compound p.Lys69Ser haplotype</text><text x="52" y="408" class="footer">RNA correction of isolated SNV effect</text><text x="420" y="400" class="body">Illumina and ONT reproduce AG&gt;GT; single-edit Lys→Arg is rejected </text><text x="1138" y="400" text-anchor="end" class="outcome" fill="#176b4d">SELECTED</text><rect x="32" y="422" width="1136" height="46" rx="7" fill="#fff2c2"/><text x="52" y="443" class="strong">CD109 long-read phased alleles</text><text x="52" y="460" class="footer">Long-read-resolved compound protein</text><text x="420" y="452" class="body">ONT links both alleles in 21 UMIs; Illumina links neither </text><text x="1138" y="452" text-anchor="end" class="outcome" fill="#755400">NO TARGET BINDER</text><rect x="32" y="474" width="1136" height="46" rx="7" fill="#dff4e9"/><text x="52" y="495" class="strong">ZNF436 p.Ser207Cys long-read context</text><text x="52" y="512" class="footer">Long-read-expanded antigen context</text><text x="420" y="504" class="body">ONT 49 aa; Illumina assembly 30 aa; Illumina unassembled 29 aa </text><text x="1138" y="504" text-anchor="end" class="outcome" fill="#176b4d">SELECTED</text>
+<rect x="32" y="595" width="1136" height="71" rx="8" fill="#eef3f7"/>
+<text x="52" y="620" class="panel-title">PREDICTION CONTEXT</text>
+<text x="52" y="646" class="body">NetMHCpan 4.2c; patient class-I alleles: HLA-A*01:01, HLA-B*08:01, HLA-B*27:05, HLA-C*01:02, HLA-C*07:01</text>
+<text x="52" y="662" class="footer">Exploratory binding ranks: full-proteome exact-self screening was not run for explicit assembled-antigen inputs.</text>
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Generated 2026-09-17 from committed evidence records</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.1 | research use only</text>
+</svg>

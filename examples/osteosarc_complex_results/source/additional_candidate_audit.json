@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "checked_utc": "2026-09-17T002650Z",
+  "reference_genome": "GRCh38",
+  "method": {
+    "indels": "Isovar default read collector on 100-nt regional queries; counts deduplicate read-group/QNAME fragments and establish exact-allele support, not protein reconstruction or biological independence.",
+    "structural_variants": "Indexed 2-kb regional queries of tagged ONT BAMs; accepted paths require both observed segments, mapping quality at least 20, reciprocal supplementary-alignment declarations, and compatible Isovar phasing alignments.",
+    "scope": "Targeted validation of caller-reported candidates, not de novo patient-wide discovery."
+  },
+  "sources": [
+    {
+      "source_id": "7010dd389c50467d",
+      "label": "T1 ONT deduplicated",
+      "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam"
+    },
+    {
+      "source_id": "2bc1fc291308debb",
+      "label": "T2 ONT deduplicated",
+      "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam"
+    },
+    {
+      "source_id": "261f8be4ce5aa8c8",
+      "label": "T1 short-read RNA oncoanalyser",
+      "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/kamil/oncoanalyser/IPISRC044_T1_ucla/alignments/rna/IPISRC044_tumor_T1_ucla_rna.md.bam"
+    },
+    {
+      "source_id": "95a1e72e7ec10990",
+      "label": "T2 short-read RNA oncoanalyser",
+      "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/kamil/oncoanalyser/IPISRC044_T2_ucla/alignments/rna/IPISRC044_tumor_T2_ucla_rna.md.bam"
+    }
+  ],
+  "indels": [
+    {
+      "gene": "GTF3C5",
+      "locus": "chr9:133057893",
+      "ref": "GGAGGAGGAGGAA",
+      "alt": "G",
+      "pave_protein_annotation": "p.Glu493_Glu496del",
+      "assembled_transcript_annotation": "p.Glu503_Glu506del on ENST00000372108",
+      "fragment_counts": {
+        "7010dd389c50467d": {"ref": 302, "alt": 117, "other": 20},
+        "2bc1fc291308debb": {"ref": 408, "alt": 128, "other": 28},
+        "261f8be4ce5aa8c8": {"ref": 37, "alt": 7, "other": 4},
+        "95a1e72e7ec10990": {"ref": 19, "alt": 12, "other": 12}
+      }
+    },
+    {
+      "gene": "RNF213",
+      "locus": "chr17:80327830",
+      "ref": "ATAC",
+      "alt": "A",
+      "pave_protein_annotation": "p.Leu1071del",
+      "assembled_transcript_annotation": "p.Ile1070Ile (del Leu) in the ranked context",
+      "fragment_counts": {
+        "7010dd389c50467d": {"ref": 136, "alt": 5, "other": 3},
+        "2bc1fc291308debb": {"ref": 488, "alt": 14, "other": 15},
+        "261f8be4ce5aa8c8": {"ref": 359, "alt": 42, "other": 3},
+        "95a1e72e7ec10990": {"ref": 592, "alt": 11, "other": 1}
+      }
+    },
+    {
+      "gene": "GLIS3",
+      "locus": "chr9:3856149",
+      "ref": "CTGATGTGG",
+      "alt": "C",
+      "pave_protein_annotation": "p.His775fs",
+      "assembled_transcript_annotation": "p.Ser775fs in the ranked context",
+      "fragment_counts": {
+        "7010dd389c50467d": {"ref": 2, "alt": 0, "other": 0},
+        "2bc1fc291308debb": {"ref": 1, "alt": 0, "other": 1},
+        "261f8be4ce5aa8c8": {"ref": 32, "alt": 9, "other": 1},
+        "95a1e72e7ec10990": {"ref": 0, "alt": 0, "other": 0}
+      }
+    },
+    {
+      "gene": "KTN1",
+      "locus": "chr14:55627965",
+      "ref": "G",
+      "alt": "GTT",
+      "pave_protein_annotation": "p.Leu340fs",
+      "fragment_counts": {
+        "7010dd389c50467d": {"ref": 637, "alt": 0, "other": 4},
+        "2bc1fc291308debb": {"ref": 1388, "alt": 10, "other": 8},
+        "261f8be4ce5aa8c8": {"ref": 843, "alt": 0, "other": 0},
+        "95a1e72e7ec10990": {"ref": 302, "alt": 2, "other": 1}
+      }
+    }
+  ],
+  "structural_variants": [
+    {
+      "id": "GABBR1--SLC29A1",
+      "breakpoints": ["chr6:29612906", "chr6:44218908"],
+      "tagged_ont_paths": {
+        "7010dd389c50467d": {"validated_paths": 2, "cell_umi_keys": 2},
+        "2bc1fc291308debb": {"validated_paths": 3, "cell_umi_keys": 3}
+      },
+      "translation_status": "unresolved coding orientation, CDS start, and frame"
+    },
+    {
+      "id": "OTUD7A--FMN1",
+      "breakpoints": ["chr15:31743670", "chr15:33043479"],
+      "dna_junction_insert": "CT",
+      "tagged_ont_paths": {
+        "2bc1fc291308debb": {"validated_paths": 8, "cell_umi_keys": 6}
+      },
+      "translation_status": "unresolved coding orientation, CDS start, and frame"
+    }
+  ],
+  "larger_unresolved_leads": [
+    {
+      "id": "DLG5--DLG5",
+      "event": "chr10:77850921-77930452 deletion",
+      "size_bp": 79531,
+      "evidence": "T1 and T2 DRAGEN calls with 7 and 5 DNA split observations; no RNA reconstruction"
+    },
+    {
+      "id": "AFF3-deletion",
+      "event": "chr2:99668095-99668223 deletion",
+      "size_bp": 128,
+      "evidence": "T2 DRAGEN call with 9 DNA split observations; no coding-transcript exon overlap in inspected Ensembl 87 models"
+    },
+    {
+      "id": "KEAP1-deletion",
+      "event": "chr19:10492683-10492894 deletion",
+      "size_bp": 211,
+      "evidence": "T2 DRAGEN call with 12 DNA split observations; no coding-transcript exon overlap in inspected Ensembl 87 models"
+    }
+  ]
+}

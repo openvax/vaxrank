@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="47" class="kicker">OSTEOSARCOMA COMPLEX-VARIANT RESULTS</text>
+<text x="32" y="84" class="title">Assembly changes what Vaxrank can claim</text>
+<text x="32" y="112" class="subtitle">Actual RNA reconstruction, translation, epitope prediction, and vaccine-selection outcomes | decision matrix 3 of 4</text>
+<rect x="32" y="139" width="1136" height="48" rx="8" fill="#dceefa"/>
+<text x="52" y="168" class="strong">A DNA event is not an antigen. Vaxrank requires a defensible mutant protein before ranking epitopes.</text>
+<text x="52" y="207" class="panel-title">VARIANT</text>
+<text x="420" y="207" class="panel-title">RNA / TRANSLATION EVIDENCE</text>
+<text x="1115" y="207" text-anchor="end" class="panel-title">VAXRANK OUTCOME</text>
+<rect x="32" y="214" width="1136" height="46" rx="7" fill="#f8e3e7"/><text x="52" y="235" class="strong">FOXO3::STRADA/CCDC47</text><text x="52" y="252" class="footer">Cross-platform structural variant / fusion</text><text x="420" y="244" class="body">55 DNA + 31 RNA split reads across four timepoints; donor frame unresolved </text><text x="1138" y="244" text-anchor="end" class="outcome" fill="#7a2938">NO TRANSLATION</text><rect x="32" y="266" width="1136" height="46" rx="7" fill="#f8e3e7"/><text x="52" y="287" class="strong">PARD3B::CDKN2B-AS1/CDKN2B</text><text x="52" y="304" class="footer">Recurrent somatic translocation</text><text x="420" y="296" class="body">119 DNA + 48 RNA split reads; direct ONT junction includes 12 inserted nt </text><text x="1138" y="296" text-anchor="end" class="outcome" fill="#7a2938">NO TRANSLATION</text><rect x="32" y="318" width="1136" height="46" rx="7" fill="#f8e3e7"/><text x="52" y="339" class="strong">AMPH 4.3-kb internal deletion</text><text x="52" y="356" class="footer">DNA-supported intragenic structural deletion</text><text x="420" y="348" class="body">DNA-supported 4.3-kb deletion; no RNA split reads </text><text x="1138" y="348" text-anchor="end" class="outcome" fill="#7a2938">NO TRANSLATION</text><rect x="32" y="370" width="1136" height="46" rx="7" fill="#f8e3e7"/><text x="52" y="391" class="strong">chr21 unnamed long-read-rich junction</text><text x="52" y="408" class="footer">Long-read-dominant expressed structural junction</text><text x="420" y="400" class="body">29 ONT/PacBio + 3 short-read RNA witnesses; unnamed CDS/frame </text><text x="1138" y="400" text-anchor="end" class="outcome" fill="#7a2938">NO TRANSLATION</text><rect x="32" y="422" width="1136" height="46" rx="7" fill="#f8e3e7"/><text x="52" y="443" class="strong">KTN1 p.Leu340fs</text><text x="52" y="460" class="footer">RNA-supported 2-nt frameshift insertion</text><text x="420" y="452" class="body">T2 exact ALT: 10 ONT + 2 short-read fragments; protein unresolved </text><text x="1138" y="452" text-anchor="end" class="outcome" fill="#7a2938">NO TRANSLATION</text>
+<rect x="32" y="595" width="1136" height="71" rx="8" fill="#eef3f7"/>
+<text x="52" y="620" class="panel-title">PREDICTION CONTEXT</text>
+<text x="52" y="646" class="body">NetMHCpan 4.2c; patient class-I alleles: HLA-A*01:01, HLA-B*08:01, HLA-B*27:05, HLA-C*01:02, HLA-C*07:01</text>
+<text x="52" y="662" class="footer">Exploratory binding ranks: full-proteome exact-self screening was not run for explicit assembled-antigen inputs.</text>
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Generated 2026-09-17 from committed evidence records</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.1 | research use only</text>
+</svg>

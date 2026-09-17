@@ -1,0 +1,67 @@
+{
+  "assembled_transcript_ids": [
+    "ENST00000447648"
+  ],
+  "combined_score": 0.2521712627064244,
+  "decision_reason": "Illumina overlap assembly extends the supported protein from 37 to 49 aa and Vaxrank identifies a target-bearing 25-aa construct.",
+  "dna_only": "The one-base deletion predicts a frameshift, but DNA alone does not establish how much expressed mutant reading frame is supported.",
+  "id": "TECPR1-p-Thr259fs",
+  "interpretation": "This is the strongest short-read assembly example: both translations validate, while assembly adds twelve supported upstream residues and changes the candidate-window pool.",
+  "limitation": "The osteosarc.com page publishes a longer predicted context; this panel ranks only the 49 aa directly reconstructed from the selected RNA evidence.",
+  "osteosarc_protein_context": "PEGSSWSLLDTPGEVVQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGPSWSLLDLKTGSCTSRWESAWSGLSPRTGRCGSEEASTLTIPAAPVGLRWLVR",
+  "osteosarc_sequence_status": null,
+  "osteosarc_vaccine_sequence": null,
+  "outcome": "selected",
+  "protein_sequence": "SSWSLLDTPGEVVQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGP",
+  "rna_evidence": {
+    "alt_fragments": 19,
+    "other_fragments": 0,
+    "passes_vaxrank_filters": true,
+    "platform": "Illumina short-read RNA",
+    "ref_fragments": 20,
+    "source": "T2 SARC0277; source 8fda918141cedf55",
+    "top_protein_fragments": 15,
+    "transcript_ids": [
+      "ENST00000447648"
+    ]
+  },
+  "sample": "Osteosarcoma T2",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": "GPHDLLWAHSGRDRPWSGKESTGAI",
+  "source_labels": [
+    "osteosarc.com protein context",
+    "Isovar assembly evidence",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variant/TECPR1-chr7-98241127/",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json"
+  ],
+  "summary_rna": "Illumina assembly: 49 aa versus 37 aa without overlap assembly",
+  "target_epitope_score": 0.2521712627064244,
+  "targetable_intervals": [
+    [
+      24,
+      49
+    ]
+  ],
+  "title": "TECPR1 p.Thr259fs",
+  "top_epitopes": [
+    {
+      "allele": "HLA-B*27:05",
+      "epitope_score": 0.2521309247013169,
+      "ic50_nm": 531.38,
+      "percentile_rank": 0.919,
+      "sequence": "GRDRPWSGK"
+    },
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 4.0338005107482355e-05,
+      "ic50_nm": 1881.61,
+      "percentile_rank": 3.088,
+      "sequence": "SGKESTGAI"
+    }
+  ],
+  "variant": "chr7:g.98241128delG (TECPR1 p.Thr259fs)",
+  "variant_class": "Assembly-extended frameshift indel"
+}

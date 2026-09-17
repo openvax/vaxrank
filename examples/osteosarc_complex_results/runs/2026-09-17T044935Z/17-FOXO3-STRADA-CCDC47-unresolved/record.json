@@ -1,0 +1,41 @@
+{
+  "decision_reason": "The top-ranked fusion has 55 DNA and 31 RNA split reads, yet the directly observed ONT junction window has no exact collinear annotated donor; translation is withheld.",
+  "dna_only": "DNA split reads establish a recurrent somatic rearrangement, but breakends alone do not identify the expressed splice path, CDS start, or junction reading frame.",
+  "epitope_message": "Not predicted because the observed junction has no justified donor CDS/frame.",
+  "id": "FOXO3-STRADA-CCDC47-unresolved",
+  "interpretation": "Strong cross-platform support establishes an expressed rearrangement, not an antigen. This is the clearest example of evidence strength and peptide readiness being separate questions.",
+  "junction_cdna_sequence": "TTTTAATTGCTGAGAAGTATGCCATTGTTGTATGGATATTCTGTTATAGAAATATACCGGAGAAGCAACGGCACACAGCCATAATATAGAGAACAGAGCTTCTCCATGAACATCCACCAG",
+  "junction_interval_nt": [
+    60,
+    60
+  ],
+  "limitation": "A longer assembled transcript with justified CDS/frame is required before junction-spanning peptides can be enumerated.",
+  "outcome": "no_translation",
+  "protein_sequence": null,
+  "rna_evidence": {
+    "alt_fragments": 3,
+    "counts_text": "55 tumor-DNA split reads; 31 RNA split reads; 3 direct T2 ONT junction fragments",
+    "gate_status": "HELD OUT: NO ANNOTATED DONOR FRAME",
+    "other_fragments": "n/a",
+    "passes_vaxrank_filters": false,
+    "platform": "Short- and long-read RNA",
+    "ref_fragments": "n/a",
+    "source": "fusion scan plus direct T2 ONT witnesses",
+    "top_protein_fragments": 0
+  },
+  "sample": "Osteosarcoma T1/T2",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com fusion rank 1",
+    "Isovar direct ONT junction evidence"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/fusions/foxo3--strada-ccdc47/",
+    "https://osteosarc.com/fusions/"
+  ],
+  "summary_rna": "55 DNA + 31 RNA split reads across four timepoints; donor frame unresolved",
+  "title": "FOXO3::STRADA/CCDC47",
+  "top_epitopes": [],
+  "variant": "chr6:108611245 \u2194 chr17:63745980",
+  "variant_class": "Cross-platform structural variant / fusion"
+}
