@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="45" class="kicker">SEQUENCING-PLATFORM COMPARISON</text>
+<text x="32" y="78" class="title">KEAP1 211-bp intronic/noncoding deletion</text>
+<text x="32" y="103" class="subtitle">chr19:g.10492683_10492894del | Osteosarcoma T2</text>
+<rect x="32" y="122" width="1136" height="55" rx="8" fill="#f8e3e7"/>
+<text x="52" y="146" class="outcome" fill="#7a2938">NO TRANSLATION</text>
+<text x="238" y="145" class="body">Both platforms strongly support the unchanged KEAP1 coding splice. Illumina alone samples a noncoding</text><text x="238" y="162" class="body">processed isoform that overlaps the DNA deletion, but no complete mutant RNA path is observed.</text>
+
+<text x="32" y="207" class="panel-title">DNA EVENT AND CODING MODEL</text>
+<rect x="32" y="221" width="1136" height="68" rx="8" fill="#f8fafb"/>
+<text x="52" y="246" class="body">chr19:10492683-10492894 is intronic in every inspected Ensembl 87 coding transcript. It removes 35 nt from an exon of noncoding processed transcript</text><text x="52" y="263" class="body">ENST00000588024, which has no CDS.</text>
+
+<text x="32" y="309" class="panel-title">LONG READ</text>
+<text x="616" y="309" class="panel-title">SHORT READ</text>
+
+<rect x="32" y="318" width="552" height="236" rx="8" fill="#eef3f7"/>
+<text x="52" y="347" class="strong">T1/T2 Oxford Nanopore RNA</text>
+<text x="52" y="372" class="body">The canonical coding 10492262|10499395 splice has 473 T1 and 535 T2</text><text x="52" y="388" class="body">primary fragments. Neither processed-transcript junction is observed.</text>
+<text x="52" y="425" class="panel-title">TRANSCRIPT NUCLEOTIDE / STRUCTURE</text>
+<text x="52" y="448" class="sequence">Coding path: ...10492262|10499395...; deleted DNA is intronic.</text><text x="52" y="465" class="sequence">ENST00000588024 exon path not detected</text>
+<text x="52" y="507" class="panel-title">PROTEIN AND PEPTIDE SPACE</text>
+<text x="52" y="530" class="sequence">Canonical KEAP1 coding protein; no mutant translation</text>
+<text x="52" y="550" class="footer">Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0</text>
+<rect x="616" y="318" width="552" height="236" rx="8" fill="#eef3f7"/>
+<text x="636" y="347" class="strong">T1/T2 Illumina RNA</text>
+<text x="636" y="372" class="body">The coding splice has 98 T1 and 63 T2 fragments. T1 also supports both</text><text x="636" y="388" class="body">noncoding isoform junctions (4 and 6); T2 supports only the upstream</text><text x="636" y="404" class="body">junction (2).</text>
+<text x="636" y="425" class="panel-title">TRANSCRIPT NUCLEOTIDE / STRUCTURE</text>
+<text x="636" y="448" class="sequence">Coding: 10492262|10499395. Noncoding:</text><text x="636" y="465" class="sequence">10492262|10492573|10492717|10499395; no deletion-allele path</text>
+<text x="636" y="507" class="panel-title">PROTEIN AND PEPTIDE SPACE</text>
+<text x="636" y="530" class="sequence">Canonical coding protein; processed transcript has no CDS</text>
+<text x="636" y="550" class="footer">Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0</text>
+
+<rect x="32" y="578" width="1136" height="89" rx="8" fill="#e8f3fa"/>
+<text x="52" y="603" class="panel-title">VACCINE CONSEQUENCE</text>
+<text x="52" y="627" class="body">The platform difference concerns noncoding isoform detection, not an antigen. ONT and Illumina agree on the canonical coding RNA; neither produces an altered</text><text x="52" y="644" class="body">coding frame or variant-specific peptide.</text>
+<text x="52" y="658" class="strong">No evidence-backed vaccine construct selected.</text>
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">osteosarc.com DRAGEN SV | matched ONT/Illumina transcript audit | Ensembl 87</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.2 | research use only</text>
+</svg>

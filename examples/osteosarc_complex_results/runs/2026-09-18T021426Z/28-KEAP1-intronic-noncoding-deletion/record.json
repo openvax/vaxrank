@@ -1,0 +1,64 @@
+{
+  "decision_reason": "Both platforms strongly support the unchanged coding splice. Illumina samples the noncoding isoform, but no complete T2 deletion-allele transcript path or coding consequence is observed.",
+  "dna_only": "The deletion is intronic in all inspected coding transcripts but removes 35 nt from an exon of processed noncoding transcript ENST00000588024, which has no CDS.",
+  "epitope_message": "Not predicted because the observed platform difference is noncoding and no mutant CDS exists.",
+  "id": "KEAP1-intronic-noncoding-deletion",
+  "interpretation": "This is a real platform difference in transcript evidence: short reads detect a noncoding isoform absent from the ONT slice. It does not change the coding protein or vaccine-peptide pool.",
+  "limitation": "The complete noncoding isoform is supported in T1, before the acquired T2 DNA event; two T2 upstream-junction reads alone do not establish a mutant noncoding transcript.",
+  "outcome": "no_translation",
+  "platform_comparison": {
+    "conclusion": "Both platforms strongly support the unchanged KEAP1 coding splice. Illumina alone samples a noncoding processed isoform that overlaps the DNA deletion, but no complete mutant RNA path is observed.",
+    "dna_model": "chr19:10492683-10492894 is intronic in every inspected Ensembl 87 coding transcript. It removes 35 nt from an exon of noncoding processed transcript ENST00000588024, which has no CDS.",
+    "id": "KEAP1-intronic-noncoding-deletion",
+    "overview": {
+      "long": "Canonical coding splice: 473 T1 / 535 T2; no processed-isoform junction",
+      "short": "Coding splice: 98 T1 / 63 T2; noncoding isoform complete only in T1",
+      "vaccine": "Platform-specific noncoding evidence; coding peptide set unchanged"
+    },
+    "rows": [
+      {
+        "evidence": "The canonical coding 10492262|10499395 splice has 473 T1 and 535 T2 primary fragments. Neither processed-transcript junction is observed.",
+        "label": "T1/T2 Oxford Nanopore RNA",
+        "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0",
+        "protein": "Canonical KEAP1 coding protein; no mutant translation",
+        "transcript_nt": "Coding path: ...10492262|10499395...; deleted DNA is intronic. ENST00000588024 exon path not detected"
+      },
+      {
+        "evidence": "The coding splice has 98 T1 and 63 T2 fragments. T1 also supports both noncoding isoform junctions (4 and 6); T2 supports only the upstream junction (2).",
+        "label": "T1/T2 Illumina RNA",
+        "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0",
+        "protein": "Canonical coding protein; processed transcript has no CDS",
+        "transcript_nt": "Coding: 10492262|10499395. Noncoding: 10492262|10492573|10492717|10499395; no deletion-allele path"
+      }
+    ],
+    "vaccine_impact": "The platform difference concerns noncoding isoform detection, not an antigen. ONT and Illumina agree on the canonical coding RNA; neither produces an altered coding frame or variant-specific peptide."
+  },
+  "protein_sequence": null,
+  "rna_evidence": {
+    "alt_fragments": 0,
+    "counts_text": "canonical coding junction: ONT 473 T1 / 535 T2, Illumina 98 T1 / 63 T2; complete processed-isoform junction support only in T1 Illumina",
+    "gate_status": "HELD OUT: NONCODING DIFFERENCE / NO MUTANT CDS",
+    "other_fragments": "noncoding isoform evidence",
+    "passes_vaxrank_filters": false,
+    "platform": "Oxford Nanopore and Illumina RNA",
+    "ref_fragments": "canonical coding splice present",
+    "source": "matched T1/T2 regional transcript audit",
+    "top_protein_fragments": 0
+  },
+  "sample": "Osteosarcoma T2",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com DRAGEN SV",
+    "matched ONT/Illumina transcript audit",
+    "Ensembl 87"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/dragen/sv/",
+    "examples/osteosarc_complex_results/source/platform_comparison_audit.json"
+  ],
+  "summary_rna": "Coding splice agrees; Illumina alone samples a noncoding isoform, with no coding peptide effect",
+  "title": "KEAP1 211-bp intronic/noncoding deletion",
+  "top_epitopes": [],
+  "variant": "chr19:g.10492683_10492894del",
+  "variant_class": "DNA-supported intronic deletion overlapping a noncoding exon"
+}

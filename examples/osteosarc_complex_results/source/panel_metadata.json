@@ -61,6 +61,21 @@
       "source_urls": ["https://osteosarc.com/variant/RNF213-chr17-80327830/", "examples/osteosarc_complex_results/source/assembled_antigens.json", "examples/osteosarc_complex_results/source/additional_candidate_audit.json"]
     },
     {
+      "id": "KTN1-p-Leu340fs",
+      "title": "KTN1 p.Leu340fs",
+      "variant": "chr14:g.55627965_55627966insTT",
+      "variant_class": "Cross-platform frameshift with long-read construct rescue",
+      "sample": "Osteosarcoma T2",
+      "dna_only": "The two-base insertion predicts a frameshift, but DNA alone cannot establish expression, the mutant tail, or how much contiguous translated context is supported.",
+      "decision_reason": "ONT and Illumina independently reconstruct the same FYSLL tail; ONT extends the protein context from 18 to 29 aa, making a standard 25-aa construct possible.",
+      "interpretation": "The 20 mutation-overlapping class-I 8-11mers are identical across platforms. The platform-dependent result is the long-peptide pool: five ONT 25mers versus none from the short-read context.",
+      "limitation": "Counts come from differently prepared ONT single-cell and Illumina bulk libraries and are not a platform sensitivity or abundance comparison.",
+      "summary_rna": "Same FYSLL tail and 20 class-I windows; ONT 29 aa / 5 construct windows versus Illumina 18 aa / 0",
+      "rna_evidence": {"platform": "Oxford Nanopore and Illumina RNA", "source": "matched T2 regional reconstruction", "counts_text": "ONT 10 ALT fragments / 9 supporting protein; Illumina 4 ALT reads / 2 fragments / 2 supporting protein", "gate_status": "PASS: CROSS-PLATFORM TRANSLATION", "alt_fragments": 10, "ref_fragments": 1388, "other_fragments": 8, "top_protein_fragments": 9, "passes_vaxrank_filters": true, "transcript_ids": ["ENST00000395308", "ENST00000395309", "ENST00000395311", "ENST00000395314", "ENST00000413890", "ENST00000438792"]},
+      "source_labels": ["osteosarc.com oncoanalyser allele", "matched ONT/Illumina Isovar reconstruction", "NetMHCpan 4.2c"],
+      "source_urls": ["https://osteosarc.com/oncoanalyser/snv/", "examples/osteosarc_complex_results/source/assembled_antigens.json", "examples/osteosarc_complex_results/source/platform_comparison_audit.json"]
+    },
+    {
       "id": "DYNC1H1-p-Val314Ile",
       "title": "DYNC1H1 p.Val314Ile",
       "variant": "chr14:g.101980529G>A",

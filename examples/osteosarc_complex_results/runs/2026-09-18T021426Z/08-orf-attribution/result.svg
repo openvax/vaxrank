@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="47" class="kicker">ISOLATED DNA EFFECT VERSUS RNA</text>
+<text x="32" y="84" class="title">Six loci have at least one non-exact RNA protein window</text>
+<text x="32" y="112" class="subtitle">Sixteen product rows; exact and non-exact products can coexist for one locus</text>
+<rect x="32" y="133" width="1136" height="48" rx="8" fill="#e8f3fa"/>
+<text x="52" y="162" class="strong">NTF3 is cross-platform and explained at sequence level; biological origin remains unresolved.</text>
+
+<text x="52" y="193" class="table-head">LOCUS</text>
+<text x="180" y="193" class="table-head">PLATFORM</text>
+<text x="300" y="193" class="table-head">ROWS</text>
+<text x="380" y="193" class="table-head">INTERPRETATION</text>
+<rect x="32" y="201" width="1136" height="49" rx="7" fill="#eef3f7"/><text x="52" y="225" class="strong">NME1</text><text x="180" y="225" class="body">ILMN</text><text x="300" y="225" class="body">2</text><text x="380" y="220" class="body">The non-exact rows end one residue earlier than the isolated-edit window; other products recover the</text><text x="380" y="236" class="body">exact local sequence.</text><rect x="32" y="258" width="1136" height="49" rx="7" fill="#f7f9fb"/><text x="52" y="282" class="strong">NR2F2</text><text x="180" y="282" class="body">ILMN</text><text x="300" y="282" class="body">1</text><text x="380" y="277" class="body">The RNA window contains an unexplained three-nucleotide transcript deletion; no matched DNA variant has</text><text x="380" y="293" class="body">yet been linked to it.</text><rect x="32" y="315" width="1136" height="49" rx="7" fill="#eef3f7"/><text x="52" y="339" class="strong">NTF3</text><text x="180" y="339" class="body">ILMN + ONT</text><text x="300" y="339" class="body">9</text><text x="380" y="334" class="body">RNA establishes the adjacent base change and compound AG&gt;GT allele, changing Varcode&#x27;s isolated</text><text x="380" y="350" class="body">Lys-to-Arg call to serine; germline versus somatic origin remains unresolved.</text><rect x="32" y="372" width="1136" height="49" rx="7" fill="#f7f9fb"/><text x="52" y="396" class="strong">ROBO2</text><text x="180" y="396" class="body">ILMN</text><text x="300" y="396" class="body">1</text><text x="380" y="391" class="body">One ILMN product contains an additional amino-acid substitution; other products recover the</text><text x="380" y="407" class="body">isolated-edit sequence.</text><rect x="32" y="429" width="1136" height="49" rx="7" fill="#eef3f7"/><text x="52" y="453" class="strong">ZNF674</text><text x="180" y="453" class="body">ILMN</text><text x="300" y="453" class="body">1</text><text x="380" y="448" class="body">One ILMN product contains an additional amino-acid substitution; other products recover the</text><text x="380" y="464" class="body">isolated-edit sequence.</text><rect x="32" y="486" width="1136" height="49" rx="7" fill="#f7f9fb"/><text x="52" y="510" class="strong">ZNF764</text><text x="180" y="510" class="body">ILMN</text><text x="300" y="510" class="body">2</text><text x="380" y="505" class="body">Two ILMN products contain a divergent downstream protein context; other products recover the</text><text x="380" y="521" class="body">isolated-edit sequence.</text>
+
+<rect x="32" y="559" width="552" height="104" rx="8" fill="#f8e9e5"/>
+<text x="52" y="586" class="panel-title">GERMLINE ATTRIBUTION: NOT YET</text>
+<text x="52" y="612" class="body">The public run_isovar path has no matched-germline variant input.</text><text x="52" y="629" class="body">Additional transcript edits remain &#x27;unexplained&#x27; even when they may be</text><text x="52" y="646" class="body">germline.</text>
+<rect x="616" y="559" width="552" height="104" rx="8" fill="#fff2c2"/>
+<text x="636" y="586" class="panel-title">CO-SOMATIC PHASING: CAPABLE, NOT TESTED HERE</text>
+<text x="636" y="612" class="body">Isovar can phase multiple supplied somatic variants by shared</text><text x="636" y="629" class="body">fragments, but the 44 nominated loci contain no nearby pair. MAP2 and</text><text x="636" y="646" class="body">CD109 use explicit external compound inputs.</text>
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Exact local sequences and transcript-relative edits are retained in the checksummed source JSON.</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.2 | research use only</text>
+</svg>

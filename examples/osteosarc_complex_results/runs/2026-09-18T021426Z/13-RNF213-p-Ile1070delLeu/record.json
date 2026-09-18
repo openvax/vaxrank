@@ -1,0 +1,58 @@
+{
+  "assembled_transcript_ids": [],
+  "combined_score": 0.06648564926043199,
+  "decision_reason": "Illumina RNA supports the in-frame deletion and Vaxrank selects a target-bearing 25-aa construct.",
+  "dna_only": "The genomic allele predicts loss of one leucine; RNA is needed to establish expression and its local translated context.",
+  "id": "RNF213-p-Ile1070delLeu",
+  "interpretation": "The RNA and nominated edit agree, providing a robust complex-indel reconstruction control across the DNA, RNA, protein, and epitope layers. A separate audit found alternate fragments in both technologies and both samples.",
+  "limitation": "The rank is specific to the five assessed patient class-I alleles and default filters.",
+  "osteosarc_protein_context": "ADNFNDILKHLLTLADVKHVFRLCGTDEKILANVTEDAKRLIAVADSVLTKVVGDLLSGT",
+  "osteosarc_sequence_status": null,
+  "osteosarc_vaccine_sequence": null,
+  "outcome": "selected",
+  "protein_sequence": "DILKHLLTLADVKHVFRLCGTDEKIANVTEDAKRLIAVADSVLTKVVGD",
+  "rna_evidence": {
+    "alt_fragments": 39,
+    "counts_text": "selected assembly corpus: 39 ALT observations / 38 templates; direct audit: ONT 5 T1 + 14 T2, short-read 42 T1 + 11 T2",
+    "other_fragments": 16,
+    "passes_vaxrank_filters": true,
+    "platform": "Oxford Nanopore and Illumina RNA",
+    "ref_fragments": 17,
+    "source": "T1 BostonGene assembly plus four-product exact-allele audit",
+    "top_protein_fragments": 38,
+    "validation": "reference plus nominated edit"
+  },
+  "sample": "Osteosarcoma T1",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": "LTLADVKHVFRLCGTDEKIANVTED",
+  "source_labels": [
+    "osteosarc.com protein context",
+    "Isovar RNA translation",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variant/RNF213-chr17-80327830/",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json",
+    "examples/osteosarc_complex_results/source/additional_candidate_audit.json"
+  ],
+  "summary_rna": "RNA ALT audit: ONT 5/14 and short-read 42/11 in T1/T2",
+  "target_epitope_score": 0.06648564926043199,
+  "targetable_intervals": [
+    [
+      24,
+      25
+    ]
+  ],
+  "title": "RNF213 p.Ile1070Ile (del Leu)",
+  "top_epitopes": [
+    {
+      "allele": "HLA-B*27:05",
+      "epitope_score": 0.06648564926043199,
+      "ic50_nm": 761.12,
+      "percentile_rank": 1.173,
+      "sequence": "FRLCGTDEKI"
+    }
+  ],
+  "variant": "chr17:g.80327830_80327832delTAC",
+  "variant_class": "Expressed in-frame deletion"
+}

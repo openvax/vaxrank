@@ -141,6 +141,31 @@
       }
     },
     {
+      "id": "KTN1-p-Leu340fs",
+      "gene_name": "KTN1",
+      "amino_acids": "QDALKKSSKGELTTLIHQLQEKDKFYSLL",
+      "targetable_intervals": [[24, 29]],
+      "transcript_ids": ["ENST00000395308", "ENST00000395309", "ENST00000395311", "ENST00000395314", "ENST00000413890", "ENST00000438792"],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/oncoanalyser/snv/",
+      "osteosarc_sequence_status": "The website reports p.Leu340fs but does not publish a sample-specific protein context.",
+      "source_metadata": {
+        "platform": "Oxford Nanopore RNA with Illumina corroboration",
+        "source_id": "2bc1fc291308debb",
+        "ont_alt_fragments": "10",
+        "ont_supporting_fragments": "9",
+        "ont_protein_context_aa": "29",
+        "illumina_alt_reads": "4",
+        "illumina_alt_fragments": "2",
+        "illumina_supporting_fragments": "2",
+        "illumina_protein_context_aa": "18",
+        "shared_mutation_overlapping_8_11mers": "20",
+        "ont_25mer_windows": "5",
+        "illumina_25mer_windows": "0",
+        "validation": "both platforms independently encode the same FYSLL frameshift tail; assembly on/off agrees"
+      }
+    },
+    {
       "id": "MAP2-compound-haplotype",
       "gene_name": "MAP2",
       "amino_acids": "SQLEDRAHCHHLFKTVRIYQGRVVP",

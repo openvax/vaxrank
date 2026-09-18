@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "checked_utc": "2026-09-17T170000Z",
+  "reference_genome": "GRCh38",
+  "annotation": "Ensembl 87",
+  "method": {
+    "scope": "Matched, indexed regional queries of the four RNA products already identified in additional_candidate_audit.json; this is a targeted audit, not a sensitivity benchmark or de novo variant call set.",
+    "ktn1": "Isovar 1.17.0 default read collection and translation with overlap assembly on/off and balanced/context/support preferences. All modes agreed within each platform.",
+    "structural_variants": "Primary alignments were checked for exact breakpoint-spanning CIGAR or reciprocal-SA evidence and for annotated transcript splice junctions. Fragment counts deduplicate query name and mate identity.",
+    "comparison_limit": "ONT single-cell and Illumina bulk libraries differ in preparation, depth, and deduplication. Counts support within-product sequence claims and must not be interpreted as platform sensitivity or abundance comparisons."
+  },
+  "sources": [
+    {
+      "source_id": "7010dd389c50467d",
+      "label": "T1 ONT deduplicated",
+      "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam"
+    },
+    {
+      "source_id": "2bc1fc291308debb",
+      "label": "T2 ONT deduplicated",
+      "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam"
+    },
+    {
+      "source_id": "261f8be4ce5aa8c8",
+      "label": "T1 Illumina RNA oncoanalyser",
+      "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/kamil/oncoanalyser/IPISRC044_T1_ucla/alignments/rna/IPISRC044_tumor_T1_ucla_rna.md.bam"
+    },
+    {
+      "source_id": "95a1e72e7ec10990",
+      "label": "T2 Illumina RNA oncoanalyser",
+      "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/kamil/oncoanalyser/IPISRC044_T2_ucla/alignments/rna/IPISRC044_tumor_T2_ucla_rna.md.bam"
+    }
+  ],
+  "records": [
+    {
+      "id": "KTN1-p-Leu340fs",
+      "conclusion": "Both platforms encode the same FYSLL mutant tail and the same 20 mutation-overlapping 8-11mers; ONT alone supplies enough upstream context for a 25-aa construct.",
+      "dna_model": "chr14:g.55627965_55627966insTT; Ensembl 87 maps the insertion to the shared coding frame of six KTN1 transcripts and predicts p.Leu340fs with a five-residue FYSLL tail before stop.",
+      "vaccine_impact": "The antigen sequence is concordant, not platform-specific. The platform effect is construct eligibility: ONT yields five mutation-overlapping 25mers, while the 18-aa Illumina context yields none.",
+      "overview": {
+        "long": "10 ALT fragments; 29-aa protein context; five 25-aa windows",
+        "short": "4 ALT reads / 2 fragments; 18-aa context; no 25-aa window",
+        "vaccine": "Same 20 class-I 8-11mers; ONT enables the long construct"
+      },
+      "rows": [
+        {
+          "label": "T2 Oxford Nanopore RNA",
+          "source_id": "2bc1fc291308debb",
+          "evidence": "10 exact ALT fragments; nine support the selected translation. Assembly on/off and all three preference modes agree.",
+          "transcript_nt": "...TACAAGATGCTTTAAAGAAGTCAAGTAAGGGAGAATTGACTACGCTTATACATCAGCTTCAAGAAAAGGACAAG[TT]TTACTCGCTGCTGTGAAGGAAGATGCTGCTGCTACAA...",
+          "protein": "QDALKKSSKGELTTLIHQLQEKDK[FYSLL]*",
+          "peptide_pool": "20 unique mutation-overlapping 8-11mers; 5 eligible 25-aa construct windows",
+          "alt_reads": 10,
+          "alt_fragments": 10,
+          "supporting_fragments": 9,
+          "protein_sequence": "QDALKKSSKGELTTLIHQLQEKDKFYSLL",
+          "mutation_interval": [24, 29],
+          "transcript_ids": ["ENST00000395308", "ENST00000395309", "ENST00000395311", "ENST00000395314", "ENST00000413890", "ENST00000438792"]
+        },
+        {
+          "label": "T2 Illumina RNA",
+          "source_id": "95a1e72e7ec10990",
+          "evidence": "Four exact ALT reads in two fragments; both fragments support the selected translation. Assembly does not extend it.",
+          "transcript_nt": "...ATTGACTACGCTTATACATCAGCTTCAAGAAAAGGACAAG[TT]TTACTCGCTGCTGTGAAGGAAGATGCTGCTGCTACAA...",
+          "protein": "LTTLIHQLQEKDK[FYSLL]*",
+          "peptide_pool": "Same 20 unique mutation-overlapping 8-11mers; 0 eligible 25-aa construct windows",
+          "alt_reads": 4,
+          "alt_fragments": 2,
+          "supporting_fragments": 2,
+          "protein_sequence": "LTTLIHQLQEKDKFYSLL",
+          "mutation_interval": [13, 18],
+          "transcript_ids": ["ENST00000395308", "ENST00000395309", "ENST00000395311", "ENST00000395314", "ENST00000413890", "ENST00000438792"]
+        }
+      ],
+      "mhc_windows_8_11": [
+        "EKDKFYSL", "KDKFYSLL", "LQEKDKFY", "QEKDKFYS", "QLQEKDKF",
+        "EKDKFYSLL", "HQLQEKDKF", "LQEKDKFYS", "QEKDKFYSL", "QLQEKDKFY",
+        "HQLQEKDKFY", "IHQLQEKDKF", "LQEKDKFYSL", "QEKDKFYSLL", "QLQEKDKFYS",
+        "HQLQEKDKFYS", "IHQLQEKDKFY", "LIHQLQEKDKF", "LQEKDKFYSLL", "QLQEKDKFYSL"
+      ]
+    },
+    {
+      "id": "DLG5-start-region-deletion",
+      "conclusion": "Long and short RNA both show canonical DLG5 expression from an intact transcript, but neither contains the somatic deletion junction; no mutant CDS or vaccine peptide is established.",
+      "dna_model": "The 79,531-bp deletion removes five ENST00000372391 coding exons, including the chr10:77926518-77926520 start codon. The retained lower-coordinate coding region has no annotated start after the deletion.",
+      "vaccine_impact": "ONT phases up to four canonical DLG5 exon junctions on single reads; Illumina supplies many local junction fragments. Both observations describe reference-spliced RNA, not the deletion allele, so both peptide pools remain empty.",
+      "overview": {
+        "long": "Two T1 and two T2 reads phase four canonical DLG5 junctions",
+        "short": "Canonical retained-to-deleted exon junction: 130 T1 / 51 T2 fragments",
+        "vaccine": "No deletion-junction RNA on either platform; no mutant peptide"
+      },
+      "rows": [
+        {
+          "label": "T1/T2 Oxford Nanopore RNA",
+          "evidence": "No deletion-junction path. Two reads in each sample span four canonical DLG5 exon junctions, linking retained and DNA-deleted regions on an intact RNA molecule.",
+          "transcript_nt": "WT path: exon 77843447-77843706 -> 77853354-77853537 -> 77854227-77854370 -> 77856730-77856892 -> 77869129-77869197",
+          "protein": "Reference-spliced DLG5 only; mutant CDS not observed",
+          "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0"
+        },
+        {
+          "label": "T1/T2 Illumina RNA",
+          "evidence": "No deletion-junction fragment. The canonical 77843706|77853354 splice has 130 T1 and 51 T2 primary fragments, but short reads do not phase the full exon chain.",
+          "transcript_nt": "WT local junction: ...77843706|77853354...; deletion junction 77850921|77930452 not observed",
+          "protein": "Reference-spliced DLG5 only; mutant CDS not observed",
+          "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0"
+        }
+      ]
+    },
+    {
+      "id": "AFF3-intronic-deletion",
+      "conclusion": "Both platforms recover the same canonical coding splice across the affected intron; the 128-bp DNA deletion is absent from mature coding RNA and creates no observed peptide difference.",
+      "dna_model": "chr2:99668095-99668223 lies wholly inside the intron between ENST00000317233 exons ending at 99649666 and starting at 99672538; no Ensembl 87 coding exon overlaps it.",
+      "vaccine_impact": "The mature coding junction is identical with or without the intronic DNA segment. ONT adds long-range isoform linkage, while Illumina confirms the local splice; neither supplies a mutant coding sequence to rank.",
+      "overview": {
+        "long": "Canonical 99649666|99672538 junction: 6 T1 / 16 T2 fragments",
+        "short": "Same canonical junction: 26 T1 / 15 T2 fragments",
+        "vaccine": "No coding-sequence change on either platform; no mutant peptide"
+      },
+      "rows": [
+        {
+          "label": "T1/T2 Oxford Nanopore RNA",
+          "evidence": "Six T1 and 16 T2 primary fragments carry the canonical coding splice; long reads continue across additional AFF3 exons on the same molecule.",
+          "transcript_nt": "Coding path: exon ...99649626-99649666 | 99672538-99672589...; deleted DNA 99668095-99668223 is intronic and absent",
+          "protein": "Canonical AFF3 protein sequence; no mutant translation",
+          "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0"
+        },
+        {
+          "label": "T1/T2 Illumina RNA",
+          "evidence": "Twenty-six T1 and 15 T2 primary fragments carry the same canonical coding splice; no exact DNA-deletion junction or altered exon boundary is observed.",
+          "transcript_nt": "Same mature junction: ...99649666|99672538...; intronic 128 bp is absent through ordinary splicing",
+          "protein": "Canonical AFF3 protein sequence; no mutant translation",
+          "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0"
+        }
+      ]
+    },
+    {
+      "id": "KEAP1-intronic-noncoding-deletion",
+      "conclusion": "Both platforms strongly support the unchanged KEAP1 coding splice. Illumina alone samples a noncoding processed isoform that overlaps the DNA deletion, but no complete mutant RNA path is observed.",
+      "dna_model": "chr19:10492683-10492894 is intronic in every inspected Ensembl 87 coding transcript. It removes 35 nt from an exon of noncoding processed transcript ENST00000588024, which has no CDS.",
+      "vaccine_impact": "The platform difference concerns noncoding isoform detection, not an antigen. ONT and Illumina agree on the canonical coding RNA; neither produces an altered coding frame or variant-specific peptide.",
+      "overview": {
+        "long": "Canonical coding splice: 473 T1 / 535 T2; no processed-isoform junction",
+        "short": "Coding splice: 98 T1 / 63 T2; noncoding isoform complete only in T1",
+        "vaccine": "Platform-specific noncoding evidence; coding peptide set unchanged"
+      },
+      "rows": [
+        {
+          "label": "T1/T2 Oxford Nanopore RNA",
+          "evidence": "The canonical coding 10492262|10499395 splice has 473 T1 and 535 T2 primary fragments. Neither processed-transcript junction is observed.",
+          "transcript_nt": "Coding path: ...10492262|10499395...; deleted DNA is intronic. ENST00000588024 exon path not detected",
+          "protein": "Canonical KEAP1 coding protein; no mutant translation",
+          "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0"
+        },
+        {
+          "label": "T1/T2 Illumina RNA",
+          "evidence": "The coding splice has 98 T1 and 63 T2 fragments. T1 also supports both noncoding isoform junctions (4 and 6); T2 supports only the upstream junction (2).",
+          "transcript_nt": "Coding: 10492262|10499395. Noncoding: 10492262|10492573|10492717|10499395; no deletion-allele path",
+          "protein": "Canonical coding protein; processed transcript has no CDS",
+          "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0"
+        }
+      ]
+    }
+  ]
+}

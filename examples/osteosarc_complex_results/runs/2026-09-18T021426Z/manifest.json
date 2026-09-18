@@ -1,0 +1,220 @@
+{
+  "combined_pdf": "vaxrank-all-figures.pdf",
+  "created_utc": "2026-09-18T021426Z",
+  "page_count": 34,
+  "pages": [
+    {
+      "name": "summary",
+      "page": 1,
+      "png": "01-summary/result.png",
+      "svg": "01-summary/result.svg"
+    },
+    {
+      "name": "summary-2",
+      "page": 2,
+      "png": "02-summary-2/result.png",
+      "svg": "02-summary-2/result.svg"
+    },
+    {
+      "name": "summary-3",
+      "page": 3,
+      "png": "03-summary-3/result.png",
+      "svg": "03-summary-3/result.svg"
+    },
+    {
+      "name": "summary-4",
+      "page": 4,
+      "png": "04-summary-4/result.png",
+      "svg": "04-summary-4/result.svg"
+    },
+    {
+      "name": "platform-overview",
+      "page": 5,
+      "png": "05-platform-overview/result.png",
+      "svg": "05-platform-overview/result.svg"
+    },
+    {
+      "name": "orf-platform-summary",
+      "page": 6,
+      "png": "06-orf-platform-summary/result.png",
+      "svg": "06-orf-platform-summary/result.svg"
+    },
+    {
+      "name": "orf-assembly-comparison",
+      "page": 7,
+      "png": "07-orf-assembly-comparison/result.png",
+      "svg": "07-orf-assembly-comparison/result.svg"
+    },
+    {
+      "name": "orf-attribution",
+      "page": 8,
+      "png": "08-orf-attribution/result.png",
+      "svg": "08-orf-attribution/result.svg"
+    },
+    {
+      "name": "PIP5K1A-p-G474fs-ONT-T1",
+      "page": 9,
+      "png": "09-PIP5K1A-p-G474fs-ONT-T1/result.png",
+      "svg": "09-PIP5K1A-p-G474fs-ONT-T1/result.svg"
+    },
+    {
+      "name": "GTF3C5-p-Glu503-Glu506del",
+      "page": 10,
+      "png": "10-GTF3C5-p-Glu503-Glu506del/result.png",
+      "svg": "10-GTF3C5-p-Glu503-Glu506del/result.svg"
+    },
+    {
+      "name": "TECPR1-p-Thr259fs",
+      "page": 11,
+      "png": "11-TECPR1-p-Thr259fs/result.png",
+      "svg": "11-TECPR1-p-Thr259fs/result.svg"
+    },
+    {
+      "name": "GLIS3-p-Ser775fs",
+      "page": 12,
+      "png": "12-GLIS3-p-Ser775fs/result.png",
+      "svg": "12-GLIS3-p-Ser775fs/result.svg"
+    },
+    {
+      "name": "RNF213-p-Ile1070delLeu",
+      "page": 13,
+      "png": "13-RNF213-p-Ile1070delLeu/result.png",
+      "svg": "13-RNF213-p-Ile1070delLeu/result.svg"
+    },
+    {
+      "name": "KTN1-p-Leu340fs",
+      "page": 14,
+      "png": "14-KTN1-p-Leu340fs/result.png",
+      "svg": "14-KTN1-p-Leu340fs/result.svg"
+    },
+    {
+      "name": "DYNC1H1-p-Val314Ile",
+      "page": 15,
+      "png": "15-DYNC1H1-p-Val314Ile/result.png",
+      "svg": "15-DYNC1H1-p-Val314Ile/result.svg"
+    },
+    {
+      "name": "DYNC1H1-p-Gln3267His",
+      "page": 16,
+      "png": "16-DYNC1H1-p-Gln3267His/result.png",
+      "svg": "16-DYNC1H1-p-Gln3267His/result.svg"
+    },
+    {
+      "name": "NAV2-p-Ala1809Val",
+      "page": 17,
+      "png": "17-NAV2-p-Ala1809Val/result.png",
+      "svg": "17-NAV2-p-Ala1809Val/result.svg"
+    },
+    {
+      "name": "MAP2-compound-haplotype",
+      "page": 18,
+      "png": "18-MAP2-compound-haplotype/result.png",
+      "svg": "18-MAP2-compound-haplotype/result.svg"
+    },
+    {
+      "name": "NTF3-compound-haplotype",
+      "page": 19,
+      "png": "19-NTF3-compound-haplotype/result.png",
+      "svg": "19-NTF3-compound-haplotype/result.svg"
+    },
+    {
+      "name": "CD109-long-read-phased",
+      "page": 20,
+      "png": "20-CD109-long-read-phased/result.png",
+      "svg": "20-CD109-long-read-phased/result.svg"
+    },
+    {
+      "name": "ZNF436-long-read-context",
+      "page": 21,
+      "png": "21-ZNF436-long-read-context/result.png",
+      "svg": "21-ZNF436-long-read-context/result.svg"
+    },
+    {
+      "name": "FOXO3-STRADA-CCDC47-unresolved",
+      "page": 22,
+      "png": "22-FOXO3-STRADA-CCDC47-unresolved/result.png",
+      "svg": "22-FOXO3-STRADA-CCDC47-unresolved/result.svg"
+    },
+    {
+      "name": "PARD3B-CDKN2B-unresolved",
+      "page": 23,
+      "png": "23-PARD3B-CDKN2B-unresolved/result.png",
+      "svg": "23-PARD3B-CDKN2B-unresolved/result.svg"
+    },
+    {
+      "name": "AMPH-internal-deletion-DNA-only",
+      "page": 24,
+      "png": "24-AMPH-internal-deletion-DNA-only/result.png",
+      "svg": "24-AMPH-internal-deletion-DNA-only/result.svg"
+    },
+    {
+      "name": "chr21-unnamed-long-read-rich-unresolved",
+      "page": 25,
+      "png": "25-chr21-unnamed-long-read-rich-unresolved/result.png",
+      "svg": "25-chr21-unnamed-long-read-rich-unresolved/result.svg"
+    },
+    {
+      "name": "DLG5-start-region-deletion",
+      "page": 26,
+      "png": "26-DLG5-start-region-deletion/result.png",
+      "svg": "26-DLG5-start-region-deletion/result.svg"
+    },
+    {
+      "name": "AFF3-intronic-deletion",
+      "page": 27,
+      "png": "27-AFF3-intronic-deletion/result.png",
+      "svg": "27-AFF3-intronic-deletion/result.svg"
+    },
+    {
+      "name": "KEAP1-intronic-noncoding-deletion",
+      "page": 28,
+      "png": "28-KEAP1-intronic-noncoding-deletion/result.png",
+      "svg": "28-KEAP1-intronic-noncoding-deletion/result.svg"
+    },
+    {
+      "name": "GABBR1-SLC29A1-unresolved",
+      "page": 29,
+      "png": "29-GABBR1-SLC29A1-unresolved/result.png",
+      "svg": "29-GABBR1-SLC29A1-unresolved/result.svg"
+    },
+    {
+      "name": "OTUD7A-FMN1-unresolved",
+      "page": 30,
+      "png": "30-OTUD7A-FMN1-unresolved/result.png",
+      "svg": "30-OTUD7A-FMN1-unresolved/result.svg"
+    },
+    {
+      "name": "H1-2-15nt-deletion-ONT-T1",
+      "page": 31,
+      "png": "31-H1-2-15nt-deletion-ONT-T1/result.png",
+      "svg": "31-H1-2-15nt-deletion-ONT-T1/result.svg"
+    },
+    {
+      "name": "ATP5MG-KMT2A-T0",
+      "page": 32,
+      "png": "32-ATP5MG-KMT2A-T0/result.png",
+      "svg": "32-ATP5MG-KMT2A-T0/result.svg"
+    },
+    {
+      "name": "TPST1-CRCP-T2-long-read-rescue",
+      "page": 33,
+      "png": "33-TPST1-CRCP-T2-long-read-rescue/result.png",
+      "svg": "33-TPST1-CRCP-T2-long-read-rescue/result.svg"
+    },
+    {
+      "name": "provenance",
+      "page": 34,
+      "png": "34-provenance/result.png",
+      "svg": "34-provenance/result.svg"
+    }
+  ],
+  "png_dimensions": {
+    "height": 2280,
+    "width": 3600
+  },
+  "png_scale": 3,
+  "schema_version": 1,
+  "source_json": "/Users/iskander/code/vaxrank/examples/osteosarc_complex_results/source/all_results.json",
+  "source_json_sha256": "86e979d2308ffff99598c5c4bff79aa8f619e3616efb4b7db23787959edd20e3",
+  "vaxrank_version": "3.19.2"
+}

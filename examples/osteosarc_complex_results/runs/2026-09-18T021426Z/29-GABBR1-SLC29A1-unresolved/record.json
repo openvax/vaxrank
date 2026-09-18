@@ -1,0 +1,37 @@
+{
+  "decision_reason": "Direct tagged-BAM inspection recovered two complete T1 and three complete T2 ONT paths with reciprocal supplementary alignments; no productive orientation, CDS start or reading frame is yet justified.",
+  "dna_only": "DNA establishes a somatic chr6 rearrangement, but its displayed genomic flank concatenation is not an assembled fusion transcript.",
+  "epitope_message": "Not predicted because complete RNA junction paths do not yet establish a translated CDS/frame.",
+  "id": "GABBR1-SLC29A1-unresolved",
+  "interpretation": "GABBR1::SLC29A1 is a genuine long-read transcript-reconstruction candidate: complete RNA paths exist in two samples, but coding interpretation remains separate from junction detection.",
+  "limitation": "The public deduplicated ONT BAMs retain SA declarations without all matching observed partner records; validation used tagged BAMs and does not establish independent molecules or a translated product.",
+  "outcome": "no_translation",
+  "protein_sequence": null,
+  "rna_evidence": {
+    "alt_fragments": 5,
+    "counts_text": "2 complete T1 paths and 3 complete T2 paths; website also reports 1 T3 split observation not independently checked here",
+    "gate_status": "HELD OUT: CODING ORIENTATION / FRAME UNRESOLVED",
+    "other_fragments": "n/a",
+    "passes_vaxrank_filters": false,
+    "platform": "Oxford Nanopore RNA",
+    "ref_fragments": "n/a",
+    "source": "tagged-BAM reciprocal-SA audit",
+    "top_protein_fragments": 0
+  },
+  "sample": "Osteosarcoma T1/T2",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com fusion evidence",
+    "direct tagged-BAM path validation"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/fusions/gabbr1--slc29a1/",
+    "https://osteosarc.com/fusions/",
+    "examples/osteosarc_complex_results/source/additional_candidate_audit.json"
+  ],
+  "summary_rna": "Complete ONT paths: 2 T1 + 3 T2; CDS/frame unresolved",
+  "title": "GABBR1::SLC29A1",
+  "top_epitopes": [],
+  "variant": "chr6:29612906 \u2194 chr6:44218908",
+  "variant_class": "Cross-platform intrachromosomal rearrangement"
+}

@@ -1,0 +1,177 @@
+{
+  "assembled_transcript_ids": [
+    "ENST00000395308",
+    "ENST00000395309",
+    "ENST00000395311",
+    "ENST00000395314",
+    "ENST00000413890",
+    "ENST00000438792"
+  ],
+  "combined_score": 1.2096008631063737,
+  "decision_reason": "ONT and Illumina independently reconstruct the same FYSLL tail; ONT extends the protein context from 18 to 29 aa, making a standard 25-aa construct possible.",
+  "dna_only": "The two-base insertion predicts a frameshift, but DNA alone cannot establish expression, the mutant tail, or how much contiguous translated context is supported.",
+  "id": "KTN1-p-Leu340fs",
+  "interpretation": "The 20 mutation-overlapping class-I 8-11mers are identical across platforms. The platform-dependent result is the long-peptide pool: five ONT 25mers versus none from the short-read context.",
+  "limitation": "Counts come from differently prepared ONT single-cell and Illumina bulk libraries and are not a platform sensitivity or abundance comparison.",
+  "osteosarc_protein_context": null,
+  "osteosarc_sequence_status": "The website reports p.Leu340fs but does not publish a sample-specific protein context.",
+  "osteosarc_vaccine_sequence": null,
+  "outcome": "selected",
+  "platform_comparison": {
+    "conclusion": "Both platforms encode the same FYSLL mutant tail and the same 20 mutation-overlapping 8-11mers; ONT alone supplies enough upstream context for a 25-aa construct.",
+    "dna_model": "chr14:g.55627965_55627966insTT; Ensembl 87 maps the insertion to the shared coding frame of six KTN1 transcripts and predicts p.Leu340fs with a five-residue FYSLL tail before stop.",
+    "id": "KTN1-p-Leu340fs",
+    "mhc_windows_8_11": [
+      "EKDKFYSL",
+      "KDKFYSLL",
+      "LQEKDKFY",
+      "QEKDKFYS",
+      "QLQEKDKF",
+      "EKDKFYSLL",
+      "HQLQEKDKF",
+      "LQEKDKFYS",
+      "QEKDKFYSL",
+      "QLQEKDKFY",
+      "HQLQEKDKFY",
+      "IHQLQEKDKF",
+      "LQEKDKFYSL",
+      "QEKDKFYSLL",
+      "QLQEKDKFYS",
+      "HQLQEKDKFYS",
+      "IHQLQEKDKFY",
+      "LIHQLQEKDKF",
+      "LQEKDKFYSLL",
+      "QLQEKDKFYSL"
+    ],
+    "overview": {
+      "long": "10 ALT fragments; 29-aa protein context; five 25-aa windows",
+      "short": "4 ALT reads / 2 fragments; 18-aa context; no 25-aa window",
+      "vaccine": "Same 20 class-I 8-11mers; ONT enables the long construct"
+    },
+    "rows": [
+      {
+        "alt_fragments": 10,
+        "alt_reads": 10,
+        "evidence": "10 exact ALT fragments; nine support the selected translation. Assembly on/off and all three preference modes agree.",
+        "label": "T2 Oxford Nanopore RNA",
+        "mutation_interval": [
+          24,
+          29
+        ],
+        "peptide_pool": "20 unique mutation-overlapping 8-11mers; 5 eligible 25-aa construct windows",
+        "protein": "QDALKKSSKGELTTLIHQLQEKDK[FYSLL]*",
+        "protein_sequence": "QDALKKSSKGELTTLIHQLQEKDKFYSLL",
+        "source_id": "2bc1fc291308debb",
+        "supporting_fragments": 9,
+        "transcript_ids": [
+          "ENST00000395308",
+          "ENST00000395309",
+          "ENST00000395311",
+          "ENST00000395314",
+          "ENST00000413890",
+          "ENST00000438792"
+        ],
+        "transcript_nt": "...TACAAGATGCTTTAAAGAAGTCAAGTAAGGGAGAATTGACTACGCTTATACATCAGCTTCAAGAAAAGGACAAG[TT]TTACTCGCTGCTGTGAAGGAAGATGCTGCTGCTACAA..."
+      },
+      {
+        "alt_fragments": 2,
+        "alt_reads": 4,
+        "evidence": "Four exact ALT reads in two fragments; both fragments support the selected translation. Assembly does not extend it.",
+        "label": "T2 Illumina RNA",
+        "mutation_interval": [
+          13,
+          18
+        ],
+        "peptide_pool": "Same 20 unique mutation-overlapping 8-11mers; 0 eligible 25-aa construct windows",
+        "protein": "LTTLIHQLQEKDK[FYSLL]*",
+        "protein_sequence": "LTTLIHQLQEKDKFYSLL",
+        "source_id": "95a1e72e7ec10990",
+        "supporting_fragments": 2,
+        "transcript_ids": [
+          "ENST00000395308",
+          "ENST00000395309",
+          "ENST00000395311",
+          "ENST00000395314",
+          "ENST00000413890",
+          "ENST00000438792"
+        ],
+        "transcript_nt": "...ATTGACTACGCTTATACATCAGCTTCAAGAAAAGGACAAG[TT]TTACTCGCTGCTGTGAAGGAAGATGCTGCTGCTACAA..."
+      }
+    ],
+    "vaccine_impact": "The antigen sequence is concordant, not platform-specific. The platform effect is construct eligibility: ONT yields five mutation-overlapping 25mers, while the 18-aa Illumina context yields none."
+  },
+  "protein_sequence": "QDALKKSSKGELTTLIHQLQEKDKFYSLL",
+  "rna_evidence": {
+    "alt_fragments": 10,
+    "counts_text": "ONT 10 ALT fragments / 9 supporting protein; Illumina 4 ALT reads / 2 fragments / 2 supporting protein",
+    "gate_status": "PASS: CROSS-PLATFORM TRANSLATION",
+    "other_fragments": 8,
+    "passes_vaxrank_filters": true,
+    "platform": "Oxford Nanopore and Illumina RNA",
+    "ref_fragments": 1388,
+    "source": "matched T2 regional reconstruction",
+    "top_protein_fragments": 9,
+    "transcript_ids": [
+      "ENST00000395308",
+      "ENST00000395309",
+      "ENST00000395311",
+      "ENST00000395314",
+      "ENST00000413890",
+      "ENST00000438792"
+    ]
+  },
+  "sample": "Osteosarcoma T2",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": "LKKSSKGELTTLIHQLQEKDKFYSL",
+  "source_labels": [
+    "osteosarc.com oncoanalyser allele",
+    "matched ONT/Illumina Isovar reconstruction",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/oncoanalyser/snv/",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json",
+    "examples/osteosarc_complex_results/source/platform_comparison_audit.json"
+  ],
+  "summary_rna": "Same FYSLL tail and 20 class-I windows; ONT 29 aa / 5 construct windows versus Illumina 18 aa / 0",
+  "target_epitope_score": 1.2096008631063737,
+  "targetable_intervals": [
+    [
+      24,
+      29
+    ]
+  ],
+  "title": "KTN1 p.Leu340fs",
+  "top_epitopes": [
+    {
+      "allele": "HLA-B*08:01",
+      "epitope_score": 0.3965535856773269,
+      "ic50_nm": 435.33,
+      "percentile_rank": 0.477,
+      "sequence": "QLQEKDKFYSL"
+    },
+    {
+      "allele": "HLA-B*08:01",
+      "epitope_score": 0.39294844887572145,
+      "ic50_nm": 437.47,
+      "percentile_rank": 0.479,
+      "sequence": "EKDKFYSL"
+    },
+    {
+      "allele": "HLA-B*08:01",
+      "epitope_score": 0.26158548611435467,
+      "ic50_nm": 524.17,
+      "percentile_rank": 0.563,
+      "sequence": "LQEKDKFYSL"
+    },
+    {
+      "allele": "HLA-B*08:01",
+      "epitope_score": 0.15851334243897064,
+      "ic50_nm": 616.76,
+      "percentile_rank": 0.643,
+      "sequence": "QEKDKFYSL"
+    }
+  ],
+  "variant": "chr14:g.55627965_55627966insTT",
+  "variant_class": "Cross-platform frameshift with long-read construct rescue"
+}

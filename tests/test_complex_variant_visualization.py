@@ -1,12 +1,10 @@
 import json
 from pathlib import Path
 import struct
-from xml.etree import ElementTree
 
 from vaxrank.complex_variant_visualization import (
     _balanced_chunks,
     generate_complex_variant_results,
-    render_complex_result_svg,
 )
 
 
@@ -69,41 +67,34 @@ def example_payload(records):
     }
 
 
-def test_result_svg_shows_selected_peptide_and_prediction():
-    svg = render_complex_result_svg(example_record())
-    ElementTree.fromstring(svg)
-    assert '<rect width="1200" height="760" fill="#ffffff"/>' in svg
-    assert "SELECTED" in svg
-    assert "ABCDEFGHIJK" in svg
-    assert "HLA-A*02:01" in svg
-    assert "32.10" in svg
-
-
-def test_result_svg_keeps_negative_result_explicit():
-    svg = render_complex_result_svg(example_record("no_target_binder"))
-    assert "NO TARGET BINDER" in svg
-    assert "No peptide selected for a vaccine construct." in svg
-    assert "No target epitope passed the configured filters." in svg
-
-
-def test_result_svg_limits_table_to_five_rows_but_source_keeps_all():
-    record = example_record()
-    record["top_epitopes"] = [
-        {
-            "allele": "HLA-A*02:01",
-            "epitope_score": 0.9 - index / 10,
-            "ic50_nm": 32.1 + index,
-            "percentile_rank": 0.2 + index,
-            "sequence": "PEPTIDE%02d" % index,
-        }
-        for index in range(6)
-    ]
-
-    svg = render_complex_result_svg(record)
-
-    assert "PEPTIDE04" in svg
-    assert "PEPTIDE05" not in svg
-    assert len(record["top_epitopes"]) == 6
+def add_platform_comparison(record):
+    record["platform_comparison"] = {
+        "conclusion": "Both platforms agree on the mutant tail.",
+        "dna_model": "DNA predicts a frameshift but not its expressed context.",
+        "vaccine_impact": "Long reads provide a 25-aa construct window.",
+        "overview": {
+            "long": "Longer translated context",
+            "short": "Same tail, shorter context",
+            "vaccine": "Same epitopes; long-read construct only",
+        },
+        "rows": [
+            {
+                "label": "Oxford Nanopore RNA",
+                "evidence": "Nine fragments support the translation.",
+                "transcript_nt": "AAA[TT]CCC",
+                "protein": "ABCDEFG[HIJKL]*",
+                "peptide_pool": "20 class-I windows; five 25-aa windows",
+            },
+            {
+                "label": "Illumina RNA",
+                "evidence": "Two fragments support the same translation.",
+                "transcript_nt": "A[TT]CCC",
+                "protein": "EFG[HIJKL]*",
+                "peptide_pool": "20 class-I windows; no 25-aa window",
+            },
+        ],
+    }
+    return record
 
 
 def test_generate_compact_pdf_and_high_resolution_pages(tmp_path):
@@ -158,6 +149,24 @@ def test_generate_paginates_large_decision_matrix(tmp_path):
     assert len(list(run.glob("*/record.json"))) == 8
 
 
+def test_generate_adds_one_platform_overview_and_replaces_result_layout(tmp_path):
+    record = add_platform_comparison(example_record())
+    source = tmp_path / "results.json"
+    source.write_text(json.dumps(example_payload([record])))
+
+    run = generate_complex_variant_results(
+        source,
+        tmp_path / "runs",
+        timestamp="2026-09-16T120002Z",
+        png_scale=1,
+    )
+
+    manifest = json.loads((run / "manifest.json").read_text())
+    assert manifest["page_count"] == 4
+    assert [page["name"] for page in manifest["pages"]] == [
+        "summary", "platform-overview", "GENE1-complex-event", "provenance"]
+
+
 def test_committed_complex_inputs_cover_requested_cases_and_provenance():
     source = (
         Path(__file__).parents[1]
@@ -174,6 +183,7 @@ def test_committed_complex_inputs_cover_requested_cases_and_provenance():
         "TECPR1-p-Thr259fs",
         "GLIS3-p-Ser775fs",
         "RNF213-p-Ile1070delLeu",
+        "KTN1-p-Leu340fs",
         "DYNC1H1-p-Val314Ile",
         "DYNC1H1-p-Gln3267His",
         "NAV2-p-Ala1809Val",
@@ -199,7 +209,9 @@ def test_committed_complex_inputs_cover_requested_cases_and_provenance():
         "PARD3B-CDKN2B-unresolved",
         "AMPH-internal-deletion-DNA-only",
         "chr21-unnamed-long-read-rich-unresolved",
-        "KTN1-p-Leu340fs-unresolved",
+        "DLG5-start-region-deletion",
+        "AFF3-intronic-deletion",
+        "KEAP1-intronic-noncoding-deletion",
         "GABBR1-SLC29A1-unresolved",
         "OTUD7A-FMN1-unresolved",
     }
@@ -207,7 +219,7 @@ def test_committed_complex_inputs_cover_requested_cases_and_provenance():
         record["id"]: record for record in sv_audits["inventory_only"]}
     assert inventory["MYO15B-chr17-75589953"][
         "published_vaccine_peptide"] == "AGRRAQAPTRVLGLAPP"
-    assert inventory["DLG5--DLG5"]["class"] == "79.5-kb same-gene deletion"
+    assert "DLG5--DLG5" not in inventory
     assert by_id["GTF3C5-p-Glu503_Glu506del"]["source_metadata"][
         "direct_alt_fragments_t2_ont"] == "128"
     audit_indels = {record["gene"]: record for record in audit["indels"]}
@@ -217,3 +229,30 @@ def test_committed_complex_inputs_cover_requested_cases_and_provenance():
         record["id"]: record for record in audit["structural_variants"]}
     assert audit_svs["OTUD7A--FMN1"]["tagged_ont_paths"][
         "2bc1fc291308debb"]["cell_umi_keys"] == 6
+    comparison = json.loads(
+        (source / "platform_comparison_audit.json").read_text())
+    comparisons = {record["id"]: record for record in comparison["records"]}
+    assert comparisons["KTN1-p-Leu340fs"]["rows"][0][
+        "protein_sequence"] == "QDALKKSSKGELTTLIHQLQEKDKFYSLL"
+    assert len(comparisons["KTN1-p-Leu340fs"]["mhc_windows_8_11"]) == 20
+    assert comparisons["KEAP1-intronic-noncoding-deletion"]["rows"][1][
+        "protein"].endswith("processed transcript has no CDS")
+    orf_audit = json.loads((source / "orf_platform_audit.json").read_text())
+    full_by_platform = {
+        record["platform"]: record
+        for record in orf_audit["full_matrix"]["platform_summary"]}
+    assert full_by_platform["ILMN"][
+        "variants_with_validated_protein_window"] == 39
+    assert full_by_platform["ONT"][
+        "variants_with_validated_protein_window"] == 30
+    assert full_by_platform["PacBio"][
+        "variants_with_validated_protein_window"] == 3
+    paired = {
+        (record["platform"], record["mode"]): record
+        for record in orf_audit["paired_corpus"]["platform_mode_summary"]}
+    assert paired[("ILMN", "assembly_on")][
+        "validated_local_protein_windows"] == 27
+    assert paired[("ILMN", "assembly_off")][
+        "validated_local_protein_windows"] == 27
+    assert orf_audit["varcode"][
+        "variants_with_exact_isolated_effect_protein"] == 44
