@@ -1,4 +1,7 @@
 numpy>=2.0.0,<3.0.0
+# Shared test-data downloads use verified cache hits, explicit roots and bounded
+# HTTP retries via datacache's public API, without fetching during normal tests.
+datacache>=1.9.1,<2.0.0
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.6.4,<3.0.0
 # Varcode 7 supplies splice outcome sets unconditionally and defaults to fast

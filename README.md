@@ -1035,6 +1035,11 @@ The orthogonal axes are preferred for new designs.
 
 ## Development
 
+The [shared osteosarc test-data downloader](TEST_DATA.md) regenerates a small,
+checksum-pinned offline RNA subset covering all 44 original vaccine loci.
+Its datacache object keys can be shared with other OpenVax projects; downloads
+are explicit, never triggered by these fixture tests.
+
 To install Vaxrank for local development:
 
 ```bash
