@@ -72,8 +72,11 @@ def test_sdist_omits_repository_only_tests_and_raw_genomic_data(tmp_path):
         "LICENSE",
         "MANIFEST.in",
         "README.md",
+        "TEST_DATA.md",
         "requirements.txt",
         "setup.py",
         "vaxrank/__init__.py",
         "vaxrank/version.py",
+        "vaxrank/download_test_data.py",
+        "vaxrank/data/osteosarc-test-data-v1.json",
     } <= included
