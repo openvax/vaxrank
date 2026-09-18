@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="47" class="kicker">MATCHED PLATFORM AUDIT</text>
+<text x="32" y="84" class="title">Sequencing platform changes evidence - not always the antigen</text>
+<text x="32" y="112" class="subtitle">Counts are within-product evidence, not a quantitative comparison of library sensitivity.</text>
+<rect x="32" y="139" width="1136" height="48" rx="8" fill="#dceefa"/>
+<text x="52" y="168" class="strong">A platform difference matters to Vaxrank only when it changes a defensible mutant sequence or construct window.</text>
+<text x="52" y="207" class="panel-title">VARIANT</text>
+<text x="270" y="207" class="panel-title">LONG-READ RNA</text>
+<text x="570" y="207" class="panel-title">SHORT-READ RNA</text>
+<text x="870" y="207" class="panel-title">VACCINE CONSEQUENCE</text>
+<rect x="32" y="215" width="1136" height="81" rx="7" fill="#eef3f7"/><text x="52" y="234" class="strong">KTN1 p.Leu340fs</text><text x="270" y="234" class="body">10 ALT fragments; 29-aa protein context;</text><text x="270" y="249" class="body">five 25-aa windows</text><text x="570" y="234" class="body">4 ALT reads / 2 fragments; 18-aa context;</text><text x="570" y="249" class="body">no 25-aa window</text><text x="870" y="234" class="strong">Same 20 class-I 8-11mers; ONT enables</text><text x="870" y="249" class="strong">the long construct</text><rect x="32" y="306" width="1136" height="81" rx="7" fill="#f5f8fa"/><text x="52" y="325" class="strong">DLG5 79.5-kb start-region</text><text x="52" y="340" class="strong">deletion</text><text x="270" y="325" class="body">Two T1 and two T2 reads phase four</text><text x="270" y="340" class="body">canonical DLG5 junctions</text><text x="570" y="325" class="body">Canonical retained-to-deleted exon</text><text x="570" y="340" class="body">junction: 130 T1 / 51 T2 fragments</text><text x="870" y="325" class="strong">No deletion-junction RNA on either</text><text x="870" y="340" class="strong">platform; no mutant peptide</text><rect x="32" y="397" width="1136" height="81" rx="7" fill="#eef3f7"/><text x="52" y="416" class="strong">AFF3 128-bp intronic deletion</text><text x="270" y="416" class="body">Canonical 99649666|99672538 junction: 6 T1</text><text x="270" y="431" class="body">/ 16 T2 fragments</text><text x="570" y="416" class="body">Same canonical junction: 26 T1 / 15 T2</text><text x="570" y="431" class="body">fragments</text><text x="870" y="416" class="strong">No coding-sequence change on either</text><text x="870" y="431" class="strong">platform; no mutant peptide</text><rect x="32" y="488" width="1136" height="81" rx="7" fill="#f5f8fa"/><text x="52" y="507" class="strong">KEAP1 211-bp</text><text x="52" y="522" class="strong">intronic/noncoding deletion</text><text x="270" y="507" class="body">Canonical coding splice: 473 T1 / 535 T2;</text><text x="270" y="522" class="body">no processed-isoform junction</text><text x="570" y="507" class="body">Coding splice: 98 T1 / 63 T2; noncoding</text><text x="570" y="522" class="body">isoform complete only in T1</text><text x="870" y="507" class="strong">Platform-specific noncoding evidence;</text><text x="870" y="522" class="strong">coding peptide set unchanged</text>
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Matched regional audit; exact source identifiers and transcript coordinates are retained in record.json.</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.2 | research use only</text>
+</svg>

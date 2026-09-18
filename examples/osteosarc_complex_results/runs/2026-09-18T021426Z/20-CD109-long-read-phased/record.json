@@ -1,0 +1,58 @@
+{
+  "assembled_transcript_ids": [
+    "ENST00000287097"
+  ],
+  "combined_score": null,
+  "decision_reason": "Twenty-one ONT UMI groups and three exact 222-nt Q20 reads phase the alleles, but no target epitope passes the configured class-I filters.",
+  "dna_only": "Two variants 6,181 bp apart cannot be assigned to one expressed molecule from independent DNA calls or site-local short reads.",
+  "id": "CD109-long-read-phased",
+  "interpretation": "Long reads change the protein claim by linking two substitutions 207 coding nucleotides apart. Vaxrank retains the negative epitope result without forcing selection.",
+  "limitation": "No 25-mer spans both amino-acid changes; long reads prove molecular phase, while each local antigen remains independently targetable.",
+  "osteosarc_protein_context": null,
+  "osteosarc_sequence_status": "The page annotates p.Arg1310Met but does not publish a protein sequence context.",
+  "osteosarc_vaccine_sequence": null,
+  "outcome": "no_target_binder",
+  "protein_sequence": "QPMAVNISANGFGFAICQLNVVYNVKASGSSRRRRSIQNQEAFDLDVAVKENKDDLNHVDLNVCTSFSGPGMSG",
+  "rna_evidence": {
+    "alt_fragments": 21,
+    "counts_text": "21 ALT/ALT UMI groups; 3 exact full-interval Q20 reads; 0 linked Illumina reads",
+    "gate_status": "PASS: LONG-READ PHASE",
+    "other_fragments": 4,
+    "passes_vaxrank_filters": true,
+    "platform": "Oxford Nanopore long-read RNA",
+    "ref_fragments": 43,
+    "source": "T2 ONT phased interval",
+    "top_protein_fragments": 3,
+    "transcript_ids": [
+      "ENST00000287097"
+    ]
+  },
+  "sample": "Osteosarcoma T2",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com focal variant",
+    "ONT phased-interval audit",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variant/CD109-chr6-73818405/",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json"
+  ],
+  "summary_rna": "ONT links both alleles in 21 UMIs; Illumina links neither",
+  "target_epitope_score": null,
+  "targetable_intervals": [
+    [
+      2,
+      3
+    ],
+    [
+      71,
+      72
+    ]
+  ],
+  "title": "CD109 long-read phased alleles",
+  "top_epitopes": [],
+  "variant": "chr6:g.73812224C>T phased with chr6:g.73818405G>T",
+  "variant_class": "Long-read-resolved compound protein"
+}

@@ -27,6 +27,14 @@ def _lines(text, width=72, limit=3):
     lines = []
     current = []
     for word in words:
+        while len(word) > width:
+            if current:
+                lines.append(" ".join(current))
+                current = []
+            lines.append(word[:width])
+            word = word[width:]
+        if not word:
+            continue
         candidate = " ".join([*current, word])
         if current and len(candidate) > width:
             lines.append(" ".join(current))
@@ -177,6 +185,275 @@ def render_complex_result_svg(record):
 </svg>'''
 
 
+def render_platform_comparison_svg(record):
+    """Render matched long- versus short-read evidence for one variant."""
+    comparison = record["platform_comparison"]
+    rows = comparison["rows"]
+    if len(rows) != 2:
+        raise ValueError("Platform comparison pages require exactly two rows")
+    outcome_label, outcome_color, outcome_background = OUTCOME_STYLE[
+        record["outcome"]]
+
+    cards = []
+    for index, row in enumerate(rows):
+        x = 32 + index * 584
+        cards.append(f'''
+<rect x="{x}" y="318" width="552" height="236" rx="8" fill="#eef3f7"/>
+<text x="{x + 20}" y="347" class="strong">{escape(row["label"])}</text>
+{_text_lines(row['evidence'], x + 20, 372, width=73, limit=3, step=16)}
+<text x="{x + 20}" y="425" class="panel-title">TRANSCRIPT NUCLEOTIDE / STRUCTURE</text>
+{_text_lines(row['transcript_nt'], x + 20, 448, css_class='sequence', width=67, limit=3, step=17)}
+<text x="{x + 20}" y="507" class="panel-title">PROTEIN AND PEPTIDE SPACE</text>
+{_text_lines(row['protein'], x + 20, 530, css_class='sequence', width=67, limit=1)}
+<text x="{x + 20}" y="550" class="footer">{escape(row['peptide_pool'])}</text>''')
+
+    selected = record.get("selected_long_peptide")
+    selection = (
+        "Selected 25-aa construct: %s" % selected
+        if selected else "No evidence-backed vaccine construct selected.")
+    top_epitopes = record.get("top_epitopes", ())
+    if top_epitopes:
+        top = top_epitopes[0]
+        selection += " Top binder: %s / %s / %.2f nM." % (
+            top["sequence"], top["allele"], top["ic50_nm"])
+    sources = " | ".join(record.get("source_labels", ()))
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>{_base_style()}</style>
+<text x="32" y="45" class="kicker">SEQUENCING-PLATFORM COMPARISON</text>
+<text x="32" y="78" class="title">{escape(record["title"])}</text>
+<text x="32" y="103" class="subtitle">{escape(record["variant"])} | {escape(record["sample"])}</text>
+<rect x="32" y="122" width="1136" height="55" rx="8" fill="{outcome_background}"/>
+<text x="52" y="146" class="outcome" fill="{outcome_color}">{outcome_label}</text>
+{_text_lines(comparison['conclusion'], 238, 145, width=105, limit=2, step=17)}
+
+<text x="32" y="207" class="panel-title">DNA EVENT AND CODING MODEL</text>
+<rect x="32" y="221" width="1136" height="68" rx="8" fill="#f8fafb"/>
+{_text_lines(comparison['dna_model'], 52, 246, width=158, limit=2, step=17)}
+
+<text x="32" y="309" class="panel-title">LONG READ</text>
+<text x="616" y="309" class="panel-title">SHORT READ</text>
+{''.join(cards)}
+
+<rect x="32" y="578" width="1136" height="89" rx="8" fill="#e8f3fa"/>
+<text x="52" y="603" class="panel-title">VACCINE CONSEQUENCE</text>
+{_text_lines(comparison['vaccine_impact'], 52, 627, width=158, limit=2, step=17)}
+{_text_lines(selection, 52, 658, css_class='strong', width=158, limit=1)}
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">{escape(sources)}</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank {escape(__version__)} | research use only</text>
+</svg>'''
+
+
+def render_platform_overview_svg(records):
+    """Summarize which platform differences change antigen conclusions."""
+    compared = [record for record in records if record.get("platform_comparison")]
+    if len(compared) > 5:
+        raise ValueError("Platform overview supports at most five rows")
+    rows = []
+    for index, record in enumerate(compared):
+        comparison = record["platform_comparison"]
+        y = 242 + index * 91
+        fill = "#f5f8fa" if index % 2 else "#eef3f7"
+        rows.append(
+            f'<rect x="32" y="{y - 27}" width="1136" height="81" rx="7" fill="{fill}"/>'
+            + _text_lines(
+                record["title"], 52, y - 8,
+                css_class="strong", width=30, limit=2, step=15)
+            + _text_lines(
+                comparison["overview"]["long"], 270, y - 8,
+                width=42, limit=3, step=15)
+            + _text_lines(
+                comparison["overview"]["short"], 570, y - 8,
+                width=42, limit=3, step=15)
+            + _text_lines(
+                comparison["overview"]["vaccine"], 870, y - 8,
+                css_class="strong", width=38, limit=3, step=15))
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>{_base_style()}</style>
+<text x="32" y="47" class="kicker">MATCHED PLATFORM AUDIT</text>
+<text x="32" y="84" class="title">Sequencing platform changes evidence - not always the antigen</text>
+<text x="32" y="112" class="subtitle">Counts are within-product evidence, not a quantitative comparison of library sensitivity.</text>
+<rect x="32" y="139" width="1136" height="48" rx="8" fill="#dceefa"/>
+<text x="52" y="168" class="strong">A platform difference matters to Vaxrank only when it changes a defensible mutant sequence or construct window.</text>
+<text x="52" y="207" class="panel-title">VARIANT</text>
+<text x="270" y="207" class="panel-title">LONG-READ RNA</text>
+<text x="570" y="207" class="panel-title">SHORT-READ RNA</text>
+<text x="870" y="207" class="panel-title">VACCINE CONSEQUENCE</text>
+{''.join(rows)}
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Matched regional audit; exact source identifiers and transcript coordinates are retained in record.json.</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank {escape(__version__)} | research use only</text>
+</svg>'''
+
+
+def render_orf_platform_summary_svg(audit):
+    """Render full-matrix RNA platform coverage and protein conclusions."""
+    rows = []
+    for index, record in enumerate(
+            audit["full_matrix"]["platform_summary"]):
+        y = 342 + index * 63
+        fill = "#eef3f7" if index % 2 == 0 else "#f7f9fb"
+        rows.append(
+            f'<rect x="32" y="{y - 31}" width="1136" height="53" '
+            f'rx="7" fill="{fill}"/>'
+            f'<text x="52" y="{y}" class="strong">'
+            f'{escape(record["platform"])}</text>'
+            f'<text x="230" y="{y}" class="body">'
+            f'{record["catalogued_products"]}</text>'
+            f'<text x="380" y="{y}" class="body">'
+            f'{record["completed_source_variant_rows"]}</text>'
+            f'<text x="555" y="{y}" class="body">'
+            f'{record["variants_with_alt_evidence"]} / 44</text>'
+            f'<text x="720" y="{y}" class="strong">'
+            f'{record["variants_with_validated_protein_window"]} / 44</text>'
+            f'<text x="900" y="{y}" class="body">'
+            f'{record["variants_exact_in_at_least_one_product"]}</text>'
+            f'<text x="1070" y="{y}" class="body">'
+            f'{record["variants_nonexact_in_at_least_one_product"]}</text>')
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>{_base_style()}</style>
+<text x="32" y="47" class="kicker">FULL RNA-PRODUCT AUDIT</text>
+<text x="32" y="84" class="title">Which platforms establish a translated local coding window?</text>
+<text x="32" y="112" class="subtitle">44 vaccine-included loci × 164 catalogued RNA products; Isovar assembly enabled</text>
+<rect x="32" y="133" width="1136" height="55" rx="8" fill="#fff2c2"/>
+{_text_lines('A protein result is an independently validated local RNA-derived window, not a full-length ORF. Products are technical/data products, not independent biological samples or a sensitivity benchmark.', 52, 157, css_class='strong', width=160, limit=2, step=17)}
+
+<rect x="32" y="213" width="1136" height="65" rx="8" fill="#e8f3fa"/>
+{_text_lines("Varcode supplies an exact reference-plus-isolated-edit protein for all 44 loci. RNA asks a different question: was a sample-specific coding frame observed, and did its local protein agree?", 52, 239, width=160, limit=2, step=18)}
+
+<text x="52" y="300" class="table-head">PLATFORM</text>
+<text x="230" y="300" class="table-head">PRODUCTS</text>
+<text x="380" y="300" class="table-head">COMPLETED ROWS</text>
+<text x="555" y="300" class="table-head">ALT LOCI</text>
+<text x="720" y="300" class="table-head">PROTEIN LOCI</text>
+<text x="900" y="300" class="table-head">EXACT ≥1</text>
+<text x="1070" y="300" class="table-head">NON-EXACT ≥1</text>
+{''.join(rows)}
+
+<rect x="32" y="531" width="355" height="112" rx="8" fill="#eef3f7"/>
+<text x="52" y="558" class="panel-title">ILMN</text>
+{_text_lines('Broadest product inventory and 39/44 loci with a validated local protein window.', 52, 583, width=42, limit=3, step=18)}
+<rect x="423" y="531" width="355" height="112" rx="8" fill="#eef3f7"/>
+<text x="443" y="558" class="panel-title">ONT</text>
+{_text_lines('30/44 loci yield a protein window; NTF3 is the sole non-exact isolated-effect result.', 443, 583, width=42, limit=3, step=18)}
+<rect x="814" y="531" width="354" height="112" rx="8" fill="#f8e9e5"/>
+<text x="834" y="558" class="panel-title">PACBIO</text>
+{_text_lines('Only one of nine catalogued products has genomic coordinates: three protein loci. This is a data-availability limit.', 834, 583, width=42, limit=3, step=18)}
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Pinned Isovar full-product audit; unavailable rows remain unavailable rather than zero.</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank {escape(__version__)} | research use only</text>
+</svg>'''
+
+
+def render_orf_assembly_summary_svg(audit):
+    """Render the strict assembly-on/off comparison on identical read subsets."""
+    summary = audit["paired_corpus"]["platform_mode_summary"]
+    rows = []
+    for index, record in enumerate(summary):
+        y = 285 + index * 42
+        fill = "#eef3f7" if index % 2 == 0 else "#f7f9fb"
+        rows.append(
+            f'<rect x="32" y="{y - 26}" width="1136" height="36" '
+            f'rx="6" fill="{fill}"/>'
+            f'<text x="52" y="{y}" class="strong">'
+            f'{escape(record["platform"])}</text>'
+            f'<text x="200" y="{y}" class="body">'
+            f'{"ON" if record["mode"] == "assembly_on" else "OFF"}</text>'
+            f'<text x="335" y="{y}" class="body">{record["cases"]}</text>'
+            f'<text x="500" y="{y}" class="strong">'
+            f'{record["validated_local_protein_windows"]}</text>'
+            f'<text x="690" y="{y}" class="body">'
+            f'{record["exact_isolated_edit_windows"]}</text>'
+            f'<text x="865" y="{y}" class="body">'
+            f'{record["nonexact_windows"]}</text>'
+            f'<text x="1045" y="{y}" class="body">'
+            f'{record["no_protein_window"]}</text>')
+    changed = audit["paired_corpus"]["assembly_effect_summary"][0]
+    changed_names = ", ".join(
+        record["variant_id"].split("-chr", 1)[0]
+        for record in changed["changed_cases"])
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>{_base_style()}</style>
+<text x="32" y="47" class="kicker">PAIRED ASSEMBLY AUDIT</text>
+<text x="32" y="84" class="title">Same original reads, Isovar assembly on versus off</text>
+<text x="32" y="112" class="subtitle">49 checksummed source/variant BAM subsets; current Isovar runtime</text>
+<rect x="32" y="133" width="1136" height="61" rx="8" fill="#fff2c2"/>
+{_text_lines('This selected corpus is enriched for informative loci. It supports paired software behavior, not population or platform sensitivity estimates. PacBio contributes one case.', 52, 158, css_class='strong', width=160, limit=2, step=18)}
+
+<text x="52" y="235" class="table-head">PLATFORM</text>
+<text x="200" y="235" class="table-head">ASSEMBLY</text>
+<text x="335" y="235" class="table-head">CASES</text>
+<text x="500" y="235" class="table-head">PROTEIN WINDOWS</text>
+<text x="690" y="235" class="table-head">EXACT</text>
+<text x="865" y="235" class="table-head">NON-EXACT</text>
+<text x="1045" y="235" class="table-head">NO WINDOW</text>
+{''.join(rows)}
+
+<rect x="32" y="522" width="552" height="126" rx="8" fill="#dff4e9"/>
+<text x="52" y="550" class="panel-title">WHAT ASSEMBLY CHANGED</text>
+{_text_lines('ILMN assembly changed local protein length in 5/32 cases while preserving whether a window was established. Cases: %s.' % changed_names, 52, 578, width=70, limit=4, step=18)}
+<rect x="616" y="522" width="552" height="126" rx="8" fill="#eef3f7"/>
+<text x="636" y="550" class="panel-title">WHAT IT DID NOT CHANGE</text>
+{_text_lines('The assembly-on and assembly-off ORF counts are identical in this selected corpus. All 14 paired ONT proteins are sequence-identical because individual long reads already carry the local context.', 636, 578, width=70, limit=4, step=18)}
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Every case retains source URL, BAM identity, Varcode effects, sequences, and transcript edits in the checksummed source JSON.</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank {escape(__version__)} | research use only</text>
+</svg>'''
+
+
+def render_orf_attribution_svg(audit):
+    """Render non-exact protein results and current attribution limits."""
+    rows = []
+    for index, record in enumerate(audit["full_matrix"]["nonexact_records"]):
+        y = 228 + index * 57
+        fill = "#eef3f7" if index % 2 == 0 else "#f7f9fb"
+        variant = record["variant_id"].split("-chr", 1)[0]
+        rows.append(
+            f'<rect x="32" y="{y - 27}" width="1136" height="49" '
+            f'rx="7" fill="{fill}"/>'
+            f'<text x="52" y="{y - 3}" class="strong">{escape(variant)}</text>'
+            f'<text x="180" y="{y - 3}" class="body">'
+            f'{escape(" + ".join(record["platforms"]))}</text>'
+            f'<text x="300" y="{y - 3}" class="body">'
+            f'{len(record["rows"])}</text>'
+            + _text_lines(
+                record["attribution_note"], 380, y - 8,
+                width=103, limit=2, step=16))
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>{_base_style()}</style>
+<text x="32" y="47" class="kicker">ISOLATED DNA EFFECT VERSUS RNA</text>
+<text x="32" y="84" class="title">Six loci have at least one non-exact RNA protein window</text>
+<text x="32" y="112" class="subtitle">Sixteen product rows; exact and non-exact products can coexist for one locus</text>
+<rect x="32" y="133" width="1136" height="48" rx="8" fill="#e8f3fa"/>
+<text x="52" y="162" class="strong">NTF3 is cross-platform and explained at sequence level; biological origin remains unresolved.</text>
+
+<text x="52" y="193" class="table-head">LOCUS</text>
+<text x="180" y="193" class="table-head">PLATFORM</text>
+<text x="300" y="193" class="table-head">ROWS</text>
+<text x="380" y="193" class="table-head">INTERPRETATION</text>
+{''.join(rows)}
+
+<rect x="32" y="559" width="552" height="104" rx="8" fill="#f8e9e5"/>
+<text x="52" y="586" class="panel-title">GERMLINE ATTRIBUTION: NOT YET</text>
+{_text_lines("The public run_isovar path has no matched-germline variant input. Additional transcript edits remain 'unexplained' even when they may be germline.", 52, 612, width=70, limit=3, step=17)}
+<rect x="616" y="559" width="552" height="104" rx="8" fill="#fff2c2"/>
+<text x="636" y="586" class="panel-title">CO-SOMATIC PHASING: CAPABLE, NOT TESTED HERE</text>
+{_text_lines('Isovar can phase multiple supplied somatic variants by shared fragments, but the 44 nominated loci contain no nearby pair. MAP2 and CD109 use explicit external compound inputs.', 636, 612, width=70, limit=3, step=17)}
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Exact local sequences and transcript-relative edits are retained in the checksummed source JSON.</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank {escape(__version__)} | research use only</text>
+</svg>'''
+
+
 def render_summary_svg(records, metadata, page_index=1, page_count=1):
     """Render the decision-matrix cover page."""
     if len(records) > 7:
@@ -306,6 +583,7 @@ def generate_complex_variant_results(
     payload = json.loads(input_json.read_text())
     records = payload["records"]
     metadata = payload["metadata"]
+    orf_platform_audit = payload.get("orf_platform_audit")
     if not records:
         raise ValueError("Complex-variant JSON must contain records")
 
@@ -319,13 +597,38 @@ def generate_complex_variant_results(
                 page_count=len(summary_chunks))
             for index, chunk in enumerate(summary_chunks, start=1)
         ]
+        platform_overview_svg = (
+            render_platform_overview_svg(records)
+            if any(record.get("platform_comparison") for record in records)
+            else None)
         provenance_svg = render_provenance_svg(records, metadata)
         page_entries = [
             ("summary" if index == 1 else "summary-%d" % index, svg, None)
             for index, svg in enumerate(summary_svgs, start=1)
         ]
+        if platform_overview_svg:
+            page_entries.append((
+                "platform-overview", platform_overview_svg, None))
+        if orf_platform_audit:
+            page_entries.extend([
+                ("orf-platform-summary",
+                 render_orf_platform_summary_svg(orf_platform_audit),
+                 None),
+                ("orf-assembly-comparison",
+                 render_orf_assembly_summary_svg(orf_platform_audit),
+                 None),
+                ("orf-attribution",
+                 render_orf_attribution_svg(orf_platform_audit),
+                 None),
+            ])
         page_entries.extend(
-            (_slug(record["id"]), render_complex_result_svg(record), record)
+            (
+                _slug(record["id"]),
+                render_platform_comparison_svg(record)
+                if record.get("platform_comparison")
+                else render_complex_result_svg(record),
+                record,
+            )
             for record in records)
         page_entries.append(("provenance", provenance_svg, None))
         pages = [svg for _, svg, _ in page_entries]

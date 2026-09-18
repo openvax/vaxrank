@@ -1,0 +1,79 @@
+{
+  "combined_score": 14.674333740719533,
+  "decision_reason": "Long-read RNA assembly establishes an expressed frameshift protein and Vaxrank selects a supported long peptide.",
+  "dna_only": "The genomic deletion predicts a frameshift, but DNA alone cannot establish the expressed haplotype, mutant protein extent, or junction-spanning peptide sequence.",
+  "id": "PIP5K1A-p-G474fs-ONT-T1",
+  "interpretation": "This is the positive assembly-dependent result: RNA reconstruction changes an abstract frameshift call into a ranked vaccine candidate with multiple class-I binders.",
+  "limitation": "Selection is computational and is not a clinical recommendation.",
+  "outcome": "selected",
+  "protein_sequence": "VFKKIPLKPSPSKKFRSGSSFSRRAAPVATPALLTSHRSLGNTRHK",
+  "rna_evidence": {
+    "alt_fragments": 3,
+    "other_fragments": 0,
+    "passes_vaxrank_filters": true,
+    "platform": "Oxford Nanopore long-read RNA",
+    "ref_fragments": 36,
+    "source": "T1 ONT RNA window",
+    "top_protein_fragments": 2
+  },
+  "sample": "Osteosarcoma T1",
+  "selected_long_peptide": "SSFSRRAAPVATPALLTSHRSLGNT",
+  "source_labels": [
+    "Isovar T1 ONT fixture",
+    "NetMHCpan 4.2c",
+    "patient class-I HLA"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variant/PIP5K1A-chr1-151242178/",
+    "tests/data/osteosarc/selection_validation/documented.json"
+  ],
+  "summary_rna": "ONT assembly: 3 ALT, 0 OTHER; 49-aa mutant protein",
+  "target_epitope_score": 8.472231,
+  "title": "PIP5K1A p.G474fs",
+  "top_epitopes": [
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 1.25386,
+      "ic50_nm": 116.92,
+      "percentile_rank": 0.352,
+      "sequence": "RRAAPVATPAL"
+    },
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.998163,
+      "ic50_nm": 3.09,
+      "percentile_rank": 0.007,
+      "sequence": "AAPVATPAL"
+    },
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.988223,
+      "ic50_nm": 18.97,
+      "percentile_rank": 0.08,
+      "sequence": "AAPVATPALL"
+    },
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.987883,
+      "ic50_nm": 19.49,
+      "percentile_rank": 0.082,
+      "sequence": "RAAPVATPAL"
+    },
+    {
+      "allele": "HLA-C*01:02",
+      "epitope_score": 0.94363,
+      "ic50_nm": 77.44,
+      "percentile_rank": 0.254,
+      "sequence": "APVATPAL"
+    },
+    {
+      "allele": "HLA-B*08:01",
+      "epitope_score": 0.874997,
+      "ic50_nm": 148.99,
+      "percentile_rank": 0.182,
+      "sequence": "LLTSHRSL"
+    }
+  ],
+  "variant": "chr1:g.151242179delG (PIP5K1A p.G474fs)",
+  "variant_class": "Assembly-dependent frameshift indel"
+}

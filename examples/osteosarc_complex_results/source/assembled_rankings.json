@@ -211,6 +211,43 @@
     },
     {
       "evidence_gate": "pass",
+      "id": "KTN1-p-Leu340fs",
+      "rank_score": 1.2096008631063737,
+      "selected_long_peptide": "LKKSSKGELTTLIHQLQEKDKFYSL",
+      "target_epitope_score": 1.2096008631063737,
+      "top_epitopes": [
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.3965535856773269,
+          "ic50_nm": 435.33,
+          "percentile_rank": 0.477,
+          "sequence": "QLQEKDKFYSL"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.39294844887572145,
+          "ic50_nm": 437.47,
+          "percentile_rank": 0.479,
+          "sequence": "EKDKFYSL"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.26158548611435467,
+          "ic50_nm": 524.17,
+          "percentile_rank": 0.563,
+          "sequence": "LQEKDKFYSL"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.15851334243897064,
+          "ic50_nm": 616.76,
+          "percentile_rank": 0.643,
+          "sequence": "QEKDKFYSL"
+        }
+      ]
+    },
+    {
+      "evidence_gate": "pass",
       "id": "MAP2-compound-haplotype",
       "rank_score": 0.01463124052921849,
       "selected_long_peptide": "SQLEDRAHCHHLFKTVRIYQGRVVP",

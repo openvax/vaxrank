@@ -78,6 +78,7 @@
       "ref": "G",
       "alt": "GTT",
       "pave_protein_annotation": "p.Leu340fs",
+      "assembled_transcript_annotation": "p.Leu340fs with FYSLL tail on six compatible Ensembl 87 coding transcripts",
       "fragment_counts": {
         "7010dd389c50467d": {"ref": 637, "alt": 0, "other": 4},
         "2bc1fc291308debb": {"ref": 1388, "alt": 10, "other": 8},
@@ -111,19 +112,19 @@
       "id": "DLG5--DLG5",
       "event": "chr10:77850921-77930452 deletion",
       "size_bp": 79531,
-      "evidence": "T1 and T2 DRAGEN calls with 7 and 5 DNA split observations; no RNA reconstruction"
+      "evidence": "T1 and T2 DRAGEN calls with 7 and 5 DNA split observations; removes five ENST00000372391 coding exons including the start codon; retained canonical RNA exists but no deletion-junction RNA was detected"
     },
     {
       "id": "AFF3-deletion",
       "event": "chr2:99668095-99668223 deletion",
       "size_bp": 128,
-      "evidence": "T2 DRAGEN call with 9 DNA split observations; no coding-transcript exon overlap in inspected Ensembl 87 models"
+      "evidence": "T2 DRAGEN call with 9 DNA split observations; lies inside a coding-transcript intron removed by the same canonical splice in ONT and Illumina RNA"
     },
     {
       "id": "KEAP1-deletion",
       "event": "chr19:10492683-10492894 deletion",
       "size_bp": 211,
-      "evidence": "T2 DRAGEN call with 12 DNA split observations; no coding-transcript exon overlap in inspected Ensembl 87 models"
+      "evidence": "T2 DRAGEN call with 12 DNA split observations; intronic in coding transcripts and overlaps 35 nt of a processed noncoding-transcript exon; no mutant RNA path or coding consequence detected"
     }
   ]
 }

@@ -13,11 +13,13 @@ The expanded comparison contains:
   RNF213, and H1-2;
 - both DYNC1H1 loci and the multi-transcript NAV2 result;
 - explicit RNA compound haplotypes for MAP2 and NTF3;
-- long-read phasing/context results for CD109 and ZNF436; and
+- long-read phasing/context results for CD109 and ZNF436;
+- a matched ONT/Illumina KTN1 reconstruction where both platforms encode the
+  same frameshift tail but only ONT supplies a standard 25-aa construct; and
 - fusion/SV audits for ATP5MG::KMT2A, TPST1::CRCP,
   FOXO3::STRADA/CCDC47, PARD3B::CDKN2B, the AMPH internal deletion, and a
-  long-read-rich unnamed chr21 junction, KTN1, GABBR1::SLC29A1, and
-  OTUD7A::FMN1.
+  long-read-rich unnamed chr21 junction, GABBR1::SLC29A1,
+  OTUD7A::FMN1, DLG5, AFF3, and KEAP1.
 
 `source/assembled_antigens.json` is the machine-readable bridge between RNA
 evidence and Vaxrank. It records exact translated sequence, targetable amino
@@ -30,9 +32,10 @@ not a protein context, so those displayed sequences remain attributed to RNA
 evidence rather than to the website.
 
 `source/sv_audits.json` retains junction nucleotide sequences and reasons for
-withholding translation. It also inventories additional calls that are not
-ready for panels: GAPVD1, MUC3A, FAM157A, MYO15B, SPRED1, ITM2B::RB1,
-DLG5, AFF3, KEAP1, and internal PTPRD, EYS, and EDA structural junctions.
+withholding translation. DLG5, AFF3, and KEAP1 now have dedicated
+transcript-structure panels. It also inventories additional calls that are not
+ready for panels: GAPVD1, MUC3A, FAM157A, MYO15B, SPRED1, ITM2B::RB1, and
+internal PTPRD, EYS, and EDA structural junctions.
 MYO15B includes the 17-aa vaccine peptide published by osteosarc.com, but it
 is not reranked because the page does not establish sample-specific RNA
 translation provenance.
@@ -40,9 +43,37 @@ translation provenance.
 `source/additional_candidate_audit.json` preserves the exact GTF3C5, RNF213,
 GLIS3, and KTN1 alleles and per-BAM fragment counts, the four source BAM URLs,
 validated tagged-ONT paths for GABBR1::SLC29A1 and OTUD7A::FMN1, and the
-unresolved DLG5, AFF3, and KEAP1 leads. Its checksum is included in every
+original DLG5, AFF3, and KEAP1 lead inventory. Its checksum is included in every
 generated flattened result. PAVE annotations and the transcript-specific
 annotations used by the assembled panels remain separate where they differ.
+
+`source/platform_comparison_audit.json` records matched regional ONT and
+Illumina reconstruction for KTN1, DLG5, AFF3, and KEAP1. It separates four
+possible platform effects: a longer construct-eligible protein context, longer
+single-molecule exon phasing, agreement on an unchanged coding splice, and
+platform-specific evidence for a noncoding isoform. Counts are never treated as
+a direct sensitivity comparison because the ONT single-cell and Illumina bulk
+libraries differ in preparation, depth, and deduplication.
+
+`source/orf_platform_audit.json` and `orf-platform-report.md` summarize the
+pinned 44-variant × 164-product Isovar audit by ILMN, ONT, and PacBio. They
+distinguish a validated local coding window from a full-length ORF, compare
+the same 49 checksummed original-read subsets with assembly on and off, and
+retain every non-exact RNA/isolated-effect sequence. In the full audit, ILMN,
+ONT, and the single genomic-coordinate PacBio product establish local protein
+windows for 39, 30, and 3 of 44 loci, respectively. The paired corpus has the
+same ORF-availability count with assembly on and off, while assembly extends
+the returned ILMN protein context in five cases. These denominators are
+reported separately because products are not replicates and the paired corpus
+is deliberately enriched.
+
+The audit also records the present attribution boundary: Isovar can phase
+multiple supplied somatic variants through shared fragment names, but the 44
+nominated loci contain no nearby pair. The public `run_isovar` path does not
+accept a matched germline variant set, so additional transcript edits remain
+unexplained rather than being guessed germline. NTF3's adjacent RNA base is
+sequence-resolved across ILMN and ONT, but its germline/somatic origin remains
+unresolved.
 
 `rank_assembled_antigens.py` admits only inputs whose evidence gate is `pass`,
 constructs explicit `VaccineAntigen` objects, and runs NetMHCpan through the
@@ -66,6 +97,11 @@ PDF plus per-page SVG and 3600x2280 PNG files:
 PATH=/path/to/netmhc-bundle/bin:$PATH \
   python examples/osteosarc_complex_results/rank_assembled_antigens.py \
   --output examples/osteosarc_complex_results/source/assembled_rankings.json
+python examples/osteosarc_complex_results/audit_platform_orfs.py \
+  --isovar-repo /path/to/isovar \
+  --cache-directory /path/to/local/reference-cache \
+  --output examples/osteosarc_complex_results/source/orf_platform_audit.json \
+  --markdown-output examples/osteosarc_complex_results/orf-platform-report.md
 python examples/osteosarc_complex_results/build_results.py
 python examples/osteosarc_complex_results/generate.py \
   --combined-output output/pdf/vaxrank-all-figures.pdf

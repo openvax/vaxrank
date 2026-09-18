@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="47" class="kicker">FULL RNA-PRODUCT AUDIT</text>
+<text x="32" y="84" class="title">Which platforms establish a translated local coding window?</text>
+<text x="32" y="112" class="subtitle">44 vaccine-included loci × 164 catalogued RNA products; Isovar assembly enabled</text>
+<rect x="32" y="133" width="1136" height="55" rx="8" fill="#fff2c2"/>
+<text x="52" y="157" class="strong">A protein result is an independently validated local RNA-derived window, not a full-length ORF. Products are technical/data products, not independent biological</text><text x="52" y="174" class="strong">samples or a sensitivity benchmark.</text>
+
+<rect x="32" y="213" width="1136" height="65" rx="8" fill="#e8f3fa"/>
+<text x="52" y="239" class="body">Varcode supplies an exact reference-plus-isolated-edit protein for all 44 loci. RNA asks a different question: was a sample-specific coding frame observed, and</text><text x="52" y="257" class="body">did its local protein agree?</text>
+
+<text x="52" y="300" class="table-head">PLATFORM</text>
+<text x="230" y="300" class="table-head">PRODUCTS</text>
+<text x="380" y="300" class="table-head">COMPLETED ROWS</text>
+<text x="555" y="300" class="table-head">ALT LOCI</text>
+<text x="720" y="300" class="table-head">PROTEIN LOCI</text>
+<text x="900" y="300" class="table-head">EXACT ≥1</text>
+<text x="1070" y="300" class="table-head">NON-EXACT ≥1</text>
+<rect x="32" y="311" width="1136" height="53" rx="7" fill="#eef3f7"/><text x="52" y="342" class="strong">ILMN</text><text x="230" y="342" class="body">149</text><text x="380" y="342" class="body">5894</text><text x="555" y="342" class="body">41 / 44</text><text x="720" y="342" class="strong">39 / 44</text><text x="900" y="342" class="body">37</text><text x="1070" y="342" class="body">6</text><rect x="32" y="374" width="1136" height="53" rx="7" fill="#f7f9fb"/><text x="52" y="405" class="strong">ONT</text><text x="230" y="405" class="body">6</text><text x="380" y="405" class="body">259</text><text x="555" y="405" class="body">36 / 44</text><text x="720" y="405" class="strong">30 / 44</text><text x="900" y="405" class="body">29</text><text x="1070" y="405" class="body">1</text><rect x="32" y="437" width="1136" height="53" rx="7" fill="#eef3f7"/><text x="52" y="468" class="strong">PacBio</text><text x="230" y="468" class="body">9</text><text x="380" y="468" class="body">44</text><text x="555" y="468" class="body">3 / 44</text><text x="720" y="468" class="strong">3 / 44</text><text x="900" y="468" class="body">3</text><text x="1070" y="468" class="body">0</text>
+
+<rect x="32" y="531" width="355" height="112" rx="8" fill="#eef3f7"/>
+<text x="52" y="558" class="panel-title">ILMN</text>
+<text x="52" y="583" class="body">Broadest product inventory and 39/44 loci</text><text x="52" y="601" class="body">with a validated local protein window.</text>
+<rect x="423" y="531" width="355" height="112" rx="8" fill="#eef3f7"/>
+<text x="443" y="558" class="panel-title">ONT</text>
+<text x="443" y="583" class="body">30/44 loci yield a protein window; NTF3 is</text><text x="443" y="601" class="body">the sole non-exact isolated-effect result.</text>
+<rect x="814" y="531" width="354" height="112" rx="8" fill="#f8e9e5"/>
+<text x="834" y="558" class="panel-title">PACBIO</text>
+<text x="834" y="583" class="body">Only one of nine catalogued products has</text><text x="834" y="601" class="body">genomic coordinates: three protein loci.</text><text x="834" y="619" class="body">This is a data-availability limit.</text>
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Pinned Isovar full-product audit; unavailable rows remain unavailable rather than zero.</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.2 | research use only</text>
+</svg>

@@ -1,0 +1,65 @@
+{
+  "decision_reason": "Neither ONT nor Illumina RNA contains the somatic deletion junction. Both instead support canonical DLG5 RNA from an intact allele, so translation of the deletion is withheld.",
+  "dna_only": "The deletion removes five ENST00000372391 coding exons, including the annotated start codon, but genomic loss does not identify an expressed mutant transcript or a replacement translation start.",
+  "epitope_message": "Not predicted because no deletion-junction transcript, CDS start, or mutant protein was observed.",
+  "id": "DLG5-start-region-deletion",
+  "interpretation": "Long reads phase up to four canonical exon junctions on one molecule while short reads provide deeper local junction support. That platform difference strengthens the intact-transcript interpretation but creates no mutant peptide.",
+  "limitation": "Reference-spliced RNA may arise from the intact allele; absence of a mutant RNA junction does not prove the DNA event is false or transcriptionally silent in every cell.",
+  "outcome": "no_translation",
+  "platform_comparison": {
+    "conclusion": "Long and short RNA both show canonical DLG5 expression from an intact transcript, but neither contains the somatic deletion junction; no mutant CDS or vaccine peptide is established.",
+    "dna_model": "The 79,531-bp deletion removes five ENST00000372391 coding exons, including the chr10:77926518-77926520 start codon. The retained lower-coordinate coding region has no annotated start after the deletion.",
+    "id": "DLG5-start-region-deletion",
+    "overview": {
+      "long": "Two T1 and two T2 reads phase four canonical DLG5 junctions",
+      "short": "Canonical retained-to-deleted exon junction: 130 T1 / 51 T2 fragments",
+      "vaccine": "No deletion-junction RNA on either platform; no mutant peptide"
+    },
+    "rows": [
+      {
+        "evidence": "No deletion-junction path. Two reads in each sample span four canonical DLG5 exon junctions, linking retained and DNA-deleted regions on an intact RNA molecule.",
+        "label": "T1/T2 Oxford Nanopore RNA",
+        "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0",
+        "protein": "Reference-spliced DLG5 only; mutant CDS not observed",
+        "transcript_nt": "WT path: exon 77843447-77843706 -> 77853354-77853537 -> 77854227-77854370 -> 77856730-77856892 -> 77869129-77869197"
+      },
+      {
+        "evidence": "No deletion-junction fragment. The canonical 77843706|77853354 splice has 130 T1 and 51 T2 primary fragments, but short reads do not phase the full exon chain.",
+        "label": "T1/T2 Illumina RNA",
+        "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0",
+        "protein": "Reference-spliced DLG5 only; mutant CDS not observed",
+        "transcript_nt": "WT local junction: ...77843706|77853354...; deletion junction 77850921|77930452 not observed"
+      }
+    ],
+    "vaccine_impact": "ONT phases up to four canonical DLG5 exon junctions on single reads; Illumina supplies many local junction fragments. Both observations describe reference-spliced RNA, not the deletion allele, so both peptide pools remain empty."
+  },
+  "protein_sequence": null,
+  "rna_evidence": {
+    "alt_fragments": 0,
+    "counts_text": "0 deletion-junction fragments; two T1 and two T2 ONT reads span four canonical junctions; local canonical short-read junction 130 T1 / 51 T2",
+    "gate_status": "HELD OUT: NO MUTANT RNA JUNCTION",
+    "other_fragments": "n/a",
+    "passes_vaxrank_filters": false,
+    "platform": "Oxford Nanopore and Illumina RNA",
+    "ref_fragments": "canonical RNA present",
+    "source": "matched T1/T2 regional transcript audit",
+    "top_protein_fragments": 0
+  },
+  "sample": "Osteosarcoma T1/T2",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com DLG5 fusion evidence",
+    "matched ONT/Illumina transcript audit",
+    "Ensembl 87"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/fusions/dlg5--dlg5/",
+    "https://osteosarc.com/dragen/sv/",
+    "examples/osteosarc_complex_results/source/platform_comparison_audit.json"
+  ],
+  "summary_rna": "No mutant junction; ONT phases four WT junctions, Illumina supports the local WT splice",
+  "title": "DLG5 79.5-kb start-region deletion",
+  "top_epitopes": [],
+  "variant": "chr10:g.77850921_77930452del",
+  "variant_class": "DNA-supported coding/start-region deletion"
+}

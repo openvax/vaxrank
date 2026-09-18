@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="45" class="kicker">SEQUENCING-PLATFORM COMPARISON</text>
+<text x="32" y="78" class="title">KTN1 p.Leu340fs</text>
+<text x="32" y="103" class="subtitle">chr14:g.55627965_55627966insTT | Osteosarcoma T2</text>
+<rect x="32" y="122" width="1136" height="55" rx="8" fill="#dff4e9"/>
+<text x="52" y="146" class="outcome" fill="#176b4d">SELECTED</text>
+<text x="238" y="145" class="body">Both platforms encode the same FYSLL mutant tail and the same 20 mutation-overlapping 8-11mers; ONT alone</text><text x="238" y="162" class="body">supplies enough upstream context for a 25-aa construct.</text>
+
+<text x="32" y="207" class="panel-title">DNA EVENT AND CODING MODEL</text>
+<rect x="32" y="221" width="1136" height="68" rx="8" fill="#f8fafb"/>
+<text x="52" y="246" class="body">chr14:g.55627965_55627966insTT; Ensembl 87 maps the insertion to the shared coding frame of six KTN1 transcripts and predicts p.Leu340fs with a five-residue</text><text x="52" y="263" class="body">FYSLL tail before stop.</text>
+
+<text x="32" y="309" class="panel-title">LONG READ</text>
+<text x="616" y="309" class="panel-title">SHORT READ</text>
+
+<rect x="32" y="318" width="552" height="236" rx="8" fill="#eef3f7"/>
+<text x="52" y="347" class="strong">T2 Oxford Nanopore RNA</text>
+<text x="52" y="372" class="body">10 exact ALT fragments; nine support the selected translation. Assembly</text><text x="52" y="388" class="body">on/off and all three preference modes agree.</text>
+<text x="52" y="425" class="panel-title">TRANSCRIPT NUCLEOTIDE / STRUCTURE</text>
+<text x="52" y="448" class="sequence">...TACAAGATGCTTTAAAGAAGTCAAGTAAGGGAGAATTGACTACGCTTATACATCAGCTTCAAGA</text><text x="52" y="465" class="sequence">AAAGGACAAG[TT]TTACTCGCTGCTGTGAAGGAAGATGCTGCTGCTACAA...</text>
+<text x="52" y="507" class="panel-title">PROTEIN AND PEPTIDE SPACE</text>
+<text x="52" y="530" class="sequence">QDALKKSSKGELTTLIHQLQEKDK[FYSLL]*</text>
+<text x="52" y="550" class="footer">20 unique mutation-overlapping 8-11mers; 5 eligible 25-aa construct windows</text>
+<rect x="616" y="318" width="552" height="236" rx="8" fill="#eef3f7"/>
+<text x="636" y="347" class="strong">T2 Illumina RNA</text>
+<text x="636" y="372" class="body">Four exact ALT reads in two fragments; both fragments support the</text><text x="636" y="388" class="body">selected translation. Assembly does not extend it.</text>
+<text x="636" y="425" class="panel-title">TRANSCRIPT NUCLEOTIDE / STRUCTURE</text>
+<text x="636" y="448" class="sequence">...ATTGACTACGCTTATACATCAGCTTCAAGAAAAGGACAAG[TT]TTACTCGCTGCTGTGAAGGA</text><text x="636" y="465" class="sequence">AGATGCTGCTGCTACAA...</text>
+<text x="636" y="507" class="panel-title">PROTEIN AND PEPTIDE SPACE</text>
+<text x="636" y="530" class="sequence">LTTLIHQLQEKDK[FYSLL]*</text>
+<text x="636" y="550" class="footer">Same 20 unique mutation-overlapping 8-11mers; 0 eligible 25-aa construct windows</text>
+
+<rect x="32" y="578" width="1136" height="89" rx="8" fill="#e8f3fa"/>
+<text x="52" y="603" class="panel-title">VACCINE CONSEQUENCE</text>
+<text x="52" y="627" class="body">The antigen sequence is concordant, not platform-specific. The platform effect is construct eligibility: ONT yields five mutation-overlapping 25mers, while</text><text x="52" y="644" class="body">the 18-aa Illumina context yields none.</text>
+<text x="52" y="658" class="strong">Selected 25-aa construct: LKKSSKGELTTLIHQLQEKDKFYSL Top binder: QLQEKDKFYSL / HLA-B*08:01 / 435.33 nM.</text>
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">osteosarc.com oncoanalyser allele | matched ONT/Illumina Isovar reconstruction | NetMHCpan 4.2c</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.2 | research use only</text>
+</svg>

@@ -16,6 +16,8 @@ def build_results():
         "assembled_antigens.json",
         "assembled_rankings.json",
         "additional_candidate_audit.json",
+        "orf_platform_audit.json",
+        "platform_comparison_audit.json",
         "panel_metadata.json",
         "sv_audits.json",
     )
@@ -25,6 +27,10 @@ def build_results():
     inputs = json.loads(component_bytes["assembled_antigens.json"])
     rankings = json.loads(component_bytes["assembled_rankings.json"])
     panels = json.loads(component_bytes["panel_metadata.json"])
+    platform_comparisons = json.loads(
+        component_bytes["platform_comparison_audit.json"])
+    orf_platform_audit = json.loads(
+        component_bytes["orf_platform_audit.json"])
     sv_audits = json.loads(component_bytes["sv_audits.json"])
     input_by_id = {record["id"]: record for record in inputs["antigens"]}
     ranking_by_id = {record["id"]: record for record in rankings["records"]}
@@ -68,6 +74,15 @@ def build_results():
         *sv_audits["records"],
         *base["records"][1:],
     ]
+    base["orf_platform_audit"] = orf_platform_audit
+    comparison_by_id = {
+        record["id"]: record
+        for record in platform_comparisons["records"]
+    }
+    for record in base["records"]:
+        comparison = comparison_by_id.get(record["id"])
+        if comparison is not None:
+            record["platform_comparison"] = comparison
     return base
 
 

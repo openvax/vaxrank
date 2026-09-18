@@ -1,0 +1,64 @@
+{
+  "decision_reason": "ONT and Illumina RNA recover the same canonical AFF3 coding splice across the affected intron, with no altered exon boundary or deletion-specific RNA junction.",
+  "dna_only": "The focal deletion is wholly intronic in every inspected Ensembl 87 coding transcript; an altered protein would require a demonstrated splice or regulatory consequence.",
+  "epitope_message": "Not predicted because no altered coding RNA or mutant protein sequence was observed.",
+  "id": "AFF3-intronic-deletion",
+  "interpretation": "Long reads add multi-exon isoform linkage and short reads add local junction support, but the mature coding sequence is identical on both platforms and supplies no mutant peptide.",
+  "limitation": "Mature RNA cannot directly retain evidence for a small deletion inside a constitutively removed intron; this audit does not test every possible regulatory effect.",
+  "outcome": "no_translation",
+  "platform_comparison": {
+    "conclusion": "Both platforms recover the same canonical coding splice across the affected intron; the 128-bp DNA deletion is absent from mature coding RNA and creates no observed peptide difference.",
+    "dna_model": "chr2:99668095-99668223 lies wholly inside the intron between ENST00000317233 exons ending at 99649666 and starting at 99672538; no Ensembl 87 coding exon overlaps it.",
+    "id": "AFF3-intronic-deletion",
+    "overview": {
+      "long": "Canonical 99649666|99672538 junction: 6 T1 / 16 T2 fragments",
+      "short": "Same canonical junction: 26 T1 / 15 T2 fragments",
+      "vaccine": "No coding-sequence change on either platform; no mutant peptide"
+    },
+    "rows": [
+      {
+        "evidence": "Six T1 and 16 T2 primary fragments carry the canonical coding splice; long reads continue across additional AFF3 exons on the same molecule.",
+        "label": "T1/T2 Oxford Nanopore RNA",
+        "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0",
+        "protein": "Canonical AFF3 protein sequence; no mutant translation",
+        "transcript_nt": "Coding path: exon ...99649626-99649666 | 99672538-99672589...; deleted DNA 99668095-99668223 is intronic and absent"
+      },
+      {
+        "evidence": "Twenty-six T1 and 15 T2 primary fragments carry the same canonical coding splice; no exact DNA-deletion junction or altered exon boundary is observed.",
+        "label": "T1/T2 Illumina RNA",
+        "peptide_pool": "Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0",
+        "protein": "Canonical AFF3 protein sequence; no mutant translation",
+        "transcript_nt": "Same mature junction: ...99649666|99672538...; intronic 128 bp is absent through ordinary splicing"
+      }
+    ],
+    "vaccine_impact": "The mature coding junction is identical with or without the intronic DNA segment. ONT adds long-range isoform linkage, while Illumina confirms the local splice; neither supplies a mutant coding sequence to rank."
+  },
+  "protein_sequence": null,
+  "rna_evidence": {
+    "alt_fragments": 0,
+    "counts_text": "canonical 99649666|99672538 junction: ONT 6 T1 / 16 T2; Illumina 26 T1 / 15 T2; 0 deletion-specific junctions",
+    "gate_status": "HELD OUT: NO CODING RNA CHANGE",
+    "other_fragments": "n/a",
+    "passes_vaxrank_filters": false,
+    "platform": "Oxford Nanopore and Illumina RNA",
+    "ref_fragments": "canonical splice present",
+    "source": "matched T1/T2 regional transcript audit",
+    "top_protein_fragments": 0
+  },
+  "sample": "Osteosarcoma T2",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com DRAGEN SV",
+    "matched ONT/Illumina transcript audit",
+    "Ensembl 87"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/dragen/sv/",
+    "examples/osteosarc_complex_results/source/platform_comparison_audit.json"
+  ],
+  "summary_rna": "Same coding splice in ONT and Illumina; deleted DNA is absent through ordinary splicing",
+  "title": "AFF3 128-bp intronic deletion",
+  "top_epitopes": [],
+  "variant": "chr2:g.99668095_99668223del",
+  "variant_class": "DNA-supported focal intronic deletion"
+}

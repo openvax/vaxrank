@@ -1,0 +1,57 @@
+{
+  "assembled_transcript_ids": [
+    "ENST00000372108"
+  ],
+  "combined_score": null,
+  "decision_reason": "Isovar reconstructs a 29-aa protein context whose deletion junction agrees with the reference-plus-edit translation; independent RNA scans support the exact allele in ONT and short-read data from T1 and T2.",
+  "dna_only": "The repetitive 12-nt deletion predicts loss of four glutamates, but DNA alone cannot establish which low-complexity transcript sequence is expressed.",
+  "id": "GTF3C5-p-Glu503_Glu506del",
+  "interpretation": "GTF3C5 is the strongest additional cross-platform indel: 117/128 ONT and 7/12 short-read alternate fragments support T1/T2, while assembly resolves the repetitive protein context used for ranking.",
+  "limitation": "Direct audit counts measure exact allele-spanning fragments and are distinct from the pinned T1 ONT fragments used to assemble the ranked protein.",
+  "osteosarc_protein_context": "TYESGEDEEDEEEEEDFKPSDGSENEMET",
+  "osteosarc_sequence_status": null,
+  "osteosarc_vaccine_sequence": null,
+  "outcome": "no_target_binder",
+  "protein_sequence": "KEQLTYESGEDEEDEEEEEDFKPSDGSEN",
+  "rna_evidence": {
+    "alt_fragments": 13,
+    "counts_text": "assembly corpus: 13 ALT / 29 REF / 5 OTHER; direct audit: ONT 117 T1 + 128 T2, short-read 7 T1 + 12 T2",
+    "gate_status": "PASS: ASSEMBLED TRANSLATION VALIDATED",
+    "other_fragments": 5,
+    "passes_vaxrank_filters": true,
+    "platform": "Oxford Nanopore and Illumina RNA",
+    "ref_fragments": 29,
+    "source": "T1 ONT assembly plus four-product exact-allele audit",
+    "top_protein_fragments": 7,
+    "transcript_ids": [
+      "ENST00000372108"
+    ]
+  },
+  "sample": "Osteosarcoma T1/T2",
+  "score_basis": "source-agnostic target epitope score",
+  "selected_long_peptide": null,
+  "source_labels": [
+    "osteosarc.com protein context",
+    "Isovar ONT assembly",
+    "cross-platform exact-allele audit",
+    "NetMHCpan 4.2c"
+  ],
+  "source_urls": [
+    "https://osteosarc.com/variant/GTF3C5-chr9-133057893/",
+    "examples/osteosarc_mutation_figures/source/osteosarc-isovar.csv",
+    "examples/osteosarc_complex_results/source/assembled_antigens.json",
+    "examples/osteosarc_complex_results/source/additional_candidate_audit.json"
+  ],
+  "summary_rna": "ONT ALT: 117 T1 / 128 T2; short-read ALT: 7 T1 / 12 T2",
+  "target_epitope_score": null,
+  "targetable_intervals": [
+    [
+      14,
+      16
+    ]
+  ],
+  "title": "GTF3C5 p.Glu503_Glu506del",
+  "top_epitopes": [],
+  "variant": "chr9:g.133057894_133057905delGAGGAGGAGGAA",
+  "variant_class": "Cross-platform 12-nt in-frame deletion"
+}

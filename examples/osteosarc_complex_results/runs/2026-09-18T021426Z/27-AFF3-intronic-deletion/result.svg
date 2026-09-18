@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="45" class="kicker">SEQUENCING-PLATFORM COMPARISON</text>
+<text x="32" y="78" class="title">AFF3 128-bp intronic deletion</text>
+<text x="32" y="103" class="subtitle">chr2:g.99668095_99668223del | Osteosarcoma T2</text>
+<rect x="32" y="122" width="1136" height="55" rx="8" fill="#f8e3e7"/>
+<text x="52" y="146" class="outcome" fill="#7a2938">NO TRANSLATION</text>
+<text x="238" y="145" class="body">Both platforms recover the same canonical coding splice across the affected intron; the 128-bp DNA</text><text x="238" y="162" class="body">deletion is absent from mature coding RNA and creates no observed peptide difference.</text>
+
+<text x="32" y="207" class="panel-title">DNA EVENT AND CODING MODEL</text>
+<rect x="32" y="221" width="1136" height="68" rx="8" fill="#f8fafb"/>
+<text x="52" y="246" class="body">chr2:99668095-99668223 lies wholly inside the intron between ENST00000317233 exons ending at 99649666 and starting at 99672538; no Ensembl 87 coding exon</text><text x="52" y="263" class="body">overlaps it.</text>
+
+<text x="32" y="309" class="panel-title">LONG READ</text>
+<text x="616" y="309" class="panel-title">SHORT READ</text>
+
+<rect x="32" y="318" width="552" height="236" rx="8" fill="#eef3f7"/>
+<text x="52" y="347" class="strong">T1/T2 Oxford Nanopore RNA</text>
+<text x="52" y="372" class="body">Six T1 and 16 T2 primary fragments carry the canonical coding splice;</text><text x="52" y="388" class="body">long reads continue across additional AFF3 exons on the same molecule.</text>
+<text x="52" y="425" class="panel-title">TRANSCRIPT NUCLEOTIDE / STRUCTURE</text>
+<text x="52" y="448" class="sequence">Coding path: exon ...99649626-99649666 | 99672538-99672589...;</text><text x="52" y="465" class="sequence">deleted DNA 99668095-99668223 is intronic and absent</text>
+<text x="52" y="507" class="panel-title">PROTEIN AND PEPTIDE SPACE</text>
+<text x="52" y="530" class="sequence">Canonical AFF3 protein sequence; no mutant translation</text>
+<text x="52" y="550" class="footer">Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0</text>
+<rect x="616" y="318" width="552" height="236" rx="8" fill="#eef3f7"/>
+<text x="636" y="347" class="strong">T1/T2 Illumina RNA</text>
+<text x="636" y="372" class="body">Twenty-six T1 and 15 T2 primary fragments carry the same canonical coding</text><text x="636" y="388" class="body">splice; no exact DNA-deletion junction or altered exon boundary is</text><text x="636" y="404" class="body">observed.</text>
+<text x="636" y="425" class="panel-title">TRANSCRIPT NUCLEOTIDE / STRUCTURE</text>
+<text x="636" y="448" class="sequence">Same mature junction: ...99649666|99672538...; intronic 128 bp is</text><text x="636" y="465" class="sequence">absent through ordinary splicing</text>
+<text x="636" y="507" class="panel-title">PROTEIN AND PEPTIDE SPACE</text>
+<text x="636" y="530" class="sequence">Canonical AFF3 protein sequence; no mutant translation</text>
+<text x="636" y="550" class="footer">Variant-specific 8-11mers: 0; eligible 25-aa mutant constructs: 0</text>
+
+<rect x="32" y="578" width="1136" height="89" rx="8" fill="#e8f3fa"/>
+<text x="52" y="603" class="panel-title">VACCINE CONSEQUENCE</text>
+<text x="52" y="627" class="body">The mature coding junction is identical with or without the intronic DNA segment. ONT adds long-range isoform linkage, while Illumina confirms the local</text><text x="52" y="644" class="body">splice; neither supplies a mutant coding sequence to rank.</text>
+<text x="52" y="658" class="strong">No evidence-backed vaccine construct selected.</text>
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">osteosarc.com DRAGEN SV | matched ONT/Illumina transcript audit | Ensembl 87</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.2 | research use only</text>
+</svg>

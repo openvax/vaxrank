@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#ffffff"/>
+<style>
+text { font-family: Inter, Helvetica, Arial, sans-serif; }
+.title { font-size: 27px; font-weight: 700; fill: #17212b; }
+.subtitle { font-size: 13px; fill: #445364; }
+.kicker, .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; fill: #526273; }
+.outcome { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.body { font-size: 12px; fill: #334252; }
+.strong { font-size: 13px; font-weight: 700; fill: #17212b; }
+.muted { font-size: 12px; fill: #687786; }
+.sequence { font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; font-weight: 600; fill: #17212b; }
+.table-head { font-size: 10px; font-weight: 700; letter-spacing: 0.7px; fill: #526273; }
+.table { font-size: 11px; fill: #263544; }
+.table-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 600; fill: #17212b; }
+.footer { font-size: 9px; fill: #687786; }
+</style>
+<text x="32" y="47" class="kicker">PAIRED ASSEMBLY AUDIT</text>
+<text x="32" y="84" class="title">Same original reads, Isovar assembly on versus off</text>
+<text x="32" y="112" class="subtitle">49 checksummed source/variant BAM subsets; current Isovar runtime</text>
+<rect x="32" y="133" width="1136" height="61" rx="8" fill="#fff2c2"/>
+<text x="52" y="158" class="strong">This selected corpus is enriched for informative loci. It supports paired software behavior, not population or platform sensitivity estimates. PacBio</text><text x="52" y="176" class="strong">contributes one case.</text>
+
+<text x="52" y="235" class="table-head">PLATFORM</text>
+<text x="200" y="235" class="table-head">ASSEMBLY</text>
+<text x="335" y="235" class="table-head">CASES</text>
+<text x="500" y="235" class="table-head">PROTEIN WINDOWS</text>
+<text x="690" y="235" class="table-head">EXACT</text>
+<text x="865" y="235" class="table-head">NON-EXACT</text>
+<text x="1045" y="235" class="table-head">NO WINDOW</text>
+<rect x="32" y="259" width="1136" height="36" rx="6" fill="#eef3f7"/><text x="52" y="285" class="strong">ILMN</text><text x="200" y="285" class="body">ON</text><text x="335" y="285" class="body">32</text><text x="500" y="285" class="strong">27</text><text x="690" y="285" class="body">26</text><text x="865" y="285" class="body">1</text><text x="1045" y="285" class="body">5</text><rect x="32" y="301" width="1136" height="36" rx="6" fill="#f7f9fb"/><text x="52" y="327" class="strong">ILMN</text><text x="200" y="327" class="body">OFF</text><text x="335" y="327" class="body">32</text><text x="500" y="327" class="strong">27</text><text x="690" y="327" class="body">26</text><text x="865" y="327" class="body">1</text><text x="1045" y="327" class="body">5</text><rect x="32" y="343" width="1136" height="36" rx="6" fill="#eef3f7"/><text x="52" y="369" class="strong">ONT</text><text x="200" y="369" class="body">ON</text><text x="335" y="369" class="body">16</text><text x="500" y="369" class="strong">14</text><text x="690" y="369" class="body">13</text><text x="865" y="369" class="body">1</text><text x="1045" y="369" class="body">2</text><rect x="32" y="385" width="1136" height="36" rx="6" fill="#f7f9fb"/><text x="52" y="411" class="strong">ONT</text><text x="200" y="411" class="body">OFF</text><text x="335" y="411" class="body">16</text><text x="500" y="411" class="strong">14</text><text x="690" y="411" class="body">13</text><text x="865" y="411" class="body">1</text><text x="1045" y="411" class="body">2</text><rect x="32" y="427" width="1136" height="36" rx="6" fill="#eef3f7"/><text x="52" y="453" class="strong">PacBio</text><text x="200" y="453" class="body">ON</text><text x="335" y="453" class="body">1</text><text x="500" y="453" class="strong">0</text><text x="690" y="453" class="body">0</text><text x="865" y="453" class="body">0</text><text x="1045" y="453" class="body">1</text><rect x="32" y="469" width="1136" height="36" rx="6" fill="#f7f9fb"/><text x="52" y="495" class="strong">PacBio</text><text x="200" y="495" class="body">OFF</text><text x="335" y="495" class="body">1</text><text x="500" y="495" class="strong">0</text><text x="690" y="495" class="body">0</text><text x="865" y="495" class="body">0</text><text x="1045" y="495" class="body">1</text>
+
+<rect x="32" y="522" width="552" height="126" rx="8" fill="#dff4e9"/>
+<text x="52" y="550" class="panel-title">WHAT ASSEMBLY CHANGED</text>
+<text x="52" y="578" class="body">ILMN assembly changed local protein length in 5/32 cases while</text><text x="52" y="596" class="body">preserving whether a window was established. Cases: ATRX, DIAPH1,</text><text x="52" y="614" class="body">DYNC1H1, SLC25A12, TECPR1.</text>
+<rect x="616" y="522" width="552" height="126" rx="8" fill="#eef3f7"/>
+<text x="636" y="550" class="panel-title">WHAT IT DID NOT CHANGE</text>
+<text x="636" y="578" class="body">The assembly-on and assembly-off ORF counts are identical in this</text><text x="636" y="596" class="body">selected corpus. All 14 paired ONT proteins are sequence-identical</text><text x="636" y="614" class="body">because individual long reads already carry the local context.</text>
+
+<line x1="32" y1="690" x2="1168" y2="690" stroke="#d8e0e7"/>
+<text x="32" y="714" class="footer">Every case retains source URL, BAM identity, Varcode effects, sequences, and transcript edits in the checksummed source JSON.</text>
+<text x="1168" y="737" text-anchor="end" class="footer">Vaxrank 3.19.2 | research use only</text>
+</svg>
