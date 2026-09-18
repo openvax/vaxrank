@@ -89,10 +89,10 @@ peptide synthesiser:
    Vaxrank.
 2. **Mutant transcript assembly** — Tumor RNA-seq reads overlapping each
    mutation are assembled by [Isovar](https://github.com/openvax/isovar)
-   to determine the true mutant protein sequence.  This step phases
-   nearby germline variants and captures any mutation-associated splicing
-   differences, producing a more accurate reading frame than DNA-only
-   prediction.
+   into RNA-supported sequence, with protein subsequences predicted where
+   a reading frame is justified. Nearby variants and splice differences
+   can be represented when the reads and reference context support them;
+   RNA sequence support is not a direct measurement of protein translation.
 3. **MHC binding prediction** — Candidate epitopes (short peptide
    subsequences spanning the mutation) are scored for predicted binding
    to the patient's HLA class I molecules using
@@ -113,6 +113,12 @@ peptide synthesiser:
    skipped when an external neoepitope report is supplied via
    `--input-lens` or `--input-pvacseq`; the ranking and dispatch steps
    are identical.
+
+The responsibility split is consistent across the libraries: Varcode generates
+transcript hypotheses and predicts coding consequences; Isovar reconstructs
+RNA-supported sequences and reconciles evidence; Vaxrank evaluates the resulting
+protein/peptide candidates. See [library responsibilities](https://openvax.github.io/vaxrank/library-responsibilities/)
+for evidence handoffs and current integration limits.
 
 ## Vaccine designs
 
@@ -867,15 +873,19 @@ and the LENS CLI path are unchanged.
 
 For each somatic variant, [Isovar](https://github.com/openvax/isovar)
 extracts RNA-seq reads overlapping the mutant locus and assembles them
-into a mutant protein fragment.  This is more accurate than simply
-applying the DNA variant to the reference transcript because it:
+into RNA sequence, then predicts protein context where the frame is justified.
+Compared with an isolated DNA edit, this can:
 
-- **Phases** adjacent germline and somatic variants that fall on the same
-  read, producing the true amino acid sequence
-- **Captures splicing differences** such as intron retention events that
-  may alter the reading frame near the mutation
-- **Confirms expression** — variants with no supporting RNA reads are
-  filtered out
+- Preserve nearby variants linked by compatible read/fragment evidence.
+- Represent observed splice differences where reconstruction and frame matching
+  support them; not every possible splice path is resolved automatically.
+- Provide RNA support for the reconstructed sequence. Missing support fails the
+  configured RNA evidence criteria; it does not prove biological absence.
+
+The ordinary path selects Isovar's top protein sequence. The separate supplied-
+fusion adapter retains coding hypotheses; neither implies that the ordinary
+pipeline evaluates every RNA/SV alternative. See
+[current limits and the DNA fallback](https://openvax.github.io/vaxrank/library-responsibilities/#available-today-and-remaining-work).
 
 ### CandidateEpitope scoring
 
