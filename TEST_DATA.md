@@ -47,6 +47,9 @@ directories are never repaired/overwritten. An export is published only after
 every asset verifies. Interrupted acquisition leaves completed cache objects
 reusable, but no finished-looking partial export. Individual interrupted file
 transfers restart on retry; this does not claim byte-range download resumption.
+Publication uses Linux/macOS atomic no-replace rename, so even an empty directory
+created concurrently is preserved and validated, never replaced. If the OS or
+filesystem lacks that operation, export fails safely without publishing output.
 Corrupt cache hits fail visibly. `--repair-cache` explicitly redownloads invalid
 objects; it cannot be combined with `--offline` and never repairs an export.
 

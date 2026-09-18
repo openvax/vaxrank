@@ -5,11 +5,14 @@ data. The cache convention is shared, not tied to a Vaxrank package version.
 """
 
 import argparse
+import ctypes
+import errno
 import json
 import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import tempfile
 from urllib.parse import urlsplit
 
@@ -79,6 +82,34 @@ def verify_dataset(output, manifest=None):
     return output
 
 
+def _publish_no_replace(staged, output):
+    """Atomically publish a directory, refusing even an empty destination.
+
+    Python's rename replaces empty directories on POSIX. Use the native
+    exclusive operation on Linux/macOS, and fail closed if it is unavailable.
+    """
+    libc = ctypes.CDLL(None, use_errno=True)
+    if sys.platform == "linux":
+        rename = getattr(libc, "renameat2", None)
+        argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+        # AT_FDCWD = -100; RENAME_NOREPLACE = 1 (Linux renameat2(2)).
+        args = (-100, os.fsencode(staged), -100, os.fsencode(output), 1)
+    elif sys.platform == "darwin":
+        rename = getattr(libc, "renamex_np", None)
+        argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        # RENAME_EXCL = 0x4 (Darwin sys/stdio.h).
+        args = (os.fsencode(staged), os.fsencode(output), 0x4)
+    else:
+        rename = None
+    if rename is None:
+        raise OSError(errno.ENOTSUP, "Atomic no-replace directory publication is unavailable", str(output))
+    rename.argtypes = argtypes
+    rename.restype = ctypes.c_int
+    if rename(*args) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), str(output))
+
+
 def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
                        cache_root=None, offline=False, repair_cache=False):
     """Fetch verified objects, optionally publishing a new offline test subset.
@@ -119,7 +150,7 @@ def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
         return paths
     output.parent.mkdir(parents=True, exist_ok=True)
     # A one-time output export, not a general mutable bundle registry. Siblings
-    # permit atomic rename; no destination tree is deleted or replaced.
+    # permit atomic exclusive rename; no destination tree is deleted or replaced.
     with tempfile.TemporaryDirectory(prefix=".osteosarc-", dir=output.parent) as temporary:
         staged = Path(temporary) / "dataset"
         staged.mkdir()
@@ -128,13 +159,11 @@ def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
         (staged / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         verify_dataset(staged, manifest)
         try:
-            staged.rename(output)
-        except OSError:
+            _publish_no_replace(staged, output)
+        except FileExistsError:
             # A concurrent equivalent publisher is fine; a foreign/modified
             # output is rejected without deleting or repairing it.
-            if output.exists():
-                return verify_dataset(output, manifest)
-            raise
+            return verify_dataset(output, manifest)
     return verify_dataset(output, manifest)
 
 

@@ -2,9 +2,12 @@
 
 from hashlib import sha256
 from concurrent.futures import ThreadPoolExecutor
+import errno
 import json
 from pathlib import Path
 import shutil
+import stat
+from types import SimpleNamespace
 
 from datacache import Cache, FileValidationError
 from isovar import ReadCollector
@@ -84,6 +87,67 @@ def test_concurrent_exports_converge_without_mixed_assets(tmp_path, tiny_manifes
                     manifest_path=path, cache_root=root) for _ in range(2)]
         assert [f.result() for f in futures] == [output, output]
     assert downloader.verify_dataset(output, manifest) == output
+
+
+def test_concurrent_empty_destination_is_preserved(tmp_path, tiny_manifest, monkeypatch):
+    path, _ = tiny_manifest
+    output = tmp_path / "export"
+    original_verify = downloader.verify_dataset
+    created = []
+
+    def create_foreign_destination_after_staging(directory, manifest):
+        result = original_verify(directory, manifest)
+        if directory != output:
+            output.mkdir(mode=0o700)
+            created.append(output.stat())
+        return result
+
+    monkeypatch.setattr(downloader, "verify_dataset", create_foreign_destination_after_staging)
+    with pytest.raises(ValueError):
+        downloader.download_test_data(output, manifest_path=path, cache_root=tmp_path / "cache")
+    assert len(created) == 1
+    assert output.stat().st_ino == created[0].st_ino
+    assert stat.S_IMODE(output.stat().st_mode) == 0o700
+    assert list(output.iterdir()) == []
+    assert not list(tmp_path.glob(".osteosarc-*"))
+
+
+def test_concurrent_valid_destination_is_reused_without_replacement(tmp_path, tiny_manifest, monkeypatch):
+    path, manifest = tiny_manifest
+    output = tmp_path / "export"
+    original_publish = downloader._publish_no_replace
+    created = []
+
+    def publish_after_other_export(staged, destination):
+        shutil.copytree(staged, destination)
+        destination.chmod(0o700)
+        created.append(destination.stat())
+        original_publish(staged, destination)
+
+    monkeypatch.setattr(downloader, "_publish_no_replace", publish_after_other_export)
+    assert downloader.download_test_data(output, manifest_path=path, cache_root=tmp_path / "cache") == output
+    assert downloader.verify_dataset(output, manifest) == output
+    assert output.stat().st_ino == created[0].st_ino
+    assert stat.S_IMODE(output.stat().st_mode) == 0o700
+    assert not list(tmp_path.glob(".osteosarc-*"))
+
+
+@pytest.mark.parametrize("missing_symbol", [False, True])
+def test_unavailable_exclusive_rename_fails_without_publishing(tmp_path, tiny_manifest, monkeypatch, missing_symbol):
+    path, _ = tiny_manifest
+    output = tmp_path / "export"
+
+    def unsupported(*args):
+        downloader.ctypes.set_errno(errno.ENOTSUP)
+        return -1
+
+    libc = SimpleNamespace() if missing_symbol else SimpleNamespace(renameat2=unsupported, renamex_np=unsupported)
+    monkeypatch.setattr(downloader.ctypes, "CDLL", lambda *args, **kwargs: libc)
+    with pytest.raises(OSError) as error:
+        downloader.download_test_data(output, manifest_path=path, cache_root=tmp_path / "cache")
+    assert error.value.errno == errno.ENOTSUP
+    assert not output.exists()
+    assert not list(tmp_path.glob(".osteosarc-*"))
 
 
 def test_failed_last_download_does_not_publish_partial_subset(tmp_path, tiny_manifest):
