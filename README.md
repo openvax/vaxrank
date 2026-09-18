@@ -981,6 +981,8 @@ processing columns).
 
 - `report.py`: Analysis-report generation (ASCII, HTML, PDF, XLSX, CSV, JSON)
 
+<a id="papers--citations"></a>
+
 ## Papers & Citations
 
 **Vaxrank algorithm:**
