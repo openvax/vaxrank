@@ -1,0 +1,30 @@
+name: Release version
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Release version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install version parser
+        run: python -m pip install 'packaging>=21.0'
+      - name: Check against current target branch and release tags
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-recurse-submodules --force --tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/version-check-base"
+          python check_release_version.py --base refs/remotes/origin/version-check-base --head "$HEAD_SHA"
