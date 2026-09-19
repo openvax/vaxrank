@@ -11,5 +11,5 @@ if [[ -z "${PYTHON:-}" ]]; then
   fi
 fi
 
-"${PYTHON}" -m ruff check vaxrank tests release_upload.py examples/osteosarc_read_corpus
+"${PYTHON}" -m ruff check vaxrank tests release_upload.py check_release_version.py examples/osteosarc_read_corpus
 echo 'Passes ruff check'
