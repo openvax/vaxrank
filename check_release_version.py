@@ -13,11 +13,11 @@ def _git(*args):
         ["git", *args], capture_output=True, text=True, check=False)
     if result.returncode:
         raise ValueError("Git inspection failed: %s" % result.stderr.strip())
-    return result.stdout.strip()
+    return result.stdout
 
 
 def _read_version(revision):
-    commit = _git("rev-parse", "--verify", "--end-of-options", revision + "^{commit}")
+    commit = _git("rev-parse", "--verify", "--end-of-options", revision + "^{commit}").strip()
     source = _git("show", commit + ":vaxrank/version.py")
     try:
         module = ast.parse(source)

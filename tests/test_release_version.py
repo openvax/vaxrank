@@ -88,6 +88,7 @@ def test_existing_release_tag_fails_even_on_another_commit(repo, annotated, tag)
     ("__version__ = '3.19.7'\n__version__ = '3.19.8'\n", "exactly once"),
     ("__version__ = 'not-a-version'\n", "Invalid release version"),
     ("__version__ = (\n", "Invalid version file"),
+    ("  __version__ = '3.19.7'\n", "Invalid version file"),
 ])
 def test_invalid_version_assignment_fails(repo, source, message):
     (repo / "vaxrank/version.py").write_text(source, encoding="utf-8")
