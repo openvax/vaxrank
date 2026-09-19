@@ -81,8 +81,29 @@ reconstructed protein in all seven cases, and each competing window contains the
 mutation. Because no historical ranking settings are published, neither
 placement can be called the correct one here. No sequence or score was changed
 to force agreement. H1-2 retains its deletion sequence and the actual filter failure.
-Expanded MAP2 has one alternate read object and no protein meeting the two-read
-floor; it is never converted into a DNA-backed vaccine selection silently.
+MAP2 is a separate no-DNA-fallback regression, outside these seven documented
+comparisons. The imported Isovar 1.8.1 manifest deliberately retains the
+published GRCh38 `chr2:209694768 CCTGGGCTACTGTGTGTTCAATA>C` allele (22-bp
+deletion), preserving the original fixture and its checksums.
+
+Osteosarc 0.1.0's `allele-MAP2-chr2-209694768` correction identifies the complex
+replacement `CCTGGGCTACTGTGTGTTCAATAAGTACACAGT>CAGGG` at the same GRCh38
+position (net -28 bp). The primary [Tempus Pindel VCF](https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/vendor/tempus/TL-24-ALMY2X4KMV/DNA/TL-24-ALMY2X4KMV.soma.pindel.vcf)
+records the equivalent GRCh37 `2:210559493 CTGGGCTACTGTGTGTTCAATAAGTACACAGT>AGGG`,
+with `c.2599_2630delinsAGGG` and its anchored representation in `OLD_VARIANT`.
+The [CeGaT somatic table](https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/vendor/cegat/P116686_2_S000048/P116686_2_somatic.tsv)
+lists consistent component substitutions at GRCh37 chr2:210559493/210559494
+and a deletion anchored at chr2:210559496; these are not independent targets.
+
+An offline comparison on 2026-09-19 with Vaxrank 3.19.4, Isovar 1.21.0 and
+Varcode 7.0.0 applied both alleles separately to the same pinned BAM/reference
+with unchanged defaults. **Both** yielded one alternate read/fragment, zero
+reference/other reads, no protein meeting the two-read floor, and no MHC
+prediction or vaccine selection. The regression now checks both alleles.
+This selected-read subset does not establish absence of mutant expression in
+the full RNA source, nor does it settle the corrected protein or vaccine
+peptide sequence. The four-of-seven comparison above is unchanged because it
+contains no MAP2 record. See [Vaxrank #487](https://github.com/openvax/vaxrank/issues/487).
 
 **Upstream blocker, resolved 2026-09-11:** Topiary #296 duplicated cache
 occurrence coordinates, and six end-to-end cache tests failed with that

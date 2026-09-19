@@ -34,12 +34,14 @@ def load_selection_inputs(directory):
     return genome, {c["variant"]["variant_id"]: c for c in manifest["cases"]}, metadata
 
 
-def reconstruct_selection(inputs, variant_id, length=25, flags=()):
+def reconstruct_selection(inputs, variant_id, length=25, flags=(), variant=None):
+    """Reconstruct a pinned case, optionally comparing another allele on its BAM."""
     genome, cases, metadata = inputs
     case = cases[variant_id]
     record = case["variant"]
-    variant = Variant(record["chrom"].removeprefix("chr"), record["pos"],
-                      record["ref"], record["alt"], ensembl=genome)
+    if variant is None:
+        variant = Variant(record["chrom"].removeprefix("chr"), record["pos"],
+                          record["ref"], record["alt"], ensembl=genome)
     config = VaccineConfig(preferred_peptide_length=length,
                            min_peptide_length=length, max_peptide_length=length)
     bam_path = DATA / "isovar" / case["bam"]
