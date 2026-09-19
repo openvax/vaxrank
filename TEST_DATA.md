@@ -21,6 +21,13 @@ This small bundle is separate from the ongoing multi-gigabyte, uncapped regional
 analysis acquisition. It is not a replacement for that acquisition or an SV
 discovery benchmark. Large analysis BAMs do not enter Git.
 
+The separate [regional read-corpus workflow](examples/osteosarc_read_corpus/README.md)
+uses published **osteosarc 0.1.0** for downloads, header inspection and indexed
+read extraction. It retains reviewed event/source selection and explicit
+coordinate mappings, with full extraction receipts and an offline mode.
+Its original-RNA integration tests verify that acquisition preserves complete
+read records and Vaxrank's documented reconstruction-to-ranking comparisons.
+
 ## Download, export and verify
 
 Install Vaxrank/dependencies first. The packaged manifest lives at
