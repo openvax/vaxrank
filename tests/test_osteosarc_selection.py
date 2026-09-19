@@ -13,6 +13,7 @@ from unittest.mock import Mock
 import msgspec
 import pytest
 from topiary import CachedPredictor, TopiaryPredictor
+from varcode import Variant
 
 from vaxrank.construct_sequence import ConstructEvidence, ConstructSequence, ConstructSequenceEdit
 from vaxrank.core_logic import vaccine_peptides_for_variant
@@ -211,13 +212,28 @@ def test_real_cached_final_selections_against_documented_sequences(reconstruct, 
         assert sequences[0] in result.top_protein_sequence.amino_acids
 
 
-def test_expanded_map2_evidence_does_not_enable_dna_fallback(reconstruct):
-    result, config = reconstruct("MAP2-chr2-209694768")
-    assert result.num_alt_reads == 1
+@pytest.mark.parametrize("corrected", [False, True],
+                         ids=["published-deletion", "corrected-complex-replacement"])
+def test_map2_alleles_do_not_enable_dna_fallback(inputs, corrected):
+    # Keep the published Isovar 1.8.1 allele/bytes intact. Osteosarc 0.1.0's
+    # correction is a separate comparison on the same selected-read subset,
+    # not evidence of absent expression in the full RNA sample. Primary vendor
+    # sources and coordinate conventions are recorded in the fixture README.
+    ref, alt = ("CCTGGGCTACTGTGTGTTCAATAAGTACACAGT", "CAGGG") if corrected else (
+        "CCTGGGCTACTGTGTGTTCAATA", "C")
+    expected_variant = Variant("2", 209694768, ref, alt, ensembl=inputs[0])
+    result, config = reconstruct_selection(
+        inputs, "MAP2-chr2-209694768",
+        variant=expected_variant if corrected else None)
+    assert result.variant == expected_variant
+    assert (result.num_alt_reads, result.num_ref_reads, result.num_other_reads) == (1, 0, 0)
+    assert (result.num_alt_fragments, result.num_ref_fragments, result.num_other_fragments) == (1, 0, 0)
+    assert not result.passes_all_filters
     assert result.top_protein_sequence is None
     predictor = Mock(side_effect=AssertionError("No protein should reach prediction"))
     assert vaccine_peptides_for_variant(result, predictor, vaccine_config=config) == []
     assert not predictor.mock_calls
+    assert "MAP2-chr2-209694768" not in {record["variant_id"] for record in RECORDS}
 
 
 def test_two_dync1h1_loci_are_not_collapsed_by_gene_name(reconstruct):

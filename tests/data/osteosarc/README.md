@@ -31,9 +31,14 @@ The independent reference-protein edits checked here are documented on:
 - https://osteosarc.com/variant/H1_2-chr6-26055824/ (p.Ala197_Lys201del)
 - https://osteosarc.com/variant/GTF3C5-chr9-133057893/ (p.Glu503_Glu506del)
 
-MAP2 has no exact alternate deletion support in these two RNA fixtures;
+The published MAP2 deletion retained in `selection.json` has no exact alternate
+support in these two RNA fixtures;
 that remains a no-RNA-peptide case, not evidence of absent mutant expression
-or grounds for silently enabling DNA fallback. PIP5K1A's frameshift and the
+or grounds for silently enabling DNA fallback. Osteosarc 0.1.0 corrects that
+catalogue allele to a complex replacement; the separate
+[selection-validation fixture](selection_validation/README.md) compares both
+alleles on its ONT T2 BAM while retaining the published baseline unchanged.
+PIP5K1A's frameshift and the
 historically selected vaccine sequences require separate selection-level
 expectations under Vaxrank #414.
 
