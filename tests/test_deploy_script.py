@@ -108,7 +108,8 @@ def test_deploy_rejects_non_release_branch():
         (
             "lint.sh",
             [],
-            ["-m", "ruff", "check", "vaxrank", "tests", "release_upload.py"],
+            ["-m", "ruff", "check", "vaxrank", "tests", "release_upload.py",
+             "examples/osteosarc_read_corpus"],
         ),
         ("test.sh", ["-q"], ["-m", "pytest", "tests", "-q"]),
     ],

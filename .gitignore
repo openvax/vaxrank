@@ -75,3 +75,5 @@ neoepitope-report.xlsx
 ~$*
 site/
 docs/
+# Local uncapped genomic-read analysis datasets (never package raw reads).
+/output/osteosarc-read-corpus/

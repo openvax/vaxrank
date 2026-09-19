@@ -62,6 +62,17 @@ jobs:
       - name: Install weasyprint system dependencies
         run: |
           sudo apt-get install -y libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0
+      - name: Install samtools for original-read acquisition tests
+        working-directory: ${{ runner.temp }}
+        run: |
+          sudo apt-get install -y libcurl4-openssl-dev liblzma-dev libbz2-dev zlib1g-dev
+          curl --fail --location --output samtools-1.21.tar.bz2 https://github.com/samtools/samtools/releases/download/1.21/samtools-1.21.tar.bz2
+          tar -xjf samtools-1.21.tar.bz2
+          cd samtools-1.21
+          ./configure --without-curses
+          make -j2
+          sudo make install
+          samtools --version
       - name: Lint with Ruff
         run: |
           ./lint.sh
