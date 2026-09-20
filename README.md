@@ -1095,3 +1095,15 @@ are not trusted or automatically deleted.
   verifies PyPI artifacts by SHA-256, and safely resumes an interrupted upload
   from its original artifacts. Deploy is restricted to synchronized
   `main`/`master`.
+- `check_release_version.py --base origin/main`: compares the committed PR
+  version with the fetched target branch and release tags, without importing
+  either version file. Fetch the target branch and tags before running it
+  locally (`git fetch --tags origin`). A PR must increase the version and
+  choose a version that has no existing release tag.
+
+The **Release version** PR check fetches the current target branch and tags
+each time it runs, including when a PR is retargeted. A green check only covers
+the base and tags available during that run. Require this check with GitHub's
+**Require branches to be up to date before merging** option to prevent an old
+green result surviving another PR's release; otherwise rerun it after the
+target branch advances. The workflow itself does not change branch protection.
