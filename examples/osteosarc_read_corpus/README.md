@@ -46,7 +46,7 @@ symbolic MUC3A/GAPVD1 entries are anchor queries, not invented literal alleles.
 
 ## Reproduce or resume
 
-Requirements: Vaxrank's dependencies, including **osteosarc[reads]==0.1.0**;
+Requirements: Vaxrank's dependencies, including **osteosarc==0.1.1**;
 samtools with HTTPS and `--fetch-pairs` support (CI pins **1.21**); curl; minimap2 for
 the optional PacBio audit; local indexed full GRCh38 and GRCh37 references; an
 Isovar checkout containing `tests/data/osteosarc/expansion/` and the pinned

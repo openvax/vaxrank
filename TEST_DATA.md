@@ -1,124 +1,107 @@
-# Reproducible osteosarc test data
+# Bundled Sid test data
 
-## What travels with the tests
+Vaxrank packages **1,148 selected alignment records in 58 cohorts** in
+`vaxrank/data/sid-test-data.zip`. All Sid read fixtures are acquired through
+**osteosarc 0.1.1** from the public
+[CC0 Sid dataset](https://registry.opendata.aws/sid-osteosarc/).
+The archive contains no whole-source BAM, BAM index, dataset snapshot, or
+unselected regional reads. Its BAM indexes describe only the tiny selected BAMs.
 
-`tests/data/osteosarc/shared-v1/` contains **49 cases covering all 44 original
-vaccine loci**, including both DYNC1H1 loci, plus a manifest. Its 98 original
-BAM/index files total 4,126,730 bytes. Additional cases represent mitochondrial
-platform/reference combinations and native-GRCh37 NR2F2, not additional vaccine
-loci. These are Isovar's deliberately selected regression reads, not complete
-platform coverage, unbiased expression measurements or validated vaccine targets.
+The selection is explicit:
 
-The downloader generates this directory by exporting verified upstream subset
-assets **without rewriting or further downsampling their reads**. Native alleles,
-original GRCh38 identities where applicable, source BAM URLs, processing-product
-identifiers, selection rules and source-region digests remain in the manifest.
-Its upstream commit and manifest digest identify the fuller selection records
-and upstream fixture generator. The reads originate in the public osteosarc
-dataset ([CC0 source registry](https://registry.opendata.aws/sid-osteosarc/)).
+* 49 native-coordinate retrieval cases cover the 44 original vaccine loci.
+  Each retains one template, including its already-selected mate/alternative
+  alignments. NTF3 retains a template carrying the compound AG>GT evidence.
+* Five reconstruction/ranking cohorts and two context cohorts retain their
+  reviewed records. Their counts, competing alignments, low-quality reads and
+  ambiguity are part of the regressions, so these are not resampled.
+* Two fusion cases retain seven original SAM records and their reviewed RNA
+  windows/reference hypotheses.
 
-This small bundle is separate from the ongoing multi-gigabyte, uncapped regional
-analysis acquisition. It is not a replacement for that acquisition or an SV
-discovery benchmark. Large analysis BAMs do not enter Git.
+These are selected test cohorts, **not coverage, VAF or expression estimates**.
+Mates and supplementary records are explicitly listed; this does not claim all
+mates or all alignments of every template in the original BAM were recovered.
 
-The separate [regional read-corpus workflow](examples/osteosarc_read_corpus/README.md)
-uses published **osteosarc 0.1.0** for downloads, header inspection and indexed
-read extraction. It retains reviewed event/source selection and explicit
-coordinate mappings, with full extraction receipts and an offline mode.
-Its original-RNA integration tests verify that acquisition preserves complete
-read records and Vaxrank's documented reconstruction-to-ranking comparisons.
+Small Ensembl reference subsets, documented biological expectations, cached
+NetMHCpan outputs, and report expectations are included as separate supporting
+inputs. Osteosarc supplies the Sid acquisition/variant identities; it does not
+supply the independent Ensembl annotations or MHC prediction expectations.
 
-## Download, export and verify
-
-Install Vaxrank/dependencies first. The packaged manifest lives at
-`vaxrank/data/osteosarc-test-data-v1.json`; ordinary use needs neither an Isovar
-checkout, a reference-genome download, samtools, nor the original large BAMs.
-
-```sh
-# Populate the shared cache only (explicit network operation).
-python -m vaxrank.download_test_data
-
-# Generate a new offline subset from those cached objects.
-python -m vaxrank.download_test_data --offline --output /path/to/new/subset
-
-# Verify the checked-in subset without network or cache mutations.
-python -m vaxrank.download_test_data --verify-only \
-  --output tests/data/osteosarc/shared-v1
-
-# Regenerate into a NEW directory for byte-for-byte comparison/review.
-python -m vaxrank.download_test_data --output /path/to/regenerated/subset
-```
-
-Existing identical exports are verified and reused; modified or unrelated output
-directories are never repaired/overwritten. An export is published only after
-every asset verifies. Interrupted acquisition leaves completed cache objects
-reusable, but no finished-looking partial export. Individual interrupted file
-transfers restart on retry; this does not claim byte-range download resumption.
-Publication uses Linux/macOS atomic no-replace rename, so even an empty directory
-created concurrently is preserved and validated, never replaced. If the OS or
-filesystem lacks that operation, export fails safely without publishing output.
-Corrupt cache hits fail visibly. `--repair-cache` explicitly redownloads invalid
-objects; it cannot be combined with `--offline` and never repairs an export.
-
-The source is pinned to Isovar commit
-`0cad5b275c852263a1c77722aa463fe5568b2c76`, not a mutable branch or release lookup.
-Every download and cache hit is checked for both size and SHA-256. The complete
-manifest is shipped in both the package and exported dataset; tests require no
-network or user cache to read this fixture. The fixture is repository-only;
-sdists/wheels contain the downloader and its manifest, not the test BAMs.
-
-## Shared OpenVax cache contract
-
-Dataset identity: `osteosarc / vaccine-rna-v1` (independent of package version).
-Default root: datacache's platform cache directory for **`openvax`**.
-Override with `--cache-root /path/to/cache` or `OPENVAX_DATA_CACHE`.
-
-Each object is stored at:
-
-```text
-<cache-root>/objects/sha256/<SHA-256><original suffixes>
-```
-
-For example, a BAM ends in `.bam` and its index in `.bam.bai`. Consumers can use
-datacache 1.9.1+ directly, without importing Vaxrank:
+## Offline use
 
 ```python
-from pathlib import Path
-from datacache import Cache
+from vaxrank.sid_test_data import sid_test_data, sid_reads, sid_variants
 
-# asset is one entry from the pinned manifest's assets list.
-cache = Cache("openvax", cache_root=Path(shared_root) / "objects" / "sha256")
-filename = asset["sha256"] + "".join(Path(asset["filename"]).suffixes)
-path = cache.fetch(asset["url"], filename=filename, timeout=60,
-                   expected_sha256=asset["sha256"],
-                   expected_size=asset["size_bytes"])
+root = sid_test_data()  # verifies and opens installed package resources
+cases = root / "osteosarc/shared-v1/manifest.json"
+variants = sid_variants(["MAP2-chr2-209694768"])
+# sid_reads("osteosarc/shared-v1/<case>.bam") returns osteosarc.ReadSubset.
 ```
 
-Content-identical assets reuse the same key across consumers and dataset
-revisions. This is a cache convention, not a claim that Isovar, Varcode or
-Topiary have already adopted it. Keep generated outputs outside the object
-cache. A generic versioned bundle registry belongs in
-[datacache #59](https://github.com/openvax/datacache/issues/59), not Vaxrank.
-Adoption is tracked in [Isovar #308](https://github.com/openvax/isovar/issues/308),
-[Varcode #464](https://github.com/openvax/varcode/issues/464), and
-[Topiary #349](https://github.com/openvax/topiary/issues/349).
+The tests use this same installed-package loader. It writes only a temporary
+process directory, needs no persistent cache, and performs no downloads.
+The existing CLI exports the 49 retrieval cases offline:
 
-## Updating the pin
-
-Maintainers can reproduce the packaged manifest from immutable Git objects in
-an Isovar checkout containing the pinned commit:
-
-```sh
-python examples/osteosarc_test_data/pin_manifest.py --isovar-repo /path/to/isovar
+```bash
+python -m vaxrank.download_test_data --output /tmp/sid-retrieval-tests --offline
+python -m vaxrank.download_test_data --output /tmp/sid-retrieval-tests --verify-only
 ```
 
-The script verifies each upstream blob against the upstream manifest. Changing
-the upstream revision or case membership requires an explicit reviewed dataset
-revision, not silently overwriting `vaccine-rna-v1`. Generate a fresh export,
-review provenance/size/biological scope, and run:
+Existing output is verified, never replaced. Explicit custom `--manifest`
+downloads retain the generic shared OpenVax cache API for existing callers.
+They do not participate in the bundled Sid tests.
 
-```sh
-./lint.sh
-./test.sh tests/test_download_test_data.py
-./test.sh
+## Regenerate the package subset
+
+Install the declared requirements and SAMtools 1.21 or later, then run from the
+repository root (the recipe and generator are also included in the sdist):
+
+```bash
+python examples/osteosarc_test_data/build.py --cache /tmp/sid-acquisition
 ```
+
+This works with an empty acquisition cache. The checked-in small catalogue
+contains the selected native `osteosarc.Asset` and `Variant` identities from
+snapshot `e4224eeedc18b9a0e66d9e57afcb5f9d613ed76a775e58cd56d320937cd6cf6f`,
+plus pinned index receipts. It does not require the full historical metadata
+snapshot. `osteosarc.extract_reads` retrieves indexed regions and verifies
+source/index identity; the generator then retains **only** the records listed
+in `recipe/selection.json.gz`. A minimal set of one-base retrieval anchors covers the selected alignment
+spans, including explicitly required off-locus mates or supplementary records.
+The `retrieval_regions` helper derives this point cover when preparing a recipe,
+avoiding a separate remote seek for every selected read. The temporary regional results remain in the acquisition cache and
+never enter the package.
+
+The allowlist stores alignment digests, order and multiplicity, not read bases.
+Native BAM digests include float-tag bits lost by SAM text formatting. Historical
+SAM/fusion inputs use their original text representation. Missing, changed or
+extra identical selected records fail generation. A freshly acquired source
+cannot silently redefine a regression baseline.
+
+Repeat against the same verified cache without network access:
+
+```bash
+python examples/osteosarc_test_data/build.py --cache /tmp/sid-acquisition --offline
+```
+
+The read selection is deterministic. Acquisition receipts preserve real source
+identity, software versions and retrieval evidence; archive bytes can differ
+between cache locations/tool versions even when all selected records agree.
+`bundle.json` verifies every packaged file, and `provenance.json` records the
+recipe hashes and full osteosarc extraction lineage.
+
+To update the source catalogue deliberately, first review/update the selector
+recipe and create the named osteosarc metadata snapshot, then run:
+
+```bash
+python examples/osteosarc_test_data/pin_catalog.py --cache /path/to/snapshot-cache
+```
+
+The published-allele baseline is explicit (`corrections=False`). In particular,
+MAP2's old deletion remains the historical selection baseline; the separate
+corrected-complex-allele regression runs against the same selected original
+reads. This migration does not change either biological expectation.
+
+After regeneration, run `./lint.sh` and `./test.sh`. The tests check every
+selected record, native mitochondrial/GRCh37 retrieval, reconstruction and
+ranking, bundle integrity, and the actual wheel/sdist payload.

@@ -4,7 +4,7 @@ from dataclasses import replace
 import gzip
 from hashlib import sha256
 import json
-from pathlib import Path
+from vaxrank.sid_test_data import sid_test_data
 
 import pytest
 from isovar import FusionBlock, FusionBreakpoint, FusionRead, FusionReference, FusionTranscript, reconstruct_fusion
@@ -96,13 +96,15 @@ def test_no_attestation_or_insufficient_support_never_admits():
 
 
 @pytest.mark.parametrize("name,checksum,status,count", [
-    ("ATP5MG--KMT2A", "003b36de003c4faa404a88f538a35d3dfef9d58e6690eefd7bdc123f7c264873", "ambiguous", 1),
-    ("TPST1--CRCP-T1", "d8abcbe902f3cbfbbc872a79d3d0257ca7ebd8711e8b0761c2030b49ffd0bcff", "unresolved_frame", 0),
+    ("ATP5MG--KMT2A", "6c4974ae83898705f647f15f2dcdc9e86a913b9baf5577d2326720620df938a1", "ambiguous", 1),
+    ("TPST1--CRCP-T1", "aae3eca08578f1ee36f1e74043acfee2d885d13cf7594b83de5e18b1d3739e74", "unresolved_frame", 0),
 ])
 def test_original_sid_rna_preserves_coding_uncertainty_and_provenance(name, checksum, status, count):
-    raw = (Path(__file__).parent / "data/isovar_fusions" / (name + ".input.json.gz")).read_bytes()
-    assert sha256(raw).hexdigest() == checksum
-    result = reconstruct_fusion(*fusion_from_dict(json.loads(gzip.decompress(raw))))
+    raw = (sid_test_data() / "isovar_fusions" / (name + ".input.json.gz")).read_bytes()
+    data = json.loads(gzip.decompress(raw))
+    # Pin original content independently of gzip/Python transport details.
+    assert sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest() == checksum
+    result = reconstruct_fusion(*fusion_from_dict(data))
     adapted = fusion_antigens_from_isovar(result, tumor_specificity=admitted(), species="Homo sapiens")
     assert adapted.reconstruction == json.loads(json.dumps(result)) and result["status"] == status
     assert len(adapted.antigens) == count and not adapted.admitted_antigens

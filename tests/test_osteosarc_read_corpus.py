@@ -288,11 +288,11 @@ def test_download_imports_verified_prior_bytes_into_the_shared_cache(tmp_path):
     exported = tmp_path / "second.txt"
     receipt = corpus.download(url, exported, cache=cache)
     assert exported.read_bytes() == local.read_bytes()
-    assert receipt["osteosarc_version"] == "0.1.0"
+    assert receipt["osteosarc_version"] == "0.1.1"
     cached = cache.path(cache.fetch(url))
     assert cached == cache.root / "objects" / "sha256" / (old["sha256"] + ".txt")
     cached.write_text("tampered")
-    with pytest.raises(corpus.OsteosarcError, match="modified"):
+    with pytest.raises(corpus.IntegrityError):
         corpus.download(url, tmp_path / "third.txt", cache=Cache(cache.root, offline=True))
 
 

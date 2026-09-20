@@ -3,15 +3,14 @@
 import gzip
 from hashlib import sha256
 import json
-from pathlib import Path
 
 import pysam
-from varcode import Variant
+from vaxrank.sid_test_data import sid_test_data, sid_variants
 
 from .osteosarc_fixture_support import indexed_genome, verify_gzip_digests
 
 
-DATA = Path(__file__).parent / "data" / "osteosarc"
+DATA = sid_test_data() / "osteosarc"
 SELECTION = json.loads((DATA / "selection.json").read_text())
 MANIFEST = json.loads((DATA / "manifest.json").read_text())
 
@@ -29,12 +28,8 @@ def load_osteosarc(directory):
         reference_name="GRCh38-osteosarc-six-transcript-subset",
         annotation_name="osteosarc-ensembl-subset", annotation_version=87,
         cache_directory=directory / "reference")
-    variants = {
-        record["gene"]: Variant(
-            record["chrom"].removeprefix("chr"), int(record["pos"]),
-            record["ref"], record["alt"], ensembl=genome)
-        for record in SELECTION["variants"]
-    }
+    variants = {record["gene"]: next(iter(sid_variants([record["variant_id"]]).to_varcode(
+        genome=genome, assembly="GRCh38"))) for record in SELECTION["variants"]}
     bams = {}
     for name, dataset in MANIFEST["datasets"].items():
         sam_data = gzip.decompress((DATA / dataset["file"]).read_bytes())

@@ -1,12 +1,11 @@
-"""Pinned 1.8.1 original-read inputs for actual final-selection comparisons."""
+"""Osteosarc-acquired historical cohorts for actual final-selection comparisons."""
 
 import json
-from pathlib import Path
 
 from isovar import run_isovar
 from isovar.cli import protein_sequence_creator_from_args, read_collector_from_args
 import pysam
-from varcode import Variant
+from vaxrank.sid_test_data import sid_test_data, sid_variants
 
 from vaxrank.cli import make_vaxrank_arg_parser
 from vaxrank.cli.isovar_config_args import resolve_isovar_args
@@ -15,7 +14,7 @@ from vaxrank.vaccine_config import VaccineConfig
 from .osteosarc_fixture_support import indexed_genome, verify_manifest_files
 
 
-DATA = Path(__file__).parent / "data" / "osteosarc" / "selection_validation"
+DATA = sid_test_data() / "osteosarc" / "selection_validation"
 
 
 def load_selection_inputs(directory):
@@ -38,10 +37,8 @@ def reconstruct_selection(inputs, variant_id, length=25, flags=(), variant=None)
     """Reconstruct a pinned case, optionally comparing another allele on its BAM."""
     genome, cases, metadata = inputs
     case = cases[variant_id]
-    record = case["variant"]
     if variant is None:
-        variant = Variant(record["chrom"].removeprefix("chr"), record["pos"],
-                          record["ref"], record["alt"], ensembl=genome)
+        variant, = sid_variants([variant_id]).to_varcode(genome=genome, assembly="GRCh38")
     config = VaccineConfig(preferred_peptide_length=length,
                            min_peptide_length=length, max_peptide_length=length)
     bam_path = DATA / "isovar" / case["bam"]

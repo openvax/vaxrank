@@ -4,20 +4,19 @@ from hashlib import sha256
 from concurrent.futures import ThreadPoolExecutor
 import errno
 import json
-from pathlib import Path
 import shutil
 import stat
 from types import SimpleNamespace
 
 from datacache import Cache, FileValidationError
 from isovar import ReadCollector
-import pysam
 import pytest
 
 from vaxrank import download_test_data as downloader
+from vaxrank.sid_test_data import sid_test_data, sid_reads
 
 
-DATA = Path(__file__).parent / "data/osteosarc/shared-v1"
+DATA = sid_test_data() / "osteosarc/shared-v1"
 MANIFEST = downloader.load_manifest()
 
 
@@ -195,7 +194,7 @@ def test_offline_and_verify_cli_do_not_fetch(tmp_path, tiny_manifest, monkeypatc
     assert error.value.code == 1
 
 
-def test_checked_in_subset_covers_all_original_vaccine_loci_offline(monkeypatch):
+def test_bundled_subset_covers_all_original_vaccine_loci_offline(monkeypatch):
     monkeypatch.setattr(Cache, "fetch", forbid_fetch)
     downloader.verify_dataset(DATA)
     identities = set()
@@ -209,7 +208,7 @@ def test_checked_in_subset_covers_all_original_vaccine_loci_offline(monkeypatch)
 
 @pytest.mark.parametrize("case", MANIFEST["cases"], ids=lambda c: c["case_id"])
 def test_original_bams_and_indexes_are_usable(case):
-    with pysam.AlignmentFile(DATA / case["bam"]) as bam:
+    with sid_reads("osteosarc/shared-v1/" + case["bam"]).open() as bam:
         assert bam.check_index()
         reads = list(bam)
         assert len(reads) == case["selected_record_count"]
@@ -227,14 +226,14 @@ def test_isovar_consumes_original_ntf3_compound_rna_without_network(tmp_path):
 
     # Existing pinned reference fixture includes NTF3; no genome download/cache
     # from the user's machine participates in this integration test.
-    reference = Path(__file__).parent / "data/osteosarc/selection_validation/isovar/reference"
+    reference = sid_test_data() / "osteosarc/selection_validation/isovar/reference"
     genome = indexed_genome(reference, reference_name="GRCh38-shared-subset-ntf3-test",
         annotation_name="shared-subset-ensembl", annotation_version=87,
         cache_directory=tmp_path / "reference")
     case, = [c for c in MANIFEST["cases"] if c["variant"]["gene"] == "NTF3"]
     allele = case["variant"]
     variant = Variant(allele["chrom"].removeprefix("chr"), allele["pos"], allele["ref"], allele["alt"], ensembl=genome)
-    with pysam.AlignmentFile(DATA / case["bam"]) as bam:
+    with sid_reads("osteosarc/shared-v1/" + case["bam"]).open() as bam:
         evidence = ReadCollector().read_evidence_for_variant(variant, bam)
     assert evidence.alt_reads
     # At this locus the adjacent reference G is T in the RNA: focal A>G alone
@@ -251,3 +250,13 @@ def test_export_failure_preserves_destination_absence(tmp_path, tiny_manifest, m
         downloader.download_test_data(tmp_path / "export", manifest_path=path, cache_root=tmp_path / "cache")
     assert not (tmp_path / "export").exists()
     assert not list(tmp_path.glob(".osteosarc-*"))
+
+
+def test_default_export_uses_only_packaged_reads(tmp_path, monkeypatch):
+    import socket
+    monkeypatch.setattr(downloader, "Cache", forbid_fetch)
+    monkeypatch.setattr(socket.socket, "connect", forbid_fetch)
+    missing_cache = tmp_path / "absent-cache"
+    output = downloader.download_test_data(tmp_path / "bundle", cache_root=missing_cache)
+    assert downloader.verify_dataset(output) == output
+    assert not missing_cache.exists()

@@ -78,7 +78,7 @@ def cached_predictor():
 
 
 def test_regeneration_refuses_to_overwrite_existing_evidence(tmp_path, monkeypatch):
-    from tests.data.osteosarc.selection_validation import generate_predictions
+    from examples.osteosarc_test_data import generate_predictions
 
     reconstruction = Mock(side_effect=AssertionError("Existing output must fail before reconstruction"))
     monkeypatch.setattr(generate_predictions, "load_selection_inputs", reconstruction)
@@ -90,7 +90,7 @@ def test_regeneration_refuses_to_overwrite_existing_evidence(tmp_path, monkeypat
 def test_pinned_predictions_are_complete_real_model_outputs():
     metadata = json.loads((DATA / "predictions_manifest.json").read_text())
     for filename, key in [("documented.json", "documented_sha256"),
-                          ("isovar/manifest.json", "input_manifest_sha256"),
+                          ("isovar/manifest.json", "bundled_input_manifest_sha256"),
                           ("netmhcpan42.tsv", "output_sha256")]:
         assert sha256((DATA / filename).read_bytes()).hexdigest() == metadata[key]
     # The cache records the versions that actually produced it; compare those
