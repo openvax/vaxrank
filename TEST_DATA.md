@@ -2,7 +2,7 @@
 
 Vaxrank packages **1,148 selected alignment records in 58 cohorts** in
 `vaxrank/data/sid-test-data.zip`. All Sid read fixtures are acquired through
-**osteosarc 0.1.1** from the public
+**osteosarc 0.1.2** from the public
 [CC0 Sid dataset](https://registry.opendata.aws/sid-osteosarc/).
 The archive contains no whole-source BAM, BAM index, dataset snapshot, or
 unselected regional reads. Its BAM indexes describe only the tiny selected BAMs.

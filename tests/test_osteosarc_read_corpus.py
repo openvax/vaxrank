@@ -7,7 +7,7 @@ from pathlib import Path
 import socket
 import sys
 
-from osteosarc import Cache
+from osteosarc import Cache, __version__ as osteosarc_version
 import pysam
 import pytest
 
@@ -288,7 +288,7 @@ def test_download_imports_verified_prior_bytes_into_the_shared_cache(tmp_path):
     exported = tmp_path / "second.txt"
     receipt = corpus.download(url, exported, cache=cache)
     assert exported.read_bytes() == local.read_bytes()
-    assert receipt["osteosarc_version"] == "0.1.1"
+    assert receipt["osteosarc_version"] == osteosarc_version
     cached = cache.path(cache.fetch(url))
     assert cached == cache.root / "objects" / "sha256" / (old["sha256"] + ".txt")
     cached.write_text("tampered")

@@ -3,7 +3,7 @@ numpy>=2.0.0,<3.0.0
 # HTTP retries via datacache's public API, without fetching during normal tests.
 datacache>=1.9.1,<2.0.0
 # Public data acquisition and original-read extraction for the osteosarc corpus.
-osteosarc==0.1.1
+osteosarc==0.1.2
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.6.4,<3.0.0
 # Varcode 7 supplies splice outcome sets unconditionally and defaults to fast
