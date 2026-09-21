@@ -950,8 +950,9 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
         if slot['wt_preds']:
             comparators[COMPARATOR_WT] = Peptide(
                 sequence=slot['wt_peptide'] or '',
-                source_sequence=slot['source'],
-                offset=slot['offset'],
+                # The row supplies a short WT peptide, not its surrounding
+                # protein. The mutant source window is not a WT sequence and
+                # must not be used to recover comparator flanks for rescoring.
                 predictions=tuple(slot['wt_preds']),
             )
         out.append(CandidateEpitope(

@@ -153,6 +153,7 @@ class ExternalPredictionKey:
     peptide: str = ""
     source_sequence: str = ""
     offset: int = 0
+    input_id: str = ""
 
     def __post_init__(self):
         if not self.source_format:
@@ -188,6 +189,8 @@ class ExternalPredictionKey:
     def payload(self, include_position=True) -> dict:
         """Return the canonical JSON-compatible identity fields."""
         result = asdict(self)
+        if not self.input_id:
+            result.pop("input_id")
         for name in self.NON_IDENTITY_FIELDS:
             result.pop(name, None)
         if not include_position:
