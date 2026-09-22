@@ -37,7 +37,9 @@ mhctools>=3.44.0,<4.0.0
 # cache was built from; below this floor CachedPredictor can emit duplicate
 # peptide_offset columns and crash TopiaryPredictor.predict_from_named_sequences,
 # which vaxrank#414's real-cache selection regression exercises directly.
-topiary>=5.55.1,<6.0.0
+# 5.68.2 rejects contradictory measurements within a selected observation
+# instead of changing scores and filters when external rows are reordered.
+topiary>=5.68.2,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0
