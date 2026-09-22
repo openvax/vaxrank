@@ -394,7 +394,8 @@ _MISSING_SENTINEL = object()
 
 _ARG_GROUPS = (
     ("Inputs", (
-        'vcf', 'bam', 'input_lens', 'input_pvacseq',
+        'vcf', 'bam', 'input_lens', 'input_pvacseq', 'external_input',
+        'external_predictions',
         'ensembl_release', 'genome', 'tumor_sample_name',
         'input_json_file',
     )),
@@ -908,7 +909,8 @@ def populate_default_output_paths(args):
     source = (
         'external'
         if (getattr(args, 'input_lens', None)
-            or getattr(args, 'input_pvacseq', None))
+            or getattr(args, 'input_pvacseq', None)
+            or getattr(args, 'external_input', None))
         else 'pipeline')
     auto_paths = _AUTO_OUTPUT_FILENAMES[source]
     filled = []
@@ -938,10 +940,12 @@ def write_run_summary(args, patient_info, source):
     if not output_dir:
         return
     lines = ["Vaxrank run summary", "=" * 19, ""]
-    if getattr(args, 'input_lens', None):
-        lines.append("Input: LENS report — %s" % args.input_lens)
-    elif getattr(args, 'input_pvacseq', None):
-        lines.append("Input: pVACseq report — %s" % args.input_pvacseq)
+    if source == 'external':
+        from ..external_rescoring import external_inputs
+        labels = {'lens': 'LENS', 'pvacseq': 'pVACseq'}
+        for fmt, path in external_inputs(args):
+            lines.append("Input: %s report — %s" % (labels[fmt], path))
+        lines.append("Prediction evidence: %s" % getattr(args, 'external_predictions', 'input'))
     else:
         lines.append("Input: full pipeline")
         for label, attr in (("vcf", "vcf"), ("bam", "bam")):
@@ -952,7 +956,8 @@ def write_run_summary(args, patient_info, source):
     if alleles:
         inferred = getattr(args, '_inferred_mhc_alleles_from_lens', None)
         note = " (inferred from report)" if (
-            source == 'external' and inferred) else ""
+            source == 'external' and inferred
+            and getattr(args, 'external_predictions', 'input') != 'fresh') else ""
         lines += ["", "MHC alleles%s: %s" % (note, ", ".join(alleles))]
 
     if patient_info is not None:
@@ -972,6 +977,7 @@ def write_run_summary(args, patient_info, source):
     lines += ["", "Outputs (relative to this directory):"]
     for label, attr in (
             ("neoepitope table", "output_csv"),
+            ("input predictions", "output_input_predictions"),
             ("ASCII report", "output_ascii_report"),
             ("PDF report", "output_pdf_report")):
         path = getattr(args, attr, '') or ''
@@ -1167,7 +1173,8 @@ def main(args_list=None):
 
     if (
             getattr(args, 'input_pvacseq', None)
-            or getattr(args, 'input_lens', None)):
+            or getattr(args, 'input_lens', None)
+            or getattr(args, 'external_input', None)):
         merged_config = load_vaxrank_config(args)
         epitope_config = epitope_config_from_args(
             args, merged_config=merged_config)
@@ -1230,7 +1237,9 @@ def main(args_list=None):
             if args._inferred_mhc_alleles_from_lens:
                 alleles = args._inferred_mhc_alleles_from_lens
                 logger.info(
-                    "Inferred %d MHC allele(s) from the report: %s",
+                    "%s %d MHC allele(s): %s",
+                    "Configured" if getattr(args, 'external_predictions', 'input') == 'fresh'
+                    else "Inferred from the report",
                     len(alleles), ", ".join(alleles))
         # Per-(peptide, allele) CSV / XLSX report is unique to the
         # external-input path; emit it before the shared dispatch.

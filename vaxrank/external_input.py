@@ -292,6 +292,7 @@ class ExternalRankingResult:
     """Construct ranking plus metadata from the same external-file parse."""
 
     ranked: list = dataclasses.field(default_factory=list)
+    entries: tuple = ()
     dna_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
     source_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
     input_summary: ExternalInputSummary = dataclasses.field(
@@ -695,6 +696,7 @@ class ExternalRankingAccumulator:
     """
 
     ranked: list = dataclasses.field(default_factory=list)
+    entries: list = dataclasses.field(default_factory=list)
     dna_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
     source_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
     annotation_results: list = dataclasses.field(default_factory=list)
@@ -713,6 +715,7 @@ class ExternalRankingAccumulator:
         source = entry.ranking_source
         if source is None:
             return
+        self.entries.append(entry)
         self.n_parseable += 1
         if entry.annotation is not None:
             self.annotation_results.append(entry.annotation)
@@ -738,6 +741,7 @@ class ExternalRankingAccumulator:
             source_name, id_label=transcript_id_label)
         log_varcode_agreement(self.annotation_results, source_name)
         return ExternalRankingResult(
+            entries=tuple(self.entries),
             ranked=ranked_sorted_by_target_score(self.ranked),
             dna_vaf_by_variant=self.dna_vaf_by_variant,
             source_vaf_by_variant=self.source_vaf_by_variant,
@@ -2094,6 +2098,13 @@ def load_external_ranked(args, epitope_config=None, vaccine_config=None,
             args, 'num_epitopes_per_vaccine_peptide', None),
     )
     genome = getattr(args, 'genome', None)
+
+    if (getattr(args, 'external_input', None)
+            or getattr(args, 'external_predictions', 'input') != 'input'
+            or getattr(args, 'output_input_predictions', None)
+            or (getattr(args, 'input_lens', None) and getattr(args, 'input_pvacseq', None))):
+        from .external_rescoring import load_unified_external
+        return load_unified_external(args, epitope_config, options, genome)
 
     for arg_name, reader, ranker, label in (
         ('input_lens', read_lens_report, lens_ranking_result, 'LENS report'),

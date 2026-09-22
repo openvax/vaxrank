@@ -683,7 +683,7 @@ def pvacseq_genomic_coordinates(path):
     return coordinates
 
 
-def read_pvacseq_report(path, epitope_config=None):
+def read_pvacseq_report(path, epitope_config=None, *, score_epitopes=True):
     """
     Import a pVACseq TSV and return a neoepitope report DataFrame ready
     for output.
@@ -760,8 +760,9 @@ def read_pvacseq_report(path, epitope_config=None):
     report_df.attrs["topiary_df"] = topiary_df
     epitopes = candidate_epitopes_from_rows(epitope_rows)
     from .epitope_dsl import attach_per_allele_scores
-    epitopes = attach_per_allele_scores(
-        epitopes, epitope_config, topiary_df=topiary_df)
+    if score_epitopes:
+        epitopes = attach_per_allele_scores(
+            epitopes, epitope_config, topiary_df=topiary_df)
     report_df = annotate_credited_alleles(report_df, epitopes)
     logger.info(
         "Loaded %d epitope(s) (%d row(s), %s flavor) from pVACseq file %s",
@@ -948,7 +949,7 @@ def lens_epitope_position(peptide, peptide_context):
     return peptide, peptide_context, offset
 
 
-def read_lens_report(path, epitope_config=None):
+def read_lens_report(path, epitope_config=None, *, score_epitopes=True):
     """
     Import a LENS report TSV and return a neoepitope report DataFrame
     plus a list of ``vaxrank.candidate_epitope.CandidateEpitope`` objects.
@@ -1234,8 +1235,9 @@ def read_lens_report(path, epitope_config=None):
     scoring_df = attach_source_annotations(
         epitopes_to_topiary_df(epitopes), records)
     report_df.attrs["topiary_df"] = scoring_df
-    epitopes = attach_per_allele_scores(
-        epitopes, epitope_config, topiary_df=scoring_df)
+    if score_epitopes:
+        epitopes = attach_per_allele_scores(
+            epitopes, epitope_config, topiary_df=scoring_df)
     report_df = annotate_credited_alleles(report_df, epitopes)
     logger.info(
         "Loaded %d epitope(s) (%d row(s) × %d predictor(s)) from %s",
@@ -1496,11 +1498,19 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     if topiary_df is None:
         topiary_df = epitopes_to_topiary_df(epitopes)
 
-    validate_dsl_against_predictions(
-        epitope_config, epitopes, topiary_df=topiary_df)
-
-    score_series = score_predictions(
-        epitopes, epitope_config, topiary_df=topiary_df)
+    # Historical sources retain their own model/version selection. Applying a
+    # global canonical method could remove every row from another source whose
+    # table never ran that method. Fresh rescoring uses one combined frame.
+    source_frames = report_df.attrs.get("input_score_frames")
+    if source_frames is None:
+        source_frames = [topiary_df]
+    scores = []
+    for source_frame in source_frames:
+        validate_dsl_against_predictions(
+            epitope_config, epitopes, topiary_df=source_frame)
+        scores.append(score_predictions(
+            epitopes, epitope_config, topiary_df=source_frame))
+    score_series = pd.concat(scores) if scores else pd.Series(dtype=float)
 
     # score_series is indexed by the stable prediction identity, peptide,
     # offset, and allele. If an exact row is absent, the DSL filtered it out.
@@ -1554,8 +1564,11 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     report_df.insert(5, 'vaxrank_exclusion_reason', exclusion_reasons)
 
     report_df = report_df.sort_values(
-        'vaxrank_score', ascending=False, na_position='last')
+        'vaxrank_score', ascending=False, na_position='last', kind='stable')
     report_df.insert(0, 'rank', range(1, len(report_df) + 1))
+    if 'Input source' in report_df.columns:
+        report_df.insert(1, 'source_rank',
+                         report_df.groupby('Input source', sort=False).cumcount() + 1)
 
     if csv_report_path:
         _ensure_parent_dir(csv_report_path)
