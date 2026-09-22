@@ -909,6 +909,58 @@ def _candidate(*predictions):
         patient_alleles=("HLA-A*02:01",), predictions=predictions)
 
 
+@pytest.mark.parametrize("filter_expr", [None, "affinity.value < 55"])
+def test_conflicting_external_measurements_cannot_depend_on_input_order(filter_expr):
+    from vaxrank.epitope_dsl import score_predictions, attach_per_allele_scores
+
+    frame = _predictions_df([
+        dict(prediction_id="x", peptide="SIINFEKL", allele="HLA-A*02:01", value=value)
+        for value in (50., 60.)
+    ])
+    cfg = EpitopeConfig(score_expr="affinity.value", filter_expr=filter_expr, min_epitope_score=0.)
+    original = frame.copy(deep=True)
+    for ordered in (frame, frame.iloc[::-1]):
+        for consumer in (score_predictions, attach_per_allele_scores):
+            with pytest.raises(ValueError, match="Conflicting prediction measurements"):
+                consumer([_candidate()], cfg, topiary_df=ordered)
+    pd.testing.assert_frame_equal(frame, original)
+
+
+@pytest.mark.parametrize("values,expected", [([50., 50.], 50.), ([None, 50.], 50.),
+                                              ([None, None], 0.)])
+def test_compatible_external_measurements_reach_per_allele_scores(values, expected):
+    from vaxrank.epitope_dsl import score_predictions, attach_per_allele_scores
+
+    frame = _predictions_df([
+        dict(prediction_id="x", peptide="SIINFEKL", allele="HLA-A*02:01", value=value)
+        for value in values
+    ])
+    cfg = EpitopeConfig(score_expr="affinity.value", min_epitope_score=0.)
+    for ordered in (frame, frame.iloc[::-1]):
+        assert score_predictions([_candidate()], cfg, topiary_df=ordered).tolist() == [expected]
+        [scored] = attach_per_allele_scores([_candidate()], cfg, topiary_df=ordered)
+        assert dict(scored.per_allele_scores) == {"HLA-A*02:01": expected}
+
+
+def test_independent_prediction_runs_remain_separate_vaccine_candidates():
+    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.epitope_dsl import attach_per_allele_scores
+
+    candidates = [CandidateEpitope(sequence="SIINFEKL", offset=0, prediction_id=run,
+                                   patient_alleles=("HLA-A*02:01",), predictions=())
+                  for run in ("run-one", "run-two")]
+    frame = _predictions_df([
+        dict(prediction_id=run, prediction_run_name=run, peptide="SIINFEKL",
+             allele="HLA-A*02:01", value=value)
+        for run, value in zip(("run-one", "run-two"), (50., 60.))
+    ])
+    cfg = EpitopeConfig(score_expr="affinity.value", min_epitope_score=0.)
+    for ordered in (frame, frame.iloc[::-1]):
+        scored = attach_per_allele_scores(candidates, cfg, topiary_df=ordered)
+        assert {epitope.prediction_id: epitope.per_allele_scores["HLA-A*02:01"]
+                for epitope in scored} == {"run-one": 50., "run-two": 60.}
+
+
 @pytest.mark.parametrize("missing", UNSTATED_SPELLINGS)
 def test_every_spelling_of_no_version_reaches_the_frame_the_same_way(missing):
     """One meaning, one representation.
