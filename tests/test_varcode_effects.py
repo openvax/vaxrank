@@ -211,3 +211,19 @@ def test_template_data_include_manufacturability_override():
         'include_manufacturability'] is True                    # explicit follow
     assert make(include_manufacturability=False)[
         'include_manufacturability'] is False                   # forced off (core/mrna)
+
+
+def test_candidate_paths_preserve_nested_provenance_and_ignore_cycles():
+    from vaxrank.varcode_effects import iter_varcode_candidate_paths
+    outer, likely, priority = _outcome_set()
+    inner = _FakeOutcomeSet(likely, priority)
+    outer._candidates = (EffectCandidate(inner, source="outer", evidence={"sample": "x"}),)
+    inner._candidates = (
+        EffectCandidate(likely, source="first"),
+        EffectCandidate(priority, source="second"),
+        EffectCandidate(outer, source="cycle"),
+    )
+    paths = list(iter_varcode_candidate_paths(outer))
+    assert [[c.source for c in p] for p in paths] == [["outer", "first"], ["outer", "second"]]
+    assert [p[-1].effect for p in paths] == [likely, priority]
+    assert paths[0][0].evidence == {"sample": "x"}

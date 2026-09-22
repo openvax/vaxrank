@@ -12,8 +12,9 @@
 
 
 import logging
+import hashlib
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Optional
 
 from serializable import DataclassSerializable
 from varcode.effects import top_priority_effect
@@ -24,6 +25,7 @@ from .varcode_effects import (
     OUTCOME_SELECTION_MOST_LIKELY,
     OUTCOME_SELECTION_MULTI_OUTCOME,
     select_varcode_effect_outcome,
+    iter_varcode_candidate_paths,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,6 +62,65 @@ def find_mutation_region(reference_protein, mutant_protein):
         return min_len, len(mutant_protein)
 
     return start, mut_i
+
+
+def _dna_protein_candidates(variant):
+    """Resolve usable proteins before applying consequence priority.
+
+    A set-level change flag says nothing about its primary protein. Structural
+    and splice outcomes must supply their own translation; applying the point
+    variant to one transcript would substitute a different biological outcome.
+    """
+    from varcode.effects import StructuralVariantEffect, SpliceMechanismEffect
+    from varcode.effects.sequence_change import structural_sequence_changes
+    from varcode.mutant_transcript import apply_variant_to_transcript
+
+    for outcomes in variant.effects():
+        for path in iter_varcode_candidate_paths(outcomes):
+            effect = path[-1].effect
+            transcript = effect.transcript
+            if transcript is None:
+                continue
+            reference = transcript.protein_sequence
+            if not reference:
+                continue
+            structural = isinstance(effect, StructuralVariantEffect)
+            changed = (structural_sequence_changes(effect)[1] if structural
+                       else effect.modifies_protein_sequence)
+            if changed is not True:
+                continue
+            model = getattr(effect, "mutant_transcript", None)
+            if model is not None and (model.evidence or {}).get(
+                    "protein_completeness", "start_to_stop") != "start_to_stop":
+                continue
+            protein = getattr(effect, "mutant_protein_sequence", None)
+            if protein is None and model is not None:
+                protein = model.mutant_protein_sequence
+            if (protein is None and not structural
+                    and not isinstance(effect, SpliceMechanismEffect)):
+                model = apply_variant_to_transcript(variant, transcript)
+                if model is not None:
+                    protein = model.mutant_protein_sequence
+            if not protein or protein == reference:
+                continue
+            start, end = find_mutation_region(reference, protein)
+            # A terminal truncation supplies no altered residues or internal
+            # junction in the remaining protein. Internal deletions stay usable.
+            if start >= len(protein):
+                continue
+            provenance = dict(
+                effect_type=type(effect).__name__,
+                transcript_id=transcript.id,
+                partner_transcript_id=getattr(getattr(effect, "partner_transcript", None), "id", None),
+                five_prime_transcript_id=getattr(getattr(effect, "five_prime_transcript", None), "id", None),
+                three_prime_transcript_id=getattr(getattr(effect, "three_prime_transcript", None), "id", None),
+                protein_sha256=hashlib.sha256(protein.encode("ascii")).hexdigest(),
+                reference_protein_sha256=hashlib.sha256(reference.encode("ascii")).hexdigest(),
+                mutation_start=start,
+                mutation_end=end,
+                candidate_path=[dict(source=c.source, evidence=dict(c.evidence)) for c in path],
+            )
+            yield outcomes, effect, protein, provenance
 
 
 # Read-count vocabulary, all of it topiary's. Two orthogonal axes:
@@ -261,6 +322,14 @@ class MutantProteinFragment(DataclassSerializable):
     # was previously answerable only for a whole file.
     sequence_source: str = ""
 
+    # Identity and provenance of the DNA outcome used to build this fragment.
+    # Store data instead of Varcode's cyclic SV effect graph (varcode#438).
+    # Defaults preserve compatibility with earlier serialized fragments.
+    dna_effect_selection: Optional[dict] = None
+    # Explicit coordinates are needed for windows entirely inside a changed
+    # region, where clipping the local mutation offset loses the window start.
+    protein_start_offset: Optional[int] = None
+
     @staticmethod
     def slp_window_around_mutation(
             protein_aa, mut_start, mut_end, target_length):
@@ -351,10 +420,10 @@ class MutantProteinFragment(DataclassSerializable):
         using varcode's MutantTranscript.  Used as an opt-in fallback when
         isovar has no RNA support for a variant.
 
-        Transcript selection: varcode returns splice outcome sets; collapse
-        each to its highest-priority concrete outcome, then choose the most
-        protein-disruptive effect. Within that tier, pick the longest mutant
-        protein, breaking ties by lex-sorted transcript ID.
+        Enumerate concrete outcomes and retain usable, changed proteins before
+        choosing the most protein-disruptive effect. Within that tier, prefer
+        the longest mutant protein, then lex-sorted transcript and partner IDs.
+        Candidate provenance and the selected transcript pair stay attached.
 
         Parameters
         ----------
@@ -367,65 +436,29 @@ class MutantProteinFragment(DataclassSerializable):
         MutantProteinFragment or None
         """
         from varcode.effects.effect_ordering import effect_priority
-        from varcode.mutant_transcript import apply_variant_to_transcript
 
-        effects = variant.effects()
-        coding_effects = [
-            select_varcode_effect_outcome(e, OUTCOME_SELECTION_HIGHEST_PRIORITY)
-            for e in effects
-        ]
-        coding_effects = [
-            e for e in coding_effects
-            if (
-                e is not None and
-                hasattr(e, 'transcript') and
-                e.modifies_protein_sequence)
-        ]
-        if not coding_effects:
+        candidates = list(_dna_protein_candidates(variant))
+        if not candidates:
             logger.debug(
-                "No protein-modifying effects for %s, skipping DNA fallback",
+                "No usable protein-changing outcomes for %s, skipping DNA fallback",
                 variant.short_description)
             return None
 
-        # Prefer the most protein-disruptive concrete outcome, then choose
-        # the longest protein / lex-sorted transcript within that tier.
-        best_priority = max(effect_priority(e) for e in coding_effects)
-        same_tier = [
-            e for e in coding_effects
-            if effect_priority(e) == best_priority
-        ]
-        same_tier.sort(key=lambda e: (
-            -len(
-                getattr(e, 'mutant_protein_sequence', None) or
-                e.transcript.protein_sequence or ''),
-            e.transcript.id,
-        ))
-        best_effect = same_tier[0]
+        _, best_effect, mut_protein, selection = min(
+            candidates,
+            key=lambda row: (
+                -effect_priority(row[1]), -len(row[2]),
+                row[3]["transcript_id"],
+                row[3]["partner_transcript_id"] or "",
+                row[3]["five_prime_transcript_id"] or "",
+                row[3]["three_prime_transcript_id"] or "",
+            ))
         transcript = best_effect.transcript
-
-        mut_protein = getattr(best_effect, 'mutant_protein_sequence', None)
-        if mut_protein is None:
-            mt = getattr(best_effect, 'mutant_transcript', None)
-            if mt is not None:
-                mut_protein = mt.mutant_protein_sequence
-        if mut_protein is None:
-            mt = apply_variant_to_transcript(variant, transcript)
-            if mt is not None:
-                mut_protein = mt.mutant_protein_sequence
-        if mut_protein is None:
-            logger.debug(
-                "MutantTranscript construction failed for %s on %s",
-                variant.short_description, transcript.id)
-            return None
-
-        ref_protein = transcript.protein_sequence
-        if not ref_protein:
-            return None
-
-        # Locate the mutation in the protein
-        mut_start, mut_end = find_mutation_region(ref_protein, mut_protein)
-        if mut_start >= len(mut_protein):
-            return None
+        transcripts = [transcript]
+        partner = getattr(best_effect, "partner_transcript", None)
+        if partner is not None and partner.id != transcript.id:
+            transcripts.append(partner)
+        mut_start, mut_end = selection["mutation_start"], selection["mutation_end"]
 
         # Extract a window of protein_sequence_length centered on the mutation
         mutation_midpoint = (mut_start + mut_end) // 2
@@ -452,7 +485,9 @@ class MutantProteinFragment(DataclassSerializable):
             n_ref_reads=0,
             n_alt_reads_supporting_protein_sequence=0,
             sequence_source=SEQUENCE_SOURCE_VARCODE_TRANSLATION,
-            supporting_reference_transcripts=[transcript],
+            supporting_reference_transcripts=transcripts,
+            dna_effect_selection=selection,
+            protein_start_offset=window_start,
         )
 
     # ── RNA evidence, in whichever unit the source actually has ──────────
@@ -628,6 +663,8 @@ class MutantProteinFragment(DataclassSerializable):
                 subsequence_mutant_protein_fragment = replace(
                     self,
                     amino_acids=amino_acids,
+                    protein_start_offset=(None if self.protein_start_offset is None
+                                          else self.protein_start_offset + subsequence_start_offset),
                     mutant_amino_acid_start_offset=mutant_amino_acid_start_offset,
                     mutant_amino_acid_end_offset=mutant_amino_acid_end_offset)
                 yield subsequence_start_offset, subsequence_mutant_protein_fragment
@@ -655,6 +692,11 @@ class MutantProteinFragment(DataclassSerializable):
             self,
             outcome_selection=OUTCOME_SELECTION_HIGHEST_PRIORITY):
         """Top-priority varcode effect across the supporting transcripts.
+
+        DNA fallback fragments instead return their recorded usable outcome.
+        Sequence digests and candidate provenance must still match; otherwise
+        return None. Explicit most-likely and multi-outcome modes expose that
+        outcome's original set for comparison and reporting.
 
         Varcode represents splice-disrupting variants as multi-outcome
         sets. By default vaxrank collapses those sets to the highest-priority
@@ -684,6 +726,17 @@ class MutantProteinFragment(DataclassSerializable):
                 OUTCOME_SELECTION_MOST_LIKELY,
                 OUTCOME_SELECTION_MULTI_OUTCOME}:
             select_varcode_effect_outcome(None, outcome_selection)
+        if self.dna_effect_selection is not None:
+            for outcomes, effect, _protein, provenance in _dna_protein_candidates(self.variant):
+                if provenance == self.dna_effect_selection:
+                    if outcome_selection == OUTCOME_SELECTION_MULTI_OUTCOME:
+                        return outcomes
+                    if outcome_selection == OUTCOME_SELECTION_MOST_LIKELY:
+                        return select_varcode_effect_outcome(outcomes, outcome_selection)
+                    return effect
+            # Annotation or candidate provenance changed: do not silently attach
+            # another outcome to the saved protein.
+            return None
         if not self.supporting_reference_transcripts:
             return None
         # Imported here to keep the module-load cost down and avoid a
@@ -719,6 +772,8 @@ class MutantProteinFragment(DataclassSerializable):
         return best
 
     def global_start_pos(self):
+        if self.protein_start_offset is not None:
+            return self.protein_start_offset
         # position of mutation start relative to the full amino acid sequence
         effect = self.predicted_effect()
         if effect is None:

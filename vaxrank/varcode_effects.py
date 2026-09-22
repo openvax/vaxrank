@@ -1,6 +1,7 @@
 from collections import OrderedDict
 
 from varcode import MultiOutcomeEffect
+from varcode.effect_candidates import EffectCandidate
 
 
 OUTCOME_SELECTION_HIGHEST_PRIORITY = "highest_priority"
@@ -16,6 +17,39 @@ OUTCOME_SELECTIONS = {
 
 def is_multi_outcome_effect(effect):
     return isinstance(effect, MultiOutcomeEffect)
+
+
+def iter_varcode_candidate_paths(effect):
+    """Yield concrete candidates with their enclosing provenance wrappers.
+
+    Structural effects include themselves as a concrete primary. Visit that
+    primary once, while still traversing alternatives and nested outcome sets.
+    Distinct transcript pairs and provenance paths are never deduplicated.
+    """
+    def walk(candidate, path, ancestors):
+        current = candidate.effect
+        if current is None:
+            return
+        if not is_multi_outcome_effect(current):
+            yield path + (candidate,)
+            return
+        if id(current) in ancestors:
+            return
+        for child in current.candidates:
+            if child.effect is current:
+                # Keep the incoming wrapper: it may carry external provenance.
+                yield path + (candidate,)
+            else:
+                yield from walk(child, path + (candidate,), ancestors | {id(current)})
+
+    if is_multi_outcome_effect(effect):
+        for candidate in effect.candidates:
+            if candidate.effect is effect:
+                yield (candidate,)
+            else:
+                yield from walk(candidate, (), {id(effect)})
+    elif effect is not None:
+        yield (EffectCandidate(effect),)
 
 
 def select_varcode_effect_outcome(

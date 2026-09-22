@@ -626,6 +626,12 @@ are part of the intended design. The RNA support thresholds remain unchanged.
 RNA settings are saved with run arguments and do not rerun reconstruction
 when rendering cached reports or ranking external pVACseq/LENS predictions.
 DNA-only fallback remains opt-in, with its existing separate padding default.
+It examines concrete Varcode outcomes before choosing a usable changed protein,
+including alternatives behind unchanged or unresolved fusion candidates. Among
+usable outcomes it prefers consequence priority, then protein length and
+transcript-pair IDs. Saved fragments retain the chosen candidate's provenance
+and protein coordinates. These are sequence predictions, with no RNA support
+assigned by the fallback.
 
 ### Custom filtering and scoring with the topiary DSL
 
