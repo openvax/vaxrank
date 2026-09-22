@@ -186,3 +186,149 @@ def test_dna_fallback_enabled_attempts_construction(genome):
     assert frag is not None
     assert frag.n_alt_reads == 0
     assert frag.gene_name == "BRAF"
+
+
+@pytest.fixture
+def fusion_candidates(genome, monkeypatch):
+    """Real Varcode objects with synthetic proteins, not patient observations."""
+    from varcode import MutantTranscript, StructuralVariant
+    from varcode.effects import GeneFusion
+    from varcode.effect_candidates import EffectCandidate
+
+    transcript = genome.transcript_by_id("ENST00000003084")  # CFTR
+    partner = genome.transcript_by_id("ENST00000269305")  # TP53
+    variant = StructuralVariant(
+        "7", 117171168, "BND", mate_contig="17", mate_start=7577121,
+        genome=genome)
+    reference = transcript.protein_sequence
+    changed = reference[:40] + "WQWQWQWQWQ" + reference[50:]
+
+    def build(primary_protein, alternative_protein=changed, alternative_partner=partner):
+        def outcome(protein, partner):
+            model = None if protein is None else MutantTranscript(
+                reference_transcript=transcript, mutant_protein_sequence=protein,
+                annotator_name="synthetic-selection-fixture")
+            return GeneFusion(variant, transcript, partner, mutant_transcript=model)
+
+        primary = outcome(primary_protein, partner)
+        alternative = outcome(alternative_protein, alternative_partner)
+        primary._extra_candidates = (EffectCandidate(
+            alternative, source="selection-fixture",
+            evidence={"junction": "synthetic", "rna_support": None}),)
+        monkeypatch.setattr(StructuralVariant, "effects", lambda self: [primary])
+        return variant, primary, alternative
+
+    return build, reference, changed, transcript, partner
+
+
+@pytest.mark.parametrize("primary_kind", ["unchanged", "unresolved", "empty", "truncated", "ambiguous"])
+def test_dna_fusion_selects_usable_alternative(fusion_candidates, primary_kind):
+    from vaxrank.varcode_effects import select_varcode_effect_outcome
+
+    build, reference, changed, transcript, partner = fusion_candidates
+    primary_protein = {"unchanged": reference, "unresolved": None,
+                       "empty": "", "truncated": reference[:40],
+                       "ambiguous": reference[:40] + "X" + reference[41:]}[primary_kind]
+    variant, primary, alternative = build(primary_protein)
+    # The generic priority selector intentionally retains Varcode's semantics.
+    assert select_varcode_effect_outcome(primary) is primary
+    fragment = MutantProteinFragment.from_variant_dna(variant, 35)
+    assert fragment is not None
+    assert fragment.amino_acids == changed[28:63]
+    assert fragment.mutant_amino_acid_start_offset == 12
+    assert fragment.mutant_amino_acid_end_offset == 22
+    assert fragment.predicted_effect() is alternative
+    assert fragment.predicted_effect("multi_outcome") is primary
+    assert fragment.predicted_effect("most_likely") is primary
+    assert fragment.global_start_pos() == 28
+    assert fragment.supporting_reference_transcripts == [transcript, partner]
+    selection = fragment.dna_effect_selection
+    assert selection["transcript_id"] == transcript.id
+    assert selection["partner_transcript_id"] == partner.id
+    assert selection["five_prime_transcript_id"] == transcript.id
+    assert selection["three_prime_transcript_id"] == partner.id
+    assert selection["candidate_path"] == [dict(
+        source="selection-fixture", evidence={"junction": "synthetic", "rna_support": None})]
+    assert fragment.sequence_source == "varcode_translation"
+    assert fragment.rna_evidence_method == fragment.rna_evidence_subject == ""
+    assert fragment.n_alt_reads == fragment.n_alt_reads_supporting_protein_sequence == 0
+    assert fragment.n_alt_fragments is None
+
+
+@pytest.mark.parametrize("alternative_kind", ["unchanged", "unresolved", "empty", "truncated"])
+def test_dna_fusion_without_usable_protein_returns_none(fusion_candidates, alternative_kind):
+    build, reference, _changed, _transcript, _partner = fusion_candidates
+    protein = {"unchanged": reference, "unresolved": None,
+               "empty": "", "truncated": reference[:40]}[alternative_kind]
+    variant, _, _ = build(None, protein)
+    assert MutantProteinFragment.from_variant_dna(variant, 35) is None
+
+
+def test_dna_fusion_selection_survives_json_and_subsequences(fusion_candidates):
+    build, reference, _changed, _transcript, _partner = fusion_candidates
+    variant, primary, alternative = build(reference)
+    fragment = MutantProteinFragment.from_variant_dna(variant, 35)
+    restored = MutantProteinFragment.from_json(fragment.to_json())
+    assert restored.dna_effect_selection == fragment.dna_effect_selection
+    assert restored.predicted_effect() is alternative
+    assert restored.supporting_reference_transcripts == fragment.supporting_reference_transcripts
+    for offset, part in restored.generate_subsequences(25):
+        assert part.dna_effect_selection == restored.dna_effect_selection
+        assert part.predicted_effect() is alternative
+        assert part.global_start_pos() == restored.global_start_pos() + offset
+    # A changed annotation must not attach a different effect to saved residues.
+    primary._extra_candidates = ()
+    assert restored.predicted_effect() is None
+
+
+def test_dna_fusion_ties_use_partner_identity_not_producer_order(fusion_candidates, genome):
+    build, _reference, changed, _transcript, partner = fusion_candidates
+    other = genome.transcript_by_id("ENST00000357654")  # BRCA1
+    variant, primary, alternative = build(changed, changed, other)
+    assert partner.id < other.id
+    assert MutantProteinFragment.from_variant_dna(variant, 35).predicted_effect() is primary
+    from varcode.effect_candidates import EffectCandidate
+    primary._primary_effects = (alternative,)
+    primary._extra_candidates = (EffectCandidate(primary),)
+    assert MutantProteinFragment.from_variant_dna(variant, 35).predicted_effect() is primary
+
+
+def test_dna_fusion_prefers_longest_usable_protein(fusion_candidates):
+    build, _reference, changed, _transcript, _partner = fusion_candidates
+    variant, _primary, alternative = build(changed, changed + "WQWQ")
+    assert MutantProteinFragment.from_variant_dna(variant, 35).predicted_effect() is alternative
+
+
+def test_dna_unresolved_high_priority_does_not_hide_usable_lower_priority(fusion_candidates):
+    from varcode.effects import Substitution
+    from varcode.effect_candidates import EffectCandidate
+    build, reference, _changed, transcript, _partner = fusion_candidates
+    variant, primary, _alternative = build(None, None)
+    substitution = Substitution(variant, transcript, 40, reference[40], "W")
+    primary._extra_candidates = (EffectCandidate(substitution),)
+    fragment = MutantProteinFragment.from_variant_dna(variant, 35)
+    assert fragment is not None
+    assert fragment.predicted_effect() is substitution
+
+
+def test_partial_fusion_observation_is_not_compared_as_a_whole_protein(fusion_candidates):
+    from dataclasses import replace
+    build, _reference, changed, _transcript, _partner = fusion_candidates
+    variant, _primary, alternative = build(None, changed[30:65])
+    alternative.mutant_transcript = replace(
+        alternative.mutant_transcript, evidence={"protein_completeness": "partial"})
+    assert MutantProteinFragment.from_variant_dna(variant, 35) is None
+
+
+def test_dna_wide_change_preserves_actual_window_coordinates(fusion_candidates):
+    build, reference, _changed, _transcript, _partner = fusion_candidates
+    changed = reference[:40] + "WQ" * 80 + reference[200:]
+    variant, _, alternative = build(None, changed)
+    fragment = MutantProteinFragment.from_variant_dna(variant, 35)
+    start = fragment.global_start_pos()
+    assert start == 103
+    assert fragment.amino_acids == changed[start:start + 35]
+    for offset, part in fragment.generate_subsequences(25):
+        assert part.global_start_pos() == start + offset
+        assert part.amino_acids == changed[start + offset:start + offset + 25]
+        assert part.predicted_effect() is alternative

@@ -6,11 +6,10 @@ datacache>=1.9.1,<2.0.0
 osteosarc==0.1.2
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.6.4,<3.0.0
-# Varcode 7 supplies splice outcome sets unconditionally and defaults to fast
-# annotation. Vaxrank uses its keyword-free effect API and outcome selection.
-# The consumed APIs remain compatible through Varcode 9; the full suite also
-# runs against 9.3.7. Keep the next unvalidated major outside the range.
-varcode>=7.0.0,<10.0.0
+# 9.3.7 supplies candidate-local SV sequence-change checks, including partial
+# proteins and uncertain selenocysteine decoding. DNA fallback must evaluate
+# each candidate instead of treating a set-level flag as its primary's status.
+varcode>=9.3.7,<10.0.0
 # 1.17.0 preserves sequenced-read identity across alternative alignments.
 isovar>=1.17.0,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
