@@ -130,6 +130,7 @@ def make_vaxrank_arg_parser():
              "When provided without --vcf/--bam, vaxrank scores and ranks the "
              "LENS predictions and writes the requested output reports.")
 
+    add_external_rescoring_args(arg_parser)
     add_mhc_args(arg_parser)
     add_vaccine_peptide_args(arg_parser)
     add_epitope_prediction_args(arg_parser)
@@ -800,6 +801,8 @@ _PRIMARY_OUTPUT_FLAGS = (
         "Isovar transcript-assembly intermediate CSV"),
     ("--output-epitopes",               "output_epitopes",
         "raw epitope predictions"),
+    ("--output-input-predictions",      "output_input_predictions",
+        "original external-table predictions"),
     ("--output-dir",                    "output_dir",
         "directory for assembled vaccine constructs "
         "(per-modality subdirs when --vaccine-type has 2+ entries)"),
@@ -907,7 +910,7 @@ def _require_ensembl_release_for_template_reports(args):
         return
     lens_path = getattr(args, 'input_lens', None)
     pvacseq_path = getattr(args, 'input_pvacseq', None)
-    if not (lens_path or pvacseq_path):
+    if not (lens_path or pvacseq_path or getattr(args, 'external_input', None)):
         return
     # Try to infer the build from the LENS file so the hint can name
     # a plausible release. pVACseq aggregates don't carry a build
@@ -960,9 +963,24 @@ def _require_ensembl_release_for_template_reports(args):
                     % (build, build, build))
     raise ValueError(
         "Template report(s) requested with --input-lens / "
-        "--input-pvacseq but no --ensembl-release set. Transcript "
+        "--input-pvacseq / --external-input but no --ensembl-release set. Transcript "
         "effect annotations would be empty (rendered as '—'), so "
         "vaxrank refuses to write a degraded report.%s" % hint)
+
+
+def add_external_rescoring_args(arg_parser):
+    arg_parser.add_argument(
+        "--external-input", action="append", default=None, metavar="FORMAT=PATH",
+        help="External candidate report: lens=PATH or pvacseq=PATH. Repeat to "
+             "rank several reports together for the same patient/reference assembly.")
+    arg_parser.add_argument(
+        "--external-predictions", choices=("input", "fresh"), default="input",
+        help="Reuse the input tables' original prediction values (default), or "
+             "rescore their reported candidates with the configured MHC predictors.")
+    arg_parser.add_argument(
+        "--output-input-predictions", default=None,
+        help="Also save original candidate predictions in Vaxrank's native CSV/TSV "
+             "format, including unknown versions and comparator provenance.")
 
 
 def external_input_arg_parser():
@@ -979,6 +997,13 @@ def external_input_arg_parser():
         version='Vaxrank %s' % (__version__,))
     arg_parser.add_argument("--input-pvacseq", default=None)
     arg_parser.add_argument("--input-lens", default=None)
+    add_external_rescoring_args(arg_parser)
+    add_mhc_args(arg_parser)
+    # Models are required only for fresh prediction; historical-only runs must
+    # neither require a model installation nor instantiate a predictor.
+    for action in arg_parser._actions:
+        if action.dest == 'mhc_predictor':
+            action.required = False
     arg_parser.add_argument(
         "--verbose", "-v", action="store_true", default=False)
     # ``--ensembl-release`` lets external-input runs resolve LENS /
@@ -1047,7 +1072,8 @@ def choose_arg_parser(args_list):
             for arg in args_list):
         return cached_run_arg_parser()
     elif any(
-            arg in ("--input-pvacseq", "--input-lens") or
+            arg in ("--input-pvacseq", "--input-lens", "--external-input") or
+            arg.startswith("--external-input=") or
             arg.startswith("--input-pvacseq=") or
             arg.startswith("--input-lens=")
             for arg in args_list):

@@ -1107,3 +1107,93 @@ the base and tags available during that run. Require this check with GitHub's
 **Require branches to be up to date before merging** option to prevent an old
 green result surviving another PR's release; otherwise rerun it after the
 target branch advances. The workflow itself does not change branch protection.
+
+### Unified external-candidate rescoring
+
+Combine LENS and pVACseq reports for one patient and reference assembly with
+repeatable `--external-input`. Rescore their reported candidate peptides and
+known wild-type comparator sequences with the same models and explicit HLA
+set, then use the usual peptide/mRNA vaccine design:
+
+```bash
+vaxrank \
+  --external-input lens=patient.lens.tsv \
+  --external-input pvacseq=patient.all_epitopes.tsv \
+  --external-predictions fresh \
+  --mhc-predictor mhcflurry-affinity \
+  --mhc-alleles 'HLA-A*02:01,HLA-B*07:02' \
+  --ensembl-release 93 \
+  --output-input-predictions original-predictions.tsv \
+  --vaccine-type peptide mrna \
+  --output-dir unified-vaccines
+```
+
+Fresh mode preserves each reported peptide's source window and supplies its
+available flanks to models that use context. It scores the existing candidate
+set; it does not discover additional windows or invent missing pVACseq flanks.
+The explicit HLA set requests every reported peptide on those alleles; this can
+add peptide-HLA combinations absent from the input. All sources share one
+Topiary DSL scoring configuration. Original table values for matching alleles
+appear in `Input ...` report columns; the original export also keeps alleles
+outside the newly requested set. Fresh values name their model, version,
+prediction kind and metric. Historical prediction columns remain available to
+custom DSL expressions under `input_` names, while canonical RNA/DNA/expression
+evidence keeps Topiary's vocabulary. Anonymous WT scores without a known WT
+sequence are retained in the original export but cannot be freshly predicted.
+Per-allele and allele-free models are supported; haplotype-mode models are
+rejected until their full genotype-scoped transport is supported.
+
+Use `--external-predictions input` (the default) to reuse the tables as cached
+pMHC prediction evidence. This import/scoring step does not initialize or run
+an MHC predictor; downstream processing annotations and linker optimization
+follow their own configuration:
+
+```bash
+vaxrank --external-input lens=patient.lens.tsv \
+  --external-input pvacseq=patient.all_epitopes.tsv \
+  --external-predictions input --ensembl-release 93 \
+  --mrna-no-optimize-linkers --output-dir historical-vaccines
+```
+
+Historical mode retains each source's predictor/version selection and applies
+the configured Topiary DSL within that source. This avoids treating a missing
+model in another report as missing biological evidence. The combined report
+includes `rank`, `source_rank`, `Input source`, `Input file`, and
+`Prediction evidence`. Its historical ordering compares source-derived scores;
+it does not calibrate different models onto a probability of immunogenicity.
+Fresh mode is the common-model comparison. Neither mode upgrades tumor
+specificity or overrides the existing admission policy for antigen classes.
+
+Every file gets a content-derived source identity. Identical peptides in
+different genes, transcripts or contexts remain distinct observations. Exact
+copies of an input file are rejected. Vaccine selection keeps one best
+source-derived window per biological source instead of adding RNA counts or
+scores across reports; all observations remain in the neoepitope report.
+Inputs must describe the same patient and assembly. The file formats do not
+always record enough information to verify that automatically.
+Choose the Ensembl release matching that assembly (93 above is an example).
+
+`Peptide sequence SHA256` and `Context sequence SHA256` link exact amino-acid
+matches without merging observations or abundance measurements. `Context extent`
+distinguishes a reported window from an epitope alone. These are sequence
+identities, not proof that two pipelines reconstructed the same full ORF.
+Different windows remain visible even when vaccine design selects one.
+See [ORF and evidence reconciliation](docs/unified_evidence.md) for the shared
+model and upstream work needed to combine complete ORFs with these observations.
+
+The original `--input-lens` and `--input-pvacseq` flags still work and can also
+use fresh mode. Original prediction exports use `vaxrank.epitope_io`'s
+`save_predictions` / `load_predictions` format. `InputTablePredictor` in
+`vaxrank.external_rescoring` replays these candidates by exact source/context
+identity, preserving unknown versions and sparse allele coverage. It raises
+on a cache miss; it never silently substitutes a current model or another
+source's historical score.
+
+Native Exacto ingestion is tracked in [Topiary #365](https://github.com/openvax/topiary/issues/365).
+The reusable contextual-rescoring and historical-cache APIs are tracked in
+[Topiary #367](https://github.com/openvax/topiary/issues/367) and
+[#368](https://github.com/openvax/topiary/issues/368). This entry point accepts
+LENS and pVACseq reports today; it does not claim native Exacto support.
+Generalized table ingestion and additive feature selection are tracked in
+[Vaxrank #497](https://github.com/openvax/vaxrank/issues/497) and
+[Topiary #366](https://github.com/openvax/topiary/issues/366).
