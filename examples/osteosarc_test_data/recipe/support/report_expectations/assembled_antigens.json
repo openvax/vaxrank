@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "description": "Evidence-gated protein inputs used for the expanded osteosarcoma Vaxrank panels.",
+  "antigens": [
+    {
+      "id": "GTF3C5-p-Glu503_Glu506del",
+      "gene_name": "GTF3C5",
+      "amino_acids": "KEQLTYESGEDEEDEEEEEDFKPSDGSEN",
+      "targetable_intervals": [[14, 16]],
+      "transcript_ids": ["ENST00000372108"],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/GTF3C5-chr9-133057893/",
+      "osteosarc_protein_context": "TYESGEDEEDEEEEEDFKPSDGSENEMET",
+      "source_metadata": {
+        "platform": "Oxford Nanopore and Illumina RNA",
+        "source_id": "53f498a544883d51",
+        "assembly_alt_fragments": "13",
+        "assembly_ref_fragments": "29",
+        "assembly_other_fragments": "5",
+        "assembly_supporting_fragments": "7",
+        "direct_alt_fragments_t1_ont": "117",
+        "direct_alt_fragments_t2_ont": "128",
+        "direct_alt_fragments_t1_short_rna": "7",
+        "direct_alt_fragments_t2_short_rna": "12",
+        "validation": "assembled translation and reference-plus-12-nt-deletion translation agree"
+      }
+    },
+    {
+      "id": "DYNC1H1-p-Val314Ile",
+      "gene_name": "DYNC1H1",
+      "amino_acids": "RESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLM",
+      "targetable_intervals": [[22, 23]],
+      "transcript_ids": ["ENST00000360184"],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/DYNC1H1-chr14-101980529/",
+      "osteosarc_protein_context": "KRESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLMKDFP",
+      "source_metadata": {
+        "platform": "Oxford Nanopore RNA",
+        "source_id": "53f498a544883d51",
+        "alt_observations": "48",
+        "ref_observations": "16",
+        "other_observations": "7",
+        "assembly_effect": "assembly on and off produce the same 45-aa sequence"
+      }
+    },
+    {
+      "id": "DYNC1H1-p-Gln3267His",
+      "gene_name": "DYNC1H1",
+      "amino_acids": "MVKDQQEAEKKKVMSQEIQEQLHKHQEVIADKQMSVKEDLDKVEPAVIE",
+      "targetable_intervals": [[24, 25]],
+      "transcript_ids": ["ENST00000360184"],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/DYNC1H1-chr14-102030200/",
+      "osteosarc_sequence_status": "The page annotates p.Gln3267His but does not publish a protein sequence context.",
+      "source_metadata": {
+        "platform": "Illumina bulk RNA",
+        "source_id": "1b66c15da594a3ef",
+        "alt_observations": "34",
+        "ref_observations": "17",
+        "other_observations": "0",
+        "assembly_effect": "assembly adds one supported upstream residue"
+      }
+    },
+    {
+      "id": "NAV2-p-Ala1809Val",
+      "gene_name": "NAV2",
+      "amino_acids": "GTAQSADLRIRRQHSSDSVSSINSVTSHSSVGSNIESDSKKKKRKNW",
+      "targetable_intervals": [[24, 25]],
+      "transcript_ids": ["ENST00000527559", "ENST00000540292"],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/NAV2-chr11-20080142/",
+      "osteosarc_protein_context": "CKGNGTAQSADLRIRRQHSSDSVSSINSVTSHSSVGSNIESDSKKKKRKN",
+      "source_metadata": {
+        "platform": "Illumina RNA",
+        "source_id": "8fda918141cedf55",
+        "alt_observations": "18",
+        "ref_observations": "16",
+        "other_observations": "0",
+        "isoform_resolution": "two compatible contributing transcript models"
+      }
+    },
+    {
+      "id": "TECPR1-p-Thr259fs",
+      "gene_name": "TECPR1",
+      "amino_acids": "SSWSLLDTPGEVVQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGP",
+      "targetable_intervals": [[24, 49]],
+      "transcript_ids": ["ENST00000447648"],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/TECPR1-chr7-98241127/",
+      "osteosarc_protein_context": "PEGSSWSLLDTPGEVVQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGPSWSLLDLKTGSCTSRWESAWSGLSPRTGRCGSEEASTLTIPAAPVGLRWLVR",
+      "source_metadata": {
+        "platform": "Illumina RNA",
+        "source_id": "8fda918141cedf55",
+        "alt_observations": "19",
+        "alt_templates": "17",
+        "ref_observations": "20",
+        "other_observations": "0",
+        "assembly_effect": "49 aa with overlap assembly versus 37 aa without"
+      }
+    },
+    {
+      "id": "GLIS3-p-Ser775fs",
+      "gene_name": "GLIS3",
+      "amino_acids": "QLPPLTAVDAGAERFAPSAPSPQPPESSSSFFNTAKNTASLYP",
+      "targetable_intervals": [[22, 43]],
+      "transcript_ids": [],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/GLIS3-chr9-3856149/",
+      "osteosarc_vaccine_sequence": "QPPESSSSFFNTAKNTASLYPAAIRFTPEVLSARNKLFFSTKWYPCPWILWAAAEVLSPTLPRFPENCAACQLLQCGAFV",
+      "source_metadata": {
+        "platform": "Illumina bulk RNA",
+        "source_id": "1b66c15da594a3ef",
+        "alt_observations": "10",
+        "ref_observations": "19",
+        "other_observations": "1",
+        "independent_exact_allele_audit": "9 T1 short-read alternate fragments",
+        "validation": "RNA translation matches the nominated 8-bp deletion"
+      }
+    },
+    {
+      "id": "RNF213-p-Ile1070delLeu",
+      "gene_name": "RNF213",
+      "amino_acids": "DILKHLLTLADVKHVFRLCGTDEKIANVTEDAKRLIAVADSVLTKVVGD",
+      "targetable_intervals": [[24, 25]],
+      "transcript_ids": [],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/RNF213-chr17-80327830/",
+      "osteosarc_protein_context": "ADNFNDILKHLLTLADVKHVFRLCGTDEKILANVTEDAKRLIAVADSVLTKVVGDLLSGT",
+      "source_metadata": {
+        "platform": "Illumina bulk RNA",
+        "source_id": "1b66c15da594a3ef",
+        "alt_observations": "39",
+        "alt_templates": "38",
+        "ref_observations": "17",
+        "other_observations": "16",
+        "direct_alt_fragments_t1_ont": "5",
+        "direct_alt_fragments_t2_ont": "14",
+        "direct_alt_fragments_t1_short_rna": "42",
+        "direct_alt_fragments_t2_short_rna": "11",
+        "validation": "RNA translation matches the nominated in-frame deletion"
+      }
+    },
+    {
+      "id": "KTN1-p-Leu340fs",
+      "gene_name": "KTN1",
+      "amino_acids": "QDALKKSSKGELTTLIHQLQEKDKFYSLL",
+      "targetable_intervals": [[24, 29]],
+      "transcript_ids": ["ENST00000395308", "ENST00000395309", "ENST00000395311", "ENST00000395314", "ENST00000413890", "ENST00000438792"],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/oncoanalyser/snv/",
+      "osteosarc_sequence_status": "The website reports p.Leu340fs but does not publish a sample-specific protein context.",
+      "source_metadata": {
+        "platform": "Oxford Nanopore RNA with Illumina corroboration",
+        "source_id": "2bc1fc291308debb",
+        "ont_alt_fragments": "10",
+        "ont_supporting_fragments": "9",
+        "ont_protein_context_aa": "29",
+        "illumina_alt_reads": "4",
+        "illumina_alt_fragments": "2",
+        "illumina_supporting_fragments": "2",
+        "illumina_protein_context_aa": "18",
+        "shared_mutation_overlapping_8_11mers": "20",
+        "ont_25mer_windows": "5",
+        "illumina_25mer_windows": "0",
+        "validation": "both platforms independently encode the same FYSLL frameshift tail; assembly on/off agrees"
+      }
+    },
+    {
+      "id": "MAP2-compound-haplotype",
+      "gene_name": "MAP2",
+      "amino_acids": "SQLEDRAHCHHLFKTVRIYQGRVVP",
+      "targetable_intervals": [[5, 25]],
+      "transcript_ids": ["ENST00000360351", "ENST00000447185"],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/MAP2-chr2-209694768/",
+      "osteosarc_protein_context": "EDSRTGLPPVTDENHVIVKTDSQLEDRAHCHHLFKTVRIYQGRVVPFTKALMIKFEEIWPQTFH",
+      "source_metadata": {
+        "platform": "Illumina RNA with ONT corroboration",
+        "source_id": "261f8be4ce5aa8c8",
+        "compound_genomic_edit": "chr2:209694769 CTGGGCTACTGTGTGTTCAATAAGTACACAGT>AGGG",
+        "q20_compound_reads_t1_illumina": "4",
+        "q20_compound_reads_t2_illumina": "2",
+        "q20_compound_reads_t2_ont": "1",
+        "validation": "translated edited-reference haplotype; not a whole-RNA protein reconstruction"
+      }
+    },
+    {
+      "id": "NTF3-compound-haplotype",
+      "gene_name": "NTF3",
+      "amino_acids": "NKLSKQMVDVSENYQSTLPK",
+      "targetable_intervals": [[10, 11]],
+      "transcript_ids": [],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/NTF3-chr12-5494381/",
+      "osteosarc_sequence_status": "The variants table annotates p.Lys69Ser; the page does not publish a protein sequence context.",
+      "source_metadata": {
+        "platform": "Illumina RNA with ONT corroboration",
+        "compound_genomic_edit": "chr12:5494381 AG>GT",
+        "alt_templates": "4",
+        "ref_templates": "4",
+        "validation": "RNA compound edit encodes serine; isolated A>G would encode arginine"
+      }
+    },
+    {
+      "id": "CD109-long-read-phased",
+      "gene_name": "CD109",
+      "amino_acids": "QPMAVNISANGFGFAICQLNVVYNVKASGSSRRRRSIQNQEAFDLDVAVKENKDDLNHVDLNVCTSFSGPGMSG",
+      "targetable_intervals": [[2, 3], [71, 72]],
+      "transcript_ids": ["ENST00000287097"],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/CD109-chr6-73818405/",
+      "osteosarc_sequence_status": "The page annotates p.Arg1310Met but does not publish a protein sequence context.",
+      "source_metadata": {
+        "platform": "Oxford Nanopore RNA",
+        "phased_alt_alt_umis": "21",
+        "exact_222nt_q20_reads": "3",
+        "coding_distance_nt": "207",
+        "genomic_distance_bp": "6181",
+        "illumina_phased_reads": "0",
+        "validation": "conditional translation of the phased interval"
+      }
+    },
+    {
+      "id": "ZNF436-long-read-context",
+      "gene_name": "ZNF436",
+      "amino_acids": "QHQRTHTGERPYDCNECGKSFGRSCHLIQHQTIHTGEKPHKCNECGKSF",
+      "targetable_intervals": [[24, 25]],
+      "transcript_ids": ["ENST00000314011", "ENST00000374608"],
+      "evidence_gate": "pass",
+      "osteosarc_url": "https://osteosarc.com/variant/ZNF436-chr1-23362762/",
+      "osteosarc_protein_context": "LIQHQRTHTGERPYDCNECGKSFGRSCHLIQHQTIHTGEKPHKCNECGKS",
+      "source_metadata": {
+        "platform": "Oxford Nanopore RNA",
+        "alt_templates": "3",
+        "ont_context_aa": "49",
+        "illumina_assembled_context_aa": "30",
+        "illumina_unassembled_context_aa": "29",
+        "validation": "both transcript translations independently match"
+      }
+    }
+  ]
+}

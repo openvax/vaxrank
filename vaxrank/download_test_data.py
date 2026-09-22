@@ -1,7 +1,7 @@
-"""Explicit, checksum-verified acquisition of the shared osteosarc test subset.
+"""Offline export of the bundled osteosarc test subset.
 
-Tests consume the checked-in subset offline; importing this module never fetches
-data. The cache convention is shared, not tied to a Vaxrank package version.
+The default exports package resources without network access. Explicit custom
+manifests retain the generic verified-download API for existing callers.
 """
 
 import argparse
@@ -19,13 +19,16 @@ from urllib.parse import urlsplit
 from datacache import Cache, FileValidationError, get_data_dir, validate_file
 
 
-DEFAULT_MANIFEST = Path(__file__).with_name("data") / "osteosarc-test-data-v1.json"
+DEFAULT_MANIFEST = None
 CACHE_NAMESPACE = "openvax"
 CACHE_ENVIRONMENT = "OPENVAX_DATA_CACHE"
 
 
 def load_manifest(path=DEFAULT_MANIFEST):
-    """Read and validate a trusted manifest without filesystem mutations."""
+    """Validate an explicit or bundled Sid manifest without downloads."""
+    if path is None:
+        from .sid_test_data import sid_test_data
+        path = sid_test_data() / "osteosarc/shared-v1/manifest.json"
     manifest = json.loads(Path(path).read_text())
     if manifest.get("schema_version") != 1 or not manifest.get("dataset") or not manifest.get("data_version"):
         raise ValueError("Unsupported test-data manifest")
@@ -44,7 +47,10 @@ def load_manifest(path=DEFAULT_MANIFEST):
             raise ValueError("Asset needs a lowercase SHA-256 digest")
         if type(asset["size_bytes"]) is not int or asset["size_bytes"] < 0:
             raise ValueError("Asset needs a nonnegative byte size")
-        if urlsplit(asset["url"]).scheme not in ("https", "http", "file"):
+        if "bundle_path" in asset:
+            if asset["bundle_path"] != "osteosarc/shared-v1/" + name:
+                raise ValueError("Invalid bundled asset path")
+        elif urlsplit(asset["url"]).scheme not in ("https", "http", "file"):
             raise ValueError("Unsupported asset URL scheme")
     cases = manifest.get("cases", [])
     if len({c["case_id"] for c in cases}) != len(cases):
@@ -112,7 +118,7 @@ def _publish_no_replace(staged, output):
 
 def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
                        cache_root=None, offline=False, repair_cache=False):
-    """Fetch verified objects, optionally publishing a new offline test subset.
+    """Export bundled Sid reads, or fetch an explicitly supplied custom manifest.
 
     Existing output directories are only validated, never overwritten. Failed
     downloads leave verified cache objects reusable but do not publish output.
@@ -125,27 +131,33 @@ def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
         output = Path(output).absolute()
         if output.exists() or output.is_symlink():
             return verify_dataset(output, manifest)
-    root = cache_root or os.environ.get(CACHE_ENVIRONMENT) or get_data_dir(CACHE_NAMESPACE)
-    cache = Cache(CACHE_NAMESPACE, cache_root=Path(root) / "objects" / "sha256")
-    paths = {}
-    for asset in manifest["assets"]:
-        name = cache_filename(asset)
-        expected = dict(expected_sha256=asset["sha256"], expected_size=asset["size_bytes"])
-        if offline:
-            path = cache.local_path(filename=name)
-            validate_file(path, **expected)
-        else:
-            force = False
-            if repair_cache:
-                try:
-                    validate_file(cache.local_path(filename=name), **expected)
-                except FileValidationError:
-                    force = True
-                except FileNotFoundError:
-                    pass
-            path = cache.fetch(asset["url"], filename=name, timeout=60,
-                               force=force, **expected)
-        paths[asset["filename"]] = Path(path)
+    if all("bundle_path" in asset for asset in manifest["assets"]):
+        from .sid_test_data import sid_test_data
+        bundled = sid_test_data() / "osteosarc/shared-v1"
+        verify_dataset(bundled, manifest)
+        paths = {asset["filename"]: bundled / asset["filename"] for asset in manifest["assets"]}
+    else:
+        root = cache_root or os.environ.get(CACHE_ENVIRONMENT) or get_data_dir(CACHE_NAMESPACE)
+        cache = Cache(CACHE_NAMESPACE, cache_root=Path(root) / "objects" / "sha256")
+        paths = {}
+        for asset in manifest["assets"]:
+            name = cache_filename(asset)
+            expected = dict(expected_sha256=asset["sha256"], expected_size=asset["size_bytes"])
+            if offline:
+                path = cache.local_path(filename=name)
+                validate_file(path, **expected)
+            else:
+                force = False
+                if repair_cache:
+                    try:
+                        validate_file(cache.local_path(filename=name), **expected)
+                    except FileValidationError:
+                        force = True
+                    except FileNotFoundError:
+                        pass
+                path = cache.fetch(asset["url"], filename=name, timeout=60,
+                                   force=force, **expected)
+            paths[asset["filename"]] = Path(path)
     if output is None:
         return paths
     output.parent.mkdir(parents=True, exist_ok=True)

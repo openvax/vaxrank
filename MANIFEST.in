@@ -5,7 +5,10 @@ include CLEAVAGE_AUDIT.md
 include CONSTRUCT_PROCESSING.md
 include TEST_DATA.md
 
-# Tests require repository-only helpers and genomic fixtures. Setuptools adds
-# test_*.py files to sdists by default; exclude the whole partial tree rather
-# than publishing test modules that cannot run from the archive.
+# The explicitly selected Sid bundle is package data. Repository-only tests
+# remain excluded; ship their read generator and reviewed recipe separately.
 prune tests
+
+include examples/osteosarc_test_data/build.py
+include examples/osteosarc_test_data/pin_catalog.py
+recursive-include examples/osteosarc_test_data/recipe *

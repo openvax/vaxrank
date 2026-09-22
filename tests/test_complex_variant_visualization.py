@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 import struct
 
 from vaxrank.complex_variant_visualization import (
@@ -168,9 +167,8 @@ def test_generate_adds_one_platform_overview_and_replaces_result_layout(tmp_path
 
 
 def test_committed_complex_inputs_cover_requested_cases_and_provenance():
-    source = (
-        Path(__file__).parents[1]
-        / "examples" / "osteosarc_complex_results" / "source")
+    from vaxrank.sid_test_data import sid_test_data
+    source = sid_test_data() / "report_expectations"
     antigens = json.loads((source / "assembled_antigens.json").read_text())
     rankings = json.loads((source / "assembled_rankings.json").read_text())
     sv_audits = json.loads((source / "sv_audits.json").read_text())

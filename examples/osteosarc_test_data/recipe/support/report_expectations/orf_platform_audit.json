@@ -1,0 +1,5595 @@
+{
+  "attribution": {
+    "known_germline_matches": 0,
+    "reason_known_germline_is_zero": "run_isovar has no matched-germline variant input; protein objects therefore retain non-focal differences as unexplained",
+    "somatic_phasing_capability": "shared-fragment phase groups are computed for multiple somatic variants supplied in one run",
+    "somatic_phasing_in_44_variant_audit": "not evaluable: no nominated pair is close enough to share a local RNA fragment",
+    "source_linked_compound_examples": [
+      "NTF3 AG>GT changes the isolated A>G Lys-to-Arg prediction to serine",
+      "MAP2 and CD109 require explicit compound-haplotype inputs in the extended Vaxrank examples"
+    ]
+  },
+  "full_matrix": {
+    "catalogued_product_count": 841,
+    "nonexact_records": [
+      {
+        "attribution_note": "The non-exact rows end one residue earlier than the isolated-edit window; other products recover the exact local sequence.",
+        "classification": "incomplete_local_context",
+        "platforms": [
+          "ILMN"
+        ],
+        "rows": [
+          {
+            "actual": "MVLLSTLGIVFQGEGPPISSCDTR",
+            "expected": [
+              "MVLLSTLGIVFQGEGPPISSCDTRT"
+            ],
+            "source_id": "75e0a2413c9d5e78",
+            "source_name": "rna-seq/reprocessed/TL-24-ALMY2X4KMV/TL-24-ALMY2X4KMV.Aligned.sortedByCoord.out.bam",
+            "supporting_fragments": 2
+          },
+          {
+            "actual": "MVLLSTLGIVFQGEGPPISSCDTR",
+            "expected": [
+              "MVLLSTLGIVFQGEGPPISSCDTRT"
+            ],
+            "source_id": "9b42d06ca2fa2370",
+            "source_name": "rna-seq/reprocessed/TL-24-KCVBE1UI1P/TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam",
+            "supporting_fragments": 2
+          }
+        ],
+        "variant_id": "NME1-chr17-51154443"
+      },
+      {
+        "attribution_note": "The RNA window contains an unexplained three-nucleotide transcript deletion; no matched DNA variant has yet been linked to it.",
+        "classification": "rna_protein_differs_from_isolated_edit",
+        "platforms": [
+          "ILMN"
+        ],
+        "rows": [
+          {
+            "actual": "TAAGGQGGPGVPGSDKQQQQQHIECVVGDKSS",
+            "expected": [
+              "TAAGGQGGPGVPGSDKQQQQQHIECVVCGDKS"
+            ],
+            "source_id": "fbeb5d8a415e4d18",
+            "source_name": "vendor/cegat/P116686_2_S000048/P116686_3.bam",
+            "supporting_fragments": 3
+          }
+        ],
+        "variant_id": "NR2F2-chr15-96332299"
+      },
+      {
+        "attribution_note": "RNA establishes the adjacent base change and compound AG>GT allele, changing Varcode's isolated Lys-to-Arg call to serine; germline versus somatic origin remains unresolved.",
+        "classification": "rna_protein_differs_from_isolated_edit",
+        "platforms": [
+          "ILMN",
+          "ONT"
+        ],
+        "rows": [
+          {
+            "actual": "DILKNKLSKQMVDVSENY",
+            "expected": [
+              "DILKNKLSKQMVDVRENY"
+            ],
+            "source_id": "71f33f4e5748f7d1",
+            "source_name": "T1/IPISRC044_T1_UCSF_cellranger/per_sample_outs/IPISRC044_T1_scrna_live/count/June2024_pfo-004-SYS2.bam",
+            "supporting_fragments": 2
+          },
+          {
+            "actual": "NSLIIKLIQADILKNKLSKQMVDVSENYQSTLP",
+            "expected": [
+              "NSLIIKLIQADILKNKLSKQMVDVRENYQSTLP"
+            ],
+            "source_id": "1b66c15da594a3ef",
+            "source_name": "genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+            "supporting_fragments": 3
+          },
+          {
+            "actual": "NSLIIKLIQADILKNKLSKQMVDVSENYQSTLP",
+            "expected": [
+              "NSLIIKLIQADILKNKLSKQMVDVRENYQSTLP"
+            ],
+            "source_id": "261f8be4ce5aa8c8",
+            "source_name": "T1 UCLA Tumor RNA oncoanalyser",
+            "supporting_fragments": 3
+          },
+          {
+            "actual": "DILKNKLSKQMVDVSENY",
+            "expected": [
+              "DILKNKLSKQMVDVRENY"
+            ],
+            "source_id": "c712686597d2160a",
+            "source_name": "T1 UCSF Tumor scRNA 2024-06 (Kamil CellRanger)",
+            "supporting_fragments": 2
+          },
+          {
+            "actual": "NSLIIKLIQADILKNKLSKQMVDVSENYQSTLP",
+            "expected": [
+              "NSLIIKLIQADILKNKLSKQMVDVRENYQSTLP"
+            ],
+            "source_id": "17b3aa4d6d59c035",
+            "source_name": "rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.bam",
+            "supporting_fragments": 3
+          },
+          {
+            "actual": "NSLIIKLIQADILKNKLSKQMVDVSENYQSTLP",
+            "expected": [
+              "NSLIIKLIQADILKNKLSKQMVDVRENYQSTLP"
+            ],
+            "source_id": "47b695c1a686c058",
+            "source_name": "T0 BostonGene Tumor RNA 2022-12 (BG009368 reprocessed)",
+            "supporting_fragments": 3
+          },
+          {
+            "actual": "DILKNKLSKQMVDVSENY",
+            "expected": [
+              "DILKNKLSKQMVDVRENY"
+            ],
+            "source_id": "c89442609fffd3f1",
+            "source_name": "ucsf/T1/illumina_bams/June2024_pfo-004-SYS2.bam",
+            "supporting_fragments": 2
+          },
+          {
+            "actual": "NKLSKQMVDVSENYQSTLPK",
+            "expected": [
+              "NKLSKQMVDVRENYQSTLPK"
+            ],
+            "source_id": "53f498a544883d51",
+            "source_name": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam",
+            "supporting_fragments": 9
+          },
+          {
+            "actual": "NKLSKQMVDVSENYQSTLPK",
+            "expected": [
+              "NKLSKQMVDVRENYQSTLPK"
+            ],
+            "source_id": "7010dd389c50467d",
+            "source_name": "T1 UCSF Tumor ONT 2024-06",
+            "supporting_fragments": 4
+          }
+        ],
+        "variant_id": "NTF3-chr12-5494381"
+      },
+      {
+        "attribution_note": "One ILMN product contains an additional amino-acid substitution; other products recover the isolated-edit sequence.",
+        "classification": "rna_protein_differs_from_isolated_edit",
+        "platforms": [
+          "ILMN"
+        ],
+        "rows": [
+          {
+            "actual": "NKGGKGGKKKKNKNSSKPQKK",
+            "expected": [
+              "NNGGKGGKKKKNKNSSKPQKK"
+            ],
+            "source_id": "93613df8b09e73ee",
+            "source_name": "kamil/tumor/output/T3_CD45neg/outs/unassigned_alignments.bam",
+            "supporting_fragments": 14
+          }
+        ],
+        "variant_id": "ROBO2-chr3-77607853"
+      },
+      {
+        "attribution_note": "One ILMN product contains an additional amino-acid substitution; other products recover the isolated-edit sequence.",
+        "classification": "rna_protein_differs_from_isolated_edit",
+        "platforms": [
+          "ILMN"
+        ],
+        "rows": [
+          {
+            "actual": "NGSYVRKKDDGCKAYWKVCFHYNLHKAQPAERFFDPNQRGKALH",
+            "expected": [
+              "NRSYVRKKDDGCKAYWKVCFHYNLHKAQPAERFFDPNQRGKALH"
+            ],
+            "source_id": "a5079ad06c1ef4ea",
+            "source_name": "T0 Personalis Tumor RNA oncoanalyser",
+            "supporting_fragments": 5
+          }
+        ],
+        "variant_id": "ZNF674-chrX-46501045"
+      },
+      {
+        "attribution_note": "Two ILMN products contain a divergent downstream protein context; other products recover the isolated-edit sequence.",
+        "classification": "rna_protein_differs_from_isolated_edit",
+        "platforms": [
+          "ILMN"
+        ],
+        "rows": [
+          {
+            "actual": "ETYGHLNALGESPTCSPEPCAPTGPAAPL",
+            "expected": [
+              "ETYGHLNALGIGGNKPALISWVEEEAELW"
+            ],
+            "source_id": "50da1d13e05059fd",
+            "source_name": "T2 UCLA Tumor RNA 2025-01",
+            "supporting_fragments": 3
+          },
+          {
+            "actual": "ETYGHLNALGESPTCSPEPCAPTGPAAPL",
+            "expected": [
+              "ETYGHLNALGIGGNKPALISWVEEEAELW"
+            ],
+            "source_id": "8fda918141cedf55",
+            "source_name": "rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam",
+            "supporting_fragments": 3
+          }
+        ],
+        "variant_id": "ZNF764-chr16-30557995"
+      }
+    ],
+    "platform_summary": [
+      {
+        "catalogued_products": 149,
+        "completed_source_variant_rows": 5894,
+        "platform": "ILMN",
+        "products_with_completed_rows": 134,
+        "variants_assessed": 44,
+        "variants_exact_in_at_least_one_product": 37,
+        "variants_nonexact_in_at_least_one_product": 6,
+        "variants_with_alt_evidence": 41,
+        "variants_with_both_exact_and_nonexact_products": 4,
+        "variants_with_validated_protein_window": 39
+      },
+      {
+        "catalogued_products": 6,
+        "completed_source_variant_rows": 259,
+        "platform": "ONT",
+        "products_with_completed_rows": 6,
+        "variants_assessed": 44,
+        "variants_exact_in_at_least_one_product": 29,
+        "variants_nonexact_in_at_least_one_product": 1,
+        "variants_with_alt_evidence": 36,
+        "variants_with_both_exact_and_nonexact_products": 0,
+        "variants_with_validated_protein_window": 30
+      },
+      {
+        "catalogued_products": 9,
+        "completed_source_variant_rows": 44,
+        "platform": "PacBio",
+        "products_with_completed_rows": 1,
+        "variants_assessed": 44,
+        "variants_exact_in_at_least_one_product": 3,
+        "variants_nonexact_in_at_least_one_product": 0,
+        "variants_with_alt_evidence": 3,
+        "variants_with_both_exact_and_nonexact_products": 0,
+        "variants_with_validated_protein_window": 3
+      }
+    ],
+    "source_variant_row_count": 7216,
+    "variant_count": 44
+  },
+  "paired_corpus": {
+    "assembly_effect_summary": [
+      {
+        "assembly_only": 0,
+        "changed_cases": [
+          {
+            "assembly_off_length": 47,
+            "assembly_off_sequence": "SGSDNDVEVIKVWNSRSRGGGERNVDETGNNPSVSLKLEESKATSSS",
+            "assembly_on_length": 49,
+            "assembly_on_sequence": "SGSGSDNDVEVIKVWNSRSRGGGERNVDETGNNPSVSLKLEESKATSSS",
+            "variant_id": "ATRX-chrX-77599465"
+          },
+          {
+            "assembly_off_length": 40,
+            "assembly_off_sequence": "EEKMRRAKLAKEKAENERLEKQQKREQLIDMNAEGDETGV",
+            "assembly_on_length": 49,
+            "assembly_on_sequence": "KENQKRRETEEKMRRAKLAKEKAENERLEKQQKREQLIDMNAEGDETGV",
+            "variant_id": "DIAPH1-chr5-141526090"
+          },
+          {
+            "assembly_off_length": 48,
+            "assembly_off_sequence": "VKDQQEAEKKKVMSQEIQEQLHKHQEVIADKQMSVKEDLDKVEPAVIE",
+            "assembly_on_length": 49,
+            "assembly_on_sequence": "MVKDQQEAEKKKVMSQEIQEQLHKHQEVIADKQMSVKEDLDKVEPAVIE",
+            "variant_id": "DYNC1H1-chr14-102030200"
+          },
+          {
+            "assembly_off_length": 44,
+            "assembly_off_sequence": "IAESAYRFTLGSVAGAVGATAVYPTDLVKTRMQNQRGSGSVVGE",
+            "assembly_on_length": 49,
+            "assembly_on_sequence": "IAESAYRFTLGSVAGAVGATAVYPTDLVKTRMQNQRGSGSVVGELMYKN",
+            "variant_id": "SLC25A12-chr2-171813470"
+          },
+          {
+            "assembly_off_length": 37,
+            "assembly_off_sequence": "VQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGP",
+            "assembly_on_length": 49,
+            "assembly_on_sequence": "SSWSLLDTPGEVVQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGP",
+            "variant_id": "TECPR1-chr7-98241127"
+          }
+        ],
+        "different_sequence": 5,
+        "neither": 5,
+        "no_assembly_only": 0,
+        "platform": "ILMN",
+        "same_sequence": 22
+      },
+      {
+        "assembly_only": 0,
+        "changed_cases": [],
+        "different_sequence": 0,
+        "neither": 2,
+        "no_assembly_only": 0,
+        "platform": "ONT",
+        "same_sequence": 14
+      },
+      {
+        "assembly_only": 0,
+        "changed_cases": [],
+        "different_sequence": 0,
+        "neither": 1,
+        "no_assembly_only": 0,
+        "platform": "PacBio",
+        "same_sequence": 0
+      }
+    ],
+    "case_count": 49,
+    "cases": [
+      {
+        "case_id": "00-ABCF2-chr7-151218156-f30f618fb76a0e49",
+        "gene": "ABCF2",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "f30f618fb76a0e49",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.D421E",
+            "transcript_id": "ENST00000222388",
+            "transcript_name": "ABCF2-003"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.D421E",
+            "transcript_id": "ENST00000287844",
+            "transcript_name": "ABCF2-001"
+          }
+        ],
+        "variant_id": "ABCF2-chr7-151218156"
+      },
+      {
+        "case_id": "01-ADGRF5-chr6-46856758-f30f618fb76a0e49",
+        "gene": "ADGRF5",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "f30f618fb76a0e49",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.N1279S",
+            "transcript_id": "ENST00000265417",
+            "transcript_name": "ADGRF5-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.N1279S",
+            "transcript_id": "ENST00000283296",
+            "transcript_name": "ADGRF5-201"
+          }
+        ],
+        "variant_id": "ADGRF5-chr6-46856758"
+      },
+      {
+        "case_id": "02-ATRX-chrX-77599465-1b66c15da594a3ef",
+        "gene": "ATRX",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "SGSDNDVEVIKVWNSRSRGGGERNVDETGNNPSVSLKLEESKATSSS",
+            "expected_amino_acids": [
+              "SGSDNDVEVIKVWNSRSRGGGERNVDETGNNPSVSLKLEESKATSSS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 6170,
+                "cdna_start": 6169,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "X",
+                  "ref": "C",
+                  "start": 77599465
+                },
+                "transcript_id": "ENST00000373344"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 6003,
+                "cdna_start": 6002,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "X",
+                  "ref": "C",
+                  "start": 77599465
+                },
+                "transcript_id": "ENST00000395603"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              22,
+              23
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 12,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "SGSGSDNDVEVIKVWNSRSRGGGERNVDETGNNPSVSLKLEESKATSSS",
+            "expected_amino_acids": [
+              "SGSGSDNDVEVIKVWNSRSRGGGERNVDETGNNPSVSLKLEESKATSSS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 6170,
+                "cdna_start": 6169,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "X",
+                  "ref": "C",
+                  "start": 77599465
+                },
+                "transcript_id": "ENST00000373344"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 6003,
+                "cdna_start": 6002,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "X",
+                  "ref": "C",
+                  "start": 77599465
+                },
+                "transcript_id": "ENST00000395603"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 12,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G1968R",
+            "transcript_id": "ENST00000373344",
+            "transcript_name": "ATRX-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G1930R",
+            "transcript_id": "ENST00000395603",
+            "transcript_name": "ATRX-002"
+          }
+        ],
+        "variant_id": "ATRX-chrX-77599465"
+      },
+      {
+        "case_id": "03-BMP1-chr8-22192067-53f498a544883d51",
+        "gene": "BMP1",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "AHMHCVWRISVTPGEKIILNFTTLDLYRSRLCWYDYVEVRDGFWR",
+            "expected_amino_acids": [
+              "AHMHCVWRISVTPGEKIILNFTTLDLYRSRLCWYDYVEVRDGFWR"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 1250,
+                "cdna_start": 1249,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "8",
+                  "ref": "T",
+                  "start": 22192067
+                },
+                "transcript_id": "ENST00000306349"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 1766,
+                "cdna_start": 1765,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "8",
+                  "ref": "T",
+                  "start": 22192067
+                },
+                "transcript_id": "ENST00000306385"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              22,
+              23
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 34,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "AHMHCVWRISVTPGEKIILNFTTLDLYRSRLCWYDYVEVRDGFWR",
+            "expected_amino_acids": [
+              "AHMHCVWRISVTPGEKIILNFTTLDLYRSRLCWYDYVEVRDGFWR"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 1250,
+                "cdna_start": 1249,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "8",
+                  "ref": "T",
+                  "start": 22192067
+                },
+                "transcript_id": "ENST00000306349"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 1766,
+                "cdna_start": 1765,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "8",
+                  "ref": "T",
+                  "start": 22192067
+                },
+                "transcript_id": "ENST00000306385"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              22,
+              23
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 34,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "53f498a544883d51",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.S366T",
+            "transcript_id": "ENST00000306349",
+            "transcript_name": "BMP1-010"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.S366T",
+            "transcript_id": "ENST00000306385",
+            "transcript_name": "BMP1-001"
+          },
+          {
+            "effect_class": "NoncodingTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "non-coding-transcript",
+            "transcript_id": "ENST00000471755",
+            "transcript_name": "BMP1-003"
+          },
+          {
+            "effect_class": "NoncodingTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "non-coding-transcript",
+            "transcript_id": "ENST00000520970",
+            "transcript_name": "BMP1-009"
+          },
+          {
+            "effect_class": "NoncodingTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "non-coding-transcript",
+            "transcript_id": "ENST00000521385",
+            "transcript_name": "BMP1-007"
+          }
+        ],
+        "variant_id": "BMP1-chr8-22192067"
+      },
+      {
+        "case_id": "04-BTD-chr3-15645183-1120a096937e29e1",
+        "gene": "BTD",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "PTLSKELYALGVVDGLHTVHGTYYI",
+            "expected_amino_acids": [
+              "PTLSKELYALGVVDGLHTVHGTYYI"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "G",
+                "cdna_end": 1436,
+                "cdna_start": 1435,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "3",
+                  "ref": "T",
+                  "start": 15645183
+                },
+                "transcript_id": "ENST00000303498"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 1625,
+                "cdna_start": 1624,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "3",
+                  "ref": "T",
+                  "start": 15645183
+                },
+                "transcript_id": "ENST00000383778"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 1565,
+                "cdna_start": 1564,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "3",
+                  "ref": "T",
+                  "start": 15645183
+                },
+                "transcript_id": "ENST00000437172"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 1421,
+                "cdna_start": 1420,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "3",
+                  "ref": "T",
+                  "start": 15645183
+                },
+                "transcript_id": "ENST00000449107"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              12,
+              13
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 19,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "PTLSKELYALGVVDGLHTVHGTYYI",
+            "expected_amino_acids": [
+              "PTLSKELYALGVVDGLHTVHGTYYI"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "G",
+                "cdna_end": 1436,
+                "cdna_start": 1435,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "3",
+                  "ref": "T",
+                  "start": 15645183
+                },
+                "transcript_id": "ENST00000303498"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 1625,
+                "cdna_start": 1624,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "3",
+                  "ref": "T",
+                  "start": 15645183
+                },
+                "transcript_id": "ENST00000383778"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 1565,
+                "cdna_start": 1564,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "3",
+                  "ref": "T",
+                  "start": 15645183
+                },
+                "transcript_id": "ENST00000437172"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 1421,
+                "cdna_start": 1420,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "3",
+                  "ref": "T",
+                  "start": 15645183
+                },
+                "transcript_id": "ENST00000449107"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              12,
+              13
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 19,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "1120a096937e29e1",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.F443V",
+            "transcript_id": "ENST00000303498",
+            "transcript_name": "BTD-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.F423V",
+            "transcript_id": "ENST00000383778",
+            "transcript_name": "BTD-201"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.F445V",
+            "transcript_id": "ENST00000437172",
+            "transcript_name": "BTD-003"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.F445V",
+            "transcript_id": "ENST00000449107",
+            "transcript_name": "BTD-002"
+          }
+        ],
+        "variant_id": "BTD-chr3-15645183"
+      },
+      {
+        "case_id": "05-CD109-chr6-73818405-1120a096937e29e1",
+        "gene": "CD109",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "AVKENKDDLNHVDLNVCTSFSGPGMSGMALMEVNLLSGFMVPSEAISLS",
+            "expected_amino_acids": [
+              "AVKENKDDLNHVDLNVCTSFSGPGMSGMALMEVNLLSGFMVPSEAISLS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 4041,
+                "cdna_start": 4040,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 73818405
+                },
+                "transcript_id": "ENST00000287097"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 4129,
+                "cdna_start": 4128,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 73818405
+                },
+                "transcript_id": "ENST00000422508"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 4309,
+                "cdna_start": 4308,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 73818405
+                },
+                "transcript_id": "ENST00000437994"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 30,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "AVKENKDDLNHVDLNVCTSFSGPGMSGMALMEVNLLSGFMVPSEAISLS",
+            "expected_amino_acids": [
+              "AVKENKDDLNHVDLNVCTSFSGPGMSGMALMEVNLLSGFMVPSEAISLS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 4041,
+                "cdna_start": 4040,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 73818405
+                },
+                "transcript_id": "ENST00000287097"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 4129,
+                "cdna_start": 4128,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 73818405
+                },
+                "transcript_id": "ENST00000422508"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 4309,
+                "cdna_start": 4308,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 73818405
+                },
+                "transcript_id": "ENST00000437994"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 30,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "1120a096937e29e1",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.R1310M",
+            "transcript_id": "ENST00000287097",
+            "transcript_name": "CD109-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.R1233M",
+            "transcript_id": "ENST00000422508",
+            "transcript_name": "CD109-201"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.R1293M",
+            "transcript_id": "ENST00000437994",
+            "transcript_name": "CD109-202"
+          }
+        ],
+        "variant_id": "CD109-chr6-73818405"
+      },
+      {
+        "case_id": "06-CDC40-chr6-110228838-1b66c15da594a3ef",
+        "gene": "CDC40",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "VDFKYIAEPSMHSMPAVTLSPNGKSLACQSMDNQILIFGAQNRFRLNKK",
+            "expected_amino_acids": [
+              "VDFKYIAEPSMHSMPAVTLSPNGKSLACQSMDNQILIFGAQNRFRLNKK"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "C",
+                "cdna_end": 1448,
+                "cdna_start": 1447,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 110228838
+                },
+                "transcript_id": "ENST00000307731"
+              },
+              {
+                "alt_bases": "C",
+                "cdna_end": 1448,
+                "cdna_start": 1447,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 110228838
+                },
+                "transcript_id": "ENST00000368930"
+              },
+              {
+                "alt_bases": "C",
+                "cdna_end": 1525,
+                "cdna_start": 1524,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 110228838
+                },
+                "transcript_id": "ENST00000368932"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 37,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "VDFKYIAEPSMHSMPAVTLSPNGKSLACQSMDNQILIFGAQNRFRLNKK",
+            "expected_amino_acids": [
+              "VDFKYIAEPSMHSMPAVTLSPNGKSLACQSMDNQILIFGAQNRFRLNKK"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "C",
+                "cdna_end": 1448,
+                "cdna_start": 1447,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 110228838
+                },
+                "transcript_id": "ENST00000307731"
+              },
+              {
+                "alt_bases": "C",
+                "cdna_end": 1448,
+                "cdna_start": 1447,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 110228838
+                },
+                "transcript_id": "ENST00000368930"
+              },
+              {
+                "alt_bases": "C",
+                "cdna_end": 1525,
+                "cdna_start": 1524,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 110228838
+                },
+                "transcript_id": "ENST00000368932"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 37,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.W475S",
+            "transcript_id": "ENST00000307731",
+            "transcript_name": "CDC40-201"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.W475S",
+            "transcript_id": "ENST00000368930",
+            "transcript_name": "CDC40-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.W475S",
+            "transcript_id": "ENST00000368932",
+            "transcript_name": "CDC40-005"
+          }
+        ],
+        "variant_id": "CDC40-chr6-110228838"
+      },
+      {
+        "case_id": "07-CENPL-chr1-173811223-1120a096937e29e1",
+        "gene": "CENPL",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "YSAPESTPSASSRPEDYFIGATHLQKRLESVRKQSSFILTPPRRK",
+            "expected_amino_acids": [
+              "YSAPESTPSASSRPEDYFIGATHLQKRLESVRKQSSFILTPPRRK"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 291,
+                "cdna_start": 290,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 173811223
+                },
+                "transcript_id": "ENST00000345664"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 363,
+                "cdna_start": 362,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 173811223
+                },
+                "transcript_id": "ENST00000356198"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 215,
+                "cdna_start": 214,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 173811223
+                },
+                "transcript_id": "ENST00000367710"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              22,
+              23
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 27,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "YSAPESTPSASSRPEDYFIGATHLQKRLESVRKQSSFILTPPRRK",
+            "expected_amino_acids": [
+              "YSAPESTPSASSRPEDYFIGATHLQKRLESVRKQSSFILTPPRRK"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 291,
+                "cdna_start": 290,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 173811223
+                },
+                "transcript_id": "ENST00000345664"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 363,
+                "cdna_start": 362,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 173811223
+                },
+                "transcript_id": "ENST00000356198"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 215,
+                "cdna_start": 214,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 173811223
+                },
+                "transcript_id": "ENST00000367710"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              22,
+              23
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 27,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "1120a096937e29e1",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.P26H",
+            "transcript_id": "ENST00000345664",
+            "transcript_name": "CENPL-003"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.P26H",
+            "transcript_id": "ENST00000356198",
+            "transcript_name": "CENPL-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.P26H",
+            "transcript_id": "ENST00000367710",
+            "transcript_name": "CENPL-002"
+          }
+        ],
+        "variant_id": "CENPL-chr1-173811223"
+      },
+      {
+        "case_id": "08-CUL9-chr6-43186384-9b42d06ca2fa2370",
+        "gene": "CUL9",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "RVRMLDYYEEISAGDEGEFRQSNNG",
+            "expected_amino_acids": [
+              "RVRMLDYYEEISAGDEGEFRQSNNG"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 1264,
+                "cdna_start": 1263,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 43186384
+                },
+                "transcript_id": "ENST00000252050"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 1254,
+                "cdna_start": 1253,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 43186384
+                },
+                "transcript_id": "ENST00000372647"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              6,
+              7
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 2,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 1290,
+                "cdna_start": 1289,
+                "source_variant": null,
+                "transcript_id": "ENST00000252050"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 1280,
+                "cdna_start": 1279,
+                "source_variant": null,
+                "transcript_id": "ENST00000372647"
+              }
+            ]
+          },
+          "assembly_on": {
+            "amino_acids": "RVRMLDYYEEISAGDEGEFRQSNNG",
+            "expected_amino_acids": [
+              "RVRMLDYYEEISAGDEGEFRQSNNG"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 1264,
+                "cdna_start": 1263,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 43186384
+                },
+                "transcript_id": "ENST00000252050"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 1254,
+                "cdna_start": 1253,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "6",
+                  "ref": "G",
+                  "start": 43186384
+                },
+                "transcript_id": "ENST00000372647"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              6,
+              7
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 2,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 1290,
+                "cdna_start": 1289,
+                "source_variant": null,
+                "transcript_id": "ENST00000252050"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 1280,
+                "cdna_start": 1279,
+                "source_variant": null,
+                "transcript_id": "ENST00000372647"
+              }
+            ]
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "9b42d06ca2fa2370",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/TL-24-KCVBE1UI1P/TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.D394Y",
+            "transcript_id": "ENST00000252050",
+            "transcript_name": "CUL9-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.D394Y",
+            "transcript_id": "ENST00000372647",
+            "transcript_name": "CUL9-005"
+          }
+        ],
+        "variant_id": "CUL9-chr6-43186384"
+      },
+      {
+        "case_id": "09-DIAPH1-chr5-141526090-1b66c15da594a3ef",
+        "gene": "DIAPH1",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "EEKMRRAKLAKEKAENERLEKQQKREQLIDMNAEGDETGV",
+            "expected_amino_acids": [
+              "EEKMRRAKLAKEKAENERLEKQQKREQLIDMNAEGDETGV"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 3663,
+                "cdna_start": 3662,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 141526090
+                },
+                "transcript_id": "ENST00000253811"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3663,
+                "cdna_start": 3662,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 141526090
+                },
+                "transcript_id": "ENST00000389054"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3636,
+                "cdna_start": 3635,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 141526090
+                },
+                "transcript_id": "ENST00000389057"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3663,
+                "cdna_start": 3662,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 141526090
+                },
+                "transcript_id": "ENST00000398557"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3495,
+                "cdna_start": 3494,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 141526090
+                },
+                "transcript_id": "ENST00000518047"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              15,
+              16
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 14,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 3720,
+                "cdna_start": 3719,
+                "source_variant": null,
+                "transcript_id": "ENST00000253811"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3720,
+                "cdna_start": 3719,
+                "source_variant": null,
+                "transcript_id": "ENST00000389054"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3693,
+                "cdna_start": 3692,
+                "source_variant": null,
+                "transcript_id": "ENST00000389057"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3720,
+                "cdna_start": 3719,
+                "source_variant": null,
+                "transcript_id": "ENST00000398557"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3552,
+                "cdna_start": 3551,
+                "source_variant": null,
+                "transcript_id": "ENST00000518047"
+              }
+            ]
+          },
+          "assembly_on": {
+            "amino_acids": "KENQKRRETEEKMRRAKLAKEKAENERLEKQQKREQLIDMNAEGDETGV",
+            "expected_amino_acids": [
+              "KENQKRRETEEKMRRAKLAKEKAENERLEKQQKREQLIDMNAEGDETGV"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 3663,
+                "cdna_start": 3662,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 141526090
+                },
+                "transcript_id": "ENST00000253811"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3663,
+                "cdna_start": 3662,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 141526090
+                },
+                "transcript_id": "ENST00000389054"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3636,
+                "cdna_start": 3635,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 141526090
+                },
+                "transcript_id": "ENST00000389057"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3663,
+                "cdna_start": 3662,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 141526090
+                },
+                "transcript_id": "ENST00000398557"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3495,
+                "cdna_start": 3494,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 141526090
+                },
+                "transcript_id": "ENST00000518047"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 13,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 3720,
+                "cdna_start": 3719,
+                "source_variant": null,
+                "transcript_id": "ENST00000253811"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3720,
+                "cdna_start": 3719,
+                "source_variant": null,
+                "transcript_id": "ENST00000389054"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3693,
+                "cdna_start": 3692,
+                "source_variant": null,
+                "transcript_id": "ENST00000389057"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3720,
+                "cdna_start": 3719,
+                "source_variant": null,
+                "transcript_id": "ENST00000398557"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 3552,
+                "cdna_start": 3551,
+                "source_variant": null,
+                "transcript_id": "ENST00000518047"
+              }
+            ]
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.K1130N",
+            "transcript_id": "ENST00000253811",
+            "transcript_name": "DIAPH1-201"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.K1174N",
+            "transcript_id": "ENST00000389054",
+            "transcript_name": "DIAPH1-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.K1165N",
+            "transcript_id": "ENST00000389057",
+            "transcript_name": "DIAPH1-202"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.K1174N",
+            "transcript_id": "ENST00000398557",
+            "transcript_name": "DIAPH1-203"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.K1165N",
+            "transcript_id": "ENST00000518047",
+            "transcript_name": "DIAPH1-012"
+          }
+        ],
+        "variant_id": "DIAPH1-chr5-141526090"
+      },
+      {
+        "case_id": "10-DYNC1H1-chr14-101980529-53f498a544883d51",
+        "gene": "DYNC1H1",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "RESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLM",
+            "expected_amino_acids": [
+              "RESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLM"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 1104,
+                "cdna_start": 1103,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "14",
+                  "ref": "G",
+                  "start": 101980529
+                },
+                "transcript_id": "ENST00000360184"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              22,
+              23
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 39,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "RESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLM",
+            "expected_amino_acids": [
+              "RESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPLM"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 1104,
+                "cdna_start": 1103,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "14",
+                  "ref": "G",
+                  "start": 101980529
+                },
+                "transcript_id": "ENST00000360184"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              22,
+              23
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 39,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "53f498a544883d51",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.V314I",
+            "transcript_id": "ENST00000360184",
+            "transcript_name": "DYNC1H1-001"
+          }
+        ],
+        "variant_id": "DYNC1H1-chr14-101980529"
+      },
+      {
+        "case_id": "11-DYNC1H1-chr14-102030200-1b66c15da594a3ef",
+        "gene": "DYNC1H1",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "VKDQQEAEKKKVMSQEIQEQLHKHQEVIADKQMSVKEDLDKVEPAVIE",
+            "expected_amino_acids": [
+              "VKDQQEAEKKKVMSQEIQEQLHKHQEVIADKQMSVKEDLDKVEPAVIE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 9965,
+                "cdna_start": 9964,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "14",
+                  "ref": "G",
+                  "start": 102030200
+                },
+                "transcript_id": "ENST00000360184"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              23,
+              24
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 33,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "MVKDQQEAEKKKVMSQEIQEQLHKHQEVIADKQMSVKEDLDKVEPAVIE",
+            "expected_amino_acids": [
+              "MVKDQQEAEKKKVMSQEIQEQLHKHQEVIADKQMSVKEDLDKVEPAVIE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 9965,
+                "cdna_start": 9964,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "14",
+                  "ref": "G",
+                  "start": 102030200
+                },
+                "transcript_id": "ENST00000360184"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 33,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.Q3267H",
+            "transcript_id": "ENST00000360184",
+            "transcript_name": "DYNC1H1-001"
+          }
+        ],
+        "variant_id": "DYNC1H1-chr14-102030200"
+      },
+      {
+        "case_id": "12-EPG5-chr18-45925851-fbea0bf403520431",
+        "gene": "EPG5",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "TIDQVGMVSLYLFKELPLYLWQPSTSEIAVIRDWLLNYNLTVVKNKL",
+            "expected_amino_acids": [
+              "TIDQVGMVSLYLFKELPLYLWQPSTSEIAVIRDWLLNYNLTVVKNKL"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 2640,
+                "cdna_start": 2639,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "18",
+                  "ref": "C",
+                  "start": 45925851
+                },
+                "transcript_id": "ENST00000282041"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 19,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "TIDQVGMVSLYLFKELPLYLWQPSTSEIAVIRDWLLNYNLTVVKNKL",
+            "expected_amino_acids": [
+              "TIDQVGMVSLYLFKELPLYLWQPSTSEIAVIRDWLLNYNLTVVKNKL"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 2640,
+                "cdna_start": 2639,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "18",
+                  "ref": "C",
+                  "start": 45925851
+                },
+                "transcript_id": "ENST00000282041"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 19,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "fbea0bf403520431",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A869T",
+            "transcript_id": "ENST00000282041",
+            "transcript_name": "EPG5-001"
+          }
+        ],
+        "variant_id": "EPG5-chr18-45925851"
+      },
+      {
+        "case_id": "13-EXOC4-chr7-133274996-53f498a544883d51",
+        "gene": "EXOC4",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "KDPSGLLISVIRTLSTIDDVEDRENEKGRLEEA",
+            "expected_amino_acids": [
+              "KDPSGLLISVIRTLSTIDDVEDRENEKGRLEEA"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 130,
+                "cdna_start": 129,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "7",
+                  "ref": "G",
+                  "start": 133274996
+                },
+                "transcript_id": "ENST00000253861"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 130,
+                "cdna_start": 129,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "7",
+                  "ref": "G",
+                  "start": 133274996
+                },
+                "transcript_id": "ENST00000393161"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              16,
+              17
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 39,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "KDPSGLLISVIRTLSTIDDVEDRENEKGRLEEA",
+            "expected_amino_acids": [
+              "KDPSGLLISVIRTLSTIDDVEDRENEKGRLEEA"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 130,
+                "cdna_start": 129,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "7",
+                  "ref": "G",
+                  "start": 133274996
+                },
+                "transcript_id": "ENST00000253861"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 130,
+                "cdna_start": 129,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "7",
+                  "ref": "G",
+                  "start": 133274996
+                },
+                "transcript_id": "ENST00000393161"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              16,
+              17
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 39,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "53f498a544883d51",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.S34I",
+            "transcript_id": "ENST00000253861",
+            "transcript_name": "EXOC4-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.S34I",
+            "transcript_id": "ENST00000393161",
+            "transcript_name": "EXOC4-025"
+          }
+        ],
+        "variant_id": "EXOC4-chr7-133274996"
+      },
+      {
+        "case_id": "14-F8-chrX-154930861-1b66c15da594a3ef",
+        "gene": "F8",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "GPLSLSEENNDSKLLESGLMNSQERSW",
+            "expected_amino_acids": [
+              "GPLSLSEENNDSKLLESGLMNSQERSW"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "C",
+                "cdna_end": 3130,
+                "cdna_start": 3129,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "X",
+                  "ref": "T",
+                  "start": 154930861
+                },
+                "transcript_id": "ENST00000360256"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 9,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "GPLSLSEENNDSKLLESGLMNSQERSW",
+            "expected_amino_acids": [
+              "GPLSLSEENNDSKLLESGLMNSQERSW"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "C",
+                "cdna_end": 3130,
+                "cdna_start": 3129,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "X",
+                  "ref": "T",
+                  "start": 154930861
+                },
+                "transcript_id": "ENST00000360256"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 9,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.S977R",
+            "transcript_id": "ENST00000360256",
+            "transcript_name": "F8-001"
+          }
+        ],
+        "variant_id": "F8-chrX-154930861"
+      },
+      {
+        "case_id": "15-FBXO33-chr14-39431722-47b695c1a686c058",
+        "gene": "FBXO33",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "RELRVEFAAEKYLSGGGPGDGGGADTGTGGE",
+            "expected_amino_acids": [
+              "RELRVEFAAEKYLSGGGPGDGGGADTGTGGE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 779,
+                "cdna_start": 778,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "14",
+                  "ref": "G",
+                  "start": 39431722
+                },
+                "transcript_id": "ENST00000298097"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 154,
+                "cdna_start": 153,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "14",
+                  "ref": "G",
+                  "start": 39431722
+                },
+                "transcript_id": "ENST00000554190"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              10,
+              11
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 6,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "RELRVEFAAEKYLSGGGPGDGGGADTGTGGE",
+            "expected_amino_acids": [
+              "RELRVEFAAEKYLSGGGPGDGGGADTGTGGE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 779,
+                "cdna_start": 778,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "14",
+                  "ref": "G",
+                  "start": 39431722
+                },
+                "transcript_id": "ENST00000298097"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 154,
+                "cdna_start": 153,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "14",
+                  "ref": "G",
+                  "start": 39431722
+                },
+                "transcript_id": "ENST00000554190"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              10,
+              11
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 6,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "47b695c1a686c058",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.N147K",
+            "transcript_id": "ENST00000298097",
+            "transcript_name": "FBXO33-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.N19K",
+            "transcript_id": "ENST00000554190",
+            "transcript_name": "FBXO33-002"
+          }
+        ],
+        "variant_id": "FBXO33-chr14-39431722"
+      },
+      {
+        "case_id": "16-GLIS3-chr9-3856149-1b66c15da594a3ef",
+        "gene": "GLIS3",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "QLPPLTAVDAGAERFAPSAPSPQPPESSSSFFNTAKNTASLYP",
+            "expected_amino_acids": [
+              "QLPPLTAVDAGAERFAPSAPSPQPPESSSSFFNTAKNTASLYP"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 2061,
+                "cdna_start": 2053,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "9",
+                  "ref": "TGATGTGG",
+                  "start": 3856150
+                },
+                "transcript_id": "ENST00000324333"
+              },
+              {
+                "alt_bases": "",
+                "cdna_end": 2926,
+                "cdna_start": 2918,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "9",
+                  "ref": "TGATGTGG",
+                  "start": 3856150
+                },
+                "transcript_id": "ENST00000381971"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              22,
+              43
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 10,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 2051,
+                "cdna_start": 2050,
+                "source_variant": null,
+                "transcript_id": "ENST00000324333"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 2916,
+                "cdna_start": 2915,
+                "source_variant": null,
+                "transcript_id": "ENST00000381971"
+              }
+            ]
+          },
+          "assembly_on": {
+            "amino_acids": "QLPPLTAVDAGAERFAPSAPSPQPPESSSSFFNTAKNTASLYP",
+            "expected_amino_acids": [
+              "QLPPLTAVDAGAERFAPSAPSPQPPESSSSFFNTAKNTASLYP"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 2061,
+                "cdna_start": 2053,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "9",
+                  "ref": "TGATGTGG",
+                  "start": 3856150
+                },
+                "transcript_id": "ENST00000324333"
+              },
+              {
+                "alt_bases": "",
+                "cdna_end": 2926,
+                "cdna_start": 2918,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "9",
+                  "ref": "TGATGTGG",
+                  "start": 3856150
+                },
+                "transcript_id": "ENST00000381971"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              22,
+              43
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 10,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 2051,
+                "cdna_start": 2050,
+                "source_variant": null,
+                "transcript_id": "ENST00000324333"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 2916,
+                "cdna_start": 2915,
+                "source_variant": null,
+                "transcript_id": "ENST00000381971"
+              }
+            ]
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "FrameShift",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.H620fs",
+            "transcript_id": "ENST00000324333",
+            "transcript_name": "GLIS3-003"
+          },
+          {
+            "effect_class": "FrameShift",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.H775fs",
+            "transcript_id": "ENST00000381971",
+            "transcript_name": "GLIS3-008"
+          }
+        ],
+        "variant_id": "GLIS3-chr9-3856149"
+      },
+      {
+        "case_id": "17-H1_2-chr6-26055824-1120a096937e29e1",
+        "gene": "H1-2",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "AKVAKPKKAAKSAAKAVKPKVVKPKKAAPKKK",
+            "expected_amino_acids": [
+              "AKVAKPKKAAKSAAKAVKPKVVKPKKAAPKKK"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 604,
+                "cdna_start": 589,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "6",
+                  "ref": "CCTTGGGCTTAGCGG",
+                  "start": 26055825
+                },
+                "transcript_id": "ENST00000343677"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              20,
+              21
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 40,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "AKVAKPKKAAKSAAKAVKPKVVKPKKAAPKKK",
+            "expected_amino_acids": [
+              "AKVAKPKKAAKSAAKAVKPKVVKPKKAAPKKK"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 604,
+                "cdna_start": 589,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "6",
+                  "ref": "CCTTGGGCTTAGCGG",
+                  "start": 26055825
+                },
+                "transcript_id": "ENST00000343677"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              20,
+              21
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 40,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "1120a096937e29e1",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Deletion",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.AAKPK196del",
+            "transcript_id": "ENST00000343677",
+            "transcript_name": "HIST1H1C-001"
+          }
+        ],
+        "variant_id": "H1_2-chr6-26055824"
+      },
+      {
+        "case_id": "18-KDM3B-chr5-138391529-fbea0bf403520431",
+        "gene": "KDM3B",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "LLNARTPENHENLFLQPPKLSREESSNPFLAFVEKVEHSPFSSFASQAS",
+            "expected_amino_acids": [
+              "LLNARTPENHENLFLQPPKLSREESSNPFLAFVEKVEHSPFSSFASQAS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 2097,
+                "cdna_start": 2096,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 138391529
+                },
+                "transcript_id": "ENST00000314358"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 32,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "LLNARTPENHENLFLQPPKLSREESSNPFLAFVEKVEHSPFSSFASQAS",
+            "expected_amino_acids": [
+              "LLNARTPENHENLFLQPPKLSREESSNPFLAFVEKVEHSPFSSFASQAS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 2097,
+                "cdna_start": 2096,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "5",
+                  "ref": "C",
+                  "start": 138391529
+                },
+                "transcript_id": "ENST00000314358"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 32,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "fbea0bf403520431",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.P633S",
+            "transcript_id": "ENST00000314358",
+            "transcript_name": "KDM3B-001"
+          }
+        ],
+        "variant_id": "KDM3B-chr5-138391529"
+      },
+      {
+        "case_id": "19-KIF1C-chr17-5007293-fbea0bf403520431",
+        "gene": "KIF1C",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "ESQIGPEEAMERLQETEKIIAELNKTWEEKLRKTEALRMEREALLAEMG",
+            "expected_amino_acids": [
+              "ESQIGPEEAMERLQETEKIIAELNKTWEEKLRKTEALRMEREALLAEMG"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 1723,
+                "cdna_start": 1722,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "17",
+                  "ref": "G",
+                  "start": 5007293
+                },
+                "transcript_id": "ENST00000320785"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 39,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "ESQIGPEEAMERLQETEKIIAELNKTWEEKLRKTEALRMEREALLAEMG",
+            "expected_amino_acids": [
+              "ESQIGPEEAMERLQETEKIIAELNKTWEEKLRKTEALRMEREALLAEMG"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 1723,
+                "cdna_start": 1722,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "17",
+                  "ref": "G",
+                  "start": 5007293
+                },
+                "transcript_id": "ENST00000320785"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 39,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "fbea0bf403520431",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.E456K",
+            "transcript_id": "ENST00000320785",
+            "transcript_name": "KIF1C-001"
+          }
+        ],
+        "variant_id": "KIF1C-chr17-5007293"
+      },
+      {
+        "case_id": "20-KRT18-chr12-52951767-fbea0bf403520431",
+        "gene": "KRT18",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "NREELDKYWSQQIEESTTVVTTQSSEVGAAETTLTELRRTVQSLEIDLD",
+            "expected_amino_acids": [
+              "NREELDKYWSQQIEESTTVVTTQSSEVGAAETTLTELRRTVQSLEIDLD"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 1069,
+                "cdna_start": 1068,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "12",
+                  "ref": "G",
+                  "start": 52951767
+                },
+                "transcript_id": "ENST00000388835"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 928,
+                "cdna_start": 927,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "12",
+                  "ref": "G",
+                  "start": 52951767
+                },
+                "transcript_id": "ENST00000388837"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 913,
+                "cdna_start": 912,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "12",
+                  "ref": "G",
+                  "start": 52951767
+                },
+                "transcript_id": "ENST00000550600"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 6,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "NREELDKYWSQQIEESTTVVTTQSSEVGAAETTLTELRRTVQSLEIDLD",
+            "expected_amino_acids": [
+              "NREELDKYWSQQIEESTTVVTTQSSEVGAAETTLTELRRTVQSLEIDLD"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 1069,
+                "cdna_start": 1068,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "12",
+                  "ref": "G",
+                  "start": 52951767
+                },
+                "transcript_id": "ENST00000388835"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 928,
+                "cdna_start": 927,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "12",
+                  "ref": "G",
+                  "start": 52951767
+                },
+                "transcript_id": "ENST00000388837"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 913,
+                "cdna_start": 912,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "12",
+                  "ref": "G",
+                  "start": 52951767
+                },
+                "transcript_id": "ENST00000550600"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 6,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "fbea0bf403520431",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A287S",
+            "transcript_id": "ENST00000388835",
+            "transcript_name": "KRT18-002"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A287S",
+            "transcript_id": "ENST00000388837",
+            "transcript_name": "KRT18-201"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A287S",
+            "transcript_id": "ENST00000550600",
+            "transcript_name": "KRT18-001"
+          }
+        ],
+        "variant_id": "KRT18-chr12-52951767"
+      },
+      {
+        "case_id": "21-MAP2-chr2-209694768-2bc1fc291308debb",
+        "gene": "MAP2",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "2bc1fc291308debb",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "FrameShift",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.L867fs",
+            "transcript_id": "ENST00000360351",
+            "transcript_name": "MAP2-001"
+          },
+          {
+            "effect_class": "FrameShift",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.L863fs",
+            "transcript_id": "ENST00000447185",
+            "transcript_name": "MAP2-014"
+          }
+        ],
+        "variant_id": "MAP2-chr2-209694768"
+      },
+      {
+        "case_id": "22-MT_ND5-chrM-12994-f30f618fb76a0e49",
+        "gene": "MT-ND5",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "WDPQQMALLNANPSLTPLLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS",
+            "expected_amino_acids": [
+              "WDPQQMALLNANPSLTPLLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 658,
+                "cdna_start": 657,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "MT",
+                  "ref": "G",
+                  "start": 12994
+                },
+                "transcript_id": "ENST00000361567"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 14,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "WDPQQMALLNANPSLTPLLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS",
+            "expected_amino_acids": [
+              "WDPQQMALLNANPSLTPLLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 658,
+                "cdna_start": 657,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "MT",
+                  "ref": "G",
+                  "start": 12994
+                },
+                "transcript_id": "ENST00000361567"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 14,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "f30f618fb76a0e49",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A220T",
+            "transcript_id": "ENST00000361567",
+            "transcript_name": "MT-ND5-201"
+          }
+        ],
+        "variant_id": "MT_ND5-chrM-12994"
+      },
+      {
+        "case_id": "23-MYO15B-chr17-75589953-7010dd389c50467d",
+        "gene": "MYO15B",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "7010dd389c50467d",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "FrameShift",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.P634fs",
+            "transcript_id": "ENST00000610510",
+            "transcript_name": "MYO15B-036"
+          },
+          {
+            "effect_class": "NoncodingTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "non-coding-transcript",
+            "transcript_id": "ENST00000584516",
+            "transcript_name": "MYO15B-002"
+          },
+          {
+            "effect_class": "NoncodingTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "non-coding-transcript",
+            "transcript_id": "ENST00000619501",
+            "transcript_name": "MYO15B-034"
+          },
+          {
+            "effect_class": "NoncodingTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "non-coding-transcript",
+            "transcript_id": "ENST00000621743",
+            "transcript_name": "MYO15B-033"
+          }
+        ],
+        "variant_id": "MYO15B-chr17-75589953"
+      },
+      {
+        "case_id": "24-MYO9A-chr15-71994488-f30f618fb76a0e49",
+        "gene": "MYO9A",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "f30f618fb76a0e49",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.D523V",
+            "transcript_id": "ENST00000356056",
+            "transcript_name": "MYO9A-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.D523V",
+            "transcript_id": "ENST00000424560",
+            "transcript_name": "MYO9A-201"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.D523V",
+            "transcript_id": "ENST00000444904",
+            "transcript_name": "MYO9A-202"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.D523V",
+            "transcript_id": "ENST00000564571",
+            "transcript_name": "MYO9A-015"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.D118V",
+            "transcript_id": "ENST00000566885",
+            "transcript_name": "MYO9A-002"
+          }
+        ],
+        "variant_id": "MYO9A-chr15-71994488"
+      },
+      {
+        "case_id": "25-NAV2-chr11-20080142-8fda918141cedf55",
+        "gene": "NAV2",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "GTAQSADLRIRRQHSSDSVSSINSVTSHSSVGSNIESDSKKKKRKNW",
+            "expected_amino_acids": [
+              "GTAQSADLRIRRQHSSDSVSSINSVTSHSSVGSNIESDSKKKKRKNW"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 5787,
+                "cdna_start": 5786,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "11",
+                  "ref": "C",
+                  "start": 20080142
+                },
+                "transcript_id": "ENST00000527559"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 5619,
+                "cdna_start": 5618,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "11",
+                  "ref": "C",
+                  "start": 20080142
+                },
+                "transcript_id": "ENST00000540292"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 13,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 5803,
+                "cdna_start": 5802,
+                "source_variant": null,
+                "transcript_id": "ENST00000527559"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 5843,
+                "cdna_start": 5842,
+                "source_variant": null,
+                "transcript_id": "ENST00000527559"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 5635,
+                "cdna_start": 5634,
+                "source_variant": null,
+                "transcript_id": "ENST00000540292"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 5675,
+                "cdna_start": 5674,
+                "source_variant": null,
+                "transcript_id": "ENST00000540292"
+              }
+            ]
+          },
+          "assembly_on": {
+            "amino_acids": "GTAQSADLRIRRQHSSDSVSSINSVTSHSSVGSNIESDSKKKKRKNW",
+            "expected_amino_acids": [
+              "GTAQSADLRIRRQHSSDSVSSINSVTSHSSVGSNIESDSKKKKRKNW"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 5787,
+                "cdna_start": 5786,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "11",
+                  "ref": "C",
+                  "start": 20080142
+                },
+                "transcript_id": "ENST00000527559"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 5619,
+                "cdna_start": 5618,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "11",
+                  "ref": "C",
+                  "start": 20080142
+                },
+                "transcript_id": "ENST00000540292"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 13,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 5803,
+                "cdna_start": 5802,
+                "source_variant": null,
+                "transcript_id": "ENST00000527559"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 5843,
+                "cdna_start": 5842,
+                "source_variant": null,
+                "transcript_id": "ENST00000527559"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 5635,
+                "cdna_start": 5634,
+                "source_variant": null,
+                "transcript_id": "ENST00000540292"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 5675,
+                "cdna_start": 5674,
+                "source_variant": null,
+                "transcript_id": "ENST00000540292"
+              }
+            ]
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "8fda918141cedf55",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A1753V",
+            "transcript_id": "ENST00000349880",
+            "transcript_name": "NAV2-003"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A1689V",
+            "transcript_id": "ENST00000360655",
+            "transcript_name": "NAV2-008"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A1753V",
+            "transcript_id": "ENST00000396085",
+            "transcript_name": "NAV2-002"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A1809V",
+            "transcript_id": "ENST00000396087",
+            "transcript_name": "NAV2-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A1809V",
+            "transcript_id": "ENST00000527559",
+            "transcript_name": "NAV2-201"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A817V",
+            "transcript_id": "ENST00000533917",
+            "transcript_name": "NAV2-005"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A1753V",
+            "transcript_id": "ENST00000540292",
+            "transcript_name": "NAV2-202"
+          },
+          {
+            "effect_class": "IncompleteTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "incomplete",
+            "transcript_id": "ENST00000525322",
+            "transcript_name": "NAV2-006"
+          }
+        ],
+        "variant_id": "NAV2-chr11-20080142"
+      },
+      {
+        "case_id": "26-NME1-chr17-51154443-53f498a544883d51",
+        "gene": "NME1",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "GIVFQGEGPPISSCDTRTMANCERTFIAIKPDG",
+            "expected_amino_acids": [
+              "GIVFQGEGPPISSCDTRTMANCERTFIAIKPDG"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 279,
+                "cdna_start": 278,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "17",
+                  "ref": "G",
+                  "start": 51154443
+                },
+                "transcript_id": "ENST00000013034"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 306,
+                "cdna_start": 305,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "17",
+                  "ref": "G",
+                  "start": 51154443
+                },
+                "transcript_id": "ENST00000336097"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 304,
+                "cdna_start": 303,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "17",
+                  "ref": "G",
+                  "start": 51154443
+                },
+                "transcript_id": "ENST00000480143"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 246,
+                "cdna_start": 245,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "17",
+                  "ref": "G",
+                  "start": 51154443
+                },
+                "transcript_id": "ENST00000555572"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              16,
+              17
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 40,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "GIVFQGEGPPISSCDTRTMANCERTFIAIKPDG",
+            "expected_amino_acids": [
+              "GIVFQGEGPPISSCDTRTMANCERTFIAIKPDG"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 279,
+                "cdna_start": 278,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "17",
+                  "ref": "G",
+                  "start": 51154443
+                },
+                "transcript_id": "ENST00000013034"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 306,
+                "cdna_start": 305,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "17",
+                  "ref": "G",
+                  "start": 51154443
+                },
+                "transcript_id": "ENST00000336097"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 304,
+                "cdna_start": 303,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "17",
+                  "ref": "G",
+                  "start": 51154443
+                },
+                "transcript_id": "ENST00000480143"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 246,
+                "cdna_start": 245,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "17",
+                  "ref": "G",
+                  "start": 51154443
+                },
+                "transcript_id": "ENST00000555572"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              16,
+              17
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 40,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "53f498a544883d51",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G24R",
+            "transcript_id": "ENST00000555572",
+            "transcript_name": "NME1-NME2-002"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G24R",
+            "transcript_id": "ENST00000013034",
+            "transcript_name": "NME1-004"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G24R",
+            "transcript_id": "ENST00000336097",
+            "transcript_name": "NME1-002"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G24R",
+            "transcript_id": "ENST00000480143",
+            "transcript_name": "NME1-007"
+          },
+          {
+            "effect_class": "IncompleteTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "incomplete",
+            "transcript_id": "ENST00000456492",
+            "transcript_name": "NME1-005"
+          }
+        ],
+        "variant_id": "NME1-chr17-51154443"
+      },
+      {
+        "case_id": "27-NR2F2-chr15-96332299-f30f618fb76a0e49",
+        "gene": "NR2F2",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "f30f618fb76a0e49",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G65V",
+            "transcript_id": "ENST00000394166",
+            "transcript_name": "NR2F2-001"
+          }
+        ],
+        "variant_id": "NR2F2-chr15-96332299"
+      },
+      {
+        "case_id": "28-NTF3-chr12-5494381-53f498a544883d51",
+        "gene": "NTF3",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "NKLSKQMVDVSENYQSTLPK",
+            "expected_amino_acids": [
+              "NKLSKQMVDVRENYQSTLPK"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "G",
+                "cdna_end": 250,
+                "cdna_start": 249,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "12",
+                  "ref": "A",
+                  "start": 5494381
+                },
+                "transcript_id": "ENST00000331010"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 418,
+                "cdna_start": 417,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "12",
+                  "ref": "A",
+                  "start": 5494381
+                },
+                "transcript_id": "ENST00000423158"
+              }
+            ],
+            "matches_isolated_edit": false,
+            "mutation_interval": [
+              10,
+              11
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 9,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 251,
+                "cdna_start": 250,
+                "source_variant": null,
+                "transcript_id": "ENST00000331010"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 419,
+                "cdna_start": 418,
+                "source_variant": null,
+                "transcript_id": "ENST00000423158"
+              }
+            ]
+          },
+          "assembly_on": {
+            "amino_acids": "NKLSKQMVDVSENYQSTLPK",
+            "expected_amino_acids": [
+              "NKLSKQMVDVRENYQSTLPK"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "G",
+                "cdna_end": 250,
+                "cdna_start": 249,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "12",
+                  "ref": "A",
+                  "start": 5494381
+                },
+                "transcript_id": "ENST00000331010"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 418,
+                "cdna_start": 417,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "12",
+                  "ref": "A",
+                  "start": 5494381
+                },
+                "transcript_id": "ENST00000423158"
+              }
+            ],
+            "matches_isolated_edit": false,
+            "mutation_interval": [
+              10,
+              11
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 9,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 251,
+                "cdna_start": 250,
+                "source_variant": null,
+                "transcript_id": "ENST00000331010"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 419,
+                "cdna_start": 418,
+                "source_variant": null,
+                "transcript_id": "ENST00000423158"
+              }
+            ]
+          }
+        },
+        "platform": "ONT",
+        "source_id": "53f498a544883d51",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.K56R",
+            "transcript_id": "ENST00000331010",
+            "transcript_name": "NTF3-002"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.K69R",
+            "transcript_id": "ENST00000423158",
+            "transcript_name": "NTF3-001"
+          }
+        ],
+        "variant_id": "NTF3-chr12-5494381"
+      },
+      {
+        "case_id": "29-PIP5K1A-chr1-151242178-47b695c1a686c058",
+        "gene": "PIP5K1A",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "RSGSSFSRRAAPVATPALLT",
+            "expected_amino_acids": [
+              "RSGSSFSRRAAPVATPALLT"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 1827,
+                "cdna_start": 1826,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 151242179
+                },
+                "transcript_id": "ENST00000349792"
+              },
+              {
+                "alt_bases": "",
+                "cdna_end": 1842,
+                "cdna_start": 1841,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 151242179
+                },
+                "transcript_id": "ENST00000368888"
+              },
+              {
+                "alt_bases": "",
+                "cdna_end": 1829,
+                "cdna_start": 1828,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 151242179
+                },
+                "transcript_id": "ENST00000409426"
+              },
+              {
+                "alt_bases": "",
+                "cdna_end": 1744,
+                "cdna_start": 1743,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 151242179
+                },
+                "transcript_id": "ENST00000441902"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              10,
+              20
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 3,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "RSGSSFSRRAAPVATPALLT",
+            "expected_amino_acids": [
+              "RSGSSFSRRAAPVATPALLT"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 1827,
+                "cdna_start": 1826,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 151242179
+                },
+                "transcript_id": "ENST00000349792"
+              },
+              {
+                "alt_bases": "",
+                "cdna_end": 1842,
+                "cdna_start": 1841,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 151242179
+                },
+                "transcript_id": "ENST00000368888"
+              },
+              {
+                "alt_bases": "",
+                "cdna_end": 1829,
+                "cdna_start": 1828,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 151242179
+                },
+                "transcript_id": "ENST00000409426"
+              },
+              {
+                "alt_bases": "",
+                "cdna_end": 1744,
+                "cdna_start": 1743,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 151242179
+                },
+                "transcript_id": "ENST00000441902"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              10,
+              20
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 3,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "47b695c1a686c058",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "FrameShift",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G461fs",
+            "transcript_id": "ENST00000349792",
+            "transcript_name": "PIP5K1A-001"
+          },
+          {
+            "effect_class": "FrameShift",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G474fs",
+            "transcript_id": "ENST00000368888",
+            "transcript_name": "PIP5K1A-003"
+          },
+          {
+            "effect_class": "FrameShift",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G462fs",
+            "transcript_id": "ENST00000409426",
+            "transcript_name": "PIP5K1A-015"
+          },
+          {
+            "effect_class": "FrameShift",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G434fs",
+            "transcript_id": "ENST00000441902",
+            "transcript_name": "PIP5K1A-016"
+          }
+        ],
+        "variant_id": "PIP5K1A-chr1-151242178"
+      },
+      {
+        "case_id": "30-PRICKLE2-chr3-64198863-53f498a544883d51",
+        "gene": "PRICKLE2",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "VTVMPLEMEKTISKLMFDFQKNSTSDDDSGCALEEYAWVPP",
+            "expected_amino_acids": [
+              "VTVMPLEMEKTISKLMFDFQKNSTSDDDSGCALEEYAWVPP"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 651,
+                "cdna_start": 650,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "C",
+                  "start": 64198863
+                },
+                "transcript_id": "ENST00000295902"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 243,
+                "cdna_start": 242,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "C",
+                  "start": 64198863
+                },
+                "transcript_id": "ENST00000564377"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              20,
+              21
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 8,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "VTVMPLEMEKTISKLMFDFQKNSTSDDDSGCALEEYAWVPP",
+            "expected_amino_acids": [
+              "VTVMPLEMEKTISKLMFDFQKNSTSDDDSGCALEEYAWVPP"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 651,
+                "cdna_start": 650,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "C",
+                  "start": 64198863
+                },
+                "transcript_id": "ENST00000295902"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 243,
+                "cdna_start": 242,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "C",
+                  "start": 64198863
+                },
+                "transcript_id": "ENST00000564377"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              20,
+              21
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 8,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "53f498a544883d51",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.R22K",
+            "transcript_id": "ENST00000295902",
+            "transcript_name": "PRICKLE2-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.R78K",
+            "transcript_id": "ENST00000564377",
+            "transcript_name": "PRICKLE2-003"
+          },
+          {
+            "effect_class": "IncompleteTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "incomplete",
+            "transcript_id": "ENST00000498162",
+            "transcript_name": "PRICKLE2-002"
+          },
+          {
+            "effect_class": "IncompleteTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "incomplete",
+            "transcript_id": "ENST00000569824",
+            "transcript_name": "PRICKLE2-004"
+          }
+        ],
+        "variant_id": "PRICKLE2-chr3-64198863"
+      },
+      {
+        "case_id": "31-PTH1R-chr3-46898732-1b66c15da594a3ef",
+        "gene": "PTH1R",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "RRLHCTRNYIHMHLFLSFMLRAVSFFVKDAVLYSGATLDEAERLTEEEL",
+            "expected_amino_acids": [
+              "RRLHCTRNYIHMHLFLSFMLRAVSFFVKDAVLYSGATLDEAERLTEEEL"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 912,
+                "cdna_start": 911,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "A",
+                  "start": 46898732
+                },
+                "transcript_id": "ENST00000313049"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 858,
+                "cdna_start": 857,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "A",
+                  "start": 46898732
+                },
+                "transcript_id": "ENST00000418619"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 775,
+                "cdna_start": 774,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "A",
+                  "start": 46898732
+                },
+                "transcript_id": "ENST00000430002"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 912,
+                "cdna_start": 911,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "A",
+                  "start": 46898732
+                },
+                "transcript_id": "ENST00000449590"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 37,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "RRLHCTRNYIHMHLFLSFMLRAVSFFVKDAVLYSGATLDEAERLTEEEL",
+            "expected_amino_acids": [
+              "RRLHCTRNYIHMHLFLSFMLRAVSFFVKDAVLYSGATLDEAERLTEEEL"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 912,
+                "cdna_start": 911,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "A",
+                  "start": 46898732
+                },
+                "transcript_id": "ENST00000313049"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 858,
+                "cdna_start": 857,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "A",
+                  "start": 46898732
+                },
+                "transcript_id": "ENST00000418619"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 775,
+                "cdna_start": 774,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "A",
+                  "start": 46898732
+                },
+                "transcript_id": "ENST00000430002"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 912,
+                "cdna_start": 911,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "3",
+                  "ref": "A",
+                  "start": 46898732
+                },
+                "transcript_id": "ENST00000449590"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 37,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.I237F",
+            "transcript_id": "ENST00000313049",
+            "transcript_name": "PTH1R-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.I237F",
+            "transcript_id": "ENST00000418619",
+            "transcript_name": "PTH1R-003"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.I237F",
+            "transcript_id": "ENST00000430002",
+            "transcript_name": "PTH1R-201"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.I237F",
+            "transcript_id": "ENST00000449590",
+            "transcript_name": "PTH1R-002"
+          },
+          {
+            "effect_class": "NoncodingTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "non-coding-transcript",
+            "transcript_id": "ENST00000428220",
+            "transcript_name": "PTH1R-005"
+          },
+          {
+            "effect_class": "IncompleteTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "incomplete",
+            "transcript_id": "ENST00000427125",
+            "transcript_name": "PTH1R-004"
+          }
+        ],
+        "variant_id": "PTH1R-chr3-46898732"
+      },
+      {
+        "case_id": "32-RNF213-chr17-80327830-1b66c15da594a3ef",
+        "gene": "RNF213",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "DILKHLLTLADVKHVFRLCGTDEKIANVTEDAKRLIAVADSVLTKVVGD",
+            "expected_amino_acids": [
+              "DILKHLLTLADVKHVFRLCGTDEKIANVTEDAKRLIAVADSVLTKVVGD"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 3503,
+                "cdna_start": 3500,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "17",
+                  "ref": "TAC",
+                  "start": 80327831
+                },
+                "transcript_id": "ENST00000508628"
+              },
+              {
+                "alt_bases": "",
+                "cdna_end": 3354,
+                "cdna_start": 3351,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "17",
+                  "ref": "TAC",
+                  "start": 80327831
+                },
+                "transcript_id": "ENST00000582970"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 36,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "DILKHLLTLADVKHVFRLCGTDEKIANVTEDAKRLIAVADSVLTKVVGD",
+            "expected_amino_acids": [
+              "DILKHLLTLADVKHVFRLCGTDEKIANVTEDAKRLIAVADSVLTKVVGD"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 3503,
+                "cdna_start": 3500,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "17",
+                  "ref": "TAC",
+                  "start": 80327831
+                },
+                "transcript_id": "ENST00000508628"
+              },
+              {
+                "alt_bases": "",
+                "cdna_end": 3354,
+                "cdna_start": 3351,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "17",
+                  "ref": "TAC",
+                  "start": 80327831
+                },
+                "transcript_id": "ENST00000582970"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 36,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Deletion",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.L1119del",
+            "transcript_id": "ENST00000508628",
+            "transcript_name": "RNF213-001"
+          },
+          {
+            "effect_class": "Deletion",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.L1070del",
+            "transcript_id": "ENST00000582970",
+            "transcript_name": "RNF213-020"
+          }
+        ],
+        "variant_id": "RNF213-chr17-80327830"
+      },
+      {
+        "case_id": "33-ROBO2-chr3-77607853-1b66c15da594a3ef",
+        "gene": "ROBO2",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "QNKGNNGGKGGKKKKNKNSSKPQKKNGSTWANVPLPPPPVQPLPGTELE",
+            "expected_amino_acids": [
+              "QNKGNNGGKGGKKKKNKNSSKPQKKNGSTWANVPLPPPPVQPLPGTELE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 3248,
+                "cdna_start": 3247,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "3",
+                  "ref": "C",
+                  "start": 77607853
+                },
+                "transcript_id": "ENST00000332191"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 4092,
+                "cdna_start": 4091,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "3",
+                  "ref": "C",
+                  "start": 77607853
+                },
+                "transcript_id": "ENST00000461745"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 3519,
+                "cdna_start": 3518,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "3",
+                  "ref": "C",
+                  "start": 77607853
+                },
+                "transcript_id": "ENST00000487694"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 38,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "QNKGNNGGKGGKKKKNKNSSKPQKKNGSTWANVPLPPPPVQPLPGTELE",
+            "expected_amino_acids": [
+              "QNKGNNGGKGGKKKKNKNSSKPQKKNGSTWANVPLPPPPVQPLPGTELE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 3248,
+                "cdna_start": 3247,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "3",
+                  "ref": "C",
+                  "start": 77607853
+                },
+                "transcript_id": "ENST00000332191"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 4092,
+                "cdna_start": 4091,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "3",
+                  "ref": "C",
+                  "start": 77607853
+                },
+                "transcript_id": "ENST00000461745"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 3519,
+                "cdna_start": 3518,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "3",
+                  "ref": "C",
+                  "start": 77607853
+                },
+                "transcript_id": "ENST00000487694"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 38,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.N1064K",
+            "transcript_id": "ENST00000332191",
+            "transcript_name": "ROBO2-003"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.N1064K",
+            "transcript_id": "ENST00000461745",
+            "transcript_name": "ROBO2-002"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.N1080K",
+            "transcript_id": "ENST00000487694",
+            "transcript_name": "ROBO2-013"
+          }
+        ],
+        "variant_id": "ROBO2-chr3-77607853"
+      },
+      {
+        "case_id": "34-SLC25A12-chr2-171813470-fbea0bf403520431",
+        "gene": "SLC25A12",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "IAESAYRFTLGSVAGAVGATAVYPTDLVKTRMQNQRGSGSVVGE",
+            "expected_amino_acids": [
+              "IAESAYRFTLGSVAGAVGATAVYPTDLVKTRMQNQRGSGSVVGE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "C",
+                "cdna_end": 1078,
+                "cdna_start": 1077,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "2",
+                  "ref": "A",
+                  "start": 171813470
+                },
+                "transcript_id": "ENST00000422440"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 35,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "IAESAYRFTLGSVAGAVGATAVYPTDLVKTRMQNQRGSGSVVGELMYKN",
+            "expected_amino_acids": [
+              "IAESAYRFTLGSVAGAVGATAVYPTDLVKTRMQNQRGSGSVVGELMYKN"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "C",
+                "cdna_end": 1078,
+                "cdna_start": 1077,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "2",
+                  "ref": "A",
+                  "start": 171813470
+                },
+                "transcript_id": "ENST00000422440"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 35,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "fbea0bf403520431",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.I347T",
+            "transcript_id": "ENST00000422440",
+            "transcript_name": "SLC25A12-001"
+          }
+        ],
+        "variant_id": "SLC25A12-chr2-171813470"
+      },
+      {
+        "case_id": "35-SMC5-chr9-70298024-1120a096937e29e1",
+        "gene": "SMC5",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "DKHIEELQQALIVKQNEELDRQKRIGNTRKMIEDLQNELKTTENC",
+            "expected_amino_acids": [
+              "DKHIEELQQALIVKQNEELDRQKRIGNTRKMIEDLQNELKTTENC"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 1229,
+                "cdna_start": 1228,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "9",
+                  "ref": "G",
+                  "start": 70298024
+                },
+                "transcript_id": "ENST00000361138"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              22,
+              23
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 35,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "DKHIEELQQALIVKQNEELDRQKRIGNTRKMIEDLQNELKTTENC",
+            "expected_amino_acids": [
+              "DKHIEELQQALIVKQNEELDRQKRIGNTRKMIEDLQNELKTTENC"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 1229,
+                "cdna_start": 1228,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "9",
+                  "ref": "G",
+                  "start": 70298024
+                },
+                "transcript_id": "ENST00000361138"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              22,
+              23
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 35,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "1120a096937e29e1",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.R371K",
+            "transcript_id": "ENST00000361138",
+            "transcript_name": "SMC5-001"
+          }
+        ],
+        "variant_id": "SMC5-chr9-70298024"
+      },
+      {
+        "case_id": "36-TECPR1-chr7-98241127-8fda918141cedf55",
+        "gene": "TECPR1",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "VQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGP",
+            "expected_amino_acids": [
+              "VQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGP"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 1074,
+                "cdna_start": 1073,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "7",
+                  "ref": "G",
+                  "start": 98241128
+                },
+                "transcript_id": "ENST00000447648"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              12,
+              37
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 16,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "SSWSLLDTPGEVVQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGP",
+            "expected_amino_acids": [
+              "SSWSLLDTPGEVVQISCGPHDLLWAHSGRDRPWSGKESTGAIPKEVPGP"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 1074,
+                "cdna_start": 1073,
+                "source_variant": {
+                  "alt": "",
+                  "contig": "7",
+                  "ref": "G",
+                  "start": 98241128
+                },
+                "transcript_id": "ENST00000447648"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              49
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 15,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "8fda918141cedf55",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "FrameShift",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.T259fs",
+            "transcript_id": "ENST00000447648",
+            "transcript_name": "TECPR1-001"
+          }
+        ],
+        "variant_id": "TECPR1-chr7-98241127"
+      },
+      {
+        "case_id": "37-TMRO-chr9-97910412-1b66c15da594a3ef",
+        "gene": "TMRO",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "NQHTPNTVSQSDSKTDSCDQRQLSECDEPQPHHSTKRKPKCPEDRTSEE",
+            "expected_amino_acids": [
+              "NQHTPNTVSQSDSKTDSCDQRQLSECDEPQPHHSTKRKPKCPEDRTSEE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 2060,
+                "cdna_start": 2059,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "9",
+                  "ref": "C",
+                  "start": 97910412
+                },
+                "transcript_id": "ENST00000375118"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 691,
+                "cdna_start": 690,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "9",
+                  "ref": "C",
+                  "start": 97910412
+                },
+                "transcript_id": "ENST00000375119"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 2743,
+                "cdna_start": 2742,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "9",
+                  "ref": "C",
+                  "start": 97910412
+                },
+                "transcript_id": "ENST00000611338"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 36,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "NQHTPNTVSQSDSKTDSCDQRQLSECDEPQPHHSTKRKPKCPEDRTSEE",
+            "expected_amino_acids": [
+              "NQHTPNTVSQSDSKTDSCDQRQLSECDEPQPHHSTKRKPKCPEDRTSEE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 2060,
+                "cdna_start": 2059,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "9",
+                  "ref": "C",
+                  "start": 97910412
+                },
+                "transcript_id": "ENST00000375118"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 691,
+                "cdna_start": 690,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "9",
+                  "ref": "C",
+                  "start": 97910412
+                },
+                "transcript_id": "ENST00000375119"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 2743,
+                "cdna_start": 2742,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "9",
+                  "ref": "C",
+                  "start": 97910412
+                },
+                "transcript_id": "ENST00000611338"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 36,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G59E",
+            "transcript_id": "ENST00000375118",
+            "transcript_name": "TRMO-005"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G205E",
+            "transcript_id": "ENST00000375119",
+            "transcript_name": "TRMO-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G102E",
+            "transcript_id": "ENST00000611338",
+            "transcript_name": "TRMO-201"
+          }
+        ],
+        "variant_id": "TMRO-chr9-97910412"
+      },
+      {
+        "case_id": "38-VPS13B-chr8-99861923-1b66c15da594a3ef",
+        "gene": "VPS13B",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "QLPESLGEGLRQGLFRLGISLLGAIAGIVDQPMQNFQKT",
+            "expected_amino_acids": [
+              "QLPESLGEGLRQGLFRLGISLLGAIAGIVDQPMQNFQKT"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 11303,
+                "cdna_start": 11302,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "8",
+                  "ref": "C",
+                  "start": 99861923
+                },
+                "transcript_id": "ENST00000357162"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 11378,
+                "cdna_start": 11377,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "8",
+                  "ref": "C",
+                  "start": 99861923
+                },
+                "transcript_id": "ENST00000358544"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              14,
+              15
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 8,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "QLPESLGEGLRQGLFRLGISLLGAIAGIVDQPMQNFQKT",
+            "expected_amino_acids": [
+              "QLPESLGEGLRQGLFRLGISLLGAIAGIVDQPMQNFQKT"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 11303,
+                "cdna_start": 11302,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "8",
+                  "ref": "C",
+                  "start": 99861923
+                },
+                "transcript_id": "ENST00000357162"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 11378,
+                "cdna_start": 11377,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "8",
+                  "ref": "C",
+                  "start": 99861923
+                },
+                "transcript_id": "ENST00000358544"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              14,
+              15
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 8,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.S3731F",
+            "transcript_id": "ENST00000357162",
+            "transcript_name": "VPS13B-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.S3756F",
+            "transcript_id": "ENST00000358544",
+            "transcript_name": "VPS13B-002"
+          }
+        ],
+        "variant_id": "VPS13B-chr8-99861923"
+      },
+      {
+        "case_id": "39-VPS72-chr1-151185547-1120a096937e29e1",
+        "gene": "VPS72",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "EPLKSLRPRKVNTPAGSSQKAREERALLPLELQDDGSDSRKSMRQSTAE",
+            "expected_amino_acids": [
+              "EPLKSLRPRKVNTPAGSSQKAREERALLPLELQDDGSDSRKSMRQSTAE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "G",
+                "cdna_end": 381,
+                "cdna_start": 380,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "1",
+                  "ref": "T",
+                  "start": 151185547
+                },
+                "transcript_id": "ENST00000354473"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 436,
+                "cdna_start": 435,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "1",
+                  "ref": "T",
+                  "start": 151185547
+                },
+                "transcript_id": "ENST00000368892"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 37,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "EPLKSLRPRKVNTPAGSSQKAREERALLPLELQDDGSDSRKSMRQSTAE",
+            "expected_amino_acids": [
+              "EPLKSLRPRKVNTPAGSSQKAREERALLPLELQDDGSDSRKSMRQSTAE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "G",
+                "cdna_end": 381,
+                "cdna_start": 380,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "1",
+                  "ref": "T",
+                  "start": 151185547
+                },
+                "transcript_id": "ENST00000354473"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 436,
+                "cdna_start": 435,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "1",
+                  "ref": "T",
+                  "start": 151185547
+                },
+                "transcript_id": "ENST00000368892"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 37,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "1120a096937e29e1",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.K115R",
+            "transcript_id": "ENST00000354473",
+            "transcript_name": "VPS72-002"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.K115R",
+            "transcript_id": "ENST00000368892",
+            "transcript_name": "VPS72-001"
+          }
+        ],
+        "variant_id": "VPS72-chr1-151185547"
+      },
+      {
+        "case_id": "40-WWC1-chr5-168399513-1b66c15da594a3ef",
+        "gene": "WWC1",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "YDPEILKAEIATAKSRVNKLKREMGHLQHELQFKERGFQTLK",
+            "expected_amino_acids": [
+              "YDPEILKAEIATAKSRVNKLKREMGHLQHELQFKERGFQTLK"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "G",
+                "cdna_end": 1038,
+                "cdna_start": 1037,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "5",
+                  "ref": "T",
+                  "start": 168399513
+                },
+                "transcript_id": "ENST00000265293"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 539,
+                "cdna_start": 538,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "5",
+                  "ref": "T",
+                  "start": 168399513
+                },
+                "transcript_id": "ENST00000521089"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 5,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "YDPEILKAEIATAKSRVNKLKREMGHLQHELQFKERGFQTLK",
+            "expected_amino_acids": [
+              "YDPEILKAEIATAKSRVNKLKREMGHLQHELQFKERGFQTLK"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "G",
+                "cdna_end": 1038,
+                "cdna_start": 1037,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "5",
+                  "ref": "T",
+                  "start": 168399513
+                },
+                "transcript_id": "ENST00000265293"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 539,
+                "cdna_start": 538,
+                "source_variant": {
+                  "alt": "G",
+                  "contig": "5",
+                  "ref": "T",
+                  "start": 168399513
+                },
+                "transcript_id": "ENST00000521089"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 5,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.V179G",
+            "transcript_id": "ENST00000265293",
+            "transcript_name": "WWC1-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.V179G",
+            "transcript_id": "ENST00000521089",
+            "transcript_name": "WWC1-002"
+          }
+        ],
+        "variant_id": "WWC1-chr5-168399513"
+      },
+      {
+        "case_id": "41-ZNF436-chr1-23362762-1b66c15da594a3ef",
+        "gene": "ZNF436",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "QHQRTHTGERPYDCNECGKSFGRSCHLIQHQTIHTGEKPHKCNECGKSF",
+            "expected_amino_acids": [
+              "QHQRTHTGERPYDCNECGKSFGRSCHLIQHQTIHTGEKPHKCNECGKSF"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "G",
+                "cdna_end": 757,
+                "cdna_start": 756,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 23362762
+                },
+                "transcript_id": "ENST00000314011"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 1001,
+                "cdna_start": 1000,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 23362762
+                },
+                "transcript_id": "ENST00000374608"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 33,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "QHQRTHTGERPYDCNECGKSFGRSCHLIQHQTIHTGEKPHKCNECGKSF",
+            "expected_amino_acids": [
+              "QHQRTHTGERPYDCNECGKSFGRSCHLIQHQTIHTGEKPHKCNECGKSF"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "G",
+                "cdna_end": 757,
+                "cdna_start": 756,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 23362762
+                },
+                "transcript_id": "ENST00000314011"
+              },
+              {
+                "alt_bases": "G",
+                "cdna_end": 1001,
+                "cdna_start": 1000,
+                "source_variant": {
+                  "alt": "C",
+                  "contig": "1",
+                  "ref": "G",
+                  "start": 23362762
+                },
+                "transcript_id": "ENST00000374608"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 33,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.S207C",
+            "transcript_id": "ENST00000314011",
+            "transcript_name": "ZNF436-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.S207C",
+            "transcript_id": "ENST00000374608",
+            "transcript_name": "ZNF436-003"
+          }
+        ],
+        "variant_id": "ZNF436-chr1-23362762"
+      },
+      {
+        "case_id": "42-ZNF674-chrX-46501045-1b66c15da594a3ef",
+        "gene": "ZNF674",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "NFLGQNRSYVRKKDDGCKAYWKVCFHYNLHKAQPAERFFDPNQRGKALH",
+            "expected_amino_acids": [
+              "NFLGQNRSYVRKKDDGCKAYWKVCFHYNLHKAQPAERFFDPNQRGKALH"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 666,
+                "cdna_start": 665,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "X",
+                  "ref": "G",
+                  "start": 46501045
+                },
+                "transcript_id": "ENST00000414387"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 755,
+                "cdna_start": 754,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "X",
+                  "ref": "G",
+                  "start": 46501045
+                },
+                "transcript_id": "ENST00000523374"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 25,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "NFLGQNRSYVRKKDDGCKAYWKVCFHYNLHKAQPAERFFDPNQRGKALH",
+            "expected_amino_acids": [
+              "NFLGQNRSYVRKKDDGCKAYWKVCFHYNLHKAQPAERFFDPNQRGKALH"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 666,
+                "cdna_start": 665,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "X",
+                  "ref": "G",
+                  "start": 46501045
+                },
+                "transcript_id": "ENST00000414387"
+              },
+              {
+                "alt_bases": "T",
+                "cdna_end": 755,
+                "cdna_start": 754,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "X",
+                  "ref": "G",
+                  "start": 46501045
+                },
+                "transcript_id": "ENST00000523374"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 25,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "1b66c15da594a3ef",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.L176F",
+            "transcript_id": "ENST00000414387",
+            "transcript_name": "ZNF674-004"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.L182F",
+            "transcript_id": "ENST00000523374",
+            "transcript_name": "ZNF674-001"
+          }
+        ],
+        "variant_id": "ZNF674-chrX-46501045"
+      },
+      {
+        "case_id": "43-ZNF764-chr16-30557995-1120a096937e29e1",
+        "gene": "ZNF764",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "LRPAQRALYRDVMRETYGHLNALGIGGNKPALISWVEEEAE",
+            "expected_amino_acids": [
+              "LRPAQRALYRDVMRETYGHLNALGIGGNKPALISWVEEEAE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 269,
+                "cdna_start": 268,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "16",
+                  "ref": "C",
+                  "start": 30557995
+                },
+                "transcript_id": "ENST00000252797"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 504,
+                "cdna_start": 503,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "16",
+                  "ref": "C",
+                  "start": 30557995
+                },
+                "transcript_id": "ENST00000395091"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              20,
+              21
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 30,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "LRPAQRALYRDVMRETYGHLNALGIGGNKPALISWVEEEAE",
+            "expected_amino_acids": [
+              "LRPAQRALYRDVMRETYGHLNALGIGGNKPALISWVEEEAE"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 269,
+                "cdna_start": 268,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "16",
+                  "ref": "C",
+                  "start": 30557995
+                },
+                "transcript_id": "ENST00000252797"
+              },
+              {
+                "alt_bases": "A",
+                "cdna_end": 504,
+                "cdna_start": 503,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "16",
+                  "ref": "C",
+                  "start": 30557995
+                },
+                "transcript_id": "ENST00000395091"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              20,
+              21
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 30,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "1120a096937e29e1",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.S63N",
+            "transcript_id": "ENST00000252797",
+            "transcript_name": "ZNF764-001"
+          },
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.S63N",
+            "transcript_id": "ENST00000395091",
+            "transcript_name": "ZNF764-002"
+          },
+          {
+            "effect_class": "IncompleteTranscript",
+            "has_exact_mutant_protein_sequence": false,
+            "short_description": "incomplete",
+            "transcript_id": "ENST00000568114",
+            "transcript_name": "AC002310.13-001"
+          }
+        ],
+        "variant_id": "ZNF764-chr16-30557995"
+      },
+      {
+        "case_id": "44-MT_ND5-chrM-12994-238f917202dd9997",
+        "gene": "MT-ND5",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "238f917202dd9997",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/tempus/TL-24-ALMY2X4KMV/RNA/TL-24-ALMY2X4KMV_T_sorted.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A220T",
+            "transcript_id": "ENST00000361567",
+            "transcript_name": "MT-ND5-201"
+          }
+        ],
+        "variant_id": "MT_ND5-chrM-12994"
+      },
+      {
+        "case_id": "45-MT_ND5-chrM-12994-fbeb5d8a415e4d18",
+        "gene": "MT-ND5",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "LLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS",
+            "expected_amino_acids": [
+              "LLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 658,
+                "cdna_start": 657,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "MT",
+                  "ref": "G",
+                  "start": 12995
+                },
+                "transcript_id": "ENST00000361567"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              7,
+              8
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 19,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "LLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS",
+            "expected_amino_acids": [
+              "LLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 658,
+                "cdna_start": 657,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "MT",
+                  "ref": "G",
+                  "start": 12995
+                },
+                "transcript_id": "ENST00000361567"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              7,
+              8
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 19,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "fbeb5d8a415e4d18",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/vendor/cegat/P116686_2_S000048/P116686_3.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A220T",
+            "transcript_id": "ENST00000361567",
+            "transcript_name": "MT-ND5-201"
+          }
+        ],
+        "variant_id": "MT_ND5-chrM-12994"
+      },
+      {
+        "case_id": "46-MT_ND5-chrM-12994-7010dd389c50467d",
+        "gene": "MT-ND5",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "WDPQQMALLNANPSLTPLLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS",
+            "expected_amino_acids": [
+              "WDPQQMALLNANPSLTPLLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 658,
+                "cdna_start": 657,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "MT",
+                  "ref": "G",
+                  "start": 12994
+                },
+                "transcript_id": "ENST00000361567"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 14,
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": "WDPQQMALLNANPSLTPLLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS",
+            "expected_amino_acids": [
+              "WDPQQMALLNANPSLTPLLGLLLATAGKSAQLGLHPWLPSAMEGPTPVS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "A",
+                "cdna_end": 658,
+                "cdna_start": 657,
+                "source_variant": {
+                  "alt": "A",
+                  "contig": "MT",
+                  "ref": "G",
+                  "start": 12994
+                },
+                "transcript_id": "ENST00000361567"
+              }
+            ],
+            "matches_isolated_edit": true,
+            "mutation_interval": [
+              24,
+              25
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 14,
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "ONT",
+        "source_id": "7010dd389c50467d",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A220T",
+            "transcript_id": "ENST00000361567",
+            "transcript_name": "MT-ND5-201"
+          }
+        ],
+        "variant_id": "MT_ND5-chrM-12994"
+      },
+      {
+        "case_id": "47-MT_ND5-chrM-12994-0066232879babe83",
+        "gene": "MT-ND5",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          },
+          "assembly_on": {
+            "amino_acids": null,
+            "matches_isolated_edit": null,
+            "protein_status": "not_established",
+            "unexplained_transcript_edits": []
+          }
+        },
+        "platform": "PacBio",
+        "source_id": "0066232879babe83",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.A220T",
+            "transcript_id": "ENST00000361567",
+            "transcript_name": "MT-ND5-201"
+          }
+        ],
+        "variant_id": "MT_ND5-chrM-12994"
+      },
+      {
+        "case_id": "48-NR2F2-chr15-96332299-fbeb5d8a415e4d18",
+        "gene": "NR2F2",
+        "modes": {
+          "assembly_off": {
+            "amino_acids": "TAAGGQGGPGVPGSDKQQQQQHIECVVGDKSS",
+            "expected_amino_acids": [
+              "TAAGGQGGPGVPGSDKQQQQQHIECVVCGDKS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 1583,
+                "cdna_start": 1582,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "15",
+                  "ref": "G",
+                  "start": 96875528
+                },
+                "transcript_id": "ENST00000394166"
+              }
+            ],
+            "matches_isolated_edit": false,
+            "mutation_interval": [
+              10,
+              11
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 3,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 1634,
+                "cdna_start": 1631,
+                "source_variant": null,
+                "transcript_id": "ENST00000394166"
+              }
+            ]
+          },
+          "assembly_on": {
+            "amino_acids": "TAAGGQGGPGVPGSDKQQQQQHIECVVGDKSS",
+            "expected_amino_acids": [
+              "TAAGGQGGPGVPGSDKQQQQQHIECVVCGDKS"
+            ],
+            "known_germline_transcript_edits": [],
+            "known_somatic_transcript_edits": [
+              {
+                "alt_bases": "T",
+                "cdna_end": 1583,
+                "cdna_start": 1582,
+                "source_variant": {
+                  "alt": "T",
+                  "contig": "15",
+                  "ref": "G",
+                  "start": 96875528
+                },
+                "transcript_id": "ENST00000394166"
+              }
+            ],
+            "matches_isolated_edit": false,
+            "mutation_interval": [
+              10,
+              11
+            ],
+            "protein_status": "validated_local_window",
+            "supporting_fragments": 3,
+            "unexplained_transcript_edits": [
+              {
+                "alt_bases": "",
+                "cdna_end": 1634,
+                "cdna_start": 1631,
+                "source_variant": null,
+                "transcript_id": "ENST00000394166"
+              }
+            ]
+          }
+        },
+        "platform": "ILMN",
+        "source_id": "fbeb5d8a415e4d18",
+        "source_url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/vendor/cegat/P116686_2_S000048/P116686_3.bam",
+        "varcode_effects": [
+          {
+            "effect_class": "Substitution",
+            "has_exact_mutant_protein_sequence": true,
+            "short_description": "p.G65V",
+            "transcript_id": "ENST00000394166",
+            "transcript_name": "NR2F2-001"
+          }
+        ],
+        "variant_id": "NR2F2-chr15-96332299"
+      }
+    ],
+    "platform_mode_summary": [
+      {
+        "cases": 32,
+        "exact_isolated_edit_windows": 26,
+        "mode": "assembly_on",
+        "no_protein_window": 5,
+        "nonexact_windows": 1,
+        "platform": "ILMN",
+        "validated_local_protein_windows": 27,
+        "variants": 29
+      },
+      {
+        "cases": 32,
+        "exact_isolated_edit_windows": 26,
+        "mode": "assembly_off",
+        "no_protein_window": 5,
+        "nonexact_windows": 1,
+        "platform": "ILMN",
+        "validated_local_protein_windows": 27,
+        "variants": 29
+      },
+      {
+        "cases": 16,
+        "exact_isolated_edit_windows": 13,
+        "mode": "assembly_on",
+        "no_protein_window": 2,
+        "nonexact_windows": 1,
+        "platform": "ONT",
+        "validated_local_protein_windows": 14,
+        "variants": 16
+      },
+      {
+        "cases": 16,
+        "exact_isolated_edit_windows": 13,
+        "mode": "assembly_off",
+        "no_protein_window": 2,
+        "nonexact_windows": 1,
+        "platform": "ONT",
+        "validated_local_protein_windows": 14,
+        "variants": 16
+      },
+      {
+        "cases": 1,
+        "exact_isolated_edit_windows": 0,
+        "mode": "assembly_on",
+        "no_protein_window": 1,
+        "nonexact_windows": 0,
+        "platform": "PacBio",
+        "validated_local_protein_windows": 0,
+        "variants": 1
+      },
+      {
+        "cases": 1,
+        "exact_isolated_edit_windows": 0,
+        "mode": "assembly_off",
+        "no_protein_window": 1,
+        "nonexact_windows": 0,
+        "platform": "PacBio",
+        "validated_local_protein_windows": 0,
+        "variants": 1
+      }
+    ]
+  },
+  "provenance": {
+    "corpus_manifest_sha256": "504c1c0a84c0392da2e9af8f4b47f1214c05b28514c74de0544fe2a6d801cbfb",
+    "isovar_evidence_commit": "8ff7ce0cb9742bb45152cb0426b6039ede83a07d",
+    "isovar_repository": "https://github.com/openvax/isovar",
+    "isovar_runtime_module_sha256": "a86083a67cf195312243cb13f22d65e1516251ae67d18ad2221017b53fb6d4a3",
+    "isovar_runtime_version": "1.17.0",
+    "matrix_schema_version": 1,
+    "matrix_sha256": "3c8b0446b0e7df95772bc07b691ceaa184b913e0e0040b9507505997be1566a8"
+  },
+  "schema_version": 1,
+  "scope": {
+    "full_matrix": "44 vaccine variants across 164 catalogued RNA products; assembly enabled; products are not independent samples",
+    "paired_corpus": "49 selected original-read source/variant cases; same BAM subsets rerun with assembly on and off; selection enriched",
+    "protein_definition": "independently validated local RNA-derived coding window; not a full-length ORF"
+  },
+  "varcode": {
+    "interpretation": "Varcode's exact sequence is the reference transcript plus the nominated edit; it is not a sample-specific RNA haplotype.",
+    "variants": 44,
+    "variants_with_exact_isolated_effect_protein": 44,
+    "variants_without_exact_isolated_effect_protein": []
+  }
+}

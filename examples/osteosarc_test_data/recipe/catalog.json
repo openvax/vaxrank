@@ -1,0 +1,2607 @@
+{
+  "assets": {
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "Single Cell RNA-seq (Tumor) / Oxford Nanopore (ONT) Long-Read RNA-seq / Jun 2024 (T1) | BAMs",
+            "library": null,
+            "platform": "ont",
+            "provider": null,
+            "source": "data_page",
+            "timepoint": "T1",
+            "tissue": null
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T1",
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "01f9c65859ae3197ecddc65cbe0265998e1ea48e617423defad9812533d5cff1",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam.bai"
+        ],
+        "key": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam",
+        "kind": "alignment",
+        "metadata": {},
+        "modified": 1780509217,
+        "size": 65258027582,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "Single Cell RNA-seq (Tumor) / Oxford Nanopore (ONT) Long-Read RNA-seq / Jun 2024 (T1) | BAMs",
+            "library": null,
+            "platform": "ont",
+            "provider": null,
+            "source": "data_page",
+            "timepoint": "T1",
+            "tissue": null
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam.bai",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T1",
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "cf6365022253c97a997a2c04ccd16e43422d6bf2a1f4d20536269a9d03c5fd8f",
+        "index_urls": [],
+        "key": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780509215,
+        "size": 17148928,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"44d9f91502b6444363ad2732bff23910\"",
+        "filename": "IPISRC044_T1_sclrs_ONT.tagged.bam.bai",
+        "last_modified": "Wed, 03 Jun 2026 17:53:35 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:06:12.943356+00:00",
+        "sha256": "6dec1e847577c7df6091b25c310ae926ce00b16b93e1d95f05a921d2c5da9144",
+        "size": 17148928,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT.tagged.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": "2024-06",
+            "label": "T1 UCSF Tumor ONT 2024-06",
+            "library": null,
+            "platform": "ont",
+            "provider": "UCSF",
+            "source": "bams",
+            "timepoint": "T1",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": "2024-06",
+            "label": "T1 UCSF Tumor ONT 2024-06",
+            "library": null,
+            "platform": "ont",
+            "provider": "UCSF",
+            "source": "bam_metadata",
+            "timepoint": "T1",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "Single Cell RNA-seq (Tumor) / Oxford Nanopore (ONT) Long-Read RNA-seq / Jun 2024 (T1) | BAMs",
+            "library": null,
+            "platform": "ont",
+            "provider": null,
+            "source": "data_page",
+            "timepoint": "T1",
+            "tissue": null
+          },
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": "2024-06",
+            "label": "T1 UCSF Tumor ONT 2024-06",
+            "library": null,
+            "platform": "ont",
+            "provider": "UCSF",
+            "source": "vafs",
+            "timepoint": "T1",
+            "tissue": "tumor"
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T1",
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "7f7c2129809be56ca8fbdefec6cd423ebd7901c7b16636d34b336400c1b9c8a5",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam.bai"
+        ],
+        "key": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam",
+        "kind": "alignment",
+        "metadata": {
+          "catalog": {
+            "name": "T1 UCSF Tumor ONT 2024-06",
+            "size": "34.76 GiB",
+            "tissue": "tumor",
+            "url": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam"
+          },
+          "catalog_genome_assertion": "hg38",
+          "category": "scRNA ONT",
+          "metadata_rows": [
+            {
+              "analyst": "UCSF",
+              "assay": "scRNA_ONT",
+              "b2_path": "",
+              "b2_size_bytes": "",
+              "b2_size_human": "",
+              "display_name": "T1 UCSF Tumor ONT 2024-06",
+              "is_primary": "",
+              "is_superseded_by": "",
+              "md5sum": "b5c1df71cf8056d9ab4f10ee6b1df325",
+              "notes": "Deduplicated",
+              "provider": "UCSF",
+              "s3_path": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam",
+              "s3_size_bytes": "37325269101",
+              "s3_size_human": "34.76 GiB",
+              "sample_date": "2024-06",
+              "timepoint": "T1",
+              "tissue": "Tumor"
+            }
+          ]
+        },
+        "modified": 1780719699,
+        "size": 37325269101,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "Single Cell RNA-seq (Tumor) / Oxford Nanopore (ONT) Long-Read RNA-seq / Jun 2024 (T1) | BAMs",
+            "library": null,
+            "platform": "ont",
+            "provider": null,
+            "source": "data_page",
+            "timepoint": "T1",
+            "tissue": null
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam.bai",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T1",
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "51249f8b91f23aa1c02ff90d97d8c6e1391d0581910d74e5a3bfbbdd46188666",
+        "index_urls": [],
+        "key": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780719671,
+        "size": 12079800,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"62137ec4a13c912c9a5b970bf0e9738e\"",
+        "filename": "IPISRC044_T1_sclrs_ONT_dedup.bam.bai",
+        "last_modified": "Sat, 06 Jun 2026 04:21:11 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:07:28.911631+00:00",
+        "sha256": "2f0b3aca56b22156b1a88d6120e1e21a2b87a46bbc82550375c7dff871e343e4",
+        "size": 12079800,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT/IPISRC044_T1_sclrs_ONT_dedup/IPISRC044_T1_sclrs_ONT_dedup.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "Single Cell RNA-seq (Tumor) / Oxford Nanopore (ONT) Long-Read RNA-seq / Jan 2025 (T2) | BAMs",
+            "library": null,
+            "platform": "ont",
+            "provider": null,
+            "source": "data_page",
+            "timepoint": "T2",
+            "tissue": null
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T2",
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "58f81602ec2f87b86a032cf869f1abefc9f4235dbb1ce082e0b6bbc085b155de",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam.bai"
+        ],
+        "key": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam",
+        "kind": "alignment",
+        "metadata": {},
+        "modified": 1780532394,
+        "size": 78483020558,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "Single Cell RNA-seq (Tumor) / Oxford Nanopore (ONT) Long-Read RNA-seq / Jan 2025 (T2) | BAMs",
+            "library": null,
+            "platform": "ont",
+            "provider": null,
+            "source": "data_page",
+            "timepoint": "T2",
+            "tissue": null
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam.bai",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T2",
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "30f5855cec253f11ce416d7c99bddf04230ebbff0678a4fb09a255eee7838bc0",
+        "index_urls": [],
+        "key": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780532390,
+        "size": 22476432,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"b6d9791b5641dc2d06a2e00513187369\"",
+        "filename": "IPISRC044_T2_sclrs_ONT.tagged.bam.bai",
+        "last_modified": "Thu, 04 Jun 2026 00:19:50 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:06:29.460890+00:00",
+        "sha256": "1b7e79fdad815b07cf3d16f9e72204551e3dddfc919c703bc5dca7ad9e49abd5",
+        "size": 22476432,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT.tagged.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": "2025-01",
+            "label": "T2 UCSF Tumor ONT 2025-01",
+            "library": null,
+            "platform": "ont",
+            "provider": "UCSF",
+            "source": "bams",
+            "timepoint": "T2",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": "2025-01",
+            "label": "T2 UCSF Tumor ONT 2025-01",
+            "library": null,
+            "platform": "ont",
+            "provider": "UCSF",
+            "source": "bam_metadata",
+            "timepoint": "T2",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "Single Cell RNA-seq (Tumor) / Oxford Nanopore (ONT) Long-Read RNA-seq / Jan 2025 (T2) | BAMs",
+            "library": null,
+            "platform": "ont",
+            "provider": null,
+            "source": "data_page",
+            "timepoint": "T2",
+            "tissue": null
+          },
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": "2025-01",
+            "label": "T2 UCSF Tumor ONT 2025-01",
+            "library": null,
+            "platform": "ont",
+            "provider": "UCSF",
+            "source": "vafs",
+            "timepoint": "T2",
+            "tissue": "tumor"
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T2",
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "52898746cc0434d837649f3d64c84a1ce3c9c0f56b019b9de521364fc331530f",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam.bai"
+        ],
+        "key": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam",
+        "kind": "alignment",
+        "metadata": {
+          "catalog": {
+            "name": "T2 UCSF Tumor ONT 2025-01",
+            "size": "62.46 GiB",
+            "tissue": "tumor",
+            "url": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam"
+          },
+          "catalog_genome_assertion": "hg38",
+          "category": "scRNA ONT",
+          "metadata_rows": [
+            {
+              "analyst": "UCSF",
+              "assay": "scRNA_ONT",
+              "b2_path": "",
+              "b2_size_bytes": "",
+              "b2_size_human": "",
+              "display_name": "T2 UCSF Tumor ONT 2025-01",
+              "is_primary": "",
+              "is_superseded_by": "",
+              "md5sum": "4a97a763d81420293a9008f976e14210",
+              "notes": "Deduplicated",
+              "provider": "UCSF",
+              "s3_path": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam",
+              "s3_size_bytes": "67064056978",
+              "s3_size_human": "62.46 GiB",
+              "sample_date": "2025-01",
+              "timepoint": "T2",
+              "tissue": "Tumor"
+            }
+          ]
+        },
+        "modified": 1780741635,
+        "size": 67064056978,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "Single Cell RNA-seq (Tumor) / Oxford Nanopore (ONT) Long-Read RNA-seq / Jan 2025 (T2) | BAMs",
+            "library": null,
+            "platform": "ont",
+            "provider": null,
+            "source": "data_page",
+            "timepoint": "T2",
+            "tissue": null
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam.bai",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T2",
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "3c49fa37954b045958851f039086677e18a019dc8d85dbaac14bf4057a9cd800",
+        "index_urls": [],
+        "key": "ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780741628,
+        "size": 18260440,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"e4505fc200a10f4b75b8ea59771349ff\"",
+        "filename": "IPISRC044_T2_sclrs_ONT_dedup.bam.bai",
+        "last_modified": "Sat, 06 Jun 2026 10:27:08 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:07:20.879284+00:00",
+        "sha256": "1724818f2816d3544d794c45416d5a20f26beac1182e5ffec349c9beeb36969e",
+        "size": 18260440,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/ONT/IPISRC044_ONT_upload/IPISRC044_ONT/processed/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT/IPISRC044_T2_sclrs_ONT_dedup/IPISRC044_T2_sclrs_ONT_dedup.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "Bulk RNA Sequencing / Dec 2022 (T0) | Boston Gene | STAR alignments",
+            "library": null,
+            "platform": null,
+            "provider": "BostonGene",
+            "source": "data_page",
+            "timepoint": "T0",
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "b9ddb95ec3370125b05f3be19aa21f2d1353bace091b40bcb38648154b750c98",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam.bai"
+        ],
+        "key": "genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam",
+        "kind": "alignment",
+        "metadata": {},
+        "modified": 1780544921,
+        "size": 8227701005,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "Bulk RNA Sequencing / Dec 2022 (T0) | Boston Gene | STAR alignments",
+            "library": null,
+            "platform": null,
+            "provider": "BostonGene",
+            "source": "data_page",
+            "timepoint": "T0",
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "e7d322cfc6775ead3f8f3a4b25d43539200479ec9dd78a03073dde7842edffed",
+        "index_urls": [],
+        "key": "genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780544920,
+        "size": 6449152,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"866bbab68e4fe216751d9c9f9b65f654\"",
+        "filename": "2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam.bai",
+        "last_modified": "Thu, 04 Jun 2026 03:48:40 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:05:54.812287+00:00",
+        "sha256": "25cc242484d4839e89ac2978b34879eb2475d9b35280e2297cb9b2ffc7fbbef9",
+        "size": 6449152,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/genomics/genomics-bulk/2022.12.16/RNA/2022.12.16.rna.bostongene/processed/2024.06.11.bostongene.align.tcga.protocol.dr32Aligned.sorted.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "T0 Personalis Tumor RNA oncoanalyser",
+            "library": null,
+            "platform": null,
+            "provider": "Personalis",
+            "source": "bams",
+            "timepoint": "T0",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": "2022-12",
+            "label": "T0 Personalis Tumor RNA oncoanalyser",
+            "library": null,
+            "platform": null,
+            "provider": "Personalis",
+            "source": "bam_metadata",
+            "timepoint": "T0",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": "2022-12",
+            "label": "T0 Personalis Tumor RNA oncoanalyser",
+            "library": null,
+            "platform": null,
+            "provider": "Personalis",
+            "source": "vafs",
+            "timepoint": "T0",
+            "tissue": "tumor"
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bam",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T0",
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "94771f6387fdf0781583a4ea01af829784a68720a6cf5e122812aaac851e8dae",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bam.bai",
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bai"
+        ],
+        "key": "kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bam",
+        "kind": "alignment",
+        "metadata": {
+          "catalog": {
+            "name": "T0 Personalis Tumor RNA oncoanalyser",
+            "size": "17.87 GiB",
+            "tissue": "tumor",
+            "url": "kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bam"
+          },
+          "catalog_genome_assertion": "hg38",
+          "category": "RNA",
+          "metadata_rows": [
+            {
+              "analyst": "UCSF",
+              "assay": "RNA",
+              "b2_path": "",
+              "b2_size_bytes": "",
+              "b2_size_human": "",
+              "display_name": "T0 Personalis Tumor RNA oncoanalyser",
+              "is_primary": "",
+              "is_superseded_by": "",
+              "md5sum": "",
+              "notes": "hg38 pipeline BAM; viewer-only (no sample_date so it stays off the VAF trajectory)",
+              "provider": "Personalis",
+              "s3_path": "kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bam",
+              "s3_size_bytes": "19191756954",
+              "s3_size_human": "17.87 GiB",
+              "sample_date": "2022-12",
+              "timepoint": "T0",
+              "tissue": "Tumor"
+            }
+          ]
+        },
+        "modified": 1780595827,
+        "size": 19191756954,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bam.bai",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T0",
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "91ac9de9604aa9284cf822bcd0bfe312d72843a35f67c6100154c59e9e1be07f",
+        "index_urls": [],
+        "key": "kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780595823,
+        "size": 12086384,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"f4e9bf08e5d1442490b3624be1a532f4\"",
+        "filename": "IPISRC044_tumor_T0_personalis_rna.md.bam.bai",
+        "last_modified": "Thu, 04 Jun 2026 17:57:03 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:14:09.667983+00:00",
+        "sha256": "bbe729e67658fdb325b317f5942951dce6a25e3cd9bd72b4c3d37c4d7b448a3c",
+        "size": 12086384,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/kamil/oncoanalyser/IPISRC044_T0_personalis/alignments/rna/IPISRC044_tumor_T0_personalis_rna.md.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": "2024-06",
+            "label": "T1 UCSF Tumor PacBio 2024-06",
+            "library": null,
+            "platform": "pacbio",
+            "provider": "UCSF",
+            "source": "bams",
+            "timepoint": "T1",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "scrna-seq",
+            "basis": "published",
+            "date": "2024-06",
+            "label": "T1 UCSF Tumor PacBio 2024-06",
+            "library": null,
+            "platform": "pacbio",
+            "provider": "UCSF",
+            "source": "bam_metadata",
+            "timepoint": "T1",
+            "tissue": "tumor"
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T1",
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "8275c5f211640cb978ef5f54e7cf22e71dd96efc8a8f84fb14039c097182989b",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam.bai"
+        ],
+        "key": "pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam",
+        "kind": "alignment",
+        "metadata": {
+          "catalog": {
+            "name": "T1 UCSF Tumor PacBio 2024-06",
+            "size": "1.68 GiB",
+            "tissue": "tumor",
+            "url": "pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam"
+          },
+          "catalog_genome_assertion": "hg38",
+          "category": "PacBio",
+          "metadata_rows": [
+            {
+              "analyst": "UCSF",
+              "assay": "PacBio",
+              "b2_path": "",
+              "b2_size_bytes": "",
+              "b2_size_human": "",
+              "display_name": "T1 UCSF Tumor PacBio 2024-06",
+              "is_primary": "",
+              "is_superseded_by": "",
+              "md5sum": "c2006984d576077d37a4e362f1e9c664",
+              "notes": "",
+              "provider": "UCSF",
+              "s3_path": "pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam",
+              "s3_size_bytes": "1803834150",
+              "s3_size_human": "1.68 GiB",
+              "sample_date": "2024-06",
+              "timepoint": "T1",
+              "tissue": "Tumor"
+            }
+          ]
+        },
+        "modified": 1780437785,
+        "size": 1803834150,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam.bai",
+            "library": null,
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": "T1",
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "32d5904006d5a571457358ea64fc4c6101beb4b7aa70fd6ab3e0538a14c9af29",
+        "index_urls": [],
+        "key": "pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780437784,
+        "size": 3490824,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"7aa3d7be62da29ce8fe62015156099a4\"",
+        "filename": "IPISRC044_T1_sclrs_live_pbmm2_mapped.bam.bai",
+        "last_modified": "Tue, 02 Jun 2026 22:03:04 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:14:11.691098+00:00",
+        "sha256": "f73247e33a7c3c1070b8470fc8a00750174eb6aff8f76b3c2d7b48326fd9db89",
+        "size": 3490824,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/pacbio/IPISRC044_T1_sclrs_live_pbmm2_mapped.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam",
+            "library": "BG003082",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "1654105ca3a0e8b36e96d83df4c6c80c55ad854aebb8b745b7db45fc71e92ffd",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam.bai"
+        ],
+        "key": "rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam",
+        "kind": "alignment",
+        "metadata": {},
+        "modified": 1780487603,
+        "size": 6403738806,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam.bai",
+            "library": "BG003082",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "15dab1d6259ce276fce68f32df75326163bb77e34fc3057fb4adbd650a59c484",
+        "index_urls": [],
+        "key": "rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780487602,
+        "size": 4870656,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"4e2944e0898787ed05c0a32c167ae719\"",
+        "filename": "BG003082.Aligned.sortedByCoord.out.bam.bai",
+        "last_modified": "Wed, 03 Jun 2026 11:53:22 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:06:59.980307+00:00",
+        "sha256": "1e9289af9b40bdb09070aa200a3649e6884ceb23a789f74b81cd960fe576eed6",
+        "size": 4870656,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": "2022-12",
+            "label": "T0 BostonGene Tumor RNA 2022-12 (BG003082 reprocessed)",
+            "library": null,
+            "platform": null,
+            "provider": "BostonGene",
+            "source": "bams",
+            "timepoint": "T0",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": "2022-12",
+            "label": "T0 BostonGene Tumor RNA 2022-12 (BG003082)",
+            "library": null,
+            "platform": null,
+            "provider": "BostonGene",
+            "source": "bam_metadata",
+            "timepoint": "T0",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": "2022-12",
+            "label": "T0 BostonGene Tumor RNA 2022-12 (BG003082)",
+            "library": null,
+            "platform": null,
+            "provider": "BostonGene",
+            "source": "vafs",
+            "timepoint": "T0",
+            "tissue": "tumor"
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam",
+            "library": "BG003082",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "316b3ea89f1ad5ee98e06cde0710fb9b8a43d74a82b7aeadf19bf6281d546c12",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam.bai"
+        ],
+        "key": "rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam",
+        "kind": "alignment",
+        "metadata": {
+          "catalog": {
+            "name": "T0 BostonGene Tumor RNA 2022-12 (BG003082 reprocessed)",
+            "size": "6.30 GiB",
+            "tissue": "tumor",
+            "url": "rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam"
+          },
+          "catalog_genome_assertion": "hg38",
+          "category": "RNA",
+          "metadata_rows": [
+            {
+              "analyst": "Kamil",
+              "assay": "RNA",
+              "b2_path": "",
+              "b2_size_bytes": "",
+              "b2_size_human": "",
+              "display_name": "T0 BostonGene Tumor RNA 2022-12 (BG003082)",
+              "is_primary": "",
+              "is_superseded_by": "",
+              "md5sum": "1b7d1ca926339df58b22c67c71fbd286",
+              "notes": "BostonGene T0 RNA (2022). Verified via oncoanalyser read groups + VAF correlation.",
+              "provider": "BostonGene",
+              "s3_path": "rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam",
+              "s3_size_bytes": "6759940194",
+              "s3_size_human": "6.30 GiB",
+              "sample_date": "2022-12",
+              "timepoint": "T0",
+              "tissue": "Tumor"
+            }
+          ]
+        },
+        "modified": 1780488012,
+        "size": 6759940194,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam.bai",
+            "library": "BG003082",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "95a2e591dc82253f02746583b8a54969fe3cf239478998a32eaf126752838561",
+        "index_urls": [],
+        "key": "rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780488011,
+        "size": 4900480,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"d9c84e4b3d9d56a4364cc45537f08e9d\"",
+        "filename": "BG003082.Aligned.sortedByCoord.out.md.bam.bai",
+        "last_modified": "Wed, 03 Jun 2026 12:00:11 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:05:38.607508+00:00",
+        "sha256": "c7c9742d1446905bb7cd1ed07a1eb778e665f3450eb46d19d5e2ec9e0a308f45",
+        "size": 4900480,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG003082/BG003082.Aligned.sortedByCoord.out.md.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": "2022-12",
+            "label": "T0 BostonGene Tumor RNA 2022-12 (BG009368 reprocessed)",
+            "library": null,
+            "platform": null,
+            "provider": "BostonGene",
+            "source": "bams",
+            "timepoint": "T0",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": "2024-06",
+            "label": "T1 BostonGene Tumor RNA 2024-06 (BG009368)",
+            "library": null,
+            "platform": null,
+            "provider": "BostonGene",
+            "source": "bam_metadata",
+            "timepoint": "T1",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": "2024-06",
+            "label": "T1 BostonGene Tumor RNA 2024-06 (BG009368)",
+            "library": null,
+            "platform": null,
+            "provider": "BostonGene",
+            "source": "vafs",
+            "timepoint": "T1",
+            "tissue": "tumor"
+          },
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam",
+            "library": "BG009368",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "9d97f7d9808e2a3594e8e015d6a62efa281da867b9ca18257a7f08ed227ad056",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam.bai"
+        ],
+        "key": "rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam",
+        "kind": "alignment",
+        "metadata": {
+          "catalog": {
+            "name": "T0 BostonGene Tumor RNA 2022-12 (BG009368 reprocessed)",
+            "size": "8.19 GiB",
+            "tissue": "tumor",
+            "url": "rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam"
+          },
+          "catalog_genome_assertion": "hg38",
+          "category": "RNA",
+          "metadata_rows": [
+            {
+              "analyst": "Kamil",
+              "assay": "RNA",
+              "b2_path": "",
+              "b2_size_bytes": "",
+              "b2_size_human": "",
+              "display_name": "T1 BostonGene Tumor RNA 2024-06 (BG009368)",
+              "is_primary": "",
+              "is_superseded_by": "",
+              "md5sum": "70af4ad89cdde9141a404ceb25e3001e",
+              "notes": "Re-timepointed T0->T1: oncoanalyser T1 RNA was built from 20240611_bostongene_tumor_rna_BG009368.fastq.gz; 123/133 variants VAF-match the oncoanalyser T1 RNA BAM.",
+              "provider": "BostonGene",
+              "s3_path": "rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam",
+              "s3_size_bytes": "8797368647",
+              "s3_size_human": "8.19 GiB",
+              "sample_date": "2024-06",
+              "timepoint": "T1",
+              "tissue": "Tumor"
+            }
+          ]
+        },
+        "modified": 1780495573,
+        "size": 8797368647,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam.bai",
+            "library": "BG009368",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "40d30efd9cbd2bf38fadb45d4a302a31338352d06627a712482bb303c6a2a891",
+        "index_urls": [],
+        "key": "rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780495572,
+        "size": 6547696,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"92cb23a988d2278883f31093c9b86008\"",
+        "filename": "BG009368.Aligned.sortedByCoord.out.md.bam.bai",
+        "last_modified": "Wed, 03 Jun 2026 14:06:12 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:07:12.565944+00:00",
+        "sha256": "5f94b3b7f79245719303c29b794835c475ceaf54fc21082dce3c81b4512a45a0",
+        "size": 6547696,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/BG009368/BG009368.Aligned.sortedByCoord.out.md.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam",
+            "library": "SARC0277",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "40a3ceff825db98f490f303c67b1fad64e5594e16670e9ed43d7dc1c14be58fa",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam.bai"
+        ],
+        "key": "rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam",
+        "kind": "alignment",
+        "metadata": {},
+        "modified": 1780499326,
+        "size": 8379854903,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam.bai",
+            "library": "SARC0277",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "d393340d63c67d339f6d83b933ef9f43a63af75cd727f55dc6a75bbb72a7813f",
+        "index_urls": [],
+        "key": "rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780499325,
+        "size": 6709464,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"389a291202966f4aa52366e07e55dbf4\"",
+        "filename": "SARC0277.Aligned.sortedByCoord.out.bam.bai",
+        "last_modified": "Wed, 03 Jun 2026 15:08:45 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:14:13.757673+00:00",
+        "sha256": "4390ff83c2a99b64148daabec4e41bd7a808a3f3556f8309c90a66fb673897a7",
+        "size": 6709464,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/SARC0277/SARC0277.Aligned.sortedByCoord.out.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/TL-24-KCVBE1UI1P/TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/reprocessed/TL-24-KCVBE1UI1P/TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam",
+            "library": "TL-24-KCVBE1UI1P",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "772a679bdabae1a8cd8a276d39b2ec2b726b7911a560aeae6e951ecade02cbbe",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/TL-24-KCVBE1UI1P/TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam.bai"
+        ],
+        "key": "rna-seq/reprocessed/TL-24-KCVBE1UI1P/TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam",
+        "kind": "alignment",
+        "metadata": {},
+        "modified": 1780523337,
+        "size": 1445553705,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/TL-24-KCVBE1UI1P/TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/reprocessed/TL-24-KCVBE1UI1P/TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam.bai",
+            "library": "TL-24-KCVBE1UI1P",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "efc5736a26fa68605c0fbd71ff67653494ec2f0ba6d8c9bac3180a905043c6a4",
+        "index_urls": [],
+        "key": "rna-seq/reprocessed/TL-24-KCVBE1UI1P/TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780523336,
+        "size": 2587488,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/TL-24-KCVBE1UI1P/TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"16ee6c520a4ce17a5f8de80073cd764e\"",
+        "filename": "TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam.bai",
+        "last_modified": "Wed, 03 Jun 2026 21:48:56 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:06:53.046080+00:00",
+        "sha256": "62e204935b3ea22b14ada484deec8e2b8c0ccecdca050a7daf63ef2a2a3100a6",
+        "size": 2587488,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/reprocessed/TL-24-KCVBE1UI1P/TL-24-KCVBE1UI1P.Aligned.sortedByCoord.out.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/tempus/TL-24-ALMY2X4KMV/RNA/TL-24-ALMY2X4KMV_T_sorted.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/tempus/TL-24-ALMY2X4KMV/RNA/TL-24-ALMY2X4KMV_T_sorted.bam",
+            "library": "TL-24-ALMY2X4KMV",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "8ed007e6b7e0baccdb8c5906a41ec61152abb9e2919ff946448cf842f92c3bb4",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/tempus/TL-24-ALMY2X4KMV/RNA/TL-24-ALMY2X4KMV_T_sorted.bam.bai"
+        ],
+        "key": "rna-seq/tempus/TL-24-ALMY2X4KMV/RNA/TL-24-ALMY2X4KMV_T_sorted.bam",
+        "kind": "alignment",
+        "metadata": {},
+        "modified": 1780508822,
+        "size": 563222646,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/tempus/TL-24-ALMY2X4KMV/RNA/TL-24-ALMY2X4KMV_T_sorted.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": null,
+            "basis": "inferred",
+            "date": null,
+            "label": "rna-seq/tempus/TL-24-ALMY2X4KMV/RNA/TL-24-ALMY2X4KMV_T_sorted.bam.bai",
+            "library": "TL-24-ALMY2X4KMV",
+            "platform": null,
+            "provider": null,
+            "source": "bucket_path",
+            "timepoint": null,
+            "tissue": null
+          }
+        ],
+        "format": "bai",
+        "id": "53e1a92ff08b72e322410f6ddd7b93087bdce5248db3e7c570a7828ec276272e",
+        "index_urls": [],
+        "key": "rna-seq/tempus/TL-24-ALMY2X4KMV/RNA/TL-24-ALMY2X4KMV_T_sorted.bam.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1780508821,
+        "size": 2641296,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/tempus/TL-24-ALMY2X4KMV/RNA/TL-24-ALMY2X4KMV_T_sorted.bam.bai"
+      },
+      "index_receipt": {
+        "etag": "\"49a97c567f8eafab8ceff6b03dbe926a\"",
+        "filename": "TL-24-ALMY2X4KMV_T_sorted.bam.bai",
+        "last_modified": "Wed, 03 Jun 2026 17:47:01 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:14:15.656441+00:00",
+        "sha256": "0b126d5d05a9910d81a52909f96f585c9e395e9243e66919169d00946486e668",
+        "size": 2641296,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/rna-seq/tempus/TL-24-ALMY2X4KMV/RNA/TL-24-ALMY2X4KMV_T_sorted.bam.bai"
+      }
+    },
+    "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/vendor/cegat/P116686_2_S000048/P116686_3.bam": {
+      "asset": {
+        "claims": [
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": "2022-12",
+            "label": "T0 CeGaT Tumor RNA 2022-12 (P116686_3 vendor)",
+            "library": null,
+            "platform": null,
+            "provider": "CeGaT",
+            "source": "bam_metadata",
+            "timepoint": "T0",
+            "tissue": "tumor"
+          },
+          {
+            "assay": "rna-seq",
+            "basis": "published",
+            "date": null,
+            "label": "Bulk RNA Sequencing / Dec 2022 (T0) | CeGaT | Tumor RNA \u2014 STAR BAM (+ FASTQ)",
+            "library": null,
+            "platform": null,
+            "provider": "CeGaT",
+            "source": "data_page",
+            "timepoint": "T0",
+            "tissue": null
+          }
+        ],
+        "format": "bam",
+        "id": "9387e6a9a2af9239cab2380be722a04cb38061da92e79ed3750ddf3fcf66a86c",
+        "index_urls": [
+          "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/vendor/cegat/P116686_2_S000048/P116686_3.bai"
+        ],
+        "key": "vendor/cegat/P116686_2_S000048/P116686_3.bam",
+        "kind": "alignment",
+        "metadata": {
+          "metadata_rows": [
+            {
+              "analyst": "CeGaT",
+              "assay": "RNA",
+              "b2_path": "",
+              "b2_size_bytes": "",
+              "b2_size_human": "",
+              "display_name": "T0 CeGaT Tumor RNA 2022-12 (P116686_3 vendor)",
+              "is_primary": "",
+              "is_superseded_by": "",
+              "md5sum": "4d8fb94c7dd5d1fe426963d752a95e81",
+              "notes": "CeGaT tumor RNA (STAR 2.7.3a, hg19). Sequenced 2023-03-22 on the T0 material collected 2022-12-16. Files live under P116686_2_S000048/ despite the P116686_3 sample id.",
+              "provider": "CeGaT",
+              "s3_path": "vendor/cegat/P116686_2_S000048/P116686_3.bam",
+              "s3_size_bytes": "7823924680",
+              "s3_size_human": "7.29 GiB",
+              "sample_date": "2022-12",
+              "timepoint": "T0",
+              "tissue": "Tumor"
+            }
+          ]
+        },
+        "modified": 1784585192,
+        "size": 7823924680,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/vendor/cegat/P116686_2_S000048/P116686_3.bam"
+      },
+      "index": {
+        "claims": [
+          {
+            "assay": "wes",
+            "basis": "published",
+            "date": null,
+            "label": "Bulk DNA Sequencing / Whole Exome Sequencing (WES) \u2014 FASTQ / Dec 2022 (T0) | CeGaT | Tumor",
+            "library": null,
+            "platform": null,
+            "provider": "CeGaT",
+            "source": "data_page",
+            "timepoint": "T0",
+            "tissue": "tumor"
+          }
+        ],
+        "format": "bai",
+        "id": "944819b461d9b9c2007fca49e5cc1b29999d393ad76b1b43e6e4c1e805b174d0",
+        "index_urls": [],
+        "key": "vendor/cegat/P116686_2_S000048/P116686_3.bai",
+        "kind": "index",
+        "metadata": {},
+        "modified": 1784585192,
+        "size": 7515296,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/vendor/cegat/P116686_2_S000048/P116686_3.bai"
+      },
+      "index_receipt": {
+        "etag": "\"ef378b7af1f3d08e9565256ddf30b404\"",
+        "filename": "P116686_3.bai",
+        "last_modified": "Mon, 20 Jul 2026 22:06:32 GMT",
+        "md5": null,
+        "retrieved_at": "2026-09-20T19:14:17.882226+00:00",
+        "sha256": "ed496bcd2a4db7f0c99cba7212a916094422fbfff4f15aae5e606b7101425173",
+        "size": 7515296,
+        "url": "https://sid-sijbrandij-osteosarc-dataset.s3.us-west-2.amazonaws.com/vendor/cegat/P116686_2_S000048/P116686_3.bai"
+      }
+    }
+  },
+  "corrections": false,
+  "snapshot": {
+    "created_at": "2026-09-18T16:07:17.074881+00:00",
+    "id": "e4224eeedc18b9a0e66d9e57afcb5f9d613ed76a775e58cd56d320937cd6cf6f",
+    "name": "2026-09-18",
+    "schema_version": 1,
+    "sources": {
+      "bam_metadata": {
+        "etag": null,
+        "filename": "bam-metadata-consolidated.tsv",
+        "last_modified": null,
+        "md5": null,
+        "retrieved_at": "2026-09-18T16:07:17.041940+00:00",
+        "sha256": "2b79a84faf01c977abfb31324ef34736f033a909e9b22a5ca92b24680d628a9b",
+        "size": 23451,
+        "url": "https://gitlab.com/slowkow/osteosarc.com/-/raw/main/scripts/data/bam-metadata-consolidated.tsv"
+      },
+      "bams": {
+        "etag": null,
+        "filename": "bams.json",
+        "last_modified": null,
+        "md5": null,
+        "retrieved_at": "2026-09-18T16:07:16.981186+00:00",
+        "sha256": "88518bc3f9b0e9a7e6fffe13f6c5506e8f781a7287962eee20e412259313360e",
+        "size": 19722,
+        "url": "https://osteosarc.com/bams/bams.json"
+      },
+      "bucket": {
+        "etag": null,
+        "filename": "bucket_listing.json",
+        "last_modified": null,
+        "md5": null,
+        "retrieved_at": "2026-09-18T16:07:17.007809+00:00",
+        "sha256": "05266e83e44334bf20bc3f50ed45ffa243d7296b66f80b0de657d57096e07dc5",
+        "size": 44560179,
+        "url": "https://osteosarc.com/bucket_listing.json"
+      },
+      "data_page": {
+        "etag": null,
+        "filename": "data",
+        "last_modified": null,
+        "md5": null,
+        "retrieved_at": "2026-09-18T16:07:17.043891+00:00",
+        "sha256": "9d1ae0a55938f7c419ef0d5a509052fe0927878c506cb858205cce0366500a9e",
+        "size": 115042,
+        "url": "https://osteosarc.com/data/"
+      },
+      "source_variants": {
+        "etag": null,
+        "filename": "variants.json",
+        "last_modified": null,
+        "md5": null,
+        "retrieved_at": "2026-09-18T16:07:17.036506+00:00",
+        "sha256": "815e3052a5b4c3a9611a0e7ed3f6ccccde7bf95faaf4519ebffcae6633ef3db0",
+        "size": 6494620,
+        "url": "https://gitlab.com/slowkow/osteosarc.com/-/raw/main/src/data/variants.json"
+      },
+      "vaccine_overlap": {
+        "etag": null,
+        "filename": "vaccine_overlap.json",
+        "last_modified": null,
+        "md5": null,
+        "retrieved_at": "2026-09-18T16:07:17.031473+00:00",
+        "sha256": "3572f7ded10bc10e4dae92805210e858a024449e037e7f47320a05c93991053f",
+        "size": 33292,
+        "url": "https://osteosarc.com/data/vaccine_overlap.json"
+      },
+      "vaf_columns": {
+        "etag": null,
+        "filename": "variant_vafs_long.columns.tsv",
+        "last_modified": null,
+        "md5": null,
+        "retrieved_at": "2026-09-18T16:07:17.030446+00:00",
+        "sha256": "935507a2cf33688243b92285e5107c6e814aee635c5ce5f8963f2b8f3ec0535f",
+        "size": 1482,
+        "url": "https://osteosarc.com/variants/variant_vafs_long.columns.tsv"
+      },
+      "vafs": {
+        "etag": null,
+        "filename": "variant_vafs_long.tsv",
+        "last_modified": null,
+        "md5": null,
+        "retrieved_at": "2026-09-18T16:07:17.028651+00:00",
+        "sha256": "265224cae8bb7c43c85a65a7d4512195edbd7bbd9741d1cbe935f6027acbe93c",
+        "size": 1704282,
+        "url": "https://osteosarc.com/variants/variant_vafs_long.tsv"
+      },
+      "variant_index": {
+        "etag": null,
+        "filename": "variants",
+        "last_modified": null,
+        "md5": null,
+        "retrieved_at": "2026-09-18T16:07:17.025473+00:00",
+        "sha256": "e9707c90020ce84f0bb5424f8247140879b295d85858602506b47fa33ddc4925",
+        "size": 550526,
+        "url": "https://osteosarc.com/variants/"
+      }
+    }
+  },
+  "variants": {
+    "ABCF2-chr7-151218156": {
+      "alleles": [
+        [
+          "chr7",
+          151218156,
+          "G",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "ABCF2",
+      "id": "ABCF2-chr7-151218156",
+      "on_site": true,
+      "pipelines": [
+        "LENS 2022"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "ADGRF5-chr6-46856758": {
+      "alleles": [
+        [
+          "chr6",
+          46856758,
+          "T",
+          "C"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "ADGRF5",
+      "id": "ADGRF5-chr6-46856758",
+      "on_site": true,
+      "pipelines": [],
+      "status": "ready",
+      "vaccine_count": 2,
+      "vaccines": [
+        "JLF V2"
+      ]
+    },
+    "ATRX-chrX-77599465": {
+      "alleles": [
+        [
+          "chrX",
+          77599465,
+          "C",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "ATRX",
+      "id": "ATRX-chrX-77599465",
+      "on_site": true,
+      "pipelines": [
+        "BG 2024",
+        "Mutect2 2024"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "BMP1-chr8-22192067": {
+      "alleles": [
+        [
+          "chr8",
+          22192067,
+          "T",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "BMP1",
+      "id": "BMP1-chr8-22192067",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 2,
+      "vaccines": [
+        "JLF V3",
+        "mRNA"
+      ]
+    },
+    "BTD-chr3-15645183": {
+      "alleles": [
+        [
+          "chr3",
+          15645183,
+          "T",
+          "G"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "BTD",
+      "id": "BTD-chr3-15645183",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "LENS 2022",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "Natera 2022",
+        "Tempus 2022",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 3,
+      "vaccines": [
+        "JLF V1",
+        "JLF V2",
+        "JLF V3",
+        "mRNA"
+      ]
+    },
+    "CD109-chr6-73818405": {
+      "alleles": [
+        [
+          "chr6",
+          73818405,
+          "G",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "CD109",
+      "id": "CD109-chr6-73818405",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2024"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": [
+        "JLF V3"
+      ]
+    },
+    "CDC40-chr6-110228838": {
+      "alleles": [
+        [
+          "chr6",
+          110228838,
+          "G",
+          "C"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "CDC40",
+      "id": "CDC40-chr6-110228838",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "oncoanalyser"
+      ],
+      "status": "ready",
+      "vaccine_count": 2,
+      "vaccines": [
+        "JLF V3",
+        "mRNA"
+      ]
+    },
+    "CENPL-chr1-173811223": {
+      "alleles": [
+        [
+          "chr1",
+          173811223,
+          "G",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "CENPL",
+      "id": "CENPL-chr1-173811223",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024",
+        "oncoanalyser"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": [
+        "JLF V3"
+      ]
+    },
+    "CUL9-chr6-43186384": {
+      "alleles": [
+        [
+          "chr6",
+          43186384,
+          "G",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "CUL9",
+      "id": "CUL9-chr6-43186384",
+      "on_site": true,
+      "pipelines": [],
+      "status": "ready",
+      "vaccine_count": 2,
+      "vaccines": [
+        "JLF V2"
+      ]
+    },
+    "DIAPH1-chr5-141526090": {
+      "alleles": [
+        [
+          "chr5",
+          141526090,
+          "C",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "DIAPH1",
+      "id": "DIAPH1-chr5-141526090",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "DYNC1H1-chr14-101980529": {
+      "alleles": [
+        [
+          "chr14",
+          101980529,
+          "G",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "DYNC1H1",
+      "id": "DYNC1H1-chr14-101980529",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "LENS 2022",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "Natera 2022",
+        "Tempus 2022",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 5,
+      "vaccines": [
+        "CeGaT",
+        "JLF V2",
+        "JLF V3",
+        "mRNA"
+      ]
+    },
+    "DYNC1H1-chr14-102030200": {
+      "alleles": [
+        [
+          "chr14",
+          102030200,
+          "G",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "DYNC1H1",
+      "id": "DYNC1H1-chr14-102030200",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024",
+        "oncoanalyser"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "EPG5-chr18-45925851": {
+      "alleles": [
+        [
+          "chr18",
+          45925851,
+          "C",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "EPG5",
+      "id": "EPG5-chr18-45925851",
+      "on_site": true,
+      "pipelines": [
+        "LENS 2022"
+      ],
+      "status": "ready",
+      "vaccine_count": 3,
+      "vaccines": [
+        "CeGaT",
+        "JLF V1",
+        "JLF V2"
+      ]
+    },
+    "EXOC4-chr7-133274996": {
+      "alleles": [
+        [
+          "chr7",
+          133274996,
+          "G",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "EXOC4",
+      "id": "EXOC4-chr7-133274996",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "LENS 2022",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "Natera 2022",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 4,
+      "vaccines": [
+        "CeGaT",
+        "JLF V2",
+        "JLF V3"
+      ]
+    },
+    "F8-chrX-154930861": {
+      "alleles": [
+        [
+          "chrX",
+          154930861,
+          "T",
+          "G"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "F8",
+      "id": "F8-chrX-154930861",
+      "on_site": true,
+      "pipelines": [],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "FBXO33-chr14-39431722": {
+      "alleles": [
+        [
+          "chr14",
+          39431722,
+          "G",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "FBXO33",
+      "id": "FBXO33-chr14-39431722",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2024",
+        "oncoanalyser"
+      ],
+      "status": "ready",
+      "vaccine_count": 2,
+      "vaccines": []
+    },
+    "GLIS3-chr9-3856149": {
+      "alleles": [
+        [
+          "chr9",
+          3856149,
+          "CTGATGTGG",
+          "C"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "GLIS3",
+      "id": "GLIS3-chr9-3856149",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2024",
+        "oncoanalyser"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": [
+        "JLF V3"
+      ]
+    },
+    "GTF3C5-chr9-133057893": {
+      "alleles": [
+        [
+          "chr9",
+          133057893,
+          "GGAGGAGGAGGAA",
+          "G"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "GTF3C5",
+      "id": "GTF3C5-chr9-133057893",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "Natera 2022",
+        "Tempus 2022",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 0,
+      "vaccines": []
+    },
+    "H1_2-chr6-26055824": {
+      "alleles": [
+        [
+          "chr6",
+          26055824,
+          "ACCTTGGGCTTAGCGG",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "H1-2",
+      "id": "H1_2-chr6-26055824",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "Natera 2022",
+        "Tempus 2022",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": [
+        "CeGaT"
+      ]
+    },
+    "KDM3B-chr5-138391529": {
+      "alleles": [
+        [
+          "chr5",
+          138391529,
+          "C",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "KDM3B",
+      "id": "KDM3B-chr5-138391529",
+      "on_site": true,
+      "pipelines": [
+        "LENS 2022",
+        "Natera 2022",
+        "Tempus 2022"
+      ],
+      "status": "ready",
+      "vaccine_count": 3,
+      "vaccines": [
+        "CeGaT",
+        "JLF V1",
+        "JLF V2"
+      ]
+    },
+    "KIF1C-chr17-5007293": {
+      "alleles": [
+        [
+          "chr17",
+          5007293,
+          "G",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "KIF1C",
+      "id": "KIF1C-chr17-5007293",
+      "on_site": true,
+      "pipelines": [
+        "LENS 2022",
+        "Mutect2 2024",
+        "Natera 2022",
+        "Tempus 2022"
+      ],
+      "status": "ready",
+      "vaccine_count": 3,
+      "vaccines": [
+        "CeGaT",
+        "JLF V1",
+        "JLF V2"
+      ]
+    },
+    "KRT18-chr12-52951767": {
+      "alleles": [
+        [
+          "chr12",
+          52951767,
+          "G",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "KRT18",
+      "id": "KRT18-chr12-52951767",
+      "on_site": true,
+      "pipelines": [],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": [
+        "CeGaT"
+      ]
+    },
+    "MAP2-chr2-209694768": {
+      "alleles": [
+        [
+          "chr2",
+          209694768,
+          "CCTGGGCTACTGTGTGTTCAATA",
+          "C"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "MAP2",
+      "id": "MAP2-chr2-209694768",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2024",
+        "Tempus 2022"
+      ],
+      "status": "ready",
+      "vaccine_count": 3,
+      "vaccines": [
+        "JLF V1",
+        "JLF V2",
+        "JLF V3",
+        "mRNA"
+      ]
+    },
+    "MT_ND5-chrM-12994": {
+      "alleles": [
+        [
+          "chrM",
+          12994,
+          "G",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "MT-ND5",
+      "id": "MT_ND5-chrM-12994",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": [
+        "CeGaT"
+      ]
+    },
+    "MYO15B-chr17-75589953": {
+      "alleles": [
+        [
+          "chr17",
+          75589953,
+          "GC",
+          "G"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "MYO15B",
+      "id": "MYO15B-chr17-75589953",
+      "on_site": true,
+      "pipelines": [],
+      "status": "ready",
+      "vaccine_count": 2,
+      "vaccines": [
+        "JLF V1",
+        "JLF V2"
+      ]
+    },
+    "MYO9A-chr15-71994488": {
+      "alleles": [
+        [
+          "chr15",
+          71994488,
+          "T",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "MYO9A",
+      "id": "MYO9A-chr15-71994488",
+      "on_site": true,
+      "pipelines": [],
+      "status": "ready",
+      "vaccine_count": 2,
+      "vaccines": [
+        "JLF V2"
+      ]
+    },
+    "NAV2-chr11-20080142": {
+      "alleles": [
+        [
+          "chr11",
+          20080142,
+          "C",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "NAV2",
+      "id": "NAV2-chr11-20080142",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "NME1-chr17-51154443": {
+      "alleles": [
+        [
+          "chr17",
+          51154443,
+          "G",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "NME1",
+      "id": "NME1-chr17-51154443",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "Natera 2022",
+        "Tempus 2022",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": [
+        "CeGaT"
+      ]
+    },
+    "NR2F2-chr15-96332299": {
+      "alleles": [
+        [
+          "chr15",
+          96332299,
+          "G",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "NR2F2",
+      "id": "NR2F2-chr15-96332299",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2024",
+        "Natera 2022",
+        "Tempus 2022",
+        "oncoanalyser"
+      ],
+      "status": "ready",
+      "vaccine_count": 3,
+      "vaccines": [
+        "CeGaT",
+        "JLF V2"
+      ]
+    },
+    "NTF3-chr12-5494381": {
+      "alleles": [
+        [
+          "chr12",
+          5494381,
+          "A",
+          "G"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "NTF3",
+      "id": "NTF3-chr12-5494381",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2024"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "PIP5K1A-chr1-151242178": {
+      "alleles": [
+        [
+          "chr1",
+          151242178,
+          "AG",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "PIP5K1A",
+      "id": "PIP5K1A-chr1-151242178",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "oncoanalyser"
+      ],
+      "status": "ready",
+      "vaccine_count": 3,
+      "vaccines": [
+        "JLF V3",
+        "mRNA"
+      ]
+    },
+    "PRICKLE2-chr3-64198863": {
+      "alleles": [
+        [
+          "chr3",
+          64198863,
+          "C",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "PRICKLE2",
+      "id": "PRICKLE2-chr3-64198863",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024",
+        "oncoanalyser"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "PTH1R-chr3-46898732": {
+      "alleles": [
+        [
+          "chr3",
+          46898732,
+          "A",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "PTH1R",
+      "id": "PTH1R-chr3-46898732",
+      "on_site": true,
+      "pipelines": [],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": [
+        "JLF V3"
+      ]
+    },
+    "RNF213-chr17-80327830": {
+      "alleles": [
+        [
+          "chr17",
+          80327830,
+          "ATAC",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "RNF213",
+      "id": "RNF213-chr17-80327830",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "ROBO2-chr3-77607853": {
+      "alleles": [
+        [
+          "chr3",
+          77607853,
+          "C",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "ROBO2",
+      "id": "ROBO2-chr3-77607853",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "LENS 2022",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "Natera 2022",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "SLC25A12-chr2-171813470": {
+      "alleles": [
+        [
+          "chr2",
+          171813470,
+          "A",
+          "G"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "SLC25A12",
+      "id": "SLC25A12-chr2-171813470",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "Natera 2022",
+        "Tempus 2022",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 4,
+      "vaccines": [
+        "CeGaT",
+        "JLF V1",
+        "JLF V2",
+        "mRNA"
+      ]
+    },
+    "SMC5-chr9-70298024": {
+      "alleles": [
+        [
+          "chr9",
+          70298024,
+          "G",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "SMC5",
+      "id": "SMC5-chr9-70298024",
+      "on_site": true,
+      "pipelines": [
+        "Mutect2 2025",
+        "oncoanalyser"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": [
+        "JLF V3",
+        "mRNA"
+      ]
+    },
+    "TECPR1-chr7-98241127": {
+      "alleles": [
+        [
+          "chr7",
+          98241127,
+          "TG",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "TECPR1",
+      "id": "TECPR1-chr7-98241127",
+      "on_site": true,
+      "pipelines": [
+        "LENS 2022",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "Natera 2022",
+        "Tempus 2022",
+        "oncoanalyser"
+      ],
+      "status": "ready",
+      "vaccine_count": 4,
+      "vaccines": []
+    },
+    "TMRO-chr9-97910412": {
+      "alleles": [
+        [
+          "chr9",
+          97910412,
+          "C",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "TMRO",
+      "id": "TMRO-chr9-97910412",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "VPS13B-chr8-99861923": {
+      "alleles": [
+        [
+          "chr8",
+          99861923,
+          "C",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "VPS13B",
+      "id": "VPS13B-chr8-99861923",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "LENS 2022",
+        "Mutect2 2024",
+        "Natera 2022",
+        "Tempus 2022",
+        "oncoanalyser"
+      ],
+      "status": "ready",
+      "vaccine_count": 5,
+      "vaccines": [
+        "CeGaT",
+        "JLF V3"
+      ]
+    },
+    "VPS72-chr1-151185547": {
+      "alleles": [
+        [
+          "chr1",
+          151185547,
+          "T",
+          "C"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "VPS72",
+      "id": "VPS72-chr1-151185547",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": [
+        "JLF V3",
+        "mRNA"
+      ]
+    },
+    "WWC1-chr5-168399513": {
+      "alleles": [
+        [
+          "chr5",
+          168399513,
+          "T",
+          "G"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "WWC1",
+      "id": "WWC1-chr5-168399513",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": [
+        "JLF V3",
+        "mRNA"
+      ]
+    },
+    "ZNF436-chr1-23362762": {
+      "alleles": [
+        [
+          "chr1",
+          23362762,
+          "G",
+          "C"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "ZNF436",
+      "id": "ZNF436-chr1-23362762",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "LENS 2022",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "Natera 2022",
+        "Tempus 2022",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 2,
+      "vaccines": [
+        "CeGaT",
+        "mRNA"
+      ]
+    },
+    "ZNF674-chrX-46501045": {
+      "alleles": [
+        [
+          "chrX",
+          46501045,
+          "G",
+          "A"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "ZNF674",
+      "id": "ZNF674-chrX-46501045",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024",
+        "Mutect2 2025",
+        "oncoanalyser",
+        "pVACtools 2025"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    },
+    "ZNF764-chr16-30557995": {
+      "alleles": [
+        [
+          "chr16",
+          30557995,
+          "C",
+          "T"
+        ]
+      ],
+      "assembly": "GRCh38",
+      "gene": "ZNF764",
+      "id": "ZNF764-chr16-30557995",
+      "on_site": true,
+      "pipelines": [
+        "DRAGEN",
+        "Mutect2 2024"
+      ],
+      "status": "ready",
+      "vaccine_count": 1,
+      "vaccines": []
+    }
+  }
+}

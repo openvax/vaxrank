@@ -1,0 +1,344 @@
+{
+  "hla_alleles": [
+    "HLA-A*01:01",
+    "HLA-B*08:01",
+    "HLA-B*27:05",
+    "HLA-C*01:02",
+    "HLA-C*07:01"
+  ],
+  "records": [
+    {
+      "evidence_gate": "pass",
+      "id": "GTF3C5-p-Glu503_Glu506del",
+      "rank_score": null,
+      "selected_long_peptide": null,
+      "target_epitope_score": null,
+      "top_epitopes": []
+    },
+    {
+      "evidence_gate": "pass",
+      "id": "DYNC1H1-p-Val314Ile",
+      "rank_score": 4.908489631981229,
+      "selected_long_peptide": "LTLDILKHGKRFHATISFDTDTGLK",
+      "target_epitope_score": 4.908489631981229,
+      "top_epitopes": [
+        {
+          "allele": "HLA-C*07:01",
+          "epitope_score": 0.9752621531841718,
+          "ic50_nm": 37.84,
+          "percentile_rank": 0.008,
+          "sequence": "KRFHATISF"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.8552866244991775,
+          "ic50_nm": 160.43,
+          "percentile_rank": 0.201,
+          "sequence": "HGKRFHATI"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.7163759648377619,
+          "ic50_nm": 255.13,
+          "percentile_rank": 0.558,
+          "sequence": "GKRFHATISF"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.6536476020700343,
+          "ic50_nm": 291.76,
+          "percentile_rank": 0.618,
+          "sequence": "KRFHATISFD"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.5458167065504831,
+          "ic50_nm": 351.46,
+          "percentile_rank": 0.844,
+          "sequence": "ISFDTDTGL"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.18790742623063053,
+          "ic50_nm": 586.47,
+          "percentile_rank": 0.983,
+          "sequence": "HGKRFHATISF"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.031571026325438706,
+          "ic50_nm": 877.83,
+          "percentile_rank": 1.291,
+          "sequence": "KRFHATISFDT"
+        }
+      ]
+    },
+    {
+      "evidence_gate": "pass",
+      "id": "DYNC1H1-p-Gln3267His",
+      "rank_score": 0.007233796687807715,
+      "selected_long_peptide": "KKKVMSQEIQEQLHKHQEVIADKQM",
+      "target_epitope_score": 0.007233796687807715,
+      "top_epitopes": [
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.006362524766319259,
+          "ic50_nm": 1121.61,
+          "percentile_rank": 1.099,
+          "sequence": "EQLHKHQEV"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.00045979387107963665,
+          "ic50_nm": 1516.53,
+          "percentile_rank": 1.456,
+          "sequence": "QLHKHQEVI"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.00041147805040881873,
+          "ic50_nm": 1533.19,
+          "percentile_rank": 1.47,
+          "sequence": "QLHKHQEV"
+        }
+      ]
+    },
+    {
+      "evidence_gate": "pass",
+      "id": "NAV2-p-Ala1809Val",
+      "rank_score": 0.011670678442314621,
+      "selected_long_peptide": "DLRIRRQHSSDSVSSINSVTSHSSV",
+      "target_epitope_score": 0.011670678442314621,
+      "top_epitopes": [
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.011670678442314621,
+          "ic50_nm": 1029.88,
+          "percentile_rank": 1.951,
+          "sequence": "NSVTSHSSV"
+        }
+      ]
+    },
+    {
+      "evidence_gate": "pass",
+      "id": "TECPR1-p-Thr259fs",
+      "rank_score": 0.2521712627064244,
+      "selected_long_peptide": "GPHDLLWAHSGRDRPWSGKESTGAI",
+      "target_epitope_score": 0.2521712627064244,
+      "top_epitopes": [
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.2521309247013169,
+          "ic50_nm": 531.38,
+          "percentile_rank": 0.919,
+          "sequence": "GRDRPWSGK"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 4.0338005107482355e-05,
+          "ic50_nm": 1881.61,
+          "percentile_rank": 3.088,
+          "sequence": "SGKESTGAI"
+        }
+      ]
+    },
+    {
+      "evidence_gate": "pass",
+      "id": "GLIS3-p-Ser775fs",
+      "rank_score": 3.454926900776676,
+      "selected_long_peptide": "SAPSPQPPESSSSFFNTAKNTASLY",
+      "target_epitope_score": 3.454926900776676,
+      "top_epitopes": [
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.9618957246240452,
+          "ic50_nm": 55.54,
+          "percentile_rank": 0.19,
+          "sequence": "NTAKNTASL"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.8372015613813002,
+          "ic50_nm": 174.46,
+          "percentile_rank": 0.477,
+          "sequence": "FNTAKNTASL"
+        },
+        {
+          "allele": "HLA-A*01:01",
+          "epitope_score": 0.819671083439449,
+          "ic50_nm": 187.43,
+          "percentile_rank": 0.058,
+          "sequence": "NTAKNTASLY"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.7334695172233867,
+          "ic50_nm": 244.7,
+          "percentile_rank": 0.627,
+          "sequence": "FFNTAKNTASL"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.08487500606308875,
+          "ic50_nm": 721.79,
+          "percentile_rank": 1.5,
+          "sequence": "TAKNTASL"
+        },
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.009833266185763889,
+          "ic50_nm": 1055.83,
+          "percentile_rank": 1.984,
+          "sequence": "QPPESSSSF"
+        }
+      ]
+    },
+    {
+      "evidence_gate": "pass",
+      "id": "RNF213-p-Ile1070delLeu",
+      "rank_score": 0.06648564926043199,
+      "selected_long_peptide": "LTLADVKHVFRLCGTDEKIANVTED",
+      "target_epitope_score": 0.06648564926043199,
+      "top_epitopes": [
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.06648564926043199,
+          "ic50_nm": 761.12,
+          "percentile_rank": 1.173,
+          "sequence": "FRLCGTDEKI"
+        }
+      ]
+    },
+    {
+      "evidence_gate": "pass",
+      "id": "KTN1-p-Leu340fs",
+      "rank_score": 1.2096008631063737,
+      "selected_long_peptide": "LKKSSKGELTTLIHQLQEKDKFYSL",
+      "target_epitope_score": 1.2096008631063737,
+      "top_epitopes": [
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.3965535856773269,
+          "ic50_nm": 435.33,
+          "percentile_rank": 0.477,
+          "sequence": "QLQEKDKFYSL"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.39294844887572145,
+          "ic50_nm": 437.47,
+          "percentile_rank": 0.479,
+          "sequence": "EKDKFYSL"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.26158548611435467,
+          "ic50_nm": 524.17,
+          "percentile_rank": 0.563,
+          "sequence": "LQEKDKFYSL"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 0.15851334243897064,
+          "ic50_nm": 616.76,
+          "percentile_rank": 0.643,
+          "sequence": "QEKDKFYSL"
+        }
+      ]
+    },
+    {
+      "evidence_gate": "pass",
+      "id": "MAP2-compound-haplotype",
+      "rank_score": 0.01463124052921849,
+      "selected_long_peptide": "SQLEDRAHCHHLFKTVRIYQGRVVP",
+      "target_epitope_score": 0.01463124052921849,
+      "top_epitopes": [
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.007708500610938202,
+          "ic50_nm": 1092.64,
+          "percentile_rank": 1.502,
+          "sequence": "VRIYQGRVV"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.0068595108973308104,
+          "ic50_nm": 1110.26,
+          "percentile_rank": 1.516,
+          "sequence": "DRAHCHHLFK"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 3.493534280365264e-05,
+          "ic50_nm": 1903.18,
+          "percentile_rank": 2.16,
+          "sequence": "DRAHCHHLF"
+        }
+      ]
+    },
+    {
+      "evidence_gate": "pass",
+      "id": "NTF3-compound-haplotype",
+      "rank_score": 0.841564014754058,
+      "selected_long_peptide": "NKLSKQMVDVSENYQSTLPK",
+      "target_epitope_score": 0.841564014754058,
+      "top_epitopes": [
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.841564014754058,
+          "ic50_nm": 171.14,
+          "percentile_rank": 0.47,
+          "sequence": "VSENYQSTL"
+        }
+      ]
+    },
+    {
+      "evidence_gate": "pass",
+      "id": "CD109-long-read-phased",
+      "rank_score": null,
+      "selected_long_peptide": null,
+      "target_epitope_score": null,
+      "top_epitopes": []
+    },
+    {
+      "evidence_gate": "pass",
+      "id": "ZNF436-long-read-context",
+      "rank_score": 0.516769689273848,
+      "selected_long_peptide": "KSFGRSCHLIQHQTIHTGEKPHKCN",
+      "target_epitope_score": 0.516769689273848,
+      "top_epitopes": [
+        {
+          "allele": "HLA-C*01:02",
+          "epitope_score": 0.3819724623134246,
+          "ic50_nm": 444.04,
+          "percentile_rank": 0.996,
+          "sequence": "KSFGRSCHL"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 0.13444581289810284,
+          "ic50_nm": 645.26,
+          "percentile_rank": 1.05,
+          "sequence": "GRSCHLIQH"
+        },
+        {
+          "allele": "HLA-B*27:05",
+          "epitope_score": 6.852064271831775e-05,
+          "ic50_nm": 1802.13,
+          "percentile_rank": 2.081,
+          "sequence": "GRSCHLIQHQ"
+        },
+        {
+          "allele": "HLA-B*08:01",
+          "epitope_score": 1.3020421150112677e-05,
+          "ic50_nm": 2051.23,
+          "percentile_rank": 1.915,
+          "sequence": "FGRSCHLI"
+        }
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "score_basis": "source-agnostic target epitope score",
+  "self_reference_screen": "not evaluated; no full human reference proteome supplied"
+}
