@@ -80,21 +80,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ci-cache/pyensembl
-          key: pyensembl-v2-human75-human93-mouse93-mouse102
+          key: pyensembl-v3-human75-human93-full-mouse93-full-mouse102
       - name: Download Ensembl data
         run: |
           echo "Before installing Ensembl releases" && df -h
           pyensembl install --release 75 --species human --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCh37.75/
           pyensembl install --release 102 --species mouse --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCm38.102/
-          pyensembl install --release 93 --species human --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCh38.93/
-          pyensembl install --release 93 --species mouse --custom-mirror https://github.com/openvax/ensembl-data/releases/download/GRCm38.93/
+          # The release-93 mirrors lack the full GTF filenames requested by
+          # current PyEnsembl. Use the canonical Ensembl HTTPS sources.
+          pyensembl install --release 93 --species human
+          pyensembl install --release 93 --species mouse
       - name: Cache vaxrank reference proteome index
         uses: actions/cache@v4
         with:
           path: .ci-cache/vaxrank
-          key: vaxrank-refproteome-v2-human75-human93-mouse93-mouse102-${{ hashFiles('vaxrank/reference_proteome.py', 'vaxrank/config/defaults.py') }}
+          key: vaxrank-refproteome-v3-human75-human93-full-mouse93-full-mouse102-${{ hashFiles('vaxrank/reference_proteome.py', 'vaxrank/config/defaults.py') }}
           restore-keys: |
-            vaxrank-refproteome-v2-human75-human93-mouse93-mouse102-
+            vaxrank-refproteome-v3-human75-human93-full-mouse93-full-mouse102-
       - name: Test with pytest
         run: |
           # Configure netmhc-bundle paths when private bundle is available.
