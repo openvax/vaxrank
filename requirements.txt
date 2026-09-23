@@ -3,7 +3,7 @@ numpy>=2.0.0,<3.0.0
 # HTTP retries via datacache's public API, without fetching during normal tests.
 datacache>=1.9.1,<2.0.0
 # Public data acquisition and original-read extraction for the osteosarc corpus.
-osteosarc==0.1.2
+osteosarc==0.2.3
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.6.4,<3.0.0
 # 9.3.7 supplies candidate-local SV sequence-change checks, including partial
@@ -39,6 +39,8 @@ mhctools>=3.44.0,<4.0.0
 # which vaxrank#414's real-cache selection regression exercises directly.
 # 5.68.2 rejects contradictory measurements within a selected observation
 # instead of changing scores and filters when external rows are reordered.
+# This floor also validates the frozen prediction cache's producer versions;
+# the exact Osteosarc pin above constrains fixture dependency compatibility.
 topiary>=5.68.2,<6.0.0
 roman
 jinja2>=3.1

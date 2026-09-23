@@ -7,9 +7,10 @@ import io
 import json
 from pathlib import Path
 import socket
+import sys
 import zipfile
 
-from osteosarc import ReadSubset, digest
+from osteosarc import OfflineError, ReadSubset, digest
 import pysam
 import pytest
 
@@ -20,6 +21,18 @@ ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location("sid_builder", ROOT / "examples/osteosarc_test_data/build.py")
 builder = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(builder)
+
+
+def test_legacy_regeneration_cli_respects_empty_offline_cache(tmp_path, monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Offline regeneration attempted network access")
+    monkeypatch.setattr(socket.socket, "connect", forbidden)
+    output = tmp_path / "cohorts.zip"
+    monkeypatch.setattr(sys, "argv", [str(builder.__file__), "--cache", str(tmp_path / "cache"),
+                                    "--output", str(output), "--offline"])
+    with pytest.raises(OfflineError):
+        builder.main()
+    assert not output.exists()
 
 
 def test_bundle_has_only_the_explicit_required_read_records(tmp_path):
