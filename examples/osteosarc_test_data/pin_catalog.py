@@ -6,34 +6,15 @@ separately reviewed selection.json.gz allowlist; this never resamples it.
 """
 
 import argparse
-from dataclasses import asdict
-import gzip
-import json
 from pathlib import Path
 
-from osteosarc import Cache, Dataset, digest
+from osteosarc import Cache
+from osteosarc.cohort_bundle import pin_catalog as pin_catalog
 
 
 RECIPE = Path(__file__).with_name("recipe")
 
 
-def pin_catalog(recipe, cache):
-    plan = json.loads(gzip.decompress((recipe / "selection.json.gz").read_bytes()))
-    dataset = Dataset.open(plan["snapshot_name"], cache=cache, offline=cache.offline, corrections=False)
-    if dataset.id != plan["snapshot_id"]:
-        raise ValueError("Snapshot differs from the reviewed selection recipe")
-    variants = dataset.variants("all")
-    catalog = dict(snapshot=dataset.manifest, corrections=False, variants={}, assets={})
-    for variant_id in sorted({v for c in plan["cohorts"] for v in c["variants"]}):
-        catalog["variants"][variant_id] = {k: v for k, v in asdict(variants[variant_id]).items()
-                                           if k != "annotations"}
-    for url in sorted({c["source"] for c in plan["cohorts"]}):
-        asset = dataset.asset(url)
-        index = dataset.asset(asset.index_urls[0])
-        path = dataset.download(index)
-        receipt = cache.fetch(index.url, sha256=digest(path), size=path.stat().st_size)
-        catalog["assets"][url] = dict(asset=asdict(asset), index=asdict(index), index_receipt=receipt.to_dict())
-    (recipe / "catalog.json").write_text(json.dumps(catalog, indent=2, sort_keys=True) + "\n")
 
 
 if __name__ == "__main__":
