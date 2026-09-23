@@ -1,6 +1,5 @@
 """Shared Osteosarc integrity checks and consumer-owned reference construction."""
 
-
 from osteosarc import (
     verify_digest as verify_digest,
     verify_gzip_digests as verify_gzip_digests,

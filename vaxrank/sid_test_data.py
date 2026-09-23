@@ -18,8 +18,6 @@ from osteosarc.cohort_bundle import extract_bundle as extract_bundle
 BUNDLE_NAME = "sid-test-data.zip"
 
 
-
-
 @lru_cache(maxsize=1)
 def _materialized():
     directory = tempfile.TemporaryDirectory(prefix="vaxrank-sid-tests-")

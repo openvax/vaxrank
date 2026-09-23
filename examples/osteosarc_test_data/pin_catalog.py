@@ -15,8 +15,6 @@ from osteosarc.cohort_bundle import pin_catalog as pin_catalog
 RECIPE = Path(__file__).with_name("recipe")
 
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--recipe", type=Path, default=RECIPE)
