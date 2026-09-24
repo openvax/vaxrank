@@ -48,7 +48,7 @@ from .external_prediction import (
 )
 from .external_report import GENOMIC_VARIANT_COLUMN, ExternalRecord
 from .mutant_protein_fragment import MutantProteinFragment
-from .ranking import DEFAULT_RANKING_RULES
+from .ranking import DEFAULT_RANKING_RULES, rank_constructs
 from .reference_proteome import self_reference_matches
 from .vaccine_antigen import (
     ANTIGEN_KIND_CTA,
@@ -220,18 +220,6 @@ def log_transcript_resolution(n_with_ids, n_resolved, source_name,
             "mismatch — pass --ensembl-release N to match the build %s "
             "used.", n_with_ids - n_resolved, n_with_ids, id_label,
             source_name)
-
-
-def ranked_sorted_by_target_score(ranked):
-    """Order ``(variant, [VaccinePeptide])`` entries by descending
-    target-epitope score, ties broken by variant string for
-    determinism. Shared by every external loader so the ranking order
-    is defined in one place."""
-    return sorted(
-        ranked,
-        key=lambda pair: (
-            -pair[1][0].target_epitope_score if pair[1] else 0.0,
-            str(pair[0])))
 
 
 @dataclasses.dataclass
@@ -681,6 +669,7 @@ class ExternalRankingAccumulator:
     way two hand-maintained counter blocks did.
     """
 
+    require_target_epitopes: bool = True
     ranked: list = dataclasses.field(default_factory=list)
     entries: list = dataclasses.field(default_factory=list)
     dna_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
@@ -701,6 +690,11 @@ class ExternalRankingAccumulator:
         source = entry.ranking_source
         if source is None:
             return
+        if (self.require_target_epitopes and entry.vaccine_peptide is not None
+                and not entry.vaccine_peptide.contains_target_epitopes()):
+            # Match direct-input admission before either final ranking or
+            # repeated-source selection. Input evidence still enters the audit.
+            entry = dataclasses.replace(entry, vaccine_peptide=None)
         self.entries.append(entry)
         self.n_parseable += 1
         if entry.annotation is not None:
@@ -728,7 +722,7 @@ class ExternalRankingAccumulator:
         log_varcode_agreement(self.annotation_results, source_name)
         return ExternalRankingResult(
             entries=tuple(self.entries),
-            ranked=ranked_sorted_by_target_score(self.ranked),
+            ranked=rank_constructs(self.ranked),
             dna_vaf_by_variant=self.dna_vaf_by_variant,
             source_vaf_by_variant=self.source_vaf_by_variant,
             input_summary=ExternalInputSummary(
@@ -896,6 +890,7 @@ class ExternalConstructOptions:
     num_target_epitopes_to_keep: object = None
     combined_score_expr: object = None
     ranking_rules: object = None
+    require_target_epitopes_in_variant: bool = True
     manufacturability_thresholds: dict = dataclasses.field(
         default_factory=dict)
     manufacturability_rules: object = None
@@ -935,6 +930,9 @@ class ExternalConstructOptions:
             num_target_epitopes_to_keep=keep,
             combined_score_expr=expr,
             ranking_rules=rules,
+            require_target_epitopes_in_variant=(
+                vaccine_config.require_target_epitopes_in_variant
+                if vaccine_config is not None else True),
             manufacturability_thresholds=thresholds,
             manufacturability_rules=mfg_rules,
             included_antigen_sources=tuple(included_sources),
@@ -1570,7 +1568,8 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
                 sum(unexpected.values()),
                 '/'.join(sorted(unexpected)))
 
-    tally = ExternalRankingAccumulator()
+    tally = ExternalRankingAccumulator(
+        require_target_epitopes=options.require_target_epitopes_in_variant)
     for variant_id, group_rows in groups.items():
         antigen_source = external_text(
             group_rows[0].get('antigen_source')).upper()
@@ -1962,7 +1961,8 @@ def pvacseq_ranking_result(report, epitopes, genome=None, options=None):
         records_by_variant.setdefault(
             pvacseq_variant_id(record.row), []).append(record)
 
-    tally = ExternalRankingAccumulator()
+    tally = ExternalRankingAccumulator(
+        require_target_epitopes=options.require_target_epitopes_in_variant)
     for variant_id, group_rows in groups.items():
         tally.add(pvacseq_vaccine_entry(
             pvacseq_variant_metadata(variant_id, group_rows, genome=genome),
@@ -2064,9 +2064,10 @@ def load_external_ranked(args, epitope_config=None, vaccine_config=None,
     peptides are constructed, so ranking and template reports consume the
     configured DSL scores rather than the default affinity score.
     ``vaccine_config`` / ``manufacturability_config`` reach construct
-    assembly through :class:`ExternalConstructOptions`. External source-window
-    selection and final ordering still use target-epitope scores, even when a
-    custom combined-score expression is configured (see vaxrank#506).
+    assembly through :class:`ExternalConstructOptions`. Occurrence/window
+    selection uses target-epitope scores. The resulting constructs, including
+    alternatives from repeated reports, use the common combined-score ordering
+    in :func:`vaxrank.ranking.rank_constructs`.
 
     The returned ``predictions`` collection retains every loaded input group
     for audit reports and patient-genotype inference. ``ranked`` is built from

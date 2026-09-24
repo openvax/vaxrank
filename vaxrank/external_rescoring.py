@@ -324,8 +324,9 @@ def load_unified_external(args, epitope_config, options, genome):
     from .epitope_dsl import epitopes_for_ranking
     from .external_input import (
         ExternalInputSummary, lens_ranking_result, pvacseq_ranking_result,
-        patient_info_from_external, ranked_sorted_by_target_score,
+        patient_info_from_external,
     )
+    from .ranking import rank_constructs
     mode = getattr(args, 'external_predictions', 'input')
     models, alleles = [], []
     if mode == 'fresh':
@@ -365,11 +366,11 @@ def load_unified_external(args, epitope_config, options, genome):
         candidates = [(e.ranking_source, [e.vaccine_peptide]) for e in entries
                       if e.vaccine_peptide is not None]
         if candidates:
-            ranked.append(ranked_sorted_by_target_score(candidates)[0])
+            ranked.append(rank_constructs(candidates)[0])
         values = {e.dna_vaf for e in entries if e.dna_vaf is not None}
         if len(values) == 1 and entries[0].variant is not None:
             dna_vaf[entries[0].variant] = next(iter(values))
-    ranked = ranked_sorted_by_target_score(ranked)
+    ranked = rank_constructs(ranked)
     summary = ExternalInputSummary(
         num_somatic_variants=len(observations),
         num_coding_effect_variants=sum(any(e.resolved_protein_context for e in es)

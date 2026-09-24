@@ -169,7 +169,7 @@ vaccine_peptides:
 
   # ---- Score / ranking ----
   # DSL expression evaluated per VaccinePeptide to produce
-  # combined_score (used to rank variants).
+  # combined_score (used for final construct ranking across input formats).
   # Bindings: target_epitope_score, self_epitope_score,
   # expression_score, n_rna_alt, n_rna_ref, n_rna_overlapping,
   # n_rna_supporting_protein_sequence, n_alt_reads, n_ref_reads,
@@ -187,7 +187,8 @@ vaccine_peptides:
   # before lexicographic tie-breaking.
   score_fraction_of_best: 0.99
 
-  # Ordered list of tie-break rules (legacy default below). The
+  # Window-selection tie-break rules (legacy default below), separate from
+  # final combined-score ordering across variants/antigens. The
   # 'manufacturability' sentinel expands inline using the manufacturability
   # rules + thresholds in the section below. Available rules:
   # target_epitope_score, n_alt_reads, n_alt_reads_supporting,

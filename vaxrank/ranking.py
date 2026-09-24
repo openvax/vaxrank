@@ -11,8 +11,11 @@
 # limitations under the License.
 
 """
-Registry of vaccine-peptide ranking rules used to build the lexicographic
-sort key on ``VaccinePeptide``. Each rule takes a ``VaccinePeptide`` and
+Final construct ranking and the rules for selecting vaccine-peptide windows.
+
+``rank_constructs`` orders selected constructs across all input sources.
+The rule registry builds the lexicographic window-selection sort key on
+``VaccinePeptide``. Each rule takes a ``VaccinePeptide`` and
 returns a single numeric value to minimize — Python's ascending sort on
 tuples then gives us the ordering we want.
 
@@ -28,6 +31,64 @@ was built with). That lets users compose peptide-level ranking criteria
 with manufacturability criteria in a single flat list, e.g. to
 demote manufacturability below tie-breakers, or drop it entirely.
 """
+
+from itertools import groupby
+from math import isfinite
+
+
+def _rna_tiebreak_evidence(peptide):
+    """Return a count and its stated semantics, or None when unavailable."""
+    fragment = peptide.mutant_protein_fragment
+    if fragment is None:
+        return None
+    method = getattr(fragment, "rna_evidence_method", "")
+    subject = getattr(fragment, "rna_evidence_subject", "")
+    count = getattr(fragment, "n_rna_alt", None)
+    if not method or not subject or count is None or not isfinite(count):
+        return None
+    return (method, subject), count
+
+
+def rank_constructs(source_peptides):
+    """Rank already-selected constructs identically for every input source.
+
+    Each entry is ``(source, [VaccinePeptide, ...])``. The first peptide is
+    the representative chosen by upstream occurrence/window selection; this
+    function does not reorder its alternative windows. Its configured
+    ``combined_score`` determines final descending rank.
+
+    Within an exact score tie, use descending RNA support only if every
+    representative has a count with the same stated method and unit. Missing
+    evidence, different units/derivations, and source-agnostic antigens skip
+    that tier for the whole tie, rather than comparing incomparable counts
+    or replacing unknown support with zero. Descending target-epitope score
+    breaks remaining ties; complete ties preserve input order. Empty peptide
+    lists sort last, including when valid constructs have negative scores.
+    """
+    scored, empty = [], []
+    for entry in source_peptides:
+        if entry[1]:
+            scored.append((entry[1][0].combined_score, entry))
+        else:
+            empty.append(entry)
+    scored.sort(key=lambda item: item[0], reverse=True)
+    ranked = []
+    for _, group in groupby(scored, key=lambda item: item[0]):
+        entries = [entry for _, entry in group]
+        evidence = [_rna_tiebreak_evidence(entry[1][0]) for entry in entries]
+        comparable = all(item is not None for item in evidence) and len({
+            item[0] for item in evidence if item is not None
+        }) == 1
+        ordered = sorted(
+            zip(entries, evidence),
+            key=lambda item: (
+                (item[1][1], item[0][1][0].target_epitope_score)
+                if comparable else (item[0][1][0].target_epitope_score,)
+            ),
+            reverse=True,
+        )
+        ranked.extend(entry for entry, _ in ordered)
+    return ranked + empty
 
 
 def _target_epitope_score_rule(peptide):
