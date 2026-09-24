@@ -63,12 +63,55 @@ Unqualified `affinity` uses the selected default method. Use a qualified
 reference such as `affinity[mhcflurry]` when that method is present in every
 table being scored. Check feature availability and missing values in each
 source before applying a shared policy; source-specific signals are not
-guaranteed to exist in every format. The separate
-`vaccine_peptides.combined_score_expr` computes construct scores. Currently,
-external final ordering still uses target-epitope score, while the direct
-pipeline orders by combined score. A custom combined-score expression alone
-will therefore not reorder imported constructs; this inconsistency is tracked
-in [#506](https://github.com/openvax/vaxrank/issues/506).
+guaranteed to exist in every format.
+
+### Construct selection and final order
+
+`vaccine_peptides.combined_score_expr` determines final construct order for
+direct, LENS, pVACseq and mixed external inputs. The first selected vaccine
+peptide represents each variant or antigen. Constructs rank by descending
+combined score; this order feeds the template reports and the peptide/mRNA
+assemblers before optional HLA-coverage selection.
+
+Occurrence/window selection happens first and remains source-specific:
+
+- Direct inputs generate windows, apply `score_fraction_of_best`, and choose
+  among the retained windows using `vaccine_peptides.ranking_rules`.
+- Within each external report, the strongest eligible epitope selects its
+  reported occurrence/context. Only compatible epitopes from that context
+  enter the construct. A combined-score expression does not rescan windows
+  or recover candidates omitted by the producer.
+- When multiple reports supply a construct for the same variant or antigen,
+  the shared final ranking policy chooses one. Counts and predictions stay
+  with that source-derived construct; observations are not summed or blended.
+
+The existing `require_target_epitopes_in_variant` setting applies to external
+inputs too. Its default excludes constructs with no target epitopes before
+final ranking, including known-self-only constructs. Their input observations
+remain in the audit report. Set the option to `false` only when intentionally
+retaining constructs without target epitopes.
+
+Exact combined-score ties use descending RNA support only when **all tied
+representatives have counts with the same stated unit and derivation**.
+Otherwise that tie skips RNA and uses descending target-epitope score.
+Complete ties preserve input order, including the supplied file order for
+repeated-source alternatives. Missing RNA is not assigned a count by this
+ranking step, and reads are not converted to fragments.
+
+Common ordering does not make evidence from different sources comparable.
+The existing mutation default is `sqrt(n_rna_alt) * target_epitope_score`;
+source-agnostic antigens without mutation counts default to
+`target_epitope_score`. The mutation DSL retains its legacy numeric-zero
+binding for unavailable counts; provenance still distinguishes missing from
+measured zero. For a shared score that does not weight RNA, use:
+
+```sh
+--config-text 'vaccine_peptides.combined_score_expr=target_epitope_score'
+```
+
+Custom expressions using unavailable mutation fields fail for source-agnostic
+antigens. The external per-epitope/allele CSV and Excel `rank`/`source_rank`
+columns remain epitope ranks, separate from construct order.
 
 ## Generate common predictions and re-rank
 

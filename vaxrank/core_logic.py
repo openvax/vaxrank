@@ -27,6 +27,7 @@ from .vaccine_config import VaccineConfig
 from .manufacturability_config import ManufacturabilityConfig
 from .epitope_logic import slice_epitopes, predict_epitopes
 from .mutant_protein_fragment import MutantProteinFragment
+from .ranking import rank_constructs
 from .vaccine_antigen import VaccineAntigen
 from .vaccine_peptide import VaccinePeptide
 from .vaxrank_results import VaxrankResults
@@ -500,13 +501,10 @@ def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):
     This function returns a sorted list whose first element is a Variant and whose second
     element is a list of VaccinePeptide objects.
 
-    Variants are ranked by their top vaccine peptide using a three-level
-    tiebreak (see vaxrank#151): primarily by ``combined_score``, then by
-    ``n_rna_alt`` (independent RNA support), then by
-    ``target_epitope_score`` (MHC binding). The extra tiers matter when
-    ``combined_score`` ties (common when either factor is zero) so that the
-    downstream report order is stable and intuitively favors
-    better-supported variants.
+    Delegate final ordering to the same policy as external inputs:
+    combined score, comparable RNA support, then target-epitope score.
+    See :func:`vaxrank.ranking.rank_constructs` for tie and missing-evidence
+    semantics. Window selection within each variant remains separate.
 
     Parameters
     ----------
@@ -515,21 +513,4 @@ def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):
 
     Returns list of (varcode.Variant, VaccinePeptide list) tuples
     """
-    result_list = list(variant_to_vaccine_peptides_dict.items())
-
-    def sort_key(variant_and_vaccine_peptides_pair):
-        vaccine_peptides = variant_and_vaccine_peptides_pair[1]
-        if len(vaccine_peptides) == 0:
-            return (0.0, 0, 0.0)
-        top_vaccine_peptide = vaccine_peptides[0]
-        fragment = top_vaccine_peptide.mutant_protein_fragment
-        n_rna_alt = getattr(fragment, "n_rna_alt", fragment.n_alt_reads)
-        return (
-            top_vaccine_peptide.combined_score,
-            n_rna_alt or 0,
-            top_vaccine_peptide.target_epitope_score,
-        )
-
-    # Descending by (combined score, independent RNA evidence, epitope score).
-    result_list.sort(key=sort_key, reverse=True)
-    return result_list
+    return rank_constructs(variant_to_vaccine_peptides_dict.items())

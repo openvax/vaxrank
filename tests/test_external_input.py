@@ -1415,15 +1415,15 @@ def test_pvacseq_to_ranked_vaccine_peptides_round_trip():
     predictions = list(_loaded.epitopes)
     _ranking = pvacseq_ranking_result(_loaded, predictions)
     ranked, _dna_vaf = _ranking.ranked, _ranking.dna_vaf_by_variant
-    assert len(ranked) == 3, (
-        "pVACseq fixture has 3 unique variants; got %d" % len(ranked))
+    assert len(ranked) == 2, (
+        "Only TP53/BRAF have target epitopes; KRAS is a reference match")
     genes = sorted(
         peps[0].mutant_protein_fragment.gene_name for _, peps in ranked)
-    assert genes == ['BRAF', 'KRAS', 'TP53']
+    assert genes == ['BRAF', 'TP53']
     # IDs are dashed-form (chr1-100000-100001-A-T); the parser strips
     # the ``chr`` prefix so pyensembl-style downstream lookups work.
     contigs = sorted(v.contig for v, _ in ranked)
-    assert contigs == ['1', '2', '3']
+    assert contigs == ['1', '2']
 
 
 def test_pvacseq_id_parser_handles_dashed_and_dotted():
@@ -1474,7 +1474,7 @@ def test_pvacseq_drives_mrna_construct_assembly_end_to_end():
     constructs = assemble_mrna_constructs(ranked, options=options)
     assert len(constructs) == 1
     c = constructs[0]
-    assert len(c.antigen_names) == 3
+    assert len(c.antigen_names) == 2  # KRAS has only a reference-matching epitope.
     assert c.cds_nt.endswith("TAA")
 
 
