@@ -8,7 +8,7 @@ from vaxrank.sid_test_data import sid_test_data
 
 import pytest
 from isovar import FusionBlock, FusionBreakpoint, FusionRead, FusionReference, FusionTranscript, reconstruct_fusion
-from isovar.fusion import fusion_from_dict
+from isovar.fusion import FUSION_INPUT_KEYS, fusion_from_dict
 from mhctools import RandomBindingPredictor
 
 from vaxrank import EpitopeConfig, IsovarFusionAntigens, VaccinePeptide, fusion_antigens_from_isovar, predict_epitopes
@@ -44,7 +44,7 @@ def test_exact_junction_masks_including_split_codons_and_insert_only_peptides(cu
     result = reconstruct_fusion(*example(cut, insert), peptide_lengths=range(1, 12))
     adapted = fusion_antigens_from_isovar(result, tumor_specificity=admitted(), gene_name="D::A", species="test")
     antigen, = adapted.admitted_antigens
-    protein, = result["translations"]
+    protein, = result["paths"][0]["translations"]
     assert antigen.transcript_ids == ("acceptor", "donor")
     assert antigen.self_reference_excluded_gene_ids == ()
     for length in range(1, 12):
@@ -52,7 +52,7 @@ def test_exact_junction_masks_including_split_codons_and_insert_only_peptides(cu
             end = start + length
             expected = any(3 * start < b < 3 * end for b in (cut, cut + len(insert)))
             assert antigen.interval_is_targetable(start, end) == expected
-    assert {(p["protein_interval"][0], p["protein_interval"][1]) for p in protein["junction_peptides"]} == {
+    assert {(p["protein_interval"][0], p["protein_interval"][1]) for p in protein["candidate_peptides"]} == {
         (start, start + length) for length in range(1, 12)
         for start in range(len(antigen.amino_acids) - length + 1)
         if antigen.interval_is_targetable(start, start + length)}
@@ -97,14 +97,14 @@ def test_no_attestation_or_insufficient_support_never_admits():
 
 @pytest.mark.parametrize("name,checksum,status,count", [
     ("ATP5MG--KMT2A", "6c4974ae83898705f647f15f2dcdc9e86a913b9baf5577d2326720620df938a1", "ambiguous", 1),
-    ("TPST1--CRCP-T1", "aae3eca08578f1ee36f1e74043acfee2d885d13cf7594b83de5e18b1d3739e74", "unresolved_frame", 0),
+    ("TPST1--CRCP-T1", "aae3eca08578f1ee36f1e74043acfee2d885d13cf7594b83de5e18b1d3739e74", "unresolved", 0),
 ])
 def test_original_sid_rna_preserves_coding_uncertainty_and_provenance(name, checksum, status, count):
     raw = (sid_test_data() / "isovar_fusions" / (name + ".input.json.gz")).read_bytes()
     data = json.loads(gzip.decompress(raw))
     # Pin original content independently of gzip/Python transport details.
     assert sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest() == checksum
-    result = reconstruct_fusion(*fusion_from_dict(data))
+    result = reconstruct_fusion(*fusion_from_dict({k: data[k] for k in FUSION_INPUT_KEYS if k in data}))
     adapted = fusion_antigens_from_isovar(result, tumor_specificity=admitted(), species="Homo sapiens")
     assert adapted.reconstruction == json.loads(json.dumps(result)) and result["status"] == status
     assert len(adapted.antigens) == count and not adapted.admitted_antigens
@@ -114,17 +114,17 @@ def test_original_sid_rna_preserves_coding_uncertainty_and_provenance(name, chec
         assert antigen.amino_acids == "MAQFVRNLVEKTPALVNG"
         assert antigen.interval_is_targetable(17, 18)  # Mixed junction codon, not a rounded boundary.
         assert not antigen.interval_is_targetable(0, 17)
-        assert result["evidence"]["directly_spanning_fragments"] == 2
-        assert set(result["compatible_transcripts"]["acceptor"]) <= set(antigen.transcript_ids)
+        assert result["evidence"]["direct_fragments"] == 2
+        assert set(result["paths"][0]["compatible_transcripts"]["acceptor"]) <= set(antigen.transcript_ids)
 
 
 @pytest.mark.parametrize("damage,match", [
-    (lambda r: r.update(schema_version=2), "schema"),
-    (lambda r: r.update(sequence_sha256="wrong"), "checksum"),
+    (lambda r: r.update(schema="isovar.fusion_rna.v1"), "schema"),
+    (lambda r: r["paths"][0].update(sequence_sha256="wrong"), "checksum"),
     (lambda r: r.update(reasons=["unresolved"]), "unambiguous"),
-    (lambda r: r["translations"][0].update(cds_start=None), "CDS start"),
-    (lambda r: r["translations"][0].update(amino_acids="WRONG"), "protein disagrees"),
-    (lambda r: r["translations"][0].update(junction_in_translated_cds=[1, 1]), "junction"),
+    (lambda r: r["paths"][0]["translations"][0].update(cds_start=None), "CDS start"),
+    (lambda r: r["paths"][0]["translations"][0].update(amino_acids="WRONG"), "protein disagrees"),
+    (lambda r: r["paths"][0]["translations"][0].update(junction_in_translated_cds=[1, 1]), "junction"),
 ])
 def test_inconsistent_result_cannot_be_admitted(damage, match):
     result = reconstruct_fusion(*example())
