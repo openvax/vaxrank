@@ -74,6 +74,7 @@ neoepitope-report.xlsx
 *.xlsx
 ~$*
 site/
-docs/
+# Generated documentation home; authored guides are tracked.
+docs/index.md
 # Local uncapped genomic-read analysis datasets (never package raw reads).
 /output/osteosarc-read-corpus/

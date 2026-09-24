@@ -4,6 +4,7 @@ The combined view should link biological hypotheses to observations, rather
 than flattening every caller's result into one row per variant. This is the
 design contract for the generalized Topiary/Vaxrank workflow; the external
 rescoring entry point currently implements the peptide/context portion only.
+For supported commands and limitations, start with [input workflows](input-workflows.md).
 
 ## Identities and relationships
 
@@ -54,7 +55,7 @@ not multiply its score or coverage. Ambiguous ORFs remain visible even when a
 selection policy chooses one construct. Full ORF-aware coverage/selection is
 upstream integration work, not implemented by the current external entry point.
 
-## What the current PR provides
+## Current implementation
 
 LENS/pVACseq source observations retain separate prediction identities, values
 and context. The report exposes exact peptide/context sequence hashes and the

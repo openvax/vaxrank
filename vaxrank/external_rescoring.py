@@ -336,6 +336,13 @@ def load_unified_external(args, epitope_config, options, genome):
         models = predictors_from_args(args)
     elif getattr(args, 'mhc_predictor', None):
         raise ValueError("Use --external-predictions fresh to run --mhc-predictor")
+    elif (getattr(args, 'mhc_alleles', None)
+          or getattr(args, 'mhc_alleles_file', None)):
+        raise ValueError(
+            "Input prediction mode uses the alleles recorded in each report. "
+            "Remove --mhc-alleles/--mhc-alleles-file, or use "
+            "--external-predictions fresh with --mhc-predictor to predict "
+            "for an explicit HLA set.")
     reports, frame, predictions = prepare_reports(
         external_inputs(args), epitope_config, mode=mode, models=models,
         alleles=alleles,

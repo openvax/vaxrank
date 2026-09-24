@@ -181,6 +181,46 @@ def test_cli_parses_repeated_sources_and_conditional_model_configuration():
         external_inputs(SimpleNamespace(external_input=['exacto=unsupported.json']))
 
 
+@pytest.mark.parametrize('fmt,path', INPUTS)
+def test_single_input_alias_has_the_same_scores_provenance_and_constructs(fmt, path):
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+
+    alias = load_external_ranked(parse_vaxrank_args(['--input-' + fmt, path]))
+    repeated = load_external_ranked(parse_vaxrank_args(['--external-input', fmt + '=' + path]))
+    assert alias[0] and repeated[0]
+    assert [(str(source), [(v.amino_acids, v.combined_score) for v in peptides])
+            for source, peptides in alias[0]] == [
+        (str(source), [(v.amino_acids, v.combined_score) for v in peptides])
+        for source, peptides in repeated[0]]
+    pd.testing.assert_frame_equal(alias[1], repeated[1])
+    assert [e.to_dict() for e in alias[2]] == [e.to_dict() for e in repeated[2]]
+    assert alias[3].inputs == repeated[3].inputs
+    assert alias[3].mhc_alleles == repeated[3].mhc_alleles
+
+
+@pytest.mark.parametrize('source', [
+    ['--input-lens', 'missing.tsv'],
+    ['--input-pvacseq', 'missing.tsv'],
+    ['--external-input', 'lens=missing.tsv'],
+])
+@pytest.mark.parametrize('extra', [
+    ['--mhc-predictor', 'random'],
+    ['--mhc-alleles', 'HLA-A*01:01'],
+    ['--mhc-alleles-file', 'missing-alleles.txt'],
+])
+@pytest.mark.parametrize("export_originals", [False, True])
+def test_input_mode_rejects_ignored_options_before_reading_or_exporting(
+        source, extra, export_originals, tmp_path):
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+
+    output = tmp_path / 'originals.tsv'
+    export_args = ['--output-input-predictions', str(output)] if export_originals else []
+    args = parse_vaxrank_args(source + extra + export_args)
+    with pytest.raises(ValueError, match='--external-predictions fresh'):
+        load_external_ranked(args)
+    assert not output.exists()
+
+
 def test_unified_candidates_reach_both_vaccine_designs(monkeypatch):
     import mhctools.cli
     from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
@@ -198,6 +238,48 @@ def test_unified_candidates_reach_both_vaccine_designs(monkeypatch):
     assert assemble_mrna_constructs(ranked, options=RNAConstructConfig(
         signal_peptide=None, include_mitd=False, poly_a_length=10,
         antigens_per_construct=2, max_constructs=1, optimize_linkers=False))
+
+
+def test_mixed_cli_reranks_with_fresh_values_and_exports_originals(monkeypatch, tmp_path):
+    import mhctools.cli
+    from vaxrank.cli.entry_point import main
+
+    inputs = [arg for fmt, path in INPUTS for arg in ('--external-input', fmt + '=' + path)]
+    original_csv = tmp_path / 'original.csv'
+    original_native = tmp_path / 'original.tsv'
+    main(inputs + ['--output-csv', str(original_csv),
+                   '--output-input-predictions', str(original_native)])
+    original_frame = pd.read_csv(original_csv).sort_values('rank')
+    promoted = original_frame.iloc[-1]['Mutant peptide sequence']
+
+    class RerankingPredictor(ContextPredictor):
+        def predict_with_flanks(self, *args):
+            return [PeptideResult(tuple(
+                replace(p, score=0.9 if p.peptide == promoted else 0.1)
+                for p in result.preds))
+                for result in super().predict_with_flanks(*args)]
+
+    monkeypatch.setattr(mhctools.cli, 'predictors_from_args', lambda args: [RerankingPredictor()])
+    fresh_csv = tmp_path / 'fresh.csv'
+    fresh_native = tmp_path / 'fresh.tsv'
+    original_copy = tmp_path / 'original-copy.tsv'
+    main(inputs + [
+        '--external-predictions', 'fresh', '--mhc-predictor', 'random',
+        '--mhc-alleles', ','.join(ALLELES),
+        '--config-text', 'epitopes.filter_expr=affinity[unified].value < 500',
+        '--config-text', 'epitopes.score_expr=affinity[unified].score',
+        '--output-csv', str(fresh_csv), '--output-epitopes', str(fresh_native),
+        '--output-input-predictions', str(original_copy)])
+    fresh_frame = pd.read_csv(fresh_csv).sort_values('rank')
+    assert original_frame.iloc[0]['Mutant peptide sequence'] != promoted
+    assert fresh_frame.iloc[0]['Mutant peptide sequence'] == promoted
+    assert fresh_frame.iloc[0]['vaxrank_score'] == 0.9
+    assert original_copy.read_bytes() == original_native.read_bytes()
+    fresh = load_predictions(fresh_native)
+    assert {p.predictor_name for e in fresh for p in e.predictions_flat()} == {'unified'}
+    assert {e.prediction_id for e in fresh} == {
+        e.prediction_id for e in load_predictions(original_native)}
+    assert set(fresh_frame['Input format']) == {'lens', 'pvacseq'}
 
 
 def test_same_variant_is_not_double_counted_for_construct_selection(tmp_path):

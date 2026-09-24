@@ -41,10 +41,10 @@ visible rather than becoming an unsupported confidence claim.
   small-variant pipeline; see
   [fusion inputs](https://github.com/openvax/vaxrank/blob/main/README.md#upstream-inputs).
 - **Opt-in DNA fallback:** consequences come from Varcode, not RNA
-  reconstruction. It currently selects an effect before checking all fusion
-  protein candidates ([#482](https://github.com/openvax/vaxrank/issues/482)).
-  The fix must evaluate usable alternatives before selection. A set-level
-  protein-change flag does not guarantee its first protein is changed.
+  reconstruction. Fusion candidates are checked for a usable changed protein
+  before effect selection ([#482](https://github.com/openvax/vaxrank/issues/482),
+  fixed in 3.20.2). A set-level protein-change flag does not guarantee its first
+  protein is changed.
 - **RNA discovery/reconciliation:** Isovar's supplied-fusion translator is not
   an automatic soft-clip assembly workflow. That upstream connection is
   [Isovar #305](https://github.com/openvax/isovar/issues/305).
