@@ -98,7 +98,8 @@ def main(output_directory):
                            default_peptide_lengths=lengths, process_limit=1)
         predictor = TopiaryPredictor(models=[model])
         named = {"peptide-%04d" % i: p for i, p in enumerate(sorted(peptides))}
-        frame = predictor.predict_from_named_peptides(named)
+        frame = predictor.predict_from_named_peptides(named).sort_values(
+            ["peptide", "allele", "kind"], kind="stable")
         cache = CachedPredictor.from_dataframe(frame)
         output_directory.mkdir(parents=True)
         output = output_directory / "netmhcpan42.tsv"
