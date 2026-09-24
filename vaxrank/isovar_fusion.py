@@ -26,7 +26,7 @@ class IsovarFusionAntigens(DataclassSerializable):
 
 
 def fusion_antigens_from_isovar(result, *, tumor_specificity=None, gene_name="", species=""):
-    """Adapt a result from ``isovar.reconstruct_fusion`` (schema 1).
+    """Adapt a result from ``isovar.reconstruct_fusion`` (``isovar.fusion_rna.v2``).
 
     Parameters
     ----------
@@ -49,15 +49,17 @@ def fusion_antigens_from_isovar(result, *, tumor_specificity=None, gene_name="",
     """
     payload = json.dumps(result, sort_keys=True)
     result = json.loads(payload)
-    if result.get("schema_version") != 1:
+    if result.get("schema") != "isovar.fusion_rna.v2":
         raise ValueError("Unsupported Isovar fusion result schema")
     status = result["status"]
-    if status not in {"translated", "ambiguous", "unresolved_frame", "insufficient_support"}:
+    if status not in {"translated", "ambiguous", "unresolved", "insufficient_support"}:
         raise ValueError("Unknown Isovar fusion reconstruction status")
-    sequence = result["cdna_sequence"]
-    if sha256(sequence.encode()).hexdigest() != result["sequence_sha256"]:
+    path, = result["paths"]
+    junction, = path["junctions"]
+    sequence = path["sequence"]
+    if sha256(sequence.encode()).hexdigest() != path["sequence_sha256"]:
         raise ValueError("Isovar fusion sequence checksum mismatch")
-    translations = result["translations"]
+    translations = path["translations"]
     if status == "translated" and (len(translations) != 1 or result["reasons"]):
         raise ValueError("Translated Isovar result must have one unambiguous coding hypothesis")
     if tumor_specificity is None:
@@ -77,7 +79,7 @@ def fusion_antigens_from_isovar(result, *, tumor_specificity=None, gene_name="",
         if tuple(expected) != (protein["amino_acids"], protein["ends_with_stop_codon"]):
             raise ValueError("Isovar fusion protein disagrees with its RNA sequence/frame")
         boundaries = protein["junction_in_translated_cds"]
-        if (len(boundaries) != 2 or boundaries != [b - start for b in result["junction_interval"]]
+        if (len(boundaries) != 2 or boundaries != [b - start for b in junction["query_interval"]]
                 or not 0 < boundaries[0] <= boundaries[1] < 3 * len(protein["amino_acids"])):
             raise ValueError("Inconsistent Isovar fusion junction coordinates")
         # Separate boundaries avoid admitting a peptide wholly inside an insert.
@@ -92,8 +94,8 @@ def fusion_antigens_from_isovar(result, *, tumor_specificity=None, gene_name="",
             kind=ANTIGEN_KIND_FUSION, amino_acids=protein["amino_acids"],
             targetable_mask=TargetableMask(tuple(AminoAcidInterval(a, b) for a, b in intervals)),
             tumor_specificity=attestation, gene_name=gene_name, species=species,
-            transcript_ids=tuple(sorted(set(protein["donor_transcript_ids"])
-                | set(result["compatible_transcripts"]["acceptor"]))),
+            transcript_ids=tuple(sorted(set(protein["transcript_ids"])
+                | set(path["compatible_transcripts"]["acceptor"]))),
             source_identifier=result["event_id"] + ":hypothesis:" + str(index + 1),
             source_metadata=(("isovar_fusion_result", payload),
                 ("isovar_translation_index", str(index)),
