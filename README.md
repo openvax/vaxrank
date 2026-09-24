@@ -1105,4 +1105,3 @@ the base and tags available during that run. Require this check with GitHub's
 **Require branches to be up to date before merging** option to prevent an old
 green result surviving another PR's release; otherwise rerun it after the
 target branch advances. The workflow itself does not change branch protection.
-
