@@ -36,7 +36,7 @@
   },
   "executable_name": "netMHCpan",
   "executable_sha256": "675cde924f3c19ecb6314383a3fc4052e07a33573ac03e7631f3d57637c52ffc",
-  "generated": "2026-09-24T15:56:51+00:00",
+  "generated": "2026-09-24T16:07:51+00:00",
   "generator_sha256": "66043bfbc41e4729e33561dcc172b1a82a222d645eb838139f07650b66191f6a",
   "input_manifest_sha256": "c7f05094012531fe85e027902999f5a99c46f3983e8270b8e9c7634038cf57b7",
   "method": "NetMHCpan 4.2c -BA binding-affinity and elution-score outputs, default model settings",
@@ -24926,7 +24926,7 @@
   "package_versions": {
     "isovar": "1.24.0",
     "mhctools": "3.44.55",
-    "topiary": "5.69.1",
+    "topiary": "5.70.1",
     "varcode": "9.5.1",
     "vaxrank": "3.20.7"
   },
