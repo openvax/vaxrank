@@ -14,6 +14,8 @@ theme:
 
 nav:
   - Home: index.md
+  - Input workflows: input-workflows.md
+  - Unified evidence design: unified_evidence.md
   - Varcode, Isovar & Vaxrank: library-responsibilities.md
 
 markdown_extensions:

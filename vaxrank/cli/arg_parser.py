@@ -1006,18 +1006,14 @@ def external_input_arg_parser():
             action.required = False
     arg_parser.add_argument(
         "--verbose", "-v", action="store_true", default=False)
-    # ``--ensembl-release`` lets external-input runs resolve LENS /
-    # pVACseq transcript_id strings to pyensembl ``Transcript`` objects
-    # so template reports (ASCII / HTML / PDF) can render variant
-    # effects. Without it, those reports fall back to a less detailed
-    # rendering (no transcript-name / effect-description columns).
+    # Template reports require an explicit release to resolve transcript IDs.
     arg_parser.add_argument(
         "--ensembl-release",
         default=None,
         type=int,
         help="Ensembl release for resolving transcript IDs (e.g. 75, 102). "
-             "By default pyensembl picks the most recent locally installed "
-             "release. Match the release LENS / pVACseq used.")
+             "Required for ASCII/HTML/PDF template reports; match the release "
+             "used to annotate the input reports.")
     add_output_args(arg_parser)
     # Vaccine-peptide options apply to external inputs exactly as they do to
     # the VCF pipeline: the construct window, how many target epitopes it

@@ -21,6 +21,7 @@ mRNA constructs, or analysis reports for review.
 ## Contents
 
 - [Quick Start](#quick-start)
+- [Input workflows](https://openvax.github.io/vaxrank/input-workflows/)
 - [Overview](#overview)
 - [Vaccine designs](#vaccine-designs)
 - [Vaccine types and output modes](#vaccine-types-and-output-modes)
@@ -64,6 +65,13 @@ vaxrank --input-lens patient.lens.tsv \
         --vaccine-type mrna --output-dir mrna_out/ \
         --ensembl-release 102
 ```
+
+To combine LENS and pVACseq, repeat `--external-input lens=PATH` and
+`--external-input pvacseq=PATH`. Reuse original predictions by default, or
+request common models with `--external-predictions fresh`. See the
+[input workflow guide](https://openvax.github.io/vaxrank/input-workflows/)
+for complete commands, scoring choices, metadata and current Exacto/direct-input
+integration limits.
 
 Emit both peptide and mRNA constructs in one run — outputs land in
 per-modality subdirs:
@@ -111,8 +119,8 @@ peptide synthesiser:
    peptide pool ready for synthesis, an mRNA construct ready for IVT, or
    both. Analysis reports are emitted independently. Steps 1-3 are
    skipped when an external neoepitope report is supplied via
-   `--input-lens` or `--input-pvacseq`; the ranking and dispatch steps
-   are identical.
+   `--input-lens`, `--input-pvacseq` or repeatable `--external-input`.
+   Format-specific context adapters feed shared construct and report writers.
 
 The responsibility split is consistent across the libraries: Varcode generates
 transcript hypotheses and predicts coding consequences; Isovar reconstructs
@@ -414,12 +422,16 @@ of chimeric k-mers spanning antigen junctions.
 
 ### External-input mode
 
-Drive vaccine design from a pre-computed neoepitope report instead of
-VCF + BAM. Same downstream dispatch — peptide and mRNA construct
-outputs work identically.
+Use one or more pre-computed reports instead of VCF + BAM. The
+[input workflow guide](https://openvax.github.io/vaxrank/input-workflows/)
+explains original-score ranking, common-model prediction, and context limits.
 
 | Flag | Input format |
 |---|---|
+| `--external-input FORMAT=PATH` | Repeat for LENS and/or pVACseq files from the same patient/reference |
+| `--external-predictions input` | Reuse historical predictions (default); no live predictor |
+| `--external-predictions fresh` | Predict reported peptides with explicit models and HLA set |
+| `--output-input-predictions PATH` | Save original candidate predictions separately |
 | `--input-lens` | [LENS](https://github.com/openvax/lens) report TSV |
 | `--input-pvacseq` | [pVACseq](https://github.com/griffithlab/pVACtools) TSV (`*all_epitopes.tsv` or `*all_epitopes.aggregated.tsv`) |
 
@@ -687,40 +699,19 @@ Config values are resolved in order (later wins):
 3. `--config-value` / `--config-text` overrides
 4. Dedicated CLI flags (e.g. `--vaccine-peptide-length`)
 
-### Config reference
+### Configuration reference
 
-#### `EpitopeConfig` — epitope scoring and filtering
+Print the shipped, commented YAML for the supported keys and current defaults:
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `logistic_epitope_score_midpoint` | 350.0 | IC50 (nM) at which epitope score = 0.5 |
-| `logistic_epitope_score_width` | 150.0 | Steepness of logistic scoring curve |
-| `min_epitope_score` | 0.00001 | Epitopes scoring below this are dropped |
-| `binding_affinity_cutoff` | 5000.0 | IC50 >= this → score 0 |
-| `scoring_mode` | `"affinity"` | `"affinity"` (IC50-based) or `"percentile_rank"` |
-| `percentile_rank_cutoff` | 10.0 | Rank >= this → score 0 (percentile mode) |
-| `filter_expr` | `None` | Topiary DSL string; drops rows where the expression is false. Parsed eagerly at config load. |
-| `score_expr` | `None` | Topiary DSL string; overrides the default per-`(peptide, allele)` score. |
+```sh
+vaxrank --print-default-config > my-config.yaml
+```
 
-#### `VaccineConfig` — peptide assembly and manufacturability
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `preferred_peptide_length` | 25 | Preferred amino acids per vaccine peptide |
-| `min_peptide_length` | 25 | Minimum vaccine peptide length |
-| `max_peptide_length` | 25 | Maximum vaccine peptide length |
-| `padding_around_mutation` | 5 | Off-centre window positions to consider |
-| `max_vaccine_peptides_per_variant` | 1 | Peptides to keep per variant |
-| `num_target_epitopes_to_keep` | 1000 | Max epitope predictions per peptide (0 = all) |
-| `score_fraction_of_best` | 0.99 | Drop candidates scoring below this fraction of the best |
-| `max_c_terminal_hydropathy` | 1.5 | Max GRAVY score of the C-terminal 7-mer |
-| `min_kmer_hydropathy` | 0.0 | Minimum max-7mer GRAVY (floor) |
-| `max_kmer_hydropathy_low_priority` | 1.5 | Low-priority max-7mer GRAVY cap |
-| `max_kmer_hydropathy_high_priority` | 2.5 | High-priority max-7mer GRAVY cap |
-
-The four `*_hydropathy*` fields control the manufacturability tie-breaking
-in vaccine peptide ranking.  See `VaccinePeptide.peptide_synthesis_difficulty_score_tuple`
-for details on how each threshold is applied.
+Edit that file and pass `--config my-config.yaml`. YAML keys are the public
+configuration interface; Python dataclass field names can differ. Epitope
+filtering/scoring lives under `epitopes`, construct ranking under
+`vaccine_peptides`, and peptide synthesis thresholds under
+`peptide.manufacturability`.
 
 ## MHC Binding Predictors
 
@@ -929,14 +920,15 @@ A VP bundles:
   targetable intervals, source provenance, and tumor-specificity attestation;
 - for ordinary SNV/indel antigens, a **`MutantProteinFragment`** with mutation
   positions, gene name, source variant, and RNA evidence metrics;
-- a list of **`EpitopePrediction`** records — per-(k-mer, HLA-allele)
-  MHC binding predictions, sorted into a mutant set (overlapping the
-  mutation, drives ranking) and a wildtype set (cross-reactivity
-  candidates).
+- **`CandidateEpitope`** objects — peptide occurrences carrying context,
+  provenance, per-allele/model/version `mhctools.Prediction` values, known
+  comparators and DSL scores. Target epitopes drive vaccine ranking.
 
-The pipeline output is a list of `(varcode.Variant, [VaccinePeptide, ...])`
-tuples — each variant has 1 or more VPs depending on
-`max_vaccine_peptides_per_variant`:
+The shared output is a list of `(source, [VaccinePeptide, ...])` tuples.
+Ordinary variant sources are `varcode.Variant` objects; non-variant antigen
+sources retain their own identity. The direct pipeline can retain multiple
+windows per variant via `max_vaccine_peptides_per_variant`; external adapters
+currently select one source-derived window:
 
 ```
 ranked_variants_with_vaccine_peptides = [
@@ -1053,7 +1045,7 @@ The orthogonal axes are preferred for new designs.
 
 ## Development
 
-The [bundled Sid test subset](TEST_DATA.md) contains only the explicitly selected
+The [bundled Sid test subset](https://github.com/openvax/vaxrank/blob/main/TEST_DATA.md) contains only the explicitly selected
 reads needed by the regression suite. A checked-in generator acquires them
 through osteosarc and verifies the complete selected records. The same compact
 bundle ships in the wheel and sdist and opens offline.
@@ -1113,93 +1105,3 @@ the base and tags available during that run. Require this check with GitHub's
 **Require branches to be up to date before merging** option to prevent an old
 green result surviving another PR's release; otherwise rerun it after the
 target branch advances. The workflow itself does not change branch protection.
-
-### Unified external-candidate rescoring
-
-Combine LENS and pVACseq reports for one patient and reference assembly with
-repeatable `--external-input`. Rescore their reported candidate peptides and
-known wild-type comparator sequences with the same models and explicit HLA
-set, then use the usual peptide/mRNA vaccine design:
-
-```bash
-vaxrank \
-  --external-input lens=patient.lens.tsv \
-  --external-input pvacseq=patient.all_epitopes.tsv \
-  --external-predictions fresh \
-  --mhc-predictor mhcflurry-affinity \
-  --mhc-alleles 'HLA-A*02:01,HLA-B*07:02' \
-  --ensembl-release 93 \
-  --output-input-predictions original-predictions.tsv \
-  --vaccine-type peptide mrna \
-  --output-dir unified-vaccines
-```
-
-Fresh mode preserves each reported peptide's source window and supplies its
-available flanks to models that use context. It scores the existing candidate
-set; it does not discover additional windows or invent missing pVACseq flanks.
-The explicit HLA set requests every reported peptide on those alleles; this can
-add peptide-HLA combinations absent from the input. All sources share one
-Topiary DSL scoring configuration. Original table values for matching alleles
-appear in `Input ...` report columns; the original export also keeps alleles
-outside the newly requested set. Fresh values name their model, version,
-prediction kind and metric. Historical prediction columns remain available to
-custom DSL expressions under `input_` names, while canonical RNA/DNA/expression
-evidence keeps Topiary's vocabulary. Anonymous WT scores without a known WT
-sequence are retained in the original export but cannot be freshly predicted.
-Per-allele and allele-free models are supported; haplotype-mode models are
-rejected until their full genotype-scoped transport is supported.
-
-Use `--external-predictions input` (the default) to reuse the tables as cached
-pMHC prediction evidence. This import/scoring step does not initialize or run
-an MHC predictor; downstream processing annotations and linker optimization
-follow their own configuration:
-
-```bash
-vaxrank --external-input lens=patient.lens.tsv \
-  --external-input pvacseq=patient.all_epitopes.tsv \
-  --external-predictions input --ensembl-release 93 \
-  --mrna-no-optimize-linkers --output-dir historical-vaccines
-```
-
-Historical mode retains each source's predictor/version selection and applies
-the configured Topiary DSL within that source. This avoids treating a missing
-model in another report as missing biological evidence. The combined report
-includes `rank`, `source_rank`, `Input source`, `Input file`, and
-`Prediction evidence`. Its historical ordering compares source-derived scores;
-it does not calibrate different models onto a probability of immunogenicity.
-Fresh mode is the common-model comparison. Neither mode upgrades tumor
-specificity or overrides the existing admission policy for antigen classes.
-
-Every file gets a content-derived source identity. Identical peptides in
-different genes, transcripts or contexts remain distinct observations. Exact
-copies of an input file are rejected. Vaccine selection keeps one best
-source-derived window per biological source instead of adding RNA counts or
-scores across reports; all observations remain in the neoepitope report.
-Inputs must describe the same patient and assembly. The file formats do not
-always record enough information to verify that automatically.
-Choose the Ensembl release matching that assembly (93 above is an example).
-
-`Peptide sequence SHA256` and `Context sequence SHA256` link exact amino-acid
-matches without merging observations or abundance measurements. `Context extent`
-distinguishes a reported window from an epitope alone. These are sequence
-identities, not proof that two pipelines reconstructed the same full ORF.
-Different windows remain visible even when vaccine design selects one.
-See [ORF and evidence reconciliation](docs/unified_evidence.md) for the shared
-model and upstream work needed to combine complete ORFs with these observations.
-
-The original `--input-lens` and `--input-pvacseq` flags still work and can also
-use fresh mode. Original prediction exports use `vaxrank.epitope_io`'s
-`save_predictions` / `load_predictions` format. `InputTablePredictor` in
-`vaxrank.external_rescoring` replays these candidates by exact source/context
-identity, preserving unknown versions and sparse allele coverage. It raises
-on a cache miss; it never silently substitutes a current model or another
-source's historical score.
-
-Native Exacto ingestion is tracked in [Topiary #365](https://github.com/openvax/topiary/issues/365).
-The reusable contextual-rescoring and historical-cache APIs are tracked in
-[Topiary #367](https://github.com/openvax/topiary/issues/367) and
-[#368](https://github.com/openvax/topiary/issues/368). This entry point accepts
-LENS and pVACseq reports today; it does not claim native Exacto support.
-Generalized table ingestion and additive feature selection are tracked in
-[Vaxrank #497](https://github.com/openvax/vaxrank/issues/497) and
-[Topiary #366](https://github.com/openvax/topiary/issues/366).

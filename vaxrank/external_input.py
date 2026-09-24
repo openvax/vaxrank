@@ -10,31 +10,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Synthesize ranked-vaccine-peptide structures from external predictions.
+"""Build vaccine candidates from normalized LENS and pVACseq reports.
 
-LENS and pVACseq files carry pre-computed (peptide, allele) MHC
-predictions plus a peptide-context column (the SLP-style window
-surrounding each neoepitope). Vaxrank's downstream code (reports,
-peptide constructs, mRNA constructs) consumes a list of
-``(source, list[VaccinePeptide])`` tuples — the same shape
-the VCF/BAM pipeline emits.
+All CLI spellings enter ``external_rescoring.load_unified_external`` for
+source identity, prediction-mode validation and DSL scoring. Format-specific
+adapters here supply context and antigen evidence to the shared
+``(source, list[VaccinePeptide])`` output interface.
 
-This module bridges the two: it groups external predictions by
-source antigen, picks one representative peptide per source, and wraps the
-context window in a ``VaccinePeptide`` so
-**the same output dispatch** runs whether the input was a VCF or a
-LENS report. Without this bridge the CLI hard-short-circuits external
-inputs into a one-line CSV and never reaches the construct writers
-(which is precisely the gap PR #253 closes).
-
-Limitations:
-- LENS / pVACseq don't carry RNA-supporting-fragment counts in a
-  uniform way, so ``n_alt_reads`` is set from ``tpm`` (LENS) or
-  defaults to 1. Combined-score ranking that depends on read counts
-  collapses to epitope-only effectively.
-- The "fragment" recovered from ``pep_context`` is just the SLP
-  window; transcript context isn't preserved. Stop-loss / frameshift
-  extensions aren't recoverable from external inputs.
+LENS supplies reported peptide windows; pVACseq tables generally supply only
+the epitope itself. Neither path reconstructs missing protein sequence.
+RNA counts and their derivations come from normalized source evidence;
+expression values such as TPM are not substituted for read counts.
 """
 
 import dataclasses
@@ -2066,8 +2052,9 @@ def patient_info_from_external(ranked, source_path, patient_id,
 def load_external_ranked(args, epitope_config=None, vaccine_config=None,
                          manufacturability_config=None):
     """Dispatch helper: load LENS / pVACseq based on args, return
-    ``(ranked, report_df, predictions, patient_info)`` or ``None`` if
-    neither flag is set.
+    ``(ranked, report_df, predictions, patient_info, dna_vaf)`` or ``None``
+    when no external input is supplied. Single-file aliases and repeatable
+    ``--external-input`` use the same preparation and validation path.
 
     ``patient_info`` carries the variant-count metadata template reports
     (ASCII / HTML / PDF) need. Input counts are captured before filtering;
@@ -2077,19 +2064,19 @@ def load_external_ranked(args, epitope_config=None, vaccine_config=None,
     peptides are constructed, so ranking and template reports consume the
     configured DSL scores rather than the default affinity score.
     ``vaccine_config`` / ``manufacturability_config`` reach construct
-    assembly through :class:`ExternalConstructOptions`, so peptide length,
-    epitope retention, combined-score expression, ranking rules, and
-    manufacturability thresholds apply identically to external and VCF runs.
+    assembly through :class:`ExternalConstructOptions`. External source-window
+    selection and final ordering still use target-epitope scores, even when a
+    custom combined-score expression is configured (see vaxrank#506).
 
     The returned ``predictions`` collection retains every loaded input group
     for audit reports and patient-genotype inference. ``ranked`` is built from
     separate copies narrowed to groups retained by the Topiary filter and
     meeting the configured minimum epitope score.
     """
-    from .epitope_dsl import epitopes_for_ranking
-    from .epitope_io import read_lens_report, read_pvacseq_report
+    from .external_rescoring import external_inputs, load_unified_external
 
-    patient_id = getattr(args, 'output_patient_id', '') or ''
+    if not external_inputs(args):
+        return None
     options = ExternalConstructOptions.from_configs(
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config,
@@ -2099,37 +2086,4 @@ def load_external_ranked(args, epitope_config=None, vaccine_config=None,
     )
     genome = getattr(args, 'genome', None)
 
-    if (getattr(args, 'external_input', None)
-            or getattr(args, 'external_predictions', 'input') != 'input'
-            or getattr(args, 'output_input_predictions', None)
-            or (getattr(args, 'input_lens', None) and getattr(args, 'input_pvacseq', None))):
-        from .external_rescoring import load_unified_external
-        return load_unified_external(args, epitope_config, options, genome)
-
-    for arg_name, reader, ranker, label in (
-        ('input_lens', read_lens_report, lens_ranking_result, 'LENS report'),
-        ('input_pvacseq', read_pvacseq_report, pvacseq_ranking_result,
-         'pVACseq report'),
-    ):
-        path = getattr(args, arg_name, None)
-        if not path:
-            continue
-        # One read. ``report`` carries the rows, the per-row identities, the
-        # grouped candidates, and the user-facing table; every stage below
-        # consumes that single parse.
-        report = reader(path, epitope_config=epitope_config)
-        predictions = list(report.epitopes)
-        ranking_result = ranker(
-            report,
-            epitopes_for_ranking(predictions, epitope_config),
-            genome=genome,
-            options=options,
-        )
-        patient_info = patient_info_from_external(
-            ranking_result.ranked, path, patient_id,
-            ranking_result.input_summary,
-            input_label=label,
-            predictions=predictions)
-        return (ranking_result.ranked, report.report_df, predictions,
-                patient_info, ranking_result.dna_vaf_by_variant)
-    return None
+    return load_unified_external(args, epitope_config, options, genome)
