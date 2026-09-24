@@ -725,8 +725,8 @@ DEFAULT_AFFINITY_SCORE_EXPR_TEMPLATE = (
     "{logistic_epitope_score_midpoint}, {logistic_epitope_score_width})"
 )
 DEFAULT_PERCENTILE_SCORE_EXPR_TEMPLATE = (
-    "(percentile_rank < {percentile_rank_cutoff}) * "
-    "(1.0 - percentile_rank / {percentile_rank_cutoff}).clip(0.0, none)"
+    "(affinity.rank < {percentile_rank_cutoff}) * "
+    "(1.0 - affinity.rank / {percentile_rank_cutoff}).clip(0.0, none)"
 )
 
 

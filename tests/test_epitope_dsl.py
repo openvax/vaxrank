@@ -910,14 +910,15 @@ def _candidate(*predictions):
 
 
 @pytest.mark.parametrize("filter_expr", [None, "affinity.value < 55"])
-def test_conflicting_external_measurements_cannot_depend_on_input_order(filter_expr):
+@pytest.mark.parametrize("expression", ["affinity.value", "column(value)"])
+def test_conflicting_external_measurements_cannot_depend_on_input_order(filter_expr, expression):
     from vaxrank.epitope_dsl import score_predictions, attach_per_allele_scores
 
     frame = _predictions_df([
         dict(prediction_id="x", peptide="SIINFEKL", allele="HLA-A*02:01", value=value)
         for value in (50., 60.)
     ])
-    cfg = EpitopeConfig(score_expr="affinity.value", filter_expr=filter_expr, min_epitope_score=0.)
+    cfg = EpitopeConfig(score_expr=expression, filter_expr=filter_expr, min_epitope_score=0.)
     original = frame.copy(deep=True)
     for ordered in (frame, frame.iloc[::-1]):
         for consumer in (score_predictions, attach_per_allele_scores):
@@ -928,14 +929,15 @@ def test_conflicting_external_measurements_cannot_depend_on_input_order(filter_e
 
 @pytest.mark.parametrize("values,expected", [([50., 50.], 50.), ([None, 50.], 50.),
                                               ([None, None], 0.)])
-def test_compatible_external_measurements_reach_per_allele_scores(values, expected):
+@pytest.mark.parametrize("expression", ["affinity.value", "column(value)"])
+def test_compatible_external_measurements_reach_per_allele_scores(values, expected, expression):
     from vaxrank.epitope_dsl import score_predictions, attach_per_allele_scores
 
     frame = _predictions_df([
         dict(prediction_id="x", peptide="SIINFEKL", allele="HLA-A*02:01", value=value)
         for value in values
     ])
-    cfg = EpitopeConfig(score_expr="affinity.value", min_epitope_score=0.)
+    cfg = EpitopeConfig(score_expr=expression, min_epitope_score=0.)
     for ordered in (frame, frame.iloc[::-1]):
         assert score_predictions([_candidate()], cfg, topiary_df=ordered).tolist() == [expected]
         [scored] = attach_per_allele_scores([_candidate()], cfg, topiary_df=ordered)
@@ -959,6 +961,27 @@ def test_independent_prediction_runs_remain_separate_vaccine_candidates():
         scored = attach_per_allele_scores(candidates, cfg, topiary_df=ordered)
         assert {epitope.prediction_id: epitope.per_allele_scores["HLA-A*02:01"]
                 for epitope in scored} == {"run-one": 50., "run-two": 60.}
+
+
+@pytest.mark.parametrize("method,expected", [("mhcflurry", .95), ("netmhcpan", .2)])
+def test_default_percentile_scoring_uses_selected_affinity_model(method, expected):
+    from vaxrank.epitope_dsl import score_predictions, attach_per_allele_scores
+
+    frame = _predictions_df([
+        dict(prediction_id="x", peptide="SIINFEKL", allele="HLA-A*02:01",
+             prediction_method_name=name, kind=kind, percentile_rank=rank)
+        for name, kind, rank in [
+            ("mhcflurry", "pMHC_affinity", .5),
+            ("netmhcpan", "pMHC_affinity", 8.),
+            ("netmhcpan", "pMHC_presentation", .01),
+        ]
+    ])
+    cfg = EpitopeConfig(scoring_mode="percentile_rank", percentile_rank_cutoff=10.,
+                        default_methods={"pMHC_affinity": method}, min_epitope_score=0.)
+    for ordered in (frame, frame.iloc[::-1]):
+        assert score_predictions([_candidate()], cfg, topiary_df=ordered).tolist() == pytest.approx([expected])
+        [scored] = attach_per_allele_scores([_candidate()], cfg, topiary_df=ordered)
+        assert dict(scored.per_allele_scores) == pytest.approx({"HLA-A*02:01": expected})
 
 
 @pytest.mark.parametrize("missing", UNSTATED_SPELLINGS)
