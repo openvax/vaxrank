@@ -32,6 +32,7 @@ from isovar.cli import (
 )
 from isovar.cli.rna_args import alignment_file_from_args
 from isovar.cli.filter_args import filter_threshold_dict_from_args
+from isovar.cli.validation import germline_variants_from_args
 from mhctools.cli import (
     mhc_alleles_from_args,
     mhc_binding_predictor_from_args,
@@ -1548,6 +1549,7 @@ def run_vaxrank_from_parsed_args(args):
     variants = filter_unannotatable_variants(variants)
     isovar_results = run_isovar(
         variants=variants,
+        germline_variants=germline_variants_from_args(args, variants),
         alignment_file=alignment_file_from_args(args),
         read_collector=read_collector_from_args(args),
         protein_sequence_creator=protein_sequence_creator,

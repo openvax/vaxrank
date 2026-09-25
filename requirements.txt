@@ -6,12 +6,16 @@ datacache>=1.9.1,<2.0.0
 osteosarc==0.2.3
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.6.4,<3.0.0
-# 9.3.7 supplies candidate-local SV sequence-change checks, including partial
-# proteins and uncertain selenocysteine decoding. DNA fallback must evaluate
-# each candidate instead of treating a set-level flag as its primary's status.
-varcode>=9.3.7,<10.0.0
-# 1.31.0 returns fusion results in the shared RNA path format (isovar.fusion_rna.v2).
-isovar>=1.31.0,<2.0.0
+# 10.4.1 ranks structural candidate sets that list themselves as candidates
+# without recursing, which DNA fallback relies on when comparing fusion outcomes.
+# Varcode 10 also supplies candidate-local SV sequence-change checks, including
+# partial proteins and uncertain selenocysteine decoding.
+varcode>=10.4.1,<11.0.0
+# 1.33.0 accepts matched germline variants (--germline-vcf), which Vaxrank
+# passes through. The fusion adapter reads the shared RNA path format
+# isovar.fusion_rna.v2; 1.37.0 moves to v3, so stay below it until the adapter
+# follows.
+isovar>=1.33.0,<1.37.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.33.5,<4.0.0
 # 3.41.0 supplies mhctools.cleavage (CleavageInput/CleavageModel/CleavageResult/

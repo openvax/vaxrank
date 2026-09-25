@@ -442,8 +442,8 @@ def render_orf_attribution_svg(audit):
 {''.join(rows)}
 
 <rect x="32" y="559" width="552" height="104" rx="8" fill="#f8e9e5"/>
-<text x="52" y="586" class="panel-title">GERMLINE ATTRIBUTION: NOT YET</text>
-{_text_lines("The public run_isovar path has no matched-germline variant input. Additional transcript edits remain 'unexplained' even when they may be germline.", 52, 612, width=70, limit=3, step=17)}
+<text x="52" y="586" class="panel-title">GERMLINE ATTRIBUTION: NOT SUPPLIED</text>
+{_text_lines("This audit ran without a matched-germline VCF (--germline-vcf). Additional transcript edits remain 'unexplained' even when they may be germline.", 52, 612, width=70, limit=3, step=17)}
 <rect x="616" y="559" width="552" height="104" rx="8" fill="#fff2c2"/>
 <text x="636" y="586" class="panel-title">CO-SOMATIC PHASING: CAPABLE, NOT TESTED HERE</text>
 {_text_lines('Isovar can phase multiple supplied somatic variants by shared fragments, but the 44 nominated loci contain no nearby pair. MAP2 and CD109 use explicit external compound inputs.', 636, 612, width=70, limit=3, step=17)}
