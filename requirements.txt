@@ -3,7 +3,8 @@ numpy>=2.0.0,<3.0.0
 # HTTP retries via datacache's public API, without fetching during normal tests.
 datacache>=1.9.1,<2.0.0
 # Public data acquisition and original-read extraction for the osteosarc corpus.
-osteosarc==0.2.3
+# The bundled Sid test data is generated with osteosarc 0.7.0 (provenance.json).
+osteosarc>=0.7.0,<0.8
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.6.4,<3.0.0
 # 10.4.1 ranks structural candidate sets that list themselves as candidates
