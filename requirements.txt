@@ -45,7 +45,7 @@ mhctools>=3.44.0,<4.0.0
 # 5.68.2 rejects contradictory measurements within a selected observation
 # instead of changing scores and filters when external rows are reordered.
 # This floor also validates the frozen prediction cache's producer versions;
-# the exact Osteosarc pin above constrains fixture dependency compatibility.
+# The Osteosarc range above also selects Topiary >=5.72.0, the first that accepts it.
 # 5.70.1 applies the same consistency check to numeric column expressions.
 topiary>=5.70.1,<6.0.0
 roman
