@@ -26,7 +26,7 @@ class IsovarFusionAntigens(DataclassSerializable):
 
 
 def fusion_antigens_from_isovar(result, *, tumor_specificity=None, gene_name="", species=""):
-    """Adapt a result from ``isovar.reconstruct_fusion`` (``isovar.fusion_rna.v2``).
+    """Adapt a result from ``isovar.reconstruct_fusion`` (``isovar.fusion_rna.v3``).
 
     Parameters
     ----------
@@ -49,7 +49,7 @@ def fusion_antigens_from_isovar(result, *, tumor_specificity=None, gene_name="",
     """
     payload = json.dumps(result, sort_keys=True)
     result = json.loads(payload)
-    if result.get("schema") != "isovar.fusion_rna.v2":
+    if result.get("schema") != "isovar.fusion_rna.v3":
         raise ValueError("Unsupported Isovar fusion result schema")
     status = result["status"]
     if status not in {"translated", "ambiguous", "unresolved", "insufficient_support"}:
