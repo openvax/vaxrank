@@ -573,18 +573,39 @@ def add_mrna_output_args(group):
         "--mrna-optimize-linkers",
         dest="mrna_optimize_linkers",
         action="store_true",
-        default=True,
+        default=None,
         help="Enable per-junction linker optimization to minimize predicted "
              "MHC presentation of chimeric k-mers spanning antigen junctions "
-             "(issue #247). On by default; requires --mhc-predictor + "
-             "--mhc-alleles. The default linker is used as a fallback if no "
-             "candidate outperforms it.")
+             "using --mrna-junction-predictor. By default, VCF/BAM runs reuse "
+             "their configured candidate predictor; external-report runs only "
+             "optimize when a junction predictor is explicitly selected. "
+             "The shared linker is kept if no candidate outperforms it.")
     group.add_argument(
         "--mrna-no-optimize-linkers",
         dest="mrna_optimize_linkers",
         action="store_false",
+        default=None,
         help="Disable per-junction linker optimization. The shared linker "
              "is used at every junction without optimization.")
+    group.add_argument(
+        "--mrna-junction-predictor", default=None, metavar="NAME",
+        help="One mhctools predictor for new junction queries only. Imported "
+             "candidate predictions and scores are unchanged. No model is "
+             "chosen automatically for external reports.")
+    group.add_argument(
+        "--mrna-junction-alleles", default=None, metavar="ALLELES",
+        help="Comma/space-separated alleles for junction queries. Defaults to "
+             "the declared manifest genotype, or --mhc-alleles on VCF/BAM runs. "
+             "Required for reports with no declared genotype; report allele "
+             "coverage is not a genotype declaration.")
+    group.add_argument(
+        "--mrna-junction-predictor-path", default=None, metavar="PATH",
+        help="Executable path for the junction predictor, independent of the "
+             "candidate predictor path.")
+    group.add_argument(
+        "--mrna-junction-predictor-models-path", default=None, metavar="PATH",
+        help="Model directory for the junction predictor, independent of the "
+             "candidate predictor models.")
     group.add_argument(
         "--mrna-junction-candidates",
         default="",

@@ -164,6 +164,10 @@ class MrnaConstructConfigSchema(
     codon_species: Optional[str] = None
     codon_method: Optional[str] = None
     optimize_linkers: Optional[bool] = None
+    junction_predictor: Optional[str] = None
+    junction_alleles: Optional[str] = None
+    junction_predictor_path: Optional[str] = None
+    junction_predictor_models_path: Optional[str] = None
     junction_candidates: Optional[str] = None
     junction_rank_strong: Optional[float] = None
     junction_rank_mild: Optional[float] = None

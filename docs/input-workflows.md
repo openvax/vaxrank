@@ -210,12 +210,31 @@ construct admitted antigens. Replace `N` with the release matching the input
 annotation: `--output-dir` automatically requests ASCII/PDF reports, which
 require it. Explicit ASCII/HTML/PDF output flags have the same requirement.
 
-For original-only mRNA construction, also pass `--mrna-no-optimize-linkers`.
-Junction optimization is a separate prediction step and otherwise attempts to
-use a live MHC model, even in `input` mode. Optional cleavage annotation can be
-disabled with `--no-processing-aware-annotation`. Choosing an independent
-junction model while preserving historical candidate scores needs
-[#507](https://github.com/openvax/vaxrank/issues/507). Creating the directory first
+External-report construction uses the shared linker without new junction
+predictions by default. To optimize junctions while retaining every historical
+candidate score, add `--mrna-junction-predictor mhcflurry-presentation` (or another
+mhctools model that supplies percentile ranks). The manifest's declared
+genotype supplies the query alleles; `--mrna-junction-alleles 'HLA-A*02:01'`
+can select a subset. For a single report with unknown genotype, an explicit
+junction allele set is required. Report prediction coverage is not used as a
+genotype declaration.
+
+`--mrna-optimize-linkers` explicitly requires a configured junction model;
+`--mrna-no-optimize-linkers` disables junction queries even if a model is
+configured. Candidate `--mhc-predictor` settings still apply only to explicit
+`--external-predictions fresh` requests. Executable and weights paths can be
+set independently with `--mrna-junction-predictor-path` and
+`--mrna-junction-predictor-models-path`. The corresponding YAML keys live under
+`mrna:` (`junction_predictor`, `junction_alleles`, and the two path keys);
+`optimize_linkers: null` selects auto mode.
+
+The mRNA manifest's `elements.junction_swap` records the selected policy and
+whether optimization ran. Its `prediction` record preserves observed model
+names/versions/kinds, query alleles and lengths, and the peptide queries for
+each candidate linker at each junction. Unknown model versions remain null.
+This metadata also survives native RNAConstruct serialization. Optional
+cleavage annotation can be disabled with `--no-processing-aware-annotation`.
+Creating the directory first
 also avoids the direct pipeline's pending [output-path fix](https://github.com/openvax/vaxrank/pull/456).
 
 LENS supplies reported context windows. pVACseq tables generally supply only

@@ -51,116 +51,37 @@ def _capture_logger(logger_name, level=logging.DEBUG):
 # -- resolve_mhc_for_linker_optimizer ----------------------------------
 
 
-def _args_with_inferred_alleles(alleles=None):
-    """Minimal Namespace shape that the LENS path actually produces.
-
-    Real LENS-mode args don't have ``--mhc-predictor`` /
-    ``--mhc-alleles`` (the external arg parser doesn't add them), so
-    the mhctools helpers raise ``AttributeError`` when called against
-    such a Namespace. The optimizer's job is to fall back to the
-    inferred-alleles path.
-    """
-    return SimpleNamespace(
-        _inferred_mhc_alleles_from_lens=list(alleles or []))
-
-
-def test_resolve_mhc_defaults_to_mhcflurry_when_predictor_missing(monkeypatch):
-    """LENS-path: args lacks ``--mhc-predictor`` but the loader
-    stashed inferred alleles. Vaxrank should fall back to mhcflurry
-    as a credible default rather than refusing to optimize.
-
-    We don't actually instantiate mhcflurry here — loading it in
-    the test process triggers the macOS libomp clash that issue
-    #266 fixed for pepsickle (mhcflurry has the same constraint).
-    Instead, we patch ``mhctools.MHCflurry`` to a sentinel and
-    verify the function calls it with the inferred alleles + emits
-    the "defaulting to mhcflurry" INFO line."""
+def test_resolve_mhc_never_loads_an_unrequested_fallback(monkeypatch):
     import mhctools
     from vaxrank.cli import entry_point as ep
 
-    captured = {}
+    def unexpected(*args, **kwargs):
+        raise AssertionError('An unrequested model was initialized')
 
-    class _SentinelPredictor:
-        pass
-
-    def _stub_ctor(alleles, **kw):
-        captured['alleles'] = alleles
-        captured['kwargs'] = kw
-        return _SentinelPredictor()
-
-    monkeypatch.setattr(mhctools, 'MHCflurry', _stub_ctor)
-    args = _args_with_inferred_alleles(['HLA-A*02:01', 'HLA-B*07:02'])
+    monkeypatch.setattr(mhctools, 'MHCflurry', unexpected)
+    monkeypatch.setattr(ep, 'mhc_binding_predictor_from_args', unexpected)
+    args = SimpleNamespace(input_lens='report.tsv',
+                           _inferred_mhc_alleles_from_lens=['HLA-A*02:01'])
     with _capture_logger('vaxrank.cli.entry_point') as records:
-        predictor, alleles = ep.resolve_mhc_for_linker_optimizer(args)
-    assert isinstance(predictor, _SentinelPredictor)
-    assert alleles == ['HLA-A*02:01', 'HLA-B*07:02']
-    assert captured['alleles'] == ['HLA-A*02:01', 'HLA-B*07:02']
-    msgs = [r.getMessage() for r in records]
-    assert any('inferred from the LENS / pVACseq report' in m for m in msgs)
-    assert any('defaulting to mhcflurry' in m for m in msgs), \
-        "Expected the 'defaulting to mhcflurry' INFO line; got %r" % msgs
-
-
-def test_resolve_mhc_warns_when_mhcflurry_default_unavailable(monkeypatch):
-    """When the mhcflurry default can't load (not installed, weights
-    missing, …), the function returns ``(None, None)`` and surfaces
-    the targeted "predictor missing, alleles available" warning so
-    the operator knows what to fix.
-
-    Patches ``mhctools.MHCflurry`` itself to raise — replacing the
-    sys.modules entry would crater anything else that imports
-    mhctools concurrently.
-    """
-    import mhctools
-    from vaxrank.cli import entry_point as ep
-
-    def _broken_ctor(*_a, **_kw):
-        raise OSError("simulated: mhcflurry weights not available")
-    monkeypatch.setattr(mhctools, 'MHCflurry', _broken_ctor)
-
-    args = _args_with_inferred_alleles(['HLA-A*02:01'])
-    with _capture_logger('vaxrank.cli.entry_point') as records:
-        predictor, alleles = ep.resolve_mhc_for_linker_optimizer(args)
-    assert predictor is None
-    assert alleles is None
-    msgs = [r.getMessage() for r in records]
-    assert any(
-        'alleles are available' in m and 'no MHC predictor' in m
-        for m in msgs), \
-        "Expected the 'predictor missing, alleles available' WARNING; got %r" % msgs
-
-
-def test_resolve_mhc_no_inputs_at_all():
-    """Pipeline path with neither flag set: both come back None and
-    the warning explicitly mentions both flags."""
-    from vaxrank.cli.entry_point import resolve_mhc_for_linker_optimizer
-    args = SimpleNamespace()  # no inferred alleles either
-    with _capture_logger('vaxrank.cli.entry_point') as records:
-        predictor, alleles = resolve_mhc_for_linker_optimizer(args)
-    assert predictor is None
-    assert alleles is None
-    msg = ' '.join(r.getMessage() for r in records)
-    assert '--mhc-alleles' in msg
-    assert '--mhc-predictor' in msg
+        assert ep.resolve_mhc_for_linker_optimizer(args) == (None, None)
+    assert any('without new MHC predictions' in r.getMessage() for r in records)
 
 
 def test_resolve_mhc_propagates_real_predictor_load_failure(monkeypatch):
-    """A genuine model-load error inside mhctools (e.g. a missing
-    weights file — surfaces as ``RuntimeError`` / ``OSError``) must
-    propagate, not be swallowed into "optimizer disabled". Pin the
-    narrowed exception scope so a future broadening of the catch
-    falls red here."""
     from vaxrank.cli import entry_point as ep
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
 
-    class _BadDay(RuntimeError):
+    class ModelLoadFailure(RuntimeError):
         pass
 
-    def _kaboom(_args):
-        raise _BadDay("predictor went sideways")
+    def fail(_args):
+        raise ModelLoadFailure('predictor went sideways')
 
-    monkeypatch.setattr(ep, 'mhc_binding_predictor_from_args', _kaboom)
-    args = SimpleNamespace(_inferred_mhc_alleles_from_lens=['HLA-A*02:01'])
-    with pytest.raises(_BadDay):
+    monkeypatch.setattr(ep, 'mhc_binding_predictor_from_args', fail)
+    args = parse_vaxrank_args([
+        '--input-lens', 'report.tsv', '--mrna-junction-predictor', 'mhcflurry',
+        '--mrna-junction-alleles', 'HLA-A*02:01'])
+    with pytest.raises(ModelLoadFailure):
         ep.resolve_mhc_for_linker_optimizer(args)
 
 

@@ -409,10 +409,21 @@ of chimeric k-mers spanning antigen junctions.
 | Flag | Purpose |
 |---|---|
 | `--mrna-linker` | Default inter-antigen spacer (e.g. `(G4S)2`) |
-| `--mrna-optimize-linkers` / `--mrna-no-optimize-linkers` | Per-junction MHC-aware swap (on by default) |
+| `--mrna-optimize-linkers` / `--mrna-no-optimize-linkers` | Require / disable junction prediction; auto by default |
+| `--mrna-junction-predictor` | One mhctools model for new junction queries; leaves candidate scores unchanged |
+| `--mrna-junction-alleles` | Query alleles; defaults to declared manifest genotype or VCF/BAM `--mhc-alleles` |
+| `--mrna-junction-predictor-path` / `--mrna-junction-predictor-models-path` | Independent executable / weights locations |
 | `--mrna-junction-candidates` | Candidate linkers considered at each junction |
 | `--mrna-junction-rank-strong` | Strong-binder %-rank threshold |
 | `--mrna-junction-rank-mild` | Mild-binder %-rank threshold |
+
+VCF + BAM runs reuse their configured candidate predictor in auto mode.
+External-report runs use the shared linker without new predictions unless
+`--mrna-junction-predictor` is supplied. If the reports have no declared
+genotype, also supply `--mrna-junction-alleles`; observed report coverage is
+not treated as a genotype. `--mrna-no-optimize-linkers` prevents all junction
+model loading. The mRNA manifest records the policy, observed model names and
+versions, allele scope, and peptide queries under `elements.junction_swap`.
 
 **Codon optimization**
 
@@ -484,7 +495,7 @@ returns a `Linker` with primary-source citations attached. The
 default mRNA inter-antigen linker is `(G4S)2` (BioNTech FixVac
 canonical, [Sahin *Nature* 2017](https://www.nature.com/articles/nature23003));
 the default peptide linker is `G4S3`. Per-junction MHC-aware linker
-swap (`--mrna-optimize-linkers`, on by default) considers `G3S`,
+swap (automatic for VCF/BAM, explicitly configured for imported reports) considers `G3S`,
 `G4S`, `(G3S)2`, `(G4S)2`, `AAA` per junction and substitutes
 whichever minimizes predicted presentation of chimeric k-mers
 spanning the junction.
