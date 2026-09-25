@@ -617,7 +617,7 @@ def resolve_mhc_for_linker_optimizer(args, config_kwargs=None):
         if model_path or models_path:
             raise ValueError('Junction model paths require --mrna-junction-predictor')
     declared = getattr(args, '_declared_mhc_alleles', None)
-    if not external:
+    if not external and not getattr(args, 'input_json_file', None):
         declared = mhc_alleles_from_args(args)
     if query:
         prediction_args.mhc_alleles = query

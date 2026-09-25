@@ -219,6 +219,10 @@ can select a subset. For a single report with unknown genotype, an explicit
 junction allele set is required. Report prediction coverage is not used as a
 genotype declaration.
 
+Cached JSON rerendering (`--input-json-file`) can also request new junction
+predictions by supplying both `--mrna-junction-predictor` and
+`--mrna-junction-alleles`; its default performs no new junction prediction.
+
 `--mrna-optimize-linkers` explicitly requires a configured junction model;
 `--mrna-no-optimize-linkers` disables junction queries even if a model is
 configured. Candidate `--mhc-predictor` settings still apply only to explicit

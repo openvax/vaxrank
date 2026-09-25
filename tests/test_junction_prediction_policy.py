@@ -136,8 +136,10 @@ def external_args(*extra):
     return parse_vaxrank_args(['--input-lens', INPUTS[0][1], *extra])
 
 
-def test_report_coverage_does_not_supply_junction_genotype(junction_factory):
-    args = external_args('--mrna-junction-predictor', 'junction-test')
+@pytest.mark.parametrize('input_flag', ['--input-lens', '--input-json-file'])
+def test_report_coverage_does_not_supply_junction_genotype(input_flag, junction_factory):
+    args = parse_vaxrank_args([input_flag, 'saved-input',
+                               '--mrna-junction-predictor', 'junction-test'])
     args._inferred_mhc_alleles_from_lens = ALLELES
     with pytest.raises(ValueError, match='report allele coverage does not establish genotype'):
         ep.resolve_mhc_for_linker_optimizer(args)
@@ -180,9 +182,11 @@ def test_vcf_bam_auto_mode_reuses_explicit_candidate_model(junction_factory):
     assert junction_factory[0][0].mhc_predictor == args.mhc_predictor
 
 
-def test_explicit_junction_model_uses_public_mhctools_factory():
-    args = external_args('--mrna-junction-predictor', 'random',
-                         '--mrna-junction-alleles', 'A0201')
+@pytest.mark.parametrize('input_flag', ['--input-lens', '--input-json-file'])
+def test_explicit_junction_model_uses_public_mhctools_factory(input_flag):
+    args = parse_vaxrank_args([input_flag, 'saved-input',
+                               '--mrna-junction-predictor', 'random',
+                               '--mrna-junction-alleles', 'A0201'])
     predictor, alleles = ep.resolve_mhc_for_linker_optimizer(args)
     assert predictor.alleles == alleles == ALLELES[:1]
     predictions = predictor.predict_peptides(['SIINFEKLA'])
