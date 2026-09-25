@@ -16,10 +16,17 @@ from vaxrank.external_rescoring import (
     InputTablePredictor, external_inputs, prepare_reports, rescore_candidates,
 )
 
+from .input_scope_helpers import FIXTURE_SCOPE, write_input_manifest
+
+
 DATA = Path(__file__).parent / 'data/epitope_fixtures'
 INPUTS = [('lens', str(DATA / 'lens_example.tsv')),
           ('pvacseq', str(DATA / 'pvacseq_example.tsv'))]
 ALLELES = ['HLA-A*02:01', 'HLA-B*07:02']
+
+
+def scoped_reports(inputs, *args, **kwargs):
+    return prepare_reports(inputs, *args, scopes=[FIXTURE_SCOPE for _ in inputs], **kwargs)
 
 
 class ContextPredictor(BasePredictor):
@@ -84,7 +91,7 @@ def test_anonymous_wildtype_cannot_keep_old_predictions_after_rescoring():
 
 
 def test_input_table_predictor_replays_unknown_versions_without_models():
-    reports, _, _ = prepare_reports([INPUTS[1]])
+    reports, _, _ = scoped_reports([INPUTS[1]])
     originals = reports[0].epitopes
     cache = InputTablePredictor(originals)
     replay = cache.predict_candidates(originals)
@@ -98,7 +105,7 @@ def test_input_table_predictor_replays_unknown_versions_without_models():
 
 def test_fresh_reports_preserve_original_values_and_allow_new_alleles(tmp_path):
     saved = tmp_path / 'input.tsv'
-    reports, frame, epitopes = prepare_reports(
+    reports, frame, epitopes = scoped_reports(
         INPUTS, config(), mode='fresh', models=[ContextPredictor()],
         alleles=ALLELES, input_predictions_path=saved)
     assert {r.source_format for r in reports} == {'lens', 'pvacseq'}
@@ -121,7 +128,7 @@ def test_fresh_reports_preserve_original_values_and_allow_new_alleles(tmp_path):
 
 
 def test_combined_report_emits_global_and_source_ranks(tmp_path):
-    _, frame, epitopes = prepare_reports(INPUTS, config(), mode='fresh',
+    _, frame, epitopes = scoped_reports(INPUTS, config(), mode='fresh',
                                          models=[ContextPredictor()], alleles=ALLELES)
     path = tmp_path / 'report.csv'
     write_neoepitope_report(frame, epitopes, csv_report_path=path, epitope_config=config())
@@ -139,7 +146,7 @@ def test_identity_namespaces_isolate_two_reports_of_the_same_candidate(tmp_path)
     for metric in ('netmhcpan_4.1b.aff_nm', 'mhcflurry_2.1.1.aff'):
         df[metric] = 9999
     df.to_csv(second, sep='\t', index=False)
-    reports, _, _ = prepare_reports([INPUTS[0], ('lens', str(second))])
+    reports, _, _ = scoped_reports([INPUTS[0], ('lens', str(second))])
     assert {e.prediction_id for e in reports[0].epitopes}.isdisjoint(
         e.prediction_id for e in reports[1].epitopes)
     assert any(e.epitope_score > 0 for e in reports[0].epitopes)
@@ -150,13 +157,13 @@ def test_duplicate_input_is_rejected_even_at_a_different_path(tmp_path):
     copy = tmp_path / 'copy.tsv'
     copy.write_bytes(Path(INPUTS[0][1]).read_bytes())
     with pytest.raises(ValueError, match='more than once'):
-        prepare_reports([INPUTS[0], ('lens', str(copy))])
+        scoped_reports([INPUTS[0], ('lens', str(copy))])
 
 
 def test_fresh_scoring_does_not_validate_live_model_against_old_table():
     with pytest.raises(ValueError):
         read_lens_report(INPUTS[0][1], epitope_config=config())
-    reports, _, eps = prepare_reports([INPUTS[0]], config(), mode='fresh',
+    reports, _, eps = scoped_reports([INPUTS[0]], config(), mode='fresh',
                                       models=[ContextPredictor()], alleles=ALLELES)
     assert eps and reports[0].epitopes
 
@@ -221,14 +228,14 @@ def test_input_mode_rejects_ignored_options_before_reading_or_exporting(
     assert not output.exists()
 
 
-def test_unified_candidates_reach_both_vaccine_designs(monkeypatch):
+def test_unified_candidates_reach_both_vaccine_designs(monkeypatch, tmp_path):
     import mhctools.cli
     from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
     from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
     monkeypatch.setattr(mhctools.cli, 'predictors_from_args', lambda args: [ContextPredictor()])
     monkeypatch.setattr(mhctools.cli, 'mhc_alleles_from_args', lambda args: ALLELES)
     args = SimpleNamespace(
-        external_input=[fmt + '=' + path for fmt, path in INPUTS],
+        input_manifest=write_input_manifest(tmp_path / 'inputs.json', INPUTS),
         external_predictions='fresh', mhc_predictor=['test'], genome=None)
     ranked, _, _, patient, _ = load_external_ranked(args, epitope_config=config())
     assert ranked
@@ -244,7 +251,7 @@ def test_mixed_cli_reranks_with_fresh_values_and_exports_originals(monkeypatch, 
     import mhctools.cli
     from vaxrank.cli.entry_point import main
 
-    inputs = [arg for fmt, path in INPUTS for arg in ('--external-input', fmt + '=' + path)]
+    inputs = ['--input-manifest', write_input_manifest(tmp_path / 'inputs.json', INPUTS)]
     original_csv = tmp_path / 'original.csv'
     original_native = tmp_path / 'original.tsv'
     main(inputs + ['--output-csv', str(original_csv),
@@ -287,7 +294,8 @@ def test_same_variant_is_not_double_counted_for_construct_selection(tmp_path):
     df = pd.read_csv(INPUTS[0][1], sep='\t')
     df['additional_annotation'] = 'independent report; same candidate identities'
     df.to_csv(second, sep='\t', index=False)
-    args = SimpleNamespace(external_input=['lens=' + INPUTS[0][1], 'lens=' + str(second)])
+    args = SimpleNamespace(input_manifest=write_input_manifest(
+        tmp_path / 'inputs.json', [INPUTS[0], ('lens', str(second))]))
     ranked, frame, _, patient, _ = load_external_ranked(args)
     assert frame['Input source'].nunique() == 2
     original = read_lens_report(INPUTS[0][1])
@@ -298,7 +306,7 @@ def test_same_variant_is_not_double_counted_for_construct_selection(tmp_path):
 
 
 def test_historical_scores_remain_source_scoped_through_report_export(tmp_path):
-    reports, frame, eps = prepare_reports(INPUTS)
+    reports, frame, eps = scoped_reports(INPUTS)
     for report, (fmt, path) in zip(reports, INPUTS):
         from vaxrank.external_rescoring import READERS
         baseline = READERS[fmt](path)
@@ -312,7 +320,7 @@ def test_historical_scores_remain_source_scoped_through_report_export(tmp_path):
 
 
 def test_fresh_scoring_namespaces_historical_comparator_metrics():
-    _, frame, _ = prepare_reports(INPUTS, config(), mode='fresh',
+    _, frame, _ = scoped_reports(INPUTS, config(), mode='fresh',
                                   models=[ContextPredictor()], alleles=ALLELES)
     scoring = frame.attrs['topiary_df']
     assert 'input_wt_value' in scoring
@@ -345,13 +353,13 @@ def test_haplotype_model_requires_explicit_transport_support():
         rescore_candidates([candidate('a')], [Haplotype()], ALLELES)
 
 
-def test_input_mode_does_not_construct_a_live_predictor(monkeypatch):
+def test_input_mode_does_not_construct_a_live_predictor(monkeypatch, tmp_path):
     import mhctools.cli
     def forbidden(*args, **kwargs):
         raise AssertionError('Historical table replay must not initialize a model')
     monkeypatch.setattr(mhctools.cli, 'predictors_from_args', forbidden)
     ranked, _, _, _, _ = load_external_ranked(SimpleNamespace(
-        external_input=[fmt + '=' + path for fmt, path in INPUTS]))
+        input_manifest=write_input_manifest(tmp_path / 'inputs.json', INPUTS)))
     assert ranked
 
 
@@ -361,7 +369,7 @@ def test_sequence_matches_link_observations_without_merging_context_or_abundance
     alternative.loc[0, 'tpm'] = 99
     alternative.loc[1, 'pep_context'] = 'AA' + alternative.loc[1, 'peptide'] + 'CC'
     alternative.to_csv(second, sep='\t', index=False)
-    reports, frame, _ = prepare_reports([INPUTS[0], ('lens', str(second)), INPUTS[1]])
+    reports, frame, _ = scoped_reports([INPUTS[0], ('lens', str(second)), INPUTS[1]])
     a, b = (r.report_df for r in reports[:2])
     assert a.iloc[0]['Context sequence SHA256'] == b.iloc[0]['Context sequence SHA256']
     assert a.iloc[0]['Prediction identity'] != b.iloc[0]['Prediction identity']
@@ -408,4 +416,4 @@ def test_empty_candidate_input_is_explicit(tmp_path):
     path = tmp_path / 'empty.tsv'
     pd.read_csv(INPUTS[0][1], sep='\t').iloc[:0].to_csv(path, sep='\t', index=False)
     with pytest.raises(ValueError, match='no candidate peptides'):
-        prepare_reports([('lens', str(path))])
+        scoped_reports([('lens', str(path))])

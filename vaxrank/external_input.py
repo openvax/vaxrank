@@ -547,7 +547,8 @@ def variant_from_lens_row(row, genome=None):
     try:
         return Variant(
             contig=contig, start=pos, ref=ref, alt=alt,
-            genome=genome, normalize_contig_names=False)
+            genome=genome if genome is not None else cells.text(row.get('input_reference_assembly')) or None,
+            normalize_contig_names=False)
     except Exception:
         logger.debug(
             "varcode rejected LENS row at %s:%d ref=%r alt=%r; skipping.",
@@ -1811,6 +1812,9 @@ def pvacseq_genomic_variant(variant_id, group_rows, genome=None):
     needed, from their own sources: coordinates when the flavor supplies
     them, the ``ID`` / ``variant`` string (``chr1-100-A-T``) otherwise.
     """
+    if genome is None:
+        genome = next((cells.text(row.get('input_reference_assembly'))
+                       for row in group_rows if cells.text(row.get('input_reference_assembly'))), None)
     for row in group_rows:
         genomic = cells.text(row.get(GENOMIC_VARIANT_COLUMN))
         if not genomic:

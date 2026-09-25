@@ -3,6 +3,7 @@
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from tempfile import TemporaryDirectory
 
 import pandas as pd
 import pytest
@@ -19,6 +20,9 @@ from vaxrank.report import TemplateDataCreator, make_ascii_report
 from vaxrank.vaccine_config import VaccineConfig
 from vaxrank.vaccine_library import iter_named_antigens
 
+from .input_scope_helpers import write_input_manifest
+
+
 DATA = Path(__file__).parent / "data" / "epitope_fixtures"
 LENS = "lens=" + str(DATA / "lens_example.tsv")
 PVACSEQ = "pvacseq=" + str(DATA / "pvacseq_example.tsv")
@@ -26,10 +30,13 @@ INVERSE_SCORE = "1 / (1 + target_epitope_score)"
 
 
 def _load(inputs, expression, **config):
-    return load_external_ranked(
-        SimpleNamespace(external_input=inputs),
-        vaccine_config=VaccineConfig(combined_score_expr=expression, **config),
-    )[0]
+    with TemporaryDirectory() as directory:
+        args = (SimpleNamespace(input_manifest=write_input_manifest(
+            Path(directory) / 'inputs.json', [value.split('=', 1) for value in inputs]))
+            if len(inputs) > 1 else SimpleNamespace(external_input=inputs))
+        return load_external_ranked(
+            args, vaccine_config=VaccineConfig(combined_score_expr=expression, **config),
+        )[0]
 
 
 def _assert_outputs_choose_lowest_epitope_score(ranked, tmp_path):
@@ -130,8 +137,8 @@ def test_repeated_sources_choose_by_combined_score_without_combining_evidence(
     for source, peptides in ranked:
         actual = peptides[0]
         assert actual.combined_score == expected[str(source)].combined_score
-        assert [e.prediction_id for e in actual.epitopes] == [
-            e.prediction_id for e in expected[str(source)].epitopes]
+        assert [e.input_provenance.content_sha256 for e in actual.epitopes] == [
+            e.input_provenance.content_sha256 for e in expected[str(source)].epitopes]
 
 
 def test_source_agnostic_antigens_rank_without_mutation_rna(tmp_path):
@@ -143,10 +150,13 @@ def test_source_agnostic_antigens_rank_without_mutation_rna(tmp_path):
     _assert_outputs_choose_lowest_epitope_score(ranked, tmp_path)
 
 
-def test_default_source_agnostic_scores_and_missing_rna_remain_explicit():
+def test_default_source_agnostic_scores_and_missing_rna_remain_explicit(tmp_path):
     path = DATA / "real_lens_subsets" / "lens_v1.9_real_subset.tsv"
     ranked, *_ = load_external_ranked(
-        SimpleNamespace(external_input=[LENS, "lens=" + str(path)]))
+        SimpleNamespace(input_manifest=write_input_manifest(
+            tmp_path / 'inputs.json', [LENS.split('=', 1), ('lens', str(path))],
+            mhc_alleles=['HLA-A*02:01', 'HLA-B*07:02', 'HLA-A*01:01',
+                         'HLA-C*03:04', 'HLA-B*44:02', 'HLA-B*40:01', 'HLA-C*05:01'])))
     antigens = [p[0] for _, p in ranked if p[0].mutant_protein_fragment is None]
     assert antigens
     assert all(p.combined_score_expr == "target_epitope_score" for p in antigens)
@@ -208,7 +218,8 @@ def test_unified_admission_excludes_self_only_without_losing_input_evidence(tmp_
     frame.to_csv(path, sep="\t", index=False)
     inputs = ["pvacseq=" + str(path), PVACSEQ]
     ranked, report, predictions, patient, _ = load_external_ranked(
-        SimpleNamespace(external_input=inputs),
+        SimpleNamespace(input_manifest=write_input_manifest(
+            tmp_path / 'inputs.json', [value.split('=', 1) for value in inputs])),
         vaccine_config=VaccineConfig(combined_score_expr=INVERSE_SCORE))
     assert len(ranked) == 2
     assert {p[0].antigen.gene_name for _, p in ranked} == {"TP53", "BRAF"}

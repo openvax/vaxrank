@@ -5,8 +5,9 @@ source proteins. Source identities and biological admission stay with the
 readers; mhctools supplies new predictions and Topiary supplies scoring.
 """
 from collections import defaultdict
-from dataclasses import replace
+from dataclasses import asdict, replace
 import hashlib
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -17,12 +18,22 @@ from .epitope_io import (
     normalize_hla_allele, read_lens_report, read_pvacseq_report, save_predictions,
 )
 from .external_report import ExternalRecord
+from .input_scope import (
+    InputProvenance, combine_scopes, normalize_alleles, provenance_columns,
+    read_input_manifest, report_declarations, resolve_input_genome, scope_from_mapping,
+    validate_input_scopes,
+)
 
 READERS = {"lens": read_lens_report, "pvacseq": read_pvacseq_report}
 
 
 def external_inputs(args):
     """Return ordered, validated (format, path) pairs from CLI arguments."""
+    return [(fmt, path) for fmt, path, _ in external_input_specs(args)]
+
+
+def external_input_specs(args):
+    """Resolve a manifest or the existing single-report flags."""
     inputs = [(fmt, getattr(args, 'input_' + fmt)) for fmt in READERS
               if getattr(args, 'input_' + fmt, None)]
     for value in getattr(args, 'external_input', None) or ():
@@ -30,10 +41,18 @@ def external_inputs(args):
         if not sep or fmt not in READERS or not path:
             raise ValueError("--external-input requires lens=PATH or pvacseq=PATH")
         inputs.append((fmt, path))
-    return inputs
+    manifest = getattr(args, 'input_manifest', None)
+    if manifest:
+        if inputs:
+            raise ValueError("--input-manifest cannot be combined with --input-lens, "
+                             "--input-pvacseq or --external-input; list every file in the manifest")
+        return read_input_manifest(manifest)
+    return [(fmt, path, {}) for fmt, path in inputs]
 
 
-def _namespace_report(report, input_id):
+def _namespace_report(report, provenance):
+    input_id = provenance.input_id
+    scope_columns = provenance_columns(provenance)
     keys = {r.key.identifier: replace(r.key, input_id=input_id)
             for r in report.records}
     ids = {old: key.identifier for old, key in keys.items()}
@@ -45,6 +64,7 @@ def _namespace_report(report, input_id):
         row['input_source'] = input_id
         row['input_path'] = report.path
         row['input_format'] = report.source_format
+        row.update(scope_columns)
         return row
 
     frame = report.report_df.copy()
@@ -59,10 +79,27 @@ def _namespace_report(report, input_id):
     scoring['input_source'] = input_id
     scoring['input_path'] = report.path
     scoring['input_format'] = report.source_format
+    for name, value in scope_columns.items():
+        frame[name] = value
+        scoring[name] = value
     frame.attrs = {'topiary_df': scoring}
+    # Topiary owns evidence normalization and units. Keep its canonical and
+    # source-specific evidence side by side, even when observations disagree.
+    from topiary import EVIDENCE_COLUMNS
+    from topiary.evidence import source_columns
+    evidence_columns = set(EVIDENCE_COLUMNS) | set(source_columns(scoring))
+    evidence_columns.update(c for c in scoring if c.startswith(('n_rna_', 'n_dna_')))
+    evidence = defaultdict(list)
+    for record in report.records:
+        row = {name: None if pd.isna(value) else value
+               for name, value in record.row.items() if name in evidence_columns}
+        if row and row not in evidence[record.key.identifier]:
+            evidence[record.key.identifier].append(row)
     return replace(
-        report, report_df=frame,
-        epitopes=tuple(replace(e, prediction_id=ids[e.prediction_id])
+        report, report_df=frame, input_provenance=provenance,
+        epitopes=tuple(replace(e, prediction_id=ids[e.prediction_id],
+                              input_provenance=provenance,
+                              input_evidence=tuple(evidence[e.prediction_id]))
                        for e in report.epitopes),
         records=tuple(ExternalRecord(keys[r.key.identifier], row_copy(r.row))
                       for r in report.records),
@@ -209,6 +246,8 @@ def _fresh_report_frame(report, epitopes):
                 allele, epitope.sequence, None,
                 epitope.wt.sequence if epitope.wt else '', None,
                 metadata.get('Gene name'), metadata.get('Genomic variant')))
+            if report.input_provenance is not None:
+                row.update(provenance_columns(report.input_provenance))
             row['Prediction evidence'] = 'fresh'
             # Every historical field is retained under an explicit namespace;
             # no old value is presented as a new-model result or a new allele.
@@ -253,20 +292,44 @@ def _annotate_sequence_matches(frame, epitopes):
 
 
 def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
-                    alleles=(), input_predictions_path=None):
+                    alleles=(), input_predictions_path=None, scopes=None,
+                    manifest_path=None, genome=None, model_factory=None):
     """Read once and score with fresh common models or source input values."""
     if mode not in ('input', 'fresh'):
         raise ValueError("Prediction mode must be input or fresh")
+    inputs = list(inputs)
+    if scopes is None:
+        scopes = [{} for _ in inputs]
+    if len(scopes) != len(inputs):
+        raise ValueError("Each external input must have its own scope declaration")
     reports, seen = [], set()
-    for fmt, path in inputs:
+    for (fmt, path), declarations in zip(inputs, scopes):
         if fmt not in READERS:
             raise ValueError("Unsupported external format: %s" % fmt)
-        input_id = fmt + ':' + hashlib.sha256(Path(path).read_bytes()).hexdigest()
-        if input_id in seen:
+        content = Path(path).read_bytes()
+        content_sha256 = hashlib.sha256(content).hexdigest()
+        content_id = fmt + ':' + content_sha256
+        if content_id in seen:
             raise ValueError("The same external input was supplied more than once: %s" % path)
-        seen.add(input_id)
+        seen.add(content_id)
+        producer_scope, producer_declarations = report_declarations(path, fmt)
+        scope = combine_scopes(
+            producer_scope, scope_from_mapping(declarations, str(path)), str(path))
+        # An identical file assigned to a different patient/sample must not
+        # acquire the same occurrence IDs in separately saved native outputs.
+        scope_id = hashlib.sha256(json.dumps(asdict(scope), sort_keys=True).encode()).hexdigest()
+        input_id = content_id + ':' + scope_id
         report = READERS[fmt](path, score_epitopes=False)
-        reports.append(_namespace_report(report, input_id))
+        observed = sorted({a for e in report.epitopes for a in e.patient_alleles})
+        provenance = InputProvenance(
+            input_id=input_id, source_format=fmt, path=str(path), scope=scope,
+            content_sha256=content_sha256,
+            manifest_path=str(Path(manifest_path).resolve()) if manifest_path else None,
+            manifest_declarations=dict(declarations), report_declarations=producer_declarations,
+            observed_mhc_alleles=normalize_alleles(observed, str(path)) if observed else ())
+        reports.append(_namespace_report(report, provenance))
+    validate_input_scopes([r.input_provenance for r in reports],
+                          genome=genome, prediction_alleles=alleles)
     original = [e for report in reports for e in report.epitopes]
     if not original:
         raise ValueError("External inputs contain no candidate peptides to score")
@@ -285,6 +348,8 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
                       [cached[e.prediction_id] for e in report.epitopes],
                       epitope_config, topiary_df=source_frame)]
     else:
+        if model_factory is not None:
+            models = model_factory()
         epitopes = rescore_candidates(original, models, alleles)
         # Historical metric columns must never look like fresh model values.
         # Keep the common biological evidence vocabulary directly accessible,
@@ -294,6 +359,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             'prediction_id', 'variant', 'gene', 'gene_id', 'transcript',
             'transcript_id', 'antigen_source', 'input_source', 'input_format', 'input_path',
         }
+        biological.update(provenance_columns(reports[0].input_provenance))
         records = [replace(record, row={
             **{'input_' + key: value for key, value in record.row.items()},
             **{key: value for key, value in record.row.items() if key in biological},
@@ -327,14 +393,16 @@ def load_unified_external(args, epitope_config, options, genome):
         patient_info_from_external,
     )
     from .ranking import rank_constructs
+    genome = resolve_input_genome(genome)
     mode = getattr(args, 'external_predictions', 'input')
-    models, alleles = [], []
+    model_factory, alleles = None, []
     if mode == 'fresh':
         from mhctools.cli import predictors_from_args, mhc_alleles_from_args
         if not getattr(args, 'mhc_predictor', None):
             raise ValueError("Fresh external predictions require --mhc-predictor")
         alleles = sorted({normalize_hla_allele(a) for a in mhc_alleles_from_args(args)})
-        models = predictors_from_args(args)
+        def model_factory():
+            return predictors_from_args(args)
     elif getattr(args, 'mhc_predictor', None):
         raise ValueError("Use --external-predictions fresh to run --mhc-predictor")
     elif (getattr(args, 'mhc_alleles', None)
@@ -344,9 +412,12 @@ def load_unified_external(args, epitope_config, options, genome):
             "Remove --mhc-alleles/--mhc-alleles-file, or use "
             "--external-predictions fresh with --mhc-predictor to predict "
             "for an explicit HLA set.")
+    specs = external_input_specs(args)
     reports, frame, predictions = prepare_reports(
-        external_inputs(args), epitope_config, mode=mode, models=models,
-        alleles=alleles,
+        [(fmt, path) for fmt, path, _ in specs], epitope_config, mode=mode,
+        model_factory=model_factory, alleles=alleles,
+        scopes=[scope for _, _, scope in specs],
+        manifest_path=getattr(args, 'input_manifest', None), genome=genome,
         input_predictions_path=getattr(args, 'output_input_predictions', None))
     outcomes = []
     for report in reports:
@@ -357,10 +428,12 @@ def load_unified_external(args, epitope_config, options, genome):
     # Keep one best source-derived construct per variant; never blend evidence
     # or predictions between contexts. All observations remain in the report.
     observations = defaultdict(list)
-    for outcome in outcomes:
+    for outcome, report in zip(outcomes, reports):
         for entry in outcome.entries:
             source = entry.ranking_source
-            observations[(type(source).__name__, str(source))].append(entry)
+            scope = report.input_provenance.scope
+            observations[(scope.patient_id, scope.reference_assembly,
+                          type(source).__name__, str(source))].append(entry)
     ranked, dna_vaf = [], {}
     for entries in observations.values():
         candidates = [(e.ranking_source, [e.vaccine_peptide]) for e in entries
@@ -381,6 +454,12 @@ def load_unified_external(args, epitope_config, options, genome):
         ranked, '', getattr(args, 'output_patient_id', '') or '', summary,
         predictions=predictions)
     patient.inputs = [(r.source_format + ' report', r.path) for r in reports]
-    if mode == 'fresh':
+    patient.input_provenance = [r.input_provenance for r in reports]
+    scope = validate_input_scopes(patient.input_provenance)
+    if scope.patient_id:
+        patient.patient_id = patient.patient_id or scope.patient_id
+    if scope.mhc_alleles is not None:
+        patient.mhc_alleles = list(scope.mhc_alleles)
+    elif mode == 'fresh':
         patient.mhc_alleles = alleles
     return ranked, frame, predictions, patient, dna_vaf

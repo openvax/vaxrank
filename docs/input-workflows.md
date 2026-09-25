@@ -14,21 +14,78 @@ supported.
 | Saved Vaxrank candidate predictions | Python `load_predictions(path)` | Native CSV/TSV reload is a library API; there is no `--input-epitopes` CLI mode. |
 | Already constructed `VaccineAntigen` objects | Python `predict_epitopes(..., antigen=...)` and `vaccine_peptides_for_antigen(...)` | Library integration; callers provide context, targetable intervals and admission evidence. |
 
-Use reports from the **same patient and compatible reference/annotation**.
-Vaxrank does not currently validate this across files. Report allele sets can
-be partial prediction coverage; their union is not an independently verified
-patient genotype. `--output-patient-id` labels the run, rather than checking
-input identity.
+## Declare the scope of combined reports
+
+The ordinary VCF + BAM command is unchanged. It needs no manifest:
+
+```sh
+vaxrank --vcf somatic.vcf --bam tumor.bam \
+  --mhc-predictor netmhcpan --mhc-alleles 'HLA-A*02:01,HLA-B*07:02' \
+  --output-csv ranked.csv
+```
+
+A single `--input-lens` or `--input-pvacseq` report also needs no manifest.
+Unstated patient, reference, sample and genotype metadata remain unknown.
+
+To combine reports, declare their **shared patient, reference assembly and
+patient MHC allele set**. For example, save this as `inputs.yaml`:
+
+```yaml
+schema: vaxrank.input_manifest.v1
+patient_id: patient-001
+reference_assembly: GRCh38
+mhc_alleles: ['HLA-A*02:01', 'HLA-B*07:02']
+inputs:
+  - format: lens
+    path: patient.lens.tsv
+    sample_id: tumor-biopsy
+    library_id: tumor-rna-1
+  - format: pvacseq
+    path: patient.all_epitopes.tsv
+    sample_id: tumor-biopsy
+    library_id: tumor-rna-1
+```
+
+Paths resolve relative to the manifest. JSON works too. Shared declarations
+can appear at the top level; each input can also declare `patient_id`,
+`reference_assembly`, `mhc_alleles`, `annotation`, `sample_id`, `library_id`
+and `timepoint`. Sample/library/timepoint defaults can differ per input.
+Known patient, reference, annotation and genotype declarations must agree.
+Use the exact reference name; Vaxrank does not equate different assembly
+labels or lift coordinates between builds. For Ensembl annotations, use
+`annotation: ensembl:110` (with the actual release used by the producer).
+An explicitly configured `--ensembl-release` must match the declared assembly
+and annotation. Without one, a declared assembly still determines variant
+identity; it does not invent a producer annotation release.
+
+Unknown fields may be omitted or set to `null`. Combining inputs requires
+known patient, assembly and genotype for every input. Other missing fields
+remain unknown in saved provenance; their compatibility has not been
+established. A manifest is a user assertion, not independent verification of
+the patient's identity or typing assay. `--output-patient-id` remains a display
+label and cannot authorize pooling.
+
+Producer tables may carry declarations in columns with those exact names
+(`mhc_alleles` uses a JSON list in a cell). Vaxrank checks every row, including
+LENS `Hsap37.`/`Hsap38.` origin markers. Conflicting producer declarations
+cannot be overridden by a manifest. Reports that already declare all required
+scope can still use repeated `--external-input`; otherwise use the manifest.
+List every input in the manifest rather than mixing it with individual input
+flags. Conflicts fail before scoring, live model initialization or exports.
+
+Report allele coverage may be a **subset** of the declared genotype. A union
+of observed prediction alleles is never promoted into a declared genotype.
+Alleles are normalized with MHCgnomes; differing resolutions are not guessed
+to be equivalent. Reported alleles outside the declared set are rejected.
 
 ## Rank using original predictions
 
 No predictor installation or raw sequencing inputs are needed to reuse the
-table values. Repeat `--external-input` for multiple files of either format:
+table values. Use the manifest above for multiple files:
 
 ```sh
 vaxrank \
-  --external-input lens=patient.lens.tsv \
-  --external-input pvacseq=patient.all_epitopes.tsv \
+  --input-manifest inputs.yaml \
   --external-predictions input \
   --output-csv original-ranked.csv \
   --output-input-predictions originals.tsv
@@ -45,8 +102,9 @@ also provides `source_rank`. Different model scores are not automatically
 calibrated onto one scale.
 
 Do not pass `--mhc-predictor`, `--mhc-alleles`, or `--mhc-alleles-file` in this
-mode: predictions retain their recorded alleles. To compute predictions for a
-different HLA set, use `fresh` mode below.
+mode: predictions retain their recorded alleles. Declare the patient genotype
+in the manifest. To compute predictions for additional patient alleles, use
+`fresh` mode below.
 
 Use the Topiary DSL through `epitopes.filter_expr` and `epitopes.score_expr`
 to choose which original signals drive ranking. For example, this adds an
@@ -120,8 +178,7 @@ patient HLA set:
 
 ```sh
 vaxrank \
-  --external-input lens=patient.lens.tsv \
-  --external-input pvacseq=patient.all_epitopes.tsv \
+  --input-manifest inputs.yaml \
   --external-predictions fresh \
   --mhc-predictor mhcflurry \
   --mhc-alleles 'HLA-A*02:01,HLA-B*07:02' \
@@ -133,7 +190,8 @@ vaxrank \
 ```
 
 This predicts the **reported peptides**, with their available flanks, on the
-requested HLA set. It can add peptide-HLA pairs, but does not scan new peptide
+requested HLA set, which must fit the declared genotype when one is available.
+It can add peptide-HLA pairs, but does not scan new peptide
 windows, recover omitted pVACseq candidates, or extend protein context.
 Haplotype-scoped predictors are not supported by this external rescoring path.
 
@@ -169,10 +227,26 @@ for the distinction between these artifacts.
 Both readers produce `CandidateEpitope` objects containing sequence/context,
 prediction identity, allele/model/version predictions and known comparators.
 `ExternalReport` retains normalized source rows for scoring and construction.
-Reports carry input path, format and content hash; sequence hashes link exact
-peptide/window matches without claiming full ORF equivalence. Gene,
-transcript, RNA and antigen evidence remain source-dependent. They are not
-all stored on the candidate object or guaranteed to survive native reload.
+Reports carry input path, format, content hash and resolved scope. Original
+producer declarations and manifest assertions are retained separately.
+Candidate occurrence identities include scope; sequence hashes link exact
+peptide/window matches without claiming full ORF equivalence.
+
+Native `--output-epitopes` and `--output-input-predictions` files preserve each
+candidate's `input_provenance` and `input_evidence`, including Topiary's
+normalized RNA measurements, stated units/derivation and source-specific
+evidence. `load_predictions(path)` restores those fields. The per-epitope CSV
+also carries scope columns and `input_provenance_json`. External output
+directories include `candidate_predictions.tsv` and `input_provenance.json`;
+the run summary and template reports distinguish declared genotype from
+reported prediction coverage. These provenance files do not replace the
+original input reports or provide the generalized table-reload CLI in #346.
+
+Different samples, libraries and timepoints stay separate observations. One
+representative construct may be selected for their shared patient/reference
+event, but its counts come from that observation. RNA support is never summed
+between reports, even when libraries or read sets may overlap. All imported
+candidate observations remain available in the native prediction export.
 
 Construction still uses format-specific adapters and selects one
 source-derived window per grouped source. It does not merge RNA counts or
@@ -188,8 +262,6 @@ construction also requires explicit category opt-ins; see
 - [Topiary #365](https://github.com/openvax/topiary/issues/365): native Exacto.
 - [Topiary #370](https://github.com/openvax/topiary/issues/370): ORF/occurrence
   identity and reconciliation across source observations.
-- [Vaxrank #505](https://github.com/openvax/vaxrank/issues/505): validate input
-  patient/reference/genotype scope before pooling.
 
 The [unified evidence design](unified_evidence.md) describes the intended
 model, not an additional supported CLI workflow. For current configuration

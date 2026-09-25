@@ -250,6 +250,16 @@ class TemplateDataCreator(object):
                     self.patient_info.bam_path)
 
         patient_info['MHC alleles'] = ' '.join(self.patient_info.mhc_alleles)
+        if self.patient_info.input_provenance:
+            declared = self.patient_info.input_provenance[0].scope.mhc_alleles
+            patient_info['Declared patient genotype'] = (
+                ' '.join(declared) if declared else 'Unknown; report alleles are prediction coverage')
+            for index, source in enumerate(self.patient_info.input_provenance, start=1):
+                scope = source.scope
+                patient_info[f'Input {index} scope'] = (
+                    f'patient: {scope.patient_id or "unknown"}; sample: {scope.sample_id or "unknown"}; '
+                    f'reference: {scope.reference_assembly or "unknown"}; '
+                    f'annotation: {scope.annotation or "unknown"}')
         # Name the processing-credibility predictor explicitly so the
         # ``Processing: …`` columns in the per-VP epitope tables can
         # use predictor-agnostic header names without losing

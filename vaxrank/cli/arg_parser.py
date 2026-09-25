@@ -910,7 +910,8 @@ def _require_ensembl_release_for_template_reports(args):
         return
     lens_path = getattr(args, 'input_lens', None)
     pvacseq_path = getattr(args, 'input_pvacseq', None)
-    if not (lens_path or pvacseq_path or getattr(args, 'external_input', None)):
+    if not (lens_path or pvacseq_path or getattr(args, 'external_input', None)
+            or getattr(args, 'input_manifest', None)):
         return
     # Try to infer the build from the LENS file so the hint can name
     # a plausible release. pVACseq aggregates don't carry a build
@@ -970,9 +971,16 @@ def _require_ensembl_release_for_template_reports(args):
 
 def add_external_rescoring_args(arg_parser):
     arg_parser.add_argument(
+        "--input-manifest", default=None, metavar="PATH",
+        help="YAML/JSON manifest listing external reports and their shared patient, "
+             "reference_assembly and mhc_alleles, with sample/library details per input. "
+             "Required when combined reports do not declare their own scope. "
+             "Not needed for VCF + BAM or a single report.")
+    arg_parser.add_argument(
         "--external-input", action="append", default=None, metavar="FORMAT=PATH",
         help="External candidate report: lens=PATH or pvacseq=PATH. Repeat to "
-             "rank several reports together for the same patient/reference assembly.")
+             "rank reports together; use --input-manifest when their patient, "
+             "reference assembly or genotype is not declared in the files.")
     arg_parser.add_argument(
         "--external-predictions", choices=("input", "fresh"), default="input",
         help="Reuse the input tables' original prediction values (default), or "
@@ -1068,7 +1076,8 @@ def choose_arg_parser(args_list):
             for arg in args_list):
         return cached_run_arg_parser()
     elif any(
-            arg in ("--input-pvacseq", "--input-lens", "--external-input") or
+            arg in ("--input-pvacseq", "--input-lens", "--external-input", "--input-manifest") or
+            arg.startswith("--input-manifest=") or
             arg.startswith("--external-input=") or
             arg.startswith("--input-pvacseq=") or
             arg.startswith("--input-lens=")
