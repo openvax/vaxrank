@@ -11,9 +11,12 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from serializable import DataclassSerializable
+
+if TYPE_CHECKING:
+    from .input_scope import InputProvenance
 
 
 @dataclass
@@ -34,3 +37,5 @@ class PatientInfo(DataclassSerializable):
     # back to the legacy ``vcf_paths`` / ``bam_path`` fields for
     # backward compatibility with previously-saved JSON.
     inputs: list[tuple[str, str]] = field(default_factory=list)
+    # Empty on the ordinary VCF/BAM path and older saved runs.
+    input_provenance: list["InputProvenance"] = field(default_factory=list)

@@ -98,6 +98,7 @@ from .native_serialization import from_native_json, to_native_json
 if TYPE_CHECKING:
     from mhctools.pred import Prediction
     from .vaccine_antigen import SelfReferenceMatch
+    from .input_scope import InputProvenance
 
 
 def _resolve_kind(kind: str) -> str:
@@ -620,6 +621,11 @@ class CandidateEpitope(Peptide):
     # position identity remains ``(source_sequence, sequence, offset)``.
     prediction_id: str = ""
 
+    # Report scope is distinct from the alleles covered by this candidate.
+    # Evidence retains individual normalized source rows; it is never summed.
+    input_provenance: Optional["InputProvenance"] = None
+    input_evidence: tuple[dict, ...] = ()
+
     # Per-allele score for this epitope as computed by the configured
     # :class:`~vaxrank.epitope_config.EpitopeConfig` ``score_expr``
     # (see :mod:`vaxrank.epitope_dsl`). Keys are allele names exactly
@@ -760,6 +766,8 @@ class CandidateEpitope(Peptide):
             self_reference_match=self.self_reference_match,
             patient_alleles=self.patient_alleles,
             prediction_id=self.prediction_id,
+            input_provenance=self.input_provenance,
+            input_evidence=copy.deepcopy(self.input_evidence),
             per_allele_scores=dict(self.per_allele_scores),
             allele_attributions=self.allele_attributions)
 

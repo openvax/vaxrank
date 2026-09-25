@@ -34,6 +34,7 @@ def _native_serializable_classes():
     from mhctools.cleavage import CleavageInput, CleavageModel, CleavageSite
 
     from .allele_evidence import AlleleAttribution
+    from .input_scope import InputScope, InputProvenance
     from .candidate_epitope import CandidateEpitope, Peptide
     from .construct_sequence import (
         ConstructChemicalModification,
@@ -68,6 +69,8 @@ def _native_serializable_classes():
     return {
         ("builtins", "set"): set,
         ("builtins", "tuple"): tuple,
+        ("vaxrank.input_scope", "InputScope"): InputScope,
+        ("vaxrank.input_scope", "InputProvenance"): InputProvenance,
         ("mhctools.pred", "Prediction"): Prediction,
         ("mhctools.cleavage", "CleavageInput"): CleavageInput,
         ("mhctools.cleavage", "CleavageModel"): CleavageModel,

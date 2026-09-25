@@ -66,8 +66,10 @@ vaxrank --input-lens patient.lens.tsv \
         --ensembl-release 102
 ```
 
-To combine LENS and pVACseq, repeat `--external-input lens=PATH` and
-`--external-input pvacseq=PATH`. Reuse original predictions by default, or
+To combine LENS and pVACseq, use `--input-manifest inputs.yaml` to list the
+reports and declare their shared patient, reference assembly and MHC alleles.
+VCF + BAM and single-report commands do not need a manifest.
+Reuse original predictions by default, or
 request common models with `--external-predictions fresh`. See the
 [input workflow guide](https://openvax.github.io/vaxrank/input-workflows/)
 for complete commands, scoring choices, metadata and current Exacto/direct-input
@@ -119,7 +121,7 @@ peptide synthesiser:
    peptide pool ready for synthesis, an mRNA construct ready for IVT, or
    both. Analysis reports are emitted independently. Steps 1-3 are
    skipped when an external neoepitope report is supplied via
-   `--input-lens`, `--input-pvacseq` or repeatable `--external-input`.
+   `--input-lens`, `--input-pvacseq`, `--input-manifest` or `--external-input`.
    Format-specific context adapters feed shared construct and report writers.
 
 The responsibility split is consistent across the libraries: Varcode generates
@@ -428,7 +430,8 @@ explains original-score ranking, common-model prediction, and context limits.
 
 | Flag | Input format |
 |---|---|
-| `--external-input FORMAT=PATH` | Repeat for LENS and/or pVACseq files from the same patient/reference |
+| `--input-manifest PATH` | YAML/JSON report list with shared patient/reference/genotype declarations and per-input sample/library metadata |
+| `--external-input FORMAT=PATH` | LENS or pVACseq; repeated inputs require declared compatible scope, usually supplied through a manifest |
 | `--external-predictions input` | Reuse historical predictions (default); no live predictor |
 | `--external-predictions fresh` | Predict reported peptides with explicit models and HLA set |
 | `--output-input-predictions PATH` | Save original candidate predictions separately |
