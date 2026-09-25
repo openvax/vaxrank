@@ -287,6 +287,16 @@ def test_configured_genome_string_is_checked(tmp_path):
         load_external_ranked(args)
 
 
+def test_configured_custom_reference_is_not_reinferred_after_ranking(tmp_path):
+    from pyensembl import Genome
+    args = manifest_args(tmp_path, INPUTS[1:], reference_assembly='custom-assembly')
+    args.genome = Genome(reference_name='custom-assembly', annotation_name='fixture')
+    ranked, _, _, patient, _ = load_external_ranked(args)
+    assert ranked
+    assert ranked[0][0].reference_name == 'custom-assembly'
+    assert patient.input_provenance[0].scope.reference_assembly == 'custom-assembly'
+
+
 def test_nonhuman_alleles_are_normalized_without_hla_string_rules(tmp_path):
     frame = pd.read_csv(INPUTS[0][1], sep='\t').iloc[[0]].copy()
     frame['allele'] = 'H2-Kb'
@@ -326,3 +336,28 @@ def test_cli_reports_and_resolved_provenance_preserve_scope(tmp_path):
     assert saved['inputs'][0]['report_declarations'] == {}
     assert saved['inputs'][0]['manifest_declarations']['patient_id'] == 'fixture-patient'
     assert 'Declared genotype:' in (tmp_path / 'run_summary.txt').read_text()
+
+
+def test_fresh_summary_distinguishes_prediction_targets_from_declared_genotype(tmp_path):
+    args = manifest_args(tmp_path)
+    patient = load_external_ranked(args)[3]
+    args = parse_vaxrank_args([
+        '--input-manifest', args.input_manifest, '--external-predictions', 'fresh',
+        '--mhc-predictor', 'random', '--mhc-alleles', 'HLA-A*02:01'])
+    args.output_dir = str(tmp_path)
+    args._inferred_mhc_alleles_from_lens = patient.mhc_alleles
+    write_run_summary(args, patient, 'external')
+    summary = (tmp_path / 'run_summary.txt').read_text()
+    assert 'Declared genotype: HLA-A*02:01, HLA-B*07:02;' in summary
+    assert 'MHC alleles (fresh prediction targets): HLA-A*02:01\n' in summary
+    assert 'MHC alleles (declared genotype):' not in summary
+
+
+def test_run_summary_creates_directory_before_writing_provenance(tmp_path):
+    args = manifest_args(tmp_path)
+    patient = load_external_ranked(args)[3]
+    destination = tmp_path / 'new' / 'output'
+    args.output_dir = str(destination)
+    write_run_summary(args, patient, 'external')
+    assert (destination / 'input_provenance.json').is_file()
+    assert (destination / 'run_summary.txt').is_file()

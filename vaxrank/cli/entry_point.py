@@ -941,6 +941,7 @@ def write_run_summary(args, patient_info, source):
     output_dir = getattr(args, 'output_dir', '') or ''
     if not output_dir:
         return
+    os.makedirs(output_dir, exist_ok=True)
     lines = ["Vaxrank run summary", "=" * 19, ""]
     provenance = getattr(patient_info, 'input_provenance', ())
     if source == 'external':
@@ -982,9 +983,14 @@ def write_run_summary(args, patient_info, source):
     if alleles:
         inferred = getattr(args, '_inferred_mhc_alleles_from_lens', None)
         declared = any(p.scope.mhc_alleles is not None for p in provenance)
-        note = " (declared genotype)" if declared else " (inferred from report)" if (
-            source == 'external' and inferred
-            and getattr(args, 'external_predictions', 'input') != 'fresh') else ""
+        if source == 'external' and getattr(args, 'external_predictions', 'input') == 'fresh':
+            note = " (fresh prediction targets)"
+        elif declared:
+            note = " (declared genotype)"
+        elif source == 'external' and inferred:
+            note = " (inferred from report)"
+        else:
+            note = ""
         lines += ["", "MHC alleles%s: %s" % (note, ", ".join(alleles))]
 
     if patient_info is not None:
@@ -1027,7 +1033,6 @@ def write_run_summary(args, patient_info, source):
                 vtype + ":", os.path.relpath(target_dir, output_dir),
                 contents))
 
-    os.makedirs(output_dir, exist_ok=True)
     summary_path = os.path.join(output_dir, "run_summary.txt")
     with open(summary_path, 'w') as f:
         f.write("\n".join(lines) + "\n")

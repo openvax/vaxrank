@@ -455,7 +455,9 @@ def load_unified_external(args, epitope_config, options, genome):
         predictions=predictions)
     patient.inputs = [(r.source_format + ' report', r.path) for r in reports]
     patient.input_provenance = [r.input_provenance for r in reports]
-    scope = validate_input_scopes(patient.input_provenance)
+    # Preparation already validated every input before scoring. Pooled inputs
+    # all declare the same patient/genotype; single-input unknowns stay unknown.
+    scope = patient.input_provenance[0].scope
     if scope.patient_id:
         patient.patient_id = patient.patient_id or scope.patient_id
     if scope.mhc_alleles is not None:
