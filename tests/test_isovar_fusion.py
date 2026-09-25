@@ -114,12 +114,12 @@ def test_original_sid_rna_preserves_coding_uncertainty_and_provenance(name, chec
         assert antigen.amino_acids == "MAQFVRNLVEKTPALVNG"
         assert antigen.interval_is_targetable(17, 18)  # Mixed junction codon, not a rounded boundary.
         assert not antigen.interval_is_targetable(0, 17)
-        assert result["evidence"]["direct_fragments"] == 2
+        assert result["paths"][0]["junctions"][0]["direct_support"]["fragments"] == 2
         assert set(result["paths"][0]["compatible_transcripts"]["acceptor"]) <= set(antigen.transcript_ids)
 
 
 @pytest.mark.parametrize("damage,match", [
-    (lambda r: r.update(schema="isovar.fusion_rna.v1"), "schema"),
+    (lambda r: r.update(schema="isovar.fusion_rna.v2"), "schema"),
     (lambda r: r["paths"][0].update(sequence_sha256="wrong"), "checksum"),
     (lambda r: r.update(reasons=["unresolved"]), "unambiguous"),
     (lambda r: r["paths"][0]["translations"][0].update(cds_start=None), "CDS start"),

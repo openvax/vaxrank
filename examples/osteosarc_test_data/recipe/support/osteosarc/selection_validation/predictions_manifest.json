@@ -6,7 +6,6 @@
     "HLA-C*01:02",
     "HLA-C*07:01"
   ],
-  "bundled_input_manifest_sha256": "c7f05094012531fe85e027902999f5a99c46f3983e8270b8e9c7634038cf57b7",
   "contexts": {
     "DYNC1H1-chr14-101980529-size18": "VLLTLDILKHGKRFHATISFDTDTGLKQALETVND",
     "DYNC1H1-chr14-101980529-size22": "ESPEVLLTLDILKHGKRFHATISFDTDTGLKQALETVNDYNPL",
@@ -36,7 +35,7 @@
   },
   "executable_name": "netMHCpan",
   "executable_sha256": "675cde924f3c19ecb6314383a3fc4052e07a33573ac03e7631f3d57637c52ffc",
-  "generated": "2026-09-24T18:20:51+00:00",
+  "generated": "2026-09-25T14:08:27+00:00",
   "generator_sha256": "66043bfbc41e4729e33561dcc172b1a82a222d645eb838139f07650b66191f6a",
   "input_manifest_sha256": "c7f05094012531fe85e027902999f5a99c46f3983e8270b8e9c7634038cf57b7",
   "method": "NetMHCpan 4.2c -BA binding-affinity and elution-score outputs, default model settings",
@@ -24924,11 +24923,11 @@
   },
   "output_sha256": "bda526b4eeb5ee90e5ab0d6a36c08a27e353b603c646037d92f27839e1eaa258",
   "package_versions": {
-    "isovar": "1.31.0",
-    "mhctools": "3.44.55",
-    "topiary": "5.70.1",
-    "varcode": "9.5.1",
-    "vaxrank": "3.20.9"
+    "isovar": "1.37.0",
+    "mhctools": "3.44.56",
+    "topiary": "5.71.1",
+    "varcode": "10.4.1",
+    "vaxrank": "3.22.0"
   },
   "peptide_lengths": [
     8,

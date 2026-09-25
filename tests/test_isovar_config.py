@@ -29,6 +29,7 @@ def run_config(monkeypatch, tmp_path):
 
     def capture(**kwargs):
         captured["creator"] = kwargs["protein_sequence_creator"]
+        captured["germline_variants"] = kwargs["germline_variants"]
         return []
 
     monkeypatch.setattr(entry_point, "run_isovar", capture)
@@ -42,6 +43,7 @@ def run_config(monkeypatch, tmp_path):
             options += ["--config", str(config)]
         args = make_vaxrank_arg_parser().parse_args(options + list(flags))
         result = run_vaxrank_from_parsed_args(args)
+        run.germline_variants = captured["germline_variants"]
         return args, captured["creator"], result
 
     return run
@@ -204,3 +206,29 @@ def test_cached_report_parser_does_not_overwrite_saved_rna_policy():
              "min_protein_sequence_support_fraction": .95}
     updated = dict(saved, **vars(args))
     assert {key: updated[key] for key in saved} == saved
+
+
+def test_germline_vcf_reaches_isovar(run_config, monkeypatch, tmp_path):
+    """--germline-vcf comes from Isovar's parser and must not be dropped."""
+    from pyensembl import cached_release
+    from varcode import Variant
+    from vaxrank.cli import entry_point
+
+    genome = cached_release(75)
+    somatic = Variant("17", 7577121, "G", "A", genome=genome)
+    monkeypatch.setattr(entry_point, "variant_collection_from_args", lambda args: [somatic])
+    normal = tmp_path / "normal.vcf"
+    normal.write_text(
+        "##fileformat=VCFv4.2\n"
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+        "17\t7577100\t.\tC\tT\t.\tPASS\t.\n")
+
+    run_config(["--germline-vcf", str(normal)])
+    (germline,) = run_config.germline_variants
+    assert (germline.contig, germline.start, germline.ref, germline.alt) == (
+        "17", 7577100, "C", "T")
+    assert germline.genome == genome
+
+    run_config()
+    assert run_config.germline_variants is None
+
