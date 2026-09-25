@@ -417,7 +417,9 @@ of chimeric k-mers spanning antigen junctions.
 | `--mrna-junction-rank-strong` | Strong-binder %-rank threshold |
 | `--mrna-junction-rank-mild` | Mild-binder %-rank threshold |
 
-VCF + BAM runs reuse their configured candidate predictor in auto mode.
+VCF + BAM runs reuse a single configured candidate predictor in auto mode.
+With multiple candidate predictors, they keep the shared linker; select
+`--mrna-junction-predictor` to enable junction optimization.
 External-report runs use the shared linker without new predictions unless
 `--mrna-junction-predictor` is supplied. If the reports have no declared
 genotype, also supply `--mrna-junction-alleles`; observed report coverage is

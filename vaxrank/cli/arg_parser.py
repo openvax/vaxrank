@@ -577,7 +577,8 @@ def add_mrna_output_args(group):
         help="Enable per-junction linker optimization to minimize predicted "
              "MHC presentation of chimeric k-mers spanning antigen junctions "
              "using --mrna-junction-predictor. By default, VCF/BAM runs reuse "
-             "their configured candidate predictor; external-report runs only "
+             "a single configured candidate predictor and keep the shared linker "
+             "when multiple candidate predictors are configured; external-report runs only "
              "optimize when a junction predictor is explicitly selected. "
              "The shared linker is kept if no candidate outperforms it.")
     group.add_argument(

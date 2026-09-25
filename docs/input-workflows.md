@@ -212,7 +212,7 @@ require it. Explicit ASCII/HTML/PDF output flags have the same requirement.
 
 External-report construction uses the shared linker without new junction
 predictions by default. To optimize junctions while retaining every historical
-candidate score, add `--mrna-junction-predictor mhcflurry-presentation` (or another
+candidate score, add `--mrna-junction-predictor mhcflurry` (or another
 mhctools model that supplies percentile ranks). The manifest's declared
 genotype supplies the query alleles; `--mrna-junction-alleles 'HLA-A*02:01'`
 can select a subset. For a single report with unknown genotype, an explicit
@@ -231,6 +231,11 @@ set independently with `--mrna-junction-predictor-path` and
 `--mrna-junction-predictor-models-path`. The corresponding YAML keys live under
 `mrna:` (`junction_predictor`, `junction_alleles`, and the two path keys);
 `optimize_linkers: null` selects auto mode.
+
+VCF/BAM auto mode reuses a single candidate predictor. With multiple candidate
+predictors, it keeps the shared linker and logs that junction prediction is
+disabled. Select `--mrna-junction-predictor` to optimize those junctions;
+an explicit `--mrna-optimize-linkers` request requires that choice.
 
 The mRNA manifest's `elements.junction_swap` records the selected policy and
 whether optimization ran. Its `prediction` record preserves observed model

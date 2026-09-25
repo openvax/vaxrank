@@ -576,8 +576,10 @@ def resolve_target_alleles(args):
 def resolve_mhc_for_linker_optimizer(args, config_kwargs=None):
     """Resolve junction-only prediction without altering candidate settings.
 
-    Automatic mode reuses a configured VCF/BAM predictor. External reports
-    require an explicit junction model and a declared or explicit allele set.
+    Automatic mode reuses a single configured VCF/BAM predictor. With multiple
+    candidate models it keeps the shared linker unless a junction model is
+    selected explicitly. External reports require an explicit junction model
+    and a declared or explicit allele set.
     No missing configuration triggers a substitute model.
     """
     from copy import copy
@@ -616,6 +618,17 @@ def resolve_mhc_for_linker_optimizer(args, config_kwargs=None):
     else:
         if model_path or models_path:
             raise ValueError('Junction model paths require --mrna-junction-predictor')
+        candidate_models = [name for group in args.mhc_predictor for name in group]
+        if len(candidate_models) > 1:
+            if cfg('optimize_linkers') is True or query:
+                raise ValueError(
+                    'Multiple candidate predictors are configured; junction prediction '
+                    'requires --mrna-junction-predictor to select one model.')
+            logger.info(
+                'Junction prediction disabled: multiple candidate predictors (%s); '
+                'using the shared linker. Select --mrna-junction-predictor to optimize.',
+                ', '.join(candidate_models))
+            return None, None
     declared = getattr(args, '_declared_mhc_alleles', None)
     if not external and not getattr(args, 'input_json_file', None):
         declared = mhc_alleles_from_args(args)

@@ -11,4 +11,5 @@ prune tests
 
 include examples/osteosarc_test_data/build.py
 include examples/osteosarc_test_data/pin_catalog.py
+include examples/osteosarc_test_data/requirements.txt
 recursive-include examples/osteosarc_test_data/recipe *

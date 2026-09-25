@@ -2,7 +2,7 @@
 
 Vaxrank packages **1,148 selected alignment records in 58 cohorts** in
 `vaxrank/data/sid-test-data.zip`. All Sid read fixtures are acquired through
-**osteosarc 0.1.2** from the public
+**osteosarc 0.7.0** from the public
 [CC0 Sid dataset](https://registry.opendata.aws/sid-osteosarc/).
 The archive contains no whole-source BAM, BAM index, dataset snapshot, or
 unselected regional reads. Its BAM indexes describe only the tiny selected BAMs.
@@ -53,12 +53,23 @@ They do not participate in the bundled Sid tests.
 
 ## Regenerate the package subset
 
-Install the declared requirements and SAMtools 1.21 or later, then run from the
-repository root (the recipe and generator are also included in the sdist):
+Install SAMtools 1.21 or later, then create a separate generator environment
+from the repository root (the recipe and generator are also included in the sdist):
 
 ```bash
-python examples/osteosarc_test_data/build.py --cache /tmp/sid-acquisition
+python -m venv /tmp/sid-generator
+/tmp/sid-generator/bin/python -m pip install -r examples/osteosarc_test_data/requirements.txt
+/tmp/sid-generator/bin/python examples/osteosarc_test_data/build.py \
+  --cache /tmp/sid-acquisition --output /tmp/sid-test-data.zip
 ```
+
+The generator uses Osteosarc 0.7.0. Vaxrank's runtime currently remains on 0.2.3
+to satisfy released Isovar and Topiary constraints (tracked in
+[Vaxrank #519](https://github.com/openvax/vaxrank/issues/519)). The generated
+bundle must pass the consumer's full test suite after replacing
+`vaxrank/data/sid-test-data.zip`. Compare the new archive's selected-record
+digests and supporting inputs with the existing bundle before copying it into
+that path; the generator refuses to overwrite an existing output.
 
 This works with an empty acquisition cache. The checked-in small catalogue
 contains the selected native `osteosarc.Asset` and `Variant` identities from
@@ -81,7 +92,8 @@ cannot silently redefine a regression baseline.
 Repeat against the same verified cache without network access:
 
 ```bash
-python examples/osteosarc_test_data/build.py --cache /tmp/sid-acquisition --offline
+/tmp/sid-generator/bin/python examples/osteosarc_test_data/build.py \
+  --cache /tmp/sid-acquisition --offline --output /tmp/sid-test-data-offline.zip
 ```
 
 The read selection is deterministic. Acquisition receipts preserve real source

@@ -157,7 +157,7 @@ def score_junction_kmers(kmers, alleles, predictor, models=None):
             f"Junction-swap predictor returned {n_seen} predictions but none had "
             "a usable percentile_rank field; the optimizer cannot rank "
             "chimeric k-mers and will fall back to the first candidate. "
-            "Use mhcflurry-presentation or a predictor that exposes "
+            "Use --mrna-junction-predictor mhcflurry or a predictor that exposes "
             "percentile rank.",
             JunctionPredictionWarning,
             stacklevel=2,

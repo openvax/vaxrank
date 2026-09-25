@@ -29,6 +29,7 @@ def test_distributions_include_only_the_selected_sid_bundle(tmp_path):
     assert {"LICENSE", "MANIFEST.in", "setup.py", "requirements.txt", "TEST_DATA.md",
             "vaxrank/sid_test_data.py", "examples/osteosarc_test_data/build.py",
             "examples/osteosarc_test_data/pin_catalog.py",
+            "examples/osteosarc_test_data/requirements.txt",
             "examples/osteosarc_test_data/recipe/selection.json.gz"} <= set(sdist)
     bundle = "vaxrank/data/sid-test-data.zip"
     assert sdist[bundle] == wheel[bundle] == (ROOT / bundle).read_bytes()

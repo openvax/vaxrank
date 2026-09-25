@@ -182,6 +182,115 @@ def test_vcf_bam_auto_mode_reuses_explicit_candidate_model(junction_factory):
     assert junction_factory[0][0].mhc_predictor == args.mhc_predictor
 
 
+@pytest.mark.parametrize('models', [('mhcflurry', 'netmhcpan'), ('mhcflurry,netmhcpan',)])
+def test_multiple_candidate_models_keep_shared_linker_in_auto_mode(
+        models, monkeypatch, caplog):
+    monkeypatch.setattr(ep, 'mhc_binding_predictor_from_args', forbidden)
+    args = parse_vaxrank_args(['--vcf', 'calls.vcf', '--bam', 'rna.bam',
+                               '--mhc-predictor', *models, '--mhc-alleles', 'A0201'])
+    before = vars(args).copy()
+    with caplog.at_level('INFO'):
+        assert ep.resolve_mhc_for_linker_optimizer(args) == (None, None)
+    assert 'multiple candidate predictors' in caplog.text
+    assert vars(args) == before
+
+
+@pytest.mark.parametrize('options', [
+    ['--mrna-optimize-linkers'], ['--mrna-junction-alleles', 'A0201']])
+def test_explicit_junction_request_with_multiple_candidates_requires_model(
+        options, junction_factory):
+    args = parse_vaxrank_args(['--vcf', 'calls.vcf', '--bam', 'rna.bam',
+                               '--mhc-predictor', 'mhcflurry', 'netmhcpan',
+                               '--mhc-alleles', 'A0201', *options])
+    with pytest.raises(ValueError, match='requires --mrna-junction-predictor'):
+        ep.resolve_mhc_for_linker_optimizer(args)
+    assert not junction_factory
+
+
+def test_multiple_candidate_models_accept_independent_junction_override(junction_factory):
+    args = parse_vaxrank_args(['--vcf', 'calls.vcf', '--bam', 'rna.bam',
+                               '--mhc-predictor', 'mhcflurry', 'netmhcpan',
+                               '--mhc-alleles', 'A0201',
+                               '--mrna-junction-predictor', 'junction-test'])
+    _, alleles = ep.resolve_mhc_for_linker_optimizer(args)
+    assert alleles == ALLELES[:1]
+    assert junction_factory[0][0].mhc_predictor == [['junction-test']]
+    assert args.mhc_predictor == [['mhcflurry'], ['netmhcpan']]
+
+
+def test_osteosarc_vcf_bam_with_multiple_models_emits_default_reports(tmp_path, monkeypatch):
+    """Original same-sample RNA exercises the CLI; random scores test plumbing only."""
+    import random
+    import socket
+    import pysam
+    from mhctools import RandomBindingPredictor
+    from mhctools.cli import mhc_predictors
+    from varcode import load_vcf
+    from vaxrank.sid_test_data import sid_reads, sid_variants
+    from .osteosarc_selection_helpers import DATA as SID_DATA, load_selection_inputs
+
+    monkeypatch.setattr(socket.socket, 'connect', forbidden)
+    monkeypatch.setattr(socket, 'create_connection', forbidden)
+    monkeypatch.setattr(ep, 'mhc_binding_predictor_from_args', forbidden)
+    monkeypatch.setenv('VAXRANK_REF_PEPTIDES_DIR', str(tmp_path / 'kmers'))
+    model_calls = []
+
+    class OtherRandomPredictor(RandomBindingPredictor):
+        def predict_peptides(self, peptides):
+            model_calls.append(list(peptides))
+            predictions = super().predict_peptides(peptides)
+            for prediction in predictions:
+                prediction.prediction_method_name = 'other-random'
+            return predictions
+
+    monkeypatch.setitem(mhc_predictors, 'other-random', OtherRandomPredictor)
+    config = tmp_path / 'config.yaml'
+    config.write_text('epitopes:\n  default_methods:\n    pMHC_affinity: random\n')
+    genome, cases, _ = load_selection_inputs(tmp_path / 'reference')
+    ids = ['DYNC1H1-chr14-101980529', 'EXOC4-chr7-133274996']
+    subsets = [sid_reads('osteosarc/selection_validation/isovar/' + cases[v]['bam'])
+               for v in ids]
+    # Both cohorts come from the same original BAM, not separate observations.
+    assert len({s.receipt['cohort']['source'] for s in subsets}) == 1
+    bam = tmp_path / 'rna.bam'
+    pysam.merge('-o', str(bam), *[str(SID_DATA / 'isovar' / cases[v]['bam']) for v in ids])
+    pysam.index(str(bam))
+    vcf = tmp_path / 'calls.vcf'
+    vcf.write_text('##fileformat=VCFv4.2\n##reference=GRCh38\n'
+                   '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n' + ''.join(
+                       '%s\t%d\t.\t%s\t%s\t.\tPASS\t.\n' % v.allele
+                       for v in sid_variants(ids)))
+    # Supply the fixture's isolated, partial Ensembl reference to the real VCF reader.
+    monkeypatch.setattr(ep, 'variant_collection_from_args',
+                        lambda args: load_vcf(str(vcf), genome=genome))
+    output = tmp_path / 'vaccines'
+    output.mkdir()
+    state = random.getstate()
+    random.seed(0)
+    try:
+        ep.main([
+            '--vcf', str(vcf), '--bam', str(bam),
+            '--mhc-predictor', 'random', 'other-random', '--mhc-alleles', 'HLA-B*27:05',
+            '--config', str(config),
+            '--vaccine-peptide-length', '25', '--min-epitope-score', '0',
+            '--no-processing-aware-annotation', '--ensembl-release', '87',
+            '--mrna-antigens-per-construct', '2', '--mrna-max-constructs', '1',
+            '--mrna-signal-peptide', '', '--mrna-no-mitd',
+            '--pdf-backend', 'weasyprint', '--output-dir', str(output)])
+    finally:
+        random.setstate(state)
+    assert model_calls
+    for modality in ['peptide', 'mrna']:
+        assert json.loads((output / modality / 'manifest.json').read_text())
+        assert (output / modality / 'vaccine_report.pdf').stat().st_size > 0
+        assert (output / modality / 'vaccine_report.txt').stat().st_size > 0
+    construct, = json.loads((output / 'mrna/manifest.json').read_text())
+    assert len(construct['antigens']) == 2
+    assert construct['elements']['junction_swap'] == {
+        'enabled': False, 'note': 'junction prediction disabled',
+        'prediction': None, 'policy': 'none'}
+
+
 @pytest.mark.parametrize('input_flag', ['--input-lens', '--input-json-file'])
 def test_explicit_junction_model_uses_public_mhctools_factory(input_flag):
     args = parse_vaxrank_args([input_flag, 'saved-input',

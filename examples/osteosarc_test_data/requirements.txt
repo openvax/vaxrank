@@ -1,0 +1,2 @@
+# Fixture generation is isolated from consumers' runtime dependency constraints.
+osteosarc==0.7.0
