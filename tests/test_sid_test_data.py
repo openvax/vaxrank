@@ -38,6 +38,11 @@ def test_legacy_regeneration_cli_respects_empty_offline_cache(tmp_path, monkeypa
 def test_bundle_has_only_the_explicit_required_read_records(tmp_path):
     root = sid_test_data()
     provenance = json.loads((root / "provenance.json").read_text())
+    from packaging.requirements import Requirement
+    generator_requirements = (builder.RECIPE.parent / "requirements.txt").read_text()
+    osteosarc = next(Requirement(line) for line in generator_requirements.splitlines()
+                     if line.startswith("osteosarc"))
+    assert osteosarc.specifier.contains(provenance["osteosarc_version"])
     plan = json.loads(gzip.decompress((builder.RECIPE / "selection.json.gz").read_bytes()))
     assert provenance["snapshot_id"] == plan["snapshot_id"]
     assert provenance["corrections"] is False

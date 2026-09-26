@@ -305,7 +305,11 @@ mrna:
   poly_a_segment_linker: GCATATGACT
   codon_species: h_sapiens
   codon_method: use_best_codon         # | match_codon_usage | harmonize_rca
-  optimize_linkers: true               # per-junction linker optimization
+  optimize_linkers: null               # auto: reuse one VCF/BAM predictor; otherwise keep shared linker
+  junction_predictor: null             # one mhctools model, for junction queries only
+  junction_alleles: null               # declared genotype, or VCF/BAM --mhc-alleles; never inferred coverage
+  junction_predictor_path: null
+  junction_predictor_models_path: null
   junction_candidates: ""              # comma-separated; "" = library default
   junction_rank_strong: 0.5            # %rank below = strong-binder hit
   junction_rank_mild: 2.0

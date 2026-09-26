@@ -66,6 +66,7 @@ class JunctionSwapResult:
     burden: int  # count of rank ≤ RANK_MILD across all junctions, post-swap
     strong_burden: int  # count of rank ≤ RANK_STRONG, post-swap
     chimeric_predictions: list = field(default_factory=list)  # all post-swap
+    prediction_metadata: dict = field(default_factory=dict)
 
     def linker_names(self):
         return [link.name for link in self.chosen_linker_per_junction]
@@ -112,7 +113,7 @@ def junction_kmers(left_aa, linker_aa, right_aa, k_lengths,
     return out
 
 
-def score_junction_kmers(kmers, alleles, predictor):
+def score_junction_kmers(kmers, alleles, predictor, models=None):
     """Run the predictor and return rows of (kmer, allele, rank).
 
     Uses Python's standard warning filter to warn once per call site when:
@@ -123,6 +124,8 @@ def score_junction_kmers(kmers, alleles, predictor):
         dropped all of them (the optimizer would silently pick the
         first candidate).
     Callers can configure repetition through the standard :mod:`warnings` API.
+    If ``models`` is supplied, retain the distinct model identities actually
+    returned by the predictor; missing names or versions remain unknown.
     """
     if not kmers:
         return []
@@ -135,6 +138,11 @@ def score_junction_kmers(kmers, alleles, predictor):
     n_seen = 0
     n_with_rank = 0
     for p in predictions:
+        if models is not None:
+            model = {name: getattr(p, name, None) or None for name in (
+                'predictor_name', 'predictor_version', 'kind')}
+            if model not in models:
+                models.append(model)
         n_total += 1
         if allele_set and p.allele not in allele_set:
             continue
@@ -149,7 +157,7 @@ def score_junction_kmers(kmers, alleles, predictor):
             f"Junction-swap predictor returned {n_seen} predictions but none had "
             "a usable percentile_rank field; the optimizer cannot rank "
             "chimeric k-mers and will fall back to the first candidate. "
-            "Use mhcflurry-presentation or a predictor that exposes "
+            "Use --mrna-junction-predictor mhcflurry or a predictor that exposes "
             "percentile rank.",
             JunctionPredictionWarning,
             stacklevel=2,
@@ -240,6 +248,8 @@ def optimize_linkers(
     -------
     JunctionSwapResult
     """
+    alleles = tuple(alleles or ())
+    k_lengths = tuple(k_lengths)
     if len(antigen_aas) == 0:
         return JunctionSwapResult(
             chosen_linker_per_junction=[],
@@ -278,6 +288,14 @@ def optimize_linkers(
     total_burden = 0
     total_strong = 0
     default_total_burden = 0
+    prediction_metadata = {
+        'predictor_class': type(predictor).__module__ + '.' + type(predictor).__name__,
+        'alleles': list(alleles),
+        'peptide_lengths': list(k_lengths),
+        'models': [],
+        'requests': [],
+        'scored_prediction_count': 0,
+    }
     default_total_strong = 0
 
     for j, (left_aa, right_aa) in enumerate(junctions):
@@ -287,7 +305,12 @@ def optimize_linkers(
             kmers = junction_kmers(
                 left_aa, cand.amino_acids, right_aa, k_lengths,
                 reference_proteome=reference_proteome)
-            rows = score_junction_kmers(kmers, alleles, predictor)
+            if kmers:
+                prediction_metadata['requests'].append({
+                    'junction_index': j, 'linker_name': cand.name, 'peptides': list(kmers)})
+            rows = score_junction_kmers(
+                kmers, alleles, predictor, models=prediction_metadata['models'])
+            prediction_metadata['scored_prediction_count'] += len(rows)
             key = _burden_key(rows, rank_strong, rank_mild)
             per_cand_keys.append(key)
             if best is None or key < best[0]:
@@ -314,6 +337,7 @@ def optimize_linkers(
         burden=total_burden,
         strong_burden=total_strong,
         chimeric_predictions=all_predictions,
+        prediction_metadata=prediction_metadata,
     )
     if default_linker_name is not None:
         # Attach the default's burden so the caller can decide whether

@@ -426,6 +426,8 @@ _ARG_GROUPS = (
         'mrna_candidates_per_slot', 'mrna_max_length_nt',
         'mrna_codon_species', 'mrna_codon_method',
         'mrna_optimize_linkers', 'mrna_junction_candidates',
+        'mrna_junction_predictor', 'mrna_junction_alleles',
+        'mrna_junction_predictor_path', 'mrna_junction_predictor_models_path',
         'mrna_junction_rank_strong', 'mrna_junction_rank_mild',
         'mrna_poly_a_length', 'mrna_poly_a_segmented',
         'mrna_poly_a_first_segment', 'mrna_poly_a_segment_linker',
@@ -571,106 +573,93 @@ def resolve_target_alleles(args):
     return list(alleles or [])
 
 
-def resolve_mhc_for_linker_optimizer(args):
-    """Find a usable (predictor, alleles) pair for the per-junction
-    linker optimizer.
+def resolve_mhc_for_linker_optimizer(args, config_kwargs=None):
+    """Resolve junction-only prediction without altering candidate settings.
 
-    Resolution:
-
-    1. Pipeline path (``--mhc-predictor`` + ``--mhc-alleles`` on the
-       CLI): build both from ``args``.
-    2. External path (LENS / pVACseq): the report carries the
-       alleles; the LENS loader stashes them on
-       ``args._inferred_mhc_alleles_from_lens``. Predictor still
-       has to come from ``--mhc-predictor`` (LENS bundles
-       pre-computed scores, not the predictor binary). When alleles
-       are inferred but the predictor isn't set, log a targeted
-       hint instead of the generic "missing both" warning.
-    3. Anything missing → optimizer falls back to the shared
-       linker at every junction.
-
-    Returns ``(predictor, alleles)`` with ``None`` for either piece
-    that's unavailable. Callers must handle ``None`` either side.
+    Automatic mode reuses a single configured VCF/BAM predictor. With multiple
+    candidate models it keeps the shared linker unless a junction model is
+    selected explicitly. External reports require an explicit junction model
+    and a declared or explicit allele set.
+    No missing configuration triggers a substitute model.
     """
-    predictor = None
-    alleles = None
-    predictor_err = None
-    alleles_err = None
-    # ``mhc_binding_predictor_from_args`` / ``mhc_alleles_from_args``
-    # raise ``AttributeError`` when the LENS-path arg parser doesn't
-    # declare ``--mhc-predictor`` / ``--mhc-alleles``, ``ValueError``
-    # for empty / unparseable values, and ``KeyError`` if a registry
-    # name doesn't resolve. Anything else (e.g. a real model-load
-    # failure deep inside mhctools / mhcflurry) is a bug we want to
-    # propagate, not silently swallow into "linker optimizer disabled".
-    _ARG_LOAD_ERRORS = (AttributeError, ValueError, KeyError)
-    try:
-        predictor = mhc_binding_predictor_from_args(args)
-    except _ARG_LOAD_ERRORS as e:
-        predictor_err = e
-    try:
-        alleles = mhc_alleles_from_args(args)
-    except _ARG_LOAD_ERRORS as e:
-        alleles_err = e
-    inferred = getattr(args, '_inferred_mhc_alleles_from_lens', None) or None
-    if alleles is None and inferred:
-        alleles = inferred
-        logger.info(
-            "Per-junction linker optimization: using %d MHC allele(s) "
-            "inferred from the LENS / pVACseq report (%s).",
-            len(alleles), ", ".join(sorted(set(alleles))[:5])
-            + ("…" if len(set(alleles)) > 5 else ""))
-    # When alleles are available but no predictor was supplied,
-    # fall back to mhcflurry as a credible default. Rationale:
-    # mhcflurry is pip-installable, the same tool LENS frequently
-    # uses, and the optimizer needs *some* live MHC predictor to
-    # score chimeric k-mers — refusing to optimize because the
-    # operator didn't pick one is worse than optimizing against a
-    # reasonable default. Operator can override with
-    # ``--mhc-predictor`` to pick something else (netmhcpan, …).
-    if predictor is None and alleles is not None:
-        try:
-            from mhctools import MHCflurry
-            predictor = MHCflurry(alleles=alleles)
+    from copy import copy
+    from ..input_scope import normalize_alleles
+
+    config_kwargs = (construct_config_for_modality(args, 'mrna')
+                     if config_kwargs is None else config_kwargs)
+
+    def cfg(name):
+        return coalesce_config_value(args, 'mrna_' + name, config_kwargs, name)
+
+    if cfg('optimize_linkers') is False:
+        return None, None
+    model = cfg('junction_predictor')
+    query = cfg('junction_alleles')
+    model_path = cfg('junction_predictor_path')
+    models_path = cfg('junction_predictor_models_path')
+    external = any(getattr(args, name, None) for name in (
+        'input_manifest', 'input_lens', 'input_pvacseq', 'external_input'))
+    if not model and (external or not getattr(args, 'mhc_predictor', None)):
+        if cfg('optimize_linkers') is True or query or model_path or models_path:
+            raise ValueError(
+                'Junction prediction requires --mrna-junction-predictor. '
+                'Use --mrna-no-optimize-linkers to keep the shared linker.')
+        logger.info('Junction prediction disabled: no junction model selected; '
+                    'using the shared linker without new MHC predictions.')
+        return None, None
+
+    prediction_args = copy(args)
+    if model:
+        prediction_args.mhc_predictor = [[model]]
+        # A separate model must not inherit executable/weights paths belonging
+        # to the candidate model.
+        prediction_args.mhc_predictor_path = model_path
+        prediction_args.mhc_predictor_models_path = models_path
+    else:
+        if model_path or models_path:
+            raise ValueError('Junction model paths require --mrna-junction-predictor')
+        candidate_models = [name for group in args.mhc_predictor for name in group]
+        if len(candidate_models) > 1:
+            if cfg('optimize_linkers') is True or query:
+                raise ValueError(
+                    'Multiple candidate predictors are configured; junction prediction '
+                    'requires --mrna-junction-predictor to select one model.')
             logger.info(
-                "Per-junction linker optimization: --mhc-predictor "
-                "not set; defaulting to mhcflurry (presentation "
-                "score) for the chimeric-k-mer ranking. Pass "
-                "--mhc-predictor to override.")
-        except (ImportError, ValueError, KeyError, OSError) as e:
-            # mhcflurry not installed, or its weights aren't on
-            # disk. Stay with predictor=None and let the warning
-            # block below fire.
-            logger.debug("mhcflurry default-load failed: %r", e)
-            predictor_err = predictor_err or e
-    if predictor is None or alleles is None:
-        # Targeted hints based on what's missing. Operator-friendly:
-        # the previous code lumped both failure modes into one
-        # message and pointed at both flags every time.
-        if alleles is None and predictor is None:
-            logger.warning(
-                "Per-junction linker optimization disabled: no MHC "
-                "alleles or predictor available. Pass --mhc-alleles "
-                "+ --mhc-predictor (pipeline path), or rely on "
-                "LENS / pVACseq inference + --mhc-predictor "
-                "(external path).")
-        elif predictor is None:
-            logger.warning(
-                "Per-junction linker optimization disabled: alleles "
-                "are available%s but no MHC predictor is set. Pass "
-                "--mhc-predictor (e.g. mhcflurry) to enable junction "
-                "scoring.",
-                " (inferred from report)" if inferred else "")
-        else:
-            logger.warning(
-                "Per-junction linker optimization disabled: predictor "
-                "loaded but no --mhc-alleles set.")
-        if predictor_err is not None:
-            logger.debug("MHC predictor load failed: %r", predictor_err)
-        if alleles_err is not None and inferred is None:
-            logger.debug("MHC alleles load failed: %r", alleles_err)
-        return (None, None)
-    return (predictor, alleles)
+                'Junction prediction disabled: multiple candidate predictors (%s); '
+                'using the shared linker. Select --mrna-junction-predictor to optimize.',
+                ', '.join(candidate_models))
+            return None, None
+    declared = getattr(args, '_declared_mhc_alleles', None)
+    if not external and not getattr(args, 'input_json_file', None):
+        declared = mhc_alleles_from_args(args)
+    if query:
+        prediction_args.mhc_alleles = query
+        prediction_args.mhc_alleles_file = None
+        alleles = mhc_alleles_from_args(prediction_args)
+    elif declared:
+        alleles = declared
+    else:
+        raise ValueError(
+            'Junction prediction requires --mrna-junction-alleles or a declared '
+            'manifest genotype; report allele coverage does not establish genotype.')
+    alleles = list(normalize_alleles(alleles, 'Junction prediction'))
+    if declared:
+        outside = set(alleles) - set(normalize_alleles(declared, 'Declared genotype'))
+        if outside:
+            raise ValueError('Junction prediction alleles outside declared genotype: %s'
+                             % sorted(outside))
+    prediction_args.mhc_alleles = ','.join(alleles)
+    prediction_args.mhc_alleles_file = None
+    prediction_args.mhc_peptide_lengths = list(RNAConstructConfig().junction_kmer_lengths)
+    prediction_args.mhc_epitope_lengths = None
+    try:
+        predictor = mhc_binding_predictor_from_args(prediction_args)
+    except (KeyError, ValueError) as error:
+        raise ValueError('Could not configure junction prediction. Select one '
+                         '--mrna-junction-predictor: %s' % error) from error
+    logger.info('Junction prediction enabled for %s using %s; candidate scores are unchanged.',
+                ', '.join(alleles), type(predictor).__name__)
+    return predictor, alleles
 
 
 def _emit_mrna_constructs(args, ranked, target_dir):
@@ -680,6 +669,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     def cfg(cli_attr, yaml_key):
         return coalesce_config_value(args, cli_attr, yaml_kwargs, yaml_key)
 
+    mhc_predictor, mhc_alleles = resolve_mhc_for_linker_optimizer(args, yaml_kwargs)
     junction_candidates_raw = cfg(
         'mrna_junction_candidates', 'junction_candidates') or ''
     junction_candidates = tuple(
@@ -716,7 +706,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         candidates_per_slot=cfg(
             'mrna_candidates_per_slot', 'candidates_per_slot'),
         max_length_nt=cfg('mrna_max_length_nt', 'max_length_nt'),
-        optimize_linkers=cfg('mrna_optimize_linkers', 'optimize_linkers'),
+        optimize_linkers=mhc_predictor is not None,
         junction_swap_candidates=junction_candidates,
         junction_rank_strong=cfg(
             'mrna_junction_rank_strong', 'junction_rank_strong'),
@@ -729,16 +719,17 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         poly_a_segment_linker=cfg(
             'mrna_poly_a_segment_linker', 'poly_a_segment_linker'),
     )
-    if options.optimize_linkers:
-        mhc_predictor, mhc_alleles = resolve_mhc_for_linker_optimizer(args)
-    else:
-        mhc_predictor = None
-        mhc_alleles = None
     target_alleles = resolve_target_alleles(args)
     constructs = assemble_mrna_constructs(
         ranked, options=options,
         mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles,
         target_alleles=target_alleles)
+    policy = 'none'
+    if mhc_predictor is not None:
+        policy = ('explicit_junction_model' if cfg('mrna_junction_predictor', 'junction_predictor')
+                  else 'candidate_model')
+    for construct in constructs:
+        construct.elements['junction_swap']['policy'] = policy
     # Canonical filenames inside the per-modality target directory:
     # cds.fasta + no_polyA.fasta + full.fasta + manifest.json +
     # mrna-sequence-parts.csv. The cds/no_polyA/full FASTAs are
@@ -1251,23 +1242,19 @@ def main(args_list=None):
                 "External input produced no ranked vaccine peptides; "
                 "writing only the per-(peptide, allele) neoepitope "
                 "report (if requested).")
-        # Stash MHC alleles inferred from the LENS / pVACseq report
-        # so the per-junction linker optimizer (which runs from
-        # ``_emit_mrna_constructs``) can pick them up without
-        # ``--mhc-alleles`` being on the CLI. The external arg
-        # parser doesn't include the mhctools args, so the predictor
-        # still has to come from ``--mhc-predictor`` if set —
-        # ``resolve_mhc_for_linker_optimizer`` produces a targeted
-        # message when alleles are inferred but predictor is missing.
+        # Keep the declared genotype separate from report coverage. Only the
+        # declaration can supply default alleles for new junction queries.
         if patient_info is not None:
             from ..external_input import LENS_PROVENANCE_MARKER
+            args._declared_mhc_alleles = next((
+                p.scope.mhc_alleles for p in patient_info.input_provenance
+                if p.scope.mhc_alleles is not None), None)
             args._inferred_mhc_alleles_from_lens = [
                 a for a in (patient_info.mhc_alleles or [])
                 if a and a != LENS_PROVENANCE_MARKER
             ]
-            # Surface the inferred alleles once, up front — every
-            # downstream consumer (linker optimizer, coverage-aware
-            # antigen selection, report) reuses this same set.
+            # Coverage selection and reporting can still use the observed
+            # allele set when no complete genotype was declared.
             if args._inferred_mhc_alleles_from_lens:
                 alleles = args._inferred_mhc_alleles_from_lens
                 logger.info(

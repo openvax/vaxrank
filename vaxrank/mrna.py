@@ -764,7 +764,11 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
 
         per_junction_linkers = None
         pre_mitd_linker = None  # overrides shared linker for the MITD junction
-        junction_swap_meta = None
+        junction_swap_meta = {
+            'enabled': False,
+            'note': 'no junctions' if options.optimize_linkers else 'junction prediction disabled',
+            'prediction': None,
+        }
         n_junctions = max(0, len(antigen_aas) - 1)
         if options.optimize_linkers and (n_junctions > 0 or mitd_aa):
             if mhc_predictor is None or not mhc_alleles:
@@ -778,6 +782,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                 junction_swap_meta = {
                     'enabled': False,
                     'note': "no predictor / alleles available",
+                    'prediction': None,
                 }
             else:
                 from .junction_swap import (
@@ -841,6 +846,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                         'burden_mild': default_mild,
                         'note': "default linker beat or tied all candidates",
                     }
+                junction_swap_meta['prediction'] = swap.prediction_metadata
 
         protein, frozen_segments, aa_segments = build_protein_with_segments(
             antigen_aas, names, signal_peptide_aa, options.signal_peptide,
@@ -933,8 +939,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
         }
         elements['codon_species'] = options.codon_species
         elements['codon_method'] = options.codon_method
-        if junction_swap_meta is not None:
-            elements['junction_swap'] = junction_swap_meta
+        elements['junction_swap'] = junction_swap_meta
 
         # Back-compat ``components`` dict: same fields the 2.12.x
         # manifest carried, so existing readers don't break. The
@@ -949,8 +954,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             'codon_method': options.codon_method,
             'protein': protein,
         }
-        if junction_swap_meta is not None:
-            components['junction_swap'] = junction_swap_meta
+        components['junction_swap'] = junction_swap_meta
 
         constructs.append(RNAConstruct(
             # Modality-stamped namespace (was bare ``seq_NNN``):
