@@ -11,8 +11,10 @@ from pathlib import Path
 from osteosarc import Cache
 from osteosarc.cohort_bundle import pin_catalog as pin_catalog
 
+from vaxrank.sid_test_data import recipe_directory
 
-RECIPE = Path(__file__).with_name("recipe")
+
+RECIPE = recipe_directory()
 
 
 if __name__ == "__main__":

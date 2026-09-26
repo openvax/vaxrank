@@ -252,7 +252,7 @@ def test_export_failure_preserves_destination_absence(tmp_path, tiny_manifest, m
     assert not list(tmp_path.glob(".osteosarc-*"))
 
 
-def test_default_export_uses_only_packaged_reads(tmp_path, monkeypatch):
+def test_default_export_uses_only_the_sid_test_data(tmp_path, monkeypatch):
     import socket
     monkeypatch.setattr(downloader, "Cache", forbid_fetch)
     monkeypatch.setattr(socket.socket, "connect", forbid_fetch)
@@ -260,3 +260,14 @@ def test_default_export_uses_only_packaged_reads(tmp_path, monkeypatch):
     output = downloader.download_test_data(tmp_path / "bundle", cache_root=missing_cache)
     assert downloader.verify_dataset(output) == output
     assert not missing_cache.exists()
+
+
+def test_offline_default_export_needs_the_cached_shared_reads(tmp_path, monkeypatch):
+    from osteosarc import OfflineError
+    monkeypatch.setenv("OSTEOSARC_CACHE", str(tmp_path / "empty-cache"))
+    with pytest.raises(OfflineError):
+        downloader.download_test_data(tmp_path / "export", offline=True)
+    with pytest.raises(SystemExit) as error:
+        downloader.main(["--output", str(tmp_path / "export"), "--verify-only"])
+    assert error.value.code == 1
+    assert not (tmp_path / "export").exists()

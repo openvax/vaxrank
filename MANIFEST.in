@@ -5,11 +5,9 @@ include CLEAVAGE_AUDIT.md
 include CONSTRUCT_PROCESSING.md
 include TEST_DATA.md
 
-# The explicitly selected Sid bundle is package data. Repository-only tests
-# remain excluded; ship their read generator and reviewed recipe separately.
+# The reviewed Sid recipe is package data; its reads come from openvax-v1.
+# Repository-only tests remain excluded.
 prune tests
 
-include examples/osteosarc_test_data/build.py
+recursive-include vaxrank/data/sid-recipe *
 include examples/osteosarc_test_data/pin_catalog.py
-include examples/osteosarc_test_data/requirements.txt
-recursive-include examples/osteosarc_test_data/recipe *

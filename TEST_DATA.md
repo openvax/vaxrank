@@ -1,11 +1,25 @@
-# Bundled Sid test data
+# Sid test data
 
-Vaxrank packages **1,148 selected alignment records in 58 cohorts** in
-`vaxrank/data/sid-test-data.zip`. All Sid read fixtures are acquired through
-**osteosarc 0.9.0** from the public
-[CC0 Sid dataset](https://registry.opendata.aws/sid-osteosarc/).
-The archive contains no whole-source BAM, BAM index, dataset snapshot, or
-unselected regional reads. Its BAM indexes describe only the tiny selected BAMs.
+Vaxrank's Sid regression tests use **1,148 selected alignment records in 58
+cohorts** from the public
+[CC0 Sid dataset](https://registry.opendata.aws/sid-osteosarc/). Vaxrank stores
+no reads. The records come from **openvax-v1**, the OpenVax libraries' shared
+Sid test data, published by osteosarc 0.11
+([iskandr/osteosarc#56](https://github.com/iskandr/osteosarc/issues/56)). Each
+cohort is the openvax-v1 member `vaxrank/<path>`, e.g.
+`vaxrank/osteosarc/shared-v1/00-ABCF2-chr7-151218156-f30f618fb76a0e49.bam`.
+
+The reviewed recipe ships in the package, in `vaxrank/data/sid-recipe`:
+
+* `selection.json.gz` lists every cohort's records by exact digest, in order
+  and with multiplicity;
+* `headers/` holds each cohort's reviewed SAM header (no records);
+* `fusion/` holds the two fusion inputs' RNA windows and reference hypotheses;
+* `catalog.json` pins the native `osteosarc.File` and `Variant` identities from
+  snapshot `e4224eeedc18b9a0e66d9e57afcb5f9d613ed76a775e58cd56d320937cd6cf6f`;
+* `support/` holds the non-read inputs: small Ensembl reference subsets,
+  documented biological expectations, cached NetMHCpan outputs and report
+  expectations.
 
 The selection is explicit:
 
@@ -22,25 +36,33 @@ These are selected test cohorts, **not coverage, VAF or expression estimates**.
 Mates and supplementary records are explicitly listed; this does not claim all
 mates or all alignments of every template in the original BAM were recovered.
 
-Small Ensembl reference subsets, documented biological expectations, cached
-NetMHCpan outputs, and report expectations are included as separate supporting
-inputs. Osteosarc supplies the Sid acquisition/variant identities; it does not
-supply the independent Ensembl annotations or MHC prediction expectations.
+Osteosarc supplies the Sid reads and variant identities; it does not supply
+the independent Ensembl annotations or MHC prediction expectations.
 
-## Offline use
+## Use
 
 ```python
 from vaxrank.sid_test_data import sid_test_data, sid_reads, sid_variants
 
-root = sid_test_data()  # verifies and opens installed package resources
+root = sid_test_data()  # builds the test files once per process
 cases = root / "osteosarc/shared-v1/manifest.json"
 variants = sid_variants(["MAP2-chr2-209694768"])
 # sid_reads("osteosarc/shared-v1/<case>.bam") returns osteosarc.ReadSubset.
 ```
 
-The tests use this same installed-package loader. It writes only a temporary
-process directory, needs no persistent cache, and performs no downloads.
-The existing CLI exports the 49 retrieval cases offline:
+`sid_test_data()` builds the files into a temporary process directory. It
+exports the 58 members from openvax-v1, selects each cohort's records by
+digest (`osteosarc.cohort_bundle.select_records`), and writes them with the
+recipe's reviewed header and order. Missing, changed or extra records fail the
+build. The files are the same bytes as the zip Vaxrank shipped through 3.25.
+
+The first build downloads and verifies openvax-v1 (28 MB) into the osteosarc
+cache (`OSTEOSARC_CACHE`, else the shared OpenVax cache); later builds work
+offline. `provenance.json` in the built directory records the recipe hashes,
+the openvax-v1 manifest checksum, each cohort's source identity and the
+osteosarc version.
+
+The existing CLI exports the 49 retrieval cases:
 
 ```bash
 python -m vaxrank.download_test_data --output /tmp/sid-retrieval-tests --offline
@@ -49,60 +71,18 @@ python -m vaxrank.download_test_data --output /tmp/sid-retrieval-tests --verify-
 
 Existing output is verified, never replaced. Explicit custom `--manifest`
 downloads retain the generic shared OpenVax cache API for existing callers.
-They do not participate in the bundled Sid tests.
+They do not participate in the Sid tests.
 
-## Regenerate the package subset
-
-Install SAMtools 1.21 or later, then create a separate generator environment
-from the repository root (the recipe and generator are also included in the sdist):
-
-```bash
-python -m venv /tmp/sid-generator
-/tmp/sid-generator/bin/python -m pip install -r examples/osteosarc_test_data/requirements.txt
-/tmp/sid-generator/bin/python examples/osteosarc_test_data/build.py \
-  --cache /tmp/sid-acquisition --output /tmp/sid-test-data.zip
-```
-
-The generator uses Osteosarc 0.9.0, which built the bundle; Vaxrank's runtime
-uses 0.11. The generated
-bundle must pass the consumer's full test suite after replacing
-`vaxrank/data/sid-test-data.zip`. Compare the new archive's selected-record
-digests and supporting inputs with the existing bundle before copying it into
-that path; the generator refuses to overwrite an existing output.
-
-This works with an empty acquisition cache. The checked-in small catalogue
-contains the selected native `osteosarc.File` and `Variant` identities from
-snapshot `e4224eeedc18b9a0e66d9e57afcb5f9d613ed76a775e58cd56d320937cd6cf6f`,
-plus pinned index receipts. It does not require the full historical metadata
-snapshot. `osteosarc.extract_reads` retrieves indexed regions and verifies
-source/index identity; the generator then retains **only** the records listed
-in `recipe/selection.json.gz`. A minimal set of one-base retrieval anchors covers the selected alignment
-spans, including explicitly required off-locus mates or supplementary records.
-The `retrieval_regions` helper derives this point cover when preparing a recipe,
-avoiding a separate remote seek for every selected read. The temporary regional results remain in the acquisition cache and
-never enter the package.
+## Changing the recipe
 
 The allowlist stores alignment digests, order and multiplicity, not read bases.
-Native BAM digests include float-tag bits lost by SAM text formatting. Historical
-SAM/fusion inputs use their original text representation. Missing, changed or
-extra identical selected records fail generation. A freshly acquired source
-cannot silently redefine a regression baseline.
+Native BAM digests include float-tag bits lost by SAM text formatting.
+Historical SAM/fusion inputs use their original text representation. A cohort
+can only use records that openvax-v1 holds; adding records means adding them
+to the shared test data in osteosarc first.
 
-Repeat against the same verified cache without network access:
-
-```bash
-/tmp/sid-generator/bin/python examples/osteosarc_test_data/build.py \
-  --cache /tmp/sid-acquisition --offline --output /tmp/sid-test-data-offline.zip
-```
-
-The read selection is deterministic. Acquisition receipts preserve real source
-identity, software versions and retrieval evidence; archive bytes can differ
-between cache locations/tool versions even when all selected records agree.
-`bundle.json` verifies every packaged file, and `provenance.json` records the
-recipe hashes and full osteosarc extraction lineage.
-
-To update the source catalogue deliberately, first review/update the selector
-recipe and create the named osteosarc metadata snapshot, then run:
+To update the source catalogue deliberately, first review/update the recipe and
+create the named osteosarc metadata snapshot, then run:
 
 ```bash
 python examples/osteosarc_test_data/pin_catalog.py --cache /path/to/snapshot-cache
@@ -111,8 +91,8 @@ python examples/osteosarc_test_data/pin_catalog.py --cache /path/to/snapshot-cac
 The published-allele baseline is explicit (`corrections=False`). In particular,
 MAP2's old deletion remains the historical selection baseline; the separate
 corrected-complex-allele regression runs against the same selected original
-reads. This migration does not change either biological expectation.
+reads.
 
-After regeneration, run `./lint.sh` and `./test.sh`. The tests check every
+After a change, run `./lint.sh` and `./test.sh`. The tests check every
 selected record, native mitochondrial/GRCh37 retrieval, reconstruction and
-ranking, bundle integrity, and the actual wheel/sdist payload.
+ranking, and the actual wheel/sdist payload.

@@ -1,7 +1,9 @@
-"""Offline export of the bundled osteosarc test subset.
+"""Export of the Sid retrieval test cases.
 
-The default exports package resources without network access. Explicit custom
-manifests retain the generic verified-download API for existing callers.
+The default exports the 49 retrieval cases from the Sid test data, which is
+built from the shared openvax-v1 reads (downloaded once into the osteosarc
+cache; ``--offline`` never downloads them). Explicit custom manifests retain the
+generic verified-download API for existing callers.
 """
 
 import argparse
@@ -17,6 +19,7 @@ import tempfile
 from urllib.parse import urlsplit
 
 from datacache import Cache, FileValidationError, get_data_dir, validate_file
+from osteosarc import OsteosarcError
 
 
 DEFAULT_MANIFEST = None
@@ -24,11 +27,19 @@ CACHE_NAMESPACE = "openvax"
 CACHE_ENVIRONMENT = "OPENVAX_DATA_CACHE"
 
 
-def load_manifest(path=DEFAULT_MANIFEST):
-    """Validate an explicit or bundled Sid manifest without downloads."""
+def _sid_test_data(offline):
+    """The Sid test files; offline, only if openvax-v1 is already cached."""
+    import osteosarc
+    from .sid_test_data import READS, sid_test_data
+    if offline:
+        osteosarc.fetch_bundle(READS, cache=osteosarc.Cache(offline=True))
+    return sid_test_data()
+
+
+def load_manifest(path=DEFAULT_MANIFEST, *, offline=False):
+    """Validate an explicit manifest, or the Sid test data's retrieval manifest."""
     if path is None:
-        from .sid_test_data import sid_test_data
-        path = sid_test_data() / "osteosarc/shared-v1/manifest.json"
+        path = _sid_test_data(offline) / "osteosarc/shared-v1/manifest.json"
     manifest = json.loads(Path(path).read_text())
     if manifest.get("schema_version") != 1 or not manifest.get("dataset") or not manifest.get("data_version"):
         raise ValueError("Unsupported test-data manifest")
@@ -118,7 +129,7 @@ def _publish_no_replace(staged, output):
 
 def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
                        cache_root=None, offline=False, repair_cache=False):
-    """Export bundled Sid reads, or fetch an explicitly supplied custom manifest.
+    """Export the Sid retrieval cases, or fetch an explicitly supplied custom manifest.
 
     Existing output directories are only validated, never overwritten. Failed
     downloads leave verified cache objects reusable but do not publish output.
@@ -126,14 +137,13 @@ def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
     """
     if offline and repair_cache:
         raise ValueError("Offline mode cannot repair the download cache")
-    manifest = load_manifest(manifest_path)
+    manifest = load_manifest(manifest_path, offline=offline)
     if output is not None:
         output = Path(output).absolute()
         if output.exists() or output.is_symlink():
             return verify_dataset(output, manifest)
     if all("bundle_path" in asset for asset in manifest["assets"]):
-        from .sid_test_data import sid_test_data
-        bundled = sid_test_data() / "osteosarc/shared-v1"
+        bundled = _sid_test_data(offline) / "osteosarc/shared-v1"
         verify_dataset(bundled, manifest)
         paths = {asset["filename"]: bundled / asset["filename"] for asset in manifest["assets"]}
     else:
@@ -191,13 +201,13 @@ def main(argv=None):
     if args.verify_only and (args.output is None or args.repair_cache):
         parser.error("--verify-only requires --output and cannot repair the cache")
     try:
-        manifest = load_manifest(args.manifest)
+        manifest = load_manifest(args.manifest, offline=args.offline or args.verify_only)
         if args.verify_only:
             result = verify_dataset(args.output, manifest)
         else:
             result = download_test_data(args.output, manifest_path=args.manifest,
                 cache_root=args.cache_root, offline=args.offline, repair_cache=args.repair_cache)
-    except (OSError, ValueError, FileValidationError) as error:
+    except (OSError, ValueError, FileValidationError, OsteosarcError) as error:
         parser.exit(1, "Test data unavailable: %s\n" % error)
     print(json.dumps(dict(dataset=manifest["dataset"], data_version=manifest["data_version"],
         assets=len(manifest["assets"]), output=str(result) if isinstance(result, Path) else None,
