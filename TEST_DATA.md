@@ -2,7 +2,7 @@
 
 Vaxrank packages **1,148 selected alignment records in 58 cohorts** in
 `vaxrank/data/sid-test-data.zip`. All Sid read fixtures are acquired through
-**osteosarc 0.7.0** from the public
+**osteosarc 0.9.0** from the public
 [CC0 Sid dataset](https://registry.opendata.aws/sid-osteosarc/).
 The archive contains no whole-source BAM, BAM index, dataset snapshot, or
 unselected regional reads. Its BAM indexes describe only the tiny selected BAMs.
@@ -63,15 +63,14 @@ python -m venv /tmp/sid-generator
   --cache /tmp/sid-acquisition --output /tmp/sid-test-data.zip
 ```
 
-The generator uses Osteosarc 0.7.0. Vaxrank's runtime uses Osteosarc 0.9, which
-renamed `Asset` to `File`; it needs Isovar and Topiary releases that allow 0.9. The generated
+The generator and Vaxrank's runtime both use Osteosarc 0.9. The generated
 bundle must pass the consumer's full test suite after replacing
 `vaxrank/data/sid-test-data.zip`. Compare the new archive's selected-record
 digests and supporting inputs with the existing bundle before copying it into
 that path; the generator refuses to overwrite an existing output.
 
 This works with an empty acquisition cache. The checked-in small catalogue
-contains the selected native `osteosarc.Asset` and `Variant` identities from
+contains the selected native `osteosarc.File` and `Variant` identities from
 snapshot `e4224eeedc18b9a0e66d9e57afcb5f9d613ed76a775e58cd56d320937cd6cf6f`,
 plus pinned index receipts. It does not require the full historical metadata
 snapshot. `osteosarc.extract_reads` retrieves indexed regions and verifies
