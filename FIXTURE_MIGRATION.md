@@ -7,7 +7,7 @@ points retain the existing commands; no sibling checkout is required.
 
 Validate historical membership/multiplicity and source/header provenance, then
 run the reconstruction/prediction/ranking regressions offline. This consumer
-uses published Osteosarc 0.9.x and Topiary releases. New recipes use the
+uses published Osteosarc 0.11.x and Topiary releases. New recipes use the
 versioned panel/bundle APIs; historical adapters state their SAM-text fidelity.
 
 Tracked by [Osteosarc #15](https://github.com/iskandr/osteosarc/issues/15).
