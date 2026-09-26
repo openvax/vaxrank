@@ -483,18 +483,12 @@ def installed_ensembl_releases_for_build(build):
     Ensembl 76 through current ~113+). Suggesting an arbitrary number
     misleads the user; suggesting one they already have is honest.
     """
-    import os
     import glob
     import re
-    try:
-        import platformdirs
-        cache_root = platformdirs.user_cache_dir('pyensembl')
-    except ImportError:
-        # Fall back to the conventional macOS / XDG path so we still
-        # work without platformdirs in the import graph.
-        cache_root = os.path.expanduser('~/Library/Caches/pyensembl')
-        if not os.path.isdir(cache_root):
-            cache_root = os.path.expanduser('~/.cache/pyensembl')
+
+    import platformdirs
+
+    cache_root = platformdirs.user_cache_dir('pyensembl')
     pattern = os.path.join(cache_root, build, 'ensembl*')
     releases = []
     for path in glob.glob(pattern):

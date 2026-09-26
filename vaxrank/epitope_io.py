@@ -468,12 +468,6 @@ def _format_nm(value):
 # (this is where the old "No prediction" vs blank inconsistency came
 # from: three hand-rolled row dicts). Affinity args are raw nM floats
 # (or None → blank). Callers append their source-specific columns.
-NEOEPITOPE_CORE_COLUMNS = (
-    'Allele', 'Mutant peptide sequence', 'Score',
-    'Predicted mutant pMHC affinity', 'Wildtype sequence',
-    'Predicted wildtype pMHC affinity', 'Gene name', 'Genomic variant')
-
-
 def neoepitope_core_row(allele, mutant_peptide, mutant_affinity,
                         wt_peptide, wt_affinity, gene_name, variant,
                         score=None):
