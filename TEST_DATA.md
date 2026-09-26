@@ -63,9 +63,8 @@ python -m venv /tmp/sid-generator
   --cache /tmp/sid-acquisition --output /tmp/sid-test-data.zip
 ```
 
-The generator uses Osteosarc 0.7.0. Vaxrank's runtime currently remains on 0.2.3
-to satisfy released Isovar and Topiary constraints (tracked in
-[Vaxrank #519](https://github.com/openvax/vaxrank/issues/519)). The generated
+The generator uses Osteosarc 0.7.0. Vaxrank's runtime uses Osteosarc 0.9, which
+renamed `Asset` to `File`; it needs Isovar and Topiary releases that allow 0.9. The generated
 bundle must pass the consumer's full test suite after replacing
 `vaxrank/data/sid-test-data.zip`. Compare the new archive's selected-record
 digests and supporting inputs with the existing bundle before copying it into
