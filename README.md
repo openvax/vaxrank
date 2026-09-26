@@ -1061,10 +1061,11 @@ The orthogonal axes are preferred for new designs.
 
 ## Development
 
-The [bundled Sid test subset](https://github.com/openvax/vaxrank/blob/main/TEST_DATA.md) contains only the explicitly selected
-reads needed by the regression suite. A checked-in generator acquires them
-through osteosarc and verifies the complete selected records. The same compact
-bundle ships in the wheel and sdist and opens offline.
+The [Sid test data](https://github.com/openvax/vaxrank/blob/main/TEST_DATA.md) uses only the explicitly selected
+reads the regression suite needs. They come from openvax-v1, the OpenVax
+libraries' shared Sid test data published by osteosarc; the reviewed recipe
+ships in the package and verifies every selected record. The first test run
+downloads openvax-v1 (28 MB) into the osteosarc cache; later runs are offline.
 
 To install Vaxrank for local development:
 

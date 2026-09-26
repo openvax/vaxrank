@@ -1,7 +1,6 @@
-"""Inspect actual distributions and open installed Sid resources offline."""
+"""Inspect actual distributions and build installed Sid test data offline."""
 
 import gzip
-import io
 import os
 from pathlib import Path, PurePosixPath
 import subprocess
@@ -9,11 +8,13 @@ import sys
 import tarfile
 import zipfile
 
+import osteosarc
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_distributions_include_only_the_selected_sid_bundle(tmp_path):
+def test_distributions_include_the_sid_recipe_and_no_reads(tmp_path):
     result = subprocess.run([
         sys.executable, "setup.py", "--quiet", "sdist", "--dist-dir", str(tmp_path),
         "bdist_wheel", "--dist-dir", str(tmp_path)], cwd=ROOT, capture_output=True, text=True)
@@ -27,29 +28,29 @@ def test_distributions_include_only_the_selected_sid_bundle(tmp_path):
         wheel = {name: source.read(name) for name in source.namelist()}
     assert not any(name.startswith("tests/") for name in sdist)
     assert {"LICENSE", "MANIFEST.in", "setup.py", "requirements.txt", "TEST_DATA.md",
-            "vaxrank/sid_test_data.py", "examples/osteosarc_test_data/build.py",
-            "examples/osteosarc_test_data/pin_catalog.py",
-            "examples/osteosarc_test_data/requirements.txt",
-            "examples/osteosarc_test_data/recipe/selection.json.gz"} <= set(sdist)
-    bundle = "vaxrank/data/sid-test-data.zip"
-    assert sdist[bundle] == wheel[bundle] == (ROOT / bundle).read_bytes()
+            "vaxrank/sid_test_data.py", "examples/osteosarc_test_data/pin_catalog.py"} <= set(sdist)
+    recipe = ROOT / "vaxrank/data/sid-recipe"
+    shipped = {p.relative_to(ROOT).as_posix(): p.read_bytes() for p in recipe.rglob("*") if p.is_file()}
+    assert shipped
+    for name, data in shipped.items():
+        assert sdist[name] == wheel[name] == data, name
     for payload in (sdist, wheel):
         for name, data in payload.items():
-            if name.endswith((".bam", ".bai", ".cram", ".fastq", ".fastq.gz", ".sam", ".sam.gz")):
-                # The generator's original SAM headers contain no read records.
-                assert name.startswith("examples/osteosarc_test_data/recipe/headers/")
+            if name.endswith((".bam", ".bai", ".cram", ".fastq", ".fastq.gz", ".sam", ".sam.gz", ".zip")):
+                # The recipe's fixture SAM headers contain no read records.
+                assert name.startswith("vaxrank/data/sid-recipe/headers/"), name
                 assert all(line.startswith(b"@") for line in gzip.decompress(data).splitlines())
-        with zipfile.ZipFile(io.BytesIO(payload[bundle])) as source:
-            assert "provenance.json" in source.namelist()
-            assert len([n for n in source.namelist() if n.endswith(".bam")]) == 54
     installed = tmp_path / "installed"
     installed.mkdir()
     with zipfile.ZipFile(wheel_path) as source:
         source.extractall(installed)
     # Import from the extracted wheel outside the checkout with every network
-    # connection forbidden and no persistent data/reference caches available.
+    # connection forbidden: only the cached openvax-v1 reads are available.
+    reads = Path(osteosarc.fetch_bundle("openvax-v1"))
+    cache = reads.parents[2]
+    assert reads.is_relative_to(cache / "osteosarc" / "bundles")
     env = dict(os.environ, PYTHONPATH=str(installed) + os.pathsep + os.environ.get("PYTHONPATH", ""),
-               OPENVAX_DATA_CACHE=str(tmp_path / "empty-cache"), OSTEOSARC_CACHE=str(tmp_path / "empty-cache"))
+               OPENVAX_DATA_CACHE=str(tmp_path / "empty-cache"), OSTEOSARC_CACHE=str(cache))
     script = '''
 import json, socket
 from pathlib import Path

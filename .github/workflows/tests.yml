@@ -13,6 +13,7 @@ jobs:
       # them reliably (it has issues with paths outside $GITHUB_WORKSPACE).
       PYENSEMBL_CACHE_DIR: ${{ github.workspace }}/.ci-cache/pyensembl
       VAXRANK_REF_PEPTIDES_DIR: ${{ github.workspace }}/.ci-cache/vaxrank
+      OSTEOSARC_CACHE: ${{ github.workspace }}/.ci-cache/osteosarc
     strategy:
       fail-fast: true
       matrix:
@@ -54,6 +55,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest pytest-cov ruff
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Key the openvax-v1 test reads by their manifest
+        id: openvax-v1
+        run: |
+          echo "manifest=$(python -c 'from osteosarc.shared import published; print(published("openvax-v1")["manifest_sha256"])')" >> "$GITHUB_OUTPUT"
+      - name: Cache openvax-v1 test reads
+        uses: actions/cache@v4
+        with:
+          path: .ci-cache/osteosarc/osteosarc/bundles
+          key: openvax-v1-${{ steps.openvax-v1.outputs.manifest }}
       - name: Install wkhtmltopdf
         run: |
           # The runner's package index goes stale; refresh it before any install.
