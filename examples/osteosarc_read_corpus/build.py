@@ -21,7 +21,7 @@ import struct
 from urllib.parse import quote, urlsplit
 
 from osteosarc import (
-    Asset, Cache, IntegrityError, OsteosarcError, Region, __version__ as osteosarc_version,
+    Cache, File, IntegrityError, OsteosarcError, Region, __version__ as osteosarc_version,
     digest, extract_reads, inspect_alignment,
 )
 import pysam
@@ -358,9 +358,9 @@ def acquire_one(source, events, root, padding, *, cache=None):
     receipt_path = directory / "receipt.json"
     index_urls = tuple(key if urlsplit(key).scheme or Path(key).is_absolute()
                        else BUCKET + quote(key, safe="/") for key in source["listed_indexes"])
-    asset = Asset(source["source_id"], source.get("key", source["url"]), source["url"],
-                  "alignment", Path(urlsplit(source["url"]).path).suffix.lstrip("."),
-                  size=source.get("bucket_bytes"), index_urls=index_urls)
+    asset = File(source["source_id"], source.get("key", source["url"]), source["url"],
+                 "alignment", Path(urlsplit(source["url"]).path).suffix.lstrip("."),
+                 size=source.get("bucket_bytes"), index_urls=index_urls)
     snapshot = root / "provenance.json"
     snapshot_id = digest(snapshot if snapshot.exists() else root / "events.json")
     request = dict(schema_version=2, osteosarc_version=osteosarc_version,

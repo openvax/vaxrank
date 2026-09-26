@@ -3,7 +3,7 @@ numpy>=2.0.0,<3.0.0
 # HTTP retries via datacache's public API, without fetching during normal tests.
 datacache>=1.9.1,<2.0.0
 # Public data acquisition and original-read extraction for the osteosarc corpus.
-osteosarc==0.2.3
+osteosarc>=0.9.0,<0.10
 pandas>=2.1.4,<3.0.0
 pyensembl>=2.6.4,<3.0.0
 # 10.4.1 ranks structural candidate sets that list themselves as candidates
@@ -13,9 +13,11 @@ pyensembl>=2.6.4,<3.0.0
 varcode>=10.4.1,<11.0.0
 # 1.33.0 accepts matched germline variants (--germline-vcf), which Vaxrank
 # passes through. The fusion adapter reads isovar.fusion_rna.v3, which 1.37.0
-# introduced (RNA support as one record, junction direct_support); a later
-# schema needs the adapter to follow, so stay below the next minor release.
-isovar>=1.37.0,<1.38.0
+# introduced (RNA support as one record, junction direct_support); 1.38 keeps
+# that schema. A later schema needs the adapter to follow, so stay below the
+# next minor release. The Osteosarc range above selects Isovar >=1.38.1, the
+# first release that accepts it.
+isovar>=1.37.0,<1.39.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.33.5,<4.0.0
 # 3.41.0 supplies mhctools.cleavage (CleavageInput/CleavageModel/CleavageResult/
@@ -43,9 +45,9 @@ mhctools>=3.44.0,<4.0.0
 # which vaxrank#414's real-cache selection regression exercises directly.
 # 5.68.2 rejects contradictory measurements within a selected observation
 # instead of changing scores and filters when external rows are reordered.
-# This floor also validates the frozen prediction cache's producer versions;
-# the exact Osteosarc pin above constrains fixture dependency compatibility.
+# This floor also validates the frozen prediction cache's producer versions.
 # 5.70.1 applies the same consistency check to numeric column expressions.
+# The Osteosarc range above selects Topiary >=5.73.0, the first that accepts it.
 topiary>=5.70.1,<6.0.0
 roman
 jinja2>=3.1
