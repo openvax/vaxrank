@@ -32,7 +32,7 @@ def _sid_test_data(offline):
     import osteosarc
     from .sid_test_data import READS, sid_test_data
     if offline:
-        osteosarc.fetch_bundle(READS, cache=osteosarc.Cache(offline=True))
+        osteosarc.fetch_bundle(READS, offline=True)
     return sid_test_data()
 
 

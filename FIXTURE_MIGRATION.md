@@ -11,6 +11,6 @@ expectations unchanged.
 `vaxrank.sid_test_data` selects each cohort's historical records by exact
 digest and multiplicity from its openvax-v1 member, then writes them with the
 reviewed header and order, so the regressions run on unchanged inputs. This
-consumer uses published Osteosarc 0.11.x and Topiary releases. See
+consumer uses published Osteosarc 0.12.x and Topiary releases. See
 [TEST_DATA.md](TEST_DATA.md) and osteosarc's
 [shared test data](https://iskandr.github.io/osteosarc/test-data/#shared-test-data-openvax-v1).

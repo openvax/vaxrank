@@ -47,19 +47,16 @@ def build_sid_test_data(destination):
     sources = json.loads((bundle / "recipe.json").read_text())["sources"]
     shutil.copytree(recipe / "support", root, dirs_exist_ok=True)
     provenance_sources = {}
-    with tempfile.TemporaryDirectory(prefix="vaxrank-openvax-v1-") as exported:
-        paths = osteosarc.export_bundle(
-            bundle, exported, members=[MEMBER_PREFIX + c["path"] for c in plan["cohorts"]])
-        for cohort in plan["cohorts"]:
-            member = MEMBER_PREFIX + cohort["path"]
-            source_id = members[member]["source"]
-            identity = sources[source_id]["identity"]
-            if identity["url"] != cohort["source"]:
-                raise ValueError("%s comes from %s, not %s" % (member, identity["url"], cohort["source"]))
-            provenance_sources[cohort["source"]] = dict(member_source=source_id, identity=identity)
-            path = Path(paths[member])
-            records = select_records(ReadSubset(path, Path(str(path) + ".bai"), {}), cohort)
-            write_cohort(root, cohort, records, recipe)
+    for cohort in plan["cohorts"]:
+        member = MEMBER_PREFIX + cohort["path"]
+        source_id = members[member]["source"]
+        identity = sources[source_id]["identity"]
+        if identity["url"] != cohort["source"]:
+            raise ValueError("%s comes from %s, not %s" % (member, identity["url"], cohort["source"]))
+        provenance_sources[cohort["source"]] = dict(member_source=source_id, identity=identity)
+        path = Path(osteosarc.bundle_file(bundle, member))
+        records = select_records(ReadSubset(path, Path(str(path) + ".bai"), {}), cohort)
+        write_cohort(root, cohort, records, recipe)
     update_manifests(root)
     catalog = json.loads((recipe / "catalog.json").read_text())
     write_json(root / "provenance.json", dict(

@@ -51,14 +51,15 @@ variants = sid_variants(["MAP2-chr2-209694768"])
 ```
 
 `sid_test_data()` builds the files into a temporary process directory. It
-exports the 58 members from openvax-v1, selects each cohort's records by
+reads the 58 members from openvax-v1 with `osteosarc.bundle_file`, which
+exports each into the osteosarc cache once, selects each cohort's records by
 digest (`osteosarc.cohort_bundle.select_records`), and writes them with the
 recipe's reviewed header and order. Missing, changed or extra records fail the
 build. The files are the same bytes as the zip Vaxrank shipped through 3.25.
 
 The first build downloads and verifies openvax-v1 (28 MB) into the osteosarc
-cache (`OSTEOSARC_CACHE`, else the shared OpenVax cache); later builds work
-offline. `provenance.json` in the built directory records the recipe hashes,
+cache (`OSTEOSARC_CACHE`, else the shared OpenVax cache) and exports the
+members there; later builds reuse them offline. `provenance.json` in the built directory records the recipe hashes,
 the openvax-v1 manifest checksum, each cohort's source identity and the
 osteosarc version.
 
