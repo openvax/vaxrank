@@ -39,6 +39,25 @@ mates or all alignments of every template in the original BAM were recovered.
 Osteosarc supplies the Sid reads and variant identities; it does not supply
 the independent Ensembl annotations or MHC prediction expectations.
 
+## Fixtures Osteosarc does not supply
+
+Osteosarc publishes the human Sid dataset, so two groups of fixtures stay in
+this repository permanently rather than pending migration:
+
+- `tests/data/b16.f10/` — mouse B16-F10 reads and VCFs. They drive the CLI and
+  report smoke (`run-vaxrank-b16-test-data.sh`) and the mutant-protein-sequence
+  tests. Osteosarc has no mouse content, so there is nothing to migrate to.
+- `tests/data/epitope_fixtures/` — LENS and pVACseq epitope tables for the
+  external-input, rescoring and report paths. Osteosarc publishes reads, not
+  epitope tables.
+
+Both groups are pinned by sha256 in `tests/data/manifest.json` and verified by
+`tests/test_data_manifest.py`, which also fails on a fixture nobody pinned. That
+check is the substitute for osteosarc's provenance, not an equivalent of it:
+these files carry digests, not a recorded upstream source. Regenerate the
+digests with `python tests/test_data_manifest.py` when changing a fixture is the
+point of the commit.
+
 ## Use
 
 ```python

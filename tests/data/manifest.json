@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "notes": {
+    "b16.f10": "Mouse B16-F10 reads and VCFs driving the CLI/report smoke (run-vaxrank-b16-test-data.sh) and the mutant-protein-sequence tests. Osteosarc publishes the human Sid dataset only, so these stay in-repo; they are pinned by digest here because nothing else verifies them.",
+    "epitope_fixtures": "LENS and pVACseq epitope tables consumed by the external-input, rescoring and report tests. Osteosarc has no equivalent product, so these stay in-repo and are pinned by digest here."
+  },
+  "files": {
+    "b16.f10/b16.combined.bam": "5c6161eca2410e8d8d54feee91ed3952ea04822face1d58be41593aaae0be21d",
+    "b16.f10/b16.combined.bam.bai": "17ce83a29c6bd3617af98b1accd8f5e0018b92c53e3df876819f6a3cc081355d",
+    "b16.f10/b16.combined.sam": "b1dcf01943746f3d4861aa8d6f0ddcfbc7b39eaae9b57e93ae7d44aff40ceb37",
+    "b16.f10/b16.combined.sorted.bam": "76ac5e381bb4b65c4952bf50cf86930c193f8ef9fe34cd17601e0f460cc0546e",
+    "b16.f10/b16.combined.sorted.bam.bai": "130b1d5e0deea672a88e360560642a01660e132d7193ae0dd83590f4a84cc00c",
+    "b16.f10/b16.expressed.vcf": "c0b001c61c673343e6b2e0f5839f4476f0e8bcb6b232b213562ce99f3da08454",
+    "b16.f10/b16.f10.127a.aldh1b1.chr4.45802539.refG.altC.sam": "f67641889071c6dc5076e097e150e4d7b288817d3dab5b0c89d12246052d3eb0",
+    "b16.f10/b16.f10.127a.klf6.chr13.5864876.refC.altCG.sam": "1c842b1874a57cb9888ff4b4a63a6136e7d256d354043790456d39da373bd435",
+    "b16.f10/b16.f10.127a.phip.chr9.82927102.refG.altT.sam": "8b7e87c77ad4cf89a8d8ef1cd4fdf86e609e9b88c39bdec4eb6f97d65217f2d7",
+    "b16.f10/b16.f10.127a.wdr13.chrX.8125624.refC.altA.sam": "c20d64206c581a190e8329c7ec65a9c1132851fc2448b107e1b1027a12f3e0bd",
+    "b16.f10/b16.f10.Phip.vcf": "6c1f40efd1d89f0bf36abdda4487ff69c00f44a19c8e69bd1667c146023a3127",
+    "b16.f10/b16.f10.Wdr13.vcf": "e7489cafd1b49a2ebed3b04f706dfe9fa32d264bea3852e5dd8df9ddb0b05a45",
+    "b16.f10/b16.not-expressed.vcf": "5c92475a250e8fd67a7d142f10c11fd54203341da75918b819f80f61331531f9",
+    "b16.f10/b16.vcf": "d3d445b4e15f53c0861046f2ed819aa5cecab27e2401d5f8e1d734942513654a",
+    "epitope_fixtures/lens_example.tsv": "5dd6e0c5c3c29eed297639a910f51269e2326e7677880d08175119b015e50eb4",
+    "epitope_fixtures/lens_multi_row_per_variant.tsv": "b684583db640bd36559882bcfe7a07d3ad22f37e956888d1a6668349d44b4d08",
+    "epitope_fixtures/lens_v1.4_with_stability.tsv": "65d5c6a863242b9d89ece508ea91770106a246b959d1890f076002ec4ff59f35",
+    "epitope_fixtures/lens_v1.9_mhcflurry_only.tsv": "fdfad58be48043ecaaa1d45bfada929b1f38a1266a6e9f3e24cde04fe8c4f76c",
+    "epitope_fixtures/pvacseq_example.tsv": "09463758c13eec58dcc95b18acdde0ca47269d492a2ca11329ba6774b93cc8b9",
+    "epitope_fixtures/real_lens_subsets/lens_v1.4_real_subset.tsv": "a2ddc0557a57f434062077e1c17122ee84ca25a8f8931be1111881464b2839e5",
+    "epitope_fixtures/real_lens_subsets/lens_v1.5_real_subset.tsv": "d0ab33119fe67b68ed93bc2fbe196fd7043bff09eb0db936e1c49a3fdfc7b0ce",
+    "epitope_fixtures/real_lens_subsets/lens_v1.9_real_subset.tsv": "8b4518c21d63ff64c7764871e03a39f68cbeb882b5cd3c6d01170616c5ef6899",
+    "epitope_fixtures/real_lens_subsets/lens_v1.9_with_stop_codons.tsv": "636de8342f94529e59dc43df679d4322337fdfebbdeeec6302e7e7026ba6571f"
+  }
+}
