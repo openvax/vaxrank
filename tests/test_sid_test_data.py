@@ -7,7 +7,7 @@ from pathlib import Path
 import socket
 
 import osteosarc
-from osteosarc import ReadSubset, digest
+from osteosarc import ReadSubset, check_fixtures, digest
 from osteosarc.cohort_bundle import record_digest, select_records
 from osteosarc.shared import published
 from packaging.requirements import Requirement
@@ -87,6 +87,33 @@ def test_build_is_offline_once_the_reads_are_cached(tmp_path, monkeypatch):
             assert digest(root / name) == digest(sid_test_data() / name), name
     variant, = sid_variants(["MAP2-chr2-209694768"])
     assert variant.allele == ("chr2", 209694768, "CCTGGGCTACTGTGTGTTCAATA", "C")
+
+
+def test_packaged_cohorts_are_their_openvax_v1_members(monkeypatch):
+    """Every built cohort holds exactly its bundle member's records.
+
+    ``check_fixtures`` verifies openvax-v1 in full -- each file's digest and
+    size, every pinned record, the BAM indexes -- and then compares each
+    cohort against its member as a multiset of SAM text, so a selection that
+    dropped, added or duplicated a record fails here. The rest of the suite
+    checks our copies against our own recipe; this is the only test that asks
+    the bundle whether the recipe still describes it (openvax/vaxrank#522).
+    """
+    root = sid_test_data()  # downloads openvax-v1 into the osteosarc cache if needed
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Network access while checking cohorts against openvax-v1")
+    monkeypatch.setattr(socket.socket, "connect", forbidden)
+    monkeypatch.setattr(socket, "create_connection", forbidden)
+    cohorts = json.loads((root / "provenance.json").read_text())["cohorts"]
+    # A fusion's SAM lines sit inside its JSON document, not in a read file.
+    fixtures = {
+        "vaxrank/" + cohort["path"]: (
+            {"json": cohort["path"], "pointer": "/original_records"}
+            if cohort["format"] == "fusion" else cohort["path"])
+        for cohort in cohorts
+    }
+    assert len(fixtures) == len(cohorts)
+    assert check_fixtures("openvax-v1", fixtures, root=root) == {}
 
 
 def test_build_refuses_a_nonempty_destination(tmp_path):
