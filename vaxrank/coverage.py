@@ -71,10 +71,6 @@ TIER_STRONG = 0.5
 TIER_MEDIUM = 1.0
 TIER_LOW = 2.0
 
-# Names ordered most → least stringent. Shared between the report
-# writers and the selector.
-TIER_NAMES = ('strong', 'medium', 'low')
-
 
 def _tier_for_percentile(pct: Optional[float]) -> Optional[str]:
     """Bucket one peptide-allele %-rank into a tier name, or
