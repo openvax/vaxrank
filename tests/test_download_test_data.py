@@ -50,6 +50,9 @@ def test_shared_cache_and_offline_generation(tmp_path, tiny_manifest, monkeypatc
         assert paths[asset["filename"]] == expected
     monkeypatch.setattr(Cache, "fetch", forbid_fetch)
     # A second application/process has only the same root and pinned manifest.
+    # OSTEOSARC_CACHE, which CI sets for openvax-v1, now takes precedence over
+    # OPENVAX_DATA_CACHE, so drop it to exercise the fallback this pins.
+    monkeypatch.delenv(downloader.OSTEOSARC_ENVIRONMENT, raising=False)
     monkeypatch.setenv(downloader.CACHE_ENVIRONMENT, str(root))
     output = downloader.download_test_data(tmp_path / "export", manifest_path=path, offline=True)
     assert downloader.verify_dataset(output, manifest) == output
