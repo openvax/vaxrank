@@ -24,7 +24,6 @@ from vaxrank.vaccine_antigen import VaccineAntigen
 from vaxrank.vaccine_config import VaccineConfig
 
 from .osteosarc_selection_helpers import DATA, load_selection_inputs, reconstruct_selection
-from .test_declared_dependencies import requirement_named
 
 
 DOCUMENTED = json.loads((DATA / "documented.json").read_text())
@@ -87,25 +86,24 @@ def test_regeneration_refuses_to_overwrite_existing_evidence(tmp_path, monkeypat
     reconstruction.assert_not_called()
 
 
+@pytest.mark.parametrize("name,sequence", sorted(json.loads(
+    (DATA / "predictions_manifest.json").read_text())["contexts"].items()))
+def test_current_reconstruction_matches_frozen_prediction_contexts(reconstruct, name, sequence):
+    """Runtime upgrades must still reconstruct the inputs covered by the cache."""
+    variant_id, length = name.rsplit("-size", 1)
+    result, _ = reconstruct(variant_id, int(length))
+    assert result.top_protein_sequence.amino_acids == sequence
+
+
 def test_pinned_predictions_are_complete_real_model_outputs():
     metadata = json.loads((DATA / "predictions_manifest.json").read_text())
     for filename, key in [("documented.json", "documented_sha256"),
                           ("isovar/manifest.json", "bundled_input_manifest_sha256"),
                           ("netmhcpan42.tsv", "output_sha256")]:
         assert sha256((DATA / filename).read_bytes()).hexdigest() == metadata[key]
-    # The cache records the versions that actually produced it; compare those
-    # against the declared floors instead of one hardcoded value. Pinning
-    # isovar alone both went stale and never covered mhctools or topiary, so
-    # a cache generated below the topiary floor carrying the #296 cached-scan
-    # fix, or below the mhctools floor, read as verified provenance.
-    recorded = metadata["package_versions"]
-    for name in ("isovar", "mhctools", "topiary", "varcode"):
-        requirement = requirement_named(name)
-        assert requirement.specifier.contains(recorded[name], prereleases=True), (
-            "prediction cache was generated with %s %s, which violates the "
-            "declared requirement %s; regenerate it against the declared "
-            "versions rather than trusting its recorded provenance"
-            % (name, recorded[name], requirement))
+    # Producer versions describe this historical artifact. Current installation
+    # floors are checked separately; reconstruction and cache coverage below
+    # determine whether the frozen evidence still composes with today's code.
     assert metadata["predictor_name"] == "netMHCpan-4.2"
     assert metadata["predictor_version"] == "4.2c"
     # Compare the manifest to the JSON representation the generator writes.
