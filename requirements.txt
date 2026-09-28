@@ -1,7 +1,10 @@
 numpy>=2.0.0,<3.0.0
 # Shared test-data downloads use verified cache hits, explicit roots and bounded
 # HTTP retries via datacache's public API, without fetching during normal tests.
-datacache>=1.9.1,<2.0.0
+# The 1.11.1 floor is what inspect_files/Cache.inspect need: download_test_data
+# reports a per-file status (available/missing/corrupt/inaccessible) instead of
+# only raising, and 1.11.1 is the release that shortens over-long cache names.
+datacache>=1.11.1,<2.0.0
 # Public data acquisition and original-read extraction for the osteosarc corpus.
 osteosarc>=0.14.0,<0.15
 pandas>=2.1.4,<3.0.0
