@@ -20,4 +20,22 @@ if [[ -z "${PYTHON:-}" ]]; then
   fi
 fi
 
-exec "${PYTHON}" -m pytest tests "$@"
+# Isolate this run from pytest cleanup in sibling repositories. A caller's
+# explicit root is preserved, including when nested tests invoke this script.
+own_temproot=0
+if [[ -z "${PYTEST_DEBUG_TEMPROOT:-}" ]]; then
+  PYTEST_DEBUG_TEMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/vaxrank-pytest.XXXXXX")"
+  export PYTEST_DEBUG_TEMPROOT
+  own_temproot=1
+fi
+
+status=0
+"${PYTHON}" -m pytest tests "$@" || status=$?
+if (( own_temproot )); then
+  if (( status == 0 )); then
+    rm -rf -- "${PYTEST_DEBUG_TEMPROOT}"
+  else
+    echo "Kept pytest temp root: ${PYTEST_DEBUG_TEMPROOT}" >&2
+  fi
+fi
+exit "$status"

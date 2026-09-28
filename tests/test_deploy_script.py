@@ -174,3 +174,34 @@ def test_deploy_resume_rejects_a_missing_original_artifact(tmp_path):
     assert result.returncode == 1
     assert "Cannot safely resume v3.13.9" in result.stderr
     assert "vaxrank-3.13.9.tar.gz" in result.stderr
+
+
+@pytest.mark.parametrize("status", [0, 1])
+@pytest.mark.parametrize("explicit_root", [False, True])
+def test_test_script_owns_only_its_automatic_temp_root(tmp_path, status, explicit_root):
+    fake_python = tmp_path / "python"
+    fake_python.write_text(
+        '#!/bin/sh\n'
+        'printf "%s" "$PYTEST_DEBUG_TEMPROOT" > "$PYTHON_LOG"\n'
+        'touch "$PYTEST_DEBUG_TEMPROOT/evidence"\n'
+        'exit "$TEST_STATUS"\n')
+    fake_python.chmod(0o755)
+    env = os.environ.copy()
+    env.pop("PYTEST_DEBUG_TEMPROOT", None)
+    env.update(PYTHON=str(fake_python), PYTHON_LOG=str(tmp_path / "root"),
+               TMPDIR=str(tmp_path), TEST_STATUS=str(status))
+    if explicit_root:
+        supplied = tmp_path / "supplied"
+        supplied.mkdir()
+        env["PYTEST_DEBUG_TEMPROOT"] = str(supplied)
+    result = subprocess.run(
+        ["bash", "test.sh"], cwd=Path(__file__).resolve().parents[1],
+        env=env, capture_output=True, text=True)
+    root = Path((tmp_path / "root").read_text())
+    assert result.returncode == status
+    assert (root / "evidence").exists() == (explicit_root or status != 0)
+    if explicit_root:
+        assert root == supplied
+    else:
+        assert root.parent == tmp_path
+        assert root.name.startswith("vaxrank-pytest.")

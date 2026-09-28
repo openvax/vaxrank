@@ -149,3 +149,19 @@ def test_topiary_floor_keeps_the_cached_scan_fix_it_was_raised_for():
     """
     floor = floor_of(requirement_named("topiary"))
     assert floor is not None and floor >= Version("5.55.1")
+
+
+def test_shared_data_window_keeps_compatible_sibling_floors():
+    """An Osteosarc window change requires reviewing both sibling floors.
+
+    Published Isovar 1.39.5 and Topiary 5.82.0 first accept Osteosarc 0.14;
+    earlier admitted releases require incompatible windows (#533).
+    """
+    osteosarc = requirement_named("osteosarc")
+    window = floor_of(osteosarc).release[:2]
+    reviewed = {(0, 14): {"isovar": "1.39.5", "topiary": "5.82.0"}}
+    assert window in reviewed, "Review sibling compatibility for the new Osteosarc window"
+    for name, compatible in reviewed[window].items():
+        floor = floor_of(requirement_named(name))
+        assert floor is not None and floor >= Version(compatible), (
+            f"{name} must require >= {compatible} for Osteosarc {window}")
