@@ -7,7 +7,7 @@ Guide for coding agents working in this repo. Read this before touching code.
 ## Golden Rules
 
 1. **Never commit to `main`.** Always `git checkout -b <feature-branch>` before editing. Land via PR.
-2. **Every PR bumps the version.** Even doc-only PRs — at minimum a patch bump in `vaxrank/version.py`. `deploy.sh <version>` does the bump + commit + push for you.
+2. **Every PR bumps the version.** Even doc-only PRs — at minimum a patch bump in `vaxrank/version.py`, committed with the PR. After merging, run `./deploy.sh` without a version argument.
 3. **Always deploy when you merge a PR.** Merging without deploying is never done — every merge is followed by `./deploy.sh` from a clean `main`. No "wait for the next PR," no "deploy later." The exact sequence after `gh pr merge`:
    ```
    git checkout main && git pull
@@ -57,7 +57,7 @@ git tag "v${VERSION}" && git push --tags
 
 ## Code Style
 
-- Python 3.9+, Linux + macOS (no Windows guarantee)
+- Python 3.10+, Linux + macOS (no Windows guarantee)
 - Lint: `ruff check` (config minimal; no `ruff format` step in this repo)
 - Docstrings: numpy style
 - Bugfixes include a regression test where feasible
