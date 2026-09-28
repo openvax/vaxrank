@@ -6,6 +6,7 @@ import errno
 import json
 import shutil
 import stat
+from pathlib import Path
 from types import SimpleNamespace
 
 from datacache import Cache, FileValidationError
@@ -16,6 +17,7 @@ from vaxrank import download_test_data as downloader
 from vaxrank.sid_test_data import sid_test_data, sid_reads
 
 
+ROOT = Path(__file__).resolve().parents[1]
 DATA = sid_test_data() / "osteosarc/shared-v1"
 MANIFEST = downloader.load_manifest()
 
@@ -271,3 +273,143 @@ def test_offline_default_export_needs_the_cached_shared_reads(tmp_path, monkeypa
         downloader.main(["--output", str(tmp_path / "export"), "--verify-only"])
     assert error.value.code == 1
     assert not (tmp_path / "export").exists()
+
+
+def test_inspect_dataset_reports_status_without_raising(tmp_path, tiny_manifest):
+    """A caller that wants to know *what* is wrong gets a per-file status.
+
+    verify_dataset answers "is it usable"; inspect_dataset answers "what is
+    wrong with it", which is what the CLI prints and what a caller needs to
+    decide between refetching and giving up.
+    """
+    path, manifest = tiny_manifest
+    output = downloader.download_test_data(
+        tmp_path / "export", manifest_path=path, cache_root=tmp_path / "cache")
+
+    healthy = downloader.inspect_dataset(output, manifest)
+    assert healthy["status"] == "available"
+    assert healthy["verified"] is True
+    assert {name: entry["status"] for name, entry in healthy["files"].items()} == {
+        "first.bam": "available", "second.bam": "available"}
+    assert all(entry["verified"] for entry in healthy["files"].values())
+
+    (output / "first.bam").write_bytes(b"tampered")
+    corrupt = downloader.inspect_dataset(output, manifest)
+    assert corrupt["status"] == "corrupt"
+    assert corrupt["verified"] is False
+    assert corrupt["files"]["first.bam"] == dict(status="corrupt", verified=False)
+    # The intact sibling is still reported as fine, rather than the whole
+    # dataset collapsing to one exception.
+    assert corrupt["files"]["second.bam"] == dict(status="available", verified=True)
+    assert "first.bam" in corrupt["detail"]
+
+    (output / "stray.txt").write_text("x")
+    extra = downloader.inspect_dataset(output, manifest)
+    assert extra["status"] == "unexpected_contents"
+    assert "stray.txt" in extra["detail"]
+
+    assert downloader.inspect_dataset(tmp_path / "absent", manifest)["status"] == "not_a_directory"
+
+
+def test_inspect_dataset_rejects_symlinked_assets(tmp_path, tiny_manifest):
+    """datacache follows symlinks, so the refusal has to stay ours.
+
+    inspect_files would call a symlink pointing at correct bytes "available";
+    an exported dataset must hold real files.
+    """
+    path, manifest = tiny_manifest
+    output = downloader.download_test_data(
+        tmp_path / "export", manifest_path=path, cache_root=tmp_path / "cache")
+    real = (output / "first.bam").read_bytes()
+    elsewhere = tmp_path / "elsewhere.bam"
+    elsewhere.write_bytes(real)
+    (output / "first.bam").unlink()
+    (output / "first.bam").symlink_to(elsewhere)
+
+    report = downloader.inspect_dataset(output, manifest)
+    assert report["status"] == "symlink"
+    assert "first.bam" in report["detail"]
+    with pytest.raises(ValueError, match="must not be symlinks"):
+        downloader.verify_dataset(output, manifest)
+
+
+def test_cli_prints_one_json_object_for_success_and_failure(tmp_path, tiny_manifest, capsys):
+    """The CLI's output is a contract, not debug prose.
+
+    Nothing pinned it before, so the JSON could change shape unnoticed while
+    exit codes stayed the same.
+    """
+    path, manifest = tiny_manifest
+    output = tmp_path / "export"
+
+    downloader.main(["--manifest", str(path), "--output", str(output),
+                     "--cache-root", str(tmp_path / "cache")])
+    exported = json.loads(capsys.readouterr().out)
+    assert exported["action"] == "export"
+    assert exported["status"] == "available"
+    assert exported["dataset"] == manifest["dataset"]
+    assert exported["data_version"] == manifest["data_version"]
+    assert exported["assets"] == len(manifest["assets"])
+    assert exported["output"] == str(output)
+    assert exported["error"] is None
+    assert {name: entry["status"] for name, entry in exported["files"].items()} == {
+        "first.bam": "available", "second.bam": "available"}
+
+    downloader.main(["--manifest", str(path), "--output", str(output), "--verify-only"])
+    verified = json.loads(capsys.readouterr().out)
+    assert verified["action"] == "verify"
+    assert verified["status"] == "available"
+    assert verified["error"] is None
+
+    (output / "second.bam").write_bytes(b"tampered")
+    with pytest.raises(SystemExit) as failure:
+        downloader.main(["--manifest", str(path), "--output", str(output), "--verify-only"])
+    assert failure.value.code == 1
+    reported = json.loads(capsys.readouterr().out)
+    assert reported["status"] == "corrupt"
+    assert reported["files"]["second.bam"]["status"] == "corrupt"
+    assert "second.bam" in reported["error"]
+
+
+def test_cli_reports_cached_paths_without_an_output(tmp_path, tiny_manifest, capsys):
+    """Without --output the result is cache locations, and says so in `status`.
+
+    The old CLI inferred this by type-sniffing its own return value.
+    """
+    path, _ = tiny_manifest
+    downloader.main(["--manifest", str(path), "--cache-root", str(tmp_path / "cache")])
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "cached"
+    assert report["output"] is None
+    assert sorted(report["cached_paths"]) == ["first.bam", "second.bam"]
+    assert report["files"] == {}
+
+
+def test_osteosarc_cache_environment_is_honoured(tmp_path, tiny_manifest, monkeypatch):
+    """One invocation must not read bundled reads and custom assets from two roots.
+
+    osteosarc resolves OSTEOSARC_CACHE first, so the downloader does too;
+    previously it saw only OPENVAX_DATA_CACHE.
+    """
+    path, _ = tiny_manifest
+    preferred = tmp_path / "osteosarc-root"
+    fallback = tmp_path / "openvax-root"
+    monkeypatch.setenv(downloader.OSTEOSARC_ENVIRONMENT, str(preferred))
+    monkeypatch.setenv(downloader.CACHE_ENVIRONMENT, str(fallback))
+    assert downloader.cache_root_for() == preferred
+
+    downloader.download_test_data(manifest_path=path)
+    assert (preferred / "objects" / "sha256").is_dir()
+    assert not fallback.exists()
+
+    # An explicit root still wins over both variables.
+    explicit = tmp_path / "explicit"
+    assert downloader.cache_root_for(explicit) == explicit
+    monkeypatch.delenv(downloader.OSTEOSARC_ENVIRONMENT)
+    assert downloader.cache_root_for() == fallback
+
+
+def test_test_data_cli_is_installed_as_a_console_script():
+    """`vaxrank-test-data` is the documented entry point, so keep it declared."""
+    setup = (ROOT / "setup.py").read_text()
+    assert "vaxrank-test-data = vaxrank.download_test_data:main" in setup

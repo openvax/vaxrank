@@ -82,16 +82,67 @@ members there; later builds reuse them offline. `provenance.json` in the built d
 the openvax-v1 manifest checksum, each cohort's source identity and the
 osteosarc version.
 
-The existing CLI exports the 49 retrieval cases:
+`vaxrank-test-data` exports the 49 retrieval cases (`python -m
+vaxrank.download_test_data` is equivalent):
 
 ```bash
-python -m vaxrank.download_test_data --output /tmp/sid-retrieval-tests --offline
-python -m vaxrank.download_test_data --output /tmp/sid-retrieval-tests --verify-only
+vaxrank-test-data --output /tmp/sid-retrieval-tests --offline
+vaxrank-test-data --output /tmp/sid-retrieval-tests --verify-only
 ```
 
 Existing output is verified, never replaced. Explicit custom `--manifest`
 downloads retain the generic shared OpenVax cache API for existing callers.
 They do not participate in the Sid tests.
+
+Every run prints one JSON object and exits non-zero only on failure, so a
+caller reads a status rather than parsing prose:
+
+```json
+{
+  "action": "export",
+  "assets": 98,
+  "cached_paths": null,
+  "data_version": "minimal-vaccine-rna-v2",
+  "dataset": "osteosarc",
+  "error": null,
+  "files": {"00-ABCF2-chr7-151218156-f30f618fb76a0e49.bam": {"status": "available", "verified": true}},
+  "output": "/tmp/sid-retrieval-tests",
+  "status": "available"
+}
+```
+
+`status` is `available` only when every asset's digest and size were checked
+and matched. Otherwise it names the problem — `corrupt`, `missing`,
+`inaccessible`, `unexpected_contents`, `manifest_mismatch`, `symlink`,
+`not_a_directory`, or `unavailable` when the manifest itself could not be
+read — and `error` carries the prose. Without `--output`, `status` is `cached`
+and `cached_paths` gives each asset's location in the shared cache.
+`--progress`, `--timeout` and `--max-retries` apply to custom manifests, whose
+assets are the only ones this command downloads.
+
+The cache root is `--cache-root`, else `OSTEOSARC_CACHE`, else
+`OPENVAX_DATA_CACHE`, else the platform cache directory — the order osteosarc
+itself resolves, so the bundled reads and any custom assets in one invocation
+always come from the same root.
+
+From Python:
+
+```python
+from vaxrank.download_test_data import (
+    download_test_data, inspect_dataset, verify_dataset)
+
+report = inspect_dataset("/tmp/sid-retrieval-tests")  # never raises
+if report["status"] != "available":
+    print(report["detail"], report["files"])
+
+verify_dataset("/tmp/sid-retrieval-tests")  # raises on the first problem
+download_test_data("/tmp/sid-retrieval-tests", offline=True)
+```
+
+`inspect_dataset` answers "what is wrong with this dataset", `verify_dataset`
+answers "is it usable". Both check structure that datacache cannot express:
+`inspect_files` follows symlinks and inspects only the inventory it is handed,
+so it would accept a symlinked asset and never notice an extra file.
 
 ## Changing the recipe
 

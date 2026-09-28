@@ -4,6 +4,12 @@ The default exports the 49 retrieval cases from the Sid test data, which is
 built from the shared openvax-v1 reads (downloaded once into the osteosarc
 cache; ``--offline`` never downloads them). Explicit custom manifests retain the
 generic verified-download API for existing callers.
+
+Run it as ``vaxrank-test-data`` or ``python -m vaxrank.download_test_data``.
+Both print one JSON object describing what was exported or inspected, so a
+caller can read a per-file status instead of parsing prose. From Python,
+``inspect_dataset`` reports those statuses without raising, ``verify_dataset``
+raises on the first problem, and ``download_test_data`` exports.
 """
 
 import argparse
@@ -18,13 +24,27 @@ import sys
 import tempfile
 from urllib.parse import urlsplit
 
-from datacache import Cache, FileValidationError, get_data_dir, validate_file
+from datacache import Cache, FileValidationError, get_data_dir, inspect_files
 from osteosarc import OsteosarcError
 
 
 DEFAULT_MANIFEST = None
 CACHE_NAMESPACE = "openvax"
 CACHE_ENVIRONMENT = "OPENVAX_DATA_CACHE"
+# Osteosarc resolves its cache as OSTEOSARC_CACHE, then OPENVAX_DATA_CACHE, then
+# the platform directory. The Sid half of this command goes through osteosarc, so
+# honouring the same order here keeps one invocation from reading bundled reads
+# out of one root and custom assets out of another.
+OSTEOSARC_ENVIRONMENT = "OSTEOSARC_CACHE"
+
+
+def cache_root_for(cache_root=None):
+    """The shared OpenVax cache root, resolved as osteosarc resolves it."""
+    return Path(
+        cache_root
+        or os.environ.get(OSTEOSARC_ENVIRONMENT)
+        or os.environ.get(CACHE_ENVIRONMENT)
+        or get_data_dir(CACHE_NAMESPACE))
 
 
 def _sid_test_data(offline):
@@ -78,25 +98,83 @@ def cache_filename(asset):
     return "%s%s" % (asset["sha256"], "".join(Path(asset["filename"]).suffixes))
 
 
-def verify_dataset(output, manifest=None):
-    """Validate a materialized dataset offline, without repair or cache writes."""
-    manifest = load_manifest() if manifest is None else manifest
-    output = Path(output)
+def _inspect_dataset(output, manifest):
+    """``(report, datacache inspection or None)``; hashes each asset once."""
+
+    def report(status, detail, files=None):
+        return dict(path=str(output), status=status, detail=detail,
+                    verified=status == "available", files=files or {})
+
     if output.is_symlink() or not output.is_dir():
-        raise ValueError("Dataset must be a real directory: " + str(output))
+        return report("not_a_directory", "Dataset must be a real directory"), None
     expected_names = {a["filename"] for a in manifest["assets"]} | {"manifest.json"}
-    if {p.name for p in output.iterdir()} != expected_names:
-        raise ValueError("Dataset has missing or unexpected files: " + str(output))
+    present = {p.name for p in output.iterdir()}
+    if present != expected_names:
+        missing = sorted(expected_names - present)
+        unexpected = sorted(present - expected_names)
+        return report("unexpected_contents", "Dataset has missing or unexpected files"
+                      + ("; missing: " + ", ".join(missing) if missing else "")
+                      + ("; unexpected: " + ", ".join(unexpected) if unexpected else "")), None
     if (output / "manifest.json").is_symlink():
-        raise ValueError("Dataset manifest must not be a symlink")
+        return report("symlink", "Dataset manifest must not be a symlink"), None
     if json.loads((output / "manifest.json").read_text()) != manifest:
-        raise ValueError("Dataset manifest does not match requested dataset")
-    for asset in manifest["assets"]:
-        path = output / asset["filename"]
-        if path.is_symlink():
-            raise ValueError("Dataset assets must not be symlinks")
-        validate_file(path, expected_sha256=asset["sha256"], expected_size=asset["size_bytes"])
-    return output
+        return report("manifest_mismatch", "Dataset manifest does not match requested dataset"), None
+    symlinked = sorted(a["filename"] for a in manifest["assets"]
+                       if (output / a["filename"]).is_symlink())
+    if symlinked:
+        return report("symlink", "Dataset assets must not be symlinks: "
+                      + ", ".join(symlinked)), None
+
+    inspection = inspect_files(str(output), {
+        a["filename"]: dict(expected_sha256=a["sha256"], expected_size=a["size_bytes"])
+        for a in manifest["assets"]})
+    files = {name: dict(status=inspected.status, verified=inspected.verified)
+             for name, inspected in inspection.files.items()}
+    unverified = sorted(name for name, inspected in inspection.files.items()
+                        if not inspected.verified)
+    if unverified:
+        return report(inspection.status, "Assets failed verification: "
+                      + ", ".join("%s (%s)" % (name, files[name]["status"])
+                                  for name in unverified), files), inspection
+    return report("available", "Every asset matched its recorded digest and size",
+                  files), inspection
+
+
+def inspect_dataset(output, manifest=None):
+    """Report a materialized dataset's condition offline, without raising.
+
+    Returns ``{"path", "status", "verified", "files", "detail"}``. ``status`` is
+    ``"available"`` only when every asset's digest and size were checked and
+    matched; otherwise it names what is wrong, and ``detail`` says it in prose.
+    ``files`` maps each asset to datacache's per-file ``status``/``verified``.
+
+    Structural problems are checked here rather than delegated: datacache's
+    ``inspect_files`` follows symlinks and only looks at the inventory it is
+    given, so on its own it would call a symlinked asset available and would
+    never notice an extra file.
+    """
+    manifest = load_manifest() if manifest is None else manifest
+    return _inspect_dataset(Path(output), manifest)[0]
+
+
+def verify_dataset(output, manifest=None):
+    """Validate a materialized dataset offline, without repair or cache writes.
+
+    Raises on the first problem, so callers that only care whether the dataset
+    is usable keep one failure path. ``inspect_dataset`` reports the same
+    findings without raising.
+    """
+    manifest = load_manifest() if manifest is None else manifest
+    report, inspection = _inspect_dataset(Path(output), manifest)
+    if report["status"] == "available":
+        return Path(output)
+    if inspection is not None:
+        # Re-raise datacache's own error so callers keep distinguishing a
+        # corrupt asset (FileValidationError) from an absent one.
+        for inspected in inspection.files.values():
+            if inspected.error is not None:
+                raise inspected.error
+    raise ValueError("%s: %s" % (report["detail"], output))
 
 
 def _publish_no_replace(staged, output):
@@ -128,12 +206,15 @@ def _publish_no_replace(staged, output):
 
 
 def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
-                       cache_root=None, offline=False, repair_cache=False):
+                       cache_root=None, offline=False, repair_cache=False,
+                       show_progress=False, timeout=60, max_retries=2):
     """Export the Sid retrieval cases, or fetch an explicitly supplied custom manifest.
 
     Existing output directories are only validated, never overwritten. Failed
     downloads leave verified cache objects reusable but do not publish output.
     ``repair_cache`` explicitly permits replacing invalid cached objects.
+    ``show_progress`` draws datacache's download progress; ``timeout`` and
+    ``max_retries`` bound each request.
     """
     if offline and repair_cache:
         raise ValueError("Offline mode cannot repair the download cache")
@@ -147,26 +228,24 @@ def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
         verify_dataset(bundled, manifest)
         paths = {asset["filename"]: bundled / asset["filename"] for asset in manifest["assets"]}
     else:
-        root = cache_root or os.environ.get(CACHE_ENVIRONMENT) or get_data_dir(CACHE_NAMESPACE)
-        cache = Cache(CACHE_NAMESPACE, cache_root=Path(root) / "objects" / "sha256")
+        root = cache_root_for(cache_root)
+        cache = Cache(CACHE_NAMESPACE, cache_root=root / "objects" / "sha256")
         paths = {}
         for asset in manifest["assets"]:
             name = cache_filename(asset)
             expected = dict(expected_sha256=asset["sha256"], expected_size=asset["size_bytes"])
+            # Inspection never downloads, creates directories or repairs files,
+            # so it is the read-only probe both branches below need.
+            cached = cache.inspect(filename=name, **expected)
             if offline:
-                path = cache.local_path(filename=name)
-                validate_file(path, **expected)
+                if cached.error is not None:
+                    raise cached.error
+                path = cached.path
             else:
-                force = False
-                if repair_cache:
-                    try:
-                        validate_file(cache.local_path(filename=name), **expected)
-                    except FileValidationError:
-                        force = True
-                    except FileNotFoundError:
-                        pass
-                path = cache.fetch(asset["url"], filename=name, timeout=60,
-                                   force=force, **expected)
+                path = cache.fetch(asset["url"], filename=name, timeout=timeout,
+                                   force=repair_cache and cached.status == "corrupt",
+                                   show_progress=show_progress,
+                                   max_retries=max_retries, **expected)
             paths[asset["filename"]] = Path(path)
     if output is None:
         return paths
@@ -190,28 +269,63 @@ def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST,
+                        help="Custom test-data manifest; omit for the Sid retrieval cases")
     parser.add_argument("--output", type=Path, help="New directory to export, or an existing identical dataset to verify")
-    parser.add_argument("--cache-root", type=Path, help="Shared OpenVax cache root (or OPENVAX_DATA_CACHE)")
+    parser.add_argument("--cache-root", type=Path,
+                        help="Shared OpenVax cache root (else OSTEOSARC_CACHE, OPENVAX_DATA_CACHE, the platform cache)")
     parser.add_argument("--offline", action="store_true", help="Use verified local objects only; never access the network")
     parser.add_argument("--repair-cache", action="store_true", help="Explicitly refetch invalid cached objects")
     parser.add_argument("--verify-only", action="store_true", help="Validate --output without fetching or touching the cache")
+    parser.add_argument("--progress", action="store_true", help="Show download progress for custom manifests")
+    parser.add_argument("--timeout", type=float, default=60, help="Seconds allowed per request (default: 60)")
+    parser.add_argument("--max-retries", type=int, default=2, help="Retries per failed request (default: 2)")
     args = parser.parse_args(argv)
     if args.verify_only and (args.output is None or args.repair_cache):
         parser.error("--verify-only requires --output and cannot repair the cache")
+
+    report = dict(dataset=None, data_version=None, assets=None,
+                  action="verify" if args.verify_only else "export",
+                  status="unavailable", output=None, cached_paths=None,
+                  files={}, error=None)
+
+    def emit(code):
+        """One JSON object on stdout whatever happened; exit non-zero on failure.
+
+        Success returns normally so importing callers of ``main`` do not have to
+        catch ``SystemExit`` for the good case.
+        """
+        print(json.dumps(report, indent=2, sort_keys=True))
+        if code:
+            parser.exit(code)
+
     try:
         manifest = load_manifest(args.manifest, offline=args.offline or args.verify_only)
+        report.update(dataset=manifest["dataset"], data_version=manifest["data_version"],
+                      assets=len(manifest["assets"]))
         if args.verify_only:
-            result = verify_dataset(args.output, manifest)
-        else:
-            result = download_test_data(args.output, manifest_path=args.manifest,
-                cache_root=args.cache_root, offline=args.offline, repair_cache=args.repair_cache)
+            inspected = inspect_dataset(args.output, manifest)
+            report.update(status=inspected["status"], output=inspected["path"],
+                          files=inspected["files"],
+                          error=None if inspected["verified"] else inspected["detail"])
+            return emit(0 if inspected["verified"] else 1)
+        result = download_test_data(
+            args.output, manifest_path=args.manifest, cache_root=args.cache_root,
+            offline=args.offline, repair_cache=args.repair_cache,
+            show_progress=args.progress, timeout=args.timeout,
+            max_retries=args.max_retries)
     except (OSError, ValueError, FileValidationError, OsteosarcError) as error:
-        parser.exit(1, "Test data unavailable: %s\n" % error)
-    print(json.dumps(dict(dataset=manifest["dataset"], data_version=manifest["data_version"],
-        assets=len(manifest["assets"]), output=str(result) if isinstance(result, Path) else None,
-        cached_paths={k: str(v) for k, v in result.items()} if isinstance(result, dict) else None), indent=2))
+        report["error"] = "Test data unavailable: %s" % error
+        return emit(1)
+    if args.output is None:
+        report.update(status="cached", cached_paths={k: str(v) for k, v in result.items()})
+    else:
+        inspected = inspect_dataset(result, manifest)
+        report.update(status=inspected["status"], output=inspected["path"],
+                      files=inspected["files"])
+    return emit(0)
 
 
 if __name__ == "__main__":
