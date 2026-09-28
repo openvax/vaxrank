@@ -1,11 +1,12 @@
 # Releasing Vaxrank
 
-This document explains what to do once your [Pull Request](https://www.atlassian.com/git/tutorials/making-a-pull-request/) has been reviewed and all final changes applied. Now you're ready to merge your branch into main and release it to the world:
+Use Python 3.10 or newer. Set `PYTHON` to the environment used for lint and
+tests so the release uses the same dependencies. The package reads README.md
+directly as Markdown; Pandoc and pypandoc are not required.
 
-0. Make sure that you have `pandoc` and `pypandoc` installed: this is needed for readme markdown on PyPI. (See [here](http://pandoc.org/installing.html) and [here](https://pypi.python.org/pypi/pypandoc), respectively, for instructions.)
-1. Bump the [version](http://semver.org/) in `vaxrank/version.py`, as part of the PR you want to release.
-2. Merge your branch into main, check out main, and pull the merge.
-3. Run `./deploy.sh`. It uses one Python environment for lint, tests, build,
+1. Bump the version in `vaxrank/version.py` as part of the PR, including for documentation-only changes.
+2. After lint, tests and GitHub CI pass, merge the PR, check out main, and pull the merge. Confirm the working tree is clean.
+3. Run `./deploy.sh` without a version argument. It uses one Python environment for lint, tests, build,
    and upload; verifies every published artifact by SHA-256; and pushes the
    release tag only after PyPI contains the complete matching release.
 
