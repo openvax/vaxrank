@@ -126,10 +126,14 @@ def test_no_junction_cli_does_not_initialize_selected_model(tmp_path, monkeypatc
                         'prediction': None, 'policy': 'none'}
 
 
-def test_explicit_optimization_without_model_fails_through_cli(tmp_path, monkeypatch):
+def test_explicit_optimization_without_model_fails_through_cli(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(ep, 'mhc_binding_predictor_from_args', forbidden)
-    with pytest.raises(ValueError, match='requires --mrna-junction-predictor'):
+    # Through the CLI this is reported as one line and a non-zero exit rather
+    # than a traceback (openvax/vaxrank#457); the wording is what matters.
+    with pytest.raises(SystemExit) as exit_info:
         run_external(tmp_path, 'missing-model', ['--mrna-optimize-linkers'])
+    assert exit_info.value.code == 1
+    assert 'requires --mrna-junction-predictor' in capsys.readouterr().err
 
 
 def external_args(*extra):

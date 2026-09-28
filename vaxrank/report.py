@@ -980,7 +980,19 @@ def _pdf_via_pdfkit(html_path, pdf_report_path):
 
 
 def _pdf_via_weasyprint(html_path, pdf_report_path):
-    import weasyprint
+    try:
+        import weasyprint
+    except (ImportError, OSError) as error:
+        # WeasyPrint loads Pango/Cairo through ctypes at import, so a machine
+        # without them raises a dlopen failure from inside cffi. The fix is
+        # known -- test.sh and AGENTS.md both carry it -- so say it here rather
+        # than printing the loader's stack.
+        raise ValueError(
+            "The weasyprint PDF backend needs Pango and Cairo: %s. On macOS "
+            "with Homebrew, export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib "
+            "(./test.sh and ./deploy.sh do this already); on Debian or Ubuntu "
+            "install libpango-1.0-0 and libpangocairo-1.0-0. Or run with "
+            "--pdf-backend pdfkit." % error) from error
     doc = weasyprint.HTML(filename=html_path)
     doc.write_pdf(pdf_report_path)
 
@@ -1184,7 +1196,16 @@ def make_csv_report(
         frames[sheet_name] = df
 
     if not frames:
-        logger.info('No data for CSV or XLSX report')
+        # The paths were explicitly requested and no file will appear, so this
+        # is a warning naming them rather than an INFO line about "no data":
+        # an empty VCF used to exit 0 having written nothing an operator asked
+        # for, with only a quiet note about it.
+        requested = [str(p) for p in (csv_report_path, excel_report_path) if p]
+        logger.warning(
+            'No vaccine peptides passed filtering, so nothing was written to '
+            '%s. An empty input, or one whose variants were all filtered out, '
+            'produces no rows.',
+            ', '.join(requested) or 'the CSV/XLSX report')
         return
 
     all_dfs = pd.concat(frames.values())
