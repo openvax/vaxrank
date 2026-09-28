@@ -45,6 +45,7 @@ from .vaccine_config_args import (
     manufacturability_config_from_args, vaccine_config_from_args,
 )
 from ..config import load_vaxrank_config
+from .errors import USER_ERRORS, exit_with_user_error
 
 from ..core_logic import run_vaxrank
 from ..epitope_io import (
@@ -1090,7 +1091,7 @@ def resolve_ensembl_release(args):
         logger.info("Using Ensembl release %d", ensembl_release)
 
 
-def main(args_list=None):
+def run_cli(args_list=None):
     """
     Rank personalized cancer neoantigens from somatic variants + tumor
     RNA (or a pre-computed LENS / pVACseq report) and emit the ranked
@@ -1457,6 +1458,20 @@ def main(args_list=None):
                 vaccine_constructions, include_manufacturability=None),
             args.output_ascii_report, args.output_html_report,
             args.output_pdf_report)
+
+
+def main(args_list=None):
+    """Console-script entry point: run the CLI, reporting mistakes as one line.
+
+    argparse already exits with a single line for the choices it validates.
+    This gives vaxrank's own validation and its input loading the same manners
+    instead of ending in a traceback (openvax/vaxrank#457). ``run_cli`` above
+    carries the usage documentation.
+    """
+    try:
+        return run_cli(args_list)
+    except USER_ERRORS as error:
+        exit_with_user_error(error, args_list)
 
 
 def run_vaxrank_from_parsed_args(args):

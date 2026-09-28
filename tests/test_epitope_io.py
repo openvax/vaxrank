@@ -2593,21 +2593,25 @@ def test_lens_cli_writes_ascii_report():
     assert "Vaccine antigens:" in text
 
 
-def test_lens_cli_errors_when_template_report_missing_ensembl_release():
+def test_lens_cli_errors_when_template_report_missing_ensembl_release(capsys):
     """Pre-flight check: external input + template-report flag with
     no --ensembl-release must fail fast (was a late warning that
     silently degraded reports to empty effect annotations)."""
     import pytest
     from vaxrank.cli.entry_point import main
     lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
-    with pytest.raises(ValueError, match="--ensembl-release"):
+    # Reported as one line and a non-zero exit rather than a traceback
+    # (openvax/vaxrank#457); the message is what still matters.
+    with pytest.raises(SystemExit) as exit_info:
         main([
             "--input-lens", lens_path,
             "--output-ascii-report", "/tmp/should-not-be-written.txt",
         ])
+    assert exit_info.value.code == 1
+    assert "--ensembl-release" in capsys.readouterr().err
 
 
-def test_lens_cli_errors_when_no_output_flag_set():
+def test_lens_cli_errors_when_no_output_flag_set(capsys):
     """Running ``vaxrank --input-lens FILE`` with no --output-* flag
     must fail fast — every output is opt-in via its own flag and the
     earlier behavior (run to completion, write nothing, log a quiet
@@ -2615,8 +2619,10 @@ def test_lens_cli_errors_when_no_output_flag_set():
     import pytest
     from vaxrank.cli.entry_point import main
     lens_path = os.path.join(DATA_DIR, "lens_example.tsv")
-    with pytest.raises(ValueError, match="No output path specified"):
+    with pytest.raises(SystemExit) as exit_info:
         main(["--input-lens", lens_path])
+    assert exit_info.value.code == 1
+    assert "No output path specified" in capsys.readouterr().err
 
 
 def test_neoepitope_core_row_shared_contract():
