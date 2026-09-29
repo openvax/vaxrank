@@ -4,25 +4,26 @@ numpy>=2.0.0,<3.0.0
 # The 1.11.1 floor is what inspect_files/Cache.inspect need: download_test_data
 # reports a per-file status (available/missing/corrupt/inaccessible) instead of
 # only raising, and 1.11.1 is the release that shortens over-long cache names.
-datacache>=1.11.1,<2.0.0
+datacache>=1.14.0,<2.0.0
 # Public data acquisition and original-read extraction for the osteosarc corpus.
-osteosarc>=0.14.0,<0.15
+osteosarc>=0.14.4,<0.15
 pandas>=2.1.4,<3.0.0
-pyensembl>=2.6.4,<3.0.0
+pyensembl>=2.16.0,<3.0.0
 # 10.4.1 ranks structural candidate sets that list themselves as candidates
 # without recursing, which DNA fallback relies on when comparing fusion outcomes.
 # Varcode 10 also supplies candidate-local SV sequence-change checks, including
 # partial proteins and uncertain selenocysteine decoding.
-varcode>=10.4.1,<11.0.0
+varcode>=10.9.0,<11.0.0
 # 1.33.0 accepts matched germline variants (--germline-vcf), which Vaxrank
 # passes through. The fusion adapter reads isovar.fusion_rna.v3, which 1.37.0
 # introduced (RNA support as one record, junction direct_support); 1.38 and
 # 1.39 keep that schema. A later schema needs the adapter to follow, so stay
-# below the next minor release. 1.39.5 is the first release compatible
-# with the Osteosarc 0.14 window required above.
-isovar>=1.39.5,<1.40.0
+# below the next minor release. 1.39.10 fixes the full-source Sid adaptive
+# alignment merge crash (#415); 1.39.11 also excludes third-allele mate
+# conflicts from phasing (#419). Both issue numbers refer to Isovar.
+isovar>=1.39.11,<1.40.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
-mhcgnomes>=3.33.5,<4.0.0
+mhcgnomes>=3.64.4,<4.0.0
 # 3.41.0 supplies mhctools.cleavage (CleavageInput/CleavageModel/CleavageResult/
 # CleavageSite) and mhctools.peptidases.get_cleavage_model, which the Pepsickle
 # cleavage-profile integration uses directly. It also satisfies the separate
@@ -35,11 +36,11 @@ mhcgnomes>=3.33.5,<4.0.0
 # tests/test_cleavage_profile.py, tests/test_cleavage_report.py) pass these
 # fields, so importing them against an older mhctools raises TypeError for an
 # unexpected keyword argument, not just a validation gap.
-mhctools>=3.44.0,<4.0.0
+mhctools>=3.44.64,<4.0.0
 # 5.82.0 is the first release compatible with Osteosarc 0.14. It includes
 # context-correct cached scans, presentation metrics and conflict checks in
 # the DSL used for scoring. Keep these floors aligned when Osteosarc moves.
-topiary>=5.82.0,<6.0.0
+topiary>=5.86.1,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0
@@ -56,7 +57,7 @@ dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
 # oncoref is the direct authority for HPA-backed CTA identity and the full
 # candidate CTA universe. Keep this reference pin aligned with PirlyGenes.
-oncoref==1.8.194
+oncoref==1.8.206
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
 # of predictor_version strings. Always pulled in transitively via setuptools
 # / pip, but pinned explicitly so minimal / --no-deps installs don't break
