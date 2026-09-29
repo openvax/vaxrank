@@ -50,6 +50,7 @@ from .errors import USER_ERRORS, exit_with_user_error
 
 from ..core_logic import run_vaxrank
 from ..epitope_io import (
+    ensure_parent_dir,
     save_predictions,
     write_neoepitope_report,
 )
@@ -1562,6 +1563,7 @@ def run_vaxrank_from_parsed_args(args):
 
     if args.output_isovar_csv:
         df = isovar_results_to_dataframe(isovar_results)
+        ensure_parent_dir(args.output_isovar_csv)
         df.to_csv(args.output_isovar_csv, index=False)
 
     vaxrank_results = run_vaxrank(
@@ -1644,6 +1646,7 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
             gene_pathway_check=GenePathwayCheck(),
             dna_vaf_by_variant=dna_vaf_by_variant)
         df = pd.DataFrame(variant_metadata_dicts)
+        ensure_parent_dir(args.output_passing_variants_csv)
         df.to_csv(args.output_passing_variants_csv, index=False)
 
     ranked_variants_with_vaccine_peptides = vaxrank_results.ranked_vaccine_peptides
@@ -1678,12 +1681,18 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
         'args': vars(args),
         'dna_vaf_by_variant': dna_vaf_by_variant,
     }
-    logger.info('About to save args: %s', data['args'])
+    # Console-level summary of the resolved arguments already went out
+    # through ``log_args_summary``; keep the raw namespace at DEBUG so
+    # it lands in --log-path for provenance without dumping a ~110-key
+    # dict (including the internal ``_parser_defaults`` snapshot) into
+    # the operator's terminal.
+    logger.debug('Saving args: %s', data['args'])
 
     # save JSON data if necessary. as of time of writing, vaxrank takes ~25 min to run,
     # most of which is core logic. the formatting is super fast, and it can
     # be useful to save the data to be able to iterate just on the formatting
     if args.output_json_file:
+        ensure_parent_dir(args.output_json_file)
         with open(args.output_json_file, 'w') as f:
             # ``ignore_nan=True`` is defense in depth — producers should
             # be coercing NaN/Inf to None before reaching the writer
