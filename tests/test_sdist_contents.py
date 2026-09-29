@@ -9,11 +9,13 @@ import tarfile
 import zipfile
 
 import osteosarc
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.shared_read_cache
 def test_distributions_include_the_sid_recipe_and_no_reads(tmp_path):
     result = subprocess.run([
         sys.executable, "setup.py", "--quiet", "sdist", "--dist-dir", str(tmp_path),

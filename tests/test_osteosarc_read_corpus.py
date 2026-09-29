@@ -21,7 +21,7 @@ SPEC.loader.exec_module(corpus)
 
 
 @pytest.fixture(autouse=True)
-def offline_corpus_tests(monkeypatch, tmp_path):
+def offline_corpus_tests(monkeypatch, tmp_path, isolate_shared_read_cache):
     def forbidden(*args, **kwargs):
         raise AssertionError("Corpus regressions must not access the network")
 
