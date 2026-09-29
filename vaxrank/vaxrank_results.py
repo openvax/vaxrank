@@ -71,7 +71,7 @@ class VaxrankResults(DataclassSerializable):
             v['is_coding_nonsynonymous'] and v['rna_support']
             for v in variant_properties)
         counts_dict['num_variants_with_vaccine_peptides'] = sum(
-            v['is_coding_nonsynonymous'] and v['rna_support'] and v['has_vaccine_peptide']
+            v['has_vaccine_peptide']
             for v in variant_properties)
         return counts_dict
 
@@ -89,8 +89,9 @@ class VaxrankResults(DataclassSerializable):
         Returns
         -------
         list of dictionaries containing properties we want to analyze later,
-        e.g. whether this variant is part of a pathway of interest,
-        is a strong MHC binder, etc.
+        including coding effect, RNA support, variant allele fractions, and
+        whether any vaccine peptide was produced. Binding status is not
+        inferred from the presence or absence of a vaccine peptide.
         """
         dna_vaf_by_variant = dna_vaf_by_variant or {}
         variant_properties_list = []
@@ -117,11 +118,8 @@ class VaxrankResults(DataclassSerializable):
                 ('rna_vaf', rna_vaf),
             ))
 
-            # TODO:
-            #  compute MHC binder status for variants that don't have RNA support
-            variant_dict['mhc_binder'] = \
-                variant_dict["has_vaccine_peptide"] = \
-                    variant in self.variant_to_vaccine_peptides_dict
+            variant_dict["has_vaccine_peptide"] = bool(
+                self.variant_to_vaccine_peptides_dict.get(variant))
 
             if gene_pathway_check is not None:
                 pathway_dict = gene_pathway_check.make_variant_dict(variant)
