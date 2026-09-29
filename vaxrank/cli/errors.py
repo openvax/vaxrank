@@ -30,6 +30,7 @@ import sys
 import traceback
 
 from mhcgnomes.errors import ParseError as AlleleParseError
+from msgspec import DecodeError
 
 
 logger = logging.getLogger(__name__)
@@ -37,9 +38,9 @@ logger = logging.getLogger(__name__)
 
 # Exception classes an ordinary mistake in the inputs can legitimately cause.
 #
-# msgspec's ValidationError and DecodeError are ValueError subclasses, so a
-# typo'd or mistyped --config key is already covered here; listing them
-# separately would only suggest they are not.
+# Older supported msgspec releases do not derive DecodeError (and its
+# ValidationError subclass) from ValueError. Catch it explicitly across the
+# supported range so invalid configuration has the same CLI behavior.
 #
 # A bug inside vaxrank that raises one of these is reported the same way, which
 # is the cost of this approach and why the traceback stays recoverable. Anything
@@ -49,6 +50,7 @@ USER_ERRORS = (
     OSError,
     ValueError,
     AlleleParseError,
+    DecodeError,
 )
 
 

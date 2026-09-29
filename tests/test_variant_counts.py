@@ -10,9 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Regression tests for VaxrankResults.variant_counts() — pins the
-nested-subset invariant described by the patient-info report labels
-(total ⊇ coding ⊇ coding+RNA ⊇ coding+RNA+ligand)."""
+"""Variant summaries count produced peptides independently of RNA support."""
 
 from types import SimpleNamespace
 
@@ -43,7 +41,7 @@ def _isovar_result(*, coding, rna, gene_name="GENE1"):
 def _results(isovar_results, variants_with_peptides=()):
     return VaxrankResults(
         isovar_results=isovar_results,
-        variant_to_vaccine_peptides_dict={v: [] for v in variants_with_peptides},
+        variant_to_vaccine_peptides_dict={v: [object()] for v in variants_with_peptides},
         ranked_vaccine_peptides=[],
     )
 
@@ -86,3 +84,22 @@ def test_variant_counts_empty():
         "num_variants_with_rna_support": 0,
         "num_variants_with_vaccine_peptides": 0,
     }
+
+
+def test_dna_only_vaccine_peptides_are_counted_without_rna_support():
+    variant, result = _isovar_result(coding=True, rna=False)
+    results = _results([result], variants_with_peptides=[variant])
+    counts = results.variant_counts()
+    assert counts["num_variants_with_rna_support"] == 0
+    assert counts["num_variants_with_vaccine_peptides"] == 1
+    properties, = results.variant_properties()
+    assert properties["has_vaccine_peptide"] is True
+    assert "mhc_binder" not in properties
+
+
+def test_empty_peptide_lists_are_not_counted_as_vaccine_results():
+    variant, result = _isovar_result(coding=True, rna=True)
+    results = _results([result])
+    results.variant_to_vaccine_peptides_dict[variant] = []
+    assert results.variant_counts()["num_variants_with_vaccine_peptides"] == 0
+    assert results.variant_properties()[0]["has_vaccine_peptide"] is False

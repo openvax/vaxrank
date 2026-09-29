@@ -569,7 +569,7 @@ def generate_mutation_figures(
     if missing:
         raise ValueError("Isovar CSV is missing required columns: %s" % ", ".join(missing))
     if variants:
-        search = dataframe.astype(str).apply(
+        search = dataframe.astype("string").fillna("").apply(
             lambda row: " ".join(row.values).lower(), axis=1)
         keep = pd.Series(False, index=dataframe.index)
         for query in variants:

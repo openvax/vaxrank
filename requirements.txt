@@ -7,21 +7,22 @@ numpy>=2.0.0,<3.0.0
 datacache>=1.14.0,<2.0.0
 # Public data acquisition and original-read extraction for the osteosarc corpus.
 osteosarc>=0.14.4,<0.15
-pandas>=2.1.4,<3.0.0
+pandas>=2.1.4,<4.0.0
 pyensembl>=2.16.0,<3.0.0
 # 10.4.1 ranks structural candidate sets that list themselves as candidates
 # without recursing, which DNA fallback relies on when comparing fusion outcomes.
 # Varcode 10 also supplies candidate-local SV sequence-change checks, including
 # partial proteins and uncertain selenocysteine decoding.
-varcode>=10.9.0,<11.0.0
+varcode>=10.10.2,<11.0.0
 # 1.33.0 accepts matched germline variants (--germline-vcf), which Vaxrank
 # passes through. The fusion adapter reads isovar.fusion_rna.v3, which 1.37.0
 # introduced (RNA support as one record, junction direct_support); 1.38 and
 # 1.39 keep that schema. A later schema needs the adapter to follow, so stay
 # below the next minor release. 1.39.10 fixes the full-source Sid adaptive
 # alignment merge crash (#415); 1.39.11 also excludes third-allele mate
-# conflicts from phasing (#419). Both issue numbers refer to Isovar.
-isovar>=1.39.11,<1.40.0
+# conflicts from phasing (#419). 1.39.13 carries directional calibration and
+# preserves run thresholds in downstream adapters. Issue numbers refer to Isovar.
+isovar>=1.39.13,<1.40.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.64.4,<4.0.0
 # 3.41.0 supplies mhctools.cleavage (CleavageInput/CleavageModel/CleavageResult/

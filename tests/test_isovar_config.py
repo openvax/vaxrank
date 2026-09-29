@@ -30,6 +30,7 @@ def run_config(monkeypatch, tmp_path):
     def capture(**kwargs):
         captured["creator"] = kwargs["protein_sequence_creator"]
         captured["germline_variants"] = kwargs["germline_variants"]
+        captured["phasing"] = {k: v for k, v in kwargs.items() if "phasing" in k}
         return []
 
     monkeypatch.setattr(entry_point, "run_isovar", capture)
@@ -44,6 +45,7 @@ def run_config(monkeypatch, tmp_path):
         args = make_vaxrank_arg_parser().parse_args(options + list(flags))
         result = run_vaxrank_from_parsed_args(args)
         run.germline_variants = captured["germline_variants"]
+        run.phasing = captured["phasing"]
         return args, captured["creator"], result
 
     return run
@@ -232,3 +234,18 @@ def test_germline_vcf_reaches_isovar(run_config, monkeypatch, tmp_path):
     run_config()
     assert run_config.germline_variants is None
 
+
+
+
+def test_directional_phasing_calibration_reaches_isovar(run_config, monkeypatch, tmp_path):
+    from varcode import Variant
+    from vaxrank.cli import entry_point
+    variant = Variant("1", 123, "A", "G")
+    monkeypatch.setattr(entry_point, "variant_collection_from_args", lambda args: [variant])
+    profile = tmp_path / "rates.json"
+    profile.write_text(json.dumps([dict(contig="1", start=123, ref="A", alt="G",
+                                       ref_to_alt=0.1, alt_to_ref=0.02)]))
+    run_config(["--phasing-error-rate", "0.03", "--max-p-value-for-phasing", "0.01",
+                "--phasing-error-rates", str(profile)])
+    assert run_config.phasing == dict(phasing_error_rate=0.03, max_p_value_for_phasing=0.01,
+                                     phasing_error_rates={variant: (0.1, 0.02)})
