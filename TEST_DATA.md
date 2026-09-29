@@ -144,6 +144,33 @@ answers "is it usable". Both check structure that datacache cannot express:
 `inspect_files` follows symlinks and inspects only the inventory it is handed,
 so it would accept a symlinked asset and never notice an extra file.
 
+## Test cache environments
+
+Before each test, an autouse fixture clears `OSTEOSARC_CACHE` and
+`OPENVAX_DATA_CACHE`. Cache precedence tests set the variables they need with
+`monkeypatch.setenv`; those changes are restored after the test. This keeps a
+developer's shell and CI's configured shared-read cache from changing unit-test
+behavior.
+
+Tests that reopen the real openvax-v1 cache, including installed-package tests,
+opt in with `@pytest.mark.shared_read_cache`. They inherit the caller's cache
+settings. Sid fixture materialization during collection also uses that cache;
+tests that only read the resulting temporary files need no opt-in. An autouse
+fixture that sets its own shared-read cache should depend on
+`isolate_shared_read_cache` so its explicit settings run after isolation.
+
+To exercise the suite with CI-style shared-read cache settings:
+
+```bash
+OSTEOSARC_CACHE="$PWD/.ci-cache/osteosarc" \
+OPENVAX_DATA_CACHE="$PWD/.ci-cache/fallback" ./test.sh
+```
+
+The first run may fetch openvax-v1 into the configured cache. Ensembl data and
+reference-peptide caches (`PYENSEMBL_CACHE_DIR` and `VAXRANK_REF_PEPTIDES_DIR`)
+remain separate integration inputs, as in CI. Tests of their routing must set
+or clear the relevant variable explicitly.
+
 ## Changing the recipe
 
 The allowlist stores alignment digests, order and multiplicity, not read bases.

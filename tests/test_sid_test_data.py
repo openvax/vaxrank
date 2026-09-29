@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RECIPE = recipe_directory()
 
 
+@pytest.mark.shared_read_cache
 def test_test_data_has_only_the_explicit_required_read_records(tmp_path):
     root = sid_test_data()
     provenance = json.loads((root / "provenance.json").read_text())
@@ -72,6 +73,7 @@ def test_test_data_has_only_the_explicit_required_read_records(tmp_path):
             assert len({(r.get_tag("RG") if r.has_tag("RG") else "", r.query_name) for r in bam}) == 1
 
 
+@pytest.mark.shared_read_cache
 def test_build_is_offline_once_the_reads_are_cached(tmp_path, monkeypatch):
     sid_test_data()  # downloads openvax-v1 into the osteosarc cache if needed
     def forbidden(*args, **kwargs):
@@ -89,6 +91,7 @@ def test_build_is_offline_once_the_reads_are_cached(tmp_path, monkeypatch):
     assert variant.allele == ("chr2", 209694768, "CCTGGGCTACTGTGTGTTCAATA", "C")
 
 
+@pytest.mark.shared_read_cache
 def test_packaged_cohorts_are_their_openvax_v1_members(monkeypatch):
     """Every built cohort holds exactly its bundle member's records.
 

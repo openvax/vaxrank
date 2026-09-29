@@ -18,6 +18,14 @@ import pytest
 import shutil
 
 
+@pytest.fixture(autouse=True)
+def isolate_shared_read_cache(request, monkeypatch):
+    """Tests declare their cache environment unless they use the real bundle."""
+    if request.node.get_closest_marker("shared_read_cache") is None:
+        for name in ("OSTEOSARC_CACHE", "OPENVAX_DATA_CACHE"):
+            monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture(scope="session")
 def mouse_genome():
     """Lazy session-scoped pyensembl GRCm38 handle.
@@ -46,6 +54,9 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "requires_netmhcpan: marks tests that require NetMHCpan"
+    )
+    config.addinivalue_line(
+        "markers", "shared_read_cache: use the caller's configured openvax-v1 cache"
     )
 
 
