@@ -46,8 +46,12 @@ def test_typed_evidence_and_config_roundtrip(suffix, tmp_path):
     path = tmp_path / ('native.' + suffix)
     dataset.save(path)
     loaded = EpitopeDataset.load(path)
+    before = dataset.result.df.astype(object)
+    after = loaded.result.df[before.columns].astype(object)
+    # Pandas versions choose different null sentinels for table strings.
+    # Compare their meaning, retaining the distinction from '' and zero.
     pd.testing.assert_frame_equal(
-        loaded.result.df[dataset.result.df.columns], dataset.result.df, check_dtype=False)
+        after.where(after.notna(), None), before.where(before.notna(), None))
     assert loaded.result.extra == dataset.result.extra
     assert loaded.config == dataset.config
     assert [to_native_json(e) for e in loaded.epitopes] == [to_native_json(e) for e in dataset.epitopes]
