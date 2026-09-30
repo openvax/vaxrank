@@ -41,7 +41,7 @@ from mhctools.cli import (
 )
 
 from .arg_parser import parse_vaxrank_args, check_args
-from .epitope_config_args import epitope_config_from_args
+from .epitope_config_args import epitope_config_from_args, has_epitope_config_overrides
 from .vaccine_config_args import (
     manufacturability_config_from_args, vaccine_config_from_args,
 )
@@ -292,6 +292,11 @@ def emit_external_neoepitope_report(
     allele) neoepitope CSV / XLSX. Independent from the modality
     dispatch — these are *report* outputs, not vaccine-design outputs.
     """
+    dataset = report_df.attrs.get('epitope_dataset') if report_df is not None else None
+    if dataset is not None:
+        epitope_config = dataset.config
+    if getattr(args, 'output_epitopes', ''):
+        save_predictions(epitopes, args.output_epitopes, dataset=dataset)
     if report_df is None or report_df.empty:
         return
     write_neoepitope_report(
@@ -302,8 +307,6 @@ def emit_external_neoepitope_report(
         csv_report_path=getattr(args, 'output_csv', '') or None,
         epitope_config=epitope_config,
     )
-    if getattr(args, 'output_epitopes', ''):
-        save_predictions(epitopes, args.output_epitopes)
 
 
 def _resolve_axis(args, per_type_attr, shared_attr, fallback):
@@ -1201,11 +1204,15 @@ def run_cli(args_list=None):
     if (
             getattr(args, 'input_pvacseq', None)
             or getattr(args, 'input_lens', None)
+            or getattr(args, 'input_epitopes', None)
+            or getattr(args, 'input_topiary', None)
             or getattr(args, 'external_input', None)
             or getattr(args, 'input_manifest', None)):
         merged_config = load_vaxrank_config(args)
         epitope_config = epitope_config_from_args(
             args, merged_config=merged_config)
+        if not has_epitope_config_overrides(args, merged_config):
+            epitope_config = None  # Use a saved input policy, or the ordinary defaults.
         # ``vaccine_peptides:`` config used to be resolved only inside
         # ``run_vaxrank_from_parsed_args`` — the pipeline-only entry point —
         # so peptide length, epitope retention, the combined-score
@@ -1237,6 +1244,9 @@ def run_cli(args_list=None):
         else:
             (ranked_variants_with_vaccine_peptides, report_df,
              predictions, patient_info, external_dna_vaf) = loaded
+            if (report_df.attrs.get('saved_evidence_input')
+                    and '--processing-aware-annotation' not in args_list):
+                args.processing_aware_annotation = False
             # Mirror the pipeline path's ``data['dna_vaf_by_variant']``
             # so the shared template-report block picks it up.
             data['dna_vaf_by_variant'] = external_dna_vaf

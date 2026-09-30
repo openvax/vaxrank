@@ -444,7 +444,10 @@ explains original-score ranking, common-model prediction, and context limits.
 | Flag | Input format |
 |---|---|
 | `--input-manifest PATH` | YAML/JSON report list with shared patient/reference/genotype declarations and per-input sample/library metadata |
-| `--external-input FORMAT=PATH` | LENS or pVACseq; repeated inputs require declared compatible scope, usually supplied through a manifest |
+| `--external-input FORMAT=PATH` | `lens`, `pvacseq`, `topiary` or `epitopes`; repeated inputs require declared compatible scope, usually supplied through a manifest |
+| `--input-topiary FILE` | Normalized Topiary CSV/TSV, including combined tables and additive scoring features |
+| `--input-epitopes FILE` | Native candidate reload; enriched exports retain evidence and the scoring policy |
+| `--duplicate-candidates error\|best\|worst` | Topiary representative selection; default requires scores to agree |
 | `--external-predictions input` | Reuse historical predictions (default); no live predictor |
 | `--external-predictions fresh` | Predict reported peptides with explicit models and HLA set |
 | `--output-input-predictions PATH` | Save original candidate predictions separately |

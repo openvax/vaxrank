@@ -43,6 +43,7 @@ from .external_prediction import ExternalPredictionKey
 
 if TYPE_CHECKING:
     from .input_scope import InputProvenance
+    from .epitope_dataset import EpitopeDataset
 
 # Column added to a normalized row when the source file carried real genomic
 # coordinates that the normalization step did not preserve. It is deliberately
@@ -83,6 +84,7 @@ class ExternalReport:
     records: tuple = ()
     rows: tuple = ()
     input_provenance: InputProvenance | None = None
+    dataset: EpitopeDataset | None = None
 
     def records_with_epitopes(self, epitopes):
         """Bind *epitopes* to the records whose identity selected them.

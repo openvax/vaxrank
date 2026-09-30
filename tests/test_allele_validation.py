@@ -197,6 +197,7 @@ def test_nonfinite_report_score_is_missing_not_zero(score):
 
 def test_template_pipeline_keeps_unknown_and_known_allele_rows(tmp_path):
     """Exercise real table assembly and packaged HTML/ASCII templates."""
+    from varcode import Variant
     from vaxrank.patient_info import PatientInfo
     from vaxrank.report import make_ascii_report, make_html_report
 
@@ -208,7 +209,7 @@ def test_template_pipeline_keeps_unknown_and_known_allele_rows(tmp_path):
         mutant_protein_fragment=fragment, target_epitopes=[unknown, known],
         self_epitopes=[], contains_target_epitopes=lambda: True)
     creator = TemplateDataCreator(
-        [(SimpleNamespace(short_description="test variant"), [vaccine])],
+        [(Variant('1', 1000, 'A', 'T'), [vaccine])],
         PatientInfo("TEST"), final_review="", reviewers="", input_json_file=None,
         args_for_report={"manufacturability": False, "wt_epitopes": False})
     # Variant annotation is orthogonal to epitope table rendering.

@@ -331,7 +331,8 @@ def add_output_args(arg_parser):
         default=True,
         help="Build pepsickle proteasome-cleavage credibility scores "
              "for each predicted MHC ligand (c_term_cleavage_prob, "
-             "max_internal_cut_prob, processing_score). On by default. "
+             "max_internal_cut_prob, processing_score). On by default except "
+             "for native/Topiary inputs, where new inference is opt-in. "
              "Scores live on a separate ProcessingPrediction record "
              "joined into the per-epitope report tables at render "
              "time by (peptide, source, peptide_offset, predictor); see "
@@ -1000,13 +1001,17 @@ def add_external_rescoring_args(arg_parser):
              "Not needed for VCF + BAM or a single report.")
     arg_parser.add_argument(
         "--external-input", action="append", default=None, metavar="FORMAT=PATH",
-        help="External candidate report: lens=PATH or pvacseq=PATH. Repeat to "
+        help="Candidate input: lens=PATH, pvacseq=PATH, topiary=PATH or epitopes=PATH. Repeat to "
              "rank reports together; use --input-manifest when their patient, "
              "reference assembly or genotype is not declared in the files.")
     arg_parser.add_argument(
         "--external-predictions", choices=("input", "fresh"), default="input",
         help="Reuse the input tables' original prediction values (default), or "
              "rescore their reported candidates with the configured MHC predictors.")
+    arg_parser.add_argument(
+        "--duplicate-candidates", choices=("error", "best", "worst"), default=None,
+        help="Topiary observation selection when the same candidate has differing scores: "
+             "require agreement (default), or explicitly choose the best/worst observation.")
     arg_parser.add_argument(
         "--output-input-predictions", default=None,
         help="Also save original candidate predictions in Vaxrank's native CSV/TSV "
@@ -1027,6 +1032,10 @@ def external_input_arg_parser():
         version='Vaxrank %s' % (__version__,))
     arg_parser.add_argument("--input-pvacseq", default=None)
     arg_parser.add_argument("--input-lens", default=None)
+    arg_parser.add_argument("--input-epitopes", default=None, metavar="FILE",
+                            help="Reload native epitope predictions and saved scoring evidence.")
+    arg_parser.add_argument("--input-topiary", default=None, metavar="FILE",
+                            help="Load a normalized Topiary CSV/TSV using its original predictions.")
     add_external_rescoring_args(arg_parser)
     add_mhc_args(arg_parser)
     # Models are required only for fresh prediction; historical-only runs must
@@ -1098,7 +1107,10 @@ def choose_arg_parser(args_list):
             for arg in args_list):
         return cached_run_arg_parser()
     elif any(
-            arg in ("--input-pvacseq", "--input-lens", "--external-input", "--input-manifest") or
+            arg in ("--input-pvacseq", "--input-lens", "--external-input", "--input-manifest",
+                    "--input-epitopes", "--input-topiary") or
+            arg.startswith("--input-epitopes=") or
+            arg.startswith("--input-topiary=") or
             arg.startswith("--input-manifest=") or
             arg.startswith("--external-input=") or
             arg.startswith("--input-pvacseq=") or
