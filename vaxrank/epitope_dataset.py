@@ -51,6 +51,24 @@ class EpitopeDataset:
     config: EpitopeConfig | None = None
     antigens: dict[str, VaccineAntigen] = field(default_factory=dict)
     selection: dict = field(default_factory=dict)
+    mutation_fragments: dict = field(default_factory=dict)
+    construction_reports: list = field(default_factory=list)
+    direct_sources: list = field(default_factory=list)
+
+    def add_mutation(self, fragment, epitopes):
+        """Capture direct predictions before vaccine windows discard context."""
+        import hashlib
+        provenance = self.provenance[0]
+        context_id = hashlib.sha256((provenance.input_id + to_native_json(fragment)).encode()).hexdigest()
+        antigen = VaccineAntigen.from_mutant_protein_fragment(fragment)
+        candidates = []
+        for epitope in epitopes:
+            identity = 'direct:' + context_id + ':' + str(epitope.offset) + ':' + epitope.sequence
+            candidates.append(replace(epitope, prediction_id=identity,
+                                      input_provenance=provenance))
+            self.mutation_fragments[identity] = fragment
+            self.antigens[identity] = antigen
+        self.epitopes += tuple(candidates)
 
     @classmethod
     def from_predictions(cls, epitopes, *, result=None, **kwargs):
@@ -203,6 +221,10 @@ class EpitopeDataset:
             "config": msgspec.to_builtins(self.config) if self.config is not None else None,
             "antigens": {key: to_native_json(a) for key, a in self.antigens.items()},
             "selection": self.selection,
+            "mutation_fragments": {key: to_native_json(fragment)
+                                   for key, fragment in self.mutation_fragments.items()},
+            "construction_reports": self.construction_reports,
+            "direct_sources": self.direct_sources,
         }
         result = TopiaryResult(self.result.df.copy(), metadata=self.result.metadata)
         result.extra = extra
@@ -211,6 +233,7 @@ class EpitopeDataset:
 
     @classmethod
     def load(cls, path):
+        from .mutant_protein_fragment import MutantProteinFragment
         result = read_table(path)
         payload = result.extra.pop(DATASET_METADATA, None)
         if not isinstance(payload, dict) or payload.get("schema") != DATASET_SCHEMA:
@@ -224,7 +247,11 @@ class EpitopeDataset:
             config=msgspec.convert(payload["config"], EpitopeConfig) if payload["config"] else None,
             antigens={key: from_native_json(a, VaccineAntigen)
                       for key, a in payload["antigens"].items()},
-            selection=payload["selection"])
+            selection=payload["selection"],
+            mutation_fragments={key: from_native_json(value, MutantProteinFragment)
+                                for key, value in payload.get("mutation_fragments", {}).items()},
+            construction_reports=payload.get("construction_reports", []),
+            direct_sources=payload.get("direct_sources", []))
 
     def report_frame(self):
         """Expose original annotations beside the familiar report columns."""
@@ -237,7 +264,12 @@ class EpitopeDataset:
         frame["Peptide offset"] = frame.peptide_offset
         frame["Mutant peptide sequence"] = frame.peptide
         frame["Allele"] = frame.allele
+        from .external_report import ExternalRecord
+        adapter_ids = {from_native_json(r, ExternalRecord).key.identifier
+                       for saved in self.construction_reports for r in saved['records']}
         def limitation(key):
+            if key in adapter_ids:
+                return "source adapter evaluates construction evidence"
             antigen = self.antigens.get(key)
             if antigen is None:
                 return "missing antigen construction evidence"
@@ -300,25 +332,77 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
     from .vaccine_peptide import VaccinePeptide
 
     dataset = report.dataset
-    options = source_agnostic_construct_options(options)
+    from .core_logic import vaccine_peptides_from_epitopes
+    from .external_report import ExternalReport, ExternalRecord
+    from .external_input import lens_ranking_result, pvacseq_ranking_result
+
+    source_options = source_agnostic_construct_options(options)
     accumulator = ExternalRankingAccumulator(
         require_target_epitopes=options.require_target_epitopes_in_variant)
     representatives = dataset.selection.get('representatives')
     selected = (set((r['source_observation_id'], r['candidate_allele']) for r in representatives)
                 if representatives is not None else dataset.select_representatives())
+    # Saved source records re-enter their existing occurrence-selection
+    # adapters, retaining the original IDs and evidence without a file reread.
+    source_ids = set()
+    for saved in dataset.construction_reports:
+        records = tuple(from_native_json(r, ExternalRecord) for r in saved['records'])
+        ids = {r.key.identifier for r in records}
+        source_ids.update(ids)
+        report_source = ExternalReport(
+            saved['source_format'], saved['path'], records=records,
+            rows=tuple(from_native_json(saved['rows'], list)))
+        ranker = {'lens': lens_ranking_result, 'pvacseq': pvacseq_ranking_result}[saved['source_format']]
+        source_genome = genome
+        if source_genome is None and saved.get('genome') is not None:
+            from pyensembl import Genome, EnsemblRelease
+            source_genome = from_native_json(saved['genome'], (Genome, EnsemblRelease))
+        outcome = ranker(report_source, [e for e in epitopes if e.prediction_group_source in ids],
+                         genome=source_genome, options=options)
+        for entry in outcome.entries:
+            accumulator.add(entry)
+    from varcode import Variant, StructuralVariant
+    for source in dataset.direct_sources:
+        properties = source['properties']
+        accumulator.add(ExternalVariantEntry(
+            variant=from_native_json(source['variant'], (Variant, StructuralVariant)),
+            resolved_protein_context=properties['is_coding_nonsynonymous'],
+            has_rna_support=properties['rna_support'], dna_vaf=properties['dna_vaf']))
+    mutation_groups = {}
     groups = {}
+    generalized_ids = (set(dataset.result.df.source_observation_id.dropna())
+                       if 'source_observation_id' in dataset.result.df else set())
     for epitope in epitopes:
         key = epitope.prediction_group_source
-        antigen = dataset.antigens.get(key)
-        if antigen is None or not antigen.tumor_specificity.admits_construct:
+        if key in source_ids:
             continue
-        if selected is not None:
+        if selected is not None and key in generalized_ids:
             scores = {a: s for a, s in epitope.per_allele_scores.items() if (key, a) in selected}
             if not scores:
                 continue
             epitope = replace(epitope, per_allele_scores=scores)
+        fragment = dataset.mutation_fragments.get(key)
+        if fragment is not None:
+            identity = (epitope.input_provenance.input_id if epitope.input_provenance else '',
+                        to_native_json(fragment))
+            mutation_groups.setdefault(identity, (fragment, []))[1].append(epitope)
+            continue
+        antigen = dataset.antigens.get(key)
+        if antigen is None or not antigen.tumor_specificity.admits_construct:
+            continue
         identity = to_native_json(antigen)
         groups.setdefault(identity, (antigen, []))[1].append(epitope)
+    for fragment, candidates in mutation_groups.values():
+        vaccines = vaccine_peptides_from_epitopes(
+            fragment.variant, fragment, candidates, epitope_config=dataset.config,
+            vaccine_config=options.vaccine_config,
+            vaccine_peptide_length=options.vaccine_peptide_length,
+            manufacturability_config=options.manufacturability_config)
+        accumulator.add(ExternalVariantEntry(
+            variant=fragment.variant, vaccine_peptide=vaccines[0] if vaccines else None,
+            resolved_protein_context=True, has_rna_support=bool(fragment.n_rna_alt),
+            dna_vaf=fragment.dna_vaf))
+    options = source_options
     for antigen, candidates in groups.values():
         vaccine = VaccinePeptide(
             antigen=antigen, epitopes=candidates,

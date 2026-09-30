@@ -308,12 +308,8 @@ def _annotate_sequence_matches(frame, epitopes):
     return frame
 
 
-def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
-                    alleles=(), input_predictions_path=None, scopes=None,
-                    manifest_path=None, genome=None, model_factory=None):
-    """Read once and score with fresh common models or source input values."""
-    if mode not in ('input', 'fresh'):
-        raise ValueError("Prediction mode must be input or fresh")
+def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, alleles=()):
+    """Load and validate source evidence before any models or scoring run."""
     inputs = list(inputs)
     if scopes is None:
         scopes = [{} for _ in inputs]
@@ -357,6 +353,11 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
         reports.append(_namespace_report(report, provenance))
     validate_input_scopes([r.input_provenance for r in reports],
                           genome=genome, prediction_alleles=alleles)
+    return reports
+
+
+def report_config(reports, epitope_config=None):
+    """Resolve an explicit policy or require agreement between saved policies."""
     if epitope_config is None:
         from .epitope_config import EpitopeConfig
         configs = [r.dataset.config for r in reports
@@ -364,6 +365,21 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
         if configs and any(cfg != configs[0] for cfg in configs):
             raise ValueError("Saved inputs use different scoring policies; supply an explicit epitope config")
         epitope_config = configs[0] if configs else EpitopeConfig()
+    return epitope_config
+
+
+def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
+                    alleles=(), input_predictions_path=None, scopes=None,
+                    manifest_path=None, genome=None, model_factory=None,
+                    prepared_reports=()):
+    """Read once and score with fresh common models or source input values."""
+    if mode not in ('input', 'fresh'):
+        raise ValueError("Prediction mode must be input or fresh")
+    reports = list(prepared_reports) + read_reports(
+        inputs, scopes=scopes, manifest_path=manifest_path, genome=genome, alleles=alleles)
+    validate_input_scopes([r.input_provenance for r in reports],
+                          genome=genome, prediction_alleles=alleles)
+    epitope_config = report_config(reports, epitope_config)
     original = [e for report in reports for e in report.epitopes]
     identities = [e.prediction_group_key for e in original]
     if len(set(identities)) != len(identities):
@@ -457,6 +473,25 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
         r.dataset.provenance if r.dataset is not None else (r.input_provenance,)))
     dataset.antigens = {key: antigen for r in updated if r.dataset is not None
                         for key, antigen in r.dataset.antigens.items()}
+    dataset.mutation_fragments = {key: fragment for r in updated if r.dataset is not None
+                                  for key, fragment in r.dataset.mutation_fragments.items()}
+    from .native_serialization import to_native_json
+    def native_row(row):
+        frame = pd.DataFrame([row]).astype(object)
+        return frame.where(frame.notna(), None).to_dict('records')[0]
+
+    for report in updated:
+        if report.dataset is not None:
+            dataset.construction_reports.extend(report.dataset.construction_reports)
+            dataset.direct_sources.extend(report.dataset.direct_sources)
+        elif report.source_format in ('lens', 'pvacseq'):
+            dataset.construction_reports.append({
+                'source_format': report.source_format, 'path': report.path,
+                'records': [to_native_json(replace(r, row=native_row(r.row)))
+                            for r in report.records],
+                'rows': to_native_json([native_row(row) for row in report.rows]),
+                'genome': to_native_json(resolve_input_genome(genome)) if genome is not None else None,
+            })
     dataset.selection = (dict(updated[0].dataset.selection)
                          if len(updated) == 1 and updated[0].dataset is not None else {})
     if mode == 'input':
@@ -478,6 +513,10 @@ def load_unified_external(args, epitope_config, options, genome):
     genome = resolve_input_genome(genome)
     mode = getattr(args, 'external_predictions', 'input')
     model_factory, alleles = None, []
+    direct = bool(getattr(args, 'vcf', None) or getattr(args, 'bam', None))
+    if direct and mode != 'input':
+        raise ValueError('Direct/table composition requires --external-predictions input; '
+                         'direct predictor options only apply to VCF/BAM candidates')
     if mode == 'fresh':
         from mhctools.cli import predictors_from_args, mhc_alleles_from_args
         if not getattr(args, 'mhc_predictor', None):
@@ -485,20 +524,27 @@ def load_unified_external(args, epitope_config, options, genome):
         alleles = sorted({normalize_hla_allele(a) for a in mhc_alleles_from_args(args)})
         def model_factory():
             return predictors_from_args(args)
-    elif getattr(args, 'mhc_predictor', None):
+    elif not direct and getattr(args, 'mhc_predictor', None):
         raise ValueError("Use --external-predictions fresh to run --mhc-predictor")
-    elif (getattr(args, 'mhc_alleles', None)
-          or getattr(args, 'mhc_alleles_file', None)):
+    elif not direct and (getattr(args, 'mhc_alleles', None)
+                         or getattr(args, 'mhc_alleles_file', None)):
         raise ValueError(
             "Input prediction mode uses the alleles recorded in each report. "
             "Remove --mhc-alleles/--mhc-alleles-file, or use "
             "--external-predictions fresh with --mhc-predictor to predict "
             "for an explicit HLA set.")
     specs = external_input_specs(args)
-    reports, frame, predictions = prepare_reports(
-        [(fmt, path) for fmt, path, _ in specs], epitope_config, mode=mode,
-        model_factory=model_factory, alleles=alleles,
+    loaded_reports = read_reports(
+        [(fmt, path) for fmt, path, _ in specs],
         scopes=[scope for _, _, scope in specs],
+        manifest_path=getattr(args, 'input_manifest', None), genome=genome)
+    epitope_config = report_config(loaded_reports, epitope_config)
+    if direct:
+        from .direct_input import prepare_direct_report
+        loaded_reports.insert(0, prepare_direct_report(args, loaded_reports, epitope_config))
+    reports, frame, predictions = prepare_reports(
+        [], epitope_config, mode=mode, prepared_reports=loaded_reports,
+        model_factory=model_factory, alleles=alleles,
         manifest_path=getattr(args, 'input_manifest', None), genome=genome,
         input_predictions_path=getattr(args, 'output_input_predictions', None))
     epitope_config = frame.attrs['epitope_dataset'].config
@@ -512,7 +558,8 @@ def load_unified_external(args, epitope_config, options, genome):
             (identity, allele) in selected for identity, allele in
             frame[['Prediction identity', 'Allele']].itertuples(index=False, name=None)]
     rankers = {'lens': lens_ranking_result, 'pvacseq': pvacseq_ranking_result,
-               'topiary': dataset_ranking_result, 'epitopes': dataset_ranking_result}
+               'topiary': dataset_ranking_result, 'epitopes': dataset_ranking_result,
+               'vcf_bam': dataset_ranking_result}
     outcomes = []
     for report in reports:
         ranker = rankers[report.source_format]
@@ -542,6 +589,16 @@ def load_unified_external(args, epitope_config, options, genome):
         if len(values) == 1 and entries[0].variant is not None:
             dna_vaf[entries[0].variant] = next(iter(values))
     ranked = rank_constructs(ranked)
+    passing_path = getattr(args, 'output_passing_variants_csv', None)
+    if direct and passing_path:
+        from varcode import Variant, StructuralVariant
+        from .native_serialization import from_native_json
+        selected_variants = {source for source, _ in ranked if isinstance(source, Variant)}
+        rows = [{**source['properties'], 'has_vaccine_peptide':
+                 from_native_json(source['variant'], (Variant, StructuralVariant)) in selected_variants}
+                for source in dataset.direct_sources]
+        Path(passing_path).parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(rows).to_csv(passing_path, index=False)
     summary = ExternalInputSummary(
         num_somatic_variants=len(observations),
         num_coding_effect_variants=sum(any(e.resolved_protein_context for e in es)
@@ -551,7 +608,8 @@ def load_unified_external(args, epitope_config, options, genome):
     patient = patient_info_from_external(
         ranked, '', getattr(args, 'output_patient_id', '') or '', summary,
         predictions=predictions)
-    patient.inputs = [(r.source_format + ' report', r.path) for r in reports]
+    patient.inputs = [(('VCF/BAM' if r.source_format == 'vcf_bam' else r.source_format + ' report'),
+                       r.path) for r in reports]
     patient.input_provenance = [r.input_provenance for r in reports]
     # Preparation already validated every input before scoring. Pooled inputs
     # all declare the same patient/genotype; single-input unknowns stay unknown.

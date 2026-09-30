@@ -882,6 +882,8 @@ class ExternalConstructOptions:
     """
 
     vaccine_peptide_length: int = 25
+    vaccine_config: object = None
+    manufacturability_config: object = None
     num_target_epitopes_to_keep: object = None
     combined_score_expr: object = None
     ranking_rules: object = None
@@ -922,6 +924,8 @@ class ExternalConstructOptions:
             mfg_rules = manufacturability_config.rules
         return cls(
             vaccine_peptide_length=length,
+            vaccine_config=vaccine_config,
+            manufacturability_config=manufacturability_config,
             num_target_epitopes_to_keep=keep,
             combined_score_expr=expr,
             ranking_rules=rules,
