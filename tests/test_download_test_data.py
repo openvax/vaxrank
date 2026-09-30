@@ -413,3 +413,60 @@ def test_test_data_cli_is_installed_as_a_console_script():
     """`vaxrank-test-data` is the documented entry point, so keep it declared."""
     setup = (ROOT / "setup.py").read_text()
     assert "vaxrank-test-data = vaxrank.download_test_data:main" in setup
+
+
+@pytest.mark.parametrize("envkey", ["OSTEOSARC_CACHE", "OPENVAX_DATA_CACHE"])
+@pytest.mark.parametrize("form", ["absolute", "padded", "tilde", "blank"])
+def test_cache_environment_normalization_matches_osteosarc(tmp_path, monkeypatch, envkey, form):
+    from uuid import uuid4
+    from osteosarc import Cache as OsteosarcCache
+
+    platform = tmp_path / "platform"
+    monkeypatch.setattr(
+        "datacache.common.appdirs.user_cache_dir",
+        lambda appname=None: str(platform / appname if appname else platform))
+    for name in ("OSTEOSARC_CACHE", "OPENVAX_DATA_CACHE"):
+        monkeypatch.delenv(name, raising=False)
+    expected = tmp_path / "cache"
+    if form == "absolute":
+        value = str(expected)
+    elif form == "padded":
+        value = " \t" + str(expected) + " \n"
+    elif form == "tilde":
+        basename = "__vaxrank_cache_test_" + uuid4().hex
+        value, expected = "~/" + basename, Path.home() / basename
+    else:
+        value, expected = " \t\n", platform / "openvax"
+    monkeypatch.setenv(envkey, value)
+    assert downloader.cache_root_for() == OsteosarcCache().root == expected
+    assert not expected.exists()
+    assert not platform.exists()
+
+
+@pytest.mark.parametrize("blank", ["", " \t\n"])
+def test_blank_preferred_cache_environment_uses_fallback(tmp_path, monkeypatch, blank):
+    from osteosarc import Cache as OsteosarcCache
+
+    expected = tmp_path / "fallback"
+    monkeypatch.setenv("OSTEOSARC_CACHE", blank)
+    monkeypatch.setenv("OPENVAX_DATA_CACHE", " " + str(expected) + " ")
+    assert downloader.cache_root_for() == OsteosarcCache().root == expected
+    assert not expected.exists()
+
+
+def test_explicit_cache_path_is_preserved_despite_normalized_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("OSTEOSARC_CACHE", " ~/environment ")
+    explicit = tmp_path / " literal path with spaces "
+    assert downloader.cache_root_for(explicit) == explicit
+    assert not explicit.exists()
+
+
+def test_both_blank_cache_environment_values_use_platform_root(tmp_path, monkeypatch):
+    from osteosarc import Cache as OsteosarcCache
+
+    expected = tmp_path / "platform-default"
+    monkeypatch.setattr("datacache.common.appdirs.user_cache_dir", lambda namespace: str(expected))
+    monkeypatch.setenv("OSTEOSARC_CACHE", " \t")
+    monkeypatch.setenv("OPENVAX_DATA_CACHE", " \n")
+    assert downloader.cache_root_for() == OsteosarcCache().root == expected
+    assert not expected.exists()
