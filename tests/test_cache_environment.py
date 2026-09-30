@@ -44,7 +44,7 @@ def test_declared_fallback_reads_its_own_cached_object(tmp_path, monkeypatch):
 
 def test_next_test_uses_its_platform_default(tmp_path, monkeypatch):
     root = tmp_path / "default"
-    monkeypatch.setattr(downloader, "get_data_dir", lambda namespace: str(root))
+    monkeypatch.setattr("datacache.common.appdirs.user_cache_dir", lambda namespace: str(root))
     assert downloader.cache_root_for() == root
     assert not root.exists()
 
@@ -53,7 +53,7 @@ def test_next_test_uses_its_platform_default(tmp_path, monkeypatch):
 def test_opt_in_retains_the_callers_cache(tmp_path, monkeypatch):
     ambient = json.loads(os.environ["VAXRANK_TEST_AMBIENT_CACHE"])
     fallback = tmp_path / "default"
-    monkeypatch.setattr(downloader, "get_data_dir", lambda namespace: str(fallback))
+    monkeypatch.setattr("datacache.common.appdirs.user_cache_dir", lambda namespace: str(fallback))
     expected = ambient.get("OSTEOSARC_CACHE") or ambient.get("OPENVAX_DATA_CACHE") or fallback
     assert downloader.cache_root_for() == Path(expected)
 

@@ -24,7 +24,7 @@ import sys
 import tempfile
 from urllib.parse import urlsplit
 
-from datacache import Cache, FileValidationError, get_data_dir, inspect_files
+from datacache import Cache, FileValidationError, get_cache_root, inspect_files
 from osteosarc import OsteosarcError
 
 
@@ -40,11 +40,10 @@ OSTEOSARC_ENVIRONMENT = "OSTEOSARC_CACHE"
 
 def cache_root_for(cache_root=None):
     """The shared OpenVax cache root, resolved as osteosarc resolves it."""
-    return Path(
-        cache_root
-        or os.environ.get(OSTEOSARC_ENVIRONMENT)
-        or os.environ.get(CACHE_ENVIRONMENT)
-        or get_data_dir(CACHE_NAMESPACE))
+    if cache_root:
+        return Path(cache_root)
+    return Path(get_cache_root(
+        CACHE_NAMESPACE, OSTEOSARC_ENVIRONMENT, CACHE_ENVIRONMENT))
 
 
 def _sid_test_data(offline):
