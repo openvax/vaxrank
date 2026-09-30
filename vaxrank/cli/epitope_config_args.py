@@ -134,3 +134,12 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
 
     epitope_config = msgspec.convert(epitope_config_kwargs, EpitopeConfig)
     return epitope_config
+
+
+def has_epitope_config_overrides(args, merged_config):
+    """Distinguish an explicit scoring policy from a native reload default."""
+    return bool(extract_epitope_config_kwargs(merged_config)) or any(
+        getattr(args, name, None) is not None for name in (
+            "min_epitope_score", "scoring_mode", "allele_free_evidence",
+            "allele_selection_axis", "default_affinity_predictor",
+            "default_stability_predictor", "default_presentation_predictor"))

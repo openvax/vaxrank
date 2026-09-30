@@ -249,7 +249,7 @@ def predictions_to_dataframe(epitopes):
     return pd.DataFrame(rows, columns=VAXRANK_COLUMNS)
 
 
-def save_predictions(epitopes, path):
+def save_predictions(epitopes, path, *, dataset=None):
     """Save ``CandidateEpitope`` objects to a native CSV/TSV file.
 
     The canonical dataclass payload round-trips the complete object. Flat
@@ -257,6 +257,10 @@ def save_predictions(epitopes, path):
 
     Format is inferred from the file extension (.tsv -> tab, else comma).
     """
+    if dataset is not None:
+        from dataclasses import replace
+        replace(dataset, epitopes=tuple(epitopes)).save(path)
+        return
     df = predictions_to_dataframe(epitopes)
     sep = "\t" if str(path).endswith(".tsv") else ","
     ensure_parent_dir(path)
@@ -273,6 +277,10 @@ def load_predictions(path):
     rows must carry an explicit prediction kind and score, while the oldest
     affinity-only rows retain their historical defaults.
     """
+    with open(path) as stream:
+        if stream.readline().startswith("#"):
+            from .epitope_dataset import EpitopeDataset
+            return list(EpitopeDataset.load(path).epitopes)
     sep = "\t" if str(path).endswith(".tsv") else ","
     df = pd.read_csv(path, sep=sep)
 

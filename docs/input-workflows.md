@@ -1,7 +1,8 @@
 # Choosing and combining inputs
 
 Vaxrank supports direct variant analysis and imported prediction tables as
-separate CLI modes. LENS and pVACseq tables can be combined in one run. A run
+separate CLI modes. Reports, normalized Topiary tables and native candidate files
+can be combined in one run. A run
 containing direct, LENS, pVACseq and native Exacto inputs together is not yet
 supported.
 
@@ -11,8 +12,57 @@ supported.
 | LENS report | `--external-input lens=PATH` or `--input-lens PATH` | Imports reported peptide occurrences, available context and evidence. |
 | pVACseq report | `--external-input pvacseq=PATH` or `--input-pvacseq PATH` | Imports all-epitope or aggregated TSVs. An aggregated table already selected its best epitopes upstream; importing it cannot recover omitted candidates. |
 | Exacto output | No native importer | Requires upstream normalization work; treating an Exacto protein as generic FASTA does not preserve its full provenance. |
-| Saved Vaxrank candidate predictions | Python `load_predictions(path)` | Native CSV/TSV reload is a library API; there is no `--input-epitopes` CLI mode. |
+| Normalized Topiary tables | `--input-topiary FILE` or `--external-input topiary=FILE` | Retains original rows, metadata and additive features; table-only candidates need no construction evidence. |
+| Saved Vaxrank candidate predictions | `--input-epitopes FILE` or `--external-input epitopes=FILE` | Reloads native candidates. Enriched exports also retain the complete scoring frame and policy. |
 | Already constructed `VaccineAntigen` objects | Python `predict_epitopes(..., antigen=...)` and `vaccine_peptides_for_antigen(...)` | Library integration; callers provide context, targetable intervals and admission evidence. |
+
+## Reload or rank a normalized table
+
+These commands need no manifest or installed prediction model:
+
+```sh
+vaxrank --input-topiary candidates.tsv --output-epitopes saved.tsv --output-csv ranked.csv
+vaxrank --input-epitopes saved.tsv --output-csv reloaded.csv
+```
+
+The normalized input uses Topiary's column vocabulary (`peptide`, `allele`,
+`kind`, `value`, and optional predictor/annotation columns). Topiary CSV/TSV
+writers preserve typed annotations, metadata, and unknown versus empty flanks.
+Use them for enriched or combined tables. Original IDs stay in the evidence;
+the consumer uses Topiary's source-observation IDs for scoring.
+
+Enriched `--output-epitopes` exports use that same table codec plus Vaxrank's
+existing native candidate payloads. They retain the full evidence frame,
+comparators, input declarations, scoring policy and supplied antigen references.
+`load_predictions(path)` continues to return native candidates from either
+format; `EpitopeDataset.load(path)` exposes the richer saved evidence. Older
+candidate-only files remain readable. Their saved scores are reused when
+present; a new explicit epitope config can rescore the available evidence.
+
+Native reload restores the saved scoring policy unless an epitope config is
+explicitly supplied. Combining files with different saved policies requires
+one explicit policy. Source-local predictor defaults survive a combined export.
+`--duplicate-candidates best` or `worst` explicitly selects among conflicting
+Topiary observations; the default requires their scores to agree. All original
+observations remain available in the export, without summed support or coverage.
+
+Table-only candidates remain rankable. Construction requires an explicitly
+supplied `VaccineAntigen`, including its sequence, targetable mask and admission
+evidence. A normalized table can carry its existing native serialization in
+`vaxrank_antigen_json`; the epitope's `peptide_offset` must match that sequence.
+The Python `EpitopeDataset.antigens` mapping accepts the same objects. An antigen
+category alone does not provide admission. Missing or held-out evidence appears
+in the report's `Construction limitation` column.
+
+Loading native/Topiary evidence runs no predictors by default. Optional processing
+annotation requires `--processing-aware-annotation`. Additive re-scoring uses
+Topiary's public `rescore_candidates` API before loading; its namespaced features
+survive native export and can be selected with the existing epitope DSL.
+The legacy `--external-predictions fresh` option remains specific to LENS/pVACseq.
+
+Existing report construction adapters and direct VCF/BAM composition are still
+part of [#497](https://github.com/openvax/vaxrank/issues/497). Candidate-only native
+files cannot reconstruct construction evidence they did not save.
 
 ## Declare the scope of combined reports
 

@@ -132,8 +132,9 @@ def read_input_manifest(path):
         unknown = set(item) - {"format", "path", *SCOPE_FIELDS}
         if unknown:
             raise ValueError(f"{location}: unknown input fields: {sorted(unknown)}")
-        if item.get("format") not in ("lens", "pvacseq"):
-            raise ValueError(f"{location}: format must be lens or pvacseq")
+        from .external_rescoring import READERS
+        if item.get("format") not in READERS:
+            raise ValueError(f"{location}: format must be one of {', '.join(READERS)}")
         if not isinstance(item.get("path"), str) or not item["path"].strip():
             raise ValueError(f"{location}: path must be a nonempty string")
         local = {k: v for k, v in item.items() if k in SCOPE_FIELDS}
@@ -148,7 +149,7 @@ def read_input_manifest(path):
     return specs
 
 
-def report_declarations(path, source_format):
+def report_declarations(path, source_format, *, frame=None):
     """Read explicit scope columns before a format normalizer drops them.
 
     These exact column names are also accepted in annotated producer tables.
@@ -156,17 +157,22 @@ def report_declarations(path, source_format):
     LENS ERV origin identifiers independently state an assembly, not a patient.
     """
     # Reading the path preserves pandas' support for compressed TSVs.
-    frame = pd.read_csv(path, sep="\t", dtype=str,
-                        keep_default_na=False,
-                        usecols=lambda name: name in (*SCOPE_FIELDS, "origin_descriptor"))
+    if frame is None:
+        frame = pd.read_csv(path, sep="\t", dtype=str,
+                           keep_default_na=False,
+                           usecols=lambda name: name in (*SCOPE_FIELDS, "origin_descriptor"))
     result = {}
     resolved = InputScope()
     for name in SCOPE_FIELDS:
         if name not in frame:
             continue
-        values = [v for v in frame[name].unique() if not cells.missing(v)]
+        values = []
+        for value in frame[name]:
+            if not cells.missing(value) and value not in values:
+                values.append(value)
         for value in values:
-            parsed = json.loads(value) if name == "mhc_alleles" else value
+            parsed = (json.loads(value) if name == "mhc_alleles" and isinstance(value, str)
+                      else value)
             claim = scope_from_mapping({name: parsed}, str(path))
             resolved = combine_scopes(resolved, claim, str(path))
         if values:
