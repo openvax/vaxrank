@@ -109,14 +109,14 @@ _ManifestLoader.add_constructor(
     yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _unique_mapping)
 
 
-def read_input_manifest(path):
+def read_input_manifest(path, *, include_direct=False):
     """Return paths and declarations; resolve paths beside the manifest."""
     path = Path(path).resolve()
     with path.open() as stream:
         document = yaml.load(stream, Loader=_ManifestLoader)
     if not isinstance(document, dict) or document.get("schema") != MANIFEST_SCHEMA:
         raise ValueError(f"{path}: expected schema: {MANIFEST_SCHEMA}")
-    unknown = set(document) - {"schema", "inputs", *SCOPE_FIELDS}
+    unknown = set(document) - {"schema", "inputs", "direct", *SCOPE_FIELDS}
     if unknown:
         raise ValueError(f"{path}: unknown manifest fields: {sorted(unknown)}")
     shared = {k: v for k, v in document.items() if k in SCOPE_FIELDS}
@@ -146,6 +146,15 @@ def read_input_manifest(path):
                                    if v is not None or k not in shared}}
         specs.append((item["format"], str((path.parent / item["path"]).resolve()),
                       declarations))
+    direct = document.get("direct", {})
+    if not isinstance(direct, dict):
+        raise ValueError(f"{path}: direct must be a scope object")
+    direct_scope = scope_from_mapping(direct, f"{path}, direct input")
+    combine_scopes(shared_scope, direct_scope, str(path), SHARED_FIELDS)
+    if include_direct:
+        declarations = {**shared, **{k: v for k, v in direct.items()
+                                    if v is not None or k not in shared}}
+        return specs, declarations
     return specs
 
 

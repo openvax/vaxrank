@@ -245,6 +245,12 @@ class ExternalVariantEntry:
     source_vaf: object = None       # float or None
     has_rna_support: bool = False
     unparseable: bool = False
+    vaccine_peptides: tuple = ()
+
+    @property
+    def ranking_peptides(self):
+        """Retain a direct source's configured alternative vaccine windows."""
+        return self.vaccine_peptides or ((self.vaccine_peptide,) if self.vaccine_peptide else ())
 
     @property
     def ranking_source(self):
@@ -685,11 +691,11 @@ class ExternalRankingAccumulator:
         source = entry.ranking_source
         if source is None:
             return
-        if (self.require_target_epitopes and entry.vaccine_peptide is not None
-                and not entry.vaccine_peptide.contains_target_epitopes()):
+        if (self.require_target_epitopes and entry.ranking_peptides
+                and not any(p.contains_target_epitopes() for p in entry.ranking_peptides)):
             # Match direct-input admission before either final ranking or
             # repeated-source selection. Input evidence still enters the audit.
-            entry = dataclasses.replace(entry, vaccine_peptide=None)
+            entry = dataclasses.replace(entry, vaccine_peptide=None, vaccine_peptides=())
         self.entries.append(entry)
         self.n_parseable += 1
         if entry.annotation is not None:
@@ -706,8 +712,8 @@ class ExternalRankingAccumulator:
             self.dna_vaf_by_variant[entry.variant] = entry.dna_vaf
         if entry.source_vaf is not None and entry.variant is not None:
             self.source_vaf_by_variant[entry.variant] = entry.source_vaf
-        if entry.vaccine_peptide is not None:
-            self.ranked.append((source, [entry.vaccine_peptide]))
+        if entry.ranking_peptides:
+            self.ranked.append((source, list(entry.ranking_peptides)))
 
     def result(self, source_name, transcript_id_label="transcript IDs"):
         """Emit the summaries every external format owes its caller."""
@@ -892,6 +898,8 @@ class ExternalConstructOptions:
     included_antigen_sources: tuple[str, ...] = (
         DEFAULT_INCLUDED_ANTIGEN_SOURCES
     )
+    vaccine_config: object = None
+    manufacturability_config: object = None
 
     @classmethod
     def from_configs(cls, vaccine_config=None, manufacturability_config=None,
@@ -922,6 +930,8 @@ class ExternalConstructOptions:
             mfg_rules = manufacturability_config.rules
         return cls(
             vaccine_peptide_length=length,
+            vaccine_config=vaccine_config,
+            manufacturability_config=manufacturability_config,
             num_target_epitopes_to_keep=keep,
             combined_score_expr=expr,
             ranking_rules=rules,

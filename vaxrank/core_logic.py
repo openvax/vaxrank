@@ -51,6 +51,7 @@ def run_vaxrank(
     vaccine_config: Optional[VaccineConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
+    epitope_dataset=None,
 ):
     """
     Parameters
@@ -79,6 +80,10 @@ def run_vaxrank(
     vaccine_config
         Configuration options for vaccine peptide selection, using defaults if not provided
 
+    epitope_dataset
+        Optional shared evidence collector. Captures predicted occurrences and
+        mutation fragments; the caller performs scoring and window selection.
+
     allow_dna_only_fallback
         When True, variants without RNA support will attempt to construct
         vaccine peptides from DNA annotation using varcode's MutantTranscript.
@@ -93,6 +98,7 @@ def run_vaxrank(
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config,
         allow_dna_only_fallback=allow_dna_only_fallback,
+        epitope_dataset=epitope_dataset,
     )
     ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
 
@@ -113,6 +119,7 @@ def create_vaccine_peptides_dict(
     vaccine_config: Optional[VaccineConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
+    epitope_dataset=None,
 ):
     """
     Parameters
@@ -162,6 +169,7 @@ def create_vaccine_peptides_dict(
             vaccine_config=vaccine_config,
             manufacturability_config=manufacturability_config,
             allow_dna_only_fallback=allow_dna_only_fallback,
+            epitope_dataset=epitope_dataset,
         )
 
         if not vaccine_peptides:
@@ -184,6 +192,7 @@ def vaccine_peptides_for_variant(
     vaccine_config: Optional[VaccineConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
+    epitope_dataset=None,
 ):
     """
     Parameters
@@ -246,6 +255,9 @@ def vaccine_peptides_for_variant(
         epitope_config=epitope_config,
         genome=variant.ensembl,
     )
+    if epitope_dataset is not None:
+        epitope_dataset.add_mutation(long_protein_fragment, epitopes)
+        return []  # The common workflow selects windows after scoring all inputs.
     return vaccine_peptides_from_epitopes(
         variant=variant,
         long_protein_fragment=long_protein_fragment,

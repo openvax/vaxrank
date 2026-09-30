@@ -993,12 +993,18 @@ def _require_ensembl_release_for_template_reports(args):
 
 
 def add_external_rescoring_args(arg_parser):
+    arg_parser.add_argument("--input-epitopes", default=None, metavar="FILE",
+                            help="Reload native epitope predictions and saved scoring evidence.")
+    arg_parser.add_argument("--input-topiary", default=None, metavar="FILE",
+                            help="Load a normalized Topiary CSV/TSV using its original predictions.")
     arg_parser.add_argument(
         "--input-manifest", default=None, metavar="PATH",
-        help="YAML/JSON manifest listing external reports and their shared patient, "
+        help="YAML/JSON manifest listing tables and their shared patient, "
              "reference_assembly and mhc_alleles, with sample/library details per input. "
              "Required when combined reports do not declare their own scope. "
-             "Not needed for VCF + BAM or a single report.")
+             "Required with VCF/BAM plus tables; shared declarations also apply to "
+             "direct inputs, with optional direct sample/library scope. "
+             "Not needed for VCF + BAM alone or a single report.")
     arg_parser.add_argument(
         "--external-input", action="append", default=None, metavar="FORMAT=PATH",
         help="Candidate input: lens=PATH, pvacseq=PATH, topiary=PATH or epitopes=PATH. Repeat to "
@@ -1032,10 +1038,6 @@ def external_input_arg_parser():
         version='Vaxrank %s' % (__version__,))
     arg_parser.add_argument("--input-pvacseq", default=None)
     arg_parser.add_argument("--input-lens", default=None)
-    arg_parser.add_argument("--input-epitopes", default=None, metavar="FILE",
-                            help="Reload native epitope predictions and saved scoring evidence.")
-    arg_parser.add_argument("--input-topiary", default=None, metavar="FILE",
-                            help="Load a normalized Topiary CSV/TSV using its original predictions.")
     add_external_rescoring_args(arg_parser)
     add_mhc_args(arg_parser)
     # Models are required only for fresh prediction; historical-only runs must
@@ -1106,6 +1108,8 @@ def choose_arg_parser(args_list):
             arg.startswith("--input-json-file=")
             for arg in args_list):
         return cached_run_arg_parser()
+    elif any(arg.split("=", 1)[0] in ("--vcf", "--bam") for arg in args_list):
+        return make_vaxrank_arg_parser()
     elif any(
             arg in ("--input-pvacseq", "--input-lens", "--external-input", "--input-manifest",
                     "--input-epitopes", "--input-topiary") or

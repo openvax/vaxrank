@@ -1,17 +1,16 @@
 # Choosing and combining inputs
 
-Vaxrank supports direct variant analysis and imported prediction tables as
-separate CLI modes. Reports, normalized Topiary tables and native candidate files
-can be combined in one run. A run
-containing direct, LENS, pVACseq and native Exacto inputs together is not yet
-supported.
+Vaxrank combines direct VCF/BAM analysis, LENS/pVACseq reports, normalized
+Topiary tables and native candidate files through the shared scoring and
+construction workflow. Native Exacto files must first be normalized with
+Topiary; Vaxrank has no direct Exacto CLI adapter.
 
 | Input | Entry point | Current boundary |
 | --- | --- | --- |
-| Somatic variants + tumor RNA | `--vcf`, `--bam`, `--mhc-predictor`, `--mhc-alleles` | Reconstructs protein context with Isovar and predicts epitopes. Cannot be mixed with report inputs in the same CLI run. |
+| Somatic variants + tumor RNA | `--vcf`, `--bam`, `--mhc-predictor`, `--mhc-alleles` | Reconstructs protein context with Isovar and predicts epitopes. Combine with table inputs using `--input-manifest`. |
 | LENS report | `--external-input lens=PATH` or `--input-lens PATH` | Imports reported peptide occurrences, available context and evidence. |
 | pVACseq report | `--external-input pvacseq=PATH` or `--input-pvacseq PATH` | Imports all-epitope or aggregated TSVs. An aggregated table already selected its best epitopes upstream; importing it cannot recover omitted candidates. |
-| Exacto output | No native importer | Requires upstream normalization work; treating an Exacto protein as generic FASTA does not preserve its full provenance. |
+| Exacto output | Normalize with Topiary 5.88+ first, then `--input-topiary` | Direct native Exacto CLI adoption remains in #497; generic FASTA alone does not preserve its full provenance. |
 | Normalized Topiary tables | `--input-topiary FILE` or `--external-input topiary=FILE` | Retains original rows, metadata and additive features; table-only candidates need no construction evidence. |
 | Saved Vaxrank candidate predictions | `--input-epitopes FILE` or `--external-input epitopes=FILE` | Reloads native candidates. Enriched exports also retain the complete scoring frame and policy. |
 | Already constructed `VaccineAntigen` objects | Python `predict_epitopes(..., antigen=...)` and `vaccine_peptides_for_antigen(...)` | Library integration; callers provide context, targetable intervals and admission evidence. |
@@ -60,9 +59,45 @@ Topiary's public `rescore_candidates` API before loading; its namespaced feature
 survive native export and can be selected with the existing epitope DSL.
 The legacy `--external-predictions fresh` option remains specific to LENS/pVACseq.
 
-Existing report construction adapters and direct VCF/BAM composition are still
-part of [#497](https://github.com/openvax/vaxrank/issues/497). Candidate-only native
-files cannot reconstruct construction evidence they did not save.
+Direct fragments and LENS/pVACseq construction records now survive enriched
+native export. Reload repeats their existing window/occurrence selection using
+the saved evidence and the requested vaccine configuration. Candidate-only older
+native files cannot reconstruct construction evidence they did not save.
+
+## Combine direct VCF/BAM with tables
+
+List imported files in the manifest shown below, and add the direct inputs:
+
+```sh
+vaxrank --vcf somatic.vcf --bam tumor.bam \
+  --mhc-predictor netmhcpan --mhc-alleles 'HLA-A*02:01,HLA-B*07:02' \
+  --input-manifest inputs.yaml --duplicate-candidates best \
+  --output-epitopes combined.tsv --output-csv ranked.csv
+```
+
+The manifest's shared patient, assembly and genotype declarations also apply
+to the direct input. An optional top-level `direct:` object supplies its
+sample/library/timepoint declarations, using the same scope keys as other
+inputs. Direct VCF reference resolution and requested prediction alleles are
+checked against the declarations before models run. List every imported file
+in the manifest; individual table flags cannot be combined with it.
+
+`--mhc-predictor`, Isovar settings, DNA fallback and prediction-cache options
+apply to the direct candidates. Tables keep their original values. Mixed runs
+use `--external-predictions input`; additive table predictions can be prepared
+with Topiary before import. Direct occurrences enter Topiary's observation and
+representative-selection APIs alongside normalized tables. Conflicting scores
+for the same peptide/allele require an explicit duplicate policy, as in the
+example. The full observations remain in the export.
+
+Shared DSL scoring runs after direct RNA and source annotations are attached.
+Direct protein fragments, counts, comparators and reference classifications
+are saved before window selection. `--input-epitopes combined.tsv` repeats
+scoring and construction without VCF/BAM access or prediction models. Pass the
+same vaccine configuration to reproduce window selection; the saved epitope
+scoring policy is restored automatically. As with table-only runs, CSV contains
+per-peptide/allele observations and the construct outputs use common final
+ranking. Counts are never added across discoveries.
 
 ## Declare the scope of combined reports
 
@@ -275,8 +310,8 @@ predictions by supplying both `--mrna-junction-predictor` and
 
 `--mrna-optimize-linkers` explicitly requires a configured junction model;
 `--mrna-no-optimize-linkers` disables junction queries even if a model is
-configured. Candidate `--mhc-predictor` settings still apply only to explicit
-`--external-predictions fresh` requests. Executable and weights paths can be
+configured. Candidate `--mhc-predictor` settings apply to direct inputs or explicit
+`--external-predictions fresh` report-only requests. Executable and weights paths can be
 set independently with `--mrna-junction-predictor-path` and
 `--mrna-junction-predictor-models-path`. The corresponding YAML keys live under
 `mrna:` (`junction_predictor`, `junction_alleles`, and the two path keys);
@@ -293,8 +328,7 @@ names/versions/kinds, query alleles and lengths, and the peptide queries for
 each candidate linker at each junction. Unknown model versions remain null.
 This metadata also survives native RNAConstruct serialization. Optional
 cleavage annotation can be disabled with `--no-processing-aware-annotation`.
-Creating the directory first
-also avoids the direct pipeline's pending [output-path fix](https://github.com/openvax/vaxrank/pull/456).
+
 
 LENS supplies reported context windows. pVACseq tables generally supply only
 the epitope; Vaxrank does not retrieve the separate mutant/wild-type FASTA
@@ -335,11 +369,11 @@ construction also requires explicit category opt-ins; see
 ## Remaining integration work
 
 - [Vaxrank #497](https://github.com/openvax/vaxrank/issues/497) and
-  [Topiary #366](https://github.com/openvax/topiary/issues/366): common input
-  normalization, additive predictions and evidence-preserving reload.
-- [Topiary #365](https://github.com/openvax/topiary/issues/365): native Exacto.
-- [Topiary #370](https://github.com/openvax/topiary/issues/370): ORF/occurrence
-  identity and reconciliation across source observations.
+  [Topiary #366](https://github.com/openvax/topiary/issues/366): remaining generalized input
+  integration and additive predictions.
+- Topiary has shipped [native Exacto ingestion](https://github.com/openvax/topiary/issues/365)
+  and [ORF/occurrence reconciliation](https://github.com/openvax/topiary/issues/370).
+  Their full Vaxrank consumer adoption remains in #497.
 
 The [unified evidence design](unified_evidence.md) describes the intended
 model, not an additional supported CLI workflow. For current configuration

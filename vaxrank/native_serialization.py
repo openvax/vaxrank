@@ -31,6 +31,12 @@ _SERIALIZED_KEY_PREFIX = _SERIALIZED_KEYS_FIELD + "element_"
 def _native_serializable_classes():
     """Return the native class registry without creating an import cycle."""
     from mhctools.pred import Prediction
+    from varcode import Variant, StructuralVariant
+    from pyensembl import EnsemblRelease, Genome, Transcript
+    from pyensembl.species import Species
+    from .mutant_protein_fragment import MutantProteinFragment
+    from .external_report import ExternalRecord
+    from .external_prediction import ExternalPredictionKey
     from mhctools.cleavage import CleavageInput, CleavageModel, CleavageSite
 
     from .allele_evidence import AlleleAttribution
@@ -67,6 +73,9 @@ def _native_serializable_classes():
     )
 
     return {
+        **{(cls.__module__, cls.__name__): cls for cls in (
+            Variant, StructuralVariant, Genome, EnsemblRelease, Transcript, Species,
+            MutantProteinFragment, ExternalRecord, ExternalPredictionKey)},
         ("builtins", "set"): set,
         ("builtins", "tuple"): tuple,
         ("vaxrank.input_scope", "InputScope"): InputScope,
@@ -256,9 +265,10 @@ def from_native_json(payload, expected_type):
     """Decode one allowlisted native object and enforce its root type."""
     value = _decode_native_repr(
         _json_loads(payload), _native_serializable_classes())
-    if type(value) is not expected_type:
+    expected_types = expected_type if isinstance(expected_type, tuple) else (expected_type,)
+    if type(value) not in expected_types:
         raise ValueError(
             "Native payload decoded to %s, expected %s"
-            % (type(value).__name__, expected_type.__name__)
+            % (type(value).__name__, " or ".join(t.__name__ for t in expected_types))
         )
     return value

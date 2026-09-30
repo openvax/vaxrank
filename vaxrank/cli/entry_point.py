@@ -567,6 +567,10 @@ def resolve_target_alleles(args):
     to pure-score order." Animal-agnostic: HLA, mouse H-2, swine
     SLA all flow through here.
     """
+    if getattr(args, 'vcf', None) and getattr(args, '_declared_mhc_alleles', None):
+        # Direct prediction can target a subset; pooled vaccine coverage uses
+        # the complete declared genotype, including table-only alleles.
+        return list(args._declared_mhc_alleles)
     _ARG_LOAD_ERRORS = (AttributeError, ValueError, KeyError)
     alleles = None
     try:
@@ -794,6 +798,8 @@ def emit_outputs(args, ranked, source):
             ranked,
             excel_report_path=args.output_xlsx_report,
             csv_report_path=args.output_csv)
+    elif args.output_xlsx_report and getattr(args, 'vcf', None):
+        make_csv_report(ranked, excel_report_path=args.output_xlsx_report, csv_report_path=None)
     elif args.output_xlsx_report and source == 'external':
         logger.info(
             "--output-xlsx-report ignored on external-input path "
@@ -1286,6 +1292,12 @@ def run_cli(args_list=None):
         # ``data['args']`` shape.
         args_for_report = vars(args)
         source = 'external'
+        if getattr(args, 'output_json_file', None):
+            data.update(variants=ranked_variants_with_vaccine_peptides,
+                        patient_info=patient_info, args=args_for_report)
+            ensure_parent_dir(args.output_json_file)
+            with open(args.output_json_file, 'w') as stream:
+                stream.write(serialize_json_nan_tolerant(data))
     else:
         data = ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
         ranked_variants_with_vaccine_peptides = data['variants']
@@ -1486,11 +1498,11 @@ def main(args_list=None):
         exit_with_user_error(error, args_list)
 
 
-def run_vaxrank_from_parsed_args(args):
+def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_override=None):
     from .isovar_config_args import resolve_isovar_args
 
     merged_config = load_vaxrank_config(args)
-    epitope_config = epitope_config_from_args(args, merged_config=merged_config)
+    epitope_config = epitope_config_override or epitope_config_from_args(args, merged_config=merged_config)
     vaccine_config = vaccine_config_from_args(args, merged_config=merged_config)
     # Resolve before syncing args: the built-in DNA fallback padding is not
     # an explicit RNA reconstruction request. Isovar owns context derivation.
@@ -1576,19 +1588,27 @@ def run_vaxrank_from_parsed_args(args):
         ensure_parent_dir(args.output_isovar_csv)
         df.to_csv(args.output_isovar_csv, index=False)
 
+    prediction_config = epitope_config
+    if epitope_dataset is not None:
+        # Preserve every predicted occurrence for shared scoring against the
+        # enriched evidence frame. No vaccine window has been selected yet.
+        from msgspec.structs import replace
+        prediction_config = replace(epitope_config, filter_expr=None,
+                                    score_expr='1.0', min_epitope_score=0)
     vaxrank_results = run_vaxrank(
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
         vaccine_peptide_length=args.vaccine_peptide_length,
         max_vaccine_peptides_per_variant=args.max_vaccine_peptides_per_variant,
         num_target_epitopes_to_keep=args.num_epitopes_per_vaccine_peptide,
-        epitope_config=epitope_config,
+        epitope_config=prediction_config,
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config,
         allow_dna_only_fallback=getattr(args, 'allow_dna_only_fallback', False),
+        **({'epitope_dataset': epitope_dataset} if epitope_dataset is not None else {}),
     )
 
-    if getattr(args, 'output_epitopes', ''):
+    if epitope_dataset is None and getattr(args, 'output_epitopes', ''):
         # Collect all mutant epitopes across all variants
         all_epitopes = []
         for _variant, peptides in vaxrank_results.ranked_vaccine_peptides:
