@@ -41,6 +41,10 @@ from .vaccine_antigen import (
 
 logger = logging.getLogger(__name__)
 
+# Membership in annotated translations, not evidence of expression. Changing
+# the selection policy must invalidate older, protein_coding-only disk indexes.
+REFERENCE_TRANSLATION_POLICY = "annotated-protein-sequences-v2"
+
 
 @lru_cache(maxsize=1)
 def oncoref_cta_source_gene_ids() -> frozenset[str]:
@@ -119,8 +123,12 @@ def ensembl_dataset_cache_identity(genome) -> Optional[str]:
         return None
     files = []
     try:
-        definition = genome.to_dict()
-        source_paths = [definition.get("gtf_path_or_url")]
+        # EnsemblRelease.to_dict() is a compact constructor definition without
+        # source paths. Read the base Genome definition for both concrete types.
+        definition = Genome.to_dict(genome)
+        dna_source = definition.get("genome_fasta_path_or_url")
+        # Current PyEnsembl puts optional reference DNA before annotation files.
+        source_paths = [dna_source, definition.get("gtf_path_or_url")]
         source_paths.extend(
             definition.get("transcript_fasta_paths_or_urls") or []
         )
@@ -133,7 +141,8 @@ def ensembl_dataset_cache_identity(genome) -> Optional[str]:
             return None
         for source_path, cached_path in zip(source_paths, cached_paths):
             use_source_directly = (
-                "://" not in source_path
+                source_path != dna_source
+                and "://" not in source_path
                 and not definition.get("copy_local_files_to_cache")
                 and not definition.get("decompress_on_download")
             )
@@ -165,6 +174,7 @@ def ensembl_dataset_cache_identity(genome) -> Optional[str]:
         "copy_local_files_to_cache",
         "decompress_on_download",
         "gtf_path_or_url",
+        "genome_fasta_path_or_url",
         "protein_fasta_paths_or_urls",
         "transcript_fasta_paths_or_urls",
     }
@@ -172,6 +182,8 @@ def ensembl_dataset_cache_identity(genome) -> Optional[str]:
         key: value for key, value in definition.items()
         if key not in location_keys
     }
+    content_definition["species"] = str(
+        getattr(getattr(genome, "species", None), "latin_name", "") or "")
     payload = json.dumps(
         {
             "genome": content_definition,
@@ -198,7 +210,11 @@ def clear_reference_proteome_caches() -> None:
 
 
 def _protein_source_snapshot(genome):
-    """Return distinct protein sequences with every Ensembl source."""
+    """Return every annotated protein sequence and its source biotypes.
+
+    NMD/NSD, IG/TR and LoF labels do not erase an available reference sequence.
+    Membership here establishes neither expression nor antigen presentation.
+    """
     cache_key = ensembl_dataset_cache_identity(genome)
     if cache_key is not None:
         with _protein_source_snapshot_cache_lock:
@@ -211,14 +227,14 @@ def _protein_source_snapshot(genome):
     )
     sources_by_sequence: dict[str, set[SelfReferenceSource]] = {}
     for transcript in genome.transcripts():
-        if not transcript.is_protein_coding or not transcript.protein_sequence:
+        if not transcript.protein_sequence:
             continue
         gene_id = normalize_ensembl_gene_id(
             getattr(transcript, "gene_id", "") or ""
         )
         if not gene_id:
             raise ValueError(
-                "Protein-coding self-reference transcript is missing a gene ID"
+                "Annotated protein self-reference transcript is missing a gene ID"
             )
         source = SelfReferenceSource(
             gene_id=gene_id,
@@ -228,6 +244,7 @@ def _protein_source_snapshot(genome):
             protein_id=str(getattr(transcript, "protein_id", "") or ""),
             gene_name=str(getattr(transcript, "gene_name", "") or ""),
             species=species,
+            transcript_biotype=str(getattr(transcript, "biotype", "") or ""),
         )
         sources_by_sequence.setdefault(
             transcript.protein_sequence, set()
@@ -244,6 +261,7 @@ def _protein_source_snapshot(genome):
                     source.protein_id,
                     source.gene_name,
                     source.species,
+                    source.transcript_biotype,
                 ),
             )),
         )
@@ -276,9 +294,10 @@ def kmer_set_index_path(genome, min_len: int, max_len: int) -> str:
 
 
 def _kmer_dataset_identity(genome):
-    """Reuse installed dataset hashes, otherwise identify actual proteins."""
-    return (ensembl_dataset_cache_identity(genome)
-            or _protein_content_digest(genome_protein_dict(genome)))
+    """Identify both reference content and translation-selection policy."""
+    content_identity = (ensembl_dataset_cache_identity(genome)
+                        or _protein_content_digest(genome_protein_dict(genome)))
+    return "%s_%s" % (REFERENCE_TRANSLATION_POLICY, content_identity)
 
 
 def build_kmer_set_index(
@@ -317,7 +336,7 @@ def build_kmer_set_index(
     unique_proteins = set()
     transcripts = genome.transcripts()
     for t in tqdm(transcripts, desc="Collecting unique proteins", unit="transcripts"):
-        if t.is_protein_coding and t.protein_sequence:
+        if t.protein_sequence:
             unique_proteins.add(t.protein_sequence)
 
     logger.info(
@@ -466,7 +485,9 @@ def resolve_reference_kmer_lengths(
 def genome_protein_dict(genome, exclude_gene_ids=None):
     """
     Build a dict of transcript_id -> protein_sequence from a pyensembl genome,
-    optionally excluding proteins from specific genes.
+    optionally excluding proteins from specific genes. Retain every available
+    annotated protein sequence, including noncanonical transcript biotypes;
+    this is sequence membership, not an expression assessment.
 
     Parameters
     ----------
@@ -489,7 +510,7 @@ def genome_protein_dict(genome, exclude_gene_ids=None):
         gene_id = normalize_ensembl_gene_id(t.gene_id)
         if gene_id in excluded_gene_ids:
             num_excluded_transcripts += 1
-        elif t.is_protein_coding and t.protein_sequence:
+        elif t.protein_sequence:
             proteins[t.transcript_id] = t.protein_sequence
     if excluded_gene_ids:
         logger.info(
@@ -551,6 +572,7 @@ def self_reference_matches(
                 source.protein_id,
                 source.gene_name,
                 source.species,
+                source.transcript_biotype,
             ),
         ))
         result[peptide] = SelfReferenceMatch(

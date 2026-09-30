@@ -916,15 +916,22 @@ combined immunogenicity of the epitopes it contains.  Candidates are
 then filtered and ranked by:
 
 1. **CandidateEpitope content** — total predicted immunogenicity score
-2. **Reference proteome filtering** — peptides matching the human
-   reference proteome are removed to ensure only truly novel sequences
-   are selected
+2. **Reference proteome filtering** — exact matches in the selected
+   genome's annotated protein sequences are removed from mutation-derived
+   candidates, regardless of the source transcript biotype
 3. **Cancer hotspot annotation** — variants at known recurrently mutated
    positions (bundled data from
    [cancerhotspots.org](https://www.cancerhotspots.org/), ~2,700
    mutations across cancer types) are flagged
 4. **Manufacturability** — tie-breaking by hydropathy-based synthesis
    difficulty (C-terminal and 7-mer window GRAVY scores)
+
+Reference matching includes available annotated NMD, non-stop-decay, IG/TR,
+and loss-of-function protein sequences. Source-attributed matches and construct
+reports retain each transcript's biotype; membership does not establish expression
+or presentation. Older saved sources without a biotype remain explicitly unknown.
+The translation-selection policy is part of the cache key, so older indexes are
+rebuilt automatically. See the [GENCODE/Ensembl biotype definitions](https://www.gencodegenes.org/pages/biotypes.html).
 
 ### Data model
 

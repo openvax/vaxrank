@@ -231,3 +231,21 @@ def test_chemical_termini_cannot_be_embedded_inside_a_longer_product():
         ConstructChemicalModification(0, 0, "N-acetylation", DOCUMENTED),))
     with pytest.raises(ValueError, match="terminus is internal"):
         validate_construct_placements((ConstructPlacement(record, 1),), "M" + JLF, "peptide")
+
+
+@pytest.mark.parametrize("biotype", ["nonsense_mediated_decay", "protein_coding_LoF", "unknown<annotation>"])
+def test_construct_report_preserves_reference_source_biotype(tmp_path, biotype):
+    record = jlf_construct()
+    genome = create_mock_genome([
+        create_mock_transcript("REFERENCE_TX", JLF, gene_id="REFERENCE_GENE",
+                               is_protein_coding=False, biotype=biotype)])
+    audit = audit_construct_sequence(record, RecordingPredictor(), genome=genome)
+    json_path, html_path = tmp_path / "audit.json", tmp_path / "audit.html"
+    write_construct_audits([audit], json_path=json_path, html_path=html_path)
+    restored, = from_native_json(json_path.read_text(), list)
+    source, = restored.mhc_assessment.ligands[0].self_reference_match.sources
+    assert source.transcript_biotype == biotype
+    html = html_path.read_text()
+    assert biotype.replace("<", "&lt;").replace(">", "&gt;") in html
+    assert "unknown<annotation>" not in html
+    assert "does not establish expression or presentation" in html
