@@ -77,7 +77,11 @@ class EpitopeDataset:
             result = TopiaryResult(result)
         if "source_observation_id" not in result.df:
             result = combine_sources({label: result}, sample_name=sample_name)
-        frame = result.long_df
+        # Pandas may represent missing strings as NaN (notably with its
+        # string dtype). Native objects use None, while '' stays distinct.
+        # Normalize only this consumer view; retain the original table.
+        frame = result.long_df.astype(object)
+        frame = frame.where(frame.notna(), None)
         epitopes, antigens = [], {}
         for identity, rows in frame.groupby("source_observation_id", sort=False):
             row = rows.iloc[0]

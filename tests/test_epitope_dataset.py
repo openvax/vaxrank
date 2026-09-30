@@ -58,6 +58,21 @@ def test_typed_evidence_and_config_roundtrip(suffix, tmp_path):
     assert load_predictions(path) == list(loaded.epitopes)
 
 
+@pytest.mark.parametrize('missing', [float('nan'), pd.NA])
+def test_missing_flanks_become_native_nulls_without_losing_empty_strings(missing, tmp_path):
+    source = evidence(n_flank=[missing, ''], c_flank=['', missing],
+                      wt_peptide=['SIINFEKA', 'GILGFVFTA'], wt_value=[1000., 2000.],
+                      wt_n_flank=[missing, ''], wt_c_flank=['', missing])
+    dataset = EpitopeDataset.from_topiary(source, sample_name='patient')
+    for candidate, expected in zip(dataset.epitopes, [(None, ''), ('', None)]):
+        for peptide in (candidate, candidate.wt):
+            assert (peptide.n_flank, peptide.c_flank) == expected
+            assert [(p.n_flank, p.c_flank) for p in peptide.predictions_flat()] == [expected]
+    path = tmp_path / 'native.tsv'
+    dataset.save(path)
+    assert load_predictions(path) == list(dataset.epitopes)
+
+
 def test_simple_table_and_native_cli_reload(tmp_path, monkeypatch):
     import mhctools.cli
     import vaxrank.cli.entry_point
