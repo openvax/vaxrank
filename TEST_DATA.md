@@ -120,6 +120,9 @@ and `cached_paths` gives each asset's location in the shared cache.
 `--progress`, `--timeout` and `--max-retries` apply to custom manifests, whose
 assets are the only ones this command downloads.
 
+Environment cache paths are trimmed and `~` is expanded; blank variables are
+skipped. This matches Osteosarc. Resolving a root alone creates no directories.
+
 The cache root is `--cache-root`, else `OSTEOSARC_CACHE`, else
 `OPENVAX_DATA_CACHE`, else the platform cache directory — the order osteosarc
 itself resolves, so the bundled reads and any custom assets in one invocation
