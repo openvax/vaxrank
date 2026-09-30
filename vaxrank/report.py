@@ -24,7 +24,7 @@ import jinja2
 import pandas as pd
 import roman
 from mhctools.pred import Prediction
-from varcode import load_vcf_fast
+from varcode import Variant, load_vcf_fast
 
 from .cancer_hotspots import get_hotspot_url
 from . import cells
@@ -37,7 +37,6 @@ from .varcode_effects import (
     is_multi_outcome_effect,
     summarize_varcode_effect_outcomes,
 )
-from .vaccine_antigen import ANTIGEN_KIND_MUTATION
 
 logger = logging.getLogger(__name__)
 
@@ -280,13 +279,12 @@ class TemplateDataCreator(object):
         # plugged in via the same flat record fields would
         # show its own name here.
         patient_info['Processing predictor'] = PEPSICKLE_PREDICTOR_NAME
-        has_nonmutation_antigen = any(
-            getattr(getattr(peptide, 'antigen', None), 'kind',
-                    ANTIGEN_KIND_MUTATION) != ANTIGEN_KIND_MUTATION
-            for _source, peptides in self.ranked_variants_with_vaccine_peptides
-            for peptide in peptides[:1]
+        has_antigen_sources = any(
+            not isinstance(source, Variant)
+            for source, peptides in self.ranked_variants_with_vaccine_peptides
+            if peptides
         )
-        if has_nonmutation_antigen:
+        if has_antigen_sources:
             patient_info['Total number of input antigens'] = (
                 self.patient_info.num_somatic_variants)
             patient_info['Input antigens with resolved protein context'] = (
@@ -794,7 +792,7 @@ class TemplateDataCreator(object):
             top_peptide = vaccine_peptides[0]
             mutant_protein_fragment = top_peptide.mutant_protein_fragment
             antigen = getattr(top_peptide, 'antigen', None)
-            if antigen is None or antigen.kind == ANTIGEN_KIND_MUTATION:
+            if isinstance(variant, Variant):
                 variant_short_description = variant.short_description
                 variant_data = self._variant_data(variant, top_peptide)
                 predicted_effect = mutant_protein_fragment.predicted_effect()

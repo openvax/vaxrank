@@ -178,6 +178,15 @@ def test_explicit_antigens_survive_file_reload_and_build(kind, tmp_path):
             f'unknown ({kind} @ {a.source_identifier}, epitope)' for a in antigens)
         assembled.append(([p.sequence for p in peptides], [r.full_nt for r in mrna]))
     assert assembled[0] == assembled[1]
+    ascii_report = tmp_path / 'report.txt'
+    html_report = tmp_path / 'report.html'
+    run_cli(['--input-epitopes', str(native), '--output-ascii-report', str(ascii_report),
+             '--output-html-report', str(html_report)])
+    for report_path in (ascii_report, html_report):
+        text = report_path.read_text()
+        assert 'Antigen source' in text
+        assert 'Total number of input antigens' in text
+        assert all(a.source_identifier in text for a in antigens)
 
 
 def test_combined_sources_retain_all_observations_and_reject_missing_scope(tmp_path):
