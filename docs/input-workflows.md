@@ -2,14 +2,15 @@
 
 Vaxrank combines direct VCF/BAM analysis, LENS/pVACseq reports, normalized
 Topiary tables and native candidate files through the shared scoring and
-construction workflow. Native Exacto ingestion remains upstream work.
+construction workflow. Native Exacto files must first be normalized with
+Topiary; Vaxrank has no direct Exacto CLI adapter.
 
 | Input | Entry point | Current boundary |
 | --- | --- | --- |
 | Somatic variants + tumor RNA | `--vcf`, `--bam`, `--mhc-predictor`, `--mhc-alleles` | Reconstructs protein context with Isovar and predicts epitopes. Combine with table inputs using `--input-manifest`. |
 | LENS report | `--external-input lens=PATH` or `--input-lens PATH` | Imports reported peptide occurrences, available context and evidence. |
 | pVACseq report | `--external-input pvacseq=PATH` or `--input-pvacseq PATH` | Imports all-epitope or aggregated TSVs. An aggregated table already selected its best epitopes upstream; importing it cannot recover omitted candidates. |
-| Exacto output | No native importer | Requires upstream normalization work; treating an Exacto protein as generic FASTA does not preserve its full provenance. |
+| Exacto output | Normalize with Topiary 5.88+ first, then `--input-topiary` | Direct native Exacto CLI adoption remains in #497; generic FASTA alone does not preserve its full provenance. |
 | Normalized Topiary tables | `--input-topiary FILE` or `--external-input topiary=FILE` | Retains original rows, metadata and additive features; table-only candidates need no construction evidence. |
 | Saved Vaxrank candidate predictions | `--input-epitopes FILE` or `--external-input epitopes=FILE` | Reloads native candidates. Enriched exports also retain the complete scoring frame and policy. |
 | Already constructed `VaccineAntigen` objects | Python `predict_epitopes(..., antigen=...)` and `vaccine_peptides_for_antigen(...)` | Library integration; callers provide context, targetable intervals and admission evidence. |
@@ -370,9 +371,9 @@ construction also requires explicit category opt-ins; see
 - [Vaxrank #497](https://github.com/openvax/vaxrank/issues/497) and
   [Topiary #366](https://github.com/openvax/topiary/issues/366): remaining generalized input
   integration and additive predictions.
-- [Topiary #365](https://github.com/openvax/topiary/issues/365): native Exacto.
-- [Topiary #370](https://github.com/openvax/topiary/issues/370): ORF/occurrence
-  identity and reconciliation across source observations.
+- Topiary has shipped [native Exacto ingestion](https://github.com/openvax/topiary/issues/365)
+  and [ORF/occurrence reconciliation](https://github.com/openvax/topiary/issues/370).
+  Their full Vaxrank consumer adoption remains in #497.
 
 The [unified evidence design](unified_evidence.md) describes the intended
 model, not an additional supported CLI workflow. For current configuration
