@@ -140,6 +140,8 @@ def test_native_candidates_without_predictions_survive_reload(
 @pytest.mark.parametrize('kind', ['mutation', 'fusion', 'splice', 'CTA', 'ERV', 'viral'])
 def test_explicit_antigens_survive_file_reload_and_build(kind, tmp_path):
     from vaxrank.epitope_dataset import dataset_ranking_result
+    from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
+    from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
     antigens = [VaccineAntigen(
         kind=kind, amino_acids=peptide,
         targetable_mask=TargetableMask((AminoAcidInterval(0, len(peptide)),)),
@@ -163,6 +165,19 @@ def test_explicit_antigens_survive_file_reload_and_build(kind, tmp_path):
                                    options=ExternalConstructOptions())
     assert [(source, p[0].target_epitope_score) for source, p in again.ranked] == [
         (source, p[0].target_epitope_score) for source, p in result.ranked]
+    assembled = []
+    for ranked in (result.ranked, again.ranked):
+        peptides = assemble_peptide_constructs(ranked, options=PeptideConstructConfig(
+            mode='minimal_epitope', min_antigen_length_aa=8))
+        mrna = assemble_mrna_constructs(ranked, options=RNAConstructConfig(
+            antigen_content='minimal_epitope', signal_peptide=None, include_mitd=False,
+            optimize_linkers=False))
+        assert sorted(p.sequence for p in peptides) == sorted(a.amino_acids for a in antigens)
+        assert all(any(a.amino_acids in r.cds_aa for r in mrna) for a in antigens)
+        assert sorted(p.antigen_names[0] for p in peptides) == sorted(
+            f'unknown ({kind} @ {a.source_identifier}, epitope)' for a in antigens)
+        assembled.append(([p.sequence for p in peptides], [r.full_nt for r in mrna]))
+    assert assembled[0] == assembled[1]
 
 
 def test_combined_sources_retain_all_observations_and_reject_missing_scope(tmp_path):

@@ -328,6 +328,6 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
             manufacturability_thresholds=options.manufacturability_thresholds,
             manufacturability_rules=options.manufacturability_rules)
         accumulator.add(ExternalVariantEntry(
-            source=antigen.source_identifier or to_native_json(antigen),
+            source=antigen,
             vaccine_peptide=vaccine, resolved_protein_context=True))
     return accumulator.result(report.source_format)

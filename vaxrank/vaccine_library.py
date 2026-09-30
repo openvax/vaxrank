@@ -72,7 +72,9 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from .vaccine_antigen import ANTIGEN_KIND_MUTATION, VaccineAntigen
+from varcode import Variant
+
+from .vaccine_antigen import VaccineAntigen
 
 logger = logging.getLogger(__name__)
 
@@ -541,7 +543,7 @@ def get_linker(name):
 
 def antigen_description(source, antigen):
     """Stable source-aware description for construct selection reports."""
-    if antigen.kind == ANTIGEN_KIND_MUTATION:
+    if isinstance(source, Variant):
         source_description = getattr(source, "short_description", None) or str(source)
     else:
         source_description = antigen.display_identifier
@@ -551,7 +553,7 @@ def antigen_description(source, antigen):
 def antigen_construct_name(
         source, antigen, *, include_source=False, alternate_index=0):
     """Build the stable name shared by peptide and mRNA constructs."""
-    if antigen.kind == ANTIGEN_KIND_MUTATION:
+    if isinstance(source, Variant):
         if getattr(source, 'is_snv', False):
             category = 'SNV'
         elif (getattr(source, 'is_insertion', False)
@@ -563,7 +565,7 @@ def antigen_construct_name(
     else:
         category = antigen.kind
     if include_source:
-        if antigen.kind == ANTIGEN_KIND_MUTATION:
+        if isinstance(source, Variant):
             source_detail = "%s:%s %s>%s" % (
                 source.contig,
                 source.start,
@@ -598,7 +600,8 @@ def iter_named_antigens(ranked_vaccine_peptides, candidates_per_slot=1):
     Both peptide and mRNA assembly walk the same ranked list and need
     the same per-candidate name. Identity and sequence come from the
     source-agnostic ``VaccineAntigen`` attached to each peptide; the first
-    item in each ranked pair is consulted only for mutation coordinates.
+    item in each ranked pair supplies coordinates when it is a Varcode
+    Variant. Imported antigens of any kind use their stated identifiers.
 
     The name reads ``GENE (CATEGORY)`` —
     e.g. ``FYN (INDEL)`` — keeping the gene up front and the antigen
@@ -633,7 +636,7 @@ def iter_named_antigens(ranked_vaccine_peptides, candidates_per_slot=1):
                 source.ref,
                 source.alt,
             )
-            if antigen.kind == ANTIGEN_KIND_MUTATION
+            if isinstance(source, Variant)
             else antigen
         )
         identities_per_gene.setdefault(gene, set()).add(
