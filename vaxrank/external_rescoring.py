@@ -554,8 +554,10 @@ def load_unified_external(args, epitope_config, options, genome):
         raise ValueError("--duplicate-candidates requires generalized Topiary observations")
     selected = dataset.select_representatives(duplicate_policy)
     if selected is not None:
+        generalized_ids = set(dataset.result.df.source_observation_id.dropna())
         frame['Selected observation'] = [
-            (identity, allele) in selected for identity, allele in
+            (identity, allele) in selected if identity in generalized_ids else None
+            for identity, allele in
             frame[['Prediction identity', 'Allele']].itertuples(index=False, name=None)]
     rankers = {'lens': lens_ranking_result, 'pvacseq': pvacseq_ranking_result,
                'topiary': dataset_ranking_result, 'epitopes': dataset_ranking_result,

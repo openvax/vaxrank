@@ -198,6 +198,11 @@ def test_direct_and_both_report_adapters_keep_scope_and_counts(direct, tmp_path)
     assert len(dataset.construction_reports) == 2
     assert len(dataset.direct_sources) == 1
     assert next(iter(dataset.mutation_fragments.values())).n_rna_alt == 8
+    _, audit, _, _, _ = load_external_ranked(
+        parse_vaxrank_args(['--input-epitopes', str(native)]))
+    legacy = audit.loc[audit.input_format.isin(['lens', 'pvacseq'])]
+    assert not legacy.empty
+    assert legacy['Selected observation'].isna().all()
 
 
 def test_mixed_coverage_uses_declared_genotype():
