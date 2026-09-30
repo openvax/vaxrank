@@ -270,3 +270,26 @@ def test_b16_mixed_cli_assembly_and_reload(tmp_path, mouse_genome, monkeypatch):
         assert peptide and mrna
         sequences.append(([c.sequence for c in peptide], [c.sequence for c in mrna]))
     assert sequences[0] == sequences[1]
+
+
+def test_direct_configured_alternative_windows_survive_reload(direct, tmp_path, monkeypatch):
+    from dataclasses import replace
+    import vaxrank.cli.entry_point as entry
+    fragment = replace(direct[2], amino_acids='AAAAASIINFEKLAAAAAAA',
+                       mutant_amino_acid_start_offset=8, mutant_amino_acid_end_offset=9)
+    candidate = _make_epitope('SIINFEKL', 25., source_sequence=fragment.amino_acids, offset=5)
+    def predict(args, *, epitope_dataset, epitope_config_override):
+        epitope_dataset.add_mutation(fragment, [candidate])
+        return SimpleNamespace(isovar_results=[], variant_properties=lambda **kwargs: [])
+    monkeypatch.setattr(entry, 'run_vaxrank_from_parsed_args', predict)
+    args = parse_vaxrank_args(inputs(tmp_path, direct))
+    options = VaccineConfig(preferred_peptide_length=12, min_peptide_length=12,
+                            max_peptide_length=12, max_vaccine_peptides_per_variant=3)
+    ranked, frame, _, _, _ = load_external_ranked(args, vaccine_config=options)
+    assert len(ranked) == 1
+    assert len(ranked[0][1]) == 3
+    native = tmp_path / 'alternatives.tsv'
+    frame.attrs['epitope_dataset'].save(native)
+    again, _, _, _, _ = load_external_ranked(
+        parse_vaxrank_args(['--input-epitopes', str(native)]), vaccine_config=options)
+    assert [p.amino_acids for p in ranked[0][1]] == [p.amino_acids for p in again[0][1]]

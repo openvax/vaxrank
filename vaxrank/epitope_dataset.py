@@ -397,9 +397,12 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
             fragment.variant, fragment, candidates, epitope_config=dataset.config,
             vaccine_config=options.vaccine_config,
             vaccine_peptide_length=options.vaccine_peptide_length,
+            num_target_epitopes_to_keep=(options.num_target_epitopes_to_keep
+                                        if options.num_target_epitopes_to_keep is not None else 1000),
             manufacturability_config=options.manufacturability_config)
         accumulator.add(ExternalVariantEntry(
             variant=fragment.variant, vaccine_peptide=vaccines[0] if vaccines else None,
+            vaccine_peptides=tuple(vaccines),
             resolved_protein_context=True, has_rna_support=bool(fragment.n_rna_alt),
             dna_vaf=fragment.dna_vaf))
     options = source_options

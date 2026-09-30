@@ -581,8 +581,8 @@ def load_unified_external(args, epitope_config, options, genome):
                           type(source).__name__, str(source))].append(entry)
     ranked, dna_vaf = [], {}
     for entries in observations.values():
-        candidates = [(e.ranking_source, [e.vaccine_peptide]) for e in entries
-                      if e.vaccine_peptide is not None]
+        candidates = [(e.ranking_source, list(e.ranking_peptides)) for e in entries
+                      if e.ranking_peptides]
         if candidates:
             ranked.append(rank_constructs(candidates)[0])
         values = {e.dna_vaf for e in entries if e.dna_vaf is not None}
