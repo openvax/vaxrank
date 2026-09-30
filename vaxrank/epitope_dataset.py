@@ -56,7 +56,13 @@ class EpitopeDataset:
     def from_predictions(cls, epitopes, *, result=None, **kwargs):
         epitopes = tuple(epitopes)
         if result is None:
-            result = TopiaryResult(epitopes_to_topiary_df(epitopes))
+            frame = epitopes_to_topiary_df(epitopes)
+            if frame.empty:
+                # Native payloads can exist without prediction leaves. Keep
+                # an empty, readable evidence table without inventing rows.
+                frame = frame.reindex(columns=[
+                    "prediction_id", "peptide", "peptide_offset", "allele", "kind"])
+            result = TopiaryResult(frame, form="long")
         provenance = {}
         for epitope in epitopes:
             if epitope.input_provenance is not None:

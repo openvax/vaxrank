@@ -383,6 +383,8 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
         scored = []
         for report, frames in zip(reports, frames_by_report):
             for source_frame in frames:
+                if source_frame.empty:
+                    continue
                 identities = set(source_frame.prediction_id)
                 candidates = [e for e in report.epitopes if e.prediction_group_source in identities]
                 scored.extend(attach_per_allele_scores(
@@ -410,7 +412,9 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
         }) for report in reports for record in report.records]
         scoring = attach_source_annotations(epitopes_to_topiary_df(epitopes), records)
         scored = attach_per_allele_scores(epitopes, epitope_config, topiary_df=scoring)
-    by_id = {e.prediction_group_key: e for e in scored}
+    by_id = {e.prediction_group_key: e for e in original if not e.predictions_flat()}
+    by_id.update((e.prediction_group_key, e) for e in scored)
+    scored = [by_id[e.prediction_group_key] for e in original]
     updated = []
     for report in reports:
         candidates = tuple(by_id[e.prediction_group_key] for e in report.epitopes)

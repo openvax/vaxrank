@@ -6,6 +6,7 @@ import pytest
 from topiary import TopiaryResult, combine_sources
 
 from vaxrank.cli.entry_point import run_cli
+from vaxrank.candidate_epitope import CandidateEpitope
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.epitope_dataset import EpitopeDataset, ANTIGEN_COLUMN
 from vaxrank.epitope_dsl import attach_per_allele_scores
@@ -86,6 +87,35 @@ def test_legacy_native_payload_uses_shared_cli(tmp_path):
     run_cli(['--input-epitopes', str(source), '--output-csv', str(output),
              '--no-processing-aware-annotation'])
     assert len(pd.read_csv(output)) == 2
+
+
+@pytest.mark.parametrize('with_predictions', [False, True])
+@pytest.mark.parametrize('enriched', [False, True])
+def test_native_candidates_without_predictions_survive_reload(
+        with_predictions, enriched, tmp_path, monkeypatch):
+    import mhctools.cli
+    import vaxrank.cli.entry_point
+    monkeypatch.setattr(mhctools.cli, 'predictors_from_args', forbidden)
+    monkeypatch.setattr(vaxrank.cli.entry_point, 'annotate_predictions_with_processing', forbidden)
+    unpredicted = CandidateEpitope(sequence='AAAAAAAA', prediction_id='payload-only')
+    candidates = [unpredicted]
+    if with_predictions:
+        candidates.extend(EpitopeDataset.from_topiary(
+            evidence(), sample_name='patient').epitopes)
+    source = tmp_path / 'input.tsv'
+    if enriched:
+        EpitopeDataset.from_predictions(candidates).save(source)
+    else:
+        save_predictions(candidates, source)
+    native = tmp_path / 'output.tsv'
+    run_cli(['--input-epitopes', str(source), '--output-epitopes', str(native)])
+    loaded = EpitopeDataset.load(native)
+    assert len(loaded.epitopes) == len(candidates)
+    assert replace(loaded.epitopes[0], input_provenance=None) == unpredicted
+    assert len(loaded.result.df) == (2 if with_predictions else 0)
+    again = tmp_path / 'again.tsv'
+    run_cli(['--input-epitopes', str(native), '--output-epitopes', str(again)])
+    assert load_predictions(again) == list(loaded.epitopes)
 
 
 @pytest.mark.parametrize('kind', ['mutation', 'fusion', 'splice', 'CTA', 'ERV', 'viral'])
