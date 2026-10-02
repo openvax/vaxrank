@@ -105,8 +105,10 @@ def main(output, processing=False):
     documented = json.loads((DATA / 'documented.json').read_text())
     records = documented['records']
     predictor = TopiaryPredictor(models=[CachedPredictor.from_topiary_output(DATA / 'netmhcpan42.tsv')])
-    manifest = dict(packages={name: version(name) for name in (
-        'vaxrank', 'topiary', 'mhctools', 'isovar', 'varcode', 'mhcflurry', 'pepsickle')},
+    packages = ('vaxrank', 'topiary', 'mhctools', 'isovar', 'varcode')
+    if processing:
+        packages += ('mhcflurry', 'pepsickle')
+    manifest = dict(packages={name: version(name) for name in packages},
         netmhcpan_sha256=sha256((DATA / 'netmhcpan42.tsv').read_bytes()).hexdigest(),
         reference='Pinned small Sid transcript fixture; not complete human self coverage',
         documented_settings='Historical provider settings unavailable; not a tuning target', records=[])
