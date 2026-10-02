@@ -13,6 +13,7 @@
 
 
 import logging
+import json
 import logging.config
 import os
 import sys
@@ -324,8 +325,8 @@ def _resolve_axis(args, per_type_attr, shared_attr, fallback):
     return fallback
 
 
-def _emit_peptide_constructs(args, ranked, target_dir):
-    """Build + write peptide-vaccine constructs. Modality-specific."""
+def _peptide_construct_options(args):
+    """Resolve one set of peptide settings for assembly and its reports."""
     # YAML overrides for any knob not explicitly passed on the CLI.
     yaml_kwargs = construct_config_for_modality(args, 'peptide')
 
@@ -364,23 +365,36 @@ def _emit_peptide_constructs(args, ranked, target_dir):
         purity_percent=cfg('peptide_purity_percent', 'purity_percent'),
         counterion=cfg('peptide_counterion', 'counterion'),
         epitopes_per_antigen=epitopes_per_antigen,
+        window_selection=yaml_kwargs.get('window_selection'),
     )
     if antigen_content is not None:
         config_kwargs['antigen_content'] = antigen_content
-    peptide_options = PeptideConstructConfig(**config_kwargs)
+    return PeptideConstructConfig(**config_kwargs)
+
+
+def _emit_peptide_constructs(args, ranked, target_dir):
+    """Build + write peptide-vaccine constructs. Modality-specific."""
+    peptide_options = _peptide_construct_options(args)
+    from ..selection_policy import record_construct_configuration
+    record_construct_configuration(args, 'peptide', peptide_options)
     # Coverage-aware antigen selection (#269): when patient alleles
     # are known, the selector reorders ``ranked`` greedily by
     # coverage tier before bin-packing. No-op when alleles aren't
     # available (e.g. external arg parser without
     # ``--mhc-alleles`` and no LENS-inferred set).
     target_alleles = resolve_target_alleles(args)
+    window_audit = []
     constructs = assemble_peptide_constructs(
-        ranked, options=peptide_options, target_alleles=target_alleles)
+        ranked, options=peptide_options, target_alleles=target_alleles,
+        **({'window_audit': window_audit} if peptide_options.window_selection else {}))
     # Canonical filenames inside the per-modality target directory:
     # vaccine.fasta + manifest.json + order_form.csv. Single-mode
     # runs land directly in args.output_dir; multi-mode runs land in
     # args.output_dir/peptide/.
     os.makedirs(target_dir, exist_ok=True)
+    if peptide_options.window_selection is not None:
+        with open(os.path.join(target_dir, 'window_selection.json'), 'w') as stream:
+            json.dump(window_audit, stream, indent=2, allow_nan=False)
     fasta_path = os.path.join(target_dir, 'vaccine.fasta')
     manifest_path = os.path.join(target_dir, 'manifest.json')
     order_form_path = os.path.join(target_dir, 'order_form.csv')
@@ -674,6 +688,7 @@ def resolve_mhc_for_linker_optimizer(args, config_kwargs=None):
 
 def _emit_mrna_constructs(args, ranked, target_dir):
     """Build + write mRNA-vaccine constructs. Modality-specific."""
+    from ..selection_policy import record_construct_configuration
     yaml_kwargs = construct_config_for_modality(args, 'mrna')
 
     def cfg(cli_attr, yaml_key):
@@ -729,6 +744,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         poly_a_segment_linker=cfg(
             'mrna_poly_a_segment_linker', 'poly_a_segment_linker'),
     )
+    record_construct_configuration(args, 'mrna', options)
     target_alleles = resolve_target_alleles(args)
     constructs = assemble_mrna_constructs(
         ranked, options=options,
@@ -1342,6 +1358,7 @@ def run_cli(args_list=None):
     # matches what would actually be assembled with --output-dir.
     target_alleles = resolve_target_alleles(args)
     vaccine_constructions = {}
+    modality_ranked = {}
     if ranked_variants_with_vaccine_peptides:
         from ..coverage import (
             select_antigens_for_coverage, summarize_construction_decisions,
@@ -1379,31 +1396,24 @@ def run_cli(args_list=None):
                 'max_constructs': mrna_options.max_constructs,
             }
         if 'peptide' in active_types:
-            from ..peptide import PeptideConstructConfig
-            yaml_kwargs = construct_config_for_modality(args, 'peptide')
-
-            def _pep_cfg(cli_attr, yaml_key):
-                return coalesce_config_value(
-                    args, cli_attr, yaml_kwargs, yaml_key)
-            pep_options = PeptideConstructConfig(
-                antigens_per_construct=_pep_cfg(
-                    'peptide_antigens_per_construct',
-                    'antigens_per_construct'),
-                max_constructs=_pep_cfg(
-                    'peptide_max_constructs', 'max_constructs'),
-            )
+            pep_options = _peptide_construct_options(args)
+            peptide_ranked = ranked_variants_with_vaccine_peptides
+            if pep_options.window_selection is not None:
+                from ..window_selection import optimize_peptide_windows
+                peptide_ranked = optimize_peptide_windows(peptide_ranked, pep_options)
+                modality_ranked['peptide'] = peptide_ranked
             cap = (
                 pep_options.antigens_per_construct
                 * pep_options.max_constructs)
             selected = (
                 select_antigens_for_coverage(
-                    ranked_variants_with_vaccine_peptides,
+                    peptide_ranked,
                     target_alleles, cap)
                 if target_alleles else
-                list(ranked_variants_with_vaccine_peptides[:cap]))
+                list(peptide_ranked[:cap]))
             vaccine_constructions['peptide'] = {
                 **summarize_construction_decisions(
-                    ranked_variants_with_vaccine_peptides,
+                    peptide_ranked,
                     cap=cap, target_alleles=target_alleles,
                     selected=selected),
                 'antigens_per_construct': pep_options.antigens_per_construct,
@@ -1411,10 +1421,10 @@ def run_cli(args_list=None):
             }
 
 
-    def _template_data(vc_subset, include_manufacturability):
+    def _template_data(vc_subset, include_manufacturability, modality=None):
         return TemplateDataCreator(
             ranked_variants_with_vaccine_peptides=(
-                ranked_variants_with_vaccine_peptides),
+                modality_ranked.get(modality, ranked_variants_with_vaccine_peptides)),
             patient_info=patient_info,
             final_review=getattr(args, 'output_final_review', '') or '',
             reviewers=getattr(args, 'output_reviewed_by', '') or '',
@@ -1464,7 +1474,7 @@ def run_cli(args_list=None):
             td = _template_data(
                 subset,
                 include_manufacturability=(
-                    None if vtype == 'peptide' else False))
+                    None if vtype == 'peptide' else False), modality=vtype)
             os.makedirs(target_dir, exist_ok=True)
             _render(
                 td,
@@ -1479,7 +1489,8 @@ def run_cli(args_list=None):
         # core + the single modality + its manufacturability.
         _render(
             _template_data(
-                vaccine_constructions, include_manufacturability=None),
+                vaccine_constructions, include_manufacturability=None,
+                modality=active_types[0] if len(active_types) == 1 else None),
             args.output_ascii_report, args.output_html_report,
             args.output_pdf_report)
 
@@ -1593,8 +1604,9 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         # Preserve every predicted occurrence for shared scoring against the
         # enriched evidence frame. No vaccine window has been selected yet.
         from msgspec.structs import replace
-        prediction_config = replace(epitope_config, filter_expr=None,
+        prediction_config = replace(epitope_config, selection_policy=None, filter_expr=None,
                                     score_expr='1.0', min_epitope_score=0)
+    policy_evaluations = []
     vaxrank_results = run_vaxrank(
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
@@ -1606,6 +1618,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         manufacturability_config=manufacturability_config,
         allow_dna_only_fallback=getattr(args, 'allow_dna_only_fallback', False),
         **({'epitope_dataset': epitope_dataset} if epitope_dataset is not None else {}),
+        **({'policy_evaluations': policy_evaluations} if epitope_config.selection_policy else {}),
     )
 
     if epitope_dataset is None and getattr(args, 'output_epitopes', ''):
@@ -1616,6 +1629,8 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
                 all_epitopes.extend(vp.target_epitopes)
         save_predictions(all_epitopes, args.output_epitopes)
 
+    from ..selection_policy import write_run_policy
+    write_run_policy(args, policy_evaluations, epitope_config, vaccine_config)
     return vaxrank_results
 
 def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):

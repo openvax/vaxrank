@@ -147,6 +147,8 @@ _FUNCTIONS = {
 SOURCE_AGNOSTIC_BINDINGS = frozenset({
     "target_epitope_score",
     "self_epitope_score",
+    "window_epitope_score",
+    "window_selection_factor",
 })
 
 # AST node types the parser permits. Every other node type raises at
@@ -248,6 +250,10 @@ def combined_score_bindings(vp):
         'self_epitope_score': float(getattr(
             vp, 'self_epitope_score', 0.0) or 0.0),
     }
+    utility = getattr(vp, 'window_selection_audit', {}).get('utility', vp.target_epitope_score)
+    bindings['window_epitope_score'] = float(utility)
+    bindings['window_selection_factor'] = float(utility / vp.target_epitope_score
+                                              if vp.target_epitope_score > 0 else 0.)
     frag = vp.mutant_protein_fragment
     if frag is None:
         return bindings

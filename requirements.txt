@@ -43,7 +43,9 @@ mhctools>=3.44.64,<4.0.0
 # the DSL used for scoring. Keep these floors aligned when Osteosarc moves.
 # Generalized input persistence uses Topiary's typed table codec and public
 # source combination/ranking APIs, verified together against 5.86.2.
-topiary>=5.86.2,<6.0.0
+# Named selection policies require occurrence evaluation, named criteria and
+# retained audit decisions, released together in 5.90.0.
+topiary>=5.90.0,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0

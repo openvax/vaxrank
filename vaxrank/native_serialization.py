@@ -53,6 +53,7 @@ def _native_serializable_classes():
     from .cleavage_profile import CleavageProfile, CleavageIntervalEvidence
     from .processing_prediction import ProcessingPrediction
     from .mrna import RNAConstruct
+    from .peptide import PeptideConstruct
     from .sequence_context import ContextTarget, SequenceContext
     from .context_audit import MHCRequest, ContextLigand, SequenceContextAudit
     from .safety_assessment import (
@@ -73,6 +74,7 @@ def _native_serializable_classes():
     )
 
     return {
+        ("vaxrank.peptide", "PeptideConstruct"): PeptideConstruct,
         **{(cls.__module__, cls.__name__): cls for cls in (
             Variant, StructuralVariant, Genome, EnsemblRelease, Transcript, Species,
             MutantProteinFragment, ExternalRecord, ExternalPredictionKey)},

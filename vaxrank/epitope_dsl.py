@@ -214,7 +214,8 @@ def resolve_default_methods(cfg, topiary_df):
     if topiary_df.empty:
         return {}
     resolved = dict(topiary_resolve(topiary_df))
-    configured = dict(cfg.default_methods or {})
+    configured = dict((cfg.selection_policy or {}).get('default_methods') or {})
+    configured.update(cfg.default_methods or {})
     # Only announce a pick the user did not make. Logging it for a kind they
     # configured would tell them to set an entry they have already set.
     for kind, picked in sorted(resolved.items()):
@@ -404,6 +405,13 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
     group_columns = prediction_group_columns(df)
     alleles = genotype_lookup(epitopes, group_columns)
 
+    if cfg.selection_policy is not None:
+        from .selection_policy import evaluate_frame
+        return evaluate_frame(
+            df, cfg, group_keys=group_columns, alleles=alleles,
+            kind_support=kind_support, default_methods=resolved,
+            default_versions=resolved_versions)
+
     filter_node = build_filter_node(cfg)
     if filter_node is not None:
         df = apply_filter(
@@ -433,7 +441,7 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
 
 
 def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
-                             kind_support=None):
+                             kind_support=None, policy_evaluations=None):
     """Score ``epitopes`` via the configured DSL and return a new list of
     :class:`~vaxrank.candidate_epitope.CandidateEpitope` instances with
     each one's ``per_allele_scores`` populated.
@@ -497,6 +505,8 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
 
     score_series = score_predictions(
         epitopes, cfg, topiary_df=scoring_df, kind_support=kind_support)
+    if policy_evaluations is not None and "policy_evaluation" in score_series.attrs:
+        policy_evaluations.append(score_series.attrs["policy_evaluation"])
     # score_series is keyed by prediction ID, peptide, offset, and allele.
     by_position: dict[tuple, dict[str, float]] = {}
     for idx, val in score_series.items():
@@ -550,7 +560,7 @@ def epitopes_for_ranking(epitopes, cfg=None):
         retained_alleles = {
             allele
             for allele, score in epitope.per_allele_scores.items()
-            if score >= cfg.min_epitope_score
+            if cfg.selection_policy is not None or score >= cfg.min_epitope_score
         }
         if not retained_alleles:
             continue

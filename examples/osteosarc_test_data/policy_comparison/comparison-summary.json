@@ -1,0 +1,1895 @@
+{
+  "packages": {
+    "vaxrank": "3.36.0",
+    "topiary": "5.90.0",
+    "mhctools": "3.46.5",
+    "isovar": "1.39.15",
+    "varcode": "10.11.2",
+    "mhcflurry": "2.3.11",
+    "pepsickle": "0.1.3"
+  },
+  "netmhcpan_sha256": "bda526b4eeb5ee90e5ab0d6a36c08a27e353b603c646037d92f27839e1eaa258",
+  "reference": "Pinned small Sid transcript fixture; not complete human self coverage",
+  "documented_settings": "Historical provider settings unavailable; not a tuning target",
+  "hla": {
+    "clinical_class_i": [
+      "HLA-A*01:01",
+      "HLA-A*01:11N",
+      "HLA-B*08:01",
+      "HLA-B*27:05",
+      "HLA-C*01:02",
+      "HLA-C*07:01"
+    ],
+    "prediction_alleles": [
+      "HLA-A*01:01",
+      "HLA-B*08:01",
+      "HLA-B*27:05",
+      "HLA-C*01:02",
+      "HLA-C*07:01"
+    ],
+    "unassessed_hla": {
+      "HLA-A*01:11N": "Clinical table labels a null allele; not substituted with another allele or treated as an expressed presenter.",
+      "class_II": "This initial comparison uses class-I affinity only. CeGaT class-II selections are documented comparators, not expected class-I ranking agreement."
+    },
+    "typing_discrepancy": {
+      "source": "https://osteosarc.com/dragen/hla/",
+      "description": "Computational HLA callers report A*01:01 homozygosity, unlike the clinical A*01:11N call. This fixture preserves the clinical table; it does not adjudicate genotype."
+    }
+  },
+  "comparison_sha256": "c6dbba70b81cfb8e383a55e186e1f73db1c36c7da6812312f913dfdb48548fc1",
+  "records": [
+    {
+      "id": "dync1h1-mrna-minimal",
+      "variant_id": "DYNC1H1-chr14-101980529",
+      "passes_rna_filters": true,
+      "documented_native": "KRFHATISF",
+      "legacy": [
+        {
+          "sequence": "KRFHATISF",
+          "target_score": 1.9176749874510857,
+          "self_score": 0,
+          "combined_score": 13.286042042677158,
+          "targets": [
+            "KRFHATISF"
+          ]
+        }
+      ],
+      "openvax_v1": [
+        {
+          "sequence": "KRFHATISF",
+          "target_score": 1.9176749874510857,
+          "self_score": 0,
+          "combined_score": 13.286042042677158,
+          "targets": [
+            "KRFHATISF"
+          ]
+        }
+      ],
+      "baseline_parity": true,
+      "documented_match": true,
+      "processing_status": "observations_returned",
+      "cterm_coverage": 0.058823529411764705,
+      "alternatives": {
+        "presentation-v1": {
+          "windows": [
+            {
+              "sequence": "KRFHATISF",
+              "target_score": 2.094331273658221,
+              "self_score": 0,
+              "combined_score": 14.509952695425907,
+              "targets": [
+                "KRFHATIS",
+                "KRFHATISF",
+                "RFHATISF"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "KRFHATISF",
+              "target_score": 2.094331273658221,
+              "self_score": 0,
+              "combined_score": 14.509952695425907,
+              "targets": [
+                "KRFHATIS",
+                "KRFHATISF",
+                "RFHATISF"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "KRFHATISF",
+                  "target_score": 2.094331273658221,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 2.094331273658221,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {},
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [],
+              "rejected_counts": {
+                "unassessed_serum_model": 1
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [],
+              "rejected_counts": {
+                "unassessed_serum_model": 1
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-v1": {
+          "windows": [
+            {
+              "sequence": "KRFHATISF",
+              "target_score": 2.0060076094496724,
+              "self_score": 0,
+              "combined_score": 13.89802839974647,
+              "targets": [
+                "KRFHATIS",
+                "KRFHATISF",
+                "RFHATISF"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "KRFHATISF",
+              "target_score": 2.0060076094496724,
+              "self_score": 0,
+              "combined_score": 13.89802839974647,
+              "targets": [
+                "KRFHATIS",
+                "KRFHATISF",
+                "RFHATISF"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "KRFHATISF",
+                  "target_score": 2.0060076094496724,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 2.0060076094496724,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {},
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [],
+              "rejected_counts": {
+                "unassessed_serum_model": 1
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [],
+              "rejected_counts": {
+                "unassessed_serum_model": 1
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-cterm-v1": {
+          "windows": [
+            {
+              "sequence": "HGKRFHATI",
+              "target_score": 0.5568362867785223,
+              "self_score": 0,
+              "combined_score": 3.8578749607935774,
+              "targets": [
+                "HGKRFHATI"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "HGKRFHATI",
+              "target_score": 0.5568362867785223,
+              "self_score": 0,
+              "combined_score": 3.8578749607935774,
+              "targets": [
+                "HGKRFHATI"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATI",
+                  "target_score": 0.5568362867785223,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.5568362867785223,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {},
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATI",
+                  "target_score": 0.5568362867785223,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.5568362867785223,
+                  "utility": 0.41762721508389167,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {},
+              "unassessed_models": []
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATI",
+                  "target_score": 0.5568362867785223,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.5568362867785223,
+                  "utility": 0.27841814338926113,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {},
+              "unassessed_models": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "dync1h1-mrna-long",
+      "variant_id": "DYNC1H1-chr14-101980529",
+      "passes_rna_filters": true,
+      "documented_native": "VLLTLDILKHGKRFHATISFDTDTGLKQAL",
+      "legacy": [
+        {
+          "sequence": "LKHGKRFHATISFDTDTGLKQALETVNDYN",
+          "target_score": 4.908489631981229,
+          "self_score": 0.020073613907837195,
+          "combined_score": 34.00701372406619,
+          "targets": [
+            "GKRFHATISF",
+            "HGKRFHATI",
+            "HGKRFHATISF",
+            "ISFDTDTGL",
+            "KRFHATISF",
+            "KRFHATISFD",
+            "KRFHATISFDT"
+          ]
+        }
+      ],
+      "openvax_v1": [
+        {
+          "sequence": "LKHGKRFHATISFDTDTGLKQALETVNDYN",
+          "target_score": 4.908489631981229,
+          "self_score": 0.020073613907837195,
+          "combined_score": 34.00701372406619,
+          "targets": [
+            "GKRFHATISF",
+            "HGKRFHATI",
+            "HGKRFHATISF",
+            "ISFDTDTGL",
+            "KRFHATISF",
+            "KRFHATISFD",
+            "KRFHATISFDT"
+          ]
+        }
+      ],
+      "baseline_parity": true,
+      "documented_match": false,
+      "processing_status": "observations_returned",
+      "cterm_coverage": 0.773972602739726,
+      "alternatives": {
+        "presentation-v1": {
+          "windows": [
+            {
+              "sequence": "LKHGKRFHATISFDTDTGLKQALETVNDYN",
+              "target_score": 3.6388762068563296,
+              "self_score": 0.4085554644485164,
+              "combined_score": 25.210873890914712,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "KHGKRFHATISFDTDTGLKQA",
+              "target_score": 3.6388762068563296,
+              "self_score": 0.1488039801700647,
+              "combined_score": 24.306642600050036,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.6388762068563296,
+                  "non_cta_self_score": 0.1488039801700647,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.5083616620587286,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 85
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.6388762068563296,
+                  "non_cta_self_score": 0.1488039801700647,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.5083616620587286,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 41,
+                "target_retention": 56
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.6388762068563296,
+                  "non_cta_self_score": 0.1488039801700647,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.5083616620587286,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 41,
+                "target_retention": 56
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-v1": {
+          "windows": [
+            {
+              "sequence": "LKHGKRFHATISFDTDTGLKQALETVNDYN",
+              "target_score": 4.27368911472046,
+              "self_score": 0.21431460800059812,
+              "combined_score": 29.608986729799568,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "KHGKRFHATISFDTDTGLKQA",
+              "target_score": 4.27368911472046,
+              "self_score": 0.08440437647502827,
+              "combined_score": 28.99711585888866,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 4.27368911472046,
+                  "non_cta_self_score": 0.08440437647502827,
+                  "at_risk_target_score": 0.0,
+                  "utility": 4.185373161713033,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 85
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 4.27368911472046,
+                  "non_cta_self_score": 0.08440437647502827,
+                  "at_risk_target_score": 0.0,
+                  "utility": 4.185373161713033,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 41,
+                "target_retention": 56
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 4.27368911472046,
+                  "non_cta_self_score": 0.08440437647502827,
+                  "at_risk_target_score": 0.0,
+                  "utility": 4.185373161713033,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 41,
+                "target_retention": 56
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-cterm-v1": {
+          "windows": [
+            {
+              "sequence": "LKHGKRFHATISFDTDTGLKQALETVNDYN",
+              "target_score": 3.9878495718852296,
+              "self_score": 0.19431830397481545,
+              "combined_score": 27.62863228578805,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "KHGKRFHATISFDTDTGLKQA",
+              "target_score": 3.9878495718852296,
+              "self_score": 0.07221125928516656,
+              "combined_score": 27.138702318344812,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.9878495718852296,
+                  "non_cta_self_score": 0.07221125928516656,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.917134272238375,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 85
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.9878495718852296,
+                  "non_cta_self_score": 0.07221125928516656,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.917134272238375,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 41,
+                "target_retention": 56
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.9878495718852296,
+                  "non_cta_self_score": 0.07221125928516656,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.917134272238375,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 41,
+                "target_retention": 56
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "dync1h1-jlf",
+      "variant_id": "DYNC1H1-chr14-101980529",
+      "passes_rna_filters": true,
+      "documented_native": "GKRFHATISFDTDTGLKQALET",
+      "legacy": [
+        {
+          "sequence": "LKHGKRFHATISFDTDTGLKQA",
+          "target_score": 4.908489631981229,
+          "self_score": 0.020004772774957696,
+          "combined_score": 34.00701372406619,
+          "targets": [
+            "GKRFHATISF",
+            "HGKRFHATI",
+            "HGKRFHATISF",
+            "ISFDTDTGL",
+            "KRFHATISF",
+            "KRFHATISFD",
+            "KRFHATISFDT"
+          ]
+        }
+      ],
+      "openvax_v1": [
+        {
+          "sequence": "LKHGKRFHATISFDTDTGLKQA",
+          "target_score": 4.908489631981229,
+          "self_score": 0.020004772774957696,
+          "combined_score": 34.00701372406619,
+          "targets": [
+            "GKRFHATISF",
+            "HGKRFHATI",
+            "HGKRFHATISF",
+            "ISFDTDTGL",
+            "KRFHATISF",
+            "KRFHATISFD",
+            "KRFHATISFDT"
+          ]
+        }
+      ],
+      "baseline_parity": true,
+      "documented_match": false,
+      "processing_status": "observations_returned",
+      "cterm_coverage": 0.7608695652173914,
+      "alternatives": {
+        "presentation-v1": {
+          "windows": [
+            {
+              "sequence": "LKHGKRFHATISFDTDTGLKQA",
+              "target_score": 3.6388762068563296,
+              "self_score": 0.15626719139121834,
+              "combined_score": 25.210873890914712,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "KHGKRFHATISFDTDTGLKQA",
+              "target_score": 3.6388762068563296,
+              "self_score": 0.1488039801700647,
+              "combined_score": 24.306642600050036,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.6388762068563296,
+                  "non_cta_self_score": 0.1488039801700647,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.5083616620587286,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 24
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.6388762068563296,
+                  "non_cta_self_score": 0.1488039801700647,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.5083616620587286,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 17,
+                "target_retention": 11
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.6388762068563296,
+                  "non_cta_self_score": 0.1488039801700647,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.5083616620587286,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 17,
+                "target_retention": 11
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-v1": {
+          "windows": [
+            {
+              "sequence": "LKHGKRFHATISFDTDTGLKQA",
+              "target_score": 4.27368911472046,
+              "self_score": 0.08813605090550934,
+              "combined_score": 29.608986729799568,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "KHGKRFHATISFDTDTGLKQA",
+              "target_score": 4.27368911472046,
+              "self_score": 0.08440437647502827,
+              "combined_score": 28.99711585888866,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 4.27368911472046,
+                  "non_cta_self_score": 0.08440437647502827,
+                  "at_risk_target_score": 0.0,
+                  "utility": 4.185373161713033,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 24
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 4.27368911472046,
+                  "non_cta_self_score": 0.08440437647502827,
+                  "at_risk_target_score": 0.0,
+                  "utility": 4.185373161713033,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 17,
+                "target_retention": 11
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 4.27368911472046,
+                  "non_cta_self_score": 0.08440437647502827,
+                  "at_risk_target_score": 0.0,
+                  "utility": 4.185373161713033,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 17,
+                "target_retention": 11
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-cterm-v1": {
+          "windows": [
+            {
+              "sequence": "LKHGKRFHATISFDTDTGLKQA",
+              "target_score": 3.9878495718852296,
+              "self_score": 0.07513003894279462,
+              "combined_score": 27.62863228578805,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "KHGKRFHATISFDTDTGLKQA",
+              "target_score": 3.9878495718852296,
+              "self_score": 0.07221125928516656,
+              "combined_score": 27.138702318344812,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KHGKRFHATI",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.9878495718852296,
+                  "non_cta_self_score": 0.07221125928516656,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.917134272238375,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 24
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.9878495718852296,
+                  "non_cta_self_score": 0.07221125928516656,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.917134272238375,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 17,
+                "target_retention": 11
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "KHGKRFHATISFDTDTGLKQA",
+                  "target_score": 3.9878495718852296,
+                  "non_cta_self_score": 0.07221125928516656,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.917134272238375,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 17,
+                "target_retention": 11
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "dync1h1-cegat",
+      "variant_id": "DYNC1H1-chr14-101980529",
+      "passes_rna_filters": true,
+      "documented_native": "KHGKRFHATISFDTDTGL",
+      "legacy": [
+        {
+          "sequence": "KHGKRFHATISFDTDTGL",
+          "target_score": 4.908489631981229,
+          "self_score": 0.020004772774957696,
+          "combined_score": 34.00701372406619,
+          "targets": [
+            "GKRFHATISF",
+            "HGKRFHATI",
+            "HGKRFHATISF",
+            "ISFDTDTGL",
+            "KRFHATISF",
+            "KRFHATISFD",
+            "KRFHATISFDT"
+          ]
+        }
+      ],
+      "openvax_v1": [
+        {
+          "sequence": "KHGKRFHATISFDTDTGL",
+          "target_score": 4.908489631981229,
+          "self_score": 0.020004772774957696,
+          "combined_score": 34.00701372406619,
+          "targets": [
+            "GKRFHATISF",
+            "HGKRFHATI",
+            "HGKRFHATISF",
+            "ISFDTDTGL",
+            "KRFHATISF",
+            "KRFHATISFD",
+            "KRFHATISFDT"
+          ]
+        }
+      ],
+      "baseline_parity": true,
+      "documented_match": true,
+      "processing_status": "observations_returned",
+      "cterm_coverage": 0.6886792452830188,
+      "alternatives": {
+        "presentation-v1": {
+          "windows": [
+            {
+              "sequence": "HGKRFHATISFDTDTGLK",
+              "target_score": 3.6362593711246354,
+              "self_score": 0.1488039801700647,
+              "combined_score": 25.19274392114529,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "HGKRFHATISFDTDTGLK",
+              "target_score": 3.6362593711246354,
+              "self_score": 0.1488039801700647,
+              "combined_score": 24.28916289278396,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATISFDTDTGLK",
+                  "target_score": 3.636259371124635,
+                  "non_cta_self_score": 0.1488039801700647,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.505838683634872,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 8
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATISFDTDTGLK",
+                  "target_score": 3.636259371124635,
+                  "non_cta_self_score": 0.1488039801700647,
+                  "at_risk_target_score": 0.5348401904128632,
+                  "utility": 3.3769243765311323,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 5,
+                "target_retention": 3
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATISFDTDTGLK",
+                  "target_score": 3.636259371124635,
+                  "non_cta_self_score": 0.1488039801700647,
+                  "at_risk_target_score": 0.5348401904128632,
+                  "utility": 3.248010069427392,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 5,
+                "target_retention": 3
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-v1": {
+          "windows": [
+            {
+              "sequence": "HGKRFHATISFDTDTGLK",
+              "target_score": 4.272380696497865,
+              "self_score": 0.08440437647502827,
+              "combined_score": 29.599921742443236,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "HGKRFHATISFDTDTGLK",
+              "target_score": 4.272380696497865,
+              "self_score": 0.08440437647502827,
+              "combined_score": 28.988238199851228,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATISFDTDTGLK",
+                  "target_score": 4.272380696497865,
+                  "non_cta_self_score": 0.08440437647502827,
+                  "at_risk_target_score": 0.0,
+                  "utility": 4.184091782004275,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 8
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATISFDTDTGLK",
+                  "target_score": 4.272380696497865,
+                  "non_cta_self_score": 0.08440437647502827,
+                  "at_risk_target_score": 0.5403286726288727,
+                  "utility": 4.0518010921448155,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 5,
+                "target_retention": 3
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATISFDTDTGLK",
+                  "target_score": 4.272380696497865,
+                  "non_cta_self_score": 0.08440437647502827,
+                  "at_risk_target_score": 0.5403286726288727,
+                  "utility": 3.919510402285358,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 5,
+                "target_retention": 3
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-cterm-v1": {
+          "windows": [
+            {
+              "sequence": "HGKRFHATISFDTDTGLK",
+              "target_score": 3.986699930213947,
+              "self_score": 0.07221125928516656,
+              "combined_score": 27.62066733464741,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "HGKRFHATISFDTDTGLK",
+              "target_score": 3.986699930213947,
+              "self_score": 0.07221125928516656,
+              "combined_score": 27.13087860721246,
+              "targets": [
+                "GKRFHATISF",
+                "HGKRFHATI",
+                "HGKRFHATISF",
+                "ISFDTDTGL",
+                "ISFDTDTGLK",
+                "KRFHATIS",
+                "KRFHATISF",
+                "KRFHATISFD",
+                "KRFHATISFDT",
+                "RFHATISF",
+                "TISFDTDTGL"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATISFDTDTGLK",
+                  "target_score": 3.986699930213947,
+                  "non_cta_self_score": 0.07221125928516656,
+                  "at_risk_target_score": 0.0,
+                  "utility": 3.9160050168062934,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 8
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATISFDTDTGLK",
+                  "target_score": 3.986699930213947,
+                  "non_cta_self_score": 0.07221125928516656,
+                  "at_risk_target_score": 0.47580975137332393,
+                  "utility": 3.799161925650741,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 5,
+                "target_retention": 3
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "HGKRFHATISFDTDTGLK",
+                  "target_score": 3.986699930213947,
+                  "non_cta_self_score": 0.07221125928516656,
+                  "at_risk_target_score": 0.47580975137332393,
+                  "utility": 3.682318834495189,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 5,
+                "target_retention": 3
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "exoc4-jlf",
+      "variant_id": "EXOC4-chr7-133274996",
+      "passes_rna_filters": true,
+      "documented_native": "SVIRTLSTIDDVEDRENEKGR",
+      "legacy": [
+        {
+          "sequence": "SVIRTLSTIDDVEDRENEKGR",
+          "target_score": 0.0384204582838035,
+          "self_score": 0,
+          "combined_score": 0.26058022618365406,
+          "targets": [
+            "SVIRTLSTI"
+          ]
+        }
+      ],
+      "openvax_v1": [
+        {
+          "sequence": "SVIRTLSTIDDVEDRENEKGR",
+          "target_score": 0.0384204582838035,
+          "self_score": 0,
+          "combined_score": 0.26058022618365406,
+          "targets": [
+            "SVIRTLSTI"
+          ]
+        }
+      ],
+      "baseline_parity": true,
+      "documented_match": true,
+      "processing_status": "observations_returned",
+      "cterm_coverage": 0.6632653061224489,
+      "alternatives": {
+        "presentation-v1": {
+          "windows": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRENEKG",
+              "target_score": 0.43261153474681174,
+              "self_score": 0,
+              "combined_score": 2.93411418315914,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRENEKG",
+              "target_score": 0.43261153474681174,
+              "self_score": 0,
+              "combined_score": 2.93411418315914,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRENEKG",
+                  "target_score": 0.43261153474681174,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.43261153474681174,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 15
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRENEKG",
+                  "target_score": 0.43261153474681174,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.43261153474681174,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 9,
+                "target_retention": 6
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRENEKG",
+                  "target_score": 0.43261153474681174,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.43261153474681174,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 9,
+                "target_retention": 6
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-v1": {
+          "windows": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRENEKG",
+              "target_score": 0.23551599689161573,
+              "self_score": 0,
+              "combined_score": 1.5973472072236428,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRENEKG",
+              "target_score": 0.23551599689161573,
+              "self_score": 0,
+              "combined_score": 1.5973472072236428,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRENEKG",
+                  "target_score": 0.23551599689161573,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.23551599689161573,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 15
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRENEKG",
+                  "target_score": 0.23551599689161573,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.23551599689161573,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 9,
+                "target_retention": 6
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRENEKG",
+                  "target_score": 0.23551599689161573,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.23551599689161573,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 9,
+                "target_retention": 6
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-cterm-v1": {
+          "windows": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRENEKG",
+              "target_score": 0.22167943207423332,
+              "self_score": 0,
+              "combined_score": 1.503503058799254,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRENEKG",
+              "target_score": 0.22167943207423332,
+              "self_score": 0,
+              "combined_score": 1.503503058799254,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRENEKG",
+                  "target_score": 0.22167943207423332,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.22167943207423332,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 15
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRENEKG",
+                  "target_score": 0.22167943207423332,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.22167943207423332,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 9,
+                "target_retention": 6
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRENEKG",
+                  "target_score": 0.22167943207423332,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.22167943207423332,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 9,
+                "target_retention": 6
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "exoc4-cegat",
+      "variant_id": "EXOC4-chr7-133274996",
+      "passes_rna_filters": true,
+      "documented_native": "SVIRTLSTIDDVEDREN",
+      "legacy": [
+        {
+          "sequence": "SVIRTLSTIDDVEDREN",
+          "target_score": 0.0384204582838035,
+          "self_score": 0,
+          "combined_score": 0.26058022618365406,
+          "targets": [
+            "SVIRTLSTI"
+          ]
+        }
+      ],
+      "openvax_v1": [
+        {
+          "sequence": "SVIRTLSTIDDVEDREN",
+          "target_score": 0.0384204582838035,
+          "self_score": 0,
+          "combined_score": 0.26058022618365406,
+          "targets": [
+            "SVIRTLSTI"
+          ]
+        }
+      ],
+      "baseline_parity": true,
+      "documented_match": true,
+      "processing_status": "observations_returned",
+      "cterm_coverage": 0.6632653061224489,
+      "alternatives": {
+        "presentation-v1": {
+          "windows": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRE",
+              "target_score": 0.43261152525421176,
+              "self_score": 0,
+              "combined_score": 2.9341141187771944,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRE",
+              "target_score": 0.43261152525421176,
+              "self_score": 0,
+              "combined_score": 2.9341141187771944,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRE",
+                  "target_score": 0.43261152525421176,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.43261152525421176,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 1
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRE",
+                  "target_score": 0.43261152525421176,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.43261152525421176,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 1
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRE",
+                  "target_score": 0.43261152525421176,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.43261152525421176,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 1
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-v1": {
+          "windows": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRE",
+              "target_score": 0.23551599214531574,
+              "self_score": 0,
+              "combined_score": 1.59734717503267,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRE",
+              "target_score": 0.23551599214531574,
+              "self_score": 0,
+              "combined_score": 1.59734717503267,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRE",
+                  "target_score": 0.23551599214531574,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.23551599214531574,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 1
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRE",
+                  "target_score": 0.23551599214531574,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.23551599214531574,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 1
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRE",
+                  "target_score": 0.23551599214531574,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.23551599214531574,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 1
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        },
+        "presentation-ba-cterm-v1": {
+          "windows": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRE",
+              "target_score": 0.22167942760677845,
+              "self_score": 0,
+              "combined_score": 1.5035030284995008,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "self_trim": [
+            {
+              "sequence": "ISVIRTLSTIDDVEDRE",
+              "target_score": 0.22167942760677845,
+              "self_score": 0,
+              "combined_score": 1.5035030284995008,
+              "targets": [
+                "ISVIRTLSTI",
+                "SVIRTLSTI",
+                "VIRTLSTI"
+              ]
+            }
+          ],
+          "serum_sensitivity": {
+            "0.0": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRE",
+                  "target_score": 0.22167942760677845,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.22167942760677845,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "target_retention": 1
+              },
+              "unassessed_models": []
+            },
+            "0.25": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRE",
+                  "target_score": 0.22167942760677845,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.22167942760677845,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 1
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            },
+            "0.5": {
+              "constructs": [
+                {
+                  "sequence": "ISVIRTLSTIDDVEDRE",
+                  "target_score": 0.22167942760677845,
+                  "non_cta_self_score": 0,
+                  "at_risk_target_score": 0.0,
+                  "utility": 0.22167942760677845,
+                  "unassessed_models": []
+                }
+              ],
+              "rejected_counts": {
+                "unassessed_serum_model": 1
+              },
+              "unassessed_models": [
+                "dpp4-qpisa"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "h1-2-cegat",
+      "variant_id": "H1_2-chr6-26055824",
+      "passes_rna_filters": false,
+      "documented_native": "AAKAVKPKVVKPKKAA",
+      "legacy": [],
+      "openvax_v1": [],
+      "baseline_parity": true,
+      "documented_match": false,
+      "alternatives": {}
+    }
+  ]
+}

@@ -52,6 +52,7 @@ def run_vaxrank(
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
     epitope_dataset=None,
+    policy_evaluations=None,
 ):
     """
     Parameters
@@ -99,6 +100,7 @@ def run_vaxrank(
         manufacturability_config=manufacturability_config,
         allow_dna_only_fallback=allow_dna_only_fallback,
         epitope_dataset=epitope_dataset,
+        policy_evaluations=policy_evaluations,
     )
     ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
 
@@ -120,6 +122,7 @@ def create_vaccine_peptides_dict(
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
     epitope_dataset=None,
+    policy_evaluations=None,
 ):
     """
     Parameters
@@ -170,6 +173,7 @@ def create_vaccine_peptides_dict(
             manufacturability_config=manufacturability_config,
             allow_dna_only_fallback=allow_dna_only_fallback,
             epitope_dataset=epitope_dataset,
+            policy_evaluations=policy_evaluations,
         )
 
         if not vaccine_peptides:
@@ -193,6 +197,7 @@ def vaccine_peptides_for_variant(
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
     allow_dna_only_fallback: bool = False,
     epitope_dataset=None,
+    policy_evaluations=None,
 ):
     """
     Parameters
@@ -254,6 +259,7 @@ def vaccine_peptides_for_variant(
         protein_fragment=long_protein_fragment,
         epitope_config=epitope_config,
         genome=variant.ensembl,
+        **({"policy_evaluations": policy_evaluations} if policy_evaluations is not None else {}),
     )
     if epitope_dataset is not None:
         epitope_dataset.add_mutation(long_protein_fragment, epitopes)
@@ -414,9 +420,19 @@ def vaccine_peptides_from_epitopes(
                 )
     candidate_vaccine_peptides = []
 
-    for offset, candidate_fragment in long_protein_fragment.sorted_subsequences(
-        subsequence_length=vaccine_config.preferred_peptide_length
-    ):
+    lengths = [vaccine_config.preferred_peptide_length]
+    if vaccine_config.window_selection is not None:
+        from .window_selection import WindowSelection
+        if WindowSelection.resolve(vaccine_config.window_selection).enumerate_lengths:
+            lengths = range(vaccine_config.min_peptide_length,
+                            vaccine_config.max_peptide_length + 1)
+    windows = (pair for length in lengths for pair in
+               long_protein_fragment.sorted_subsequences(subsequence_length=length))
+    for offset, candidate_fragment in windows:
+        if vaccine_config.window_selection is not None and not (
+                VaccineAntigen.from_mutant_protein_fragment(long_protein_fragment)
+                .interval_is_targetable(offset, offset + len(candidate_fragment))):
+            continue
         # Isovar can legitimately return a shorter protein when no full
         # context meets its support/coverage requirements. Window generation
         # retains such fragments, but they are not eligible vaccine peptides
@@ -471,6 +487,11 @@ def vaccine_peptides_from_epitopes(
         candidate_vaccine_peptides.append(candidate_vaccine_peptide)
 
     n_total_candidates = len(candidate_vaccine_peptides)
+    if vaccine_config.window_selection is not None:
+        from .window_selection import select_windows
+        return select_windows(candidate_vaccine_peptides, vaccine_config.window_selection,
+                              preferred_length=vaccine_config.preferred_peptide_length,
+                              limit=vaccine_config.max_vaccine_peptides_per_variant)
     if n_total_candidates == 0:
         logger.info("No candidate peptides for variant %s", variant.short_description)
         return []

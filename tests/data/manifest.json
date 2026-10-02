@@ -2,7 +2,8 @@
   "schema_version": 1,
   "notes": {
     "b16.f10": "Mouse B16-F10 reads and VCFs driving the CLI/report smoke (run-vaxrank-b16-test-data.sh) and the mutant-protein-sequence tests. Osteosarc publishes the human Sid dataset only, so these stay in-repo; they are pinned by digest here because nothing else verifies them.",
-    "epitope_fixtures": "LENS and pVACseq epitope tables consumed by the external-input, rescoring and report tests. Osteosarc has no equivalent product, so these stay in-repo and are pinned by digest here."
+    "epitope_fixtures": "LENS and pVACseq epitope tables consumed by the external-input, rescoring and report tests. Osteosarc has no equivalent product, so these stay in-repo and are pinned by digest here.",
+    "selection_policy": "Small real Sid model-output subset and frozen score expectations from the named-policy comparison. Osteosarc supplies source reads, not these newly generated MHCflurry/Pepsickle predictions; keep offline policy replay independent of model installation. See examples/osteosarc_test_data/policy_comparison."
   },
   "files": {
     "b16.f10/b16.combined.bam": "5c6161eca2410e8d8d54feee91ed3952ea04822face1d58be41593aaae0be21d",
@@ -27,6 +28,8 @@
     "epitope_fixtures/real_lens_subsets/lens_v1.4_real_subset.tsv": "a2ddc0557a57f434062077e1c17122ee84ca25a8f8931be1111881464b2839e5",
     "epitope_fixtures/real_lens_subsets/lens_v1.5_real_subset.tsv": "d0ab33119fe67b68ed93bc2fbe196fd7043bff09eb0db936e1c49a3fdfc7b0ce",
     "epitope_fixtures/real_lens_subsets/lens_v1.9_real_subset.tsv": "8b4518c21d63ff64c7764871e03a39f68cbeb882b5cd3c6d01170616c5ef6899",
-    "epitope_fixtures/real_lens_subsets/lens_v1.9_with_stop_codons.tsv": "636de8342f94529e59dc43df679d4322337fdfebbdeeec6302e7e7026ba6571f"
+    "epitope_fixtures/real_lens_subsets/lens_v1.9_with_stop_codons.tsv": "636de8342f94529e59dc43df679d4322337fdfebbdeeec6302e7e7026ba6571f",
+    "selection_policy/sid-evidence.tsv": "a916fef8ca19528299c877c81ec2f3247ab8777a2195dc78de8c9b13b5af2d90",
+    "selection_policy/sid-expected.json": "2cc68f65be5c479bbd47de849f56b98217f8bede61b77f8475b33b62df66c1c6"
   }
 }

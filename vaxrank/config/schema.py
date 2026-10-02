@@ -44,6 +44,7 @@ class EpitopesConfigSchema(
     filter_expr: Optional[str] = None
     score_expr: Optional[str] = None
     default_methods: Optional[dict[str, str]] = None
+    selection_policy: Optional[dict] = None
     # How peptide-level evidence (antigen processing, proteasomal cleavage)
     # is attributed to alleles — see vaxrank.allele_evidence.
     allele_free_evidence: Optional[str] = None
@@ -99,6 +100,7 @@ class VaccinePeptidesConfigSchema(
     ranking_rules: Optional[list[str]] = None
     included_antigen_sources: Optional[list[str]] = None
     require_target_epitopes_in_variant: Optional[bool] = None
+    window_selection: Optional[dict] = None
     # Antigen-design knobs hoisted from ``vaccine_constructs:`` top
     # level (post-2.19).
     antigen_content: Optional[str] = None
@@ -132,6 +134,7 @@ class PeptideConstructConfigSchema(
     purity_percent: Optional[float] = None
     counterion: Optional[str] = None
     manufacturability: Optional[ManufacturabilityConfigSchema] = None
+    window_selection: Optional[dict] = None
 
 
 class MrnaConstructConfigSchema(
@@ -194,6 +197,7 @@ class VaxrankConfigSchema(
     kw_only=True,
     forbid_unknown_fields=True,
 ):
+    name: Optional[str] = None
     isovar: Optional[IsovarConfigSchema] = None
     epitopes: Optional[EpitopesConfigSchema] = None
     vaccine_peptides: Optional[VaccinePeptidesConfigSchema] = None

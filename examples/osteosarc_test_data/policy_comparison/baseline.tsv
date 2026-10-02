@@ -1,0 +1,8 @@
+id	passes_rna_filters	baseline_parity	documented_match	selected
+dync1h1-mrna-minimal	True	True	True	KRFHATISF
+dync1h1-mrna-long	True	True	False	LKHGKRFHATISFDTDTGLKQALETVNDYN
+dync1h1-jlf	True	True	False	LKHGKRFHATISFDTDTGLKQA
+dync1h1-cegat	True	True	True	KHGKRFHATISFDTDTGL
+exoc4-jlf	True	True	True	SVIRTLSTIDDVEDRENEKGR
+exoc4-cegat	True	True	True	SVIRTLSTIDDVEDREN
+h1-2-cegat	False	True	False	

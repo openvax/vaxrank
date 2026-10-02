@@ -107,6 +107,9 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
 
     if args.min_epitope_score is not None:
         epitope_config_kwargs["min_epitope_score"] = args.min_epitope_score
+        if epitope_config_kwargs.get("selection_policy") is not None:
+            epitope_config_kwargs["selection_policy"] = {
+                **epitope_config_kwargs["selection_policy"], "min_score": args.min_epitope_score}
     if getattr(args, "allele_free_evidence", None) is not None:
         epitope_config_kwargs["allele_free_evidence"] = (
             args.allele_free_evidence)
@@ -114,6 +117,8 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
         epitope_config_kwargs["allele_selection_axis"] = (
             args.allele_selection_axis)
     if getattr(args, 'scoring_mode', None) is not None:
+        if epitope_config_kwargs.get("selection_policy") is not None:
+            raise ValueError("With a selection_policy, override epitopes.selection_policy.score_by instead of --scoring-mode")
         epitope_config_kwargs["scoring_mode"] = args.scoring_mode
 
     # Merge CLI --default-{affinity,stability,presentation}-predictor

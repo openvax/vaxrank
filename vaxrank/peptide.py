@@ -109,6 +109,7 @@ class PeptideConstructConfig:
     scale_mg: float = 5.0           # synthesis scale per peptide
     purity_percent: float = 95.0    # HPLC purity target
     counterion: str = "TFA"         # default salt form (TFA / acetate / HCl / free)
+    window_selection: dict | None = None
 
     def __post_init__(self):
         # Normalize ``mode`` to lowercase so YAML configs that say
@@ -144,6 +145,11 @@ class PeptideConstructConfig:
             raise ValueError(
                 "antigen_content must be 'mutation_spanning' or "
                 "'minimal_epitope'; got %r" % self.antigen_content)
+        if self.window_selection is not None:
+            from .window_selection import WindowSelection
+            WindowSelection.resolve(self.window_selection)
+            if self.antigen_content != 'mutation_spanning' or self.antigens_per_construct != 1:
+                raise ValueError('Peptide window selection requires one SLP per construct')
 
 
 @dataclass
@@ -285,7 +291,7 @@ def _pack_multi_epitope(records, options, linker):
 
 def assemble_peptide_constructs(
         ranked_vaccine_peptides, options=None, *,
-        target_alleles=None):
+        target_alleles=None, window_audit=None):
     """Assemble peptide constructs from ranked vaccine peptides.
 
     Parameters
@@ -305,6 +311,9 @@ def assemble_peptide_constructs(
     list[PeptideConstruct]
     """
     options = options or PeptideConstructConfig()
+    if options.window_selection is not None:
+        from .window_selection import optimize_peptide_windows
+        ranked_vaccine_peptides = optimize_peptide_windows(ranked_vaccine_peptides, options, window_audit)
     if target_alleles:
         from .coverage import select_antigens_for_coverage
         cap = options.antigens_per_construct * options.max_constructs
@@ -323,6 +332,9 @@ def assemble_peptide_constructs(
         options.max_antigen_length_aa,
         epitopes_per_antigen=options.epitopes_per_antigen,
         candidates_per_slot=options.candidates_per_slot))
+    audits = {}
+    for name, _, vp in iter_named_antigens(ranked_vaccine_peptides, options.candidates_per_slot):
+        audits.setdefault((name, vp.amino_acids), []).append(vp.window_selection_audit)
     if not records:
         return []
 
@@ -354,11 +366,13 @@ def assemble_peptide_constructs(
                     "Antigen %s emitted at %d aa, below "
                     "--peptide-min-antigen-length-aa (%d).",
                     name, len(sequence), options.min_antigen_length_aa)
+            audit_queue = audits.get((name, sequence), [])
+            audit = audit_queue.pop(0) if audit_queue else {}
             constructs.append(PeptideConstruct(
                 name="peptide_%03d" % (len(constructs) + 1),
                 sequence=sequence,
                 antigen_names=[name],
-                components=dict(base_components),
+                components={**base_components, **({'window_selection': audit} if audit else {})},
                 manufacturability=_manufacturability_for(sequence),
             ))
         return constructs

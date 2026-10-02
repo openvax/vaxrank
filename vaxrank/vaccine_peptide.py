@@ -110,6 +110,7 @@ class VaccinePeptide(DataclassSerializable):
     combined_score_expr: Optional[str] = None
     ranking_rules: Optional[tuple] = None
     antigen: Optional[VaccineAntigen] = None
+    window_selection_audit: dict = field(default_factory=dict)
 
     # Derived attributes computed in __post_init__ — not part of the
     # serialized form. `init=False` keeps them out of the generated
@@ -398,4 +399,6 @@ class VaccinePeptide(DataclassSerializable):
             d["combined_score_expr"] = self.combined_score_expr
         if self.ranking_rules is not None:
             d["ranking_rules"] = list(self.ranking_rules)
+        if self.window_selection_audit:
+            d['window_selection_audit'] = self.window_selection_audit
         return d

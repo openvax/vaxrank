@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import warnings
+import hashlib
+from importlib.resources import files
 from typing import Any
 
 import msgspec
@@ -20,7 +22,7 @@ _LEGACY_KEY_MAP = {
 def _drop_none(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            key: _drop_none(nested_value)
+            key: (nested_value if key == "selection_policy" else _drop_none(nested_value))
             for key, nested_value in value.items()
             if nested_value is not None
         }
@@ -34,6 +36,7 @@ def _schema_to_dict(schema: VaxrankConfigSchema) -> dict[str, Any]:
 
 
 def _read_single_config_file(config_path: str) -> dict[str, Any]:
+    config_path = resolve_config_path(config_path)
     with open(config_path) as f:
         content = f.read()
 
@@ -50,12 +53,36 @@ def _read_single_config_file(config_path: str) -> dict[str, Any]:
     return raw
 
 
+def resolve_config_path(path):
+    """Resolve an explicit bundled name or a user-supplied YAML path."""
+    if str(path).startswith("builtin:"):
+        name = str(path).removeprefix("builtin:")
+        if not name or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for c in name):
+            raise ValueError("Invalid built-in configuration name: %r" % name)
+        target = files("vaxrank.config").joinpath(name + ".yaml")
+        if not target.is_file():
+            raise ValueError("Unknown built-in configuration: %s" % name)
+        return target
+    return path
+
+
+def _invalidate_policy_expansion(policy, overridden_fields):
+    """Re-expand intentionally edited saved policies; still validate originals."""
+    expressions = {'criteria', 'score_by', 'filter_by', 'ranking_by'}
+    if 'expanded' in policy and expressions.intersection(overridden_fields):
+        from topiary import SelectionPolicy
+        SelectionPolicy.from_dict(policy)
+        policy.pop('expanded')
+
+
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge ``overlay`` into ``base``. Overlay scalars replace
     base scalars; nested mappings merge key-by-key."""
     for key, overlay_value in overlay.items():
         base_value = base.get(key)
         if isinstance(base_value, dict) and isinstance(overlay_value, dict):
+            if key == 'selection_policy' and 'expanded' not in overlay_value:
+                _invalidate_policy_expansion(base_value, overlay_value)
             _deep_merge(base_value, overlay_value)
         else:
             base[key] = overlay_value
@@ -103,6 +130,10 @@ def _decode_override_value(value: str) -> Any:
 
 def _set_nested_value(target: dict[str, Any], path: str, value: Any) -> None:
     keys = path.split(".")
+    if keys[:2] == ['epitopes', 'selection_policy'] and len(keys) > 2:
+        policy = target.get('epitopes', {}).get('selection_policy')
+        if isinstance(policy, dict):
+            _invalidate_policy_expansion(policy, [keys[2]])
     current = target
     for key in keys[:-1]:
         existing = current.get(key)
@@ -294,7 +325,26 @@ def load_vaxrank_config(
             _set_nested_value(raw, path, value_text.strip())
 
     schema = msgspec.convert(raw, VaxrankConfigSchema)
-    return _schema_to_dict(schema)
+    resolved = _schema_to_dict(schema)
+    return resolved
+
+
+def configuration_provenance(args):
+    """Describe YAML derivation without mutating the caller's namespace."""
+    from ..selection_policy import canonical_digest
+    resolved = load_vaxrank_config(args)
+    paths = getattr(args, 'config', None) or []
+    if isinstance(paths, str):
+        paths = [paths]
+    sources = []
+    for path in paths:
+        with open(resolve_config_path(path), 'rb') as stream:
+            sources.append(dict(path=str(path), sha256=hashlib.sha256(stream.read()).hexdigest()))
+    return dict(name=resolved.get('name'), sources=sources,
+                ordered_overrides=getattr(args, 'config_overrides', None),
+                set_overrides=getattr(args, 'config_set_overrides', None),
+                expr_overrides=getattr(args, 'config_expr_overrides', None),
+                configuration=resolved, sha256=canonical_digest(resolved))
 
 
 _MISSING = object()
@@ -310,6 +360,7 @@ _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("epitopes.filter_expr", "filter_expr"),
     ("epitopes.score_expr", "score_expr"),
     ("epitopes.default_methods", "default_methods"),
+    ("epitopes.selection_policy", "selection_policy"),
     ("epitopes.allele_free_evidence", "allele_free_evidence"),
     ("epitopes.allele_selection_axis", "allele_selection_axis"),
 ]
@@ -322,6 +373,7 @@ _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
 # ``_MANUFACTURABILITY_CONFIG_MAPPING`` below. ``VaccineConfig``
 # carries only modality-agnostic ranking knobs.
 _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
+    ("vaccine_peptides.window_selection", "window_selection"),
     ("vaccine_peptides.preferred_length", "preferred_peptide_length"),
     ("vaccine_peptides.min_length", "min_peptide_length"),
     ("vaccine_peptides.max_length", "max_peptide_length"),

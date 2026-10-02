@@ -1,0 +1,12 @@
+# Shared antigen-window overlay; exact non-CTA self evidence only.
+name: self-trim-v1
+vaccine_peptides:
+  min_length: 15
+  max_length: 25
+  preferred_length: 25
+  combined_score_expr: "sqrt(n_rna_alt) * window_epitope_score"
+  window_selection:
+    self_weight: 0.25
+    serum_weight: 0.0
+    min_target_fraction: 0.95
+    enumerate_lengths: true

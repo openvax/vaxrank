@@ -380,6 +380,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
     validate_input_scopes([r.input_provenance for r in reports],
                           genome=genome, prediction_alleles=alleles)
     epitope_config = report_config(reports, epitope_config)
+    policy_evaluations = []
     original = [e for report in reports for e in report.epitopes]
     identities = [e.prediction_group_key for e in original]
     if len(set(identities)) != len(identities):
@@ -404,7 +405,8 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
                 identities = set(source_frame.prediction_id)
                 candidates = [e for e in report.epitopes if e.prediction_group_source in identities]
                 scored.extend(attach_per_allele_scores(
-                    candidates, epitope_config, topiary_df=source_frame))
+                    candidates, epitope_config, topiary_df=source_frame,
+                    policy_evaluations=policy_evaluations))
     else:
         if any(r.dataset is not None for r in reports):
             raise ValueError(
@@ -427,7 +429,8 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             **{key: value for key, value in record.row.items() if key in biological},
         }) for report in reports for record in report.records]
         scoring = attach_source_annotations(epitopes_to_topiary_df(epitopes), records)
-        scored = attach_per_allele_scores(epitopes, epitope_config, topiary_df=scoring)
+        scored = attach_per_allele_scores(epitopes, epitope_config, topiary_df=scoring,
+                                          policy_evaluations=policy_evaluations)
     by_id = {e.prediction_group_key: e for e in original if not e.predictions_flat()}
     by_id.update((e.prediction_group_key, e) for e in scored)
     scored = [by_id[e.prediction_group_key] for e in original]
@@ -444,7 +447,10 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
         if dataset is not None:
             selection = dict(dataset.selection)
             selection.pop('representatives', None)
-            dataset = replace(dataset, epitopes=candidates, config=epitope_config, selection=selection)
+            ids = {e.prediction_group_source for e in candidates}
+            dataset = replace(dataset, epitopes=candidates, config=epitope_config, selection=selection,
+                              policy_evaluations=[evaluation for evaluation in policy_evaluations
+                                  if set(evaluation.evidence.df.prediction_id) <= ids])
         updated.append(replace(report, report_df=frame, epitopes=candidates, dataset=dataset))
     frames = [r.report_df for r in updated if not r.report_df.empty]
     frame = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
@@ -468,7 +474,8 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
                               for r in updated if r.dataset is not None}})
     else:
         result = TopiaryResult(scoring)
-    dataset = EpitopeDataset.from_predictions(scored, result=result, config=epitope_config)
+    dataset = EpitopeDataset.from_predictions(
+        scored, result=result, config=epitope_config, policy_evaluations=policy_evaluations)
     dataset.provenance = tuple(p for r in updated for p in (
         r.dataset.provenance if r.dataset is not None else (r.input_provenance,)))
     dataset.antigens = {key: antigen for r in updated if r.dataset is not None
@@ -549,10 +556,14 @@ def load_unified_external(args, epitope_config, options, genome):
         input_predictions_path=getattr(args, 'output_input_predictions', None))
     epitope_config = frame.attrs['epitope_dataset'].config
     dataset = frame.attrs['epitope_dataset']
+    from .selection_policy import write_run_policy
     duplicate_policy = getattr(args, 'duplicate_candidates', None)
     if duplicate_policy is not None and 'candidate_id' not in dataset.result.df:
         raise ValueError("--duplicate-candidates requires generalized Topiary observations")
     selected = dataset.select_representatives(duplicate_policy)
+    run_policy = write_run_policy(args, dataset.policy_evaluations, epitope_config, options.vaccine_config)
+    if run_policy is not None:
+        dataset.selection['run_configuration'] = run_policy
     if selected is not None:
         generalized_ids = set(dataset.result.df.source_observation_id.dropna())
         frame['Selected observation'] = [
@@ -585,6 +596,11 @@ def load_unified_external(args, epitope_config, options, genome):
     for entries in observations.values():
         candidates = [(e.ranking_source, list(e.ranking_peptides)) for e in entries
                       if e.ranking_peptides]
+        if options.vaccine_config is not None and options.vaccine_config.window_selection is not None:
+            from .window_selection import optimize_antigen_windows
+            candidates = [item for candidate in candidates for item in (
+                [candidate] if all(p.window_selection_audit for p in candidate[1]) else
+                optimize_antigen_windows([candidate], options.vaccine_config))]
         if candidates:
             ranked.append(rank_constructs(candidates)[0])
         values = {e.dna_vaf for e in entries if e.dna_vaf is not None}
