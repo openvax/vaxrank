@@ -1,0 +1,37 @@
+# Experimental class-I overlay; compose after builtin:openvax-v1.
+# Requires explicit MHCflurry/NetMHCpan-4.2 evidence. Weights are heuristics.
+name: presentation-ba-cterm-v1
+epitopes:
+  selection_policy:
+    schema_version: 2
+    name: presentation-ba-cterm-v1
+    score_by: (0.5 * criterion("presentation") + 0.5 * criterion("binding")) * (0.75
+      + 0.25 * criterion("cterm"))
+    filter_by: criterion("binder")
+    ascending: false
+    duplicates: error
+    strata:
+    - candidate_mhc_class
+    default_methods: null
+    default_versions: null
+    score_fill: null
+    min_score: 1.0e-05
+    criteria:
+    - name: binding
+      expression: affinity["netMHCpan-4.2"].value.logistic_normalized(350.0, 150.0)
+      role: score
+      applies_to: null
+    - name: presentation
+      expression: presentation["mhcflurry"].score
+      role: score
+      applies_to: null
+    - name: binder
+      expression: affinity["netMHCpan-4.2"].value < 5000.0
+      role: eligibility
+      applies_to: null
+    - name: cterm
+      expression: pepsickle_cterm_score
+      role: score
+      applies_to: null
+    ranking_by: []
+    unknown: exclude

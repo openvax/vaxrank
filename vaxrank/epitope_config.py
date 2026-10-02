@@ -152,6 +152,7 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     default_methods: Optional[Dict[str, str]] = None
     allele_free_evidence: str = POLICY_ALL
     allele_selection_axis: str = SELECTION_AUTO
+    selection_policy: Optional[dict] = None
 
     @property
     def allele_policy(self):
@@ -162,6 +163,16 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
             self.allele_free_evidence, axis=self.allele_selection_axis)
 
     def __post_init__(self):
+        if self.selection_policy is not None:
+            from topiary import resolve_selection_policy
+            policy = resolve_selection_policy(self.selection_policy)
+            if policy.ascending:
+                raise ValueError('Vaxrank requires higher-is-better epitope scores; transform score_by and set ascending=false')
+            if self.filter_expr is not None or self.score_expr is not None:
+                raise ValueError("Use selection_policy.filter_by/score_by instead of filter_expr/score_expr")
+            msgspec.structs.force_setattr(self, "selection_policy", policy.to_dict())
+            if policy.min_score is not None:
+                msgspec.structs.force_setattr(self, "min_epitope_score", policy.min_score)
         # Parse eagerly so a typo fails at config time, not mid-run.
         self.allele_policy
         if self.logistic_epitope_score_midpoint <= 0:

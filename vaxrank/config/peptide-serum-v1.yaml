@@ -1,0 +1,10 @@
+# Peptide SLP overlay; serum exposure does not apply to translated mRNA.
+name: peptide-serum-v1
+peptide:
+  window_selection:
+    self_weight: 0.25
+    serum_weight: 0.25
+    min_target_fraction: 0.95
+    enumerate_lengths: true
+    serum_models: [dpp4-qpisa, fap-endo-gp, fap-dipeptidyl, ace-dipeptidyl, cpn-basic]
+    dpp4_depletion_threshold: 1.0

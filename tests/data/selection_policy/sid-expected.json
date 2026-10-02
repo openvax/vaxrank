@@ -1,0 +1,45 @@
+{
+  "openvax-v1": [
+    {
+      "prediction_id": "VLLTLDILKHGKRFHATISFDTDTGLKQALETVND",
+      "peptide": "HGKRFHATI",
+      "peptide_offset": 9,
+      "allele": "HLA-B*27:05",
+      "score": 0.5416984979037088
+    },
+    {
+      "prediction_id": "VLLTLDILKHGKRFHATISFDTDTGLKQALETVND",
+      "peptide": "KRFHATISF",
+      "peptide_offset": 11,
+      "allele": "HLA-B*27:05",
+      "score": 0.9635148476462294
+    }
+  ],
+  "presentation-v1": [
+    {
+      "prediction_id": "VLLTLDILKHGKRFHATISFDTDTGLKQALETVND",
+      "peptide": "KRFHATISF",
+      "peptide_offset": 11,
+      "allele": "HLA-B*27:05",
+      "score": 0.940146085351189
+    }
+  ],
+  "presentation-ba-v1": [
+    {
+      "prediction_id": "VLLTLDILKHGKRFHATISFDTDTGLKQALETVND",
+      "peptide": "KRFHATISF",
+      "peptide_offset": 11,
+      "allele": "HLA-B*27:05",
+      "score": 0.9412794598090515
+    }
+  ],
+  "presentation-ba-cterm-v1": [
+    {
+      "prediction_id": "VLLTLDILKHGKRFHATISFDTDTGLKQALETVND",
+      "peptide": "KRFHATISF",
+      "peptide_offset": 11,
+      "allele": "HLA-B*27:05",
+      "score": 0.9202653958688144
+    }
+  ]
+}

@@ -54,6 +54,7 @@ class EpitopeDataset:
     mutation_fragments: dict = field(default_factory=dict)
     construction_reports: list = field(default_factory=list)
     direct_sources: list = field(default_factory=list)
+    policy_evaluations: list = field(default_factory=list)
 
     def add_mutation(self, fragment, epitopes):
         """Capture direct predictions before vaccine windows discard context."""
@@ -195,6 +196,23 @@ class EpitopeDataset:
         from topiary import rank_candidates
         if 'candidate_id' not in self.result.df:
             return None
+        if self.config is not None and self.config.selection_policy is not None:
+            from topiary import select_policy_representatives
+            from .selection_policy import combine_evaluations
+            evaluation = combine_evaluations(self.policy_evaluations, self.config.selection_policy,
+                                             duplicates=duplicates)
+            if evaluation is None:
+                raise ValueError('Score named policies before selecting representative observations')
+            ranked = select_policy_representatives(evaluation)
+            self.policy_evaluations = [evaluation]
+            self.selection['duplicates'] = evaluation.policy.duplicates
+            self.selection['representatives'] = [dict(
+                source_observation_id=row.source_observation_id,
+                candidate_id=row.candidate_id, candidate_allele=row.allele,
+                candidate_observations=row.alternative_occurrences,
+                representative_reason=row.representative_reason)
+                for row in ranked.itertuples()]
+            return set(zip(ranked.source_observation_id, ranked.allele))
         frame = self.result.long_df
         frame = frame.loc[frame.source_observation_id.notna()].copy()
         scores = {(e.prediction_group_source, allele): score
@@ -213,6 +231,7 @@ class EpitopeDataset:
 
     def save(self, path):
         """Persist evidence with Topiary and objects with the native codec."""
+        from .selection_policy import encode_evaluations
         extra = dict(self.result.extra)
         extra[DATASET_METADATA] = {
             "schema": DATASET_SCHEMA,
@@ -225,6 +244,7 @@ class EpitopeDataset:
                                    for key, fragment in self.mutation_fragments.items()},
             "construction_reports": self.construction_reports,
             "direct_sources": self.direct_sources,
+            "policy_evidence": encode_evaluations(self.policy_evaluations),
         }
         result = TopiaryResult(self.result.df.copy(), metadata=self.result.metadata)
         result.extra = extra
@@ -233,6 +253,7 @@ class EpitopeDataset:
 
     @classmethod
     def load(cls, path):
+        from .selection_policy import decode_evaluations
         from .mutant_protein_fragment import MutantProteinFragment
         result = read_table(path)
         payload = result.extra.pop(DATASET_METADATA, None)
@@ -251,7 +272,8 @@ class EpitopeDataset:
             mutation_fragments={key: from_native_json(value, MutantProteinFragment)
                                 for key, value in payload.get("mutation_fragments", {}).items()},
             construction_reports=payload.get("construction_reports", []),
-            direct_sources=payload.get("direct_sources", []))
+            direct_sources=payload.get("direct_sources", []),
+            policy_evaluations=decode_evaluations(payload.get("policy_evidence", [])))
 
     def report_frame(self):
         """Expose original annotations beside the familiar report columns."""

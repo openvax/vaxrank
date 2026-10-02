@@ -17,11 +17,11 @@ from .osteosarc_fixture_support import indexed_genome, verify_manifest_files
 DATA = sid_test_data() / "osteosarc" / "selection_validation"
 
 
-def load_selection_inputs(directory):
+def load_selection_inputs(directory, reference_directory=None):
     root = DATA / "isovar"
     manifest = json.loads((root / "manifest.json").read_text())
     verify_manifest_files(root, manifest["files"], label="selection_validation/isovar")
-    reference = root / "reference"
+    reference = reference_directory or root / "reference"
     metadata = json.loads((reference / "manifest.json").read_text())
     # Distinct from the older six-transcript and upstream stress fixture IDs:
     # pyensembl/varcode cache reference-derived information by identity.

@@ -158,8 +158,14 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     # useful when the report itself is downstream input for an
     # independent epitope predictor.
     require_target_epitopes_in_variant: bool = True
+    window_selection: Optional[dict] = None
 
     def __post_init__(self):
+        if self.window_selection is not None:
+            from .window_selection import WindowSelection
+            policy = WindowSelection.resolve(self.window_selection)
+            if policy.serum_weight:
+                raise ValueError('Serum exposure belongs in peptide.window_selection, not shared vaccine_peptides')
         if self.preferred_peptide_length < 1:
             raise ValueError(
                 f"preferred_peptide_length must be at least 1, "

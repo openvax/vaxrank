@@ -578,6 +578,12 @@ default fallback path.)
 
 ## Configuration
 
+Named bundles compose through the same option: `--config builtin:openvax-v1`
+freezes the existing selection rules; append another `--config` to derive a
+policy. See [selection policies](docs/selection-policies.md) for experimental
+presentation/processing ensembles, self-content trimming, serum susceptibility,
+and replayable decision audits.
+
 ### YAML config file
 
 Common parameters can be stored in a YAML file to avoid repeating them

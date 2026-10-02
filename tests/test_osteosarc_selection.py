@@ -111,8 +111,12 @@ def test_pinned_predictions_are_complete_real_model_outputs():
     expected_vaccine_config = json.loads(json.dumps(
         msgspec.to_builtins(VaccineConfig())
     ))
+    # Historical fixture predates optional window-policy settings.
+    assert expected_vaccine_config.pop("window_selection") is None
     assert metadata["vaccine_config"] == expected_vaccine_config
-    assert metadata["epitope_config"] == msgspec.to_builtins(EpitopeConfig())
+    expected_epitope_config = msgspec.to_builtins(EpitopeConfig())
+    assert expected_epitope_config.pop("selection_policy") is None
+    assert metadata["epitope_config"] == expected_epitope_config
     cache = CachedPredictor.from_topiary_output(str(DATA / "netmhcpan42.tsv"))
     assert cache.fallback is None
     frame = cache.predict_peptides_dataframe(metadata["requested_peptides"])

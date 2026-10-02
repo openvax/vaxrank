@@ -1486,6 +1486,8 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     if epitope_config is None:
         epitope_config = EpitopeConfig()
 
+    report_attrs = report_df.attrs
+    report_df = pd.DataFrame(report_df)
     peptide_col = 'Mutant peptide sequence'
     allele_col = 'Allele'
 
@@ -1506,22 +1508,26 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
     # ``pvacseq_mhcflurry_ic50_mt`` remain DSL-addressable; LENS and
     # vaxrank-native callers fall back to rebuilding from CandidateEpitope.
     if topiary_df is None:
-        topiary_df = report_df.attrs.get("topiary_df")
+        topiary_df = report_attrs.get("topiary_df")
     if topiary_df is None:
         topiary_df = epitopes_to_topiary_df(epitopes)
 
     # Historical sources retain their own model/version selection. Applying a
     # global canonical method could remove every row from another source whose
     # table never ran that method. Fresh rescoring uses one combined frame.
-    source_frames = report_df.attrs.get("input_score_frames")
+    source_frames = report_attrs.get("input_score_frames")
     if source_frames is None:
         source_frames = [topiary_df]
     scores = []
     for source_frame in source_frames:
         validate_dsl_against_predictions(
             epitope_config, epitopes, topiary_df=source_frame)
-        scores.append(score_predictions(
-            epitopes, epitope_config, topiary_df=source_frame))
+        source_scores = score_predictions(
+            epitopes, epitope_config, topiary_df=source_frame)
+        # Evaluation objects contain frames; pandas must not compare/deep-copy
+        # those audits while concatenating scores or materializing report rows.
+        source_scores.attrs = {}
+        scores.append(source_scores)
     score_series = pd.concat(scores) if scores else pd.Series(dtype=float)
 
     # score_series is indexed by the stable prediction identity, peptide,
@@ -1535,7 +1541,7 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
         prediction_id, peptide, offset, allele = idx_tuple
         scores_by_key[(prediction_id, peptide, int(offset), allele)] = score
 
-    report_df = report_df.copy()
+    report_df = pd.DataFrame(report_df).copy()
     identity_col = 'Prediction identity'
     offset_col = 'Peptide offset'
     missing = [
@@ -1562,14 +1568,16 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
         eligible = (
             passed
             and score is not None
-            and float(score) >= epitope_config.min_epitope_score
+            and (epitope_config.selection_policy is not None
+                 or float(score) >= epitope_config.min_epitope_score)
         )
         scores.append(round(float(score), 6) if passed else None)
         filter_passed.append(passed)
         rank_eligible.append(eligible)
         exclusion_reasons.append(
             "" if eligible else (
-                "dsl_filter" if not passed else "min_epitope_score"))
+                ("selection_policy" if epitope_config.selection_policy is not None else "dsl_filter")
+                if not passed else "min_epitope_score"))
     report_df.insert(2, 'vaxrank_score', scores)
     report_df.insert(3, 'vaxrank_filter_passed', filter_passed)
     report_df.insert(4, 'vaxrank_rank_eligible', rank_eligible)

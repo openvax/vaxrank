@@ -1,0 +1,116 @@
+# Frozen Vaxrank 3.35 selection/assembly baseline. Derive changes with overlays.
+# Supplied prediction versions and resolved model defaults are recorded per run.
+epitopes:
+  logistic_midpoint: 350.0
+  logistic_width: 150.0
+  min_score: 1.0e-05
+  affinity_cutoff: 5000.0
+  percentile_rank_cutoff: 10.0
+  scoring_mode: affinity
+  selection_policy:
+    schema_version: 2
+    name: openvax-v1
+    score_by: criterion("legacy_binding")
+    filter_by: null
+    ascending: false
+    duplicates: error
+    strata:
+    - candidate_mhc_class
+    default_methods: null
+    default_versions: null
+    score_fill: 0.0
+    min_score: 1.0e-05
+    criteria:
+    - name: legacy_binding
+      expression: (affinity.value < 5000.0) * affinity.value.logistic_normalized(350.0,
+        150.0)
+      role: score
+      applies_to: null
+    ranking_by: []
+    unknown: exclude
+  allele_free_evidence: all
+  allele_selection_axis: auto
+  top_epitopes_per_candidate: 1000
+isovar:
+  protein_sequence_length: null
+  protein_context_peptide_length: null
+  protein_sequence_preference: balanced
+  min_protein_sequence_support_fraction: 0.85
+  min_variant_sequence_coverage: 2
+vaccine_peptides:
+  preferred_length: 25
+  min_length: 25
+  max_length: 25
+  padding_around_mutation: null
+  per_mutation: 1
+  combined_score_expr: sqrt(n_rna_alt) * target_epitope_score
+  score_fraction_of_best: 0.99
+  ranking_rules:
+  - target_epitope_score
+  - n_alt_reads
+  - manufacturability
+  - n_alt_reads_supporting
+  - self_epitope_score
+  - n_mutant_amino_acids
+  - mutation_distance_from_edge
+  included_antigen_sources:
+  - SNV
+  - INDEL
+  - FUSION
+  require_target_epitopes_in_variant: true
+  antigen_content: mutation_spanning
+  epitopes_per_antigen: 1
+  candidates_per_slot: 1
+  min_antigen_length_aa: 15
+  max_antigen_length_aa: 25
+peptide:
+  mode: slp
+  linker: G4Sx3
+  antigens_per_construct: 1
+  max_constructs: 20
+  n_terminal_acetyl: false
+  c_terminal_amide: false
+  scale_mg: 5.0
+  purity_percent: 95.0
+  counterion: TFA
+  manufacturability:
+    max_c_terminal_hydropathy: 1.5
+    min_kmer_hydropathy: 0.0
+    max_kmer_hydropathy_low_priority: 1.5
+    max_kmer_hydropathy_high_priority: 2.5
+    rules:
+    - cysteine_count
+    - cterm_hydropathy
+    - max_hydropathy_high
+    - difficult_n_terminal
+    - c_terminal_cysteine
+    - c_terminal_proline
+    - n_terminal_asparagine
+    - aspartate_proline
+    - max_hydropathy_low
+    - min_hydropathy
+mrna:
+  linker: G4Sx2
+  antigens_per_construct: 5
+  max_constructs: 2
+  max_length_nt: 4000
+  signal_peptide: HLA_B
+  include_mitd: true
+  mitd: HLA_B
+  utr_5p: HBB
+  utr_3p: HBB_FI
+  poly_a_length: 120
+  poly_a_segmented: false
+  poly_a_first_segment: 30
+  poly_a_segment_linker: GCATATGACT
+  codon_species: h_sapiens
+  codon_method: use_best_codon
+  optimize_linkers: null
+  junction_predictor: null
+  junction_alleles: null
+  junction_predictor_path: null
+  junction_predictor_models_path: null
+  junction_candidates: ''
+  junction_rank_strong: 0.5
+  junction_rank_mild: 2.0
+name: openvax-v1

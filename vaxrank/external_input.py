@@ -962,6 +962,8 @@ def source_agnostic_construct_options(options):
     expression = options.combined_score_expr
     if expression in (None, DEFAULT_COMBINED_SCORE_EXPR):
         expression = "target_epitope_score"
+    elif expression == 'sqrt(n_rna_alt) * window_epitope_score':
+        expression = 'window_epitope_score'
     rules = options.ranking_rules
     if rules is None or tuple(rules) == tuple(DEFAULT_RANKING_RULES):
         rules = _SOURCE_AGNOSTIC_RANKING_RULES

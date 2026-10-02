@@ -96,7 +96,8 @@ def predict_epitopes(
         protein_fragment: Optional[MutantProteinFragment] = None,
         epitope_config : Optional[EpitopeConfig] = None,
         genome : Optional[Genome] = None,
-        antigen: Optional[VaccineAntigen] = None) -> list[CandidateEpitope]:
+        antigen: Optional[VaccineAntigen] = None,
+        policy_evaluations=None) -> list[CandidateEpitope]:
     """
     Parameters
     ----------
@@ -223,7 +224,8 @@ def predict_epitopes(
         predictions_df, allele_attributions, policy,
         group_columns=prediction_group_columns(predictions_df))
 
-    filter_node = build_filter_node(epitope_config)
+    filter_node = (build_filter_node(epitope_config)
+                   if epitope_config.selection_policy is None else None)
     if filter_node is not None:
         predictions_df = apply_filter(
             predictions_df, filter_node,
@@ -260,15 +262,24 @@ def predict_epitopes(
 
     # Evaluate the score expression once; indexed by
     # (source_sequence_name, peptide, peptide_offset, allele) group tuple.
-    score_node = build_score_node(epitope_config)
-    score_ctx = EvalContext(
-        predictions_df,
-        group_keys=prediction_group_columns(predictions_df),
-        default_methods=default_methods,
-        kind_support=kind_support)
-    score_series = (
-        score_node.eval(score_ctx).reindex(score_ctx.group_index).fillna(0.0)
-    )
+    if epitope_config.selection_policy is not None:
+        from .selection_policy import evaluate_frame
+        from .epitope_dsl import resolve_default_methods, resolve_default_versions
+        score_series = evaluate_frame(
+            predictions_df, epitope_config,
+            group_keys=prediction_group_columns(predictions_df), kind_support=kind_support,
+            default_methods=resolve_default_methods(epitope_config, predictions_df),
+            default_versions=resolve_default_versions(epitope_config, predictions_df))
+        if policy_evaluations is not None:
+            policy_evaluations.append(score_series.attrs["policy_evaluation"])
+    else:
+        score_node = build_score_node(epitope_config)
+        score_ctx = EvalContext(
+            predictions_df,
+            group_keys=prediction_group_columns(predictions_df),
+            default_methods=default_methods,
+            kind_support=kind_support)
+        score_series = score_node.eval(score_ctx).reindex(score_ctx.group_index).fillna(0.0)
 
     # Compute WT epitopes for peptides that overlap the mutation
     wt_peptides = {}
@@ -362,8 +373,11 @@ def predict_epitopes(
             peptide_start_offset,
             row["allele"],
         )
+        if group_key not in score_series:
+            num_low_scoring += 1
+            continue
         epitope_score = float(score_series[group_key])
-        if epitope_score < epitope_config.min_epitope_score:
+        if epitope_config.selection_policy is None and epitope_score < epitope_config.min_epitope_score:
             num_low_scoring += 1
             continue
 

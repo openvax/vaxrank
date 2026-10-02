@@ -94,7 +94,7 @@ def make_vaxrank_arg_parser():
         "--config",
         action="append",
         default=None,
-        help="Path to YAML config. May be repeated; later files deep-merge "
+        help="YAML path or bundled name (e.g. builtin:openvax-v1). May be repeated; later files deep-merge "
              "over earlier ones. Each file may contain any of the top-level "
              "sections 'isovar', 'epitopes', 'vaccine_peptides', 'peptide', and 'mrna'; "
              "split them across files or keep them together.")
@@ -1069,7 +1069,8 @@ def external_input_arg_parser():
     add_supplemental_report_args(arg_parser)
     add_epitope_prediction_args(arg_parser)
     # config arg needed for epitope_config_from_args
-    arg_parser.add_argument("--config", action="append", default=None)
+    arg_parser.add_argument("--config", action="append", default=None,
+                           help="YAML path or builtin:NAME; repeat to overlay configurations.")
     add_config_override_args(arg_parser)
     return arg_parser
 
