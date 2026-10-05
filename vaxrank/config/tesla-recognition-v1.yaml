@@ -1,0 +1,61 @@
+# Experimental published comparison policy; construction uses Vaxrank rules.
+name: tesla-recognition-v1
+policy_metadata:
+  description: TESLA / Wells 2020 presentation and recognition gates
+  citation: https://doi.org/10.1016/j.cell.2020.09.015
+  source_version: Wells et al., Cell 2020, Figures 3L / 4D
+  scope: one input report / source evaluation partition
+  required_evidence:
+  - affinity.value (mutant binding affinity in nM)
+  - tumor_abundance_tpm (tumor epitope abundance in TPM)
+  - stability.value (pMHC binding stability in hours)
+  - wt.affinity.value (matched WT binding affinity in nM) and/or foreignness (published
+    IEDB similarity-derived recognition feature)
+  notes:
+  - Reproduces cohort-derived presentation thresholds; this experimental preset is
+    not a fitted Vaxrank immunogenicity model.
+  - tumor_abundance_tpm must be the supplied tumor epitope abundance, not raw read
+    counts or silently substituted gene TPM.
+  - pMHC binding stability is measured in hours, not extracellular/serum peptide half-life.
+  - Passing epitopes rank by ascending affinity; 1/(1+IC50) is only the higher-is-better
+    representation.
+epitopes:
+  selection_policy:
+    name: tesla-recognition-v1
+    score_by: 1 / (1 + affinity.value)
+    filter_by: criterion("binding") & criterion("abundance") & criterion("stability")
+      & (criterion("agretopicity") | criterion("foreignness"))
+    ascending: false
+    duplicates: error
+    strata:
+    - candidate_mhc_class
+    default_methods: null
+    default_versions: null
+    score_fill: null
+    min_score: 0.0
+    criteria:
+    - name: binding
+      expression: affinity.value < 34
+      role: eligibility
+      applies_to: null
+    - name: abundance
+      expression: tumor_abundance_tpm > 33
+      role: eligibility
+      applies_to: null
+    - name: stability
+      expression: stability.value > 1.4
+      role: eligibility
+      applies_to: null
+    - name: agretopicity
+      expression: (wt.affinity.value > 0) & (affinity.value / wt.affinity.value <
+        0.1)
+      role: eligibility
+      applies_to: null
+    - name: foreignness
+      expression: foreignness > 1e-16
+      role: eligibility
+      applies_to: null
+    ranking_by: []
+    unknown: exclude
+vaccine_peptides:
+  combined_score_expr: target_epitope_score

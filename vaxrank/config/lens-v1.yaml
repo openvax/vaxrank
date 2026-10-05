@@ -1,0 +1,55 @@
+# Experimental published comparison policy; construction uses Vaxrank rules.
+name: lens-v1
+policy_metadata:
+  description: LENS 1.9 documented priority score
+  citation: https://uselens.io/en/lens-v1.9.0/faq.html#how-is-the-prioritization-score-calculated
+  source_version: LENS 1.9.0 documented scoring
+  scope: one input report / source evaluation partition
+  required_evidence:
+  - affinity.value (nM; select predictor explicitly when needed)
+  - lens_rna_reads_covering_genomic_origin_with_peptide_cds (reported coding-sequence
+    support read count)
+  - ccf (fraction 0..1; optional, missing explicitly contributes 1)
+  notes:
+  - Recomputes documented priority score; upstream discovery/filtering is retained
+    in the input report.
+  - No pseudocount is added. Zero counts and a zero log-support maximum are unscorable,
+    not evidence of resistance.
+  - Normalization uses all input occurrences in this report. Scores cannot be compared
+    across reports/patients.
+  - RNA is already included in the epitope score; the Vaxrank combined score does
+    not multiply it again.
+epitopes:
+  selection_policy:
+    name: lens-v1
+    score_by: criterion("binding") * criterion("normalized_support") * criterion("clonality")
+    filter_by: null
+    ascending: false
+    duplicates: error
+    strata:
+    - candidate_mhc_class
+    default_methods: null
+    default_versions: null
+    score_fill: null
+    min_score: 0.0
+    criteria:
+    - name: binding
+      expression: (1 - affinity.value / 1000).hinge()
+      role: score
+      applies_to: null
+    - name: log_support
+      expression: lens_rna_reads_covering_genomic_origin_with_peptide_cds.log2()
+      role: score
+      applies_to: null
+    - name: normalized_support
+      expression: criterion("log_support") / criterion("log_support").population_max()
+      role: score
+      applies_to: null
+    - name: clonality
+      expression: ccf.fillna(1)
+      role: score
+      applies_to: null
+    ranking_by: []
+    unknown: exclude
+vaccine_peptides:
+  combined_score_expr: target_epitope_score

@@ -1243,6 +1243,10 @@ def run_cli(args_list=None):
         # loader, which passes them to construct assembly.
         vaccine_config = vaccine_config_from_args(
             args, merged_config=merged_config)
+        # Keep actual CLI choices before resolved defaults are materialized on
+        # args. Native replay restores its construct defaults underneath them.
+        from argparse import Namespace
+        args._external_vaccine_args = Namespace(**vars(args))
         if 'peptide' in resolve_vaccine_types(args):
             manufacturability_config = manufacturability_config_from_args(
                 args, merged_config=merged_config)

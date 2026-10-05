@@ -1,0 +1,32 @@
+{
+  "source": "https://github.com/griffithlab/pVACtools/blob/v7.1.4/pvactools/lib/sort.py",
+  "commit": "be43606c010a0ed4e7f06a3263b0a25cb6a21c42",
+  "metrics": [
+    "ic50",
+    "combined_percentile"
+  ],
+  "expected_ids": [
+    "1-113-A-T",
+    "1-120-A-T",
+    "1-100-A-T",
+    "1-114-A-T",
+    "1-116-A-T",
+    "1-117-A-T",
+    "1-115-A-T",
+    "1-118-A-T",
+    "1-112-A-T",
+    "1-119-A-T",
+    "1-101-A-T",
+    "1-102-A-T",
+    "1-103-A-T",
+    "1-104-A-T",
+    "1-105-A-T",
+    "1-106-A-T",
+    "1-107-A-T",
+    "1-108-A-T",
+    "1-109-A-T",
+    "1-110-A-T",
+    "1-111-A-T"
+  ],
+  "source_sha256": "2954d1fa12f3b5ef51c90c6fae59ae56a45e1d2e92f0f76409516501524d0764"
+}

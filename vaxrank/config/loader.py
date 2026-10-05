@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import warnings
 import hashlib
+from copy import deepcopy
 from importlib.resources import files
 from typing import Any
 
@@ -275,14 +276,16 @@ def load_vaxrank_config(
     set_overrides: list[str] | None = None,
     expr_overrides: list[str] | None = None,
     ordered_overrides: list[tuple[str, str]] | None = None,
+    base_config: dict | None = None,
 ) -> dict[str, Any]:
     if args is not None:
         config_path = getattr(args, "config", config_path)
         set_overrides = getattr(args, "config_set_overrides", set_overrides)
         expr_overrides = getattr(args, "config_expr_overrides", expr_overrides)
         ordered_overrides = getattr(args, "config_overrides", ordered_overrides)
+        base_config = getattr(args, '_saved_construct_config', base_config)
 
-    raw = _read_config_files(config_path)
+    raw = _deep_merge(deepcopy(base_config or {}), _read_config_files(config_path))
     if "schema_version" in raw:
         raise ValueError(
             "schema_version is not supported yet. Use the current unversioned config schema."
@@ -386,6 +389,30 @@ _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.require_target_epitopes_in_variant",
      "require_target_epitopes_in_variant"),
 ]
+
+
+def saved_construct_configuration(record):
+    """Return saved construct defaults for overlay by current YAML/CLI choices.
+
+    Restores the recorded effective VaccineConfig, including legacy CLI
+    settings absent from the original YAML. Epitope policy restoration remains
+    source-local. Old records without effective construct settings yield None.
+    The stored digest is checked before using the retained citation/configuration.
+    """
+    if not record or record.get('effective_vaccine_peptides') is None:
+        return None
+    from ..selection_policy import configuration_digest
+    from ..vaccine_config import VaccineConfig
+    if record.get('effective_sha256') != configuration_digest(record):
+        raise ValueError('Saved run configuration digest does not match its definition')
+    vaccine = msgspec.to_builtins(msgspec.convert(record['effective_vaccine_peptides'], VaccineConfig))
+    original = record.get('configuration', {})
+    base = {key: deepcopy(original[key]) for key in ('name', 'policy_metadata') if key in original}
+    for path, field in _VACCINE_CONFIG_MAPPING:
+        _set_nested_value(base, path, vaccine[field])
+    _set_nested_value(base, 'vaccine_peptides.max_epitopes_per_candidate',
+                      vaccine['num_target_epitopes_to_keep'])
+    return base
 
 
 # Declarative mapping: (dotted config path) → (ManufacturabilityConfig kwarg name)

@@ -1571,7 +1571,7 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
             and (epitope_config.selection_policy is not None
                  or float(score) >= epitope_config.min_epitope_score)
         )
-        scores.append(round(float(score), 6) if passed else None)
+        scores.append(float(score) if passed else None)
         filter_passed.append(passed)
         rank_eligible.append(eligible)
         exclusion_reasons.append(
@@ -1585,6 +1585,8 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
 
     report_df = report_df.sort_values(
         'vaxrank_score', ascending=False, na_position='last', kind='stable')
+    # Rank full-precision policy scores before rounding their display values.
+    report_df['vaxrank_score'] = report_df['vaxrank_score'].astype(float).round(6)
     report_df.insert(0, 'rank', range(1, len(report_df) + 1))
     if 'Input source' in report_df.columns:
         report_df.insert(1, 'source_rank',

@@ -198,6 +198,7 @@ class VaxrankConfigSchema(
     forbid_unknown_fields=True,
 ):
     name: Optional[str] = None
+    policy_metadata: Optional[dict] = None
     isovar: Optional[IsovarConfigSchema] = None
     epitopes: Optional[EpitopesConfigSchema] = None
     vaccine_peptides: Optional[VaccinePeptidesConfigSchema] = None
