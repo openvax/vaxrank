@@ -525,24 +525,24 @@ def _topiary_pvacseq_to_epitope_rows(rows):
             or prediction_kind_for_method(method))
         percentile_rank = cells.number(row.get("percentile_rank"))
         score = cells.number(row.get("score"))
-        if (not peptide or not allele
-                or (value is None and score is None
-                    and percentile_rank is None)):
+        if not peptide or not allele:
             continue
         value = physical_prediction_value(kind, value)
-        mutant = Prediction(
+        # A peptide/allele observation remains a candidate even without a
+        # quantitative leaf. Its partial/absent measurements are retained in
+        # the original Topiary frame for policy ranking and native replay.
+        mutant = (Prediction(
             kind=kind, predictor_name=method, predictor_version=version,
             allele=allele, peptide=peptide, value=value,
             score=score if score is not None else 0.0,
             percentile_rank=percentile_rank,
-        )
+        ) if value is not None or score is not None else None)
 
         wt = None
         wt_value = cells.number(row.get("wt_value"))
         wt_score = cells.number(row.get("wt_score"))
         wt_percentile_rank = cells.number(row.get("wt_percentile_rank"))
-        if (wt_value is not None or wt_score is not None
-                or wt_percentile_rank is not None):
+        if wt_value is not None or wt_score is not None:
             wt_method = cells.text(row.get("wt_prediction_method_name")) or method
             wt_version = cells.text(row.get("wt_predictor_version")) or version
             wt_value = physical_prediction_value(kind, wt_value)
@@ -575,6 +575,7 @@ def _topiary_pvacseq_to_epitope_rows(rows):
             'offset': 0,
             'mutant': mutant,
             'wt': wt,
+            'patient_alleles': (allele,),
             'source_class': SOURCE_CLASS_MUTATION,
             'overlaps_mutation': cells.boolean(
                 row.get("contains_mutant_residues"), default=True),
@@ -1571,7 +1572,7 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
             and (epitope_config.selection_policy is not None
                  or float(score) >= epitope_config.min_epitope_score)
         )
-        scores.append(round(float(score), 6) if passed else None)
+        scores.append(float(score) if passed else None)
         filter_passed.append(passed)
         rank_eligible.append(eligible)
         exclusion_reasons.append(
@@ -1585,6 +1586,8 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
 
     report_df = report_df.sort_values(
         'vaxrank_score', ascending=False, na_position='last', kind='stable')
+    # Rank full-precision policy scores before rounding their display values.
+    report_df['vaxrank_score'] = report_df['vaxrank_score'].astype(float).round(6)
     report_df.insert(0, 'rank', range(1, len(report_df) + 1))
     if 'Input source' in report_df.columns:
         report_df.insert(1, 'source_rank',

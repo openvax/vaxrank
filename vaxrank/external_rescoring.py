@@ -545,6 +545,28 @@ def load_unified_external(args, epitope_config, options, genome):
         [(fmt, path) for fmt, path, _ in specs],
         scopes=[scope for _, _, scope in specs],
         manifest_path=getattr(args, 'input_manifest', None), genome=genome)
+    from .config.loader import saved_construct_configuration, load_vaxrank_config
+    saved_configs = [saved_construct_configuration(r.dataset.selection.get('run_configuration'))
+                     for r in loaded_reports if r.dataset is not None]
+    saved_configs = [cfg for cfg in saved_configs if cfg is not None]
+    if saved_configs:
+        # Compare effective merged settings: an explicit current YAML can
+        # reconcile different source defaults, but input order cannot choose.
+        resolved = [load_vaxrank_config(args, base_config=cfg) for cfg in saved_configs]
+        if any(cfg != resolved[0] for cfg in resolved):
+            raise ValueError('Saved inputs use different construct configurations; '
+                             'supply explicit vaccine configuration overrides')
+        args._saved_construct_config = saved_configs[0]
+        from .cli.vaccine_config_args import vaccine_config_from_args
+        from .external_input import ExternalConstructOptions
+        cli_args = getattr(args, '_external_vaccine_args', args)
+        vaccine = vaccine_config_from_args(cli_args, merged_config=resolved[0])
+        options = ExternalConstructOptions.from_configs(
+            vaccine_config=vaccine, manufacturability_config=options.manufacturability_config)
+        args.vaccine_peptide_length = vaccine.preferred_peptide_length
+        args.num_epitopes_per_vaccine_peptide = vaccine.num_target_epitopes_to_keep
+        args.max_vaccine_peptides_per_variant = vaccine.max_vaccine_peptides_per_variant
+        args.included_antigen_sources = list(vaccine.included_antigen_sources)
     epitope_config = report_config(loaded_reports, epitope_config)
     if direct:
         from .direct_input import prepare_direct_report

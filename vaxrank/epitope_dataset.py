@@ -118,23 +118,30 @@ class EpitopeDataset:
                 kind = _value(record, "kind")
                 if kind is None:
                     continue
-                predictions.append(Prediction(
-                    kind=kind, peptide=peptide,
-                    allele=stated_or_blank(record.get("candidate_allele")),
-                    predictor_name=stated_or_blank(record.get("prediction_method_name")),
-                    predictor_version=stated_or_blank(record.get("predictor_version")),
-                    value=_value(record, "value"), score=_value(record, "score"),
-                    percentile_rank=_value(record, "percentile_rank"),
-                    n_flank=record.get("n_flank"), c_flank=record.get("c_flank")))
+                method = stated_or_blank(record.get("prediction_method_name"))
+                version = stated_or_blank(record.get("predictor_version"))
+                # The typed table is the lossless authority for partial
+                # measurements. A percentile-only quantitative prediction
+                # cannot be represented by mhctools.Prediction (#566). Keep
+                # its occurrence, allele and rank in result; do not fabricate
+                # a quantitative value or score for a native leaf.
+                if any(_value(record, name) is not None for name in ('value', 'score')):
+                    predictions.append(Prediction(
+                        kind=kind, peptide=peptide,
+                        allele=stated_or_blank(record.get("candidate_allele")),
+                        predictor_name=method, predictor_version=version,
+                        value=_value(record, "value"), score=_value(record, "score"),
+                        percentile_rank=_value(record, "percentile_rank"),
+                        n_flank=record.get("n_flank"), c_flank=record.get("c_flank")))
                 if any(_value(record, 'wt_' + name) is not None
-                       for name in ('value', 'score', 'percentile_rank')):
+                       for name in ('value', 'score')):
                     wt_predictions.append(Prediction(
                         kind=kind, peptide=_value(record, 'wt_peptide', ''),
                         allele=stated_or_blank(record.get('candidate_allele')),
                         predictor_name=_value(record, 'wt_prediction_method_name',
-                                              predictions[-1].predictor_name),
+                                              method),
                         predictor_version=_value(record, 'wt_predictor_version',
-                                                 predictions[-1].predictor_version),
+                                                 version),
                         value=_value(record, 'wt_value'), score=_value(record, 'wt_score'),
                         percentile_rank=_value(record, 'wt_percentile_rank'),
                         n_flank=record.get('wt_n_flank'), c_flank=record.get('wt_c_flank')))
@@ -147,7 +154,8 @@ class EpitopeDataset:
                 source_name=_value(row, "source_sequence_name", ""),
                 n_flank=row.get("n_flank"), c_flank=row.get("c_flank"),
                 prediction_id=identity, predictions=tuple(predictions), comparators=comparators,
-                patient_alleles=tuple(sorted({p.allele for p in predictions if p.allele})),
+                patient_alleles=tuple(sorted({stated_or_blank(value)
+                    for value in rows.candidate_allele if stated_or_blank(value)})),
                 source_class=_value(row, "source_class"),
                 overlaps_targetable=False)
             validate_peptide_alleles(candidate, f"Topiary observation {identity}")
@@ -276,12 +284,20 @@ class EpitopeDataset:
             policy_evaluations=decode_evaluations(payload.get("policy_evidence", [])))
 
     def report_frame(self):
-        """Expose original annotations beside the familiar report columns."""
+        """Report each occurrence/allele once; retain full evidence for scoring."""
         frame = self.scoring_frame()
         if frame.empty:
             return frame
         frame = frame.loc[frame.prediction_id.isin(
             e.prediction_group_source for e in self.epitopes)].copy()
+        alleles = {e.prediction_group_source: e.patient_alleles or ('',)
+                   for e in self.epitopes}
+        # Shared allele-free processing rows are evidence for these candidates,
+        # not extra peptide/allele report observations. The full scoring frame
+        # and native result keep every measurement kind and predictor row.
+        frame = frame.loc[[row.allele in alleles[row.prediction_id]
+                           for row in frame.itertuples()]]
+        frame = frame.drop_duplicates(['prediction_id', 'peptide', 'peptide_offset', 'allele'])
         frame["Prediction identity"] = frame.prediction_id
         frame["Peptide offset"] = frame.peptide_offset
         frame["Mutant peptide sequence"] = frame.peptide

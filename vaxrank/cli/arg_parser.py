@@ -61,6 +61,29 @@ class _PrintDefaultConfigAction(Action):
         parser.exit()
 
 
+class _ListPoliciesAction(Action):
+    def __init__(self, option_strings, dest=SUPPRESS, default=SUPPRESS, **kwargs):
+        super().__init__(option_strings, dest=dest, default=default, nargs=0, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        from ..config.policies import list_policies
+        for policy in list_policies():
+            sys.stdout.write('%s\t%s\n' % (policy['name'], policy['description']))
+        parser.exit()
+
+
+class _ShowPolicyAction(Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        import msgspec
+        from ..config.policies import show_policy
+        try:
+            configuration = show_policy(values)
+        except ValueError as error:
+            parser.error(str(error))
+        sys.stdout.write(msgspec.yaml.encode(configuration).decode('utf-8'))
+        parser.exit()
+
+
 def make_vaxrank_arg_parser():
     # create common parser with the --version flag
     parent_parser = ArgumentParser('parent', add_help=False)
@@ -71,6 +94,11 @@ def make_vaxrank_arg_parser():
         help="Print the bundled default YAML config to stdout and exit. "
              "Pipe to a file (`> my-config.yaml`) to start from a fully "
              "documented config you can edit, then run with --config.")
+
+    parent_parser.add_argument('--list-policies', action=_ListPoliciesAction,
+                               help='List bundled selection policies and exit.')
+    parent_parser.add_argument('--show-policy', action=_ShowPolicyAction, metavar='NAME',
+                               help='Print the composed bundled policy, formulas and evidence requirements; exit.')
 
     # inherit commandline options from Isovar
     arg_parser = make_isovar_arg_parser(

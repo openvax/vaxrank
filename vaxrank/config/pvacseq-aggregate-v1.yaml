@@ -1,0 +1,79 @@
+# Experimental aggregate replay policy; source Tier decisions are retained.
+name: pvacseq-aggregate-v1
+policy_metadata:
+  description: pVACseq aggregate tiers and default within-report ordering
+  citation: https://github.com/griffithlab/pVACtools/blob/v7.1.4/pvactools/lib/sort.py
+  source_version: pVACtools 7.1.4; median IC50 MT and %ile MT ordering
+  scope: one input report / source evaluation partition
+  required_evidence:
+  - pvacseq_tier (upstream aggregate Tier, including its transcript/anchor/clonality
+    decisions)
+  - rna_alt_expression (reported Allele Expr)
+  - affinity.value and affinity.rank (aggregate IC50 MT in nM and %ile MT)
+  - gene and aa_change (upstream Gene / AA Change tie-breaks)
+  notes:
+  - Consumes upstream best-peptide and Tier decisions. This preset does not recompute
+    tiers from raw all-epitopes rows or substitute for upstream annotation.
+  - Pins default metric ordering. Supply matching aggregate columns; nondefault upstream
+    metric choices require a derived policy.
+  - Expression sorts descending in pVACseq source despite the documentation saying
+    ascending.
+  - Missing numeric sort measurements rank at bottom as in the source implementation.
+    Unknown Tier is excluded.
+  - The reciprocal ordinal is an ordering score, not a biological probability; construct
+    aggregation is Vaxrank-specific.
+epitopes:
+  selection_policy:
+    name: pvacseq-aggregate-v1
+    score_by: 1 / ordinal_rank(criterion("tier_order"), criterion("rank_sum"), criterion("binding_rank"),
+      column(gene), column(aa_change))
+    filter_by: criterion("known_tier")
+    ascending: false
+    duplicates: error
+    strata:
+    - candidate_mhc_class
+    default_methods: null
+    default_versions: null
+    score_fill: null
+    min_score: 0.0
+    criteria:
+    - name: tier_order
+      expression: 0 * (column(pvacseq_tier) == "Pass") + 1 * (column(pvacseq_tier)
+        == "PoorBinder") + 2 * (column(pvacseq_tier) == "PoorImmunogenicity") + 3
+        * (column(pvacseq_tier) == "PoorPresentation") + 4 * (column(pvacseq_tier)
+        == "RefMatch") + 5 * (column(pvacseq_tier) == "PoorTranscript") + 6 * (column(pvacseq_tier)
+        == "LowExpr") + 7 * (column(pvacseq_tier) == "Anchor") + 8 * (column(pvacseq_tier)
+        == "Subclonal") + 9 * (column(pvacseq_tier) == "ProbPos") + 10 * (column(pvacseq_tier)
+        == "Poor") + 11 * (column(pvacseq_tier) == "NoExpr")
+      role: score
+      applies_to: null
+    - name: expression_rank
+      expression: rna_alt_expression.dense_rank(0, 1)
+      role: score
+      applies_to: null
+    - name: binding_rank
+      expression: affinity.value.dense_rank(1, 1)
+      role: score
+      applies_to: null
+    - name: percentile_rank
+      expression: affinity.rank.dense_rank(1, 1)
+      role: score
+      applies_to: null
+    - name: rank_sum
+      expression: criterion("expression_rank") + criterion("binding_rank") + criterion("percentile_rank")
+      role: score
+      applies_to: null
+    - name: known_tier
+      expression: (column(pvacseq_tier) == "Pass") | (column(pvacseq_tier) == "PoorBinder")
+        | (column(pvacseq_tier) == "PoorImmunogenicity") | (column(pvacseq_tier) ==
+        "PoorPresentation") | (column(pvacseq_tier) == "RefMatch") | (column(pvacseq_tier)
+        == "PoorTranscript") | (column(pvacseq_tier) == "LowExpr") | (column(pvacseq_tier)
+        == "Anchor") | (column(pvacseq_tier) == "Subclonal") | (column(pvacseq_tier)
+        == "ProbPos") | (column(pvacseq_tier) == "Poor") | (column(pvacseq_tier) ==
+        "NoExpr")
+      role: eligibility
+      applies_to: null
+    ranking_by: []
+    unknown: exclude
+vaccine_peptides:
+  combined_score_expr: target_epitope_score

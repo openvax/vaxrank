@@ -578,6 +578,11 @@ default fallback path.)
 
 ## Configuration
 
+Use `vaxrank --list-policies` to list bundled policies and
+`vaxrank --show-policy NAME` to inspect their resolved formulas and required
+measurements. [Published comparison policies](docs/published-policies.md) include
+LENS, pVACseq aggregate ordering and experimental TESLA gates.
+
 Named bundles compose through the same option: `--config builtin:openvax-v1`
 freezes the existing selection rules; append another `--config` to derive a
 policy. See [selection policies](docs/selection-policies.md) for experimental
