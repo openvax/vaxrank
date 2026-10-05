@@ -14,15 +14,12 @@ pyensembl>=2.16.0,<3.0.0
 # Varcode 10 also supplies candidate-local SV sequence-change checks, including
 # partial proteins and uncertain selenocysteine decoding.
 varcode>=10.10.2,<11.0.0
-# 1.33.0 accepts matched germline variants (--germline-vcf), which Vaxrank
-# passes through. The fusion adapter reads isovar.fusion_rna.v3, which 1.37.0
-# introduced (RNA support as one record, junction direct_support); 1.38 and
-# 1.39 keep that schema. A later schema needs the adapter to follow, so stay
-# below the next minor release. 1.39.10 fixes the full-source Sid adaptive
-# alignment merge crash (#415); 1.39.11 also excludes third-allele mate
-# conflicts from phasing (#419). 1.39.13 carries directional calibration and
-# preserves run thresholds in downstream adapters. Issue numbers refer to Isovar.
-isovar>=1.39.13,<1.40.0
+# 1.42.1 corrects flanking-indel candidate matching. The fusion consumer
+# validates isovar.fusion_rna.v3 explicitly; audited through 1.44.2. Raw
+# assembly support remains distinct from opt-in fractional catalog support.
+# Retains matched germline input, directional calibration and run thresholds.
+# 1.45 changes Osteosarc's minor window; coordinate with Topiary first (#571).
+isovar>=1.42.1,<1.45.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.64.4,<4.0.0
 # 3.41.0 supplies mhctools.cleavage (CleavageInput/CleavageModel/CleavageResult/
