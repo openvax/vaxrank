@@ -13,7 +13,7 @@ from functools import partial
 
 import pandas as pd
 
-from .epitope_dsl import attach_per_allele_scores, epitopes_to_topiary_df
+from .epitope_dsl import attach_per_allele_scores
 from .epitope_io import (
     annotate_credited_alleles, attach_source_annotations, neoepitope_core_row,
     normalize_hla_allele, read_lens_report, read_pvacseq_report, save_predictions,
@@ -26,10 +26,41 @@ from .input_scope import (
     validate_input_scopes,
 )
 
+
+def _exacto_identity(path, options):
+    contents = {'table': hashlib.sha256(Path(path).read_bytes()).hexdigest()}
+    contents.update({name: hashlib.sha256(Path(options[name]).read_bytes()).hexdigest()
+                     for name in ('primary_structures', 'transcript_read_support') if name in options})
+    return 'exacto:' + hashlib.sha256(json.dumps(contents, sort_keys=True).encode()).hexdigest()
+
+
+def read_exacto_report(path, *, scope_declarations=None, **_):
+    """Use Topiary's native reader, retaining unknown admission and MHC scope."""
+    from topiary import read_exacto
+    from .external_report import ExternalReport
+    declarations = dict(scope_declarations or {})
+    options = declarations.pop('exacto', {})
+    scope = scope_from_mapping(declarations, str(path))
+    if not scope.sample_id:
+        raise ValueError('Native Exacto inputs require an explicit sample_id in --input-manifest')
+    result = read_exacto(path, sample_name=scope.sample_id, reference_name=scope.reference_assembly,
+                        library_id=scope.library_id, **options)
+    # These coordinates/context are producer-supplied only with the companion
+    # primary structure. Preserve unknown source coordinates in the table.
+    result.df['peptide_offset'] = result.df.peptide_start
+    result.df['source_sequence'] = result.df.sequence.where(result.df.peptide_start.notna(), None)
+    label = _exacto_identity(path, options) + ':' + hashlib.sha256(
+        json.dumps(asdict(scope), sort_keys=True).encode()).hexdigest()
+    dataset = EpitopeDataset.from_topiary(result, label=label)
+    return ExternalReport('exacto', str(path), report_df=dataset.report_frame(),
+                          epitopes=dataset.epitopes, dataset=dataset)
+
+
 READERS = {
     "lens": read_lens_report, "pvacseq": read_pvacseq_report,
     "topiary": partial(read_epitope_report, source_format="topiary"),
     "epitopes": partial(read_epitope_report, source_format="epitopes"),
+    "exacto": read_exacto_report,
 }
 
 
@@ -131,15 +162,15 @@ class InputTablePredictor:
     def __init__(self, epitopes):
         self._entries = {}
         for epitope in epitopes:
-            key = epitope.prediction_id
-            if not key or key in self._entries:
-                raise ValueError("Input predictions require unique source identities")
+            key = epitope.prediction_group_key
+            if not epitope.prediction_id or key in self._entries:
+                raise ValueError("Input predictions require unique source occurrence identities")
             self._entries[key] = epitope
 
     def predict_candidates(self, epitopes):
         result = []
         for epitope in epitopes:
-            original = self._entries[epitope.prediction_id]
+            original = self._entries[epitope.prediction_group_key]
             if (epitope.sequence, epitope.source_sequence, epitope.offset,
                     epitope.n_flank, epitope.c_flank) != (
                     original.sequence, original.source_sequence, original.offset,
@@ -161,86 +192,91 @@ def _context(peptide):
             raise ValueError("Peptide does not match its source context")
         return (peptide.sequence, peptide.source_sequence[:start],
                 peptide.source_sequence[end:])
-    return peptide.sequence, peptide.n_flank or '', peptide.c_flank or ''
+    return peptide.sequence, peptide.n_flank, peptide.c_flank
 
 
-def rescore_candidates(epitopes, models, alleles):
-    """Re-predict candidate and known comparator sequences using mhctools.
+def rescore_candidates(epitopes, models, alleles, *, use_flanks=True):
+    """Predict exact supplied windows with Topiary's public occurrence API."""
+    return _predict_selected_occurrences(epitopes, models, alleles, use_flanks=use_flanks)[0]
 
-    Each batch has at most one occurrence of any peptide so backends that
-    return peptide-grouped results cannot join different flanks accidentally.
-    Identical inference contexts across source files are evaluated once.
-    """
-    if not models or not alleles:
-        raise ValueError("Fresh rescoring requires predictors and explicit patient alleles")
-    alleles = sorted({normalize_hla_allele(a) for a in alleles})
-    contexts = dict.fromkeys(_context(e) for e in epitopes)
-    for e in epitopes:
-        contexts.update(dict.fromkeys(_context(p) for p in e.comparators.values()
-                                      if p.sequence))
-    predictions = {key: [] for key in contexts}
+
+def _predict_selected_occurrences(epitopes, models, alleles, *, use_flanks=True):
+    from dataclasses import fields
+    from mhctools.pred import Prediction
+    from topiary import predict_peptide_occurrences, is_stated
+    from topiary.ranking import prediction_mhc_scope
+    from .candidate_epitope import stated_or_blank
+
+    if not models:
+        raise ValueError("Fresh rescoring requires predictors")
+    alleles = tuple(sorted({normalize_hla_allele(a) for a in alleles}))
+    requests, owners = [], []
+    for index, epitope in enumerate(epitopes):
+        peptides = [(None, epitope), *epitope.comparators.items()]
+        for comparator, peptide in peptides:
+            if not peptide.sequence:
+                continue
+            sequence, n, c = _context(peptide)
+            request = dict(prediction_id=str(len(requests)), peptide=sequence,
+                           peptide_offset=peptide.offset, n_flank=n, c_flank=c)
+            if epitope.input_provenance is not None:
+                request['sample_name'] = (epitope.input_provenance.scope.sample_id
+                                          or epitope.input_provenance.scope.patient_id
+                                          or epitope.input_provenance.input_id)
+            requests.append(request)
+            owners.append((index, comparator))
+    leaves = defaultdict(list)
+    predicted_frames = []
+    prediction_fields = {field.name for field in fields(Prediction)}
     for model in models:
-        if not callable(getattr(model, 'predict_with_flanks', None)):
-            raise ValueError("%s has no contextual mhctools prediction API" % type(model).__name__)
-        support = model.kind_support() if callable(getattr(model, 'kind_support', None)) else {}
-        if any(meta.get('mhc_dependence') == 'haplotype' for meta in support.values()):
-            raise ValueError("Fresh external rescoring requires per-allele models; "
-                             "haplotype-scoped transport is tracked in Topiary #367")
-        # Trimming is part of the model's declared inference contract.
-        use_flanks = getattr(model, 'uses_flanking_sequences', False)
-        default = getattr(model, 'flank_length', 15)
-        n_length = getattr(model, 'n_flank_length', None)
-        c_length = getattr(model, 'c_flank_length', None)
-        n_length = default if n_length is None else n_length
-        c_length = default if c_length is None else c_length
-        queries = defaultdict(list)
-        for key in contexts:
-            sequence, n, c = key
-            inference = (sequence, n[-n_length:] if use_flanks and n_length else '',
-                         c[:c_length] if use_flanks and c_length else '')
-            queries[inference].append(key)
-        queues = defaultdict(list)
-        for query in queries:
-            queues[query[0]].append(query)
-        while queues:
-            batch = [queue.pop(0) for queue in queues.values()]
-            queues = {seq: queue for seq, queue in queues.items() if queue}
-            by_sequence = {q[0]: q for q in batch}
-            results = model.predict_with_flanks(
-                [q[0] for q in batch], [q[1] for q in batch], [q[2] for q in batch])
-            observed = set()
-            for result in results:
-                if result.peptide not in by_sequence or result.peptide in observed:
-                    raise ValueError("Predictor returned an unexpected or duplicate peptide")
-                observed.add(result.peptide)
-                query = by_sequence[result.peptide]
-                if not result.preds:
-                    raise ValueError("Predictor returned no values for %s" % result.peptide)
-                for pred in result.preds:
-                    if pred.peptide != result.peptide:
-                        raise ValueError("Predictor returned mismatched peptide identity")
-                    if pred.allele and pred.allele not in alleles:
-                        raise ValueError("Predictor returned an allele outside the patient genotype")
-                for kind, meta in support.items():
-                    if meta.get('mhc_dependence') == 'single_allele':
-                        observed_alleles = {p.allele for p in result.preds if p.kind == kind}
-                        if observed_alleles != set(getattr(model, 'alleles', ())):
-                            raise ValueError("Predictor omitted requested allele coverage for %s" % kind)
-                for key in queries[query]:
-                    predictions[key].extend(result.preds)
-            missing = set(by_sequence) - observed
-            if missing:
-                raise ValueError("Predictor omitted requested peptides: %s" % sorted(missing))
-    result = []
-    for epitope in epitopes:
-        comparators = {
-            name: replace(p, predictions=tuple(predictions[_context(p)]) if p.sequence else ())
-            for name, p in epitope.comparators.items()}
-        result.append(replace(
-            epitope, predictions=tuple(predictions[_context(epitope)]),
-            comparators=comparators, patient_alleles=tuple(alleles),
-            per_allele_scores={}, allele_attributions=()))
-    return result
+        support = model.kind_support()
+        dependent = any(spec.get('mhc_dependence') != 'none' for spec in support.values())
+        configured = tuple(sorted({normalize_hla_allele(a) for a in getattr(model, 'alleles', ())}))
+        if dependent and (not alleles or configured != alleles):
+            raise ValueError("Predictor allele coverage must match the explicit patient genotype")
+        predicted = predict_peptide_occurrences(requests, model, use_flanks=use_flanks)
+        for row in predicted.to_dict('records'):
+            request_index = int(row['prediction_id'])
+            index, comparator = owners[request_index]
+            values = {key: value for key, value in row.items() if key in prediction_fields}
+            values['predictor_name'] = row['prediction_method_name']
+            values['offset'] = int(row['peptide_offset'])
+            for key in ('value', 'score', 'percentile_rank', 'measurement_context', 'peptide_input', 'cache_key'):
+                if key in values and not is_stated(values[key]):
+                    values[key] = None
+            values['allele'] = stated_or_blank(values.get('allele'))
+            if isinstance(values.get('measurement_context'), dict) and not values['measurement_context'].get('unit'):
+                # Topiary aliases dimensionless primary scores to value.
+                # mhctools.value is a unit-bearing measurement; retain the
+                # canonical table value without fabricating a native unit.
+                values['value'] = None
+            leaves[(index, comparator)].append(Prediction.from_dict(values))
+        primary = predicted.loc[[owners[int(identity)][1] is None for identity in predicted.prediction_id]].copy()
+        def match_key(row):
+            return (owners[int(row['prediction_id'])][0], row['kind'], row['prediction_method_name'],
+                    row.get('predictor_version'), prediction_mhc_scope(row['allele'],
+                        dependence=row['prediction_mhc_dependence'], allele_set=row['allele_set']))
+        wildtypes = {match_key(row): row for row in predicted.to_dict('records')
+                     if owners[int(row['prediction_id'])][1] == 'wt'}
+        matches = [wildtypes.get(match_key(row), {}) for row in primary.to_dict('records')]
+        for field in ('value', 'score', 'affinity', 'percentile_rank', 'prediction_method_name',
+                      'predictor_version', 'allele', 'allele_set', 'measurement_context'):
+            if wildtypes:
+                primary['wt_' + field] = [row.get(field) for row in matches]
+        primary['prediction_id'] = [epitopes[owners[int(identity)][0]].prediction_group_source
+                                    for identity in primary.prediction_id]
+        predicted_frames.append(primary)
+    fresh = []
+    for index, epitope in enumerate(epitopes):
+        fresh.append(replace(
+            epitope, predictions=tuple(leaves[(index, None)]),
+            comparators={name: replace(peptide, predictions=tuple(leaves[(index, name)]))
+                         for name, peptide in epitope.comparators.items()},
+            patient_alleles=alleles, per_allele_scores={}, allele_attributions=()))
+    # Native leaves preserve comparators; the public prediction frame retains
+    # declared MHC dependence, configured genotype and supplied flank context.
+    scoring = pd.concat(predicted_frames, ignore_index=True) if predicted_frames else pd.DataFrame()
+    return fresh, scoring
 
 
 def _fresh_report_frame(report, epitopes):
@@ -321,24 +357,26 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             raise ValueError("Unsupported external format: %s" % fmt)
         content = Path(path).read_bytes()
         content_sha256 = hashlib.sha256(content).hexdigest()
-        content_id = fmt + ':' + content_sha256
+        content_id = (_exacto_identity(path, declarations.get('exacto', {}))
+                      if fmt == 'exacto' else fmt + ':' + content_sha256)
         if content_id in seen:
             raise ValueError("The same external input was supplied more than once: %s" % path)
         seen.add(content_id)
         reader_kwargs = {'score_epitopes': False}
-        if fmt in ('topiary', 'epitopes'):
+        if fmt in ('topiary', 'epitopes', 'exacto'):
             reader_kwargs['scope_declarations'] = declarations
+        scope_declarations = {key: value for key, value in declarations.items() if key != 'exacto'}
         report = READERS[fmt](path, **reader_kwargs)
         producer_scope, producer_declarations = report_declarations(
             path, fmt, frame=report.dataset.result.df if report.dataset is not None else None)
         if report.dataset is not None and report.dataset.provenance:
-            declared = scope_from_mapping(declarations, str(path))
+            declared = scope_from_mapping(scope_declarations, str(path))
             stored_scope = validate_input_scopes([
                 replace(p, scope=combine_scopes(p.scope, declared, str(path), SHARED_FIELDS))
                 for p in report.dataset.provenance], genome=genome)
             producer_scope = combine_scopes(producer_scope, stored_scope, str(path), SHARED_FIELDS)
         scope = combine_scopes(
-            producer_scope, scope_from_mapping(declarations, str(path)), str(path))
+            producer_scope, scope_from_mapping(scope_declarations, str(path)), str(path))
         # An identical file assigned to a different patient/sample must not
         # acquire the same occurrence IDs in separately saved native outputs.
         scope_id = hashlib.sha256(json.dumps(asdict(scope), sort_keys=True).encode()).hexdigest()
@@ -368,13 +406,69 @@ def report_config(reports, epitope_config=None):
     return epitope_config
 
 
+def _add_predictions(reports, models, prefix, use_flanks):
+    """Project public additive features through retained consumer identities."""
+    from copy import deepcopy
+    from topiary import TopiaryResult, combine_sources, reconcile_evidence
+    from topiary import rescore_candidates as add_features
+    frames, metadata = [], {}
+    runs = {}
+    for index, report in enumerate(reports):
+        source = (report.dataset.result if report.dataset is not None
+                  else TopiaryResult(report.report_df.attrs['topiary_df']))
+        if 'source_observation_id' not in source.df:
+            scope = report.input_provenance.scope
+            source = combine_sources({report.input_provenance.input_id: source}, sample_name=(
+                scope.sample_id or scope.patient_id or report.input_provenance.input_id))
+            frame = source.long_df.copy()
+            frame['vaxrank_prediction_id'] = frame.prediction_id
+        else:
+            frame = source.long_df.copy()
+        frame['_vaxrank_report_index'] = index
+        frames.append(frame)
+        metadata[report.input_provenance.input_id] = asdict(source.metadata)
+        for name, run in source.extra.get('candidate_rescoring', {}).items():
+            if name in runs and runs[name] != run:
+                raise ValueError(f'Inputs disagree on saved prediction run {name!r}')
+            runs[name] = run
+    combined = reconcile_evidence(TopiaryResult(pd.concat(frames, ignore_index=True), extra={
+        'input_results': metadata, 'candidate_rescoring': deepcopy(runs)}))
+    added = add_features(combined, models, prefix=prefix, use_flanks=use_flanks)
+    updated = []
+    for index, report in enumerate(reports):
+        frame = added.long_df.loc[added.long_df['_vaxrank_report_index'].eq(index)].copy()
+        frame = frame.drop(columns=['_vaxrank_report_index']).reset_index(drop=True)
+        source_metadata = deepcopy(report.dataset.result.metadata) if report.dataset is not None else None
+        result = TopiaryResult(frame, metadata=source_metadata, form='long')
+        for key in ('candidate_rescoring', 'evidence_reconciliation'):
+            result.extra[key] = deepcopy(added.extra[key])
+        dataset = (replace(report.dataset, result=result) if report.dataset is not None
+                   else EpitopeDataset.from_predictions(report.epitopes, result=result))
+        scoring = dataset.scoring_frame()
+        display = report.report_df.copy()
+        features = [column for column in frame if column.startswith(prefix + '__')]
+        if features and not display.empty:
+            values = scoring[['prediction_id', 'allele', *features]].drop_duplicates()
+            values = values.rename(columns={'prediction_id': 'Prediction identity', 'allele': 'Allele'})
+            display = display.merge(values, on=['Prediction identity', 'Allele'], how='left', validate='many_to_one')
+        display.attrs = {'topiary_df': scoring}
+        # Source report adapters keep their recorded construction evidence.
+        updated.append(replace(report, report_df=display,
+                               dataset=dataset if report.dataset is not None else None))
+    added = TopiaryResult(added.long_df.drop(columns=['_vaxrank_report_index']), metadata=added.metadata)
+    return updated, added
+
+
 def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
                     alleles=(), input_predictions_path=None, scopes=None,
                     manifest_path=None, genome=None, model_factory=None,
-                    prepared_reports=()):
+                    prepared_reports=(), use_flanks=True, prediction_prefix=None):
     """Read once and score with fresh common models or source input values."""
-    if mode not in ('input', 'fresh'):
-        raise ValueError("Prediction mode must be input or fresh")
+    from topiary import is_stated
+    if mode not in ('input', 'fresh', 'additive'):
+        raise ValueError("Prediction mode must be input, fresh or additive")
+    if prediction_prefix is not None and mode != 'additive':
+        raise ValueError('A prediction prefix requires additive prediction mode')
     reports = list(prepared_reports) + read_reports(
         inputs, scopes=scopes, manifest_path=manifest_path, genome=genome, alleles=alleles)
     validate_input_scopes([r.input_provenance for r in reports],
@@ -385,13 +479,20 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
     identities = [e.prediction_group_key for e in original]
     if len(set(identities)) != len(identities):
         raise ValueError("Inputs contain overlapping candidate identities; do not load an input alongside its native export")
-    if not original:
+    if not original and not any(r.dataset is not None and not r.dataset.result.df.empty for r in reports):
         raise ValueError("External inputs contain no candidate peptides to score")
     if input_predictions_path:
         Path(input_predictions_path).parent.mkdir(parents=True, exist_ok=True)
         save_predictions(original, input_predictions_path)
-    if mode == 'input':
-        if models:
+    additive_result = None
+    if mode == 'additive':
+        if not prediction_prefix:
+            raise ValueError('Additive predictions require an explicit prediction prefix')
+        if model_factory is not None:
+            models = model_factory()
+        reports, additive_result = _add_predictions(reports, models, prediction_prefix, use_flanks)
+    if mode in ('input', 'additive'):
+        if models and mode == 'input':
             raise ValueError("Input-table prediction mode does not run fresh models")
         frames_by_report = [r.dataset.scoring_frames() if r.dataset is not None else
                             [r.report_df.attrs['topiary_df']] for r in reports]
@@ -402,6 +503,8 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             for source_frame in frames:
                 if source_frame.empty:
                     continue
+                if 'kind' in source_frame and not source_frame.kind.map(is_stated).any():
+                    continue  # Unmeasured sequence/RNA evidence remains report-only.
                 identities = set(source_frame.prediction_id)
                 candidates = [e for e in report.epitopes if e.prediction_group_source in identities]
                 scored.extend(attach_per_allele_scores(
@@ -414,7 +517,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
                 "API before loading; --external-predictions fresh replaces legacy report predictions")
         if model_factory is not None:
             models = model_factory()
-        epitopes = rescore_candidates(original, models, alleles)
+        epitopes, fresh_frame = _predict_selected_occurrences(original, models, alleles, use_flanks=use_flanks)
         # Historical metric columns must never look like fresh model values.
         # Keep the common biological evidence vocabulary directly accessible,
         # and retain every original annotation in an explicit input namespace.
@@ -428,7 +531,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             **{'input_' + key: value for key, value in record.row.items()},
             **{key: value for key, value in record.row.items() if key in biological},
         }) for report in reports for record in report.records]
-        scoring = attach_source_annotations(epitopes_to_topiary_df(epitopes), records)
+        scoring = attach_source_annotations(fresh_frame, records)
         scored = attach_per_allele_scores(epitopes, epitope_config, topiary_df=scoring,
                                           policy_evaluations=policy_evaluations)
     by_id = {e.prediction_group_key: e for e in original if not e.predictions_flat()}
@@ -455,12 +558,14 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
     frames = [r.report_df for r in updated if not r.report_df.empty]
     frame = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     frame.attrs['topiary_df'] = scoring
-    if mode == 'input':
+    if mode in ('input', 'additive'):
         frame.attrs['input_score_frames'] = input_frames
     from topiary import TopiaryResult
     # One native dataset carries the scoring frame and the resolved policy.
     # Keep the richer original Topiary result when the input supplies one.
-    if len(updated) == 1 and updated[0].dataset is not None and mode == 'input':
+    if mode == 'additive':
+        result = additive_result
+    elif len(updated) == 1 and updated[0].dataset is not None and mode == 'input':
         result = updated[0].dataset.result
     elif mode == 'input':
         original_frames = []
@@ -504,7 +609,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             })
     dataset.selection = (dict(updated[0].dataset.selection)
                          if len(updated) == 1 and updated[0].dataset is not None else {})
-    if mode == 'input':
+    if mode in ('input', 'additive'):
         dataset.selection['score_groups'] = [list(f.prediction_id.unique()) for f in input_frames]
     frame.attrs['epitope_dataset'] = dataset
     frame.attrs['saved_evidence_input'] = any(r.dataset is not None for r in reports)
@@ -522,20 +627,31 @@ def load_unified_external(args, epitope_config, options, genome):
     from .epitope_dataset import dataset_ranking_result
     genome = resolve_input_genome(genome)
     mode = getattr(args, 'external_predictions', 'input')
+    if mode == 'input' and getattr(args, 'external_peptide_only', False):
+        raise ValueError('--external-peptide-only requires fresh or additive prediction mode')
     model_factory, alleles = None, []
     direct = bool(getattr(args, 'vcf', None) or getattr(args, 'bam', None))
-    if direct and mode != 'input':
-        raise ValueError('Direct/table composition requires --external-predictions input; '
-                         'direct predictor options only apply to VCF/BAM candidates')
-    if mode == 'fresh':
+    if direct and mode == 'fresh':
+        raise ValueError('Direct/table composition requires --external-predictions input or additive')
+    if mode in ('fresh', 'additive'):
         from mhctools.cli import predictors_from_args, mhc_alleles_from_args
         if not getattr(args, 'mhc_predictor', None):
-            raise ValueError("Fresh external predictions require --mhc-predictor")
+            raise ValueError("Fresh/additive external predictions require --mhc-predictor")
         alleles = sorted({normalize_hla_allele(a) for a in mhc_alleles_from_args(args)})
         def model_factory():
-            return predictors_from_args(args)
+            models = predictors_from_args(args)
+            cache_path = getattr(args, 'prediction_cache', None)
+            if cache_path:
+                from topiary import CachedPredictor
+                if not getattr(args, 'external_peptide_only', False):
+                    raise ValueError('External prediction caches require --external-peptide-only; '
+                                     'contextual exact-cache queries are tracked in Topiary #468')
+                if len(models) != 1:
+                    raise ValueError('--prediction-cache requires one configured external predictor')
+                models = [CachedPredictor.from_topiary_output(cache_path, fallback=models[0])]
+            return models
     elif not direct and getattr(args, 'mhc_predictor', None):
-        raise ValueError("Use --external-predictions fresh to run --mhc-predictor")
+        raise ValueError("Use --external-predictions fresh or additive to run --mhc-predictor")
     elif not direct and (getattr(args, 'mhc_alleles', None)
                          or getattr(args, 'mhc_alleles_file', None)):
         raise ValueError(
@@ -584,6 +700,8 @@ def load_unified_external(args, epitope_config, options, genome):
     reports, frame, predictions = prepare_reports(
         [], epitope_config, mode=mode, prepared_reports=loaded_reports,
         model_factory=model_factory, alleles=alleles,
+        use_flanks=not getattr(args, 'external_peptide_only', False),
+        prediction_prefix=getattr(args, 'external_prediction_prefix', None),
         manifest_path=getattr(args, 'input_manifest', None), genome=genome,
         input_predictions_path=getattr(args, 'output_input_predictions', None))
     epitope_config = frame.attrs['epitope_dataset'].config
@@ -596,15 +714,17 @@ def load_unified_external(args, epitope_config, options, genome):
     run_policy = write_run_policy(args, dataset.policy_evaluations, epitope_config, options.vaccine_config)
     if run_policy is not None:
         dataset.selection['run_configuration'] = run_policy
-    if selected is not None:
-        generalized_ids = set(dataset.result.df.source_observation_id.dropna())
+    generalized_ids = (set(dataset.scoring_frame().loc[
+        dataset.result.long_df.source_observation_id.notna(), 'prediction_id'].dropna())
+                       if 'source_observation_id' in dataset.result.df else set())
+    if selected is not None and not frame.empty:
         frame['Selected observation'] = [
             (identity, allele) in selected if identity in generalized_ids else None
             for identity, allele in
             frame[['Prediction identity', 'Allele']].itertuples(index=False, name=None)]
     rankers = {'lens': lens_ranking_result, 'pvacseq': pvacseq_ranking_result,
                'topiary': dataset_ranking_result, 'epitopes': dataset_ranking_result,
-               'vcf_bam': dataset_ranking_result}
+               'vcf_bam': dataset_ranking_result, 'exacto': dataset_ranking_result}
     outcomes = []
     for report in reports:
         ranker = rankers[report.source_format]
@@ -612,7 +732,13 @@ def load_unified_external(args, epitope_config, options, genome):
             for key in ('duplicates', 'representatives'):
                 if key in dataset.selection:
                     report.dataset.selection[key] = dataset.selection[key]
-        outcomes.append(ranker(report, epitopes_for_ranking(report.epitopes, epitope_config),
+        ranking_candidates = epitopes_for_ranking(report.epitopes, epitope_config)
+        if selected is not None:
+            ranking_candidates = [replace(e, per_allele_scores={
+                a: score for a, score in e.per_allele_scores.items()
+                if e.prediction_group_source not in generalized_ids or (e.prediction_group_source, a) in selected})
+                for e in ranking_candidates]
+        outcomes.append(ranker(report, ranking_candidates,
                                genome=genome, options=options))
     # A discovery in two tables is not two variants or twice the RNA support.
     # Keep one best source-derived construct per variant; never blend evidence
@@ -668,6 +794,6 @@ def load_unified_external(args, epitope_config, options, genome):
         patient.patient_id = patient.patient_id or scope.patient_id
     if scope.mhc_alleles is not None:
         patient.mhc_alleles = list(scope.mhc_alleles)
-    elif mode == 'fresh':
+    elif mode in ('fresh', 'additive'):
         patient.mhc_alleles = alleles
     return ranked, frame, predictions, patient, dna_vaf

@@ -116,6 +116,53 @@ def test_direct_prediction_flags_do_not_rescore_tables(direct, tmp_path):
     assert direct[3] == []
 
 
+def test_direct_reports_native_and_exacto_additive_replay_retains_support(direct, tmp_path, monkeypatch):
+    import mhctools.cli
+    from .test_external_rescoring import ALLELES, INPUTS, ContextPredictor
+    from .test_topiary_consumer import exacto_manifest
+
+    argv = inputs(tmp_path, direct)
+    table = tmp_path / 'table.tsv'
+    native_input = tmp_path / 'native-input.tsv'
+    EpitopeDataset.from_topiary(evidence(
+        source_sequence_name=['native-a', 'native-b']), sample_name='fixture-patient').save(native_input)
+    exacto_manifest(tmp_path / 'inputs.json',
+        dict(format='topiary', path=str(table)),
+        dict(format='epitopes', path=str(native_input)),
+        *[dict(format=fmt, path=path) for fmt, path in INPUTS])
+    argv[argv.index('--mhc-alleles') + 1] = ','.join(ALLELES)
+    model = ContextPredictor()
+    monkeypatch.setattr(mhctools.cli, 'predictors_from_args', lambda args: [model])
+    saved = tmp_path / 'mixed.tsv'
+    output = tmp_path / 'output'
+    run_cli(argv + ['--external-predictions', 'additive', '--external-peptide-only',
+                   '--external-prediction-prefix', 'comparison',
+                   '--output-epitopes', str(saved), '--output-dir', str(output),
+                   '--no-processing-aware-annotation'])
+    dataset = EpitopeDataset.load(saved)
+    assert {p.source_format for p in dataset.provenance} == {
+        'vcf_bam', 'topiary', 'epitopes', 'lens', 'pvacseq', 'exacto'}
+    assert len(direct[3]) == 1 and model.calls
+    assert len(dataset.direct_sources) == 1
+    assert next(iter(dataset.mutation_fragments.values())).n_rna_alt == 8
+    assert dataset.result.df.loc[dataset.result.df.input_format.eq('vcf_bam'), 'value'].eq(25.).all()
+    assert dataset.result.df.comparison__unified__pMHC_affinity__score.notna().any()
+    assert dataset.result.extra['candidate_rescoring']['comparison']['features']
+    summary = (output / 'run_summary.txt').read_text()
+    assert 'Added prediction namespace: comparison' in summary
+    assert 'peptide only (flanks excluded)' in summary
+
+    monkeypatch.setattr(mhctools.cli, 'predictors_from_args', forbidden)
+    again = tmp_path / 'again.tsv'
+    run_cli(['--input-epitopes', str(saved), '--output-epitopes', str(again),
+             '--no-processing-aware-annotation'])
+    replay = EpitopeDataset.load(again)
+    assert len(direct[3]) == 1
+    assert next(iter(replay.mutation_fragments.values())).n_rna_alt == 8
+    assert [e.prediction_group_key for e in replay.epitopes] == [e.prediction_group_key for e in dataset.epitopes]
+    assert [e.per_allele_scores for e in replay.epitopes] == [e.per_allele_scores for e in dataset.epitopes]
+
+
 @pytest.mark.parametrize('fmt', ['lens', 'pvacseq'])
 def test_report_constructs_survive_common_native_export(tmp_path, fmt):
     from vaxrank.external_rescoring import prepare_reports

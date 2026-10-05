@@ -238,6 +238,14 @@ def add_optional_output_args(arg_parser):
     arg_parser.set_defaults(wt_epitopes=True)
 
 
+def add_prediction_cache_arg(arg_parser):
+    arg_parser.add_argument(
+        "--prediction-cache", default=None,
+        help="Path to pre-computed MHC binding predictions (topiary TSV/Parquet "
+             "or CSV). Cache misses use the configured live predictor. External "
+             "inference requires a single model and --external-peptide-only.")
+
+
 def add_advanced_args(arg_parser):
     advanced_group = arg_parser.add_argument_group("Advanced options")
     advanced_group.add_argument(
@@ -247,12 +255,7 @@ def add_advanced_args(arg_parser):
         help="When a variant has no RNA support, attempt to construct vaccine "
              "peptides from DNA annotation alone using varcode's MutantTranscript. "
              "These peptides will have zero supporting RNA reads.")
-    advanced_group.add_argument(
-        "--prediction-cache",
-        default=None,
-        help="Path to pre-computed MHC binding predictions (topiary TSV/Parquet "
-             "or CSV). Used as a lookup cache; peptides not in the cache fall "
-             "through to the live MHC predictor.")
+    add_prediction_cache_arg(advanced_group)
     advanced_group.add_argument(
         "--tumor-sample-name",
         default=None,
@@ -1039,13 +1042,22 @@ def add_external_rescoring_args(arg_parser):
              "Not needed for VCF + BAM alone or a single report.")
     arg_parser.add_argument(
         "--external-input", action="append", default=None, metavar="FORMAT=PATH",
-        help="Candidate input: lens=PATH, pvacseq=PATH, topiary=PATH or epitopes=PATH. Repeat to "
+        help="Candidate input: lens=PATH, pvacseq=PATH, topiary=PATH, epitopes=PATH or exacto=PATH. Repeat to "
              "rank reports together; use --input-manifest when their patient, "
              "reference assembly or genotype is not declared in the files.")
     arg_parser.add_argument(
-        "--external-predictions", choices=("input", "fresh"), default="input",
+        "--external-predictions", choices=("input", "fresh", "additive"), default="input",
         help="Reuse the input tables' original prediction values (default), or "
-             "rescore their reported candidates with the configured MHC predictors.")
+             "add named model features while retaining original measurements, or "
+             "replace legacy report predictions with fresh exact-window predictions.")
+    arg_parser.add_argument(
+        '--external-prediction-prefix', default=None,
+        help='Required unique feature namespace for --external-predictions additive. '
+             'Select added features through the existing epitope DSL configuration.')
+    arg_parser.add_argument(
+        '--external-peptide-only', action='store_true', default=False,
+        help='Explicitly predict selected external peptides without flank context. '
+             'Required for flank-dependent models when either flank is unknown.')
     arg_parser.add_argument(
         "--duplicate-candidates", choices=("error", "best", "worst"), default=None,
         help="Topiary observation selection when the same candidate has differing scores: "
@@ -1072,6 +1084,7 @@ def external_input_arg_parser():
     arg_parser.add_argument("--input-lens", default=None)
     add_external_rescoring_args(arg_parser)
     add_mhc_args(arg_parser)
+    add_prediction_cache_arg(arg_parser)
     # Models are required only for fresh prediction; historical-only runs must
     # neither require a model installation nor instantiate a predictor.
     for action in arg_parser._actions:

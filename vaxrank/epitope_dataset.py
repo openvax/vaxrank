@@ -97,6 +97,8 @@ class EpitopeDataset:
             result = TopiaryResult(result)
         if "source_observation_id" not in result.df:
             result = combine_sources({label: result}, sample_name=sample_name)
+        from topiary import reconcile_evidence
+        result = reconcile_evidence(result)
         # Pandas may represent missing strings as NaN (notably with its
         # string dtype). Native objects use None, while '' stays distinct.
         # Normalize only this consumer view; retain the original table.
@@ -180,6 +182,9 @@ class EpitopeDataset:
             original = frame.get("prediction_id", pd.Series(None, index=frame.index, dtype=object))
             frame["prediction_id"] = frame["source_observation_id"].where(
                 frame["source_observation_id"].notna(), original)
+        if 'vaxrank_prediction_id' in frame:
+            frame['prediction_id'] = frame.vaxrank_prediction_id.where(
+                frame.vaxrank_prediction_id.notna(), frame.prediction_id)
         if "peptide_offset" not in frame:
             frame["peptide_offset"] = 0
         else:
@@ -205,6 +210,8 @@ class EpitopeDataset:
         from topiary import rank_candidates
         if 'candidate_id' not in self.result.df:
             return None
+        consumer_ids = dict(zip(self.result.long_df.source_observation_id,
+                               self.scoring_frame().prediction_id))
         if self.config is not None and self.config.selection_policy is not None:
             from topiary import select_policy_representatives
             from .selection_policy import combine_evaluations
@@ -217,16 +224,19 @@ class EpitopeDataset:
             self.selection['duplicates'] = evaluation.policy.duplicates
             self.selection['representatives'] = [dict(
                 source_observation_id=row.source_observation_id,
+                prediction_id=consumer_ids.get(row.source_observation_id, row.source_observation_id),
                 candidate_id=row.candidate_id, candidate_allele=row.allele,
                 candidate_observations=row.alternative_occurrences,
                 representative_reason=row.representative_reason)
                 for row in ranked.itertuples()]
-            return set(zip(ranked.source_observation_id, ranked.allele))
+            return {(consumer_ids.get(row.source_observation_id, row.source_observation_id), row.allele)
+                    for row in ranked.itertuples()}
         frame = self.result.long_df
         frame = frame.loc[frame.source_observation_id.notna()].copy()
         scores = {(e.prediction_group_source, allele): score
                   for e in self.epitopes for allele, score in e.per_allele_scores.items()}
-        frame['vaxrank_selection_score'] = [scores.get(key) for key in frame[[
+        frame['vaxrank_selection_score'] = [scores.get((consumer_ids.get(identity, identity), allele))
+                                          for identity, allele in frame[[
             'source_observation_id', 'candidate_allele']].itertuples(index=False, name=None)]
         policy = duplicates or self.selection.get('duplicates', 'error')
         ranked = rank_candidates(
@@ -236,7 +246,42 @@ class EpitopeDataset:
         self.selection['representatives'] = ranked[[
             'source_observation_id', 'candidate_id', 'candidate_allele',
             'candidate_observations']].to_dict('records')
-        return set(zip(ranked.source_observation_id, ranked.candidate_allele))
+        for row in self.selection['representatives']:
+            row['prediction_id'] = consumer_ids.get(row['source_observation_id'], row['source_observation_id'])
+        return {(consumer_ids.get(row.source_observation_id, row.source_observation_id), row.candidate_allele)
+                for row in ranked.itertuples()}
+
+    def evidence_views(self):
+        """Inspect every retained observation through Topiary's relational views.
+
+        Historical report/direct rows are combined in a separate analysis
+        view when they lack Topiary observation identities. Unknown samples
+        remain source-local. The saved evidence and scoring policy are untouched.
+        """
+        from topiary import evidence_views
+        frame = self.result.long_df
+        identities = frame.get('source_observation_id', pd.Series(None, index=frame.index, dtype=object))
+        missing = identities.isna()
+        if not missing.any():
+            return evidence_views(self.result)
+        frames = [frame.loc[~missing].copy()] if (~missing).any() else []
+        uncombined = frame.loc[missing].copy()
+        labels = uncombined.get('input_source', pd.Series('native-evidence', index=uncombined.index))
+        scopes = {p.input_id: p.scope for p in self.provenance}
+        for label, rows in uncombined.groupby(labels, dropna=False, sort=False):
+            label = str(label) if is_stated(label) else 'native-evidence'
+            scope = scopes.get(label)
+            sample = (scope.sample_id or scope.patient_id or label) if scope is not None else label
+            # Concatenation adds null combined-identity columns to historical
+            # rows. Let Topiary derive them from the actual source, not nulls.
+            rows = rows.dropna(axis=1, how='all')
+            # The table reader adds a transport filename as `source`. Recorded
+            # input scope/labels provide identity; moving a native file cannot.
+            rows = rows.drop(columns='source', errors='ignore')
+            combined = combine_sources({label: TopiaryResult(rows)}, sample_name=sample)
+            frames.append(combined.long_df)
+        return evidence_views(TopiaryResult(pd.concat(frames, ignore_index=True),
+                                            metadata=self.result.metadata))
 
     def save(self, path):
         """Persist evidence with Topiary and objects with the native codec."""
@@ -402,7 +447,8 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
     accumulator = ExternalRankingAccumulator(
         require_target_epitopes=options.require_target_epitopes_in_variant)
     representatives = dataset.selection.get('representatives')
-    selected = (set((r['source_observation_id'], r['candidate_allele']) for r in representatives)
+    selected = (set((r.get('prediction_id', r['source_observation_id']), r['candidate_allele'])
+                    for r in representatives)
                 if representatives is not None else dataset.select_representatives())
     # Saved source records re-enter their existing occurrence-selection
     # adapters, retaining the original IDs and evidence without a file reread.
@@ -432,7 +478,8 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
             has_rna_support=properties['rna_support'], dna_vaf=properties['dna_vaf']))
     mutation_groups = {}
     groups = {}
-    generalized_ids = (set(dataset.result.df.source_observation_id.dropna())
+    generalized_ids = (set(dataset.scoring_frame().loc[
+        dataset.result.long_df.source_observation_id.notna(), 'prediction_id'].dropna())
                        if 'source_observation_id' in dataset.result.df else set())
     for epitope in epitopes:
         key = epitope.prediction_group_source
