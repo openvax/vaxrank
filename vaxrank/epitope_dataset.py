@@ -55,6 +55,7 @@ class EpitopeDataset:
     construction_reports: list = field(default_factory=list)
     direct_sources: list = field(default_factory=list)
     policy_evaluations: list = field(default_factory=list)
+    native_references: object = field(default=None, repr=False, compare=False)
 
     def add_mutation(self, fragment, epitopes):
         """Capture direct predictions before vaccine windows discard context."""
@@ -254,6 +255,9 @@ class EpitopeDataset:
             "direct_sources": self.direct_sources,
             "policy_evidence": encode_evaluations(self.policy_evaluations),
         }
+        from .native_references import NativeReferences
+        extra[DATASET_METADATA] = NativeReferences(path, self.native_references).transform(
+            extra[DATASET_METADATA])
         result = TopiaryResult(self.result.df.copy(), metadata=self.result.metadata)
         result.extra = extra
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -267,21 +271,41 @@ class EpitopeDataset:
         payload = result.extra.pop(DATASET_METADATA, None)
         if not isinstance(payload, dict) or payload.get("schema") != DATASET_SCHEMA:
             raise ValueError("Expected a native Vaxrank epitope dataset")
+        from .native_references import NativeReferences
+        references = NativeReferences(path)
+        payload = references.transform(payload, decode=True)
         epitopes = tuple(from_native_json(e, CandidateEpitope) for e in payload["epitopes"])
         for epitope in epitopes:
             validate_peptide_alleles(epitope, str(path))
+        antigens = {key: from_native_json(a, VaccineAntigen)
+                    for key, a in payload["antigens"].items()}
+        fragments = {key: from_native_json(value, MutantProteinFragment)
+                     for key, value in payload.get("mutation_fragments", {}).items()}
+        # Older datasets already persisted these IDs on the construction
+        # antigen. Reuse that recorded provenance only for the same transcripts;
+        # do not query an absent annotation to recreate it during replay.
+        for key, fragment in fragments.items():
+            antigen = antigens.get(key)
+            transcript_ids = tuple(sorted({t.id for t in fragment.supporting_reference_transcripts}))
+            if (fragment.supporting_reference_protein_ids is None and antigen is not None
+                    and antigen.transcript_ids == transcript_ids):
+                fragments[key] = replace(fragment, supporting_reference_protein_ids=antigen.protein_ids)
         return cls(
             result=result, epitopes=epitopes,
             provenance=tuple(from_native_json(p, InputProvenance) for p in payload["provenance"]),
             config=msgspec.convert(payload["config"], EpitopeConfig) if payload["config"] else None,
-            antigens={key: from_native_json(a, VaccineAntigen)
-                      for key, a in payload["antigens"].items()},
+            antigens=antigens,
             selection=payload["selection"],
-            mutation_fragments={key: from_native_json(value, MutantProteinFragment)
-                                for key, value in payload.get("mutation_fragments", {}).items()},
+            mutation_fragments=fragments,
             construction_reports=payload.get("construction_reports", []),
             direct_sources=payload.get("direct_sources", []),
-            policy_evaluations=decode_evaluations(payload.get("policy_evidence", [])))
+            policy_evaluations=decode_evaluations(payload.get("policy_evidence", [])),
+            native_references=references)
+
+    def index_native_references(self):
+        """Prepare bundled local annotation indexes without acquiring data."""
+        if self.native_references is not None:
+            self.native_references.index()
 
     def report_frame(self):
         """Report each occurrence/allele once; retain full evidence for scoring."""

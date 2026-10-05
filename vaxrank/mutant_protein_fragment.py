@@ -328,6 +328,10 @@ class MutantProteinFragment(DataclassSerializable):
     # Blank for older archives and sources whose version was not supplied.
     sequence_source_version: str = ""
 
+    # Annotation provenance resolved while the source reference is available.
+    # None is unknown (legacy archives); () means no protein IDs were reported.
+    supporting_reference_protein_ids: Optional[tuple] = None
+
     # Identity and provenance of the DNA outcome used to build this fragment.
     # Store data instead of Varcode's cyclic SV effect graph (varcode#438).
     # Defaults preserve compatibility with earlier serialized fragments.
@@ -420,6 +424,9 @@ class MutantProteinFragment(DataclassSerializable):
             rna_evidence_subject=FRAGMENTS,
             sequence_source=SEQUENCE_SOURCE_ISOVAR_ASSEMBLY,
             sequence_source_version=isovar_version,
+            supporting_reference_protein_ids=tuple(sorted({
+                t.protein_id for t in protein_sequence.transcripts
+                if getattr(t, "protein_id", None)})),
             supporting_reference_transcripts=protein_sequence.transcripts)
 
     @classmethod
@@ -495,6 +502,8 @@ class MutantProteinFragment(DataclassSerializable):
             n_alt_reads_supporting_protein_sequence=0,
             sequence_source=SEQUENCE_SOURCE_VARCODE_TRANSLATION,
             supporting_reference_transcripts=transcripts,
+            supporting_reference_protein_ids=tuple(sorted({
+                t.protein_id for t in transcripts if getattr(t, "protein_id", None)})),
             dna_effect_selection=selection,
             protein_start_offset=window_start,
         )
