@@ -1,0 +1,24 @@
+{
+  "repository": "https://github.com/pirl-unc/exacto",
+  "commit": "307c08670d5e706734bddf393bcebc84db497f9f",
+  "version": "0.4.6",
+  "license": "Apache-2.0",
+  "files": {
+    "peptide-variants.tsv": {
+      "source": "examples/outputs/call-peptide-vars/rna-100-tumor_minimap2_mdtagged_sorted_exacto_peptide_variants.tsv",
+      "sha256": "90d5f285b386fc61af91d38daf2d062fb74e54911d38b562e1373366c3fc72a0"
+    },
+    "primary-structures.tsv": {
+      "source": "examples/outputs/translate-structs/rna-100-tumor_minimap2_mdtagged_sorted_exacto_primary_structures.tsv",
+      "sha256": "6d4f210d06ee88eee8a10a4c74af4ba76921f0b5e1f24c5d5c0ac3a408e4c425"
+    },
+    "translations.tsv.gz": {
+      "source": "examples/outputs/translate-seqs/sample_tumor_long_read_rna_exacto_translations_all-orfs.tsv.gz",
+      "sha256": "95cc819b6f12e8f92d30c797d535bd5aab1d4b176ff9aa0a39c18302c0310804"
+    },
+    "transcript-read-support.tsv": {
+      "source": "examples/outputs/call-rna-vars/rna-100-tumor-minimap2_mdtagged_sorted_bam_exacto_call_rna_vars_outputs/rna-100-tumor_minimap2_mdtagged_sorted_exacto_transcripts_read_support.tsv",
+      "sha256": "0897b4e6f2c9294f4ec80d575dc6f2a853d7ce16636f45070abc148484998a89"
+    }
+  }
+}

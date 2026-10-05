@@ -416,7 +416,7 @@ _MISSING_SENTINEL = object()
 _ARG_GROUPS = (
     ("Inputs", (
         'vcf', 'bam', 'input_lens', 'input_pvacseq', 'external_input', 'input_manifest',
-        'external_predictions',
+        'external_predictions', 'external_prediction_prefix', 'external_peptide_only',
         'ensembl_release', 'genome', 'tumor_sample_name',
         'input_json_file',
     )),
@@ -622,7 +622,8 @@ def resolve_mhc_for_linker_optimizer(args, config_kwargs=None):
     model_path = cfg('junction_predictor_path')
     models_path = cfg('junction_predictor_models_path')
     external = any(getattr(args, name, None) for name in (
-        'input_manifest', 'input_lens', 'input_pvacseq', 'external_input'))
+        'input_manifest', 'input_lens', 'input_pvacseq', 'external_input',
+        'input_topiary', 'input_epitopes'))
     if not model and (external or not getattr(args, 'mhc_predictor', None)):
         if cfg('optimize_linkers') is True or query or model_path or models_path:
             raise ValueError(
@@ -970,13 +971,19 @@ def write_run_summary(args, patient_info, source):
         from ..input_scope import PROVENANCE_SCHEMA
         if not getattr(patient_info, 'inputs', None):
             from ..external_rescoring import external_inputs
-            labels = {'lens': 'LENS', 'pvacseq': 'pVACseq'}
+            labels = {'lens': 'LENS', 'pvacseq': 'pVACseq', 'exacto': 'Exacto',
+                      'topiary': 'Topiary', 'epitopes': 'native epitopes'}
             input_labels = [(labels[fmt] + ' report', path) for fmt, path in external_inputs(args)]
         else:
             input_labels = patient_info.inputs
         for label, path in input_labels:
             lines.append("Input: %s — %s" % (label, path))
         lines.append("Prediction evidence: %s" % getattr(args, 'external_predictions', 'input'))
+        prefix = getattr(args, 'external_prediction_prefix', None)
+        if prefix:
+            lines.append("Added prediction namespace: %s" % prefix)
+        if getattr(args, 'external_peptide_only', False):
+            lines.append("New prediction context: peptide only (flanks excluded)")
         if provenance:
             for source_input in provenance:
                 scope = source_input.scope
@@ -1005,6 +1012,8 @@ def write_run_summary(args, patient_info, source):
         declared = any(p.scope.mhc_alleles is not None for p in provenance)
         if source == 'external' and getattr(args, 'external_predictions', 'input') == 'fresh':
             note = " (fresh prediction targets)"
+        elif source == 'external' and getattr(args, 'external_predictions', 'input') == 'additive':
+            note = " (additive prediction targets)"
         elif declared:
             note = " (declared genotype)"
         elif source == 'external' and inferred:
@@ -1300,7 +1309,7 @@ def run_cli(args_list=None):
                     "%s %d MHC allele(s): %s",
                     "Declared genotype" if any(
                         p.scope.mhc_alleles is not None for p in patient_info.input_provenance)
-                    else "Configured" if getattr(args, 'external_predictions', 'input') == 'fresh'
+                    else "Configured" if getattr(args, 'external_predictions', 'input') in ('fresh', 'additive')
                     else "Inferred from the report",
                     len(alleles), ", ".join(alleles))
         # Per-(peptide, allele) CSV / XLSX report is unique to the

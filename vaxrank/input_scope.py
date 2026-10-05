@@ -129,7 +129,7 @@ def read_input_manifest(path, *, include_direct=False):
         location = f"{path}, input {index}"
         if not isinstance(item, dict):
             raise ValueError(f"{location}: expected an input object")
-        unknown = set(item) - {"format", "path", *SCOPE_FIELDS}
+        unknown = set(item) - {"format", "path", "exacto", *SCOPE_FIELDS}
         if unknown:
             raise ValueError(f"{location}: unknown input fields: {sorted(unknown)}")
         from .external_rescoring import READERS
@@ -144,6 +144,20 @@ def read_input_manifest(path, *, include_direct=False):
         combine_scopes(shared_scope, local_scope, location, SHARED_FIELDS)
         declarations = {**shared, **{k: v for k, v in local.items()
                                    if v is not None or k not in shared}}
+        if 'exacto' in item:
+            options = item['exacto']
+            if item['format'] != 'exacto' or not isinstance(options, dict):
+                raise ValueError(f"{location}: exacto options require an Exacto input object")
+            allowed = {'schema', 'primary_structures', 'transcript_read_support', 'read_set_id', 'tag'}
+            if set(options) - allowed:
+                raise ValueError(f"{location}: unknown Exacto options: {sorted(set(options) - allowed)}")
+            if any(not isinstance(v, str) or not v.strip() for v in options.values()):
+                raise ValueError(f"{location}: Exacto options must be nonempty strings")
+            options = dict(options)
+            for name in ('primary_structures', 'transcript_read_support'):
+                if name in options:
+                    options[name] = str((path.parent / options[name]).resolve())
+            declarations['exacto'] = options
         specs.append((item["format"], str((path.parent / item["path"]).resolve()),
                       declarations))
     direct = document.get("direct", {})

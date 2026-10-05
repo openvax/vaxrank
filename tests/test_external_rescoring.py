@@ -38,6 +38,12 @@ class ContextPredictor(BasePredictor):
         super().__init__(alleles=ALLELES, default_peptide_lengths=[9])
         self.calls = []
 
+    def predict(self, peptides, n_flanks=None, c_flanks=None):
+        n_flanks = [''] * len(peptides) if n_flanks is None else n_flanks
+        c_flanks = [''] * len(peptides) if c_flanks is None else c_flanks
+        return self.predict_with_flanks(peptides, [n[-2:] for n in n_flanks],
+                                        [c[:2] for c in c_flanks])
+
     def predict_with_flanks(self, peptides, n_flanks, c_flanks):
         self.calls.append(list(zip(peptides, n_flanks, c_flanks)))
         return [PeptideResult(tuple(
@@ -56,7 +62,7 @@ def candidate(name, context='AA', comparator=True):
         sequence=sequence, source_sequence=context + sequence + 'KK', offset=2,
         prediction_id=name, patient_alleles=tuple(ALLELES),
         overlaps_mutation=True,
-        comparators={'wt': Peptide(sequence='SIINFEKLV')} if comparator else {})
+        comparators={'wt': Peptide(sequence='SIINFEKLV', n_flank='', c_flank='')} if comparator else {})
 
 
 def config():
@@ -68,7 +74,7 @@ def test_fresh_contexts_are_batched_without_merging_occurrences():
     model = ContextPredictor()
     originals = [candidate('a', 'AA'), candidate('b', 'CC'), candidate('c', 'AA')]
     fresh = rescore_candidates(originals, [model], ALLELES)
-    assert len(model.calls) == 2
+    assert len(model.calls) == 3
     requests = [q for batch in model.calls for q in batch]
     assert requests.count(('SIINFEKLA', 'AA', 'KK')) == 1
     assert requests.count(('SIINFEKLA', 'CC', 'KK')) == 1
@@ -172,7 +178,7 @@ def test_predictions_missing_a_requested_peptide_fail():
     class Incomplete(ContextPredictor):
         def predict_with_flanks(self, peptides, n_flanks, c_flanks):
             return []
-    with pytest.raises(ValueError, match='omitted requested peptides'):
+    with pytest.raises(ValueError, match='no prediction'):
         rescore_candidates([candidate('a')], [Incomplete()], ALLELES)
 
 
@@ -185,7 +191,7 @@ def test_cli_parses_repeated_sources_and_conditional_model_configuration():
     assert args.external_predictions == 'fresh'
     assert parse_vaxrank_args(['--external-input', 'lens=one.tsv']).mhc_predictor is None
     with pytest.raises(ValueError, match='requires lens=PATH'):
-        external_inputs(SimpleNamespace(external_input=['exacto=unsupported.json']))
+        external_inputs(SimpleNamespace(external_input=['unsupported=unsupported.json']))
 
 
 @pytest.mark.parametrize('fmt,path', INPUTS)
@@ -324,7 +330,7 @@ def test_fresh_scoring_namespaces_historical_comparator_metrics():
                                   models=[ContextPredictor()], alleles=ALLELES)
     scoring = frame.attrs['topiary_df']
     assert 'input_wt_value' in scoring
-    assert 'wt_value' not in scoring
+    assert 'wt_value' in scoring
     assert 'input_mhcflurry_affinity_value' in scoring
     assert 'mhcflurry_affinity_value' not in scoring
 
@@ -341,16 +347,24 @@ def test_missing_allele_coverage_is_not_fabricated():
     class Incomplete(ContextPredictor):
         def predict_with_flanks(self, *args):
             return [PeptideResult(r.preds[:1]) for r in super().predict_with_flanks(*args)]
-    with pytest.raises(ValueError, match='allele coverage'):
+    with pytest.raises(ValueError, match='complete .* prediction'):
         rescore_candidates([candidate('a')], [Incomplete()], ALLELES)
 
 
-def test_haplotype_model_requires_explicit_transport_support():
+def test_haplotype_model_retains_configured_genotype_and_presenter():
     class Haplotype(ContextPredictor):
         def kind_support(self):
             return {'pMHC_presentation': {'mhc_dependence': 'haplotype'}}
-    with pytest.raises(ValueError, match='haplotype'):
-        rescore_candidates([candidate('a')], [Haplotype()], ALLELES)
+
+        def predict_with_flanks(self, peptides, n_flanks, c_flanks):
+            return [PeptideResult((Prediction(kind='pMHC_presentation', peptide=p,
+                allele=ALLELES[0], score=.8, predictor_name='haplotype',
+                predictor_version='1'),)) for p in peptides]
+
+    fresh, = rescore_candidates([candidate('a')], [Haplotype()], ALLELES)
+    assert fresh.patient_alleles == tuple(ALLELES)
+    assert fresh.predictions_flat()[0].kind == 'pMHC_presentation'
+    assert fresh.predictions_flat()[0].allele == ALLELES[0]
 
 
 def test_input_mode_does_not_construct_a_live_predictor(monkeypatch, tmp_path):
