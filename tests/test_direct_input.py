@@ -78,6 +78,9 @@ def test_mixed_cli_and_native_reload_keep_original_values_and_direct_context(dir
     fragment = next(iter(dataset.mutation_fragments.values()))
     assert fragment.n_rna_alt == 8
     assert fragment.rna_evidence_method == 'isovar'
+    assert fragment.sequence_source_version == ''  # Synthetic producer is unknown.
+    assert set(dataset.result.df.loc[
+        dataset.result.df.input_format == 'vcf_bam', 'sequence_source_version']) == {''}
     assert fragment.variant == direct[2].variant
     assert next(p for p in dataset.provenance if p.source_format == 'vcf_bam').scope.annotation == 'ensembl:110'
     run_cli(['--input-epitopes', str(native), '--output-epitopes', str(reloaded)] + config)

@@ -102,7 +102,8 @@ def prepare_direct_report(args, reports, epitope_config):
         frame = dataset.result.df.copy()
     fields = ('n_rna_alt', 'n_rna_ref', 'n_rna_overlapping',
               'n_rna_supporting_protein_sequence', 'rna_evidence_method',
-              'rna_evidence_subject', 'gene_name', 'sequence_source', 'dna_vaf')
+              'rna_evidence_subject', 'gene_name', 'sequence_source',
+              'sequence_source_version', 'dna_vaf')
     for field in fields:
         frame[field] = frame.prediction_id.map(
             {key: getattr(fragment, field) for key, fragment in dataset.mutation_fragments.items()})

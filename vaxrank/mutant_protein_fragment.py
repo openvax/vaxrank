@@ -235,12 +235,14 @@ class MutantProteinFragment(DataclassSerializable):
         Number of reads supporting the reference allele.
 
     n_alt_reads_supporting_protein_sequence : int
-        Number of RNA read objects compatible with the cDNA sequence(s)
+        Number of RNA reads used to assemble the cDNA sequence(s)
         translated into this protein. Reads may cover only part of the
         sequence; this is not full-length peptide or independent molecule
-        evidence. Distinct compatible read names are counted separately in
+        evidence. Distinct assembly fragments, scoped by SAM read group,
+        are counted separately in
         n_alt_fragments_supporting_protein_sequence, not in n_alt_fragments
-        (which counts all alternate-supporting names at the locus).
+        (which counts all alternate-supporting fragments at the locus).
+        Neither field is Isovar's opt-in fractional candidate-support score.
     """
 
     variant: Any
@@ -322,6 +324,10 @@ class MutantProteinFragment(DataclassSerializable):
     # was previously answerable only for a whole file.
     sequence_source: str = ""
 
+    # Runtime producer version, independent of historical fixture metadata.
+    # Blank for older archives and sources whose version was not supplied.
+    sequence_source_version: str = ""
+
     # Identity and provenance of the DNA outcome used to build this fragment.
     # Store data instead of Varcode's cyclic SV effect graph (varcode#438).
     # Defaults preserve compatibility with earlier serialized fragments.
@@ -384,6 +390,8 @@ class MutantProteinFragment(DataclassSerializable):
         -------
         MutantProteinFragment
         """
+        from isovar import __version__ as isovar_version
+
         protein_sequence = isovar_result.top_protein_sequence
         if protein_sequence is None:
             return None
@@ -411,6 +419,7 @@ class MutantProteinFragment(DataclassSerializable):
             rna_evidence_method=RNA_EVIDENCE_METHOD_ALIGNMENT,
             rna_evidence_subject=FRAGMENTS,
             sequence_source=SEQUENCE_SOURCE_ISOVAR_ASSEMBLY,
+            sequence_source_version=isovar_version,
             supporting_reference_transcripts=protein_sequence.transcripts)
 
     @classmethod
