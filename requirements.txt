@@ -8,7 +8,8 @@ datacache>=1.14.0,<2.0.0
 # Public data acquisition and original-read extraction for the osteosarc corpus.
 osteosarc>=0.14.4,<0.15
 pandas>=2.1.4,<4.0.0
-pyensembl>=2.16.0,<3.0.0
+# Metadata-only Transcript/Gene restore defers annotation DB access (#563).
+pyensembl>=2.22.2,<3.0.0
 # 10.4.1 ranks structural candidate sets that list themselves as candidates
 # without recursing, which DNA fallback relies on when comparing fusion outcomes.
 # Varcode 10 also supplies candidate-local SV sequence-change checks, including

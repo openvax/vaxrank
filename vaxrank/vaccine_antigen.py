@@ -439,11 +439,13 @@ class VaccineAntigen(DataclassSerializable):
             for transcript in transcripts
             if getattr(transcript, "transcript_id", "")
         }))
-        protein_ids = tuple(sorted({
-            str(getattr(transcript, "protein_id", ""))
-            for transcript in transcripts
-            if getattr(transcript, "protein_id", "")
-        }))
+        protein_ids = getattr(fragment, "supporting_reference_protein_ids", None)
+        if protein_ids is None:
+            protein_ids = tuple(sorted({
+                str(getattr(transcript, "protein_id", ""))
+                for transcript in transcripts
+                if getattr(transcript, "protein_id", "")
+            }))
         variant = getattr(fragment, "variant", None)
         source_identifier = str(
             getattr(variant, "short_description", "") or variant or ""

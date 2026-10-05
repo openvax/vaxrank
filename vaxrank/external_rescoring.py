@@ -482,6 +482,9 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
                         for key, antigen in r.dataset.antigens.items()}
     dataset.mutation_fragments = {key: fragment for r in updated if r.dataset is not None
                                   for key, fragment in r.dataset.mutation_fragments.items()}
+    from .native_references import NativeReferences
+    dataset.native_references = NativeReferences.combine(
+        r.dataset.native_references for r in updated if r.dataset is not None)
     from .native_serialization import to_native_json
     def native_row(row):
         frame = pd.DataFrame([row]).astype(object)
@@ -545,6 +548,13 @@ def load_unified_external(args, epitope_config, options, genome):
         [(fmt, path) for fmt, path, _ in specs],
         scopes=[scope for _, _, scope in specs],
         manifest_path=getattr(args, 'input_manifest', None), genome=genome)
+    if getattr(args, 'index_native_references', False):
+        native = [report.dataset for report in loaded_reports
+                  if report.source_format == 'epitopes' and report.dataset is not None]
+        if not native:
+            raise ValueError('--index-native-references requires a native epitope input')
+        for dataset in native:
+            dataset.index_native_references()
     from .config.loader import saved_construct_configuration, load_vaxrank_config
     saved_configs = [saved_construct_configuration(r.dataset.selection.get('run_configuration'))
                      for r in loaded_reports if r.dataset is not None]

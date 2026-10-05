@@ -1023,6 +1023,10 @@ def _require_ensembl_release_for_template_reports(args):
 def add_external_rescoring_args(arg_parser):
     arg_parser.add_argument("--input-epitopes", default=None, metavar="FILE",
                             help="Reload native epitope predictions and saved scoring evidence.")
+    arg_parser.add_argument(
+        "--index-native-references", action="store_true", default=False,
+        help="Prepare verified bundled annotation indexes for native input reports. "
+             "Uses local resources only; unnecessary for scoring or construct replay.")
     arg_parser.add_argument("--input-topiary", default=None, metavar="FILE",
                             help="Load a normalized Topiary CSV/TSV using its original predictions.")
     arg_parser.add_argument(
