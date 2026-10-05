@@ -816,8 +816,8 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                                        them
       ``offset``     int             — peptide offset within ``source``
       ``prediction_id`` str, optional — complete external provenance key
-      ``mutant``     Prediction      — leaf prediction for one (allele,
-                                       predictor, version) cell
+      ``mutant``     Prediction|None — available leaf prediction for one
+                                       (allele, predictor, version) cell
       ``wt``         Prediction|None — parallel WT prediction, optional
       ``source_class``               str|None, default None
       ``overlaps_mutation``          bool,     default False
@@ -889,10 +889,11 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                 'allele_attributions': (),
             }
             groups[key] = slot
-        slot['mutant_preds'].append(row['mutant'])
+        if row.get('mutant') is not None:
+            slot['mutant_preds'].append(row['mutant'])
         if row.get('allele_attributions'):
             slot['allele_attributions'] = tuple(row['allele_attributions'])
-        if row['mutant'].allele:
+        if row.get('mutant') is not None and row['mutant'].allele:
             slot['patient_alleles'].add(row['mutant'].allele)
         slot['patient_alleles'].update(
             stated
@@ -928,7 +929,7 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                     "Conflicting self-reference matches for one candidate epitope"
                 )
             slot['self_reference_match'] = self_reference_match
-        if 'allele_score' in row and row['mutant'].allele:
+        if 'allele_score' in row and row.get('mutant') is not None and row['mutant'].allele:
             # Allele-free leaves (antigen_processing, proteasome_cleavage)
             # carry a score for the peptide, not for an allele. Writing it
             # under '' would put a non-allele entry in a map whose contract

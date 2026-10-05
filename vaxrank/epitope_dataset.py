@@ -284,12 +284,20 @@ class EpitopeDataset:
             policy_evaluations=decode_evaluations(payload.get("policy_evidence", [])))
 
     def report_frame(self):
-        """Expose original annotations beside the familiar report columns."""
+        """Report each occurrence/allele once; retain full evidence for scoring."""
         frame = self.scoring_frame()
         if frame.empty:
             return frame
         frame = frame.loc[frame.prediction_id.isin(
             e.prediction_group_source for e in self.epitopes)].copy()
+        alleles = {e.prediction_group_source: e.patient_alleles or ('',)
+                   for e in self.epitopes}
+        # Shared allele-free processing rows are evidence for these candidates,
+        # not extra peptide/allele report observations. The full scoring frame
+        # and native result keep every measurement kind and predictor row.
+        frame = frame.loc[[row.allele in alleles[row.prediction_id]
+                           for row in frame.itertuples()]]
+        frame = frame.drop_duplicates(['prediction_id', 'peptide', 'peptide_offset', 'allele'])
         frame["Prediction identity"] = frame.prediction_id
         frame["Peptide offset"] = frame.peptide_offset
         frame["Mutant peptide sequence"] = frame.peptide

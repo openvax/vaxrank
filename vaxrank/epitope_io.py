@@ -525,24 +525,24 @@ def _topiary_pvacseq_to_epitope_rows(rows):
             or prediction_kind_for_method(method))
         percentile_rank = cells.number(row.get("percentile_rank"))
         score = cells.number(row.get("score"))
-        if (not peptide or not allele
-                or (value is None and score is None
-                    and percentile_rank is None)):
+        if not peptide or not allele:
             continue
         value = physical_prediction_value(kind, value)
-        mutant = Prediction(
+        # A peptide/allele observation remains a candidate even without a
+        # quantitative leaf. Its partial/absent measurements are retained in
+        # the original Topiary frame for policy ranking and native replay.
+        mutant = (Prediction(
             kind=kind, predictor_name=method, predictor_version=version,
             allele=allele, peptide=peptide, value=value,
             score=score if score is not None else 0.0,
             percentile_rank=percentile_rank,
-        )
+        ) if value is not None or score is not None else None)
 
         wt = None
         wt_value = cells.number(row.get("wt_value"))
         wt_score = cells.number(row.get("wt_score"))
         wt_percentile_rank = cells.number(row.get("wt_percentile_rank"))
-        if (wt_value is not None or wt_score is not None
-                or wt_percentile_rank is not None):
+        if wt_value is not None or wt_score is not None:
             wt_method = cells.text(row.get("wt_prediction_method_name")) or method
             wt_version = cells.text(row.get("wt_predictor_version")) or version
             wt_value = physical_prediction_value(kind, wt_value)
@@ -575,6 +575,7 @@ def _topiary_pvacseq_to_epitope_rows(rows):
             'offset': 0,
             'mutant': mutant,
             'wt': wt,
+            'patient_alleles': (allele,),
             'source_class': SOURCE_CLASS_MUTATION,
             'overlaps_mutation': cells.boolean(
                 row.get("contains_mutant_residues"), default=True),

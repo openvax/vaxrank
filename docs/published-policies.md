@@ -86,9 +86,9 @@ affinity is a disclosed comparison convention.
 For a report, select its corresponding bundle and save native evidence:
 
 ```sh
-vaxrank --input-lens report.tsv --config builtin:lens-v1 \
+vaxrank --input-lens report.tsv --no-processing-aware-annotation --config builtin:lens-v1 \
   --output-epitopes evidence.tsv --output-csv lens-comparison.csv
-vaxrank --input-pvacseq aggregate.tsv --config builtin:pvacseq-aggregate-v1 \
+vaxrank --input-pvacseq aggregate.tsv --no-processing-aware-annotation --config builtin:pvacseq-aggregate-v1 \
   --output-epitopes evidence.tsv --output-csv pvacseq-comparison.csv
 vaxrank --input-topiary measured.tsv --config builtin:tesla-recognition-v1 \
   --output-epitopes evidence.tsv --output-csv tesla-comparison.csv

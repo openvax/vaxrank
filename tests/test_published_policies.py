@@ -237,3 +237,25 @@ def test_published_construct_scores_replay_and_explicit_override(tmp_path, monke
     assert outcomes[0] == pytest.approx([.5, .475])
     assert outcomes[1] == pytest.approx(outcomes[0])
     assert outcomes[2] == pytest.approx([1., .95])
+
+
+@pytest.mark.parametrize('flag,path,name', [
+    ('--input-pvacseq', DATA / 'pvacseq-aggregate.tsv', 'pvacseq-aggregate-v1'),
+    ('--input-lens', Path(__file__).parent / 'data/epitope_fixtures/real_lens_subsets/lens_v1.9_real_subset.tsv', 'lens-v1'),
+])
+def test_original_reports_keep_all_ranked_rows_on_cli_native_replay(flag, path, name, tmp_path, monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Reported-evidence comparison must not run predictors')
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
+    monkeypatch.setattr('vaxrank.cli.entry_point.annotate_predictions_with_processing', forbidden)
+    native, first, second = (tmp_path / name for name in ('native.tsv', 'first.csv', 'second.csv'))
+    run_cli([flag, str(path), '--config', 'builtin:' + name,
+             '--no-processing-aware-annotation', '--output-epitopes', str(native),
+             '--output-csv', str(first)])
+    run_cli(['--input-epitopes', str(native), '--output-csv', str(second)])
+    a, b = pd.read_csv(first), pd.read_csv(second)
+    columns = ['Prediction identity', 'Allele', 'vaxrank_score', 'vaxrank_rank_eligible']
+    pd.testing.assert_frame_equal(a[columns], b[columns])
+    assert a.vaxrank_rank_eligible.any()
+    if name == 'pvacseq-aggregate-v1':
+        assert len(a) == len(b) == 21
