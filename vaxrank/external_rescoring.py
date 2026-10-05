@@ -464,6 +464,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
                     manifest_path=None, genome=None, model_factory=None,
                     prepared_reports=(), use_flanks=True, prediction_prefix=None):
     """Read once and score with fresh common models or source input values."""
+    from topiary import is_stated
     if mode not in ('input', 'fresh', 'additive'):
         raise ValueError("Prediction mode must be input, fresh or additive")
     if prediction_prefix is not None and mode != 'additive':
@@ -502,9 +503,8 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             for source_frame in frames:
                 if source_frame.empty:
                     continue
-                if ('candidate_id' in source_frame and not source_frame.candidate_id.notna().any()
-                        and source_frame.source_observation_id.notna().all()):
-                    continue  # Retain RNA/ORF/allele-free evidence without inventing pMHC candidates.
+                if 'kind' in source_frame and not source_frame.kind.map(is_stated).any():
+                    continue  # Unmeasured sequence/RNA evidence remains report-only.
                 identities = set(source_frame.prediction_id)
                 candidates = [e for e in report.epitopes if e.prediction_group_source in identities]
                 scored.extend(attach_per_allele_scores(

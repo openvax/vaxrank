@@ -252,6 +252,29 @@ def test_exacto_orf_only_input_is_saved_without_invented_candidates(tmp_path, mo
     assert dataset.evidence_views()['orfs'].shape[0] == 77
 
 
+def test_measured_allele_free_evidence_scores_and_replays_without_hla(tmp_path, monkeypatch):
+    import mhctools.cli
+
+    monkeypatch.setattr(mhctools.cli, 'predictors_from_args', forbidden)
+    source = tmp_path / 'processing.tsv'
+    evidence(allele=['', ''], kind=['proteasome_cleavage'] * 2,
+             value=[None, None], score=[.4, .8]).to_tsv(source)
+    native = tmp_path / 'native.tsv'
+    run_cli(['--input-topiary', str(source), '--output-epitopes', str(native),
+             '--config-value', 'epitopes.score_expr=10 * peptide_view(proteasome_cleavage.score)',
+             '--min-epitope-score', '0'])
+    dataset = EpitopeDataset.load(native)
+    assert dataset.result.df.candidate_id.isna().all()
+    assert not dataset.antigens and all(not e.patient_alleles for e in dataset.epitopes)
+    assert all(not e.per_allele_scores for e in dataset.epitopes)
+    from vaxrank.epitope_dsl import score_predictions
+    assert score_predictions(dataset.epitopes, dataset.config,
+                             topiary_df=dataset.scoring_frame()).tolist() == [4., 8.]
+    replay, _, _ = prepare_reports([('epitopes', native)])
+    assert score_predictions(replay[0].epitopes, replay[0].dataset.config,
+                             topiary_df=replay[0].dataset.scoring_frame()).tolist() == [4., 8.]
+
+
 def test_historical_native_views_survive_transport_filename_changes(tmp_path):
     from .test_core_logic_config import _make_epitope
 
