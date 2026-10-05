@@ -38,8 +38,9 @@ vaxrank --input-epitopes result.tsv --index-native-references --output-dir repor
 ```
 
 The equivalent Python call is `dataset.index_native_references()`. Indexing
-verifies the resources again and acquires no data. Derived indexes are local to
-the relocated bundle. Missing annotation resources produce an explicit error.
+verifies the resources again and acquires no data. Custom-reference indexes are
+local to the relocated bundle; standard Ensembl releases use PyEnsembl's normal
+release cache. Missing annotation resources produce an explicit error.
 
 Earlier native files retain their original reference identities and now restore
 metadata lazily. Where the saved antigen already records protein IDs for the

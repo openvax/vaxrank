@@ -177,11 +177,12 @@ def test_ensembl_release_preserves_identity_and_bundles_attached_dna(tmp_path, m
     from pyensembl import EnsemblRelease
     from varcode import Variant
     import pyensembl.download_cache
+    monkeypatch.setenv('PYENSEMBL_CACHE_DIR', str(tmp_path / 'release-cache'))
     monkeypatch.setattr(pyensembl.download_cache.DownloadCache, "_fetch", forbidden)
     dna = tmp_path / "dna.fa"
     dna.write_text(">1\nACGTACGTACGT\n")
     genome = EnsemblRelease(104, species="mouse", genome_fasta=str(dna))
-    dataset = EpitopeDataset.from_predictions([_make_epitope("SIINFEKL")])
+    dataset = EpitopeDataset.from_predictions([_make_epitope("SIINFEKL", ic50=100.)])
     dataset.direct_sources = [{'variant': to_native_json(Variant('1', 2, 'C', 'T', ensembl=genome)),
                                'properties': {}}]
     path = tmp_path / "archive" / "native.tsv"
