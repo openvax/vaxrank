@@ -6,7 +6,7 @@ numpy>=2.0.0,<3.0.0
 # only raising, and 1.11.1 is the release that shortens over-long cache names.
 datacache>=1.14.0,<2.0.0
 # Public data acquisition and original-read extraction for the osteosarc corpus.
-osteosarc>=0.14.4,<0.15
+osteosarc>=0.15.4,<0.16
 pandas>=2.1.4,<4.0.0
 # Metadata-only Transcript/Gene restore defers annotation DB access (#563).
 pyensembl>=2.22.2,<3.0.0
@@ -16,11 +16,11 @@ pyensembl>=2.22.2,<3.0.0
 # partial proteins and uncertain selenocysteine decoding.
 varcode>=10.10.2,<11.0.0
 # 1.42.1 corrects flanking-indel candidate matching. The fusion consumer
-# validates isovar.fusion_rna.v3 explicitly; audited through 1.44.2. Raw
+# validates isovar.fusion_rna.v3 explicitly; audited through 1.45.0. Raw
 # assembly support remains distinct from opt-in fractional catalog support.
 # Retains matched germline input, directional calibration and run thresholds.
-# 1.45 changes Osteosarc's minor window; coordinate with Topiary first (#571).
-isovar>=1.42.1,<1.45.0
+# 1.45 requires Osteosarc 0.15.4; Topiary 5.93.3 accepts that shared window.
+isovar>=1.45.0,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.64.4,<4.0.0
 # 3.41.0 supplies mhctools.cleavage (CleavageInput/CleavageModel/CleavageResult/
@@ -47,7 +47,8 @@ mhctools>=3.44.64,<4.0.0
 # Native Exacto/mixed report replay requires typed scalar/structured annotations
 # and nullable integer/boolean cells. Public occurrence/reconciliation and
 # additive rescoring APIs are consumed together; 5.93.2 fixes that replay.
-topiary>=5.93.2,<6.0.0
+# 5.93.3 accepts Osteosarc 0.15 alongside 0.14, enabling Isovar 1.45.
+topiary>=5.93.3,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0
