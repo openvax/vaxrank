@@ -155,11 +155,15 @@ def test_shared_data_window_keeps_compatible_sibling_floors():
     """An Osteosarc window change requires reviewing both sibling floors.
 
     Published Isovar 1.39.5 and Topiary 5.82.0 first accept Osteosarc 0.14;
-    earlier admitted releases require incompatible windows (#533).
+    earlier admitted releases require incompatible windows (#533). Isovar
+    1.45.0 and Topiary 5.93.3 enable the audited Osteosarc 0.15 window (#571).
     """
     osteosarc = requirement_named("osteosarc")
     window = floor_of(osteosarc).release[:2]
-    reviewed = {(0, 14): {"isovar": "1.39.5", "topiary": "5.82.0"}}
+    reviewed = {
+        (0, 14): {"isovar": "1.39.5", "topiary": "5.82.0"},
+        (0, 15): {"isovar": "1.45.0", "topiary": "5.93.3"},
+    }
     assert window in reviewed, "Review sibling compatibility for the new Osteosarc window"
     for name, compatible in reviewed[window].items():
         floor = floor_of(requirement_named(name))
