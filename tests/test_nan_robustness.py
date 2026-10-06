@@ -20,8 +20,10 @@ Two layered guarantees:
 """
 import json
 import math
+import sys
 from unittest.mock import patch
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -221,14 +223,47 @@ def test_json_writer_round_trips_real_payload():
     assert parsed == payload
 
 
-# ---- stdlib json baseline (for documentation; not a real test) ---------
+@pytest.mark.parametrize("value", [np.float64('nan'), np.float64('inf'),
+                                   np.float64('-inf')])
+def test_json_writer_handles_nested_numpy_floats_without_mutating_input(value):
+    from vaxrank.cli.entry_point import serialize_json_nan_tolerant
+
+    payload = {'nested': [{'value': value}]}
+    assert json.loads(serialize_json_nan_tolerant(payload)) == {
+        'nested': [{'value': None}]}
+    assert payload['nested'][0]['value'] is value
 
 
-def test_simplejson_default_rejects_nan_as_documented():
-    """Sanity: confirms the bug premise. The stdlib + simplejson
-    *default* path rejects NaN — which is why we wrapped with
-    ``ignore_nan=True``. This test fails the day simplejson changes
-    its default; if it ever does, we can remove the wrapper."""
-    import simplejson
-    with pytest.raises(ValueError, match='Out of range'):
-        simplejson.dumps({'x': float('nan')})
+def test_json_writer_normalizes_serializable_containers_and_objects():
+    from vaxrank.cli.entry_point import serialize_json_nan_tolerant
+
+    class Payload:
+        def __init__(self, value):
+            self.value = value
+
+    payload = {'tuple': (float('nan'),), 'set': {float('inf')},
+               'object': Payload(float('-inf'))}
+    parsed = json.loads(serialize_json_nan_tolerant(payload))
+    assert parsed['tuple']['__value__'] == [None]
+    assert parsed['set']['__value__'] == [None]
+    assert parsed['object']['value'] is None
+    assert parsed['object']['__class__']['__name__'] == 'Payload'
+
+
+def test_json_writer_preserves_report_encoding():
+    from vaxrank.cli.entry_point import serialize_json_nan_tolerant
+
+    payload = {'values': [float('nan'), float('inf'), float('-inf')],
+               'negative_zero': -0.0, 'tiny': 5e-324, 'large': 2 ** 64,
+               'text': 'café'}
+    assert serialize_json_nan_tolerant(payload) == (
+        '{"values": [null, null, null], "negative_zero": -0.0, '
+        '"tiny": 5e-324, "large": 18446744073709551616, "text": "caf\\u00e9"}')
+
+
+def test_json_writer_works_when_simplejson_cannot_be_imported(monkeypatch):
+    from vaxrank.cli.entry_point import serialize_json_nan_tolerant
+
+    monkeypatch.setitem(sys.modules, 'simplejson', None)
+    assert json.loads(serialize_json_nan_tolerant({'value': float('nan')})) == {
+        'value': None}

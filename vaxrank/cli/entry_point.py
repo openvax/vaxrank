@@ -15,6 +15,7 @@
 import logging
 import json
 import logging.config
+import math
 import os
 import sys
 from importlib.resources import files
@@ -76,15 +77,25 @@ from ..vaf import extract_dna_vaf_by_variant
 logger = logging.getLogger(__name__)
 
 
+def _nan_to_none(value):
+    """Replace non-finite floats in normalized dict/list values with None."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _nan_to_none(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_nan_to_none(item) for item in value]
+    return value
+
+
 def serialize_json_nan_tolerant(obj):
-    """Serialize ``obj`` to a JSON string, rendering NaN/Inf as
-    ``null`` rather than raising. Defense-in-depth wrapper around
-    ``serializable.to_json``; producers should already be coercing
-    NaN to None, but a writer-side safety net prevents the whole
-    report from being lost on a single rogue float (#289)."""
-    import simplejson
+    """Serialize ``obj`` to strict JSON, rendering NaN/Inf as ``null``.
+
+    Producers should already coerce non-finite floats to None. This writer
+    also normalizes them so one bad float cannot lose the report (#289).
+    """
     from serializable.helpers import to_serializable_repr
-    return simplejson.dumps(to_serializable_repr(obj), ignore_nan=True)
+    return json.dumps(_nan_to_none(to_serializable_repr(obj)), allow_nan=False)
 
 
 def filter_unannotatable_variants(variants):
@@ -1752,14 +1763,13 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     if args.output_json_file:
         ensure_parent_dir(args.output_json_file)
         with open(args.output_json_file, 'w') as f:
-            # ``ignore_nan=True`` is defense in depth — producers should
+            # Writer-side normalization is defense in depth — producers should
             # be coercing NaN/Inf to None before reaching the writer
             # (see vaxrank.finite_prediction_value), but if any
             # slips through (e.g. a future predictor adapter, or a
             # custom score expression), render it as JSON null instead
             # of crashing the whole report. Note: strict JSON doesn't
-            # have a NaN literal — simplejson's default behavior is to
-            # raise; we explicitly opt into the null representation.
+            # have a NaN literal; the writer converts non-finite floats to null.
             f.write(serialize_json_nan_tolerant(data))
             logger.info('Wrote JSON report data to %s', args.output_json_file)
 
