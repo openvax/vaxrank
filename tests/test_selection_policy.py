@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 from topiary import replay_selection_policy
 from topiary import read_tsv
+from topiary.ranking import Column
 
 from vaxrank.config.loader import (
     load_vaxrank_config, extract_epitope_config_kwargs, resolve_config_path,
@@ -45,6 +46,52 @@ def test_frozen_policy_matches_legacy_scores_and_replays(tmp_path):
     pd.testing.assert_frame_equal(evaluation.occurrences, decoded.occurrences)
     record, = save_policy_evaluations([evaluation], tmp_path)
     restored = replay_selection_policy(read_tsv(tmp_path / record['evidence']))
+    pd.testing.assert_frame_equal(evaluation.occurrences, restored.occurrences)
+
+
+@pytest.mark.parametrize('renderer', ['repr', 'to_expr_string'])
+@pytest.mark.parametrize('expression, measurements, threshold, expected_scores, eligible', [
+    pytest.param(
+        Column('review_score') - (Column('penalty') - Column('credit')),
+        dict(review_score=[10., 8.], penalty=[3., 3.], credit=[1., 1.]),
+        7., [8., 6.], [True, False], id='grouped-subtraction'),
+    pytest.param(
+        Column('signed_score').clip(-1, 1), dict(signed_score=[-2., 0., 2.]),
+        -1., [-1., 0., 1.], [True, True, True], id='negative-clip-bound'),
+])
+def test_rendered_policy_yaml_keeps_scores_selection_and_evidence_replay(
+        tmp_path, renderer, expression, measurements, threshold, expected_scores, eligible):
+    """Saved policies must preserve arithmetic and signed transform parameters (#582)."""
+    def render(node):
+        return repr(node) if renderer == 'repr' else node.to_expr_string()
+
+    policy = dict(
+        name='saved-expression', score_by=render(expression), min_score=None,
+        criteria=[dict(name='accepted', expression=render(expression >= threshold),
+                       role='eligibility')], filter_by='criterion("accepted")')
+    path = tmp_path / 'policy.yaml'
+    path.write_bytes(msgspec.yaml.encode({'epitopes': {'selection_policy': policy}}))
+    cfg = msgspec.convert(extract_epitope_config_kwargs(
+        load_vaxrank_config(config_path=str(path))), EpitopeConfig)
+    frame = _predictions_df([
+        dict(peptide='SIINFEKL', allele='HLA-A*02:01', peptide_offset=i, value=50.,
+             **{name: values[i] for name, values in measurements.items()})
+        for i in range(len(expected_scores))])
+
+    scores = score_predictions([], cfg, topiary_df=frame)
+    assert scores.tolist() == [score for score, keep in zip(expected_scores, eligible) if keep]
+    evaluation = scores.attrs['policy_evaluation']
+    assert evaluation.occurrences.eligible.tolist() == eligible
+    # Topiary evaluates scores after eligibility; rejected occurrences stay
+    # in the audit with a missing score rather than an evaluated value.
+    assert evaluation.occurrences.loc[eligible, 'score'].tolist() == scores.tolist()
+    assert evaluation.occurrences.loc[[not keep for keep in eligible], 'score'].isna().all()
+    assert len(evaluation.evidence.df) == len(frame)
+    decoded, = decode_evaluations(encode_evaluations([evaluation]))
+    pd.testing.assert_frame_equal(evaluation.occurrences, decoded.occurrences)
+    record, = save_policy_evaluations([evaluation], tmp_path / 'evidence')
+    restored = replay_selection_policy(read_tsv(tmp_path / 'evidence' / record['evidence']))
+    assert restored.policy.sha256 == evaluation.policy.sha256
     pd.testing.assert_frame_equal(evaluation.occurrences, restored.occurrences)
 
 
