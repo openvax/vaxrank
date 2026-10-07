@@ -69,7 +69,7 @@ dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
 # oncoref is the direct authority for HPA-backed CTA identity and the full
 # candidate CTA universe. Keep this reference pin aligned with PirlyGenes.
-oncoref==1.8.206
+oncoref==1.8.207
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
 # of predictor_version strings. Always pulled in transitively via setuptools
 # / pip, but pinned explicitly so minimal / --no-deps installs don't break

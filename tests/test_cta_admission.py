@@ -273,3 +273,23 @@ def test_live_oncoref_prame_regression_uses_two_distinct_cta_sets():
     assert set(result.antigen.self_reference_excluded_gene_ids) == {
         gene_id.split(".")[0] for gene_id in cta_unfiltered_gene_ids()
     }
+
+
+def test_live_oncoref_extended_panel_preserves_core_admission_and_provenance():
+    import oncoref
+    from oncoref.cta import cta_evidence, cta_extended_gene_ids, cta_gene_ids
+    from oncoref.version import DATA_VERSION, SOURCE_MATRIX_VERSION
+
+    # PAGE4 belongs to OncoRef's explicit extended panel, not its core default.
+    evidence = cta_evidence()
+    gene_id = evidence.loc[evidence.Symbol.eq("PAGE4"), "Ensembl_Gene_ID"].item()
+    assert gene_id in cta_extended_gene_ids() - cta_gene_ids()
+
+    result = _assess(gene_id=gene_id)
+    assert result.antigen.tumor_specificity.status == ATTESTATION_HELD_OUT
+    assert result.antigen.tumor_specificity.rationale_code == CTA_REASON_NONCANONICAL_HELD_OUT
+    reference = result.reference_evidence
+    assert reference.oncoref_version == oncoref.__version__
+    assert reference.oncoref_data_version == DATA_VERSION
+    assert reference.oncoref_source_matrix_version == SOURCE_MATRIX_VERSION
+    assert CTAAdmissionAssessment.from_dict(result.to_dict()) == result
