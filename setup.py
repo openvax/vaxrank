@@ -64,6 +64,7 @@ if __name__ == "__main__":
         # tests only 3.10-3.13 so this matches tested reality.
         python_requires=">=3.10",
         install_requires=requirements,
+        extras_require={'hitlist': ['hitlist>=1.65.1,<2']},
         long_description=readme_markdown,
         long_description_content_type="text/markdown",
         packages=find_packages(exclude=["tests", "tests.*"]),

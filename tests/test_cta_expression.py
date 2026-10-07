@@ -27,6 +27,16 @@ UNKNOWN_TRANSCRIPT = "ENST00000399999"
 SEQUENCE = "ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMN"
 
 
+@pytest.mark.parametrize('suffix,separator', [('tsv', '\t'), ('csv', ',')])
+def test_duplicate_expression_headers_fail_before_measurement_selection(tmp_path, genome, suffix, separator):
+    path = tmp_path / ('duplicate.' + suffix)
+    path.write_text(separator.join(['feature_id', 'patient_tpm', 'patient_tpm']) + '\n' +
+                    separator.join([PRAME, '3', '30']) + '\n')
+    with pytest.raises(ValueError, match='unique column names'):
+        admit_cta_expression(path, input_contract=contract(),
+                             admission_policy=CTAAdmissionPolicy(2, 'TPM'), genome=genome)
+
+
 def contract(level="gene", **changes):
     return replace(CTAExpressionInput(
         measurement_level=level, id_column="feature_id", value_column="patient_tpm",

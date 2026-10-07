@@ -58,6 +58,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest pytest-cov ruff
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # Exercise the optional portable Hitlist evidence consumer on every
+          # supported Python, alongside the ordinary CLI/persistence tests.
+          python -m pip install '.[hitlist]'
       - name: Key the openvax-v1 test reads by their manifest
         id: openvax-v1
         run: |

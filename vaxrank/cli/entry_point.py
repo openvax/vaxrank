@@ -276,7 +276,8 @@ def construct_config_for_modality(args, modality):
     try:
         from ..config.loader import load_vaxrank_config, extract_construct_kwargs
         merged = load_vaxrank_config(args)
-        return extract_construct_kwargs(merged, modality)
+        saved = getattr(args, '_saved_cta_construct_config', {}).get(modality, {})
+        return {**saved, **extract_construct_kwargs(merged, modality)}
     except (FileNotFoundError, OSError, AttributeError) as e:
         logger.debug(
             "vaccine_constructs config not loaded for %s (%s); "
@@ -395,9 +396,15 @@ def _emit_peptide_constructs(args, ranked, target_dir):
     # ``--mhc-alleles`` and no LENS-inferred set).
     target_alleles = resolve_target_alleles(args)
     window_audit = []
-    constructs = assemble_peptide_constructs(
-        ranked, options=peptide_options, target_alleles=target_alleles,
-        **({'window_audit': window_audit} if peptide_options.window_selection else {}))
+    from ..cta_design import restore_cta_products, record_cta_products
+    constructs = restore_cta_products(args, ranked, 'peptide', peptide_options)
+    if constructs is None:
+        constructs = assemble_peptide_constructs(
+            ranked, options=peptide_options, target_alleles=target_alleles,
+            **({'window_audit': window_audit} if peptide_options.window_selection else {}))
+    else:
+        window_audit = args._cta_assembly['peptide'].get('window_audit') or []
+    record_cta_products(args, ranked, 'peptide', peptide_options, constructs, window_audit=window_audit)
     # Canonical filenames inside the per-modality target directory:
     # vaccine.fasta + manifest.json + order_form.csv. Single-mode
     # runs land directly in args.output_dir; multi-mode runs land in
@@ -419,6 +426,7 @@ def _emit_peptide_constructs(args, ranked, target_dir):
     logger.info(
         "Wrote %d peptide construct(s) to %s",
         len(constructs), target_dir)
+    return constructs
 
 
 _MISSING_SENTINEL = object()
@@ -634,7 +642,7 @@ def resolve_mhc_for_linker_optimizer(args, config_kwargs=None):
     models_path = cfg('junction_predictor_models_path')
     external = any(getattr(args, name, None) for name in (
         'input_manifest', 'input_lens', 'input_pvacseq', 'external_input',
-        'input_topiary', 'input_epitopes'))
+        'input_topiary', 'input_epitopes', 'input_cta_expression'))
     if not model and (external or not getattr(args, 'mhc_predictor', None)):
         if cfg('optimize_linkers') is True or query or model_path or models_path:
             raise ValueError(
@@ -706,7 +714,15 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     def cfg(cli_attr, yaml_key):
         return coalesce_config_value(args, cli_attr, yaml_kwargs, yaml_key)
 
-    mhc_predictor, mhc_alleles = resolve_mhc_for_linker_optimizer(args, yaml_kwargs)
+    cta = getattr(args, '_cta_assembly', None) is not None
+    mhc_predictor, mhc_alleles = (None, None) if cta else resolve_mhc_for_linker_optimizer(args, yaml_kwargs)
+    junction_context = {name: cfg('mrna_' + name, name) for name in (
+        'junction_predictor', 'junction_alleles', 'junction_predictor_path', 'junction_predictor_models_path')}
+    if (cta and not junction_context['junction_predictor']
+            and cfg('mrna_optimize_linkers', 'optimize_linkers') is not False
+            and (cfg('mrna_optimize_linkers', 'optimize_linkers') is True
+                 or any(junction_context.values()))):
+        raise ValueError('Junction prediction requires --mrna-junction-predictor')
     junction_candidates_raw = cfg(
         'mrna_junction_candidates', 'junction_candidates') or ''
     junction_candidates = tuple(
@@ -743,7 +759,8 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         candidates_per_slot=cfg(
             'mrna_candidates_per_slot', 'candidates_per_slot'),
         max_length_nt=cfg('mrna_max_length_nt', 'max_length_nt'),
-        optimize_linkers=mhc_predictor is not None,
+        optimize_linkers=(bool(junction_context['junction_predictor']) and
+                          cfg('mrna_optimize_linkers', 'optimize_linkers') is not False) if cta else mhc_predictor is not None,
         junction_swap_candidates=junction_candidates,
         junction_rank_strong=cfg(
             'mrna_junction_rank_strong', 'junction_rank_strong'),
@@ -758,16 +775,22 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     )
     record_construct_configuration(args, 'mrna', options)
     target_alleles = resolve_target_alleles(args)
-    constructs = assemble_mrna_constructs(
-        ranked, options=options,
-        mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles,
-        target_alleles=target_alleles)
-    policy = 'none'
-    if mhc_predictor is not None:
-        policy = ('explicit_junction_model' if cfg('mrna_junction_predictor', 'junction_predictor')
-                  else 'candidate_model')
-    for construct in constructs:
-        construct.elements['junction_swap']['policy'] = policy
+    from ..cta_design import restore_cta_products, record_cta_products
+    constructs = restore_cta_products(args, ranked, 'mrna', options, junction_context)
+    if constructs is None:
+        if cta:
+            mhc_predictor, mhc_alleles = resolve_mhc_for_linker_optimizer(args, yaml_kwargs)
+        constructs = assemble_mrna_constructs(
+            ranked, options=options,
+            mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles,
+            target_alleles=target_alleles)
+        policy = 'none'
+        if mhc_predictor is not None:
+            policy = ('explicit_junction_model' if cfg('mrna_junction_predictor', 'junction_predictor')
+                      else 'candidate_model')
+        for construct in constructs:
+            construct.elements['junction_swap']['policy'] = policy
+    record_cta_products(args, ranked, 'mrna', options, constructs, junction_context)
     # Canonical filenames inside the per-modality target directory:
     # cds.fasta + no_polyA.fasta + full.fasta + manifest.json +
     # mrna-sequence-parts.csv. The cds/no_polyA/full FASTAs are
@@ -788,6 +811,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     logger.info(
         "Wrote %d mRNA construct(s) to %s/{cds,no_polyA,full}.fasta",
         len(constructs), target_dir)
+    return constructs
 
 
 # Multi-mode dispatch table: vaccine-type → writer.
@@ -843,6 +867,7 @@ def emit_outputs(args, ranked, source):
 
     output_dir = getattr(args, 'output_dir', '') or ''
     fired = []
+    products = {}
     for vtype in vaccine_types:
         writer = _VACCINE_TYPE_DISPATCH.get(vtype)
         if writer is None:
@@ -868,7 +893,7 @@ def emit_outputs(args, ranked, source):
         # writer may have left partial files behind in ``target_dir``
         # that the operator needs to find and clean up.
         try:
-            writer(args, ranked, target_dir)
+            products[vtype] = writer(args, ranked, target_dir)
         except Exception:
             written = [
                 (t, vaccine_target_dir(output_dir, t, vaccine_types))
@@ -897,6 +922,7 @@ def emit_outputs(args, ranked, source):
     logger.info(
         "Vaccine-type dispatch [%s]: types=%s wrote=%s",
         source_label, vaccine_types, fired)
+    return products
 
 
 _AUTO_OUTPUT_FILENAMES = {
@@ -1033,7 +1059,15 @@ def write_run_summary(args, patient_info, source):
             note = ""
         lines += ["", "MHC alleles%s: %s" % (note, ", ".join(alleles))]
 
-    if patient_info is not None:
+    if patient_info is not None and getattr(patient_info, 'cta_expression_summary', None) is not None:
+        summary = patient_info.cta_expression_summary
+        lines += ['', 'CTA expression targets:',
+                  '  input expression features: %d' % summary['input_features'],
+                  '  admitted CTA proteins:     %d' % summary['admitted_targets'],
+                  '  with selected regions:     %d' % summary['selected_targets'],
+                  '  measurement level / units: %s / %s' % (
+                      summary['measurement_level'], summary['expression_unit'])]
+    elif patient_info is not None:
         lines += [
             "",
             "Antigen counts:",
@@ -1206,6 +1240,8 @@ def run_cli(args_list=None):
     # JSON dump) without listing every flag. Explicit
     # ``--output-csv`` / ``--output-json-file`` paths win.
     populate_default_output_paths(args)
+    if getattr(args, 'input_cta_expression', None) and args.output_dir and not args.output_cta_admission:
+        args.output_cta_admission = os.path.join(args.output_dir, 'cta_admission.json')
     log_args_summary(args)
 
     # Fail fast when no output path is set, *before* loading inputs or
@@ -1248,6 +1284,7 @@ def run_cli(args_list=None):
             or getattr(args, 'input_lens', None)
             or getattr(args, 'input_epitopes', None)
             or getattr(args, 'input_topiary', None)
+            or getattr(args, 'input_cta_expression', None)
             or getattr(args, 'external_input', None)
             or getattr(args, 'input_manifest', None)):
         merged_config = load_vaxrank_config(args)
@@ -1357,7 +1394,12 @@ def run_cli(args_list=None):
             human_only=getattr(args, 'pepsickle_human_only', False),
             threshold=getattr(args, 'pepsickle_threshold', 0.5))
 
-    emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
+    products = emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
+    if report_df is not None and report_df.attrs.get('epitope_dataset') is not None:
+        from ..cta_design import write_cta_design
+        write_cta_design(args, ranked_variants_with_vaccine_peptides,
+                         report_df.attrs['epitope_dataset'], products,
+                         predictor=report_df.attrs.get('cta_predictor'))
     write_run_summary(args, patient_info, source)
 
     ########################
