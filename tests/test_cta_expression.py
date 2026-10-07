@@ -274,7 +274,14 @@ def test_expression_antigen_reaches_existing_peptide_and_mrna_builders(tmp_path,
     assert all(peptide.sequence in SEQUENCE for peptide in peptides)
 
 
-@pytest.mark.xfail(strict=True, reason="Topiary #486: short CSV delimiter inference; blocks draft readiness")
-def test_single_feature_csv_uses_the_public_loader(tmp_path, genome):
-    result = run(tmp_path, genome, [(PRAME, 3)], suffix="csv")
-    assert len(result.admitted_antigens) == 1
+@pytest.mark.parametrize("suffix", ["csv", "tsv"])
+@pytest.mark.parametrize("level", ["gene", "transcript"])
+@pytest.mark.parametrize("n_rows", [0, 1, 3])
+def test_expression_tables_of_any_size_use_the_public_loader(tmp_path, genome, suffix, level, n_rows):
+    features = ([PRAME, MAGEA4, HELD_OUT] if level == "gene" else
+                [PRAME_TRANSCRIPT, ALTERNATE_TRANSCRIPT, MAGEA4_TRANSCRIPT])
+    result = run(tmp_path, genome, [(identity, 3) for identity in features[:n_rows]],
+                 suffix=suffix, level=level)
+    assert len(result.decisions) == n_rows
+    assert [d.input_identifier for d in result.decisions] == features[:n_rows]
+    assert len(result.admitted_antigens) == (min(n_rows, 2) if level == "gene" else n_rows)

@@ -70,11 +70,12 @@ transcript abundance. [Ensembl canonical selection](https://www.ensembl.org/info
 chooses a representative transcript, rather than measuring patient isoform or
 protein abundance.
 
-## Draft readiness and subsequent work
+## Released prerequisite and subsequent work
 
-- [Topiary #486](https://github.com/openvax/topiary/issues/486) blocks CSV tables
-  with fewer than two data rows. A strict expected-failure regression records
-  that upstream bug; adopt its released fix before marking this PR ready.
+- Requires Topiary >=5.94.3, which fixes delimiter inference for empty and
+  single-feature expression tables ([Topiary #486](https://github.com/openvax/topiary/issues/486)).
+  Consumer regressions cover CSV/TSV gene and transcript inputs with zero,
+  one and multiple rows, with no expected failures.
 - Wire expression input into the shared CLI prediction, filtering/ranking,
   native dataset, report, peptide and mRNA construct paths. Use Topiary's DSL
   for configurable expression-aware selection and scores.

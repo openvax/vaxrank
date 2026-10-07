@@ -50,7 +50,9 @@ mhctools>=3.44.64,<4.0.0
 # 5.93.3 accepts Osteosarc 0.15 alongside 0.14, enabling Isovar 1.45.
 # 5.93.6 preserves saved DSL grouping, negative transform bounds and scalar
 # literal compatibility (openvax/topiary#473, #475, #481; vaxrank#582).
-topiary>=5.93.6,<6.0.0
+# 5.94.3 infers delimiters from header-only and single-feature expression
+# tables, required by expression-first CTA admission (topiary#486).
+topiary>=5.94.3,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0
