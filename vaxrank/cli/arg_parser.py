@@ -1202,10 +1202,29 @@ def choose_arg_parser(args_list):
 def parse_vaxrank_args(args_list):
     arg_parser = choose_arg_parser(args_list)
     parsed = arg_parser.parse_args(args_list)
-    # Snapshot of parser defaults so downstream code can detect
-    # "user explicitly passed this flag" by ``args.X !=
-    # args._parser_defaults['X']``. Used by the construct-kwargs
-    # resolver to give CLI flags precedence over YAML config values.
+    # Record supplied destinations, including values equal to defaults,
+    # aliases, abbreviations and --option=value. Value comparison alone
+    # cannot distinguish an explicit reset from an omitted option.
+    explicit = set()
+    option_actions = {name: action for action in arg_parser._actions
+                      for name in action.option_strings}
+    for token in args_list:
+        if token == '--':
+            break
+        option = token.split('=', 1)[0]
+        action = option_actions.get(option)
+        if action is not None:
+            explicit.add(action.dest)
+        elif arg_parser.allow_abbrev and option.startswith('--'):
+            # Parsing already succeeded, so a long-option abbreviation
+            # resolves to one action. Do not call _parse_optional: its
+            # return format differs across supported Python versions.
+            matches = {a.dest for name, a in option_actions.items() if name.startswith(option)}
+            if len(matches) == 1:
+                explicit.update(matches)
+    parsed._explicit_cli_args = explicit
+    # Keep defaults for summaries and library callers which construct their
+    # own Namespace rather than going through this parser.
     #
     # Apply ``action.type`` to string defaults the same way argparse
     # does at parse time — otherwise the snapshot stores the raw

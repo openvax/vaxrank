@@ -107,13 +107,18 @@ def test_expression_only_cli_outputs_and_offline_replay(tmp_path, monkeypatch, c
     # Explicit new settings cannot inherit either old products or their audit.
     changed = tmp_path / 'changed'
     run_cli(['--input-epitopes', str(native), '--output-dir', str(changed),
-             '--vaccine-type', 'peptide', '--peptide-max-constructs', '2',
+             '--vaccine-type', 'peptide', 'mrna', '--peptide-max-constructs', '20',
+             '--mrna-no-optimize-linkers'] +
+            (['--mrna-poly-a-length', '120'] if level == 'gene' else ['--mrna-poly-a-length=120']) + [
              '--config-value', 'peptide.n_terminal_acetyl=false',
              '--no-processing-aware-annotation'])
     changed_design = from_native_json((changed / 'cta_design.json').read_text(), dict)
     assert changed_design['final_product_audit']['mhc_status'] == 'unassessed'
     assert changed_design['final_product_audit']['reason'] == 'mhc_predictor_not_requested'
-    assert (first / 'peptide' / 'manifest.json').read_bytes() != (changed / 'manifest.json').read_bytes()
+    assert all(p.poly_a_nt == 'A' * 120 for p in changed_design['final_product_audit']['products']['mrna'])
+    if level == 'gene':
+        assert len(changed_design['final_product_audit']['products']['peptide']) > 1
+    assert (first / 'peptide' / 'manifest.json').read_bytes() != (changed / 'peptide' / 'manifest.json').read_bytes()
 
 
 def test_expression_dsl_changes_selected_targets(tmp_path, cli_dependencies):

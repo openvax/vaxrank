@@ -239,8 +239,8 @@ def coalesce_config_value(args, cli_attr, config_kwargs, config_key):
     """Resolve a single construct knob across CLI flag, YAML config,
     and built-in default. Precedence (highest first):
 
-      1. CLI flag was explicitly passed (``args.X`` differs from the
-         parser default snapshot in ``args._parser_defaults``).
+      1. CLI flag was explicitly passed, even if equal to its default.
+         Library-created namespaces retain value-comparison fallback.
       2. YAML config has a value for the key.
       3. Built-in default (the parser default; what ``args.X``
          already holds).
@@ -253,7 +253,7 @@ def coalesce_config_value(args, cli_attr, config_kwargs, config_key):
     cli_val = getattr(args, cli_attr, None)
     parser_defaults = getattr(args, '_parser_defaults', None) or {}
     cli_default = parser_defaults.get(cli_attr, cli_val)
-    if cli_val != cli_default:
+    if cli_attr in getattr(args, '_explicit_cli_args', ()) or cli_val != cli_default:
         return cli_val   # user supplied; CLI wins
     if config_key in config_kwargs:
         return config_kwargs[config_key]
