@@ -41,6 +41,14 @@ def _native_serializable_classes():
 
     from .allele_evidence import AlleleAttribution
     from .input_scope import InputScope, InputProvenance
+    from .cta_admission import (
+        CTAAdmissionAssessment, CTAAdmissionPolicy, CTAOverrideEvidence,
+        CTAReferenceEvidence, CTAReferenceResolution, PatientTumorExpressionEvidence,
+    )
+    from .cta_expression import (
+        CTAExpressionInput, CTAExpressionDecision, CTAExpressionResult,
+        CTATargetExclusionPolicy,
+    )
     from .candidate_epitope import CandidateEpitope, Peptide
     from .construct_sequence import (
         ConstructChemicalModification,
@@ -78,6 +86,11 @@ def _native_serializable_classes():
         **{(cls.__module__, cls.__name__): cls for cls in (
             Variant, StructuralVariant, Genome, EnsemblRelease, Transcript, Species,
             MutantProteinFragment, ExternalRecord, ExternalPredictionKey)},
+        **{(cls.__module__, cls.__name__): cls for cls in (
+            CTAAdmissionAssessment, CTAAdmissionPolicy, CTAOverrideEvidence,
+            CTAReferenceEvidence, CTAReferenceResolution, PatientTumorExpressionEvidence,
+            CTAExpressionInput, CTAExpressionDecision, CTAExpressionResult,
+            CTATargetExclusionPolicy)},
         ("builtins", "set"): set,
         ("builtins", "tuple"): tuple,
         ("vaxrank.input_scope", "InputScope"): InputScope,

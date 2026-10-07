@@ -70,6 +70,10 @@ class PatientTumorExpressionEvidence(DataclassSerializable):
     evidence_source: str
     evidence_version: str
     assay: str = ""
+    measurement_level: str = "gene"
+    transcript_id: str = ""
+    input_identifier: str = ""
+    input_sha256: str = ""
 
     def __post_init__(self):
         gene_id = normalize_ensembl_gene_id(self.gene_id)
@@ -85,6 +89,15 @@ class PatientTumorExpressionEvidence(DataclassSerializable):
                 "Tumor expression requires assay, units, and versioned provenance"
             )
         object.__setattr__(self, "gene_id", gene_id)
+        if self.measurement_level not in {"gene", "transcript"}:
+            raise ValueError("Tumor expression measurement level must be gene or transcript")
+        if (self.measurement_level == "transcript") != bool(self.transcript_id):
+            raise ValueError("Only transcript expression requires a measured transcript ID")
+        if self.input_sha256 and (
+            len(self.input_sha256) != 64
+            or any(c not in "0123456789abcdef" for c in self.input_sha256)
+        ):
+            raise ValueError("Tumor expression input_sha256 must be a SHA-256 digest")
         try:
             value = float(self.value)
         except (TypeError, ValueError) as error:
@@ -326,6 +339,10 @@ def assess_cta_antigen(
         raise ValueError(
             "CTA tumor-expression units do not match the admission policy"
         )
+    if tumor_expression.measurement_level == "transcript":
+        measured = tumor_expression.transcript_id.split(".")[0]
+        if measured not in {value.split(".")[0] for value in transcript_ids}:
+            raise ValueError("CTA transcript expression must select its measured transcript")
     reference_resolution = resolve_cta_reference_evidence(gene_id)
     reference = reference_resolution.evidence
     expression_passes = tumor_expression.value >= policy.min_tumor_expression
@@ -376,7 +393,13 @@ def assess_cta_antigen(
         numeric_value=tumor_expression.value,
         unit=tumor_expression.unit,
         threshold=policy.min_tumor_expression,
-        details=(("assay", tumor_expression.assay),),
+        details=tuple((name, value) for name, value in (
+            ("assay", tumor_expression.assay),
+            ("measurement_level", tumor_expression.measurement_level),
+            ("transcript_id", tumor_expression.transcript_id),
+            ("input_identifier", tumor_expression.input_identifier),
+            ("input_sha256", tumor_expression.input_sha256),
+        ) if value),
     )
     records = [reference_record, expression_record]
     if status == ATTESTATION_OVERRIDDEN:
