@@ -1624,3 +1624,12 @@ peptide:
     linker2 = coalesce_config_value(
         args2, 'peptide_linker', yaml_kwargs2, 'linker')
     assert linker2 == 'EAAAK'
+    # Explicit defaults also win, including converted strings and long
+    # abbreviations with an attached value.
+    args3 = parse_vaxrank_args([
+        '--input-lens', '/dev/null', '--output-csv', '/dev/null',
+        '--config', str(cfg), '--peptide-linker', 'G4Sx3',
+        '--mrna-poly-a-len=120',
+    ])
+    assert coalesce_config_value(args3, 'peptide_linker', yaml_kwargs, 'linker') == 'G4SX3'
+    assert coalesce_config_value(args3, 'mrna_poly_a_length', {'poly_a_length': 73}, 'poly_a_length') == 120

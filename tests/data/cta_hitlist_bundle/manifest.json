@@ -1,0 +1,563 @@
+{
+  "artifacts": {
+    "atlas_donors.parquet": {
+      "sha256": "07930c26fa46f9e7cff2b5054a83d96b84431980aa61e1a0b5c386129f545a5d",
+      "size_bytes": 2336
+    },
+    "blacklist.parquet": {
+      "sha256": "268d9f6586ca273953cbb9ee19322b1424e4fe7c19d4d2d6e35ccb86ef2b3348",
+      "size_bytes": 6298
+    },
+    "contributors.parquet": {
+      "sha256": "332e35d9ac948ea50ee16abf8d9d61defae518683d3c25b02b43cea623715205",
+      "size_bytes": 8134
+    },
+    "cta_reference.parquet": {
+      "sha256": "fceea55f12a1ca43076bc5615bbf17c7bc5261f081db2e992f9ff7aec325aaf4",
+      "size_bytes": 2348
+    },
+    "excluded_observations.parquet": {
+      "sha256": "40392ed68d4d68f5ef513b57336ce231e1d48b526db334ebd006e06829094d9c",
+      "size_bytes": 104367
+    },
+    "expression.parquet": {
+      "sha256": "75d47ac0623a454acc924a8f76fcba6b57f60653a155c2b48fd7c9b8cdef371f",
+      "size_bytes": 6859
+    },
+    "expression_mappings.parquet": {
+      "sha256": "63e222b3f73181d304e3eef33e5fe057d4ce06d0de327968ca82926326dd72ae",
+      "size_bytes": 11353
+    },
+    "forbidden_sequences.txt": {
+      "sha256": "9c5109b270f99f03c046d867d9dd9779f0aa712f643abb4a5faccfdf31f52510",
+      "size_bytes": 10
+    },
+    "identities.parquet": {
+      "sha256": "d4c85a00cd5e8201e742a6275bd73ddcccb845cc67bd6f8fa08a181fe1b59c03",
+      "size_bytes": 19214
+    },
+    "lineage.json": {
+      "sha256": "6f94b132175ab286a1e1da2fd73e88abe6bf61c3c87349ddc8ad3f80142f3258",
+      "size_bytes": 21181
+    },
+    "mappings.parquet": {
+      "sha256": "70d4d3462ee3301aa0b1e77f0dfb5082e5cb3beadf3f4beea0ec315721fbb643",
+      "size_bytes": 8952
+    },
+    "peptides.parquet": {
+      "sha256": "6cb6032395bc4dee35b5fc551f5473d2d4147b7cb5788e45f19e3a516cc55e2d",
+      "size_bytes": 12499
+    },
+    "presentation.parquet": {
+      "sha256": "34eed52579edfa239c5e3943533eee652b1b5ffde56026e0f9b2ff218e67626b",
+      "size_bytes": 103784
+    },
+    "tissue_evidence.parquet": {
+      "sha256": "c2a18165e0047756072d162c9f1665a67dde33c32766a7a598f642b1b35cf334",
+      "size_bytes": 14796
+    },
+    "tissue_risk.parquet": {
+      "sha256": "d8bc515ba923124feb58a5ec893a7e9fdeecc6bd411ec816dbc952ac9086fdf6",
+      "size_bytes": 6305
+    }
+  },
+  "atlas": {
+    "coverage": "Supplied Atlas snapshot; not an exhaustive survey of all tissue MS studies",
+    "files": {
+      "donors": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/atlas/HLA_donors.tsv",
+        "sha256": "7f65d79cb00cec07f6762e7875c65af63670e4e926ce4db91e8c358a20b3758b",
+        "size_bytes": 53,
+        "url": "https://hla-ligand-atlas.org/rel/2020.12/donors.tsv.gz"
+      },
+      "peptides": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/atlas/HLA_peptides.tsv",
+        "sha256": "e3e4f085fd602068903b305e27f528c7f20dfc8f75ab75ab9b4916b9399af03a",
+        "size_bytes": 61,
+        "url": "https://hla-ligand-atlas.org/rel/2020.12/peptides.tsv.gz"
+      },
+      "sample_hits": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/atlas/HLA_sample_hits.tsv",
+        "sha256": "fbd9acccae7da0fc8849a165ad02927199e725a5d833a52be71b889683c4dc70",
+        "size_bytes": 116,
+        "url": "https://hla-ligand-atlas.org/rel/2020.12/sample_hits.tsv.gz"
+      }
+    },
+    "license": "CC-BY-4.0",
+    "n_source_donors": 2,
+    "n_source_peptides": 2,
+    "n_source_sample_hits": 4,
+    "publication": "https://doi.org/10.1136/jitc-2020-002071",
+    "release": "2020.12",
+    "source_url": "https://hla-ligand-atlas.org/data"
+  },
+  "coverage": {
+    "lineage": {
+      "acquisition": {
+        "n_distinct_resolved_identities": 0,
+        "n_resolved_observations": 0,
+        "n_unresolved_observations": 2
+      },
+      "donor": {
+        "n_distinct_resolved_identities": 0,
+        "n_resolved_observations": 0,
+        "n_unresolved_observations": 2
+      },
+      "experimental_origin": {
+        "n_distinct_resolved_identities": 0,
+        "n_resolved_observations": 0,
+        "n_unresolved_observations": 2
+      },
+      "specimen": {
+        "n_distinct_resolved_identities": 0,
+        "n_resolved_observations": 0,
+        "n_unresolved_observations": 2
+      }
+    },
+    "n_contributor_links": 3,
+    "n_observations": 2,
+    "n_observations_with_contributors": 2,
+    "n_source_records": 3,
+    "n_unresolved_contributor_links": 0
+  },
+  "expression": {
+    "allow_genes": [
+      "MAGEA4"
+    ],
+    "cta_gene_ids": [
+      "ENSG00000185686"
+    ],
+    "definition": "strict",
+    "ensembl_release": 93,
+    "exclude_gene_patterns": [
+      "MAGE*"
+    ],
+    "id_column": "feature_id",
+    "inferred_inputs": {
+      "id_column": false,
+      "level": false,
+      "path": false,
+      "tpm_column": false
+    },
+    "input": {
+      "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/expression.tsv",
+      "sha256": "055e1e3be10b72776835971596dbc0027e3e20bfc9b15fd6f52543e4d05a9d6e",
+      "size_bytes": 41
+    },
+    "isoform_policy": "Transcript TPM applies only to the named transcript; gene TPM does not establish an expressed isoform",
+    "level": "gene",
+    "min_tpm": 2.0,
+    "oncoref_version": "1.8.207",
+    "tpm_column": "patient_tpm",
+    "units": "TPM"
+  },
+  "hitlist_version": "1.65.1",
+  "index_inputs": {
+    "build_metadata": {
+      "artifact_version": 8,
+      "mhcgnomes_version": "3.64.4",
+      "n_alleles": 1,
+      "n_binding_peptides": 0,
+      "n_binding_rows": 0,
+      "n_bulk_peptide_rows": 0,
+      "n_bulk_protein_rows": 0,
+      "n_bulk_rows": 0,
+      "n_line_expression_lines": 0,
+      "n_line_expression_rows": 0,
+      "n_peptides": 1,
+      "n_rows": 2,
+      "n_species": 1,
+      "parquets": {
+        "binding": {
+          "mtime": 1791391696.3716834,
+          "size": 636
+        },
+        "bulk_proteomics": {
+          "mtime": 1791391696.3730733,
+          "size": 636
+        },
+        "contributors": {
+          "mtime": 1791391696.358512,
+          "size": 8069
+        },
+        "line_expression": {
+          "mtime": 1791391696.3735967,
+          "size": 636
+        },
+        "observations": {
+          "mtime": 1791391696.370515,
+          "size": 40853
+        }
+      },
+      "provenance": {
+        "contributors": {
+          "file": "observation_contributors.parquet",
+          "sha256": "36196f3f5cdc2b59e870138c7acc14aae21bc4c91b07830e5eed86740207d11b",
+          "size_bytes": 8069
+        },
+        "indexes": {
+          "binding": {
+            "sha256": "74c2ffa7bea3077c928dc76c593eef3efb6c933da14a442e2432fb8276e30b24",
+            "size_bytes": 636
+          },
+          "observations": {
+            "sha256": "96c294a07f3a84b0690dfa37f03bbffd750ad5343e3fea4a23618b856fa41f3d",
+            "size_bytes": 40853
+          }
+        },
+        "n_contributor_links": 3,
+        "schema_version": 1,
+        "sources": {
+          "iedb": {
+            "locator_basis": "ingested_csv_logical_data_row_1_based",
+            "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/iedb.csv",
+            "sha256": "c5bb3ac4be7208a52e0f45ffd675ad27c7f031cd9ddc420d40745e660c9cd8ec",
+            "size_bytes": 1012,
+            "upstream_description": "",
+            "upstream_record_locator_status": "assay_iri_when_reported"
+          }
+        }
+      },
+      "sources": {
+        "curation:cell_lines.yaml": {
+          "mtime": 1791391696.0509484,
+          "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/cell_lines.yaml",
+          "sha256": "763e87f3de212ee61a7c6afc165a97a6fb229418ffa9ed52f230caf4af043434",
+          "size": 69063
+        },
+        "curation:monoallelic_lines.yaml": {
+          "mtime": 1791391696.0499372,
+          "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/monoallelic_lines.yaml",
+          "sha256": "fbbb90c66374da3831f46a3051982fdb324adb85189c5ee538d1f50ffe210bd1",
+          "size": 1974
+        },
+        "curation:pmid_overrides.yaml": {
+          "mtime": 1791391696.0511684,
+          "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/pmid_overrides.yaml",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+          "size": 3
+        },
+        "curation:tissue_categories.yaml": {
+          "mtime": 1791391696.0490904,
+          "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/tissue_categories.yaml",
+          "sha256": "5f3b53cb82aa3f4556bf858ccb42f55f286e2fd3d99d1e14e912031f46f6ba7c",
+          "size": 2474
+        },
+        "iedb": {
+          "mtime": 1791391696.0514545,
+          "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/iedb.csv",
+          "size": 1012
+        },
+        "line_expression_index": {
+          "build_version": 1,
+          "packaged_inputs": "25f1800039c26fbf9cce4e8cc89f732b32499b2093c2574e63f1b013a26b73ed"
+        },
+        "supplementary_csv:abelin_2019_dr_tissue.csv": {
+          "mtime": 1776342381.3421288,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/abelin_2019_dr_tissue.csv",
+          "size": 210368
+        },
+        "supplementary_csv:abelin_2019_maptac_class1.csv": {
+          "mtime": 1776342381.342985,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/abelin_2019_maptac_class1.csv",
+          "size": 246822
+        },
+        "supplementary_csv:abelin_2019_maptac_class2.csv": {
+          "mtime": 1776342381.3467538,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/abelin_2019_maptac_class2.csv",
+          "size": 1638237
+        },
+        "supplementary_csv:gomez_zepeda_2024_hela.csv": {
+          "mtime": 1775939774.9675896,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/gomez_zepeda_2024_hela.csv",
+          "size": 261764
+        },
+        "supplementary_csv:gomez_zepeda_2024_jy.csv": {
+          "mtime": 1775939774.9038227,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/gomez_zepeda_2024_jy.csv",
+          "size": 577082
+        },
+        "supplementary_csv:gomez_zepeda_2024_plasma.csv": {
+          "mtime": 1775939775.2349296,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/gomez_zepeda_2024_plasma.csv",
+          "size": 33847
+        },
+        "supplementary_csv:gomez_zepeda_2024_raji.csv": {
+          "mtime": 1775939775.2054431,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/gomez_zepeda_2024_raji.csv",
+          "size": 668528
+        },
+        "supplementary_csv:gomez_zepeda_2024_skmel37.csv": {
+          "mtime": 1775939775.0489302,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/gomez_zepeda_2024_skmel37.csv",
+          "size": 286030
+        },
+        "supplementary_csv:shapiro_2025_hap1_b2m_ko.csv": {
+          "mtime": 1777860107.6234703,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_b2m_ko.csv",
+          "size": 7650
+        },
+        "supplementary_csv:shapiro_2025_hap1_calr_ko.csv": {
+          "mtime": 1777860107.624179,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_calr_ko.csv",
+          "size": 232191
+        },
+        "supplementary_csv:shapiro_2025_hap1_canx_ko.csv": {
+          "mtime": 1777860107.6250377,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_canx_ko.csv",
+          "size": 217182
+        },
+        "supplementary_csv:shapiro_2025_hap1_erap1_ko.csv": {
+          "mtime": 1777860107.6254919,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_erap1_ko.csv",
+          "size": 125926
+        },
+        "supplementary_csv:shapiro_2025_hap1_ganab_ko.csv": {
+          "mtime": 1777860107.6260083,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_ganab_ko.csv",
+          "size": 151604
+        },
+        "supplementary_csv:shapiro_2025_hap1_irf2_ko.csv": {
+          "mtime": 1777860107.6263182,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_irf2_ko.csv",
+          "size": 70407
+        },
+        "supplementary_csv:shapiro_2025_hap1_pdia3_ko.csv": {
+          "mtime": 1777860107.6266816,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_pdia3_ko.csv",
+          "size": 95826
+        },
+        "supplementary_csv:shapiro_2025_hap1_sppl3_ko.csv": {
+          "mtime": 1777860107.6273038,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_sppl3_ko.csv",
+          "size": 199225
+        },
+        "supplementary_csv:shapiro_2025_hap1_tap1_ko.csv": {
+          "mtime": 1777860107.6277344,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_tap1_ko.csv",
+          "size": 120243
+        },
+        "supplementary_csv:shapiro_2025_hap1_tap2_ko.csv": {
+          "mtime": 1777860107.6279695,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_tap2_ko.csv",
+          "size": 42720
+        },
+        "supplementary_csv:shapiro_2025_hap1_tapbp_ko.csv": {
+          "mtime": 1777860107.6282458,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_tapbp_ko.csv",
+          "size": 59337
+        },
+        "supplementary_csv:shapiro_2025_hap1_wildtype.csv": {
+          "mtime": 1777860107.629015,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/shapiro_2025_hap1_wildtype.csv",
+          "size": 250548
+        },
+        "supplementary_csv:strazar_2023_hla2.csv": {
+          "mtime": 1776423490.0628963,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary/strazar_2023_hla2.csv",
+          "size": 13932615
+        },
+        "supplementary_manifest": {
+          "mtime": 1781102833.604074,
+          "path": "/Users/iskander/code/hitlist/hitlist/data/supplementary.yaml",
+          "size": 15474
+        }
+      },
+      "with_flanking": true,
+      "with_mappings": false
+    },
+    "current_curation": {
+      "curation:cell_lines.yaml": {
+        "mtime": 1791391696.0509484,
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/cell_lines.yaml",
+        "sha256": "763e87f3de212ee61a7c6afc165a97a6fb229418ffa9ed52f230caf4af043434",
+        "size": 69063
+      },
+      "curation:monoallelic_lines.yaml": {
+        "mtime": 1791391696.0499372,
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/monoallelic_lines.yaml",
+        "sha256": "fbbb90c66374da3831f46a3051982fdb324adb85189c5ee538d1f50ffe210bd1",
+        "size": 1974
+      },
+      "curation:pmid_overrides.yaml": {
+        "mtime": 1791391696.0511684,
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/pmid_overrides.yaml",
+        "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "size": 3
+      },
+      "curation:tissue_categories.yaml": {
+        "mtime": 1791391696.0490904,
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/tissue_categories.yaml",
+        "sha256": "5f3b53cb82aa3f4556bf858ccb42f55f286e2fd3d99d1e14e912031f46f6ba7c",
+        "size": 2474
+      }
+    },
+    "files": {
+      "binding.parquet": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/indexes/binding.parquet",
+        "sha256": "74c2ffa7bea3077c928dc76c593eef3efb6c933da14a442e2432fb8276e30b24",
+        "size_bytes": 636
+      },
+      "curation:cell_lines.yaml": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/cell_lines.yaml",
+        "sha256": "763e87f3de212ee61a7c6afc165a97a6fb229418ffa9ed52f230caf4af043434",
+        "size_bytes": 69063
+      },
+      "curation:monoallelic_lines.yaml": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/monoallelic_lines.yaml",
+        "sha256": "fbbb90c66374da3831f46a3051982fdb324adb85189c5ee538d1f50ffe210bd1",
+        "size_bytes": 1974
+      },
+      "curation:pmid_overrides.yaml": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/pmid_overrides.yaml",
+        "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "size_bytes": 3
+      },
+      "curation:tissue_categories.yaml": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/curation/tissue_categories.yaml",
+        "sha256": "5f3b53cb82aa3f4556bf858ccb42f55f286e2fd3d99d1e14e912031f46f6ba7c",
+        "size_bytes": 2474
+      },
+      "line_expression.parquet": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/indexes/line_expression.parquet",
+        "sha256": "74c2ffa7bea3077c928dc76c593eef3efb6c933da14a442e2432fb8276e30b24",
+        "size_bytes": 636
+      },
+      "line_expression:ensembl_gene_id_symbol.csv": {
+        "path": "/Users/iskander/code/hitlist/hitlist/data/line_expression/ensembl_gene_id_symbol.csv",
+        "sha256": "cd5a8f42cd45137ffd3de580f395d42107e6ff4b77a80b0a746b9508c0f4c0e2",
+        "size_bytes": 257327
+      },
+      "line_expression:gm12878_encode_rnaseq_tpm.csv.gz": {
+        "path": "/Users/iskander/code/hitlist/hitlist/data/line_expression/gm12878_encode_rnaseq_tpm.csv.gz",
+        "sha256": "b3d605f3426d283ecf166bd6a38006dc40d4d3aa9c4050c40f7f2101ff60d8ab",
+        "size_bytes": 271557
+      },
+      "line_expression:hap1_depmap24q4_gene_tpm.csv.gz": {
+        "path": "/Users/iskander/code/hitlist/hitlist/data/line_expression/hap1_depmap24q4_gene_tpm.csv.gz",
+        "sha256": "9c91022631272fdd626369b03b848162da30062004295cc7249fc3140d149918",
+        "size_bytes": 253816
+      },
+      "line_expression:line_expression_anchors.yaml": {
+        "path": "/Users/iskander/code/hitlist/hitlist/data/line_expression_anchors.yaml",
+        "sha256": "b736261a977b416b40623848a410b2b9ff16c56527bea392592996480f8f678e",
+        "size_bytes": 13122
+      },
+      "line_expression:sources.yaml": {
+        "path": "/Users/iskander/code/hitlist/hitlist/data/line_expression/sources.yaml",
+        "sha256": "7e3ea4f05481ae1d810cf8bbbf2f0cb1e7b41b4f7c779629a413525a7b013ea2",
+        "size_bytes": 7621
+      },
+      "observation_contributors.parquet": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/indexes/observation_contributors.parquet",
+        "sha256": "36196f3f5cdc2b59e870138c7acc14aae21bc4c91b07830e5eed86740207d11b",
+        "size_bytes": 8069
+      },
+      "observations.parquet": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/indexes/observations.parquet",
+        "sha256": "96c294a07f3a84b0690dfa37f03bbffd750ad5343e3fea4a23618b856fa41f3d",
+        "size_bytes": 40853
+      },
+      "observations_meta.json": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/indexes/observations_meta.json",
+        "sha256": "2aa0a932f549607a13162ffd2f24219775152ecec5b7532dc770b6b64c656e71",
+        "size_bytes": 8155
+      },
+      "peptide_mappings.parquet": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/indexes/peptide_mappings.parquet",
+        "sha256": "7d17c3f82c159f0d4ac745ed1c657459c4aa483f70e0cd08eb80208403ff51a2",
+        "size_bytes": 7182
+      },
+      "peptide_mappings_meta.json": {
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/indexes/peptide_mappings_meta.json",
+        "sha256": "2c29c6c071abf6ed0d4de833ced25399c1676b1f9fd0a07ea2218d924b4219d5",
+        "size_bytes": 845
+      },
+      "specimen_lineage.yaml": {
+        "path": "/Users/iskander/code/hitlist/hitlist/data/specimen_lineage.yaml",
+        "sha256": "e0645d212a7dffe67fc46d886e96fdc4170d10933220c66dcb0cf7d096c2d064",
+        "size_bytes": 17231
+      }
+    }
+  },
+  "interpretation": "CTA-specific means all resolved human mappings are CTAs, including sharing between CTAs. Missing observations do not establish safety. Assembly and treatment ranking belong downstream.",
+  "kind": "cta_expression",
+  "mapping_reference": {
+    "contract": {
+      "artifact_version": 3,
+      "columns": [
+        "peptide",
+        "protein_id",
+        "gene_name",
+        "gene_id",
+        "gene_biotype",
+        "transcript_id",
+        "is_canonical_transcript",
+        "position",
+        "n_flank",
+        "c_flank",
+        "proteome",
+        "proteome_source"
+      ],
+      "ensembl_gene_biotypes": [
+        "protein_coding",
+        "IG_V_gene",
+        "IG_D_gene",
+        "IG_J_gene",
+        "IG_C_gene",
+        "TR_V_gene",
+        "TR_D_gene",
+        "TR_J_gene",
+        "TR_C_gene"
+      ],
+      "fetch_missing": true,
+      "flank": 15,
+      "release": 93,
+      "seed_kmer_length": 7,
+      "use_uniprot": false
+    },
+    "observations": {
+      "binding": {
+        "mtime": 1791391696.3716834,
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/indexes/binding.parquet",
+        "size": 636
+      },
+      "observations": {
+        "mtime": 1791391696.370515,
+        "path": "/Users/iskander/code/vaxrank/output/579-584-20261007/hitlist-interop/indexes/observations.parquet",
+        "size": 40853
+      }
+    },
+    "unavailable_proteomes": []
+  },
+  "ms_policy": "Positive mass-spectrometry method or curated MS-only supplement; explicit non-MS excluded",
+  "n_blacklisted_peptides": 1,
+  "policy": {
+    "donor_count_scope": "distinct people across the union of the selected tissues",
+    "downstream_rule": "Exclude blacklisted sequences wherever they occur, including inside longer antigens",
+    "hla_filter": null,
+    "min_donors": 2,
+    "schema_version": 1,
+    "sequence_match": "exact contiguous sequence; no inferred nested epitopes",
+    "tissue_groups": {
+      "brain": [
+        "Brain",
+        "Cerebellum",
+        "Cerebrum",
+        "Cerebral cortex"
+      ],
+      "heart": [
+        "Heart",
+        "Myocardium",
+        "Cardiac muscle"
+      ],
+      "lung": [
+        "Lung",
+        "Lung parenchyma"
+      ]
+    },
+    "tissue_status": "nonmalignant"
+  },
+  "schema_version": 1,
+  "scope": "Indexed peptide sequences mapping to eligible expressed CTAs; full human multi-mapping; Atlas blacklist independent of expression and HLA"
+}

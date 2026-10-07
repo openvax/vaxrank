@@ -2086,7 +2086,7 @@ def load_external_ranked(args, epitope_config=None, vaccine_config=None,
     """
     from .external_rescoring import external_inputs, load_unified_external
 
-    if not external_inputs(args):
+    if not external_inputs(args) and not getattr(args, 'input_cta_expression', None):
         return None
     options = ExternalConstructOptions.from_configs(
         vaccine_config=vaccine_config,

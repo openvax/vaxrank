@@ -631,6 +631,7 @@ def load_unified_external(args, epitope_config, options, genome):
         raise ValueError('--external-peptide-only requires fresh or additive prediction mode')
     model_factory, alleles = None, []
     direct = bool(getattr(args, 'vcf', None) or getattr(args, 'bam', None))
+    cta = bool(getattr(args, 'input_cta_expression', None))
     if direct and mode == 'fresh':
         raise ValueError('Direct/table composition requires --external-predictions input or additive')
     if mode in ('fresh', 'additive'):
@@ -650,9 +651,9 @@ def load_unified_external(args, epitope_config, options, genome):
                     raise ValueError('--prediction-cache requires one configured external predictor')
                 models = [CachedPredictor.from_topiary_output(cache_path, fallback=models[0])]
             return models
-    elif not direct and getattr(args, 'mhc_predictor', None):
+    elif not direct and not cta and getattr(args, 'mhc_predictor', None):
         raise ValueError("Use --external-predictions fresh or additive to run --mhc-predictor")
-    elif not direct and (getattr(args, 'mhc_alleles', None)
+    elif not direct and not cta and (getattr(args, 'mhc_alleles', None)
                          or getattr(args, 'mhc_alleles_file', None)):
         raise ValueError(
             "Input prediction mode uses the alleles recorded in each report. "
@@ -664,6 +665,18 @@ def load_unified_external(args, epitope_config, options, genome):
         [(fmt, path) for fmt, path, _ in specs],
         scopes=[scope for _, _, scope in specs],
         manifest_path=getattr(args, 'input_manifest', None), genome=genome)
+    if cta:
+        from .cta_input import prepare_cta_report
+        from .external_input import ExternalConstructOptions
+        from .vaccine_config import VaccineConfig
+        from .window_selection import WindowSelection
+        loaded_reports = [prepare_cta_report(args, genome, epitope_config)]
+        vaccine = options.vaccine_config or VaccineConfig()
+        if vaccine.window_selection is None:
+            import msgspec
+            vaccine = msgspec.structs.replace(vaccine, window_selection=WindowSelection())
+        options = ExternalConstructOptions.from_configs(
+            vaccine_config=vaccine, manufacturability_config=options.manufacturability_config)
     if getattr(args, 'index_native_references', False):
         native = [report.dataset for report in loaded_reports
                   if report.source_format == 'epitopes' and report.dataset is not None]
@@ -704,8 +717,15 @@ def load_unified_external(args, epitope_config, options, genome):
         prediction_prefix=getattr(args, 'external_prediction_prefix', None),
         manifest_path=getattr(args, 'input_manifest', None), genome=genome,
         input_predictions_path=getattr(args, 'output_input_predictions', None))
+    if cta:
+        frame.attrs['cta_predictor'] = loaded_reports[0].report_df.attrs['cta_predictor']
     epitope_config = frame.attrs['epitope_dataset'].config
     dataset = frame.attrs['epitope_dataset']
+    if dataset.selection.get('cta_expression_admission'):
+        args._cta_assembly = dataset.selection.setdefault('cta_assembly', {})
+        args._saved_cta_construct_config = {
+            modality: saved['configuration']
+            for modality, saved in dataset.selection.get('cta_assembly', {}).items()}
     from .selection_policy import write_run_policy
     duplicate_policy = getattr(args, 'duplicate_candidates', None)
     if duplicate_policy is not None and 'candidate_id' not in dataset.result.df:
@@ -724,7 +744,8 @@ def load_unified_external(args, epitope_config, options, genome):
             frame[['Prediction identity', 'Allele']].itertuples(index=False, name=None)]
     rankers = {'lens': lens_ranking_result, 'pvacseq': pvacseq_ranking_result,
                'topiary': dataset_ranking_result, 'epitopes': dataset_ranking_result,
-               'vcf_bam': dataset_ranking_result, 'exacto': dataset_ranking_result}
+               'vcf_bam': dataset_ranking_result, 'exacto': dataset_ranking_result,
+               'cta_expression': dataset_ranking_result}
     outcomes = []
     for report in reports:
         ranker = rankers[report.source_format]
@@ -787,6 +808,16 @@ def load_unified_external(args, epitope_config, options, genome):
     patient.inputs = [(('VCF/BAM' if r.source_format == 'vcf_bam' else r.source_format + ' report'),
                        r.path) for r in reports]
     patient.input_provenance = [r.input_provenance for r in reports]
+    if dataset.selection.get('cta_expression_admission'):
+        from .cta_expression import CTAExpressionResult
+        from .native_serialization import from_native_json
+        admission = from_native_json(dataset.selection['cta_expression_admission'], CTAExpressionResult)
+        patient.cta_expression_summary = dict(
+            input_features=len(admission.decisions), admitted_targets=len(admission.admitted_antigens),
+            selected_targets=len(ranked), measurement_level=admission.input_contract.measurement_level,
+            expression_unit=admission.input_contract.expression_unit)
+        patient.num_somatic_variants = patient.num_coding_effect_variants = 0
+        patient.num_variants_with_rna_support = patient.num_variants_with_vaccine_peptides = 0
     # Preparation already validated every input before scoring. Pooled inputs
     # all declare the same patient/genotype; single-input unknowns stay unknown.
     scope = patient.input_provenance[0].scope

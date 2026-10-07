@@ -284,7 +284,14 @@ class TemplateDataCreator(object):
             for source, peptides in self.ranked_variants_with_vaccine_peptides
             if peptides
         )
-        if has_antigen_sources:
+        if getattr(self.patient_info, 'cta_expression_summary', None) is not None:
+            summary = self.patient_info.cta_expression_summary
+            patient_info['Expression features'] = summary['input_features']
+            patient_info['Admitted CTA reference proteins'] = summary['admitted_targets']
+            patient_info['CTA targets with selected vaccine regions'] = summary['selected_targets']
+            patient_info['Expression measurement level / units'] = (
+                summary['measurement_level'] + ' / ' + summary['expression_unit'])
+        elif has_antigen_sources:
             patient_info['Total number of input antigens'] = (
                 self.patient_info.num_somatic_variants)
             patient_info['Input antigens with resolved protein context'] = (

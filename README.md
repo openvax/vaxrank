@@ -57,6 +57,11 @@ Required inputs:
 - `--mhc-predictor` — which MHC binding predictor to use (see
   [MHC Binding Predictors](#mhc-binding-predictors))
 
+CTA vaccines can start from a gene or transcript expression table and patient
+HLA, without VCF/BAM. See the [expression-first CTA guide](docs/design/expression-cta-inputs.md)
+for the explicit measurement contract, MAGE exclusions, optional verified
+Hitlist evidence, construct audits and offline replay.
+
 Drive design from a pre-computed neoepitope report (LENS or pVACseq)
 when upstream MHC prediction has already been done:
 
@@ -447,6 +452,8 @@ explains original-score ranking, common-model prediction, and context limits.
 | `--external-input FORMAT=PATH` | `lens`, `pvacseq`, `topiary` or `epitopes`; repeated inputs require declared compatible scope, usually supplied through a manifest |
 | `--input-topiary FILE` | Normalized Topiary CSV/TSV, including combined tables and additive scoring features |
 | `--input-epitopes FILE` | Native candidate reload; enriched exports retain evidence and the scoring policy |
+| `--input-cta-expression FILE` | Gene/transcript CSV/TSV with explicitly declared columns, units, sample and quantification provenance |
+| `--hitlist-evidence-bundle DIRECTORY` | Optional verified Hitlist CTA-expression evidence for the same input and reference |
 | `--duplicate-candidates error\|best\|worst` | Topiary representative selection; default requires scores to agree |
 | `--external-predictions input` | Reuse historical predictions (default); no live predictor |
 | `--external-predictions fresh` | Predict reported peptides with explicit models and HLA set |

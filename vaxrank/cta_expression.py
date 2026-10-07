@@ -5,6 +5,7 @@ transcript measurements. It does not infer protein abundance or read counts.
 """
 
 from dataclasses import dataclass, replace
+import csv
 from fnmatch import fnmatchcase
 import hashlib
 import math
@@ -134,6 +135,11 @@ def _expression_rows(path, contract):
     if Path(path).suffix.lower() not in {".csv", ".tsv"}:
         raise ValueError("CTA expression input must be a CSV or TSV table")
     separator = "\t" if Path(path).suffix.lower() == ".tsv" else ","
+    with Path(path).open(newline='') as stream:
+        header = next(csv.reader((line for line in stream if line.strip() and not line.lstrip().startswith('#')),
+                                 delimiter=separator), [])
+    if len(set(header)) != len(header):
+        raise ValueError('Expression input requires unique column names')
     raw = pd.read_csv(path, sep=separator, comment="#", dtype=str)
     missing = {contract.id_column, contract.value_column} - set(raw.columns)
     if missing:

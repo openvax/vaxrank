@@ -1,0 +1,519 @@
+{
+  "aliases": [],
+  "contexts": [
+    {
+      "condition_id": "721_221_hla_a_01_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_01_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_a_01_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_01_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_a_02_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_02_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_a_02_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_02_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_a_02_03",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_02_03"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_a_02_03",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_02_03"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_a_02_04",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_02_04"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_a_02_04",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_02_04"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_a_02_07",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_02_07"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_a_02_07",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_02_07"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_a_03_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_03_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_a_03_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_03_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_a_24_02",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_24_02"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_a_24_02",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_24_02"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_a_29_02",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_29_02"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_a_29_02",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_29_02"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_a_31_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_31_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_a_31_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_31_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_a_68_02",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_68_02"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_a_68_02",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_a_68_02"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_b_35_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_35_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_b_35_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_35_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_b_44_02",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_44_02"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_b_44_02",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_44_02"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_b_44_03",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_44_03"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_b_44_03",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_44_03"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_b_51_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_51_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_b_51_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_51_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_b_54_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_54_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_b_54_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_54_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "721_221_hla_b_57_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_57_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 28228285
+    },
+    {
+      "condition_id": "721_221_hla_b_57_01",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "experimental_origin": {
+        "ids": [
+          "origin:MSV000080527:721_221_hla_b_57_01"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 31844290
+    },
+    {
+      "condition_id": "fib_primary_fibroblasts",
+      "evidence_reference": "https://kclpure.kcl.ac.uk/ws/portalfiles/portal/77732670/Liepe_et_al_main_text_Science_final_3.pdf",
+      "experimental_origin": {
+        "ids": [
+          "origin:pmid:25576301:fibroblast_immunopeptidome"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 25576301
+    },
+    {
+      "condition_id": "primary_fibroblasts",
+      "evidence_reference": "https://kclpure.kcl.ac.uk/ws/portalfiles/portal/77732670/Liepe_et_al_main_text_Science_final_3.pdf",
+      "experimental_origin": {
+        "ids": [
+          "origin:pmid:25576301:fibroblast_immunopeptidome"
+        ],
+        "status": "resolved"
+      },
+      "pmid": 27846572
+    }
+  ],
+  "description": "Reviewed experimental lineage. Omitted biological axes are unknown. These initial links establish dataset origin only; no physical specimen, donor, or acquisition IDs are inferred.",
+  "entities": [
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_a_01_01",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-A*01:01"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_a_02_01",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-A*02:01"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_a_02_03",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-A*02:03"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_a_02_04",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-A*02:04"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_a_02_07",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-A*02:07"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_a_03_01",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-A*03:01"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_a_24_02",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-A*24:02"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_a_29_02",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-A*29:02"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_a_31_01",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-A*31:01"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_a_68_02",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-A*68:02"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_b_35_01",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-B*35:01"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_b_44_02",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-B*44:02"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_b_44_03",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-B*44:03"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_b_51_01",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-B*51:01"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_b_54_01",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-B*54:01"
+    },
+    {
+      "evidence_note": "Data availability distinguishes 79 new datasets (MSV000084172) from 16 previously published monoallelic datasets (MSV000080527); allele roster: Abelin 2017 Figure 1D (PMC5405381). This identifies dataset reuse, not a physical specimen or donor.",
+      "evidence_reference": "https://www.nature.com/articles/s41587-019-0322-9#data-availability",
+      "identity_id": "origin:MSV000080527:721_221_hla_b_57_01",
+      "kind": "experimental_origin",
+      "namespace": "MassIVE:MSV000080527",
+      "reported_id": "721.221-HLA-B*57:01"
+    },
+    {
+      "evidence_note": "Cell culture and Results identify the primary fibroblast immunopeptidome; biological replicates do not establish donor count. Liepe 2016 main text, primary human fibroblasts citation (6), reuses this dataset.",
+      "evidence_reference": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4349985/",
+      "identity_id": "origin:pmid:25576301:fibroblast_immunopeptidome",
+      "kind": "experimental_origin",
+      "namespace": "PMID:25576301:dataset",
+      "reported_id": "Fib"
+    }
+  ],
+  "schema_version": 1
+}

@@ -39,3 +39,4 @@ class PatientInfo(DataclassSerializable):
     inputs: list[tuple[str, str]] = field(default_factory=list)
     # Empty on the ordinary VCF/BAM path and older saved runs.
     input_provenance: list["InputProvenance"] = field(default_factory=list)
+    cta_expression_summary: Optional[dict] = None
