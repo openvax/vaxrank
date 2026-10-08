@@ -49,6 +49,7 @@ def _native_serializable_classes():
         CTAExpressionInput, CTAExpressionDecision, CTAExpressionResult,
         CTATargetExclusionPolicy,
     )
+    from .cta_identity import CTAAnnotationReference
     from .candidate_epitope import CandidateEpitope, Peptide
     from .construct_sequence import (
         ConstructChemicalModification,
@@ -91,6 +92,7 @@ def _native_serializable_classes():
             CTAReferenceEvidence, CTAReferenceResolution, PatientTumorExpressionEvidence,
             CTAExpressionInput, CTAExpressionDecision, CTAExpressionResult,
             CTATargetExclusionPolicy)},
+        (CTAAnnotationReference.__module__, CTAAnnotationReference.__name__): CTAAnnotationReference,
         ("builtins", "set"): set,
         ("builtins", "tuple"): tuple,
         ("vaxrank.input_scope", "InputScope"): InputScope,

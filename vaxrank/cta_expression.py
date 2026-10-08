@@ -22,6 +22,7 @@ from .cta_admission import (
     assess_cta_antigen, resolve_cta_reference_evidence,
 )
 from .native_serialization import from_native_json, to_native_json
+from .cta_identity import CTAAnnotationReference, snapshot_cta_annotation
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ class CTAExpressionDecision(DataclassSerializable):
     status: str = ""
     assessment: CTAAdmissionAssessment | None = None
     reference_resolution: CTAReferenceResolution | None = None
+    gene_identity: dict | None = None
 
     def __post_init__(self):
         if self.value is not None and (not math.isfinite(self.value) or self.value < 0):
@@ -108,6 +110,34 @@ class CTAExpressionResult(DataclassSerializable):
     annotation_name: str
     annotation_version: str
     decisions: tuple[CTAExpressionDecision, ...]
+    annotation_reference: CTAAnnotationReference | None = None
+
+    def __post_init__(self):
+        if self.annotation_reference is None:
+            # Older archives have no verified annotation contract. Never add
+            # today's evidence or reinterpret their recorded decisions.
+            if any((d.reference_resolution and d.reference_resolution.identity_contract_version)
+                   or (d.assessment and d.assessment.reference_resolution
+                       and d.assessment.reference_resolution.identity_contract_version)
+                   for d in self.decisions):
+                raise ValueError("CTA identity decisions require their annotation reference")
+            return
+        reference = self.annotation_reference
+        if (reference.annotation_assembly != self.reference_assembly
+                or str(reference.annotation_release) != self.annotation_version):
+            raise ValueError("CTA admission and annotation reference disagree")
+        for decision in self.decisions:
+            resolution = decision.reference_resolution
+            if resolution is None:
+                continue
+            if (resolution.annotation_reference_sha256 != reference.fingerprint
+                    or resolution.annotation_sha256 != reference.annotation_sha256
+                    or resolution.evidence.unfiltered_gene_ids_sha256 != reference.canonical_candidate_gene_ids_sha256
+                    or resolution.self_reference_excluded_gene_ids != reference.self_reference_excluded_gene_ids
+                    or resolution.gene_identity != decision.gene_identity
+                    or resolution.gene_identity["source_gene_id"] != decision.gene_id
+                    or (decision.assessment and decision.assessment.reference_resolution != resolution)):
+                raise ValueError("CTA decision and annotation identity evidence disagree")
 
     @property
     def admitted_antigens(self):
@@ -169,14 +199,16 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome,
                          exclusion_policy=None):
     """Intersect patient gene/transcript expression with direct OncoRef CTAs.
 
-    Gene inputs choose the OncoRef canonical transcript as a reference sequence;
-    transcript inputs choose only the measured transcript. Measurements are
+    Canonical gene inputs choose the OncoRef canonical transcript. Alternate
+    genes choose the longest available protein in the source annotation, with
+    transcript ID breaking ties; this is reference selection, not isoform RNA.
+    Transcript inputs choose only the measured transcript. Measurements are
     never pooled across features, including identical protein sequences.
     Unresolvable transcripts are retained as held-out decisions. Reference
     failures (e.g. missing genome caches) propagate rather than becoming empty
     CTA categories. Only human Ensembl identifiers are supported here.
     """
-    from oncoref.cta import cta_unfiltered_gene_ids
+    from oncoref import resolve_gene_identity
 
     if input_contract.expression_unit != admission_policy.expression_unit:
         raise ValueError("Expression input units do not match the CTA admission policy")
@@ -189,7 +221,8 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome,
     exclusion_policy = exclusion_policy or CTATargetExclusionPolicy()
     fingerprint = hashlib.sha256(Path(path).read_bytes()).hexdigest()
     rows = _expression_rows(path, input_contract)
-    candidate_ids = {value.split(".")[0] for value in cta_unfiltered_gene_ids()}
+    annotation_reference = snapshot_cta_annotation(genome)
+    candidate_ids = set(annotation_reference.canonical_candidate_gene_ids)
     if not candidate_ids:
         raise ValueError("OncoRef returned an empty CTA candidate universe")
     # Establish annotation availability before resolving individual features.
@@ -211,10 +244,19 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome,
             gene_id = transcript.gene_id
         decision = replace(decision, gene_id=gene_id,
                            transcript_id=feature_id if transcript else "")
-        if gene_id not in candidate_ids:
+        identity = resolve_gene_identity(identifier if transcript is None else gene_id, genome=genome)
+        decision = replace(decision, gene_identity=identity.as_dict())
+        if not identity.verified:
+            status = ("unverified_identity" if identity.candidate_gene_ids or gene_id in candidate_ids
+                      else "not_cta")
+            decisions.append(replace(decision, status=status))
+            continue
+        if identity.canonical_gene_id not in candidate_ids:
             decisions.append(replace(decision, status="not_cta"))
             continue
-        cta = resolve_cta_reference_evidence(gene_id)
+        cta = resolve_cta_reference_evidence(
+            identifier if transcript is None else gene_id, genome=genome,
+            annotation_reference=annotation_reference)
         decision = replace(decision, gene_name=cta.evidence.gene_name,
                            reference_resolution=cta)
         if exclusion_policy.excludes(decision.gene_name):
@@ -223,7 +265,16 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome,
         if value is None:
             decisions.append(replace(decision, status="unknown_expression"))
             continue
+        selection = "measured_transcript" if transcript else "oncoref_canonical"
         transcript_id = (feature_id if transcript else cta.evidence.canonical_transcript_id)
+        if transcript is None and gene_id != cta.evidence.gene_id:
+            proteins = [t for t in genome.gene_by_id(gene_id).transcripts if t.protein_sequence]
+            if not proteins:
+                decisions.append(replace(decision, status="no_protein_sequence"))
+                continue
+            transcript = min(proteins, key=lambda t: (-len(t.protein_sequence), t.transcript_id))
+            transcript_id = transcript.transcript_id
+            selection = "annotation_longest_protein"
         if not transcript_id:
             decisions.append(replace(decision, status="missing_canonical_transcript"))
             continue
@@ -254,16 +305,16 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome,
             transcript_id=identifier if input_contract.measurement_level == "transcript" else "",
             input_identifier=identifier, input_sha256=fingerprint)
         assessment = assess_cta_antigen(
-            amino_acids=sequence, gene_id=gene_id, tumor_expression=measurement,
+            amino_acids=sequence, gene_id=gene_id, genome=genome, tumor_expression=measurement,
             policy=admission_policy, transcript_ids=(transcript_id,),
+            reference_resolution=cta,
             protein_ids=(transcript.protein_id,) if transcript.protein_id else (),
             source_identifier=f"{input_contract.sample_id}:{identifier}")
         metadata = (
             ("expression_id_namespace", input_contract.id_namespace),
             ("reference_assembly", reference[0]), ("annotation_name", reference[1]),
             ("annotation_version", reference[2]),
-            ("sequence_selection", "oncoref_canonical" if input_contract.measurement_level == "gene"
-             else "measured_transcript"),
+            ("sequence_selection", selection),
         )
         assessment = replace(assessment, antigen=replace(
             assessment.antigen, source_metadata=metadata))
@@ -272,4 +323,4 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome,
     if fingerprint != hashlib.sha256(Path(path).read_bytes()).hexdigest():
         raise ValueError("Expression input changed during admission")
     return CTAExpressionResult(input_contract, admission_policy, exclusion_policy,
-                               fingerprint, *reference, tuple(decisions))
+                               fingerprint, *reference, tuple(decisions), annotation_reference)

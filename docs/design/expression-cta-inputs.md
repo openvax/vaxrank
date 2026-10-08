@@ -121,7 +121,10 @@ infinite, nonnumeric, missing-ID and duplicate normalized-ID rows fail.
 Ensembl gene and transcript IDs are supported, including version suffixes;
 the original feature identifier and source SHA-256 stay in the result.
 
-Gene inputs select OncoRef's canonical transcript as a reference sequence.
+Canonical gene inputs select OncoRef's canonical transcript as a reference sequence.
+Verified alternate gene inputs select the longest available protein from that
+actual annotation locus, with transcript ID breaking ties. This is labeled
+`annotation_longest_protein`; the primary locus's transcript is never substituted.
 That selection does not assign the gene's abundance to an individual isoform
 or to a protein. Transcript inputs select only their measured transcript and
 hold out a version mismatch. No values are summed across isoforms, genes or
@@ -140,7 +143,19 @@ The default gene-symbol policy excludes `MAGE*` except exactly `MAGEA4`.
 Empty patterns and exceptions allow all otherwise admissible targets. Matching
 uses case-sensitive canonical OncoRef symbols, and exceptions are exact
 symbols. This changes target eligibility only: the full OncoRef CTA candidate
-universe remains the negative-self-reference exclusion set.
+universe determines the negative-self-reference exclusion set. OncoRef verifies
+source IDs against the explicitly selected Ensembl annotation. Alternate loci
+are excluded only through shipped, verified mappings. Ambiguous, conflicting or
+unverified loci remain in the self background; matching symbols or proteins do
+not create mappings. Genuine non-CTA sources survive identical CTA sequences.
+
+CTA facts use the verified canonical gene ID while source genes, transcripts,
+proteins and original expression identifiers retain their annotation identity.
+Admission and design audits persist identity contract 1, each mapping decision,
+annotation content and OncoRef reference hashes. Canonical membership and
+annotation source exclusions have separate fingerprints. Earlier native files
+remain legacy contract 0 with their original decisions and exclusions; replay
+does not upgrade them to the current reference.
 
 `CTAExpressionResult.load("cta-admission.json")` uses allowlisted native
 serialization and reproduces policies, decisions, expression evidence, genome
@@ -159,8 +174,8 @@ protein abundance.
   single-feature expression tables ([Topiary #486](https://github.com/openvax/topiary/issues/486)).
   Consumer regressions cover CSV/TSV gene and transcript inputs with zero,
   one and multiple rows, with no expected failures.
-- Requires OncoRef 1.8.207, validated in
-  [#579](https://github.com/openvax/vaxrank/issues/579). The extended CTA panel
+- Requires OncoRef 1.8.208, adopting annotation-scoped identity contract 1 in
+  [#592](https://github.com/openvax/vaxrank/issues/592). The extended CTA panel
   remains a separate upstream alternative; default admission is unchanged.
 - Contextual prediction caches remain tracked in
   [Topiary #468](https://github.com/openvax/topiary/issues/468); CTA input currently
