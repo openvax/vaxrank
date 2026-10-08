@@ -135,6 +135,48 @@ def test_expression_dsl_changes_selected_targets(tmp_path, cli_dependencies):
     assert 'Expression features' in (out / 'vaccine_report.txt').read_text()
 
 
+@pytest.mark.parametrize('level', ['gene', 'transcript'])
+def test_verified_alternate_sources_survive_cli_native_occurrences(tmp_path, monkeypatch, level):
+    from .test_cta_identity import Annotation, ALTERNATE
+    import oncoref
+    import vaxrank.cli.entry_point
+    annotation = Annotation(112)
+    annotation.to_dict = lambda: dict(reference_name='GRCh38', annotation_version=112)
+    # Exercise real admission and self matching on the pinned annotation, with
+    # a deterministic predictor so both identical source occurrences survive.
+    import mhctools.cli
+    import vaxrank.cta_input
+    predictor = ContextPredictor()
+    monkeypatch.setattr(mhctools.cli, 'predictors_from_args', lambda args: [predictor])
+    monkeypatch.setattr(vaxrank.cli.entry_point, 'resolve_ensembl_release',
+                        lambda args: setattr(args, 'genome', annotation))
+    rows = ([(PRAME, 3), (ALTERNATE, 9)] if level == 'gene' else
+            [('ENST00000398743', 3), ('ENST00000617728', 9)])
+    path, native = tmp_path / 'expression.tsv', tmp_path / 'native.tsv'
+    pd.DataFrame(rows, columns=['feature_id', 'patient_tpm']).to_csv(path, sep='\t', index=False)
+    first = tmp_path / 'first'
+    run_cli(argv(path, first, level) + ['--ensembl-release', '112', '--output-epitopes', str(native),
+                                      '--vaccine-type', 'peptide'])
+    saved = EpitopeDataset.load(native)
+    assert {a.gene_id for a in saved.antigens.values()} == {PRAME, ALTERNATE}
+    assert saved.result.df.canonical_gene_id.eq(PRAME).all()
+    assert set(saved.result.df.cta_expression_value) == {3, 9}
+    assert {e.source_name for e in saved.epitopes} == {'patient-001:' + r[0] for r in rows}
+    assert len({e.prediction_group_source for e in saved.epitopes}) == len(saved.epitopes)
+    alternate = next(a for a in saved.antigens.values() if a.gene_id == ALTERNATE)
+    expected_transcript = 'ENST00000539862' if level == 'gene' else 'ENST00000617728'
+    assert alternate.transcript_ids == (expected_transcript,)
+    assert alternate.protein_ids == (annotation.transcript_by_id(expected_transcript).protein_id,)
+    path.unlink()
+    monkeypatch.setattr(mhctools.cli, 'predictors_from_args', forbidden)
+    monkeypatch.setattr(vaxrank.cta_input, 'admit_cta_expression', forbidden)
+    monkeypatch.setattr(oncoref, 'resolve_gene_identity', forbidden)
+    monkeypatch.setattr(oncoref, 'cta_annotation_gene_identities', forbidden)
+    run_cli(['--input-epitopes', str(native), '--output-dir', str(tmp_path / 'replay'),
+             '--vaccine-type', 'peptide', '--no-processing-aware-annotation'])
+    assert (first / 'cta_design.json').read_bytes() == (tmp_path / 'replay' / 'cta_design.json').read_bytes()
+
+
 def mhctools_cli():
     import mhctools.cli
     return mhctools.cli

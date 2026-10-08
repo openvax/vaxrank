@@ -1,0 +1,213 @@
+{
+  "packages": {
+    "vaxrank": "3.40.1",
+    "oncoref": "1.8.208",
+    "pyensembl": "2.27.0",
+    "datacache": "1.19.0",
+    "mhctools": "3.47.12",
+    "topiary": "5.94.3",
+    "mhcflurry": "2.3.13"
+  },
+  "python": "3.12.6 (main, Sep  9 2024, 21:36:32) [Clang 18.1.8 ]",
+  "input_sha256": "575983696a7c977a3fc89f0db093e71f4fc41b23de0acc3f6abe34c83a9fb84f",
+  "input_features": 22,
+  "admitted": 9,
+  "identity_contract": 1,
+  "canonical_candidates": 2532,
+  "annotation_exclusions": 2697,
+  "synthetic_test_genotype": [
+    "HLA-A*02:01"
+  ],
+  "patient_hla_known": false,
+  "ms_evidence": "unknown",
+  "byte_identical_outputs": {
+    "peptide/vaccine.fasta": "67dc5a910f9e85dbc34df8271a87dcff170f76e2f649bd82e1d7dfb971e13033",
+    "mrna/no_polyA.fasta": "370c990281e52d37f1f3482856ae9faff45c46db06836fad8a3a56f5f6b3eded",
+    "mrna/cds.fasta": "bfe13b6f35a3cd371476ec379ae4d77a10359accbe754ff6f044ac562642e5cf",
+    "mrna/full.fasta": "61ddbb978f638037832b2e47292d36d751a595926bd9513f644897c6434b9823",
+    "cta_design.json": "6eb6ee5d2e241aefca50849e88a97312070eb7e7774fac019def5cbccb3d7f0b",
+    "cta_target_decisions.csv": "790f1877be25872082a6278c02d94e541f86834848d7dd1e0197e7a414108d93"
+  },
+  "oncoref_data_version": "5.23.25",
+  "oncoref_source_matrix_version": "5.22.14",
+  "expression_source": "OncoRef SKCM source matrix 5.22.10 snapshot, TCGA-Z2-AA3S-06; unchanged input from #584 smoke",
+  "reference": {
+    "annotation": "full Ensembl 112 / GRCh38",
+    "source_files": [
+      {
+        "name": "Homo_sapiens.GRCh38.112.chr_patch_hapl_scaff.gtf.gz",
+        "bytes": 60149702,
+        "sha256": "9068bd52a9def32ac22b248393461b9f52931f29404a94b397ecc7ddbc2fce38"
+      },
+      {
+        "name": "Homo_sapiens.GRCh38.cdna.all.fa.gz",
+        "bytes": 79435386,
+        "sha256": "0bb3012f45e2474b8ce79911c47de0fc216bd574c60f1ddc8a8d911cd8a32b4d"
+      },
+      {
+        "name": "Homo_sapiens.GRCh38.ncrna.fa.gz",
+        "bytes": 19887296,
+        "sha256": "16b9e32d047653e42a5d3b8843b30eefea1a08f7984568746d8db15ada26540b"
+      },
+      {
+        "name": "Homo_sapiens.GRCh38.pep.all.fa.gz",
+        "bytes": 14904881,
+        "sha256": "2868236131342d14afbfa8dbd8a5e3fb56ba85210fdca196b65db3e17c7ece83"
+      }
+    ],
+    "annotation_sha256": "29ea3f145805bef0128a2e29523337f0e1e6eb9a9d3da3cf66a1a11d268f850d",
+    "annotation_hash_kind": "pyensembl-source-files",
+    "annotation_reference_sha256": "15e66a1d79f91937d1fa42b5b331af3e291bb36312635ed42d44d0c6a3999665",
+    "canonical_membership_sha256": "2047bd2f3480fc176cd3be3e31c8c20d30c438eadb99da52d71f7350987e75ec",
+    "source_exclusions_sha256": "ae06f4a6d3d7c2b3abf6f9571e303328d820fa6a8d9a66d4bdce54721f93ea0b",
+    "aliases_sha256": "da23d42812e2b43893706fa0bb2440078bc7fc162f387b7803431b895bcbb26a",
+    "canonical_gene_space_sha256": "6d64ee082fec9274fefbbe50bbe20aabddb77b0334e73d4d431d1fb9c43bfc39"
+  },
+  "predictor": {
+    "name": "MHCflurry affinity",
+    "version": "2.3.13",
+    "weights": "2.3.0",
+    "files": [
+      {
+        "name": "GENERATE.sh",
+        "bytes": 2595,
+        "sha256": "cae258b41e211055e2aadbc94b762ea148e47c69a7368a66f5384f62c3a3ccc5"
+      },
+      {
+        "name": "allele_sequences.csv",
+        "bytes": 1070430,
+        "sha256": "0967249e8d73dc06a675ecfafae71f03f90d13a274bb1c0122140d22d521df8a"
+      },
+      {
+        "name": "frequency_matrices.csv.bz2",
+        "bytes": 67443102,
+        "sha256": "d79eabc7e84b4608143bf9ce8f115c76d2e35d6b2a58cfca1890c5805c88f20a"
+      },
+      {
+        "name": "inference_export.json",
+        "bytes": 1093,
+        "sha256": "fab583d304eaaa9eadea1dabe212864238d6e556683ca34de6fbb46b4b61250d"
+      },
+      {
+        "name": "info.txt",
+        "bytes": 189,
+        "sha256": "49a37970f08d32854a6281dbb8f84826de50adf262b94c101d49328c35ae5458"
+      },
+      {
+        "name": "length_distributions.csv.bz2",
+        "bytes": 860935,
+        "sha256": "7e9a0328d5c546fd147ec96c0032887799916dee7a403f2a0bb89f3c2ccb7bad"
+      },
+      {
+        "name": "manifest.csv",
+        "bytes": 489853,
+        "sha256": "5e749c5b9da19ee2b0467aa2486b447a9e2971b13f7954a803f75f93fc12d56e"
+      },
+      {
+        "name": "model_selection_data.csv.bz2",
+        "bytes": 5125006,
+        "sha256": "22997c4b688c7315edb8fb242b56e9356c9fe35765007c2215a26e69eda2eef2"
+      },
+      {
+        "name": "model_selection_predictions.csv.bz2",
+        "bytes": 1873989,
+        "sha256": "2f5231c22b2be51cd7893e686a32394f670417b63ec9aacee1908cf1757687d2"
+      },
+      {
+        "name": "model_selection_summary.csv.bz2",
+        "bytes": 1051387,
+        "sha256": "eff112ad559713f56f985ec296d885f895d526e4f9462d3227ba73b71bd0ce79"
+      },
+      {
+        "name": "percent_ranks.json",
+        "bytes": 37174158,
+        "sha256": "9cb4ee611dfce6b7f8c3365bd420546ef4f05e91af3e18ef58abec4dbd30df2b"
+      },
+      {
+        "name": "pseudosequences.mhcflurry.39aa.csv",
+        "bytes": 1070436,
+        "sha256": "80bcdf5c250ce9954524b7bffccf80f030add9e9a090dd61bed0380f55652980"
+      },
+      {
+        "name": "train_data.csv.bz2",
+        "bytes": 5116064,
+        "sha256": "da310aad1251ea225af7f8e9330266fb13bc7aee4b67e4dfd55c3aff55bc7468"
+      },
+      {
+        "name": "weights_PAN-CLASS1-1-023e475ab69a6b2e.npz",
+        "bytes": 5953440,
+        "sha256": "842afffc5d56629608adf61508a5693787a09345216dd361a353476ef7f60565"
+      },
+      {
+        "name": "weights_PAN-CLASS1-1-21872705eecbad28.npz",
+        "bytes": 9335712,
+        "sha256": "c804b5a4945df017d6c85160c51a51b49014cc435cae8cb97d7df11fa48f7e19"
+      },
+      {
+        "name": "weights_PAN-CLASS1-1-5c21c209aa71dcbe.npz",
+        "bytes": 11436960,
+        "sha256": "fc3c2ca844fdcbd37af9f46e9ef818d91fd9ba30b46d75999ecb05de665900c7"
+      },
+      {
+        "name": "weights_PAN-CLASS1-1-5e8cfd8467919f6a.npz",
+        "bytes": 11436960,
+        "sha256": "8d500ec31eeb23e15bef14e913256a78fb9dca7aecd80ddff74876e601619e3f"
+      },
+      {
+        "name": "weights_PAN-CLASS1-1-a1852d5c4dd657ba.npz",
+        "bytes": 5953440,
+        "sha256": "fd9599b56c8aab097377e803b55d5f8d3ffc0bf3150521ffaa0ee6d97ea646f2"
+      },
+      {
+        "name": "weights_PAN-CLASS1-1-b8cfcfd3e5868e3d.npz",
+        "bytes": 9335712,
+        "sha256": "64580b7f7ae5d1178c88f47108cd309f2ddd140f23d080070344fc13733dc221"
+      },
+      {
+        "name": "weights_PAN-CLASS1-1-c734d88715df1670.npz",
+        "bytes": 4935052,
+        "sha256": "2aa1a0f6493ab89718e1a1da789864aa1195ca3db0805ab07c5265b0959dc664"
+      },
+      {
+        "name": "weights_PAN-CLASS1-1-e7ade34181bb9774.npz",
+        "bytes": 7528844,
+        "sha256": "57ce2368b733ec79ef5bd2014e59dbae2c8e8e6878ad720e46f63ef74d533312"
+      },
+      {
+        "name": "weights_PAN-CLASS1-1-edb7484c5406eaca.npz",
+        "bytes": 7528844,
+        "sha256": "8a8d098b259fdc8d44647748d80543208e084b2fc34924a21667592efae02856"
+      },
+      {
+        "name": "weights_PAN-CLASS1-1-f38e10af5757cedc.npz",
+        "bytes": 11436960,
+        "sha256": "6bdb3ed4ecf0a4d9e1fe525fc1e29eac03740c2a5d943d65fb40d3afa3231d18"
+      },
+      {
+        "name": "weights_PAN-CLASS1-1-f54dfdc7a7f34534.npz",
+        "bytes": 11436960,
+        "sha256": "72fd23175ee80150e7aa4c2b3a539747f54fc33972fac5c5fcfb1790cd639821"
+      }
+    ]
+  },
+  "prame": {
+    "source_gene_id": "ENSG00000185686",
+    "canonical_gene_id": "ENSG00000185686",
+    "selected_transcript": "ENST00000398743",
+    "protein_ids": [
+      "ENSP00000381728"
+    ],
+    "distinct_9mers": 501,
+    "retained_non_cta_shared_9mers": 14,
+    "specific_9mers": 487,
+    "verified_alternate_excluded": true,
+    "design_status": "selected_region",
+    "product_status": "contributed"
+  },
+  "replay": {
+    "expression_input_unavailable": true,
+    "prediction_and_admission_queries": "forbidden",
+    "gene_identity_and_annotation_queries": "forbidden",
+    "outputs": "byte-identical FASTA, CTA target decisions and design audit"
+  }
+}
