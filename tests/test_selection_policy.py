@@ -58,10 +58,18 @@ def test_frozen_policy_matches_legacy_scores_and_replays(tmp_path):
     pytest.param(
         Column('signed_score').clip(-1, 1), dict(signed_score=[-2., 0., 2.]),
         -1., [-1., 0., 1.], [True, True, True], id='negative-clip-bound'),
+    pytest.param(
+        Column('review score') + 10 * Column('review label').eq("approved 'quoted'\\line\nnext"),
+        {'review score': [1., 9.], 'review label': ["approved 'quoted'\\line\nnext", 'rejected']},
+        10., [11., 9.], [True, False], id='categorical-quoted-equality'),
+    pytest.param(
+        10 * ~Column('review label').isin(['rejected', 'pending']),
+        {'review label': ['approved', 'rejected', 'pending']},
+        1., [10., 0., 0.], [True, False, False], id='negated-membership'),
 ])
 def test_rendered_policy_yaml_keeps_scores_selection_and_evidence_replay(
         tmp_path, renderer, expression, measurements, threshold, expected_scores, eligible):
-    """Saved policies must preserve arithmetic and signed transform parameters (#582)."""
+    """Saved policies preserve arithmetic, transform parameters and categories."""
     def render(node):
         return repr(node) if renderer == 'repr' else node.to_expr_string()
 
