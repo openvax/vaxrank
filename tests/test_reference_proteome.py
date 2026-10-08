@@ -334,7 +334,7 @@ def test_kmer_set_index_path_format():
 
         import hashlib
         digest = hashlib.sha256(b"").hexdigest()
-        eq_(path, "/cache/content_annotated-protein-sequences-v2_%s_kmer_set_8_15.pkl.gz" % digest)
+        eq_(path, "/cache/content_annotated-protein-sequences-v2_identity-1_%s_kmer_set_8_15.pkl.gz" % digest)
 
 
 def test_reference_cache_separates_content_with_same_species_release(tmp_path, monkeypatch):
@@ -699,7 +699,7 @@ def test_from_genome_with_exclude_cta_genes():
     t2 = create_mock_transcript("T2", "KLMNOPQRST", gene_id="ENSG00000099999")
     genome = create_mock_genome([t1, t2], species_name="Homo sapiens")
     with patch(
-            "vaxrank.reference_proteome.oncoref_cta_source_gene_ids",
+            "oncoref.cta_annotation_gene_ids",
             return_value=frozenset({prame_gene_id})):
         ref = ReferenceProteome.from_genome(
             genome, exclude_cta_genes=True,
@@ -717,7 +717,7 @@ def test_oncoref_cta_source_universe_includes_prame():
 
 def test_cta_source_exclusion_is_human_only():
     genome = create_mock_genome([], species_name="Mus musculus")
-    with patch("vaxrank.reference_proteome.oncoref_cta_source_gene_ids") as load_ctas:
+    with patch("oncoref.cta_annotation_gene_ids") as load_ctas:
         assert cta_source_gene_ids_for_genome(genome) == frozenset()
     load_ctas.assert_not_called()
 
@@ -731,7 +731,7 @@ def test_cta_shared_sequence_remains_self_through_non_cta_gene():
     genome = create_mock_genome(
         [cta, non_cta], species_name="Homo sapiens", release=111)
     with patch(
-            "vaxrank.reference_proteome.oncoref_cta_source_gene_ids",
+            "oncoref.cta_annotation_gene_ids",
             return_value=frozenset({prame_gene_id})):
         ref = ReferenceProteome.from_genome(
             genome, exclude_cta_genes=True,

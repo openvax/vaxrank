@@ -59,17 +59,30 @@ def genome(monkeypatch):
     frame["Canonical_Transcript_ID"] = frame.Ensembl_Gene_ID.map(ids)
     _patch_oncoref(monkeypatch, frame=frame, canonical=canonical,
                    unfiltered=set(frame.Ensembl_Gene_ID))
-    transcripts = {tid: SimpleNamespace(gene_id=gene, protein_id=f"protein-{tid}",
+    class Transcripts(dict):
+        def __call__(self):
+            return list(self.values())
+    transcripts = Transcripts({tid: SimpleNamespace(gene_id=gene, transcript_id=tid, protein_id=f"protein-{tid}",
                    protein_sequence=SEQUENCE, transcript_version=3)
-                   for gene, tid in ids.items()}
+                   for gene, tid in ids.items()})
     # Same gene, different isoform and sequence: do not select the canonical
     # isoform merely because it is the OncoRef representative.
     transcripts[ALTERNATE_TRANSCRIPT] = SimpleNamespace(
         gene_id=PRAME, protein_id="alternate-protein", protein_sequence=SEQUENCE[::-1],
         transcript_version=2)
+    transcripts[ALTERNATE_TRANSCRIPT].transcript_id = ALTERNATE_TRANSCRIPT
+    genes = {r.Ensembl_Gene_ID: SimpleNamespace(gene_id=r.Ensembl_Gene_ID,
+             gene_name=r.Symbol, contig="22", start=1, end=100, strand="+",
+             transcripts=[t for t in transcripts.values() if t.gene_id == r.Ensembl_Gene_ID])
+             for r in frame.itertuples()}
+    def lookup(gid):
+        if gid not in genes:
+            raise ValueError(gid)
+        return genes[gid]
     return SimpleNamespace(
         species=SimpleNamespace(latin_name="homo_sapiens"), reference_name="GRCh38",
-        annotation_name="ensembl", annotation_version=93,
+        annotation_name="ensembl", annotation_version=93, release=93,
+        gene_ids=lambda: list(genes), gene_by_id=lookup,
         transcript_ids=lambda: list(transcripts), transcript_by_id=transcripts.__getitem__,
         transcripts=transcripts)
 
@@ -251,7 +264,7 @@ def test_transcript_evidence_cannot_admit_another_isoform(genome):
         evidence_source="Salmon", evidence_version="1", measurement_level="transcript",
         transcript_id=ALTERNATE_TRANSCRIPT)
     with pytest.raises(ValueError, match="measured transcript"):
-        assess_cta_antigen(amino_acids=SEQUENCE, gene_id=PRAME, tumor_expression=measurement,
+        assess_cta_antigen(amino_acids=SEQUENCE, gene_id=PRAME, genome=genome, tumor_expression=measurement,
                            policy=CTAAdmissionPolicy(2, "TPM"), transcript_ids=(PRAME_TRANSCRIPT,))
 
 

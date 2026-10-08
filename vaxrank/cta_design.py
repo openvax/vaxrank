@@ -153,6 +153,8 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
         contributed_ids = {r['antigen'].source_identifier for r in regions
                            if r['name'] in {n for records in products.values() for p in records for n in p.antigen_names}}
         decisions = [dict(input_identifier=d.input_identifier, gene_id=d.gene_id,
+                          canonical_gene_id=d.gene_identity.get('canonical_gene_id') if d.gene_identity else None,
+                          identity_status=d.gene_identity.get('status') if d.gene_identity else 'legacy_unverified',
                           gene_name=d.gene_name, transcript_id=d.transcript_id,
                           expression_value=d.value, expression_unit=admission.input_contract.expression_unit,
                           measurement_level=admission.input_contract.measurement_level,

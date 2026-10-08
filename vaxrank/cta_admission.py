@@ -15,6 +15,7 @@ import pandas as pd
 from serializable import DataclassSerializable
 
 from .identifiers import normalize_ensembl_gene_id
+from .cta_identity import CTAAnnotationReference, identity_digest, snapshot_cta_annotation
 from .vaccine_antigen import (
     ANTIGEN_KIND_CTA,
     ATTESTATION_ADMITTED,
@@ -162,13 +163,35 @@ class CTAReferenceResolution(DataclassSerializable):
 
     evidence: CTAReferenceEvidence
     self_reference_excluded_gene_ids: tuple[str, ...]
+    # Missing fields in old native files mean legacy, canonical-ID-only evidence.
+    identity_contract_version: int = 0
+    gene_identity: Optional[dict] = None
+    annotation_reference_sha256: str = ""
+    annotation_sha256: str = ""
+    self_reference_excluded_gene_ids_sha256: str = ""
 
     def __post_init__(self):
         excluded_gene_ids = tuple(sorted({
             normalize_ensembl_gene_id(gene_id)
             for gene_id in self.self_reference_excluded_gene_ids
         }))
-        if not excluded_gene_ids or self.evidence.gene_id not in excluded_gene_ids:
+        source_id = self.evidence.gene_id
+        if self.identity_contract_version:
+            identity = self.gene_identity or {}
+            if (self.identity_contract_version != 1
+                    or identity.get("identity_contract_version") != 1
+                    or identity.get("status") not in {"canonical", "alias"}
+                    or identity.get("canonical_gene_id") != self.evidence.gene_id):
+                raise ValueError("CTA reference requires verified annotation identity")
+            source_id = identity["source_gene_id"]
+            if any(len(d) != 64 for d in (
+                    self.annotation_reference_sha256, self.annotation_sha256,
+                    self.self_reference_excluded_gene_ids_sha256)):
+                raise ValueError("CTA annotation identity requires SHA-256 provenance")
+        elif (self.gene_identity is not None or self.annotation_reference_sha256
+              or self.annotation_sha256 or self.self_reference_excluded_gene_ids_sha256):
+            raise ValueError("Legacy CTA reference cannot claim annotation identity evidence")
+        if not excluded_gene_ids or source_id not in excluded_gene_ids:
             raise ValueError(
                 "CTA reference resolution must include its source gene"
             )
@@ -177,7 +200,9 @@ class CTAReferenceResolution(DataclassSerializable):
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")).hexdigest()
-        if excluded_digest != self.evidence.unfiltered_gene_ids_sha256:
+        expected = (self.self_reference_excluded_gene_ids_sha256
+                    if self.identity_contract_version else self.evidence.unfiltered_gene_ids_sha256)
+        if excluded_digest != expected:
             raise ValueError(
                 "CTA reference exclusions disagree with oncoref provenance"
             )
@@ -193,18 +218,30 @@ class CTAAdmissionAssessment(DataclassSerializable):
     tumor_expression: PatientTumorExpressionEvidence
     reference_evidence: CTAReferenceEvidence
     override_evidence: Optional[CTAOverrideEvidence] = None
+    reference_resolution: Optional[CTAReferenceResolution] = None
 
     def __post_init__(self):
         if self.antigen.kind != ANTIGEN_KIND_CTA:
             raise ValueError("CTA assessment requires a CTA vaccine antigen")
-        if self.antigen.gene_id != self.reference_evidence.gene_id:
+        source_id = self.reference_evidence.gene_id
+        if self.reference_resolution is not None:
+            resolution = self.reference_resolution
+            if resolution.evidence != self.reference_evidence:
+                raise ValueError("CTA assessment and reference resolution disagree")
+            if resolution.gene_identity is not None:
+                source_id = resolution.gene_identity["source_gene_id"]
+            if self.antigen.self_reference_excluded_gene_ids != resolution.self_reference_excluded_gene_ids:
+                raise ValueError("CTA antigen and reference exclusions disagree")
+        if self.antigen.gene_id != source_id or self.tumor_expression.gene_id != source_id:
             raise ValueError("CTA antigen and reference evidence genes differ")
 
     def to_report_dict(self) -> dict:
         return asdict(self)
 
 
-def resolve_cta_reference_evidence(gene_id: str) -> CTAReferenceResolution:
+def resolve_cta_reference_evidence(
+        gene_id: str, *, genome,
+        annotation_reference: Optional[CTAAnnotationReference] = None) -> CTAReferenceResolution:
     """Resolve one CTA against canonical and unfiltered oncoref facts.
 
     ``cta_gene_ids()`` determines default target admission, while the broader
@@ -216,7 +253,15 @@ def resolve_cta_reference_evidence(gene_id: str) -> CTAReferenceResolution:
     from oncoref.cta import cta_evidence, cta_gene_ids, cta_unfiltered_gene_ids
     from oncoref.version import DATA_VERSION, SOURCE_MATRIX_VERSION
 
-    gene_id = normalize_ensembl_gene_id(gene_id)
+    identity = oncoref.resolve_gene_identity(gene_id, genome=genome)
+    if not identity.verified:
+        raise CTAAdmissionError(f"Unverified annotation identity for {gene_id}: {identity.status}")
+    gene_id = identity.canonical_gene_id
+    annotation_reference = annotation_reference or snapshot_cta_annotation(genome)
+    if (annotation_reference.annotation_assembly != identity.annotation_assembly
+            or annotation_reference.annotation_release != identity.annotation_release
+            or annotation_reference.annotation_species != identity.annotation_species):
+        raise CTAAdmissionError("CTA reference uses a different annotation")
     canonical_ids = frozenset(
         normalize_ensembl_gene_id(value) for value in cta_gene_ids()
     )
@@ -230,6 +275,15 @@ def resolve_cta_reference_evidence(gene_id: str) -> CTAReferenceResolution:
         raise CTAAdmissionError(
             f"Gene {gene_id} is not in oncoref's CTA candidate universe"
         )
+    recorded = next((r for r in annotation_reference.identities
+                     if r["source_gene_id"] == identity.source_gene_id), None)
+    facts = identity.as_dict()
+    recorded_facts = {k: v for k, v in (recorded or {}).items() if k != "input_gene_id"}
+    current_facts = {k: v for k, v in facts.items() if k != "input_gene_id"}
+    if identity_digest(recorded_facts) != identity_digest(current_facts):
+        raise CTAAdmissionError("CTA mapping changed since the annotation snapshot")
+    if identity_digest(sorted(unfiltered_ids)) != annotation_reference.canonical_candidate_gene_ids_sha256:
+        raise CTAAdmissionError("CTA canonical membership changed during admission")
     frame = cta_evidence()
     required = {
         "Ensembl_Gene_ID",
@@ -315,7 +369,12 @@ def resolve_cta_reference_evidence(gene_id: str) -> CTAReferenceResolution:
     )
     return CTAReferenceResolution(
         evidence=evidence,
-        self_reference_excluded_gene_ids=tuple(unfiltered_ids),
+        self_reference_excluded_gene_ids=annotation_reference.self_reference_excluded_gene_ids,
+        identity_contract_version=annotation_reference.identity_contract_version,
+        gene_identity=identity.as_dict(),
+        annotation_reference_sha256=annotation_reference.fingerprint,
+        annotation_sha256=annotation_reference.annotation_sha256,
+        self_reference_excluded_gene_ids_sha256=annotation_reference.self_reference_excluded_gene_ids_sha256,
     )
 
 
@@ -323,6 +382,7 @@ def assess_cta_antigen(
     *,
     amino_acids: str,
     gene_id: str,
+    genome,
     tumor_expression: PatientTumorExpressionEvidence,
     policy: CTAAdmissionPolicy,
     override_evidence: Optional[CTAOverrideEvidence] = None,
@@ -330,8 +390,10 @@ def assess_cta_antigen(
     protein_ids: tuple[str, ...] = (),
     species: str = "Homo sapiens",
     source_identifier: str = "",
+    reference_resolution: Optional[CTAReferenceResolution] = None,
 ) -> CTAAdmissionAssessment:
     """Resolve oncoref CTA status and patient-expression construct admission."""
+    input_gene_id = gene_id
     gene_id = normalize_ensembl_gene_id(gene_id)
     if tumor_expression.gene_id != gene_id:
         raise ValueError("CTA and tumor-expression gene IDs differ")
@@ -343,7 +405,12 @@ def assess_cta_antigen(
         measured = tumor_expression.transcript_id.split(".")[0]
         if measured not in {value.split(".")[0] for value in transcript_ids}:
             raise ValueError("CTA transcript expression must select its measured transcript")
-    reference_resolution = resolve_cta_reference_evidence(gene_id)
+    reference_resolution = reference_resolution or resolve_cta_reference_evidence(input_gene_id, genome=genome)
+    identity = reference_resolution.gene_identity or {}
+    if (identity.get("source_gene_id") != gene_id
+            or identity.get("annotation_assembly") != genome.reference_name
+            or identity.get("annotation_release") != genome.release):
+        raise ValueError("CTA admission requires matching annotation identity evidence")
     reference = reference_resolution.evidence
     expression_passes = tumor_expression.value >= policy.min_tumor_expression
 
@@ -375,6 +442,12 @@ def assess_cta_antigen(
         subject_id=gene_id,
         passed=reference.canonical_default,
         details=(
+            ("canonical_gene_id", reference.gene_id),
+            ("identity_contract_version", str(reference_resolution.identity_contract_version)),
+            ("annotation_reference_sha256", reference_resolution.annotation_reference_sha256),
+            ("annotation_sha256", reference_resolution.annotation_sha256),
+            ("source_exclusions_sha256", reference_resolution.self_reference_excluded_gene_ids_sha256),
+            ("gene_identity", json.dumps(identity, sort_keys=True)),
             ("specificity_status", reference.specificity_status),
             ("specificity_action", reference.specificity_action),
             ("restriction", reference.restriction),
@@ -439,7 +512,7 @@ def assess_cta_antigen(
         gene_id=gene_id,
         transcript_ids=transcript_ids or (
             (reference.canonical_transcript_id,)
-            if reference.canonical_transcript_id else ()
+            if reference.canonical_transcript_id and gene_id == reference.gene_id else ()
         ),
         protein_ids=protein_ids,
         species=species,
@@ -451,6 +524,7 @@ def assess_cta_antigen(
         tumor_expression=tumor_expression,
         reference_evidence=reference,
         override_evidence=override_evidence,
+        reference_resolution=reference_resolution,
     )
 
 
@@ -458,6 +532,7 @@ def build_cta_vaccine_antigen(
     *,
     amino_acids: str,
     gene_id: str,
+    genome,
     tumor_expression: PatientTumorExpressionEvidence,
     policy: CTAAdmissionPolicy,
     override_evidence: Optional[CTAOverrideEvidence] = None,
@@ -470,6 +545,7 @@ def build_cta_vaccine_antigen(
     return assess_cta_antigen(
         amino_acids=amino_acids,
         gene_id=gene_id,
+        genome=genome,
         tumor_expression=tumor_expression,
         policy=policy,
         override_evidence=override_evidence,

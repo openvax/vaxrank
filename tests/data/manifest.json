@@ -5,7 +5,8 @@
     "epitope_fixtures": "LENS and pVACseq epitope tables consumed by the external-input, rescoring and report tests. Osteosarc has no equivalent product, so these stay in-repo and are pinned by digest here.",
     "selection_policy": "Small real Sid model-output subset and frozen score expectations from the named-policy comparison. Osteosarc supplies source reads, not these newly generated MHCflurry/Pepsickle predictions; keep offline policy replay independent of model installation. See examples/osteosarc_test_data/policy_comparison.",
     "published_policies": "Synthetic pVACseq aggregate evidence and ordering computed with the pinned upstream v7.1.4 sorting function; Osteosarc does not publish epitope reports or policy sorting oracles.",
-    "cta_hitlist_bundle": "Synthetic CTA-expression evidence exported by Hitlist 1.65.1 through its public writer and verified consumer contract; pins original artifacts, mixed MS/non-MS observations, source mappings, contributors and lineage for portable CLI/replay interoperability. No clinical or patient evidence; see cta_hitlist_bundle/README.md. Osteosarc publishes read/variant fixtures rather than this evidence-bundle format."
+    "cta_hitlist_bundle": "Synthetic CTA-expression evidence exported by Hitlist 1.65.1 through its public writer and verified consumer contract; pins original artifacts, mixed MS/non-MS observations, source mappings, contributors and lineage for portable CLI/replay interoperability. No clinical or patient evidence; see cta_hitlist_bundle/README.md. Osteosarc publishes read/variant fixtures rather than this evidence-bundle format.",
+    "cta_identity": "Exact PRAME alternate and non-CTA PRAMEF10 loci/translations from full Ensembl 93/112; copied from OncoRef identity-contract regressions, with original GTF/protein FASTA URLs and SHA-256 hashes in each fixture."
   },
   "files": {
     "b16.f10/b16.combined.bam": "5c6161eca2410e8d8d54feee91ed3952ea04822face1d58be41593aaae0be21d",
@@ -58,6 +59,8 @@
     "published_policies/pvacseq-aggregate.tsv": "20de1f10f3991ab9579780b5361004f73e7dc1955f6375b802b7dbc7a460f648",
     "published_policies/pvacseq-expected.json": "d0eed57bc2a7cea6bb41eb8302b16aedf4ca4eec741bf371eb3b0f43398d72fe",
     "selection_policy/sid-evidence.tsv": "a916fef8ca19528299c877c81ec2f3247ab8777a2195dc78de8c9b13b5af2d90",
-    "selection_policy/sid-expected.json": "2cc68f65be5c479bbd47de849f56b98217f8bede61b77f8475b33b62df66c1c6"
+    "selection_policy/sid-expected.json": "2cc68f65be5c479bbd47de849f56b98217f8bede61b77f8475b33b62df66c1c6",
+    "cta_identity/prame-ensembl-93.json": "1840b5621966d3c0fd7043d5ddfe2a945f8d42c0c57d79450507a49379d76ba5",
+    "cta_identity/prame-ensembl-112.json": "1d4fea075f65ab9f8781adc205229f2dd5fcd82abcbcbe7b80d99730e0884c81"
   }
 }

@@ -164,7 +164,8 @@ def prepare_cta_report(args, genome, epitope_config=None):
         raise ValueError('No admitted CTA proteins; inspect --output-cta-admission decisions')
     alleles = normalize_alleles(mhc_alleles_from_args(args), 'CTA patient genotype')
     provenance = InputProvenance(
-        input_id='cta:' + hashlib.sha256((admission.input_sha256 + to_native_json(contract)).encode()).hexdigest(),
+        input_id='cta:' + hashlib.sha256((admission.input_sha256 + to_native_json(contract)
+                                        + admission.annotation_reference.fingerprint).encode()).hexdigest(),
         source_format='cta_expression', path=str(args.input_cta_expression),
         content_sha256=admission.input_sha256,
         scope=InputScope(patient_id=args.output_patient_id or contract.sample_id,
@@ -189,6 +190,7 @@ def prepare_cta_report(args, genome, epitope_config=None):
         'source_sequence': [antigens[n].amino_acids for n in frame.source_sequence_name],
         ANTIGEN_COLUMN: [to_native_json(antigens[n]) for n in frame.source_sequence_name],
         'gene_id': [antigens[n].gene_id for n in frame.source_sequence_name],
+        'canonical_gene_id': [decisions[n].reference_resolution.evidence.gene_id for n in frame.source_sequence_name],
         'gene_name': [antigens[n].display_gene_name for n in frame.source_sequence_name],
         'transcript_id': [decisions[n].transcript_id for n in frame.source_sequence_name],
         'cta_expression_value': [decisions[n].value for n in frame.source_sequence_name],

@@ -70,7 +70,8 @@ def cta_source_gene_ids_for_genome(genome) -> frozenset[str]:
     normalized = latin_name.strip().casefold().replace("_", " ")
     if normalized not in {"homo sapiens", "human"}:
         return frozenset()
-    return oncoref_cta_source_gene_ids()
+    from oncoref import cta_annotation_gene_ids
+    return frozenset(cta_annotation_gene_ids(genome, unfiltered=True))
 
 # In-memory cache for loaded kmer sets to avoid repeated disk reads
 # Key: (content identity, min_len, max_len) -> set of kmers
@@ -297,7 +298,9 @@ def _kmer_dataset_identity(genome):
     """Identify both reference content and translation-selection policy."""
     content_identity = (ensembl_dataset_cache_identity(genome)
                         or _protein_content_digest(genome_protein_dict(genome)))
-    return "%s_%s" % (REFERENCE_TRANSLATION_POLICY, content_identity)
+    from oncoref.gene_identity import GENE_IDENTITY_CONTRACT_VERSION
+    return "%s_identity-%s_%s" % (
+        REFERENCE_TRANSLATION_POLICY, GENE_IDENTITY_CONTRACT_VERSION, content_identity)
 
 
 def build_kmer_set_index(
@@ -725,7 +728,9 @@ class ReferenceProteome:
         kmer_set = None
 
         if not exclude_fasta:
+            from oncoref.gene_identity import GENE_IDENTITY_CONTRACT_VERSION
             cache_key = (
+                GENE_IDENTITY_CONTRACT_VERSION,
                 _protein_content_digest(proteins),
                 frozenset(all_exclude_ids),
                 min_kmer_length,

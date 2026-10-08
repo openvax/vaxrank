@@ -3,6 +3,7 @@
 import oncoref
 from oncoref import cta
 from oncoref.version import DATA_VERSION, SOURCE_MATRIX_VERSION
+from pyensembl import EnsemblRelease
 
 from vaxrank.cta_admission import (
     CTAAdmissionAssessment,
@@ -19,10 +20,11 @@ def test_public_default_cta_admission_keeps_extended_targets_explicit():
     assert "PRAME" in cta.cta_gene_names()
     assert "GPX5" in cta.cta_extended_gene_names()
     assert "GPX5" not in cta.cta_gene_names()
-    excluded = tuple(sorted(cta.cta_unfiltered_gene_ids()))
+    genome = EnsemblRelease(93)
+    excluded = tuple(sorted(oncoref.cta_annotation_gene_ids(genome, unfiltered=True)))
 
     for symbol, canonical in (("PRAME", True), ("GPX5", False)):
-        resolution = resolve_cta_reference_evidence(core.loc[symbol, "Ensembl_Gene_ID"])
+        resolution = resolve_cta_reference_evidence(core.loc[symbol, "Ensembl_Gene_ID"], genome=genome)
         evidence = resolution.evidence
         assert evidence.canonical_default is canonical
         assert evidence.oncoref_version == oncoref.__version__
@@ -41,6 +43,7 @@ def test_public_extended_only_cta_stays_held_out_and_replays_without_reference_q
         # protein identity or peptide presentation.
         amino_acids="ACDEFGHIKLMNPQRSTVWY",
         gene_id=row.Ensembl_Gene_ID,
+        genome=EnsemblRelease(93),
         tumor_expression=PatientTumorExpressionEvidence(
             gene_id=row.Ensembl_Gene_ID, sample_id="synthetic-patient",
             value=10, unit="TPM", evidence_source="synthetic fixture",

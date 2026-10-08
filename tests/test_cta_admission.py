@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -80,6 +81,29 @@ def _patch_oncoref(monkeypatch, *, frame=None, canonical=None, unfiltered=None):
         lambda: {PRAME, HELD_OUT, OTHER_CTA}
         if unfiltered is None else unfiltered,
     )
+    # The CTA curation above is synthetic; supply a matching synthetic primary
+    # ID registry while exercising the real public annotation resolver.
+    from vaxrank.cta_identity import identity_digest
+    rows = _frame() if frame is None else frame
+    by_id = {r.Ensembl_Gene_ID: (r.Symbol, "22", "115") for r in rows.itertuples()}
+    monkeypatch.setattr("oncoref.gene_identity._reference", lambda: (
+        {}, by_id, {s: {g} for g, (s, _, _) in by_id.items()},
+        identity_digest([]), identity_digest(sorted(by_id.items())), ("115",)))
+
+
+def cta_genome():
+    genes = {r.Ensembl_Gene_ID: SimpleNamespace(
+        gene_id=r.Ensembl_Gene_ID, gene_name=r.Symbol, contig="22",
+        start=1, end=100, strand="+", transcripts=()) for r in _frame().itertuples()}
+
+    def lookup(gid):
+        if gid not in genes:
+            raise ValueError(gid)
+        return genes[gid]
+    return SimpleNamespace(
+        species=SimpleNamespace(latin_name="homo_sapiens"), reference_name="GRCh38",
+        release=93, annotation_name="ensembl", annotation_version=93,
+        gene_ids=lambda: list(genes), gene_by_id=lookup, transcripts=lambda: ())
 
 
 def _expression(gene_id=PRAME, value=5.0, unit="TPM"):
@@ -105,6 +129,7 @@ def _assess(gene_id=PRAME, expression=None, policy=None, override=None):
     return assess_cta_antigen(
         amino_acids="ACDEFGHIKLMN",
         gene_id=gene_id,
+        genome=cta_genome(),
         tumor_expression=expression or _expression(gene_id),
         policy=policy or _policy(),
         override_evidence=override,
@@ -142,7 +167,7 @@ def test_canonical_cta_at_expression_threshold_is_admitted(monkeypatch):
 def test_public_cta_reference_resolution_keeps_two_cta_sets_distinct(monkeypatch):
     _patch_oncoref(monkeypatch)
 
-    resolution = resolve_cta_reference_evidence(f"{PRAME}.7")
+    resolution = resolve_cta_reference_evidence(f"{PRAME}.7", genome=cta_genome())
 
     assert resolution.evidence.gene_id == PRAME
     assert resolution.evidence.canonical_default
@@ -154,7 +179,7 @@ def test_public_cta_reference_resolution_keeps_two_cta_sets_distinct(monkeypatch
 
 def test_cta_reference_resolution_rejects_mismatched_exclusions(monkeypatch):
     _patch_oncoref(monkeypatch)
-    resolution = resolve_cta_reference_evidence(PRAME)
+    resolution = resolve_cta_reference_evidence(PRAME, genome=cta_genome())
 
     with pytest.raises(ValueError, match="disagree"):
         CTAReferenceResolution(
@@ -206,7 +231,7 @@ def test_noncanonical_cta_requires_explicit_versioned_override(monkeypatch):
 
 def test_gene_outside_unfiltered_oncoref_universe_is_not_a_cta(monkeypatch):
     _patch_oncoref(monkeypatch)
-    with pytest.raises(CTAAdmissionError, match="not in oncoref"):
+    with pytest.raises(CTAAdmissionError, match="Unverified annotation identity"):
         _assess(gene_id="ENSG_NOT_CTA")
 
 
@@ -270,6 +295,6 @@ def test_live_oncoref_prame_regression_uses_two_distinct_cta_sets():
     assert PRAME in cta_unfiltered_gene_ids()
     assert len(cta_unfiltered_gene_ids()) > len(cta_gene_ids())
     assert result.antigen.tumor_specificity.status == ATTESTATION_ADMITTED
-    assert set(result.antigen.self_reference_excluded_gene_ids) == {
-        gene_id.split(".")[0] for gene_id in cta_unfiltered_gene_ids()
-    }
+    from oncoref import cta_annotation_gene_ids
+    assert set(result.antigen.self_reference_excluded_gene_ids) == cta_annotation_gene_ids(
+        cta_genome(), unfiltered=True)
