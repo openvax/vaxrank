@@ -38,6 +38,43 @@ format; `EpitopeDataset.load(path)` exposes the richer saved evidence. Older
 candidate-only files remain readable. Their saved scores are reused when
 present; a new explicit epitope config can rescore the available evidence.
 
+## Replay a saved vaccine design
+
+When both `--output-dir` and `--output-epitopes` are supplied, the native file
+retains the actual peptide and mRNA products as well as their assembly settings
+and source graph. This applies to VCF/BAM, imported reports and expression-only
+designs. For example:
+
+```sh
+vaxrank --input-topiary candidates.tsv --output-dir design \
+  --output-epitopes design/native.tsv --peptide-max-constructs 1 \
+  --mrna-poly-a-length 73 --mrna-no-optimize-linkers
+vaxrank --input-epitopes design/native.tsv --output-dir replay
+```
+
+An unchanged design reuses its exact products without model initialization,
+new prediction, codon optimization or annotation downloads. Retained settings
+include construct limits, chemical modifications, antigen-design axes, RNA
+elements, codon settings and junction-model options. Actual products include
+selected optimized linkers and their recorded prediction provenance. Window
+selection audits are retained too. The original source limit from
+`--max-mutations-in-report` also applies to assembly; unselected evidence stays
+available in the native file.
+
+Current YAML and explicit CLI options override saved defaults, including CLI
+values equal to a built-in default. Changed sources, scoring policies or
+effective assembly settings invalidate retained products and their audits.
+Combining native designs also requires compatible effective settings, or
+explicit overrides that reconcile them; pooled sources are assembled anew.
+Checksums reject altered product payloads. Older exports without actual products
+can restore their recorded defaults and reconstruct from available evidence,
+but cannot establish exact historical products or recover omitted settings.
+
+Move any sibling reference bundle with the native table as described in
+[Moving native mutation datasets](native-references.md).
+
+## Saved scoring policies
+
 Native reload restores the saved scoring policy unless an epitope config is
 explicitly supplied. Combining files with different saved policies requires
 one explicit policy. Source-local predictor defaults survive a combined export.

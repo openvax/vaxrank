@@ -1,7 +1,5 @@
 """CTA design decisions and unfiltered measurements of actual final products."""
 
-import hashlib
-from dataclasses import asdict
 from pathlib import Path
 
 import pandas as pd
@@ -9,37 +7,6 @@ from topiary import TopiaryResult
 
 from .cta_expression import CTAExpressionResult
 from .native_serialization import from_native_json, to_native_json
-
-
-def _assembly_identity(ranked, options, context):
-    sources = [(source, [(p.amino_acids, tuple(p.epitopes), p.target_epitope_score,
-                         p.window_selection_audit) for p in peptides]) for source, peptides in ranked]
-    return hashlib.sha256(to_native_json((sources, asdict(options), context)).encode()).hexdigest()
-
-
-def restore_cta_products(args, ranked, modality, options, context=None):
-    """Replay the actual assembly only for identical sources and settings."""
-    assembly = getattr(args, '_cta_assembly', None)
-    saved = assembly.get(modality) if assembly is not None else None
-    if saved and saved['identity'] == _assembly_identity(ranked, options, context):
-        return from_native_json(saved['products'], list)
-    return None
-
-
-def record_cta_products(args, ranked, modality, options, products, context=None, window_audit=None):
-    assembly = getattr(args, '_cta_assembly', None)
-    if assembly is None:
-        return
-    configuration = asdict(options)
-    if modality == 'peptide':
-        configuration['n_terminal_acetyl'] = configuration.pop('n_terminal_acetylation')
-        configuration['c_terminal_amide'] = configuration.pop('c_terminal_amidation')
-    else:
-        configuration['junction_candidates'] = ','.join(configuration.pop('junction_swap_candidates'))
-    configuration.update(context or {})
-    assembly[modality] = dict(
-        identity=_assembly_identity(ranked, options, context), configuration=configuration,
-        products=to_native_json(products), window_audit=window_audit)
 
 
 def selected_regions(ranked, dataset):
@@ -86,7 +53,10 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
                                                  or p.components.get('c_terminal_amidation'))}
     # A replayed audit is usable only for the identical products and native
     # source/region graph; a different policy cannot inherit an old audit.
-    identity = hashlib.sha256(to_native_json((products, regions)).encode()).hexdigest()
+    from .construct_replay import design_digest
+    assembly_identities = {modality: args._construct_assembly[modality]['identity']
+                           for modality in products}
+    identity = design_digest(args, (products, regions, args._construct_policy, assembly_identities))
     saved = dataset.selection.get('cta_product_audit')
     if saved is not None and saved['identity'] == identity:
         audit = from_native_json(saved['payload'], dict)
