@@ -54,7 +54,9 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
     # A replayed audit is usable only for the identical products and native
     # source/region graph; a different policy cannot inherit an old audit.
     from .construct_replay import design_digest
-    identity = design_digest(args, (products, regions, args._construct_policy))
+    assembly_identities = {modality: args._construct_assembly[modality]['identity']
+                           for modality in products}
+    identity = design_digest(args, (products, regions, args._construct_policy, assembly_identities))
     saved = dataset.selection.get('cta_product_audit')
     if saved is not None and saved['identity'] == identity:
         audit = from_native_json(saved['payload'], dict)

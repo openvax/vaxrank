@@ -104,6 +104,15 @@ def test_expression_only_cli_outputs_and_offline_replay(tmp_path, monkeypatch, c
     assert (first / 'cta_design.json').read_bytes() == (tmp_path / 'replay' / 'cta_design.json').read_bytes()
     assert (first / 'peptide' / 'window_selection.json').read_bytes() == (
         tmp_path / 'replay' / 'peptide' / 'window_selection.json').read_bytes()
+    if level == 'transcript':
+        # A capacity override must invalidate its audit even when this one
+        # source still produces exactly the same product sequences.
+        limits = tmp_path / 'changed_limits'
+        run_cli(['--input-epitopes', str(native), '--output-dir', str(limits),
+                 '--peptide-max-constructs', '20', '--no-processing-aware-annotation'])
+        assert (first / 'peptide' / 'vaccine.fasta').read_bytes() == (limits / 'peptide' / 'vaccine.fasta').read_bytes()
+        audit = from_native_json((limits / 'cta_design.json').read_text(), dict)['final_product_audit']
+        assert audit['mhc_status'] == 'unassessed'
     # Explicit new settings cannot inherit either old products or their audit.
     changed = tmp_path / 'changed'
     run_cli(['--input-epitopes', str(native), '--output-dir', str(changed),
