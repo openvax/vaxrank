@@ -397,7 +397,8 @@ def _emit_peptide_constructs(args, ranked, target_dir):
     target_alleles = resolve_target_alleles(args)
     window_audit = []
     from ..input_scope import normalize_alleles
-    context = dict(target_alleles=list(normalize_alleles(target_alleles, 'Assembly genotype')))
+    context = dict(target_alleles=list(normalize_alleles(target_alleles, 'Assembly genotype'))
+                   if target_alleles else [])
     from ..construct_replay import restore_products, record_products
     constructs = restore_products(args, ranked, 'peptide', peptide_options, context)
     if constructs is None:
@@ -727,12 +728,13 @@ def _emit_mrna_constructs(args, ranked, target_dir):
 
     prediction_args, mhc_alleles = _linker_prediction_configuration(args, yaml_kwargs)
     from ..input_scope import normalize_alleles
+    target_alleles = resolve_target_alleles(args)
     junction_context = dict(
         junction_predictor=prediction_args.mhc_predictor[0][0] if prediction_args else None,
         junction_alleles=','.join(mhc_alleles) if mhc_alleles else None,
         junction_predictor_path=getattr(prediction_args, 'mhc_predictor_path', None),
         junction_predictor_models_path=getattr(prediction_args, 'mhc_predictor_models_path', None),
-        target_alleles=list(normalize_alleles(resolve_target_alleles(args), 'Assembly genotype')))
+        target_alleles=list(normalize_alleles(target_alleles, 'Assembly genotype')) if target_alleles else [])
     junction_candidates_raw = cfg(
         'mrna_junction_candidates', 'junction_candidates') or ''
     junction_candidates = tuple(
