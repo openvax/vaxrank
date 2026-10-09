@@ -85,21 +85,25 @@ class NativeReferences:
                 temporary.unlink(missing_ok=True)
         return dict(path=str(relative), sha256=digest, size=destination.stat().st_size)
 
-    def _resource(self, source):
+    def _resource(self, source, *, identity=False):
         expected = self._expected.get(str(source.resolve()))
         if source.is_file():
             if expected is not None and (source.stat().st_size != expected['size']
                     or self._file_digest(source) != expected['sha256']):
                 raise ValueError(f"Native reference checksum mismatch: {source}")
+            if identity:
+                return dict(sha256=self._file_digest(source), size=source.stat().st_size)
             return self._bundle_file(source)
         if expected is not None:
             # Evidence-only exports retain the identity of absent resources;
             # absence must not silently erase a previously recorded checksum.
+            if identity:
+                return dict(sha256=expected['sha256'], size=expected['size'])
             return dict(path=str(self.directory / Path(expected['path']).name),
                         sha256=expected['sha256'], size=expected['size'])
         return None
 
-    def _encode_genome(self, value):
+    def _encode_genome(self, value, *, identity=False):
         metadata = value["__class__"]
         state = {key: item for key, item in value.items() if key != "__class__"}
         resources = []
@@ -116,19 +120,37 @@ class NativeReferences:
                 fields.extend((key, index) for index, _ in enumerate(state.get(key) or []))
             for field, index in fields:
                 source = Path(next(files))
-                resource = self._resource(source)
+                resource = self._resource(source, identity=identity)
                 if resource is not None:
                     resources.append(dict(field=field, index=index, **resource))
         else:
             # Exact Ensembl release/species is already portable. Attached local
             # reference DNA is the only source path in its public state.
             source = state.get("genome_fasta")
-            resource = self._resource(Path(source)) if isinstance(source, str) else None
+            resource = self._resource(Path(source), identity=identity) if isinstance(source, str) else None
             if resource is not None:
                 resources.append(dict(field="genome_fasta", index=None, **resource))
-        if resources:
+        if identity:
+            for resource in resources:
+                field, index = resource['field'], resource['index']
+                content = dict(sha256=resource['sha256'], size=resource['size'])
+                if index is None:
+                    value[field] = content
+                else:
+                    value[field][index] = content
+            for key in ('cache_directory_path', 'copy_local_files_to_cache', 'decompress_on_download'):
+                value.pop(key, None)
+        elif resources:
             value[REFERENCE_FIELD] = dict(schema=REFERENCE_SCHEMA, resources=resources)
         return value
+
+    def source_identity(self, payload):
+        """Identify native sources by verified content, including absent bundles.
+
+        This reads available files or retained checksums; it never downloads,
+        indexes or copies annotation resources. Unverified locations stay exact.
+        """
+        return self._walk(_json_loads(payload), lambda value: self._encode_genome(value, identity=True))
 
     def _decode_genome(self, value):
         manifest = value.pop(REFERENCE_FIELD, None)
@@ -209,6 +231,11 @@ class NativeReferences:
             report["genome"] = native(report.get("genome"))
             report["rows"] = native(report["rows"])
             report["records"] = [native(value) for value in report["records"]]
+        for key in ('construct_assembly', 'cta_assembly'):
+            for saved in payload.get('selection', {}).get(key, {}).values():
+                for field in ('products', 'source_graph'):
+                    if saved.get(field) is not None:
+                        saved[field] = native(saved[field])
         return payload
 
     def index(self):

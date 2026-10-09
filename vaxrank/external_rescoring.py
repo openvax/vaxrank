@@ -685,23 +685,38 @@ def load_unified_external(args, epitope_config, options, genome):
         for dataset in native:
             dataset.index_native_references()
     from .config.loader import saved_construct_configuration, load_vaxrank_config
-    saved_configs = [saved_construct_configuration(r.dataset.selection.get('run_configuration'))
+    saved_designs = [(r.dataset, saved_construct_configuration(r.dataset.selection.get('run_configuration')))
                      for r in loaded_reports if r.dataset is not None]
-    saved_configs = [cfg for cfg in saved_configs if cfg is not None]
+    saved_designs = [(dataset, cfg) for dataset, cfg in saved_designs if cfg is not None]
+    saved_configs = [cfg for _, cfg in saved_designs]
     if saved_configs:
         # Compare effective merged settings: an explicit current YAML can
         # reconcile different source defaults, but input order cannot choose.
         resolved = [load_vaxrank_config(args, base_config=cfg) for cfg in saved_configs]
-        if any(cfg != resolved[0] for cfg in resolved):
+        from .construct_replay import resolved_saved_design
+        identities = [resolved_saved_design(args, cfg, dataset)
+                      for (dataset, _), cfg in zip(saved_designs, resolved)]
+        if len(set(identities)) != 1:
             raise ValueError('Saved inputs use different construct configurations; '
                              'supply explicit vaccine configuration overrides')
         args._saved_construct_config = saved_configs[0]
-        from .cli.vaccine_config_args import vaccine_config_from_args
+        from .construct_replay import saved_modalities
+        args._inherited_modality_config = saved_modalities(saved_designs[0][0])
+        args._inherited_source_limit = saved_designs[0][0].selection.get(
+            'run_configuration', {}).get('effective_design', {}).get('max_ranked_sources')
+        saved_types = saved_designs[0][0].selection.get('run_configuration', {}).get(
+            'effective_design', {}).get('vaccine_types')
+        if saved_types is not None and 'vaccine_type' not in getattr(args, '_explicit_cli_args', ()):
+            args.vaccine_type = saved_types
+        from .cli.vaccine_config_args import vaccine_config_from_args, manufacturability_config_from_args
         from .external_input import ExternalConstructOptions
         cli_args = getattr(args, '_external_vaccine_args', args)
         vaccine = vaccine_config_from_args(cli_args, merged_config=resolved[0])
+        from .cli.entry_point import resolve_vaccine_types
+        manufacturability = (manufacturability_config_from_args(cli_args, merged_config=resolved[0])
+                             if 'peptide' in resolve_vaccine_types(args) else None)
         options = ExternalConstructOptions.from_configs(
-            vaccine_config=vaccine, manufacturability_config=options.manufacturability_config)
+            vaccine_config=vaccine, manufacturability_config=manufacturability)
         args.vaccine_peptide_length = vaccine.preferred_peptide_length
         args.num_epitopes_per_vaccine_peptide = vaccine.num_target_epitopes_to_keep
         args.max_vaccine_peptides_per_variant = vaccine.max_vaccine_peptides_per_variant
@@ -721,11 +736,8 @@ def load_unified_external(args, epitope_config, options, genome):
         frame.attrs['cta_predictor'] = loaded_reports[0].report_df.attrs['cta_predictor']
     epitope_config = frame.attrs['epitope_dataset'].config
     dataset = frame.attrs['epitope_dataset']
-    if dataset.selection.get('cta_expression_admission'):
-        args._cta_assembly = dataset.selection.setdefault('cta_assembly', {})
-        args._saved_cta_construct_config = {
-            modality: saved['configuration']
-            for modality, saved in dataset.selection.get('cta_assembly', {}).items()}
+    from .construct_replay import initialize_construct_replay
+    initialize_construct_replay(args, dataset, options.vaccine_config, options.manufacturability_config)
     from .selection_policy import write_run_policy
     duplicate_policy = getattr(args, 'duplicate_candidates', None)
     if duplicate_policy is not None and 'candidate_id' not in dataset.result.df:
@@ -786,6 +798,7 @@ def load_unified_external(args, epitope_config, options, genome):
         if len(values) == 1 and entries[0].variant is not None:
             dna_vaf[entries[0].variant] = next(iter(values))
     ranked = rank_constructs(ranked)
+    ranked = ranked[:getattr(args, 'max_mutations_in_report', None)]
     passing_path = getattr(args, 'output_passing_variants_csv', None)
     if direct and passing_path:
         from varcode import Variant, StructuralVariant

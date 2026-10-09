@@ -71,6 +71,7 @@ class EpitopeDataset:
             self.mutation_fragments[identity] = fragment
             self.antigens[identity] = antigen
         self.epitopes += tuple(candidates)
+        return candidates
 
     @classmethod
     def from_predictions(cls, epitopes, *, result=None, **kwargs):

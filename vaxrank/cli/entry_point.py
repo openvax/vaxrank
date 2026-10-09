@@ -276,7 +276,7 @@ def construct_config_for_modality(args, modality):
     try:
         from ..config.loader import load_vaxrank_config, extract_construct_kwargs
         merged = load_vaxrank_config(args)
-        saved = getattr(args, '_saved_cta_construct_config', {}).get(modality, {})
+        saved = getattr(args, '_saved_modality_config', {}).get(modality, {})
         return {**saved, **extract_construct_kwargs(merged, modality)}
     except (FileNotFoundError, OSError, AttributeError) as e:
         logger.debug(
@@ -396,15 +396,18 @@ def _emit_peptide_constructs(args, ranked, target_dir):
     # ``--mhc-alleles`` and no LENS-inferred set).
     target_alleles = resolve_target_alleles(args)
     window_audit = []
-    from ..cta_design import restore_cta_products, record_cta_products
-    constructs = restore_cta_products(args, ranked, 'peptide', peptide_options)
+    from ..input_scope import normalize_alleles
+    context = dict(target_alleles=list(normalize_alleles(target_alleles, 'Assembly genotype')))
+    from ..construct_replay import restore_products, record_products
+    constructs = restore_products(args, ranked, 'peptide', peptide_options, context)
     if constructs is None:
         constructs = assemble_peptide_constructs(
             ranked, options=peptide_options, target_alleles=target_alleles,
             **({'window_audit': window_audit} if peptide_options.window_selection else {}))
     else:
-        window_audit = args._cta_assembly['peptide'].get('window_audit') or []
-    record_cta_products(args, ranked, 'peptide', peptide_options, constructs, window_audit=window_audit)
+        window_audit = args._construct_assembly['peptide'].get('window_audit') or []
+    record_products(args, ranked, 'peptide', peptide_options, constructs, context,
+                    window_audit=window_audit)
     # Canonical filenames inside the per-modality target directory:
     # vaccine.fasta + manifest.json + order_form.csv. Single-mode
     # runs land directly in args.output_dir; multi-mode runs land in
@@ -616,7 +619,7 @@ def resolve_target_alleles(args):
     return list(alleles or [])
 
 
-def resolve_mhc_for_linker_optimizer(args, config_kwargs=None):
+def _linker_prediction_configuration(args, config_kwargs=None):
     """Resolve junction-only prediction without altering candidate settings.
 
     Automatic mode reuses a single configured VCF/BAM predictor. With multiple
@@ -696,6 +699,14 @@ def resolve_mhc_for_linker_optimizer(args, config_kwargs=None):
     prediction_args.mhc_alleles_file = None
     prediction_args.mhc_peptide_lengths = list(RNAConstructConfig().junction_kmer_lengths)
     prediction_args.mhc_epitope_lengths = None
+    return prediction_args, alleles
+
+
+def resolve_mhc_for_linker_optimizer(args, config_kwargs=None):
+    """Initialize the planned junction model only when a new assembly needs it."""
+    prediction_args, alleles = _linker_prediction_configuration(args, config_kwargs)
+    if prediction_args is None:
+        return None, None
     try:
         predictor = mhc_binding_predictor_from_args(prediction_args)
     except (KeyError, ValueError) as error:
@@ -714,15 +725,14 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     def cfg(cli_attr, yaml_key):
         return coalesce_config_value(args, cli_attr, yaml_kwargs, yaml_key)
 
-    cta = getattr(args, '_cta_assembly', None) is not None
-    mhc_predictor, mhc_alleles = (None, None) if cta else resolve_mhc_for_linker_optimizer(args, yaml_kwargs)
-    junction_context = {name: cfg('mrna_' + name, name) for name in (
-        'junction_predictor', 'junction_alleles', 'junction_predictor_path', 'junction_predictor_models_path')}
-    if (cta and not junction_context['junction_predictor']
-            and cfg('mrna_optimize_linkers', 'optimize_linkers') is not False
-            and (cfg('mrna_optimize_linkers', 'optimize_linkers') is True
-                 or any(junction_context.values()))):
-        raise ValueError('Junction prediction requires --mrna-junction-predictor')
+    prediction_args, mhc_alleles = _linker_prediction_configuration(args, yaml_kwargs)
+    from ..input_scope import normalize_alleles
+    junction_context = dict(
+        junction_predictor=prediction_args.mhc_predictor[0][0] if prediction_args else None,
+        junction_alleles=','.join(mhc_alleles) if mhc_alleles else None,
+        junction_predictor_path=getattr(prediction_args, 'mhc_predictor_path', None),
+        junction_predictor_models_path=getattr(prediction_args, 'mhc_predictor_models_path', None),
+        target_alleles=list(normalize_alleles(resolve_target_alleles(args), 'Assembly genotype')))
     junction_candidates_raw = cfg(
         'mrna_junction_candidates', 'junction_candidates') or ''
     junction_candidates = tuple(
@@ -759,8 +769,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         candidates_per_slot=cfg(
             'mrna_candidates_per_slot', 'candidates_per_slot'),
         max_length_nt=cfg('mrna_max_length_nt', 'max_length_nt'),
-        optimize_linkers=(bool(junction_context['junction_predictor']) and
-                          cfg('mrna_optimize_linkers', 'optimize_linkers') is not False) if cta else mhc_predictor is not None,
+        optimize_linkers=prediction_args is not None,
         junction_swap_candidates=junction_candidates,
         junction_rank_strong=cfg(
             'mrna_junction_rank_strong', 'junction_rank_strong'),
@@ -775,11 +784,10 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     )
     record_construct_configuration(args, 'mrna', options)
     target_alleles = resolve_target_alleles(args)
-    from ..cta_design import restore_cta_products, record_cta_products
-    constructs = restore_cta_products(args, ranked, 'mrna', options, junction_context)
+    from ..construct_replay import restore_products, record_products
+    constructs = restore_products(args, ranked, 'mrna', options, junction_context)
     if constructs is None:
-        if cta:
-            mhc_predictor, mhc_alleles = resolve_mhc_for_linker_optimizer(args, yaml_kwargs)
+        mhc_predictor, mhc_alleles = resolve_mhc_for_linker_optimizer(args, yaml_kwargs)
         constructs = assemble_mrna_constructs(
             ranked, options=options,
             mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles,
@@ -790,7 +798,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
                       else 'candidate_model')
         for construct in constructs:
             construct.elements['junction_swap']['policy'] = policy
-    record_cta_products(args, ranked, 'mrna', options, constructs, junction_context)
+    record_products(args, ranked, 'mrna', options, constructs, junction_context)
     # Canonical filenames inside the per-modality target directory:
     # cds.fasta + no_polyA.fasta + full.fasta + manifest.json +
     # mrna-sequence-parts.csv. The cds/no_polyA/full FASTAs are
@@ -1367,7 +1375,8 @@ def run_cli(args_list=None):
         # Template reports want a dict here, not a Namespace —
         # ``vars(args)`` matches the pipeline path's
         # ``data['args']`` shape.
-        args_for_report = vars(args)
+        args_for_report = {key: value for key, value in vars(args).items()
+                           if key != '_design_dataset'}
         source = 'external'
         if getattr(args, 'output_json_file', None):
             data.update(variants=ranked_variants_with_vaccine_peptides,
@@ -1400,6 +1409,8 @@ def run_cli(args_list=None):
         write_cta_design(args, ranked_variants_with_vaccine_peptides,
                          report_df.attrs['epitope_dataset'], products,
                          predictor=report_df.attrs.get('cta_predictor'))
+    if getattr(args, '_design_dataset', None) is not None and args.output_epitopes:
+        args._design_dataset.save(args.output_epitopes)
     write_run_summary(args, patient_info, source)
 
     ########################
@@ -1650,6 +1661,10 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     # so we can filter out alt contigs that would crash downstream.
     variants = variant_collection_from_args(args)
     variants = filter_unannotatable_variants(variants)
+    capture_native = epitope_dataset is None and bool(getattr(args, 'output_epitopes', None))
+    if capture_native:
+        from ..construct_replay import pipeline_native_dataset
+        epitope_dataset = pipeline_native_dataset(args, variants, epitope_config)
     isovar_results = run_isovar(
         variants=variants,
         germline_variants=germline_variants_from_args(args, variants),
@@ -1666,7 +1681,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         df.to_csv(args.output_isovar_csv, index=False)
 
     prediction_config = epitope_config
-    if epitope_dataset is not None:
+    if epitope_dataset is not None and not capture_native:
         # Preserve every predicted occurrence for shared scoring against the
         # enriched evidence frame. No vaccine window has been selected yet.
         from msgspec.structs import replace
@@ -1684,19 +1699,21 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         manufacturability_config=manufacturability_config,
         allow_dna_only_fallback=getattr(args, 'allow_dna_only_fallback', False),
         **({'epitope_dataset': epitope_dataset} if epitope_dataset is not None else {}),
+        **({'defer_window_selection': False} if capture_native else {}),
         **({'policy_evaluations': policy_evaluations} if epitope_config.selection_policy else {}),
     )
 
-    if epitope_dataset is None and getattr(args, 'output_epitopes', ''):
-        # Collect all mutant epitopes across all variants
-        all_epitopes = []
-        for _variant, peptides in vaxrank_results.ranked_vaccine_peptides:
-            for vp in peptides:
-                all_epitopes.extend(vp.target_epitopes)
-        save_predictions(all_epitopes, args.output_epitopes)
-
     from ..selection_policy import write_run_policy
-    write_run_policy(args, policy_evaluations, epitope_config, vaccine_config)
+    run_policy = write_run_policy(args, policy_evaluations, epitope_config, vaccine_config)
+    if capture_native:
+        from ..construct_replay import initialize_construct_replay
+        from ..epitope_dataset import EpitopeDataset
+        epitope_dataset.result = EpitopeDataset.from_predictions(epitope_dataset.epitopes).result
+        epitope_dataset.policy_evaluations = policy_evaluations
+        if run_policy is not None:
+            epitope_dataset.selection['run_configuration'] = run_policy
+        initialize_construct_replay(args, epitope_dataset, vaccine_config, manufacturability_config)
+        epitope_dataset.save(args.output_epitopes)
     return vaxrank_results
 
 def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
@@ -1789,7 +1806,8 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
         #  but figure out how to do it in a backwards compatible way
         'variants': ranked_variants_with_vaccine_peptides_for_report,
         'patient_info': patient_info,
-        'args': vars(args),
+        'args': {key: value for key, value in vars(args).items()
+                 if key != '_design_dataset'},
         'dna_vaf_by_variant': dna_vaf_by_variant,
     }
     # Console-level summary of the resolved arguments already went out

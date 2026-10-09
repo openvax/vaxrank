@@ -142,6 +142,9 @@ def write_run_policy(args, evaluations, epitope_config, vaccine_config):
     resolved = configuration_provenance(args)
     resolved["effective_epitopes"] = msgspec.to_builtins(epitope_config)
     resolved["effective_vaccine_peptides"] = msgspec.to_builtins(vaccine_config)
+    from .cli.entry_point import resolve_vaccine_types
+    resolved["effective_design"] = dict(max_ranked_sources=getattr(args, 'max_mutations_in_report', None),
+                                      vaccine_types=resolve_vaccine_types(args))
     resolved["vaxrank_version"] = __version__
     resolved["effective_sha256"] = configuration_digest(resolved)
     resolved["evaluations"] = save_policy_evaluations(evaluations, directory / "policy_evidence")
@@ -155,16 +158,33 @@ def configuration_digest(record):
                                  key.startswith('effective_') and key != 'effective_sha256')})
 
 
+def modality_configuration(modality, options):
+    """Translate recorded assembly fields to their public YAML spellings."""
+    options = dict(options)
+    aliases = ({'n_terminal_acetylation': 'n_terminal_acetyl',
+                'c_terminal_amidation': 'c_terminal_amide'} if modality == 'peptide'
+               else {'junction_swap_candidates': 'junction_candidates'})
+    for source, target in aliases.items():
+        if source in options:
+            value = options.pop(source)
+            options[target] = ','.join(value) if source == 'junction_swap_candidates' else value
+    return options
+
+
 def record_construct_configuration(args, modality, options):
     """Include actual CLI-resolved construct settings in the run identity."""
     from dataclasses import asdict
     directory = getattr(args, 'output_dir', None)
-    if not directory:
+    dataset = getattr(args, '_design_dataset', None)
+    record = dataset.selection.get('run_configuration') if dataset is not None else None
+    if not directory and getattr(args, 'output_epitopes', None):
+        directory = str(args.output_epitopes) + '.policy'
+    path = Path(directory) / 'selection_policy.json' if directory else None
+    if record is None and path is not None and path.exists():
+        record = json.loads(path.read_text())
+    if record is None:
         return
-    path = Path(directory) / 'selection_policy.json'
-    if not path.exists():
-        return
-    record = json.loads(path.read_text())
     record.setdefault('effective_constructs', {})[modality] = asdict(options)
     record['effective_sha256'] = configuration_digest(record)
-    path.write_text(json.dumps(record, indent=2) + '\n')
+    if path is not None:
+        path.write_text(json.dumps(record, indent=2) + '\n')

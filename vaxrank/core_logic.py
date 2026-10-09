@@ -53,6 +53,7 @@ def run_vaxrank(
     allow_dna_only_fallback: bool = False,
     epitope_dataset=None,
     policy_evaluations=None,
+    defer_window_selection=True,
 ):
     """
     Parameters
@@ -83,7 +84,11 @@ def run_vaxrank(
 
     epitope_dataset
         Optional shared evidence collector. Captures predicted occurrences and
-        mutation fragments; the caller performs scoring and window selection.
+        mutation fragments. Selection is deferred unless defer_window_selection
+        is False, which captures evidence while retaining ordinary selection.
+
+    defer_window_selection
+        When False, collect evidence and also return selected vaccine peptides.
 
     allow_dna_only_fallback
         When True, variants without RNA support will attempt to construct
@@ -101,6 +106,7 @@ def run_vaxrank(
         allow_dna_only_fallback=allow_dna_only_fallback,
         epitope_dataset=epitope_dataset,
         policy_evaluations=policy_evaluations,
+        defer_window_selection=defer_window_selection,
     )
     ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
 
@@ -123,6 +129,7 @@ def create_vaccine_peptides_dict(
     allow_dna_only_fallback: bool = False,
     epitope_dataset=None,
     policy_evaluations=None,
+    defer_window_selection=True,
 ):
     """
     Parameters
@@ -174,6 +181,7 @@ def create_vaccine_peptides_dict(
             allow_dna_only_fallback=allow_dna_only_fallback,
             epitope_dataset=epitope_dataset,
             policy_evaluations=policy_evaluations,
+            defer_window_selection=defer_window_selection,
         )
 
         if not vaccine_peptides:
@@ -198,6 +206,7 @@ def vaccine_peptides_for_variant(
     allow_dna_only_fallback: bool = False,
     epitope_dataset=None,
     policy_evaluations=None,
+    defer_window_selection=True,
 ):
     """
     Parameters
@@ -262,8 +271,9 @@ def vaccine_peptides_for_variant(
         **({"policy_evaluations": policy_evaluations} if policy_evaluations is not None else {}),
     )
     if epitope_dataset is not None:
-        epitope_dataset.add_mutation(long_protein_fragment, epitopes)
-        return []  # The common workflow selects windows after scoring all inputs.
+        epitopes = epitope_dataset.add_mutation(long_protein_fragment, epitopes)
+        if defer_window_selection:
+            return []  # The common workflow selects windows after scoring all inputs.
     return vaccine_peptides_from_epitopes(
         variant=variant,
         long_protein_fragment=long_protein_fragment,

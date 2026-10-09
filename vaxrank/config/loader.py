@@ -407,7 +407,14 @@ def saved_construct_configuration(record):
         raise ValueError('Saved run configuration digest does not match its definition')
     vaccine = msgspec.to_builtins(msgspec.convert(record['effective_vaccine_peptides'], VaccineConfig))
     original = record.get('configuration', {})
-    base = {key: deepcopy(original[key]) for key in ('name', 'policy_metadata') if key in original}
+    base = {key: deepcopy(original[key]) for key in ('name', 'policy_metadata', 'peptide', 'mrna')
+            if key in original}
+    from ..selection_policy import modality_configuration
+    from .schema import PeptideConstructConfigSchema, MrnaConstructConfigSchema
+    for modality, schema in (('peptide', PeptideConstructConfigSchema), ('mrna', MrnaConstructConfigSchema)):
+        retained = modality_configuration(modality, record.get('effective_constructs', {}).get(modality, {}))
+        base.setdefault(modality, {}).update({key: value for key, value in retained.items()
+                                             if key in schema.__struct_fields__})
     for path, field in _VACCINE_CONFIG_MAPPING:
         _set_nested_value(base, path, vaccine[field])
     _set_nested_value(base, 'vaccine_peptides.max_epitopes_per_candidate',
