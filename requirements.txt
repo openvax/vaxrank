@@ -72,7 +72,9 @@ serializable>=1.1.0,<2.0.0
 # candidate CTA universe. Keep this reference pin aligned with PirlyGenes.
 # 1.8.208 verifies canonical/alternate gene IDs against the selected annotation
 # for admission and full candidate self exclusions (identity contract 1).
-oncoref==1.8.208
+# 1.8.210 restores identical CTA protein groups and refreshed expression
+# summaries without changing annotation-scoped gene identity or patient RNA.
+oncoref==1.8.210
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
 # of predictor_version strings. Always pulled in transitively via setuptools
 # / pip, but pinned explicitly so minimal / --no-deps installs don't break

@@ -26,10 +26,11 @@ class Annotation:
     reference_name = "GRCh38"
     annotation_name = "ensembl"
 
-    def __init__(self, release, primary_only=False):
+    def __init__(self, release, primary_only=False, fixture_name=None):
         self.release = self.annotation_version = release
+        fixture_name = fixture_name or f"prame-ensembl-{release}.json"
         self.source = json.loads((Path(__file__).parent / "data" / "cta_identity"
-                                  / f"prame-ensembl-{release}.json").read_text())
+                                  / fixture_name).read_text())
         self.genes, self.proteins = {}, {}
         for row in self.source["genes"]:
             if primary_only and row["gene_id"] == ALTERNATE:
