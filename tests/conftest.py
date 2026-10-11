@@ -14,8 +14,28 @@
 Pytest configuration for vaxrank tests.
 """
 
+from pathlib import Path
+
 import pytest
 import shutil
+
+
+@pytest.fixture
+def platform_cache_home(tmp_path, monkeypatch):
+    """Move datacache's platform cache directory under tmp_path; return the openvax root.
+
+    HOME decides the Linux (~/.cache) and macOS (~/Library/Caches) defaults
+    whichever library datacache uses to find them (appdirs before 1.25,
+    platformdirs after), so nothing inside datacache is patched.
+    """
+    from datacache import get_data_dir
+    from vaxrank.download_test_data import CACHE_NAMESPACE
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    root = Path(get_data_dir(CACHE_NAMESPACE))
+    assert root.is_relative_to(tmp_path), root  # Never a real cache.
+    return root
 
 
 @pytest.fixture(autouse=True)
