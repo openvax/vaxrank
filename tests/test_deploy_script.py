@@ -13,6 +13,7 @@
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -174,6 +175,78 @@ def test_deploy_resume_rejects_a_missing_original_artifact(tmp_path):
     assert result.returncode == 1
     assert "Cannot safely resume v3.13.9" in result.stderr
     assert "vaxrank-3.13.9.tar.gz" in result.stderr
+
+
+@pytest.mark.parametrize("arguments,valid", [
+    (["--dry-run"], True),
+    (["--dry-run", "1.0.0"], True),
+    (["v1.0.0", "--dry-run"], True),
+    (["--dry-run", "1.0.1"], False),
+    (["--dry-run", "v1.0.1"], False),
+    (["1.0.1"], False),
+    (["v1.0.1"], False),
+])
+def test_deploy_version_arguments_never_mutate_git(tmp_path, arguments, valid):
+    """Exercise real version reads and local/remote refs without package services."""
+    repo_root = Path(__file__).resolve().parents[1]
+    repo = tmp_path / "checkout"
+    repo.mkdir()
+    remote = tmp_path / "origin.git"
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], cwd=repo, check=True, capture_output=True,
+            text=True).stdout
+
+    git("init", "-b", "main")
+    git("init", "--bare", str(remote))
+    git("config", "user.name", "Deploy Test")
+    git("config", "user.email", "deploy-test@example.invalid")
+    for filename in ("deploy.sh", "lint.sh", "test.sh"):
+        shutil.copy2(repo_root / filename, repo / filename)
+    (repo / "vaxrank").mkdir()
+    version_path = repo / "vaxrank/version.py"
+    version_path.write_text('__version__ = "1.0.0"\n', encoding="utf-8")
+    git("add", ".")
+    git("commit", "--no-gpg-sign", "-m", "Initial release")
+    git("remote", "add", "origin", str(remote))
+    git("push", "-u", "origin", "main")
+    before = (version_path.read_bytes(), git("show-ref"), git("ls-remote", "origin"))
+
+    fake_python = tmp_path / "release-python"
+    python_log = tmp_path / "python-log"
+    fake_python.write_text(
+        "#!" + sys.executable + "\n"
+        "import os, sys\n"
+        "if sys.argv[1:] == ['-']:\n"
+        "    os.execv(sys.executable, [sys.executable, '-'])\n"
+        "with open(os.environ['PYTHON_LOG'], 'a') as log:\n"
+        "    log.write(' '.join(sys.argv[1:]) + '\\n')\n"
+        "if sys.argv[1:3] not in (['-m', 'pip'], ['-m', 'build'], "
+        "['-m', 'ruff'], ['-m', 'pytest']):\n"
+        "    sys.exit('Unexpected package publication command')\n",
+        encoding="utf-8")
+    fake_python.chmod(0o755)
+    env = dict(os.environ, PYTHON=str(fake_python), PYTHON_LOG=str(python_log))
+    env.pop("VAXRANK_DEPLOY_BRANCH", None)
+    result = subprocess.run(
+        ["bash", "deploy.sh", *arguments], cwd=repo, env=env,
+        capture_output=True, text=True, check=False)
+
+    assert (version_path.read_bytes(), git("show-ref"), git("ls-remote", "origin")) == before
+    assert git("status", "--porcelain") == ""
+    if valid:
+        assert result.returncode == 0, result.stderr
+        assert "Dry run: ready to release v1.0.0" in result.stdout
+        commands = python_log.read_text(encoding="utf-8").splitlines()
+        assert "-m build" in commands
+        assert any(command.startswith("-m ruff check") for command in commands)
+        assert "-m pytest tests" in commands
+    else:
+        assert result.returncode == 1, result.stderr
+        assert "does not match vaxrank/version.py (1.0.0)" in result.stderr
+        assert "Bump the version in a PR" in result.stderr
+        assert not python_log.exists()
 
 
 @pytest.mark.parametrize("status", [0, 1])

@@ -1137,7 +1137,10 @@ are not trusted or automatically deleted.
 - `deploy.sh`: runs lint/tests/build/upload through one Python environment,
   verifies PyPI artifacts by SHA-256, and safely resumes an interrupted upload
   from its original artifacts. Deploy is restricted to synchronized
-  `main`/`master`.
+  `main`/`master`. Bump the version in a PR, then run `./deploy.sh` after
+  merging. An optional version argument (with or without a `v` prefix) must
+  match `vaxrank/version.py`; it never edits or commits a version bump.
+  `--dry-run` validates and builds without uploading, tagging, or pushing.
 - `check_release_version.py --base origin/main`: compares the committed PR
   version with the fetched target branch and release tags, without importing
   either version file. Fetch the target branch and tags before running it
@@ -1145,7 +1148,10 @@ are not trusted or automatically deleted.
   choose a version that has no existing release tag.
 
 The **Release version** PR check fetches the current target branch and tags
-each time it runs, including when a PR is retargeted. A green check only covers
+each time it runs, including when a PR is retargeted. Closed PR events are
+skipped; if validation fails while an open PR's job is running, the workflow
+rechecks the live PR state before reporting a failure. Open PRs and failed
+state lookups still fail validation. A green check only covers
 the base and tags available during that run. Require this check with GitHub's
 **Require branches to be up to date before merging** option to prevent an old
 green result surviving another PR's release; otherwise rerun it after the
