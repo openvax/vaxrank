@@ -80,6 +80,17 @@ request common models with `--external-predictions fresh`. See the
 for complete commands, scoring choices, metadata and current Exacto/direct-input
 integration limits.
 
+ASCII/HTML/PDF annotation requirements follow the selected candidates. Native
+CTA and viral antigens report their retained source provenance through
+`--input-epitopes`, `--external-input epitopes=...`, or `--input-manifest`;
+these paths do not require an unrelated Ensembl release. Mutation candidates
+without retained transcript annotation require `--ensembl-release` matching
+their input reference. Saved mutation designs can instead use their retained
+annotation; relocated custom references can be prepared locally with
+`--index-native-references`. Missing reference files remain an explicit error
+when a mutation report needs them. Evidence-only exports do not require report
+annotation resources.
+
 Emit both peptide and mRNA constructs in one run — outputs land in
 per-modality subdirs:
 

@@ -31,6 +31,7 @@ import traceback
 
 from mhcgnomes.errors import ParseError as AlleleParseError
 from msgspec import DecodeError
+from pyensembl.download_cache import MissingLocalFile
 
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ USER_ERRORS = (
     ValueError,
     AlleleParseError,
     DecodeError,
+    MissingLocalFile,
 )
 
 
