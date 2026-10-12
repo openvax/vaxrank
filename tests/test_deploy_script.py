@@ -28,65 +28,6 @@ def _write_fake_python(path):
     path.chmod(0o755)
 
 
-def _deploy_resume_harness(tmp_path, *, include_sdist):
-    repo_root = Path(__file__).resolve().parents[1]
-    for filename in ("deploy.sh", "lint.sh", "test.sh"):
-        shutil.copy2(repo_root / filename, tmp_path / filename)
-
-    fake_bin = tmp_path / "fake-bin"
-    fake_bin.mkdir()
-    python_log = tmp_path / "python-log"
-    fake_python = fake_bin / "python"
-    fake_python.write_text(
-        "#!/bin/sh\n"
-        "if [ \"$1\" = \"-\" ]; then\n"
-        "  echo 3.13.9\n"
-        "  exit 0\n"
-        "fi\n"
-        "printf '%s\\n' \"$*\" >> \"$PYTHON_LOG\"\n",
-        encoding="utf-8",
-    )
-    fake_python.chmod(0o755)
-
-    fake_git = fake_bin / "git"
-    fake_git.write_text(
-        "#!/bin/sh\n"
-        "case \"$1 $2\" in\n"
-        "  'status --porcelain') exit 0 ;;\n"
-        "  'rev-parse HEAD') echo release-commit; exit 0 ;;\n"
-        "  'rev-parse @{upstream}') echo release-commit; exit 0 ;;\n"
-        "  'rev-parse -q') exit 0 ;;\n"
-        "  'rev-list -n') echo release-commit; exit 0 ;;\n"
-        "esac\n"
-        "exit 0\n",
-        encoding="utf-8",
-    )
-    fake_git.chmod(0o755)
-
-    dist = tmp_path / "dist"
-    dist.mkdir()
-    (dist / "vaxrank-3.13.9-py3-none-any.whl").write_bytes(b"wheel")
-    if include_sdist:
-        (dist / "vaxrank-3.13.9.tar.gz").write_bytes(b"sdist")
-
-    env = os.environ.copy()
-    env.update(
-        PATH=f"{fake_bin}{os.pathsep}{env['PATH']}",
-        PYTHON=str(fake_python),
-        PYTHON_LOG=str(python_log),
-        VAXRANK_DEPLOY_BRANCH="main",
-    )
-    result = subprocess.run(
-        ["bash", "deploy.sh", "--dry-run"],
-        cwd=tmp_path,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result, python_log
-
-
 def test_deploy_rejects_non_release_branch():
     repo_root = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
@@ -109,7 +50,7 @@ def test_deploy_rejects_non_release_branch():
         (
             "lint.sh",
             [],
-            ["-m", "ruff", "check", "vaxrank", "tests", "release_upload.py",
+            ["-m", "ruff", "check", "vaxrank", "tests", "release_deploy.py", "release_upload.py",
              "check_release_version.py", "examples/osteosarc_read_corpus"],
         ),
         ("test.sh", ["-q"], ["-m", "pytest", "tests", "-q"]),
@@ -158,25 +99,6 @@ def test_quality_scripts_prefer_the_active_environment_over_local_venv(
     ]
 
 
-def test_deploy_resume_reuses_the_original_artifacts(tmp_path):
-    result, python_log = _deploy_resume_harness(
-        tmp_path,
-        include_sdist=True,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert "Resuming release from v3.13.9" in result.stdout
-    assert "-m build" not in python_log.read_text(encoding="utf-8")
-
-
-def test_deploy_resume_rejects_a_missing_original_artifact(tmp_path):
-    result, _ = _deploy_resume_harness(tmp_path, include_sdist=False)
-
-    assert result.returncode == 1
-    assert "Cannot safely resume v3.13.9" in result.stderr
-    assert "vaxrank-3.13.9.tar.gz" in result.stderr
-
-
 @pytest.mark.parametrize("arguments,valid", [
     (["--dry-run"], True),
     (["--dry-run", "1.0.0"], True),
@@ -222,6 +144,8 @@ def test_deploy_version_arguments_never_mutate_git(tmp_path, arguments, valid):
         "    os.execv(sys.executable, [sys.executable, '-'])\n"
         "with open(os.environ['PYTHON_LOG'], 'a') as log:\n"
         "    log.write(' '.join(sys.argv[1:]) + '\\n')\n"
+        "if sys.argv[1:2] == ['release_deploy.py']:\n"
+        "    sys.exit(0)\n"
         "if sys.argv[1:3] not in (['-m', 'pip'], ['-m', 'build'], "
         "['-m', 'ruff'], ['-m', 'pytest']):\n"
         "    sys.exit('Unexpected package publication command')\n",
@@ -237,9 +161,8 @@ def test_deploy_version_arguments_never_mutate_git(tmp_path, arguments, valid):
     assert git("status", "--porcelain") == ""
     if valid:
         assert result.returncode == 0, result.stderr
-        assert "Dry run: ready to release v1.0.0" in result.stdout
-        commands = python_log.read_text(encoding="utf-8").splitlines()
-        assert "-m build" in commands
+        commands = python_log.read_text().splitlines()
+        assert "release_deploy.py --project vaxrank --version 1.0.0 --dry-run" in commands
         assert any(command.startswith("-m ruff check") for command in commands)
         assert "-m pytest tests" in commands
     else:

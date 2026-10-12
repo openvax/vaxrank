@@ -74,8 +74,6 @@ if [[ -n "${VERSION_INPUT}" && "${VERSION_INPUT#v}" != "${CURRENT_VERSION}" ]]; 
   exit 1
 fi
 
-TAG="v${VERSION}"
-
 # Deploys should only run from the release branch.
 CURRENT_BRANCH="${VAXRANK_DEPLOY_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 if [[ "${CURRENT_BRANCH}" != "main" && "${CURRENT_BRANCH}" != "master" ]]; then
@@ -103,47 +101,10 @@ if [[ "${HEAD_COMMIT}" != "${UPSTREAM_COMMIT}" ]]; then
   exit 1
 fi
 
-RESUMING=0
-if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-  TAG_COMMIT="$(git rev-list -n 1 "${TAG}")"
-  if [[ "${TAG_COMMIT}" != "${HEAD_COMMIT}" ]]; then
-    echo "Tag ${TAG} points to ${TAG_COMMIT}, not HEAD ${HEAD_COMMIT}." >&2
-    exit 1
-  fi
-  RESUMING=1
-fi
-
-WHEEL="dist/vaxrank-${VERSION}-py3-none-any.whl"
-SDIST="dist/vaxrank-${VERSION}.tar.gz"
-DISTRIBUTIONS=("${WHEEL}" "${SDIST}")
-
+# The coordinator owns build/upload/tag across independent clones.
 "$PYTHON" -m pip install --upgrade build twine
-if [[ "${RESUMING}" -eq 1 ]]; then
-  for distribution in "${DISTRIBUTIONS[@]}"; do
-    if [[ ! -f "${distribution}" ]]; then
-      echo "Cannot safely resume ${TAG}: original artifact is missing: ${distribution}" >&2
-      exit 1
-    fi
-  done
-  echo "Resuming release from ${TAG} with its original artifacts."
-else
-  rm -rf dist
-  "$PYTHON" -m build
-fi
-
+DEPLOY_ARGS=(--project vaxrank --version "${VERSION}")
 if [[ "${DRY_RUN}" -eq 1 ]]; then
-  echo "Dry run: ready to release ${TAG}"
-  exit 0
+  DEPLOY_ARGS+=(--dry-run)
 fi
-
-"$PYTHON" -m twine check "${DISTRIBUTIONS[@]}"
-
-if [[ "${RESUMING}" -eq 0 ]]; then
-  git tag "${TAG}"
-fi
-
-"$PYTHON" release_upload.py \
-  --project vaxrank \
-  --version "${VERSION}" \
-  "${DISTRIBUTIONS[@]}"
-git push origin "refs/tags/${TAG}"
+"$PYTHON" release_deploy.py "${DEPLOY_ARGS[@]}"

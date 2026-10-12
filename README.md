@@ -1140,7 +1140,14 @@ are not trusted or automatically deleted.
   `main`/`master`. Bump the version in a PR, then run `./deploy.sh` after
   merging. An optional version argument (with or without a `v` prefix) must
   match `vaxrank/version.py`; it never edits or commits a version bump.
-  `--dry-run` validates and builds without uploading, tagging, or pushing.
+  After the quality gates, `release_deploy.py` rechecks live main and claims
+  `refs/tags/release-locks/vVERSION` on `origin` before building. Independent
+  clones wait for that owner, then verify the completed release instead of
+  rebuilding it. Annotated release tags record the source commit and exact
+  wheel/sdist SHA-256 hashes, which must match PyPI.
+  `--dry-run` validates and builds an archive of committed sources in temporary
+  directories without uploading, tagging, pushing, or replacing a running
+  deploy's build files.
 - `check_release_version.py --base origin/main`: compares the committed PR
   version with the fetched target branch and release tags, without importing
   either version file. Fetch the target branch and tags before running it
@@ -1156,3 +1163,18 @@ the base and tags available during that run. Require this check with GitHub's
 **Require branches to be up to date before merging** option to prevent an old
 green result surviving another PR's release; otherwise rerun it after the
 target branch advances. The workflow itself does not change branch protection.
+
+An interrupted upload is resumed with its original `dist/` files and local
+annotated release tag. Missing or changed artifacts are rejected. Normal failures
+release the remote claim; a killed process or lost connection may leave one.
+Before removing a stale claim, confirm the owner has stopped and recover its
+original artifacts and tag. The error prints a deletion command guarded by that
+claim's exact object ID, so it cannot delete a newer owner's claim. Published
+versions with older lightweight tags lack recorded hashes and require manual
+artifact/tag verification; they are never rebuilt automatically.
+
+CI uses `scripts/pip_install.sh` for installs that resolve sibling releases.
+It makes at most three attempts, waiting 20 then 40 seconds, and bypasses pip's
+cache on retries. All requirements and constraints are unchanged; persistent
+failures retain pip's exit status. `PYTHON`, `PIP_INSTALL_ATTEMPTS`, and
+`PIP_INSTALL_RETRY_DELAY` can override the interpreter and retry settings.
