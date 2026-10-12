@@ -487,3 +487,11 @@ construction also requires explicit category opt-ins; see
 The [unified evidence design](unified_evidence.md) describes the intended
 model, not an additional supported CLI workflow. For current configuration
 keys and defaults, run `vaxrank --print-default-config`.
+
+## Assess every candidate SLP window
+
+Use `vaxrank-window-exposure` on an enriched saved dataset to enumerate all
+admitted target-containing windows before rank/count pruning and assess their
+core delivery under explicit kinetics. See [core window exposure](core-window-exposure.md)
+for 1 µg dose normalization, sensitivity scenarios, documented binding-core
+intervals, source coverage and the separate mRNA construct input.
