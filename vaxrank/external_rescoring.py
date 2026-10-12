@@ -344,6 +344,27 @@ def _annotate_sequence_matches(frame, epitopes):
     return frame
 
 
+def _retained_genomes(report):
+    """Host annotation carried by native mutation construction evidence."""
+    if report.dataset is None:
+        return ()
+    from pyensembl import Genome, EnsemblRelease
+    from .native_serialization import from_native_json
+    genomes = {id(fragment.variant.genome): fragment.variant.genome
+               for fragment in report.dataset.mutation_fragments.values()}
+    for saved in report.dataset.construction_reports:
+        if saved.get('genome') is not None:
+            reference = from_native_json(saved['genome'], (Genome, EnsemblRelease))
+            genomes[id(reference)] = reference
+    return tuple(genomes.values())
+
+
+def _validate_report_scopes(reports, *, genome=None, alleles=()):
+    return validate_input_scopes(
+        [r.input_provenance for r in reports], genome=genome, prediction_alleles=alleles,
+        retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in reports})
+
+
 def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, alleles=()):
     """Load and validate source evidence before any models or scoring run."""
     inputs = list(inputs)
@@ -373,7 +394,9 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             declared = scope_from_mapping(scope_declarations, str(path))
             stored_scope = validate_input_scopes([
                 replace(p, scope=combine_scopes(p.scope, declared, str(path), SHARED_FIELDS))
-                for p in report.dataset.provenance], genome=genome)
+                for p in report.dataset.provenance], genome=genome,
+                retained_genomes={p.input_id: _retained_genomes(report)
+                                 for p in report.dataset.provenance})
             producer_scope = combine_scopes(producer_scope, stored_scope, str(path), SHARED_FIELDS)
         scope = combine_scopes(
             producer_scope, scope_from_mapping(scope_declarations, str(path)), str(path))
@@ -389,8 +412,7 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             manifest_declarations=dict(declarations), report_declarations=producer_declarations,
             observed_mhc_alleles=normalize_alleles(observed, str(path)) if observed else ())
         reports.append(_namespace_report(report, provenance))
-    validate_input_scopes([r.input_provenance for r in reports],
-                          genome=genome, prediction_alleles=alleles)
+    _validate_report_scopes(reports, genome=genome, alleles=alleles)
     return reports
 
 
@@ -471,8 +493,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
         raise ValueError('A prediction prefix requires additive prediction mode')
     reports = list(prepared_reports) + read_reports(
         inputs, scopes=scopes, manifest_path=manifest_path, genome=genome, alleles=alleles)
-    validate_input_scopes([r.input_provenance for r in reports],
-                          genome=genome, prediction_alleles=alleles)
+    _validate_report_scopes(reports, genome=genome, alleles=alleles)
     epitope_config = report_config(reports, epitope_config)
     policy_evaluations = []
     original = [e for report in reports for e in report.epitopes]

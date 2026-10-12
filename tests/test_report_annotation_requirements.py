@@ -115,11 +115,20 @@ def test_native_mutation_reports_use_retained_annotation(mutation_native, tmp_pa
     delete_original_reference(tmp_path)
     monkeypatch.setattr('pyensembl.download_cache.DownloadCache._fetch', forbidden)
     report = tmp_path / 'mutation.txt'
-    run_cli(input_args(route, path, tmp_path, reference_assembly=None) + [
+    run_cli(input_args(route, path, tmp_path, reference_assembly='support-test-+') + [
         '--index-native-references', '--output-ascii-report', str(report),
         '--vaccine-peptide-length', '10', '--no-processing-aware-annotation'])
     text = report.read_text()
     assert 'Effect type: Substitution' in text and 'Effect description: p.K6Q' in text
+
+
+def test_native_manifest_rejects_conflicting_retained_reference(mutation_native, tmp_path):
+    _, path = mutation_native
+    report = tmp_path / 'wrong-reference.txt'
+    with pytest.raises(ValueError, match='conflicting reference_assembly'):
+        run_cli(input_args('manifest', path, tmp_path, reference_assembly='GRCh38') + [
+            '--output-ascii-report', str(report), '--no-processing-aware-annotation'])
+    assert not report.exists()
 
 
 def test_native_mutation_without_transcripts_requires_annotation(mutation_native, tmp_path):
