@@ -125,6 +125,12 @@ panels; Vaxrank does not yet optimize source minimum/maximum quotas jointly
 inside one concatenated mRNA construct. Free competition in a pooled run and
 separate source allocations are distinct design policies.
 
+The saved mixed dataset also feeds the opt-in
+[window exposure assessment](core-window-exposure.md). It evaluates available
+admitted, scored windows and retains each antigen's kind, targetable mask and
+admission record. Missing kinetics remains unassessed; exposure output does not
+change admission, rank or emitted products.
+
 ## Scientific interpretation and audit limits
 
 CTA reference membership cannot substitute for patient tumor evidence. The

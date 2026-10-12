@@ -1,7 +1,7 @@
 # Core delivery across candidate SLP windows
 
 `vaxrank-window-exposure` connects saved epitope scores and antigen contexts to
-mhctools' core-preserving exposure model. It enumerates **all admitted,
+MHCtools' core-preserving exposure model. It enumerates **all admitted,
 target-containing windows** in the requested length range before ordinary
 best-score and construct-count pruning. This opt-in analysis does not change the
 existing vaccine ranking or products.
@@ -39,7 +39,8 @@ engine. They are never silently replaced with free peptide.
 Free linear SLPs default to 1 µg **of each actual window**. Each contributing
 scored occurrence/allele keeps its original score, coordinates and source
 provenance. Gene, transcript, protein, species and input-scope metadata accompany
-every window. Repeated sequences at distinct positions remain distinct targets.
+every window, together with the native antigen kind, targetability and admission
+record. Repeated sequences at distinct positions remain distinct targets.
 
 ## Supply kinetics or run sensitivity scenarios
 

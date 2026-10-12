@@ -54,6 +54,7 @@ def enumerate_exposure_windows(dataset, min_length, max_length):
             'source_identifier', 'gene_name', 'gene_id', 'transcript_ids',
             'protein_ids', 'species', 'source_metadata')}
         source.update(input_provenance=provenance, source_id=source_id,
+                      antigen_kind=antigen.kind, antigen=to_native_json(antigen),
                       antigen_sequence=antigen.amino_acids)
         for length in range(min_length, min(max_length, len(antigen.amino_acids)) + 1):
             for start in range(len(antigen.amino_acids) - length + 1):

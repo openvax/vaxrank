@@ -16,7 +16,8 @@ Concatenating antigens with a fixed linker can create k-mers that span
 the junction (end of antigen N + linker + start of antigen N+1) which
 the patient's MHC can present even though the sequence was never
 present in the wild proteome and is not the intended neoantigen.
-These "chimeric" peptides dilute the immune response.
+These "chimeric" peptides are unintended candidate ligands; predicted
+binding or presentation alone does not establish an immune response.
 
 This module picks an inter-antigen linker per junction independently
 to minimize predicted MHC presentation of chimeric k-mers. The
@@ -41,14 +42,14 @@ from .vaccine_library import JUNCTION_SWAP_CANDIDATES, get_linker
 logger = logging.getLogger(__name__)
 
 
-# Default presentation-rank thresholds. mhcflurry-presentation reports
-# percentile rank where lower = stronger predicted presentation. The
-# convention in immunoinformatics is "rank ≤ 2.0" for "presented
-# binder" and "rank ≤ 0.5" for "strong binder". The optimizer
-# minimizes count of rank ≤ STRONG first, then rank ≤ MILD as
-# tie-breaker, then maximizes the worst-case rank.
-RANK_STRONG = 0.5   # high-confidence presentation
-RANK_MILD = 2.0     # any presentation
+# Existing percentile-rank heuristics, lower = stronger prediction.
+# Endpoint selection is recorded separately: affinity when available,
+# otherwise presentation. These thresholds are selection rules, not
+# probabilities or observations of presentation. The optimizer minimizes
+# count of rank ≤ STRONG first, then rank ≤ MILD as tie-breaker, then
+# maximizes the worst-case rank.
+RANK_STRONG = 0.5
+RANK_MILD = 2.0
 
 
 @dataclass

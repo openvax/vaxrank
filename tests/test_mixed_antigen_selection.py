@@ -42,23 +42,28 @@ def mixed_native(tmp_path):
     return path
 
 
+@pytest.mark.parametrize('modality', ['peptide', 'mrna'])
 @pytest.mark.parametrize('kind,expected', [(None, ['CTA', 'mutation', 'viral']),
                                           ('CTA', ['CTA']), ('viral', ['viral'])])
-def test_mixed_native_design_and_source_strata(mixed_native, tmp_path, monkeypatch, kind, expected):
+def test_mixed_native_design_and_source_strata(mixed_native, tmp_path, monkeypatch, modality, kind, expected):
     monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
     output = tmp_path / 'design'
     saved = tmp_path / 'selected.tsv'
     options = ['--input-epitopes', str(mixed_native), '--output-dir', str(output),
-               '--output-epitopes', str(saved), '--vaccine-type', 'peptide',
+               '--output-epitopes', str(saved), '--vaccine-type', modality,
                '--pdf-backend', 'weasyprint',
                '--index-native-references', '--vaccine-peptide-length', '10',
                '--no-processing-aware-annotation',
                '--config-text', 'vaccine_peptides.combined_score_expr=target_epitope_score']
+    if modality == 'mrna':
+        options += ['--mrna-antigens-per-construct', '3', '--mrna-max-constructs', '1',
+                    '--mrna-no-optimize-linkers', '--mrna-codon-method', 'use_best_codon']
     if kind:
         options += ['--config-text', f'epitopes.filter_expr=vaxrank_antigen_kind == "{kind}"']
     run_cli(options)
     manifest = json.loads((output / 'manifest.json').read_text())
-    sequences = [entry['sequence'] for entry in manifest]
+    sequences = ([entry['sequence'] for entry in manifest] if modality == 'peptide' else
+                 [antigen['aa'] for entry in manifest for antigen in entry['antigens']])
     by_kind = {a.kind: a.amino_acids for a in EpitopeDataset.load(mixed_native).antigens.values()
                if a.tumor_specificity.admits_construct}
     assert len(sequences) == len(expected)
@@ -71,8 +76,17 @@ def test_mixed_native_design_and_source_strata(mixed_native, tmp_path, monkeypat
     run_cli(['--input-epitopes', str(saved), '--output-dir', str(replay),
              '--index-native-references', '--pdf-backend', 'weasyprint',
              '--no-processing-aware-annotation'])
-    assert (replay / 'vaccine.fasta').read_bytes() == (output / 'vaccine.fasta').read_bytes()
+    for fasta in output.glob('*.fasta'):
+        assert (replay / fasta.name).read_bytes() == fasta.read_bytes()
     assert (replay / 'manifest.json').read_bytes() == (output / 'manifest.json').read_bytes()
+    if kind is None:
+        from vaxrank.core_exposure import assess_dataset_windows
+        request, result = assess_dataset_windows(EpitopeDataset.load(saved),
+            {'scenario': 'Synthetic mixed-source test', 'times_hours': [0, 1]},
+            min_length=8, max_length=10)
+        assert {c['metadata']['antigen_kind'] for c in request['candidates']} == set(expected)
+        assert all(c['status'] == 'unassessed' for c in result['candidates'])
+        assert any(g['reason'] == 'antigen_not_admitted' for g in result['source_coverage_gaps'])
 
 
 def test_native_source_fields_ignore_unverified_producer_labels(tmp_path):
