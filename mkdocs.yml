@@ -16,6 +16,7 @@ nav:
   - Home: index.md
   - Input workflows: input-workflows.md
   - Mixed antigen design: mixed-antigen-design.md
+  - Core delivery across vaccine windows: core-window-exposure.md
   - Unified evidence design: unified_evidence.md
   - Varcode, Isovar & Vaxrank: library-responsibilities.md
 

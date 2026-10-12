@@ -75,6 +75,7 @@ if __name__ == "__main__":
             "vaxrank-mutation-figure = vaxrank.cli.mutation_visualization:main",
             "vaxrank-evidence-figure = vaxrank.cli.evidence_visualization:main",
             "vaxrank-complex-result-figure = vaxrank.cli.complex_variant_visualization:main",
+            "vaxrank-window-exposure = vaxrank.cli.window_exposure:main",
             "vaxrank-test-data = vaxrank.download_test_data:main",
         ]},
     )
