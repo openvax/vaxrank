@@ -120,6 +120,8 @@ def window_exposure_request(windows, profile, *, n_term='free', c_term='free', s
                               'sequence': epitope.sequence[core_start:core_end], 'start': epitope.offset + core_start,
                               'end': epitope.offset + core_end,
                               'scored_ligand': epitope.sequence,
+                              'scored_ligand_start': epitope.offset,
+                              'scored_ligand_end': epitope.offset + len(epitope.sequence),
                               'core_source': interval['source'] if interval else None,
                               'allele': identity.to_string(), 'mhc_class': 'I' if identity.is_class1 else 'II',
                               'score_contribution': float(score), 'score_source': score_source,
@@ -134,18 +136,23 @@ def window_exposure_request(windows, profile, *, n_term='free', c_term='free', s
         for core in cores:
             key = core['start'], core['end'], core['allele']
             component = {name: core[name] for name in (
-                'prediction_id', 'scored_ligand', 'score_contribution', 'score_source', 'core_source')}
+                'prediction_id', 'scored_ligand', 'scored_ligand_start', 'scored_ligand_end',
+                'score_contribution', 'score_source', 'core_source')}
             if key not in merged:
                 merged[key] = {**core, 'score_components': [component]}
             else:
                 existing = merged[key]
                 if core['core_source'] is None or existing['core_source'] is None or any(
-                        c['scored_ligand'] == core['scored_ligand'] for c in existing['score_components']):
+                        (c['scored_ligand'], c['scored_ligand_start']) ==
+                        (core['scored_ligand'], core['scored_ligand_start'])
+                        for c in existing['score_components']):
                     raise ValueError('Repeated scored ligand occurrence/allele; resolve duplicate evidence before exposure assessment')
                 existing['score_components'].append(component)
                 existing['score_contribution'] += core['score_contribution']
                 existing['prediction_id'] = None
                 existing['scored_ligand'] = None
+                existing['scored_ligand_start'] = None
+                existing['scored_ligand_end'] = None
                 existing['core_source'] = 'See each documented score component'
                 existing['label'] = '%s@%s' % (core['sequence'], core['start'])
         cores = list(merged.values())
