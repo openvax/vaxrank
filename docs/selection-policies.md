@@ -184,5 +184,5 @@ The Sid experiment is a small behavioral check, not a clinical validation.
 Its pinned reference is a transcript subset; its prediction HLA panel differs
 from parts of the reported typing. The report retains those discrepancies,
 RNA rejection, missing cleavage context and disagreements with historical
-selections. See the [checked-in comparison](../examples/osteosarc_test_data/policy_comparison/README.md)
+selections. See the [checked-in comparison](https://github.com/openvax/vaxrank/blob/main/examples/osteosarc_test_data/policy_comparison/README.md)
 for measured results.
