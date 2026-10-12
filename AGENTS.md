@@ -44,6 +44,7 @@ git tag "v${VERSION}" && git push --tags
 - `./test.sh` — pytest with coverage (handles macOS arm64 WeasyPrint DYLD)
 - `./deploy.sh [--dry-run] [version]` — optional version assertion → lint → test → build → twine upload → tag → push. Versions are bumped in PRs; dry runs stop before upload/tag/push.
 - `release_deploy.py` — coordinates build/upload/tag through an owned remote ref; verifies annotated release-tag artifact hashes before accepting an already published release. Never steal another deploy's claim or rebuild an interrupted release's original artifacts.
+- `bash scripts/pip_install.sh <pip install arguments>` — bounded CI install retries with unchanged requirements; retries bypass pip's cache.
 - `./run-vaxrank-b16-test-data.sh` — end-to-end smoke on B16 test data
 
 **macOS arm64 note:** `test.sh`/`deploy.sh` re-export `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib` so WeasyPrint can find Pango/Cairo. Invoke the scripts, not `pytest` directly.

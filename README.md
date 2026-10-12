@@ -1172,3 +1172,9 @@ original artifacts and tag. The error prints a deletion command guarded by that
 claim's exact object ID, so it cannot delete a newer owner's claim. Published
 versions with older lightweight tags lack recorded hashes and require manual
 artifact/tag verification; they are never rebuilt automatically.
+
+CI uses `scripts/pip_install.sh` for installs that resolve sibling releases.
+It makes at most three attempts, waiting 20 then 40 seconds, and bypasses pip's
+cache on retries. All requirements and constraints are unchanged; persistent
+failures retain pip's exit status. `PYTHON`, `PIP_INSTALL_ATTEMPTS`, and
+`PIP_INSTALL_RETRY_DELAY` can override the interpreter and retry settings.
