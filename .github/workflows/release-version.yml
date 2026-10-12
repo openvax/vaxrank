@@ -6,10 +6,12 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   check:
     name: Release version
+    if: github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -25,6 +27,20 @@ jobs:
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           git fetch --no-recurse-submodules --force --tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/version-check-base"
-          python check_release_version.py --base refs/remotes/origin/version-check-base --head "$HEAD_SHA"
+          if python check_release_version.py --base refs/remotes/origin/version-check-base --head "$HEAD_SHA"; then
+            exit 0
+          fi
+          # The PR can merge after this run's open-event payload was created.
+          # Recheck live state after validation so fetching the merged base (or
+          # its new release tag) cannot turn a valid merged PR red. API failures
+          # and all states other than closed still fail the check.
+          PR_STATE=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .state)
+          if [[ "$PR_STATE" == "closed" ]]; then
+            echo "PR #${PR_NUMBER} is now closed; pre-merge version validation no longer applies."
+            exit 0
+          fi
+          exit 1

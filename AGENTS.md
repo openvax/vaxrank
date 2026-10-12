@@ -42,7 +42,7 @@ git tag "v${VERSION}" && git push --tags
 - `./develop.sh` — editable install (uses `uv` if available, else pip)
 - `./lint.sh` — `ruff check` on `vaxrank/` and `tests/`
 - `./test.sh` — pytest with coverage (handles macOS arm64 WeasyPrint DYLD)
-- `./deploy.sh [version]` — lint → test → optional version bump → build → twine upload → tag → push
+- `./deploy.sh [--dry-run] [version]` — optional version assertion → lint → test → build → twine upload → tag → push. Versions are bumped in PRs; dry runs stop before upload/tag/push.
 - `./run-vaxrank-b16-test-data.sh` — end-to-end smoke on B16 test data
 
 **macOS arm64 note:** `test.sh`/`deploy.sh` re-export `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib` so WeasyPrint can find Pango/Cairo. Invoke the scripts, not `pytest` directly.

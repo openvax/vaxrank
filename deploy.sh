@@ -14,6 +14,7 @@ fi
 
 usage() {
   echo "Usage: ./deploy.sh [--dry-run] [version]" >&2
+  echo "The optional version must match vaxrank/version.py; bump versions in a PR." >&2
 }
 
 DRY_RUN=0
@@ -67,8 +68,10 @@ PY
 )"
 
 VERSION="${CURRENT_VERSION}"
-if [[ -n "${VERSION_INPUT}" ]]; then
-  VERSION="${VERSION_INPUT#v}"
+if [[ -n "${VERSION_INPUT}" && "${VERSION_INPUT#v}" != "${CURRENT_VERSION}" ]]; then
+  echo "Requested version ${VERSION_INPUT} does not match vaxrank/version.py (${CURRENT_VERSION})." >&2
+  echo "Bump the version in a PR, merge it, then run ./deploy.sh without a version argument." >&2
+  exit 1
 fi
 
 TAG="v${VERSION}"
@@ -88,31 +91,6 @@ fi
 
 ./lint.sh
 ./test.sh
-
-# Bump version, commit, and push if version was provided.
-if [[ -n "${VERSION_INPUT}" && "${VERSION}" != "${CURRENT_VERSION}" ]]; then
-  VERSION="${VERSION}" "$PYTHON" - <<'PY'
-import os
-import re
-from pathlib import Path
-
-version = os.environ["VERSION"]
-path = Path("vaxrank/version.py")
-text = path.read_text()
-new_text, n = re.subn(
-    r'__version__ = "([^"]+)"',
-    f'__version__ = "{version}"',
-    text,
-    count=1,
-)
-if n != 1:
-    raise SystemExit("Failed to update vaxrank/version.py; unexpected format.")
-path.write_text(new_text)
-PY
-  git add vaxrank/version.py
-  git commit -m "Bump version to ${VERSION}"
-  git push
-fi
 
 HEAD_COMMIT="$(git rev-parse HEAD)"
 if ! UPSTREAM_COMMIT="$(git rev-parse '@{upstream}')"; then
@@ -154,9 +132,6 @@ else
 fi
 
 if [[ "${DRY_RUN}" -eq 1 ]]; then
-  if [[ -n "${VERSION_INPUT}" && "${VERSION}" != "${CURRENT_VERSION}" ]]; then
-    echo "Dry run: would bump version to ${VERSION}"
-  fi
   echo "Dry run: ready to release ${TAG}"
   exit 0
 fi
