@@ -8,15 +8,11 @@
 
 # vaxrank
 
-Vaxrank is the neoantigen ranking component of the
-[OpenVax](https://www.openvax.org/) pipeline for designing personalized
-cancer vaccines.  Given either (a) a patient's somatic mutations + tumor
-RNA-seq + HLA type, or (b) a pre-computed neoepitope report from
-[LENS](https://github.com/openvax/lens) or
-[pVACseq](https://github.com/griffithlab/pVACtools), Vaxrank selects and
-ranks the mutant antigens most likely to elicit a T-cell response and
-emits them as the vaccine type(s) the user requests — peptide pools,
-mRNA constructs, or analysis reports for review.
+Vaxrank is the antigen ranking and vaccine design component of the
+[OpenVax](https://www.openvax.org/) pipeline for personalized cancer vaccines.
+It uses somatic variants, tumor RNA-seq and HLA types, or previously scored
+candidate evidence, to select antigens and design peptide or mRNA constructs.
+Reports support review of the evidence and resulting designs.
 
 ## Contents
 
@@ -51,10 +47,11 @@ vaxrank \
 ```
 
 Required inputs:
-- `--vcf` — somatic variants (VCF from any variant caller)
-- `--bam` — tumor RNA-seq alignments (used by Isovar to assemble mutant transcripts)
-- `--mhc-alleles` — patient HLA alleles (e.g. `HLA-A*02:01,HLA-B*07:02`)
-- `--mhc-predictor` — which MHC binding predictor to use (see
+
+- `--vcf`: somatic variants (VCF from any variant caller)
+- `--bam`: tumor RNA-seq alignments (used by Isovar to assemble mutant transcripts)
+- `--mhc-alleles`: patient HLA alleles (e.g. `HLA-A*02:01,HLA-B*07:02`)
+- `--mhc-predictor`: which MHC binding predictor to use (see
   [MHC Binding Predictors](#mhc-binding-predictors))
 
 **Experimental:** [CTA inputs](docs/design/expression-cta-inputs.md),
@@ -84,8 +81,8 @@ Reports use retained annotation when available. CTA/viral reports need no
 Ensembl release; mutation reports need `--ensembl-release` when annotation is
 missing. This applies equally to single files, external inputs and manifests.
 
-Emit both peptide and mRNA constructs in one run — outputs land in
-per-modality subdirs:
+Emit both peptide and mRNA constructs in one run. Outputs use separate
+subdirectories:
 
 ```sh
 vaxrank --vcf v.vcf --bam r.bam \
@@ -96,48 +93,40 @@ vaxrank --vcf v.vcf --bam r.bam \
 
 ## Overview
 
-Personalized cancer vaccines (also called neoantigen vaccines) work by
-training the immune system to recognise peptides that arise from somatic
-mutations unique to a patient's tumor.  Designing such a vaccine requires
-a computational pipeline that bridges raw sequencing data and the
-peptide synthesiser:
+Vaxrank connects antigen evidence to vaccine design and synthesis planning.
 
-1. **Variant calling** — Whole-exome or whole-genome sequencing of the
-   tumor and matched normal identifies somatic mutations.  This is
-   typically done with tools such as MuTect or Strelka, upstream of
-   Vaxrank.
-2. **Mutant transcript assembly** — Tumor RNA-seq reads overlapping each
-   mutation are assembled by [Isovar](https://github.com/openvax/isovar)
-   into RNA-supported sequence, with protein subsequences predicted where
-   a reading frame is justified. Nearby variants and splice differences
-   can be represented when the reads and reference context support them;
-   RNA sequence support is not a direct measurement of protein translation.
-3. **MHC binding prediction** — Candidate epitopes (short peptide
-   subsequences spanning the mutation) are scored for predicted binding
-   to the patient's HLA class I molecules using
-   [mhctools](https://github.com/openvax/mhctools), which wraps
-   predictors such as [MHCflurry](https://github.com/openvax/mhcflurry),
-   [NetMHCpan](https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/),
-   and [BigMHC](https://github.com/KarchinLab/bigmhc).
-4. **Vaccine peptide selection** — Vaxrank assembles longer synthetic long
-   peptides (SLPs, typically 25-mers) around the mutation, scores them by
-   the number and strength of their predicted MHC-binding epitopes,
-   filters out peptides that appear in the reference proteome, annotates
-   known cancer hotspot mutations, and ranks candidates by a combined
-   immunogenicity and manufacturability score.
-5. **Vaccine-type dispatch** — the ranked candidates are written out as
-   one or more of the vaccine types selected via `--vaccine-type`: a
-   peptide pool ready for synthesis, an mRNA construct ready for IVT, or
-   both. Analysis reports are emitted independently. Steps 1-3 are
-   skipped when an external neoepitope report is supplied via
-   `--input-lens`, `--input-pvacseq`, `--input-manifest` or `--external-input`.
-   Format-specific context adapters feed shared construct and report writers.
+**Choose the vaccine type first:** peptide, mRNA, or both (`--vaccine-type`).
+This choice sets defaults and constraints for antigen selection, construct
+assembly and reporting, including peptide synthesis checks or mRNA sequence
+optimization.
 
-The responsibility split is consistent across the libraries: Varcode generates
-transcript hypotheses and predicts coding consequences; Isovar reconstructs
-RNA-supported sequences and reconciles evidence; Vaxrank evaluates the resulting
-protein/peptide candidates. See [library responsibilities](https://openvax.github.io/vaxrank/library-responsibilities/)
-for evidence handoffs and current integration limits.
+**Upstream preparation (outside Vaxrank):**
+
+- Call somatic variants from aligned tumor and matched-normal DNA using a tool
+  such as [Mutect2](https://gatk.broadinstitute.org/hc/en-us/articles/5257897695387-Mutect2)
+  or [Strelka2](https://github.com/Illumina/strelka), producing a VCF.
+- Align tumor RNA-seq reads to produce a BAM.
+- Determine the patient's HLA alleles.
+
+**Within Vaxrank:**
+
+1. **Prepare candidates.** Use [Varcode](https://github.com/openvax/varcode) for
+   coding-consequence annotation and [Isovar](https://github.com/openvax/isovar)
+   for RNA-supported sequences and predicted protein context where justified.
+2. **Score epitopes.** Run predictors through
+   [MHCtools](https://github.com/openvax/mhctools) and score/filter their evidence
+   with [Topiary](https://github.com/openvax/topiary), or reuse saved predictions.
+3. **Select and assemble.** Rank candidates, select antigen windows and apply
+   the chosen vaccine type's limits, linkers and assembly settings.
+4. **Export designs.** Write peptide or mRNA sequences, synthesis planning files
+   and requested analysis reports.
+
+Previously scored inputs can bypass reconstruction and prediction. See
+[input workflows](https://openvax.github.io/vaxrank/input-workflows/) for saved
+evidence, LENS/pVACseq reports and optional new predictions, and
+[library responsibilities](https://openvax.github.io/vaxrank/library-responsibilities/)
+for the evidence handoffs. CTA/viral integration and mixed-source selection
+remain **experimental**.
 
 ## Vaccine designs
 
@@ -150,7 +139,7 @@ across vaccine types) plus the type itself:
 | `--antigen-content` | `mutation_spanning` / `minimal_epitope` | What each antigen *is* |
 | `--antigens-per-construct` | `1` / `N` | How many antigens to concatenate per construct |
 
-Combined, the matrix yields 8 distinct designs — 4 per vaccine type:
+The matrix yields 8 designs, 4 per vaccine type:
 
 | Type | Content | Per-construct | Design name | Reference |
 |---|---|---|---|---|
@@ -172,7 +161,7 @@ separate antigens.
 ### Peptide designs
 
 **SLP (default).** Mutation-spanning long peptide, one antigen per
-construct — the PGV-001 canonical design.
+construct, as in the PGV-001 design.
 
 ```sh
 vaxrank --vcf v.vcf --bam r.bam --output-dir vaccine_out/
@@ -189,9 +178,8 @@ vaxrank --vcf v.vcf --bam r.bam \
         --peptide-antigens-per-construct 5 --peptide-linker AAY
 ```
 
-**Minimal-epitope peptide.** A single short MHC ligand per construct
-— useful when minimum-length manufacturability matters more than
-flanking context.
+**Minimal-epitope peptide.** A single short MHC ligand per construct,
+useful when minimum-length manufacturability matters more than flanking context.
 
 ```sh
 vaxrank --vcf v.vcf --bam r.bam \
@@ -202,7 +190,7 @@ vaxrank --vcf v.vcf --bam r.bam \
 ### mRNA designs
 
 **BioNTech FixVac / iNeST canonical.** Multi-antigen mutation-spanning
-mRNA — the default for `--vaccine-type mrna`. Antigens are linked with
+mRNA, the default for `--vaccine-type mrna`. Antigens are linked with
 `(G4S)2` and emitted as CDS, no-polyA, and full (with polyA) FASTAs
 plus a structured manifest.
 
@@ -211,9 +199,8 @@ vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-dir mrna_out/
 # → mrna_out/{cds.fasta, no_polyA.fasta, full.fasta, manifest.json, layers.csv}
 ```
 
-**String-of-beads mRNA.** Concatenated minimal-epitope antigens —
-short MHC ligands linked together rather than mutation-spanning
-windows.
+**String-of-beads mRNA.** Short MHC ligands linked together
+rather than mutation-spanning windows.
 
 ```sh
 vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-dir out/ \
@@ -243,13 +230,11 @@ vaxrank --vcf v.vcf --bam r.bam --vaccine-type peptide mrna --output-dir vaccine
 
 ## Vaccine types and output modes
 
-Vaxrank always ranks. The vaccine-type writer fires only when both
-`--vaccine-type` and `--output-dir` are set. `--vaccine-type` is
-multi-valued (default `peptide`): pass one or more of `peptide` / `mrna`.
-Single-mode runs write canonical files directly in `--output-dir`;
-multi-mode runs scope into per-modality subdirs (`DIR/peptide/`,
-`DIR/mrna/`, …). Analysis reports use their own `--output-*` flags
-and are independent of the vaccine-type dispatch.
+Choose `peptide`, `mrna` or both with `--vaccine-type` (default `peptide`).
+Vaxrank uses this choice during design. `--output-dir` enables construct files.
+A single vaccine type writes directly into the directory; multiple types write
+into `peptide/` and `mrna/` subdirectories. Analysis reports use their own
+`--output-*` flags and can be requested without writing construct files.
 
 ```sh
 # Peptide pool (default vaccine type)
@@ -276,9 +261,9 @@ vaxrank --input-lens patient.lens.tsv --output-ascii-report report.txt \
 
 ### Analysis reports
 
-Per-variant tables of ranked vaccine peptide candidates, predicted
-epitopes, and manufacturability scores. Independent of vaccine-type
-dispatch — runs whenever any report flag is set.
+Tables of ranked candidates, predicted epitopes and applicable manufacturability
+metrics. Request reports with the corresponding output flags, with or without
+construct files.
 
 | Flag | Output |
 |---|---|
@@ -473,7 +458,7 @@ schema (`modality`, `name`, `length`, `length_unit`, `antigen_names`,
 exposes `cds`, `no_polya_nt`, `full_nt`, per-antigen `antigens` (each
 with AA + nt), and a structured `elements` dict with one entry per
 layer (5' UTR, signal peptide, antigens, linkers per junction, MITD,
-stop codon, 3' UTR, polyA) — every layer carrying both AA (where
+stop codon, 3' UTR, polyA). Each layer carries both AA (where
 applicable) and nt forms for direct inspection.
 
 ### Shared linker library and grammar
@@ -489,7 +474,7 @@ construct design can be ported between peptide and mRNA backbones.
 | `EAAAK` | rigid α-helical | When fused antigens need separation rather than flex ([Arai *Protein Eng* 2001](https://doi.org/10.1093/protein/14.8.529)) |
 | `RKRR`, `RVKR`, `RKRKR` | furin cleavage | R-X-(K/R)-R motif ([Hosaka *J Biol Chem* 1991](https://pubmed.ncbi.nlm.nih.gov/1905715/)); preclinical in DNA vaccines, no clinical vaccine use as of 2025 |
 | `AAY` | proteasome-friendly | Empirical foundation: [Livingston *Vaccine* 2001](https://doi.org/10.1016/S0264-410X(01)00233-X); see citation in `vaxrank/vaccine_library.py` for the AAY-vs-GGGS empirical landscape ([Yang 2015](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4514284/) vs [Aguilar-Gurrieri 2023](https://doi.org/10.1007/s00262-023-03409-3)) |
-| `AAA` | alanine spacer | [Aguilar-Gurrieri *Cancer Immunol Immunother* 2023](https://doi.org/10.1007/s00262-023-03409-3) — strongest empirical alanine spacer for MHC-I presentation |
+| `AAA` | alanine spacer | [Aguilar-Gurrieri *Cancer Immunol Immunother* 2023](https://doi.org/10.1007/s00262-023-03409-3): strongest empirical alanine spacer for MHC-I presentation |
 | `GPGPG` | helper-T spacer | Between MHC-II epitopes ([Livingston *J Immunol* 2002](https://doi.org/10.4049/jimmunol.168.11.5499)) |
 | `P2A`, `T2A`, `F2A`, `E2A` | self-cleaving 2A | Co-translational ribosomal skipping for mRNA constructs ([Donnelly *J Gen Virol* 2001](https://doi.org/10.1099/0022-1317-82-5-1027); [Kim *PLoS ONE* 2011](https://doi.org/10.1371/journal.pone.0018556)). In peptide mode these are functionally inert and the manifest annotates them as such. |
 
@@ -504,7 +489,7 @@ construct design can be ported between peptide and mRNA backbones.
 | `Gn` | n glycines (no S) | `G4` → `GGGG` |
 
 Repeat counts are capped at 100. 2A entries (codon-frozen, positional)
-are rejected in repeat forms — use the base linker once.
+are rejected in repeat forms. Use the base linker once.
 
 Every name resolves through `vaccine_library.get_linker(name)` and
 returns a `Linker` with primary-source citations attached. The
@@ -524,19 +509,19 @@ Vaxrank is the ranking engine behind the OpenVax neoantigen vaccine
 pipeline, which has been used in several clinical trials of personalized
 cancer vaccines at Mount Sinai:
 
-- **PGV001** ([NCT02721043](https://clinicaltrials.gov/study/NCT02721043)) —
+- **PGV001** ([NCT02721043](https://clinicaltrials.gov/study/NCT02721043)):
   A phase I study of personalised neoantigen vaccines in patients with
   solid and haematologic malignancies.  All 11 treated patients developed
   neoantigen-specific T-cell responses
   ([Saxena et al., Cancer Discovery 2025](https://pubmed.ncbi.nlm.nih.gov/40094414/)).
 - **PGV001 + atezolizumab in urothelial cancer**
-  ([NCT03359239](https://clinicaltrials.gov/study/NCT03359239)) —
+  ([NCT03359239](https://clinicaltrials.gov/study/NCT03359239)):
   A phase I trial combining PGV001 with checkpoint inhibition.
   The combination was safe and induced neoantigen-specific CD4+ and CD8+
   T-cell responses in all evaluated patients
   ([Saxena et al., Nature Cancer 2025](https://pubmed.ncbi.nlm.nih.gov/40346292/)).
 - **PGV001 + TTFields in newly diagnosed glioblastoma**
-  ([NCT03223103](https://clinicaltrials.gov/study/NCT03223103)) —
+  ([NCT03223103](https://clinicaltrials.gov/study/NCT03223103)):
   A phase I trial combining PGV001 with tumor treating fields and
   standard-of-care temozolomide (paper in preparation).
 
@@ -584,8 +569,8 @@ Homebrew's `/opt/homebrew/lib` by default. Add this to your shell profile:
 export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH"
 ```
 
-(Intel macOS doesn't need this — Homebrew's `/usr/local/lib` is in dyld's
-default fallback path.)
+Intel macOS already includes Homebrew's `/usr/local/lib` in dyld's default
+fallback path.
 
 ## Configuration
 
@@ -757,7 +742,7 @@ filtering/scoring lives under `epitopes`, construct ranking under
 ## MHC Binding Predictors
 
 Vaxrank integrates with MHC binding predictors via
-[mhctools](https://github.com/openvax/mhctools).
+[MHCtools](https://github.com/openvax/mhctools).
 Use `--mhc-predictor <name>` to select one:
 
 | `--mhc-predictor` | Tool | MHC Class | Notes |
@@ -805,33 +790,27 @@ Use `--mhc-predictor <name>` to select one:
 
 ### Upstream inputs
 
-Vaxrank accepts two distinct input shapes, both producing the same
-ranked-vaccine-peptides intermediate:
+For the **VCF + BAM workflow**, variant calling, read alignment and HLA typing
+happen upstream, for example in
+[neoantigen-vaccine-pipeline](https://github.com/openvax/neoantigen-vaccine-pipeline):
 
-**Full pipeline** (VCF + BAM): Vaxrank does not perform variant
-calling or read alignment itself.  Those steps happen upstream,
-typically as part of a larger bioinformatics pipeline (e.g.
-[neoantigen-vaccine-pipeline](https://github.com/openvax/neoantigen-vaccine-pipeline)):
+1. Call somatic variants from tumor and matched-normal DNA with
+   [Mutect2](https://gatk.broadinstitute.org/hc/en-us/articles/5257897695387-Mutect2)
+   or [Strelka2](https://github.com/Illumina/strelka), producing a VCF.
+2. Align tumor RNA-seq reads to produce a BAM.
+3. Supply the patient's HLA alleles from typing or clinical records.
 
-1. Tumor and matched-normal DNA are sequenced and aligned; a variant
-   caller (MuTect, Strelka, etc.) produces a VCF of somatic mutations.
-2. Tumor RNA is sequenced and aligned to produce a BAM file.
-3. The patient's HLA class I alleles are typed (from sequencing data or
-   clinical records).
+Vaxrank then coordinates Varcode annotation, Isovar reconstruction, MHCtools
+prediction, and candidate selection for the requested vaccine type.
 
-Vaxrank takes these three inputs — the VCF, the tumor RNA BAM, and the
-HLA alleles — runs Isovar transcript assembly + MHC binding prediction
-+ ranking, and produces vaccine peptide candidates.
-
-**External-input mode** (`--input-lens` or `--input-pvacseq`): when an
-upstream tool (e.g. [LENS](https://github.com/openvax/lens) or pVACseq)
-has already produced a per-(peptide, allele) neoepitope report, Vaxrank
-skips Isovar + MHC prediction and consumes the report directly. The
-per-row `pep_context` (LENS) or `Best Peptide` / `MT Epitope Seq`
-(pVACseq) is used as the SLP-style antigen window. Downstream dispatch
-— reports + peptide constructs + mRNA constructs — is identical to the
-full pipeline. pVACseq parsing is delegated to topiary, so both
-`all_epitopes.tsv` and `all_epitopes.aggregated.tsv` are accepted.
+**Previously scored evidence** can enter through saved native datasets,
+[LENS](https://github.com/openvax/lens),
+[pVACseq](https://github.com/griffithlab/pVACtools), or an input manifest.
+These paths reuse supplied sequences and predictions by default; new predictions
+can be requested explicitly. They feed shared selection, assembly and report
+writers. pVACseq parsing is delegated to Topiary and accepts both
+`all_epitopes.tsv` and `all_epitopes.aggregated.tsv`. See
+[input workflows](https://openvax.github.io/vaxrank/input-workflows/) for details.
 
 LENS `FUSION` rows are also eligible for construct ranking. Vaxrank treats
 their caller-supplied `pep_context` as an assembled fusion antigen rather than
@@ -940,15 +919,15 @@ constructed around each mutation.  Each candidate is scored by the
 combined immunogenicity of the epitopes it contains.  Candidates are
 then filtered and ranked by:
 
-1. **CandidateEpitope content** — total predicted immunogenicity score
-2. **Reference proteome filtering** — exact matches in the selected
+1. **CandidateEpitope content**: total predicted immunogenicity score
+2. **Reference proteome filtering**: exact matches in the selected
    genome's annotated protein sequences are removed from mutation-derived
    candidates, regardless of the source transcript biotype
-3. **Cancer hotspot annotation** — variants at known recurrently mutated
+3. **Cancer hotspot annotation**: variants at known recurrently mutated
    positions (bundled data from
    [cancerhotspots.org](https://www.cancerhotspots.org/), ~2,700
    mutations across cancer types) are flagged
-4. **Manufacturability** — tie-breaking by hydropathy-based synthesis
+4. **Manufacturability**: tie-breaking by hydropathy-based synthesis
    difficulty (C-terminal and 7-mer window GRAVY scores)
 
 Reference matching includes available annotated NMD, non-stop-decay, IG/TR,
@@ -960,15 +939,15 @@ rebuilt automatically. See the [GENCODE/Ensembl biotype definitions](https://www
 
 ### Data model
 
-Vaxrank's central data unit is the **VaccinePeptide** (VP) — one ranked
-candidate of "this is a vaccine peptide we should consider for this antigen."
+Vaxrank's central data unit is the **VaccinePeptide** (VP), a ranked antigen
+window considered for vaccine construction.
 A VP bundles:
 
-- a source-agnostic **`VaccineAntigen`** — the amino-acid sequence,
+- a source-agnostic **`VaccineAntigen`**: the amino-acid sequence,
   targetable intervals, source provenance, and tumor-specificity attestation;
 - for ordinary SNV/indel antigens, a **`MutantProteinFragment`** with mutation
   positions, gene name, source variant, and RNA evidence metrics;
-- **`CandidateEpitope`** objects — peptide occurrences carrying context,
+- **`CandidateEpitope`** objects: peptide occurrences carrying context,
   provenance, per-allele/model/version `mhctools.Prediction` values, known
   comparators and DSL scores. Target epitopes drive vaccine ranking.
 
@@ -988,24 +967,24 @@ ranked_variants_with_vaccine_peptides = [
 
 For each variant, vaxrank can emit multiple alternate constructs:
 
-- `--vaccine-peptide-length` — controls SLP size and the default RNA context
+- `--vaccine-peptide-length`: controls SLP size and the default RNA context
   request; `--protein-sequence-length` or legacy `--padding-around-mutation`
   can explicitly override the reconstruction context.
-- `max_vaccine_peptides_per_variant` (config) — controls how many
+- `max_vaccine_peptides_per_variant` (config): controls how many
   alternate windows per variant make it into the ranked output.
 - `--peptide-candidates-per-slot` / `--mrna-candidates-per-slot`
-  (CLI) — controls how many VP alternates per variant slot the
+  (CLI): controls how many VP alternates per variant slot the
   *construct assembler* renders into FASTAs.
 
 Reports render one section per variant; within a section, each VP gets
-its own per-epitope sub-table — column counts can differ per VP
+its own per-epitope sub-table. Column counts can differ per VP
 (e.g. when pepsickle credibility tagging succeeded for one VP and
 failed for another, only the successful VP's table shows the
 processing columns).
 
 ### Key modules
 
-**Shared upstream:**
+**Shared evidence and selection:**
 
 - `core_logic.py`: Main vaccine peptide selection algorithm
 - `epitope_logic.py`: CandidateEpitope scoring and filtering
@@ -1016,7 +995,7 @@ processing columns).
 - `vaccine_peptide.py`: Vaccine peptide scoring and manufacturability
 - `vaccine_library.py`: Shared linker vocabulary + compositional grammar (`(BASE)N`, `GnSm`, `AnY`, `An`, `Gn`) with primary-source citations
 
-**Vaccine-type-specific (downstream):**
+**Assembly for each vaccine type:**
 
 - `peptide.py`: Peptide construct assembly + FASTA / JSON manifest / vendor order-form CSV writers; sub-modes `slp` / `minimal_epitope` / `multi_epitope`
 - `mrna.py`: mRNA construct assembly + three-FASTA / structured manifest / long-format CSV writers. DnaChisel codon optimization, 2A frozen-codon handling, configurable polyA tail (default A120, optional segmented BNT162b2 pattern), per-junction MHC-aware linker swap (issue #247)
@@ -1072,7 +1051,7 @@ Vaxrank is built on the [OpenVax](https://github.com/openvax) ecosystem:
 - [pyensembl](https://github.com/openvax/pyensembl): Reference genome annotation
 - [varcode](https://github.com/openvax/varcode): Variant effect prediction from DNA
 - [isovar](https://github.com/openvax/isovar): RNA-based mutant transcript assembly and variant phasing
-- [mhctools](https://github.com/openvax/mhctools): Unified interface to MHC binding predictors
+- [MHCtools](https://github.com/openvax/mhctools): Unified interface to MHC binding predictors
 
 Other key dependencies:
 - `msgspec`: Configuration serialization (YAML/JSON)
