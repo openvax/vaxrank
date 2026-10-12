@@ -1,7 +1,10 @@
-# Expression-first CTA admission (#584)
+# Experimental expression-first CTA admission
+
+**Experimental research workflow.** Admission and ranking do not establish
+clinical safety or efficacy.
 
 Vaxrank designs CTA vaccines from patient expression tables and HLA without
-VCF/BAM. OncoRef supplies the CTA reference; Topiary/mhctools predict the
+VCF/BAM. OncoRef supplies the CTA reference; Topiary/MHCtools predict the
 admitted proteins, and the shared DSL selects/ranks peptide or mRNA designs.
 
 ```bash

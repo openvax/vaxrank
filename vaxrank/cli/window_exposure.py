@@ -1,4 +1,4 @@
-"""Assess every SLP window from saved scored antigen evidence."""
+"""Experimental exposure assessment of saved antigen windows."""
 
 import argparse
 import csv
@@ -35,7 +35,8 @@ def main(argv=None):
                                  for path, data in ((args.profile, profile_data),
                                      (args.input_epitopes, Path(args.input_epitopes).read_bytes()))]
         rows = vaccine_window_rows(result)
-        report = format_vaccine_window_report(result)
+        report = '**Experimental research output.** Clinical safety and efficacy are not established.\n\n'
+        report += format_vaccine_window_report(result)
         report += '\n## Source coverage\n\nAll admitted target-containing windows were evaluated before ranking or count limits. '
         report += 'Targets use supplied core intervals when documented, otherwise the saved scored ligands; no shorter binding core was inferred.\n\n'
         for gap in result['source_coverage_gaps']:
