@@ -156,9 +156,32 @@ def test_clean_duplicate_version_merge_is_rejected(repo):
     assert (repo / "second-change").exists()
 
 
-@pytest.mark.parametrize("update", ["base", "tag"])
-def test_workflow_fetches_current_target_and_tags(repo, tmp_path_factory, update):
-    """Run the actual workflow step against a local remote advanced after checkout."""
+@pytest.fixture
+def github_api(tmp_path_factory):
+    """Keep workflow tests offline and record the exact read-only API request."""
+    bin_dir = tmp_path_factory.mktemp("github-api")
+    executable = bin_dir / "gh"
+    executable.write_text(
+        "#!" + sys.executable + "\n"
+        "import os, sys\n"
+        "from pathlib import Path\n"
+        "assert sys.argv[1:] == ['api', 'repos/openvax/vaxrank/pulls/601', "
+        "'--jq', '.state'], sys.argv\n"
+        "Path(os.environ['GH_CALL_LOG']).write_text('called')\n"
+        "print(os.environ['TEST_PR_STATE'])\n"
+        "sys.exit(int(os.environ['TEST_GH_EXIT']))\n",
+        encoding="utf-8")
+    executable.chmod(0o755)
+    return bin_dir
+
+
+@pytest.mark.parametrize("update", ["none", "base", "tag", "merge", "squash"])
+@pytest.mark.parametrize("state,api_exit", [
+    ("open", 0), ("closed", 0), ("unknown", 0), ("closed", 1),
+])
+def test_workflow_handles_live_pr_state(
+        repo, tmp_path_factory, github_api, update, state, api_exit):
+    """Run the workflow after the remote advances while an open-PR job queues."""
     (repo / "check_release_version.py").write_bytes(CHECKER.read_bytes())
     head = commit_version(repo, "3.19.7")
     checkout = tmp_path_factory.mktemp("version-check") / "checkout"
@@ -167,16 +190,47 @@ def test_workflow_fetches_current_target_and_tags(repo, tmp_path_factory, update
     if update == "base":
         git(repo, "checkout", "main")
         commit_version(repo, "3.19.7")
-    else:
+    elif update == "tag":
         git(repo, "tag", "v3.19.7", "main")
+    elif update in ("merge", "squash"):
+        git(repo, "checkout", "main")
+        if update == "merge":
+            git(repo, "merge", "--no-gpg-sign", "--no-ff", "--no-edit", head)
+        else:
+            git(repo, "merge", "--squash", head)
+            git(repo, "commit", "--no-gpg-sign", "-m", "Squash PR")
+        git(repo, "tag", "v3.19.7")
 
     workflow = yaml.safe_load(
         (ROOT / ".github/workflows/release-version.yml").read_text(encoding="utf-8"))
     command = workflow["jobs"]["check"]["steps"][-1]["run"]
+    call_log = checkout / "github-api-call"
     result = subprocess.run(
         ["bash", "-eo", "pipefail", "-c", command], cwd=checkout,
         env=dict(os.environ, BASE_REF="main", HEAD_SHA=head,
-                 PATH=str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"]),
+                 GITHUB_REPOSITORY="openvax/vaxrank", PR_NUMBER="601",
+                 TEST_PR_STATE=state, TEST_GH_EXIT=str(api_exit),
+                 GH_CALL_LOG=str(call_log),
+                 PATH=os.pathsep.join([
+                     str(github_api), str(Path(sys.executable).parent), os.environ["PATH"]])),
         capture_output=True, text=True, check=False)
-    assert result.returncode == 1
-    assert ("must be greater" if update == "base" else "already tagged") in result.stderr
+    if update == "none":
+        assert result.returncode == 0, result.stderr
+        assert "has no existing tag" in result.stdout
+        assert not call_log.exists()
+    else:
+        assert ("already tagged" if update == "tag" else "must be greater") in result.stderr
+        if state == "closed" and api_exit == 0:
+            assert result.returncode == 0, result.stderr
+            assert "pre-merge version validation no longer applies" in result.stdout
+        else:
+            assert result.returncode == 1
+            assert "no longer applies" not in result.stdout
+        assert call_log.exists(), result.stderr
+
+
+def test_workflow_skips_closed_event_payloads():
+    """Edited events can arrive after merge; GitHub must skip the entire job."""
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/release-version.yml").read_text(encoding="utf-8"))
+    assert workflow["jobs"]["check"]["if"] == "github.event.pull_request.state == 'open'"
