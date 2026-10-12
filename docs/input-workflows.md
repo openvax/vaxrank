@@ -435,6 +435,12 @@ The mRNA manifest's `elements.junction_swap` records the selected policy and
 whether optimization ran. Its `prediction` record preserves observed model
 names/versions/kinds, query alleles and lengths, and the peptide queries for
 each candidate linker at each junction. Unknown model versions remain null.
+Junction queries use MHCtools' public `predict()` API, including its adapter for
+legacy predictors. The rank policy uses affinity when the model returns that
+endpoint, otherwise presentation; it never adds the two endpoint counts.
+This preserves historical MHCflurry affinity scoring. Allele-independent
+processing and haplotype-only results do not become allele-specific hits.
+The manifest records this rank policy alongside the returned model identities.
 This metadata also survives native RNAConstruct serialization. Optional
 cleavage annotation can be disabled with `--no-processing-aware-annotation`.
 

@@ -34,6 +34,8 @@ import logging
 import warnings
 from dataclasses import dataclass, field
 
+from mhctools.pred import Kind
+
 from .vaccine_library import JUNCTION_SWAP_CANDIDATES, get_linker
 
 logger = logging.getLogger(__name__)
@@ -118,20 +120,33 @@ def score_junction_kmers(kmers, alleles, predictor, models=None):
 
     Uses Python's standard warning filter to warn once per call site when:
       - the predictor returned predictions but none had a usable
-        ``percentile_rank`` (e.g. binding-affinity-only mhctools
-        wrappers like RandomBindingPredictor), or
+        ``percentile_rank``, or
       - the predictor returned predictions but the allele filter
         dropped all of them (the optimizer would silently pick the
         first candidate).
     Callers can configure repetition through the standard :mod:`warnings` API.
+    Use affinity ranks when available (preserving legacy MHCflurry scoring),
+    otherwise presentation ranks. Never combine the two endpoints or count
+    allele-independent processing predictions as allele-specific evidence.
     If ``models`` is supplied, retain the distinct model identities actually
     returned by the predictor; missing names or versions remain unknown.
     """
     if not kmers:
         return []
-    # Predictor API: mhctools.BasePredictor returns BindingPrediction
-    # objects with .peptide / .allele / .percentile_rank attributes.
-    predictions = predictor.predict_peptides(kmers)
+    # The public API returns one PeptideResult per input occurrence. Its
+    # BasePredictor adapter also supports legacy production predictors.
+    results = list(predictor.predict(kmers))
+    if len(results) != len(kmers):
+        raise ValueError('Junction predictor must return one result per peptide occurrence')
+    predictions = []
+    for peptide, result in zip(kmers, results):
+        for prediction in result.preds:
+            if prediction.peptide != peptide:
+                raise ValueError('Junction predictor returned a mismatched peptide: '
+                                 f'expected {peptide!r}, got {prediction.peptide!r}')
+            predictions.append(prediction)
+    rank_kind = (Kind.pMHC_affinity if any(
+        p.kind == Kind.pMHC_affinity for p in predictions) else Kind.pMHC_presentation)
     rows = []
     allele_set = set(alleles) if alleles else None
     n_total = 0
@@ -143,6 +158,8 @@ def score_junction_kmers(kmers, alleles, predictor, models=None):
                 'predictor_name', 'predictor_version', 'kind')}
             if model not in models:
                 models.append(model)
+        if p.kind != rank_kind:
+            continue
         n_total += 1
         if allele_set and p.allele not in allele_set:
             continue
@@ -215,8 +232,8 @@ def optimize_linkers(
     alleles : list[str]
         Patient HLA alleles, e.g. ``['HLA-A*02:01', 'HLA-B*07:02']``.
     predictor : mhctools.BasePredictor
-        An MHC predictor with a ``predict_peptides(peptides)`` method
-        (e.g. ``mhcflurry.MHCflurryPredictor``). The predictor's
+        An MHC predictor with a ``predict(peptides)`` method returning
+        MHCtools ``PeptideResult`` objects. The predictor's
         configured alleles must include those in ``alleles``.
     candidate_names : iterable of str
         Linker names parseable by ``vaccine_library.get_linker``.
@@ -292,6 +309,7 @@ def optimize_linkers(
         'predictor_class': type(predictor).__module__ + '.' + type(predictor).__name__,
         'alleles': list(alleles),
         'peptide_lengths': list(k_lengths),
+        'rank_kind_policy': 'affinity_if_available_else_presentation',
         'models': [],
         'requests': [],
         'scored_prediction_count': 0,
