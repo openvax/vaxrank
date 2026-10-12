@@ -57,6 +57,9 @@ Required inputs:
 - `--mhc-predictor` — which MHC binding predictor to use (see
   [MHC Binding Predictors](#mhc-binding-predictors))
 
+For evidence requirements, common ranking and source-specific selection across
+mutation, CTA and viral candidates, see the [mixed antigen design guide](docs/mixed-antigen-design.md).
+
 CTA vaccines can start from a gene or transcript expression table and patient
 HLA, without VCF/BAM. See the [expression-first CTA guide](docs/design/expression-cta-inputs.md)
 for the explicit measurement contract, MAGE exclusions, optional verified

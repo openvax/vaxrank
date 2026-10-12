@@ -196,6 +196,13 @@ class EpitopeDataset:
             if "candidate_allele" in frame:
                 frame["allele"] = frame["candidate_allele"].where(
                     frame["source_observation_id"].notna(), frame["allele"])
+        # Consumer-owned fields come from typed construction evidence, never
+        # a producer label or peptide sequence match. Original columns remain
+        # untouched in result; missing construction evidence stays unknown.
+        frame['vaxrank_antigen_kind'] = frame.prediction_id.map(
+            {key: antigen.kind for key, antigen in self.antigens.items()})
+        frame['vaxrank_admission_status'] = frame.prediction_id.map(
+            {key: antigen.tumor_specificity.status for key, antigen in self.antigens.items()})
         return frame
 
     def scoring_frames(self):
