@@ -142,3 +142,17 @@ def test_overlapping_ligands_sharing_a_documented_core_keep_all_score_components
     assert cores[0]['score_contribution'] == 3.
     assert len(cores[0]['score_components']) == 2
     assert {c['prediction_id'] for c in cores[0]['score_components']} == {'shared-0', 'shared-1'}
+
+
+def test_identical_ligands_at_different_positions_can_document_one_shared_core():
+    vp = vaccine('AAAAAA', [(0, 4, 1., False), (1, 5, 2., False)])
+    epitopes = tuple(replace(e, prediction_id='position-%s' % i) for i, e in enumerate(vp.epitopes))
+    evidence = EpitopeDataset.from_predictions(epitopes, antigens={e.prediction_group_source: vp.antigen for e in epitopes})
+    scenario = profile()
+    scenario['core_intervals'] = [
+        {'prediction_id': 'position-0', 'allele': 'HLA-A*02:01', 'start': 1, 'end': 3, 'source': 'Synthetic annotation 1'},
+        {'prediction_id': 'position-1', 'allele': 'HLA-A*02:01', 'start': 0, 'end': 2, 'source': 'Synthetic annotation 2'}]
+    request, _ = assess_dataset_windows(evidence, scenario, min_length=6, max_length=6)
+    core, = request['candidates'][0]['cores']
+    assert (core['start'], core['end'], core['score_contribution']) == (1, 3, 3.)
+    assert {c['scored_ligand_start'] for c in core['score_components']} == {0, 1}
