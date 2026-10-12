@@ -610,6 +610,18 @@ def test_legacy_predictor_uses_mhctools_adapter():
     assert 0 <= rows[0][2] <= 100
 
 
+@pytest.mark.parametrize('kind,message', [
+    ('pMHC_presentation', 'allele filter'), ('antigen_processing', 'no affinity or presentation')])
+def test_allele_free_predictions_are_not_junction_hits(kind, message):
+    class AlleleFreePredictor:
+        def predict(self, peptides):
+            return [PeptideResult((Prediction(kind=kind, peptide=p, score=.1,
+                                             percentile_rank=.5),)) for p in peptides]
+
+    with pytest.warns(JunctionPredictionWarning, match=message):
+        assert score_junction_kmers(['SIINFEKLA'], [], AlleleFreePredictor()) == []
+
+
 @pytest.mark.parametrize('peptides, message', [
     ([], 'one result per peptide'), (['WRONGPEPT'], 'mismatched peptide')])
 def test_invalid_public_api_result_fails(peptides, message):

@@ -161,7 +161,7 @@ def score_junction_kmers(kmers, alleles, predictor, models=None):
         if p.kind != rank_kind:
             continue
         n_total += 1
-        if allele_set and p.allele not in allele_set:
+        if not p.allele or (allele_set and p.allele not in allele_set):
             continue
         n_seen += 1
         rank = getattr(p, 'percentile_rank', None)
@@ -185,7 +185,14 @@ def score_junction_kmers(kmers, alleles, predictor, models=None):
             "allele filter dropped all of them; the optimizer cannot "
             "rank chimeric k-mers and will fall back to the first "
             "candidate. Check that the predictor's configured alleles "
-            "include the patient HLA set.",
+            "include the patient MHC set and return allele-specific ranks.",
+            JunctionPredictionWarning,
+            stacklevel=2,
+        )
+    if predictions and not n_total:
+        warnings.warn(
+            "Junction-swap predictor returned no affinity or presentation predictions; "
+            "the optimizer cannot rank chimeric k-mers and will fall back to the first candidate.",
             JunctionPredictionWarning,
             stacklevel=2,
         )
