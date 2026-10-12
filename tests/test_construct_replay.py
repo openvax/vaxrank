@@ -63,7 +63,6 @@ def product_files(directory):
 @pytest.mark.parametrize('content', ['mutation_spanning', 'minimal_epitope'])
 def test_actual_general_products_replay_offline(source, tmp_path, monkeypatch, optimized, content):
     model = ContextPredictor()
-    model.predict_peptides = lambda peptides: [p for result in model.predict(peptides) for p in result.preds]
     monkeypatch.setattr('mhctools.cli.predictors_from_args', lambda args: [model])
     monkeypatch.setattr('vaxrank.cli.entry_point.mhc_binding_predictor_from_args', lambda args: model)
     native, first, second = tmp_path / 'native.tsv', tmp_path / 'first', tmp_path / 'replay'
@@ -219,7 +218,7 @@ def test_current_cli_reconciles_pooled_saved_construct_defaults(source, tmp_path
                '--peptide-max-constructs', str(i + 1))
     manifest = write_input_manifest(tmp_path / 'inputs.json', [('epitopes', path) for path in natives],
                                     patient_id='patient')
-    argv = ['--input-manifest', manifest, '--output-dir', str(tmp_path / 'pool'), '--ensembl-release', '110',
+    argv = ['--input-manifest', manifest, '--output-dir', str(tmp_path / 'pool'),
             '--no-processing-aware-annotation']
     with pytest.raises(ValueError, match='different construct configurations'):
         run_cli(argv)

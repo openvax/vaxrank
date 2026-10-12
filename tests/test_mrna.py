@@ -921,7 +921,6 @@ def test_junction_swap_meta_appears_in_elements_when_optimizer_runs():
     """When the junction-aware optimizer runs (predictor + alleles
     supplied), elements['junction_swap'] is populated. Without
     predictor, elements['junction_swap'] reflects the fallback."""
-    from types import SimpleNamespace
     from vaxrank.junction_swap import junction_kmers
     from varcode import Variant
 
@@ -931,16 +930,7 @@ def test_junction_swap_meta_appears_in_elements_when_optimizer_runs():
     g4s2_kmers = junction_kmers(a1, "GGGGSGGGGS", a2, k_lengths=(9,))
     rank_table = {(g4s2_kmers[0], "HLA-A*02:01"): 0.05}
 
-    class StubPredictor:
-        def __init__(self, table): self.table = table
-        def predict_peptides(self, peptides):
-            out = []
-            for p in peptides:
-                out.append(SimpleNamespace(
-                    peptide=p, allele="HLA-A*02:01",
-                    percentile_rank=self.table.get(
-                        (p, "HLA-A*02:01"), 99.0)))
-            return out
+    from .test_junction_swap import StubPredictor
 
     pep_a = mutation_vaccine_peptide(a1, gene_name='GENEA')
     pep_b = mutation_vaccine_peptide(a2, gene_name='GENEB')

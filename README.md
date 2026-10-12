@@ -57,6 +57,9 @@ Required inputs:
 - `--mhc-predictor` — which MHC binding predictor to use (see
   [MHC Binding Predictors](#mhc-binding-predictors))
 
+For evidence requirements, common ranking and source-specific selection across
+mutation, CTA and viral candidates, see the [mixed antigen design guide](docs/mixed-antigen-design.md).
+
 CTA vaccines can start from a gene or transcript expression table and patient
 HLA, without VCF/BAM. See the [expression-first CTA guide](docs/design/expression-cta-inputs.md)
 for the explicit measurement contract, MAGE exclusions, optional verified
@@ -79,6 +82,17 @@ request common models with `--external-predictions fresh`. See the
 [input workflow guide](https://openvax.github.io/vaxrank/input-workflows/)
 for complete commands, scoring choices, metadata and current Exacto/direct-input
 integration limits.
+
+ASCII/HTML/PDF annotation requirements follow the selected candidates. Native
+CTA and viral antigens report their retained source provenance through
+`--input-epitopes`, `--external-input epitopes=...`, or `--input-manifest`;
+these paths do not require an unrelated Ensembl release. Mutation candidates
+without retained transcript annotation require `--ensembl-release` matching
+their input reference. Saved mutation designs can instead use their retained
+annotation; relocated custom references can be prepared locally with
+`--index-native-references`. Missing reference files remain an explicit error
+when a mutation report needs them. Evidence-only exports do not require report
+annotation resources.
 
 Emit both peptide and mRNA constructs in one run — outputs land in
 per-modality subdirs:

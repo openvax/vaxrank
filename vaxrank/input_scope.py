@@ -225,10 +225,12 @@ def resolve_input_genome(genome):
     return genome
 
 
-def validate_input_scopes(provenance, *, genome=None, prediction_alleles=()):
+def validate_input_scopes(provenance, *, genome=None, prediction_alleles=(),
+                          retained_genomes=None):
     """Validate the whole batch before DSL scoring, output or live prediction."""
     shared = InputScope()
     genome = resolve_input_genome(genome)
+    retained_genomes = retained_genomes or {}
     for source in provenance:
         shared = combine_scopes(shared, source.scope, source.path, SHARED_FIELDS)
         if len(provenance) > 1:
@@ -246,7 +248,10 @@ def validate_input_scopes(provenance, *, genome=None, prediction_alleles=()):
             if outside:
                 raise ValueError(f"{source.path}: reported alleles outside declared "
                                  f"mhc_alleles: {sorted(outside)}")
-        if genome is None and source.scope.reference_assembly is not None:
+        references = list(retained_genomes.get(source.input_id, ()))
+        if genome is not None:
+            references.append(genome)
+        if not references and source.scope.reference_assembly is not None:
             # Variant adapters historically skip unresolvable rows. Reject a
             # bad declared assembly here instead of silently dropping them.
             try:
@@ -254,17 +259,18 @@ def validate_input_scopes(provenance, *, genome=None, prediction_alleles=()):
             except (TypeError, ValueError) as error:
                 raise ValueError(f"{source.path}: unsupported reference_assembly "
                                  f"{source.scope.reference_assembly!r}: {error}") from error
-        elif genome is not None:
-            assembly = getattr(genome, "reference_name", None)
+        for reference in references:
+            assembly = getattr(reference, "reference_name", None)
             if source.scope.reference_assembly is not None and assembly is None:
                 raise ValueError(f"{source.path}: configured genome has no reference_name "
                                  "to validate against reference_assembly")
-            release = getattr(genome, "release", None)
+            release = getattr(reference, "release", None)
             configured = InputScope(
                 reference_assembly=assembly,
                 annotation=f"ensembl:{release}" if release is not None else None)
             combine_scopes(source.scope, configured,
-                           f"{source.path}, configured genome", ("reference_assembly", "annotation"))
+                           f"{source.path}, configured or retained genome",
+                           ("reference_assembly", "annotation"))
     if prediction_alleles and shared.mhc_alleles is not None:
         requested = normalize_alleles(prediction_alleles, "Fresh prediction")
         outside = set(requested) - set(shared.mhc_alleles)

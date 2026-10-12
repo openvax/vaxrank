@@ -42,7 +42,7 @@ from mhctools.cli import (
     predictors_from_args,
 )
 
-from .arg_parser import parse_vaxrank_args, check_args
+from .arg_parser import parse_vaxrank_args, check_args, require_annotations_for_template_reports
 from .epitope_config_args import epitope_config_from_args, has_epitope_config_overrides
 from .vaccine_config_args import (
     manufacturability_config_from_args, vaccine_config_from_args,
@@ -1348,6 +1348,9 @@ def run_cli(args_list=None):
                 "External input produced no ranked vaccine peptides; "
                 "writing only the per-(peptide, allele) neoepitope "
                 "report (if requested).")
+        # Input flags do not describe annotation needs: native antigens carry
+        # source provenance, and saved mutation fragments may retain transcripts.
+        require_annotations_for_template_reports(args, ranked_variants_with_vaccine_peptides)
         # Keep the declared genotype separate from report coverage. Only the
         # declaration can supply default alleles for new junction queries.
         if patient_info is not None:

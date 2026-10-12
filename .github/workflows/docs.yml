@@ -24,10 +24,10 @@ jobs:
       - name: Prepare docs
         run: |
           mkdir -p docs
-          cp README.md docs/index.md
+          python -c "from pathlib import Path; Path('docs/index.md').write_text(Path('README.md').read_text().replace('](docs/', ']('))"
 
       - name: Build documentation
-        run: mkdocs build
+        run: mkdocs build --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

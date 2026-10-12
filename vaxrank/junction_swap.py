@@ -16,7 +16,8 @@ Concatenating antigens with a fixed linker can create k-mers that span
 the junction (end of antigen N + linker + start of antigen N+1) which
 the patient's MHC can present even though the sequence was never
 present in the wild proteome and is not the intended neoantigen.
-These "chimeric" peptides dilute the immune response.
+These "chimeric" peptides are unintended candidate ligands; predicted
+binding or presentation alone does not establish an immune response.
 
 This module picks an inter-antigen linker per junction independently
 to minimize predicted MHC presentation of chimeric k-mers. The
@@ -34,19 +35,21 @@ import logging
 import warnings
 from dataclasses import dataclass, field
 
+from mhctools.pred import Kind
+
 from .vaccine_library import JUNCTION_SWAP_CANDIDATES, get_linker
 
 logger = logging.getLogger(__name__)
 
 
-# Default presentation-rank thresholds. mhcflurry-presentation reports
-# percentile rank where lower = stronger predicted presentation. The
-# convention in immunoinformatics is "rank ≤ 2.0" for "presented
-# binder" and "rank ≤ 0.5" for "strong binder". The optimizer
-# minimizes count of rank ≤ STRONG first, then rank ≤ MILD as
-# tie-breaker, then maximizes the worst-case rank.
-RANK_STRONG = 0.5   # high-confidence presentation
-RANK_MILD = 2.0     # any presentation
+# Existing percentile-rank heuristics, lower = stronger prediction.
+# Endpoint selection is recorded separately: affinity when available,
+# otherwise presentation. These thresholds are selection rules, not
+# probabilities or observations of presentation. The optimizer minimizes
+# count of rank ≤ STRONG first, then rank ≤ MILD as tie-breaker, then
+# maximizes the worst-case rank.
+RANK_STRONG = 0.5
+RANK_MILD = 2.0
 
 
 @dataclass
@@ -118,20 +121,33 @@ def score_junction_kmers(kmers, alleles, predictor, models=None):
 
     Uses Python's standard warning filter to warn once per call site when:
       - the predictor returned predictions but none had a usable
-        ``percentile_rank`` (e.g. binding-affinity-only mhctools
-        wrappers like RandomBindingPredictor), or
+        ``percentile_rank``, or
       - the predictor returned predictions but the allele filter
         dropped all of them (the optimizer would silently pick the
         first candidate).
     Callers can configure repetition through the standard :mod:`warnings` API.
+    Use affinity ranks when available (preserving legacy MHCflurry scoring),
+    otherwise presentation ranks. Never combine the two endpoints or count
+    allele-independent processing predictions as allele-specific evidence.
     If ``models`` is supplied, retain the distinct model identities actually
     returned by the predictor; missing names or versions remain unknown.
     """
     if not kmers:
         return []
-    # Predictor API: mhctools.BasePredictor returns BindingPrediction
-    # objects with .peptide / .allele / .percentile_rank attributes.
-    predictions = predictor.predict_peptides(kmers)
+    # The public API returns one PeptideResult per input occurrence. Its
+    # BasePredictor adapter also supports legacy production predictors.
+    results = list(predictor.predict(kmers))
+    if len(results) != len(kmers):
+        raise ValueError('Junction predictor must return one result per peptide occurrence')
+    predictions = []
+    for peptide, result in zip(kmers, results):
+        for prediction in result.preds:
+            if prediction.peptide != peptide:
+                raise ValueError('Junction predictor returned a mismatched peptide: '
+                                 f'expected {peptide!r}, got {prediction.peptide!r}')
+            predictions.append(prediction)
+    rank_kind = (Kind.pMHC_affinity if any(
+        p.kind == Kind.pMHC_affinity for p in predictions) else Kind.pMHC_presentation)
     rows = []
     allele_set = set(alleles) if alleles else None
     n_total = 0
@@ -143,8 +159,10 @@ def score_junction_kmers(kmers, alleles, predictor, models=None):
                 'predictor_name', 'predictor_version', 'kind')}
             if model not in models:
                 models.append(model)
+        if p.kind != rank_kind:
+            continue
         n_total += 1
-        if allele_set and p.allele not in allele_set:
+        if not p.allele or (allele_set and p.allele not in allele_set):
             continue
         n_seen += 1
         rank = getattr(p, 'percentile_rank', None)
@@ -168,7 +186,14 @@ def score_junction_kmers(kmers, alleles, predictor, models=None):
             "allele filter dropped all of them; the optimizer cannot "
             "rank chimeric k-mers and will fall back to the first "
             "candidate. Check that the predictor's configured alleles "
-            "include the patient HLA set.",
+            "include the patient MHC set and return allele-specific ranks.",
+            JunctionPredictionWarning,
+            stacklevel=2,
+        )
+    if predictions and not n_total:
+        warnings.warn(
+            "Junction-swap predictor returned no affinity or presentation predictions; "
+            "the optimizer cannot rank chimeric k-mers and will fall back to the first candidate.",
             JunctionPredictionWarning,
             stacklevel=2,
         )
@@ -215,8 +240,8 @@ def optimize_linkers(
     alleles : list[str]
         Patient HLA alleles, e.g. ``['HLA-A*02:01', 'HLA-B*07:02']``.
     predictor : mhctools.BasePredictor
-        An MHC predictor with a ``predict_peptides(peptides)`` method
-        (e.g. ``mhcflurry.MHCflurryPredictor``). The predictor's
+        An MHC predictor with a ``predict(peptides)`` method returning
+        MHCtools ``PeptideResult`` objects. The predictor's
         configured alleles must include those in ``alleles``.
     candidate_names : iterable of str
         Linker names parseable by ``vaccine_library.get_linker``.
@@ -292,6 +317,7 @@ def optimize_linkers(
         'predictor_class': type(predictor).__module__ + '.' + type(predictor).__name__,
         'alleles': list(alleles),
         'peptide_lengths': list(k_lengths),
+        'rank_kind_policy': 'affinity_if_available_else_presentation',
         'models': [],
         'requests': [],
         'scored_prediction_count': 0,

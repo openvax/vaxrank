@@ -435,6 +435,12 @@ The mRNA manifest's `elements.junction_swap` records the selected policy and
 whether optimization ran. Its `prediction` record preserves observed model
 names/versions/kinds, query alleles and lengths, and the peptide queries for
 each candidate linker at each junction. Unknown model versions remain null.
+Junction queries use MHCtools' public `predict()` API, including its adapter for
+legacy predictors. The rank policy uses affinity when the model returns that
+endpoint, otherwise presentation; it never adds the two endpoint counts.
+This preserves historical MHCflurry affinity scoring. Allele-independent
+processing and haplotype-only results do not become allele-specific hits.
+The manifest records this rank policy alongside the returned model identities.
 This metadata also survives native RNAConstruct serialization. Optional
 cleavage annotation can be disabled with `--no-processing-aware-annotation`.
 
@@ -487,3 +493,11 @@ construction also requires explicit category opt-ins; see
 The [unified evidence design](unified_evidence.md) describes the intended
 model, not an additional supported CLI workflow. For current configuration
 keys and defaults, run `vaxrank --print-default-config`.
+
+## Assess every candidate SLP window
+
+Use `vaxrank-window-exposure` on an enriched saved dataset to enumerate all
+admitted target-containing windows before rank/count pruning and assess their
+core delivery under explicit kinetics. See [core window exposure](core-window-exposure.md)
+for 1 µg dose normalization, sensitivity scenarios, documented binding-core
+intervals, source coverage and the separate mRNA construct input.

@@ -35,7 +35,8 @@ mhcgnomes>=3.64.4,<4.0.0
 # tests/test_cleavage_profile.py, tests/test_cleavage_report.py) pass these
 # fields, so importing them against an older mhctools raises TypeError for an
 # unexpected keyword argument, not just a validation gap.
-mhctools>=3.44.64,<4.0.0
+# 3.53 adds per-window, per-core dose-normalized APC exposure.
+mhctools>=3.53.0,<4.0.0
 # 5.82.0 is the first release compatible with Osteosarc 0.14. It includes
 # context-correct cached scans, presentation metrics and conflict checks in
 # the DSL used for scoring. Keep these floors aligned when Osteosarc moves.

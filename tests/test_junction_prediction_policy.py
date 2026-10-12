@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from mhctools.pred import Prediction
+from mhctools.pred import PeptideResult, Prediction
 
 from vaxrank.cli import entry_point as ep
 from vaxrank.cli.arg_parser import parse_vaxrank_args
@@ -30,12 +30,12 @@ class JunctionPredictor:
         self.alleles = alleles
         self.calls = []
 
-    def predict_peptides(self, peptides):
+    def predict(self, peptides):
         self.calls.append(list(peptides))
-        return [Prediction(
+        return [PeptideResult(tuple(Prediction(
             peptide=p, allele=a, kind='pMHC_presentation', value=None, score=.1,
             percentile_rank=5.0, predictor_name='junction-test', predictor_version='2.0')
-            for p in peptides for a in self.alleles]
+            for a in self.alleles)) for p in peptides]
 
 
 @pytest.fixture
@@ -302,7 +302,7 @@ def test_explicit_junction_model_uses_public_mhctools_factory(input_flag):
                                '--mrna-junction-alleles', 'A0201'])
     predictor, alleles = ep.resolve_mhc_for_linker_optimizer(args)
     assert predictor.alleles == alleles == ALLELES[:1]
-    predictions = predictor.predict_peptides(['SIINFEKLA'])
+    predictions = [p for r in predictor.predict(['SIINFEKLA']) for p in r.preds]
     assert predictions and all(p.allele == ALLELES[0] for p in predictions)
 
 

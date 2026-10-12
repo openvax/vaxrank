@@ -890,14 +890,6 @@ def check_args(args):
     # rather than burning ranking time and crashing in the writer.
     _reject_output_dir_misuse(args)
 
-    # External input + template-report flag without ``--ensembl-release``
-    # would render reports with empty effect annotations (transcript
-    # IDs from LENS / pVACseq won't resolve). Reject pre-flight with a
-    # build hint inferred from the file — empty-effect reports waste
-    # the user's time and silently degrade quality, so make this a
-    # hard error rather than a warning.
-    _require_ensembl_release_for_template_reports(args)
-
 
 # Suffixes that look like a single-file output but ``--output-dir``
 # always wants a directory; same set ``mrna.py`` enforces locally for
@@ -952,7 +944,15 @@ def _reject_output_dir_misuse(args):
             "suffix)." % output_dir)
 
 
-def _require_ensembl_release_for_template_reports(args):
+def require_annotations_for_template_reports(args, ranked):
+    """Require annotation context for the mutation rows a report will render.
+
+    Native nonmutation antigens render their retained source provenance.
+    Native mutation fragments can retain their own transcript/reference
+    context, independently of the current CLI's Ensembl release argument.
+    """
+    from varcode import Variant
+
     needs_transcripts = any(
         getattr(args, attr, '') for attr in (
             'output_ascii_report',
@@ -964,11 +964,12 @@ def _require_ensembl_release_for_template_reports(args):
         return
     if getattr(args, 'ensembl_release', None) is not None:
         return
-    lens_path = getattr(args, 'input_lens', None)
-    pvacseq_path = getattr(args, 'input_pvacseq', None)
-    if not (lens_path or pvacseq_path or getattr(args, 'external_input', None)
-            or getattr(args, 'input_manifest', None)):
+    mutations = [source for source, peptides in ranked
+                 if isinstance(source, Variant) and peptides
+                 and not peptides[0].mutant_protein_fragment.supporting_reference_transcripts]
+    if not mutations:
         return
+    lens_path = getattr(args, 'input_lens', None)
     # Try to infer the build from the LENS file so the hint can name
     # a plausible release. pVACseq aggregates don't carry a build
     # marker we can read here. Be honest about uncertainty:
@@ -1019,10 +1020,11 @@ def _require_ensembl_release_for_template_reports(args):
                     "(N must match the build LENS used)."
                     % (build, build, build))
     raise ValueError(
-        "Template report(s) requested with --input-lens / "
-        "--input-pvacseq / --external-input but no --ensembl-release set. Transcript "
+        "Template report(s) include %d mutation antigen(s) without retained "
+        "transcript annotation and no --ensembl-release set (%s). Transcript "
         "effect annotations would be empty (rendered as '—'), so "
-        "vaxrank refuses to write a degraded report.%s" % hint)
+        "vaxrank refuses to write a degraded report.%s" % (
+            len(mutations), ', '.join(v.short_description for v in mutations[:3]), hint))
 
 
 def add_external_rescoring_args(arg_parser):
@@ -1120,14 +1122,15 @@ def external_input_arg_parser():
             action.required = False
     arg_parser.add_argument(
         "--verbose", "-v", action="store_true", default=False)
-    # Template reports require an explicit release to resolve transcript IDs.
+    # Mutation reports need annotation; native inputs may retain it already.
     arg_parser.add_argument(
         "--ensembl-release",
         default=None,
         type=int,
         help="Ensembl release for resolving transcript IDs (e.g. 75, 102). "
-             "Required for ASCII/HTML/PDF template reports; match the release "
-             "used to annotate the input reports.")
+             "Required for mutation ASCII/HTML/PDF reports without retained "
+             "transcript annotation; match the input annotation release. "
+             "Native nonmutation antigen reports use their source provenance.")
     add_output_args(arg_parser)
     # Vaccine-peptide options apply to external inputs exactly as they do to
     # the VCF pipeline: the construct window, how many target epitopes it
