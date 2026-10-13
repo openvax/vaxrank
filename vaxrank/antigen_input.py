@@ -144,15 +144,20 @@ class AntigenDataset:
         if genome is None:
             raise ValueError('New antigen predictions require a host annotation for exact-self assessment')
         validate_input_scopes([InputProvenance('validation', 'antigens', '', '', self.scope)], genome=genome)
+        release = getattr(genome, 'release', None)
+        annotation = ('ensembl:' + str(release) if release is not None else
+                      str(genome.annotation_name) + ':' + str(genome.annotation_version))
+        return combine_scopes(self.scope, InputScope(annotation=annotation), 'Selected host annotation')
 
     def predict(self, predictor, *, genome, config=None, path=''):
         """Predict native occurrences through Topiary and return shared evidence."""
-        self.validate_for_prediction(genome)
-        digest = hashlib.sha256(json.dumps(self.to_dict(), sort_keys=True, allow_nan=False).encode()).hexdigest()
+        scope = self.validate_for_prediction(genome)
+        resolved = dict(self.to_dict(), scope=asdict(scope))
+        digest = hashlib.sha256(json.dumps(resolved, sort_keys=True, allow_nan=False).encode()).hexdigest()
         provenance = InputProvenance(
             input_id='antigens:' + digest, source_format='antigens', path=str(path),
             content_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest() if path else digest,
-            scope=self.scope,
+            scope=scope,
             report_declarations={'input_history': [asdict(p) for p in self.provenance]})
         return predict_antigens(self.antigens, predictor, genome=genome,
                                 provenance=provenance, config=config)

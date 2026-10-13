@@ -209,6 +209,7 @@ def test_real_mhctools_cli_and_host_reference(inputs, reference, tmp_path, monke
     _, variant = reference
     genome = variant.ensembl
     genome.reference_name = 'GRCh38'
+    inputs.scope = replace(inputs.scope, annotation='test:1')
     monkeypatch.setattr('vaxrank.cli.entry_point.resolve_ensembl_release',
                         lambda args: setattr(args, 'genome', genome))
     path, output = tmp_path / 'input.json', tmp_path / 'predictions.tsv'
@@ -260,3 +261,15 @@ def test_native_mutation_export_retains_target_coordinates_and_provenance(refere
     path = tmp_path / 'mutation.json'
     exported.save(path)
     assert AntigenDataset.load(path) == exported
+
+
+def test_selected_annotation_is_recorded_even_if_absent_from_input(inputs, dependencies):
+    model, genome = dependencies
+    inputs.scope = replace(inputs.scope, annotation=None)
+    first = inputs.predict(TopiaryPredictor(models=[model]), genome=genome)
+    genome.release = 94
+    second = inputs.predict(TopiaryPredictor(models=[model]), genome=genome)
+    assert first.provenance[0].scope.annotation == 'ensembl:93'
+    assert second.provenance[0].scope.annotation == 'ensembl:94'
+    assert first.provenance[0].input_id != second.provenance[0].input_id
+    assert inputs.scope.annotation is None
