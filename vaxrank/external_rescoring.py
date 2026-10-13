@@ -62,6 +62,7 @@ READERS = {
     "epitopes": partial(read_epitope_report, source_format="epitopes"),
     "exacto": read_exacto_report,
 }
+INPUT_FORMATS = (*READERS, 'antigens')
 
 
 def external_inputs(args):
@@ -71,18 +72,18 @@ def external_inputs(args):
 
 def external_input_specs(args):
     """Resolve a manifest or the existing single-report flags."""
-    inputs = [(fmt, getattr(args, 'input_' + fmt)) for fmt in READERS
+    inputs = [(fmt, getattr(args, 'input_' + fmt)) for fmt in INPUT_FORMATS
               if getattr(args, 'input_' + fmt, None)]
     for value in getattr(args, 'external_input', None) or ():
         fmt, sep, path = value.partition('=')
-        if not sep or fmt not in READERS or not path:
-            raise ValueError("--external-input requires " + ", ".join(fmt + "=PATH" for fmt in READERS))
+        if not sep or fmt not in INPUT_FORMATS or not path:
+            raise ValueError("--external-input requires " + ", ".join(fmt + "=PATH" for fmt in INPUT_FORMATS))
         inputs.append((fmt, path))
     manifest = getattr(args, 'input_manifest', None)
     if manifest:
         if inputs:
-            raise ValueError("--input-manifest cannot be combined with --input-lens, "
-                             "--input-pvacseq or --external-input; list every file in the manifest")
+            raise ValueError("--input-manifest cannot be combined with other input flags; "
+                             "list every file in the manifest")
         return read_input_manifest(manifest)
     return [(fmt, path, {}) for fmt, path in inputs]
 
@@ -365,16 +366,26 @@ def _validate_report_scopes(reports, *, genome=None, alleles=()):
         retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in reports})
 
 
-def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, alleles=()):
-    """Load and validate source evidence before any models or scoring run."""
+def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, alleles=(),
+                 antigen_predictor_factory=None, antigen_alleles=(), epitope_config=None,
+                 prepared_reports=()):
+    """Validate every input before predicting new sequences or scoring evidence.
+
+    Experimental ``antigens`` inputs need an ``antigen_predictor_factory``
+    accepting the validated shared InputScope and returning a Topiary predictor.
+    It is called once, after loading and validating all input declarations.
+    Saved reports keep their existing prediction values.
+    """
+    from .antigen_input import AntigenDataset, antigen_report
+    from .input_scope import InputScope
     inputs = list(inputs)
     if scopes is None:
         scopes = [{} for _ in inputs]
     if len(scopes) != len(inputs):
         raise ValueError("Each external input must have its own scope declaration")
-    reports, seen = [], set()
+    reports, seen, pending = list(prepared_reports), set(), []
     for (fmt, path), declarations in zip(inputs, scopes):
-        if fmt not in READERS:
+        if fmt not in INPUT_FORMATS:
             raise ValueError("Unsupported external format: %s" % fmt)
         content = Path(path).read_bytes()
         content_sha256 = hashlib.sha256(content).hexdigest()
@@ -383,6 +394,19 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
         if content_id in seen:
             raise ValueError("The same external input was supplied more than once: %s" % path)
         seen.add(content_id)
+        if fmt == 'antigens':
+            source = AntigenDataset.load(path)
+            declared = scope_from_mapping(declarations, str(path))
+            source = replace(source, scope=combine_scopes(source.scope, declared, str(path)))
+            if antigen_alleles:
+                source = replace(source, scope=combine_scopes(source.scope, InputScope(
+                    mhc_alleles=normalize_alleles(antigen_alleles, 'Antigen prediction')), str(path)))
+            provenance = source.prediction_provenance(
+                genome=genome, path=path, manifest_path=manifest_path,
+                manifest_declarations=declarations)
+            pending.append((len(reports), source, provenance))
+            reports.append(None)
+            continue
         reader_kwargs = {'score_epitopes': False}
         if fmt in ('topiary', 'epitopes', 'exacto'):
             reader_kwargs['scope_declarations'] = declarations
@@ -412,7 +436,24 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             manifest_declarations=dict(declarations), report_declarations=producer_declarations,
             observed_mhc_alleles=normalize_alleles(observed, str(path)) if observed else ())
         reports.append(_namespace_report(report, provenance))
-    _validate_report_scopes(reports, genome=genome, alleles=alleles)
+    loaded = [report for report in reports if report is not None]
+    shared_scope = validate_input_scopes(
+        [report.input_provenance for report in loaded] + [p for _, _, p in pending],
+        genome=genome, prediction_alleles=alleles,
+        retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in loaded})
+    if pending:
+        retained_ids = {p.input_id for r in loaded if r.dataset is not None for p in r.dataset.provenance}
+        pending_ids = [p.input_id for _, _, p in pending]
+        if len(set(pending_ids)) != len(pending_ids) or retained_ids.intersection(pending_ids):
+            raise ValueError('Inputs contain overlapping candidate identities; '
+                             'do not load an input alongside its native export')
+        if antigen_predictor_factory is None:
+            raise ValueError('Antigen sequence inputs require an antigen_predictor_factory')
+        config = report_config(loaded, epitope_config)
+        predictor = antigen_predictor_factory(shared_scope)
+        for index, source, provenance in pending:
+            reports[index] = antigen_report(source, predictor, genome=genome,
+                                            provenance=provenance, config=config)
     return reports
 
 
@@ -484,15 +525,21 @@ def _add_predictions(reports, models, prefix, use_flanks):
 def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
                     alleles=(), input_predictions_path=None, scopes=None,
                     manifest_path=None, genome=None, model_factory=None,
-                    prepared_reports=(), use_flanks=True, prediction_prefix=None):
+                    prepared_reports=(), use_flanks=True, prediction_prefix=None,
+                    antigen_predictor_factory=None, antigen_alleles=()):
     """Read once and score with fresh common models or source input values."""
     from topiary import is_stated
     if mode not in ('input', 'fresh', 'additive'):
         raise ValueError("Prediction mode must be input, fresh or additive")
     if prediction_prefix is not None and mode != 'additive':
         raise ValueError('A prediction prefix requires additive prediction mode')
-    reports = list(prepared_reports) + read_reports(
-        inputs, scopes=scopes, manifest_path=manifest_path, genome=genome, alleles=alleles)
+    inputs = list(inputs)
+    if mode != 'input' and any(fmt == 'antigens' for fmt, _ in inputs):
+        raise ValueError('Antigen sequence inputs require input prediction mode')
+    reports = read_reports(
+        inputs, scopes=scopes, manifest_path=manifest_path, genome=genome, alleles=alleles,
+        antigen_predictor_factory=antigen_predictor_factory, antigen_alleles=antigen_alleles,
+        epitope_config=epitope_config, prepared_reports=prepared_reports)
     _validate_report_scopes(reports, genome=genome, alleles=alleles)
     epitope_config = report_config(reports, epitope_config)
     policy_evaluations = []
@@ -639,6 +686,24 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
                 catalogs[identity] = records
     if catalogs:
         dataset.selection['antigen_inputs'] = catalogs
+    source_evidence = {}
+    for report in updated:
+        if report.dataset is None:
+            continue
+        selection = report.dataset.selection
+        retained = dict(selection.get('source_evidence', {}))
+        evidence = {key: selection[key] for key in ('cta_expression_admission', 'hitlist_evidence_bundle')
+                    if key in selection}
+        if evidence:
+            provenance = report.dataset.provenance
+            identity = provenance[0].input_id if len(provenance) == 1 else report.input_provenance.input_id
+            retained[identity] = evidence
+        for identity, evidence in retained.items():
+            if identity in source_evidence and source_evidence[identity] != evidence:
+                raise ValueError('Conflicting retained source evidence for ' + identity)
+            source_evidence[identity] = evidence
+    if source_evidence:
+        dataset.selection['source_evidence'] = source_evidence
     if mode in ('input', 'additive'):
         dataset.selection['score_groups'] = [list(f.prediction_id.unique()) for f in input_frames]
     frame.attrs['epitope_dataset'] = dataset
@@ -662,7 +727,21 @@ def load_unified_external(args, epitope_config, options, genome):
     model_factory, alleles = None, []
     direct = bool(getattr(args, 'vcf', None) or getattr(args, 'bam', None))
     cta = bool(getattr(args, 'input_cta_expression', None))
-    antigens = bool(getattr(args, 'input_antigens', None))
+    specs = external_input_specs(args)
+    antigens = any(fmt == 'antigens' for fmt, _, _ in specs)
+    antigen_predictor_factory, antigen_alleles = None, ()
+    if antigens:
+        from .antigen_input import validate_antigen_args
+        from mhctools.cli import mhc_alleles_from_args, predictors_from_args
+        from topiary import TopiaryPredictor
+        validate_antigen_args(args)
+        if getattr(args, 'mhc_alleles', None) or getattr(args, 'mhc_alleles_file', None):
+            antigen_alleles = normalize_alleles(mhc_alleles_from_args(args), 'Antigen prediction')
+
+        def antigen_predictor_factory(scope):
+            args.mhc_alleles = ','.join(scope.mhc_alleles)
+            args.mhc_alleles_file = None  # Genotype already read and reconciled.
+            return TopiaryPredictor(models=predictors_from_args(args))
     if direct and mode == 'fresh':
         raise ValueError('Direct/table composition requires --external-predictions input or additive')
     if mode in ('fresh', 'additive'):
@@ -691,25 +770,15 @@ def load_unified_external(args, epitope_config, options, genome):
             "Remove --mhc-alleles/--mhc-alleles-file, or use "
             "--external-predictions fresh with --mhc-predictor to predict "
             "for an explicit HLA set.")
-    specs = external_input_specs(args)
     loaded_reports = read_reports(
         [(fmt, path) for fmt, path, _ in specs],
         scopes=[scope for _, _, scope in specs],
-        manifest_path=getattr(args, 'input_manifest', None), genome=genome)
-    if cta or antigens:
-        from .antigen_input import prepare_antigen_report
+        manifest_path=getattr(args, 'input_manifest', None), genome=genome,
+        antigen_predictor_factory=antigen_predictor_factory, antigen_alleles=antigen_alleles,
+        epitope_config=epitope_config)
+    if cta:
         from .cta_input import prepare_cta_report
-        from .external_input import ExternalConstructOptions
-        from .vaccine_config import VaccineConfig
-        from .window_selection import WindowSelection
-        prepare = prepare_cta_report if cta else prepare_antigen_report
-        loaded_reports = [prepare(args, genome, epitope_config)]
-        vaccine = options.vaccine_config or VaccineConfig()
-        if vaccine.window_selection is None:
-            import msgspec
-            vaccine = msgspec.structs.replace(vaccine, window_selection=WindowSelection())
-        options = ExternalConstructOptions.from_configs(
-            vaccine_config=vaccine, manufacturability_config=options.manufacturability_config)
+        loaded_reports = [prepare_cta_report(args, genome, epitope_config)]
     if getattr(args, 'index_native_references', False):
         native = [report.dataset for report in loaded_reports
                   if report.source_format == 'epitopes' and report.dataset is not None]
@@ -754,6 +823,16 @@ def load_unified_external(args, epitope_config, options, genome):
         args.num_epitopes_per_vaccine_peptide = vaccine.num_target_epitopes_to_keep
         args.max_vaccine_peptides_per_variant = vaccine.max_vaccine_peptides_per_variant
         args.included_antigen_sources = list(vaccine.included_antigen_sources)
+    if cta or antigens:
+        from .external_input import ExternalConstructOptions
+        from .vaccine_config import VaccineConfig
+        from .window_selection import WindowSelection
+        vaccine = options.vaccine_config or VaccineConfig()
+        if vaccine.window_selection is None:
+            import msgspec
+            vaccine = msgspec.structs.replace(vaccine, window_selection=WindowSelection())
+        options = ExternalConstructOptions.from_configs(
+            vaccine_config=vaccine, manufacturability_config=options.manufacturability_config)
     epitope_config = report_config(loaded_reports, epitope_config)
     if direct:
         from .direct_input import prepare_direct_report

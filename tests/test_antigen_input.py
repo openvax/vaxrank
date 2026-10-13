@@ -211,7 +211,8 @@ def test_host_identity_and_antigen_self_exclusions_stay_distinct(inputs, depende
 
 
 @pytest.mark.parametrize('genotype_source', ['input', 'flag', 'file'])
-def test_real_mhctools_cli_and_host_reference(inputs, reference, tmp_path, monkeypatch, genotype_source):
+@pytest.mark.parametrize('input_route', ['single', 'manifest'])
+def test_real_mhctools_cli_and_host_reference(inputs, reference, tmp_path, monkeypatch, genotype_source, input_route):
     # Use the installed MHCtools predictor factory and actual PyEnsembl indexes.
     # Only annotation resolution is redirected to the small local fixture.
     _, variant = reference
@@ -222,7 +223,13 @@ def test_real_mhctools_cli_and_host_reference(inputs, reference, tmp_path, monke
                         lambda args: setattr(args, 'genome', genome))
     path, output = tmp_path / 'input.json', tmp_path / 'predictions.tsv'
     inputs.save(path)
-    options = ['--input-antigens', str(path), '--mhc-predictor', 'random',
+    options = ['--input-antigens', str(path)]
+    if input_route == 'manifest':
+        manifest = tmp_path / 'inputs.json'
+        manifest.write_text(json.dumps(dict(schema='vaxrank.input_manifest.v1',
+            inputs=[dict(format='antigens', path=path.name)])))
+        options = ['--input-manifest', str(manifest)]
+    options += ['--mhc-predictor', 'random',
                '--ensembl-release', '93', '--output-epitopes', str(output),
                '--config-text', 'epitopes.score_expr=1.0', '--no-processing-aware-annotation']
     if genotype_source == 'flag':
