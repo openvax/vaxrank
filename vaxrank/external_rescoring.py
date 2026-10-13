@@ -62,7 +62,8 @@ READERS = {
     "epitopes": partial(read_epitope_report, source_format="epitopes"),
     "exacto": read_exacto_report,
 }
-INPUT_FORMATS = (*READERS, 'antigens')
+INPUT_FORMATS = (*READERS, 'antigens', 'cta_expression')
+SEQUENCE_FORMATS = ('antigens', 'cta_expression')
 
 
 def external_inputs(args):
@@ -76,6 +77,8 @@ def external_input_specs(args):
               if getattr(args, 'input_' + fmt, None)]
     for value in getattr(args, 'external_input', None) or ():
         fmt, sep, path = value.partition('=')
+        if fmt == 'cta_expression':
+            raise ValueError('CTA expression contracts require --input-manifest or --input-cta-expression')
         if not sep or fmt not in INPUT_FORMATS or not path:
             raise ValueError("--external-input requires " + ", ".join(fmt + "=PATH" for fmt in INPUT_FORMATS))
         inputs.append((fmt, path))
@@ -85,7 +88,17 @@ def external_input_specs(args):
             raise ValueError("--input-manifest cannot be combined with other input flags; "
                              "list every file in the manifest")
         return read_input_manifest(manifest)
-    return [(fmt, path, {}) for fmt, path in inputs]
+    specs = []
+    for fmt, path in inputs:
+        declarations = {}
+        if fmt == 'cta_expression':
+            from .cta_input import cta_options_from_args
+            declarations = dict(
+                patient_id=getattr(args, 'output_patient_id', None) or getattr(args, 'cta_sample_id', None),
+                sample_id=getattr(args, 'cta_sample_id', None),
+                cta_expression=cta_options_from_args(args))
+        specs.append((fmt, path, declarations))
+    return specs
 
 
 def _namespace_report(report, provenance):
@@ -368,15 +381,16 @@ def _validate_report_scopes(reports, *, genome=None, alleles=()):
 
 def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, alleles=(),
                  antigen_predictor_factory=None, antigen_alleles=(), epitope_config=None,
-                 prepared_reports=()):
+                 prepared_reports=(), cta_admission_writer=None):
     """Validate every input before predicting new sequences or scoring evidence.
 
-    Experimental ``antigens`` inputs need an ``antigen_predictor_factory``
+    Experimental ``antigens`` and admitted ``cta_expression`` inputs need an ``antigen_predictor_factory``
     accepting the validated shared InputScope and returning a Topiary predictor.
     It is called once, after loading and validating all input declarations.
     Saved reports keep their existing prediction values.
     """
     from .antigen_input import AntigenDataset, antigen_report
+    from .cta_input import CTAExpressionSource, predict_cta_source
     from .input_scope import InputScope
     inputs = list(inputs)
     if scopes is None:
@@ -391,19 +405,27 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
         content_sha256 = hashlib.sha256(content).hexdigest()
         content_id = (_exacto_identity(path, declarations.get('exacto', {}))
                       if fmt == 'exacto' else fmt + ':' + content_sha256)
+        if fmt == 'cta_expression':
+            # One expression matrix can supply distinct sample columns.
+            content_id += ':' + hashlib.sha256(json.dumps(declarations, sort_keys=True).encode()).hexdigest()
         if content_id in seen:
             raise ValueError("The same external input was supplied more than once: %s" % path)
         seen.add(content_id)
-        if fmt == 'antigens':
-            source = AntigenDataset.load(path)
-            declared = scope_from_mapping(declarations, str(path))
-            source = replace(source, scope=combine_scopes(source.scope, declared, str(path)))
+        if fmt in SEQUENCE_FORMATS:
+            declared = scope_from_mapping({k: v for k, v in declarations.items() if k != 'cta_expression'}, str(path))
             if antigen_alleles:
-                source = replace(source, scope=combine_scopes(source.scope, InputScope(
-                    mhc_alleles=normalize_alleles(antigen_alleles, 'Antigen prediction')), str(path)))
-            provenance = source.prediction_provenance(
-                genome=genome, path=path, manifest_path=manifest_path,
-                manifest_declarations=declarations)
+                declared = combine_scopes(declared, InputScope(
+                    mhc_alleles=normalize_alleles(antigen_alleles, 'Antigen prediction')), str(path))
+            if fmt == 'cta_expression':
+                source = CTAExpressionSource.load(path, options=declarations.get('cta_expression'),
+                    scope=declared, genome=genome, manifest_path=manifest_path, declarations=declarations)
+                provenance = source.provenance
+            else:
+                source = AntigenDataset.load(path)
+                source = replace(source, scope=combine_scopes(source.scope, declared, str(path)))
+                provenance = source.prediction_provenance(
+                    genome=genome, path=path, manifest_path=manifest_path,
+                    manifest_declarations=declarations)
             pending.append((len(reports), source, provenance))
             reports.append(None)
             continue
@@ -447,13 +469,23 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
         if len(set(pending_ids)) != len(pending_ids) or retained_ids.intersection(pending_ids):
             raise ValueError('Inputs contain overlapping candidate identities; '
                              'do not load an input alongside its native export')
-        if antigen_predictor_factory is None:
+        cta_sources = [s for _, s, _ in pending if isinstance(s, CTAExpressionSource)]
+        needs_prediction = any(not isinstance(s, CTAExpressionSource) or s.admission.admitted_antigens
+                               for _, s, _ in pending)
+        if antigen_predictor_factory is None and needs_prediction:
             raise ValueError('Antigen sequence inputs require an antigen_predictor_factory')
         config = report_config(loaded, epitope_config)
-        predictor = antigen_predictor_factory(shared_scope)
+        if cta_admission_writer is not None:
+            cta_admission_writer(cta_sources)
+        if not needs_prediction and not loaded:
+            raise ValueError('No admitted CTA proteins; inspect the CTA admission decisions')
+        predictor = antigen_predictor_factory(shared_scope) if needs_prediction else None
         for index, source, provenance in pending:
-            reports[index] = antigen_report(source, predictor, genome=genome,
-                                            provenance=provenance, config=config)
+            if isinstance(source, CTAExpressionSource):
+                reports[index] = predict_cta_source(source, predictor, genome=genome, epitope_config=config)
+            else:
+                reports[index] = antigen_report(source, predictor, genome=genome,
+                                                provenance=provenance, config=config)
     return reports
 
 
@@ -534,7 +566,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
     if prediction_prefix is not None and mode != 'additive':
         raise ValueError('A prediction prefix requires additive prediction mode')
     inputs = list(inputs)
-    if mode != 'input' and any(fmt == 'antigens' for fmt, _ in inputs):
+    if mode != 'input' and any(fmt in SEQUENCE_FORMATS for fmt, _ in inputs):
         raise ValueError('Antigen sequence inputs require input prediction mode')
     reports = read_reports(
         inputs, scopes=scopes, manifest_path=manifest_path, genome=genome, alleles=alleles,
@@ -726,15 +758,17 @@ def load_unified_external(args, epitope_config, options, genome):
         raise ValueError('--external-peptide-only requires fresh or additive prediction mode')
     model_factory, alleles = None, []
     direct = bool(getattr(args, 'vcf', None) or getattr(args, 'bam', None))
-    cta = bool(getattr(args, 'input_cta_expression', None))
     specs = external_input_specs(args)
+    cta = any(fmt == 'cta_expression' for fmt, _, _ in specs)
     antigens = any(fmt == 'antigens' for fmt, _, _ in specs)
     antigen_predictor_factory, antigen_alleles = None, ()
-    if antigens:
+    if antigens or cta:
         from .antigen_input import validate_antigen_args
+        from .cta_input import validate_cta_args
         from mhctools.cli import mhc_alleles_from_args, predictors_from_args
         from topiary import TopiaryPredictor
         validate_antigen_args(args)
+        validate_cta_args(args)
         if getattr(args, 'mhc_alleles', None) or getattr(args, 'mhc_alleles_file', None):
             antigen_alleles = normalize_alleles(mhc_alleles_from_args(args), 'Antigen prediction')
 
@@ -770,15 +804,14 @@ def load_unified_external(args, epitope_config, options, genome):
             "Remove --mhc-alleles/--mhc-alleles-file, or use "
             "--external-predictions fresh with --mhc-predictor to predict "
             "for an explicit HLA set.")
+    from .cta_input import write_cta_admissions
     loaded_reports = read_reports(
         [(fmt, path) for fmt, path, _ in specs],
         scopes=[scope for _, _, scope in specs],
         manifest_path=getattr(args, 'input_manifest', None), genome=genome,
         antigen_predictor_factory=antigen_predictor_factory, antigen_alleles=antigen_alleles,
-        epitope_config=epitope_config)
-    if cta:
-        from .cta_input import prepare_cta_report
-        loaded_reports = [prepare_cta_report(args, genome, epitope_config)]
+        epitope_config=epitope_config,
+        cta_admission_writer=lambda sources: write_cta_admissions(args, sources))
     if getattr(args, 'index_native_references', False):
         native = [report.dataset for report in loaded_reports
                   if report.source_format == 'epitopes' and report.dataset is not None]
@@ -844,7 +877,7 @@ def load_unified_external(args, epitope_config, options, genome):
         prediction_prefix=getattr(args, 'external_prediction_prefix', None),
         manifest_path=getattr(args, 'input_manifest', None), genome=genome,
         input_predictions_path=getattr(args, 'output_input_predictions', None))
-    if cta:
+    if cta and len(loaded_reports) == 1:
         frame.attrs['cta_predictor'] = loaded_reports[0].report_df.attrs['cta_predictor']
     epitope_config = frame.attrs['epitope_dataset'].config
     dataset = frame.attrs['epitope_dataset']

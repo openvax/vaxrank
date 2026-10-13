@@ -246,9 +246,9 @@ def validate_antigen_args(args):
     specs = external_input_specs(args)
     if not any(fmt == 'antigens' for fmt, _, _ in specs):
         return
-    conflicts = ('vcf', 'bam', 'input_cta_expression')
+    conflicts = ('vcf', 'bam')
     if any(getattr(args, name, None) for name in conflicts):
-        raise ValueError('Combine new antigen sequences with saved VCF/BAM or CTA evidence '
+        raise ValueError('Combine new antigen sequences with saved VCF/BAM evidence '
                          'using epitopes inputs in --input-manifest')
     if not getattr(args, 'mhc_predictor', None) or getattr(args, 'ensembl_release', None) is None:
         raise ValueError('--input-antigens requires --mhc-predictor and --ensembl-release for new predictions')

@@ -275,7 +275,8 @@ def test_hitlist_bundle_contract_capture_and_mismatch(tmp_path, monkeypatch, gen
         load_hitlist_bundle(bundle, admission)
 
 
-def test_real_verified_hitlist_bundle_cli_and_portable_replay(tmp_path, monkeypatch, cli_dependencies):
+@pytest.mark.parametrize('route', ['alias', 'manifest'])
+def test_real_verified_hitlist_bundle_cli_and_portable_replay(tmp_path, monkeypatch, cli_dependencies, route):
     """Exercise the public verifier on a real producer-exported synthetic bundle."""
     import base64
     import hashlib
@@ -295,8 +296,14 @@ def test_real_verified_hitlist_bundle_cli_and_portable_replay(tmp_path, monkeypa
     monkeypatch.setattr(importlib.metadata, 'version', lambda name:
                         manifest['expression']['oncoref_version'] if name == 'oncoref' else actual_version(name))
     first, native = tmp_path / 'first', tmp_path / 'native.tsv'
-    run_cli(argv(expression, first) + ['--hitlist-evidence-bundle', str(bundle),
-        '--output-epitopes', str(native), '--vaccine-type', 'peptide', 'mrna'])
+    if route == 'manifest':
+        from .test_cta_manifest import cli, entry, manifest as write_manifest
+        args = cli(write_manifest(tmp_path, [entry(hitlist_evidence_bundle='moved-evidence')]), native)
+        args += ['--output-dir', str(first), '--num-epitopes-per-vaccine-peptide', '1000']
+    else:
+        args = argv(expression, first) + ['--hitlist-evidence-bundle', str(bundle),
+                                        '--output-epitopes', str(native)]
+    run_cli(args + ['--vaccine-type', 'peptide', 'mrna'])
     saved = EpitopeDataset.load(native)
     captured = saved.selection['hitlist_evidence_bundle']
     assert captured['manifest'] == manifest

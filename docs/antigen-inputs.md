@@ -76,10 +76,47 @@ The Python `vaxrank.external_rescoring.prepare_reports` API accepts the same
 `("antigens", path)` inputs and an `antigen_predictor_factory(scope)` returning
 a Topiary predictor. The factory runs once after validation.
 
-Direct VCF/BAM and CTA expression still run their source adapters first; add
-their saved candidate files to this manifest. Fresh/additive table rescoring
+Direct VCF/BAM still runs its source adapter first; add
+its saved candidate file to this manifest. Fresh/additive table rescoring
 is a separate step. Pooling does not calibrate different models or evidence
 types: use an explicit [selection policy](mixed-antigen-design.md).
+
+## Add CTA expression
+
+An experimental `cta_expression` entry admits targets from patient expression
+before prediction. Add it beside `antigens` or `epitopes` in the manifest above:
+
+```yaml
+  - format: cta_expression
+    path: expression.tsv
+    sample_id: tumor-rna
+    cta_expression:
+      measurement_level: gene
+      id_column: gene_id
+      value_column: tumor_tpm
+      expression_unit: TPM
+      evidence_source: Salmon
+      evidence_version: "1.10.3"
+      assay: bulk RNA-seq
+      min_expression: 2
+```
+
+Use `transcript` for transcript measurements. Each entry declares its own
+columns, units, sample and threshold; one matrix may supply several sample
+columns. Existing human Ensembl/OncoRef admission rules apply. Expression is
+not converted into protein abundance or mutation read support.
+
+Optional `exclusion_policy` lists `gene_patterns` and `gene_exceptions`;
+defaults remain `MAGE*` and `MAGEA4`. An optional `hitlist_evidence_bundle` path
+is relative to the manifest and is verified against that input's contract.
+All input scopes are checked before loading one predictor for new sources.
+
+`--output-dir` writes `cta_admission.json` for one CTA source, or separate files
+under `cta_admissions/` for multiple sources. `--output-cta-admission` selects a
+single-source file explicitly. Held-out and unresolved decisions remain in
+the native evidence, even when a CTA source contributes no admitted proteins
+to an otherwise usable mixed run. A wholly unadmitted CTA-only run stops after
+writing requested admission records.
 
 ## Shared outputs
 
