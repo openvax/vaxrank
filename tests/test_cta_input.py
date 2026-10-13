@@ -16,6 +16,7 @@ from .test_epitope_dataset import forbidden
 from vaxrank.cli.entry_point import run_cli
 from vaxrank.cta_expression import CTAExpressionResult
 from vaxrank.cta_input import hitlist_annotations
+from vaxrank import AntigenDataset
 from vaxrank.epitope_dataset import EpitopeDataset
 from vaxrank.native_serialization import from_native_json
 
@@ -62,6 +63,7 @@ def test_expression_only_cli_outputs_and_offline_replay(tmp_path, monkeypatch, c
     first, native = tmp_path / 'first', tmp_path / 'native.tsv'
     admission_path = tmp_path / 'admission.json'
     run_cli(argv(path, first, level) + ['--output-epitopes', str(native),
+                                     '--output-antigens', str(first / 'antigens.json'),
                                      '--output-cta-admission', str(admission_path),
                                      '--mrna-poly-a-length', '73',
                                      '--peptide-max-constructs', '1',
@@ -73,6 +75,9 @@ def test_expression_only_cli_outputs_and_offline_replay(tmp_path, monkeypatch, c
     saved = EpitopeDataset.load(native)
     admission = from_native_json(saved.selection['cta_expression_admission'], CTAExpressionResult)
     assert admission == CTAExpressionResult.load(admission_path)
+    exported = AntigenDataset.load(first / 'antigens.json')
+    assert set(exported.antigens.values()) == {
+        d.assessment.antigen for d in admission.decisions if d.assessment is not None}
     assert saved.result.df.cta_expression_level.eq(level).all()
     assert saved.result.df.cta_expression_unit.eq('TPM').all()
     assert 'n_rna_alt' not in saved.result.df

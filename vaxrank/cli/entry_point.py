@@ -979,6 +979,10 @@ def populate_default_output_paths(args):
         'external'
         if (getattr(args, 'input_lens', None)
             or getattr(args, 'input_pvacseq', None)
+            or getattr(args, 'input_epitopes', None)
+            or getattr(args, 'input_topiary', None)
+            or getattr(args, 'input_cta_expression', None)
+            or getattr(args, 'input_antigens', None)
             or getattr(args, 'external_input', None)
             or getattr(args, 'input_manifest', None))
         else 'pipeline')
@@ -1295,6 +1299,7 @@ def run_cli(args_list=None):
             or getattr(args, 'input_epitopes', None)
             or getattr(args, 'input_topiary', None)
             or getattr(args, 'input_cta_expression', None)
+            or getattr(args, 'input_antigens', None)
             or getattr(args, 'external_input', None)
             or getattr(args, 'input_manifest', None)):
         merged_config = load_vaxrank_config(args)
@@ -1416,6 +1421,12 @@ def run_cli(args_list=None):
                          predictor=report_df.attrs.get('cta_predictor'))
     if getattr(args, '_design_dataset', None) is not None and args.output_epitopes:
         args._design_dataset.save(args.output_epitopes)
+    if getattr(args, 'output_antigens', None):
+        from ..antigen_input import AntigenDataset
+        dataset = getattr(args, '_design_dataset', None)
+        if dataset is None:
+            raise ValueError('Antigen export requires resolved native input evidence')
+        AntigenDataset.from_epitope_dataset(dataset).save(args.output_antigens)
     write_run_summary(args, patient_info, source)
 
     ########################
@@ -1666,7 +1677,8 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     # so we can filter out alt contigs that would crash downstream.
     variants = variant_collection_from_args(args)
     variants = filter_unannotatable_variants(variants)
-    capture_native = epitope_dataset is None and bool(getattr(args, 'output_epitopes', None))
+    capture_native = epitope_dataset is None and bool(
+        getattr(args, 'output_epitopes', None) or getattr(args, 'output_antigens', None))
     if capture_native:
         from ..construct_replay import pipeline_native_dataset
         epitope_dataset = pipeline_native_dataset(args, variants, epitope_config)
@@ -1718,7 +1730,8 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         if run_policy is not None:
             epitope_dataset.selection['run_configuration'] = run_policy
         initialize_construct_replay(args, epitope_dataset, vaccine_config, manufacturability_config)
-        epitope_dataset.save(args.output_epitopes)
+        if args.output_epitopes:
+            epitope_dataset.save(args.output_epitopes)
     return vaxrank_results
 
 def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):

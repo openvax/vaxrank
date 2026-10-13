@@ -24,6 +24,10 @@ workflows. Admission and ranking do not establish clinical safety or efficacy.
 
 ## Rank together or select separate panels
 
+For resolved sequences without predictions, use the experimental
+[unified antigen input](antigen-inputs.md). It accepts all supported kinds
+in one dataset and predicts them through the shared pipeline.
+
 Save candidates with `--output-epitopes`, keep their `.references` directories,
 and combine them using an [input manifest](input-workflows.md). Preserve viral
 accessions separately from the manifest's host reference.

@@ -630,6 +630,15 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             })
     dataset.selection = (dict(updated[0].dataset.selection)
                          if len(updated) == 1 and updated[0].dataset is not None else {})
+    catalogs = {}
+    for report in updated:
+        if report.dataset is not None:
+            for identity, records in report.dataset.selection.get('antigen_inputs', {}).items():
+                if identity in catalogs and catalogs[identity] != records:
+                    raise ValueError('Conflicting retained antigen records for ' + identity)
+                catalogs[identity] = records
+    if catalogs:
+        dataset.selection['antigen_inputs'] = catalogs
     if mode in ('input', 'additive'):
         dataset.selection['score_groups'] = [list(f.prediction_id.unique()) for f in input_frames]
     frame.attrs['epitope_dataset'] = dataset
@@ -653,6 +662,7 @@ def load_unified_external(args, epitope_config, options, genome):
     model_factory, alleles = None, []
     direct = bool(getattr(args, 'vcf', None) or getattr(args, 'bam', None))
     cta = bool(getattr(args, 'input_cta_expression', None))
+    antigens = bool(getattr(args, 'input_antigens', None))
     if direct and mode == 'fresh':
         raise ValueError('Direct/table composition requires --external-predictions input or additive')
     if mode in ('fresh', 'additive'):
@@ -672,9 +682,9 @@ def load_unified_external(args, epitope_config, options, genome):
                     raise ValueError('--prediction-cache requires one configured external predictor')
                 models = [CachedPredictor.from_topiary_output(cache_path, fallback=models[0])]
             return models
-    elif not direct and not cta and getattr(args, 'mhc_predictor', None):
+    elif not direct and not cta and not antigens and getattr(args, 'mhc_predictor', None):
         raise ValueError("Use --external-predictions fresh or additive to run --mhc-predictor")
-    elif not direct and not cta and (getattr(args, 'mhc_alleles', None)
+    elif not direct and not cta and not antigens and (getattr(args, 'mhc_alleles', None)
                          or getattr(args, 'mhc_alleles_file', None)):
         raise ValueError(
             "Input prediction mode uses the alleles recorded in each report. "
@@ -686,12 +696,14 @@ def load_unified_external(args, epitope_config, options, genome):
         [(fmt, path) for fmt, path, _ in specs],
         scopes=[scope for _, _, scope in specs],
         manifest_path=getattr(args, 'input_manifest', None), genome=genome)
-    if cta:
+    if cta or antigens:
+        from .antigen_input import prepare_antigen_report
         from .cta_input import prepare_cta_report
         from .external_input import ExternalConstructOptions
         from .vaccine_config import VaccineConfig
         from .window_selection import WindowSelection
-        loaded_reports = [prepare_cta_report(args, genome, epitope_config)]
+        prepare = prepare_cta_report if cta else prepare_antigen_report
+        loaded_reports = [prepare(args, genome, epitope_config)]
         vaccine = options.vaccine_config or VaccineConfig()
         if vaccine.window_selection is None:
             import msgspec
@@ -778,7 +790,7 @@ def load_unified_external(args, epitope_config, options, genome):
     rankers = {'lens': lens_ranking_result, 'pvacseq': pvacseq_ranking_result,
                'topiary': dataset_ranking_result, 'epitopes': dataset_ranking_result,
                'vcf_bam': dataset_ranking_result, 'exacto': dataset_ranking_result,
-               'cta_expression': dataset_ranking_result}
+               'cta_expression': dataset_ranking_result, 'antigens': dataset_ranking_result}
     outcomes = []
     for report in reports:
         ranker = rankers[report.source_format]

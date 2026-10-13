@@ -15,6 +15,7 @@ theme:
 nav:
   - Home: index.md
   - Input workflows: input-workflows.md
+  - Experimental antigen inputs: antigen-inputs.md
   - Experimental mixed antigens: mixed-antigen-design.md
   - Experimental window exposure: core-window-exposure.md
   - Unified evidence design: unified_evidence.md
