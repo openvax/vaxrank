@@ -346,8 +346,8 @@ evidence. `load_predictions(path)` restores those fields. The per-epitope CSV
 also carries scope columns and `input_provenance_json`. External output
 directories include `candidate_predictions.tsv` and `input_provenance.json`;
 the run summary and template reports distinguish declared genotype from
-reported prediction coverage. These provenance files do not replace the
-original input reports or provide the generalized table-reload CLI in #346.
+reported prediction coverage. Keep the original input reports alongside these provenance files. Native
+evidence reload is available through `--input-epitopes`.
 
 Different samples, libraries and timepoints stay separate observations. One
 representative construct may be selected for their shared patient/reference
@@ -463,9 +463,10 @@ presenters. Unknown flanks remain unknown; `--external-peptide-only` explicitly
 requests inference without flanks when a flank-dependent model cannot use the
 available context. `--prediction-cache FILE` applies to explicit external
 inference with a single configured model and `--external-peptide-only`.
-Topiary's released flat cache retains its model/version checks and fallback;
-contextual exact-cache queries remain tracked in openvax/topiary#468. Original-only
-replay needs no cache or live model.
+Topiary's released cache retains model/version checks and fallback. Its
+[contextual query API](https://github.com/openvax/topiary/issues/468) has shipped;
+Vaxrank still requires peptide-only external cache queries pending
+[consumer integration](https://github.com/openvax/vaxrank/issues/624). Original-only replay needs no cache or live model.
 
 ## Native Exacto inputs
 
@@ -517,18 +518,11 @@ native export. Reload repeats their existing window/occurrence selection using
 the saved evidence and the requested vaccine configuration. Candidate-only older
 native files cannot reconstruct construction evidence they did not save.
 
-## Remaining integration work
+## Evidence model
 
-- [Vaxrank #497](https://github.com/openvax/vaxrank/issues/497) and
-  [Topiary #366](https://github.com/openvax/topiary/issues/366): remaining generalized input
-  integration and additive predictions.
-- Topiary has shipped [native Exacto ingestion](https://github.com/openvax/topiary/issues/365)
-  and [ORF/occurrence reconciliation](https://github.com/openvax/topiary/issues/370).
-  Their full Vaxrank consumer adoption remains in #497.
-
-The [unified evidence design](unified_evidence.md) describes the intended
-model, not an additional supported CLI workflow. For current configuration
-keys and defaults, run `vaxrank --print-default-config`.
+The [unified evidence design](unified_evidence.md) describes the broader model.
+The supported input, reconciliation and replay paths are documented above.
+For current configuration keys and defaults, run `vaxrank --print-default-config`.
 
 ## Experimental window exposure
 

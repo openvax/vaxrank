@@ -73,7 +73,7 @@ All mappings, contributors, raw presentation and excluded observations, identiti
 lineage and tissue evidence are captured in the native file. Positive MS must be
 established by the producer's verified modality/measurement contract; fluorescence,
 binding, negative and unknown-modality observations do not count. This consumes the
-corrected evidence export contract while raw scanner correction remains tracked in
+corrected evidence export contract. The upstream scanner correction is recorded in
 [Hitlist #644](https://github.com/pirl-unc/hitlist/issues/644).
 
 Scoring columns include `hitlist_ms_observations`, `hitlist_query_status`,
