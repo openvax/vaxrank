@@ -7,6 +7,11 @@ Vaxrank designs CTA vaccines from patient expression tables and HLA without
 VCF/BAM. OncoRef supplies the CTA reference; Topiary/MHCtools predict the
 admitted proteins, and the shared DSL selects/ranks peptide or mRNA designs.
 
+To combine expression with viral sequences or saved mutation evidence, use a
+[`cta_expression` manifest entry](../antigen-inputs.md#add-cta-expression). Each
+entry declares its own sample, columns and admission threshold. The single-input
+command below remains available.
+
 ```bash
 vaxrank --input-cta-expression patient-expression.tsv \
   --cta-expression-level gene --cta-id-column gene_id --cta-value-column TPM \
@@ -68,7 +73,7 @@ All mappings, contributors, raw presentation and excluded observations, identiti
 lineage and tissue evidence are captured in the native file. Positive MS must be
 established by the producer's verified modality/measurement contract; fluorescence,
 binding, negative and unknown-modality observations do not count. This consumes the
-corrected evidence export contract while raw scanner correction remains tracked in
+corrected evidence export contract. The upstream scanner correction is recorded in
 [Hitlist #644](https://github.com/pirl-unc/hitlist/issues/644).
 
 Scoring columns include `hitlist_ms_observations`, `hitlist_query_status`,

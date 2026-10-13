@@ -39,7 +39,7 @@ visible rather than becoming an unsupported confidence claim.
 - **Supplied-fusion path:** `fusion_antigens_from_isovar` retains coding
   hypotheses and reports unresolved/ambiguous status. It is separate from the
   small-variant pipeline; see
-  [fusion inputs](https://github.com/openvax/vaxrank/blob/main/README.md#upstream-inputs).
+  [fusion antigens from supplied assemblies](how-it-works.md#fusion-antigens-from-supplied-assemblies).
 - **Opt-in DNA fallback:** consequences come from Varcode, not RNA
   reconstruction. Fusion candidates are checked for a usable changed protein
   before effect selection ([#482](https://github.com/openvax/vaxrank/issues/482),

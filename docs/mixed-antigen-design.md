@@ -44,7 +44,8 @@ vaxrank --input-manifest inputs.yaml \
 ```
 
 Select a recorded version with `affinity["mhcflurry", "VERSION"]` when needed.
-For incompatible scores, use [common-model prediction](input-workflows.md#saved-scoring-policies).
+For incompatible scores, use
+[common-model prediction](input-workflows.md#generate-common-predictions-and-re-rank).
 Binding, presentation and immune response remain distinct; this score does not
 infer missing expression or tumor specificity.
 
