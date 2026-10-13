@@ -855,6 +855,8 @@ _PRIMARY_OUTPUT_FLAGS = (
         "Isovar transcript-assembly intermediate CSV"),
     ("--output-epitopes",               "output_epitopes",
         "raw epitope predictions"),
+    ("--output-antigens",               "output_antigens",
+        "experimental resolved antigen sequences and admission evidence"),
     ("--output-input-predictions",      "output_input_predictions",
         "original external-table predictions"),
     ("--output-dir",                    "output_dir",
@@ -873,7 +875,9 @@ def check_args(args):
     the surprise we want to prevent.
     """
     from ..cta_input import validate_cta_args
+    from ..antigen_input import validate_antigen_args
     validate_cta_args(args)
+    validate_antigen_args(args)
     if not any(getattr(args, attr, '') for _, attr, _ in _PRIMARY_OUTPUT_FLAGS):
         flag_lines = "\n".join(
             "  %-32s %s" % (flag, purpose)
@@ -1028,6 +1032,10 @@ def require_annotations_for_template_reports(args, ranked):
 
 
 def add_external_rescoring_args(arg_parser):
+    arg_parser.add_argument('--input-antigens', metavar='JSON',
+                            help='Experimental: predict and design from a unified antigen dataset with explicit admission evidence.')
+    arg_parser.add_argument('--output-antigens', metavar='JSON',
+                            help='Experimental: export resolved source antigens and admission evidence, without predictions.')
     cta = arg_parser.add_argument_group('Patient CTA expression input')
     cta.add_argument('--input-cta-expression', metavar='CSV_OR_TSV',
                      help='Design CTA vaccines directly from patient expression without VCF/BAM.')
@@ -1189,7 +1197,8 @@ def choose_arg_parser(args_list):
         return make_vaxrank_arg_parser()
     elif any(
             arg in ("--input-pvacseq", "--input-lens", "--external-input", "--input-manifest",
-                    "--input-epitopes", "--input-topiary", "--input-cta-expression") or
+                    "--input-epitopes", "--input-topiary", "--input-cta-expression", "--input-antigens") or
+            arg.startswith("--input-antigens=") or
             arg.startswith("--input-cta-expression=") or
             arg.startswith("--input-epitopes=") or
             arg.startswith("--input-topiary=") or

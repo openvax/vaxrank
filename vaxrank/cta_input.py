@@ -1,6 +1,6 @@
 """Expression-first CTA inputs for the shared prediction/design pipeline."""
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 import base64
 import hashlib
 import io
@@ -8,12 +8,11 @@ import json
 from pathlib import Path
 
 import pandas as pd
-from topiary import TopiaryPredictor, TopiaryResult
+from topiary import TopiaryPredictor
 
 from .cta_admission import CTAAdmissionPolicy
 from .cta_expression import CTAExpressionInput, CTATargetExclusionPolicy, admit_cta_expression
-from .epitope_config import EpitopeConfig
-from .epitope_dataset import ANTIGEN_COLUMN, EpitopeDataset
+from .antigen_input import predict_antigens
 from .external_report import ExternalReport
 from .input_scope import InputProvenance, InputScope, normalize_alleles
 from .native_serialization import to_native_json
@@ -177,62 +176,32 @@ def prepare_cta_report(args, genome, epitope_config=None):
         raise ValueError('CTA inputs require an MHC predictor')
     predictor = TopiaryPredictor(models=models)
     antigens = {a.source_identifier: a for a in admission.admitted_antigens}
-    frame = predictor.predict_from_named_sequences({name: a.amino_acids for name, a in antigens.items()})
-    if frame.empty:
-        raise ValueError('CTA predictor returned no peptide measurements')
-    frame = frame.reset_index(drop=True)
-    from .allele_validation import validate_prediction_frame, parse_prediction_allele
-    validate_prediction_frame(frame, 'CTA native protein prediction')
-    if any(a and parse_prediction_allele(a) not in alleles for a in frame.allele):
-        raise ValueError('CTA predictor returned an allele outside the declared patient genotype')
     decisions = {d.assessment.antigen.source_identifier: d for d in admission.decisions if d.status == 'admitted'}
-    for column, values in {
-        'source_sequence': [antigens[n].amino_acids for n in frame.source_sequence_name],
-        ANTIGEN_COLUMN: [to_native_json(antigens[n]) for n in frame.source_sequence_name],
-        'gene_id': [antigens[n].gene_id for n in frame.source_sequence_name],
-        'canonical_gene_id': [decisions[n].reference_resolution.evidence.gene_id for n in frame.source_sequence_name],
-        'gene_name': [antigens[n].display_gene_name for n in frame.source_sequence_name],
-        'transcript_id': [decisions[n].transcript_id for n in frame.source_sequence_name],
-        'cta_expression_value': [decisions[n].value for n in frame.source_sequence_name],
-    }.items():
-        frame[column] = values
-    frame['cta_expression_unit'] = contract.expression_unit
-    frame['cta_expression_level'] = contract.measurement_level
-    if contract.expression_unit == 'TPM':
-        frame['cta_' + contract.measurement_level + '_tpm'] = frame.cta_expression_value
-    frame['sample_name'] = contract.sample_id
-    frame['source_class'] = 'self'
-    frame['source_species'] = 'Homo sapiens'
-    annotations = hitlist_annotations(frame.peptide, bundle, frame.allele)
-    for name in annotations:
-        frame[name] = annotations[name]
-    adapted = EpitopeDataset.from_topiary(TopiaryResult(frame), label=provenance.input_id)
-    def occurrence_id(name, peptide, offset):
-        return provenance.input_id + ':' + hashlib.sha256(
-            json.dumps([name, peptide, int(offset)]).encode()).hexdigest()
-    # As in direct variant prediction, each native protein occurrence is a
-    # design input. Shared peptide strings never choose an arbitrary gene or
-    # erase the distinct flank context/expression of another occurrence.
-    frame['prediction_id'] = [occurrence_id(r.source_sequence_name, r.peptide, r.peptide_offset)
-                              for r in frame.itertuples()]
-    candidates = tuple(replace(e, prediction_id=occurrence_id(e.source_name, e.sequence, e.offset))
-                       for e in adapted.epitopes)
-    dataset = EpitopeDataset.from_predictions(candidates, result=TopiaryResult(frame))
-    dataset.antigens = {e.prediction_id: antigens[e.source_name] for e in candidates}
-    # Exact source-level self matches use the unchanged full candidate CTA
-    # reference, independently of which targets were admitted/excluded.
-    matches = {name: self_reference_matches(frame.loc[frame.source_sequence_name.eq(name), 'peptide'], antigen, genome)
-               for name, antigen in antigens.items()}
-    dataset.epitopes = tuple(replace(
-        e, input_provenance=provenance, patient_alleles=alleles,
-        occurs_in_reference=True,
-        occurs_in_non_CTA_reference=matches[e.source_name][e.sequence].occurs,
-        self_reference_match=matches[e.source_name][e.sequence]) for e in dataset.epitopes)
+
+    def annotate(frame):
+        frame['canonical_gene_id'] = [decisions[n].reference_resolution.evidence.gene_id
+                                      for n in frame.source_sequence_name]
+        frame['transcript_id'] = [decisions[n].transcript_id for n in frame.source_sequence_name]
+        frame['cta_expression_value'] = [decisions[n].value for n in frame.source_sequence_name]
+        frame['cta_expression_unit'] = contract.expression_unit
+        frame['cta_expression_level'] = contract.measurement_level
+        if contract.expression_unit == 'TPM':
+            frame['cta_' + contract.measurement_level + '_tpm'] = frame.cta_expression_value
+        frame['source_class'] = 'self'
+        annotations = hitlist_annotations(frame.peptide, bundle, frame.allele)
+        for name in annotations:
+            frame[name] = annotations[name]
+
+    dataset = predict_antigens(antigens, predictor, genome=genome, provenance=provenance,
+                               config=epitope_config, annotate=annotate,
+                               self_matcher=self_reference_matches)
+    # CTA proteins are encoded by the host; the antigen-aware self match
+    # separately retains matches outside the declared CTA source exclusions.
+    dataset.epitopes = tuple(replace(e, occurs_in_reference=True) for e in dataset.epitopes)
     dataset.result.df['occurs_in_reference'] = True
-    dataset.result.df['occurs_in_non_CTA_reference'] = [
-        matches[r.source_sequence_name][r.peptide].occurs for r in dataset.result.df.itertuples()]
-    dataset.provenance = (provenance,)
-    dataset.config = epitope_config or EpitopeConfig()
+    dataset.selection['antigen_inputs'][provenance.input_id].update({
+        d.assessment.antigen.source_identifier: asdict(d.assessment.antigen)
+        for d in admission.decisions if d.assessment is not None})
     dataset.selection['cta_expression_admission'] = to_native_json(admission)
     if bundle is not None:
         dataset.selection['hitlist_evidence_bundle'] = bundle

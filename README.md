@@ -54,7 +54,8 @@ Required inputs:
 - `--mhc-predictor`: which MHC binding predictor to use (see
   [MHC Binding Predictors](#mhc-binding-predictors))
 
-**Experimental:** [CTA inputs](docs/design/expression-cta-inputs.md),
+**Experimental:** [unified antigen inputs](docs/antigen-inputs.md),
+[CTA inputs](docs/design/expression-cta-inputs.md),
 [mixed mutation/CTA/viral selection](docs/mixed-antigen-design.md) and
 [window exposure](docs/core-window-exposure.md). These research workflows do not
 establish clinical safety or efficacy.

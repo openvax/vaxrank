@@ -13,7 +13,7 @@ Topiary's public reader with explicit sample and companion-file scope.
 | Normalized Topiary tables | `--input-topiary FILE` or `--external-input topiary=FILE` | Retains original rows, metadata and additive features; table-only candidates need no construction evidence. |
 | Native Exacto tables | `format: exacto` in `--input-manifest` | Requires an explicit sample; preserves peptide/ORF/RNA evidence without inferring HLA assignments or construction admission. |
 | Saved Vaxrank candidate predictions | `--input-epitopes FILE` or `--external-input epitopes=FILE` | Reloads native candidates. Enriched exports also retain the complete scoring frame and policy. |
-| Already constructed `VaccineAntigen` objects | Python `predict_epitopes(..., antigen=...)` and `vaccine_peptides_for_antigen(...)` | Library integration; callers provide context, targetable intervals and admission evidence. |
+| Resolved antigens of any supported kind | Experimental `AntigenDataset` / `--input-antigens JSON` | [Shared sequence/evidence input](antigen-inputs.md); callers provide context, targetable intervals and admission evidence. Uses the same prediction, ranking and design outputs. |
 
 ## Reload or rank a normalized table
 
