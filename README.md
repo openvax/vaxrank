@@ -8,33 +8,29 @@
 
 # vaxrank
 
-Vaxrank is the antigen ranking and vaccine design component of the
-[OpenVax](https://www.openvax.org/) pipeline for personalized cancer vaccines.
-It uses somatic variants, tumor RNA-seq and HLA types, or previously scored
-candidate evidence, to select antigens and design peptide or mRNA constructs.
-Reports support review of the evidence and resulting designs.
+Vaxrank selects mutated protein fragments for personalized therapeutic cancer
+vaccines. It is the antigen ranking and vaccine design component of the
+[OpenVax](https://www.openvax.org/) pipeline.
 
-## Contents
+It takes somatic variants, tumor RNA-seq and HLA types — or candidate epitopes
+that another tool has already scored — and returns ranked vaccine peptides,
+peptide or mRNA construct files, and reports for reviewing the evidence behind
+each design.
 
-- [Quick Start](#quick-start)
-- [Input workflows](https://openvax.github.io/vaxrank/input-workflows/)
-- [Overview](#overview)
-- [Vaccine designs](#vaccine-designs)
-- [Vaccine types and output modes](#vaccine-types-and-output-modes)
-- [Clinical Use](#clinical-use)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [MHC Binding Predictors](#mhc-binding-predictors)
-- [How It Works](#how-it-works)
-- [Papers & Citations](#papers--citations)
-- [Dependencies](#dependencies)
-- [Legacy flags](#legacy-flags)
-- [Development](#development)
+## Install
 
-## Quick Start
+```sh
+pip install vaxrank
+pyensembl install --release 113 --species human   # match your reference genome
+```
 
-Full pipeline from a tumor VCF + RNA-seq BAM, emitting ranked vaccine
-peptides as text, HTML, and PDF reports:
+Vaxrank needs Python 3.10 or newer. PDF reports additionally need wkhtmltopdf or
+WeasyPrint; see [installation](docs/installation.md).
+
+## Quick start
+
+Ranked vaccine peptides from a tumor VCF plus an RNA-seq BAM, as text and PDF
+reports (this command uses the mouse B16 melanoma data in this repository):
 
 ```sh
 vaxrank \
@@ -46,22 +42,22 @@ vaxrank \
     --output-pdf-report vaccine-peptides.pdf
 ```
 
-Required inputs:
+Four inputs are required:
 
-- `--vcf`: somatic variants (VCF from any variant caller)
-- `--bam`: tumor RNA-seq alignments (used by Isovar to assemble mutant transcripts)
-- `--mhc-alleles`: patient HLA alleles (e.g. `HLA-A*02:01,HLA-B*07:02`)
-- `--mhc-predictor`: which MHC binding predictor to use (see
-  [MHC Binding Predictors](#mhc-binding-predictors))
+- `--vcf`: somatic variants, from any variant caller
+- `--bam`: tumor RNA-seq alignments, used by Isovar to assemble mutant transcripts
+- `--mhc-alleles`: the patient's HLA alleles, e.g. `HLA-A*02:01,HLA-B*07:02`
+- `--mhc-predictor`: which binding predictor to run
+  ([available predictors](docs/mhc-predictors.md))
 
-**Experimental:** [unified antigen inputs](docs/antigen-inputs.md),
-[CTA inputs](docs/design/expression-cta-inputs.md),
-[mixed mutation/CTA/viral selection](docs/mixed-antigen-design.md) and
-[window exposure](docs/core-window-exposure.md). These research workflows do not
-establish clinical safety or efficacy.
+To get vaccine constructs rather than reports, add `--output-dir` and, for mRNA,
+`--vaccine-type mrna`. [Vaccine designs](docs/vaccine-designs.md) describes the
+peptide and mRNA designs and the files each one writes.
 
-Drive design from a pre-computed neoepitope report (LENS or pVACseq)
-when upstream MHC prediction has already been done:
+### Start from an already-scored report
+
+When MHC prediction has happened upstream, design directly from a LENS or
+pVACseq report instead of a VCF and BAM:
 
 ```sh
 vaxrank --input-lens patient.lens.tsv \
@@ -69,961 +65,74 @@ vaxrank --input-lens patient.lens.tsv \
         --ensembl-release 102
 ```
 
-To combine LENS and pVACseq, use `--input-manifest inputs.yaml` to list the
-reports and declare their shared patient, reference assembly and MHC alleles.
-VCF + BAM and single-report commands do not need a manifest.
-Reuse original predictions by default, or
-request common models with `--external-predictions fresh`. See the
-[input workflow guide](https://openvax.github.io/vaxrank/input-workflows/)
-for complete commands, scoring choices, metadata and current Exacto/direct-input
-integration limits.
-
-Reports use retained annotation when available. CTA/viral reports need no
-Ensembl release; mutation reports need `--ensembl-release` when annotation is
-missing. This applies equally to single files, external inputs and manifests.
-
-Emit both peptide and mRNA constructs in one run. Outputs use separate
-subdirectories:
-
-```sh
-vaxrank --vcf v.vcf --bam r.bam \
-        --vaccine-type peptide mrna --output-dir vaccines/
-# → vaccines/peptide/{vaccine.fasta, manifest.json, order_form.csv}
-# → vaccines/mrna/{cds.fasta, no_polyA.fasta, full.fasta, manifest.json, layers.csv}
-```
-
-## Overview
-
-Vaxrank connects antigen evidence to vaccine design and synthesis planning.
-
-**Choose the vaccine type first:** peptide, mRNA, or both (`--vaccine-type`).
-This choice sets defaults and constraints for antigen selection, construct
-assembly and reporting, including peptide synthesis checks or mRNA sequence
-optimization.
-
-**Upstream preparation (outside Vaxrank):**
-
-- Call somatic variants from aligned tumor and matched-normal DNA using a tool
-  such as [Mutect2](https://gatk.broadinstitute.org/hc/en-us/articles/5257897695387-Mutect2)
-  or [Strelka2](https://github.com/Illumina/strelka), producing a VCF.
-- Align tumor RNA-seq reads to produce a BAM.
-- Determine the patient's HLA alleles.
-
-**Within Vaxrank:**
-
-1. **Prepare candidates.** Use [Varcode](https://github.com/openvax/varcode) for
-   coding-consequence annotation and [Isovar](https://github.com/openvax/isovar)
-   for RNA-supported sequences and predicted protein context where justified.
-2. **Score epitopes.** Run predictors through
-   [MHCtools](https://github.com/openvax/mhctools) and score/filter their evidence
-   with [Topiary](https://github.com/openvax/topiary), or reuse saved predictions.
-3. **Select and assemble.** Rank candidates, select antigen windows and apply
-   the chosen vaccine type's limits, linkers and assembly settings.
-4. **Export designs.** Write peptide or mRNA sequences, synthesis planning files
-   and requested analysis reports.
-
-Previously scored inputs can bypass reconstruction and prediction. See
-[input workflows](https://openvax.github.io/vaxrank/input-workflows/) for saved
-evidence, LENS/pVACseq reports and optional new predictions, and
-[library responsibilities](https://openvax.github.io/vaxrank/library-responsibilities/)
-for the evidence handoffs. CTA/viral integration and mixed-source selection
-remain **experimental**.
-
-## Vaccine designs
-
-Vaxrank's vaccine design space is two **orthogonal axes** (shared
-across vaccine types) plus the type itself:
-
-| Axis | Values | What it controls |
-|---|---|---|
-| `--vaccine-type` | `peptide` / `mrna` (multi-valued) | The platform(s); pass multiple for parallel design |
-| `--antigen-content` | `mutation_spanning` / `minimal_epitope` | What each antigen *is* |
-| `--antigens-per-construct` | `1` / `N` | How many antigens to concatenate per construct |
-
-The matrix yields 8 designs, 4 per vaccine type:
-
-| Type | Content | Per-construct | Design name | Reference |
-|---|---|---|---|---|
-| peptide | mutation_spanning | 1 | **SLP** (default) | [PGV-001 (Saxena 2025)](https://pubmed.ncbi.nlm.nih.gov/40094414/) |
-| peptide | mutation_spanning | N | Multi-SLP / multi-epitope long peptide | |
-| peptide | minimal_epitope | 1 | Minimal-ligand peptide | |
-| peptide | minimal_epitope | N | Concatenated minimal-ligand peptide | |
-| mrna | mutation_spanning | N | **BioNTech FixVac / iNeST** (default for mRNA) | [Sahin 2017](https://doi.org/10.1038/nature23003) / [Rojas 2023](https://doi.org/10.1038/s41586-023-06063-y) |
-| mrna | mutation_spanning | 1 | Single-antigen mRNA | |
-| mrna | minimal_epitope | N | "String of beads" mRNA | [Whitton 1993](https://pubmed.ncbi.nlm.nih.gov/7677954/) |
-| mrna | minimal_epitope | 1 | Single-ligand mRNA | |
-
-A third knob, `--epitopes-per-antigen`, controls how many top MHC
-ligands to take *per ranked vaccine peptide* when content is
-`minimal_epitope`. The default `1` is the "single top ligand"
-semantics; `>1` packs multiple top ligands from the same variant as
-separate antigens.
-
-### Peptide designs
-
-**SLP (default).** Mutation-spanning long peptide, one antigen per
-construct, as in the PGV-001 design.
-
-```sh
-vaxrank --vcf v.vcf --bam r.bam --output-dir vaccine_out/
-# → vaccine_out/{vaccine.fasta, manifest.json, order_form.csv}
-```
-
-**Multi-epitope concatenated peptide.** Several mutation-spanning
-antigens linked into one longer peptide. Use `--peptide-linker` to
-pick the spacer; `AAY` is the proteasome-friendly default.
-
-```sh
-vaxrank --vcf v.vcf --bam r.bam \
-        --output-dir vaccine_out/ \
-        --peptide-antigens-per-construct 5 --peptide-linker AAY
-```
-
-**Minimal-epitope peptide.** A single short MHC ligand per construct,
-useful when minimum-length manufacturability matters more than flanking context.
-
-```sh
-vaxrank --vcf v.vcf --bam r.bam \
-        --output-dir vaccine_out/ \
-        --antigen-content minimal_epitope
-```
-
-### mRNA designs
-
-**BioNTech FixVac / iNeST canonical.** Multi-antigen mutation-spanning
-mRNA, the default for `--vaccine-type mrna`. Antigens are linked with
-`(G4S)2` and emitted as CDS, no-polyA, and full (with polyA) FASTAs
-plus a structured manifest.
-
-```sh
-vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-dir mrna_out/
-# → mrna_out/{cds.fasta, no_polyA.fasta, full.fasta, manifest.json, layers.csv}
-```
-
-**String-of-beads mRNA.** Short MHC ligands linked together
-rather than mutation-spanning windows.
-
-```sh
-vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-dir out/ \
-        --mrna-antigen-content minimal_epitope --mrna-antigens-per-construct 8 \
-        --mrna-linker AAY
-```
-
-**Top-N ligands per variant in a string-of-beads.** Pack multiple top
-MHC ligands from each ranked vaccine peptide as separate antigens.
-
-```sh
-vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-dir out/ \
-        --mrna-antigen-content minimal_epitope \
-        --mrna-epitopes-per-antigen 2 --mrna-antigens-per-construct 16
-```
-
-### Both modalities in one run
-
-Multi-valued `--vaccine-type` writes per-modality subdirs in
-`--output-dir`.
-
-```sh
-vaxrank --vcf v.vcf --bam r.bam --vaccine-type peptide mrna --output-dir vaccines/
-# → vaccines/peptide/{vaccine.fasta, manifest.json, order_form.csv}
-# → vaccines/mrna/{cds.fasta, no_polyA.fasta, full.fasta, manifest.json, layers.csv}
-```
-
-## Vaccine types and output modes
-
-Choose `peptide`, `mrna` or both with `--vaccine-type` (default `peptide`).
-Vaxrank uses this choice during design. `--output-dir` enables construct files.
-A single vaccine type writes directly into the directory; multiple types write
-into `peptide/` and `mrna/` subdirectories. Analysis reports use their own
-`--output-*` flags and can be requested without writing construct files.
-
-```sh
-# Peptide pool (default vaccine type)
-vaxrank --vcf v.vcf --bam r.bam --output-dir vaccine_out/
-
-# mRNA construct
-vaxrank --vcf v.vcf --bam r.bam --vaccine-type mrna --output-dir mrna_out/
-
-# Both at once (per-modality subdirs in mixed_out/)
-vaxrank --vcf v.vcf --bam r.bam --vaccine-type peptide mrna --output-dir mixed_out/
-
-# Reports only (no vaccine constructs)
-vaxrank --vcf v.vcf --bam r.bam --output-pdf-report report.pdf
-
-# Drive vaccine design from a pre-computed LENS report
-vaxrank --input-lens patient.lens.tsv --vaccine-type mrna \
-        --output-dir mrna_out/ \
-        --ensembl-release 102
-
-# Full ASCII summary report from a LENS file (transcripts resolved)
-vaxrank --input-lens patient.lens.tsv --output-ascii-report report.txt \
-        --ensembl-release 102
-```
-
-### Analysis reports
-
-Tables of ranked candidates, predicted epitopes and applicable manufacturability
-metrics. Request reports with the corresponding output flags, with or without
-construct files.
-
-| Flag | Output |
-|---|---|
-| `--output-ascii-report` | Plain-text summary |
-| `--output-html-report` | HTML report |
-| `--output-pdf-report` | PDF report (wkhtmltopdf or WeasyPrint backend) |
-| `--output-xlsx-report` | Excel workbook with one sheet per variant |
-| `--output-csv` | Flat CSV |
-| `--output-json-file` | Full ranked-vaccine-peptides graph as JSON |
-
-### Mutation and assembly figures
-
-`vaxrank-mutation-figure` turns the Isovar table produced by
-`--output-isovar-csv` into publication-ready, white-background transcript and
-protein context figures. When the input includes the optional
-`*_cdna_sequence` and `*_cdna_variant_{start,end}` columns, each variant gets a
-5-prime-to-3-prime nucleotide comparison in addition to the protein view. Both
-views separate the reference transcript, annotation-only mutant prediction,
-and RNA-assembled sequence so unsupported or assembly-refined claims remain
-explicit.
-
-```bash
-vaxrank --vcf variants.vcf --bam tumor-rna.bam \
-  --mhc-predictor random --mhc-alleles HLA-A*02:01 \
-  --output-isovar-csv patient-isovar.csv
-
-vaxrank-mutation-figure patient-isovar.csv \
-  --output-root figures \
-  --variant DYNC1H1 \
-  --format svg --format pdf --format png \
-  --png-scale 3
-```
-
-Outputs are grouped under `figures/YYYY-MM-DDTHHMMSSZ/`. Every variant gets an
-SVG, PDF, high-resolution PNG (3600×2100 at the default 3× scale), and compact
-JSON record. The figure and JSON distinguish annotation gene/transcript
-provenance from RNA-assembly provenance. The run manifest records the input
-checksum, Vaxrank version, formats, raster dimensions, and file inventory. Omit
-`--variant` to render every row. Use `--timestamp` for reproducible builds or
-tests; an existing run is never overwritten.
-
-For structural variants and fusion junctions, use a cross-platform evidence
-JSON rather than an Isovar table:
-
-```bash
-vaxrank-evidence-figure evidence.json \
-  --output-root evidence-figures \
-  --format svg --format pdf --format png
-```
-
-This view keeps DNA, short-read RNA, short-read assembly, and long-read RNA as
-separate evidence stages. It displays the junction nucleotide sequence and
-withholds a protein unless the input supplies an established coding sequence.
-See `examples/osteosarc_evidence_figures/` for DNA-only, cross-platform,
-matched-sample long-read rescue, and unresolved long-read-only examples.
-
-To show the downstream Vaxrank decision rather than evidence alone, use a
-complex-result record. This view separates DNA interpretation, RNA support,
-translated protein, target epitopes, and final vaccine-construct selection:
-
-```bash
-vaxrank-complex-result-figure results.json \
-  --output-root result-figures \
-  --combined-output vaxrank-complex-variant-results.pdf
-```
-
-The timestamped run contains a compact combined PDF and one high-resolution
-PNG/SVG page per result. See `examples/osteosarc_complex_results/` for a real
-assembly-dependent frameshift selection, an assembled indel with no passing
-binder, an ambiguous fusion held out of ranking, and an unresolved long-read
-fusion whose protein is deliberately withheld.
-
-### Neoepitope report
-
-Per-(peptide, allele) report (XLSX/CSV). Default output of the
-LENS / pVACseq input path; also available on the full pipeline.
-
-| Flag | Output |
-|---|---|
-| `--output-neoepitope-report` | XLSX (default) or CSV (by extension) |
-
-### Peptide constructs
-
-`vaccine.fasta` + `manifest.json` + `order_form.csv` written into
-`--output-dir` (or `--output-dir/peptide/` in multi-mode). The
-peptide design comes from `--antigen-content` and
-`--peptide-antigens-per-construct` (see [Vaccine designs](#vaccine-designs)
-above).
-
-| Flag | Purpose |
-|---|---|
-| `--output-dir` | Where to write the construct files |
-| `--peptide-linker` | Inter-antigen spacer (e.g. `AAY`, `(G4S)2`); default `G4S3` |
-| `--peptide-max-antigen-length-aa` | Truncate antigens longer than this |
-| `--peptide-n-terminal-acetyl` | Add N-terminal acetylation note to the manifest |
-| `--peptide-c-terminal-amide` | Add C-terminal amide note to the manifest |
-
-### mRNA constructs
-
-A directory containing three FASTAs (`cds.fasta`, `no_polyA.fasta`,
-`full.fasta`) plus `manifest.json` (per-element view) and `layers.csv`
-(long-format per-element table with AA + nt). Codon optimization uses
-[DnaChisel](https://github.com/Edinburgh-Genome-Foundry/DnaChisel); 2A
-self-cleaving peptides preserve their published codon usage
-automatically.
-
-Flags are grouped by what they configure:
-
-**Construct anatomy**
-
-| Flag | Purpose |
-|---|---|
-| `--output-dir` | Where to write construct files (or `--output-dir/mrna/` in multi-mode) |
-| `--mrna-signal-peptide` | Leader peptide: `HLA-A`, `HLA-B`, `tPA`, `IgK`, `CD8A`, `CD28` |
-| `--mrna-5p-utr` | 5' UTR (e.g. `HBB`, `HBB_FI` tandem) |
-| `--mrna-3p-utr` | 3' UTR |
-| `--mrna-include-mitd` / `--mrna-no-mitd` | Include the BioNTech MITD trafficking domain |
-| `--mrna-mitd` | Which MITD variant (`HLA-A` / `HLA-B`) |
-| `--mrna-max-length-nt` | Hard cap on construct length (nt) |
-| `--mrna-antigens-per-construct` | Antigens per CDS |
-| `--mrna-max-constructs` | Stop emitting after this many constructs |
-
-**PolyA tail**
-
-| Flag | Purpose |
-|---|---|
-| `--mrna-poly-a-length` | Length of polyA tail (default `120`) |
-| `--mrna-poly-a-segmented` | Use BNT162b2-style segmented pattern (A30 + linker + A70) |
-| `--mrna-poly-a-first-segment` | Length of the first segment when segmented |
-| `--mrna-poly-a-segment-linker` | Inter-segment linker sequence |
-
-**Linker optimization**
-
-Per-junction MHC-aware linker swap minimizes predicted presentation
-of chimeric k-mers spanning antigen junctions.
-
-| Flag | Purpose |
-|---|---|
-| `--mrna-linker` | Default inter-antigen spacer (e.g. `(G4S)2`) |
-| `--mrna-optimize-linkers` / `--mrna-no-optimize-linkers` | Require / disable junction prediction; auto by default |
-| `--mrna-junction-predictor` | One mhctools model for new junction queries; leaves candidate scores unchanged |
-| `--mrna-junction-alleles` | Query alleles; defaults to declared manifest genotype or VCF/BAM `--mhc-alleles` |
-| `--mrna-junction-predictor-path` / `--mrna-junction-predictor-models-path` | Independent executable / weights locations |
-| `--mrna-junction-candidates` | Candidate linkers considered at each junction |
-| `--mrna-junction-rank-strong` | Strong-binder %-rank threshold |
-| `--mrna-junction-rank-mild` | Mild-binder %-rank threshold |
-
-VCF + BAM runs reuse a single configured candidate predictor in auto mode.
-With multiple candidate predictors, they keep the shared linker; select
-`--mrna-junction-predictor` to enable junction optimization.
-External-report runs use the shared linker without new predictions unless
-`--mrna-junction-predictor` is supplied. If the reports have no declared
-genotype, also supply `--mrna-junction-alleles`; observed report coverage is
-not treated as a genotype. `--mrna-no-optimize-linkers` prevents all junction
-model loading. The mRNA manifest records the policy, observed model names and
-versions, allele scope, and peptide queries under `elements.junction_swap`.
-
-**Codon optimization**
-
-| Flag | Purpose |
-|---|---|
-| `--mrna-codon-species` | Target organism for codon usage (default `h_sapiens`) |
-| `--mrna-codon-method` | DnaChisel optimization strategy |
-| `--mrna-csv-no-full-rows` | Skip the `full` polyA'd rows in `layers.csv` (saves disk space) |
-
-### External-input mode
-
-Use one or more pre-computed reports instead of VCF + BAM. The
-[input workflow guide](https://openvax.github.io/vaxrank/input-workflows/)
-explains original-score ranking, common-model prediction, and context limits.
-
-| Flag | Input format |
-|---|---|
-| `--input-manifest PATH` | YAML/JSON report list with shared patient/reference/genotype declarations and per-input sample/library metadata |
-| `--external-input FORMAT=PATH` | `lens`, `pvacseq`, `topiary` or `epitopes`; repeated inputs require declared compatible scope, usually supplied through a manifest |
-| `--input-topiary FILE` | Normalized Topiary CSV/TSV, including combined tables and additive scoring features |
-| `--input-epitopes FILE` | Native candidate reload; enriched exports retain evidence and the scoring policy |
-| `--input-cta-expression FILE` | Gene/transcript CSV/TSV with explicitly declared columns, units, sample and quantification provenance |
-| `--hitlist-evidence-bundle DIRECTORY` | Optional verified Hitlist CTA-expression evidence for the same input and reference |
-| `--duplicate-candidates error\|best\|worst` | Topiary representative selection; default requires scores to agree |
-| `--external-predictions input` | Reuse historical predictions (default); no live predictor |
-| `--external-predictions fresh` | Predict reported peptides with explicit models and HLA set |
-| `--output-input-predictions PATH` | Save original candidate predictions separately |
-| `--input-lens` | [LENS](https://github.com/openvax/lens) report TSV |
-| `--input-pvacseq` | [pVACseq](https://github.com/griffithlab/pVACtools) TSV (`*all_epitopes.tsv` or `*all_epitopes.aggregated.tsv`) |
-
-### Manifest schema
-
-The peptide and mRNA construct JSON manifests share a back-compat
-schema (`modality`, `name`, `length`, `length_unit`, `antigen_names`,
-`components`, `manufacturability`). The mRNA manifest additionally
-exposes `cds`, `no_polya_nt`, `full_nt`, per-antigen `antigens` (each
-with AA + nt), and a structured `elements` dict with one entry per
-layer (5' UTR, signal peptide, antigens, linkers per junction, MITD,
-stop codon, 3' UTR, polyA). Each layer carries both AA (where
-applicable) and nt forms for direct inspection.
-
-### Shared linker library and grammar
-
-Both vaccine types consume the same set of linker names so a single
-construct design can be ported between peptide and mRNA backbones.
-
-**Static entries:**
-
-| Name | Type | Use |
-|---|---|---|
-| `G2S`, `G3S`, `G4S`, `G5S` | flexible (Gly_n_Ser) | The (Gly4Ser)n family ([Huston *PNAS* 1988](https://doi.org/10.1073/pnas.85.16.5879)); used clinically in BioNTech FixVac / iNeST as `(G4S)2` |
-| `EAAAK` | rigid α-helical | When fused antigens need separation rather than flex ([Arai *Protein Eng* 2001](https://doi.org/10.1093/protein/14.8.529)) |
-| `RKRR`, `RVKR`, `RKRKR` | furin cleavage | R-X-(K/R)-R motif ([Hosaka *J Biol Chem* 1991](https://pubmed.ncbi.nlm.nih.gov/1905715/)); preclinical in DNA vaccines, no clinical vaccine use as of 2025 |
-| `AAY` | proteasome-friendly | Empirical foundation: [Livingston *Vaccine* 2001](https://doi.org/10.1016/S0264-410X(01)00233-X); see citation in `vaxrank/vaccine_library.py` for the AAY-vs-GGGS empirical landscape ([Yang 2015](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4514284/) vs [Aguilar-Gurrieri 2023](https://doi.org/10.1007/s00262-023-03409-3)) |
-| `AAA` | alanine spacer | [Aguilar-Gurrieri *Cancer Immunol Immunother* 2023](https://doi.org/10.1007/s00262-023-03409-3): strongest empirical alanine spacer for MHC-I presentation |
-| `GPGPG` | helper-T spacer | Between MHC-II epitopes ([Livingston *J Immunol* 2002](https://doi.org/10.4049/jimmunol.168.11.5499)) |
-| `P2A`, `T2A`, `F2A`, `E2A` | self-cleaving 2A | Co-translational ribosomal skipping for mRNA constructs ([Donnelly *J Gen Virol* 2001](https://doi.org/10.1099/0022-1317-82-5-1027); [Kim *PLoS ONE* 2011](https://doi.org/10.1371/journal.pone.0018556)). In peptide mode these are functionally inert and the manifest annotates them as such. |
-
-**Compositional grammar** (parsed at lookup time):
-
-| Form | Meaning | Example |
-|---|---|---|
-| `(BASE)N` / `(BASE)xN` / `BASExN` | Repeat N times | `(G4S)2` → `GGGGSGGGGS`, `G4Sx2` → same |
-| `GnSm` | Literal n glycines + m serines (single unit, **not** a repeat) | `G6S` → `GGGGGGS`, `G4S2` → `GGGGSS` |
-| `AnY` | n alanines + tyrosine | `A3Y` → `AAAY` |
-| `An` | n alanines (no Y) | `A4` → `AAAA` |
-| `Gn` | n glycines (no S) | `G4` → `GGGG` |
-
-Repeat counts are capped at 100. 2A entries (codon-frozen, positional)
-are rejected in repeat forms. Use the base linker once.
-
-Every name resolves through `vaccine_library.get_linker(name)` and
-returns a `Linker` with primary-source citations attached. The
-default mRNA inter-antigen linker is `(G4S)2` (BioNTech FixVac
-canonical, [Sahin *Nature* 2017](https://www.nature.com/articles/nature23003));
-the default peptide linker is `G4S3`. Per-junction MHC-aware linker
-swap (automatic for VCF/BAM, explicitly configured for imported reports) considers `G3S`,
-`G4S`, `(G3S)2`, `(G4S)2`, `AAA` per junction and substitutes
-whichever minimizes predicted presentation of chimeric k-mers
-spanning the junction.
-
-All sequences carry primary-source citations in `vaxrank/vaccine_library.py`.
-
-## Clinical Use
-
-Vaxrank is the ranking engine behind the OpenVax neoantigen vaccine
-pipeline, which has been used in several clinical trials of personalized
-cancer vaccines at Mount Sinai:
-
-- **PGV001** ([NCT02721043](https://clinicaltrials.gov/study/NCT02721043)):
-  A phase I study of personalised neoantigen vaccines in patients with
-  solid and haematologic malignancies.  All 11 treated patients developed
+Use the Ensembl release the report was annotated with. Original predictions are
+reused by default. [Input workflows](docs/input-workflows.md) covers pVACseq
+reports, saved Vaxrank evidence, combining several reports in one run, and when
+to compute new predictions instead.
+
+## Documentation
+
+Full documentation: <https://openvax.github.io/vaxrank/>
+
+- [Installation](docs/installation.md): reference annotation and PDF backends.
+- [Input workflows](docs/input-workflows.md): VCF/BAM, LENS, pVACseq, Topiary
+  tables, saved evidence, and how to combine them.
+- [Vaccine designs](docs/vaccine-designs.md): the design axes, peptide and mRNA
+  construct files, linker library, manifest schema.
+- [Analysis outputs](docs/outputs.md): report formats and the figure commands.
+- [Configuration](docs/configuration.md): YAML config, override order, named
+  policy bundles, RNA reconstruction context, Topiary scoring DSL.
+- [MHC binding predictors](docs/mhc-predictors.md): supported predictor names.
+- [How Vaxrank works](docs/how-it-works.md): pipeline stages, ranking criteria,
+  data model, module map.
+- [Varcode, Isovar, and Vaxrank](docs/library-responsibilities.md): which
+  library owns which decision.
+- [Development](docs/development.md): local setup, test data, release scripts.
+
+Experimental research workflows: [unified antigen inputs](docs/antigen-inputs.md),
+[CTA expression inputs](docs/design/expression-cta-inputs.md),
+[mixed mutation/CTA/viral selection](docs/mixed-antigen-design.md) and
+[window exposure](docs/core-window-exposure.md). These do not establish clinical
+safety or efficacy.
+
+## Clinical use
+
+Vaxrank is the ranking engine behind the OpenVax neoantigen vaccine pipeline,
+which has been used in several clinical trials of personalized cancer vaccines
+at Mount Sinai:
+
+- [NCT02721043](https://clinicaltrials.gov/study/NCT02721043) (PGV001): phase I
+  study in solid and hematologic malignancies. All 11 treated patients developed
   neoantigen-specific T-cell responses
   ([Saxena et al., Cancer Discovery 2025](https://pubmed.ncbi.nlm.nih.gov/40094414/)).
-- **PGV001 + atezolizumab in urothelial cancer**
-  ([NCT03359239](https://clinicaltrials.gov/study/NCT03359239)):
-  A phase I trial combining PGV001 with checkpoint inhibition.
-  The combination was safe and induced neoantigen-specific CD4+ and CD8+
-  T-cell responses in all evaluated patients
+- [NCT03359239](https://clinicaltrials.gov/study/NCT03359239): phase I of PGV001
+  plus atezolizumab in urothelial cancer. The combination was safe and induced
+  neoantigen-specific CD4+ and CD8+ T-cell responses in all evaluated patients
   ([Saxena et al., Nature Cancer 2025](https://pubmed.ncbi.nlm.nih.gov/40346292/)).
-- **PGV001 + TTFields in newly diagnosed glioblastoma**
-  ([NCT03223103](https://clinicaltrials.gov/study/NCT03223103)):
-  A phase I trial combining PGV001 with tumor treating fields and
-  standard-of-care temozolomide (paper in preparation).
+- [NCT03223103](https://clinicaltrials.gov/study/NCT03223103): phase I of PGV001
+  plus tumor treating fields and standard-of-care temozolomide in newly
+  diagnosed glioblastoma (paper in preparation).
 
 The computational pipeline used in these trials is described in
 [Kodysh & Rubinsteyn, Methods Mol. Biol. 2020](https://link.springer.com/protocol/10.1007/978-1-0716-0327-7_10).
 
-## Installation
-
-```
-pip install vaxrank
-```
-
-**Requirements:** Python 3.9+
-
-Vaxrank uses [PyEnsembl](https://github.com/openvax/pyensembl) for
-reference genome annotation.  Install an Ensembl release matching your
-reference genome:
-
-```sh
-# GRCh38
-pyensembl install --release 113 --species human
-# GRCh37 (legacy)
-pyensembl install --release 75 --species human
-```
-
-PDF report generation uses [wkhtmltopdf](http://wkhtmltopdf.org/) by default:
-
-```
-brew install --cask wkhtmltopdf
-```
-
-Alternatively, pass `--pdf-backend=weasyprint` to use
-[WeasyPrint](https://weasyprint.org/) (experimental), which has no external
-binary dependency:
-
-```
-pip install weasyprint
-# macOS also needs: brew install pango
-```
-
-On Apple Silicon, WeasyPrint loads Pango via dyld, which doesn't search
-Homebrew's `/opt/homebrew/lib` by default. Add this to your shell profile:
-
-```sh
-export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH"
-```
-
-Intel macOS already includes Homebrew's `/usr/local/lib` in dyld's default
-fallback path.
-
-## Configuration
-
-Use `vaxrank --list-policies` to list bundled policies and
-`vaxrank --show-policy NAME` to inspect their resolved formulas and required
-measurements. [Published comparison policies](docs/published-policies.md) include
-LENS, pVACseq aggregate ordering and experimental TESLA gates.
-
-Named bundles compose through the same option: `--config builtin:openvax-v1`
-freezes the existing selection rules; append another `--config` to derive a
-policy. See [selection policies](docs/selection-policies.md) for experimental
-presentation/processing ensembles, self-content trimming, serum susceptibility,
-and replayable decision audits.
-
-### YAML config file
-
-Common parameters can be stored in a YAML file to avoid repeating them
-on every run:
-
-```sh
-vaxrank --config my_config.yaml --vcf variants.vcf --bam tumor.bam
-```
-
-Example `my_config.yaml`:
-
-```yaml
-epitopes:
-  min_score: 0.00001                        # drop epitopes below this score
-  scoring_mode: affinity                    # "affinity" or "percentile_rank"
-  logistic_midpoint: 350.0                  # IC50 (nM) at which score = 0.5
-  logistic_width: 150.0                     # steepness of logistic curve
-  affinity_cutoff: 5000.0                   # IC50 >= this → score 0
-  percentile_rank_cutoff: 10.0              # rank >= this → score 0 (percentile mode)
-  top_epitopes_per_candidate: 1000          # 0 = keep all
-
-vaccine_peptides:
-  preferred_length: 25                      # target amino acids per vaccine peptide
-  min_length: 25                            # minimum vaccine peptide length
-  max_length: 25                            # maximum vaccine peptide length
-  padding_around_mutation: null             # adaptive RNA context; explicit legacy override
-  per_mutation: 1                           # peptides to keep per variant
-  max_epitopes_per_candidate: 1000          # 0 = keep all
-  score_fraction_of_best: 0.99              # drop candidates scoring < 99% of best
-  manufacturability:                        # GRAVY = mean hydropathy
-    max_c_terminal_hydropathy: 1.5          # max GRAVY of C-terminal 7-mer
-    min_kmer_hydropathy: 0.0                # min max-7mer GRAVY (floor)
-    max_kmer_hydropathy_low_priority: 1.5   # low-priority max-7mer GRAVY cap
-    max_kmer_hydropathy_high_priority: 2.5  # high-priority max-7mer GRAVY cap
-```
-
-### RNA reconstruction context
-
-Vaxrank 3.14 requires Isovar ≥1.8.0. By default, the resolved vaccine peptide
-size K drives a `2*K-1` amino-acid context request: 29 for 15mers, 49 for
-25mers, and 59 for 30mers. Actual RNA-supported context may be shorter.
-Isovar's `balanced` policy maximizes mutation-containing peptide windows
-among candidates retaining at least 85% of the best candidate's compatible
-read-name support. Independently, every retained cDNA base must meet a
-two-read-object coverage floor. The fraction is a configurable selection
-tolerance, not biological confidence or per-base depth; compatible reads
-need not span a whole vaccine peptide. No reference sequence is added to
-fill missing RNA context. This is a reconstruction policy, not a change to
-Vaxrank's MHC scoring or ranking model (see the
-[PGV pipeline methods](https://doi.org/10.3389/fimmu.2017.01807)).
-
-```yaml
-isovar:
-  protein_sequence_length: null            # derive from peptide size
-  protein_context_peptide_length: null     # use vaccine_peptides.preferred_length
-  protein_sequence_preference: balanced    # or support / context
-  min_protein_sequence_support_fraction: 0.85
-  min_variant_sequence_coverage: 2
-```
-
-Each setting also has a same-named CLI flag with hyphens in place of
-underscores, or can be set using `--config-value isovar.<name>=<value>`. Explicit
-CLI values win over YAML, including values equal to the defaults and a
-coverage floor of zero (which explicitly disables that floor). An explicit
-protein length wins over legacy `--padding-around-mutation` / YAML padding;
-otherwise explicit padding requests `K + 2*padding`. With neither, Isovar
-derives the adaptive target. To reproduce historical Isovar extraction and
-support-first selection, pass `--protein-sequence-length 20
---protein-sequence-preference support`.
-
-The target includes all placements for a centered single-residue mutation,
-not necessarily wider mutations; deletions require windows spanning their
-junction. Short outputs are not evidence of a full-length vaccine window.
-Vaxrank rejects candidate windows shorter than `vaccine_peptides.min_length`
-(25 by default); explicitly lower that minimum only when shorter peptides
-are part of the intended design. The RNA support thresholds remain unchanged.
-RNA settings are saved with run arguments and do not rerun reconstruction
-when rendering cached reports or ranking external pVACseq/LENS predictions.
-DNA-only fallback remains opt-in, with its existing separate padding default.
-It examines concrete Varcode outcomes before choosing a usable changed protein,
-including alternatives behind unchanged or unresolved fusion candidates. Among
-usable outcomes it prefers consequence priority, then protein length and
-transcript-pair IDs. Saved fragments retain the chosen candidate's provenance
-and protein coordinates. These are sequence predictions, with no RNA support
-assigned by the fallback.
-
-### Custom filtering and scoring with the topiary DSL
-
-For anything beyond the scalar logistic / percentile-rank defaults, set
-`epitopes.filter_expr` and/or `epitopes.score_expr` to a
-[topiary](https://github.com/openvax/topiary) DSL
-string. Both accept the full topiary 5.0 expression grammar (kind
-accessors like `affinity` / `presentation`, arithmetic, `&` / `|`,
-`.logistic(...)` / `.clip(...)` transforms, `column(col_name)` for raw
-DataFrame columns, etc.).
-
-```yaml
-epitopes:
-  # Drop rows wholesale before scoring
-  filter_expr: "affinity <= 500 & affinity.rank <= 2.0"
-  # Compute a per-(peptide, allele) score in [0, 1] (binder-quality score)
-  score_expr:  "affinity.logistic_normalized(350, 150)"
-```
-
-When `filter_expr` is omitted, no rows are dropped up-front; the default
-`score_expr` is synthesized from the scalar fields above
-(`binding_affinity_cutoff`, `logistic_midpoint`, `logistic_width`, etc.)
-and masked so `ic50 >= affinity_cutoff → 0`, reproducing the pre-5.0
-behavior byte-for-byte.
-
-Use `affinity.logistic_normalized(m, w)` for a `[0, 1]` binder-quality
-score (the topiary 5.1+ primitive); the plain `affinity.logistic(m, w)`
-is the raw sigmoid and caps below 1 (≈0.912 at default `m=350, w=150`).
-
-Invalid DSL strings are rejected at config load (not mid-pipeline), so
-typos in the YAML surface before any predictions run.
-
-### CLI overrides
-
-CLI arguments override YAML values.  You can also use `--config-value` to
-override individual keys without editing the file:
-
-```sh
-vaxrank --config my_config.yaml \
-  --config-value vaccine_peptides.score_fraction_of_best=0.95 \
-  --config-value epitopes.percentile_rank_cutoff=5.0
-```
-
-Use `--config-text` when the right-hand side should be kept as a raw
-string instead of being YAML-parsed.
-
-### Resolution order
-
-Config values are resolved in order (later wins):
-
-1. Compiled-in defaults (see `vaxrank/config/defaults.py`)
-2. YAML config file (`--config`)
-3. `--config-value` / `--config-text` overrides
-4. Dedicated CLI flags (e.g. `--vaccine-peptide-length`)
-
-### Configuration reference
-
-Print the shipped, commented YAML for the supported keys and current defaults:
-
-```sh
-vaxrank --print-default-config > my-config.yaml
-```
-
-Edit that file and pass `--config my-config.yaml`. YAML keys are the public
-configuration interface; Python dataclass field names can differ. Epitope
-filtering/scoring lives under `epitopes`, construct ranking under
-`vaccine_peptides`, and peptide synthesis thresholds under
-`peptide.manufacturability`.
-
-## MHC Binding Predictors
-
-Vaxrank integrates with MHC binding predictors via
-[MHCtools](https://github.com/openvax/mhctools).
-Use `--mhc-predictor <name>` to select one:
-
-| `--mhc-predictor` | Tool | MHC Class | Notes |
-|--------------------|------|-----------|-------|
-| `mhcflurry` | [MHCflurry](https://github.com/openvax/mhcflurry) | I | Open-source neural network; installed with mhctools |
-| `bigmhc` | [BigMHC](https://github.com/KarchinLab/bigmhc) | I | Auto-detects EL or IM model |
-| `bigmhc-el` | [BigMHC](https://github.com/KarchinLab/bigmhc) EL | I | Presentation (eluted ligand) model |
-| `bigmhc-im` | [BigMHC](https://github.com/KarchinLab/bigmhc) IM | I | Immunogenicity model |
-| `pepsickle` | [Pepsickle](https://github.com/pdxgx/pepsickle) | I | Proteasomal cleavage predictor |
-| `netmhc` | [NetMHC](https://services.healthtech.dtu.dk/services/NetMHC-4.0/) | I | Auto-detects NetMHC3 or NetMHC4 |
-| `netmhc3` | NetMHC 3.x | I | Requires local install |
-| `netmhc4` | [NetMHC 4.0](https://services.healthtech.dtu.dk/services/NetMHC-4.0/) | I | Requires local install |
-| `netmhcpan` | [NetMHCpan](https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/) | I | Auto-detects installed version |
-| `netmhcpan28` | NetMHCpan 2.8 | I | Requires local install |
-| `netmhcpan3` | NetMHCpan 3.x | I | Requires local install |
-| `netmhcpan4` | [NetMHCpan 4.0](https://services.healthtech.dtu.dk/services/NetMHCpan-4.0/) | I | Default mode (EL + BA) |
-| `netmhcpan4-ba` | NetMHCpan 4.0 | I | Binding affinity mode only |
-| `netmhcpan4-el` | NetMHCpan 4.0 | I | Eluted ligand mode only |
-| `netmhcpan41` | [NetMHCpan 4.1](https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/) | I | Default mode (EL + BA) |
-| `netmhcpan41-ba` | NetMHCpan 4.1 | I | Binding affinity mode only |
-| `netmhcpan41-el` | NetMHCpan 4.1 | I | Eluted ligand mode only |
-| `netmhcpan42` | NetMHCpan 4.2 | I | Default mode (EL + BA) |
-| `netmhcpan42-ba` | NetMHCpan 4.2 | I | Binding affinity mode only |
-| `netmhcpan42-el` | NetMHCpan 4.2 | I | Eluted ligand mode only |
-| `netmhccons` | [NetMHCcons](https://services.healthtech.dtu.dk/services/NetMHCcons-1.1/) | I | Requires local install |
-| `netmhcstabpan` | [NetMHCstabpan](https://services.healthtech.dtu.dk/services/NetMHCstabpan-1.0/) | I | Stability predictor; requires local install |
-| `netchop` | [NetChop](https://services.healthtech.dtu.dk/services/NetChop-3.1/) | -- | Proteasomal cleavage predictor |
-| `netmhciipan` | [NetMHCIIpan](https://services.healthtech.dtu.dk/services/NetMHCIIpan-4.3/) | II | Auto-detects installed version |
-| `netmhciipan3` | NetMHCIIpan 3.x | II | Requires local install |
-| `netmhciipan4` | [NetMHCIIpan 4.0](https://services.healthtech.dtu.dk/services/NetMHCIIpan-4.0/) | II | Default mode (EL + BA) |
-| `netmhciipan4-ba` | NetMHCIIpan 4.0 | II | Binding affinity mode only |
-| `netmhciipan4-el` | NetMHCIIpan 4.0 | II | Eluted ligand mode only |
-| `netmhciipan43` | [NetMHCIIpan 4.3](https://services.healthtech.dtu.dk/services/NetMHCIIpan-4.3/) | II | Default mode (EL + BA) |
-| `netmhciipan43-ba` | NetMHCIIpan 4.3 | II | Binding affinity mode only |
-| `netmhciipan43-el` | NetMHCIIpan 4.3 | II | Eluted ligand mode only |
-| `mixmhcpred` | [MixMHCpred](https://github.com/GfellerLab/MixMHCpred) | I | Requires local install |
-| `netmhcpan-iedb` | NetMHCpan via IEDB | I | Uses IEDB web API |
-| `netmhccons-iedb` | NetMHCcons via IEDB | I | Uses IEDB web API |
-| `netmhciipan-iedb` | NetMHCIIpan via IEDB | II | Uses IEDB web API |
-| `smm-iedb` | SMM via IEDB | I | Uses IEDB web API |
-| `smm-pmbec-iedb` | SMM-PMBEC via IEDB | I | Uses IEDB web API |
-| `random` | Random | -- | Returns random scores; for testing only |
-
-## How It Works
-
-### Upstream inputs
-
-For the **VCF + BAM workflow**, variant calling, read alignment and HLA typing
-happen upstream, for example in
-[neoantigen-vaccine-pipeline](https://github.com/openvax/neoantigen-vaccine-pipeline):
-
-1. Call somatic variants from tumor and matched-normal DNA with
-   [Mutect2](https://gatk.broadinstitute.org/hc/en-us/articles/5257897695387-Mutect2)
-   or [Strelka2](https://github.com/Illumina/strelka), producing a VCF.
-2. Align tumor RNA-seq reads to produce a BAM.
-3. Supply the patient's HLA alleles from typing or clinical records.
-
-Vaxrank then coordinates Varcode annotation, Isovar reconstruction, MHCtools
-prediction, and candidate selection for the requested vaccine type.
-
-**Previously scored evidence** can enter through saved native datasets,
-[LENS](https://github.com/openvax/lens),
-[pVACseq](https://github.com/griffithlab/pVACtools), or an input manifest.
-These paths reuse supplied sequences and predictions by default; new predictions
-can be requested explicitly. They feed shared selection, assembly and report
-writers. pVACseq parsing is delegated to Topiary and accepts both
-`all_epitopes.tsv` and `all_epitopes.aggregated.tsv`. See
-[input workflows](https://openvax.github.io/vaxrank/input-workflows/) for details.
-
-LENS `FUSION` rows are also eligible for construct ranking. Vaxrank treats
-their caller-supplied `pep_context` as an assembled fusion antigen rather than
-fabricating a single-locus genomic variant. Fusion ID, both partner genes,
-breakpoints, transcript IDs, fusion type, RNA evidence fields, and sequence
-source are preserved in the report; ranked fusion antigens can be included in
-both peptide and mRNA constructs. This path imports LENS's peptide predictions.
-It does not infer a coding frame or translate raw breakpoints when the upstream
-report has not supplied an established protein context.
-
-LENS `SPLICE`, `CTA/SELF`, and `ERV` rows are preserved in the neoepitope
-report but require an explicit opt-in before they enter construct ranking:
-
-```sh
-vaxrank --input-lens patient.lens.tsv \
-  --include-antigen-source SPLICE \
-  --include-antigen-source CTA/SELF \
-  --include-antigen-source ERV
-```
-
-`--exclude-antigen-source` removes a default or configured category (for
-example, `--exclude-antigen-source FUSION`). The same exact selection can be
-set with `vaccine_peptides.included_antigen_sources` in YAML. Splice targets
-retain their genomic junction, description, coding sequence, and RNA evidence;
-CTA/self targets retain gene, transcript, normal-tissue, mTEC, and expression
-evidence; ERV targets retain the ORF identifier and all `erv_*` evidence.
-Only caller-designated peptide intervals are targetable because these LENS
-rows do not state an exact amino-acid junction offset. CTA/self and ERV opt-ins
-are recorded as review-required tumor-specificity overrides, not as proof of
-sequence novelty or absence from normal tissue.
-
-For an upstream assembler that supplies the translated sequence and exact
-amino-acid junction, `VaccineAntigen.from_fusion_sequence(...)` records the
-junction as a zero-width target mask. `predict_epitopes(..., antigen=antigen)`
-then enumerates the predictor's peptide lengths and marks only peptides that
-contain residues from both fusion partners as targetable; no fictitious
-wild-type comparator is generated.
-
-For validated results from `isovar.reconstruct_fusion(...)` or `isovar fusion`,
-use `fusion_antigens_from_isovar(result, tumor_specificity=attestation,
-gene_name="DONOR::ACCEPTOR", species="Homo sapiens")`. It returns an
-`IsovarFusionAntigens` containing every coding hypothesis in `.antigens`,
-the complete JSON-normalized result in `.reconstruction`, and the eligible
-subset in `.admitted_antigens`. No best transcript is selected. Nucleotide
-junctions are mapped exactly: a mixed codon is targetable, while peptides
-entirely inside an inserted sequence are not junction-spanning.
-
-RNA validation is not tumor-specificity evidence: absent a separate
-`TumorSpecificityAttestation`, every hypothesis is held out. Ambiguous,
-unsupported and partial-CDS reconstructions remain held out even with an
-admission attestation; their reasons, alternatives, RNA support and provenance
-are preserved. Exploratory predictions can use any hypothesis, but only
-admitted antigens can enter `VaccinePeptide`. This adapter expects trusted
-Isovar output; it does not validate arbitrary caller declarations against
-reference annotation or discover fusions from BAM files.
-
-```python
-from vaxrank import fusion_antigens_from_isovar, predict_epitopes, VaccinePeptide
-
-adapted = fusion_antigens_from_isovar(result, tumor_specificity=attestation)
-for antigen in adapted.admitted_antigens:
-    epitopes = predict_epitopes(mhc_predictor=predictor, antigen=antigen, genome=genome)
-    candidate = VaccinePeptide(
-        antigen=antigen, epitopes=epitopes,
-        combined_score_expr="target_epitope_score",
-        ranking_rules=("target_epitope_score", "manufacturability", "self_epitope_score"),
-    )
-```
-
-Use source-agnostic scoring as above, not the small-variant default's
-`n_rna_alt` binding. Full reconstruction provenance travels in each antigen's
-`source_metadata`; no wild-type protein, self-proteome exclusion or clinical
-neoantigen status is invented. The existing small-variant `run_vaxrank` API
-and the LENS CLI path are unchanged.
-
-### Mutant transcript assembly (Isovar)
-
-For each somatic variant, [Isovar](https://github.com/openvax/isovar)
-extracts RNA-seq reads overlapping the mutant locus and assembles them
-into RNA sequence, then predicts protein context where the frame is justified.
-Compared with an isolated DNA edit, this can:
-
-- Preserve nearby variants linked by compatible read/fragment evidence.
-- Represent observed splice differences where reconstruction and frame matching
-  support them; not every possible splice path is resolved automatically.
-- Provide RNA support for the reconstructed sequence. Missing support fails the
-  configured RNA evidence criteria; it does not prove biological absence.
-
-The ordinary path selects Isovar's top protein sequence. The separate supplied-
-fusion adapter retains coding hypotheses; neither implies that the ordinary
-pipeline evaluates every RNA/SV alternative. See
-[current limits and the DNA fallback](https://openvax.github.io/vaxrank/library-responsibilities/#available-today-and-remaining-work).
-
-### CandidateEpitope scoring
-
-Each mutant protein fragment is sliced into overlapping subsequences of
-epitope length (typically 8–15 amino acids).  These candidate epitopes
-are scored for predicted MHC binding affinity using the selected
-predictor.  Binding predictions are converted to a score between 0 and 1
-via a logistic function parameterised by the `EpitopeConfig` settings.
-
-### Vaccine peptide ranking
-
-Candidate vaccine peptides (longer SLPs, typically 25-mers) are
-constructed around each mutation.  Each candidate is scored by the
-combined immunogenicity of the epitopes it contains.  Candidates are
-then filtered and ranked by:
-
-1. **CandidateEpitope content**: total predicted immunogenicity score
-2. **Reference proteome filtering**: exact matches in the selected
-   genome's annotated protein sequences are removed from mutation-derived
-   candidates, regardless of the source transcript biotype
-3. **Cancer hotspot annotation**: variants at known recurrently mutated
-   positions (bundled data from
-   [cancerhotspots.org](https://www.cancerhotspots.org/), ~2,700
-   mutations across cancer types) are flagged
-4. **Manufacturability**: tie-breaking by hydropathy-based synthesis
-   difficulty (C-terminal and 7-mer window GRAVY scores)
-
-Reference matching includes available annotated NMD, non-stop-decay, IG/TR,
-and loss-of-function protein sequences. Source-attributed matches and construct
-reports retain each transcript's biotype; membership does not establish expression
-or presentation. Older saved sources without a biotype remain explicitly unknown.
-The translation-selection policy is part of the cache key, so older indexes are
-rebuilt automatically. See the [GENCODE/Ensembl biotype definitions](https://www.gencodegenes.org/pages/biotypes.html).
-
-### Data model
-
-Vaxrank's central data unit is the **VaccinePeptide** (VP), a ranked antigen
-window considered for vaccine construction.
-A VP bundles:
-
-- a source-agnostic **`VaccineAntigen`**: the amino-acid sequence,
-  targetable intervals, source provenance, and tumor-specificity attestation;
-- for ordinary SNV/indel antigens, a **`MutantProteinFragment`** with mutation
-  positions, gene name, source variant, and RNA evidence metrics;
-- **`CandidateEpitope`** objects: peptide occurrences carrying context,
-  provenance, per-allele/model/version `mhctools.Prediction` values, known
-  comparators and DSL scores. Target epitopes drive vaccine ranking.
-
-The shared output is a list of `(source, [VaccinePeptide, ...])` tuples.
-Ordinary variant sources are `varcode.Variant` objects; non-variant antigen
-sources retain their own identity. The direct pipeline can retain multiple
-windows per variant via `max_vaccine_peptides_per_variant`; external adapters
-currently select one source-derived window:
-
-```
-ranked_variants_with_vaccine_peptides = [
-    (Variant_A, [VP_A1, VP_A2, ...]),    # multiple windows around variant A's mutation
-    (Variant_B, [VP_B1]),                 # single SLP for variant B
-    ...
-]
-```
-
-For each variant, vaxrank can emit multiple alternate constructs:
-
-- `--vaccine-peptide-length`: controls SLP size and the default RNA context
-  request; `--protein-sequence-length` or legacy `--padding-around-mutation`
-  can explicitly override the reconstruction context.
-- `max_vaccine_peptides_per_variant` (config): controls how many
-  alternate windows per variant make it into the ranked output.
-- `--peptide-candidates-per-slot` / `--mrna-candidates-per-slot`
-  (CLI): controls how many VP alternates per variant slot the
-  *construct assembler* renders into FASTAs.
-
-Reports render one section per variant; within a section, each VP gets
-its own per-epitope sub-table. Column counts can differ per VP
-(e.g. when pepsickle credibility tagging succeeded for one VP and
-failed for another, only the successful VP's table shows the
-processing columns).
-
-### Key modules
-
-**Shared evidence and selection:**
-
-- `core_logic.py`: Main vaccine peptide selection algorithm
-- `epitope_logic.py`: CandidateEpitope scoring and filtering
-- `epitope_io.py`: LENS / pVACseq / vaxrank-native I/O for epitope predictions
-- `external_input.py`: Synthesize the canonical ranked-vaccine-peptides shape from a LENS / pVACseq report so external-input runs reach the same dispatch as VCF + BAM
-- `reference_proteome.py`: Set-based kmer index for reference proteome filtering (O(1) lookup, built once and cached)
-- `cancer_hotspots.py`: Cancer mutation hotspot annotation
-- `vaccine_peptide.py`: Vaccine peptide scoring and manufacturability
-- `vaccine_library.py`: Shared linker vocabulary + compositional grammar (`(BASE)N`, `GnSm`, `AnY`, `An`, `Gn`) with primary-source citations
-
-**Assembly for each vaccine type:**
-
-- `peptide.py`: Peptide construct assembly + FASTA / JSON manifest / vendor order-form CSV writers; sub-modes `slp` / `minimal_epitope` / `multi_epitope`
-- `mrna.py`: mRNA construct assembly + three-FASTA / structured manifest / long-format CSV writers. DnaChisel codon optimization, 2A frozen-codon handling, configurable polyA tail (default A120, optional segmented BNT162b2 pattern), per-junction MHC-aware linker swap (issue #247)
-- `mrna_library.py`: mRNA-specific elements (5'/3' UTRs incl. tandem 2× HBB FI; signal peptides HLA-A / HLA-B / tPA / IgK / CD8A / CD28; MITD HLA-A / HLA-B)
-- `junction_swap.py`: Per-junction linker optimizer that minimizes predicted MHC presentation of chimeric k-mers spanning antigen junctions
-
-**Reports:**
-
-- `report.py`: Analysis-report generation (ASCII, HTML, PDF, XLSX, CSV, JSON)
-
 <a id="papers--citations"></a>
 
-## Papers & Citations
+## Papers and citations
 
-**Vaxrank algorithm:**
+Vaxrank algorithm:
 
 > Rubinsteyn, A., Hodes, I., Kodysh, J. & Hammerbacher, J.
 > [Vaxrank: A Computational Tool For Designing Personalized Cancer Vaccines.](https://doi.org/10.1101/142919)
 > *bioRxiv* (2017).
 
-**OpenVax pipeline (methods):**
+OpenVax pipeline (methods):
 
 > Kodysh, J. & Rubinsteyn, A.
 > [OpenVax: An Open-Source Computational Pipeline for Cancer Neoantigen Prediction.](https://link.springer.com/protocol/10.1007/978-1-0716-0327-7_10)
 > *Methods Mol. Biol.* 2120, 147–160 (2020).
 
-**PGV001 clinical results:**
+PGV001 clinical results:
 
 > Saxena, Marron, Kodysh, et al.
 > [PGV001, a Multi-Peptide Personalized Neoantigen Vaccine Platform: Phase I Study in Patients with Solid and Hematologic Malignancies in the Adjuvant Setting.](https://pubmed.ncbi.nlm.nih.gov/40094414/)
@@ -1045,120 +154,9 @@ BibTeX for the Vaxrank paper:
         journal = {bioRxiv}
     }
 
-## Dependencies
+## License
 
-Vaxrank is built on the [OpenVax](https://github.com/openvax) ecosystem:
-
-- [pyensembl](https://github.com/openvax/pyensembl): Reference genome annotation
-- [varcode](https://github.com/openvax/varcode): Variant effect prediction from DNA
-- [isovar](https://github.com/openvax/isovar): RNA-based mutant transcript assembly and variant phasing
-- [MHCtools](https://github.com/openvax/mhctools): Unified interface to MHC binding predictors
-
-Other key dependencies:
-- `msgspec`: Configuration serialization (YAML/JSON)
-- `pandas`, `numpy`: Data processing
-- `jinja2`, `pdfkit`/`weasyprint`: Report generation
-
-## Legacy flags
-
-For back-compat with older scripts:
-
-- `--peptide-mode {slp, minimal_epitope, multi_epitope}` is a
-  shorthand for the orthogonal axes:
-  - `slp` ≡ `--antigen-content mutation_spanning --peptide-antigens-per-construct 1`
-  - `minimal_epitope` ≡ `--antigen-content minimal_epitope --peptide-antigens-per-construct 1`
-  - `multi_epitope` ≡ `--antigen-content mutation_spanning --peptide-antigens-per-construct N`
-
-The orthogonal axes are preferred for new designs.
-
-## Development
-
-The [Sid test data](https://github.com/openvax/vaxrank/blob/main/TEST_DATA.md) uses only the explicitly selected
-reads the regression suite needs. They come from openvax-v1, the OpenVax
-libraries' shared Sid test data published by osteosarc; the reviewed recipe
-ships in the package and verifies every selected record. The first test run
-downloads openvax-v1 (28 MB) into the osteosarc cache; later runs are offline.
-
-To install Vaxrank for local development:
-
-```bash
-git clone git@github.com:openvax/vaxrank.git
-cd vaxrank
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install -e .
-# Examples; adjust release to match your reference
-pyensembl install --release 113 --species human
-pyensembl install --release 113 --species mouse
-```
-
-Run linting and tests:
-
-```bash
-./lint.sh && ./test.sh
-```
-
-The test suite is intentionally repository-only and is not included in source
-distributions. Its integration tests depend on helpers and genomic fixtures
-that are not package payloads, so run tests from a Git checkout rather than an
-unpacked PyPI archive.
-
-The first run of the tests may take a while to build the reference proteome kmer index, but subsequent runs will use the cached index.
-
-Reference membership caches are keyed by the installed annotation/sequence
-content (or actual protein content for custom reference providers), not only
-species and release. This supports explicit offline PyEnsembl `Genome`
-references and prevents a subset from sharing a full-reference cache. Upgrading
-from species/release-only caches triggers a one-time rebuild; old cache files
-are not trusted or automatically deleted.
-
-### Scripts
-
-- `develop.sh`: installs the package in editable mode and sets `PYTHONPATH` to the repo root.
-- `lint.sh`: runs ruff on `vaxrank` and `tests`.
-- `test.sh`: runs pytest with coverage.
-- `deploy.sh`: runs lint/tests/build/upload through one Python environment,
-  verifies PyPI artifacts by SHA-256, and safely resumes an interrupted upload
-  from its original artifacts. Deploy is restricted to synchronized
-  `main`/`master`. Bump the version in a PR, then run `./deploy.sh` after
-  merging. An optional version argument (with or without a `v` prefix) must
-  match `vaxrank/version.py`; it never edits or commits a version bump.
-  After the quality gates, `release_deploy.py` rechecks live main and claims
-  `refs/tags/release-locks/vVERSION` on `origin` before building. Independent
-  clones wait for that owner, then verify the completed release instead of
-  rebuilding it. Annotated release tags record the source commit and exact
-  wheel/sdist SHA-256 hashes, which must match PyPI.
-  `--dry-run` validates and builds an archive of committed sources in temporary
-  directories without uploading, tagging, pushing, or replacing a running
-  deploy's build files.
-- `check_release_version.py --base origin/main`: compares the committed PR
-  version with the fetched target branch and release tags, without importing
-  either version file. Fetch the target branch and tags before running it
-  locally (`git fetch --tags origin`). A PR must increase the version and
-  choose a version that has no existing release tag.
-
-The **Release version** PR check fetches the current target branch and tags
-each time it runs, including when a PR is retargeted. Closed PR events are
-skipped; if validation fails while an open PR's job is running, the workflow
-rechecks the live PR state before reporting a failure. Open PRs and failed
-state lookups still fail validation. A green check only covers
-the base and tags available during that run. Require this check with GitHub's
-**Require branches to be up to date before merging** option to prevent an old
-green result surviving another PR's release; otherwise rerun it after the
-target branch advances. The workflow itself does not change branch protection.
-
-An interrupted upload is resumed with its original `dist/` files and local
-annotated release tag. Missing or changed artifacts are rejected. Normal failures
-release the remote claim; a killed process or lost connection may leave one.
-Before removing a stale claim, confirm the owner has stopped and recover its
-original artifacts and tag. The error prints a deletion command guarded by that
-claim's exact object ID, so it cannot delete a newer owner's claim. Published
-versions with older lightweight tags lack recorded hashes and require manual
-artifact/tag verification; they are never rebuilt automatically.
-
-CI uses `scripts/pip_install.sh` for installs that resolve sibling releases.
-It makes at most three attempts, waiting 20 then 40 seconds, and bypasses pip's
-cache on retries. All requirements and constraints are unchanged; persistent
-failures retain pip's exit status. `PYTHON`, `PIP_INSTALL_ATTEMPTS`, and
-`PIP_INSTALL_RETRY_DELAY` can override the interpreter and retry settings.
+Apache 2.0. Contributions are welcome; see
+[CONTRIBUTING.md](https://github.com/openvax/vaxrank/blob/main/CONTRIBUTING.md)
+and the
+[code of conduct](https://github.com/openvax/vaxrank/blob/main/code-of-conduct.md).
