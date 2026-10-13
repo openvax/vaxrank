@@ -28,6 +28,7 @@ nav:
   - Moving native datasets: native-references.md
   - Development: development.md
   - Experimental antigen inputs: antigen-inputs.md
+  - Experimental CTA expression inputs: design/expression-cta-inputs.md
   - Experimental mixed antigens: mixed-antigen-design.md
   - Experimental window exposure: core-window-exposure.md
   - Unified evidence design: unified_evidence.md
