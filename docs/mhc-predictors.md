@@ -3,7 +3,8 @@
 Vaxrank runs MHC binding predictors through
 [MHCtools](https://github.com/openvax/mhctools). Select one with
 `--mhc-predictor <name>`. Names marked "requires local install" need the
-vendor's own executable on your `PATH`; the IEDB entries call the IEDB web API.
+vendor's own executable on your `PATH`. The historical IEDB names also run
+local tools; they do not call a web API or fall back to HTTP.
 
 | `--mhc-predictor` | Tool | MHC Class | Notes |
 |--------------------|------|-----------|-------|
@@ -39,9 +40,9 @@ vendor's own executable on your `PATH`; the IEDB entries call the IEDB web API.
 | `netmhciipan43-ba` | NetMHCIIpan 4.3 | II | Binding affinity mode only |
 | `netmhciipan43-el` | NetMHCIIpan 4.3 | II | Eluted ligand mode only |
 | `mixmhcpred` | [MixMHCpred](https://github.com/GfellerLab/MixMHCpred) | I | Requires local install |
-| `netmhcpan-iedb` | NetMHCpan via IEDB | I | Uses IEDB web API |
-| `netmhccons-iedb` | NetMHCcons via IEDB | I | Uses IEDB web API |
-| `netmhciipan-iedb` | NetMHCIIpan via IEDB | II | Uses IEDB web API |
-| `smm-iedb` | SMM via IEDB | I | Uses IEDB web API |
-| `smm-pmbec-iedb` | SMM-PMBEC via IEDB | I | Uses IEDB web API |
+| `netmhcpan-iedb` | NetMHCpan compatibility wrapper | I | Requires local NetMHCpan 4.1 BA |
+| `netmhccons-iedb` | NetMHCcons compatibility wrapper | I | Requires local NetMHCcons |
+| `netmhciipan-iedb` | NetMHCIIpan compatibility wrapper | II | Requires local NetMHCIIpan 4.3 BA |
+| `smm-iedb` | SMM compatibility wrapper | I | Requires local SMM |
+| `smm-pmbec-iedb` | SMM-PMBEC compatibility wrapper | I | Requires local SMM-PMBEC |
 | `random` | Random | -- | Returns random scores; for testing only |

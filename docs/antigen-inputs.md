@@ -41,6 +41,46 @@ exact-self assessment. Conflicting reference or genotype declarations fail.
 The Python equivalent is `inputs.predict(predictor, genome=genome)`, using a
 Topiary predictor. It returns the shared `EpitopeDataset`.
 
+## Combine new sequences and saved evidence
+
+An experimental manifest can mix new antigen sequences with saved mutation,
+CTA or viral predictions. Paths are relative to the manifest:
+
+```yaml
+schema: vaxrank.input_manifest.v1
+patient_id: patient-001
+reference_assembly: GRCh38
+annotation: ensembl:93
+mhc_alleles: [HLA-A*02:01]
+inputs:
+  - format: epitopes
+    path: mutations-and-cta.tsv
+  - format: antigens
+    path: viral-antigens.json
+```
+
+```sh
+vaxrank --input-manifest inputs.yaml \
+  --mhc-predictor mhcflurry --ensembl-release 93 \
+  --vaccine-type peptide mrna --output-dir mixed-design
+```
+
+Only the `antigens` entries receive new predictions. Saved measurements stay
+unchanged. All declarations are checked before loading models; a manifest may
+fill missing scope but cannot override conflicting evidence. Duplicate files
+and loading an antigen input alongside its native prediction export are rejected.
+
+When each file already declares its scope, repeat `--external-input
+antigens=PATH` or combine `--input-antigens` with `--input-epitopes` instead.
+The Python `vaxrank.external_rescoring.prepare_reports` API accepts the same
+`("antigens", path)` inputs and an `antigen_predictor_factory(scope)` returning
+a Topiary predictor. The factory runs once after validation.
+
+Direct VCF/BAM and CTA expression still run their source adapters first; add
+their saved candidate files to this manifest. Fresh/additive table rescoring
+is a separate step. Pooling does not calibrate different models or evidence
+types: use an explicit [selection policy](mixed-antigen-design.md).
+
 ## Shared outputs
 
 The ordinary ranking, peptide/mRNA assembly and reports apply to every kind.
@@ -58,6 +98,10 @@ and unmeasured records. It excludes prediction values and design policies;
 keep the native candidate file for replay. Unresolved table rows do not become
 invented antigen sequences. This export also works with native mutation and
 CTA expression workflows.
+
+Pooled native files retain each input's CTA admission decisions and captured
+Hitlist evidence in `dataset.selection["source_evidence"]`, including unresolved
+features. Prior product audits do not establish an audit for a new mixed design.
 
 See [mixed-source selection](mixed-antigen-design.md) for evidence requirements
 and current source-allocation limits.

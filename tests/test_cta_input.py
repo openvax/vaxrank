@@ -322,3 +322,35 @@ def test_real_verified_hitlist_bundle_cli_and_portable_replay(tmp_path, monkeypa
     assert (first / 'cta_design.json').read_bytes() == (tmp_path / 'replay' / 'cta_design.json').read_bytes()
     for file in first.rglob('*.fasta'):
         assert file.read_bytes() == (tmp_path / 'replay' / file.relative_to(first)).read_bytes()
+
+
+def test_pooled_cta_admission_and_hitlist_evidence_survive_native_replay(tmp_path, cli_dependencies, genome):
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    from vaxrank.cta_input import prepare_cta_report
+    from vaxrank.external_rescoring import prepare_reports
+    sources, evidence = [], {}
+    for sample in ('sample-one', 'sample-two'):
+        path = tmp_path / (sample + '.tsv')
+        pd.DataFrame([(PRAME, 3), (MAGEA3, 50), (NOT_CTA, 10)],
+                     columns=['feature_id', 'patient_tpm']).to_csv(path, sep='\t', index=False)
+        args = parse_vaxrank_args(argv(path, tmp_path / sample) + [
+            '--cta-sample-id', sample, '--output-patient-id', 'one-patient'])
+        report = prepare_cta_report(args, genome)
+        # Captured evidence is carried verbatim, including features without a sequence.
+        report.dataset.selection['hitlist_evidence_bundle'] = {'synthetic_retained_bundle': sample}
+        identity = report.input_provenance.input_id
+        evidence[identity] = {key: report.dataset.selection[key]
+                             for key in ('cta_expression_admission', 'hitlist_evidence_bundle')}
+        sources.append(report)
+    _, frame, _ = prepare_reports([], prepared_reports=sources)
+    pooled = frame.attrs['epitope_dataset']
+    assert pooled.selection['source_evidence'] == evidence
+    assert 'cta_expression_admission' not in pooled.selection
+    native = tmp_path / 'pooled.tsv'
+    pooled.save(native)
+    _, replay, _ = prepare_reports([('epitopes', str(native))])
+    assert replay.attrs['epitope_dataset'].selection['source_evidence'] == evidence
+    for retained in replay.attrs['epitope_dataset'].selection['source_evidence'].values():
+        admission = from_native_json(retained['cta_expression_admission'], CTAExpressionResult)
+        assert len(admission.decisions) == 3
+        assert len(admission.admitted_antigens) == 1

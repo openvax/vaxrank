@@ -12,7 +12,7 @@ scoring, selection and construct code.
 | Normalized Topiary table | `--input-topiary FILE` | Original rows, metadata and additive features |
 | Native Exacto table | `format: exacto` in `--input-manifest` | Peptide, ORF and RNA evidence |
 | Saved Vaxrank candidates | `--input-epitopes FILE` | Native candidates; enriched exports also carry the full scoring frame and policy |
-| Resolved antigens of any kind | `--input-antigens JSON` (experimental) | Caller-supplied sequences, targetable intervals and admission evidence |
+| Resolved antigens of any kind | `--input-antigens JSON` or manifest `format: antigens` (experimental) | Caller-supplied sequences, targetable intervals and admission evidence; can join saved predictions in one manifest |
 
 Boundaries worth knowing before choosing a path:
 

@@ -132,9 +132,9 @@ def read_input_manifest(path, *, include_direct=False):
         unknown = set(item) - {"format", "path", "exacto", *SCOPE_FIELDS}
         if unknown:
             raise ValueError(f"{location}: unknown input fields: {sorted(unknown)}")
-        from .external_rescoring import READERS
-        if item.get("format") not in READERS:
-            raise ValueError(f"{location}: format must be one of {', '.join(READERS)}")
+        from .external_rescoring import INPUT_FORMATS
+        if item.get("format") not in INPUT_FORMATS:
+            raise ValueError(f"{location}: format must be one of {', '.join(INPUT_FORMATS)}")
         if not isinstance(item.get("path"), str) or not item["path"].strip():
             raise ValueError(f"{location}: path must be a nonempty string")
         local = {k: v for k, v in item.items() if k in SCOPE_FIELDS}
