@@ -854,7 +854,7 @@ def load_unified_external(args, epitope_config, options, genome):
     patient.inputs = [(('VCF/BAM' if r.source_format == 'vcf_bam' else r.source_format + ' report'),
                        r.path) for r in reports]
     patient.input_provenance = [r.input_provenance for r in reports]
-    if dataset.selection.get('antigen_inputs') or any(a.kind != 'mutation' for a in dataset.antigens.values()):
+    if dataset.selection.get('antigen_inputs') or any(key not in dataset.mutation_fragments for key in dataset.antigens):
         from collections import Counter
         from .antigen_input import AntigenDataset
         records = list(AntigenDataset.from_epitope_dataset(dataset).antigens.values())

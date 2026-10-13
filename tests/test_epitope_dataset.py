@@ -185,7 +185,8 @@ def test_explicit_antigens_survive_file_reload_and_build(kind, tmp_path):
     for report_path in (ascii_report, html_report):
         text = report_path.read_text()
         assert 'Antigen source' in text
-        assert 'Total number of input antigens' in text
+        assert 'Resolved antigen records' in text
+        assert 'Experimental antigen design' in text
         assert all(a.source_identifier in text for a in antigens)
 
 
