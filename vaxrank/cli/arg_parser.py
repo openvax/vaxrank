@@ -1072,15 +1072,17 @@ def add_external_rescoring_args(arg_parser):
                             help="Load a normalized Topiary CSV/TSV using its original predictions.")
     arg_parser.add_argument(
         "--input-manifest", default=None, metavar="PATH",
-        help="YAML/JSON manifest listing tables and their shared patient, "
+        help="YAML/JSON manifest listing inputs and their shared patient, "
              "reference_assembly and mhc_alleles, with sample/library details per input. "
+             "Experimental antigens entries can mix new sequences with saved evidence. "
              "Required when combined reports do not declare their own scope. "
              "Required with VCF/BAM plus tables; shared declarations also apply to "
              "direct inputs, with optional direct sample/library scope. "
              "Not needed for VCF + BAM alone or a single report.")
     arg_parser.add_argument(
         "--external-input", action="append", default=None, metavar="FORMAT=PATH",
-        help="Candidate input: lens=PATH, pvacseq=PATH, topiary=PATH, epitopes=PATH or exacto=PATH. Repeat to "
+        help="Candidate input: lens=PATH, pvacseq=PATH, topiary=PATH, epitopes=PATH, exacto=PATH "
+             "or experimental antigens=PATH. Repeat to "
              "rank reports together; use --input-manifest when their patient, "
              "reference assembly or genotype is not declared in the files.")
     arg_parser.add_argument(

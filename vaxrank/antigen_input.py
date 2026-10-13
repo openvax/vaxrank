@@ -149,16 +149,23 @@ class AntigenDataset:
                       str(genome.annotation_name) + ':' + str(genome.annotation_version))
         return combine_scopes(self.scope, InputScope(annotation=annotation), 'Selected host annotation')
 
-    def predict(self, predictor, *, genome, config=None, path=''):
-        """Predict native occurrences through Topiary and return shared evidence."""
+    def prediction_provenance(self, *, genome, path='', manifest_path=None,
+                              manifest_declarations=None):
+        """Resolve identity and scope before acquiring prediction models."""
         scope = self.validate_for_prediction(genome)
         resolved = dict(self.to_dict(), scope=asdict(scope))
         digest = hashlib.sha256(json.dumps(resolved, sort_keys=True, allow_nan=False).encode()).hexdigest()
-        provenance = InputProvenance(
+        return InputProvenance(
             input_id='antigens:' + digest, source_format='antigens', path=str(path),
             content_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest() if path else digest,
             scope=scope,
+            manifest_path=str(Path(manifest_path).resolve()) if manifest_path else None,
+            manifest_declarations=dict(manifest_declarations or {}),
             report_declarations={'input_history': [asdict(p) for p in self.provenance]})
+
+    def predict(self, predictor, *, genome, config=None, path=''):
+        """Predict native occurrences through Topiary and return shared evidence."""
+        provenance = self.prediction_provenance(genome=genome, path=path)
         return predict_antigens(self.antigens, predictor, genome=genome,
                                 provenance=provenance, config=config)
 
@@ -235,12 +242,14 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
 
 
 def validate_antigen_args(args):
-    if not getattr(args, 'input_antigens', None):
+    from .external_rescoring import external_input_specs
+    specs = external_input_specs(args)
+    if not any(fmt == 'antigens' for fmt, _, _ in specs):
         return
-    conflicts = ('vcf', 'bam', 'input_lens', 'input_pvacseq', 'input_epitopes',
-                 'input_topiary', 'external_input', 'input_manifest', 'input_cta_expression')
+    conflicts = ('vcf', 'bam', 'input_cta_expression')
     if any(getattr(args, name, None) for name in conflicts):
-        raise ValueError('--input-antigens requires one antigen dataset; combine its antigen records first')
+        raise ValueError('Combine new antigen sequences with saved VCF/BAM or CTA evidence '
+                         'using epitopes inputs in --input-manifest')
     if not getattr(args, 'mhc_predictor', None) or getattr(args, 'ensembl_release', None) is None:
         raise ValueError('--input-antigens requires --mhc-predictor and --ensembl-release for new predictions')
     if getattr(args, 'external_predictions', 'input') != 'input' or getattr(args, 'external_peptide_only', False):
@@ -249,25 +258,11 @@ def validate_antigen_args(args):
         raise ValueError('Antigen context prediction caches are not yet supported')
 
 
-def prepare_antigen_report(args, genome, epitope_config=None):
-    from mhctools.cli import mhc_alleles_from_args, predictors_from_args
-    from topiary import TopiaryPredictor
+def antigen_report(inputs, predictor, *, genome, provenance, config=None):
+    """Adapt validated sequences into the common report representation."""
     from .external_report import ExternalReport
-    from .input_scope import normalize_alleles
-
-    validate_antigen_args(args)
-    inputs = AntigenDataset.load(args.input_antigens)
-    if getattr(args, 'mhc_alleles', None) or getattr(args, 'mhc_alleles_file', None):
-        requested = normalize_alleles(mhc_alleles_from_args(args), 'Antigen prediction')
-        inputs.scope = combine_scopes(inputs.scope, InputScope(mhc_alleles=requested), 'Antigen prediction')
-    if not inputs.scope.mhc_alleles:
-        raise ValueError('Antigen input requires declared mhc_alleles or --mhc-alleles')
-    args.mhc_alleles = ','.join(inputs.scope.mhc_alleles)
-    args.mhc_alleles_file = None  # Already read and reconciled with the input genotype.
-    # Validate scope against the requested annotation before loading models.
-    inputs.validate_for_prediction(genome)
-    predictor = TopiaryPredictor(models=predictors_from_args(args))
-    dataset = inputs.predict(predictor, genome=genome, config=epitope_config, path=args.input_antigens)
-    return ExternalReport('antigens', str(args.input_antigens), report_df=dataset.report_frame(),
+    dataset = predict_antigens(inputs.antigens, predictor, genome=genome,
+                               provenance=provenance, config=config)
+    return ExternalReport('antigens', provenance.path, report_df=dataset.report_frame(),
                           epitopes=dataset.epitopes, dataset=dataset,
-                          input_provenance=dataset.provenance[0])
+                          input_provenance=provenance)
