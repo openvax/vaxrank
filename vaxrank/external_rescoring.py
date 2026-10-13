@@ -854,6 +854,18 @@ def load_unified_external(args, epitope_config, options, genome):
     patient.inputs = [(('VCF/BAM' if r.source_format == 'vcf_bam' else r.source_format + ' report'),
                        r.path) for r in reports]
     patient.input_provenance = [r.input_provenance for r in reports]
+    if dataset.selection.get('antigen_inputs') or any(a.kind != 'mutation' for a in dataset.antigens.values()):
+        from collections import Counter
+        from .antigen_input import AntigenDataset
+        records = list(AntigenDataset.from_epitope_dataset(dataset).antigens.values())
+        patient.antigen_summary = dict(
+            resolved_records=len(records),
+            admitted_records=sum(a.tumor_specificity.admits_construct for a in records),
+            held_out_records=sum(not a.tumor_specificity.admits_construct for a in records),
+            by_kind=dict(sorted(Counter(a.kind for a in records).items())),
+            ranked_sources=len(ranked),
+            unresolved_candidate_groups=len({e.prediction_group_source for e in dataset.epitopes
+                                             if e.prediction_group_source not in dataset.antigens}))
     if dataset.selection.get('cta_expression_admission'):
         from .cta_expression import CTAExpressionResult
         from .native_serialization import from_native_json

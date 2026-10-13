@@ -114,6 +114,14 @@ def test_all_sources_use_shared_design_and_offline_replay(inputs, dependencies, 
                  [a['aa'] for p in manifest for a in p['antigens']])
     assert len(sequences) == 6
     assert set(sequences) == {a.amino_acids for a in inputs.antigens.values()}
+    for filename in ('run_summary.txt', 'vaccine_report.txt'):
+        summary = (output / filename).read_text()
+        assert 'Experimental antigen design' in summary
+        assert 'Resolved antigen records: 7' in summary
+        assert 'Admitted antigen records: 6' in summary
+        assert 'Held-out antigen records: 1' in summary
+        assert 'viral: 2' in summary
+        assert 'variants with antigens' not in summary
     path.unlink()
     monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
     monkeypatch.setattr('vaxrank.antigen_input.self_reference_matches', forbidden)

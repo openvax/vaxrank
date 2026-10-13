@@ -44,6 +44,7 @@ Topiary predictor. It returns the shared `EpitopeDataset`.
 ## Shared outputs
 
 The ordinary ranking, peptide/mRNA assembly and reports apply to every kind.
+Reports distinguish resolved, admitted and held-out records by source kind.
 `design/candidate_predictions.tsv` retains predictions, policies and actual
 products for replay:
 

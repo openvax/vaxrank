@@ -1073,6 +1073,9 @@ def write_run_summary(args, patient_info, source):
             note = ""
         lines += ["", "MHC alleles%s: %s" % (note, ", ".join(alleles))]
 
+    antigen_summary = getattr(patient_info, 'antigen_summary', None)
+    if antigen_summary is not None:
+        lines += ['', 'Experimental antigen design']
     if patient_info is not None and getattr(patient_info, 'cta_expression_summary', None) is not None:
         summary = patient_info.cta_expression_summary
         lines += ['', 'CTA expression targets:',
@@ -1081,6 +1084,16 @@ def write_run_summary(args, patient_info, source):
                   '  with selected regions:     %d' % summary['selected_targets'],
                   '  measurement level / units: %s / %s' % (
                       summary['measurement_level'], summary['expression_unit'])]
+    elif antigen_summary is not None:
+        lines += [
+            'Resolved antigen records: %d' % antigen_summary['resolved_records'],
+            'Admitted antigen records: %d' % antigen_summary['admitted_records'],
+            'Held-out antigen records: %d' % antigen_summary['held_out_records'],
+            'Antigen records by source kind: ' + ', '.join(
+                f'{kind}: {count}' for kind, count in antigen_summary['by_kind'].items()),
+            'Ranked antigen sources: %d' % antigen_summary['ranked_sources'],
+            'Candidate groups without resolved antigen records: %d' % antigen_summary['unresolved_candidate_groups'],
+        ]
     elif patient_info is not None:
         lines += [
             "",
