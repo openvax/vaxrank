@@ -139,11 +139,13 @@ def test_conflicting_source_after_raw_input_fails_before_models(inputs, dependen
     assert not (tmp_path / 'output.tsv').exists()
 
 
-@pytest.mark.parametrize('duplicate', ['copied-file', 'native-export'])
+@pytest.mark.parametrize('duplicate', ['copied-file', 'reformatted-file', 'native-export'])
 def test_duplicate_inputs_fail_before_models(inputs, dependencies, tmp_path, monkeypatch, duplicate):
     inputs.save(tmp_path / 'new.json')
-    if duplicate == 'copied-file':
+    if duplicate in ('copied-file', 'reformatted-file'):
         inputs.save(tmp_path / 'copy.json')
+        if duplicate == 'reformatted-file':
+            (tmp_path / 'copy.json').write_text(json.dumps(inputs.to_dict()))
         other = ('antigens', 'copy.json')
     else:
         model, genome = dependencies

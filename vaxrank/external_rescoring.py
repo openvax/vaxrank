@@ -443,7 +443,8 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
         retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in loaded})
     if pending:
         retained_ids = {p.input_id for r in loaded if r.dataset is not None for p in r.dataset.provenance}
-        if any(p.input_id in retained_ids for _, _, p in pending):
+        pending_ids = [p.input_id for _, _, p in pending]
+        if len(set(pending_ids)) != len(pending_ids) or retained_ids.intersection(pending_ids):
             raise ValueError('Inputs contain overlapping candidate identities; '
                              'do not load an input alongside its native export')
         if antigen_predictor_factory is None:
