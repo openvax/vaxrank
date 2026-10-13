@@ -1,7 +1,8 @@
 # Choosing and combining inputs
 
 Vaxrank can start from raw somatic variants, from a report another tool has
-already scored, or from evidence it saved earlier. Every path reaches the same
+already scored, or from evidence it saved earlier. Experimental sequence and CTA expression
+inputs can join saved evidence in one manifest. Every path reaches the same
 scoring, selection and construct code.
 
 | Input | Entry point | What it supplies |
@@ -13,6 +14,7 @@ scoring, selection and construct code.
 | Native Exacto table | `format: exacto` in `--input-manifest` | Peptide, ORF and RNA evidence |
 | Saved Vaxrank candidates | `--input-epitopes FILE` | Native candidates; enriched exports also carry the full scoring frame and policy |
 | Resolved antigens of any kind | `--input-antigens JSON` or manifest `format: antigens` (experimental) | Caller-supplied sequences, targetable intervals and admission evidence; can join saved predictions in one manifest |
+| Patient CTA expression | `--input-cta-expression FILE` or manifest `format: cta_expression` (experimental) | [Per-source expression contract](antigen-inputs.md#add-cta-expression), explicit threshold and human Ensembl annotation |
 
 Boundaries worth knowing before choosing a path:
 
@@ -24,15 +26,16 @@ Boundaries worth knowing before choosing a path:
 - `--input-antigens` requires resolved sequences; unresolved hypotheses stay in
   the upstream evidence tables. See
   [shared sequence/evidence input](antigen-inputs.md).
-- To use more than one file, list them all in an `--input-manifest`. Individual
-  input flags cannot be mixed with it.
+- A manifest lists every input and its scope. Alternatively, combine input
+  flags when each file already declares compatible scope. Do not mix a
+  manifest with individual input flags.
 
 ## Flag reference
 
 | Flag | Input format |
 |---|---|
-| `--input-manifest PATH` | YAML/JSON report list with shared patient/reference/genotype declarations and per-input sample/library metadata |
-| `--external-input FORMAT=PATH` | `lens`, `pvacseq`, `topiary` or `epitopes`; repeated inputs require declared compatible scope, usually supplied through a manifest |
+| `--input-manifest PATH` | YAML/JSON input list with shared patient/reference/genotype declarations and per-input sample/library metadata |
+| `--external-input FORMAT=PATH` | `lens`, `pvacseq`, `topiary`, `epitopes` or `antigens`; repeated inputs require declared compatible scope, usually supplied through a manifest |
 | `--input-lens FILE` | [LENS](https://github.com/openvax/lens) report TSV |
 | `--input-pvacseq FILE` | [pVACseq](https://github.com/griffithlab/pVACtools) TSV (`*all_epitopes.tsv` or `*all_epitopes.aggregated.tsv`) |
 | `--input-topiary FILE` | Normalized Topiary CSV/TSV, including combined tables and additive scoring features |
@@ -40,7 +43,7 @@ Boundaries worth knowing before choosing a path:
 | `--input-cta-expression FILE` | Gene/transcript CSV/TSV with explicitly declared columns, units, sample and quantification provenance |
 | `--hitlist-evidence-bundle DIRECTORY` | Optional verified Hitlist CTA-expression evidence for the same input and reference |
 | `--duplicate-candidates error\|best\|worst` | Topiary representative selection; the default requires scores to agree |
-| `--external-predictions input` | Reuse historical predictions (default); no live predictor |
+| `--external-predictions input` | Reuse saved predictions (default); new `antigens`/`cta_expression` sources still require a predictor |
 | `--external-predictions fresh` | Predict the reported peptides with explicit models and HLA set |
 | `--output-input-predictions PATH` | Save the original candidate predictions separately |
 
@@ -131,10 +134,12 @@ table, so the pooled `rank` is conditional on that scoring policy. The report
 also provides `source_rank`. Different model scores are not automatically
 calibrated onto one scale.
 
-Do not pass `--mhc-predictor`, `--mhc-alleles`, or `--mhc-alleles-file` in this
-mode: predictions retain their recorded alleles. Declare the patient genotype
-in the manifest. To compute predictions for additional patient alleles, use
-`fresh` mode below.
+For saved-report-only runs, omit `--mhc-predictor`, `--mhc-alleles` and
+`--mhc-alleles-file`: predictions retain their recorded alleles. Declare the
+patient genotype in the manifest. New `antigens` and `cta_expression` entries
+require `--mhc-predictor` and `--ensembl-release`; only those sources receive
+new predictions. See [unified antigen inputs](antigen-inputs.md). To recompute
+reported peptides for additional patient alleles, use `fresh` mode below.
 
 Use the Topiary DSL through `epitopes.filter_expr` and `epitopes.score_expr`
 to choose which original signals drive ranking. For example, this adds an
@@ -271,16 +276,18 @@ ranking. Counts are never added across discoveries.
 
 ## Construct outputs and provenance
 
-Create the destination with `mkdir -p vaccines`, then add
-`--vaccine-type peptide mrna --output-dir vaccines --ensembl-release N` to
-construct admitted antigens. Replace `N` with the release matching the input
-annotation: `--output-dir` automatically requests ASCII/PDF reports, which
-require it. Explicit ASCII/HTML/PDF output flags have the same requirement.
+Add `--vaccine-type peptide mrna --output-dir vaccines` to construct admitted
+antigens. The directory also receives ASCII/PDF reports. Annotation requirements
+depend on the evidence: native CTA/viral reports use retained source provenance,
+while mutation reports need `--ensembl-release N` when transcript annotation
+is missing. Use the producer's release. These rules apply equally to single
+files, `--external-input` and manifests. New sequence and CTA expression
+prediction still requires host annotation.
 
 External-report construction uses the shared linker without new junction
 predictions by default. To optimize junctions while retaining every historical
 candidate score, add `--mrna-junction-predictor mhcflurry` (or another
-mhctools model that supplies percentile ranks). The manifest's declared
+MHCtools model that supplies percentile ranks). The manifest's declared
 genotype supplies the query alleles; `--mrna-junction-alleles 'HLA-A*02:01'`
 can select a subset. For a single report with unknown genotype, an explicit
 junction allele set is required. Report prediction coverage is not used as a
@@ -292,8 +299,8 @@ predictions by supplying both `--mrna-junction-predictor` and
 
 `--mrna-optimize-linkers` explicitly requires a configured junction model;
 `--mrna-no-optimize-linkers` disables junction queries even if a model is
-configured. Candidate `--mhc-predictor` settings apply to direct inputs or explicit
-`--external-predictions fresh` or `additive` requests. Executable and weights paths can be
+configured. Candidate `--mhc-predictor` settings apply to direct inputs, new sequence/CTA
+sources, or explicit `--external-predictions fresh` or `additive` requests. Executable and weights paths can be
 set independently with `--mrna-junction-predictor-path` and
 `--mrna-junction-predictor-models-path`. The corresponding YAML keys live under
 `mrna:` (`junction_predictor`, `junction_alleles`, and the two path keys);

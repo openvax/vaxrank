@@ -1,9 +1,8 @@
 # How Vaxrank works
 
 Vaxrank turns antigen evidence into ranked vaccine peptides and finished
-constructs. Most of the biology upstream of that — variant calling, RNA
-alignment, HLA typing — happens outside Vaxrank; most of the scoring and
-assembly downstream of it happens inside.
+constructs. Variant calling, RNA alignment and HLA typing happen upstream. Vaxrank
+handles antigen ranking, selection, construct assembly and reports.
 
 ## Pipeline stages
 
@@ -13,9 +12,11 @@ assembly and reporting, including peptide synthesis checks and mRNA sequence
 optimization. Vaxrank then:
 
 1. **Prepares candidates.** [Varcode](https://github.com/openvax/varcode)
-   annotates coding consequences;
+   annotates coding consequences for mutation inputs;
    [Isovar](https://github.com/openvax/isovar) assembles RNA-supported
    sequences and predicts protein context where the frame is justified.
+   Experimental [unified inputs](antigen-inputs.md) admit CTA expression or
+   load supplied antigen sequences through source-specific evidence adapters.
 2. **Scores epitopes.** Predictors run through
    [MHCtools](https://github.com/openvax/mhctools); their evidence is scored and
    filtered with [Topiary](https://github.com/openvax/topiary). Saved
@@ -31,7 +32,7 @@ division of responsibility between the libraries, and
 
 ## Upstream inputs
 
-For the VCF + BAM workflow, three things happen before Vaxrank runs — for
+For the VCF + BAM workflow, three things happen before Vaxrank runs, for
 example in
 [neoantigen-vaccine-pipeline](https://github.com/openvax/neoantigen-vaccine-pipeline):
 
@@ -162,11 +163,11 @@ parameterized by the `EpitopeConfig` settings (see
 
 ## Vaccine peptide ranking
 
-Candidate vaccine peptides — longer SLPs, typically 25-mers — are constructed
-around each mutation and scored by the combined immunogenicity of the epitopes
-they contain. Candidates are then filtered and ranked by:
+Candidate antigen windows, typically 25 amino acids, are constructed
+around each mutation and scored from the epitope predictions they contain. Candidates are then filtered and ranked by:
 
-1. **Epitope content:** total predicted immunogenicity score.
+1. **Epitope content:** sum of configured epitope scores. Binding predictions
+   alone do not establish immunogenicity.
 2. **Reference proteome filtering:** exact matches in the selected genome's
    annotated protein sequences are removed from mutation-derived candidates,
    regardless of the source transcript biotype.
@@ -174,7 +175,7 @@ they contain. Candidates are then filtered and ranked by:
    positions are flagged, using bundled data from
    [cancerhotspots.org](https://www.cancerhotspots.org/) (~2,700 mutations
    across cancer types).
-4. **Manufacturability:** tie-breaking by hydropathy-based synthesis difficulty
+4. **Peptide manufacturability:** tie-breaking by hydropathy-based synthesis difficulty
    (C-terminal and 7-mer window GRAVY scores).
 
 Reference matching includes available annotated NMD, non-stop-decay, IG/TR and
@@ -224,7 +225,7 @@ Three settings control how many alternates a variant contributes:
   FASTAs.
 
 Reports render one section per variant; within a section, each VP gets its own
-per-epitope sub-table. Column counts can differ per VP — for example, when
+per-epitope sub-table. Column counts can differ per VP. For example, when
 pepsickle credibility tagging succeeded for one VP and failed for another, only
 the successful VP's table shows the processing columns.
 

@@ -1038,7 +1038,7 @@ def add_external_rescoring_args(arg_parser):
                             help='Experimental: export resolved source antigens and admission evidence, without predictions.')
     cta = arg_parser.add_argument_group('Patient CTA expression input')
     cta.add_argument('--input-cta-expression', metavar='CSV_OR_TSV',
-                     help='Design CTA vaccines directly from patient expression without VCF/BAM.')
+                     help='Experimental: design from patient CTA expression. Use a manifest to combine expression sources.')
     cta.add_argument('--cta-expression-level', choices=('gene', 'transcript'))
     for name, help_text in (
         ('id-column', 'Human Ensembl gene/transcript identifier column.'),
@@ -1061,7 +1061,7 @@ def add_external_rescoring_args(arg_parser):
     cta.add_argument('--hitlist-evidence-bundle', metavar='DIRECTORY',
                      help='Verified portable Hitlist CTA-expression evidence bundle for this input.')
     cta.add_argument('--output-cta-admission', metavar='JSON',
-                     help='Save all expression admission decisions, including held-out/unknown features.')
+                     help='Save admission decisions for one CTA input. With multiple CTA inputs, --output-dir writes separate files.')
     arg_parser.add_argument("--input-epitopes", default=None, metavar="FILE",
                             help="Reload native epitope predictions and saved scoring evidence.")
     arg_parser.add_argument(
@@ -1074,7 +1074,7 @@ def add_external_rescoring_args(arg_parser):
         "--input-manifest", default=None, metavar="PATH",
         help="YAML/JSON manifest listing inputs and their shared patient, "
              "reference_assembly and mhc_alleles, with sample/library details per input. "
-             "Experimental antigens entries can mix new sequences with saved evidence. "
+             "Experimental antigens and cta_expression entries can mix new sequences and expression with saved evidence. "
              "Required when combined reports do not declare their own scope. "
              "Required with VCF/BAM plus tables; shared declarations also apply to "
              "direct inputs, with optional direct sample/library scope. "

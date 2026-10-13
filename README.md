@@ -6,16 +6,17 @@
     <img src="https://img.shields.io/pypi/v/vaxrank.svg?maxAge=1000" alt="PyPI" />
 </a>
 
-# vaxrank
+# Vaxrank
 
 Vaxrank selects mutated protein fragments for personalized therapeutic cancer
 vaccines. It is the antigen ranking and vaccine design component of the
 [OpenVax](https://www.openvax.org/) pipeline.
 
-It takes somatic variants, tumor RNA-seq and HLA types — or candidate epitopes
-that another tool has already scored — and returns ranked vaccine peptides,
+It takes somatic variants, tumor RNA-seq and HLA types, or previously scored
+candidate epitopes, and returns ranked antigen windows,
 peptide or mRNA construct files, and reports for reviewing the evidence behind
-each design.
+each design. Unified mutation/CTA/viral inputs and the expanded peptide/mRNA
+design workflows are experimental.
 
 ## Install
 
@@ -29,20 +30,24 @@ WeasyPrint; see [installation](docs/installation.md).
 
 ## Quick start
 
-Ranked vaccine peptides from a tumor VCF plus an RNA-seq BAM, as text and PDF
-reports (this command uses the mouse B16 melanoma data in this repository):
+Choose the vaccine type first: `peptide`, `mrna`, or both. This smoke example
+uses the mouse B16 melanoma files in a repository checkout and a **random test
+predictor**. It exercises the workflow; its scores are not biological predictions.
 
 ```sh
 vaxrank \
+    --vaccine-type peptide \
+    --download-reference-genome-data \
     --vcf tests/data/b16.f10/b16.vcf \
     --bam tests/data/b16.f10/b16.combined.bam \
-    --mhc-predictor netmhc \
+    --mhc-predictor random \
     --mhc-alleles H2-Kb,H2-Db \
     --output-ascii-report vaccine-peptides.txt \
-    --output-pdf-report vaccine-peptides.pdf
+    --output-pdf-report vaccine-peptides.pdf \
+    --pdf-backend weasyprint
 ```
 
-Four inputs are required:
+For a real VCF + RNA run, supply:
 
 - `--vcf`: somatic variants, from any variant caller
 - `--bam`: tumor RNA-seq alignments, used by Isovar to assemble mutant transcripts
@@ -76,7 +81,7 @@ Full documentation: <https://openvax.github.io/vaxrank/>
 
 - [Installation](docs/installation.md): reference annotation and PDF backends.
 - [Input workflows](docs/input-workflows.md): VCF/BAM, LENS, pVACseq, Topiary
-  tables, saved evidence, and how to combine them.
+  tables, CTA expression, antigen sequences and saved evidence.
 - [Vaccine designs](docs/vaccine-designs.md): the design axes, peptide and mRNA
   construct files, linker library, manifest schema.
 - [Analysis outputs](docs/outputs.md): report formats and the figure commands.

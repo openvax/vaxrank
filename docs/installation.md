@@ -21,15 +21,12 @@ pyensembl install --release 75 --species human
 
 ## PDF reports
 
-PDF generation uses [wkhtmltopdf](http://wkhtmltopdf.org/) by default:
-
-```sh
-brew install --cask wkhtmltopdf
-```
+PDF generation uses [wkhtmltopdf](https://wkhtmltopdf.org/downloads.html) by
+default. Install a compatible executable and make it available on `PATH`.
 
 Alternatively, pass `--pdf-backend=weasyprint` to use
-[WeasyPrint](https://weasyprint.org/) (experimental), which needs no external
-binary:
+[WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html)
+(experimental). It uses system libraries such as Pango:
 
 ```sh
 pip install weasyprint

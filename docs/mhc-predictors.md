@@ -6,13 +6,17 @@ Vaxrank runs MHC binding predictors through
 vendor's own executable on your `PATH`. The historical IEDB names also run
 local tools; they do not call a web API or fall back to HTTP.
 
+MHCflurry also needs model weights (`mhcflurry-downloads fetch`). Check the
+[MHCtools predictor guide](https://openvax.github.io/mhctools/) for model
+installation and allele/length support.
+
 | `--mhc-predictor` | Tool | MHC Class | Notes |
 |--------------------|------|-----------|-------|
-| `mhcflurry` | [MHCflurry](https://github.com/openvax/mhcflurry) | I | Open-source neural network; installed with mhctools |
+| `mhcflurry` | [MHCflurry](https://github.com/openvax/mhcflurry) | I | Open-source neural network; Python package installed with MHCtools; fetch model weights separately |
 | `bigmhc` | [BigMHC](https://github.com/KarchinLab/bigmhc) | I | Auto-detects EL or IM model |
 | `bigmhc-el` | [BigMHC](https://github.com/KarchinLab/bigmhc) EL | I | Presentation (eluted ligand) model |
 | `bigmhc-im` | [BigMHC](https://github.com/KarchinLab/bigmhc) IM | I | Immunogenicity model |
-| `pepsickle` | [Pepsickle](https://github.com/pdxgx/pepsickle) | I | Proteasomal cleavage predictor |
+| `pepsickle` | [Pepsickle](https://github.com/pdxgx/pepsickle) | -- | Proteasomal cleavage predictor |
 | `netmhc` | [NetMHC](https://services.healthtech.dtu.dk/services/NetMHC-4.0/) | I | Auto-detects NetMHC3 or NetMHC4 |
 | `netmhc3` | NetMHC 3.x | I | Requires local install |
 | `netmhc4` | [NetMHC 4.0](https://services.healthtech.dtu.dk/services/NetMHC-4.0/) | I | Requires local install |

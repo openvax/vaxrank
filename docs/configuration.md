@@ -8,7 +8,7 @@ single-key override, or a dedicated CLI flag.
 Store the parameters you repeat on every run in a YAML file:
 
 ```sh
-vaxrank --config my_config.yaml --vcf variants.vcf --bam tumor.bam
+vaxrank --config my_config.yaml --input-epitopes candidates.tsv
 ```
 
 Example `my_config.yaml`:
@@ -21,7 +21,6 @@ epitopes:
   logistic_width: 150.0                     # steepness of logistic curve
   affinity_cutoff: 5000.0                   # IC50 >= this → score 0
   percentile_rank_cutoff: 10.0              # rank >= this → score 0 (percentile mode)
-  top_epitopes_per_candidate: 1000          # 0 = keep all
 
 vaccine_peptides:
   preferred_length: 25                      # target amino acids per vaccine peptide
@@ -31,6 +30,8 @@ vaccine_peptides:
   per_mutation: 1                           # peptides to keep per variant
   max_epitopes_per_candidate: 1000          # 0 = keep all
   score_fraction_of_best: 0.99              # drop candidates scoring < 99% of best
+
+peptide:
   manufacturability:                        # GRAVY = mean hydropathy
     max_c_terminal_hydropathy: 1.5          # max GRAVY of C-terminal 7-mer
     min_kmer_hydropathy: 0.0                # min max-7mer GRAVY (floor)
@@ -66,10 +67,15 @@ instead of being YAML-parsed.
 
 Values are resolved in this order, later winning:
 
-1. Compiled-in defaults (see `vaxrank/config/defaults.py`)
-2. YAML config file (`--config`)
-3. `--config-value` / `--config-text` overrides
-4. Dedicated CLI flags (e.g. `--vaccine-peptide-length`)
+1. Built-in defaults (see `vaxrank/config/defaults.py`)
+2. Saved construct defaults when reloading a native design
+3. YAML config files (`--config`, in order)
+4. `--config-value` / `--config-text` overrides
+5. Dedicated CLI flags (e.g. `--vaccine-peptide-length`)
+
+Native epitope scoring restores its saved policy unless you supply an explicit
+epitope configuration. Combining different saved scoring policies requires an
+explicit choice. See [saved scoring policies](input-workflows.md#saved-scoring-policies).
 
 ## Named policy bundles
 
@@ -167,7 +173,7 @@ behavior byte for byte.
 
 Use `affinity.logistic_normalized(m, w)` for a `[0, 1]` binder-quality score
 (the Topiary 5.1+ primitive). The plain `affinity.logistic(m, w)` is the raw
-sigmoid and caps below 1 — about 0.912 at the default `m=350, w=150`.
+sigmoid and caps below 1, about 0.912 at the default `m=350, w=150`.
 
 Invalid DSL strings are rejected at config load rather than mid-pipeline, so
 typos in the YAML surface before any predictions run.

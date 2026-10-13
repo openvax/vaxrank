@@ -129,7 +129,7 @@ def read_input_manifest(path, *, include_direct=False):
         location = f"{path}, input {index}"
         if not isinstance(item, dict):
             raise ValueError(f"{location}: expected an input object")
-        unknown = set(item) - {"format", "path", "exacto", *SCOPE_FIELDS}
+        unknown = set(item) - {"format", "path", "exacto", "cta_expression", *SCOPE_FIELDS}
         if unknown:
             raise ValueError(f"{location}: unknown input fields: {sorted(unknown)}")
         from .external_rescoring import INPUT_FORMATS
@@ -144,6 +144,16 @@ def read_input_manifest(path, *, include_direct=False):
         combine_scopes(shared_scope, local_scope, location, SHARED_FIELDS)
         declarations = {**shared, **{k: v for k, v in local.items()
                                    if v is not None or k not in shared}}
+        if item['format'] == 'cta_expression' or 'cta_expression' in item:
+            from .cta_input import cta_expression_contract
+            if item['format'] != 'cta_expression':
+                raise ValueError(f'{location}: cta_expression options require a CTA expression input')
+            options = item.get('cta_expression')
+            cta_expression_contract(options, scope_from_mapping(declarations, location), location)
+            options = dict(options)
+            if 'hitlist_evidence_bundle' in options:
+                options['hitlist_evidence_bundle'] = str((path.parent / options['hitlist_evidence_bundle']).resolve())
+            declarations['cta_expression'] = options
         if 'exacto' in item:
             options = item['exacto']
             if item['format'] != 'exacto' or not isinstance(options, dict):

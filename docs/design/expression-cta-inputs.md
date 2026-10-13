@@ -7,6 +7,11 @@ Vaxrank designs CTA vaccines from patient expression tables and HLA without
 VCF/BAM. OncoRef supplies the CTA reference; Topiary/MHCtools predict the
 admitted proteins, and the shared DSL selects/ranks peptide or mRNA designs.
 
+To combine expression with viral sequences or saved mutation evidence, use a
+[`cta_expression` manifest entry](../antigen-inputs.md#add-cta-expression). Each
+entry declares its own sample, columns and admission threshold. The single-input
+command below remains available.
+
 ```bash
 vaxrank --input-cta-expression patient-expression.tsv \
   --cta-expression-level gene --cta-id-column gene_id --cta-value-column TPM \

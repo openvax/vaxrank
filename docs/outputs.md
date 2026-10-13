@@ -37,9 +37,11 @@ and `*_cdna_variant_{start,end}` columns, each variant also gets a
 transcript, the annotation-only mutant prediction and the RNA-assembled
 sequence, so unsupported or assembly-refined claims stay explicit.
 
+The `random` predictor below is for testing the figure workflow only.
+
 ```bash
 vaxrank --vcf variants.vcf --bam tumor-rna.bam \
-  --mhc-predictor random --mhc-alleles HLA-A*02:01 \
+  --mhc-predictor random --mhc-alleles 'HLA-A*02:01' \
   --output-isovar-csv patient-isovar.csv
 
 vaxrank-mutation-figure patient-isovar.csv \

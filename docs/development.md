@@ -6,13 +6,14 @@ cd vaxrank
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install -e .
-# Adjust the release to match your reference
-pyensembl install --release 113 --species human
-pyensembl install --release 113 --species mouse
+pip install -e ".[hitlist]" pytest pytest-cov ruff mkdocs-material
+# Reference releases exercised by the test suite
+pyensembl install --release 75 93 --species human
+pyensembl install --release 93 102 --species mouse
 ```
 
-Run linting and tests:
+Install the [PDF dependencies](installation.md#pdf-reports) and `samtools`
+for the original-read integration tests. Run linting and tests:
 
 ```bash
 ./lint.sh && ./test.sh
@@ -34,27 +35,25 @@ The [Sid test data](https://github.com/openvax/vaxrank/blob/main/TEST_DATA.md)
 contains only the reads the regression suite explicitly selects. They come from
 openvax-v1, the OpenVax libraries' shared Sid test data published by osteosarc;
 the reviewed recipe ships in the package and verifies every selected record.
-The first test run downloads openvax-v1 (28 MB) into the osteosarc cache; later
-runs are offline.
+The first run downloads required reads and reference data. Cached runs can
+reuse them; the full suite also contains explicit download and integration checks.
 
 The first run may take a while to build the reference proteome kmer index.
 Later runs use the cached index.
 
 ## Reference membership caches
 
-Caches are keyed by the installed annotation/sequence content — or by actual
-protein content for custom reference providers — not only by species and
-release. This supports explicit offline PyEnsembl `Genome` references and keeps
+Caches are keyed by installed annotation/sequence content, or by actual
+protein content for custom reference providers, as well as species and release. This supports explicit offline PyEnsembl `Genome` references and keeps
 a subset from sharing a full-reference cache. Upgrading from
 species/release-only caches triggers a one-time rebuild; old cache files are
 not trusted and not automatically deleted.
 
 ## Scripts
 
-- `develop.sh`: installs the package in editable mode and sets `PYTHONPATH` to
-  the repo root.
-- `lint.sh`: runs ruff on `vaxrank` and `tests`.
-- `test.sh`: runs pytest with coverage.
+- `develop.sh`: installs the package in editable mode.
+- `lint.sh`: runs Ruff on the package, tests and release helpers.
+- `test.sh`: runs pytest; CI additionally collects coverage.
 - `deploy.sh`: runs lint, tests, build and upload through one Python
   environment, verifies PyPI artifacts by SHA-256, and safely resumes an
   interrupted upload from its original artifacts.
