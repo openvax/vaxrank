@@ -24,8 +24,7 @@ a derived configuration; the saved effective definition and digest identify it.
 
 These bundles compare epitope selection. Vaccine construction, multiple-epitope
 aggregation and manufacturability remain Vaxrank procedures. Their combined
-score uses `target_epitope_score`, preventing an additional RNA factor. Their
-scores are not calibrated immunogenicity probabilities.
+score uses `target_epitope_score`, preventing an additional RNA factor.
 
 ## LENS evidence and normalization
 
@@ -59,10 +58,6 @@ documentation's ascending wording. The score `1/ordinal_rank(...)` represents
 the ordering and exact sort-key ties remain tied. Conflicting scores for multiple
 occurrences of one candidate require an explicit duplicate-resolution choice.
 
-Tests compare a synthetic aggregate report covering every supported Tier,
-missing measurements and ties against the actual v7.1.4 sorting function. The
-fixture records the source commit and hash of that function's file.
-
 [pVACseq aggregate criteria](https://pvactools.readthedocs.io/en/stable/pvacseq/output_files.html#the-pvacseq-aggregate-report-tiers),
 [pVACtools 7.1.4 sorting implementation](https://github.com/griffithlab/pVACtools/blob/v7.1.4/pvactools/lib/sort.py)
 
@@ -74,10 +69,8 @@ read counts are not automatically substituted. Recognition also requires matched
 WT affinity and/or the published IEDB similarity-derived `foreignness` feature.
 The CLI does not calculate foreignness or obtain missing experimental measures.
 
-All thresholds are strict and missing required evidence remains unknown. These
-are explicit experimental reproductions of cohort-derived published gates,
-not newly fitted or externally validated Vaxrank models. Ordering survivors by
-affinity is a disclosed comparison convention.
+Thresholds are strict; missing required evidence stays unknown. These
+experimental bundles apply the published gates, then order survivors by affinity.
 
 [Wells et al., Cell 2020](https://doi.org/10.1016/j.cell.2020.09.015)
 
@@ -98,10 +91,5 @@ vaxrank --input-epitopes evidence.tsv --output-csv replay.csv
 Native evidence retains the effective policy, all source measurements and
 per-occurrence decisions. The adjacent `.policy` directory records configuration
 derivation, source citations, model choices and replayable Topiary audit tables.
-Evaluation and replay do not run predictors. Required missing evidence is not
-filled with plausible measurements; percentile-only source rows remain available
-even when they cannot create a quantitative native prediction object.
-
-These table-based comparisons do not require lifting the Isovar dependency cap
-(#562), relocating mutation annotation references (#563), or completing the
-remaining exact-window prediction consumer integration (#497).
+Evaluation and replay do not run predictors. Percentile-only rows remain in the
+evidence even when they cannot create a quantitative native prediction object.

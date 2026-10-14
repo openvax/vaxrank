@@ -94,32 +94,22 @@ Full documentation: <https://openvax.github.io/vaxrank/>
   library owns which decision.
 - [Development](docs/development.md): local setup, test data, release scripts.
 
-Experimental research workflows: [unified antigen inputs](docs/antigen-inputs.md),
+Experimental workflows: [unified antigen inputs](docs/antigen-inputs.md),
 [CTA expression inputs](docs/design/expression-cta-inputs.md),
 [mixed mutation/CTA/viral selection](docs/mixed-antigen-design.md) and
-[window exposure](docs/core-window-exposure.md). These do not establish clinical
-safety or efficacy.
+[window exposure](docs/core-window-exposure.md).
 
-## Clinical use
+<a id="clinical-use"></a>
 
-Vaxrank is the ranking engine behind the OpenVax neoantigen vaccine pipeline,
-which has been used in several clinical trials of personalized cancer vaccines
-at Mount Sinai:
+## Clinical studies
 
-- [NCT02721043](https://clinicaltrials.gov/study/NCT02721043) (PGV001): phase I
-  study in solid and hematologic malignancies. All 11 treated patients developed
-  neoantigen-specific T-cell responses
-  ([Saxena et al., Cancer Discovery 2025](https://pubmed.ncbi.nlm.nih.gov/40094414/)).
-- [NCT03359239](https://clinicaltrials.gov/study/NCT03359239): phase I of PGV001
-  plus atezolizumab in urothelial cancer. The combination was safe and induced
-  neoantigen-specific CD4+ and CD8+ T-cell responses in all evaluated patients
-  ([Saxena et al., Nature Cancer 2025](https://pubmed.ncbi.nlm.nih.gov/40346292/)).
-- [NCT03223103](https://clinicaltrials.gov/study/NCT03223103): phase I of PGV001
-  plus tumor treating fields and standard-of-care temozolomide in newly
-  diagnosed glioblastoma (paper in preparation).
+The OpenVax pipeline has used Vaxrank in these Mount Sinai trials:
 
-The computational pipeline used in these trials is described in
-[Kodysh & Rubinsteyn, Methods Mol. Biol. 2020](https://link.springer.com/protocol/10.1007/978-1-0716-0327-7_10).
+- [PGV001 / NCT02721043](https://clinicaltrials.gov/study/NCT02721043): personalized vaccines for solid and hematologic malignancies.
+- [NCT03359239](https://clinicaltrials.gov/study/NCT03359239): PGV001 with atezolizumab in urothelial cancer.
+- [NCT03223103](https://clinicaltrials.gov/study/NCT03223103): PGV001 with tumor treating fields and temozolomide in glioblastoma.
+
+Methods and published results are cited below.
 
 <a id="papers--citations"></a>
 

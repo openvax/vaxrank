@@ -31,7 +31,7 @@ nav:
   - Experimental CTA expression inputs: design/expression-cta-inputs.md
   - Experimental mixed antigens: mixed-antigen-design.md
   - Experimental window exposure: core-window-exposure.md
-  - Unified evidence design: unified_evidence.md
+  - Evidence and provenance: unified_evidence.md
 
 markdown_extensions:
   - pymdownx.highlight:

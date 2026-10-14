@@ -1,55 +1,38 @@
 # Choosing and combining inputs
 
-Vaxrank can start from raw somatic variants, from a report another tool has
-already scored, or from evidence it saved earlier. Experimental sequence and CTA expression
-inputs can join saved evidence in one manifest. Every path reaches the same
-scoring, selection and construct code.
+Vaxrank accepts variants, scored reports and saved evidence. Experimental antigen
+and CTA expression inputs use the same scoring, selection and construct outputs.
 
-| Input | Entry point | What it supplies |
+| Input | Entry point | Supplies |
 | --- | --- | --- |
-| Somatic variants + tumor RNA | `--vcf`, `--bam`, `--mhc-predictor`, `--mhc-alleles` | Isovar-reconstructed protein context and new epitope predictions |
-| LENS report | `--input-lens PATH` | Reported peptide occurrences, available context and evidence |
-| pVACseq report | `--input-pvacseq PATH` | All-epitope or aggregated TSVs |
-| Normalized Topiary table | `--input-topiary FILE` | Original rows, metadata and additive features |
-| Native Exacto table | `format: exacto` in `--input-manifest` | Peptide, ORF and RNA evidence |
-| Saved Vaxrank candidates | `--input-epitopes FILE` | Native candidates; enriched exports also carry the full scoring frame and policy |
-| Resolved antigens of any kind | `--input-antigens JSON` or manifest `format: antigens` (experimental) | Caller-supplied sequences, targetable intervals and admission evidence; can join saved predictions in one manifest |
-| Patient CTA expression | `--input-cta-expression FILE` or manifest `format: cta_expression` (experimental) | [Per-source expression contract](antigen-inputs.md#add-cta-expression), explicit threshold and human Ensembl annotation |
+| Somatic variants + tumor RNA | `--vcf`, `--bam`, `--mhc-predictor`, `--mhc-alleles` | Isovar protein context and new predictions |
+| LENS report | `--input-lens PATH` | Reported peptides, context and evidence |
+| pVACseq report | `--input-pvacseq PATH` | All-epitope or aggregated TSVs; omitted candidates cannot be recovered |
+| Topiary table | `--input-topiary FILE` | Normalized predictions, metadata and features |
+| Native Exacto table | Manifest `format: exacto` | Peptide, ORF and RNA evidence; requires an explicit sample |
+| Saved Vaxrank candidates | `--input-epitopes FILE` | Native candidates; enriched files also retain evidence and policies |
+| Resolved antigens (experimental) | `--input-antigens JSON` or manifest `format: antigens` | Sequences, targetable intervals and admission evidence |
+| CTA expression (experimental) | `--input-cta-expression FILE` or manifest `format: cta_expression` | Patient expression with [declared columns, units and threshold](antigen-inputs.md#add-cta-expression) |
 
-Boundaries worth knowing before choosing a path:
-
-- An aggregated pVACseq table already selected its best epitopes upstream.
-  Importing it cannot recover the candidates it omitted.
-- Native Exacto input requires an explicit sample. It infers neither HLA
-  assignments nor construction admission.
-- Table-only candidates can be ranked without construction evidence.
-- `--input-antigens` requires resolved sequences; unresolved hypotheses stay in
-  the upstream evidence tables. See
-  [shared sequence/evidence input](antigen-inputs.md).
-- A manifest lists every input and its scope. Alternatively, combine input
-  flags when each file already declares compatible scope. Do not mix a
-  manifest with individual input flags.
+Table-only candidates can be ranked. Construction also requires sequence context
+and admission evidence. Unresolved sequence hypotheses stay in upstream tables.
 
 ## Flag reference
 
-| Flag | Input format |
+| Flag | Purpose |
 |---|---|
-| `--input-manifest PATH` | YAML/JSON input list with shared patient/reference/genotype declarations and per-input sample/library metadata |
-| `--external-input FORMAT=PATH` | `lens`, `pvacseq`, `topiary`, `epitopes` or `antigens`; repeated inputs require declared compatible scope, usually supplied through a manifest |
-| `--input-lens FILE` | [LENS](https://github.com/openvax/lens) report TSV |
-| `--input-pvacseq FILE` | [pVACseq](https://github.com/griffithlab/pVACtools) TSV (`*all_epitopes.tsv` or `*all_epitopes.aggregated.tsv`) |
-| `--input-topiary FILE` | Normalized Topiary CSV/TSV, including combined tables and additive scoring features |
-| `--input-epitopes FILE` | Native candidate reload; enriched exports retain evidence and the scoring policy |
-| `--input-cta-expression FILE` | Gene/transcript CSV/TSV with explicitly declared columns, units, sample and quantification provenance |
-| `--hitlist-evidence-bundle DIRECTORY` | Optional verified Hitlist CTA-expression evidence for the same input and reference |
-| `--duplicate-candidates error\|best\|worst` | Topiary representative selection; the default requires scores to agree |
-| `--external-predictions input` | Reuse saved predictions (default); new `antigens`/`cta_expression` sources still require a predictor |
-| `--external-predictions fresh` | Predict the reported peptides with explicit models and HLA set |
-| `--output-input-predictions PATH` | Save the original candidate predictions separately |
+| `--input-manifest PATH` | YAML/JSON input list with shared and per-input scope |
+| `--external-input FORMAT=PATH` | Repeat for `lens`, `pvacseq`, `topiary`, `epitopes` or `antigens` files that already declare compatible scope |
+| `--duplicate-candidates error\|best\|worst` | Choose a representative among duplicate observations; default requires scores to agree |
+| `--external-predictions input\|fresh\|additive` | Reuse predictions (default), replace LENS/pVACseq predictions, or add named features |
+| `--output-input-predictions PATH` | Save original predictions separately |
+
+A manifest replaces individual input flags. Direct `--vcf`/`--bam` inputs can
+still be added alongside it.
 
 ## Declare the scope of combined reports
 
-The ordinary VCF + BAM command is unchanged. It needs no manifest:
+A single VCF/BAM run or imported report needs no manifest:
 
 ```sh
 vaxrank --vcf somatic.vcf --bam tumor.bam \
@@ -57,11 +40,8 @@ vaxrank --vcf somatic.vcf --bam tumor.bam \
   --output-csv ranked.csv
 ```
 
-A single `--input-lens` or `--input-pvacseq` report also needs no manifest.
-Unstated patient, reference, sample and genotype metadata remain unknown.
-
-To combine reports, declare their **shared patient, reference assembly and
-patient MHC allele set**. For example, save this as `inputs.yaml`:
+Combining reports requires a shared **patient, reference assembly and MHC allele
+set**. Save this as `inputs.yaml`:
 
 ```yaml
 schema: vaxrank.input_manifest.v1
@@ -79,71 +59,43 @@ inputs:
     library_id: tumor-rna-1
 ```
 
-Paths resolve relative to the manifest. JSON works too. Shared declarations
-can appear at the top level; each input can also declare `patient_id`,
-`reference_assembly`, `mhc_alleles`, `annotation`, `sample_id`, `library_id`
-and `timepoint`. Sample/library/timepoint defaults can differ per input.
-Known patient, reference, annotation and genotype declarations must agree.
-Use the exact reference name; Vaxrank does not equate different assembly
-labels or lift coordinates between builds. For Ensembl annotations, use
-`annotation: ensembl:110` (with the actual release used by the producer).
-An explicitly configured `--ensembl-release` must match the declared assembly
-and annotation. Without one, a declared assembly still determines variant
-identity; it does not invent a producer annotation release.
+`format` selects the input adapter, not the file extension. Paths are relative
+to the manifest. Shared fields can appear at the top level or on each input:
 
-Unknown fields may be omitted or set to `null`. Combining inputs requires
-known patient, assembly and genotype for every input. Other missing fields
-remain unknown in saved provenance; their compatibility has not been
-established. A manifest is a user assertion, not independent verification of
-the patient's identity or typing assay. `--output-patient-id` remains a display
-label and cannot authorize pooling.
+- `patient_id`, `reference_assembly`, `annotation` and `mhc_alleles` must agree
+  wherever declared. Use the exact assembly name and, if known,
+  `annotation: ensembl:110` with the producer's release.
+- `sample_id`, `library_id` and `timepoint` may differ per input.
+- Optional unknown fields may be omitted or `null`. `--output-patient-id` is
+  only a display label, not a declaration for combining evidence.
 
-Producer tables may carry declarations in columns with those exact names
-(`mhc_alleles` uses a JSON list in a cell). Vaxrank checks every row, including
-LENS `Hsap37.`/`Hsap38.` origin markers. Conflicting producer declarations
-cannot be overridden by a manifest. Reports that already declare all required
-scope can still use repeated `--external-input`; otherwise use the manifest.
-List every input in the manifest rather than mixing it with individual input
-flags. Conflicts fail before scoring, live model initialization or exports.
+An explicit `--ensembl-release` must match the declared assembly and annotation.
+Assembly alone does not imply the producer's annotation release. Producer
+columns with these names are checked on every row, including LENS assembly
+markers; manifest values cannot override conflicts. An `mhc_alleles` table cell
+uses a JSON list. Conflicts fail before models or exports run.
 
-Report allele coverage may be a **subset** of the declared genotype. A union
-of observed prediction alleles is never promoted into a declared genotype.
-Alleles are normalized with MHCgnomes; differing resolutions are not guessed
-to be equivalent. Reported alleles outside the declared set are rejected.
+Report alleles may cover a subset of the declared genotype. MHCgnomes normalizes
+alleles; Vaxrank rejects reported alleles outside that set and does not infer a
+genotype from report coverage.
 
 ## Rank using original predictions
 
-No predictor installation or raw sequencing inputs are needed to reuse the
-table values. Use the manifest above for multiple files:
-
 ```sh
-vaxrank \
-  --input-manifest inputs.yaml \
-  --external-predictions input \
-  --output-csv original-ranked.csv \
-  --output-input-predictions originals.tsv
+vaxrank --input-manifest inputs.yaml --external-predictions input \
+  --output-csv original-ranked.csv --output-input-predictions originals.tsv
 ```
 
-`--output-csv` writes a per-peptide/allele report in external mode;
-`--output-neoepitope-report report.xlsx` writes its Excel counterpart.
+`input` is the default. It applies Vaxrank's filters and scoring to saved
+measurements, retaining both pooled `rank` and within-source `source_rank`.
+Different models are not automatically calibrated. CSV and
+`--output-neoepitope-report report.xlsx` contain per-peptide/allele results.
 
-`input` is the default. It preserves historical prediction values and applies
-Vaxrank's configured filters/scores; it does **not** reproduce each producer's
-original ranking algorithm. Model selection is resolved within each source
-table, so the pooled `rank` is conditional on that scoring policy. The report
-also provides `source_rank`. Different model scores are not automatically
-calibrated onto one scale.
+Saved-report-only runs need no predictor or prediction allele flags. New
+`antigens` or `cta_expression` entries still require a predictor and host
+annotation; only those entries receive new predictions.
 
-For saved-report-only runs, omit `--mhc-predictor`, `--mhc-alleles` and
-`--mhc-alleles-file`: predictions retain their recorded alleles. Declare the
-patient genotype in the manifest. New `antigens` and `cta_expression` entries
-require `--mhc-predictor` and `--ensembl-release`; only those sources receive
-new predictions. See [unified antigen inputs](antigen-inputs.md). To recompute
-reported peptides for additional patient alleles, use `fresh` mode below.
-
-Use the Topiary DSL through `epitopes.filter_expr` and `epitopes.score_expr`
-to choose which original signals drive ranking. For example, this adds an
-expression threshold to a LENS run whose normalized table contains `gene_tpm`:
+Choose ranking signals with the Topiary DSL:
 
 ```sh
 vaxrank --input-lens patient.lens.tsv \
@@ -152,96 +104,65 @@ vaxrank --input-lens patient.lens.tsv \
   --output-csv expression-ranked.csv
 ```
 
-Unqualified `affinity` uses the selected default method. Use a qualified
-reference such as `affinity[mhcflurry]` when that method is present in every
-table being scored. Check feature availability and missing values in each
-source before applying a shared policy; source-specific signals are not
-guaranteed to exist in every format.
+Unqualified `affinity` uses each source's selected method. A qualified reference
+such as `affinity[mhcflurry]` requires that method in every scored table. Check
+that the chosen features exist across inputs.
 
 ### Construct selection and final order
 
-`vaccine_peptides.combined_score_expr` determines final construct order for
-direct, LENS, pVACseq and mixed external inputs. The first selected vaccine
-peptide represents each variant or antigen. Constructs rank by descending
-combined score; this order feeds the template reports and the peptide/mRNA
-assemblers before optional HLA-coverage selection.
+`vaccine_peptides.combined_score_expr` orders constructs across direct and
+imported inputs, before optional HLA-coverage selection:
 
-Occurrence/window selection happens first and remains source-specific:
+- Direct inputs generate windows, apply `score_fraction_of_best`, then select
+  with `vaccine_peptides.ranking_rules`.
+- External inputs select the reported context containing their strongest
+  eligible epitope. Only compatible epitopes from that context enter a construct.
+- Where sources offer the same variant or antigen, final ranking selects one
+  source's construct. Counts and predictions remain with that source.
 
-- Direct inputs generate windows, apply `score_fraction_of_best`, and choose
-  among the retained windows using `vaccine_peptides.ranking_rules`.
-- Within each external report, the strongest eligible epitope selects its
-  reported occurrence/context. Only compatible epitopes from that context
-  enter the construct. A combined-score expression does not rescan windows
-  or recover candidates omitted by the producer.
-- When multiple reports supply a construct for the same variant or antigen,
-  the shared final ranking policy chooses one. Counts and predictions stay
-  with that source-derived construct; observations are not summed or blended.
+By default, `require_target_epitopes_in_variant` excludes constructs with no
+target epitopes, including known-self-only constructs. Their observations remain
+in the reports.
 
-The existing `require_target_epitopes_in_variant` setting applies to external
-inputs too. Its default excludes constructs with no target epitopes before
-final ranking, including known-self-only constructs. Their input observations
-remain in the audit report. Set the option to `false` only when intentionally
-retaining constructs without target epitopes.
-
-Exact combined-score ties use descending RNA support only when **all tied
-representatives have counts with the same stated unit and derivation**.
-Otherwise that tie skips RNA and uses descending target-epitope score.
-Complete ties preserve input order, including the supplied file order for
-repeated-source alternatives. Missing RNA is not assigned a count by this
-ranking step, and reads are not converted to fragments.
-
-Common ordering does not make evidence from different sources comparable.
-The existing mutation default is `sqrt(n_rna_alt) * target_epitope_score`;
-source-agnostic antigens without mutation counts default to
-`target_epitope_score`. The mutation DSL retains its legacy numeric-zero
-binding for unavailable counts; provenance still distinguishes missing from
-measured zero. For a shared score that does not weight RNA, use:
+The mutation default is `sqrt(n_rna_alt) * target_epitope_score`. Antigens without
+mutation counts default to `target_epitope_score`. To use binding alone across
+sources:
 
 ```sh
 --config-text 'vaccine_peptides.combined_score_expr=target_epitope_score'
 ```
 
-Custom expressions using unavailable mutation fields fail for source-agnostic
-antigens. The external per-epitope/allele CSV and Excel `rank`/`source_rank`
-columns remain epitope ranks, separate from construct order.
+The mutation DSL retains its legacy numeric zero for unavailable counts;
+provenance distinguishes missing from measured zero. Custom expressions using
+unavailable mutation fields fail for other antigen kinds.
+
+Exact score ties use RNA support only when all tied counts share stated units
+and derivation, then target-epitope score, then input order. Counts are never
+summed across discoveries or converted from reads to fragments. CSV/Excel
+`rank` columns are epitope ranks, separate from construct order.
 
 ## Generate common predictions and re-rank
 
-Request fresh predictions explicitly, with installed models and the desired
-patient HLA set:
-
 ```sh
-vaxrank \
-  --input-manifest inputs.yaml \
-  --external-predictions fresh \
-  --mhc-predictor mhcflurry \
-  --mhc-alleles 'HLA-A*02:01,HLA-B*07:02' \
+vaxrank --input-manifest inputs.yaml --external-predictions fresh \
+  --mhc-predictor mhcflurry --mhc-alleles 'HLA-A*02:01,HLA-B*07:02' \
   --config-text 'epitopes.filter_expr=affinity[mhcflurry].value < 500' \
   --config-text 'epitopes.score_expr=affinity[mhcflurry].logistic_normalized(350, 150)' \
-  --output-csv fresh-ranked.csv \
-  --output-input-predictions originals.tsv \
+  --output-csv fresh-ranked.csv --output-input-predictions originals.tsv \
   --output-epitopes fresh.tsv
 ```
 
-This predicts the **reported peptides**, with their available flanks, on the
-requested HLA set, which must fit the declared genotype when one is available.
-It can add peptide-HLA pairs, but does not scan new peptide
-windows, recover omitted pVACseq candidates, or extend protein context.
-Haplotype-scoped models retain their configured genotype and deconvolved
-presenter; primary and comparator presenters may differ. Allele-free models
-retain their own scope.
+`fresh` is supported for LENS/pVACseq. It predicts reported peptides with their
+available flanks on the requested allele set, within any declared genotype. It
+can add peptide/allele pairs but cannot recover omitted peptides or extend
+context. Haplotype models retain their genotype and deconvolved presenter;
+allele-free models retain their scope.
 
-The active `CandidateEpitope` objects contain fresh predictions. Original
-values appear separately under `Input ...` report columns for matching
-alleles, and under `input_...` columns in the in-memory scoring frame. Keep
-`originals.tsv` as well: original alleles outside the fresh HLA set do not get
-rows in the fresh report. This is not yet a single lossless file containing
-all original evidence plus all new predictions and ranking policies.
+Fresh predictions populate the active candidates. Matching original values
+appear in `Input ...` report columns and `input_...` scoring features. Keep the
+separate original export: alleles outside the fresh set have no fresh report row.
 
 ## Combine direct VCF/BAM with tables
-
-List the imported files in a manifest, as shown above, and add the direct inputs:
 
 ```sh
 vaxrank --vcf somatic.vcf --bam tumor.bam \
@@ -250,146 +171,56 @@ vaxrank --vcf somatic.vcf --bam tumor.bam \
   --output-epitopes combined.tsv --output-csv ranked.csv
 ```
 
-The manifest's shared patient, assembly and genotype declarations also apply
-to the direct input. An optional top-level `direct:` object supplies its
-sample/library/timepoint declarations, using the same scope keys as other
-inputs. Direct VCF reference resolution and requested prediction alleles are
-checked against the declarations before models run. List every imported file
-in the manifest; individual table flags cannot be combined with it.
+Shared manifest declarations also apply to direct inputs. An optional `direct:`
+object sets their sample/library/timepoint. Reference and allele compatibility
+are checked before prediction.
 
-`--mhc-predictor`, Isovar settings, DNA fallback and prediction-cache options
-apply to the direct candidates. Tables keep their original values. Mixed runs
-use `--external-predictions input` by default. Additive mode can explicitly add
-named features to the selected direct/table candidates too. Direct occurrences enter Topiary's observation and
-representative-selection APIs alongside normalized tables. Conflicting scores
-for the same peptide/allele require an explicit duplicate policy, as in the
-example. The full observations remain in the export.
-
-Shared DSL scoring runs after direct RNA and source annotations are attached.
-Direct protein fragments, counts, comparators and reference classifications
-are saved before window selection. `--input-epitopes combined.tsv` repeats
-scoring and construction without VCF/BAM access or prediction models. Pass the
-same vaccine configuration to reproduce window selection; the saved epitope
-scoring policy is restored automatically. As with table-only runs, CSV contains
-per-peptide/allele observations and the construct outputs use common final
-ranking. Counts are never added across discoveries.
+Predictor, Isovar, DNA fallback and cache settings apply to direct candidates;
+imported tables retain their measurements unless additive scoring is requested.
+Direct fragments, counts, comparators and reference classifications are saved
+before window selection. Reload `combined.tsv` with `--input-epitopes` to repeat
+scoring and construction without VCF/BAM or models. Use the same vaccine
+configuration to reproduce window selection.
 
 ## Construct outputs and provenance
 
-Add `--vaccine-type peptide mrna --output-dir vaccines` to construct admitted
-antigens. The directory also receives ASCII/PDF reports. Annotation requirements
-depend on the evidence: native CTA/viral reports use retained source provenance,
-while mutation reports need `--ensembl-release N` when transcript annotation
-is missing. Use the producer's release. These rules apply equally to single
-files, `--external-input` and manifests. New sequence and CTA expression
-prediction still requires host annotation.
+Add `--vaccine-type peptide mrna --output-dir vaccines` for constructs and
+ASCII/PDF reports. Native CTA/viral reports use retained provenance. Mutation
+reports need `--ensembl-release N` when transcript annotation is missing; use
+the producer's release. New sequence prediction requires host annotation.
+These rules are the same for single files and manifests.
 
-External-report construction uses the shared linker without new junction
-predictions by default. To optimize junctions while retaining every historical
-candidate score, add `--mrna-junction-predictor mhcflurry` (or another
-MHCtools model that supplies percentile ranks). The manifest's declared
-genotype supplies the query alleles; `--mrna-junction-alleles 'HLA-A*02:01'`
-can select a subset. For a single report with unknown genotype, an explicit
-junction allele set is required. Report prediction coverage is not used as a
-genotype declaration.
+External inputs use the shared mRNA linker by default. Explicit junction
+prediction has independent model and allele settings; see
+[junction linker optimization](vaccine-designs.md#junction-linker-optimization).
 
-Cached JSON rerendering (`--input-json-file`) can also request new junction
-predictions by supplying both `--mrna-junction-predictor` and
-`--mrna-junction-alleles`; its default performs no new junction prediction.
+LENS supplies reported context windows. pVACseq generally supplies the epitope
+alone; Vaxrank does not fetch its separate mutant/wild-type FASTAs. LENS splice,
+CTA/self and ERV construction require [source opt-ins](how-it-works.md#lens-antigen-source-opt-ins).
 
-`--mrna-optimize-linkers` explicitly requires a configured junction model;
-`--mrna-no-optimize-linkers` disables junction queries even if a model is
-configured. Candidate `--mhc-predictor` settings apply to direct inputs, new sequence/CTA
-sources, or explicit `--external-predictions fresh` or `additive` requests. Executable and weights paths can be
-set independently with `--mrna-junction-predictor-path` and
-`--mrna-junction-predictor-models-path`. The corresponding YAML keys live under
-`mrna:` (`junction_predictor`, `junction_alleles`, and the two path keys);
-`optimize_linkers: null` selects auto mode.
-
-VCF/BAM auto mode reuses a single candidate predictor. With multiple candidate
-predictors, it keeps the shared linker and logs that junction prediction is
-disabled. Select `--mrna-junction-predictor` to optimize those junctions;
-an explicit `--mrna-optimize-linkers` request requires that choice.
-
-The mRNA manifest's `elements.junction_swap` records the selected policy and
-whether optimization ran. Its `prediction` record preserves observed model
-names/versions/kinds, query alleles and lengths, and the peptide queries for
-each candidate linker at each junction. Unknown model versions remain null.
-Junction queries use MHCtools' public `predict()` API, including its adapter for
-legacy predictors. The rank policy uses affinity when the model returns that
-endpoint, otherwise presentation; it never adds the two endpoint counts.
-This preserves historical MHCflurry affinity scoring. Allele-independent
-processing and haplotype-only results do not become allele-specific hits.
-The manifest records this rank policy alongside the returned model identities.
-This metadata also survives native RNAConstruct serialization. Optional
-cleavage annotation can be disabled with `--no-processing-aware-annotation`.
-
-
-LENS supplies reported context windows. pVACseq tables generally supply only
-the epitope; Vaxrank does not retrieve the separate mutant/wild-type FASTA
-automatically or invent longer flanks. See the
-[pVACseq output reference](https://pvactools.readthedocs.io/en/latest/pvacseq/output_files.html)
-for the distinction between these artifacts.
-
-Both readers produce `CandidateEpitope` objects containing sequence/context,
-prediction identity, allele/model/version predictions and known comparators.
-`ExternalReport` retains normalized source rows for scoring and construction.
-Reports carry input path, format, content hash and resolved scope. Original
-producer declarations and manifest assertions are retained separately.
-Candidate occurrence identities include scope; sequence hashes link exact
-peptide/window matches without claiming full ORF equivalence.
-
-Native `--output-epitopes` and `--output-input-predictions` files preserve each
-candidate's `input_provenance` and `input_evidence`, including Topiary's
-normalized RNA measurements, stated units/derivation and source-specific
-evidence. `load_predictions(path)` restores those fields. The per-epitope CSV
-also carries scope columns and `input_provenance_json`. External output
-directories include `candidate_predictions.tsv` and `input_provenance.json`;
-the run summary and template reports distinguish declared genotype from
-reported prediction coverage. Keep the original input reports alongside these provenance files. Native
-evidence reload is available through `--input-epitopes`.
-
-Different samples, libraries and timepoints stay separate observations. One
-representative construct may be selected for their shared patient/reference
-event, but its counts come from that observation. RNA support is never summed
-between reports, even when libraries or read sets may overlap. All imported
-candidate observations remain available in the native prediction export.
-
-Construction still uses format-specific adapters and selects one
-source-derived window per grouped source. It does not merge RNA counts or
-assemble a consensus ORF across reports. LENS splice, CTA/self and ERV
-construction also requires explicit category opt-ins; see
-[LENS antigen source opt-ins](how-it-works.md#lens-antigen-source-opt-ins).
+Native exports retain source rows, scope, content hashes, producer declarations,
+manifest assertions, comparators and RNA units/derivation. External output
+directories include `candidate_predictions.tsv` and `input_provenance.json`.
+CSV includes scope columns and `input_provenance_json`. See the
+[evidence model](unified_evidence.md) for identities and source relationships.
 
 ## Reload or rank a normalized table
-
-These commands need no manifest or installed prediction model:
 
 ```sh
 vaxrank --input-topiary candidates.tsv --output-epitopes saved.tsv --output-csv ranked.csv
 vaxrank --input-epitopes saved.tsv --output-csv reloaded.csv
 ```
 
-The normalized input uses Topiary's column vocabulary (`peptide`, `allele`,
-`kind`, `value`, and optional predictor/annotation columns). Topiary CSV/TSV
-writers preserve typed annotations, metadata, and unknown versus empty flanks.
-Use them for enriched or combined tables. Original IDs stay in the evidence;
-the consumer uses Topiary's source-observation IDs for scoring.
+Topiary tables use `peptide`, `allele`, `kind`, `value` and optional prediction
+and annotation columns. Its CSV/TSV writers preserve typed metadata and unknown
+versus empty flanks. Enriched Vaxrank exports add native candidates, the evidence
+frame, scoring policy and antigen references.
 
-Enriched `--output-epitopes` exports use that same table codec plus Vaxrank's
-existing native candidate payloads. They retain the full evidence frame,
-comparators, input declarations, scoring policy and supplied antigen references.
-`load_predictions(path)` continues to return native candidates from either
-format; `EpitopeDataset.load(path)` exposes the richer saved evidence. Older
-candidate-only files remain readable. Their saved scores are reused when
-present; a new explicit epitope config can rescore the available evidence.
+`load_predictions(path)` returns candidates; `EpitopeDataset.load(path)` exposes
+the richer evidence. Older candidate-only files remain readable, but cannot
+recover construction evidence they did not save.
 
 ## Replay a saved vaccine design
-
-When both `--output-dir` and `--output-epitopes` are supplied, the native file
-retains the actual peptide and mRNA products as well as their assembly settings
-and source graph. This applies to VCF/BAM, imported reports and expression-only
-designs. For example:
 
 ```sh
 vaxrank --input-topiary candidates.tsv --output-dir design \
@@ -398,47 +229,34 @@ vaxrank --input-topiary candidates.tsv --output-dir design \
 vaxrank --input-epitopes design/native.tsv --output-dir replay
 ```
 
-An unchanged design reuses its exact products without model initialization,
-new prediction, codon optimization or annotation downloads. Retained settings
-include construct limits, chemical modifications, antigen-design axes, RNA
-elements, codon settings and junction-model options. Actual products include
-selected optimized linkers and their recorded prediction provenance. Window
-selection audits are retained too. The original source limit from
-`--max-mutations-in-report` also applies to assembly; unselected evidence stays
-available in the native file.
+A native file saved with construct outputs retains actual products, assembly
+settings, source mappings and audits. Unchanged replay reuses those products
+without prediction, codon optimization or annotation downloads, including
+optimized linkers and their provenance.
 
-Current YAML and explicit CLI options override saved defaults, including CLI
-values equal to a built-in default. Changed sources, scoring policies or
-effective assembly settings invalidate retained products and their audits.
-Combining native designs also requires compatible effective settings, or
-explicit overrides that reconcile them; pooled sources are assembled anew.
-Checksums reject altered product payloads. Older exports without actual products
-can restore their recorded defaults and reconstruct from available evidence,
-but cannot establish exact historical products or recover omitted settings.
+Current YAML and explicit CLI options override saved defaults. Changed sources,
+policies or assembly settings invalidate retained products and audits. Combined
+designs need compatible settings or explicit overrides, and are assembled anew.
+Checksums detect altered product payloads. Older exports without saved products
+can reconstruct from available evidence but cannot recover exact historical
+products or omitted settings.
 
-Move any sibling reference bundle with the native table as described in
-[Moving native mutation datasets](native-references.md).
+The original `--max-mutations-in-report` limit also applies to assembly; other
+evidence stays in the native file. Move sibling reference bundles with the table
+as described in [Moving native mutation datasets](native-references.md).
 
 ## Saved scoring policies
 
-Native reload restores the saved scoring policy unless an epitope config is
-explicitly supplied. Combining files with different saved policies requires
-one explicit policy. Source-local predictor defaults survive a combined export.
-`--duplicate-candidates best` or `worst` explicitly selects among conflicting
-Topiary observations; the default requires their scores to agree. All original
-observations remain available in the export, without summed support or coverage.
+Native reload restores saved epitope policies unless explicitly overridden.
+Combining different policies requires one explicit policy. Source-local model
+preferences survive export, as do all observations after duplicate selection.
 
-Table-only candidates remain rankable. Construction requires an explicitly
-supplied `VaccineAntigen`, including its sequence, targetable mask and admission
-evidence. A normalized table can carry its existing native serialization in
-`vaxrank_antigen_json`; the epitope's `peptide_offset` must match that sequence.
-The Python `EpitopeDataset.antigens` mapping accepts the same objects. An antigen
-category alone does not provide admission. Missing or held-out evidence appears
-in the report's `Construction limitation` column.
+Table-only candidates need a `VaccineAntigen` for construction: sequence,
+targetable mask and admission evidence. Supply `vaxrank_antigen_json` with a
+matching `peptide_offset`, or use `EpitopeDataset.antigens` in Python. Missing or
+held-out evidence appears in `Construction limitation`.
 
-Loading native/Topiary evidence runs no predictors by default. Optional processing
-annotation requires `--processing-aware-annotation`. Additive re-scoring uses
-Topiary's public `rescore_candidates` API through the CLI:
+Add named prediction features without replacing originals:
 
 ```sh
 vaxrank --input-topiary candidates.tsv \
@@ -448,30 +266,23 @@ vaxrank --input-topiary candidates.tsv \
   --output-epitopes comparison.tsv --output-csv ranked.csv
 ```
 
-The prefix names an explicit run and must be unique in the saved evidence.
-Original measurements, occurrence IDs and source-local model preferences remain
-intact. New numeric features change scores only when the DSL selects them; run
-without the `--config-value` override to retain the current scoring formula.
-Both features and the model/version/units/invocation metadata survive native
-export. Conflicting observations still require the explicit duplicate policy.
-An added run scores only existing peptide/HLA candidates; it does not create
-HLA assignments for allele-free Exacto observations or scan additional windows.
-The legacy `--external-predictions fresh` option remains specific to LENS/pVACseq.
-Both inference paths use Topiary's exact selected-occurrence API. Supplied
-flanks and comparator contexts stay distinct, including changed haplotype
-presenters. Unknown flanks remain unknown; `--external-peptide-only` explicitly
-requests inference without flanks when a flank-dependent model cannot use the
-available context. `--prediction-cache FILE` applies to explicit external
-inference with a single configured model and `--external-peptide-only`.
-Topiary's released cache retains model/version checks and fallback. Its
-[contextual query API](https://github.com/openvax/topiary/issues/468) has shipped;
-Vaxrank still requires peptide-only external cache queries pending
-[consumer integration](https://github.com/openvax/vaxrank/issues/624). Original-only replay needs no cache or live model.
+The prefix must be unique. Features affect ranking only when the DSL selects
+them; omit the config override to retain the current formula. Model, version,
+units and invocation metadata survive export. Additive inference scores existing
+peptide/allele candidates; it creates neither new windows nor allele assignments
+for allele-free Exacto observations.
+
+Fresh and additive inference retain distinct occurrence flanks and comparator
+contexts. `--external-peptide-only` explicitly discards flanks for inference.
+External `--prediction-cache` currently requires that option and a single model;
+[contextual cache integration](https://github.com/openvax/vaxrank/issues/624) is
+pending. Original-only replay needs neither a model nor a cache. Optional
+processing annotation requires `--processing-aware-annotation`.
 
 ## Native Exacto inputs
 
-Use the released Topiary reader for Exacto's native peptide-variant,
-primary-structure or translation tables, including gzip inputs. For example:
+Exacto peptide-variant, primary-structure and translation tables, including gzip,
+use Topiary's native reader:
 
 ```yaml
 schema: vaxrank.input_manifest.v1
@@ -492,40 +303,28 @@ inputs:
     path: pvacseq.tsv
 ```
 
-Companion paths resolve beside the manifest. `schema` optionally selects the
-tested native schema; extra native columns and records stay in Topiary metadata.
-The optional read-support companion requires library and read-set identities.
-Its counts remain transcript-level RNA evidence, with exact read membership;
-they are never promoted to variant support, ORF abundance or TPM.
+Companion paths are relative to the manifest. Optional `schema` selects the
+native schema; extra fields remain in metadata. Read-support companions require
+library and read-set identities. Counts remain transcript-level evidence with
+exact read membership, not variant support or TPM.
 
-Without primary structures, peptide context and geometry remain unknown.
-Full ORF and partial-translation hypotheses remain distinct. Native Exacto
-supplies no tumor-specificity admission, reference comparator or pMHC prediction;
-its observations remain report-only unless those requirements are explicitly
-supplied in enriched evidence. ORF-only inputs can be retained in a native
-export without inventing candidate peptides.
+Without primary structures, context and geometry remain unknown. Full ORFs and
+partial translations stay distinct. Exacto supplies no tumor-specificity
+admission, reference comparator or pMHC prediction; construction needs those in
+enriched evidence. ORF-only records can be exported without candidate peptides.
 
-Topiary's public reconciliation preserves explicit event/ORF/occurrence/RNA
-relationships. Inspect the relational tables with
-`dataset.evidence_views()`; historical report rows are combined in a separate
-analysis view without changing saved evidence or default selection. Shared protein sequences alone do not merge ORFs,
-and reconciliation never sums expression/support or transfers another source's
-prediction/admission. Legacy report IDs remain a separate consumer mapping in
-`vaxrank_prediction_id` when additive inference normalizes their evidence.
-
-Direct fragments and LENS/pVACseq construction records now survive enriched
-native export. Reload repeats their existing window/occurrence selection using
-the saved evidence and the requested vaccine configuration. Candidate-only older
-native files cannot reconstruct construction evidence they did not save.
+Inspect event, ORF, occurrence and RNA relationships through
+`dataset.evidence_views()`. Shared sequence alone does not merge ORFs or transfer
+another source's prediction, admission or support. Legacy report IDs remain in
+`vaxrank_prediction_id` when additive inference normalizes evidence.
 
 ## Evidence model
 
-The [unified evidence design](unified_evidence.md) describes the broader model.
-The supported input, reconciliation and replay paths are documented above.
-For current configuration keys and defaults, run `vaxrank --print-default-config`.
+See [Evidence and provenance](unified_evidence.md) for the data model.
+Run `vaxrank --print-default-config` for current configuration defaults.
 
 ## Experimental window exposure
 
 `vaxrank-window-exposure` explores delivery of admitted SLP windows under explicit
-kinetic assumptions. It does not change selection or establish clinical efficacy.
-See the [short guide](core-window-exposure.md).
+kinetic assumptions, without changing selection. See the
+[window exposure guide](core-window-exposure.md).
