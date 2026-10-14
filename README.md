@@ -99,6 +99,8 @@ Experimental workflows: [unified antigen inputs](docs/antigen-inputs.md),
 [mixed mutation/CTA/viral selection](docs/mixed-antigen-design.md) and
 [window exposure](docs/core-window-exposure.md).
 
+<a id="clinical-use"></a>
+
 ## Clinical studies
 
 The OpenVax pipeline has used Vaxrank in these Mount Sinai trials:

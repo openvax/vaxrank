@@ -1,7 +1,11 @@
+<a id="combining-orf-hypotheses-and-their-evidence"></a>
+
 # Evidence and provenance
 
 Vaxrank retains source observations while selecting a representative for a
 vaccine design. The experimental shared model distinguishes:
+
+<a id="identities-and-relationships"></a>
 
 | Entity | Identity |
 | --- | --- |
@@ -16,6 +20,8 @@ Several ORFs may encode one protein, and several proteins may contain the same
 peptide. Sequence matches retain every source mapping. Context-dependent
 predictions remain attached to their occurrence.
 
+<a id="combining-evidence-and-choosing-vaccines"></a>
+
 ## Combining inputs
 
 RNA evidence keeps its measured level: gene, transcript, ORF, variant, read,
@@ -26,6 +32,8 @@ It does not sum callers' expression estimates or calibrate different models.
 Fresh prediction evaluates reported peptides on the requested alleles. Additive
 prediction attaches named features to existing candidates. Neither mode scans
 unreported peptide windows. See [prediction modes](input-workflows.md#generate-common-predictions-and-re-rank).
+
+<a id="current-implementation"></a>
 
 ## Inspect and replay
 
@@ -39,3 +47,9 @@ source. Full ORF-aware selection remains integration work. The
 [input guide](input-workflows.md#replay-a-saved-vaccine-design) documents current
 replay behavior and the [native reference guide](native-references.md) explains
 which files to move with an export.
+
+<a id="source-format-references"></a>
+
+Source formats: [LENS](https://uselens.io/),
+[pVACseq](https://pvactools.readthedocs.io/en/latest/pvacseq/output_files.html),
+[Exacto](https://github.com/pirl-unc/exacto).

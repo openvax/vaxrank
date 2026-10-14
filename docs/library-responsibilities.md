@@ -10,6 +10,8 @@ Sequences carry their reference, transcript IDs, frame/completeness and availabl
 RNA evidence. Identical proteins retain all contributing sources; different
 proteins remain separate candidates.
 
+<a id="what-vaxrank-receives"></a>
+
 ## Available today and remaining work
 
 - The ordinary RNA path uses `IsovarResult.top_protein_sequence`, rather than all
