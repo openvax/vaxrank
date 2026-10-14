@@ -422,15 +422,14 @@ def read_epitope_report(path, *, source_format, scope_declarations=None, **_):
     else:
         import hashlib
         import json
-        from dataclasses import asdict
-        from .input_scope import combine_scopes, report_declarations, scope_from_mapping
+        from .input_scope import combine_scopes, report_declarations, scope_from_mapping, scope_dict
         identity = "topiary:" + hashlib.sha256(Path(path).read_bytes()).hexdigest()
         result = read_table(path)
         producer_scope, _ = report_declarations(path, source_format, frame=result.df)
         scope = combine_scopes(producer_scope, scope_from_mapping(
             scope_declarations or {}, str(path)), str(path))
         label = identity + ':' + hashlib.sha256(
-            json.dumps(asdict(scope), sort_keys=True).encode()).hexdigest()
+            json.dumps(scope_dict(scope), sort_keys=True).encode()).hexdigest()
         dataset = EpitopeDataset.from_topiary(
             result, label=label, sample_name=scope.patient_id or label)
     return ExternalReport(source_format, str(path),

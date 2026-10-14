@@ -22,7 +22,7 @@ from .external_report import ExternalRecord
 from .epitope_dataset import EpitopeDataset, read_epitope_report
 from .input_scope import (
     InputProvenance, SHARED_FIELDS, combine_scopes, normalize_alleles, provenance_columns,
-    read_input_manifest, report_declarations, resolve_input_genome, scope_from_mapping,
+    read_input_manifest, report_declarations, resolve_input_genome, scope_from_mapping, scope_dict,
     validate_input_scopes,
 )
 
@@ -50,7 +50,7 @@ def read_exacto_report(path, *, scope_declarations=None, **_):
     result.df['peptide_offset'] = result.df.peptide_start
     result.df['source_sequence'] = result.df.sequence.where(result.df.peptide_start.notna(), None)
     label = _exacto_identity(path, options) + ':' + hashlib.sha256(
-        json.dumps(asdict(scope), sort_keys=True).encode()).hexdigest()
+        json.dumps(scope_dict(scope), sort_keys=True).encode()).hexdigest()
     dataset = EpitopeDataset.from_topiary(result, label=label)
     return ExternalReport('exacto', str(path), report_df=dataset.report_frame(),
                           epitopes=dataset.epitopes, dataset=dataset)
@@ -448,7 +448,7 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             producer_scope, scope_from_mapping(scope_declarations, str(path)), str(path))
         # An identical file assigned to a different patient/sample must not
         # acquire the same occurrence IDs in separately saved native outputs.
-        scope_id = hashlib.sha256(json.dumps(asdict(scope), sort_keys=True).encode()).hexdigest()
+        scope_id = hashlib.sha256(json.dumps(scope_dict(scope), sort_keys=True).encode()).hexdigest()
         input_id = content_id + ':' + scope_id
         observed = sorted({a for e in report.epitopes for a in e.patient_alleles})
         provenance = InputProvenance(

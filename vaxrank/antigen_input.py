@@ -14,7 +14,7 @@ from .epitope_config import EpitopeConfig
 from .epitope_dataset import ANTIGEN_COLUMN, EpitopeDataset
 from .input_scope import (
     InputProvenance, InputScope, SHARED_FIELDS, combine_scopes,
-    scope_from_mapping, validate_input_scopes,
+    scope_from_mapping, scope_dict, provenance_dict, validate_input_scopes,
 )
 from .native_serialization import _json_loads, to_native_json
 from .reference_proteome import self_reference_matches
@@ -69,16 +69,16 @@ class AntigenDataset:
             raise ValueError('Antigen record identifiers must be nonempty strings')
         if any(not isinstance(a, VaccineAntigen) for a in self.antigens.values()):
             raise TypeError('Antigen records must contain VaccineAntigen objects')
-        self.scope = scope_from_mapping(asdict(self.scope), 'Antigen dataset')
+        self.scope = scope_from_mapping(scope_dict(self.scope), 'Antigen dataset')
         self.provenance = tuple(self.provenance)
         for source in self.provenance:
             combine_scopes(self.scope, source.scope, source.path, SHARED_FIELDS)
 
     def to_dict(self):
         """Return versioned JSON data without Python class metadata."""
-        return dict(schema=ANTIGEN_DATASET_SCHEMA, scope=asdict(self.scope),
+        return dict(schema=ANTIGEN_DATASET_SCHEMA, scope=scope_dict(self.scope),
                     antigens={key: asdict(a) for key, a in self.antigens.items()},
-                    provenance=[asdict(p) for p in self.provenance])
+                    provenance=[provenance_dict(p) for p in self.provenance])
 
     def save(self, path):
         """Write the same portable evidence format accepted by the CLI."""
@@ -153,7 +153,7 @@ class AntigenDataset:
                               manifest_declarations=None):
         """Resolve identity and scope before acquiring prediction models."""
         scope = self.validate_for_prediction(genome)
-        resolved = dict(self.to_dict(), scope=asdict(scope))
+        resolved = dict(self.to_dict(), scope=scope_dict(scope))
         digest = hashlib.sha256(json.dumps(resolved, sort_keys=True, allow_nan=False).encode()).hexdigest()
         return InputProvenance(
             input_id='antigens:' + digest, source_format='antigens', path=str(path),
@@ -161,7 +161,7 @@ class AntigenDataset:
             scope=scope,
             manifest_path=str(Path(manifest_path).resolve()) if manifest_path else None,
             manifest_declarations=dict(manifest_declarations or {}),
-            report_declarations={'input_history': [asdict(p) for p in self.provenance]})
+            report_declarations={'input_history': [provenance_dict(p) for p in self.provenance]})
 
     def predict(self, predictor, *, genome, config=None, path=''):
         """Predict native occurrences through Topiary and return shared evidence."""

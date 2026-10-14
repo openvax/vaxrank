@@ -14,7 +14,7 @@ def pipeline_native_dataset(args, variants, epitope_config):
     from pathlib import Path
     from .direct_input import _file_digest
     from .epitope_dataset import EpitopeDataset
-    from .input_scope import InputProvenance, InputScope, normalize_alleles
+    from .input_scope import InputProvenance, InputScope, normalize_alleles, scope_dict
     from .selection_policy import canonical_digest
     from mhctools.cli import mhc_alleles_from_args
 
@@ -30,7 +30,7 @@ def pipeline_native_dataset(args, variants, epitope_config):
                        mhc_alleles=normalize_alleles(mhc_alleles_from_args(args), 'Direct prediction'))
     content_hash = canonical_digest(list(hashes.values()))
     provenance = InputProvenance(
-        input_id='vcf_bam:' + content_hash + ':' + canonical_digest(asdict(scope)),
+        input_id='vcf_bam:' + content_hash + ':' + canonical_digest(scope_dict(scope)),
         source_format='vcf_bam', path='; '.join(paths), content_sha256=content_hash,
         scope=scope, report_declarations=dict(file_sha256=hashes))
     dataset = EpitopeDataset.from_predictions((), config=epitope_config)

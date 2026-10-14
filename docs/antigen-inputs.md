@@ -117,6 +117,25 @@ the native evidence, even when a CTA source contributes no admitted proteins
 to an otherwise usable mixed run. A wholly unadmitted CTA-only run stops after
 writing requested admission records.
 
+## Declare the host species (experimental draft)
+
+The draft integration for [#625](https://github.com/openvax/vaxrank/issues/625)
+adds an optional top-level `host_taxon_id` to the manifest:
+
+```yaml
+host_taxon_id: 9606  # NCBI taxonomy ID for the human patient
+```
+
+It must agree with every input's host declaration and the selected annotation.
+MHC allele species are checked through MHCgnomes, including broader groups such
+as DLA. Antigen source species remain separate, so a viral antigen can belong to
+a human design. The declaration survives native export and offline replay.
+
+This declaration does not enable nonhuman CTA admission or add extra ORFs to
+the self reference. Those adapters depend on the upstream work linked in #625.
+Current CTA expression admission remains human-only. Inputs without this new
+declaration retain their historical behavior.
+
 ## Shared outputs
 
 The ordinary ranking, peptide/mRNA assembly and reports apply to every kind.

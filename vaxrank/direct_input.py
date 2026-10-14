@@ -1,5 +1,5 @@
 """Adapt the existing VCF/BAM pipeline to shared, reloadable input evidence."""
-from dataclasses import asdict, replace
+from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
@@ -12,7 +12,7 @@ from .epitope_io import normalize_hla_allele
 from .external_report import ExternalReport
 from .input_scope import (
     InputProvenance, combine_scopes, normalize_alleles, provenance_columns,
-    read_input_manifest, scope_from_mapping, validate_input_scopes,
+    read_input_manifest, scope_from_mapping, scope_dict, validate_input_scopes,
 )
 
 
@@ -62,7 +62,7 @@ def prepare_direct_report(args, reports, epitope_config):
                           prediction_alleles=alleles)
     hashes = {str(Path(path).resolve()): _file_digest(path) for path in paths}
     content_hash = hashlib.sha256(json.dumps(list(hashes.values())).encode()).hexdigest()
-    scope_hash = hashlib.sha256(json.dumps(asdict(scope), sort_keys=True).encode()).hexdigest()
+    scope_hash = hashlib.sha256(json.dumps(scope_dict(scope), sort_keys=True).encode()).hexdigest()
     provenance = replace(
         provisional, input_id='vcf_bam:' + content_hash + ':' + scope_hash,
         content_sha256=content_hash, manifest_path=str(Path(manifest).resolve()),

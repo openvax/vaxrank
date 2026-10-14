@@ -14,7 +14,7 @@ from .cta_admission import CTAAdmissionPolicy
 from .cta_expression import CTAExpressionInput, CTAExpressionResult, CTATargetExclusionPolicy, admit_cta_expression
 from .antigen_input import predict_antigens
 from .external_report import ExternalReport
-from .input_scope import InputProvenance, InputScope, combine_scopes, normalize_alleles, validate_input_scopes
+from .input_scope import InputProvenance, InputScope, combine_scopes, normalize_alleles, scope_dict, validate_input_scopes
 from .native_serialization import to_native_json
 from .reference_proteome import self_reference_matches
 
@@ -120,7 +120,7 @@ class CTAExpressionSource:
         admission = admit_cta_expression(path, input_contract=contract, admission_policy=policy,
                                         exclusion_policy=exclusions, genome=genome)
         bundle = load_hitlist_bundle(bundle_path, admission) if bundle_path else None
-        identity = dict(admission=to_native_json(admission), scope=asdict(scope),
+        identity = dict(admission=to_native_json(admission), scope=scope_dict(scope),
                         bundle_manifest=bundle['manifest'] if bundle is not None else None)
         provenance = InputProvenance(
             input_id='cta:' + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(),
