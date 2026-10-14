@@ -103,14 +103,9 @@ mutation-containing peptide windows among candidates retaining at least 85% of
 the best candidate's compatible read-name support. Independently, every
 retained cDNA base must meet a two-read-object coverage floor.
 
-That fraction is a configurable selection tolerance, not biological confidence
-or per-base depth; compatible reads need not span a whole vaccine peptide. No
-reference sequence is added to fill missing RNA context. This is a
-reconstruction policy, not a change to Vaxrank's MHC scoring or ranking model
-(see the [PGV pipeline methods](https://doi.org/10.3389/fimmu.2017.01807)).
-The required Isovar release is pinned in `requirements.txt`; see
-[Isovar support compatibility](isovar-support.md) for what Vaxrank retains from
-it.
+Compatible reads need not span the whole peptide. Missing RNA context is not
+filled with reference sequence. See [Isovar support](isovar-support.md) for
+the retained support measurements.
 
 ```yaml
 isovar:
@@ -123,17 +118,15 @@ isovar:
 
 Each setting also has a same-named CLI flag with hyphens in place of
 underscores, or can be set with `--config-value isovar.<name>=<value>`.
-Explicit CLI values win over YAML, including values equal to the defaults and a
-coverage floor of zero, which explicitly disables that floor. An explicit
+A coverage floor of zero disables that floor. An explicit
 protein length wins over legacy `--padding-around-mutation` or YAML padding;
 otherwise an explicit padding request asks for `K + 2*padding`. With neither,
 Isovar derives the adaptive target. To reproduce historical Isovar extraction
 and support-first selection, pass `--protein-sequence-length 20
 --protein-sequence-preference support`.
 
-The target includes all placements for a centered single-residue mutation, but
-not necessarily wider mutations; deletions require windows spanning their
-junction. Short outputs are not evidence of a full-length vaccine window.
+The target covers all placements of a centered single-residue mutation; wider
+mutations may need more context. Deletion windows must span the junction.
 Vaxrank rejects candidate windows shorter than `vaccine_peptides.min_length`
 (25 by default); lower that minimum only when shorter peptides are part of the
 intended design. The RNA support thresholds are unchanged by it. RNA settings
@@ -167,13 +160,11 @@ epitopes:
 
 When `filter_expr` is omitted, no rows are dropped up front. The default
 `score_expr` is synthesized from the scalar fields above
-(`binding_affinity_cutoff`, `logistic_midpoint`, `logistic_width`, and so on)
-and masked so that `ic50 >= affinity_cutoff → 0`, reproducing the pre-5.0
-behavior byte for byte.
+and sets `ic50 >= affinity_cutoff` to zero.
 
-Use `affinity.logistic_normalized(m, w)` for a `[0, 1]` binder-quality score
-(the Topiary 5.1+ primitive). The plain `affinity.logistic(m, w)` is the raw
-sigmoid and caps below 1, about 0.912 at the default `m=350, w=150`.
+Use `affinity.logistic_normalized(m, w)` for a `[0, 1]` binder-quality score.
+The plain `affinity.logistic(m, w)` is the raw sigmoid and caps below 1, about
+0.912 at the default `m=350, w=150`.
 
 Invalid DSL strings are rejected at config load rather than mid-pipeline, so
 typos in the YAML surface before any predictions run.

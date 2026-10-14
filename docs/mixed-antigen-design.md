@@ -1,8 +1,5 @@
 # Experimental mixed-antigen design
 
-**Experimental:** CTA/viral integration and mixed-source selection are research
-workflows. Admission and ranking do not establish clinical safety or efficacy.
-
 ## What information is needed?
 
 | Stage | Minimum information |
@@ -24,7 +21,7 @@ workflows. Admission and ranking do not establish clinical safety or efficacy.
 
 ## Rank together or select separate panels
 
-For resolved sequences without predictions, use the experimental
+For resolved sequences without predictions, use the
 [unified antigen input](antigen-inputs.md). It accepts all supported kinds
 in one dataset and predicts them through the shared pipeline.
 
@@ -46,8 +43,6 @@ vaxrank --input-manifest inputs.yaml \
 Select a recorded version with `affinity["mhcflurry", "VERSION"]` when needed.
 For incompatible scores, use
 [common-model prediction](input-workflows.md#generate-common-predictions-and-re-rank).
-Binding, presentation and immune response remain distinct; this score does not
-infer missing expression or tumor specificity.
 
 For separate source allocations, filter the saved pool and cap each panel:
 

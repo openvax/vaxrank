@@ -1,7 +1,7 @@
 # Vaccine designs and construct outputs
 
-These expanded design workflows are **experimental**. Choose the vaccine type
-first, then the antigen content and number of antigens per construct:
+**Experimental.** Choose the vaccine type first, then antigen content and
+antigens per construct:
 
 | Axis | Values | What it controls |
 |---|---|---|
@@ -22,15 +22,12 @@ That matrix yields eight designs, four per vaccine type:
 | mrna | minimal_epitope | N | "String of beads" mRNA | [Whitton 1993](https://pubmed.ncbi.nlm.nih.gov/7677954/) |
 | mrna | minimal_epitope | 1 | Single-ligand mRNA | |
 
-A third knob, `--epitopes-per-antigen`, sets how many top MHC ligands to take
-per ranked vaccine peptide when content is `minimal_epitope`. The default `1`
-gives single-top-ligand semantics; `>1` packs several top ligands from the same
-variant as separate antigens.
+`--epitopes-per-antigen` sets how many top ligands to take from each ranked
+vaccine peptide in `minimal_epitope` mode (default `1`).
 
 The commands below start from `candidates.tsv`, a native export with admitted
 antigens and retained sequence/annotation evidence. See [input workflows](input-workflows.md)
-to create one. The cited studies illustrate related designs; these experimental
-outputs do not reproduce a validated clinical product.
+to create one.
 
 ## Peptide designs
 
@@ -42,9 +39,7 @@ vaxrank --input-epitopes candidates.tsv --output-dir vaccine_out/
 # → vaccine_out/{vaccine.fasta, manifest.json, order_form.csv}
 ```
 
-Multi-epitope concatenated peptide: several mutation-spanning antigens linked
-into one longer peptide. `--peptide-linker` picks the spacer; the example uses
-`AAY`. Processing depends on the sequence context and delivery modality.
+Concatenate five antigens with an `AAY` spacer:
 
 ```sh
 vaxrank --input-epitopes candidates.tsv \
@@ -52,8 +47,7 @@ vaxrank --input-epitopes candidates.tsv \
         --peptide-antigens-per-construct 5 --peptide-linker AAY
 ```
 
-Minimal-epitope peptide: a single short MHC ligand per construct, useful when
-minimum-length manufacturability matters more than flanking context.
+Select a single short MHC ligand per construct:
 
 ```sh
 vaxrank --input-epitopes candidates.tsv \
@@ -98,16 +92,8 @@ write into `peptide/` and `mrna/` subdirectories. Analysis reports have their
 own `--output-*` flags and can be requested without writing construct files.
 
 ```sh
-# Peptide pool (default vaccine type)
-vaxrank --input-epitopes candidates.tsv --output-dir vaccine_out/
-
-# mRNA construct
-vaxrank --input-epitopes candidates.tsv --vaccine-type mrna --output-dir mrna_out/
-
 # Both at once (per-modality subdirs in mixed_out/)
 vaxrank --input-epitopes candidates.tsv --vaccine-type peptide mrna --output-dir mixed_out/
-# → mixed_out/peptide/{vaccine.fasta, manifest.json, order_form.csv}
-# → mixed_out/mrna/{cds.fasta, no_polyA.fasta, full.fasta, manifest.json, layers.csv}
 
 # Reports only (no vaccine constructs)
 vaxrank --input-epitopes candidates.tsv --output-pdf-report report.pdf
@@ -199,10 +185,16 @@ also supply `--mrna-junction-alleles`, since observed report coverage is not
 treated as a genotype. `--mrna-no-optimize-linkers` prevents all junction model
 loading.
 
-The mRNA manifest records the policy, observed model names and versions, allele
-scope and peptide queries under `elements.junction_swap`. See
-[input workflows](input-workflows.md#construct-outputs-and-provenance) for the
-imported-report case in detail.
+Cached JSON rerendering (`--input-json-file`) also needs explicit junction model
+and allele options for new predictions. YAML equivalents live under `mrna:`;
+`optimize_linkers: null` selects auto mode.
+
+The rank policy uses affinity when available, otherwise presentation. It does
+not add both endpoint counts or treat allele-independent processing and
+haplotype-only results as allele-specific hits. The manifest records the policy,
+model names/versions, alleles, lengths and peptide queries under
+`elements.junction_swap`; native exports retain it for replay. Disable optional
+cleavage annotation with `--no-processing-aware-annotation`.
 
 ## Manifest schema
 
@@ -226,7 +218,7 @@ Static entries:
 | `G2S`, `G3S`, `G4S`, `G5S` | flexible (Gly_n_Ser) | The (Gly4Ser)n family ([Huston *PNAS* 1988](https://doi.org/10.1073/pnas.85.16.5879)); used clinically in BioNTech FixVac / iNeST as `(G4S)2` |
 | `EAAAK` | rigid α-helical | When fused antigens need separation rather than flex ([Arai *Protein Eng* 2001](https://doi.org/10.1093/protein/14.8.529)) |
 | `RKRR`, `RVKR`, `RKRKR` | furin cleavage | R-X-(K/R)-R motif ([Hosaka *J Biol Chem* 1991](https://pubmed.ncbi.nlm.nih.gov/1905715/)); see the cited cleavage study |
-| `AAY` | proteasome-friendly | Empirical foundation: [Livingston *Vaccine* 2001](https://doi.org/10.1016/S0264-410X(01)00233-X); see the citation in `vaxrank/vaccine_library.py` for the AAY-vs-GGGS empirical landscape ([Yang 2015](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4514284/) vs [Aguilar-Gurrieri 2023](https://doi.org/10.1007/s00262-023-03409-3)) |
+| `AAY` | proteasome-friendly | [Livingston 2001](https://doi.org/10.1016/S0264-410X(01)00233-X); spacer comparisons in [Yang 2015](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4514284/) and [Aguilar-Gurrieri 2023](https://doi.org/10.1007/s00262-023-03409-3) |
 | `AAA` | alanine spacer | [Aguilar-Gurrieri *Cancer Immunol Immunother* 2023](https://doi.org/10.1007/s00262-023-03409-3): alanine spacers improved SIINFEKL presentation in the tested cell system |
 | `GPGPG` | helper-T spacer | Between MHC-II epitopes ([Livingston *J Immunol* 2002](https://doi.org/10.4049/jimmunol.168.11.5499)) |
 | `P2A`, `T2A`, `F2A`, `E2A` | self-cleaving 2A | Co-translational ribosomal skipping for mRNA constructs ([Donnelly *J Gen Virol* 2001](https://doi.org/10.1099/0022-1317-82-5-1027); [Kim *PLoS ONE* 2011](https://doi.org/10.1371/journal.pone.0018556)). In peptide mode these are functionally inert and the manifest annotates them as such. |
@@ -244,14 +236,9 @@ Compositional forms, parsed at lookup time:
 Repeat counts are capped at 100. The 2A entries are codon-frozen and
 positional, so they are rejected in repeat forms; use the base linker once.
 
-Every name resolves through `vaccine_library.get_linker(name)` and returns a
-`Linker` with primary-source citations attached. The default mRNA inter-antigen
-linker is `(G4S)2` (BioNTech FixVac canonical,
-[Sahin *Nature* 2017](https://www.nature.com/articles/nature23003)); the default
-peptide linker is `G4S3`. Per-junction MHC-aware linker swap considers `G3S`, `G4S`,
-`(G3S)2`, `(G4S)2` and `AAA` per junction, substituting whichever minimizes
-predicted presentation of chimeric k-mers spanning the junction. All sequences
-carry primary-source citations in `vaxrank/vaccine_library.py`.
+`vaccine_library.get_linker(name)` returns a `Linker` with sequence and
+primary-source citations. Junction optimization considers `G3S`, `G4S`,
+`(G3S)2`, `(G4S)2` and `AAA` by default.
 
 ## Legacy peptide-mode flag
 

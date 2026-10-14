@@ -1,16 +1,12 @@
-# Experimental expression-first CTA admission
+# Experimental CTA expression inputs
 
-**Experimental research workflow.** Admission and ranking do not establish
-clinical safety or efficacy.
+Vaxrank accepts patient expression tables without VCF/BAM. OncoRef supplies
+human CTA membership; Topiary/MHCtools predict admitted proteins for the shared
+ranking and peptide/mRNA design workflows.
 
-Vaxrank designs CTA vaccines from patient expression tables and HLA without
-VCF/BAM. OncoRef supplies the CTA reference; Topiary/MHCtools predict the
-admitted proteins, and the shared DSL selects/ranks peptide or mRNA designs.
-
-To combine expression with viral sequences or saved mutation evidence, use a
-[`cta_expression` manifest entry](../antigen-inputs.md#add-cta-expression). Each
-entry declares its own sample, columns and admission threshold. The single-input
-command below remains available.
+To combine expression with viral sequences or saved mutations, use a
+[`cta_expression` manifest entry](../antigen-inputs.md#add-cta-expression).
+For one table:
 
 ```bash
 vaxrank --input-cta-expression patient-expression.tsv \
@@ -24,73 +20,56 @@ vaxrank --input-cta-expression patient-expression.tsv \
   --output-epitopes cta-design/native.tsv
 ```
 
-The annotation and predictor assets must be available. Change the level to
-`transcript` and supply Ensembl transcript IDs for transcript measurements.
-The minimum is explicitly required in the declared units. Target exclusions
-default to `MAGE*` with an exact `MAGEA4` exception; repeat
-`--cta-exclude-gene-pattern` and `--cta-allow-gene` to replace these lists.
-`--cta-no-gene-exclusions` explicitly allows all otherwise admitted CTA genes.
+Install the annotation and predictor assets first. Use `transcript` with
+Ensembl transcript IDs for transcript measurements. The threshold is required
+in the declared units; `2 TPM` here is an example choice.
 
-CTA designs select bounded windows using the shared window selector and vaccine
-length settings. They retain all native source occurrences, including repeated
-peptides and identical proteins from different genes. The initial score is the
-ordinary binding policy. Expression-aware rules are explicit DSL choices, e.g.
+Default exclusions are `MAGE*` with an exact `MAGEA4` exception. Repeated
+`--cta-exclude-gene-pattern` and `--cta-allow-gene` options replace those lists;
+`--cta-no-gene-exclusions` removes them. Matching uses canonical, case-sensitive
+OncoRef symbols.
+
+Windows use the shared selector and vaccine length settings. Ranking defaults
+to binding. Expression rules are explicit, for example
 `--config-text 'epitopes.filter_expr=cta_gene_tpm > 3'` or
 `--config-text 'epitopes.score_expr=cta_expression_value'`. Gene and transcript
-TPM columns are distinct; arbitrary declared units never populate a TPM column.
+TPM columns are distinct; other units do not populate TPM columns.
 
-The output includes all admission decisions (`cta_admission.json`), target
-selection/rejection reasons (`cta_target_decisions.csv`), exact selected native
-coordinates and final product inventories (`cta_design.json`), unfiltered final
-product measurements (`cta_product_predictions.tsv`), the standard reports and
-peptide/mRNA files. Final product measurements do not change native ranking.
-Native-region and actual-product audits reuse the existing construct audit API.
-Composite or changed native mappings and chemically modified peptides retain
-explicit unassessed findings. Assembly coverage records contributing regions,
-unassembled regions and unresolved product names. Processing
-compartments remain unassessed; neither RNA nor predicted binding demonstrates
-presentation, immunogenicity or clinical safety.
+Alongside standard reports and constructs, outputs include:
+
+| File | Contents |
+|---|---|
+| `cta_admission.json` | Every admission decision, including held-out targets |
+| `cta_target_decisions.csv` | Selection and rejection reasons |
+| `cta_design.json` | Selected coordinates and final product inventories |
+| `cta_product_predictions.tsv` | Final product measurements, without changing native ranking |
 
 Reload with `--input-epitopes cta-design/native.tsv --output-dir replay`.
-Admission, predictions, effective policies, public evidence and unchanged
-product audits and actual assembly (including selected optimized linkers) replay
-without the expression/evidence inputs or upstream
-queries. Changed products cannot inherit an old final-context audit. Explicit
-junction optimization uses the ordinary separate junction-model options; CTA
-input does not implicitly optimize linkers with the candidate model.
+Unchanged products, settings and audits replay without original inputs or new
+queries. Changed products invalidate prior audits. See
+[junction optimization](../vaccine-designs.md#junction-linker-optimization) for
+separate junction-model settings.
 
 ## Optional Hitlist evidence
 
-Install `vaxrank[hitlist]` and pass `--hitlist-evidence-bundle DIRECTORY` from
-Hitlist's `export cta-evidence` command. Vaxrank verifies the public portable
-contract (Hitlist >=1.65.1), every artifact hash and captured relationships. It
-requires the same expression input SHA-256, columns, units, measurement level,
-Ensembl release and OncoRef package version. It does not rebuild evidence indexes
-or silently change a reference. The bundle's CTA definition is recorded separately
-from Vaxrank's full candidate negative-self-reference universe.
-
-All mappings, contributors, raw presentation and excluded observations, identities,
-lineage and tissue evidence are captured in the native file. Positive MS must be
-established by the producer's verified modality/measurement contract; fluorescence,
-binding, negative and unknown-modality observations do not count. This consumes the
-corrected evidence export contract. The upstream scanner correction is recorded in
-[Hitlist #644](https://github.com/pirl-unc/hitlist/issues/644).
+Install `vaxrank[hitlist]` and supply `--hitlist-evidence-bundle DIRECTORY`,
+created by Hitlist's `export cta-evidence` command (>=1.65.1). Vaxrank verifies
+artifact hashes, relationships, expression input, columns, units, measurement
+level, Ensembl release and OncoRef version. It retains the captured evidence
+without rebuilding indexes.
 
 Scoring columns include `hitlist_ms_observations`, `hitlist_query_status`,
-`hitlist_cta_specific`, `hitlist_avoid_sequence`, and tissue-donor/review fields.
-Per-allele facets distinguish `hitlist_ms_monoallelic`,
-`hitlist_ms_experimental_restriction`, `hitlist_ms_predicted_restriction`,
-`hitlist_ms_donor_hla_candidate`, and coarse/untyped or unknown restriction
-evidence. Donor typing is a candidate set, not a measured restriction. These
-facets can overlap and are not a scalar confidence score. Public observations
-are not measurements from this patient.
+`hitlist_cta_specific` and `hitlist_avoid_sequence`. Per-allele facets distinguish
+monoallelic MS, experimental restriction, predicted restriction and donor-HLA
+candidates. These overlapping facets are not summed into a confidence score.
+Donor typing gives candidate alleles, not measured restriction.
 
-Only exact observed peptide strings acquire MS support. A longer observation
-does not support unobserved nested epitopes. Unqueried sequences have null support,
-including targets outside a bundle's selection. Zero in a captured indexed
-sequence means no positive observations in that captured source, not an
-experimentally measured negative. MS/tissue-based selection is an explicit DSL
-choice. The benign-tissue interpretation follows the primary
+Only exact observed peptides acquire MS support; longer observations do not
+support unobserved nested epitopes. Unqueried sequences have null support. Zero
+means no positive observations in the captured source, not an experimental
+negative. Only verified MS measurements count; fluorescence, binding and unknown
+modalities do not. Public observations remain separate from patient measurements.
+MS/tissue filtering is an explicit DSL choice. See the primary
 [HLA Ligand Atlas study](https://pmc.ncbi.nlm.nih.gov/articles/PMC8054196/).
 
 ## Library admission API
@@ -112,7 +91,7 @@ result = admit_cta_expression(
         evidence_version="workflow-2026.10", assay="bulk RNA-seq",
     ),
     admission_policy=CTAAdmissionPolicy(min_tumor_expression=2, expression_unit="TPM"),
-    genome=EnsemblRelease(93),  # caller's installed, declared annotation
+    genome=EnsemblRelease(93),
     exclusion_policy=CTATargetExclusionPolicy(
         gene_patterns=("MAGE*",), gene_exceptions=("MAGEA4",)),
 )
@@ -120,71 +99,33 @@ result.save("cta-admission.json")
 antigens = result.admitted_antigens
 ```
 
-The example threshold is a caller choice, not a universal biological cutoff.
-Units, sample, measurement level, column names, assay and producer version must
-be declared. The adapter uses Topiary's expression loader with the declared
-columns and rejects malformed values or identifiers before coercion can lose
-them. Blank/NA values stay unknown; zero is a measured value. Negative,
-infinite, nonnumeric, missing-ID and duplicate normalized-ID rows fail.
-Ensembl gene and transcript IDs are supported, including version suffixes;
-the original feature identifier and source SHA-256 stay in the result.
+Declare units, sample, measurement level, columns, assay and producer version.
+Blank/NA expression stays unknown; zero is measured. Negative, nonfinite,
+nonnumeric, missing-ID and duplicate normalized-ID rows fail. Original IDs,
+including version suffixes, and the input SHA-256 are retained.
 
-Canonical gene inputs select OncoRef's canonical transcript as a reference sequence.
-Verified alternate gene inputs select the longest available protein from that
-actual annotation locus, with transcript ID breaking ties. This is labeled
-`annotation_longest_protein`; the primary locus's transcript is never substituted.
-That selection does not assign the gene's abundance to an individual isoform
-or to a protein. Transcript inputs select only their measured transcript and
-hold out a version mismatch. No values are summed across isoforms, genes or
-identical proteins. Identical proteins retain independent gene/transcript
-occurrences and expression evidence. Neither path fabricates alternate-read
-counts or variant evidence.
+Canonical gene inputs use OncoRef's canonical transcript. Verified alternate
+loci use their own longest annotated protein, with transcript ID breaking ties.
+Transcript inputs use only the measured transcript; version mismatches are held
+out. Gene expression is not assigned to an isoform or protein. Counts are not
+summed across genes, transcripts or identical proteins; source occurrences stay
+separate. See [Salmon](https://doi.org/10.1038/nmeth.4197) and
+[Ensembl canonical selection](https://www.ensembl.org/info/genome/genebuild/canonical.html).
 
-OncoRef owns CTA membership and canonical admission. Each CTA decision carries
-its versioned reference resolution, including noncanonical, expression-unknown
-and excluded targets. Non-CTA and unresolved features stay in the decision
-list. Canonical CTAs above the threshold produce admitted `VaccineAntigen`
-objects through the existing admission model; noncanonical candidates remain
-held out. This first adapter does not introduce an override route.
+Only canonical CTAs above the threshold are admitted. Noncanonical, unresolved,
+unmeasured and excluded targets remain in the decision list. Target exclusions
+are separate from the self-reference background: the full verified CTA candidate
+set defines source exclusions. Ambiguous or unverified loci and non-CTA sources
+with identical sequences remain in that background.
 
-The default gene-symbol policy excludes `MAGE*` except exactly `MAGEA4`.
-Empty patterns and exceptions allow all otherwise admissible targets. Matching
-uses case-sensitive canonical OncoRef symbols, and exceptions are exact
-symbols. This changes target eligibility only: the full OncoRef CTA candidate
-universe determines the negative-self-reference exclusion set. OncoRef verifies
-source IDs against the explicitly selected Ensembl annotation. Alternate loci
-are excluded only through shipped, verified mappings. Ambiguous, conflicting or
-unverified loci remain in the self background; matching symbols or proteins do
-not create mappings. Genuine non-CTA sources survive identical CTA sequences.
-
-CTA facts use the verified canonical gene ID while source genes, transcripts,
-proteins and original expression identifiers retain their annotation identity.
-Admission and design audits persist identity contract 1, each mapping decision,
-annotation content and OncoRef reference hashes. Canonical membership and
-annotation source exclusions have separate fingerprints. Earlier native files
-remain legacy contract 0 with their original decisions and exclusions; replay
-does not upgrade them to the current reference.
-
-`CTAExpressionResult.load("cta-admission.json")` uses allowlisted native
-serialization and reproduces policies, decisions, expression evidence, genome
-identity and admitted source sequences without the expression file, new
-OncoRef queries or prediction. It replays admission; prediction and construct
-selection have their own native-dataset persistence paths.
-
-Scientific basis: [Salmon](https://doi.org/10.1038/nmeth.4197) estimates
-transcript abundance. [Ensembl canonical selection](https://www.ensembl.org/info/genome/genebuild/canonical.html)
-chooses a representative transcript, rather than measuring patient isoform or
-protein abundance.
+Audits retain annotation identities, mapping decisions and reference hashes.
+Earlier native files keep their original identity contract and exclusions on
+replay. `CTAExpressionResult.load("cta-admission.json")` restores admission
+without the expression file or new OncoRef queries; save the native candidate
+dataset to replay predictions and constructs too.
 
 ## Released prerequisites
 
-- Requires Topiary >=5.94.3, which fixes delimiter inference for empty and
-  single-feature expression tables ([Topiary #486](https://github.com/openvax/topiary/issues/486)).
-  Consumer regressions cover CSV/TSV gene and transcript inputs with zero,
-  one and multiple rows, with no expected failures.
-- Requires OncoRef 1.8.208, adopting annotation-scoped identity contract 1 in
-  [#592](https://github.com/openvax/vaxrank/issues/592). The extended CTA panel
-  remains a separate upstream alternative; default admission is unchanged.
-- Contextual prediction caches remain tracked in
-  [Topiary #468](https://github.com/openvax/topiary/issues/468); CTA input currently
-  rejects `--prediction-cache` rather than discarding its native flank context.
+Core version requirements are installed with Vaxrank. Hitlist is optional.
+CTA inputs currently reject `--prediction-cache`; contextual cache support is
+tracked in [#624](https://github.com/openvax/vaxrank/issues/624).

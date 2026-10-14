@@ -1,8 +1,7 @@
 # Experimental window exposure
 
-**Experimental:** explore delivery assumptions with the MHCtools exposure model.
-Results do not establish clinical safety or efficacy and do not change vaccine
-ranking or products.
+Explore delivery assumptions with the MHCtools exposure model. This analysis
+leaves vaccine ranking and products unchanged.
 
 ## Run
 
@@ -36,8 +35,7 @@ The request also works with `mhctools vaccine-windows`.
 - Missing context, scores or admission appear as coverage gaps. No new prediction
   or source reconstruction occurs; provenance and admission records are retained.
 - Supply explicit kinetic rates and cleavage assessments under `kinetics`.
-  Per-window overrides use `candidates[window_id]`. Binding scores do not become
-  kinetic rates; synthetic sensitivity scenarios are illustrative.
+  Per-window overrides use `candidates[window_id]`.
 - The tracked interval is the saved scored ligand. A shorter documented core
   uses `core_intervals` with prediction ID, allele, source and zero-based,
   half-open coordinates **within that ligand**. Affinity alone does not identify

@@ -3,12 +3,10 @@
 Mutation, fusion, CTA, ERV, splice and viral antigens can use the same
 `AntigenDataset` API and `--input-antigens` CLI. Each record carries a
 `VaccineAntigen`: sequence, targetable intervals, source identity and an
-evidence-bearing admission decision. These are experimental research interfaces.
+admission decision and its evidence.
 
-Source adapters or callers supply the admission evidence. A source label or
-sequence alone does not establish tumor specificity. Held-out records remain
-in the evidence and cannot enter constructs. This input requires resolved
-sequences; unresolved hypotheses remain in upstream evidence tables.
+Callers supply resolved sequences and admission evidence. Held-out records stay
+in the evidence but cannot enter constructs; unresolved sequences stay upstream.
 
 ## Prepare and predict
 
@@ -43,8 +41,8 @@ Topiary predictor. It returns the shared `EpitopeDataset`.
 
 ## Combine new sequences and saved evidence
 
-An experimental manifest can mix new antigen sequences with saved mutation,
-CTA or viral predictions. Paths are relative to the manifest:
+A manifest can mix new sequences with saved predictions. Paths are relative
+to the manifest:
 
 ```yaml
 schema: vaxrank.input_manifest.v1
@@ -83,8 +81,8 @@ types: use an explicit [selection policy](mixed-antigen-design.md).
 
 ## Add CTA expression
 
-An experimental `cta_expression` entry admits targets from patient expression
-before prediction. Add it beside `antigens` or `epitopes` in the manifest above:
+Add a `cta_expression` entry beside `antigens` or `epitopes` to select CTA targets
+from patient expression before prediction:
 
 ```yaml
   - format: cta_expression
@@ -101,6 +99,8 @@ before prediction. Add it beside `antigens` or `epitopes` in the manifest above:
       min_expression: 2
 ```
 
+`format: cta_expression` selects the CTA expression adapter. The file can be CSV
+or TSV; the nested `cta_expression` settings describe its columns and units.
 Use `transcript` for transcript measurements. Each entry declares its own
 columns, units, sample and threshold; one matrix may supply several sample
 columns. Existing human Ensembl/OncoRef admission rules apply. Expression is
@@ -109,7 +109,6 @@ not converted into protein abundance or mutation read support.
 Optional `exclusion_policy` lists `gene_patterns` and `gene_exceptions`;
 defaults remain `MAGE*` and `MAGEA4`. An optional `hitlist_evidence_bundle` path
 is relative to the manifest and is verified against that input's contract.
-All input scopes are checked before loading one predictor for new sources.
 
 `--output-dir` writes `cta_admission.json` for one CTA source, or separate files
 under `cta_admissions/` for multiple sources. `--output-cta-admission` selects a
@@ -132,13 +131,11 @@ vaxrank --input-epitopes design/candidate_predictions.tsv --output-dir replay
 `--output-antigens` exports resolved native antigen records in the input JSON
 format. It preserves admission evidence and input history, including held-out
 and unmeasured records. It excludes prediction values and design policies;
-keep the native candidate file for replay. Unresolved table rows do not become
-invented antigen sequences. This export also works with native mutation and
-CTA expression workflows.
+keep the native candidate file for replay. This export also supports native mutation and CTA expression workflows.
 
 Pooled native files retain each input's CTA admission decisions and captured
 Hitlist evidence in `dataset.selection["source_evidence"]`, including unresolved
-features. Prior product audits do not establish an audit for a new mixed design.
+features. A new mixed design requires new product audits.
 
 See [mixed-source selection](mixed-antigen-design.md) for evidence requirements
 and current source-allocation limits.
