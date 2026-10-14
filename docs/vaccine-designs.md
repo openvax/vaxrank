@@ -7,7 +7,7 @@ antigens per construct:
 |---|---|---|
 | `--vaccine-type` | `peptide` / `mrna` (multi-valued) | The platform(s); pass both for parallel design |
 | `--antigen-content` | `mutation_spanning` / `minimal_epitope` | What each antigen *is* |
-| `--antigens-per-construct` | `1` / `N` | How many antigens to concatenate per construct |
+| `--peptide-antigens-per-construct` / `--mrna-antigens-per-construct` | `1` / `N` | How many antigens to concatenate per construct |
 
 That matrix yields eight designs, four per vaccine type:
 
