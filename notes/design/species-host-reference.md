@@ -39,3 +39,31 @@ can separate source kind from encoding if that becomes necessary.
 
 The first slice adds host validation only. Nonhuman CTA admission and expanded
 self-reference checks remain pending above.
+
+## Review fixes and chimeric hosts (#630, #631)
+
+- Normalize integer-valued numeric host columns and blanks at table ingestion;
+  reject booleans, fractional IDs and infinities before candidate adaptation.
+  Manifest/API taxon IDs remain strict positive integers.
+- Add optional `mhc_species` (canonical concrete MHCgnomes species names). It
+  declares the intended MHC repertoire independently of the animal/reference.
+  With no override, check alleles against the known host/reference species.
+  With an override, check every declared, observed and requested allele against
+  that list; still check host taxon against annotation. Do not infer the
+  transgene or knockouts from the animal's species.
+- Support the same declarations in manifests, API scope and CLI. Validate
+  input agreement, fresh predictions, native replay, direct VCF references and
+  junction queries before model acquisition. Preserve both declarations and
+  historical identities when they are absent.
+- Regression coverage: plain TSV/CSV blanks, invalid numeric IDs, annotation-free
+  dog/macaque conflicts, matching dog groups, HLA-only and mixed HLA/H2 mice,
+  incompatible annotations/third-species alleles, export and offline replay.
+
+HHD mice provide a concrete reason to separate these roles: their transgene
+contains human peptide-binding domains and mouse H2-D domains. See the
+[MGI transgene record](https://www.informatics.jax.org/allele/MGI%3A3711164).
+This scope declaration does not compose a multi-species self proteome; the
+reference snapshot work above still needs explicit layers and source evidence.
+
+MHCgnomes casing follow-up: [#205](https://github.com/pirl-unc/mhcgnomes/issues/205).
+The boundary uses canonical scientific-name casing for current releases.

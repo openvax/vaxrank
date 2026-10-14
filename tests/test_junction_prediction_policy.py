@@ -186,6 +186,21 @@ def test_vcf_bam_auto_mode_reuses_explicit_candidate_model(junction_factory):
     assert junction_factory[0][0].mhc_predictor == args.mhc_predictor
 
 
+def test_hla_mouse_junction_query_requires_explicit_repertoire(junction_factory):
+    from pyensembl import EnsemblRelease
+    from vaxrank.input_scope import InputScope
+    args = external_args('--mrna-junction-predictor', 'junction-test',
+                         '--mrna-junction-alleles', 'HLA-A*02:01')
+    args.genome = EnsemblRelease(93, species='mouse')
+    args._input_species_scope = InputScope(host_taxon_id=10090)
+    with pytest.raises(ValueError, match='conflicts with host_taxon_id'):
+        ep.resolve_mhc_for_linker_optimizer(args)
+    assert not junction_factory
+    args._input_species_scope = InputScope(host_taxon_id=10090, mhc_species=['human'])
+    assert ep.resolve_mhc_for_linker_optimizer(args)[1] == ['HLA-A*02:01']
+    assert len(junction_factory) == 1
+
+
 @pytest.mark.parametrize('models', [('mhcflurry', 'netmhcpan'), ('mhcflurry,netmhcpan',)])
 def test_multiple_candidate_models_keep_shared_linker_in_auto_mode(
         models, monkeypatch, caplog):

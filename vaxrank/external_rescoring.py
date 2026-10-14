@@ -73,6 +73,8 @@ def external_inputs(args):
 
 def external_input_specs(args):
     """Resolve a manifest or the existing single-report flags."""
+    from .input_scope import species_scope_from_args, with_species_declarations
+    species_scope = species_scope_from_args(args)
     inputs = [(fmt, getattr(args, 'input_' + fmt)) for fmt in INPUT_FORMATS
               if getattr(args, 'input_' + fmt, None)]
     for value in getattr(args, 'external_input', None) or ():
@@ -87,7 +89,8 @@ def external_input_specs(args):
         if inputs:
             raise ValueError("--input-manifest cannot be combined with other input flags; "
                              "list every file in the manifest")
-        return read_input_manifest(manifest)
+        return [(fmt, path, with_species_declarations(scope, species_scope, path))
+                for fmt, path, scope in read_input_manifest(manifest)]
     specs = []
     for fmt, path in inputs:
         declarations = {}
@@ -97,7 +100,7 @@ def external_input_specs(args):
                 patient_id=getattr(args, 'output_patient_id', None) or getattr(args, 'cta_sample_id', None),
                 sample_id=getattr(args, 'cta_sample_id', None),
                 cta_expression=cta_options_from_args(args))
-        specs.append((fmt, path, declarations))
+        specs.append((fmt, path, with_species_declarations(declarations, species_scope, path)))
     return specs
 
 
@@ -107,8 +110,10 @@ def _namespace_report(report, provenance):
         inherited = tuple(replace(p, scope=combine_scopes(
             p.scope, provenance.scope, report.path, SHARED_FIELDS))
             for p in dataset.provenance)
-        candidates = tuple(replace(e, input_provenance=e.input_provenance or provenance)
-                           for e in dataset.epitopes)
+        candidates = tuple(replace(e, input_provenance=(replace(
+            e.input_provenance, scope=combine_scopes(
+                e.input_provenance.scope, provenance.scope, report.path, SHARED_FIELDS))
+            if e.input_provenance is not None else provenance)) for e in dataset.epitopes)
         dataset = replace(dataset, provenance=inherited or (provenance,), epitopes=candidates)
         return replace(report, dataset=dataset, epitopes=candidates, input_provenance=provenance)
     input_id = provenance.input_id
@@ -375,8 +380,15 @@ def _retained_genomes(report):
 
 def _validate_report_scopes(reports, *, genome=None, alleles=()):
     return validate_input_scopes(
-        [r.input_provenance for r in reports], genome=genome, prediction_alleles=alleles,
+        [replace(r.input_provenance, observed_mhc_alleles=_observed_alleles(r))
+         for r in reports], genome=genome, prediction_alleles=alleles,
         retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in reports})
+
+
+def _observed_alleles(report):
+    alleles = {a for e in report.epitopes for a in e.patient_alleles}
+    alleles.update(p.allele for e in report.epitopes for p in e.predictions_flat() if p.allele)
+    return normalize_alleles(sorted(alleles), report.path) if alleles else ()
 
 
 def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, alleles=(),
@@ -450,13 +462,13 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
         # acquire the same occurrence IDs in separately saved native outputs.
         scope_id = hashlib.sha256(json.dumps(scope_dict(scope), sort_keys=True).encode()).hexdigest()
         input_id = content_id + ':' + scope_id
-        observed = sorted({a for e in report.epitopes for a in e.patient_alleles})
+        observed = _observed_alleles(report)
         provenance = InputProvenance(
             input_id=input_id, source_format=fmt, path=str(path), scope=scope,
             content_sha256=content_sha256,
             manifest_path=str(Path(manifest_path).resolve()) if manifest_path else None,
             manifest_declarations=dict(declarations), report_declarations=producer_declarations,
-            observed_mhc_alleles=normalize_alleles(observed, str(path)) if observed else ())
+            observed_mhc_alleles=observed)
         reports.append(_namespace_report(report, provenance))
     loaded = [report for report in reports if report is not None]
     shared_scope = validate_input_scopes(
@@ -881,6 +893,7 @@ def load_unified_external(args, epitope_config, options, genome):
         frame.attrs['cta_predictor'] = loaded_reports[0].report_df.attrs['cta_predictor']
     epitope_config = frame.attrs['epitope_dataset'].config
     dataset = frame.attrs['epitope_dataset']
+    args._input_species_scope = _validate_report_scopes(reports, genome=genome)
     from .construct_replay import initialize_construct_replay
     initialize_construct_replay(args, dataset, options.vaccine_config, options.manufacturability_config)
     from .selection_policy import write_run_policy

@@ -13,6 +13,7 @@ from .external_report import ExternalReport
 from .input_scope import (
     InputProvenance, combine_scopes, normalize_alleles, provenance_columns,
     read_input_manifest, scope_from_mapping, scope_dict, validate_input_scopes,
+    species_scope_from_args, with_species_declarations,
 )
 
 
@@ -36,6 +37,7 @@ def prepare_direct_report(args, reports, epitope_config):
         raise ValueError('Combining VCF/BAM with tables requires --input-manifest '
                          'to declare their shared patient, reference_assembly and mhc_alleles')
     _, declarations = read_input_manifest(manifest, include_direct=True)
+    declarations = with_species_declarations(declarations, species_scope_from_args(args), 'Direct VCF/BAM input')
     scope = scope_from_mapping(declarations, 'Direct VCF/BAM input')
     alleles = normalize_alleles(mhc_alleles_from_args(args), 'Direct prediction')
     if not alleles:
@@ -58,8 +60,9 @@ def prepare_direct_report(args, reports, epitope_config):
     provisional = InputProvenance(
         input_id='direct', source_format='vcf_bam', path='; '.join(paths), scope=scope,
         content_sha256='')
-    validate_input_scopes([provisional] + [r.input_provenance for r in reports],
-                          prediction_alleles=alleles)
+    args._input_species_scope = validate_input_scopes([provisional] + [r.input_provenance for r in reports],
+                          prediction_alleles=alleles,
+                          retained_genomes={'direct': tuple({id(v.ensembl): v.ensembl for v in variants}.values())})
     hashes = {str(Path(path).resolve()): _file_digest(path) for path in paths}
     content_hash = hashlib.sha256(json.dumps(list(hashes.values())).encode()).hexdigest()
     scope_hash = hashlib.sha256(json.dumps(scope_dict(scope), sort_keys=True).encode()).hexdigest()

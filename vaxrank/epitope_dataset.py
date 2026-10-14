@@ -28,7 +28,10 @@ ANTIGEN_COLUMN = "vaxrank_antigen_json"
 
 def read_table(path):
     """Read a normalized table using Topiary's typed CSV/TSV codec."""
-    return (read_tsv if str(path).endswith(".tsv") else read_csv)(path)
+    from .input_scope import normalize_scope_columns
+    result = (read_tsv if str(path).endswith(".tsv") else read_csv)(path)
+    normalize_scope_columns(result.df, str(path))
+    return result
 
 
 def _value(row, name, default=None):

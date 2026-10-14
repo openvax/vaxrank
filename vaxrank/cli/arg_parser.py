@@ -1032,6 +1032,11 @@ def require_annotations_for_template_reports(args, ranked):
 
 
 def add_external_rescoring_args(arg_parser):
+    arg_parser.add_argument('--host-taxon-id', type=int,
+                            help='Experimental: NCBI taxonomy ID of the animal/host reference.')
+    arg_parser.add_argument('--mhc-species', nargs='+', metavar='SPECIES',
+                            help='Experimental: intended MHC species, e.g. human mouse for an HLA mouse. '
+                                 'Defaults to the known host species; does not change its reference.')
     arg_parser.add_argument('--input-antigens', metavar='JSON',
                             help='Experimental: predict and design from a unified antigen dataset with explicit admission evidence.')
     arg_parser.add_argument('--output-antigens', metavar='JSON',

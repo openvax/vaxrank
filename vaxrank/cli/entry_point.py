@@ -696,6 +696,8 @@ def _linker_prediction_configuration(args, config_kwargs=None):
         if outside:
             raise ValueError('Junction prediction alleles outside declared genotype: %s'
                              % sorted(outside))
+    from ..input_scope import validate_prediction_species
+    validate_prediction_species(args, [getattr(args, 'genome', None)], alleles, 'Junction prediction')
     prediction_args.mhc_alleles = ','.join(alleles)
     prediction_args.mhc_alleles_file = None
     prediction_args.mhc_peptide_lengths = list(RNAConstructConfig().junction_kmer_lengths)
@@ -1661,6 +1663,16 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     # it inside ``predict_epitopes``). Multi-predictor runs use
     # ``topiary.TopiaryPredictor(models=[...])`` so the per-row
     # ``prediction_method_name`` ends up on every flat record.
+    # Resolve actual VCF references before models or RNA processing. An explicit
+    # MHC repertoire permits HLA mice without changing the host reference.
+    variants = variant_collection_from_args(args)
+    variants = filter_unannotatable_variants(variants)
+    from ..input_scope import validate_prediction_species
+    references = list({id(v.ensembl): v.ensembl for v in variants}.values())
+    if getattr(args, 'genome', None) is not None:
+        references.append(args.genome)
+    args._input_species_scope = validate_prediction_species(
+        args, references, mhc_alleles_from_args(args), 'Direct prediction')
     predictors_list = predictors_from_args(args)
     if len(predictors_list) == 1:
         mhc_predictor = predictors_list[0]
@@ -1684,12 +1696,6 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         logger.info("Loaded prediction cache from %s", prediction_cache)
         mhc_predictor = cached
 
-    # Vaxrank is going to evaluate multiple vaccine peptides containing
-    # the same mutation so need a longer sequence from Isovar.
-    # We load variants ourselves (instead of run_isovar_from_parsed_args)
-    # so we can filter out alt contigs that would crash downstream.
-    variants = variant_collection_from_args(args)
-    variants = filter_unannotatable_variants(variants)
     capture_native = epitope_dataset is None and bool(
         getattr(args, 'output_epitopes', None) or getattr(args, 'output_antigens', None))
     if capture_native:

@@ -14,7 +14,7 @@ from .epitope_config import EpitopeConfig
 from .epitope_dataset import ANTIGEN_COLUMN, EpitopeDataset
 from .input_scope import (
     InputProvenance, InputScope, SHARED_FIELDS, combine_scopes,
-    scope_from_mapping, scope_dict, provenance_dict, validate_input_scopes,
+    scope_from_mapping, scope_dict, provenance_dict, validate_input_scopes, validate_host_taxon,
 )
 from .native_serialization import _json_loads, to_native_json
 from .reference_proteome import self_reference_matches
@@ -188,6 +188,8 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
         raise ValueError('Antigen predictor returned no peptide measurements')
     frame = frame.reset_index(drop=True)
     validate_prediction_frame(frame, 'Native antigen prediction')
+    validate_host_taxon(provenance.scope, genome, 'Native antigen predictor output',
+                        [a for a in frame.allele if cell_text(a)])
     if any(cell_text(a) and parse_prediction_allele(cell_text(a)) not in alleles for a in frame.allele):
         raise ValueError('Antigen predictor returned an allele outside the declared patient genotype')
     if not set(frame.source_sequence_name) <= set(antigens):
