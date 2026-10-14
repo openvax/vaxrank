@@ -10,7 +10,7 @@ from pyensembl import EnsemblRelease
 import pytest
 
 from vaxrank import AntigenDataset
-from vaxrank.cli.entry_point import run_cli
+from vaxrank.cli.entry_point import run_cli, resolve_ensembl_release
 from vaxrank.epitope_dataset import EpitopeDataset, read_table
 from vaxrank.external_rescoring import prepare_reports, read_reports, external_input_specs
 from vaxrank.input_scope import (
@@ -303,3 +303,22 @@ def test_chimeric_scope_changes_identity_and_survives_native_export(inputs, depe
     declared = replace(inputs, scope=replace(inputs.scope, mhc_species=['human', 'mouse']))
     assert declared.prediction_provenance(genome=genome).input_id != original.input_id
     assert from_native_json(to_native_json(declared.scope), InputScope) == declared.scope
+
+
+def test_hla_mouse_antigen_cli_uses_real_mouse_reference_resolution(inputs, dependencies, tmp_path, monkeypatch):
+    monkeypatch.setattr('vaxrank.cli.entry_point.resolve_ensembl_release', resolve_ensembl_release)
+    monkeypatch.setattr('pyensembl.Genome.download', forbidden)
+    monkeypatch.setattr('pyensembl.Genome.index', forbidden)
+    viral = replace(inputs, antigens={'viral': inputs.antigens['viral']}, scope=replace(
+        inputs.scope, reference_assembly='GRCm38', host_taxon_id=10090, mhc_species=['human']))
+    path = tmp_path / 'virus.json'
+    viral.save(path)
+    saved = tmp_path / 'predictions.tsv'
+    run_cli(['--input-antigens', str(path), '--mhc-predictor', 'random',
+             '--genome', 'GRCm38', '--ensembl-release', '93',
+             '--no-processing-aware-annotation', '--output-epitopes', str(saved)])
+    scope = EpitopeDataset.load(saved).provenance[0].scope
+    assert scope.reference_assembly == 'GRCm38'
+    assert scope.annotation == 'ensembl:93'
+    assert scope.host_taxon_id == 10090
+    assert scope.mhc_species == ('Homo sapiens',)

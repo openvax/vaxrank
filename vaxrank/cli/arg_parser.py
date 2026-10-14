@@ -1137,6 +1137,11 @@ def external_input_arg_parser():
             action.required = False
     arg_parser.add_argument(
         "--verbose", "-v", action="store_true", default=False)
+    arg_parser.add_argument(
+        "--genome",
+        default=None,
+        help="Reference assembly for annotation (e.g. GRCh38 or GRCm38). "
+             "With --ensembl-release, selects that species and requires a matching assembly.")
     # Mutation reports need annotation; native inputs may retain it already.
     arg_parser.add_argument(
         "--ensembl-release",

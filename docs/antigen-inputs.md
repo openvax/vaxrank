@@ -145,6 +145,8 @@ allele species; it does not change the host annotation or add donor/transgene
 sequences to the self reference. Declare only the alleles intended for the
 experiment. Host and MHC declarations survive native export and offline replay.
 The same CLI options are `--host-taxon-id 10090 --mhc-species human`.
+For fresh mouse predictions, select mouse annotation with
+`--genome GRCm38 --ensembl-release 93` (or another matching build/release).
 
 Producer tables may leave host cells blank. Integer-valued numeric taxon cells
 are normalized when read; fractional IDs and booleans are rejected. Manifest

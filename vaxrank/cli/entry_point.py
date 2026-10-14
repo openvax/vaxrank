@@ -1192,12 +1192,24 @@ def configure_logging(args):
 
 
 def resolve_ensembl_release(args):
-    """If --ensembl-release was given, override args.genome with a specific
-    pyensembl EnsemblRelease so that varcode/isovar use that release."""
+    """Select a release without changing an explicitly requested species/build."""
     ensembl_release = getattr(args, 'ensembl_release', None)
     if ensembl_release is not None:
         import pyensembl
-        args.genome = pyensembl.EnsemblRelease(ensembl_release)
+        requested = getattr(args, 'genome', None)
+        if requested is None:
+            args.genome = pyensembl.EnsemblRelease(ensembl_release)
+        else:
+            from ..input_scope import resolve_input_genome
+            reference = resolve_input_genome(requested)
+            species = getattr(reference, 'species', None)
+            if species is None:
+                raise ValueError('Cannot select an Ensembl release for a genome without species metadata')
+            selected = pyensembl.EnsemblRelease(ensembl_release, species=species)
+            if selected.reference_name != reference.reference_name:
+                raise ValueError(f'Ensembl release {ensembl_release} uses {selected.reference_name}, '
+                                 f'which conflicts with requested genome {reference.reference_name}')
+            args.genome = selected
         logger.info("Using Ensembl release %d", ensembl_release)
 
 

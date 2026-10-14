@@ -71,3 +71,8 @@ The boundary uses canonical scientific-name casing for current releases.
 Verification follow-up: exercise reference-only offline junction checks and
 native table/comparator alleles too. Resolve any full-suite compatibility
 failures before final validation; do not weaken the explicit species checks.
+
+Reference-selection follow-up: honor the species of `--genome` when applying
+`--ensembl-release`, reject incompatible assemblies, and test fresh HLA-mouse
+antigen CLI loading with the actual resolver. Keep the human default only when
+no genome is supplied. Document the mouse annotation flags explicitly.

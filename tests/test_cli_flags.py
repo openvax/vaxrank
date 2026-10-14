@@ -21,7 +21,10 @@ import logging
 import os
 import subprocess
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from vaxrank.cli import make_vaxrank_arg_parser
 from vaxrank.cli.entry_point import (
@@ -106,6 +109,21 @@ def test_resolve_ensembl_release_noop_when_not_set():
     args.genome = "GRCh38"
     resolve_ensembl_release(args)
     assert args.genome == "GRCh38"
+
+
+@pytest.mark.parametrize('assembly,species', [('GRCm38', 'mus_musculus'), ('CanFam3.1', 'canis_familiaris')])
+def test_release_selection_preserves_nonhuman_species(assembly, species):
+    args = SimpleNamespace(genome=assembly, ensembl_release=93)
+    resolve_ensembl_release(args)
+    assert args.genome.reference_name == assembly
+    assert args.genome.species.latin_name == species
+    assert args.genome.release == 93
+
+
+def test_release_selection_rejects_an_incompatible_assembly():
+    args = SimpleNamespace(genome='GRCh37', ensembl_release=93)
+    with pytest.raises(ValueError, match='conflicts with requested genome GRCh37'):
+        resolve_ensembl_release(args)
 
 
 # ---- --verbose (#62) --------------------------------------------------------
