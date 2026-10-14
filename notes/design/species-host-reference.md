@@ -67,3 +67,7 @@ reference snapshot work above still needs explicit layers and source evidence.
 
 MHCgnomes casing follow-up: [#205](https://github.com/pirl-unc/mhcgnomes/issues/205).
 The boundary uses canonical scientific-name casing for current releases.
+
+Verification follow-up: exercise reference-only offline junction checks and
+native table/comparator alleles too. Resolve any full-suite compatibility
+failures before final validation; do not weaken the explicit species checks.

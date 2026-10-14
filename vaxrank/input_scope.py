@@ -107,8 +107,11 @@ def species_scope_from_args(args):
 
 def validate_prediction_species(args, references, alleles, location):
     """Check live candidate/junction queries before acquiring a model."""
-    scope = combine_scopes(getattr(args, '_input_species_scope', InputScope()),
+    scope = combine_scopes(scope_from_mapping(getattr(args, '_input_species_scope', {}), location),
                            species_scope_from_args(args), location)
+    references = [reference for reference in references if reference is not None]
+    if not references and scope.reference_assembly is not None:
+        references = [scope.reference_assembly]
     for reference in references or (None,):
         validate_host_taxon(scope, resolve_input_genome(reference), location, alleles)
     return scope

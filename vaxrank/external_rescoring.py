@@ -386,8 +386,16 @@ def _validate_report_scopes(reports, *, genome=None, alleles=()):
 
 
 def _observed_alleles(report):
+    from topiary import is_stated
     alleles = {a for e in report.epitopes for a in e.patient_alleles}
-    alleles.update(p.allele for e in report.epitopes for p in e.predictions_flat() if p.allele)
+    for epitope in report.epitopes:
+        for peptide in (epitope, *epitope.comparators.values()):
+            alleles.update(p.allele for p in peptide.predictions_flat() if p.allele)
+    if report.dataset is not None:
+        frame = report.dataset.result.long_df
+        for column in ('candidate_allele', 'allele'):
+            if column in frame:
+                alleles.update(value for value in frame[column] if is_stated(value))
     return normalize_alleles(sorted(alleles), report.path) if alleles else ()
 
 
@@ -893,7 +901,7 @@ def load_unified_external(args, epitope_config, options, genome):
         frame.attrs['cta_predictor'] = loaded_reports[0].report_df.attrs['cta_predictor']
     epitope_config = frame.attrs['epitope_dataset'].config
     dataset = frame.attrs['epitope_dataset']
-    args._input_species_scope = _validate_report_scopes(reports, genome=genome)
+    args._input_species_scope = scope_dict(_validate_report_scopes(reports, genome=genome))
     from .construct_replay import initialize_construct_replay
     initialize_construct_replay(args, dataset, options.vaccine_config, options.manufacturability_config)
     from .selection_policy import write_run_policy

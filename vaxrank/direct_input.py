@@ -60,9 +60,10 @@ def prepare_direct_report(args, reports, epitope_config):
     provisional = InputProvenance(
         input_id='direct', source_format='vcf_bam', path='; '.join(paths), scope=scope,
         content_sha256='')
-    args._input_species_scope = validate_input_scopes([provisional] + [r.input_provenance for r in reports],
+    shared = validate_input_scopes([provisional] + [r.input_provenance for r in reports],
                           prediction_alleles=alleles,
                           retained_genomes={'direct': tuple({id(v.ensembl): v.ensembl for v in variants}.values())})
+    args._input_species_scope = scope_dict(shared)
     hashes = {str(Path(path).resolve()): _file_digest(path) for path in paths}
     content_hash = hashlib.sha256(json.dumps(list(hashes.values())).encode()).hexdigest()
     scope_hash = hashlib.sha256(json.dumps(scope_dict(scope), sort_keys=True).encode()).hexdigest()

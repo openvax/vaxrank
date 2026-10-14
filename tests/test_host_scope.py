@@ -255,16 +255,23 @@ def test_actual_annotation_species_checked_without_taxon_declaration():
                                  genome=EnsemblRelease(93, species='mouse')).mhc_species == ('Homo sapiens',)
 
 
-def test_native_replay_checks_actual_prediction_species(tmp_path):
+@pytest.mark.parametrize('location', ['prediction', 'comparator', 'table'])
+def test_native_replay_checks_actual_prediction_species(tmp_path, location):
     from mhctools.pred import Prediction
-    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.candidate_epitope import CandidateEpitope, Peptide
     scope = InputScope(host_taxon_id=9606)
     source = InputProvenance('test', 'topiary', 'original.tsv', '', scope)
+    prediction = Prediction(kind='pMHC_affinity', peptide='SIINFEKL', allele='DLA-88*508:01',
+                            value=10, score=None, predictor_name='fixture')
     candidate = CandidateEpitope(sequence='SIINFEKL', prediction_id='one', input_provenance=source,
-        predictions=(Prediction(kind='pMHC_affinity', peptide='SIINFEKL', allele='DLA-88*508:01',
-                                value=10, score=None, predictor_name='fixture'),))
+        predictions=(prediction if location == 'prediction' else replace(prediction, allele='HLA-A*02:01'),))
+    if location == 'comparator':
+        candidate = replace(candidate, comparators={'wt': Peptide(sequence='SIINFEKL', predictions=(prediction,))})
     path = tmp_path / 'native.tsv'
-    EpitopeDataset.from_predictions([candidate]).save(path)
+    dataset = EpitopeDataset.from_predictions([candidate])
+    if location == 'table':
+        dataset.result.df['allele'] = 'DLA-88*508:01'
+    dataset.save(path)
     with pytest.raises(ValueError, match='conflicts with host_taxon_id'):
         read_reports([('epitopes', path)])
 
