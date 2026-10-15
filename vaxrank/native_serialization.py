@@ -37,7 +37,8 @@ def _native_serializable_classes():
     from .mutant_protein_fragment import MutantProteinFragment
     from .external_report import ExternalRecord
     from .external_prediction import ExternalPredictionKey
-    from mhctools.cleavage import CleavageInput, CleavageModel, CleavageSite
+    from mhctools import PeptideInput
+    from mhctools.cleavage import CleavageModel, CleavageSite
 
     from .allele_evidence import AlleleAttribution
     from .input_scope import InputScope, InputProvenance
@@ -98,7 +99,8 @@ def _native_serializable_classes():
         ("vaxrank.input_scope", "InputScope"): InputScope,
         ("vaxrank.input_scope", "InputProvenance"): InputProvenance,
         ("mhctools.pred", "Prediction"): Prediction,
-        ("mhctools.cleavage", "CleavageInput"): CleavageInput,
+        ("mhctools.peptide_input", "PeptideInput"): PeptideInput,
+        ("mhctools.cleavage", "CleavageInput"): PeptideInput,
         ("mhctools.cleavage", "CleavageModel"): CleavageModel,
         ("mhctools.cleavage", "CleavageSite"): CleavageSite,
         ("vaxrank.cleavage_profile", "CleavageProfile"): CleavageProfile,
@@ -227,6 +229,11 @@ def _decode_native_repr(value, registry):
         return class_object(state[_VALUE_FIELD])
     if _VALUE_FIELD in state:
         raise ValueError("Unexpected value wrapper for native serialized class")
+    if class_metadata == {"__module__": "mhctools.cleavage", "__name__": "CleavageInput"}:
+        if "source_sequence_name" in state and "source_id" in state:
+            raise ValueError("Archived cleavage input has conflicting source names")
+        if "source_id" in state:
+            state["source_sequence_name"] = state.pop("source_id")
     if hasattr(class_object, "from_dict"):
         return class_object.from_dict(state)
     state = _migrate_state(class_object, state)

@@ -15,7 +15,7 @@ Enzyme location does not establish calibration in serum or another compartment.
 Cleavage evidence is not whole-peptide half-life, presentation or T-cell recognition.</p>
 {% if not records %}<p>No sequence profiles supplied; processing is unassessed.</p>{% endif %}
 {% for record in records %}{% set p = record.profile %}{% set n = p.peptide.sequence|length %}
-<section><h2>{{ p.peptide.source_id or 'Unnamed context' }} — {{ p.model.name }}</h2>
+<section><h2>{{ p.peptide.source_sequence_name or 'Unnamed context' }} — {{ p.model.name }}</h2>
 <p>Exact input ({{ n }} residues): <code>{{ p.peptide.sequence }}</code></p>
 <p>Source start: {{ p.peptide.source_start }} (zero-based).
 N terminus: {{ p.peptide.n_term }}; C terminus: {{ p.peptide.c_term }}.

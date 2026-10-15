@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import hashlib
 from typing import Optional
 
-from mhctools.cleavage import CleavageInput
+from mhctools import PeptideInput
 from serializable import DataclassSerializable
 
 from .construct_sequence import ConstructEvidence, ConstructSequence
@@ -69,7 +69,7 @@ class SequenceContext(DataclassSerializable):
             raise ValueError("Sequence context name is required")
         if not isinstance(self.chemistry_basis, str):
             raise ValueError("Context chemistry basis must be text")
-        CleavageInput(self.sequence, n_term=self.n_term, c_term=self.c_term)
+        PeptideInput(self.sequence, n_term=self.n_term, c_term=self.c_term)
         if (self.n_term != "unknown" or self.c_term != "unknown") and not self.chemistry_basis:
             raise ValueError("Terminal chemistry requires an explicit evidence/assumption basis")
         if self.evidence is not None and not isinstance(self.evidence, ConstructEvidence):
@@ -152,7 +152,7 @@ class SequenceContext(DataclassSerializable):
         # Pepsickle accepts only bare sequence. Free here is an explicit model
         # input assumption for a context window, NOT exposed peptidase termini.
         n_term, c_term = ("free", "free") if sequence_only else (self.n_term, self.c_term)
-        return CleavageInput(self.sequence, n_term=n_term, c_term=c_term, source_id=self.source_id)
+        return PeptideInput(self.sequence, n_term=n_term, c_term=c_term, source_sequence_name=self.source_id)
 
 
 def native_sequence_context(antigen, *, name=None):
