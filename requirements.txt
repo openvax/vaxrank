@@ -76,9 +76,9 @@ serializable>=1.1.0,<2.0.0
 # 1.8.210 restores identical CTA protein groups and refreshed expression
 # summaries without changing annotation-scoped gene identity or patient RNA.
 oncoref==1.8.210
-# Released taxonomy/reference identity API for explicit host declarations.
-# Composed proteome snapshots remain blocked on ORFdata #60/#68 in draft #625.
-orfdata>=0.18.0,<1.0.0
+# Released taxonomy/reference identity API, including annotation-free ID lookup.
+# Composed proteome integration remains tracked in #625.
+orfdata>=0.27.1,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
 # of predictor_version strings. Always pulled in transitively via setuptools
 # / pip, but pinned explicitly so minimal / --no-deps installs don't break

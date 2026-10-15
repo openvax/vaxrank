@@ -84,3 +84,11 @@ input alias for the existing canonical host taxon, not a second stored claim.
 Keep canonical IDs and sorted MHC tuples internally so aliases, existing native
 archives and input identities remain equivalent. Reject conflicting aliases.
 Exercise manifest, API, CLI and sparse table inputs through export/replay.
+
+Review fixes (#633–#635): normalize MHC common names with ORFdata's aliases;
+resolve taxonomy IDs through an upstream public reverse lookup, independently
+of Ensembl's supported annotations ([ORFdata #84](https://github.com/openvax/orfdata/pull/84),
+released in 0.27.1). Read legacy native table declarations before
+candidate adaptation, reconcile them with saved scope and CLI/manifest assertions,
+and retain them through export/replay. Cover common-name/ID equivalence, cattle
+without annotation, and sparse native CSV/TSV species declarations.

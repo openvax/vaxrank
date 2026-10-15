@@ -373,3 +373,115 @@ def test_sparse_species_alias_columns_load_and_validate_alleles(tmp_path, host, 
     frame.to_csv(path, sep='\t', index=False)
     with pytest.raises(ValueError, match='conflicts with mhc_species'):
         read_reports([('topiary', path)])
+
+
+@pytest.mark.parametrize('name,scientific,taxon', [
+    ('human', 'Homo sapiens', 9606), ('mouse', 'Mus musculus', 10090),
+    ('dog', 'Canis lupus familiaris', 9615), ('cat', 'Felis catus', 9685),
+    ('rat', 'Rattus norvegicus', 10116), ('cow', 'Bos taurus', 9913),
+    ('cattle', 'Bos taurus', 9913),
+])
+def test_host_and_mhc_aliases_share_taxonomy(name, scientific, taxon):
+    scopes = [InputScope.from_dict(dict(host_species=value, mhc_species=value))
+              for value in (name, scientific, taxon, str(taxon))]
+    assert all(scope == scopes[0] for scope in scopes)
+    assert len({to_native_json(scope) for scope in scopes}) == 1
+    mixed = InputScope.from_dict(dict(host_species=name, mhc_species=['human', name]))
+    assert mixed == InputScope.from_dict(dict(host_species=taxon, mhc_species=[9606, taxon]))
+
+
+@pytest.mark.parametrize('host', ['cow', 'cattle', 'Bos taurus', 9913])
+def test_cattle_table_needs_no_annotation(tmp_path, host, monkeypatch):
+    from pyensembl.species import Species
+    monkeypatch.setattr(Species, 'all_registered_latin_names', forbidden)
+    monkeypatch.setattr('pyensembl.Genome.index', forbidden)
+    monkeypatch.setattr('pyensembl.Genome.download', forbidden)
+    path = write_species_table(tmp_path, hosts=['9913'], alleles=['BoLA-1*009:01'])
+    scope = dict(host_species=host)
+    report = read_reports([('topiary', path)], scopes=[scope])[0]
+    assert report.input_provenance.scope.host_taxon_id == 9913
+    report.dataset.save(tmp_path / 'native.tsv')
+    assert read_reports([('epitopes', tmp_path / 'native.tsv')])[0].input_provenance.scope.host_taxon_id == 9913
+    with pytest.raises(ValueError, match='conflicts with host_taxon_id'):
+        validate_input_scopes([report.input_provenance], prediction_alleles=['HLA-A*02:01'])
+
+
+def write_legacy_species_table(tmp_path, suffix, payload, *, scope=None, **columns):
+    from mhctools.pred import Prediction
+    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.epitope_io import NATIVE_EPITOPE_COLUMN, save_predictions
+    provenance = InputProvenance('original', 'topiary', 'original.tsv', '', scope) if scope else None
+    prediction = Prediction(kind='pMHC_affinity', peptide='SIINFEKL', allele='HLA-A*02:01',
+                            value=10, score=1.0, predictor_name='fixture')
+    candidates = [CandidateEpitope(sequence='SIINFEKL', prediction_id=str(index),
+                                  predictions=(prediction,), input_provenance=provenance)
+                  for index in range(2)]
+    path = tmp_path / ('legacy.' + suffix)
+    save_predictions(candidates, path)
+    sep = '\t' if suffix == 'tsv' else ','
+    frame = pd.read_csv(path, sep=sep)
+    if not payload:
+        frame = frame.drop(columns=NATIVE_EPITOPE_COLUMN)
+    for name, value in columns.items():
+        frame[name] = [value, None]
+    frame.to_csv(path, sep=sep, index=False)
+    return path
+
+
+@pytest.mark.parametrize('suffix', ['tsv', 'csv'])
+@pytest.mark.parametrize('payload', [False, True])
+def test_legacy_native_species_columns_validate_before_replay(tmp_path, suffix, payload):
+    path = write_legacy_species_table(tmp_path, suffix, payload, host_species='mouse')
+    with pytest.raises(ValueError, match='conflicts with host_taxon_id'):
+        read_reports([('epitopes', path)])
+    # An explicit HLA repertoire is accepted; adding a conflicting CLI/manifest
+    # assertion must not silently replace the table's host.
+    path = write_legacy_species_table(tmp_path, suffix, payload,
+                                     patient_id='patient#1', host_species='mouse', mhc_species='human')
+    with pytest.raises(ValueError, match='conflicting host_taxon_id'):
+        read_reports([('epitopes', path)], scopes=[dict(host_species='human')])
+    report = read_reports([('epitopes', path)])[0]
+    expected = InputScope.from_dict(dict(patient_id='patient#1', host_species='mouse', mhc_species='human'))
+    assert report.input_provenance.scope == expected
+    assert report.input_provenance.report_declarations['host_species'] == ['mouse']
+    assert all(e.input_provenance.scope == expected for e in report.epitopes)
+    saved = tmp_path / ('replay.' + suffix)
+    report.dataset.save(saved)
+    replay = read_reports([('epitopes', saved)])[0]
+    assert replay.input_provenance.scope == expected
+    assert [e.prediction_group_key for e in replay.epitopes] == [e.prediction_group_key for e in report.epitopes]
+
+
+@pytest.mark.parametrize('suffix', ['tsv', 'csv'])
+def test_legacy_native_sparse_numeric_aliases_through_cli(tmp_path, suffix):
+    path = write_legacy_species_table(tmp_path, suffix, True, host_species=10090, mhc_species=9606)
+    saved = tmp_path / 'cli.tsv'
+    run_cli(['--input-epitopes', str(path), '--output-epitopes', str(saved),
+             '--no-processing-aware-annotation'])
+    scope = EpitopeDataset.load(saved).provenance[0].scope
+    assert scope == InputScope(host_taxon_id=10090, mhc_species='human')
+    replay = tmp_path / 'replay.tsv'
+    run_cli(['--input-epitopes', str(saved), '--output-epitopes', str(replay),
+             '--no-processing-aware-annotation'])
+    assert EpitopeDataset.load(replay).provenance[0].scope == scope
+
+
+@pytest.mark.parametrize('column,value', [('host_taxon_id', 10090.5), ('host_species', True),
+                                         ('mhc_species', 9606.5)])
+def test_invalid_legacy_native_species_stops_before_adaptation(tmp_path, monkeypatch, column, value):
+    from vaxrank.external_rescoring import READERS
+    path = write_legacy_species_table(tmp_path, 'tsv', True, **{column: value})
+    monkeypatch.setitem(READERS, 'epitopes', forbidden)
+    with pytest.raises(ValueError, match=column):
+        read_reports([('epitopes', path)])
+
+
+def test_legacy_native_table_scope_reconciles_with_saved_payload(tmp_path):
+    path = write_legacy_species_table(tmp_path, 'tsv', True,
+                                     scope=InputScope(host_taxon_id=9606), host_species='mouse')
+    with pytest.raises(ValueError, match='conflicting host_taxon_id'):
+        read_reports([('epitopes', path)])
+    path = write_legacy_species_table(tmp_path, 'tsv', True,
+                                     scope=InputScope(host_taxon_id=10090), mhc_species='human')
+    report = read_reports([('epitopes', path)])[0]
+    assert report.input_provenance.scope == InputScope(host_taxon_id=10090, mhc_species='human')

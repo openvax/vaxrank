@@ -107,6 +107,7 @@ def normalize_host_species(value):
 def normalize_mhc_species(values):
     """Resolve an explicit repertoire, including transgenic/chimeric animals."""
     from mhcgnomes import Species
+    from orfdata.reference import canonical_species
     if isinstance(values, (str, int)):
         values = [values]
     if not isinstance(values, (list, tuple)) or not values:
@@ -118,7 +119,8 @@ def normalize_mhc_species(values):
             if value.isdecimal():
                 value = int(value)
         species = (_species_for_taxon(value) if type(value) is int else
-                   Species.get(value.replace('_', ' ').capitalize()) if isinstance(value, str) else None)
+                   Species.get(canonical_species(value).replace('_', ' ').capitalize())
+                   if isinstance(value, str) else None)
         if species is None or species.is_group:
             raise ValueError(f'mhc_species requires a known concrete species, got {value!r}')
         result.add(species.name)
@@ -336,7 +338,16 @@ def report_declarations(path, source_format, *, frame=None):
     """
     # Reading the path preserves pandas' support for compressed TSVs.
     if frame is None:
-        frame = pd.read_csv(path, sep="\t", dtype=str,
+        native = source_format == 'epitopes'
+        skiprows = 0
+        if native:
+            with open(path) as stream:
+                for line in stream:
+                    if not line.startswith('#'):
+                        break
+                    skiprows += 1
+        frame = pd.read_csv(path, sep=',' if native and not str(path).endswith('.tsv') else '\t',
+                           skiprows=skiprows, dtype=str,
                            keep_default_na=False,
                            usecols=lambda name: name in (*DECLARATION_FIELDS, "origin_descriptor"))
     normalize_scope_columns(frame, str(path))
@@ -385,16 +396,11 @@ def resolve_input_genome(genome):
 
 @lru_cache(maxsize=128)
 def _species_for_taxon(taxon_id):
-    """Join the public annotation registry to ORFdata's taxonomy aliases."""
+    """Resolve taxonomy without requiring an annotation for that species."""
     from mhcgnomes import Species
-    from pyensembl.species import Species as AnnotationSpecies
-    from orfdata.reference import canonical_species, species_taxon
-    for name in AnnotationSpecies.all_registered_latin_names():
-        if species_taxon(name) == taxon_id:
-            species = Species.get(canonical_species(name).replace('_', ' ').capitalize())
-            if species is not None:
-                return species
-    return None
+    from orfdata.reference import species_name_for_taxon
+    name = species_name_for_taxon(taxon_id)
+    return Species.get(name.replace('_', ' ').capitalize()) if name is not None else None
 
 
 def validate_host_taxon(scope, reference, location, observed_alleles=()):

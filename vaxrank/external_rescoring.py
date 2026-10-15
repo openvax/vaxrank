@@ -453,11 +453,16 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
         if fmt in ('topiary', 'epitopes', 'exacto'):
             reader_kwargs['scope_declarations'] = declarations
         scope_declarations = {key: value for key, value in declarations.items() if key != 'exacto'}
+        # Legacy native readers reconstruct their table from candidate payloads.
+        # Capture explicit table declarations before that adaptation drops them.
+        if fmt == 'epitopes':
+            producer_scope, producer_declarations = report_declarations(path, fmt)
         report = READERS[fmt](path, **reader_kwargs)
-        producer_scope, producer_declarations = report_declarations(
-            path, fmt, frame=report.dataset.result.df if report.dataset is not None else None)
+        if fmt != 'epitopes':
+            producer_scope, producer_declarations = report_declarations(
+                path, fmt, frame=report.dataset.result.df if report.dataset is not None else None)
         if report.dataset is not None and report.dataset.provenance:
-            declared = scope_from_mapping(scope_declarations, str(path))
+            declared = combine_scopes(producer_scope, scope_from_mapping(scope_declarations, str(path)), str(path))
             stored_scope = validate_input_scopes([
                 replace(p, scope=combine_scopes(p.scope, declared, str(path), SHARED_FIELDS))
                 for p in report.dataset.provenance], genome=genome,
