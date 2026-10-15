@@ -46,7 +46,7 @@ recognition rules are not serum half-life or calibrated cleavage probabilities.
 ## Foundational site API (first PR; #422 remains open)
 
 ```python
-from mhctools import CleavageInput
+from mhctools import PeptideInput
 from mhctools.peptidases import get_cleavage_model
 from vaxrank import (
     audit_pepsickle_inputs, audit_peptidase_inputs, write_cleavage_profiles,
@@ -54,7 +54,7 @@ from vaxrank import (
 
 # Explicit model input assumption: canonical linear L-peptide, free termini.
 # Do not assert free termini if the manufactured chemistry is unknown.
-inputs = [CleavageInput("GKRFHATISFDTDTGLKQALETKK", source_id="supplied-final-sequence")]
+inputs = [PeptideInput("GKRFHATISFDTDTGLKQALETKK", source_sequence_name="supplied-final-sequence")]
 profiles = audit_pepsickle_inputs(inputs)
 profiles += audit_peptidase_inputs(inputs, get_cleavage_model("cpn-basic"))
 write_cleavage_profiles(profiles, json_path="sites.json", html_path="sites.html")
@@ -64,7 +64,7 @@ The Pepsickle dependency remains optional. Missing model assets are reported as
 unassessed, not replaced by a predictor. Model weights are fingerprinted on the
 active interpreter's import path; they are not redistributed. Terminal chemistry
 outside a backend's domain remains unassessed. Arbitrary chemical modifications
-are outside `CleavageInput` and must not be reduced to a bare sequence.
+are outside `PeptideInput` and must not be reduced to a bare sequence.
 The remaining upstream Pepsickle per-bond/provenance API gap is tracked in
 [mhctools #329](https://github.com/openvax/mhctools/issues/329). Once it ships,
 Vaxrank should consume that result directly and remove its local model-metadata

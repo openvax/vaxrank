@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import mhctools
 import pytest
-from mhctools.cleavage import CleavageInput
+from mhctools import PeptideInput
 from mhctools.peptidases import get_cleavage_model
 
 from vaxrank.cleavage_inference import audit_pepsickle_inputs, audit_peptidase_inputs
@@ -19,9 +19,9 @@ def identity():
 
 
 def test_contexts_deduplicated_without_losing_occurrences_or_source_offsets():
-    inputs = [CleavageInput("ACDE", source_id="a"),
-              CleavageInput("ACDE", source_id="b", source_start=40),
-              CleavageInput("ACDEKK", source_id="final")]
+    inputs = [PeptideInput("ACDE", source_sequence_name="a"),
+              PeptideInput("ACDE", source_sequence_name="b", source_start=40),
+              PeptideInput("ACDEKK", source_sequence_name="final")]
     with identity(), patch.object(mhctools.Pepsickle, "cleavage_probs_many", return_value={
             "ACDE": [.1, .2, .3, 0.], "ACDEKK": [.8, .7, .6, .5, .4, 0.]}) as run:
         profiles = audit_pepsickle_inputs(inputs)
@@ -32,7 +32,7 @@ def test_contexts_deduplicated_without_losing_occurrences_or_source_offsets():
 
 
 def test_chemistry_and_missing_model_never_enter_sequence_only_backend():
-    inputs = [CleavageInput("ACDE", n_term="acetylated"), CleavageInput("ACDE")]
+    inputs = [PeptideInput("ACDE", n_term="acetylated"), PeptideInput("ACDE")]
     with patch("vaxrank.cleavage_inference._pepsickle_model_identity", return_value=(MODEL, "", "")), \
             patch.object(mhctools.Pepsickle, "cleavage_probs_many") as run:
         profiles = audit_pepsickle_inputs(inputs)
@@ -45,14 +45,14 @@ def test_chemistry_and_missing_model_never_enter_sequence_only_backend():
 def test_bad_array_does_not_destroy_other_sequence_evidence():
     with identity(), patch.object(mhctools.Pepsickle, "cleavage_probs_many", return_value={
             "ACDE": [float("nan")] * 4, "ACDEK": [.1] * 5}):
-        profiles = audit_pepsickle_inputs([CleavageInput("ACDE"), CleavageInput("ACDEK")])
+        profiles = audit_pepsickle_inputs([PeptideInput("ACDE"), PeptideInput("ACDEK")])
     assert [p.status for p in profiles] == ["failed", "observations_returned"]
     assert profiles[0].unassessed_bonds == (1, 2, 3)
 
 
 def test_batch_failure_is_explicit_not_no_cuts():
     with identity(), patch.object(mhctools.Pepsickle, "cleavage_probs_many", side_effect=RuntimeError("failed")):
-        p, = audit_pepsickle_inputs([CleavageInput("ACDE")])
+        p, = audit_pepsickle_inputs([PeptideInput("ACDE")])
     assert p.status == "failed" and p.error_message == "failed"
     assert p.sites == ()
 
@@ -60,7 +60,7 @@ def test_batch_failure_is_explicit_not_no_cuts():
 def test_real_cpn_rule_assesses_only_the_exposed_terminal_bond():
     # This tests the released API's stated motif behavior, not serum kinetics.
     predictor = get_cleavage_model("cpn-basic")
-    peptide = CleavageInput("ACDEKK", source_id="JLF-shaped-fixture")
+    peptide = PeptideInput("ACDEKK", source_sequence_name="JLF-shaped-fixture")
     p, repeated = audit_peptidase_inputs([peptide, peptide], predictor)
     assert p is repeated
     assert p.model.evidence == "motif_rule"
@@ -70,7 +70,7 @@ def test_real_cpn_rule_assesses_only_the_exposed_terminal_bond():
 
 
 def test_canonical_peptidase_chemistry_gate_is_preserved():
-    p, = audit_peptidase_inputs([CleavageInput("ACDEK", c_term="amidated")],
+    p, = audit_peptidase_inputs([PeptideInput("ACDEK", c_term="amidated")],
                                 get_cleavage_model("cpn-basic"))
     assert p.status == "unassessed" and p.reason_codes
 
@@ -83,7 +83,7 @@ def test_unreadable_weights_are_explicit_and_do_not_crash_the_audit(tmp_path):
             patch("vaxrank.cleavage_inference.metadata.version", return_value="fixture"), \
             patch("pathlib.Path.open", side_effect=PermissionError("weights not readable")), \
             patch.object(mhctools.Pepsickle, "cleavage_probs_many") as run:
-        p, = audit_pepsickle_inputs([CleavageInput("ACDE")])
+        p, = audit_pepsickle_inputs([PeptideInput("ACDE")])
     run.assert_not_called()
     assert p.status == "unassessed" and p.error_message == "weights not readable"
 
@@ -91,7 +91,7 @@ def test_unreadable_weights_are_explicit_and_do_not_crash_the_audit(tmp_path):
 @pytest.mark.parametrize("threshold", [None, True, float("nan"), float("inf"), -1., 2., ".5"])
 def test_invalid_model_settings_fail_before_loading_assets(threshold):
     with pytest.raises(ValueError, match="settings"):
-        audit_pepsickle_inputs([CleavageInput("ACDE")], threshold=threshold)
+        audit_pepsickle_inputs([PeptideInput("ACDE")], threshold=threshold)
 
 
 def test_empty_input_does_not_load_models():
