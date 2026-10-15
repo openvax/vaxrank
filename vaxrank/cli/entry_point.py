@@ -1679,6 +1679,8 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     # MHC repertoire permits HLA mice without changing the host reference.
     variants = variant_collection_from_args(args)
     variants = filter_unannotatable_variants(variants)
+    if getattr(args, 'host_reference', None):
+        raise ValueError('Use --host-reference with native antigen inputs or saved --input-epitopes')
     from ..input_scope import validate_prediction_species, scope_dict
     references = list({id(v.ensembl): v.ensembl for v in variants}.values())
     if getattr(args, 'genome', None) is not None:

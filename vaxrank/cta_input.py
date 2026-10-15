@@ -267,7 +267,7 @@ def prepare_cta_report(args, genome, epitope_config=None):
         cta_admission_writer=lambda sources: write_cta_admissions(args, sources))[0]
 
 
-def predict_cta_source(source, predictor, *, genome, epitope_config=None):
+def predict_cta_source(source, predictor, *, genome, epitope_config=None, host_reference=None):
     """Predict admitted occurrences, retaining every source admission decision."""
     admission, provenance, bundle = source.admission, source.provenance, source.bundle
     contract = admission.input_contract
@@ -291,10 +291,11 @@ def predict_cta_source(source, predictor, *, genome, epitope_config=None):
     if antigens:
         dataset = predict_antigens(antigens, predictor, genome=genome, provenance=provenance,
                                    config=epitope_config, annotate=annotate,
-                                   self_matcher=self_reference_matches)
+                                   self_matcher=self_reference_matches, host_reference=host_reference)
     else:
         from .epitope_dataset import EpitopeDataset
         dataset = EpitopeDataset.from_predictions((), config=epitope_config)
+        dataset.host_reference = host_reference
         dataset.provenance = (provenance,)
         dataset.selection['antigen_inputs'] = {provenance.input_id: {}}
     # CTA proteins are encoded by the host; the antigen-aware self match

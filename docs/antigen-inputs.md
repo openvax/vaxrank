@@ -148,11 +148,45 @@ Producer tables may leave host cells blank. Integer-valued numeric taxon cells
 are normalized when read; fractional IDs and booleans are rejected. Manifest
 and API taxon IDs must be positive integers.
 
-Donor/transgene sequences and extra ORFs still need explicit self-reference
-integration, tracked in [#625](https://github.com/openvax/vaxrank/issues/625).
+Donor/transgene self layers remain tracked in
+[#625](https://github.com/openvax/vaxrank/issues/625).
 Current CTA expression admission remains human-only. Inputs without new scope
 fields keep their historical identities; known host annotation still enables
 species checks.
+
+## Host proteome snapshots (experimental draft)
+
+Use an ORFdata snapshot to include selected uORFs and other noncanonical ORFs:
+
+```yaml
+host_reference: host.proteome.json.gz
+inputs:
+  - format: antigens
+    path: antigens.json
+```
+
+Add this to a manifest with `schema: vaxrank.input_manifest.v1`. Paths are
+relative to the manifest. Standalone inputs accept `--host-reference FILE`.
+Build the snapshot with ORFdata's `Proteome.build(...).save(...)`; its selected
+evidence, source hashes, exclusions and every mapped occurrence are retained.
+An optional `{path: FILE, identity: SHA256}` declaration pins its content identity.
+
+The snapshot must match the declared host and annotation. It supplies exact-self
+assessment for new native antigen predictions without a live Ensembl annotation;
+CTA expression still needs its annotation for transcript/sequence selection.
+CTA gene exclusions remove annotated proteins, leaving additional ORFs at those
+genes searchable. Viral entries never become host self.
+
+Native outputs bundle the snapshot in their `.references/` directory. Move that
+directory with the table for offline replay. Changed or missing snapshots fail.
+Saved predictions require their original reference; select a different reference
+by predicting the source antigens again. Legacy producer tables and direct
+VCF/BAM runs retain their existing annotated reference path.
+
+Python accepts a `HostReference`, ORFdata `Proteome`, or snapshot path through
+`AntigenDataset.predict(..., host_reference=...)` and
+`audit_construct_sequence(..., host_reference=...)`.
+For an HLA mouse, also pass `mhc_species="human"` to the audit.
 
 ## Shared outputs
 

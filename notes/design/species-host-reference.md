@@ -19,16 +19,16 @@ can separate source kind from encoding if that becomes necessary.
 
 ## Remaining work before this PR is ready
 
-- [ ] Consume released ORFdata composition and snapshot APIs from
+- [x] Consume released ORFdata composition and snapshot APIs from
   [#60](https://github.com/openvax/orfdata/pull/60) and
   [#68](https://github.com/openvax/orfdata/issues/68). Pin the tested release.
-- [ ] Declare a composed host reference in the manifest with verified source
+- [x] Declare a composed host reference in the manifest with verified source
   hashes and explicit ORF evidence/coverage selection. Keep viral target layers
   separate from host self layers.
-- [ ] Use the same resolved reference in candidate self matches and actual
+- [x] Use the same resolved reference in candidate self matches and actual
   product-window audits. Preserve all mapped occurrences and explicit source
   exclusions; a gene exclusion must not silently exclude its additional ORFs.
-- [ ] Retain the reference snapshot and its identity for deterministic native
+- [x] Retain the reference snapshot and its identity for deterministic native
   replay, corruption checks and reference-cache invalidation.
 - [ ] Consume OncoRef's versioned species-specific CTA evidence from
   [#593](https://github.com/pirl-unc/oncoref/issues/593). Retain current human
@@ -37,8 +37,8 @@ can separate source kind from encoding if that becomes necessary.
 - [ ] Exercise released producer artifacts, uORF-only self matches, retained
   non-CTA sharing, missing nonhuman catalogue coverage and mixed product replay.
 
-The first slice adds host validation only. Nonhuman CTA admission and expanded
-self-reference checks remain pending above.
+Host validation and ORFdata snapshot consumption are implemented. Nonhuman CTA
+admission and donor/transgene self layers remain pending.
 
 ## Review fixes and chimeric hosts (#630, #631)
 
@@ -98,3 +98,24 @@ each native source's host and alleles. Retain the existing per-source genotype,
 reference and pooling checks. Carry the validated shared species scope into
 every report and candidate so each exported source can reload independently.
 Cover raw/native mixtures in either order, conflicts and CLI export/replay.
+
+## Snapshot consumer
+
+Accept an optional `host_reference` ORFdata snapshot path in the shared manifest
+and `--host-reference` for standalone inputs. A `{path, identity}` mapping can
+pin its content identity. Use the released `Proteome.load/save` contract; keep
+annotated-only defaults unchanged. Validate the snapshot against the host,
+assembly and annotation before models run. Reject conflicting snapshots.
+
+Match host entries only, retaining every occurrence and the snapshot identity.
+CTA gene exclusions apply to annotated proteins, never automatically to extra
+ORFs. Keep complete ORF evidence and mapping history in the bundled snapshot.
+Use this same reference for native candidates and final construct audits;
+include its identity in replay decisions. Existing predictions must not silently
+acquire new self-reference semantics on reload. Bundle the snapshot beside
+native outputs with verified relative paths for offline relocation and replay.
+
+Test noncanonical-only matches, multiple placements, retained non-CTA sharing,
+viral layer separation, wrong references, corrupt/missing snapshots, and mixed
+native replay. Synthetic cases test the adapter, not species catalogue coverage.
+ORF definitions follow [Mudge et al. 2022](https://pmc.ncbi.nlm.nih.gov/articles/PMC9757701/).

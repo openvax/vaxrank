@@ -1032,6 +1032,8 @@ def require_annotations_for_template_reports(args, ranked):
 
 
 def add_external_rescoring_args(arg_parser):
+    arg_parser.add_argument('--host-reference', metavar='SNAPSHOT',
+                            help='Experimental: ORFdata host proteome snapshot, including selected extra ORFs.')
     arg_parser.add_argument('--host-species', metavar='SPECIES',
                             help='Experimental: host species name or NCBI taxonomy ID, e.g. mouse.')
     arg_parser.add_argument('--host-taxon-id', type=int,

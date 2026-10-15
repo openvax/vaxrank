@@ -35,6 +35,7 @@ class InputScope(DataclassSerializable):
     library_id: str | None = None
     host_taxon_id: int | None = None
     mhc_species: tuple[str, ...] | None = None
+    host_reference_sha256: str | None = None
 
     def __post_init__(self):
         if self.host_taxon_id is not None and (
@@ -42,6 +43,10 @@ class InputScope(DataclassSerializable):
             raise ValueError("host_taxon_id must be a positive integer NCBI taxonomy ID")
         if self.mhc_species is not None:
             object.__setattr__(self, 'mhc_species', normalize_mhc_species(self.mhc_species))
+        if self.host_reference_sha256 is not None and (
+                not isinstance(self.host_reference_sha256, str)
+                or not re.fullmatch('[0-9a-f]{64}', self.host_reference_sha256)):
+            raise ValueError('host_reference_sha256 must be a SHA-256')
 
     @classmethod
     def from_dict(cls, values):
@@ -52,7 +57,8 @@ SCOPE_FIELDS = tuple(f.name for f in fields(InputScope))
 DECLARATION_FIELDS = (*SCOPE_FIELDS, "host_species")
 SPECIES_FIELDS = ("host_taxon_id", "mhc_species")
 SPECIES_DECLARATIONS = (*SPECIES_FIELDS, "host_species")
-SHARED_FIELDS = ("patient_id", "reference_assembly", "annotation", "mhc_alleles", *SPECIES_FIELDS)
+SHARED_FIELDS = ("patient_id", "reference_assembly", "annotation", "mhc_alleles", *SPECIES_FIELDS,
+                 "host_reference_sha256")
 REQUIRED_POOLED_FIELDS = ("patient_id", "reference_assembly", "mhc_alleles")
 
 
@@ -72,7 +78,7 @@ class InputProvenance(DataclassSerializable):
 def scope_dict(scope):
     """Keep historical identities unchanged when no host taxon was declared."""
     result = asdict(scope)
-    for name in SPECIES_FIELDS:
+    for name in (*SPECIES_FIELDS, 'host_reference_sha256'):
         if result[name] is None:
             del result[name]
     return result
@@ -225,11 +231,20 @@ def read_input_manifest(path, *, include_direct=False):
         document = yaml.load(stream, Loader=_ManifestLoader)
     if not isinstance(document, dict) or document.get("schema") != MANIFEST_SCHEMA:
         raise ValueError(f"{path}: expected schema: {MANIFEST_SCHEMA}")
-    unknown = set(document) - {"schema", "inputs", "direct", *DECLARATION_FIELDS}
+    unknown = set(document) - {"schema", "inputs", "direct", "host_reference", *DECLARATION_FIELDS}
     if unknown:
         raise ValueError(f"{path}: unknown manifest fields: {sorted(unknown)}")
     shared = {k: v for k, v in document.items() if k in DECLARATION_FIELDS}
     shared_scope = scope_from_mapping(shared, str(path))
+    if 'host_reference' in document:
+        reference = document['host_reference']
+        if isinstance(reference, str) and reference.strip():
+            shared['host_reference'] = str((path.parent / reference).resolve())
+        elif (isinstance(reference, dict) and set(reference) == {'path', 'identity'}
+              and isinstance(reference['path'], str) and reference['path'].strip()):
+            shared['host_reference'] = {**reference, 'path': str((path.parent / reference['path']).resolve())}
+        else:
+            raise ValueError(f'{path}: host_reference requires a snapshot path or path/identity mapping')
     inputs = document.get("inputs")
     if not isinstance(inputs, list) or not inputs:
         raise ValueError(f"{path}: inputs must be a nonempty list")
@@ -258,7 +273,8 @@ def read_input_manifest(path, *, include_direct=False):
             if item['format'] != 'cta_expression':
                 raise ValueError(f'{location}: cta_expression options require a CTA expression input')
             options = item.get('cta_expression')
-            cta_expression_contract(options, scope_from_mapping(declarations, location), location)
+            cta_expression_contract(options, scope_from_mapping(
+                {k: v for k, v in declarations.items() if k != 'host_reference'}, location), location)
             options = dict(options)
             if 'hitlist_evidence_bundle' in options:
                 options['hitlist_evidence_bundle'] = str((path.parent / options['hitlist_evidence_bundle']).resolve())
@@ -285,6 +301,8 @@ def read_input_manifest(path, *, include_direct=False):
     direct_scope = scope_from_mapping(direct, f"{path}, direct input")
     combine_scopes(shared_scope, direct_scope, str(path), SHARED_FIELDS)
     if include_direct:
+        if 'host_reference' in shared:
+            raise ValueError('host_reference requires saved native VCF/BAM evidence as an epitopes input')
         declarations = {**shared, **{k: v for k, v in direct.items()
                                     if v is not None or k not in shared}}
         return specs, declarations

@@ -199,10 +199,17 @@ class SelfReferenceSource(DataclassSerializable):
     gene_name: str = ""
     species: str = ""
     transcript_biotype: str = ""
+    orf_id: str = ""
+    reference_entry: str = ""
+    reference_occurrence: int | None = None
 
     def __post_init__(self):
         if not self.gene_id:
             raise ValueError("Self-reference source requires a gene ID")
+        if self.reference_occurrence is not None and (
+                type(self.reference_occurrence) is not int or self.reference_occurrence < 0
+                or not self.reference_entry):
+            raise ValueError('Self-reference occurrence requires an entry and nonnegative index')
         object.__setattr__(
             self, "gene_id", normalize_ensembl_gene_id(self.gene_id)
         )
@@ -224,6 +231,7 @@ class SelfReferenceMatch(DataclassSerializable):
     sources: tuple[SelfReferenceSource, ...] = field(default_factory=tuple)
     source_provenance_complete: bool = False
     genome_release: str = ""
+    reference_sha256: str = ""
 
     def __post_init__(self):
         if self.antigen_kind not in ANTIGEN_KINDS:
@@ -243,7 +251,8 @@ class SelfReferenceMatch(DataclassSerializable):
                 "A provenance-complete match must agree with its source list"
             )
         excluded = set(excluded_gene_ids)
-        if any(source.gene_id in excluded for source in sources):
+        if any(source.gene_id in excluded and not (self.reference_sha256 and source.orf_id)
+               for source in sources):
             raise ValueError("Self-match sources cannot include excluded genes")
 
 

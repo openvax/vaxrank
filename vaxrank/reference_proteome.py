@@ -527,7 +527,7 @@ def genome_protein_dict(genome, exclude_gene_ids=None):
 def self_reference_matches(
         peptides: Iterable[str],
         antigen: VaccineAntigen,
-        genome) -> dict[str, SelfReferenceMatch]:
+        genome=None, *, host_reference=None) -> dict[str, SelfReferenceMatch]:
     """Find every retained Ensembl source of each exact peptide.
 
     The genome is traversed once for the batch. Source-gene exclusions come
@@ -535,6 +535,12 @@ def self_reference_matches(
     CTA source therefore cannot erase a match encoded by a retained non-CTA
     gene. With no genome, results remain explicitly provenance-incomplete.
     """
+    if host_reference is not None:
+        from .host_reference import HostReference
+        from .input_scope import InputScope
+        reference = HostReference.load(host_reference)
+        reference.validate(InputScope(), genome=genome)
+        return reference.matches(peptides, antigen)
     unique_peptides = tuple(dict.fromkeys(peptides))
     if not unique_peptides:
         return {}

@@ -134,6 +134,16 @@ def _canonical_native(value):
         return value
     result = {key: _canonical_native(item) for key, item in value.items()}
     metadata = result.get('__class__')
+    if metadata == dict(__module__='vaxrank.input_scope', __name__='InputScope'):
+        if result.get('host_reference_sha256') is None:
+            result.pop('host_reference_sha256', None)
+    if metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='SelfReferenceSource'):
+        for key in ('orf_id', 'reference_entry', 'reference_occurrence'):
+            if result.get(key) in ('', None):
+                result.pop(key, None)
+    if metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='SelfReferenceMatch'):
+        if not result.get('reference_sha256'):
+            result.pop('reference_sha256', None)
     prediction_tuple = (metadata == dict(__module__='builtins', __name__='tuple')
                         and result['__value__'] and all(
                             isinstance(item, dict) and item.get('__class__') ==
@@ -152,6 +162,8 @@ def design_digest(args, value):
 
 def _assembly_identity(args, ranked, options, context):
     definition = (_source_graph(ranked, options), asdict(options), context, args._construct_policy)
+    if args._design_dataset.host_reference is not None:
+        definition += (args._design_dataset.host_reference.identity,)
     return design_digest(args, definition)
 
 

@@ -44,6 +44,7 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
         return
     admission = from_native_json(admission_payload, CTAExpressionResult)
     regions = selected_regions(ranked, dataset)
+    mhc_species = next((p.scope.mhc_species for p in dataset.provenance if p.scope.mhc_species), None)
     products = products or {}
     sequences = {modality + ':' + p.name: p.cds_aa if modality == 'mrna' else p.sequence
                  for modality, records in products.items() for p in records or ()}
@@ -89,7 +90,9 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
                             modifications.append(ConstructChemicalModification(offset, offset, label, evidence))
                 record = ConstructSequence(name, sequence, modality, evidence,
                                            chemical_modifications=tuple(modifications), **mapping)
-                product_audits.append(audit_construct_sequence(record, predictor, genome=args.genome))
+                product_audits.append(audit_construct_sequence(
+                    record, predictor, genome=args.genome, host_reference=dataset.host_reference,
+                    mhc_species=mhc_species))
         audit['product_audits'] = tuple(product_audits)
         emitted_names = {name for records in products.values() for p in records for name in p.antigen_names}
         audit['assembly_coverage'] = dict(
@@ -102,7 +105,8 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
             audit['native_region_audits'] = tuple(audit_construct_sequence(
                 ConstructSequence(r['name'], r['sequence'], 'peptide', evidence,
                                   native_antigen=r['antigen'], native_start=r['start'], native_end=r['end']),
-                predictor, genome=args.genome) for r in regions)
+                predictor, genome=args.genome, host_reference=dataset.host_reference,
+                mhc_species=mhc_species) for r in regions)
             requested = {name: sequence for name, sequence in sequences.items() if name not in unsupported}
             if requested:
                 frame = predictor.predict_from_named_sequences(requested)

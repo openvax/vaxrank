@@ -89,8 +89,15 @@ def external_input_specs(args):
         if inputs:
             raise ValueError("--input-manifest cannot be combined with other input flags; "
                              "list every file in the manifest")
-        return [(fmt, path, with_species_declarations(scope, species_scope, path))
-                for fmt, path, scope in read_input_manifest(manifest)]
+        specs = [(fmt, path, with_species_declarations(scope, species_scope, path))
+                 for fmt, path, scope in read_input_manifest(manifest)]
+        reference = getattr(args, 'host_reference', None)
+        if reference is not None:
+            from .host_reference import combine_host_references
+            for _, _, scope in specs:
+                combine_host_references((scope.get('host_reference'), reference))
+                scope['host_reference'] = reference
+        return specs
     specs = []
     for fmt, path in inputs:
         declarations = {}
@@ -101,6 +108,9 @@ def external_input_specs(args):
                 sample_id=getattr(args, 'cta_sample_id', None),
                 cta_expression=cta_options_from_args(args))
         specs.append((fmt, path, with_species_declarations(declarations, species_scope, path)))
+    if getattr(args, 'host_reference', None) is not None:
+        for _, _, scope in specs:
+            scope['host_reference'] = args.host_reference
     return specs
 
 
@@ -401,7 +411,7 @@ def _observed_alleles(report):
 
 def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, alleles=(),
                  antigen_predictor_factory=None, antigen_alleles=(), epitope_config=None,
-                 prepared_reports=(), cta_admission_writer=None):
+                 prepared_reports=(), cta_admission_writer=None, host_reference=None):
     """Validate every input before predicting new sequences or scoring evidence.
 
     Experimental ``antigens`` and admitted ``cta_expression`` inputs need an ``antigen_predictor_factory``
@@ -412,14 +422,37 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
     from .antigen_input import AntigenDataset, antigen_report
     from .cta_input import CTAExpressionSource, predict_cta_source
     from .input_scope import InputScope
+    from .host_reference import combine_host_references
     inputs = list(inputs)
     if scopes is None:
         scopes = [{} for _ in inputs]
     if len(scopes) != len(inputs):
         raise ValueError("Each external input must have its own scope declaration")
     reports, seen, pending = list(prepared_reports), set(), []
+    # Read native evidence once, before predicting sequences. Its frozen host
+    # reference applies equally when the native input appears last in a batch.
+    native = {}
+    for index, (fmt, path) in enumerate(inputs):
+        if fmt == 'epitopes':
+            producer = report_declarations(path, fmt)
+            native[index] = (READERS[fmt](path, score_epitopes=False), producer)
+    host_reference = combine_host_references([
+        host_reference, *(s.get('host_reference') for s in scopes),
+        *(r.dataset.host_reference for r, _ in native.values() if r.dataset is not None),
+        *(r.dataset.host_reference for r in reports if r.dataset is not None)])
+    if host_reference is not None:
+        resolved = []
+        for (fmt, path), declarations in zip(inputs, scopes):
+            if fmt not in ('antigens', 'cta_expression', 'epitopes'):
+                raise ValueError(f'{path}: host_reference currently requires native antigens or epitopes')
+            options = {k: v for k, v in declarations.items() if k in ('exacto', 'cta_expression')}
+            scope = scope_from_mapping({k: v for k, v in declarations.items()
+                                        if k not in (*options, 'host_reference')}, str(path))
+            resolved.append({**scope_dict(host_reference.validate(scope, genome=genome, location=str(path))),
+                             **options})
+        scopes = resolved
     native_scopes = []
-    for (fmt, path), declarations in zip(inputs, scopes):
+    for input_index, ((fmt, path), declarations) in enumerate(zip(inputs, scopes)):
         if fmt not in INPUT_FORMATS:
             raise ValueError("Unsupported external format: %s" % fmt)
         content = Path(path).read_bytes()
@@ -446,7 +479,7 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
                 source = replace(source, scope=combine_scopes(source.scope, declared, str(path)))
                 provenance = source.prediction_provenance(
                     genome=genome, path=path, manifest_path=manifest_path,
-                    manifest_declarations=declarations)
+                    manifest_declarations=declarations, host_reference=host_reference)
             pending.append((len(reports), source, provenance))
             reports.append(None)
             continue
@@ -457,8 +490,9 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
         # Legacy native readers reconstruct their table from candidate payloads.
         # Capture explicit table declarations before that adaptation drops them.
         if fmt == 'epitopes':
-            producer_scope, producer_declarations = report_declarations(path, fmt)
-        report = READERS[fmt](path, **reader_kwargs)
+            report, (producer_scope, producer_declarations) = native[input_index]
+        else:
+            report = READERS[fmt](path, **reader_kwargs)
         if fmt != 'epitopes':
             producer_scope, producer_declarations = report_declarations(
                 path, fmt, frame=report.dataset.result.df if report.dataset is not None else None)
@@ -486,6 +520,11 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             manifest_declarations=dict(declarations), report_declarations=producer_declarations,
             observed_mhc_alleles=observed)
         reports.append(_namespace_report(report, provenance))
+        if host_reference is not None:
+            retained = report.dataset.host_reference if report.dataset is not None else None
+            if retained is None:
+                raise ValueError(f'{path}: saved predictions have no host_reference; '
+                                 'predict the source antigens with the selected reference first')
     loaded = [report for report in reports if report is not None]
     shared_scope = validate_input_scopes(
         [report.input_provenance for report in loaded] + [p for _, _, p in pending],
@@ -515,10 +554,12 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
         predictor = antigen_predictor_factory(shared_scope) if needs_prediction else None
         for index, source, provenance in pending:
             if isinstance(source, CTAExpressionSource):
-                reports[index] = predict_cta_source(source, predictor, genome=genome, epitope_config=config)
+                reports[index] = predict_cta_source(source, predictor, genome=genome, epitope_config=config,
+                                                    host_reference=host_reference)
             else:
                 reports[index] = antigen_report(source, predictor, genome=genome,
-                                                provenance=provenance, config=config)
+                                                provenance=provenance, config=config,
+                                                host_reference=host_reference)
     # Persist the scope that passed batch validation, including on each saved
     # candidate, so constituent reports can also be replayed independently.
     for index, report in enumerate(reports):
@@ -598,7 +639,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
                     alleles=(), input_predictions_path=None, scopes=None,
                     manifest_path=None, genome=None, model_factory=None,
                     prepared_reports=(), use_flanks=True, prediction_prefix=None,
-                    antigen_predictor_factory=None, antigen_alleles=()):
+                    antigen_predictor_factory=None, antigen_alleles=(), host_reference=None):
     """Read once and score with fresh common models or source input values."""
     from topiary import is_stated
     if mode not in ('input', 'fresh', 'additive'):
@@ -611,7 +652,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
     reports = read_reports(
         inputs, scopes=scopes, manifest_path=manifest_path, genome=genome, alleles=alleles,
         antigen_predictor_factory=antigen_predictor_factory, antigen_alleles=antigen_alleles,
-        epitope_config=epitope_config, prepared_reports=prepared_reports)
+        epitope_config=epitope_config, prepared_reports=prepared_reports, host_reference=host_reference)
     _validate_report_scopes(reports, genome=genome, alleles=alleles)
     epitope_config = report_config(reports, epitope_config)
     policy_evaluations = []
@@ -721,6 +762,9 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
         result = TopiaryResult(scoring)
     dataset = EpitopeDataset.from_predictions(
         scored, result=result, config=epitope_config, policy_evaluations=policy_evaluations)
+    from .host_reference import combine_host_references
+    dataset.host_reference = combine_host_references(
+        r.dataset.host_reference for r in updated if r.dataset is not None)
     dataset.provenance = tuple(p for r in updated for p in (
         r.dataset.provenance if r.dataset is not None else (r.input_provenance,)))
     dataset.antigens = {key: antigen for r in updated if r.dataset is not None

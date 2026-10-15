@@ -220,7 +220,29 @@ class NativeReferences:
         operation = self._decode_genome if decode else self._encode_genome
         def native(value):
             return json.dumps(self._walk(_json_loads(value), operation)) if value is not None else None
-        payload = deepcopy(payload)
+        host_reference = payload.get('host_reference')
+        payload = deepcopy({key: value for key, value in payload.items() if key != 'host_reference'})
+        if host_reference is not None:
+            from .host_reference import HostReference
+            if decode:
+                if not isinstance(host_reference, dict) or set(host_reference) != {'path', 'sha256', 'size', 'identity'}:
+                    raise ValueError('Malformed native host reference resource')
+                source = self._relative_path(host_reference['path'])
+                if (not source.is_file() or source.stat().st_size != host_reference['size']
+                        or self._file_digest(source) != host_reference['sha256']):
+                    raise ValueError(f'Native host reference is missing or corrupt: {source}')
+                payload['host_reference'] = HostReference.load({
+                    'path': source, 'identity': host_reference['identity']})
+            else:
+                host_reference = HostReference.load(host_reference)
+                # ORFdata writes deterministic snapshots. Bundle once, then use
+                # the same verified relative-resource transport as annotations.
+                self.root.mkdir(parents=True, exist_ok=True)
+                with tempfile.TemporaryDirectory(dir=self.root) as temporary:
+                    source = Path(temporary) / 'host.proteome.json.gz'
+                    host_reference.save(source)
+                    resource = self._bundle_file(source)
+                payload['host_reference'] = dict(resource, identity=host_reference.identity)
         for field in ("epitopes", "provenance"):
             payload[field] = [native(value) for value in payload[field]]
         for field in ("antigens", "mutation_fragments"):
