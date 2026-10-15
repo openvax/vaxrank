@@ -1,8 +1,10 @@
 """Exact processing evidence and coverage, without a biological verdict."""
 
 from dataclasses import FrozenInstanceError, replace
+import json
 
-from mhctools.cleavage import CleavageInput, CleavageModel, CleavageResult, CleavageSite
+from mhctools import PeptideInput
+from mhctools.cleavage import CleavageModel, CleavageResult, CleavageSite
 import pytest
 
 from vaxrank.cleavage_profile import (
@@ -30,7 +32,7 @@ MOTIF_MODEL = replace(
 
 
 def profile(sequence="ACDEFG", scores=(.1, .2, .3, .4, .5, 0.), **kw):
-    return profile_from_residue_scores(CleavageInput(sequence), MODEL, scores, **kw)
+    return profile_from_residue_scores(PeptideInput(sequence), MODEL, scores, **kw)
 
 
 def test_every_internal_bond_retained_and_endpoint_not_counted():
@@ -78,7 +80,7 @@ def test_no_internal_bond_is_not_a_negative_cleavage_prediction():
 
 
 def test_partial_motif_rule_preserves_native_semantics_and_unknown_bonds():
-    result = CleavageResult(CleavageInput("ACDEFG"), MOTIF_MODEL,
+    result = CleavageResult(PeptideInput("ACDEFG"), MOTIF_MODEL,
                             (CleavageSite(5, "not_matched", "limited terminal rule"),))
     p = profile_from_cleavage_result(result)
     assert p.status == "observations_returned"
@@ -90,7 +92,7 @@ def test_partial_motif_rule_preserves_native_semantics_and_unknown_bonds():
 
 
 def test_unsupported_chemistry_remains_explicit():
-    result = CleavageResult(CleavageInput("ACDE", n_term="acetylated"), MODEL,
+    result = CleavageResult(PeptideInput("ACDE", n_term="acetylated"), MODEL,
                             unsupported_reason="model excludes acetylation")
     p = profile_from_cleavage_result(result)
     assert p.status == "unassessed" and p.unassessed_bonds == (1, 2, 3)
@@ -102,13 +104,25 @@ def test_native_roundtrip_preserves_all_nested_types_and_provenance():
                 model_asset_sha256="a" * 64, upstream_context=8, downstream_context=8)
     restored = from_native_json(to_native_json(p), CleavageProfile)
     assert restored == p
-    assert isinstance(restored.peptide, CleavageInput)
+    assert isinstance(restored.peptide, PeptideInput)
     assert isinstance(restored.model, CleavageModel)
     assert all(isinstance(site, CleavageSite) for site in restored.sites)
     interval = p.interval_evidence(1, 5)
     assert from_native_json(to_native_json(interval), type(interval)) == interval
     with pytest.raises(FrozenInstanceError):
         restored.status = "unassessed"
+
+
+def test_archived_cleavage_input_loads_as_peptide_input():
+    old = json.loads(to_native_json(PeptideInput(
+        "ACDE", source_sequence_name="parent", source_start=37)))
+    old["__class__"] = {"__module__": "mhctools.cleavage", "__name__": "CleavageInput"}
+    old["source_id"] = old.pop("source_sequence_name")
+    for field in ("attachments", "occurrence_id", "source_gene", "source_species",
+                  "context", "schema_version"):
+        old.pop(field)
+    assert from_native_json(json.dumps(old), PeptideInput) == PeptideInput(
+        "ACDE", source_sequence_name="parent", source_start=37)
 
 
 @pytest.mark.parametrize("updates", [
@@ -129,7 +143,7 @@ def test_repeated_motifs_retain_distinct_context_bonds():
 
 def test_source_offsets_and_terminal_chemistry_survive_roundtrip():
     result = CleavageResult(
-        CleavageInput("ACDE", c_term="amidated", source_id="parent", source_start=37), MODEL,
+        PeptideInput("ACDE", c_term="amidated", source_sequence_name="parent", source_start=37), MODEL,
         unsupported_reason="unsupported chemistry")
     p = profile_from_cleavage_result(result)
     assert from_native_json(to_native_json(p), CleavageProfile) == p
@@ -138,7 +152,7 @@ def test_source_offsets_and_terminal_chemistry_survive_roundtrip():
 @pytest.mark.parametrize("score", [-2., 400.])
 def test_native_quantitative_scores_are_not_forced_into_probability_bounds(score):
     model = replace(MODEL, score_name="native_activity", score_units="native_units")
-    result = CleavageResult(CleavageInput("ACDE"), model,
+    result = CleavageResult(PeptideInput("ACDE"), model,
                             (CleavageSite(2, "scored", "fixture native output", score),))
     p = profile_from_cleavage_result(result)
     assert p.sites[0].score == score

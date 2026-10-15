@@ -146,7 +146,7 @@ def main(output, processing=False):
         (output / 'comparison.json').write_text(json.dumps(manifest, indent=2) + '\n')
         if processing:
             from mhctools import MHCflurry
-            from mhctools.cleavage import CleavageInput
+            from mhctools import PeptideInput
             model = MHCflurry(alleles=documented['prediction_alleles'],
                              default_peptide_lengths=documented['prediction_peptide_lengths'],
                              presentation_allele_mode='per_allele')
@@ -154,7 +154,7 @@ def main(output, processing=False):
             contexts = {str(i): r.top_protein_sequence.amino_acids for i, (r, _) in enumerate(cache.values())}
             fresh_frame = fresh.predict_from_named_sequences(contexts)
             TopiaryResult(fresh_frame).to_tsv(output / 'mhcflurry-evidence.tsv')
-            profiles = audit_pepsickle_inputs([CleavageInput(seq, source_id=name)
+            profiles = audit_pepsickle_inputs([PeptideInput(seq, source_sequence_name=name)
                                                for name, seq in contexts.items()])
             (output / 'pepsickle-evidence.json').write_text(json.dumps([asdict(p) for p in profiles], indent=2))
             for i, (key, (result, config)) in enumerate(cache.items()):

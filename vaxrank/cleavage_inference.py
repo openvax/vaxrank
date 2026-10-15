@@ -12,7 +12,8 @@ from numbers import Real
 from pathlib import Path
 
 import mhctools
-from mhctools.cleavage import CleavageInput, CleavageModel
+from mhctools import PeptideInput
+from mhctools.cleavage import CleavageModel
 
 from .cleavage_profile import (
     CleavageProfile, profile_from_cleavage_result, profile_from_residue_scores,
@@ -21,8 +22,8 @@ from .cleavage_profile import (
 
 def _inputs(peptides):
     peptides = tuple(peptides)
-    if any(not isinstance(p, CleavageInput) for p in peptides):
-        raise ValueError("Processing audit requires explicit mhctools CleavageInput records")
+    if any(not isinstance(p, PeptideInput) for p in peptides):
+        raise ValueError("Processing audit requires explicit mhctools PeptideInput records")
     return peptides
 
 

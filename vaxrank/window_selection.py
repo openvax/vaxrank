@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, replace
 import math
 
 import msgspec
-from mhctools.cleavage import CleavageInput
+from mhctools import PeptideInput
 from mhctools.peptidases import get_cleavage_model
 
 from .cleavage_inference import audit_peptidase_inputs
@@ -62,7 +62,7 @@ def window_metrics(peptide, policy, *, n_term='free', c_term='free'):
     profiles = ()
     cuts = set()
     if policy.serum_weight:
-        substrate = CleavageInput(peptide.amino_acids, n_term=n_term, c_term=c_term)
+        substrate = PeptideInput(peptide.amino_acids, n_term=n_term, c_term=c_term)
         profiles = tuple(audit_peptidase_inputs([substrate], get_cleavage_model(name))[0]
                          for name in policy.serum_models)
         for profile in profiles:

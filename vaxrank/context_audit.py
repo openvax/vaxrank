@@ -5,7 +5,8 @@
 
 from dataclasses import dataclass, field, replace
 import mhctools
-from mhctools.cleavage import CleavageInput, CleavageModel
+from mhctools import PeptideInput
+from mhctools.cleavage import CleavageModel
 from serializable import DataclassSerializable
 from topiary import TopiaryPredictor
 
@@ -265,7 +266,7 @@ def audit_sequence_contexts(contexts, *, mhc_predictor=None, mhc_requests=(),
             else:
                 # Source metadata cannot change the native enzyme prediction.
                 # Score each chemistry/sequence once, then restore occurrences.
-                key = CleavageInput(peptide.sequence, n_term=peptide.n_term, c_term=peptide.c_term)
+                key = PeptideInput(peptide.sequence, n_term=peptide.n_term, c_term=peptide.c_term)
                 by_input.setdefault(key, None)
                 pending.append((i, peptide, key))
         if by_input:

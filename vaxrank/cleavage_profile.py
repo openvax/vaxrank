@@ -14,7 +14,8 @@ import math
 from numbers import Real
 from typing import Optional
 
-from mhctools.cleavage import CleavageInput, CleavageModel, CleavageResult, CleavageSite
+from mhctools import PeptideInput
+from mhctools.cleavage import CleavageModel, CleavageResult, CleavageSite
 from serializable import DataclassSerializable
 
 
@@ -28,7 +29,7 @@ class CleavageProfile(DataclassSerializable):
     Native model scores and qualitative motif decisions remain distinct.
     """
 
-    peptide: CleavageInput
+    peptide: PeptideInput
     model: CleavageModel
     status: str
     sites: tuple[CleavageSite, ...] = field(default_factory=tuple)
@@ -41,7 +42,7 @@ class CleavageProfile(DataclassSerializable):
     padded_bonds: tuple[int, ...] = field(default_factory=tuple)
 
     def __post_init__(self):
-        if not isinstance(self.peptide, CleavageInput) or not isinstance(self.model, CleavageModel):
+        if not isinstance(self.peptide, PeptideInput) or not isinstance(self.model, CleavageModel):
             raise ValueError("Cleavage profile requires typed mhctools input and model")
         if any(not isinstance(value, str) for value in (
                 self.error_message, self.backend_version, self.model_asset_sha256)):

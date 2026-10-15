@@ -62,7 +62,7 @@ def test_distinct_context_scores_and_repeated_source_provenance_are_not_merged()
     assert predictor.calls == [{"context_0": NATIVE, "context_1": JLF}]
     assert audits[0].profiles[0].sites[0].score == .2
     assert audits[1].profiles[0].sites[0].score == .8
-    assert audits[1].profiles[0].peptide.source_id != audits[2].profiles[0].peptide.source_id
+    assert audits[1].profiles[0].peptide.source_sequence_name != audits[2].profiles[0].peptide.source_sequence_name
     assert [len(a.ligands) for a in audits] == [14, 16, 16]
     assert all(a.coverage[0][2] == () for a in audits)
     assert audits[1].context.construct.native_residue_offsets[-2:] == (None, None)
@@ -266,7 +266,7 @@ def test_enzyme_inference_deduplicates_chemistry_without_losing_source_occurrenc
                                                 peptidase_predictors=[enzyme])
     assert predict.call_count == 1
     assert first.profiles[0].sites == second.profiles[0].sites
-    assert first.profiles[0].peptide.source_id != second.profiles[0].peptide.source_id
+    assert first.profiles[0].peptide.source_sequence_name != second.profiles[0].peptide.source_sequence_name
 
 
 def test_complete_product_without_placements_is_not_claimed_to_have_no_targets():
