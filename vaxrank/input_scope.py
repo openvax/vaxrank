@@ -303,14 +303,18 @@ def normalize_scope_columns(frame, location):
             if cells.missing(value):
                 values.append(None)
                 continue
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                except ValueError as error:
+                    if name.endswith('host_taxon_id'):
+                        raise ValueError(f'{location}: invalid {name}: {value!r}') from error
+                else:
+                    if name.endswith('host_taxon_id') or isinstance(parsed, (Real, bool)):
+                        value = parsed
             if not name.endswith('host_taxon_id') and isinstance(value, (str, list, tuple)):
                 values.append(value)
                 continue
-            if isinstance(value, str):
-                try:
-                    value = json.loads(value)
-                except ValueError as error:
-                    raise ValueError(f'{location}: invalid {name}: {value!r}') from error
             if isinstance(value, Integral) and not isinstance(value, bool):
                 value = int(value)
             elif (isinstance(value, Real) and not isinstance(value, bool)

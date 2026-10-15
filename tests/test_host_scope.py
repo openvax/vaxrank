@@ -368,6 +368,7 @@ def test_sparse_species_alias_columns_load_and_validate_alleles(tmp_path, host, 
     report = read_reports([('topiary', path)])[0]
     scope = report.input_provenance.scope
     assert scope == InputScope(host_taxon_id=10090, mhc_species=['human'])
+    assert report_declarations(path, 'topiary')[0] == scope
     frame['allele'] = ['H2-Kb', 'H2-Kb']
     frame.to_csv(path, sep='\t', index=False)
     with pytest.raises(ValueError, match='conflicts with mhc_species'):
