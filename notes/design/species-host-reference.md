@@ -76,3 +76,11 @@ Reference-selection follow-up: honor the species of `--genome` when applying
 `--ensembl-release`, reject incompatible assemblies, and test fresh HLA-mouse
 antigen CLI loading with the actual resolver. Keep the human default only when
 no genome is supplied. Document the mouse annotation flags explicitly.
+
+Input simplification: use `host_species: mouse` and `mhc_species: human` in
+ordinary examples. Accept common/scientific names and taxonomy IDs at the
+boundary; require a list only for multiple MHC species. `host_species` is an
+input alias for the existing canonical host taxon, not a second stored claim.
+Keep canonical IDs and sorted MHC tuples internally so aliases, existing native
+archives and input identities remain equivalent. Reject conflicting aliases.
+Exercise manifest, API, CLI and sparse table inputs through export/replay.

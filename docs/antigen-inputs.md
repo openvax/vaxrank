@@ -119,32 +119,28 @@ writing requested admission records.
 
 ## Declare the host species (experimental draft)
 
-The draft integration for [#625](https://github.com/openvax/vaxrank/issues/625)
-adds an optional top-level `host_taxon_id` to the manifest:
+Declare a host by name. For an ordinary mouse, this is enough:
 
 ```yaml
-host_taxon_id: 9606  # NCBI taxonomy ID for the human patient
+host_species: mouse
 ```
 
-It must agree with every input's host declaration and the selected annotation.
-MHCgnomes checks declared, observed and requested alleles against the known
-host species, including broader allele groups such as DLA. Antigen source
-species remain separate, so viral sequences can belong to a human design.
-
-For an HLA mouse, declare the intended MHC repertoire separately:
+For an HLA mouse, add the intended MHC species:
 
 ```yaml
-host_taxon_id: 10090
-reference_assembly: GRCm38
-mhc_species: [human]  # Use [human, mouse] when targeting both HLA and H2.
-mhc_alleles: ["HLA-A*02:01"]
+host_species: mouse
+mhc_species: human
 ```
 
-`mhc_species` lists concrete species recognized by MHCgnomes. It permits those
-allele species; it does not change the host annotation or add donor/transgene
-sequences to the self reference. Declare only the alleles intended for the
-experiment. Host and MHC declarations survive native export and offline replay.
-The same CLI options are `--host-taxon-id 10090 --mhc-species human`.
+Only use a list when targeting multiple MHC species: `mhc_species: [human, mouse]`.
+Both fields accept common names, scientific names or NCBI taxonomy IDs;
+`host_taxon_id` remains an alias. Equivalent declarations normalize to the same
+stored identity. The CLI equivalent is `--host-species mouse --mhc-species human`.
+The API accepts the same declarations through `InputScope.from_dict(...)`.
+
+The host must agree with annotation; declared and observed alleles must match
+the intended MHC species. Antigen source species remain separate, allowing
+viral sequences in a human or mouse design. Declarations survive native replay.
 For fresh mouse predictions, select mouse annotation with
 `--genome GRCm38 --ensembl-release 93` (or another matching build/release).
 
@@ -152,8 +148,8 @@ Producer tables may leave host cells blank. Integer-valued numeric taxon cells
 are normalized when read; fractional IDs and booleans are rejected. Manifest
 and API taxon IDs must be positive integers.
 
-This declaration does not enable nonhuman CTA admission or add extra ORFs to
-the self reference. Those adapters depend on the upstream work linked in #625.
+Donor/transgene sequences and extra ORFs still need explicit self-reference
+integration, tracked in [#625](https://github.com/openvax/vaxrank/issues/625).
 Current CTA expression admission remains human-only. Inputs without new scope
 fields keep their historical identities; known host annotation still enables
 species checks.

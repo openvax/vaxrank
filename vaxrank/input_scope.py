@@ -43,9 +43,15 @@ class InputScope(DataclassSerializable):
         if self.mhc_species is not None:
             object.__setattr__(self, 'mhc_species', normalize_mhc_species(self.mhc_species))
 
+    @classmethod
+    def from_dict(cls, values):
+        return scope_from_mapping(values, 'Input scope')
+
 
 SCOPE_FIELDS = tuple(f.name for f in fields(InputScope))
+DECLARATION_FIELDS = (*SCOPE_FIELDS, "host_species")
 SPECIES_FIELDS = ("host_taxon_id", "mhc_species")
+SPECIES_DECLARATIONS = (*SPECIES_FIELDS, "host_species")
 SHARED_FIELDS = ("patient_id", "reference_assembly", "annotation", "mhc_alleles", *SPECIES_FIELDS)
 REQUIRED_POOLED_FIELDS = ("patient_id", "reference_assembly", "mhc_alleles")
 
@@ -87,14 +93,32 @@ def normalize_alleles(values, location):
         raise ValueError(f"{location}: invalid mhc_alleles: {error}") from error
 
 
+def normalize_host_species(value):
+    """Resolve a name or taxonomy ID to the canonical host taxon."""
+    from orfdata.reference import species_taxon
+    if isinstance(value, str):
+        value = value.strip()
+        value = int(value) if value.isdecimal() else species_taxon(value)
+    if type(value) is not int or value < 1:
+        raise ValueError('host_species requires a known species name or positive NCBI taxonomy ID')
+    return value
+
+
 def normalize_mhc_species(values):
     """Resolve an explicit repertoire, including transgenic/chimeric animals."""
     from mhcgnomes import Species
+    if isinstance(values, (str, int)):
+        values = [values]
     if not isinstance(values, (list, tuple)) or not values:
-        raise ValueError('mhc_species must be a nonempty list of concrete species names')
+        raise ValueError('mhc_species requires a species name or taxonomy ID, or a nonempty list')
     result = set()
     for value in values:
-        species = Species.get(value.replace('_', ' ').capitalize()) if isinstance(value, str) else None
+        if isinstance(value, str):
+            value = value.strip()
+            if value.isdecimal():
+                value = int(value)
+        species = (_species_for_taxon(value) if type(value) is int else
+                   Species.get(value.replace('_', ' ').capitalize()) if isinstance(value, str) else None)
         if species is None or species.is_group:
             raise ValueError(f'mhc_species requires a known concrete species, got {value!r}')
         result.add(species.name)
@@ -102,7 +126,8 @@ def normalize_mhc_species(values):
 
 
 def species_scope_from_args(args):
-    return InputScope(**{name: getattr(args, name, None) for name in SPECIES_FIELDS})
+    return scope_from_mapping(
+        {name: getattr(args, name, None) for name in SPECIES_DECLARATIONS}, 'CLI species')
 
 
 def validate_prediction_species(args, references, alleles, location):
@@ -120,7 +145,7 @@ def validate_prediction_species(args, references, alleles, location):
 def with_species_declarations(declarations, scope, location):
     """Apply CLI assertions without replacing manifest or adapter options."""
     existing = scope_from_mapping(
-        {k: v for k, v in declarations.items() if k in SPECIES_FIELDS}, location)
+        {k: v for k, v in declarations.items() if k in SPECIES_DECLARATIONS}, location)
     combined = combine_scopes(existing, scope, location, SPECIES_FIELDS)
     return {**declarations, **{k: list(v) if isinstance(v, tuple) else v
                               for k, v in scope_dict(combined).items()
@@ -129,6 +154,15 @@ def with_species_declarations(declarations, scope, location):
 
 def scope_from_mapping(values, location):
     """Validate declaration types without guessing missing identifiers."""
+    values = dict(values)
+    host_species = values.pop('host_species', None)
+    if host_species is not None:
+        taxon = normalize_host_species(host_species)
+        declared = values.get('host_taxon_id')
+        if declared is not None and declared != taxon:
+            raise ValueError(f'{location}: conflicting host_species and host_taxon_id')
+        if declared is None:
+            values['host_taxon_id'] = taxon
     normalized = {}
     for name, value in values.items():
         if name not in SCOPE_FIELDS:
@@ -189,10 +223,10 @@ def read_input_manifest(path, *, include_direct=False):
         document = yaml.load(stream, Loader=_ManifestLoader)
     if not isinstance(document, dict) or document.get("schema") != MANIFEST_SCHEMA:
         raise ValueError(f"{path}: expected schema: {MANIFEST_SCHEMA}")
-    unknown = set(document) - {"schema", "inputs", "direct", *SCOPE_FIELDS}
+    unknown = set(document) - {"schema", "inputs", "direct", *DECLARATION_FIELDS}
     if unknown:
         raise ValueError(f"{path}: unknown manifest fields: {sorted(unknown)}")
-    shared = {k: v for k, v in document.items() if k in SCOPE_FIELDS}
+    shared = {k: v for k, v in document.items() if k in DECLARATION_FIELDS}
     shared_scope = scope_from_mapping(shared, str(path))
     inputs = document.get("inputs")
     if not isinstance(inputs, list) or not inputs:
@@ -202,7 +236,7 @@ def read_input_manifest(path, *, include_direct=False):
         location = f"{path}, input {index}"
         if not isinstance(item, dict):
             raise ValueError(f"{location}: expected an input object")
-        unknown = set(item) - {"format", "path", "exacto", "cta_expression", *SCOPE_FIELDS}
+        unknown = set(item) - {"format", "path", "exacto", "cta_expression", *DECLARATION_FIELDS}
         if unknown:
             raise ValueError(f"{location}: unknown input fields: {sorted(unknown)}")
         from .external_rescoring import INPUT_FORMATS
@@ -210,7 +244,7 @@ def read_input_manifest(path, *, include_direct=False):
             raise ValueError(f"{location}: format must be one of {', '.join(INPUT_FORMATS)}")
         if not isinstance(item.get("path"), str) or not item["path"].strip():
             raise ValueError(f"{location}: path must be a nonempty string")
-        local = {k: v for k, v in item.items() if k in SCOPE_FIELDS}
+        local = {k: v for k, v in item.items() if k in DECLARATION_FIELDS}
         local_scope = scope_from_mapping(local, location)
         # Shared patient/reference/genotype assertions cannot be overridden.
         # Sample/timepoint/library defaults can differ between inputs.
@@ -261,13 +295,16 @@ def normalize_scope_columns(frame, location):
     Pandas promotes an integer column with blanks to floats. Normalize that
     representation here, leaving manifest/API validation strictly typed.
     """
-    for name in ('host_taxon_id', 'input_host_taxon_id'):
+    for name in (*SPECIES_DECLARATIONS, *("input_" + n for n in SPECIES_DECLARATIONS)):
         if name not in frame:
             continue
         values = []
         for value in frame[name]:
             if cells.missing(value):
                 values.append(None)
+                continue
+            if not name.endswith('host_taxon_id') and isinstance(value, (str, list, tuple)):
+                values.append(value)
                 continue
             if isinstance(value, str):
                 try:
@@ -297,11 +334,11 @@ def report_declarations(path, source_format, *, frame=None):
     if frame is None:
         frame = pd.read_csv(path, sep="\t", dtype=str,
                            keep_default_na=False,
-                           usecols=lambda name: name in (*SCOPE_FIELDS, "origin_descriptor"))
+                           usecols=lambda name: name in (*DECLARATION_FIELDS, "origin_descriptor"))
     normalize_scope_columns(frame, str(path))
     result = {}
     resolved = InputScope()
-    for name in SCOPE_FIELDS:
+    for name in DECLARATION_FIELDS:
         if name not in frame:
             continue
         values = []
@@ -309,8 +346,10 @@ def report_declarations(path, source_format, *, frame=None):
             if not cells.missing(value) and value not in values:
                 values.append(value)
         for value in values:
-            parsed = (json.loads(value) if name in {"mhc_alleles", "mhc_species"} and isinstance(value, str)
-                      else value)
+            parsed = value
+            if name in {"mhc_alleles", "mhc_species"} and isinstance(value, str):
+                if name == 'mhc_alleles' or value.lstrip().startswith(('[', '"')):
+                    parsed = json.loads(value)
             claim = scope_from_mapping({name: parsed}, str(path))
             resolved = combine_scopes(resolved, claim, str(path))
         if values:

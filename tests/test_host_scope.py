@@ -98,7 +98,7 @@ def test_host_conflict_fails_before_predictor_or_output(inputs, dependencies, tm
 @pytest.mark.parametrize('modality', ['peptide', 'mrna'])
 @pytest.mark.parametrize('host,taxon,assembly,mhc_species', [
     ('homo_sapiens', 9606, 'GRCh38', None),
-    ('mus_musculus', 10090, 'GRCm38', ['human']),
+    ('mus_musculus', 10090, 'GRCm38', 'human'),
 ])
 def test_viral_source_keeps_human_host_through_design_and_offline_replay(
         inputs, dependencies, tmp_path, monkeypatch, modality, host, taxon, assembly, mhc_species):
@@ -110,7 +110,7 @@ def test_viral_source_keeps_human_host_through_design_and_offline_replay(
     viral = replace(inputs, antigens={'viral': inputs.antigens['viral']},
                     scope=replace(inputs.scope, reference_assembly=assembly))
     viral.save(tmp_path / 'virus.json')
-    path = write_manifest(tmp_path, [('antigens', 'virus.json')], host_taxon_id=taxon, mhc_species=mhc_species)
+    path = write_manifest(tmp_path, [('antigens', 'virus.json')], host_species=host, mhc_species=mhc_species)
     output = tmp_path / 'design'
     run_cli(['--input-manifest', str(path), '--ensembl-release', '93',
              '--mhc-predictor', 'random'] + design_options(output, modality))
@@ -229,7 +229,7 @@ def test_hla_mouse_explicit_repertoire_preserves_mouse_reference(tmp_path, allel
         validate_input_scopes([report.input_provenance], prediction_alleles=['DLA-88*508:01'])
 
 
-@pytest.mark.parametrize('species', [[], 'human', ['unknown species'], ['Canis sp.'], [9606], [None]])
+@pytest.mark.parametrize('species', [[], '', ['unknown species'], ['Canis sp.'], True, 9606.5, [None]])
 def test_mhc_species_must_be_concrete_species(species):
     with pytest.raises(ValueError, match='mhc_species'):
         InputScope(mhc_species=species)
@@ -309,16 +309,66 @@ def test_hla_mouse_antigen_cli_uses_real_mouse_reference_resolution(inputs, depe
     monkeypatch.setattr('vaxrank.cli.entry_point.resolve_ensembl_release', resolve_ensembl_release)
     monkeypatch.setattr('pyensembl.Genome.download', forbidden)
     monkeypatch.setattr('pyensembl.Genome.index', forbidden)
-    viral = replace(inputs, antigens={'viral': inputs.antigens['viral']}, scope=replace(
-        inputs.scope, reference_assembly='GRCm38', host_taxon_id=10090, mhc_species=['human']))
+    viral = replace(inputs, antigens={'viral': inputs.antigens['viral']}, scope=InputScope.from_dict({
+        **scope_dict(inputs.scope), 'reference_assembly': 'GRCm38',
+        'host_species': 'mouse', 'mhc_species': 'human'}))
     path = tmp_path / 'virus.json'
     viral.save(path)
     saved = tmp_path / 'predictions.tsv'
     run_cli(['--input-antigens', str(path), '--mhc-predictor', 'random',
              '--genome', 'GRCm38', '--ensembl-release', '93',
+             '--host-species', 'Mus musculus', '--mhc-species', '9606',
              '--no-processing-aware-annotation', '--output-epitopes', str(saved)])
     scope = EpitopeDataset.load(saved).provenance[0].scope
     assert scope.reference_assembly == 'GRCm38'
     assert scope.annotation == 'ensembl:93'
     assert scope.host_taxon_id == 10090
     assert scope.mhc_species == ('Homo sapiens',)
+
+
+@pytest.mark.parametrize('host', ['mouse', 'Mus musculus', 'mus_musculus', 10090, '10090'])
+@pytest.mark.parametrize('mhc', ['human', 'Homo sapiens', 9606, '9606', ['human'], ['human', 9606]])
+def test_species_aliases_share_canonical_scope_and_identity(host, mhc):
+    expected = InputScope(host_taxon_id=10090, mhc_species=['Homo sapiens'])
+    actual = InputScope.from_dict(dict(host_species=host, mhc_species=mhc))
+    assert actual == expected
+    assert scope_from_mapping(dict(host_species=host, mhc_species=mhc), 'input') == expected
+    assert scope_dict(actual) == scope_dict(expected)
+    assert to_native_json(actual) == to_native_json(expected)
+    assert from_native_json(to_native_json(actual), InputScope) == expected
+
+
+@pytest.mark.parametrize('host', ['', 'unknown species', True, 10090.0, ['mouse']])
+def test_invalid_host_species_is_rejected(host):
+    with pytest.raises(ValueError, match='host_species'):
+        InputScope.from_dict(dict(host_species=host))
+
+
+def test_host_alias_conflicts_are_rejected_in_api_manifest_and_cli(tmp_path):
+    with pytest.raises(ValueError, match='conflicting host_species and host_taxon_id'):
+        InputScope.from_dict(dict(host_species='mouse', host_taxon_id=9606))
+    path = write_manifest(tmp_path, [('topiary', 'input.tsv')], host_species='mouse')
+    document = json.loads(path.read_text())
+    document['inputs'][0]['host_taxon_id'] = 9606
+    path.write_text(json.dumps(document))
+    with pytest.raises(ValueError, match='conflicting host_taxon_id'):
+        read_input_manifest(path)
+    path = write_manifest(tmp_path, [('topiary', 'input.tsv')], host_species='mouse')
+    with pytest.raises(ValueError, match='conflicting host_taxon_id'):
+        external_input_specs(SimpleNamespace(input_manifest=path, host_species='human'))
+
+
+@pytest.mark.parametrize('host,mhc', [('mouse', 'human'), (10090, 9606)])
+def test_sparse_species_alias_columns_load_and_validate_alleles(tmp_path, host, mhc):
+    path = write_species_table(tmp_path)
+    frame = pd.read_csv(path, sep='\t').drop(columns='host_taxon_id')
+    frame['host_species'] = [host, None]
+    frame['mhc_species'] = [mhc, None]
+    frame.to_csv(path, sep='\t', index=False)
+    report = read_reports([('topiary', path)])[0]
+    scope = report.input_provenance.scope
+    assert scope == InputScope(host_taxon_id=10090, mhc_species=['human'])
+    frame['allele'] = ['H2-Kb', 'H2-Kb']
+    frame.to_csv(path, sep='\t', index=False)
+    with pytest.raises(ValueError, match='conflicts with mhc_species'):
+        read_reports([('topiary', path)])
