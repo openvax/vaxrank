@@ -485,3 +485,93 @@ def test_legacy_native_table_scope_reconciles_with_saved_payload(tmp_path):
                                      scope=InputScope(host_taxon_id=10090), mhc_species='human')
     report = read_reports([('epitopes', path)])[0]
     assert report.input_provenance.scope == InputScope(host_taxon_id=10090, mhc_species='human')
+
+
+def pooled_hla_mouse_inputs(tmp_path, native_indices):
+    common = dict(patient_id='patient', reference_assembly='GRCm38',
+                  mhc_alleles=['HLA-A*02:01'], host_species='mouse')
+    scopes = [common, {**common, 'mhc_species': 'human'}]
+    inputs = []
+    for index in range(2):
+        path = tmp_path / f'source-{index}.tsv'
+        pd.DataFrame(dict(peptide=[('SIINFEKL', 'GILGFVFTL')[index]], allele=['HLA-A*02:01'],
+                          kind=['pMHC_affinity'], value=[10 + index])).to_csv(path, sep='\t', index=False)
+        inputs.append(('topiary', path))
+    reports = read_reports(inputs, scopes=scopes)
+    for index in native_indices:
+        # Older exports retain only the declarations supplied on that source.
+        report = reports[index]
+        provenance = replace(report.input_provenance, scope=InputScope.from_dict(scopes[index]))
+        dataset = replace(report.dataset, provenance=(provenance,), epitopes=tuple(
+            replace(e, input_provenance=provenance) for e in report.epitopes))
+        path = tmp_path / f'native-{index}.tsv'
+        dataset.save(path)
+        inputs[index] = ('epitopes', path)
+        scopes[index] = {}
+    return inputs, scopes
+
+
+@pytest.mark.parametrize('native_indices', [(), (0,), (1,), (0, 1)])
+@pytest.mark.parametrize('reverse', [False, True])
+def test_pooled_species_scope_survives_individual_export(tmp_path, native_indices, reverse):
+    inputs, scopes = pooled_hla_mouse_inputs(tmp_path, native_indices)
+    if reverse:
+        inputs, scopes = inputs[::-1], scopes[::-1]
+    reports = read_reports(inputs, scopes=scopes)
+    for index, report in enumerate(reports):
+        assert report.input_provenance.scope.mhc_species == ('Homo sapiens',)
+        assert all(p.scope.mhc_species == ('Homo sapiens',) for p in report.dataset.provenance)
+        assert all(e.input_provenance.scope.mhc_species == ('Homo sapiens',) for e in report.epitopes)
+        saved = tmp_path / f'export-{index}.tsv'
+        report.dataset.save(saved)
+        replay, = read_reports([('epitopes', saved)])
+        assert replay.input_provenance.scope == report.input_provenance.scope
+        assert [e.prediction_group_key for e in replay.epitopes] == [
+            e.prediction_group_key for e in report.epitopes]
+
+
+@pytest.mark.parametrize('field,value', [('host_species', 'human'), ('mhc_species', 'mouse')])
+def test_pooled_native_species_conflicts_fail_before_prediction(tmp_path, field, value):
+    inputs, scopes = pooled_hla_mouse_inputs(tmp_path, (0, 1))
+    scopes[0][field] = value
+    with pytest.raises(ValueError, match='conflicting (host_taxon_id|mhc_species)'):
+        prepare_reports(inputs, scopes=scopes, mode='additive', prediction_prefix='new',
+                        model_factory=forbidden)
+
+
+@pytest.mark.parametrize('invalid', ['missing_patient', 'outside_genotype'])
+def test_pooled_native_species_keeps_individual_source_checks(tmp_path, invalid):
+    inputs, _ = pooled_hla_mouse_inputs(tmp_path, (0, 1))
+    first, second = [EpitopeDataset.load(path) for _, path in inputs]
+    provenance, = first.provenance
+    if invalid == 'missing_patient':
+        provenance = replace(provenance, scope=replace(provenance.scope, patient_id=None))
+        message = 'combining reports requires declared patient_id'
+    else:
+        provenance = replace(provenance, observed_mhc_alleles=('HLA-A*03:01',))
+        message = 'reported alleles outside declared mhc_alleles'
+    combined = EpitopeDataset.from_predictions([
+        *(replace(e, input_provenance=provenance) for e in first.epitopes), *second.epitopes])
+    saved = tmp_path / 'invalid-native.tsv'
+    combined.save(saved)
+    with pytest.raises(ValueError, match=message):
+        read_reports([('epitopes', saved)])
+
+
+def test_pooled_native_species_cli_export_and_replay(tmp_path):
+    inputs, scopes = pooled_hla_mouse_inputs(tmp_path, (0,))
+    manifest = tmp_path / 'inputs.json'
+    manifest.write_text(json.dumps(dict(schema='vaxrank.input_manifest.v1', inputs=[
+        dict(format=fmt, path=str(path), **scope) for (fmt, path), scope in zip(inputs, scopes)])))
+    saved = tmp_path / 'combined.tsv'
+    run_cli(['--input-manifest', str(manifest), '--output-epitopes', str(saved),
+             '--no-processing-aware-annotation'])
+    replay = tmp_path / 'replay.tsv'
+    run_cli(['--input-epitopes', str(saved), '--output-epitopes', str(replay),
+             '--no-processing-aware-annotation'])
+    original, restored = EpitopeDataset.load(saved), EpitopeDataset.load(replay)
+    assert len(original.provenance) == 2
+    assert all(p.scope.mhc_species == ('Homo sapiens',) for p in original.provenance)
+    assert restored.provenance == original.provenance
+    assert [e.prediction_group_key for e in restored.epitopes] == [
+        e.prediction_group_key for e in original.epitopes]

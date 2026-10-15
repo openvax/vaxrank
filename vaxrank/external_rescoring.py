@@ -21,7 +21,7 @@ from .epitope_io import (
 from .external_report import ExternalRecord
 from .epitope_dataset import EpitopeDataset, read_epitope_report
 from .input_scope import (
-    InputProvenance, SHARED_FIELDS, combine_scopes, normalize_alleles, provenance_columns,
+    InputProvenance, SHARED_FIELDS, SPECIES_FIELDS, combine_scopes, normalize_alleles, provenance_columns,
     read_input_manifest, report_declarations, resolve_input_genome, scope_from_mapping, scope_dict,
     validate_input_scopes,
 )
@@ -418,6 +418,7 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
     if len(scopes) != len(inputs):
         raise ValueError("Each external input must have its own scope declaration")
     reports, seen, pending = list(prepared_reports), set(), []
+    native_scopes = []
     for (fmt, path), declarations in zip(inputs, scopes):
         if fmt not in INPUT_FORMATS:
             raise ValueError("Unsupported external format: %s" % fmt)
@@ -463,12 +464,14 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
                 path, fmt, frame=report.dataset.result.df if report.dataset is not None else None)
         if report.dataset is not None and report.dataset.provenance:
             declared = combine_scopes(producer_scope, scope_from_mapping(scope_declarations, str(path)), str(path))
-            stored_scope = validate_input_scopes([
+            stored = [
                 replace(p, scope=combine_scopes(p.scope, declared, str(path), SHARED_FIELDS))
-                for p in report.dataset.provenance], genome=genome,
-                retained_genomes={p.input_id: _retained_genomes(report)
-                                 for p in report.dataset.provenance})
-            producer_scope = combine_scopes(producer_scope, stored_scope, str(path), SHARED_FIELDS)
+                for p in report.dataset.provenance]
+            # Another input may carry the batch's explicit MHC repertoire.
+            # Reconcile declarations now; validate retained sources below.
+            native_scopes.append((stored, _retained_genomes(report)))
+            for source in stored:
+                producer_scope = combine_scopes(producer_scope, source.scope, str(path), SHARED_FIELDS)
         scope = combine_scopes(
             producer_scope, scope_from_mapping(scope_declarations, str(path)), str(path))
         # An identical file assigned to a different patient/sample must not
@@ -488,6 +491,11 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
         [report.input_provenance for report in loaded] + [p for _, _, p in pending],
         genome=genome, prediction_alleles=alleles,
         retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in loaded})
+    for stored, references in native_scopes:
+        validate_input_scopes([
+            replace(p, scope=combine_scopes(p.scope, shared_scope, p.path, SPECIES_FIELDS))
+            for p in stored], genome=genome, prediction_alleles=alleles,
+            retained_genomes={p.input_id: references for p in stored})
     if pending:
         retained_ids = {p.input_id for r in loaded if r.dataset is not None for p in r.dataset.provenance}
         pending_ids = [p.input_id for _, _, p in pending]
@@ -511,6 +519,13 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             else:
                 reports[index] = antigen_report(source, predictor, genome=genome,
                                                 provenance=provenance, config=config)
+    # Persist the scope that passed batch validation, including on each saved
+    # candidate, so constituent reports can also be replayed independently.
+    for index, report in enumerate(reports):
+        provenance = report.input_provenance
+        scope = combine_scopes(provenance.scope, shared_scope, report.path, SPECIES_FIELDS)
+        if scope != provenance.scope:
+            reports[index] = _namespace_report(report, replace(provenance, scope=scope))
     return reports
 
 

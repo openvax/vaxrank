@@ -92,3 +92,9 @@ released in 0.27.1). Read legacy native table declarations before
 candidate adaptation, reconcile them with saved scope and CLI/manifest assertions,
 and retain them through export/replay. Cover common-name/ID equivalence, cattle
 without annotation, and sparse native CSV/TSV species declarations.
+
+Pooled replay fix (#637): reconcile all saved input declarations before checking
+each native source's host and alleles. Retain the existing per-source genotype,
+reference and pooling checks. Carry the validated shared species scope into
+every report and candidate so each exported source can reload independently.
+Cover raw/native mixtures in either order, conflicts and CLI export/replay.
