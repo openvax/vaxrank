@@ -132,5 +132,7 @@ Before release:
   Ensembl assembly alias, during prediction, native replay and junction queries.
 - Apply the same final-product species checks to live genomes and snapshots;
   explicit MHC species overrides must work for both reference forms.
+- Preserve pre-species assembly identities when the new fields are absent.
+  Verify peptide/mRNA restoration from an actual 3.44.3 native export.
 - Add regression cases, run lint/full tests and CLI replay, require green CI,
   then merge and deploy 3.45.0 from clean main.
