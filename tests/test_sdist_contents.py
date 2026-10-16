@@ -30,7 +30,10 @@ def test_distributions_include_the_sid_recipe_and_no_reads(tmp_path):
         wheel = {name: source.read(name) for name in source.namelist()}
     assert not any(name.startswith("tests/") for name in sdist)
     assert {"LICENSE", "MANIFEST.in", "setup.py", "requirements.txt", "TEST_DATA.md",
-            "vaxrank/sid_test_data.py", "examples/osteosarc_test_data/pin_catalog.py"} <= set(sdist)
+            "vaxrank/sid_test_data.py", "examples/osteosarc_test_data/pin_catalog.py",
+            "examples/build_canine_host_reference.py"} <= set(sdist)
+    assert sdist['examples/build_canine_host_reference.py'] == (
+        ROOT / 'examples/build_canine_host_reference.py').read_bytes()
     recipe = ROOT / "vaxrank/data/sid-recipe"
     shipped = {p.relative_to(ROOT).as_posix(): p.read_bytes() for p in recipe.rglob("*") if p.is_file()}
     assert shipped

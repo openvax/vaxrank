@@ -8,3 +8,4 @@ prune tests
 
 recursive-include vaxrank/data/sid-recipe *
 include examples/osteosarc_test_data/pin_catalog.py
+include examples/build_canine_host_reference.py

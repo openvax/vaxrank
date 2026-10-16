@@ -122,8 +122,9 @@ writing requested admission records.
 For dogs, declare `host_species: dog` and a `host_reference` snapshot. The same
 `cta_expression` entry accepts NCBI Gene IDs or versioned RefSeq transcript IDs.
 It uses OncoRef's canine evidence mapped to RefSeq annotation 106 /
-GCF_011100685.1. Build the complete annotated reference from its pinned protein
-FASTA and feature table (about 14 MB of downloads):
+GCF_011100685.1. From a source checkout or extracted source distribution, build
+the complete annotated reference from its pinned protein FASTA and feature table
+(about 14 MB of downloads):
 
 ```sh
 python examples/build_canine_host_reference.py dog.proteome.json.gz
