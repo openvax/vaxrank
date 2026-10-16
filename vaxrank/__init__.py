@@ -38,6 +38,7 @@ from .vaccine_antigen import (
 )
 from .vaccine_peptide import VaccinePeptide
 from .antigen_input import AntigenDataset, predict_antigens
+from .host_reference import HostReference
 from .isovar_fusion import IsovarFusionAntigens, fusion_antigens_from_isovar
 from .construct_sequence import (
     ConstructChemicalModification,
@@ -160,6 +161,7 @@ from .reference_proteome import (
 from .version import __version__
 
 __all__ = [
+    "HostReference",
     "AntigenDataset",
     "predict_antigens",
     "CleavageProfile",

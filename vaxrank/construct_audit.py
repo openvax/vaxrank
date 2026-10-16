@@ -69,7 +69,7 @@ class ConstructAudit(DataclassSerializable):
 
 
 def audit_construct_sequence(construct, mhc_predictor=None, *, genome=None,
-                            reference_proteome=None):
+                            reference_proteome=None, host_reference=None, mhc_species=None):
     """Assess the actual final context through Topiary and existing self policy.
 
     Native-context predictions are deliberately not accepted as an argument.
@@ -79,7 +79,7 @@ def audit_construct_sequence(construct, mhc_predictor=None, *, genome=None,
     reason = construct.sequence_prediction_unassessed_reason
     if reason is None and mhc_predictor is None:
         reason = "mhc_predictor_not_requested"
-    if reason is None and genome is None and reference_proteome is None:
+    if reason is None and genome is None and reference_proteome is None and host_reference is None:
         reason = "self_reference_unavailable"
     if reason:
         return ConstructAudit(construct, "unassessed", reason_codes=(reason,))
@@ -89,7 +89,9 @@ def audit_construct_sequence(construct, mhc_predictor=None, *, genome=None,
     try:
         assessment = assess_vaccine_antigen_window(
             mhc_predictor, antigen, genome=genome,
-            reference_proteome=reference_proteome, construct_boundaries=boundaries)
+            reference_proteome=reference_proteome, host_reference=host_reference,
+            mhc_species=mhc_species,
+            construct_boundaries=boundaries)
     except SafetyAssessmentError as error:
         return ConstructAudit(
             construct, "failed", reason_codes=("mhc_prediction_failed",),

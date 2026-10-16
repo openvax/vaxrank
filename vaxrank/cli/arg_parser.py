@@ -1032,6 +1032,15 @@ def require_annotations_for_template_reports(args, ranked):
 
 
 def add_external_rescoring_args(arg_parser):
+    arg_parser.add_argument('--host-reference', metavar='SNAPSHOT',
+                            help='Experimental: ORFdata host proteome snapshot, including selected extra ORFs.')
+    arg_parser.add_argument('--host-species', metavar='SPECIES',
+                            help='Experimental: host species name or NCBI taxonomy ID, e.g. mouse.')
+    arg_parser.add_argument('--host-taxon-id', type=int,
+                            help='Experimental: numeric alias for --host-species.')
+    arg_parser.add_argument('--mhc-species', nargs='+', metavar='SPECIES',
+                            help='Experimental: intended MHC species names or taxonomy IDs, e.g. human for an HLA mouse. '
+                                 'Defaults to the known host species; does not change its reference.')
     arg_parser.add_argument('--input-antigens', metavar='JSON',
                             help='Experimental: predict and design from a unified antigen dataset with explicit admission evidence.')
     arg_parser.add_argument('--output-antigens', metavar='JSON',
@@ -1132,6 +1141,11 @@ def external_input_arg_parser():
             action.required = False
     arg_parser.add_argument(
         "--verbose", "-v", action="store_true", default=False)
+    arg_parser.add_argument(
+        "--genome",
+        default=None,
+        help="Reference assembly for annotation (e.g. GRCh38 or GRCm38). "
+             "With --ensembl-release, selects that species and requires a matching assembly.")
     # Mutation reports need annotation; native inputs may retain it already.
     arg_parser.add_argument(
         "--ensembl-release",

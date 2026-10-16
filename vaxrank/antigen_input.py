@@ -14,7 +14,7 @@ from .epitope_config import EpitopeConfig
 from .epitope_dataset import ANTIGEN_COLUMN, EpitopeDataset
 from .input_scope import (
     InputProvenance, InputScope, SHARED_FIELDS, combine_scopes,
-    scope_from_mapping, validate_input_scopes,
+    scope_from_mapping, scope_dict, provenance_dict, validate_input_scopes, validate_host_taxon,
 )
 from .native_serialization import _json_loads, to_native_json
 from .reference_proteome import self_reference_matches
@@ -69,16 +69,16 @@ class AntigenDataset:
             raise ValueError('Antigen record identifiers must be nonempty strings')
         if any(not isinstance(a, VaccineAntigen) for a in self.antigens.values()):
             raise TypeError('Antigen records must contain VaccineAntigen objects')
-        self.scope = scope_from_mapping(asdict(self.scope), 'Antigen dataset')
+        self.scope = scope_from_mapping(scope_dict(self.scope), 'Antigen dataset')
         self.provenance = tuple(self.provenance)
         for source in self.provenance:
             combine_scopes(self.scope, source.scope, source.path, SHARED_FIELDS)
 
     def to_dict(self):
         """Return versioned JSON data without Python class metadata."""
-        return dict(schema=ANTIGEN_DATASET_SCHEMA, scope=asdict(self.scope),
+        return dict(schema=ANTIGEN_DATASET_SCHEMA, scope=scope_dict(self.scope),
                     antigens={key: asdict(a) for key, a in self.antigens.items()},
-                    provenance=[asdict(p) for p in self.provenance])
+                    provenance=[provenance_dict(p) for p in self.provenance])
 
     def save(self, path):
         """Write the same portable evidence format accepted by the CLI."""
@@ -133,27 +133,35 @@ class AntigenDataset:
             scope = combine_scopes(scope, source.scope, source.path, SHARED_FIELDS)
         return cls(antigens, scope, dataset.provenance)
 
-    def validate_for_prediction(self, genome):
+    def validate_for_prediction(self, genome, *, host_reference=None):
         """Check the common prediction contract before acquiring models."""
         if not self.antigens:
             raise ValueError('Antigen input contains no resolved sequences')
+        scope = self.scope
+        if host_reference is not None:
+            scope = host_reference.validate(scope, genome=genome)
+        elif scope.host_reference_sha256 is not None:
+            raise ValueError('Antigen input requires its declared host_reference snapshot')
         missing = [name for name in ('patient_id', 'reference_assembly', 'mhc_alleles')
-                   if getattr(self.scope, name) is None]
+                   if getattr(scope, name) is None]
         if missing:
             raise ValueError('Antigen prediction requires declared ' + ', '.join(missing))
-        if genome is None:
+        if genome is None and host_reference is None:
             raise ValueError('New antigen predictions require a host annotation for exact-self assessment')
-        validate_input_scopes([InputProvenance('validation', 'antigens', '', '', self.scope)], genome=genome)
+        validate_input_scopes([InputProvenance('validation', 'antigens', '', '', scope)],
+                              genome=genome, host_reference=host_reference)
+        if genome is None:
+            return scope
         release = getattr(genome, 'release', None)
         annotation = ('ensembl:' + str(release) if release is not None else
                       str(genome.annotation_name) + ':' + str(genome.annotation_version))
-        return combine_scopes(self.scope, InputScope(annotation=annotation), 'Selected host annotation')
+        return combine_scopes(scope, InputScope(annotation=annotation), 'Selected host annotation')
 
-    def prediction_provenance(self, *, genome, path='', manifest_path=None,
-                              manifest_declarations=None):
+    def prediction_provenance(self, *, genome=None, path='', manifest_path=None,
+                              manifest_declarations=None, host_reference=None):
         """Resolve identity and scope before acquiring prediction models."""
-        scope = self.validate_for_prediction(genome)
-        resolved = dict(self.to_dict(), scope=asdict(scope))
+        scope = self.validate_for_prediction(genome, host_reference=host_reference)
+        resolved = dict(self.to_dict(), scope=scope_dict(scope))
         digest = hashlib.sha256(json.dumps(resolved, sort_keys=True, allow_nan=False).encode()).hexdigest()
         return InputProvenance(
             input_id='antigens:' + digest, source_format='antigens', path=str(path),
@@ -161,24 +169,35 @@ class AntigenDataset:
             scope=scope,
             manifest_path=str(Path(manifest_path).resolve()) if manifest_path else None,
             manifest_declarations=dict(manifest_declarations or {}),
-            report_declarations={'input_history': [asdict(p) for p in self.provenance]})
+            report_declarations={'input_history': [provenance_dict(p) for p in self.provenance]})
 
-    def predict(self, predictor, *, genome, config=None, path=''):
+    def predict(self, predictor, *, genome=None, config=None, path='', host_reference=None):
         """Predict native occurrences through Topiary and return shared evidence."""
-        provenance = self.prediction_provenance(genome=genome, path=path)
+        if host_reference is not None:
+            from .host_reference import HostReference
+            host_reference = HostReference.load(host_reference)
+        provenance = self.prediction_provenance(genome=genome, path=path, host_reference=host_reference)
         return predict_antigens(self.antigens, predictor, genome=genome,
-                                provenance=provenance, config=config)
+                                provenance=provenance, config=config, host_reference=host_reference)
 
 
 def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
-                     annotate=None, self_matcher=None):
+                     annotate=None, self_matcher=None, host_reference=None):
     """Shared native-protein prediction for source-specific admission adapters.
 
     ``annotate`` may add source evidence columns to the prediction frame before
     shared adaptation. It must not change sequence coordinates or measurements.
     Distinct source names and repeated native occurrences remain distinct.
     """
-    validate_input_scopes([provenance], genome=genome)
+    if host_reference is not None:
+        from .host_reference import HostReference
+        host_reference = HostReference.load(host_reference)
+        provenance = replace(provenance, scope=host_reference.validate(provenance.scope, genome=genome))
+        def self_matcher(peptides, antigen, genome):
+            return host_reference.matches(peptides, antigen)
+    elif provenance.scope.host_reference_sha256 is not None:
+        raise ValueError('Prediction requires its declared host_reference snapshot')
+    validate_input_scopes([provenance], genome=genome, host_reference=host_reference)
     self_matcher = self_matcher or self_reference_matches
     alleles = provenance.scope.mhc_alleles
     if not alleles:
@@ -188,6 +207,9 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
         raise ValueError('Antigen predictor returned no peptide measurements')
     frame = frame.reset_index(drop=True)
     validate_prediction_frame(frame, 'Native antigen prediction')
+    reference = host_reference.proteome.reference if host_reference is not None else genome
+    validate_host_taxon(provenance.scope, reference, 'Native antigen predictor output',
+                        [a for a in frame.allele if cell_text(a)])
     if any(cell_text(a) and parse_prediction_allele(cell_text(a)) not in alleles for a in frame.allele):
         raise ValueError('Antigen predictor returned an allele outside the declared patient genotype')
     if not set(frame.source_sequence_name) <= set(antigens):
@@ -236,6 +258,7 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     dataset.result.df['occurs_in_non_CTA_reference'] = [matches[r.source_sequence_name][r.peptide].occurs
                                                        for r in frame.itertuples()]
     dataset.provenance = (provenance,)
+    dataset.host_reference = host_reference
     dataset.config = config or EpitopeConfig()
     dataset.selection['antigen_inputs'] = {provenance.input_id: {name: asdict(a) for name, a in antigens.items()}}
     return dataset
@@ -250,19 +273,19 @@ def validate_antigen_args(args):
     if any(getattr(args, name, None) for name in conflicts):
         raise ValueError('Combine new antigen sequences with saved VCF/BAM evidence '
                          'using epitopes inputs in --input-manifest')
-    if not getattr(args, 'mhc_predictor', None) or getattr(args, 'ensembl_release', None) is None:
-        raise ValueError('--input-antigens requires --mhc-predictor and --ensembl-release for new predictions')
+    if not getattr(args, 'mhc_predictor', None):
+        raise ValueError('--input-antigens requires --mhc-predictor for new predictions')
     if getattr(args, 'external_predictions', 'input') != 'input' or getattr(args, 'external_peptide_only', False):
         raise ValueError('--input-antigens predicts native sequences; external prediction modes do not apply')
     if getattr(args, 'prediction_cache', None):
         raise ValueError('Antigen context prediction caches are not yet supported')
 
 
-def antigen_report(inputs, predictor, *, genome, provenance, config=None):
+def antigen_report(inputs, predictor, *, genome, provenance, config=None, host_reference=None):
     """Adapt validated sequences into the common report representation."""
     from .external_report import ExternalReport
     dataset = predict_antigens(inputs.antigens, predictor, genome=genome,
-                               provenance=provenance, config=config)
+                               provenance=provenance, config=config, host_reference=host_reference)
     return ExternalReport('antigens', provenance.path, report_df=dataset.report_frame(),
                           epitopes=dataset.epitopes, dataset=dataset,
                           input_provenance=provenance)

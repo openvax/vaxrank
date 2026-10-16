@@ -1,7 +1,9 @@
 """General native designs retain actual products, settings and source graphs."""
 
 from dataclasses import replace
+import gzip
 import json
+from pathlib import Path
 
 import pytest
 
@@ -57,6 +59,27 @@ def product_files(directory):
     return {str(path.relative_to(directory)): path.read_bytes()
             for path in directory.rglob('*') if path.is_file() and path.suffix in ('.fasta', '.csv', '.json')
             and path.parent.name in ('peptide', 'mrna')}
+
+
+def test_pre_species_design_restores_both_products_without_reassembly(tmp_path, monkeypatch):
+    # Actual 3.44.3 export (3eaa3d0), generated with this module's source/design
+    # helpers and --mrna-no-optimize-linkers --mrna-codon-method use_best_codon.
+    # Relative input paths keep the fixture independent of the original machine.
+    native = tmp_path / 'legacy.tsv'
+    native.write_bytes(gzip.decompress(
+        (Path(__file__).parent / 'data/epitope_fixtures/native_design_3_44_3.tsv.gz').read_bytes()))
+    saved = EpitopeDataset.load(native).selection['construct_assembly']
+    monkeypatch.setattr('vaxrank.cli.entry_point.assemble_peptide_constructs', forbidden)
+    monkeypatch.setattr('vaxrank.cli.entry_point.assemble_mrna_constructs', forbidden)
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
+    output = tmp_path / 'replay'
+    replay(native, output)
+    restored = EpitopeDataset.load(output / 'candidate_predictions.tsv').selection['construct_assembly']
+    for modality, original in saved.items():
+        assert restored[modality]['identity'] == original['identity']
+        assert restored[modality]['payload_sha256'] == original['payload_sha256']
+        assert from_native_json(restored[modality]['products'], list) == from_native_json(original['products'], list)
+    assert {path.parent.name for path in output.rglob('*.fasta')} == {'peptide', 'mrna'}
 
 
 @pytest.mark.parametrize('optimized', [False, True])

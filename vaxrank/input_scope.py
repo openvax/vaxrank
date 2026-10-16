@@ -4,8 +4,10 @@ The ordinary VCF/BAM entry point does not use this module. Manifest values are
 user declarations, not facts inferred from filenames or prediction coverage.
 """
 
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
+from functools import lru_cache
 import json
+from numbers import Integral, Real
 from pathlib import Path
 import re
 
@@ -31,10 +33,32 @@ class InputScope(DataclassSerializable):
     sample_id: str | None = None
     timepoint: str | None = None
     library_id: str | None = None
+    host_taxon_id: int | None = None
+    mhc_species: tuple[str, ...] | None = None
+    host_reference_sha256: str | None = None
+
+    def __post_init__(self):
+        if self.host_taxon_id is not None and (
+                type(self.host_taxon_id) is not int or self.host_taxon_id < 1):
+            raise ValueError("host_taxon_id must be a positive integer NCBI taxonomy ID")
+        if self.mhc_species is not None:
+            object.__setattr__(self, 'mhc_species', normalize_mhc_species(self.mhc_species))
+        if self.host_reference_sha256 is not None and (
+                not isinstance(self.host_reference_sha256, str)
+                or not re.fullmatch('[0-9a-f]{64}', self.host_reference_sha256)):
+            raise ValueError('host_reference_sha256 must be a SHA-256')
+
+    @classmethod
+    def from_dict(cls, values):
+        return scope_from_mapping(values, 'Input scope')
 
 
 SCOPE_FIELDS = tuple(f.name for f in fields(InputScope))
-SHARED_FIELDS = ("patient_id", "reference_assembly", "annotation", "mhc_alleles")
+DECLARATION_FIELDS = (*SCOPE_FIELDS, "host_species")
+SPECIES_FIELDS = ("host_taxon_id", "mhc_species")
+SPECIES_DECLARATIONS = (*SPECIES_FIELDS, "host_species")
+SHARED_FIELDS = ("patient_id", "reference_assembly", "annotation", "mhc_alleles", *SPECIES_FIELDS,
+                 "host_reference_sha256")
 REQUIRED_POOLED_FIELDS = ("patient_id", "reference_assembly", "mhc_alleles")
 
 
@@ -51,6 +75,21 @@ class InputProvenance(DataclassSerializable):
     observed_mhc_alleles: tuple[str, ...] = ()
 
 
+def scope_dict(scope):
+    """Keep historical identities unchanged when no host taxon was declared."""
+    result = asdict(scope)
+    for name in (*SPECIES_FIELDS, 'host_reference_sha256'):
+        if result[name] is None:
+            del result[name]
+    return result
+
+
+def provenance_dict(provenance):
+    result = asdict(provenance)
+    result['scope'] = scope_dict(provenance.scope)
+    return result
+
+
 def normalize_alleles(values, location):
     if not isinstance(values, (list, tuple)) or not values:
         raise ValueError(f"{location}: mhc_alleles must be a nonempty list, or null if unknown")
@@ -60,8 +99,82 @@ def normalize_alleles(values, location):
         raise ValueError(f"{location}: invalid mhc_alleles: {error}") from error
 
 
+def normalize_host_species(value):
+    """Resolve a name or taxonomy ID to the canonical host taxon."""
+    from orfdata.reference import species_taxon
+    if isinstance(value, str):
+        value = value.strip()
+        value = int(value) if value.isdecimal() else species_taxon(value)
+    if type(value) is not int or value < 1:
+        raise ValueError('host_species requires a known species name or positive NCBI taxonomy ID')
+    return value
+
+
+def normalize_mhc_species(values):
+    """Resolve an explicit repertoire, including transgenic/chimeric animals."""
+    from mhcgnomes import Species
+    from orfdata.reference import canonical_species
+    if isinstance(values, (str, int)):
+        values = [values]
+    if not isinstance(values, (list, tuple)) or not values:
+        raise ValueError('mhc_species requires a species name or taxonomy ID, or a nonempty list')
+    result = set()
+    for value in values:
+        if isinstance(value, str):
+            value = value.strip()
+            if value.isdecimal():
+                value = int(value)
+        species = (_species_for_taxon(value) if type(value) is int else
+                   Species.get(canonical_species(value).replace('_', ' ').capitalize())
+                   if isinstance(value, str) else None)
+        if species is None or species.is_group:
+            raise ValueError(f'mhc_species requires a known concrete species, got {value!r}')
+        result.add(species.name)
+    return tuple(sorted(result))
+
+
+def species_scope_from_args(args):
+    return scope_from_mapping(
+        {name: getattr(args, name, None) for name in SPECIES_DECLARATIONS}, 'CLI species')
+
+
+def validate_prediction_species(args, references, alleles, location):
+    """Check live candidate/junction queries before acquiring a model."""
+    scope = combine_scopes(scope_from_mapping(getattr(args, '_input_species_scope', {}), location),
+                           species_scope_from_args(args), location)
+    host_reference = getattr(getattr(args, '_design_dataset', None), 'host_reference', None)
+    if host_reference is not None:
+        scope = host_reference.validate(scope, location=location)
+    references = [reference for reference in references if reference is not None]
+    if not references and host_reference is None and scope.reference_assembly is not None:
+        references = [scope.reference_assembly]
+    fallback = host_reference.proteome.reference if host_reference is not None else None
+    for reference in references or (fallback,):
+        validate_host_taxon(scope, resolve_input_genome(reference), location, alleles)
+    return scope
+
+
+def with_species_declarations(declarations, scope, location):
+    """Apply CLI assertions without replacing manifest or adapter options."""
+    existing = scope_from_mapping(
+        {k: v for k, v in declarations.items() if k in SPECIES_DECLARATIONS}, location)
+    combined = combine_scopes(existing, scope, location, SPECIES_FIELDS)
+    return {**declarations, **{k: list(v) if isinstance(v, tuple) else v
+                              for k, v in scope_dict(combined).items()
+                              if k in SPECIES_FIELDS}}
+
+
 def scope_from_mapping(values, location):
     """Validate declaration types without guessing missing identifiers."""
+    values = dict(values)
+    host_species = values.pop('host_species', None)
+    if host_species is not None:
+        taxon = normalize_host_species(host_species)
+        declared = values.get('host_taxon_id')
+        if declared is not None and declared != taxon:
+            raise ValueError(f'{location}: conflicting host_species and host_taxon_id')
+        if declared is None:
+            values['host_taxon_id'] = taxon
     normalized = {}
     for name, value in values.items():
         if name not in SCOPE_FIELDS:
@@ -70,6 +183,12 @@ def scope_from_mapping(values, location):
             normalized[name] = None
         elif name == "mhc_alleles":
             normalized[name] = normalize_alleles(value, location)
+        elif name == "mhc_species":
+            normalized[name] = normalize_mhc_species(value)
+        elif name == "host_taxon_id":
+            if type(value) is not int or value < 1:
+                raise ValueError(f"{location}: host_taxon_id must be a positive integer NCBI taxonomy ID")
+            normalized[name] = value
         elif not isinstance(value, str) or not value.strip():
             raise ValueError(f"{location}: {name} must be a nonempty string, or null if unknown")
         else:
@@ -116,11 +235,20 @@ def read_input_manifest(path, *, include_direct=False):
         document = yaml.load(stream, Loader=_ManifestLoader)
     if not isinstance(document, dict) or document.get("schema") != MANIFEST_SCHEMA:
         raise ValueError(f"{path}: expected schema: {MANIFEST_SCHEMA}")
-    unknown = set(document) - {"schema", "inputs", "direct", *SCOPE_FIELDS}
+    unknown = set(document) - {"schema", "inputs", "direct", "host_reference", *DECLARATION_FIELDS}
     if unknown:
         raise ValueError(f"{path}: unknown manifest fields: {sorted(unknown)}")
-    shared = {k: v for k, v in document.items() if k in SCOPE_FIELDS}
+    shared = {k: v for k, v in document.items() if k in DECLARATION_FIELDS}
     shared_scope = scope_from_mapping(shared, str(path))
+    if 'host_reference' in document:
+        reference = document['host_reference']
+        if isinstance(reference, str) and reference.strip():
+            shared['host_reference'] = str((path.parent / reference).resolve())
+        elif (isinstance(reference, dict) and set(reference) == {'path', 'identity'}
+              and isinstance(reference['path'], str) and reference['path'].strip()):
+            shared['host_reference'] = {**reference, 'path': str((path.parent / reference['path']).resolve())}
+        else:
+            raise ValueError(f'{path}: host_reference requires a snapshot path or path/identity mapping')
     inputs = document.get("inputs")
     if not isinstance(inputs, list) or not inputs:
         raise ValueError(f"{path}: inputs must be a nonempty list")
@@ -129,7 +257,7 @@ def read_input_manifest(path, *, include_direct=False):
         location = f"{path}, input {index}"
         if not isinstance(item, dict):
             raise ValueError(f"{location}: expected an input object")
-        unknown = set(item) - {"format", "path", "exacto", "cta_expression", *SCOPE_FIELDS}
+        unknown = set(item) - {"format", "path", "exacto", "cta_expression", *DECLARATION_FIELDS}
         if unknown:
             raise ValueError(f"{location}: unknown input fields: {sorted(unknown)}")
         from .external_rescoring import INPUT_FORMATS
@@ -137,7 +265,7 @@ def read_input_manifest(path, *, include_direct=False):
             raise ValueError(f"{location}: format must be one of {', '.join(INPUT_FORMATS)}")
         if not isinstance(item.get("path"), str) or not item["path"].strip():
             raise ValueError(f"{location}: path must be a nonempty string")
-        local = {k: v for k, v in item.items() if k in SCOPE_FIELDS}
+        local = {k: v for k, v in item.items() if k in DECLARATION_FIELDS}
         local_scope = scope_from_mapping(local, location)
         # Shared patient/reference/genotype assertions cannot be overridden.
         # Sample/timepoint/library defaults can differ between inputs.
@@ -149,7 +277,8 @@ def read_input_manifest(path, *, include_direct=False):
             if item['format'] != 'cta_expression':
                 raise ValueError(f'{location}: cta_expression options require a CTA expression input')
             options = item.get('cta_expression')
-            cta_expression_contract(options, scope_from_mapping(declarations, location), location)
+            cta_expression_contract(options, scope_from_mapping(
+                {k: v for k, v in declarations.items() if k != 'host_reference'}, location), location)
             options = dict(options)
             if 'hitlist_evidence_bundle' in options:
                 options['hitlist_evidence_bundle'] = str((path.parent / options['hitlist_evidence_bundle']).resolve())
@@ -176,10 +305,50 @@ def read_input_manifest(path, *, include_direct=False):
     direct_scope = scope_from_mapping(direct, f"{path}, direct input")
     combine_scopes(shared_scope, direct_scope, str(path), SHARED_FIELDS)
     if include_direct:
+        if 'host_reference' in shared:
+            raise ValueError('host_reference requires saved native VCF/BAM evidence as an epitopes input')
         declarations = {**shared, **{k: v for k, v in direct.items()
                                     if v is not None or k not in shared}}
         return specs, declarations
     return specs
+
+
+def normalize_scope_columns(frame, location):
+    """Restore nullable integer taxon IDs at the table ingestion boundary.
+
+    Pandas promotes an integer column with blanks to floats. Normalize that
+    representation here, leaving manifest/API validation strictly typed.
+    """
+    for name in (*SPECIES_DECLARATIONS, *("input_" + n for n in SPECIES_DECLARATIONS)):
+        if name not in frame:
+            continue
+        values = []
+        for value in frame[name]:
+            if cells.missing(value):
+                values.append(None)
+                continue
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                except ValueError as error:
+                    if name.endswith('host_taxon_id'):
+                        raise ValueError(f'{location}: invalid {name}: {value!r}') from error
+                else:
+                    if name.endswith('host_taxon_id') or isinstance(parsed, (Real, bool)):
+                        value = parsed
+            if not name.endswith('host_taxon_id') and isinstance(value, (str, list, tuple)):
+                values.append(value)
+                continue
+            if isinstance(value, Integral) and not isinstance(value, bool):
+                value = int(value)
+            elif (isinstance(value, Real) and not isinstance(value, bool)
+                  and value > 0 and value < 2**53 and int(value) == value):
+                value = int(value)
+            if type(value) is not int or value < 1:
+                raise ValueError(f'{location}: {name} must be a positive integer NCBI taxonomy ID')
+            values.append(value)
+        frame[name] = pd.Series(values, index=frame.index, dtype=object)
+    return frame
 
 
 def report_declarations(path, source_format, *, frame=None):
@@ -191,12 +360,22 @@ def report_declarations(path, source_format, *, frame=None):
     """
     # Reading the path preserves pandas' support for compressed TSVs.
     if frame is None:
-        frame = pd.read_csv(path, sep="\t", dtype=str,
+        native = source_format == 'epitopes'
+        skiprows = 0
+        if native:
+            with open(path) as stream:
+                for line in stream:
+                    if not line.startswith('#'):
+                        break
+                    skiprows += 1
+        frame = pd.read_csv(path, sep=',' if native and not str(path).endswith('.tsv') else '\t',
+                           skiprows=skiprows, dtype=str,
                            keep_default_na=False,
-                           usecols=lambda name: name in (*SCOPE_FIELDS, "origin_descriptor"))
+                           usecols=lambda name: name in (*DECLARATION_FIELDS, "origin_descriptor"))
+    normalize_scope_columns(frame, str(path))
     result = {}
     resolved = InputScope()
-    for name in SCOPE_FIELDS:
+    for name in DECLARATION_FIELDS:
         if name not in frame:
             continue
         values = []
@@ -204,8 +383,10 @@ def report_declarations(path, source_format, *, frame=None):
             if not cells.missing(value) and value not in values:
                 values.append(value)
         for value in values:
-            parsed = (json.loads(value) if name == "mhc_alleles" and isinstance(value, str)
-                      else value)
+            parsed = value
+            if name in {"mhc_alleles", "mhc_species"} and isinstance(value, str):
+                if name == 'mhc_alleles' or value.lstrip().startswith(('[', '"')):
+                    parsed = json.loads(value)
             claim = scope_from_mapping({name: parsed}, str(path))
             resolved = combine_scopes(resolved, claim, str(path))
         if values:
@@ -235,14 +416,79 @@ def resolve_input_genome(genome):
     return genome
 
 
+@lru_cache(maxsize=128)
+def _species_for_taxon(taxon_id):
+    """Resolve taxonomy without requiring an annotation for that species."""
+    from mhcgnomes import Species
+    from orfdata.reference import species_name_for_taxon
+    name = species_name_for_taxon(taxon_id)
+    return Species.get(name.replace('_', ' ').capitalize()) if name is not None else None
+
+
+def validate_host_taxon(scope, reference, location, observed_alleles=()):
+    """Validate an explicit host independently of antigen source species.
+
+    ORFdata owns taxon aliases; mhcgnomes owns allele species and group
+    compatibility (for example DLA's Canis group). An unknown allele taxon
+    cannot establish host identity. New prediction inputs also validate the
+    actual annotation, while saved evidence can be replayed without one.
+    """
+    from mhcgnomes import Species, parse
+    from orfdata import ReferenceContext
+    from orfdata.reference import canonical_species
+
+    host_species = _species_for_taxon(scope.host_taxon_id) if scope.host_taxon_id else None
+    if reference is not None:
+        if scope.host_taxon_id is not None or isinstance(reference, ReferenceContext):
+            try:
+                context = (reference if isinstance(reference, ReferenceContext)
+                           else ReferenceContext.from_genome(reference))
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"{location}: cannot validate host_taxon_id against annotation: {error}") from error
+            if scope.host_taxon_id is not None and context.taxon_id != scope.host_taxon_id:
+                raise ValueError(f"{location}: conflicting host_taxon_id: "
+                                 f"{scope.host_taxon_id} versus annotation {context.taxon_id}")
+            host_species = Species.get(canonical_species(context.species).replace('_', ' ').capitalize())
+        else:
+            name = getattr(reference, 'species', None)
+            if name is None and getattr(reference, 'reference_name', None):
+                from pyensembl import find_species_by_reference
+                try:
+                    name = find_species_by_reference(reference.reference_name)
+                except ValueError:
+                    pass
+            name = getattr(name, 'latin_name', name)
+            host_species = Species.get(canonical_species(name).replace('_', ' ').capitalize()) if name else None
+    if scope.host_taxon_id is not None and host_species is None:
+        raise ValueError(f'{location}: cannot resolve host_taxon_id {scope.host_taxon_id} to an MHC species')
+    expected = ([Species.get(name) for name in scope.mhc_species]
+                if scope.mhc_species is not None else [host_species] if host_species else [])
+    for allele in set(scope.mhc_alleles or ()) | set(observed_alleles):
+        species = parse(parse_prediction_allele(allele), infer_class2_pairing=False).species
+        if expected and not any(item.compatible_with(species) for item in expected):
+            label = (f'mhc_species {scope.mhc_species}' if scope.mhc_species is not None else
+                     f'host_taxon_id {scope.host_taxon_id}' if scope.host_taxon_id else
+                     f'host species {host_species.name}')
+            raise ValueError(f'{location}: allele {allele} conflicts with {label}. '
+                             'For a chimeric/transgenic animal, declare its intended mhc_species.')
+
+
 def validate_input_scopes(provenance, *, genome=None, prediction_alleles=(),
-                          retained_genomes=None):
+                          retained_genomes=None, host_reference=None):
     """Validate the whole batch before DSL scoring, output or live prediction."""
     shared = InputScope()
     genome = resolve_input_genome(genome)
     retained_genomes = retained_genomes or {}
     for source in provenance:
         shared = combine_scopes(shared, source.scope, source.path, SHARED_FIELDS)
+    if host_reference is not None:
+        from .host_reference import HostReference
+        host_reference = HostReference.load(host_reference)
+        shared = host_reference.validate(shared, genome=genome)
+    for source in provenance:
+        # A shared host assertion applies to every source, including older
+        # evidence which did not itself declare a host taxon.
+        host_scope = replace(source.scope, **{name: getattr(shared, name) for name in SPECIES_FIELDS})
         if len(provenance) > 1:
             missing = [name for name in REQUIRED_POOLED_FIELDS
                        if getattr(source.scope, name) is None]
@@ -261,15 +507,27 @@ def validate_input_scopes(provenance, *, genome=None, prediction_alleles=(),
         references = list(retained_genomes.get(source.input_id, ()))
         if genome is not None:
             references.append(genome)
-        if not references and source.scope.reference_assembly is not None:
+        observed_alleles = (*source.observed_mhc_alleles, *prediction_alleles)
+        if host_reference is not None:
+            host_reference.validate(source.scope, location=source.path)
+        if not references and host_reference is not None:
+            validate_host_taxon(host_scope, host_reference.proteome.reference, source.path, observed_alleles)
+        elif not references and source.scope.reference_assembly is not None:
             # Variant adapters historically skip unresolvable rows. Reject a
             # bad declared assembly here instead of silently dropping them.
             try:
-                resolve_input_genome(source.scope.reference_assembly)
+                declared_reference = resolve_input_genome(source.scope.reference_assembly)
             except (TypeError, ValueError) as error:
                 raise ValueError(f"{source.path}: unsupported reference_assembly "
                                  f"{source.scope.reference_assembly!r}: {error}") from error
+            # Assembly metadata identifies species, not the saved annotation release.
+            validate_host_taxon(
+                host_scope, declared_reference, source.path,
+                observed_alleles)
+        elif not references:
+            validate_host_taxon(host_scope, None, source.path, observed_alleles)
         for reference in references:
+            validate_host_taxon(host_scope, reference, source.path, observed_alleles)
             assembly = getattr(reference, "reference_name", None)
             if source.scope.reference_assembly is not None and assembly is None:
                 raise ValueError(f"{source.path}: configured genome has no reference_name "
@@ -291,11 +549,13 @@ def validate_input_scopes(provenance, *, genome=None, prediction_alleles=(),
 
 def provenance_columns(provenance):
     """Plain table columns plus a complete, reloadable provenance record."""
-    scope = asdict(provenance.scope)
+    scope = scope_dict(provenance.scope)
     scope["mhc_alleles"] = (json.dumps(scope["mhc_alleles"])
                             if scope["mhc_alleles"] is not None else None)
+    if scope.get('mhc_species') is not None:
+        scope['mhc_species'] = json.dumps(scope['mhc_species'])
     return {
         **{"input_" + name: value for name, value in scope.items()},
         "input_observed_mhc_alleles": json.dumps(provenance.observed_mhc_alleles),
-        "input_provenance_json": json.dumps(asdict(provenance), sort_keys=True),
+        "input_provenance_json": json.dumps(provenance_dict(provenance), sort_keys=True),
     }

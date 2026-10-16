@@ -14,7 +14,7 @@ from .cta_admission import CTAAdmissionPolicy
 from .cta_expression import CTAExpressionInput, CTAExpressionResult, CTATargetExclusionPolicy, admit_cta_expression
 from .antigen_input import predict_antigens
 from .external_report import ExternalReport
-from .input_scope import InputProvenance, InputScope, combine_scopes, normalize_alleles, validate_input_scopes
+from .input_scope import InputProvenance, InputScope, combine_scopes, normalize_alleles, scope_dict, validate_input_scopes
 from .native_serialization import to_native_json
 from .reference_proteome import self_reference_matches
 
@@ -120,7 +120,7 @@ class CTAExpressionSource:
         admission = admit_cta_expression(path, input_contract=contract, admission_policy=policy,
                                         exclusion_policy=exclusions, genome=genome)
         bundle = load_hitlist_bundle(bundle_path, admission) if bundle_path else None
-        identity = dict(admission=to_native_json(admission), scope=asdict(scope),
+        identity = dict(admission=to_native_json(admission), scope=scope_dict(scope),
                         bundle_manifest=bundle['manifest'] if bundle is not None else None)
         provenance = InputProvenance(
             input_id='cta:' + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(),
@@ -267,7 +267,7 @@ def prepare_cta_report(args, genome, epitope_config=None):
         cta_admission_writer=lambda sources: write_cta_admissions(args, sources))[0]
 
 
-def predict_cta_source(source, predictor, *, genome, epitope_config=None):
+def predict_cta_source(source, predictor, *, genome, epitope_config=None, host_reference=None):
     """Predict admitted occurrences, retaining every source admission decision."""
     admission, provenance, bundle = source.admission, source.provenance, source.bundle
     contract = admission.input_contract
@@ -291,10 +291,11 @@ def predict_cta_source(source, predictor, *, genome, epitope_config=None):
     if antigens:
         dataset = predict_antigens(antigens, predictor, genome=genome, provenance=provenance,
                                    config=epitope_config, annotate=annotate,
-                                   self_matcher=self_reference_matches)
+                                   self_matcher=self_reference_matches, host_reference=host_reference)
     else:
         from .epitope_dataset import EpitopeDataset
         dataset = EpitopeDataset.from_predictions((), config=epitope_config)
+        dataset.host_reference = host_reference
         dataset.provenance = (provenance,)
         dataset.selection['antigen_inputs'] = {provenance.input_id: {}}
     # CTA proteins are encoded by the host; the antigen-aware self match

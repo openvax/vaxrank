@@ -117,6 +117,80 @@ the native evidence, even when a CTA source contributes no admitted proteins
 to an otherwise usable mixed run. A wholly unadmitted CTA-only run stops after
 writing requested admission records.
 
+## Declare the host species (experimental)
+
+Declare a host by name. For an ordinary mouse, this is enough:
+
+```yaml
+host_species: mouse
+```
+
+For an HLA mouse, add the intended MHC species:
+
+```yaml
+host_species: mouse
+mhc_species: human
+```
+
+Only use a list when targeting multiple MHC species: `mhc_species: [human, mouse]`.
+Both fields accept common names, scientific names or NCBI taxonomy IDs;
+`host_taxon_id` remains an alias. Equivalent declarations normalize to the same
+stored identity. The CLI equivalent is `--host-species mouse --mhc-species human`.
+The API accepts the same declarations through `InputScope.from_dict(...)`.
+
+The host must agree with annotation; declared and observed alleles must match
+the intended MHC species. Antigen source species remain separate, allowing
+viral sequences in a human or mouse design. Declarations survive native replay.
+For fresh mouse predictions, select mouse annotation with
+`--genome GRCm38 --ensembl-release 93` (or another matching build/release).
+
+Producer tables may leave host cells blank. Integer-valued numeric taxon cells
+are normalized when read; fractional IDs and booleans are rejected. Manifest
+and API taxon IDs must be positive integers.
+
+Donor/transgene self layers remain tracked in
+[#625](https://github.com/openvax/vaxrank/issues/625).
+Current CTA expression admission remains human-only. Inputs without new scope
+fields keep their historical identities; known host annotation still enables
+species checks.
+
+## Host proteome snapshots (experimental)
+
+Use an ORFdata snapshot to include selected uORFs and other noncanonical ORFs:
+
+```yaml
+host_reference: host.proteome.json.gz
+inputs:
+  - format: antigens
+    path: antigens.json
+```
+
+Add this to a manifest with `schema: vaxrank.input_manifest.v1`. Paths are
+relative to the manifest. Standalone inputs accept `--host-reference FILE`.
+Build the snapshot with ORFdata's `Proteome.build(...).save(...)`; its selected
+evidence, source hashes, exclusions and every mapped occurrence are retained.
+An optional `{path: FILE, identity: SHA256}` declaration pins its content identity.
+
+The snapshot must match the declared host and annotation. It supplies exact-self
+assessment for new native antigen predictions without a live Ensembl annotation;
+CTA expression still needs its annotation for transcript/sequence selection.
+Custom assembly names and versioned assembly accessions use the snapshot's
+reference metadata directly.
+CTA gene exclusions remove annotated proteins, leaving additional ORFs at those
+genes searchable. Viral entries never become host self.
+
+Native outputs bundle the snapshot in their `.references/` directory. Move that
+directory with the table for offline replay. Changed or missing snapshots fail.
+Saved predictions require their original reference; select a different reference
+by predicting the source antigens again. Legacy producer tables and direct
+VCF/BAM runs retain their existing annotated reference path.
+
+Python accepts a `HostReference`, ORFdata `Proteome`, or snapshot path through
+`AntigenDataset.predict(..., host_reference=...)` and
+`audit_construct_sequence(..., host_reference=...)`.
+For an HLA mouse, also pass `mhc_species="human"` to the audit, whether using
+a snapshot or a live genome.
+
 ## Shared outputs
 
 The ordinary ranking, peptide/mRNA assembly and reports apply to every kind.

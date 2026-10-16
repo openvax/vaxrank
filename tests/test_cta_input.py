@@ -54,6 +54,38 @@ def argv(path, output, level='gene'):
             '--no-processing-aware-annotation', '--num-epitopes-per-vaccine-peptide', '1000']
 
 
+def test_cta_snapshot_is_shared_by_candidates_and_actual_product_audits(
+        tmp_path, cli_dependencies, genome):
+    from orfdata import Proteome
+    from vaxrank import HostReference
+    from .test_host_reference import reference
+    from .test_cta_expression import SEQUENCE
+
+    base = reference(sequence=SEQUENCE[:9])
+    entries = tuple(replace(entry, occurrences=tuple(
+        replace(occurrence, gene_id=PRAME if occurrence.gene_id == 'CTA' else NOT_CTA)
+        for occurrence in entry.occurrences)) for entry in base)
+    host = HostReference(Proteome(base.reference, entries, base.layers))
+    snapshot = tmp_path / 'host.json.gz'
+    host.save(snapshot)
+    expression = tmp_path / 'expression.tsv'
+    pd.DataFrame([(PRAME, 3)], columns=['feature_id', 'patient_tpm']).to_csv(
+        expression, sep='\t', index=False)
+    output = tmp_path / 'design'
+    run_cli(argv(expression, output) + ['--host-reference', str(snapshot)])
+    dataset = EpitopeDataset.load(output / 'candidate_predictions.tsv')
+    assert dataset.host_reference.identity == host.identity
+    match = next(e.self_reference_match for e in dataset.epitopes if e.sequence == SEQUENCE[:9])
+    assert match.reference_sha256 == host.identity
+    assert {source.orf_id for source in match.sources} == {'uORF'}
+    assert {source.gene_id for source in match.sources} == {PRAME, NOT_CTA}
+    audit = from_native_json((output / 'cta_design.json').read_text(), dict)['final_product_audit']
+    inventories = [record.mhc_assessment for record in audit['product_audits'] if record.mhc_assessment]
+    assert inventories
+    assert all(ligand.self_reference_match.reference_sha256 == host.identity
+               for inventory in inventories for ligand in inventory.ligands)
+
+
 @pytest.mark.parametrize('level', ['gene', 'transcript'])
 def test_expression_only_cli_outputs_and_offline_replay(tmp_path, monkeypatch, cli_dependencies, level):
     path = tmp_path / 'expression.tsv'

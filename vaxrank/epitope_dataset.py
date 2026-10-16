@@ -28,7 +28,10 @@ ANTIGEN_COLUMN = "vaxrank_antigen_json"
 
 def read_table(path):
     """Read a normalized table using Topiary's typed CSV/TSV codec."""
-    return (read_tsv if str(path).endswith(".tsv") else read_csv)(path)
+    from .input_scope import normalize_scope_columns
+    result = (read_tsv if str(path).endswith(".tsv") else read_csv)(path)
+    normalize_scope_columns(result.df, str(path))
+    return result
 
 
 def _value(row, name, default=None):
@@ -56,6 +59,7 @@ class EpitopeDataset:
     direct_sources: list = field(default_factory=list)
     policy_evaluations: list = field(default_factory=list)
     native_references: object = field(default=None, repr=False, compare=False)
+    host_reference: object = field(default=None, repr=False, compare=False)
 
     def add_mutation(self, fragment, epitopes):
         """Capture direct predictions before vaccine windows discard context."""
@@ -308,6 +312,8 @@ class EpitopeDataset:
             "direct_sources": self.direct_sources,
             "policy_evidence": encode_evaluations(self.policy_evaluations),
         }
+        if self.host_reference is not None:
+            extra[DATASET_METADATA]['host_reference'] = self.host_reference
         from .native_references import NativeReferences
         extra[DATASET_METADATA] = NativeReferences(path, self.native_references).transform(
             extra[DATASET_METADATA])
@@ -343,7 +349,7 @@ class EpitopeDataset:
             if (fragment.supporting_reference_protein_ids is None and antigen is not None
                     and antigen.transcript_ids == transcript_ids):
                 fragments[key] = replace(fragment, supporting_reference_protein_ids=antigen.protein_ids)
-        return cls(
+        dataset = cls(
             result=result, epitopes=epitopes,
             provenance=tuple(from_native_json(p, InputProvenance) for p in payload["provenance"]),
             config=msgspec.convert(payload["config"], EpitopeConfig) if payload["config"] else None,
@@ -353,7 +359,21 @@ class EpitopeDataset:
             construction_reports=payload.get("construction_reports", []),
             direct_sources=payload.get("direct_sources", []),
             policy_evaluations=decode_evaluations(payload.get("policy_evidence", [])),
-            native_references=references)
+            native_references=references, host_reference=payload.get('host_reference'))
+        if dataset.host_reference is not None:
+            for source in dataset.provenance:
+                if source.scope.host_reference_sha256 != dataset.host_reference.identity:
+                    raise ValueError('Native provenance disagrees with its host reference')
+                dataset.host_reference.validate(source.scope)
+            for candidate in dataset.epitopes:
+                if (candidate.input_provenance is None
+                        or candidate.input_provenance.scope.host_reference_sha256 != dataset.host_reference.identity
+                        or candidate.self_reference_match is None
+                        or candidate.self_reference_match.reference_sha256 != dataset.host_reference.identity):
+                    raise ValueError('Native candidate disagrees with its host reference')
+        elif any(p.scope.host_reference_sha256 is not None for p in dataset.provenance):
+            raise ValueError('Native evidence is missing its declared host reference')
+        return dataset
 
     def index_native_references(self):
         """Prepare bundled local annotation indexes without acquiring data."""
@@ -422,15 +442,14 @@ def read_epitope_report(path, *, source_format, scope_declarations=None, **_):
     else:
         import hashlib
         import json
-        from dataclasses import asdict
-        from .input_scope import combine_scopes, report_declarations, scope_from_mapping
+        from .input_scope import combine_scopes, report_declarations, scope_from_mapping, scope_dict
         identity = "topiary:" + hashlib.sha256(Path(path).read_bytes()).hexdigest()
         result = read_table(path)
         producer_scope, _ = report_declarations(path, source_format, frame=result.df)
         scope = combine_scopes(producer_scope, scope_from_mapping(
             scope_declarations or {}, str(path)), str(path))
         label = identity + ':' + hashlib.sha256(
-            json.dumps(asdict(scope), sort_keys=True).encode()).hexdigest()
+            json.dumps(scope_dict(scope), sort_keys=True).encode()).hexdigest()
         dataset = EpitopeDataset.from_topiary(
             result, label=label, sample_name=scope.patient_id or label)
     return ExternalReport(source_format, str(path),

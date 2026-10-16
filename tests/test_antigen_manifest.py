@@ -180,7 +180,7 @@ def test_library_predicts_multiple_sources_with_one_factory(inputs, dependencies
 
 @pytest.mark.parametrize('extra,match', [
     ([], 'requires --mhc-predictor'),
-    (['--mhc-predictor', 'random'], 'requires --mhc-predictor'),
+    (['--mhc-predictor', 'random'], 'host annotation'),
     (['--mhc-predictor', 'random', '--ensembl-release', '93', '--external-predictions', 'additive'],
      'external prediction modes do not apply'),
 ])

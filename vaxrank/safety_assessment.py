@@ -762,6 +762,8 @@ def assess_vaccine_antigen_window(
     antigen: VaccineAntigen,
     *,
     genome=None,
+    host_reference=None,
+    mhc_species=None,
     reference_proteome: Optional[ReferenceProteome] = None,
     window_start: int = 0,
     window_end: Optional[int] = None,
@@ -773,9 +775,17 @@ def assess_vaccine_antigen_window(
     immunogenicity filter. Predictor failures raise ``SafetyAssessmentError``;
     they are never converted into a reassuring empty result.
     """
+    from .input_scope import InputScope, validate_host_taxon
+    host_scope = InputScope(mhc_species=mhc_species)
+    if host_reference is not None:
+        from .host_reference import HostReference
+        host_reference = HostReference.load(host_reference)
+        host_scope = host_reference.validate(host_scope, genome=genome)
+        if reference_proteome is not None:
+            raise ValueError('Pass host_reference or reference_proteome, not both')
     if genome is not None and reference_proteome is not None:
         raise ValueError("Pass genome or reference_proteome, not both")
-    if reference_proteome is None and genome is None:
+    if reference_proteome is None and genome is None and host_reference is None:
         raise ValueError(
             "Safety assessment requires a genome or reference proteome"
         )
@@ -811,14 +821,21 @@ def assess_vaccine_antigen_window(
             f"MHC safety prediction failed for {source_name!r}"
         ) from error
 
+    if (host_reference is not None or genome is not None or mhc_species is not None) and not predictions_df.empty:
+        reference = host_reference.proteome.reference if host_reference is not None else genome
+        validate_host_taxon(host_scope, reference, 'Final product prediction',
+                            tuple(a for a in predictions_df.allele if a))
+
     matches = None
-    if genome is not None:
+    if genome is not None or host_reference is not None:
         # Use the existing provenance-complete batch matcher, not a membership
         # index followed by a second full proteome traversal for source names.
         peptides = () if predictions_df.empty else tuple(dict.fromkeys(predictions_df["peptide"]))
-        matches = self_reference_matches(peptides, antigen, genome)
+        matches = (host_reference.matches(peptides, antigen) if host_reference is not None
+                   else self_reference_matches(peptides, antigen, genome))
 
-    genome_release = str(getattr(genome, "release", "") or "")
+    genome_release = (str(host_reference.proteome.reference.annotation_version or '')
+                      if host_reference is not None else str(getattr(genome, "release", "") or ""))
     return safety_assessment_from_prediction_frame(
         predictions_df,
         antigen=antigen,

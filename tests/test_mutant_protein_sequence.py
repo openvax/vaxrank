@@ -149,6 +149,7 @@ def test_mutant_amino_acids_in_mm10_chrX_8125624_refC_altA_pS460I():
         "--padding-around-mutation", "5",
         "--mhc-predictor", "random",
         "--mhc-alleles", "HLA-A*02:01",
+        "--mhc-species", "human",  # Explicit HLA-mouse repertoire on the B16 reference.
     ])
     results = run_vaxrank_from_parsed_args(args)
     ranked_list = results.ranked_vaccine_peptides
@@ -186,6 +187,7 @@ def test_mutant_amino_acids_in_mm10_chr9_82927102_refGT_altTG_pT441H():
         "--padding-around-mutation", "5",
         "--mhc-predictor", "random",
         "--mhc-alleles", "HLA-A*02:01",
+        "--mhc-species", "human",
     ])
     results = run_vaxrank_from_parsed_args(args)
     ranked_list = results.ranked_vaccine_peptides
@@ -218,6 +220,7 @@ def test_keep_top_k_epitopes():
         "--num-epitopes-per-vaccine-peptide", str(keep_k_epitopes),
         "--mhc-predictor", "netmhc",
         "--mhc-alleles", "HLA-A*02:01",
+        "--mhc-species", "human",
     ])
     results = run_vaxrank_from_parsed_args(args)
 
@@ -278,6 +281,7 @@ def test_mutant_protein_fragment_serialization():
         "--num-epitopes-per-vaccine-peptide", str(keep_k_epitopes),
         "--mhc-predictor", "netmhc",
         "--mhc-alleles", "HLA-A*02:01",
+        "--mhc-species", "human",
     ])
     results = run_vaxrank_from_parsed_args(args)
 
