@@ -110,3 +110,25 @@ def test_identical_rbmy_transcripts_retain_independent_expression_and_source_ide
     monkeypatch.setattr(oncoref, "__version__", "future-reference")
     monkeypatch.setattr("oncoref.version.DATA_VERSION", "future-data")
     assert CTAExpressionResult.load(path) == result
+
+
+def test_released_species_cta_snapshots_keep_evidence_and_offline_identity(tmp_path):
+    from oncoref.species_antigens import CTAEvidenceSnapshot
+
+    for collection, taxon in ((oncoref.human, 9606), (oncoref.canine, 9615),
+                               (oncoref.mouse, 10090)):
+        snapshot = collection.cta_snapshot()
+        assert snapshot.taxon_id == taxon
+        path = tmp_path / f'{taxon}.json'
+        snapshot.write(path)
+        replay = CTAEvidenceSnapshot.read(path, expected_snapshot_id=snapshot.snapshot_id)
+        assert replay.as_dict() == snapshot.as_dict()
+        assert replay.candidates() == snapshot.candidates()
+        assert replay.evidence() == snapshot.evidence()
+
+    dog = oncoref.canine.cta_snapshot()
+    assert dog.coverage['status'] == 'partial'
+    assert dog.gene_ids(reference='refseq106')
+    assert any(c['mapping']['status'] == 'ambiguous' for c in dog.candidates())
+    assert any(e['tissue'] == 'kidney' for e in dog.evidence())
+    assert oncoref.mouse.cta_snapshot().coverage['status'] == 'unavailable'

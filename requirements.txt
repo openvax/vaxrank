@@ -58,13 +58,9 @@ platformdirs
 msgspec>=0.18.6,<1.0.0
 dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
-# oncoref is the direct authority for HPA-backed CTA identity and the full
-# candidate CTA universe. Keep this reference pin aligned with PirlyGenes.
-# 1.8.208 verifies canonical/alternate gene IDs against the selected annotation
-# for admission and full candidate self exclusions (identity contract 1).
-# 1.8.210 restores identical CTA protein groups and refreshed expression
-# summaries without changing annotation-scoped gene identity or patient RNA.
-oncoref==1.8.210
+# OncoRef supplies human CTA identity and species-scoped evidence snapshots.
+# Historical human admission still uses the annotation-bound identity contract.
+oncoref==1.9.12
 # Released taxonomy/reference identity API, including annotation-free ID lookup.
 # Composed proteome integration remains tracked in #625.
 orfdata>=0.27.1,<1.0.0
