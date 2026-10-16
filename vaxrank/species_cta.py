@@ -9,6 +9,7 @@ from serializable import DataclassSerializable
 
 from .cta_admission import CTAAdmissionPolicy, CTAOverrideEvidence, PatientTumorExpressionEvidence
 from .cta_identity import identity_digest
+from .amino_acids import STANDARD_AMINO_ACIDS
 from .cta_expression import (
     CTAExpressionDecision, CTAExpressionInput, CTAExpressionResult,
     CTATargetExclusionPolicy, _expression_rows,
@@ -26,6 +27,26 @@ class SpeciesCTAExpressionInput(CTAExpressionInput):
     @property
     def id_namespace(self):
         return 'ncbi_gene_id' if self.measurement_level == 'gene' else 'refseq_transcript_id'
+
+
+@dataclass(frozen=True)
+class SpeciesCTAExpressionDecision(CTAExpressionDecision):
+    """A selected reference protein, including sequences unsuitable for prediction."""
+
+    protein_id: str = ''
+    protein_sequence_sha256: str = ''
+    unsupported_amino_acids: str = ''
+
+    def __post_init__(self):
+        super().__post_init__()
+        if bool(self.protein_id) != bool(self.protein_sequence_sha256):
+            raise ValueError('Species CTA protein selection requires its sequence checksum')
+        if self.protein_id and not re.fullmatch('[0-9a-f]{64}', self.protein_sequence_sha256):
+            raise ValueError('Species CTA protein selection requires a SHA-256')
+        if (bool(self.unsupported_amino_acids) != (self.status == 'unsupported_protein_sequence')
+                or (self.unsupported_amino_acids and (not self.protein_id
+                    or any(a in STANDARD_AMINO_ACIDS for a in self.unsupported_amino_acids)))):
+            raise ValueError('Species CTA unresolved sequence status disagrees with its residues')
 
 
 @dataclass(frozen=True)
@@ -86,6 +107,13 @@ class SpeciesCTAExpressionResult(CTAExpressionResult):
         by_gene = _unique_candidates(candidates)
         for decision in self.decisions:
             _ncbi_feature_id(decision.input_identifier, self.input_contract.measurement_level)
+            selected = by_gene.get(decision.gene_id, ())
+            pairs = {(s['transcript_id'], s['protein_id']) for c in selected
+                     for t in c['mapping']['targets'] if t['id'] == decision.gene_id
+                     for s in t['sequences']}
+            if (isinstance(decision, SpeciesCTAExpressionDecision) and decision.protein_id
+                    and (decision.transcript_id, decision.protein_id) not in pairs):
+                raise ValueError('Species CTA selected protein disagrees with its frozen mapping')
             assessment = decision.assessment
             if assessment is None:
                 if decision.status == 'admitted':
@@ -95,10 +123,6 @@ class SpeciesCTAExpressionResult(CTAExpressionResult):
                 raise ValueError('Species CTA result contains a different admission contract')
             antigen = assessment.antigen
             expression = assessment.tumor_expression
-            selected = by_gene.get(decision.gene_id, ())
-            pairs = {(s['transcript_id'], s['protein_id']) for c in selected
-                     for t in c['mapping']['targets'] if t['id'] == decision.gene_id
-                     for s in t['sequences']}
             if (assessment.snapshot_id != snapshot.snapshot_id
                     or assessment.candidate_ids != tuple(c['id'] for c in selected)
                     or assessment.policy != self.admission_policy
@@ -116,6 +140,9 @@ class SpeciesCTAExpressionResult(CTAExpressionResult):
                     or species_taxon(antigen.species) != snapshot.taxon_id
                     or len(antigen.transcript_ids) != 1 or len(antigen.protein_ids) != 1
                     or (decision.transcript_id, antigen.protein_ids[0]) not in pairs
+                    or (isinstance(decision, SpeciesCTAExpressionDecision) and (
+                        decision.protein_id != antigen.protein_ids[0]
+                        or decision.protein_sequence_sha256 != hashlib.sha256(antigen.amino_acids.encode()).hexdigest()))
                     or antigen.transcript_ids != (decision.transcript_id,)
                     or decision.status != ('admitted' if antigen.tumor_specificity.admits_construct else 'held_out')):
                 raise ValueError('Species CTA decision disagrees with frozen mapping or expression evidence')
@@ -240,7 +267,7 @@ def admit_species_cta_expression(path, *, input_contract, admission_policy, host
         genes = {t['id'] for c in candidates for t in c['mapping']['targets']
                  if any(s['transcript_id'] == measured_transcript for s in t['sequences'])}
         gene = feature_id if not measured_transcript else next(iter(genes)) if len(genes) == 1 else ''
-        decision = CTAExpressionDecision(identifier, value, gene_id=gene, transcript_id=measured_transcript)
+        decision = SpeciesCTAExpressionDecision(identifier, value, gene_id=gene, transcript_id=measured_transcript)
         selected = by_gene.get(gene, ())
         if not selected:
             status = 'ambiguous_mapping' if gene in ambiguous or len(genes) > 1 else 'not_cta'
@@ -250,6 +277,8 @@ def admit_species_cta_expression(path, *, input_contract, admission_policy, host
         decision = replace(decision, gene_name=target['symbol'], gene_identity={
             'source_gene_id': gene, 'canonical_gene_id': gene, 'taxon_id': reference.taxon_id,
             'status': 'species_reference', 'reference_id': mapped_reference['reference_id']})
+        if gene in overrides:
+            used_overrides.add(gene)
         if exclusions.excludes(decision.gene_name):
             decisions.append(replace(decision, status='excluded_target'))
             continue
@@ -266,13 +295,18 @@ def admit_species_cta_expression(path, *, input_contract, admission_policy, host
             continue
         # Gene RNA selects a reference protein, never an inferred expressed isoform.
         entry, occurrence = min(available, key=lambda pair: (-len(pair[0].sequence), pair[1].transcript_id, pair[0].accession))
+        unsupported = ''.join(sorted(set(entry.sequence) - STANDARD_AMINO_ACIDS))
+        decision = replace(decision, transcript_id=occurrence.transcript_id, protein_id=entry.accession,
+                           protein_sequence_sha256=hashlib.sha256(entry.sequence.encode()).hexdigest())
+        if unsupported:
+            decisions.append(replace(decision, status='unsupported_protein_sequence',
+                                     unsupported_amino_acids=unsupported))
+            continue
         expression = PatientTumorExpressionEvidence(
             gene, input_contract.sample_id, value, input_contract.expression_unit,
             input_contract.evidence_source, input_contract.evidence_version, input_contract.assay,
             input_contract.measurement_level, measured_transcript, identifier, fingerprint)
         override = overrides.get(gene)
-        if override:
-            used_overrides.add(gene)
         passes = value >= admission_policy.min_tumor_expression
         admitted = passes and override is not None
         records = [_reference_evidence(snapshot, selected, gene, mapped_reference),

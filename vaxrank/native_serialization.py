@@ -51,7 +51,10 @@ def _native_serializable_classes():
         CTATargetExclusionPolicy,
     )
     from .cta_identity import CTAAnnotationReference
-    from .species_cta import SpeciesCTAAdmission, SpeciesCTAExpressionInput, SpeciesCTAExpressionResult
+    from .species_cta import (
+        SpeciesCTAAdmission, SpeciesCTAExpressionDecision, SpeciesCTAExpressionInput,
+        SpeciesCTAExpressionResult,
+    )
     from .candidate_epitope import CandidateEpitope, Peptide
     from .construct_sequence import (
         ConstructChemicalModification,
@@ -93,7 +96,8 @@ def _native_serializable_classes():
             CTAAdmissionAssessment, CTAAdmissionPolicy, CTAOverrideEvidence,
             CTAReferenceEvidence, CTAReferenceResolution, PatientTumorExpressionEvidence,
             CTAExpressionInput, CTAExpressionDecision, CTAExpressionResult,
-            CTATargetExclusionPolicy, SpeciesCTAAdmission, SpeciesCTAExpressionInput, SpeciesCTAExpressionResult)},
+            CTATargetExclusionPolicy, SpeciesCTAAdmission, SpeciesCTAExpressionDecision,
+            SpeciesCTAExpressionInput, SpeciesCTAExpressionResult)},
         (CTAAnnotationReference.__module__, CTAAnnotationReference.__name__): CTAAnnotationReference,
         ("builtins", "set"): set,
         ("builtins", "tuple"): tuple,

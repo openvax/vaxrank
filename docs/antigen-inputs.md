@@ -147,6 +147,9 @@ is supplied beside `min_expression`:
 ```
 
 An override cannot bypass the expression threshold or an unresolved mapping.
+Proteins with unknown residues stay unresolved, with their accession and sequence
+checksum recorded; other targets continue. Gene measurements do not switch to a
+different isoform to conceal an unresolved sequence.
 Human `MAGE*` exclusions do not apply to dogs. Self checks omit only the reviewed
 target gene; other genes and extra ORFs remain searchable. OncoRef's partial
 coverage, family ambiguity and normal-tissue observations stay in native outputs.

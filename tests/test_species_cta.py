@@ -1,6 +1,7 @@
 """Released canine evidence with synthetic sequences, never a validated panel."""
 
 from dataclasses import replace
+import hashlib
 import json
 import shutil
 
@@ -151,10 +152,37 @@ def test_species_cta_invalid_gene_ids_fail_on_ingest(tmp_path, value):
 def test_species_cta_missing_expression_and_ineffective_overrides(tmp_path):
     result = admit(tmp_path, [(PRAME, None)])
     assert result.decisions[0].status == 'unknown_expression'
+    assert admit(tmp_path, [(PRAME, None)], overrides={PRAME: REVIEW}).decisions[0].status == 'unknown_expression'
     with pytest.raises(ValueError, match='resolved expression targets'):
         admit(tmp_path, overrides={'999': REVIEW})
     with pytest.raises(ValueError, match='Duplicate normalized'):
         admit(tmp_path, [(PRAME, 3), (PRAME, 4)])
+
+
+def test_species_cta_unresolved_residues_hold_the_selected_isoform_and_keep_other_targets(tmp_path):
+    original = host()
+    longest = next(e for e in original.proteome if e.gene_id == PRAME)
+    uncertain = replace(longest, sequence=longest.sequence + 'X')
+    entries = [uncertain if e.accession == longest.accession else e for e in original.proteome]
+    context = replace(original.proteome.reference,
+        sequence_sha256=identity_digest(sorted((e.accession, e.sequence) for e in entries)))
+    reference = HostReference(Proteome(context, entries, original.proteome.layers))
+    result = admit(tmp_path, [(PRAME, 10), (CTCFL, 10)], reference=reference,
+                   overrides={PRAME: REVIEW, CTCFL: REVIEW})
+    unresolved, valid = result.decisions
+    assert unresolved.status == 'unsupported_protein_sequence'
+    assert unresolved.assessment is None
+    assert unresolved.transcript_id == longest.transcript_id
+    assert unresolved.protein_id == longest.accession
+    assert unresolved.protein_sequence_sha256 == hashlib.sha256(uncertain.sequence.encode()).hexdigest()
+    assert unresolved.unsupported_amino_acids == 'X'
+    assert valid.status == 'admitted'
+    assert {a.gene_id for a in result.admitted_antigens} == {CTCFL}
+    saved = tmp_path / 'unresolved.json'
+    result.save(saved)
+    assert CTAExpressionResult.load(saved) == result
+    with pytest.raises(ValueError, match='frozen mapping'):
+        replace(result, decisions=(replace(unresolved, protein_id='XP_999.1'), valid))
 
 
 def test_species_cta_saved_result_replays_without_current_reference(tmp_path, monkeypatch):
@@ -165,7 +193,7 @@ def test_species_cta_saved_result_replays_without_current_reference(tmp_path, mo
     monkeypatch.setattr(oncoref, '__version__', 'future')
     assert CTAExpressionResult.load(path) == result
     decision = result.decisions[0]
-    with pytest.raises(ValueError, match='sequence differs'):
+    with pytest.raises(ValueError, match='frozen mapping or expression'):
         replace(result, decisions=(replace(decision, assessment=replace(decision.assessment,
             antigen=replace(decision.assessment.antigen, amino_acids=SEQUENCE[::-1]))),))
     with pytest.raises(ValueError, match='annotation disagree'):
