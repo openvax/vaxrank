@@ -148,7 +148,8 @@ class AntigenDataset:
             raise ValueError('Antigen prediction requires declared ' + ', '.join(missing))
         if genome is None and host_reference is None:
             raise ValueError('New antigen predictions require a host annotation for exact-self assessment')
-        validate_input_scopes([InputProvenance('validation', 'antigens', '', '', scope)], genome=genome)
+        validate_input_scopes([InputProvenance('validation', 'antigens', '', '', scope)],
+                              genome=genome, host_reference=host_reference)
         if genome is None:
             return scope
         release = getattr(genome, 'release', None)
@@ -196,7 +197,7 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
             return host_reference.matches(peptides, antigen)
     elif provenance.scope.host_reference_sha256 is not None:
         raise ValueError('Prediction requires its declared host_reference snapshot')
-    validate_input_scopes([provenance], genome=genome)
+    validate_input_scopes([provenance], genome=genome, host_reference=host_reference)
     self_matcher = self_matcher or self_reference_matches
     alleles = provenance.scope.mhc_alleles
     if not alleles:
@@ -206,7 +207,8 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
         raise ValueError('Antigen predictor returned no peptide measurements')
     frame = frame.reset_index(drop=True)
     validate_prediction_frame(frame, 'Native antigen prediction')
-    validate_host_taxon(provenance.scope, genome, 'Native antigen predictor output',
+    reference = host_reference.proteome.reference if host_reference is not None else genome
+    validate_host_taxon(provenance.scope, reference, 'Native antigen predictor output',
                         [a for a in frame.allele if cell_text(a)])
     if any(cell_text(a) and parse_prediction_allele(cell_text(a)) not in alleles for a in frame.allele):
         raise ValueError('Antigen predictor returned an allele outside the declared patient genotype')

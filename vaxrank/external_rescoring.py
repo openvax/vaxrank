@@ -389,10 +389,13 @@ def _retained_genomes(report):
 
 
 def _validate_report_scopes(reports, *, genome=None, alleles=()):
+    from .host_reference import combine_host_references
     return validate_input_scopes(
         [replace(r.input_provenance, observed_mhc_alleles=_observed_alleles(r))
          for r in reports], genome=genome, prediction_alleles=alleles,
-        retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in reports})
+        retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in reports},
+        host_reference=combine_host_references(
+            r.dataset.host_reference for r in reports if r.dataset is not None))
 
 
 def _observed_alleles(report):
@@ -421,7 +424,7 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
     """
     from .antigen_input import AntigenDataset, antigen_report
     from .cta_input import CTAExpressionSource, predict_cta_source
-    from .input_scope import InputScope
+    from .input_scope import InputScope, with_species_declarations
     from .host_reference import combine_host_references
     inputs = list(inputs)
     if scopes is None:
@@ -451,6 +454,41 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             resolved.append({**scope_dict(host_reference.validate(scope, genome=genome, location=str(path))),
                              **options})
         scopes = resolved
+    # Load declarations before validating any new sequence source. A repertoire
+    # carried by another input applies equally to new and saved evidence.
+    preloaded, sequences = dict(native), {}
+    species_scope = InputScope()
+    for report in reports:
+        claims = [report.input_provenance.scope]
+        if report.dataset is not None:
+            claims.extend(p.scope for p in report.dataset.provenance)
+        for claim in claims:
+            species_scope = combine_scopes(species_scope, claim, report.path, SPECIES_FIELDS)
+    for index, ((fmt, path), declarations) in enumerate(zip(inputs, scopes)):
+        if fmt not in INPUT_FORMATS:
+            raise ValueError("Unsupported external format: %s" % fmt)
+        claims = [scope_from_mapping({k: v for k, v in declarations.items()
+                                      if k not in ('exacto', 'cta_expression', 'host_reference')}, str(path))]
+        if fmt == 'antigens':
+            sequences[index] = AntigenDataset.load(path)
+            claims.append(sequences[index].scope)
+        elif fmt not in SEQUENCE_FORMATS:
+            if index not in preloaded:
+                kwargs = {'score_epitopes': False}
+                if fmt in ('topiary', 'exacto'):
+                    kwargs['scope_declarations'] = declarations
+                report = READERS[fmt](path, **kwargs)
+                producer = report_declarations(
+                    path, fmt, frame=report.dataset.result.df if report.dataset is not None else None)
+                preloaded[index] = report, producer
+            report, (producer_scope, _) = preloaded[index]
+            claims.append(producer_scope)
+            if report.dataset is not None:
+                claims.extend(p.scope for p in report.dataset.provenance)
+        for claim in claims:
+            species_scope = combine_scopes(species_scope, claim, str(path), SPECIES_FIELDS)
+    scopes = [with_species_declarations(declarations, species_scope, str(path))
+              for (_, path), declarations in zip(inputs, scopes)]
     native_scopes = []
     for input_index, ((fmt, path), declarations) in enumerate(zip(inputs, scopes)):
         if fmt not in INPUT_FORMATS:
@@ -475,7 +513,7 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
                     scope=declared, genome=genome, manifest_path=manifest_path, declarations=declarations)
                 provenance = source.provenance
             else:
-                source = AntigenDataset.load(path)
+                source = sequences[input_index]
                 source = replace(source, scope=combine_scopes(source.scope, declared, str(path)))
                 provenance = source.prediction_provenance(
                     genome=genome, path=path, manifest_path=manifest_path,
@@ -483,19 +521,10 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             pending.append((len(reports), source, provenance))
             reports.append(None)
             continue
-        reader_kwargs = {'score_epitopes': False}
-        if fmt in ('topiary', 'epitopes', 'exacto'):
-            reader_kwargs['scope_declarations'] = declarations
         scope_declarations = {key: value for key, value in declarations.items() if key != 'exacto'}
         # Legacy native readers reconstruct their table from candidate payloads.
         # Capture explicit table declarations before that adaptation drops them.
-        if fmt == 'epitopes':
-            report, (producer_scope, producer_declarations) = native[input_index]
-        else:
-            report = READERS[fmt](path, **reader_kwargs)
-        if fmt != 'epitopes':
-            producer_scope, producer_declarations = report_declarations(
-                path, fmt, frame=report.dataset.result.df if report.dataset is not None else None)
+        report, (producer_scope, producer_declarations) = preloaded[input_index]
         if report.dataset is not None and report.dataset.provenance:
             declared = combine_scopes(producer_scope, scope_from_mapping(scope_declarations, str(path)), str(path))
             stored = [
@@ -528,12 +557,12 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
     loaded = [report for report in reports if report is not None]
     shared_scope = validate_input_scopes(
         [report.input_provenance for report in loaded] + [p for _, _, p in pending],
-        genome=genome, prediction_alleles=alleles,
+        genome=genome, prediction_alleles=alleles, host_reference=host_reference,
         retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in loaded})
     for stored, references in native_scopes:
         validate_input_scopes([
             replace(p, scope=combine_scopes(p.scope, shared_scope, p.path, SPECIES_FIELDS))
-            for p in stored], genome=genome, prediction_alleles=alleles,
+            for p in stored], genome=genome, prediction_alleles=alleles, host_reference=host_reference,
             retained_genomes={p.input_id: references for p in stored})
     if pending:
         retained_ids = {p.input_id for r in loaded if r.dataset is not None for p in r.dataset.provenance}

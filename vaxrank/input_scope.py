@@ -142,10 +142,14 @@ def validate_prediction_species(args, references, alleles, location):
     """Check live candidate/junction queries before acquiring a model."""
     scope = combine_scopes(scope_from_mapping(getattr(args, '_input_species_scope', {}), location),
                            species_scope_from_args(args), location)
+    host_reference = getattr(getattr(args, '_design_dataset', None), 'host_reference', None)
+    if host_reference is not None:
+        scope = host_reference.validate(scope, location=location)
     references = [reference for reference in references if reference is not None]
-    if not references and scope.reference_assembly is not None:
+    if not references and host_reference is None and scope.reference_assembly is not None:
         references = [scope.reference_assembly]
-    for reference in references or (None,):
+    fallback = host_reference.proteome.reference if host_reference is not None else None
+    for reference in references or (fallback,):
         validate_host_taxon(scope, resolve_input_genome(reference), location, alleles)
     return scope
 
@@ -435,12 +439,13 @@ def validate_host_taxon(scope, reference, location, observed_alleles=()):
 
     host_species = _species_for_taxon(scope.host_taxon_id) if scope.host_taxon_id else None
     if reference is not None:
-        if scope.host_taxon_id is not None:
+        if scope.host_taxon_id is not None or isinstance(reference, ReferenceContext):
             try:
-                context = ReferenceContext.from_genome(reference)
+                context = (reference if isinstance(reference, ReferenceContext)
+                           else ReferenceContext.from_genome(reference))
             except (TypeError, ValueError) as error:
                 raise ValueError(f"{location}: cannot validate host_taxon_id against annotation: {error}") from error
-            if context.taxon_id != scope.host_taxon_id:
+            if scope.host_taxon_id is not None and context.taxon_id != scope.host_taxon_id:
                 raise ValueError(f"{location}: conflicting host_taxon_id: "
                                  f"{scope.host_taxon_id} versus annotation {context.taxon_id}")
             host_species = Species.get(canonical_species(context.species).replace('_', ' ').capitalize())
@@ -469,13 +474,17 @@ def validate_host_taxon(scope, reference, location, observed_alleles=()):
 
 
 def validate_input_scopes(provenance, *, genome=None, prediction_alleles=(),
-                          retained_genomes=None):
+                          retained_genomes=None, host_reference=None):
     """Validate the whole batch before DSL scoring, output or live prediction."""
     shared = InputScope()
     genome = resolve_input_genome(genome)
     retained_genomes = retained_genomes or {}
     for source in provenance:
         shared = combine_scopes(shared, source.scope, source.path, SHARED_FIELDS)
+    if host_reference is not None:
+        from .host_reference import HostReference
+        host_reference = HostReference.load(host_reference)
+        shared = host_reference.validate(shared, genome=genome)
     for source in provenance:
         # A shared host assertion applies to every source, including older
         # evidence which did not itself declare a host taxon.
@@ -499,7 +508,11 @@ def validate_input_scopes(provenance, *, genome=None, prediction_alleles=(),
         if genome is not None:
             references.append(genome)
         observed_alleles = (*source.observed_mhc_alleles, *prediction_alleles)
-        if not references and source.scope.reference_assembly is not None:
+        if host_reference is not None:
+            host_reference.validate(source.scope, location=source.path)
+        if not references and host_reference is not None:
+            validate_host_taxon(host_scope, host_reference.proteome.reference, source.path, observed_alleles)
+        elif not references and source.scope.reference_assembly is not None:
             # Variant adapters historically skip unresolvable rows. Reject a
             # bad declared assembly here instead of silently dropping them.
             try:

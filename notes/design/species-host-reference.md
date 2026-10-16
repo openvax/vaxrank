@@ -1,6 +1,6 @@
 # Experimental host references for shared antigen inputs
 
-Draft implementation for #625. The host reference and each antigen's source
+Experimental implementation for #625. The host reference and each antigen's source
 species are separate: a human design can contain viral antigen sequences.
 
 ## First slice
@@ -17,7 +17,7 @@ no host declaration keep their existing identity and behavior.
 the existing key compatible and explain it in the input guide. A future schema
 can separate source kind from encoding if that becomes necessary.
 
-## Remaining work before this PR is ready
+## Scope and follow-ups
 
 - [x] Consume released ORFdata composition and snapshot APIs from
   [#60](https://github.com/openvax/orfdata/pull/60) and
@@ -37,7 +37,7 @@ can separate source kind from encoding if that becomes necessary.
 - [ ] Exercise released producer artifacts, uORF-only self matches, retained
   non-CTA sharing, missing nonhuman catalogue coverage and mixed product replay.
 
-Host validation and ORFdata snapshot consumption are implemented. Nonhuman CTA
+Host validation and ORFdata snapshot consumption ship in this slice. Nonhuman CTA
 admission and donor/transgene self layers remain pending.
 
 ## Review fixes and chimeric hosts (#630, #631)
@@ -119,3 +119,18 @@ Test noncanonical-only matches, multiple placements, retained non-CTA sharing,
 viral layer separation, wrong references, corrupt/missing snapshots, and mixed
 native replay. Synthetic cases test the adapter, not species catalogue coverage.
 ORF definitions follow [Mudge et al. 2022](https://pmc.ncbi.nlm.nih.gov/articles/PMC9757701/).
+
+## Release review
+
+Ship host/MHC declarations and frozen host snapshots as experimental. Keep
+species-specific CTA admission and donor/transgene layers as separate follow-ups.
+Before release:
+
+- Reconcile shared species before validating any new sequence source, including
+  mixed saved/new inputs and either input order. Keep per-source genotype checks.
+- Validate snapshot references using their own metadata, without requiring an
+  Ensembl assembly alias, during prediction, native replay and junction queries.
+- Apply the same final-product species checks to live genomes and snapshots;
+  explicit MHC species overrides must work for both reference forms.
+- Add regression cases, run lint/full tests and CLI replay, require green CI,
+  then merge and deploy 3.45.0 from clean main.

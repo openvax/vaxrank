@@ -775,11 +775,12 @@ def assess_vaccine_antigen_window(
     immunogenicity filter. Predictor failures raise ``SafetyAssessmentError``;
     they are never converted into a reassuring empty result.
     """
+    from .input_scope import InputScope, validate_host_taxon
+    host_scope = InputScope(mhc_species=mhc_species)
     if host_reference is not None:
         from .host_reference import HostReference
-        from .input_scope import InputScope, validate_host_taxon
         host_reference = HostReference.load(host_reference)
-        host_scope = host_reference.validate(InputScope(mhc_species=mhc_species), genome=genome)
+        host_scope = host_reference.validate(host_scope, genome=genome)
         if reference_proteome is not None:
             raise ValueError('Pass host_reference or reference_proteome, not both')
     if genome is not None and reference_proteome is not None:
@@ -820,8 +821,9 @@ def assess_vaccine_antigen_window(
             f"MHC safety prediction failed for {source_name!r}"
         ) from error
 
-    if host_reference is not None and not predictions_df.empty:
-        validate_host_taxon(host_scope, None, 'Final product prediction',
+    if (host_reference is not None or genome is not None or mhc_species is not None) and not predictions_df.empty:
+        reference = host_reference.proteome.reference if host_reference is not None else genome
+        validate_host_taxon(host_scope, reference, 'Final product prediction',
                             tuple(a for a in predictions_df.allele if a))
 
     matches = None

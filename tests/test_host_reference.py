@@ -4,6 +4,7 @@ from dataclasses import replace
 import gzip
 import json
 import shutil
+from types import SimpleNamespace
 
 from orfdata import Proteome
 from orfdata.proteome import Occurrence, ProteomeEntry, ViralProteome
@@ -29,10 +30,10 @@ inputs = test_antigen_input.inputs
 dependencies = test_antigen_input.dependencies
 
 
-def reference(*, sequence='SIINFEKLA', extra=True, species='human'):
-    taxon, name, assembly = ((9606, 'homo_sapiens', 'GRCh38') if species == 'human'
+def reference(*, sequence='SIINFEKLA', extra=True, species='human', assembly=None):
+    taxon, name, default_assembly = ((9606, 'homo_sapiens', 'GRCh38') if species == 'human'
                              else (10090, 'mus_musculus', 'GRCm38'))
-    context = ReferenceContext(taxon, name, assembly, 'ensembl', '93')
+    context = ReferenceContext(taxon, name, assembly or default_assembly, 'ensembl', '93')
     def occurrence(transcript, gene):
         return Occurrence(transcript, gene, gene, 'protein_coding', '1', '+', 0,
                           len(sequence) * 3, ((1, len(sequence) * 3),), transcript == 'source')
@@ -109,13 +110,24 @@ def test_candidate_and_final_product_audit_share_the_exact_reference(inputs):
     assert {s.orf_id for s in final.sources} == {'', 'uORF'}
 
 
-def test_final_product_snapshot_validates_species_and_allows_an_explicit_hla_mouse():
+@pytest.mark.parametrize('snapshot', [False, True])
+def test_final_product_reference_validates_species_and_allows_an_explicit_hla_mouse(monkeypatch, snapshot):
     host = HostReference(reference(species='mouse'))
-    with pytest.raises(ValueError, match='conflicts with host_taxon_id'):
-        audit_construct_sequence(jlf_construct(), RecordingPredictor(), host_reference=host)
+    reference_args = dict(host_reference=host)
+    if not snapshot:
+        reference_args = dict(genome=SimpleNamespace(
+            species='mus_musculus', reference_name='GRCm38', release=93))
+        monkeypatch.setattr('vaxrank.safety_assessment.self_reference_matches',
+            lambda peptides, antigen, genome: {p: replace(antigen.self_reference_match(p, False),
+                genome_release='93') for p in peptides})
+    with pytest.raises(ValueError, match='conflicts with host'):
+        audit_construct_sequence(jlf_construct(), RecordingPredictor(), **reference_args)
     audit = audit_construct_sequence(jlf_construct(), RecordingPredictor(),
-                                    host_reference=host, mhc_species='human')
+                                    **reference_args, mhc_species='human')
     assert audit.mhc_status == 'predictions_returned'
+    with pytest.raises(ValueError, match='conflicts with mhc_species'):
+        audit_construct_sequence(jlf_construct(), RecordingPredictor(),
+                                 **reference_args, mhc_species='dog')
 
 
 def test_manifest_resolves_and_validates_snapshot_declaration(tmp_path):
@@ -190,6 +202,70 @@ def test_mixed_inputs_inherit_the_saved_snapshot_before_prediction(
     assert all(report.input_provenance.scope.host_reference_sha256 == host.identity for report in reports)
 
 
+@pytest.mark.parametrize('snapshot', [False, True])
+@pytest.mark.parametrize('saved', [False, True])
+@pytest.mark.parametrize('reverse', [False, True])
+def test_new_sequences_inherit_pooled_mhc_species_before_validation(
+        inputs, dependencies, tmp_path, snapshot, saved, reverse):
+    model, genome = dependencies
+    genome.species, genome.reference_name = 'mus_musculus', 'GRCm38'
+    genome.annotation_name, genome.annotation_version = 'ensembl', '93'
+    reference_args = (dict(host_reference=reference(species='mouse')) if snapshot else dict(genome=genome))
+    predictor = TopiaryPredictor(models=[model])
+    entries = []
+    for index, mhc_species in enumerate((None, 'human')):
+        source = replace(inputs, antigens={str(index): inputs.antigens['viral']},
+            scope=replace(inputs.scope, host_taxon_id=10090, reference_assembly='GRCm38',
+                          mhc_species=mhc_species, sample_id=str(index)))
+        fmt = 'epitopes' if saved and index else 'antigens'
+        path = tmp_path / (str(index) + ('.tsv' if fmt == 'epitopes' else '.json'))
+        if fmt == 'epitopes':
+            source.predict(predictor, **reference_args).save(path)
+        else:
+            source.save(path)
+        entries.append((fmt, path))
+    if reverse:
+        entries.reverse()
+    reports = read_reports(entries, **reference_args, antigen_predictor_factory=lambda scope: predictor)
+    for index, report in enumerate(reports):
+        assert report.input_provenance.scope.mhc_species == ('Homo sapiens',)
+        output = tmp_path / f'export-{index}.tsv'
+        report.dataset.save(output)
+        assert read_reports([('epitopes', output)])[0].input_provenance.scope.mhc_species == ('Homo sapiens',)
+
+
+def test_snapshot_reference_supports_custom_assemblies_through_prediction_and_junctions(inputs, dependencies):
+    from vaxrank.input_scope import validate_prediction_species
+    model, _ = dependencies
+    host = HostReference(reference(assembly='GCF_000001405.40'))
+    source = replace(inputs, antigens={'viral': inputs.antigens['viral']},
+                     scope=replace(inputs.scope, reference_assembly=host.scope.reference_assembly))
+    dataset = source.predict(TopiaryPredictor(models=[model]), host_reference=host)
+    args = SimpleNamespace(_design_dataset=dataset, _input_species_scope={})
+    scope = validate_prediction_species(args, [], dataset.provenance[0].scope.mhc_alleles, 'Junction')
+    assert scope.host_reference_sha256 == host.identity
+
+
+def test_snapshot_supplies_species_metadata_without_an_alias_registry_entry(inputs, dependencies, tmp_path):
+    from vaxrank.external_rescoring import prepare_reports
+    model, _ = dependencies
+    base = reference()
+    context = ReferenceContext(9544, 'macaca_mulatta', 'Mmul_10', 'refseq', '103')
+    host = HostReference(Proteome(context, [replace(e, taxon_id=9544) for e in base.entries]))
+    model.alleles = ['Mamu-A*01:01']
+    source = replace(inputs, antigens={'viral': inputs.antigens['viral']}, scope=replace(inputs.scope,
+        reference_assembly='Mmul_10', annotation='refseq:103', mhc_alleles=tuple(model.alleles)))
+    dataset = source.predict(TopiaryPredictor(models=[model]), host_reference=host)
+    saved = tmp_path / 'macaque.tsv'
+    dataset.save(saved)
+    _, frame, _ = prepare_reports([('epitopes', saved)])
+    assert frame.attrs['epitope_dataset'].host_reference.identity == host.identity
+    predictor = RecordingPredictor()
+    original = predictor.predict_from_named_sequences
+    predictor.predict_from_named_sequences = lambda sequences: original(sequences).assign(allele='Mamu-A*01:01')
+    assert audit_construct_sequence(jlf_construct(), predictor, host_reference=host).mhc_status == 'predictions_returned'
+
+
 def test_conflicting_snapshots_fail_before_predictor(inputs, dependencies, tmp_path):
     model, _ = dependencies
     paths = []
@@ -218,14 +294,17 @@ def test_unpinned_prediction_evidence_cannot_change_self_reference_on_reload(inp
         read_reports([('epitopes', saved)], host_reference=reference())
 
 
+@pytest.mark.parametrize('assembly', ['GRCh38', 'custom-human-assembly'])
 @pytest.mark.parametrize('modality', ['peptide', 'mrna'])
-def test_product_design_with_snapshot_replays_offline(inputs, dependencies, tmp_path, monkeypatch, modality):
+def test_product_design_with_snapshot_replays_offline(
+        inputs, dependencies, tmp_path, monkeypatch, modality, assembly):
     monkeypatch.setattr('vaxrank.cli.entry_point.resolve_ensembl_release',
                         lambda args: setattr(args, 'genome', None))
     source = tmp_path / 'viral.json'
-    replace(inputs, antigens={'viral': inputs.antigens['viral']}).save(source)
+    replace(inputs, antigens={'viral': inputs.antigens['viral']},
+            scope=replace(inputs.scope, reference_assembly=assembly)).save(source)
     snapshot = tmp_path / 'host.json.gz'
-    HostReference(reference()).save(snapshot)
+    HostReference(reference(assembly=assembly)).save(snapshot)
     original = tmp_path / 'original'
     run_cli(['--input-antigens', str(source), '--host-reference', str(snapshot),
              '--mhc-predictor', 'random'] + design_options(original, modality))

@@ -117,7 +117,7 @@ the native evidence, even when a CTA source contributes no admitted proteins
 to an otherwise usable mixed run. A wholly unadmitted CTA-only run stops after
 writing requested admission records.
 
-## Declare the host species (experimental draft)
+## Declare the host species (experimental)
 
 Declare a host by name. For an ordinary mouse, this is enough:
 
@@ -154,7 +154,7 @@ Current CTA expression admission remains human-only. Inputs without new scope
 fields keep their historical identities; known host annotation still enables
 species checks.
 
-## Host proteome snapshots (experimental draft)
+## Host proteome snapshots (experimental)
 
 Use an ORFdata snapshot to include selected uORFs and other noncanonical ORFs:
 
@@ -174,6 +174,8 @@ An optional `{path: FILE, identity: SHA256}` declaration pins its content identi
 The snapshot must match the declared host and annotation. It supplies exact-self
 assessment for new native antigen predictions without a live Ensembl annotation;
 CTA expression still needs its annotation for transcript/sequence selection.
+Custom assembly names and versioned assembly accessions use the snapshot's
+reference metadata directly.
 CTA gene exclusions remove annotated proteins, leaving additional ORFs at those
 genes searchable. Viral entries never become host self.
 
@@ -186,7 +188,8 @@ VCF/BAM runs retain their existing annotated reference path.
 Python accepts a `HostReference`, ORFdata `Proteome`, or snapshot path through
 `AntigenDataset.predict(..., host_reference=...)` and
 `audit_construct_sequence(..., host_reference=...)`.
-For an HLA mouse, also pass `mhc_species="human"` to the audit.
+For an HLA mouse, also pass `mhc_species="human"` to the audit, whether using
+a snapshot or a live genome.
 
 ## Shared outputs
 
