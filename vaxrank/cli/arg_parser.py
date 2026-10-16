@@ -1050,7 +1050,7 @@ def add_external_rescoring_args(arg_parser):
                      help='Experimental: design from patient CTA expression. Use a manifest to combine expression sources.')
     cta.add_argument('--cta-expression-level', choices=('gene', 'transcript'))
     for name, help_text in (
-        ('id-column', 'Human Ensembl gene/transcript identifier column.'),
+        ('id-column', 'Identifier column: human Ensembl IDs, or NCBI Gene/versioned RefSeq IDs for a mapped species reference.'),
         ('value-column', 'Patient expression measurement column.'),
         ('expression-unit', 'Declared measurement units, e.g. TPM.'),
         ('sample-id', 'Patient sample identity.'),

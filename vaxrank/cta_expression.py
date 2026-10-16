@@ -11,6 +11,7 @@ import hashlib
 import math
 from pathlib import Path
 import re
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from serializable import DataclassSerializable
@@ -23,6 +24,9 @@ from .cta_admission import (
 )
 from .native_serialization import from_native_json, to_native_json
 from .cta_identity import CTAAnnotationReference, snapshot_cta_annotation
+
+if TYPE_CHECKING:
+    from .species_cta import SpeciesCTAAdmission
 
 
 @dataclass(frozen=True)
@@ -85,7 +89,7 @@ class CTAExpressionDecision(DataclassSerializable):
     gene_name: str = ""
     transcript_id: str = ""
     status: str = ""
-    assessment: CTAAdmissionAssessment | None = None
+    assessment: "CTAAdmissionAssessment | SpeciesCTAAdmission | None" = None
     reference_resolution: CTAReferenceResolution | None = None
     gene_identity: dict | None = None
 
@@ -149,7 +153,13 @@ class CTAExpressionResult(DataclassSerializable):
 
     @classmethod
     def load(cls, path):
-        return from_native_json(Path(path).read_text(), cls)
+        return load_cta_expression_result(Path(path).read_text())
+
+
+def load_cta_expression_result(payload):
+    """Restore either admission contract without consulting live references."""
+    from .species_cta import SpeciesCTAExpressionResult
+    return from_native_json(payload, (CTAExpressionResult, SpeciesCTAExpressionResult))
 
 
 def _feature_id(identifier, level):
@@ -160,7 +170,7 @@ def _feature_id(identifier, level):
     return identifier.split(".")[0]
 
 
-def _expression_rows(path, contract):
+def _expression_rows(path, contract, *, normalize=_feature_id):
     """Preflight omissions/invalid values before using Topiary's public loader."""
     if Path(path).suffix.lower() not in {".csv", ".tsv"}:
         raise ValueError("CTA expression input must be a CSV or TSV table")
@@ -178,7 +188,7 @@ def _expression_rows(path, contract):
     # missing. Reject those cases here so no input feature disappears or an
     # invalid measurement becomes an unknown measurement silently.
     identifiers = raw[contract.id_column]
-    normalized = [_feature_id(v, contract.measurement_level) for v in identifiers]
+    normalized = [normalize(v, contract.measurement_level) for v in identifiers]
     if len(set(normalized)) != len(normalized):
         raise ValueError("Duplicate normalized expression feature IDs require explicit aggregation")
     for value in raw[contract.value_column].dropna():
@@ -195,8 +205,9 @@ def _expression_rows(path, contract):
     return tuple(zip(identifiers, normalized, loaded[contract.value_column]))
 
 
-def admit_cta_expression(path, *, input_contract, admission_policy, genome,
-                         exclusion_policy=None):
+def admit_cta_expression(path, *, input_contract, admission_policy, genome=None,
+                         exclusion_policy=None, host_reference=None, overrides=None,
+                         evidence_snapshot=None):
     """Intersect patient gene/transcript expression with direct OncoRef CTAs.
 
     Canonical gene inputs choose the OncoRef canonical transcript. Alternate
@@ -206,14 +217,31 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome,
     never pooled across features, including identical protein sequences.
     Unresolvable transcripts are retained as held-out decisions. Reference
     failures (e.g. missing genome caches) propagate rather than becoming empty
-    CTA categories. Only human Ensembl identifiers are supported here.
+    CTA categories. Human inputs use Ensembl identifiers and annotation;
+    nonhuman inputs use a mapped host-reference snapshot and species evidence.
     """
     from oncoref import resolve_gene_identity
+
+    if host_reference is not None:
+        from .host_reference import HostReference
+        host_reference = HostReference.load(host_reference)
+        if genome is not None:
+            host_reference.proteome.reference.validate_genome(genome)
+        if host_reference.scope.host_taxon_id != 9606:
+            from .species_cta import admit_species_cta_expression
+            return admit_species_cta_expression(
+                path, input_contract=input_contract, admission_policy=admission_policy,
+                host_reference=host_reference, exclusion_policy=exclusion_policy,
+                overrides=overrides, evidence_snapshot=evidence_snapshot)
+    if genome is None:
+        raise ValueError('Human CTA expression requires a host annotation')
+    if evidence_snapshot is not None:
+        raise ValueError('Human CTA expression uses its annotation-bound OncoRef reference')
 
     if input_contract.expression_unit != admission_policy.expression_unit:
         raise ValueError("Expression input units do not match the CTA admission policy")
     if genome.species.latin_name != "homo_sapiens":
-        raise ValueError("OncoRef CTA expression admission requires a human genome")
+        raise ValueError("Nonhuman CTA expression requires a mapped host_reference snapshot")
     reference = (str(genome.reference_name), str(genome.annotation_name),
                  str(genome.annotation_version))
     if any(v in {"", "None"} for v in reference):
@@ -230,6 +258,7 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome,
     # unknown transcripts in an otherwise successful, empty admission run.
     transcript_ids = frozenset(genome.transcript_ids())
     decisions = []
+    used_overrides = set()
     for identifier, feature_id, abundance in rows:
         value = None if pd.isna(abundance) else float(abundance)
         decision = CTAExpressionDecision(identifier, value)
@@ -308,8 +337,11 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome,
             amino_acids=sequence, gene_id=gene_id, genome=genome, tumor_expression=measurement,
             policy=admission_policy, transcript_ids=(transcript_id,),
             reference_resolution=cta,
+            override_evidence=(overrides or {}).get(gene_id),
             protein_ids=(transcript.protein_id,) if transcript.protein_id else (),
             source_identifier=f"{input_contract.sample_id}:{identifier}")
+        if gene_id in (overrides or {}):
+            used_overrides.add(gene_id)
         metadata = (
             ("expression_id_namespace", input_contract.id_namespace),
             ("reference_assembly", reference[0]), ("annotation_name", reference[1]),
@@ -320,6 +352,8 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome,
             assessment.antigen, source_metadata=metadata))
         status = "admitted" if assessment.antigen.tumor_specificity.admits_construct else "held_out"
         decisions.append(replace(decision, status=status, assessment=assessment))
+    if set(overrides or {}) != used_overrides:
+        raise ValueError('CTA overrides do not match resolved expression targets')
     if fingerprint != hashlib.sha256(Path(path).read_bytes()).hexdigest():
         raise ValueError("Expression input changed during admission")
     return CTAExpressionResult(input_contract, admission_policy, exclusion_policy,

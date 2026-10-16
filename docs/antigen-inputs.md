@@ -117,6 +117,47 @@ the native evidence, even when a CTA source contributes no admitted proteins
 to an otherwise usable mixed run. A wholly unadmitted CTA-only run stops after
 writing requested admission records.
 
+### Species-specific CTA expression (experimental)
+
+For dogs, declare `host_species: dog` and a `host_reference` snapshot. The same
+`cta_expression` entry accepts NCBI Gene IDs or versioned RefSeq transcript IDs.
+It uses OncoRef's canine evidence mapped to RefSeq annotation 106 /
+GCF_011100685.1. Build the complete annotated reference from its pinned protein
+FASTA and feature table (about 14 MB of downloads):
+
+```sh
+python examples/build_canine_host_reference.py dog.proteome.json.gz
+```
+
+The example uses `Proteome.from_refseq()` and OncoRef's verified public assets.
+Vaxrank checks both source hashes, the annotation, identifier namespaces and the
+complete protein inventory before prediction. No Ensembl release is needed.
+
+Canine candidates stay held out until an explicit, gene-specific evidence review
+is supplied beside `min_expression`:
+
+```yaml
+      overrides:
+        "477552":
+          evidence_source: project target review
+          evidence_version: "1"
+          evidence_id: review-PRAME
+          rationale: Recorded justification for this research target
+```
+
+An override cannot bypass the expression threshold or an unresolved mapping.
+Human `MAGE*` exclusions do not apply to dogs. Self checks omit only the reviewed
+target gene; other genes and extra ORFs remain searchable. OncoRef's partial
+coverage, family ambiguity and normal-tissue observations stay in native outputs.
+Its canine evidence includes [kidney expression for CTCFL and DDX53](https://doi.org/10.1016/j.vetimm.2025.110946).
+Mouse CTA evidence is currently unavailable; requesting it gives a clear error.
+
+An optional `evidence_snapshot` path selects an exported OncoRef snapshot,
+relative to the manifest. Python uses the same adapter:
+`admit_cta_expression(..., host_reference=host, overrides={gene_id: evidence})`,
+with `CTAOverrideEvidence` records. Saved results replay without current OncoRef
+queries or the original expression table.
+
 ## Declare the host species (experimental)
 
 Declare a host by name. For an ordinary mouse, this is enough:
@@ -150,9 +191,8 @@ and API taxon IDs must be positive integers.
 
 Donor/transgene self layers remain tracked in
 [#625](https://github.com/openvax/vaxrank/issues/625).
-Current CTA expression admission remains human-only. Inputs without new scope
-fields keep their historical identities; known host annotation still enables
-species checks.
+Inputs without new scope fields keep their historical identities; known host
+annotation still enables species checks.
 
 ## Host proteome snapshots (experimental)
 
@@ -172,8 +212,9 @@ evidence, source hashes, exclusions and every mapped occurrence are retained.
 An optional `{path: FILE, identity: SHA256}` declaration pins its content identity.
 
 The snapshot must match the declared host and annotation. It supplies exact-self
-assessment for new native antigen predictions without a live Ensembl annotation;
-CTA expression still needs its annotation for transcript/sequence selection.
+assessment for new native antigen predictions without a live Ensembl annotation.
+Human CTA expression still uses annotation for transcript/sequence selection;
+mapped canine CTA inputs select sequences directly from the snapshot.
 Custom assembly names and versioned assembly accessions use the snapshot's
 reference metadata directly.
 CTA gene exclusions remove annotated proteins, leaving additional ORFs at those

@@ -510,7 +510,8 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
                     mhc_alleles=normalize_alleles(antigen_alleles, 'Antigen prediction')), str(path))
             if fmt == 'cta_expression':
                 source = CTAExpressionSource.load(path, options=declarations.get('cta_expression'),
-                    scope=declared, genome=genome, manifest_path=manifest_path, declarations=declarations)
+                    scope=declared, genome=genome, manifest_path=manifest_path, declarations=declarations,
+                    host_reference=host_reference)
                 provenance = source.provenance
             else:
                 source = sequences[input_index]
@@ -1093,9 +1094,8 @@ def load_unified_external(args, epitope_config, options, genome):
             unresolved_candidate_groups=len({e.prediction_group_source for e in dataset.epitopes
                                              if e.prediction_group_source not in dataset.antigens}))
     if dataset.selection.get('cta_expression_admission'):
-        from .cta_expression import CTAExpressionResult
-        from .native_serialization import from_native_json
-        admission = from_native_json(dataset.selection['cta_expression_admission'], CTAExpressionResult)
+        from .cta_expression import load_cta_expression_result
+        admission = load_cta_expression_result(dataset.selection['cta_expression_admission'])
         patient.cta_expression_summary = dict(
             input_features=len(admission.decisions), admitted_targets=len(admission.admitted_antigens),
             selected_targets=len(ranked), measurement_level=admission.input_contract.measurement_level,
