@@ -19,6 +19,10 @@ from vaxrank.species_cta import SpeciesCTAExpressionResult
 from vaxrank.native_serialization import to_native_json
 from vaxrank.cli.entry_point import run_cli
 from vaxrank.epitope_dataset import EpitopeDataset
+from vaxrank.epitope_config import EpitopeConfig
+from vaxrank.input_scope import InputScope
+
+from . import test_antigen_input
 
 from .test_cta_expression import contract, SEQUENCE
 from .test_cta_manifest import options
@@ -27,6 +31,7 @@ from .test_epitope_dataset import forbidden
 PRAME = '477552'
 CTCFL = '477271'
 REVIEW = CTAOverrideEvidence('synthetic review fixture', '1', 'Exercise explicit research selection', 'fixture')
+inputs = test_antigen_input.inputs
 
 
 def host(*, shared=False, extra=False):
@@ -183,7 +188,8 @@ def test_species_cta_unavailable_mouse_evidence_is_explicit(tmp_path):
 
 
 @pytest.mark.parametrize('modality', ['peptide', 'mrna'])
-def test_species_cta_manifest_design_and_offline_replay(tmp_path, monkeypatch, modality):
+@pytest.mark.parametrize('mixed', [False, True])
+def test_species_cta_manifest_design_and_offline_replay(tmp_path, monkeypatch, modality, mixed, inputs):
     source = tmp_path / 'source'
     source.mkdir()
     reference = host()
@@ -202,6 +208,22 @@ def test_species_cta_manifest_design_and_offline_replay(tmp_path, monkeypatch, m
         patient_id='dog-001', sample_id='dog-tumor', mhc_alleles=['DLA-88*001:01'],
         host_reference='host.json.gz', inputs=[dict(format='cta_expression', path='expression.tsv',
                                                   cta_expression=opts)])
+    previous = None
+    if mixed:
+        from mhctools import RandomBindingPredictor
+        from topiary import TopiaryPredictor
+        scope = InputScope.from_dict(dict(patient_id='dog-001', sample_id='dog-tumor',
+            host_species='dog', mhc_alleles=['DLA-88*001:01']))
+        viral = replace(inputs, scope=scope,
+            antigens={'viral': replace(inputs.antigens['viral'], amino_acids='YYYYYYYYYY')})
+        viral.save(source / 'viral.json')
+        mutation = replace(inputs, scope=scope, antigens={'mutation': replace(
+            inputs.antigens['mutation'], species='dog', amino_acids='WWWWWWWWWW')})
+        previous = mutation.predict(TopiaryPredictor(models=[RandomBindingPredictor(['DLA-88*001:01'])]),
+            host_reference=reference, config=EpitopeConfig(score_expr='1.0'))
+        previous.save(source / 'mutation.tsv')
+        manifest['inputs'] += [dict(format='antigens', path='viral.json'),
+                               dict(format='epitopes', path='mutation.tsv')]
     path = source / 'inputs.json'
     path.write_text(json.dumps(manifest))
     output = tmp_path / 'design'
@@ -214,10 +236,22 @@ def test_species_cta_manifest_design_and_offline_replay(tmp_path, monkeypatch, m
     run_cli(args)
     dataset = EpitopeDataset.load(output / 'native.tsv')
     assert dataset.host_reference.identity == reference.identity
-    assert {a.species for a in dataset.antigens.values()} == {'canis_lupus_familiaris'}
+    assert {a.species for a in dataset.antigens.values() if a.kind == 'CTA'} == {'canis_lupus_familiaris'}
     saved = CTAExpressionResult.load(output / 'cta_admission.json')
     assert saved.admitted_antigens[0].gene_id == PRAME
-    assert to_native_json(saved) == dataset.selection['cta_expression_admission']
+    payload = (next(iter(dataset.selection['source_evidence'].values()))['cta_expression_admission']
+               if mixed else dataset.selection['cta_expression_admission'])
+    assert to_native_json(saved) == payload
+    exported = test_antigen_input.AntigenDataset.from_epitope_dataset(dataset)
+    target = next(a for a in exported.antigens.values() if a.kind == 'CTA')
+    facts = dict(target.tumor_specificity.evidence_records[0].details)
+    assert json.loads(facts['observations'])
+    assert json.loads(facts['candidate_records'])[0]['taxon_id'] == 9615
+    if mixed:
+        assert {a.kind for a in dataset.antigens.values()} == {'CTA', 'mutation', 'viral'}
+        historical = {e.prediction_id: e.predictions_flat() for e in previous.epitopes}
+        assert {e.prediction_id: e.predictions_flat() for e in dataset.epitopes
+                if e.prediction_id in historical} == historical
     shutil.rmtree(source)
     monkeypatch.setattr('oncoref.species_antigens.cta_snapshot', forbidden)
     monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
