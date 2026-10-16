@@ -67,7 +67,7 @@ def test_pre_species_design_restores_both_products_without_reassembly(tmp_path, 
     # Relative input paths keep the fixture independent of the original machine.
     native = tmp_path / 'legacy.tsv'
     native.write_bytes(gzip.decompress(
-        (Path(__file__).parent / 'data/native_design_3_44_3.tsv.gz').read_bytes()))
+        (Path(__file__).parent / 'data/epitope_fixtures/native_design_3_44_3.tsv.gz').read_bytes()))
     saved = EpitopeDataset.load(native).selection['construct_assembly']
     monkeypatch.setattr('vaxrank.cli.entry_point.assemble_peptide_constructs', forbidden)
     monkeypatch.setattr('vaxrank.cli.entry_point.assemble_mrna_constructs', forbidden)

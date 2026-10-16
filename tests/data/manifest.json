@@ -2,7 +2,7 @@
   "schema_version": 1,
   "notes": {
     "b16.f10": "Mouse B16-F10 reads and VCFs driving the CLI/report smoke (run-vaxrank-b16-test-data.sh) and the mutant-protein-sequence tests. Osteosarc publishes the human Sid dataset only, so these stay in-repo; they are pinned by digest here because nothing else verifies them.",
-    "epitope_fixtures": "LENS and pVACseq epitope tables consumed by the external-input, rescoring and report tests. Osteosarc has no equivalent product, so these stay in-repo and are pinned by digest here.",
+    "epitope_fixtures": "LENS, pVACseq and saved Vaxrank epitope tables consumed by input, rescoring and replay tests. The synthetic 3.44.3 native export pins historical peptide/mRNA product replay. Osteosarc has no equivalent output, so these stay in-repo and are pinned by digest here.",
     "selection_policy": "Small real Sid model-output subset and frozen score expectations from the named-policy comparison. Osteosarc supplies source reads, not these newly generated MHCflurry/Pepsickle predictions; keep offline policy replay independent of model installation. See examples/osteosarc_test_data/policy_comparison.",
     "published_policies": "Synthetic pVACseq aggregate evidence and ordering computed with the pinned upstream v7.1.4 sorting function; Osteosarc does not publish epitope reports or policy sorting oracles.",
     "cta_hitlist_bundle": "Synthetic CTA-expression evidence exported by Hitlist 1.65.1 through its public writer and verified consumer contract; pins original artifacts, mixed MS/non-MS observations, source mappings, contributors and lineage for portable CLI/replay interoperability. No clinical or patient evidence; see cta_hitlist_bundle/README.md. Osteosarc publishes read/variant fixtures rather than this evidence-bundle format.",
@@ -41,6 +41,9 @@
     "cta_hitlist_bundle/presentation.parquet": "34eed52579edfa239c5e3943533eee652b1b5ffde56026e0f9b2ff218e67626b",
     "cta_hitlist_bundle/tissue_evidence.parquet": "c2a18165e0047756072d162c9f1665a67dde33c32766a7a598f642b1b35cf334",
     "cta_hitlist_bundle/tissue_risk.parquet": "d8bc515ba923124feb58a5ec893a7e9fdeecc6bd411ec816dbc952ac9086fdf6",
+    "cta_identity/prame-ensembl-112.json": "1d4fea075f65ab9f8781adc205229f2dd5fcd82abcbcbe7b80d99730e0884c81",
+    "cta_identity/prame-ensembl-93.json": "1840b5621966d3c0fd7043d5ddfe2a945f8d42c0c57d79450507a49379d76ba5",
+    "cta_identity/rbmy-ensembl-112.json": "00d4f55d3c367b4eb0fc43ae6d25f2cd44e9ac9ecc47696b787b6d1fdc604615",
     "epitope_fixtures/exacto/LICENSE": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
     "epitope_fixtures/exacto/peptide-variants.tsv": "90d5f285b386fc61af91d38daf2d062fb74e54911d38b562e1373366c3fc72a0",
     "epitope_fixtures/exacto/primary-structures.tsv": "6d4f210d06ee88eee8a10a4c74af4ba76921f0b5e1f24c5d5c0ac3a408e4c425",
@@ -51,6 +54,7 @@
     "epitope_fixtures/lens_multi_row_per_variant.tsv": "b684583db640bd36559882bcfe7a07d3ad22f37e956888d1a6668349d44b4d08",
     "epitope_fixtures/lens_v1.4_with_stability.tsv": "65d5c6a863242b9d89ece508ea91770106a246b959d1890f076002ec4ff59f35",
     "epitope_fixtures/lens_v1.9_mhcflurry_only.tsv": "fdfad58be48043ecaaa1d45bfada929b1f38a1266a6e9f3e24cde04fe8c4f76c",
+    "epitope_fixtures/native_design_3_44_3.tsv.gz": "63904b8f4f6085a83be698790f8f4405f92f75f6765c947128168fa76b743d0c",
     "epitope_fixtures/pvacseq_example.tsv": "09463758c13eec58dcc95b18acdde0ca47269d492a2ca11329ba6774b93cc8b9",
     "epitope_fixtures/real_lens_subsets/lens_v1.4_real_subset.tsv": "a2ddc0557a57f434062077e1c17122ee84ca25a8f8931be1111881464b2839e5",
     "epitope_fixtures/real_lens_subsets/lens_v1.5_real_subset.tsv": "d0ab33119fe67b68ed93bc2fbe196fd7043bff09eb0db936e1c49a3fdfc7b0ce",
@@ -59,9 +63,6 @@
     "published_policies/pvacseq-aggregate.tsv": "20de1f10f3991ab9579780b5361004f73e7dc1955f6375b802b7dbc7a460f648",
     "published_policies/pvacseq-expected.json": "d0eed57bc2a7cea6bb41eb8302b16aedf4ca4eec741bf371eb3b0f43398d72fe",
     "selection_policy/sid-evidence.tsv": "a916fef8ca19528299c877c81ec2f3247ab8777a2195dc78de8c9b13b5af2d90",
-    "selection_policy/sid-expected.json": "2cc68f65be5c479bbd47de849f56b98217f8bede61b77f8475b33b62df66c1c6",
-    "cta_identity/prame-ensembl-93.json": "1840b5621966d3c0fd7043d5ddfe2a945f8d42c0c57d79450507a49379d76ba5",
-    "cta_identity/prame-ensembl-112.json": "1d4fea075f65ab9f8781adc205229f2dd5fcd82abcbcbe7b80d99730e0884c81",
-    "cta_identity/rbmy-ensembl-112.json": "00d4f55d3c367b4eb0fc43ae6d25f2cd44e9ac9ecc47696b787b6d1fdc604615"
+    "selection_policy/sid-expected.json": "2cc68f65be5c479bbd47de849f56b98217f8bede61b77f8475b33b62df66c1c6"
   }
 }
