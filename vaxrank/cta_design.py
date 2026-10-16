@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 from topiary import TopiaryResult
 
-from .cta_expression import CTAExpressionResult
+from .cta_expression import load_cta_expression_result
 from .native_serialization import from_native_json, to_native_json
 
 
@@ -42,7 +42,7 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
     admission_payload = dataset.selection.get('cta_expression_admission')
     if admission_payload is None:
         return
-    admission = from_native_json(admission_payload, CTAExpressionResult)
+    admission = load_cta_expression_result(admission_payload)
     regions = selected_regions(ranked, dataset)
     mhc_species = next((p.scope.mhc_species for p in dataset.provenance if p.scope.mhc_species), None)
     products = products or {}

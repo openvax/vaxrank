@@ -61,9 +61,8 @@ serializable>=1.1.0,<2.0.0
 # OncoRef supplies human CTA identity and species-scoped evidence snapshots.
 # Historical human admission still uses the annotation-bound identity contract.
 oncoref==1.9.12
-# Released taxonomy/reference identity API, including annotation-free ID lookup.
-# Composed proteome integration remains tracked in #625.
-orfdata>=0.27.1,<1.0.0
+# Pinned RefSeq protein/feature-table snapshots retain NCBI Gene identities.
+orfdata>=0.31.0,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
 # of predictor_version strings. Always pulled in transitively via setuptools
 # / pip, but pinned explicitly so minimal / --no-deps installs don't break

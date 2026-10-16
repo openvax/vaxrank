@@ -282,6 +282,8 @@ def read_input_manifest(path, *, include_direct=False):
             options = dict(options)
             if 'hitlist_evidence_bundle' in options:
                 options['hitlist_evidence_bundle'] = str((path.parent / options['hitlist_evidence_bundle']).resolve())
+            if 'evidence_snapshot' in options:
+                options['evidence_snapshot'] = str((path.parent / options['evidence_snapshot']).resolve())
             declarations['cta_expression'] = options
         if 'exacto' in item:
             options = item['exacto']

@@ -31,18 +31,23 @@ def validate_cta_args(args):
     required = ('cta_expression_level', 'cta_id_column', 'cta_value_column',
                 'cta_expression_unit', 'cta_sample_id', 'cta_expression_source',
                 'cta_expression_version', 'cta_expression_assay', 'cta_min_expression',
-                'ensembl_release', 'mhc_predictor')
+                'mhc_predictor')
     missing = ['--' + name.replace('_', '-') for name in required
                if getattr(args, name, None) is None]
     if standalone and missing:
         raise ValueError('CTA expression input requires ' + ', '.join(missing))
     from .external_rescoring import external_input_specs
-    if not any(fmt == 'cta_expression' for fmt, _, _ in external_input_specs(args)):
+    specs = external_input_specs(args)
+    if not any(fmt == 'cta_expression' for fmt, _, _ in specs):
         return
     if any(getattr(args, name, None) for name in ('vcf', 'bam')):
         raise ValueError('CTA expression inputs can join saved VCF/BAM evidence using epitopes inputs')
-    if not getattr(args, 'mhc_predictor', None) or getattr(args, 'ensembl_release', None) is None:
-        raise ValueError('CTA expression inputs require --mhc-predictor and --ensembl-release')
+    if not getattr(args, 'mhc_predictor', None):
+        raise ValueError('CTA expression inputs require --mhc-predictor')
+    if (getattr(args, 'ensembl_release', None) is None
+            and not getattr(args, 'host_reference', None)
+            and any(fmt == 'cta_expression' and not d.get('host_reference') for fmt, _, d in specs)):
+        raise ValueError('CTA expression inputs require --ensembl-release or a mapped host_reference')
     if getattr(args, 'external_predictions', 'input') != 'input' or getattr(args, 'external_peptide_only', False):
         raise ValueError('CTA expression inputs predict native proteins; external prediction modes do not apply')
     if getattr(args, 'prediction_cache', None):
@@ -75,7 +80,7 @@ def cta_options_from_args(args):
 def cta_expression_contract(options, scope, location):
     """Validate per-source options without annotation, admission or prediction."""
     names = {f.name for f in fields(CTAExpressionInput)} - {'sample_id'}
-    allowed = names | {'min_expression', 'exclusion_policy', 'hitlist_evidence_bundle'}
+    allowed = names | {'min_expression', 'exclusion_policy', 'hitlist_evidence_bundle', 'overrides', 'evidence_snapshot'}
     if not isinstance(options, dict) or set(options) - allowed:
         raise ValueError(f'{location}: invalid or unknown cta_expression options')
     missing = sorted(names - set(options))
@@ -86,7 +91,8 @@ def cta_expression_contract(options, scope, location):
         raise ValueError(f'{location}: CTA min_expression must be an explicit number')
     contract = CTAExpressionInput(sample_id=scope.sample_id, **{k: options[k] for k in names})
     policy = CTAAdmissionPolicy(minimum, contract.expression_unit)
-    excluded = options.get('exclusion_policy', {})
+    excluded = options.get('exclusion_policy', {} if scope.host_taxon_id in (None, 9606)
+                           else dict(gene_patterns=[], gene_exceptions=[]))
     if not isinstance(excluded, dict) or set(excluded) - {'gene_patterns', 'gene_exceptions'}:
         raise ValueError(f'{location}: invalid or unknown CTA exclusion_policy')
     if any(not isinstance(v, (list, tuple)) for v in excluded.values()):
@@ -95,6 +101,11 @@ def cta_expression_contract(options, scope, location):
     bundle = options.get('hitlist_evidence_bundle')
     if 'hitlist_evidence_bundle' in options and (not isinstance(bundle, str) or not bundle.strip()):
         raise ValueError(f'{location}: hitlist_evidence_bundle must be a nonempty path')
+    snapshot = options.get('evidence_snapshot')
+    if 'evidence_snapshot' in options and (not isinstance(snapshot, str) or not snapshot.strip()):
+        raise ValueError(f'{location}: evidence_snapshot must be a nonempty path')
+    from .species_cta import cta_overrides
+    cta_overrides(options)
     return contract, policy, exclusions, bundle
 
 
@@ -107,18 +118,26 @@ class CTAExpressionSource:
     bundle: dict | None = None
 
     @classmethod
-    def load(cls, path, *, options, scope, genome, manifest_path=None, declarations=None):
+    def load(cls, path, *, options, scope, genome, manifest_path=None, declarations=None, host_reference=None):
+        if host_reference is not None:
+            scope = host_reference.validate(scope, genome=genome, location=str(path))
         contract, policy, exclusions, bundle_path = cta_expression_contract(options, scope, str(path))
-        if genome is None:
+        if genome is None and host_reference is None:
             raise ValueError('CTA expression requires a host annotation')
         if not scope.patient_id or not scope.mhc_alleles:
             raise ValueError('CTA expression requires declared patient_id and mhc_alleles')
-        scope = combine_scopes(scope, InputScope(
-            reference_assembly=str(genome.reference_name),
-            annotation=str(genome.annotation_name) + ':' + str(genome.annotation_version)), str(path))
-        validate_input_scopes([InputProvenance('validation', 'cta_expression', str(path), '', scope)], genome=genome)
+        if genome is not None:
+            scope = combine_scopes(scope, InputScope(
+                reference_assembly=str(genome.reference_name),
+                annotation=str(genome.annotation_name) + ':' + str(genome.annotation_version)), str(path))
+        validate_input_scopes([InputProvenance('validation', 'cta_expression', str(path), '', scope)],
+                              genome=genome, host_reference=host_reference)
+        from .species_cta import cta_overrides
         admission = admit_cta_expression(path, input_contract=contract, admission_policy=policy,
-                                        exclusion_policy=exclusions, genome=genome)
+                                        exclusion_policy=exclusions, genome=genome, host_reference=host_reference,
+                                        overrides=cta_overrides(options), evidence_snapshot=options.get('evidence_snapshot'))
+        if bundle_path and scope.host_taxon_id not in (None, 9606):
+            raise ValueError('Hitlist CTA bundles currently require the human expression contract')
         bundle = load_hitlist_bundle(bundle_path, admission) if bundle_path else None
         identity = dict(admission=to_native_json(admission), scope=scope_dict(scope),
                         bundle_manifest=bundle['manifest'] if bundle is not None else None)
@@ -275,7 +294,7 @@ def predict_cta_source(source, predictor, *, genome, epitope_config=None, host_r
     decisions = {d.assessment.antigen.source_identifier: d for d in admission.decisions if d.status == 'admitted'}
 
     def annotate(frame):
-        frame['canonical_gene_id'] = [decisions[n].reference_resolution.evidence.gene_id
+        frame['canonical_gene_id'] = [decisions[n].gene_identity['canonical_gene_id']
                                       for n in frame.source_sequence_name]
         frame['transcript_id'] = [decisions[n].transcript_id for n in frame.source_sequence_name]
         frame['cta_expression_value'] = [decisions[n].value for n in frame.source_sequence_name]

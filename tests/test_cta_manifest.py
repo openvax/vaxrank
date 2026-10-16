@@ -228,8 +228,9 @@ def test_manifest_requires_annotation_and_predictor(tmp_path, cli_dependencies, 
     index = args.index(missing)
     del args[index:index + 2]
     monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
-    with pytest.raises(ValueError, match='require --mhc-predictor and --ensembl-release'):
+    with pytest.raises(ValueError, match='CTA expression inputs require') as error:
         run_cli(args)
+    assert missing in str(error.value)
 
 
 @pytest.mark.parametrize('exported', [False, True])
