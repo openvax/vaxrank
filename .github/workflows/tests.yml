@@ -44,7 +44,7 @@ jobs:
 
       - name: Install netmhc-bundle dependencies
         if: env.HAS_NETMHC_TOKEN == 'true'
-        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         with:
           packages: tcsh gawk python2-minimal
           version: 1.0
