@@ -70,8 +70,9 @@ jobs:
         id: openvax-v1
         run: |
           echo "manifest=$(python -c 'from osteosarc.shared import published; print(published("openvax-v1")["manifest_sha256"])')" >> "$GITHUB_OUTPUT"
-      - name: Cache openvax-v1 test reads
-        uses: actions/cache@v4
+      - name: Restore openvax-v1 test reads
+        id: openvax-v1-cache
+        uses: actions/cache/restore@v6
         with:
           path: .ci-cache/osteosarc/osteosarc/bundles
           key: openvax-v1-${{ steps.openvax-v1.outputs.manifest }}
@@ -99,8 +100,9 @@ jobs:
       - name: Lint with Ruff
         run: |
           ./lint.sh
-      - name: Cache Ensembl genome data
-        uses: actions/cache@v4
+      - name: Restore Ensembl genome data
+        id: pyensembl-cache
+        uses: actions/cache/restore@v6
         with:
           path: .ci-cache/pyensembl
           key: pyensembl-v4-canonical-human75-human93-full-mouse93-full-mouse102
@@ -120,8 +122,9 @@ jobs:
               if not genome.installed():
                   raise SystemExit(f"Canonical {species} release {release} is not fully indexed")
           PY
-      - name: Cache vaxrank reference proteome index
-        uses: actions/cache@v4
+      - name: Restore vaxrank reference proteome index
+        id: refproteome-cache
+        uses: actions/cache/restore@v6
         with:
           path: .ci-cache/vaxrank
           key: vaxrank-refproteome-v3-human75-human93-full-mouse93-full-mouse102-${{ hashFiles('vaxrank/reference_proteome.py', 'vaxrank/config/defaults.py') }}
@@ -146,6 +149,25 @@ jobs:
         uses: coverallsapp/github-action@v2.3.6
         with:
           parallel: true
+      # The matrix shares these keys; one job owns each save to avoid collisions.
+      - name: Save openvax-v1 test reads
+        if: matrix.python-version == '3.12' && steps.openvax-v1-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .ci-cache/osteosarc/osteosarc/bundles
+          key: ${{ steps.openvax-v1-cache.outputs.cache-primary-key }}
+      - name: Save Ensembl genome data
+        if: matrix.python-version == '3.12' && steps.pyensembl-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .ci-cache/pyensembl
+          key: ${{ steps.pyensembl-cache.outputs.cache-primary-key }}
+      - name: Save vaxrank reference proteome index
+        if: matrix.python-version == '3.12' && steps.refproteome-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .ci-cache/vaxrank
+          key: ${{ steps.refproteome-cache.outputs.cache-primary-key }}
 
   supported-msgspec:
     runs-on: ubuntu-22.04
