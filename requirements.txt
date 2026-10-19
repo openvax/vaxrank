@@ -60,7 +60,7 @@ dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
 # OncoRef supplies human CTA identity and species-scoped evidence snapshots.
 # Historical human admission still uses the annotation-bound identity contract.
-oncoref==1.9.12
+oncoref==1.9.15
 # Pinned RefSeq protein/feature-table snapshots retain NCBI Gene identities.
 orfdata>=0.31.0,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering

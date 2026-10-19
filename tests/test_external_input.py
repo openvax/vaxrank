@@ -1304,7 +1304,9 @@ def test_predicted_effect_returns_none_when_varcode_rejects_all_transcripts():
                 observed_ref='C')
 
     class _StubTranscript:
-        transcript_id = 'ENST_STUB'
+        id = transcript_id = 'ENST_STUB'
+        name = 'TEST'
+        strand = '+'
 
     frag = MutantProteinFragment(
         variant=_StubVariant(),
