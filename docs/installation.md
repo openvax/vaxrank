@@ -4,7 +4,7 @@
 pip install vaxrank
 ```
 
-Vaxrank requires Python 3.10 or newer.
+Vaxrank requires Python 3.11 or newer.
 
 ## Reference annotation
 

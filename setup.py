@@ -57,12 +57,13 @@ if __name__ == "__main__":
             "Intended Audience :: Science/Research",
             "License :: OSI Approved :: Apache Software License",
             "Programming Language :: Python",
+            "Programming Language :: Python :: 3.11",
+            "Programming Language :: Python :: 3.12",
+            "Programming Language :: Python :: 3.13",
+            "Programming Language :: Python :: 3.14",
             "Topic :: Scientific/Engineering :: Bio-Informatics",
         ],
-        # 3.10+ for PEP 604 union syntax (``str | None``) and dataclass
-        # slots=True used in the LENS multi-predictor loader. CI already
-        # tests only 3.10-3.13 so this matches tested reality.
-        python_requires=">=3.10",
+        python_requires=">=3.11",
         install_requires=requirements,
         extras_require={'hitlist': ['hitlist>=1.65.1,<2']},
         long_description=readme_markdown,
