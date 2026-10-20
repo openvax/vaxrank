@@ -1132,13 +1132,8 @@ def external_input_arg_parser():
     arg_parser.add_argument("--input-pvacseq", default=None)
     arg_parser.add_argument("--input-lens", default=None)
     add_external_rescoring_args(arg_parser)
-    add_mhc_args(arg_parser)
+    add_mhc_args(arg_parser, predictor_required=False)
     add_prediction_cache_arg(arg_parser)
-    # Models are required only for fresh prediction; historical-only runs must
-    # neither require a model installation nor instantiate a predictor.
-    for action in arg_parser._actions:
-        if action.dest == 'mhc_predictor':
-            action.required = False
     arg_parser.add_argument(
         "--verbose", "-v", action="store_true", default=False)
     arg_parser.add_argument(

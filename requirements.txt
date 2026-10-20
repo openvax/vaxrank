@@ -25,7 +25,7 @@ isovar>=1.45.0,<2.0.0
 mhcgnomes>=3.64.4,<4.0.0
 # 4.0.0 makes PeptideInput the single cleavage record, removing CleavageInput.
 # The report and processing adapters below use that record directly.
-mhctools>=4.0.0,<5.0.0
+mhctools>=4.2.0,<5.0.0
 # 5.82.0 is the first release compatible with Osteosarc 0.14. It includes
 # context-correct cached scans, presentation metrics and conflict checks in
 # the DSL used for scoring. Keep these floors aligned when Osteosarc moves.
