@@ -190,8 +190,20 @@ def test_cli_parses_repeated_sources_and_conditional_model_configuration():
     assert external_inputs(args) == [('lens', 'one.tsv'), ('pvacseq', 'two.tsv')]
     assert args.external_predictions == 'fresh'
     assert parse_vaxrank_args(['--external-input', 'lens=one.tsv']).mhc_predictor is None
+    assert parse_vaxrank_args([
+        '--vcf', 'one.vcf', '--bam', 'one.bam', '--mhc-predictor', 'random',
+    ]).mhc_predictor == [['random']]
     with pytest.raises(ValueError, match='requires lens=PATH'):
         external_inputs(SimpleNamespace(external_input=['unsupported=unsupported.json']))
+
+
+def test_direct_cli_requires_predictor_selection(capsys):
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+
+    with pytest.raises(SystemExit) as error:
+        parse_vaxrank_args(['--vcf', 'one.vcf', '--bam', 'one.bam'])
+    assert error.value.code == 2
+    assert '--mhc-predictor' in capsys.readouterr().err
 
 
 @pytest.mark.parametrize('fmt,path', INPUTS)
@@ -262,6 +274,9 @@ def test_mixed_cli_reranks_with_fresh_values_and_exports_originals(monkeypatch, 
     original_native = tmp_path / 'original.tsv'
     main(inputs + ['--output-csv', str(original_csv),
                    '--output-input-predictions', str(original_native)])
+    original_predictions = load_predictions(original_native)
+    assert {p.predictor_version for e in original_predictions for p in e.predictions_flat()
+            if p.predictor_name == 'mhcflurry'} == {'2.1.1'}
     original_frame = pd.read_csv(original_csv).sort_values('rank')
     promoted = original_frame.iloc[-1]['Mutant peptide sequence']
 
