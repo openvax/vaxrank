@@ -25,7 +25,7 @@ pip install vaxrank
 pyensembl install --release 113 --species human   # match your reference genome
 ```
 
-Vaxrank needs Python 3.10 or newer. PDF reports additionally need wkhtmltopdf or
+Vaxrank needs Python 3.11 or newer. PDF reports additionally need wkhtmltopdf or
 WeasyPrint; see [installation](docs/installation.md).
 
 ## Quick start

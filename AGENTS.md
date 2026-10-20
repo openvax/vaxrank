@@ -59,7 +59,7 @@ git tag "v${VERSION}" && git push --tags
 
 ## Code Style
 
-- Python 3.10+, Linux + macOS (no Windows guarantee)
+- Python 3.11+, Linux + macOS (no Windows guarantee)
 - Lint: `ruff check` (config minimal; no `ruff format` step in this repo)
 - Docstrings: numpy style
 - Bugfixes include a regression test where feasible

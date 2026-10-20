@@ -1,6 +1,6 @@
 # Releasing Vaxrank
 
-Use Python 3.10 or newer. Set `PYTHON` to the environment used for lint and
+Use Python 3.11 or newer. Set `PYTHON` to the environment used for lint and
 tests so the release uses the same dependencies. The package reads README.md
 directly as Markdown; Pandoc and pypandoc are not required.
 
