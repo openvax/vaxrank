@@ -11,7 +11,7 @@
 # limitations under the License.
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from serializable import DataclassSerializable
@@ -31,11 +31,20 @@ class VaxrankResults(DataclassSerializable):
         Dictionary mapping variant to a list of possible vaccine peptides
 
     ranked_vaccine_peptides : list of tuple(varcode.Variant, list of VaccinePeptide)
+
+    retained_protein_fragments : list of MutantProteinFragment
+        Exact windows constructed while considering variants, including those
+        later excluded by peptide selection. Isovar alternatives remain in
+        ``isovar_results`` rather than being copied into this list.
     """
 
     isovar_results: list[Any]
     variant_to_vaccine_peptides_dict: dict[Any, Any]
     ranked_vaccine_peptides: list[Any]
+    # Exact fragments generated while considering variants, including windows
+    # later excluded by MHC prediction or vaccine ranking. These are partial
+    # products; Isovar's unfiltered results retain its complete alternatives.
+    retained_protein_fragments: list[Any] = field(default_factory=list)
 
     @property
     def variants(self):
