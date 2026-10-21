@@ -130,6 +130,45 @@ def test_vaccine_peptides_for_variant_fails_filter_returns_empty():
     eq_(result, [])
 
 
+def test_run_retains_unranked_dna_fallback_window():
+    """A DNA window survives even when no epitope earns a vaccine peptide."""
+    isovar_result = MagicMock()
+    isovar_result.passes_all_filters = False
+    isovar_result.variant.ensembl = None
+    fragment = MagicMock(spec=MutantProteinFragment)
+    fragment.amino_acids = "MUTANTWINDOW"
+    fragment.protein_start_offset = 42
+    fragment.sequence_source = "varcode_translation"
+    fragment.sorted_subsequences.return_value = []
+
+    with patch.object(MutantProteinFragment, "from_variant_dna", return_value=fragment):
+        with patch("vaxrank.core_logic.predict_epitopes", return_value=[]):
+            results = run_vaxrank(
+                [isovar_result], MagicMock(), allow_dna_only_fallback=True)
+
+    assert results.variant_to_vaccine_peptides_dict == {}
+    assert results.ranked_vaccine_peptides == []
+    assert results.retained_protein_fragments == [fragment]
+    assert results.retained_protein_fragments[0].protein_start_offset == 42
+
+
+def test_run_retains_rna_fragment_without_promoting_alternatives():
+    """Isovar inputs remain intact while Vaxrank records the selected window."""
+    isovar_result = MagicMock()
+    isovar_result.passes_all_filters = True
+    isovar_result.variant.ensembl = None
+    fragment = MagicMock(spec=MutantProteinFragment)
+    fragment.sorted_subsequences.return_value = []
+
+    with patch.object(MutantProteinFragment, "from_isovar_result", return_value=fragment):
+        with patch("vaxrank.core_logic.predict_epitopes", return_value=[]):
+            results = run_vaxrank([isovar_result], MagicMock())
+
+    assert results.isovar_results == [isovar_result]
+    assert results.retained_protein_fragments == [fragment]
+    assert results.variant_to_vaccine_peptides_dict == {}
+
+
 def test_vaccine_peptides_for_variant_config_overrides_explicit_params():
     """Test that vaccine_config values override explicit parameters"""
     mock_isovar_result = MagicMock()
