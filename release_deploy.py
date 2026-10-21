@@ -160,8 +160,18 @@ class Release:
             "-c", "push.followTags=false", "push", "--porcelain",
             "--force-with-lease=%s:%s" % (self.lock_ref, owner),
             "origin", ":" + self.lock_ref, check=False)
-        if self.remote_ref(self.lock_ref) is not None:
-            raise ReleaseUploadError("Could not release ownership: " + result.stderr.strip())
+        # A successful deletion can be followed by a transient SSH read failure.
+        for attempt in range(3):
+            try:
+                observed = self.remote_ref(self.lock_ref)
+            except ReleaseUploadError:
+                if attempt == 2:
+                    raise
+                time.sleep(1)
+                continue
+            if observed is not None:
+                raise ReleaseUploadError("Could not release ownership: " + result.stderr.strip())
+            return
 
     def record_artifacts(self, head, paths):
         hashes = {path.name: file_sha256(path) for path in paths}

@@ -256,6 +256,41 @@ def test_lost_lock_push_acknowledgement_is_reconciled(releases, package_io, monk
     assert release.remote_ref(release.lock_ref) is None
 
 
+@pytest.mark.parametrize("failed_reads", [1, None])
+def test_final_lock_read_retries_transient_failure_but_not_indefinitely(
+        releases, package_io, monkeypatch, failed_reads):
+    io, published, builds, uploads = package_io
+    release = releases[0]
+    original_git = release.git
+    deleted = False
+    failed = 0
+
+    def flaky_git(*args, **kwargs):
+        nonlocal deleted, failed
+        if deleted and args[:2] == ("ls-remote", "--refs") and args[-1] == release.lock_ref:
+            if failed_reads is None or failed < failed_reads:
+                failed += 1
+                raise ReleaseUploadError("Connection closed during final lock read")
+        result = original_git(*args, **kwargs)
+        if args[-1] == ":" + release.lock_ref:
+            assert result.returncode == 0
+            deleted = True
+        return result
+
+    monkeypatch.setattr(release, "git", flaky_git)
+    monkeypatch.setattr(release_deploy.time, "sleep", lambda seconds: None)
+    if failed_reads == 1:
+        deploy(release, **io)
+        assert failed == 1
+    else:
+        with pytest.raises(ReleaseUploadError, match="Connection closed during final lock read"):
+            deploy(release, **io)
+        assert failed == 3
+    assert len(builds) == 1 and len(uploads) == 2
+    assert set(published) == release.filenames
+    assert git(release.repo, "ls-remote", "origin", release.lock_ref) == ""
+
+
 def test_remote_claim_rejection_fails_before_build(releases, package_io):
     io, _, builds, uploads = package_io
     release = releases[0]
