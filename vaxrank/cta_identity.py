@@ -3,8 +3,32 @@
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import re
 
 from serializable import DataclassSerializable
+from .input_scope import resolved_reference_assembly
+
+
+def _validate_annotation_identity(species, assembly, release):
+    if species != "homo_sapiens":
+        raise ValueError("CTA identity requires explicit homo_sapiens species metadata")
+    if type(assembly) is not str or assembly not in {"GRCh37", "GRCh38"}:
+        raise ValueError("CTA identity requires a resolved GRCh37/GRCh38 assembly")
+    numbered = type(release) is int and release >= 1
+    dated = (type(release) is str
+             and re.fullmatch(r"[0-9]{4}_(0[1-9]|1[0-2])", release) is not None
+             and release[:4] != "0000")
+    if not (numbered or dated):
+        raise ValueError("CTA identity requires a positive numbered release or YYYY_MM annotation date")
+
+
+def cta_annotation_identity(genome):
+    """Return the explicit biological annotation identity, apart from cache labels."""
+    species = getattr(getattr(genome, "species", None), "latin_name", None)
+    assembly = resolved_reference_assembly(genome)
+    release = getattr(genome, "release", None)
+    _validate_annotation_identity(species, assembly, release)
+    return species, assembly, release
 
 
 def identity_digest(value):
@@ -23,7 +47,7 @@ class CTAAnnotationReference(DataclassSerializable):
     identity_contract_version: int
     annotation_species: str
     annotation_assembly: str
-    annotation_release: int
+    annotation_release: int | str
     annotation_sha256: str
     annotation_hash_kind: str
     canonical_candidate_gene_ids: tuple[str, ...]
@@ -35,10 +59,8 @@ class CTAAnnotationReference(DataclassSerializable):
     def __post_init__(self):
         if self.identity_contract_version != 1:
             raise ValueError("Unsupported CTA identity contract")
-        if (self.annotation_species != "homo_sapiens"
-                or self.annotation_assembly not in {"GRCh37", "GRCh38"}
-                or self.annotation_release < 1):
-            raise ValueError("CTA identity requires an explicit human annotation")
+        _validate_annotation_identity(self.annotation_species, self.annotation_assembly,
+                                      self.annotation_release)
         if len(self.annotation_sha256) != 64:
             raise ValueError("CTA annotation requires SHA-256 provenance")
         candidates = tuple(sorted(set(self.canonical_candidate_gene_ids)))
@@ -72,6 +94,7 @@ class CTAAnnotationReference(DataclassSerializable):
 
 def snapshot_cta_annotation(genome):
     """Resolve once for admission, exclusions and the persisted audit."""
+    species, assembly, release = cta_annotation_identity(genome)
     from oncoref import cta_annotation_gene_identities
     from oncoref.cta import cta_unfiltered_gene_ids
     from oncoref.gene_identity import GENE_IDENTITY_CONTRACT_VERSION
@@ -95,9 +118,9 @@ def snapshot_cta_annotation(genome):
         hash_kind = "annotated-cta-loci-and-proteins"
     return CTAAnnotationReference(
         identity_contract_version=GENE_IDENTITY_CONTRACT_VERSION,
-        annotation_species=genome.species.latin_name,
-        annotation_assembly=genome.reference_name,
-        annotation_release=genome.release,
+        annotation_species=species,
+        annotation_assembly=assembly,
+        annotation_release=release,
         annotation_sha256=annotation_hash, annotation_hash_kind=hash_kind,
         canonical_candidate_gene_ids=candidates,
         canonical_candidate_gene_ids_sha256=identity_digest(list(candidates)),

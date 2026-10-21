@@ -23,7 +23,7 @@ from .cta_admission import (
     assess_cta_antigen, resolve_cta_reference_evidence,
 )
 from .native_serialization import from_native_json, to_native_json
-from .cta_identity import CTAAnnotationReference, snapshot_cta_annotation
+from .cta_identity import CTAAnnotationReference, cta_annotation_identity, snapshot_cta_annotation
 
 if TYPE_CHECKING:
     from .species_cta import SpeciesCTAAdmission
@@ -240,9 +240,8 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome=None,
 
     if input_contract.expression_unit != admission_policy.expression_unit:
         raise ValueError("Expression input units do not match the CTA admission policy")
-    if genome.species.latin_name != "homo_sapiens":
-        raise ValueError("Nonhuman CTA expression requires a mapped host_reference snapshot")
-    reference = (str(genome.reference_name), str(genome.annotation_name),
+    _, assembly, _ = cta_annotation_identity(genome)
+    reference = (str(assembly), str(genome.annotation_name),
                  str(genome.annotation_version))
     if any(v in {"", "None"} for v in reference):
         raise ValueError("CTA expression admission requires a versioned genome reference")
