@@ -14,7 +14,10 @@ from .cta_admission import CTAAdmissionPolicy
 from .cta_expression import CTAExpressionInput, CTAExpressionResult, CTATargetExclusionPolicy, admit_cta_expression
 from .antigen_input import predict_antigens
 from .external_report import ExternalReport
-from .input_scope import InputProvenance, InputScope, combine_scopes, normalize_alleles, scope_dict, validate_input_scopes
+from .input_scope import (
+    InputProvenance, InputScope, combine_scopes, normalize_alleles,
+    resolved_reference_assembly, scope_dict, validate_input_scopes,
+)
 from .native_serialization import to_native_json
 from .reference_proteome import self_reference_matches
 
@@ -128,7 +131,7 @@ class CTAExpressionSource:
             raise ValueError('CTA expression requires declared patient_id and mhc_alleles')
         if genome is not None:
             scope = combine_scopes(scope, InputScope(
-                reference_assembly=str(genome.reference_name),
+                reference_assembly=str(resolved_reference_assembly(genome)),
                 annotation=str(genome.annotation_name) + ':' + str(genome.annotation_version)), str(path))
         validate_input_scopes([InputProvenance('validation', 'cta_expression', str(path), '', scope)],
                               genome=genome, host_reference=host_reference)
