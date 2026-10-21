@@ -278,7 +278,8 @@ class TemplateDataCreator(object):
         # ``vaxrank.processing``); a future per-position predictor
         # plugged in via the same flat record fields would
         # show its own name here.
-        patient_info['Processing predictor'] = PEPSICKLE_PREDICTOR_NAME
+        if self.processing_predictions_by_key:
+            patient_info['Processing predictor'] = PEPSICKLE_PREDICTOR_NAME
         has_antigen_sources = any(
             not isinstance(source, Variant)
             for source, peptides in self.ranked_variants_with_vaccine_peptides

@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.shared_read_cache
-def test_distributions_include_the_sid_recipe_and_no_reads(tmp_path):
+def test_distributions_include_sid_recipe_and_only_pinned_canine_reads(tmp_path):
     result = subprocess.run([
         sys.executable, "setup.py", "--quiet", "sdist", "--dist-dir", str(tmp_path),
         "bdist_wheel", "--dist-dir", str(tmp_path)], cwd=ROOT, capture_output=True, text=True)
@@ -31,9 +31,17 @@ def test_distributions_include_the_sid_recipe_and_no_reads(tmp_path):
     assert not any(name.startswith("tests/") for name in sdist)
     assert {"LICENSE", "MANIFEST.in", "setup.py", "requirements.txt", "TEST_DATA.md",
             "vaxrank/sid_test_data.py", "examples/osteosarc_test_data/pin_catalog.py",
-            "examples/build_canine_host_reference.py"} <= set(sdist)
+            "examples/build_canine_host_reference.py", "examples/wlos0001_tp53/README.md",
+            "examples/wlos0001_tp53/run.py"} <= set(sdist)
     assert sdist['examples/build_canine_host_reference.py'] == (
         ROOT / 'examples/build_canine_host_reference.py').read_bytes()
+    canine_reads = {
+        "examples/wlos0001_tp53/data/wlos0001-tp53.bam",
+        "examples/wlos0001_tp53/data/wlos0001-tp53.bam.bai",
+    }
+    for name in canine_reads:
+        assert sdist[name] == (ROOT / name).read_bytes()
+        assert name not in wheel
     recipe = ROOT / "vaxrank/data/sid-recipe"
     shipped = {p.relative_to(ROOT).as_posix(): p.read_bytes() for p in recipe.rglob("*") if p.is_file()}
     assert shipped
@@ -42,6 +50,9 @@ def test_distributions_include_the_sid_recipe_and_no_reads(tmp_path):
     for payload in (sdist, wheel):
         for name, data in payload.items():
             if name.endswith((".bam", ".bai", ".cram", ".fastq", ".fastq.gz", ".sam", ".sam.gz", ".zip")):
+                if name in canine_reads:
+                    assert payload is sdist
+                    continue
                 # The recipe's fixture SAM headers contain no read records.
                 assert name.startswith("vaxrank/data/sid-recipe/headers/"), name
                 assert all(line.startswith(b"@") for line in gzip.decompress(data).splitlines())
