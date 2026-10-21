@@ -12,7 +12,8 @@ from .epitope_io import normalize_hla_allele
 from .external_report import ExternalReport
 from .input_scope import (
     InputProvenance, combine_scopes, normalize_alleles, provenance_columns,
-    read_input_manifest, scope_from_mapping, scope_dict, validate_input_scopes,
+    read_input_manifest, resolved_reference_assembly, scope_from_mapping,
+    scope_dict, validate_input_scopes,
     species_scope_from_args, with_species_declarations,
 )
 
@@ -47,7 +48,7 @@ def prepare_direct_report(args, reports, epitope_config):
     for variant in variants:
         genome = variant.ensembl
         scope = combine_scopes(scope, scope_from_mapping({
-            'reference_assembly': genome.reference_name,
+            'reference_assembly': resolved_reference_assembly(genome),
             'annotation': 'ensembl:' + str(genome.release) if hasattr(genome, 'release') else None,
         }, 'Direct VCF reference'), 'Direct VCF reference')
     paths = list(getattr(args, 'vcf', None) or [])
