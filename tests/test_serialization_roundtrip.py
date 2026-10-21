@@ -16,6 +16,7 @@ migrated from ``serializable.Serializable`` to
 only exercise these code paths when an MHC predictor is available."""
 
 import pickle
+from dataclasses import replace
 
 import pytest
 from mhctools.pred import Prediction
@@ -29,6 +30,7 @@ from vaxrank.vaccine_antigen import (
     VaccineAntigen,
 )
 from vaxrank.vaccine_peptide import VaccinePeptide
+from vaxrank.vaxrank_results import VaxrankResults
 
 
 def _sample_variant():
@@ -50,6 +52,21 @@ def _sample_fragment(amino_acids="MKVTHFYL" * 3, n_alt_reads=50):
         n_ref_reads=50,
         n_alt_reads_supporting_protein_sequence=n_alt_reads,
     )
+
+
+def test_results_retain_partial_dna_window_offline():
+    fragment = replace(
+        _sample_fragment(),
+        protein_start_offset=123,
+        sequence_source="varcode_translation",
+        dna_effect_selection={"transcript_id": "TX1", "mutation_start": 127},
+    )
+    results = VaxrankResults([], {}, [], [fragment])
+
+    restored = VaxrankResults.from_json(results.to_json())
+    assert restored.retained_protein_fragments == [fragment]
+    assert restored.retained_protein_fragments[0].protein_start_offset == 123
+    assert restored.retained_protein_fragments[0].amino_acids == fragment.amino_acids
 
 
 def _sample_epitope(

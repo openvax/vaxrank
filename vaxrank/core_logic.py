@@ -93,7 +93,11 @@ def run_vaxrank(
     allow_dna_only_fallback
         When True, variants without RNA support will attempt to construct
         vaccine peptides from DNA annotation using varcode's MutantTranscript.
+
+    The returned results retain every constructed fragment before peptide
+    selection, including DNA fallback windows that produce no MHC binder.
     """
+    retained_protein_fragments = []
     variant_to_vaccine_peptides_dict = create_vaccine_peptides_dict(
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
@@ -107,6 +111,7 @@ def run_vaxrank(
         epitope_dataset=epitope_dataset,
         policy_evaluations=policy_evaluations,
         defer_window_selection=defer_window_selection,
+        retained_protein_fragments=retained_protein_fragments,
     )
     ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
 
@@ -114,6 +119,7 @@ def run_vaxrank(
         isovar_results=isovar_results,
         variant_to_vaccine_peptides_dict=variant_to_vaccine_peptides_dict,
         ranked_vaccine_peptides=ranked_list,
+        retained_protein_fragments=retained_protein_fragments,
     )
 
 
@@ -130,6 +136,7 @@ def create_vaccine_peptides_dict(
     epitope_dataset=None,
     policy_evaluations=None,
     defer_window_selection=True,
+    retained_protein_fragments=None,
 ):
     """
     Parameters
@@ -161,6 +168,9 @@ def create_vaccine_peptides_dict(
     -------
     Returns a dictionary of varcode.Variant objects to a list of
     VaccinePeptides.
+
+    ``retained_protein_fragments`` may collect the exact candidate windows
+    before MHC or vaccine selection, independently of this dictionary.
     """
     require_target_epitopes = (
         vaccine_config.require_target_epitopes_in_variant
@@ -182,6 +192,7 @@ def create_vaccine_peptides_dict(
             epitope_dataset=epitope_dataset,
             policy_evaluations=policy_evaluations,
             defer_window_selection=defer_window_selection,
+            retained_protein_fragments=retained_protein_fragments,
         )
 
         if not vaccine_peptides:
@@ -207,6 +218,7 @@ def vaccine_peptides_for_variant(
     epitope_dataset=None,
     policy_evaluations=None,
     defer_window_selection=True,
+    retained_protein_fragments=None,
 ):
     """
     Parameters
@@ -262,6 +274,8 @@ def vaccine_peptides_for_variant(
         return []
 
     logger.info("Mutant protein fragment for %s: %s", variant, long_protein_fragment)
+    if retained_protein_fragments is not None:
+        retained_protein_fragments.append(long_protein_fragment)
 
     epitopes = predict_epitopes(
         mhc_predictor=mhc_predictor,
