@@ -1,0 +1,6 @@
+##fileformat=VCFv4.2
+##reference=CanFam3.1
+##contig=<ID=5,length=88915250>
+##source=Gardner_et_al_2019_Supplementary_Data_6_Primary_Tumor_dog_1
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+5	32563056	.	G	A	.	PASS	.

@@ -2,8 +2,8 @@
 
 Vaxrank's Sid regression tests use **1,148 selected alignment records in 58
 cohorts** from the public
-[CC0 Sid dataset](https://registry.opendata.aws/sid-osteosarc/). Vaxrank stores
-no reads. The records come from **openvax-v1**, the OpenVax libraries' shared
+[CC0 Sid dataset](https://registry.opendata.aws/sid-osteosarc/). The Sid recipe
+stores no reads. The records come from **openvax-v1**, the OpenVax libraries' shared
 Sid test data, published by osteosarc 0.11
 ([iskandr/osteosarc#56](https://github.com/iskandr/osteosarc/issues/56)). Each
 cohort is the openvax-v1 member `vaxrank/<path>`, e.g.
@@ -38,6 +38,16 @@ mates or all alignments of every template in the original BAM were recovered.
 
 Osteosarc supplies the Sid reads and variant identities; it does not supply
 the independent Ensembl annotations or MHC prediction expectations.
+
+## Canine WLOS_0001 example
+
+The source distribution also includes a separate, 38 KB region-extracted
+tumor RNA BAM and its index for one canine TP53 locus. The matched-normal
+somatic call is transcribed from the published study; the DNA reads are not
+included. [The example README](examples/wlos0001_tp53/README.md) documents
+the source, checksums, pinned CanFam3.1/Ensembl 98 reference subsets, run
+command, and limits of the random MHC test predictor. These files are not part
+of the Sid recipe or the installed wheel.
 
 ## Fixtures Osteosarc does not supply
 

@@ -12,7 +12,7 @@ Vaxrank selects mutated protein fragments for personalized therapeutic cancer
 vaccines. It is the antigen ranking and vaccine design component of the
 [OpenVax](https://www.openvax.org/) pipeline.
 
-It takes somatic variants, tumor RNA-seq and HLA types, or previously scored
+It takes somatic variants, tumor RNA-seq and MHC alleles, or previously scored
 candidate epitopes, and returns ranked antigen windows,
 peptide or mRNA construct files, and reports for reviewing the evidence behind
 each design. Unified mutation/CTA/viral inputs and the expanded peptide/mRNA
@@ -47,11 +47,16 @@ vaxrank \
     --pdf-backend weasyprint
 ```
 
+For an offline canine DNA/RNA replay, see the
+[WLOS_0001 TP53 example](examples/wlos0001_tp53/README.md). It uses original
+tumor RNA and a published matched-normal somatic call with a random test
+predictor; the dog's DLA genotype is unknown.
+
 For a real VCF + RNA run, supply:
 
 - `--vcf`: somatic variants, from any variant caller
 - `--bam`: tumor RNA-seq alignments, used by Isovar to assemble mutant transcripts
-- `--mhc-alleles`: the patient's HLA alleles, e.g. `HLA-A*02:01,HLA-B*07:02`
+- `--mhc-alleles`: the patient's MHC alleles, e.g. `HLA-A*02:01,HLA-B*07:02`
 - `--mhc-predictor`: which binding predictor to run
   ([available predictors](docs/mhc-predictors.md))
 
