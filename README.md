@@ -48,7 +48,7 @@ vaxrank \
 ```
 
 For an offline canine DNA/RNA replay, see the
-[WLOS_0001 TP53 example](examples/wlos0001_tp53/README.md). It uses original
+[WLOS_0001 TP53 example](https://github.com/openvax/vaxrank/tree/main/examples/wlos0001_tp53). It uses original
 tumor RNA and a published matched-normal somatic call with a random test
 predictor; the dog's DLA genotype is unknown.
 
