@@ -1,6 +1,7 @@
 """Exercise released reference data alongside the stubbed CTA unit tests."""
 
 import oncoref
+import pytest
 from oncoref import cta
 from oncoref.version import DATA_VERSION, SOURCE_MATRIX_VERSION
 from pyensembl import EnsemblRelease
@@ -26,7 +27,7 @@ def test_public_default_cta_admission_keeps_extended_targets_explicit():
     genome = EnsemblRelease(93)
     excluded = tuple(sorted(oncoref.cta_annotation_gene_ids(genome, unfiltered=True)))
 
-    for symbol, canonical in (("PRAME", True), ("GPX5", False)):
+    for symbol, canonical in (("PRAME", True), ("GPX5", False), ("SPAG9", False)):
         resolution = resolve_cta_reference_evidence(core.loc[symbol, "Ensembl_Gene_ID"], genome=genome)
         evidence = resolution.evidence
         assert evidence.canonical_default is canonical
@@ -37,12 +38,15 @@ def test_public_default_cta_admission_keeps_extended_targets_explicit():
         assert evidence.gene_id in excluded
 
 
-def test_public_extended_only_cta_stays_held_out_and_replays_without_reference_queries(
-    monkeypatch,
+@pytest.mark.parametrize("symbol", ["GPX5", "SPAG9"])
+def test_public_noncanonical_cta_stays_held_out_and_replays_without_reference_queries(
+    monkeypatch, symbol,
 ):
-    row = cta.cta_df().set_index("Symbol").loc["GPX5"]
+    # GPX5 is extended-only; SPAG9 is a newly nominated, filtered-out record.
+    # Neither source nomination nor extended membership admits a construct.
+    row = cta.cta_df().set_index("Symbol").loc[symbol]
     assessment = assess_cta_antigen(
-        # Synthetic sequence: this test checks reference admission, not GPX5
+        # Synthetic sequence: this test checks reference admission, not source
         # protein identity or peptide presentation.
         amino_acids="ACDEFGHIKLMNPQRSTVWY",
         gene_id=row.Ensembl_Gene_ID,

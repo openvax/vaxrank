@@ -67,7 +67,7 @@ def test_gene_admission_keeps_actual_sources_and_distinct_membership_hashes(tmp_
     assert [d.status for d in result.decisions] == ["admitted", "unverified_identity" if primary_only else "admitted"]
     reference = result.annotation_reference
     assert reference.identity_contract_version == 1
-    assert len(reference.canonical_candidate_gene_ids) == 2532
+    assert set(reference.canonical_candidate_gene_ids) == oncoref.cta.cta_unfiltered_gene_ids()
     assert set(reference.self_reference_excluded_gene_ids) == ({PRAME} if primary_only else {PRAME, ALTERNATE})
     assert reference.canonical_candidate_gene_ids_sha256 != reference.self_reference_excluded_gene_ids_sha256
     assert PRAMEF10 not in reference.self_reference_excluded_gene_ids
