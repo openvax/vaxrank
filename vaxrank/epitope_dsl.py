@@ -164,6 +164,9 @@ def epitopes_to_topiary_df(epitopes):
                 "affinity": p.value,
                 "percentile_rank": p.percentile_rank,
                 "score": p.score,
+                "measurement_context": (
+                    p.measurement_context.to_dict()
+                    if p.measurement_context is not None else None),
             })
     return pd.DataFrame(rows)
 

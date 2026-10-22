@@ -50,3 +50,27 @@ installation and allele/length support.
 | `smm-iedb` | SMM compatibility wrapper | I | Requires local SMM |
 | `smm-pmbec-iedb` | SMM-PMBEC compatibility wrapper | I | Requires local SMM-PMBEC |
 | `random` | Random | -- | Returns random scores; for testing only |
+
+## Optional WEIRDO category scores
+
+Topiary 5.95 supports the released WEIRDO model through
+`pip install 'topiary[weirdo]>=5.95,<6'`. Its `foreignness` predictions are
+allele-independent and retain their exact model/artifact version and score
+policy through Topiary tables, native `CandidateEpitope` records, and saved
+Vaxrank datasets. Imported matched-comparator rows also retain their own
+measurement context.
+
+For a dataset that already contains WEIRDO predictions, opt into the score
+with `epitopes.score_expr=peptide_view(foreignness[weirdo].score)`. Ordinary
+binding-based scoring is unchanged when these observations are merely present.
+Keep the complete `predictor_version` and `measurement_context` columns when
+transporting the table; native dataset save/load preserves them automatically.
+
+The released policy is `human-self-complement-v1`: one minus the model's
+human-category output. It accepts canonical 8–11-residue peptides and only a
+human reference host (taxon 9606). Do not apply this policy as a mouse/B16
+self reference; a rodent training category is not a mouse-specific model.
+This is an experimental category score, with no confirmed immune-response
+ranking benefit. It is not a self-safety verdict or a substitute for binding,
+presentation, or self-proteome evidence. It is also distinct from the published
+IEDB similarity feature used by `tesla-recognition-v1`.

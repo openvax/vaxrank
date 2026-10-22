@@ -65,7 +65,7 @@ jobs:
           if [ -f requirements.txt ]; then bash scripts/pip_install.sh -r requirements.txt; fi
           # Exercise the optional portable Hitlist evidence consumer on every
           # supported Python, alongside the ordinary CLI/persistence tests.
-          bash scripts/pip_install.sh '.[hitlist]'
+          bash scripts/pip_install.sh '.[hitlist]' 'topiary[weirdo]>=5.95.0,<6'
       - name: Check package and CLI startup
         run: |
           python -c "import vaxrank; print(vaxrank.__version__)"

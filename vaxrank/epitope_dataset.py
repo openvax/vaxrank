@@ -140,6 +140,7 @@ class EpitopeDataset:
                         predictor_name=method, predictor_version=version,
                         value=_value(record, "value"), score=_value(record, "score"),
                         percentile_rank=_value(record, "percentile_rank"),
+                        measurement_context=_value(record, "measurement_context"),
                         n_flank=record.get("n_flank"), c_flank=record.get("c_flank")))
                 if any(_value(record, 'wt_' + name) is not None
                        for name in ('value', 'score')):
@@ -152,6 +153,7 @@ class EpitopeDataset:
                                                  version),
                         value=_value(record, 'wt_value'), score=_value(record, 'wt_score'),
                         percentile_rank=_value(record, 'wt_percentile_rank'),
+                        measurement_context=_value(record, 'wt_measurement_context'),
                         n_flank=record.get('wt_n_flank'), c_flank=record.get('wt_c_flank')))
             wt_sequence = _value(row, 'wt_peptide', '')
             comparators = ({'wt': Peptide(sequence=wt_sequence, predictions=tuple(wt_predictions),
