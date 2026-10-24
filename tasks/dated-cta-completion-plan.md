@@ -9,7 +9,7 @@ exact int/string annotation provenance. Old numbered archives must retain their
 saved fingerprints and field layout. Do not modify patient input, cached genome
 files, retained admissions, source identities or the cache hashing algorithm.
 
-Consume the published OncoRef fix at ==1.19.2 instead of the old exact 1.9.15
+Consume the published OncoRef fix at ==1.19.2 instead of the current exact 1.13.0
 pin. Retain the exact pin so future upstream curation changes are deliberate. Verify current frozen human CTA APIs retain expected membership and alias
 resolution. Keep PyEnsembl >=2.29 to supply resolved assembly metadata. Update
 version/release documentation and remove stale comments/mocks for OncoRef #609.
@@ -41,14 +41,11 @@ PR body to the final result, mark ready, merge and run ./deploy.sh on clean main
 Respect release_deploy.py's owned remote claim; verify published artifacts/tag.
 Then proceed to PyEnsembl #456 and the related #497 validation regression.
 
-## Confirmed upstream data delta to disclose
+## Current released baseline
 
-Comparing the actual published 1.9.15 data with the 1.19.2 code/data shows identical
-624 admitted IDs and identical alias/canonical reference-table hashes. The full
-candidate universe already gained SPAG9 (ENSG00000008294) in OncoRef's published
-#613 recalibration: 2532 -> 2533. This is upstream data provenance, not a new
-Vaxrank biological rule. Update the current-data expectation and document the
-addition; preserve saved numbered record fingerprints and existing cached files.
-Fresh candidate-universe hashes appropriately describe the selected OncoRef
-version. Do not hide this delta with an ad-hoc excluded-gene list or rewrite old
-snapshots to match new data.
+Current Vaxrank main pins OncoRef 1.13.0. Comparing it with OncoRef 1.19.2
+confirms identical 624 admitted IDs, 2533 candidate IDs, and alias/canonical
+reference-table hashes. This PR introduces no candidate membership change.
+The old PR branch's 1.9.15 pin predates SPAG9's published inclusion; rebasing
+already incorporates that independently released data update. Existing saved
+numbered record fingerprints and cached files remain unchanged.

@@ -126,6 +126,24 @@ replay. `CTAExpressionResult.load("cta-admission.json")` restores admission
 without the expression file or new OncoRef queries; save the native candidate
 dataset to replay predictions and constructs too.
 
+### Pinned dated annotations
+
+The library admission API also accepts a dated `EnsemblRelease`, for example
+`EnsemblRelease("2026_04", species="human")` or
+`EnsemblRelease("2013_09", species="human", assembly="GRCh37")`. Install its
+annotation data before admission. A saved `annotation_release` retains the exact
+`YYYY_MM` string; numbered releases retain their integer values.
+
+Identity and input-scope checks use the resolved biological `assembly`, so an
+accession or custom `reference_name` can keep its original cache/display label.
+Human CTA identity still requires explicit human GRCh37/GRCh38 metadata; missing
+species, unknown builds and malformed release dates fail before lookup. Older
+annotation providers without `assembly` retain their `reference_name` fallback.
+
+Vaxrank 3.46.11 pins OncoRef 1.19.2 for this support and requires PyEnsembl 2.29
+or later. Existing numbered admissions retain their saved fingerprints and
+exclusions on replay. No genome cache migration or reindexing is required.
+
 ## Released prerequisites
 
 Core version requirements are installed with Vaxrank. Hitlist is optional.

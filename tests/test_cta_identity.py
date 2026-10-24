@@ -178,10 +178,6 @@ def test_dated_identity_uses_resolved_assembly_and_replays_exactly(tmp_path, mon
     genome.release = genome.annotation_version = "2026_04"
     genome.assembly = "GRCh38"
     genome.reference_name = "GCA_000001405.29"
-    # OncoRef #609 still rejects dated annotations. Exercise its expected
-    # identity contract while testing Vaxrank's downstream snapshot and replay.
-    monkeypatch.setattr(oncoref.gene_identity, "_annotation", lambda g: (
-        g.species.latin_name, g.assembly, g.release))
     result = run(tmp_path, genome, [(PRAME, 3)])
     reference = result.annotation_reference
     assert reference.annotation_assembly == result.reference_assembly == "GRCh38"
