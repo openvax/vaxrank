@@ -17,7 +17,7 @@ from varcode import load_vcf
 
 from vaxrank.core_logic import run_vaxrank
 from vaxrank.epitope_config import EpitopeConfig
-from vaxrank.input_scope import InputProvenance, InputScope
+from vaxrank.input_scope import InputProvenance, InputScope, validate_host_taxon
 from vaxrank.patient_info import PatientInfo
 from vaxrank.report import TemplateDataCreator, make_ascii_report
 
@@ -68,8 +68,19 @@ def _source(path, source_format, sample_id):
     )
 
 
-def run_example(output_dir, scratch_dir=None):
+def run_example(output_dir, scratch_dir=None, *, allele=ALLELE, predictor="random"):
     """Write a source receipt and ASCII report; return the receipt for checks."""
+    if predictor not in {"random", "mhcflurry"}:
+        raise ValueError(f"Unknown predictor: {predictor}")
+    validate_host_taxon(InputScope(host_taxon_id=9615, mhc_alleles=(allele,)),
+                        None, "Canine example", (allele,))
+    if predictor == "mhcflurry":
+        from mhctools import MHCflurry
+        mhc_predictor = MHCflurry([allele])
+    else:
+        mhc_predictor = RandomBindingPredictor([allele])
+    epitope_config = (EpitopeConfig() if predictor == "mhcflurry" else
+                      EpitopeConfig(score_expr="1.0", min_epitope_score=0))
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     vcf = DATA / "wlos0001-tp53.vcf"
@@ -87,8 +98,8 @@ def run_example(output_dir, scratch_dir=None):
         with patch.dict(os.environ, {"VAXRANK_REF_PEPTIDES_DIR": str(directory / "ref-peptides")}):
             result = run_vaxrank(
                 isovar_results,
-                RandomBindingPredictor([ALLELE]),
-                epitope_config=EpitopeConfig(score_expr="1.0", min_epitope_score=0),
+                mhc_predictor,
+                epitope_config=epitope_config,
             )
 
         counts = result.variant_counts()
@@ -98,7 +109,7 @@ def run_example(output_dir, scratch_dir=None):
             patient_id="WLOS_0001",
             vcf_paths=[str(vcf)],
             bam_path=str(bam),
-            mhc_alleles=[ALLELE],
+            mhc_alleles=[allele],
             inputs=[("Published matched-normal somatic call", str(vcf)),
                     ("Original tumor RNA alignments", str(bam))],
             input_provenance=[
@@ -114,7 +125,7 @@ def run_example(output_dir, scratch_dir=None):
             reviewers="",
             args_for_report={
                 "vaccine_type": ["peptide"],
-                "mhc_predictor": "random",
+                "mhc_predictor": predictor,
                 "manufacturability": False,
                 "wt_epitopes": False,
                 "reference_scope": "TP53-only Ensembl 98 subset",
@@ -144,7 +155,7 @@ def run_example(output_dir, scratch_dir=None):
             }
                                for _, peptides in result.ranked_vaccine_peptides
                                for peptide in peptides],
-            "prediction": {"method": "random", "allele": ALLELE,
+            "prediction": {"method": predictor, "allele": allele,
                            "patient_genotype": "unknown", "binding_claim": False},
             "limits": ["one TP53 locus, not a whole-sample benchmark",
                        "no normal or tumor DNA reads in this fixture",
@@ -163,8 +174,11 @@ def run_example(output_dir, scratch_dir=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", default="wlos0001-tp53-output")
+    parser.add_argument("--allele", default=ALLELE,
+                        help="Illustrative DLA allele; WLOS_0001's genotype is unknown")
+    parser.add_argument("--predictor", choices=("random", "mhcflurry"), default="random")
     args = parser.parse_args()
-    receipt = run_example(args.output_dir)
+    receipt = run_example(args.output_dir, allele=args.allele, predictor=args.predictor)
     print("RNA alt reads: %d; ranked windows: %d" % (
         receipt["rna_source"]["reads"]["alt"], len(receipt["ranked_windows"])))
     print("Wrote %s/receipt.json and report.txt" % args.output_dir)
