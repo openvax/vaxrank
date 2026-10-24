@@ -9,7 +9,8 @@ datacache>=1.14.0,<2.0.0
 osteosarc>=0.15.4,<0.16
 pandas>=2.1.4,<4.0.0
 # Metadata-only Transcript/Gene restore defers annotation DB access (#563).
-pyensembl>=2.22.2,<3.0.0
+# 2.29.0 exposes resolved assembly identity apart from the cache/display label.
+pyensembl>=2.29.0,<3.0.0
 # 10.4.1 ranks structural candidate sets that list themselves as candidates
 # without recursing, which DNA fallback relies on when comparing fusion outcomes.
 # Varcode 10 also supplies candidate-local SV sequence-change checks, including
@@ -64,7 +65,8 @@ serializable>=1.1.0,<2.0.0
 # OncoRef supplies human CTA identity and species-scoped evidence snapshots.
 # Historical human admission still uses the annotation-bound identity contract.
 # Keep the exact owner pin aligned with PirlyGenes 6.0.17 (pirlygenes#649).
-oncoref==1.13.0
+# 1.19.2 accepts pinned dated annotations and resolved biological assemblies.
+oncoref==1.19.2
 # Pinned RefSeq protein/feature-table snapshots retain NCBI Gene identities.
 orfdata>=0.31.0,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering

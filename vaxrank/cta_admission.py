@@ -15,7 +15,10 @@ import pandas as pd
 from serializable import DataclassSerializable
 
 from .identifiers import normalize_ensembl_gene_id
-from .cta_identity import CTAAnnotationReference, identity_digest, snapshot_cta_annotation
+from .cta_identity import (
+    CTAAnnotationReference, cta_annotation_identity, identity_digest,
+    snapshot_cta_annotation,
+)
 from .vaccine_antigen import (
     ANTIGEN_KIND_CTA,
     ATTESTATION_ADMITTED,
@@ -407,9 +410,11 @@ def assess_cta_antigen(
             raise ValueError("CTA transcript expression must select its measured transcript")
     reference_resolution = reference_resolution or resolve_cta_reference_evidence(input_gene_id, genome=genome)
     identity = reference_resolution.gene_identity or {}
+    annotation_species, assembly, release = cta_annotation_identity(genome)
     if (identity.get("source_gene_id") != gene_id
-            or identity.get("annotation_assembly") != genome.reference_name
-            or identity.get("annotation_release") != genome.release):
+            or identity.get("annotation_species") != annotation_species
+            or identity.get("annotation_assembly") != assembly
+            or identity.get("annotation_release") != release):
         raise ValueError("CTA admission requires matching annotation identity evidence")
     reference = reference_resolution.evidence
     expression_passes = tumor_expression.value >= policy.min_tumor_expression

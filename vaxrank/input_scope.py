@@ -418,6 +418,13 @@ def resolve_input_genome(genome):
     return genome
 
 
+def resolved_reference_assembly(genome):
+    """Use a resolved biological assembly when the provider exposes one."""
+    missing = object()
+    assembly = getattr(genome, "assembly", missing)
+    return getattr(genome, "reference_name", None) if assembly is missing else assembly
+
+
 @lru_cache(maxsize=128)
 def _species_for_taxon(taxon_id):
     """Resolve taxonomy without requiring an annotation for that species."""
@@ -530,9 +537,9 @@ def validate_input_scopes(provenance, *, genome=None, prediction_alleles=(),
             validate_host_taxon(host_scope, None, source.path, observed_alleles)
         for reference in references:
             validate_host_taxon(host_scope, reference, source.path, observed_alleles)
-            assembly = getattr(reference, "reference_name", None)
+            assembly = resolved_reference_assembly(reference)
             if source.scope.reference_assembly is not None and assembly is None:
-                raise ValueError(f"{source.path}: configured genome has no reference_name "
+                raise ValueError(f"{source.path}: configured genome has no resolved assembly "
                                  "to validate against reference_assembly")
             release = getattr(reference, "release", None)
             configured = InputScope(
