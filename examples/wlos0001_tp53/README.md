@@ -57,3 +57,21 @@ Real canine interpretation needs the dog's DLA genotype, a validated canine
 binding model, and an assembly-matched complete self proteome; those gaps are
 tracked in [#596](https://github.com/openvax/vaxrank/issues/596) and
 [#625](https://github.com/openvax/vaxrank/issues/625).
+
+To exercise a real DLA-capable model on the same pinned RNA and variant, first
+install MHCflurry's model weights as described in the
+[predictor guide](../../docs/mhc-predictors.md), then run:
+
+```sh
+python -m examples.wlos0001_tp53.run \
+  --output-dir /tmp/wlos0001-mhcflurry \
+  --predictor mhcflurry --allele 'DLA-88*034:01'
+```
+
+This applies Vaxrank's default binding-affinity score and records `mhcflurry`
+in the report and receipt.
+The selected allele is illustrative: WLOS_0001's DLA genotype was not published.
+The output therefore remains a technical demonstration, not a patient-specific
+binding claim. The reference is still limited to three TP53 translations.
+See the [canine VCF/RNA workflow](../../docs/canine-vcf-workflow.md) for a full
+assembly-matched run with a dog's typed alleles.

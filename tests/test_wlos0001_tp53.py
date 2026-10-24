@@ -1,5 +1,7 @@
 """Offline canine tumor DNA/RNA replay through Isovar and Vaxrank."""
 
+import pytest
+
 from examples.wlos0001_tp53.run import run_example
 
 
@@ -36,3 +38,10 @@ def test_wlos0001_tp53_rna_reaches_ranked_vaxrank_report(tmp_path):
     assert "random" in report
     assert "Processing predictor: pepsickle" not in report
     assert (output / "receipt.json").is_file()
+
+
+def test_wlos0001_rejects_human_mhc_allele_before_writing(tmp_path):
+    output = tmp_path / "result"
+    with pytest.raises(ValueError, match="allele .* conflicts"):
+        run_example(output, allele="HLA-A*02:01", predictor="mhcflurry")
+    assert not output.exists()

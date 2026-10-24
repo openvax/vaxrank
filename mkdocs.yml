@@ -16,6 +16,7 @@ nav:
   - Home: index.md
   - Installation: installation.md
   - Input workflows: input-workflows.md
+  - Canine VCF and RNA: canine-vcf-workflow.md
   - Vaccine designs: vaccine-designs.md
   - Analysis outputs: outputs.md
   - Configuration: configuration.md

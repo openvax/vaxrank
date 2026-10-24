@@ -86,6 +86,7 @@ Full documentation: <https://openvax.github.io/vaxrank/>
 
 - [Installation](docs/installation.md): reference annotation and PDF backends.
 - [Input workflows](docs/input-workflows.md): VCF/BAM, LENS, pVACseq, Topiary
+- [Canine VCF and RNA](docs/canine-vcf-workflow.md): dog reference and DLA workflow
   tables, CTA expression, antigen sequences and saved evidence.
 - [Vaccine designs](docs/vaccine-designs.md): the design axes, peptide and mRNA
   construct files, linker library, manifest schema.
