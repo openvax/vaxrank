@@ -1,8 +1,13 @@
 """Offline canine tumor DNA/RNA replay through Isovar and Vaxrank."""
 
-import pytest
+import json
 
-from examples.wlos0001_tp53.run import run_example
+from orfdata import ReferenceContext
+import pytest
+from varcode import load_vcf
+
+from examples.wlos0001_tp53.run import DATA, _reference, run_example
+from vaxrank.cli.entry_point import run_cli
 
 
 def test_wlos0001_tp53_rna_reaches_ranked_vaxrank_report(tmp_path):
@@ -45,3 +50,30 @@ def test_wlos0001_rejects_human_mhc_allele_before_writing(tmp_path):
     with pytest.raises(ValueError, match="allele .* conflicts"):
         run_example(output, allele="HLA-A*02:01", predictor="mhcflurry")
     assert not output.exists()
+
+
+def test_wlos0001_serialized_custom_genome_accepts_declared_context(tmp_path, monkeypatch):
+    """A direct VCF/RNA run checks the original custom Genome before prediction."""
+    genome = _reference(tmp_path)
+    variants = load_vcf(str(DATA / 'wlos0001-tp53.vcf'), genome=genome)
+    source = tmp_path / 'variants.json'
+    variants.write_json_file(source)
+    context = tmp_path / 'context.json'
+    context.write_text(json.dumps(ReferenceContext(
+        9615, 'dog', 'CanFam3.1', 'Ensembl', '98').to_dict()))
+    monkeypatch.setenv('VAXRANK_REF_PEPTIDES_DIR', str(tmp_path / 'reference-cache'))
+    report = tmp_path / 'report.txt'
+    arguments = ['--json-variants', str(source), '--bam', str(DATA / 'wlos0001-tp53.bam'),
+                 '--reference-context', str(context), '--host-species', 'dog',
+                 '--mhc-predictor', 'random', '--mhc-alleles', 'DLA-88*034:01',
+                 '--output-ascii-report', str(report)]
+    wrong = json.loads(context.read_text())
+    wrong['annotation_version'] = '99'
+    context.write_text(json.dumps(wrong))
+    with pytest.raises(ValueError, match='annotation_version'):
+        run_cli(arguments)
+    assert not report.exists()
+    wrong['annotation_version'] = '98'
+    context.write_text(json.dumps(wrong))
+    run_cli(arguments)
+    assert 'VCF (somatic variants):' in report.read_text()

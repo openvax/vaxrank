@@ -14,7 +14,7 @@ from .input_scope import (
     InputProvenance, combine_scopes, normalize_alleles, provenance_columns,
     read_input_manifest, resolved_reference_assembly, scope_from_mapping,
     scope_dict, validate_input_scopes,
-    species_scope_from_args, with_species_declarations,
+    species_scope_from_args, with_species_declarations, load_reference_context,
 )
 
 
@@ -44,6 +44,12 @@ def prepare_direct_report(args, reports, epitope_config):
     if not alleles:
         raise ValueError('Direct VCF/BAM predictions require explicit MHC alleles')
     variants = variant_collection_from_args(args)
+    context = load_reference_context(getattr(args, 'reference_context', None))
+    if context is not None:
+        scope = combine_scopes(scope, scope_from_mapping({
+            'host_taxon_id': context.taxon_id, 'reference_assembly': context.genome_build,
+            'annotation': f'{context.annotation_name}:{context.annotation_version}',
+        }, 'Direct reference_context'), 'Direct reference_context')
     # Validate actual VCF reference resolution as well as explicit CLI options.
     for variant in variants:
         genome = variant.ensembl
@@ -63,7 +69,8 @@ def prepare_direct_report(args, reports, epitope_config):
         content_sha256='')
     shared = validate_input_scopes([provisional] + [r.input_provenance for r in reports],
                           prediction_alleles=alleles,
-                          retained_genomes={'direct': tuple({id(v.ensembl): v.ensembl for v in variants}.values())})
+                          retained_genomes={'direct': tuple({id(v.ensembl): v.ensembl for v in variants}.values())},
+                          reference_context=context)
     args._input_species_scope = scope_dict(shared)
     hashes = {str(Path(path).resolve()): _file_digest(path) for path in paths}
     content_hash = hashlib.sha256(json.dumps(list(hashes.values())).encode()).hexdigest()

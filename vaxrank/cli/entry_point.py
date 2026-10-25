@@ -1262,6 +1262,14 @@ def run_cli(args_list=None):
         args_list = sys.argv[1:]
 
     args = parse_vaxrank_args(args_list)
+    if getattr(args, 'reference_context', None):
+        direct = any(getattr(args, name, None) for name in ('vcf', 'maf', 'variant', 'json_variants'))
+        external = any(getattr(args, name, None) for name in (
+            'input_pvacseq', 'input_lens', 'input_epitopes', 'input_topiary',
+            'input_cta_expression', 'input_antigens', 'external_input', 'input_manifest'))
+        if not direct or (external and not (getattr(args, 'input_manifest', None)
+                                            and getattr(args, 'vcf', None))):
+            raise ValueError('--reference-context requires a direct variant input or a manifest with direct VCF')
     configure_logging(args)
     resolve_ensembl_release(args)
     # Manufacturability default depends on whether peptide is one of

@@ -138,19 +138,55 @@ def species_scope_from_args(args):
         {name: getattr(args, name, None) for name in SPECIES_DECLARATIONS}, 'CLI species')
 
 
+def load_reference_context(value):
+    """Load an explicit ORFdata context without guessing custom Genome metadata."""
+    from orfdata import ReferenceContext
+    if value is None:
+        return None
+    if isinstance(value, ReferenceContext):
+        context = value
+    else:
+        if not isinstance(value, (str, Path)):
+            raise ValueError('reference_context requires an ORFdata ReferenceContext or JSON file')
+        with Path(value).open() as stream:
+            record = json.load(stream)
+        if not isinstance(record, dict) or set(record) - {f.name for f in fields(ReferenceContext)}:
+            raise ValueError('reference_context requires a serialized ORFdata ReferenceContext')
+        try:
+            context = ReferenceContext(**record)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f'Invalid reference_context: {error}') from error
+    if context.genome_build is None or context.annotation_name is None or context.annotation_version is None:
+        raise ValueError('Direct reference_context requires assembly, annotation name and version')
+    return context
+
+
+def _context_scope(context):
+    return InputScope(host_taxon_id=context.taxon_id,
+                      reference_assembly=context.genome_build,
+                      annotation=f'{context.annotation_name}:{context.annotation_version}')
+
+
 def validate_prediction_species(args, references, alleles, location):
     """Check live candidate/junction queries before acquiring a model."""
     scope = combine_scopes(scope_from_mapping(getattr(args, '_input_species_scope', {}), location),
                            species_scope_from_args(args), location)
+    context = load_reference_context(getattr(args, 'reference_context', None))
+    if context is not None:
+        scope = combine_scopes(scope, _context_scope(context), location)
     host_reference = getattr(getattr(args, '_design_dataset', None), 'host_reference', None)
     if host_reference is not None:
         scope = host_reference.validate(scope, location=location)
     references = [reference for reference in references if reference is not None]
-    if not references and host_reference is None and scope.reference_assembly is not None:
-        references = [scope.reference_assembly]
-    fallback = host_reference.proteome.reference if host_reference is not None else None
+    if not references and host_reference is None:
+        if context is not None:
+            references = [context]
+        elif scope.reference_assembly is not None:
+            references = [scope.reference_assembly]
+    fallback = host_reference.proteome.reference if host_reference is not None else context
     for reference in references or (fallback,):
-        validate_host_taxon(scope, resolve_input_genome(reference), location, alleles)
+        validate_host_taxon(scope, resolve_input_genome(reference), location, alleles,
+                            reference_context=context)
     return scope
 
 
@@ -434,7 +470,7 @@ def _species_for_taxon(taxon_id):
     return Species.get(name.replace('_', ' ').capitalize()) if name is not None else None
 
 
-def validate_host_taxon(scope, reference, location, observed_alleles=()):
+def validate_host_taxon(scope, reference, location, observed_alleles=(), *, reference_context=None):
     """Validate an explicit host independently of antigen source species.
 
     ORFdata owns taxon aliases; mhcgnomes owns allele species and group
@@ -446,6 +482,17 @@ def validate_host_taxon(scope, reference, location, observed_alleles=()):
     from orfdata import ReferenceContext
     from orfdata.reference import canonical_species
 
+    if reference_context is not None:
+        if not isinstance(reference_context, ReferenceContext):
+            raise TypeError('reference_context must be a ReferenceContext')
+        if reference is not None and not isinstance(reference, ReferenceContext):
+            try:
+                ReferenceContext.from_genome(reference, context=reference_context)
+            except (TypeError, ValueError) as error:
+                raise ValueError(f'{location}: reference_context disagrees with annotation: {error}') from error
+        elif isinstance(reference, ReferenceContext) and reference != reference_context:
+            raise ValueError(f'{location}: reference_context disagrees with host reference')
+        reference = reference_context
     host_species = _species_for_taxon(scope.host_taxon_id) if scope.host_taxon_id else None
     if reference is not None:
         if scope.host_taxon_id is not None or isinstance(reference, ReferenceContext):
@@ -483,13 +530,16 @@ def validate_host_taxon(scope, reference, location, observed_alleles=()):
 
 
 def validate_input_scopes(provenance, *, genome=None, prediction_alleles=(),
-                          retained_genomes=None, host_reference=None):
+                          retained_genomes=None, host_reference=None, reference_context=None):
     """Validate the whole batch before DSL scoring, output or live prediction."""
     shared = InputScope()
     genome = resolve_input_genome(genome)
+    context = load_reference_context(reference_context)
     retained_genomes = retained_genomes or {}
     for source in provenance:
         shared = combine_scopes(shared, source.scope, source.path, SHARED_FIELDS)
+    if context is not None:
+        shared = combine_scopes(shared, _context_scope(context), 'Direct reference_context')
     if host_reference is not None:
         from .host_reference import HostReference
         host_reference = HostReference.load(host_reference)
@@ -520,23 +570,28 @@ def validate_input_scopes(provenance, *, genome=None, prediction_alleles=(),
         if host_reference is not None:
             host_reference.validate(source.scope, location=source.path)
         if not references and host_reference is not None:
-            validate_host_taxon(host_scope, host_reference.proteome.reference, source.path, observed_alleles)
+            validate_host_taxon(host_scope, host_reference.proteome.reference, source.path, observed_alleles,
+                                reference_context=context)
         elif not references and source.scope.reference_assembly is not None:
             # Variant adapters historically skip unresolvable rows. Reject a
             # bad declared assembly here instead of silently dropping them.
-            try:
-                declared_reference = resolve_input_genome(source.scope.reference_assembly)
-            except (TypeError, ValueError) as error:
-                raise ValueError(f"{source.path}: unsupported reference_assembly "
-                                 f"{source.scope.reference_assembly!r}: {error}") from error
+            if context is not None:
+                declared_reference = context
+            else:
+                try:
+                    declared_reference = resolve_input_genome(source.scope.reference_assembly)
+                except (TypeError, ValueError) as error:
+                    raise ValueError(f"{source.path}: unsupported reference_assembly "
+                                     f"{source.scope.reference_assembly!r}: {error}") from error
             # Assembly metadata identifies species, not the saved annotation release.
-            validate_host_taxon(
-                host_scope, declared_reference, source.path,
-                observed_alleles)
+            validate_host_taxon(host_scope, declared_reference, source.path,
+                                observed_alleles, reference_context=context)
         elif not references:
-            validate_host_taxon(host_scope, None, source.path, observed_alleles)
+            validate_host_taxon(host_scope, None, source.path, observed_alleles,
+                                reference_context=context)
         for reference in references:
-            validate_host_taxon(host_scope, reference, source.path, observed_alleles)
+            validate_host_taxon(host_scope, reference, source.path, observed_alleles,
+                                reference_context=context)
             assembly = resolved_reference_assembly(reference)
             if source.scope.reference_assembly is not None and assembly is None:
                 raise ValueError(f"{source.path}: configured genome has no resolved assembly "
