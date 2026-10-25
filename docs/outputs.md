@@ -17,6 +17,34 @@ manufacturability metrics.
 | `--output-csv` | Flat CSV |
 | `--output-json-file` | Full ranked-vaccine-peptides graph as JSON |
 
+## Joint protein collections
+
+The Python API exports retained source proteins, evidence and Vaxrank's
+selection state to ORFdata without running prediction or ranking again:
+
+```python
+from orfdata import ReferenceContext
+from vaxrank import to_proteome
+
+reference = ReferenceContext(9606, "human", "GRCh38", "Ensembl", "115")
+patient = to_proteome(
+    results,
+    sample_id="tumor-1",
+    source="vaxrank-run-1",
+    reference=reference,
+)
+joint = reference_transcriptome.proteome(nc_orf_sources="all").merge(patient)
+joint.write_fasta("joint.fasta")
+joint.save("joint.proteome.json.gz")
+```
+
+Every retained Isovar alternative comes through Isovar's own adapter. Vaxrank
+adds an export path and its recorded fragment/selection state without creating
+a second source protein. DNA-predicted and supplied fragments keep their exact
+window and mutation intervals; they are not presented as reconstructed
+full-length proteins. Unknown source references remain unknown and require
+ORFdata's explicit compatibility policy when composed with a known host.
+
 ## Neoepitope report
 
 A per-(peptide, allele) table in XLSX or CSV, chosen by file extension. It is

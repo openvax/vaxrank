@@ -158,6 +158,7 @@ from .reference_proteome import (
     ensembl_dataset_cache_identity,
     self_reference_matches,
 )
+from .proteome import to_proteome
 from .version import __version__
 
 __all__ = [
@@ -288,6 +289,7 @@ __all__ = [
     "predict_epitopes",
     "prediction_integer",
     "run_vaxrank",
+    "to_proteome",
     "vaccine_peptides_for_antigen",
     "resolve_tissue_risk_policy",
     "resolve_cta_reference_evidence",
