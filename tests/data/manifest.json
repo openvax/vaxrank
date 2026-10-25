@@ -6,7 +6,8 @@
     "selection_policy": "Small real Sid model-output subset and frozen score expectations from the named-policy comparison. Osteosarc supplies source reads, not these newly generated MHCflurry/Pepsickle predictions; keep offline policy replay independent of model installation. See examples/osteosarc_test_data/policy_comparison.",
     "published_policies": "Synthetic pVACseq aggregate evidence and ordering computed with the pinned upstream v7.1.4 sorting function; Osteosarc does not publish epitope reports or policy sorting oracles.",
     "cta_hitlist_bundle": "Synthetic CTA-expression evidence exported by Hitlist 1.65.1 through its public writer and verified consumer contract; pins original artifacts, mixed MS/non-MS observations, source mappings, contributors and lineage for portable CLI/replay interoperability. No clinical or patient evidence; see cta_hitlist_bundle/README.md. Osteosarc publishes read/variant fixtures rather than this evidence-bundle format.",
-    "cta_identity": "Exact PRAME alternate/non-CTA PRAMEF10 and RBMY1F/RBMY1J loci/translations from full Ensembl 93/112. These annotation fixtures are not read datasets supplied by Osteosarc; each retains original GTF/protein FASTA URLs and SHA-256 hashes. PRAME records come from OncoRef identity-contract regressions; RBMY records are captured from the Ensembl 112 sources for Vaxrank consumer validation."
+    "cta_identity": "Exact PRAME alternate/non-CTA PRAMEF10 and RBMY1F/RBMY1J loci/translations from full Ensembl 93/112. These annotation fixtures are not read datasets supplied by Osteosarc; each retains original GTF/protein FASTA URLs and SHA-256 hashes. PRAME records come from OncoRef identity-contract regressions; RBMY records are captured from the Ensembl 112 sources for Vaxrank consumer validation.",
+    "orfdata_snapshots": "Synthetic ORFdata 0.35.0 host snapshot for cross-version pinned-identity and replay compatibility. Osteosarc does not provide ORFdata snapshots."
   },
   "files": {
     "b16.f10/b16.combined.bam": "5c6161eca2410e8d8d54feee91ed3952ea04822face1d58be41593aaae0be21d",
@@ -60,6 +61,7 @@
     "epitope_fixtures/real_lens_subsets/lens_v1.5_real_subset.tsv": "d0ab33119fe67b68ed93bc2fbe196fd7043bff09eb0db936e1c49a3fdfc7b0ce",
     "epitope_fixtures/real_lens_subsets/lens_v1.9_real_subset.tsv": "8b4518c21d63ff64c7764871e03a39f68cbeb882b5cd3c6d01170616c5ef6899",
     "epitope_fixtures/real_lens_subsets/lens_v1.9_with_stop_codons.tsv": "636de8342f94529e59dc43df679d4322337fdfebbdeeec6302e7e7026ba6571f",
+    "orfdata_snapshots/v4-host.json": "871b6d893863b2d1b8d0eaee581b85061fd1223255bfe6db608f9f14a19b49db",
     "published_policies/pvacseq-aggregate.tsv": "20de1f10f3991ab9579780b5361004f73e7dc1955f6375b802b7dbc7a460f648",
     "published_policies/pvacseq-expected.json": "d0eed57bc2a7cea6bb41eb8302b16aedf4ca4eec741bf371eb3b0f43398d72fe",
     "selection_policy/sid-evidence.tsv": "a916fef8ca19528299c877c81ec2f3247ab8777a2195dc78de8c9b13b5af2d90",

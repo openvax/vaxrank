@@ -68,7 +68,7 @@ serializable>=1.1.0,<2.0.0
 # 1.19.2 accepts pinned dated annotations and resolved biological assemblies.
 oncoref==1.19.2
 # Pinned RefSeq protein/feature-table snapshots retain NCBI Gene identities.
-orfdata>=0.31.0,<1.0.0
+orfdata>=0.36.0,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
 # of predictor_version strings. Always pulled in transitively via setuptools
 # / pip, but pinned explicitly so minimal / --no-deps installs don't break

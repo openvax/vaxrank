@@ -6,8 +6,7 @@ import json
 import shutil
 
 import oncoref
-from orfdata import Proteome
-from orfdata.proteome import Occurrence, ProteomeEntry
+from orfdata import Occurrence, ProteinSequence, Proteome
 from orfdata.reference import ReferenceContext
 import pandas as pd
 import pytest
@@ -52,11 +51,11 @@ def host(*, shared=False, extra=False):
                     continue
                 occurrence = Occurrence(pair['transcript_id'], target['id'], target['symbol'],
                     'protein_coding', '1', '+', 0, len(SEQUENCE) * 3, ((1, len(SEQUENCE) * 3),), True)
-                entries.append(ProteomeEntry(pair['protein_id'], SEQUENCE, 'annotated', 9615,
+                entries.append(ProteinSequence(pair['protein_id'], SEQUENCE, 'annotated', 9615,
                                               'synthetic fixture', occurrences=(occurrence,)))
     if shared or extra:
         occurrence = replace(entries[0].occurrences[0], gene_id='OTHER', transcript_id='other')
-        entries.append(ProteomeEntry('other', SEQUENCE, 'extra_orf' if extra else 'annotated',
+        entries.append(ProteinSequence('other', SEQUENCE, 'extra_orf' if extra else 'annotated',
                                      9615, 'synthetic fixture', occurrences=(occurrence,)))
     layer = dict(role='host', kind='annotated', source='synthetic fixture',
         content_provenance={k: identity['content_provenance'][k] for k in ('protein', 'feature_table')},
@@ -133,7 +132,7 @@ def test_species_cta_requires_both_source_assets_and_their_id_namespaces(tmp_pat
     for change in (dict(content_provenance={'protein': '0' * 64}), dict(identifier_namespaces={})):
         with pytest.raises(ValueError, match='source SHA-256'):
             admit(tmp_path, reference=HostReference(Proteome(original.proteome.reference,
-                original.proteome.entries, ({**layer, **change},))))
+                original.proteome.proteins, ({**layer, **change},))))
 
 
 def test_species_cta_rejects_a_filtered_annotated_self_inventory(tmp_path):
