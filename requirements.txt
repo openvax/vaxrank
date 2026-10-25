@@ -7,7 +7,7 @@ numpy>=2.0.0,<3.0.0
 datacache>=1.14.0,<2.0.0
 # Public data acquisition and original-read extraction for the osteosarc corpus.
 osteosarc>=0.15.4,<0.16
-pandas>=2.1.4,<4.0.0
+pandas>=3.0.0,<4.0.0
 # Metadata-only Transcript/Gene restore defers annotation DB access (#563).
 # 2.29.0 exposes resolved assembly identity apart from the cache/display label.
 pyensembl>=2.29.0,<3.0.0
