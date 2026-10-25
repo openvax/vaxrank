@@ -3,11 +3,11 @@
 from dataclasses import replace
 import gzip
 import json
+from pathlib import Path
 import shutil
 from types import SimpleNamespace
 
-from orfdata import Proteome
-from orfdata.proteome import Occurrence, ProteomeEntry, ViralProteome
+from orfdata import Occurrence, ProteinSequence, ProteinSet, Proteome
 from orfdata.reference import ReferenceContext
 import pytest
 from topiary import TopiaryPredictor
@@ -37,10 +37,10 @@ def reference(*, sequence='SIINFEKLA', extra=True, species='human', assembly=Non
     def occurrence(transcript, gene):
         return Occurrence(transcript, gene, gene, 'protein_coding', '1', '+', 0,
                           len(sequence) * 3, ((1, len(sequence) * 3),), transcript == 'source')
-    entries = [ProteomeEntry('protein', sequence, 'annotated', taxon, 'ensembl:93',
+    entries = [ProteinSequence('protein', sequence, 'annotated', taxon, 'ensembl:93',
                              occurrences=(occurrence('annotated', 'CTA'),))]
     if extra:
-        entries.append(ProteomeEntry('uORF', sequence, 'extra_orf', taxon, 'catalog:fixture',
+        entries.append(ProteinSequence('uORF', sequence, 'extra_orf', taxon, 'catalog:fixture',
             orf_type='uORF', evidence=('ribosome',), evidence_detail={'fixture': 'not biological evidence'},
             occurrences=(occurrence('source', 'CTA'), occurrence('other', 'OTHER')),
             source_transcript_id='source', source_binding='synthetic binding history'))
@@ -66,9 +66,10 @@ def test_noncanonical_matches_preserve_all_occurrences_and_annotation_exclusions
 
 
 def test_viral_layers_never_count_as_host_self(inputs):
-    proteome = reference().with_viral(ViralProteome(
-        name='fixture virus', taxon_id=1234, host_taxon_ids=(9606,),
-        proteins=(('viral', 'GILGFVFTL'),), source='synthetic', host_source='synthetic'))
+    proteome = reference().with_viral(ProteinSet(
+        name='fixture virus', taxon_id=1234,
+        proteins=(('viral', 'GILGFVFTL'),), source='synthetic'),
+        host_taxon_ids=(9606,), host_source='synthetic')
     host = HostReference(proteome)
     assert any(e.kind == 'viral' for e in host.proteome)
     assert not host.matches(['GILGFVFTL'], inputs.antigens['viral'])['GILGFVFTL'].occurs
@@ -80,8 +81,8 @@ def test_snapshot_loading_pins_identity_and_detects_corruption(tmp_path):
     host.save(path)
     restored = HostReference.load({'path': path, 'identity': host.identity})
     assert restored.identity == host.identity
-    assert restored.proteome.entries[1].evidence_detail == host.proteome.entries[1].evidence_detail
-    assert restored.proteome.entries[1].source_binding == 'synthetic binding history'
+    assert restored.proteome.proteins[1].evidence_detail == host.proteome.proteins[1].evidence_detail
+    assert restored.proteome.proteins[1].source_binding == 'synthetic binding history'
     with pytest.raises(ValueError, match='declared identity'):
         HostReference.load({'path': path, 'identity': '0' * 64})
     payload = json.loads(gzip.decompress(path.read_bytes()))
@@ -89,6 +90,20 @@ def test_snapshot_loading_pins_identity_and_detects_corruption(tmp_path):
     path.write_text(json.dumps(payload))
     with pytest.raises(ValueError, match='identity'):
         HostReference.load(path)
+
+
+def test_legacy_v4_snapshot_keeps_pinned_identity_for_replay(inputs, tmp_path):
+    # Frozen by ORFdata 0.35.0 before its public class rename.
+    path = Path(__file__).parent / 'data' / 'orfdata-v4-host.json'
+    identity = '27dc279cae59f2c0ef18ef673cfcdc5759bc46a9f9484351989477a10debda30'
+    host = HostReference.load({'path': path, 'identity': identity})
+    assert host.identity == identity
+    match = host.matches(['SIINFEKLA'], inputs.antigens['viral'])['SIINFEKLA']
+    assert match.occurs and match.sources[0].gene_id == 'GENE1'
+    replay_path = tmp_path / 'host.json.gz'
+    host.save(replay_path)
+    assert HostReference.load({'path': replay_path, 'identity': identity}).matches(
+        ['SIINFEKLA'], inputs.antigens['viral']) == {'SIINFEKLA': match}
 
 
 @pytest.mark.parametrize('claim', [dict(host_taxon_id=10090), dict(reference_assembly='GRCm38'),
@@ -251,7 +266,7 @@ def test_snapshot_supplies_species_metadata_without_an_alias_registry_entry(inpu
     model, _ = dependencies
     base = reference()
     context = ReferenceContext(9544, 'macaca_mulatta', 'Mmul_10', 'refseq', '103')
-    host = HostReference(Proteome(context, [replace(e, taxon_id=9544) for e in base.entries]))
+    host = HostReference(Proteome(context, [replace(e, taxon_id=9544) for e in base.proteins]))
     model.alleles = ['Mamu-A*01:01']
     source = replace(inputs, antigens={'viral': inputs.antigens['viral']}, scope=replace(inputs.scope,
         reference_assembly='Mmul_10', annotation='refseq:103', mhc_alleles=tuple(model.alleles)))
@@ -329,7 +344,7 @@ def test_reference_identity_invalidates_assembly_even_with_identical_sequences(t
     from vaxrank.native_references import NativeReferences
 
     host = reference()
-    changed = Proteome(host.reference, host.entries, [
+    changed = Proteome(host.reference, host.proteins, [
         *host.layers, dict(role='filter', description='different explicit selection', removed=0)])
     dataset = SimpleNamespace(host_reference=HostReference(host),
                               _assembly_references=NativeReferences(tmp_path / 'native.tsv'))
