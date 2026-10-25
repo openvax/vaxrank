@@ -13,6 +13,24 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  hitlist-compatibility:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        hitlist: ["==1.65.1", ">=2.0.35,<3"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install supported Hitlist and the consumer
+        run: |
+          python -m pip install pytest
+          bash scripts/pip_install.sh '.[hitlist]' 'hitlist${{ matrix.hitlist }}'
+          python -m pip check
+      - name: Verify archived bundles, capture and offline replay
+        run: python -m pytest tests/test_cta_input.py tests/test_cta_manifest.py -k hitlist -q
+
   build:
     runs-on: ubuntu-22.04
     env:
