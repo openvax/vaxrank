@@ -37,6 +37,24 @@ the VCF's assembly. The Ensembl annotation supplies translated proteins for
 reference-peptide checks; incomplete annotation limits those checks. Inspect
 RNA support, allele identity and reference scope along with the epitope scores.
 
+For `--json-variants` containing a custom PyEnsembl `Genome`, its serialized
+metadata may omit species and taxonomy. Supply an explicit ORFdata context:
+
+```python
+import json
+from orfdata import ReferenceContext
+
+context = ReferenceContext(9615, 'dog', 'CanFam3.1', 'Ensembl', '98')
+with open('dog-reference-context.json', 'w') as stream:
+    json.dump(context.to_dict(), stream)
+```
+
+Use `--reference-context dog-reference-context.json` with `--json-variants`,
+`--bam` and `--host-species dog`. Vaxrank checks the declaration against every
+assembly, annotation, species and taxonomy field present in the custom Genome
+before acquiring an MHC predictor. The context declares missing metadata; it
+does not infer species from `CanFam3.1` or verify the source FASTA/GTF bytes.
+
 For a small reproducible run using a published dog tumor/normal call and
 original tumor RNA, see the [WLOS_0001 TP53 example](https://github.com/openvax/vaxrank/tree/main/examples/wlos0001_tp53).
 Its default random predictor tests the pipeline offline; the optional
