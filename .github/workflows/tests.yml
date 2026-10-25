@@ -23,13 +23,17 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Install report rendering dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wkhtmltopdf xvfb libpango-1.0-0 libpangocairo-1.0-0
       - name: Install supported Hitlist and the consumer
         run: |
           python -m pip install pytest
           bash scripts/pip_install.sh '.[hitlist]' 'hitlist${{ matrix.hitlist }}'
           python -m pip check
       - name: Verify archived bundles, capture and offline replay
-        run: python -m pytest tests/test_cta_input.py tests/test_cta_manifest.py -k hitlist -q
+        run: python -m pytest tests -k hitlist -q
 
   build:
     runs-on: ubuntu-22.04
