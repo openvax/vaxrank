@@ -94,7 +94,7 @@ def test_snapshot_loading_pins_identity_and_detects_corruption(tmp_path):
 
 def test_legacy_v4_snapshot_keeps_pinned_identity_for_replay(inputs, tmp_path):
     # Frozen by ORFdata 0.35.0 before its public class rename.
-    path = Path(__file__).parent / 'data' / 'orfdata-v4-host.json'
+    path = Path(__file__).parent / 'data' / 'orfdata_snapshots' / 'v4-host.json'
     identity = '27dc279cae59f2c0ef18ef673cfcdc5759bc46a9f9484351989477a10debda30'
     host = HostReference.load({'path': path, 'identity': identity})
     assert host.identity == identity
