@@ -12,33 +12,9 @@ from topiary import TopiaryPredictor
 
 from .cleavage_inference import audit_pepsickle_inputs, audit_peptidase_inputs
 from .cleavage_profile import CleavageProfile
-from .allele_validation import parse_prediction_allele, validate_prediction_allele, validate_prediction_frame
-from .safety_assessment import SafetyPrediction, prediction_occurrences_from_frame
+from .allele_validation import validate_prediction_frame
+from .safety_assessment import MHCRequest, SafetyPrediction, prediction_occurrences_from_frame
 from .sequence_context import SequenceContext
-
-
-@dataclass(frozen=True)
-class MHCRequest(DataclassSerializable):
-    """One explicitly requested model/kind/HLA/length, not observed coverage."""
-
-    kind: str
-    predictor_name: str
-    predictor_version: str
-    allele: str
-    peptide_length: int
-
-    def __post_init__(self):
-        if any(not isinstance(v, str) or not v for v in (
-                self.kind, self.predictor_name, self.predictor_version, self.allele)):
-            raise ValueError("MHC request needs complete model/kind/allele identity")
-        if type(self.peptide_length) is not int or self.peptide_length < 1:
-            raise ValueError("MHC request peptide length must be a positive integer")
-        validate_prediction_allele(self.kind, self.allele, "MHC request")
-        object.__setattr__(self, "allele", parse_prediction_allele(self.allele))
-
-    @property
-    def identity(self):
-        return (self.kind, self.predictor_name, self.predictor_version, self.allele)
 
 
 @dataclass(frozen=True)

@@ -21,6 +21,7 @@ from serializable import DataclassSerializable
 from topiary import TopiaryPredictor
 
 from .identifiers import normalize_mhc_allele
+from .allele_validation import parse_prediction_allele, validate_prediction_allele
 from .near_self import (
     DEFAULT_NEAR_SELF_COMPARATOR,
     NearSelfAssessment,
@@ -34,6 +35,8 @@ from .vaccine_antigen import SelfReferenceMatch, VaccineAntigen
 
 
 SAFETY_REASON_NO_PREDICTIONS = "no_predictions_emitted"
+SAFETY_REASON_MISSING_PREDICTION_SCOPE = "missing_candidate_prediction_scope"
+SAFETY_REASON_INCOMPLETE_PREDICTIONS = "incomplete_candidate_prediction_coverage"
 
 
 class SafetyAssessmentError(RuntimeError):
@@ -121,6 +124,43 @@ class SafetyPrediction(DataclassSerializable):
             self.predictor_version,
             self.allele,
         )
+
+
+@dataclass(frozen=True)
+class MHCRequest(DataclassSerializable):
+    """One explicitly requested model/kind/allele/length, not observed coverage.
+
+    Declare requests before prediction, independently of returned rows. Lengths
+    are per allele, so mixed classes do not imply an allele/length cross product.
+    """
+
+    kind: str
+    predictor_name: str
+    predictor_version: str
+    allele: str
+    peptide_length: int
+
+    def __post_init__(self):
+        if any(not isinstance(v, str) or not v for v in (
+                self.kind, self.predictor_name, self.predictor_version, self.allele)):
+            raise ValueError("MHC request needs complete model/kind/allele identity")
+        if type(self.peptide_length) is not int or self.peptide_length < 1:
+            raise ValueError("MHC request peptide length must be a positive integer")
+        validate_prediction_allele(self.kind, self.allele, "MHC request")
+        object.__setattr__(self, "allele", parse_prediction_allele(self.allele))
+
+    @property
+    def identity(self) -> tuple[str, str, str, str]:
+        return self.kind, self.predictor_name, self.predictor_version, self.allele
+
+
+def _normalize_prediction_requests(requests):
+    requests = tuple(requests)
+    if any(not isinstance(request, MHCRequest) for request in requests):
+        raise ValueError("Prediction scope requires MHCRequest records")
+    if len(set(requests)) != len(requests):
+        raise ValueError("Duplicate MHC prediction request")
+    return tuple(sorted(requests, key=lambda request: (request.identity, request.peptide_length)))
 
 
 @dataclass(frozen=True)
@@ -234,7 +274,11 @@ class EmittedSafetyLigand(DataclassSerializable):
 
 @dataclass(frozen=True)
 class WindowSafetyAssessment(DataclassSerializable):
-    """Immutable complete prediction inventory for one antigen window."""
+    """Immutable prediction inventory and declared scope for one antigen window.
+
+    Historical inventories without a request remain readable, but cannot
+    establish complete candidate prediction coverage.
+    """
 
     antigen: VaccineAntigen
     window_start_offset: int
@@ -243,8 +287,12 @@ class WindowSafetyAssessment(DataclassSerializable):
     coverage: tuple[SafetyPredictionCoverage, ...]
     genome_release: str = ""
     reason_codes: tuple[str, ...] = field(default_factory=tuple)
+    prediction_requests: tuple[MHCRequest, ...] = field(default_factory=tuple)
 
     def __post_init__(self):
+        requests = _normalize_prediction_requests(self.prediction_requests)
+        object.__setattr__(self, "prediction_requests", requests)
+        requested = {(request.identity, request.peptide_length) for request in requests}
         if self.window_start_offset < 0:
             raise ValueError("Window start cannot be negative")
         if not self.window_start_offset < self.window_end_offset:
@@ -283,6 +331,11 @@ class WindowSafetyAssessment(DataclassSerializable):
                 raise ValueError(
                     "Safety ligand does not match the scanned antigen window"
                 )
+            if requests and any(
+                (prediction.identity, len(ligand.peptide)) not in requested
+                for prediction in ligand.predictions
+            ):
+                raise SafetyAssessmentError("Prediction evidence is outside the declared request")
         object.__setattr__(self, "ligands", ligands)
         coverage = tuple(sorted(
             self.coverage,
@@ -343,7 +396,51 @@ class WindowSafetyAssessment(DataclassSerializable):
 
     def to_report_dict(self) -> dict:
         """Plain JSON-compatible tree without serializer type metadata."""
-        return json.loads(json.dumps(asdict(self)))
+        return json.loads(json.dumps({
+            **asdict(self),
+            "prediction_coverage_gaps": self.prediction_coverage_gaps,
+            "prediction_coverage_reason_codes": self.prediction_coverage_reason_codes,
+        }))
+
+    @property
+    def prediction_coverage_gaps(self) -> tuple[dict, ...]:
+        """Missing and nonfinite percentiles, grouped by request and length.
+
+        Offsets are relative to the scanned window. A length exceeding that
+        window has no expected occurrences. Gaps are recomputed from retained
+        evidence on replay, rather than trusting a serialized success flag.
+        """
+        observed = {}
+        for ligand in self.ligands:
+            for prediction in ligand.predictions:
+                observed.setdefault((prediction.identity, len(ligand.peptide)), {})[
+                    ligand.window_start_offset
+                ] = prediction.percentile_rank is not None
+        gaps = []
+        for request in self.prediction_requests:
+            values = observed.get((request.identity, request.peptide_length), {})
+            offsets = range(max(0, len(self.window_sequence) - request.peptide_length + 1))
+            missing = tuple(offset for offset in offsets if offset not in values)
+            nonfinite = tuple(offset for offset in offsets if values.get(offset) is False)
+            if missing or nonfinite:
+                gaps.append({
+                    "request": asdict(request),
+                    "missing_window_offsets": missing,
+                    "nonfinite_window_offsets": nonfinite,
+                })
+        return tuple(gaps)
+
+    @property
+    def prediction_coverage_reason_codes(self) -> tuple[str, ...]:
+        if not self.prediction_requests:
+            return (SAFETY_REASON_MISSING_PREDICTION_SCOPE,)
+        if not self.ligands or self.prediction_coverage_gaps:
+            return (SAFETY_REASON_INCOMPLETE_PREDICTIONS,)
+        return ()
+
+    @property
+    def has_complete_prediction_coverage(self) -> bool:
+        return not self.prediction_coverage_reason_codes
 
     def prediction_rows(self) -> list[dict]:
         """Flat, primitive-valued rows for CSV/DataFrame report inputs."""
@@ -666,8 +763,10 @@ def safety_assessment_from_prediction_frame(
     construct_boundaries: tuple[ConstructBoundary, ...] = (),
     genome_release: str = "",
     expected_source_name: Optional[str] = None,
+    prediction_requests: tuple[MHCRequest, ...] = (),
 ) -> WindowSafetyAssessment:
-    """Convert an unfiltered topiary prediction frame into safety evidence."""
+    """Convert unfiltered output using a scope declared independently of rows."""
+    prediction_requests = _normalize_prediction_requests(prediction_requests)
     if reference_proteome is None and self_reference_results is None:
         raise ValueError("Safety inventory requires explicit self-reference evidence")
     if reference_proteome is not None and self_reference_results is not None:
@@ -693,6 +792,7 @@ def safety_assessment_from_prediction_frame(
             coverage=(),
             genome_release=genome_release,
             reason_codes=(SAFETY_REASON_NO_PREDICTIONS,),
+            prediction_requests=prediction_requests,
         )
 
     groups, coverage_records = prediction_occurrences_from_frame(
@@ -754,6 +854,7 @@ def safety_assessment_from_prediction_frame(
         ligands=tuple(ligands),
         coverage=coverage,
         genome_release=genome_release,
+        prediction_requests=prediction_requests,
     )
 
 
@@ -768,13 +869,19 @@ def assess_vaccine_antigen_window(
     window_start: int = 0,
     window_end: Optional[int] = None,
     construct_boundaries: tuple[ConstructBoundary, ...] = (),
+    prediction_requests: tuple[MHCRequest, ...] = (),
 ) -> WindowSafetyAssessment:
     """Predict and inventory every ligand emitted for an antigen window.
 
     Unlike :func:`vaxrank.predict_epitopes`, this API applies no ranking or
     immunogenicity filter. Predictor failures raise ``SafetyAssessmentError``;
     they are never converted into a reassuring empty result.
+
+    ``prediction_requests`` declares required model/version/kind, allele and
+    length combinations before inference. Omitting it records unassessed
+    coverage; it never derives an expected scope from returned predictions.
     """
+    prediction_requests = _normalize_prediction_requests(prediction_requests)
     from .input_scope import InputScope, validate_host_taxon
     host_scope = InputScope(mhc_species=mhc_species)
     if host_reference is not None:
@@ -846,4 +953,5 @@ def assess_vaccine_antigen_window(
         construct_boundaries=construct_boundaries,
         genome_release=genome_release,
         expected_source_name=source_name,
+        prediction_requests=prediction_requests,
     )
