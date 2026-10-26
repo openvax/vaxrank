@@ -53,9 +53,9 @@ not trusted and not automatically deleted.
 
 Library callers of `assess_vaccine_antigen_window` and
 `safety_assessment_from_prediction_frame` can pass `prediction_requests`, a
-tuple of public `SafetyPredictionRequest` records. Each record declares an
-exact prediction kind, predictor name/version, one allele, and its required
-peptide lengths. Resolve these from the intended model configuration before
+tuple of public `MHCRequest` records (also used by context audits). Each record
+declares an exact prediction kind, predictor name/version, one allele, and one
+required peptide length. Resolve these from the intended model configuration before
 prediction; never construct the request from the output rows. Declare lengths
 per allele so class-I and class-II configurations remain separate.
 

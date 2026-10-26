@@ -9,7 +9,7 @@ from topiary import TopiaryPredictor
 
 from tests.test_near_self import _index
 from tests.test_safety_assessment import _antigen, _Reference, _row
-from vaxrank import SafetyPredictionRequest
+from vaxrank import MHCRequest
 from vaxrank.native_serialization import from_native_json, to_native_json
 from vaxrank.safety_assessment import (
     SAFETY_REASON_INCOMPLETE_PREDICTIONS,
@@ -24,7 +24,7 @@ from vaxrank.safety_policy import SafetyEnforcementPolicy, SafetyPolicyError, ev
 
 
 REQUESTS = tuple(
-    SafetyPredictionRequest(kind, model, version, allele, (9, 10))
+    MHCRequest(kind, model, version, allele, length)
     for kind, model, version in (
         ("pMHC_affinity", "mhcflurry", "2.1.4"),
         ("pMHC_affinity", "mhcflurry", "2.2.0"),
@@ -32,18 +32,18 @@ REQUESTS = tuple(
         ("pMHC_presentation", "presentation", "2.1.4"),
     )
     for allele in ("HLA-A*02:01", "HLA-B*07:02")
+    for length in (9, 10)
 )
 
 
 def _rows(requests=REQUESTS, sequence=None):
     sequence = sequence or _antigen().amino_acids
     return [
-        dict(_row(sequence[offset:offset + length], offset, kind=request.kind,
+        dict(_row(sequence[offset:offset + request.peptide_length], offset, kind=request.kind,
                   predictor=request.predictor_name, allele=request.allele),
              predictor_version=request.predictor_version)
         for request in requests
-        for length in request.peptide_lengths
-        for offset in range(len(sequence) - length + 1)
+        for offset in range(len(sequence) - request.peptide_length + 1)
     ]
 
 
@@ -161,8 +161,9 @@ def test_complete_evidence_keeps_audit_and_enforcement_actions_distinct():
 
 def test_mixed_class_lengths_are_checked_per_allele_without_cross_product():
     requests = (
-        SafetyPredictionRequest("pMHC_affinity", "class-I", "1", "HLA-A*02:01", (9, 10)),
-        SafetyPredictionRequest("pMHC_affinity", "class-II", "1", "HLA-DRB1*01:01", (15,)),
+        MHCRequest("pMHC_affinity", "class-I", "1", "HLA-A*02:01", 9),
+        MHCRequest("pMHC_affinity", "class-I", "1", "HLA-A*02:01", 10),
+        MHCRequest("pMHC_affinity", "class-II", "1", "HLA-DRB1*01:01", 15),
     )
     window = _window(_rows(requests), requests)
     assert window.has_complete_prediction_coverage
@@ -200,25 +201,25 @@ def test_high_level_api_freezes_scope_before_model_runs():
         _decision(window)
 
 
-@pytest.mark.parametrize("lengths", [(), (0,), (-1,), (True,), (9.5,)])
-def test_request_requires_positive_integer_lengths(lengths):
-    with pytest.raises(ValueError, match="positive integers"):
-        replace(REQUESTS[0], peptide_lengths=lengths)
+@pytest.mark.parametrize("length", [0, -1, True, 9.5])
+def test_request_requires_positive_integer_lengths(length):
+    with pytest.raises(ValueError, match="positive integer"):
+        replace(REQUESTS[0], peptide_length=length)
 
 
 def test_duplicate_scope_and_unrequested_length_fail_explicitly():
     with pytest.raises(ValueError, match="Duplicate"):
         _window([], (REQUESTS[0], REQUESTS[0]))
     with pytest.raises(SafetyAssessmentError, match="outside the declared request"):
-        _window(_rows(), tuple(replace(r, peptide_lengths=(9,)) for r in REQUESTS))
-    request = replace(REQUESTS[0], allele="HLA-A0201", peptide_lengths=(10, 9, 9))
-    assert request.allele == "HLA-A*02:01" and request.peptide_lengths == (9, 10)
+        _window(_rows(), tuple(r for r in REQUESTS if r.peptide_length == 9))
+    request = replace(REQUESTS[0], allele="HLA-A0201")
+    assert request.allele == "HLA-A*02:01"
 
 
 def test_too_long_lengths_do_not_invent_windows_or_make_empty_output_complete():
-    requests = (replace(REQUESTS[0], peptide_lengths=(9, 25)),)
+    requests = (REQUESTS[0], replace(REQUESTS[0], peptide_length=25))
     assert _window(_rows(requests), requests).has_complete_prediction_coverage
-    window = _window([], (replace(REQUESTS[0], peptide_lengths=(25,)),))
+    window = _window([], (replace(REQUESTS[0], peptide_length=25),))
     assert window.prediction_coverage_gaps == ()
     assert not window.has_complete_prediction_coverage
 
@@ -244,3 +245,12 @@ def test_requested_positions_are_relative_to_the_scanned_window():
     )
     assert window.has_complete_prediction_coverage
     assert window.ligands[0].antigen_start_offset == 2
+
+
+def test_existing_context_audit_request_import_and_archives_remain_supported():
+    from vaxrank.context_audit import MHCRequest as ContextRequest
+
+    assert ContextRequest is MHCRequest
+    historical = json.loads(to_native_json(REQUESTS[0]))
+    historical["__class__"]["__module__"] = "vaxrank.context_audit"
+    assert from_native_json(json.dumps(historical), MHCRequest) == REQUESTS[0]

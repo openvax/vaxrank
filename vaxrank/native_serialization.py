@@ -74,7 +74,6 @@ def _native_serializable_classes():
         ConstructBoundary,
         EmittedSafetyLigand,
         SafetyPrediction,
-        SafetyPredictionRequest,
         SafetyPredictionCoverage,
         WindowSafetyAssessment,
     )
@@ -137,7 +136,7 @@ def _native_serializable_classes():
         ("vaxrank.safety_assessment", "ConstructBoundary"): ConstructBoundary,
         ("vaxrank.safety_assessment", "EmittedSafetyLigand"): EmittedSafetyLigand,
         ("vaxrank.safety_assessment", "SafetyPrediction"): SafetyPrediction,
-        ("vaxrank.safety_assessment", "SafetyPredictionRequest"): SafetyPredictionRequest,
+        ("vaxrank.safety_assessment", "MHCRequest"): MHCRequest,
         ("vaxrank.safety_assessment", "SafetyPredictionCoverage"): SafetyPredictionCoverage,
         ("vaxrank.safety_assessment", "WindowSafetyAssessment"): WindowSafetyAssessment,
     }
