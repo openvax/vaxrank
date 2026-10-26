@@ -333,6 +333,9 @@ class AntigenSafetyPolicyDecision(DataclassSerializable):
         else:
             if self.finding == SAFETY_FINDING_DISABLED:
                 raise ValueError("Audit/enforce modes cannot report safety disabled")
+            if (not self.assessment.window_assessment.has_complete_prediction_coverage
+                    and self.finding != SAFETY_FINDING_INCOMPLETE):
+                raise ValueError("Incomplete candidate prediction coverage requires an incomplete finding")
             expected_action = (
                 SAFETY_ACTION_ERROR
                 if (
@@ -357,13 +360,18 @@ class AntigenSafetyPolicyDecision(DataclassSerializable):
 
     @property
     def has_complete_coverage(self) -> bool:
-        return self.policy.mode != SAFETY_MODE_OFF and all(
-            decision.has_complete_coverage for decision in self.ligand_decisions
-        ) and SAFETY_REASON_NO_PREDICTIONS not in self.reason_codes
+        return (
+            self.policy.mode != SAFETY_MODE_OFF
+            and self.assessment.window_assessment.has_complete_prediction_coverage
+            and all(decision.has_complete_coverage for decision in self.ligand_decisions)
+            and SAFETY_REASON_NO_PREDICTIONS not in self.reason_codes
+        )
 
     def to_report_dict(self) -> dict:
         """JSON-native decision tree for audit and counterfactual reports."""
-        return json.loads(json.dumps(asdict(self)))
+        return json.loads(json.dumps({
+            **asdict(self), "assessment": self.assessment.to_report_dict(),
+        }))
 
 
 def evaluate_antigen_safety_policy(
@@ -441,11 +449,12 @@ def evaluate_antigen_safety_policy(
         for decision in ligand_decisions
         for code in (*decision.risk_reason_codes, *decision.coverage_reason_codes)
     }
+    reason_codes.update(assessment.window_assessment.prediction_coverage_reason_codes)
     if SAFETY_REASON_NO_PREDICTIONS in assessment.window_assessment.reason_codes:
         reason_codes.add(SAFETY_REASON_NO_PREDICTIONS)
     incomplete = any(
         not decision.has_complete_coverage for decision in ligand_decisions
-    ) or SAFETY_REASON_NO_PREDICTIONS in reason_codes
+    ) or not assessment.window_assessment.has_complete_prediction_coverage
     unsafe = any(decision.has_safety_risk for decision in ligand_decisions)
     finding = (
         SAFETY_FINDING_INCOMPLETE

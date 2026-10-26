@@ -38,10 +38,8 @@ from vaxrank.safety_assessment import SAFETY_REASON_NO_PREDICTIONS
 from vaxrank.safety_policy import (
     SAFETY_ACTION_ALLOW,
     SAFETY_ACTION_ERROR,
-    SAFETY_ACTION_REPAIR,
     SAFETY_FINDING_DISABLED,
     SAFETY_FINDING_INCOMPLETE,
-    SAFETY_FINDING_UNSAFE,
     SAFETY_MODEL_COMBINATION_ALL,
     SAFETY_REASON_DISABLED,
     SAFETY_REASON_EXACT_SELF,
@@ -171,7 +169,7 @@ def test_prediction_gate_supports_union_intersection_and_missing_coverage():
     )
 
 
-def test_off_audit_and_enforce_separate_findings_from_actions():
+def test_off_audit_and_enforce_preserve_risk_findings_with_undeclared_scope():
     antigen = VaccineAntigen(
         kind=ANTIGEN_KIND_MUTATION,
         amino_acids="CCCCCCCCCAAAAAAAAIGGGGGGGGG",
@@ -343,26 +341,26 @@ def test_off_audit_and_enforce_separate_findings_from_actions():
         assessment,
         SafetyEnforcementPolicy(mode=SAFETY_MODE_AUDIT),
     )
-    enforce = evaluate_antigen_safety_policy(
-        assessment,
-        SafetyEnforcementPolicy(mode=SAFETY_MODE_ENFORCE),
-    )
+    with pytest.raises(SafetyPolicyError) as error:
+        evaluate_antigen_safety_policy(assessment, SafetyEnforcementPolicy(mode=SAFETY_MODE_ENFORCE))
+    enforce = error.value.decision
 
     assert off.finding == SAFETY_FINDING_DISABLED
     assert off.action == SAFETY_ACTION_ALLOW
     assert off.reason_codes == (SAFETY_REASON_DISABLED,)
     assert not off.has_complete_coverage
-    assert audit.finding == SAFETY_FINDING_UNSAFE
+    assert audit.finding == SAFETY_FINDING_INCOMPLETE
     assert audit.action == SAFETY_ACTION_ALLOW
     assert audit.would_require_repair
-    assert audit.has_complete_coverage
-    assert enforce.finding == SAFETY_FINDING_UNSAFE
-    assert enforce.action == SAFETY_ACTION_REPAIR
+    assert not audit.has_complete_coverage
+    assert enforce.finding == SAFETY_FINDING_INCOMPLETE
+    assert enforce.action == SAFETY_ACTION_ERROR
     assert enforce.would_require_repair
     assert set(enforce.reason_codes) == {
         SAFETY_REASON_NON_TARGET,
         SAFETY_REASON_EXACT_SELF,
         SAFETY_REASON_NEAR_SELF_DISTANCE,
+        "missing_candidate_prediction_scope",
     }
     assert json.loads(json.dumps(enforce.to_report_dict())) == enforce.to_report_dict()
     assert AntigenSafetyPolicyDecision.from_json(enforce.to_json()) == enforce

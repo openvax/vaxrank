@@ -49,6 +49,32 @@ a subset from sharing a full-reference cache. Upgrading from
 species/release-only caches triggers a one-time rebuild; old cache files are
 not trusted and not automatically deleted.
 
+## Safety prediction coverage API
+
+Library callers of `assess_vaccine_antigen_window` and
+`safety_assessment_from_prediction_frame` can pass `prediction_requests`, a
+tuple of public `SafetyPredictionRequest` records. Each record declares an
+exact prediction kind, predictor name/version, one allele, and its required
+peptide lengths. Resolve these from the intended model configuration before
+prediction; never construct the request from the output rows. Declare lengths
+per allele so class-I and class-II configurations remain separate.
+
+For every requested combination, coverage requires a finite percentile at
+every position where that peptide length fits inside the scanned window.
+Missing positions and nonfinite percentiles appear in
+`prediction_coverage_gaps`, with offsets relative to the window. Output outside
+the declared model/allele/length scope raises `SafetyAssessmentError`. A length
+longer than the window requires no positions, but an entirely empty prediction
+inventory cannot be reported as complete.
+
+Historical inventories without a request remain readable and explicitly lack
+coverage. The safety policy reports `incomplete` in audit mode and raises
+`SafetyPolicyError` in enforce mode for undeclared or incomplete coverage. Off
+mode remains visibly disabled. Native replay retains the request and recomputes
+gaps from the preserved evidence; JSON reports include both. These coverage
+checks do not enable default CLI safety enforcement or change its screening
+thresholds, which remain separate work.
+
 ## Scripts
 
 - `develop.sh`: installs the package in editable mode.
