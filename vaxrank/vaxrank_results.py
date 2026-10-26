@@ -11,7 +11,7 @@
 # limitations under the License.
 
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from serializable import DataclassSerializable
@@ -36,6 +36,10 @@ class VaxrankResults(DataclassSerializable):
         Exact windows constructed while considering variants, including those
         later excluded by peptide selection. Isovar alternatives remain in
         ``isovar_results`` rather than being copied into this list.
+
+    isovar_protein_hypotheses : dict, optional
+        Isovar's portable, versioned hypothesis export for offline replay.
+        Present in saved RNA-backed results instead of live ``isovar_results``.
     """
 
     isovar_results: list[Any]
@@ -45,6 +49,26 @@ class VaxrankResults(DataclassSerializable):
     # later excluded by MHC prediction or vaccine ranking. These are partial
     # products; Isovar's unfiltered results retain its complete alternatives.
     retained_protein_fragments: list[Any] = field(default_factory=list)
+    isovar_protein_hypotheses: Any = None
+
+    def to_json(self, *, sample_id=None, source=None):
+        """Save RNA hypotheses portably without serializing live read objects.
+
+        RNA-backed results require their original sample and run identifiers.
+        DNA-only results keep the ordinary dataclass JSON format.
+        """
+        if not self.isovar_results:
+            return super().to_json()
+        if self.isovar_protein_hypotheses is not None:
+            raise ValueError('Results cannot contain both live and saved Isovar hypotheses')
+        if any(not isinstance(value, str) or not value.strip()
+               for value in (sample_id, source)):
+            raise ValueError('RNA-backed results need sample_id and source for portable JSON')
+        from isovar import export_protein_hypotheses
+        portable = replace(self, isovar_results=[],
+            isovar_protein_hypotheses=export_protein_hypotheses(
+                self.isovar_results, sample_id=sample_id, source=source))
+        return DataclassSerializable.to_json(portable)
 
     @property
     def variants(self):
@@ -55,6 +79,8 @@ class VaxrankResults(DataclassSerializable):
         -------
         list of varcode.Variant
         """
+        if self.isovar_protein_hypotheses is not None:
+            raise ValueError('Saved Isovar hypotheses cannot supply live variant objects')
         return [
             isovar_result.variant
             for isovar_result
@@ -102,6 +128,8 @@ class VaxrankResults(DataclassSerializable):
         whether any vaccine peptide was produced. Binding status is not
         inferred from the presence or absence of a vaccine peptide.
         """
+        if self.isovar_protein_hypotheses is not None:
+            raise ValueError('Saved Isovar hypotheses cannot supply live variant properties')
         dna_vaf_by_variant = dna_vaf_by_variant or {}
         variant_properties_list = []
         for isovar_result in self.isovar_results:

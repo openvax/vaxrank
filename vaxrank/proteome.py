@@ -6,6 +6,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import replace
 
+from isovar import from_protein_hypotheses as isovar_from_protein_hypotheses
 from isovar import to_proteome as isovar_to_proteome
 from orfdata import (
     ProducerInfo,
@@ -290,7 +291,17 @@ def to_proteome(results, *, sample_id, source, reference):
            for fragment in results.retained_protein_fragments):
         raise TypeError("retained_protein_fragments must contain MutantProteinFragment values")
 
-    if results.isovar_results:
+    saved_isovar = results.isovar_protein_hypotheses
+    if results.isovar_results and saved_isovar is not None:
+        raise ValueError("Results cannot contain both live and saved Isovar hypotheses")
+    if saved_isovar is not None:
+        if not isinstance(saved_isovar, Mapping):
+            raise ValueError("Saved Isovar hypotheses must be a versioned JSON object")
+        if (saved_isovar.get("sample_id"), saved_isovar.get("source")) != (sample_id, source):
+            raise ValueError("Saved Isovar sample_id and source disagree with the export request")
+        proteome = _with_export_path(isovar_from_protein_hypotheses(
+            saved_isovar, reference=reference))
+    elif results.isovar_results:
         proteome = _with_export_path(isovar_to_proteome(
             results.isovar_results,
             sample_id=sample_id,
@@ -341,7 +352,7 @@ def to_proteome(results, *, sample_id, source, reference):
         protein = None
         if fragment.sequence_source == SEQUENCE_SOURCE_ISOVAR_ASSEMBLY:
             protein = _isovar_protein(proteome, fragment)
-            if protein is None and results.isovar_results:
+            if protein is None and (results.isovar_results or saved_isovar is not None):
                 raise ValueError(
                     "Retained Isovar fragment does not match an exported Isovar hypothesis"
                 )

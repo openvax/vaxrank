@@ -38,6 +38,26 @@ joint.write_fasta("joint.fasta")
 joint.save("joint.proteome.json.gz")
 ```
 
+To convert RNA-backed results again without the original reads, save Isovar's
+portable hypotheses with the same sample and run IDs:
+
+```python
+from pathlib import Path
+from vaxrank.vaxrank_results import VaxrankResults
+
+Path("results.json").write_text(
+    results.to_json(sample_id="tumor-1", source="vaxrank-run-1")
+)
+restored = VaxrankResults.from_json(Path("results.json").read_text())
+replayed = to_proteome(
+    restored, sample_id="tumor-1", source="vaxrank-run-1", reference=reference
+)
+assert replayed.identity == patient.identity
+```
+
+This JSON retains the source hypotheses and evidence for ORFdata replay. It
+does not reconstruct live Isovar read objects.
+
 Every retained Isovar alternative comes through Isovar's own adapter. Vaxrank
 adds an export path and its recorded fragment/selection state without creating
 a second source protein. DNA-predicted and supplied fragments keep their exact

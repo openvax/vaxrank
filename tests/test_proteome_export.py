@@ -221,7 +221,7 @@ def test_real_isovar_results_merge_direct_and_wrapped(
         "test",
         "1",
     )
-    results = VaxrankResults([result], {}, [], [fragment])
+    results = VaxrankResults([result], {result.variant: []}, [(result.variant, [])], [fragment])
     direct = importlib.import_module("isovar").to_proteome(
         [result],
         sample_id="sample",
@@ -243,6 +243,45 @@ def test_real_isovar_results_merge_direct_and_wrapped(
     path = tmp_path / "wrapped.proteome.json.gz"
     wrapped.save(path)
     assert Proteome.load(path).identity == wrapped.identity
+
+
+def test_saved_rna_results_replay_all_isovar_evidence_offline(
+    tmp_path, assembly_reference, monkeypatch
+):
+    result = reconstruct(tmp_path, assembly_reference, [
+        (MUTANT, [(len(MUTANT), "M")], 0),
+        (MUTANT, [(len(MUTANT), "M")], 0),
+    ])
+    fragment = MutantProteinFragment.from_isovar_result(result)
+    reference = ReferenceContext(9606, "human", result.variant.reference_name, "test", "1")
+    results = VaxrankResults([result], {result.variant: []}, [(result.variant, [])], [fragment])
+    native = to_proteome(results, sample_id="sample", source="synthetic-bam", reference=reference)
+
+    with pytest.raises(ValueError, match="sample_id and source"):
+        results.to_json()
+    saved = results.to_json(sample_id="sample", source="synthetic-bam")
+    restored = VaxrankResults.from_json(saved)
+    assert restored.isovar_results == []
+    assert restored.isovar_protein_hypotheses["schema"] == "isovar.protein_hypotheses.v2"
+    with pytest.raises(ValueError, match="live variant"):
+        _ = restored.variants
+    with pytest.raises(ValueError, match="live variant"):
+        restored.variant_counts()
+    monkeypatch.setattr(
+        "vaxrank.proteome.isovar_to_proteome",
+        lambda *args, **kwargs: pytest.fail("replay must use saved Isovar hypotheses"),
+    )
+    monkeypatch.setattr(
+        "pyensembl.Genome.transcripts",
+        lambda *args, **kwargs: pytest.fail("replay must not load genome transcripts"),
+    )
+    replay = to_proteome(restored, sample_id="sample", source="synthetic-bam", reference=reference)
+    assert replay.identity == native.identity
+    assert replay.proteins == native.proteins
+    assert replay.records == native.records
+    assert replay.links == native.links
+    with pytest.raises(ValueError, match="sample_id and source"):
+        to_proteome(restored, sample_id="other", source="synthetic-bam", reference=reference)
 
 
 def test_saved_results_convert_identically_without_prediction(monkeypatch):
