@@ -29,7 +29,9 @@ reference = test_isovar_support_contract.reference
 @pytest.fixture
 def inputs():
     records = {}
-    for index, kind in enumerate(sorted(ANTIGEN_KINDS)):
+    # Keep the released six-kind fixture's sequences stable when adding kinds.
+    legacy = ('CTA', 'ERV', 'fusion', 'mutation', 'splice', 'viral')
+    for index, kind in enumerate((*legacy, *sorted(ANTIGEN_KINDS - set(legacy)))):
         sequence = 'ACDEFGHIKLMNPQRSTVWY'[index:index + 10]
         records[kind] = VaccineAntigen(
             kind=kind, amino_acids=sequence, source_identifier='synthetic-' + kind,
@@ -76,13 +78,13 @@ def test_antigen_json_roundtrip_and_shared_prediction(inputs, tmp_path, dependen
                              config=EpitopeConfig(score_expr='1.0'))
     assert model.calls
     assert {a.kind for a in dataset.antigens.values()} == ANTIGEN_KINDS
-    assert len(dataset.epitopes) == 14  # two occurrences per source, including held-out evidence
-    assert len({e.prediction_id for e in dataset.epitopes}) == 14
+    assert len(dataset.epitopes) == 2 * len(inputs.antigens)  # two occurrences per source, including held-out evidence
+    assert len({e.prediction_id for e in dataset.epitopes}) == 2 * len(inputs.antigens)
     assert all(e.self_reference_match.source_provenance_complete for e in dataset.epitopes)
     assert all(e.source_sequence[e.offset:e.offset + len(e.sequence)] == e.sequence for e in dataset.epitopes)
     assert all(e.patient_alleles == tuple(ALLELES) for e in dataset.epitopes)
     exported = AntigenDataset.from_epitope_dataset(dataset)
-    assert len(exported.antigens) == 7
+    assert len(exported.antigens) == len(inputs.antigens)
     assert exported.antigens == inputs.antigens
     assert set(exported.antigens.values()) == set(inputs.antigens.values())
     exported.save(path)
@@ -103,22 +105,22 @@ def test_all_sources_use_shared_design_and_offline_replay(inputs, dependencies, 
         '--vaccine-peptide-length', '10', '--config-text', 'epitopes.score_expr=1.0',
         '--config-text', 'vaccine_peptides.combined_score_expr=target_epitope_score']
     if modality == 'mrna':
-        options += ['--mrna-antigens-per-construct', '6', '--mrna-max-constructs', '1',
+        options += ['--mrna-antigens-per-construct', str(len(ANTIGEN_KINDS)), '--mrna-max-constructs', '1',
                     '--mrna-no-optimize-linkers', '--mrna-codon-method', 'use_best_codon']
     run_cli(options)
-    assert len(AntigenDataset.load(exported).antigens) == 7
+    assert len(AntigenDataset.load(exported).antigens) == len(inputs.antigens)
     saved = EpitopeDataset.load(native)
     assert {a.kind for a in saved.antigens.values()} == ANTIGEN_KINDS
     manifest = json.loads((output / 'manifest.json').read_text())
     sequences = ([p['sequence'] for p in manifest] if modality == 'peptide' else
                  [a['aa'] for p in manifest for a in p['antigens']])
-    assert len(sequences) == 6
+    assert len(sequences) == len(ANTIGEN_KINDS)
     assert set(sequences) == {a.amino_acids for a in inputs.antigens.values()}
     for filename in ('run_summary.txt', 'vaccine_report.txt'):
         summary = (output / filename).read_text()
         assert 'Experimental antigen design' in summary
-        assert 'Resolved antigen records: 7' in summary
-        assert 'Admitted antigen records: 6' in summary
+        assert f'Resolved antigen records: {len(inputs.antigens)}' in summary
+        assert f'Admitted antigen records: {len(ANTIGEN_KINDS)}' in summary
         assert 'Held-out antigen records: 1' in summary
         assert 'viral: 2' in summary
         assert 'variants with antigens' not in summary
@@ -260,7 +262,7 @@ def test_pooled_native_sources_keep_independent_antigen_catalogs(inputs, depende
         paths.append(('epitopes', str(path)))
     _, frame, _ = prepare_reports(paths, genome=genome)
     exported = AntigenDataset.from_epitope_dataset(frame.attrs['epitope_dataset'])
-    assert len(exported.antigens) == 14
+    assert len(exported.antigens) == 2 * len(inputs.antigens)
     assert {p.scope.sample_id for p in exported.provenance} == {'sample-1', 'sample-2'}
     path = tmp_path / 'pooled.json'
     exported.save(path)

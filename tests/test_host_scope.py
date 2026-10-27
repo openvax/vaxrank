@@ -144,6 +144,7 @@ def test_viral_source_keeps_human_host_through_design_and_offline_replay(
 
 def test_old_scope_and_antigen_identities_are_unchanged(inputs):
     # Recorded from released Vaxrank 3.44.1 (c8822ed), before adding host_taxon_id.
+    inputs = replace(inputs, antigens={k: a for k, a in inputs.antigens.items() if a.kind not in ('SV', 'isoform')})
     scope = InputScope(patient_id='patient', reference_assembly='GRCh38', annotation='ensembl:93',
                        mhc_alleles=('HLA-A*02:01',))
     assert hashlib.sha256(json.dumps(scope_dict(scope), sort_keys=True).encode()).hexdigest() == (

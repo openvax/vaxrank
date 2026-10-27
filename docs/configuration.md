@@ -133,6 +133,16 @@ intended design. The RNA support thresholds are unchanged by it. RNA settings
 are saved with run arguments and do not rerun reconstruction when rendering
 cached reports or ranking external pVACseq/LENS predictions.
 
+For [native Isovar ORF inputs](isovar-inputs.md), use
+`isovar.sources.<family>.admission`, `.reconstruction`, `.reads`, and `.protein`.
+The same controls work in source JSON, manifest entries, Python
+`IsovarSourceOptions`, and `--set` (an alias for `--config-value`). For example,
+`--set isovar.sources.variant_orfs.admission.allow_partial=true` permits partial
+coding candidates to pass that gate while retaining their uncertainty and
+requiring independent tumor-specificity evidence. Reconstruction controls cannot
+be applied to a saved producer result. The source guide documents each family's
+valid controls, support units, precedence and unresolved outcomes.
+
 The DNA-only fallback remains opt-in, with its own separate padding default. It
 examines concrete Varcode outcomes before choosing a usable changed protein,
 including alternatives behind unchanged or unresolved fusion candidates. Among

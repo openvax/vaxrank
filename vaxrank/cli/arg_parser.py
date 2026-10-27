@@ -1045,6 +1045,10 @@ def add_external_rescoring_args(arg_parser):
                                  'Defaults to the known host species; does not change its reference.')
     arg_parser.add_argument('--input-antigens', metavar='JSON',
                             help='Experimental: predict and design from a unified antigen dataset with explicit admission evidence.')
+    arg_parser.add_argument('--input-isovar', metavar='JSON',
+                            help='Predict from an Isovar result or vaxrank.isovar_input.v1 request. '
+                                 'Controls: --set isovar.sources.FAMILY.admission.allow_partial=true, '
+                                 'or source-specific reconstruction controls in the input file.')
     arg_parser.add_argument('--output-antigens', metavar='JSON',
                             help='Experimental: export resolved source antigens and admission evidence, without predictions.')
     cta = arg_parser.add_argument_group('Patient CTA expression input')
@@ -1174,7 +1178,7 @@ def external_input_arg_parser():
 
 def add_config_override_args(arg_parser):
     arg_parser.add_argument(
-        "--config-value",
+        "--config-value", "--set",
         dest="config_set_overrides",
         action=_ConfigOverrideAction,
         override_kind="set",
@@ -1210,7 +1214,8 @@ def choose_arg_parser(args_list):
         return make_vaxrank_arg_parser()
     elif any(
             arg in ("--input-pvacseq", "--input-lens", "--external-input", "--input-manifest",
-                    "--input-epitopes", "--input-topiary", "--input-cta-expression", "--input-antigens") or
+                    "--input-epitopes", "--input-topiary", "--input-cta-expression", "--input-antigens", "--input-isovar") or
+            arg.startswith("--input-isovar=") or
             arg.startswith("--input-antigens=") or
             arg.startswith("--input-cta-expression=") or
             arg.startswith("--input-epitopes=") or

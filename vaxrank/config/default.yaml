@@ -153,6 +153,11 @@ isovar:
   min_protein_sequence_support_fraction: 0.85
   # Independent absolute floor at every retained cDNA base (read objects, not names).
   min_variant_sequence_coverage: 2
+  # Native --input-isovar controls use sources.<family>.<section>.<name>.
+  # Sections: admission, reconstruction, reads (variant_orfs/SV), protein (variant_orfs).
+  # Omitted sources use producer defaults and IsovarAdmission defaults:
+  # allow_partial=false, allow_ambiguous=false, min_fragments=2.
+  # See docs/isovar-inputs.md; these do not change ordinary VCF/BAM settings.
 
 vaccine_peptides:
   # ---- Length / position ----

@@ -646,7 +646,7 @@ def _linker_prediction_configuration(args, config_kwargs=None):
     models_path = cfg('junction_predictor_models_path')
     external = any(getattr(args, name, None) for name in (
         'input_manifest', 'input_lens', 'input_pvacseq', 'external_input',
-        'input_topiary', 'input_epitopes', 'input_cta_expression'))
+        'input_topiary', 'input_epitopes', 'input_cta_expression', 'input_antigens', 'input_isovar'))
     if not model and (external or not getattr(args, 'mhc_predictor', None)):
         if cfg('optimize_linkers') is True or query or model_path or models_path:
             raise ValueError(
@@ -985,6 +985,7 @@ def populate_default_output_paths(args):
             or getattr(args, 'input_topiary', None)
             or getattr(args, 'input_cta_expression', None)
             or getattr(args, 'input_antigens', None)
+            or getattr(args, 'input_isovar', None)
             or getattr(args, 'external_input', None)
             or getattr(args, 'input_manifest', None))
         else 'pipeline')
@@ -1096,6 +1097,7 @@ def write_run_summary(args, patient_info, source):
             'Ranked antigen sources: %d' % antigen_summary['ranked_sources'],
             'Candidate groups without resolved antigen records: %d' % antigen_summary['unresolved_candidate_groups'],
         ]
+        lines += ['Isovar source: ' + row for row in antigen_summary.get('isovar_inputs', ())]
     elif patient_info is not None:
         lines += [
             "",
@@ -1266,7 +1268,7 @@ def run_cli(args_list=None):
         direct = any(getattr(args, name, None) for name in ('vcf', 'maf', 'variant', 'json_variants'))
         external = any(getattr(args, name, None) for name in (
             'input_pvacseq', 'input_lens', 'input_epitopes', 'input_topiary',
-            'input_cta_expression', 'input_antigens', 'external_input', 'input_manifest'))
+            'input_cta_expression', 'input_antigens', 'input_isovar', 'external_input', 'input_manifest'))
         if not direct or (external and not (getattr(args, 'input_manifest', None)
                                             and getattr(args, 'vcf', None))):
             raise ValueError('--reference-context requires a direct variant input or a manifest with direct VCF')
@@ -1335,6 +1337,7 @@ def run_cli(args_list=None):
             or getattr(args, 'input_topiary', None)
             or getattr(args, 'input_cta_expression', None)
             or getattr(args, 'input_antigens', None)
+            or getattr(args, 'input_isovar', None)
             or getattr(args, 'external_input', None)
             or getattr(args, 'input_manifest', None)):
         merged_config = load_vaxrank_config(args)

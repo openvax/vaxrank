@@ -140,6 +140,14 @@ def external_args(*extra):
     return parse_vaxrank_args(['--input-lens', INPUTS[0][1], *extra])
 
 
+@pytest.mark.parametrize('input_flag', ['--input-antigens', '--input-isovar'])
+def test_native_sequence_inputs_require_explicit_junction_model(input_flag, junction_factory):
+    args = parse_vaxrank_args([input_flag, 'source.json', '--mhc-predictor', 'random',
+                               '--mhc-alleles', 'A0201'])
+    assert ep.resolve_mhc_for_linker_optimizer(args) == (None, None)
+    assert not junction_factory
+
+
 @pytest.mark.parametrize('input_flag', ['--input-lens', '--input-json-file'])
 def test_report_coverage_does_not_supply_junction_genotype(input_flag, junction_factory):
     args = parse_vaxrank_args([input_flag, 'saved-input',

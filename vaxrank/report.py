@@ -303,6 +303,8 @@ class TemplateDataCreator(object):
                 f'{kind}: {count}' for kind, count in antigen_summary['by_kind'].items())
             patient_info['Ranked antigen sources'] = antigen_summary['ranked_sources']
             patient_info['Candidate groups without resolved antigen records'] = antigen_summary['unresolved_candidate_groups']
+            if antigen_summary.get('isovar_inputs'):
+                patient_info['Isovar source outcomes'] = '; '.join(antigen_summary['isovar_inputs'])
         elif has_antigen_sources:
             patient_info['Total number of input antigens'] = (
                 self.patient_info.num_somatic_variants)

@@ -62,6 +62,7 @@ class AntigenDataset:
     antigens: dict[str, VaccineAntigen]
     scope: InputScope = field(default_factory=InputScope)
     provenance: tuple[InputProvenance, ...] = ()
+    source_evidence: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.antigens = dict(self.antigens)
@@ -71,6 +72,9 @@ class AntigenDataset:
             raise TypeError('Antigen records must contain VaccineAntigen objects')
         self.scope = scope_from_mapping(scope_dict(self.scope), 'Antigen dataset')
         self.provenance = tuple(self.provenance)
+        self.source_evidence = json.loads(json.dumps(self.source_evidence, allow_nan=False))
+        if not isinstance(self.source_evidence, dict):
+            raise ValueError('Source evidence must be an object keyed by identity')
         for source in self.provenance:
             combine_scopes(self.scope, source.scope, source.path, SHARED_FIELDS)
 
@@ -78,7 +82,8 @@ class AntigenDataset:
         """Return versioned JSON data without Python class metadata."""
         return dict(schema=ANTIGEN_DATASET_SCHEMA, scope=scope_dict(self.scope),
                     antigens={key: asdict(a) for key, a in self.antigens.items()},
-                    provenance=[provenance_dict(p) for p in self.provenance])
+                    provenance=[provenance_dict(p) for p in self.provenance],
+                    **({'source_evidence': self.source_evidence} if self.source_evidence else {}))
 
     def save(self, path):
         """Write the same portable evidence format accepted by the CLI."""
@@ -92,7 +97,7 @@ class AntigenDataset:
         document = _json_loads(Path(path).read_text())
         if not isinstance(document, dict) or document.get('schema') != ANTIGEN_DATASET_SCHEMA:
             raise ValueError('Expected antigen schema: ' + ANTIGEN_DATASET_SCHEMA)
-        if set(document) - {'schema', 'scope', 'antigens', 'provenance'}:
+        if set(document) - {'schema', 'scope', 'antigens', 'provenance', 'source_evidence'}:
             raise ValueError('Unknown antigen dataset fields')
         if not isinstance(document.get('antigens'), dict):
             raise ValueError('Antigens must be an object keyed by record identifier')
@@ -102,7 +107,8 @@ class AntigenDataset:
                 'observed_mhc_alleles': tuple(p.get('observed_mhc_alleles', ())),
             }) for p in document.get('provenance', ()))
             return cls({key: _antigen_from_dict(a) for key, a in document['antigens'].items()},
-                       scope_from_mapping(document.get('scope', {}), 'Antigen dataset'), provenance)
+                       scope_from_mapping(document.get('scope', {}), 'Antigen dataset'), provenance,
+                       document.get('source_evidence', {}))
         except (TypeError, KeyError) as error:
             raise ValueError('Malformed antigen dataset: ' + str(error)) from error
 
@@ -131,11 +137,11 @@ class AntigenDataset:
         scope = InputScope()
         for source in dataset.provenance:
             scope = combine_scopes(scope, source.scope, source.path, SHARED_FIELDS)
-        return cls(antigens, scope, dataset.provenance)
+        return cls(antigens, scope, dataset.provenance, dataset.selection.get('source_evidence', {}))
 
     def validate_for_prediction(self, genome, *, host_reference=None):
         """Check the common prediction contract before acquiring models."""
-        if not self.antigens:
+        if not self.antigens and not self.source_evidence:
             raise ValueError('Antigen input contains no resolved sequences')
         scope = self.scope
         if host_reference is not None:
@@ -178,11 +184,12 @@ class AntigenDataset:
             host_reference = HostReference.load(host_reference)
         provenance = self.prediction_provenance(genome=genome, path=path, host_reference=host_reference)
         return predict_antigens(self.antigens, predictor, genome=genome,
-                                provenance=provenance, config=config, host_reference=host_reference)
+                                provenance=provenance, config=config, host_reference=host_reference,
+                                source_evidence=self.source_evidence)
 
 
 def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
-                     annotate=None, self_matcher=None, host_reference=None):
+                     annotate=None, self_matcher=None, host_reference=None, source_evidence=None):
     """Shared native-protein prediction for source-specific admission adapters.
 
     ``annotate`` may add source evidence columns to the prediction frame before
@@ -202,6 +209,13 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     alleles = provenance.scope.mhc_alleles
     if not alleles:
         raise ValueError('Antigen prediction requires a declared patient genotype')
+    if not antigens and source_evidence:
+        dataset = EpitopeDataset.from_predictions((), config=config)
+        dataset.host_reference = host_reference
+        dataset.provenance = (provenance,)
+        dataset.selection['antigen_inputs'] = {provenance.input_id: {}}
+        dataset.selection['source_evidence'] = source_evidence
+        return dataset
     frame = predictor.predict_from_named_sequences({name: a.amino_acids for name, a in antigens.items()})
     if frame.empty:
         raise ValueError('Antigen predictor returned no peptide measurements')
@@ -261,13 +275,15 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     dataset.host_reference = host_reference
     dataset.config = config or EpitopeConfig()
     dataset.selection['antigen_inputs'] = {provenance.input_id: {name: asdict(a) for name, a in antigens.items()}}
+    if source_evidence:
+        dataset.selection['source_evidence'] = source_evidence
     return dataset
 
 
 def validate_antigen_args(args):
     from .external_rescoring import external_input_specs
     specs = external_input_specs(args)
-    if not any(fmt == 'antigens' for fmt, _, _ in specs):
+    if not any(fmt in ('antigens', 'isovar') for fmt, _, _ in specs):
         return
     conflicts = ('vcf', 'bam')
     if any(getattr(args, name, None) for name in conflicts):
@@ -285,7 +301,8 @@ def antigen_report(inputs, predictor, *, genome, provenance, config=None, host_r
     """Adapt validated sequences into the common report representation."""
     from .external_report import ExternalReport
     dataset = predict_antigens(inputs.antigens, predictor, genome=genome,
-                               provenance=provenance, config=config, host_reference=host_reference)
-    return ExternalReport('antigens', provenance.path, report_df=dataset.report_frame(),
+                               provenance=provenance, config=config, host_reference=host_reference,
+                               source_evidence=inputs.source_evidence)
+    return ExternalReport(provenance.source_format, provenance.path, report_df=dataset.report_frame(),
                           epitopes=dataset.epitopes, dataset=dataset,
                           input_provenance=provenance)

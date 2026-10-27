@@ -1,12 +1,15 @@
 # Experimental unified antigen inputs
 
-Mutation, fusion, CTA, ERV, splice and viral antigens can use the same
+Mutation, fusion, SV, isoform, CTA, ERV, splice and viral antigens can use the same
 `AntigenDataset` API and `--input-antigens` CLI. Each record carries a
 `VaccineAntigen`: sequence, targetable intervals, source identity and an
 admission decision and its evidence.
 
 Callers supply resolved sequences and admission evidence. Held-out records stay
-in the evidence but cannot enter constructs; unresolved sequences stay upstream.
+in the evidence but cannot enter constructs. [Isovar source inputs](isovar-inputs.md)
+can also reconstruct ncORFs, SV ORFs, viral coding and targeted isoforms directly,
+retaining the producer evidence and unresolved/no-protein outcomes in
+`AntigenDataset.source_evidence`.
 
 ## Prepare and predict
 

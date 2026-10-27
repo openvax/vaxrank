@@ -40,6 +40,9 @@ from .vaccine_peptide import VaccinePeptide
 from .antigen_input import AntigenDataset, predict_antigens
 from .host_reference import HostReference
 from .isovar_fusion import IsovarFusionAntigens, fusion_antigens_from_isovar
+from .isovar_antigens import antigens_from_isovar
+from .isovar_input import load_isovar_input, reconstruct_isovar_antigens
+from .isovar_options import IsovarAdmission, IsovarSourceOptions
 from .construct_sequence import (
     ConstructChemicalModification,
     ConstructEvidence,
@@ -260,6 +263,11 @@ __all__ = [
     "TumorSpecificityEvidence",
     "VaccineAntigen",
     "IsovarFusionAntigens",
+    "IsovarAdmission",
+    "IsovarSourceOptions",
+    "antigens_from_isovar",
+    "load_isovar_input",
+    "reconstruct_isovar_antigens",
     "fusion_antigens_from_isovar",
     "ANTIGEN_KIND_CTA",
     "ANTIGEN_KIND_ERV",
