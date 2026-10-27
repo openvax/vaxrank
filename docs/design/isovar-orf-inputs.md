@@ -17,6 +17,13 @@ the complete source evidence and unresolved outcomes. It does not reconstruct
 missing flanks, infer tumor specificity from RNA, or select a strongest frame
 before the shared ranking stage.
 
+Frame comparisons use transcript strand and codon phase at the focal allele,
+not offsets relative to separately cropped candidate windows. Regression tests
+must preserve frame identity when only a noncoding prefix is trimmed, and must
+retain genuinely different phases after cropping. Opposing strands stay
+distinct; exports missing strand cannot establish orientation equivalence
+across different transcripts.
+
 Supported source families are `variant_orfs`, `sv`, `fusion`, `viral`,
 `isoforms`, and saved producer results. Small-variant ORF requests use validated
 ORFdata transcript models; SV requests use Isovar's nominated-event contract;
