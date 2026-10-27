@@ -359,3 +359,37 @@ def test_topiary_additive_rescoring_retains_original_values_and_changes_only_cho
     assert max(fresh, key=lambda e: e.epitope_score).sequence == 'GILGFVFTL'
     assert frame.attrs['epitope_dataset'].result.df.value.tolist() == [50., 500.]
     assert model.calls == calls
+
+
+@pytest.mark.parametrize('producer', ['direct', 'cache', 'scan'])
+@pytest.mark.parametrize('kind,allele,value', [
+    ('pMHC_presentation', ALLELE, None),
+    ('antigen_processing', '', None),
+    ('pMHC_affinity', ALLELE, 120.0),
+])
+def test_typed_prediction_producers_survive_native_replay(producer, kind, allele, value, tmp_path):
+    """Real score-only producer records must survive admission-table ingestion."""
+    from mhctools import Prediction, RandomBindingPredictor
+    from topiary import CachedPredictor, TopiaryPredictor, from_predictions
+
+    prediction = Prediction(kind=kind, peptide='SIINFEKLA', allele=allele,
+                            value=value, score=0.42, percentile_rank=2.0,
+                            predictor_name='test', predictor_version='1',
+                            source_sequence_name='query', offset=0)
+    frame = from_predictions([prediction])
+    if producer == 'cache':
+        frame = CachedPredictor(frame).predict_dataframe(['SIINFEKLA'])
+    elif producer == 'scan':
+        model = RandomBindingPredictor(alleles=[ALLELE], default_peptide_lengths=[9])
+        model.predict_proteins_dataframe = lambda sequences: pd.DataFrame([prediction.to_row()])
+        frame = TopiaryPredictor(models=model).predict_from_named_sequences({'query': 'SIINFEKLA'})
+    dataset = EpitopeDataset.from_topiary(frame, sample_name='patient')
+    path = tmp_path / 'native.tsv'
+    dataset.save(path)
+    for restored in [dataset, EpitopeDataset.load(path)]:
+        leaves = [p for e in restored.epitopes for p in e.predictions_flat()]
+        assert len(leaves) == 1
+        leaf = leaves[0]
+        assert (leaf.kind, leaf.value, leaf.score, leaf.percentile_rank) == (kind, value, 0.42, 2.0)
+        assert leaf.measurement_context == prediction.measurement_context
+        assert (leaf.predictor_name, leaf.predictor_version) == ('test', '1')

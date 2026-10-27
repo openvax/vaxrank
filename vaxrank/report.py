@@ -185,6 +185,12 @@ class TemplateDataCreator(object):
             'version', 'config', 'config_set_overrides',
             'config_expr_overrides', '_parser_defaults',
         }
+        # Retain inferred biological scope, while assembly graphs, policy
+        # internals and future runtime fields stay in their native artifacts.
+        _provenance_keys = {
+            '_inferred_mhc_alleles_from_lens', '_declared_mhc_alleles',
+            '_input_species_scope',
+        }
         args_to_display_in_report = {
             k: v for k, v in args_for_report.items()
             if not k.startswith("output")
@@ -192,15 +198,7 @@ class TemplateDataCreator(object):
             and v is not None
             and v != ''
             and v != '==SUPPRESS=='
-            # Other underscore keys are state vaxrank wired up itself
-            # rather than state the user passed —
-            # ``_inferred_mhc_alleles_from_lens`` on the LENS / pVACseq
-            # path, where the alleles never appear on the command line.
-            # That belongs in a record of what ran, so keep it when
-            # something was actually inferred. Same rule
-            # ``log_args_summary`` applies to its auto-wired console
-            # block (vaxrank/cli/entry_point.py).
-            and (not k.startswith("_") or bool(v))
+            and (not k.startswith("_") or (k in _provenance_keys and bool(v)))
         }
 
         self.template_data = {

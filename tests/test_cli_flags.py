@@ -349,13 +349,25 @@ def test_report_args_table_omits_internal_parser_state(tmp_path):
     PDF report."""
     from vaxrank.report import make_ascii_report, make_html_report
 
-    template_data = _template_data_for_args(_args_for_report_test())
+    args = _args_for_report_test()
+    private_state = {
+        '_construct_assembly': {'products': ['internal-assembly-marker']},
+        '_construct_policy': {'policy': 'internal-policy-marker'},
+        '_explicit_cli_args': {'vcf', 'bam'},
+        '_future_runtime_state': {'state': 'internal-future-marker'},
+    }
+    vars(args).update(private_state)
+    template_data = _template_data_for_args(args)
 
     assert "_parser_defaults" not in dict(template_data["args"])
+    assert not private_state.keys() & dict(template_data['args']).keys()
     for suffix, writer in (("html", make_html_report), ("txt", make_ascii_report)):
         path = tmp_path / ("report." + suffix)
         writer(template_data, path)
         assert "_parser_defaults" not in path.read_text()
+        assert 'internal-assembly-marker' not in path.read_text()
+        assert 'internal-policy-marker' not in path.read_text()
+        assert 'internal-future-marker' not in path.read_text()
 
 
 def test_report_args_table_keeps_auto_wired_provenance():
@@ -368,8 +380,12 @@ def test_report_args_table_keeps_auto_wired_provenance():
     was wired, so it stays out."""
     args = _args_for_report_test()
     args._inferred_mhc_alleles_from_lens = ["HLA-A*02:01", "HLA-B*07:02"]
+    args._declared_mhc_alleles = ["HLA-A*02:01"]
+    args._input_species_scope = {'host_taxon_id': 9606}
     rows = dict(_template_data_for_args(args)["args"])
     assert rows["_inferred_mhc_alleles_from_lens"] == ["HLA-A*02:01", "HLA-B*07:02"]
+    assert rows['_declared_mhc_alleles'] == ['HLA-A*02:01']
+    assert rows['_input_species_scope'] == {'host_taxon_id': 9606}
 
     args._inferred_mhc_alleles_from_lens = []
     rows = dict(_template_data_for_args(args)["args"])

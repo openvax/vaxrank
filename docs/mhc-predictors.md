@@ -51,16 +51,16 @@ installation and allele/length support.
 | `smm-pmbec-iedb` | SMM-PMBEC compatibility wrapper | I | Requires local SMM-PMBEC |
 | `random` | Random | -- | Returns random scores; for testing only |
 
-## Optional WEIRDO category scores
+## Optional Weirdo category scores
 
-Topiary 5.95 supports the released WEIRDO model through
+Topiary 5.95 supports the released Weirdo model through
 `pip install 'topiary[weirdo]>=5.95,<6'`. Its `foreignness` predictions are
 allele-independent and retain their exact model/artifact version and score
 policy through Topiary tables, native `CandidateEpitope` records, and saved
 Vaxrank datasets. Imported matched-comparator rows also retain their own
 measurement context.
 
-For a dataset that already contains WEIRDO predictions, opt into the score
+For a dataset that already contains Weirdo predictions, opt into the score
 with `epitopes.score_expr=peptide_view(foreignness[weirdo].score)`. Ordinary
 binding-based scoring is unchanged when these observations are merely present.
 Keep the complete `predictor_version` and `measurement_context` columns when
