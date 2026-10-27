@@ -1,6 +1,6 @@
 """Producer contract replay, evidence gates and the common CLI/design path."""
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from hashlib import sha256
 from pathlib import Path
 import gzip
@@ -28,6 +28,7 @@ from . import test_antigen_input
 
 DATA = Path(__file__).parent / 'data/isovar'
 dependencies = test_antigen_input.dependencies
+inputs = test_antigen_input.inputs
 MANIFEST = json.loads((DATA / 'manifest.json').read_text())
 
 
@@ -293,6 +294,35 @@ def test_live_bam_request_and_saved_replay_share_owner_contract(variant_inputs, 
     replay = load_isovar_input(path)
     assert replay.antigens == live.antigens
     assert next(iter(replay.source_evidence.values()))['isovar_result'] == evidence['isovar_result']
+
+
+def test_isovar_manifest_combines_fresh_sequences_and_saved_predictions(inputs, dependencies, tmp_path):
+    from topiary import TopiaryPredictor
+    from vaxrank.epitope_config import EpitopeConfig
+    model, genome = dependencies
+    old = replace(inputs, antigens={'viral': inputs.antigens['viral']})
+    saved = old.predict(TopiaryPredictor(models=[model]), genome=genome,
+                        config=EpitopeConfig(score_expr='1.0'))
+    saved.save(tmp_path / 'saved.tsv')
+    producer = result('ncorf')
+    producer['variant']['reference_name'] = 'GRCh38'
+    (tmp_path / 'source.json').write_text(json.dumps(dict(schema=ISOVAR_INPUT_SCHEMA,
+        result=producer, tumor_specificity=asdict(attestation()))))
+    manifest = tmp_path / 'manifest.json'
+    manifest.write_text(json.dumps(dict(schema='vaxrank.input_manifest.v1', **asdict(inputs.scope),
+        inputs=[dict(format='isovar', path='source.json'), dict(format='epitopes', path='saved.tsv')])))
+    output = tmp_path / 'combined.tsv'
+    run_cli(['--input-manifest', str(manifest), '--mhc-predictor', 'random', '--ensembl-release', '93',
+             '--output-epitopes', str(output), '--no-processing-aware-annotation',
+             '--config-text', 'epitopes.score_expr=1.0'])
+    combined = EpitopeDataset.load(output)
+    recovered = AntigenDataset.from_epitope_dataset(combined)
+    assert len(recovered.antigens) == 2
+    assert {a.kind for a in recovered.antigens.values()} == {'mutation', 'viral'}
+    assert next(iter(recovered.source_evidence.values()))['isovar_result'] == producer
+    original = {e.prediction_id: e.predictions_flat() for e in saved.epitopes}
+    assert {e.prediction_id: e.predictions_flat() for e in combined.epitopes
+            if e.prediction_id in original} == original
 
 
 def test_fusion_live_api_and_existing_owner_json_input(tmp_path):
