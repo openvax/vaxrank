@@ -95,14 +95,33 @@ class _Candidate:
     evidence: dict = field(default_factory=dict)
 
 
+def _variant_frame(row, reference):
+    """Compare frames at the focal allele, independent of window cropping."""
+    length = len(row['nucleotide_sequence'])
+    coding_start, _ = _interval(row['coding_interval'], length)
+    variant_start, _ = _interval(row['variant_cdna_interval'], length)
+    model = reference['model']
+    strand = model['strand'] if model is not None else None
+    if strand is not None and strand not in ('+', '-'):
+        raise ValueError('Isovar reference strand must be + or -')
+    return strand, (variant_start - coding_start) % 3, reference['translation_table']
+
+
 def _variants(result):
     models = {m['model_id']: m['reference'] for m in result['models']}
     frames = {}
     for row in result['protein_candidates']:
-        frames.setdefault(row['rna_candidate_id'], set()).add((row['coding_interval'][0] % 3,
-            models[row['model_id']]['translation_table']))
+        reference = models[row['model_id']]
+        strand, phase, table = _variant_frame(row, reference)
+        # TranscriptORF.at/annotated-CDS exports currently omit strand. The
+        # same identified transcript still defines one orientation; different
+        # transcripts cannot be proven to share it from these exports.
+        orientation = strand or (reference['reference_key'], reference['resolved_transcript']['id'])
+        frames.setdefault(row['rna_candidate_id'], set()).add(
+            (orientation, phase, table))
     for row in result['protein_candidates']:
         reference = models[row['model_id']]
+        strand, phase, table = _variant_frame(row, reference)
         amino = row['protein_sequence']
         low, high = _interval(row['coding_interval'], len(row['nucleotide_sequence']))
         _translation(row['nucleotide_sequence'][low:high], amino, row['ends_with_stop_codon'],
@@ -124,7 +143,8 @@ def _variants(result):
             evidence=dict(model_id=row['model_id'], rna_candidate_id=row['rna_candidate_id'],
                           rna_support=support, coding_support=row['coding_support'],
                           reference_orf_source_gene_id=reference.get('source_gene_id'),
-                          sequence_extent=row['sequence_extent'], translation_table=reference['translation_table']))
+                          reference_strand=strand, variant_codon_phase=phase,
+                          sequence_extent=row['sequence_extent'], translation_table=table))
 
 
 def _sv_export(result, observations=None):

@@ -1,6 +1,7 @@
 """Producer contract replay, evidence gates and the common CLI/design path."""
 
 from dataclasses import asdict, replace
+from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
 import gzip
@@ -85,10 +86,35 @@ def test_partial_ncorf_opt_in_keeps_all_real_colo829_alternatives():
     assert not any(a.tumor_specificity.admits_construct for a in default.antigens.values())
     relaxed = antigens_from_isovar(producer, tumor_specificity=attestation(),
                                   options=IsovarSourceOptions(admission=IsovarAdmission(
-                                      allow_partial=True, allow_ambiguous=True)))
+                                      allow_partial=True)))
     assert set(relaxed.antigens) == set(default.antigens)
+    assert not any(a.tumor_specificity.admits_construct for a in relaxed.antigens.values())
+    relaxed = antigens_from_isovar(producer, tumor_specificity=attestation(),
+                                  options=IsovarSourceOptions(admission=IsovarAdmission(
+                                      allow_partial=True, allow_ambiguous=True)))
     assert any(a.tumor_specificity.admits_construct for a in relaxed.antigens.values())
     assert all(a.gene_name == 'DYNLL2' and a.transcript_ids for a in relaxed.antigens.values())
+
+
+def test_ncorf_frame_identity_is_independent_of_window_cropping():
+    producer = result('ncorf')
+    original, = producer['protein_candidates']
+    cropped = deepcopy(original)
+    # The producer frames each candidate separately. Removing noncoding
+    # prefix changes local offsets, but cannot change the observed codons.
+    cropped['candidate_id'] += ':rebased-window'
+    cropped['nucleotide_sequence'] = cropped['nucleotide_sequence'][1:]
+    for key in ('coding_interval', 'variant_cdna_interval'):
+        cropped[key] = [value - 1 for value in cropped[key]]
+    producer['protein_candidates'].append(cropped)
+    producer['models'][0]['candidate_ids'].append(cropped['candidate_id'])
+    dataset = antigens_from_isovar(producer, tumor_specificity=attestation())
+    assert len(dataset.antigens) == 2
+    assert {a.amino_acids for a in dataset.antigens.values()} == {original['protein_sequence']}
+    assert all(a.tumor_specificity.admits_construct for a in dataset.antigens.values())
+    phases = {json.loads(dict(a.source_metadata)['isovar_candidate'])['variant_codon_phase']
+              for a in dataset.antigens.values()}
+    assert phases == {1}
 
 
 def test_sv_annotated_and_exploratory_frames_keep_junction_masks():
@@ -167,7 +193,10 @@ def test_invalid_translation_reference_attestations_and_controls_fail():
 @pytest.fixture
 def variant_inputs(tmp_path, request):
     # Tiny noncoding transcript adapted from Isovar's Apache-2.0 regression.
-    sequence = 'C' * 15 + 'ATG' + 'GCC' * 3 + getattr(request, 'param', 'GCC') + 'GCC' * 6 + 'TAA' + 'G' * 15
+    parameter = getattr(request, 'param', 'GCC')
+    competing = parameter == 'competing_frames'
+    sequence = ('C' * 15 + 'ATGAATG' + 'GCC' * 10 + 'TAACCTAA' + 'G' * 15 if competing else
+                'C' * 15 + 'ATG' + 'GCC' * 3 + parameter + 'GCC' * 6 + 'TAA' + 'G' * 15)
     attrs = 'gene_id "G"; gene_name "NONCODING"; transcript_id "T"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";'
     gtf, fasta = tmp_path / 'reference.gtf', tmp_path / 'reference.fa'
     gtf.write_text(''.join(f'1\ttest\t{kind}\t100\t{99 + len(sequence)}\t.\t+\t.\t{attrs}{extra}\n'
@@ -180,12 +209,41 @@ def variant_inputs(tmp_path, request):
     genome.index()
     reference = TranscriptORF.at(genome.transcript_by_id('T'), 15,
                                  orf_id='noncoding_orf', source='synthetic')
-    variant = Variant('1', 134, 'C', 'T', genome)
+    references = [reference]
+    if competing:
+        references.append(TranscriptORF.at(genome.transcript_by_id('T'), 19,
+            orf_id='shifted_orf', source='synthetic'))
+    variant = Variant('1', 134, sequence[34], 'T', genome)
     reads = [AlleleRead(sequence[:34], 'T', sequence[35:], name='read' + str(i),
                        reference_blocks=[(0, len(sequence), 99, 99 + len(sequence))]) for i in range(2)]
     yield dict(variant=variant, read_evidence=ReadEvidence.from_variant_and_allele_reads(variant, reads),
-               reference_orfs=[reference], sample_id='sample', source='synthetic')
+               reference_orfs=references, sample_id='sample', source='synthetic')
     genome.close()
+
+
+@pytest.mark.parametrize('variant_inputs', ['competing_frames'], indirect=True)
+def test_competing_frames_remain_ambiguous_after_window_rebasing(variant_inputs):
+    from isovar import reconstruct_variant_orfs
+    producer = reconstruct_variant_orfs(**variant_inputs)
+    groups = {}
+    for row in producer['protein_candidates']:
+        groups.setdefault(row['rna_candidate_id'], []).append(row)
+    competing = next(rows for rows in groups.values() if len({r['model_id'] for r in rows}) == 2)
+    assert len(competing) == 2
+    # Same producer proteins and mutation positions, with all noncoding prefix
+    # removed. Their local coding starts now coincide despite distinct frames.
+    for row in producer['protein_candidates']:
+        prefix = row['coding_interval'][0]
+        row['nucleotide_sequence'] = row['nucleotide_sequence'][prefix:]
+        for key in ('coding_interval', 'variant_cdna_interval'):
+            row[key] = [value - prefix for value in row[key]]
+    dataset = antigens_from_isovar(producer, tumor_specificity=attestation(),
+                                   options={'admission': {'allow_partial': True}})
+    assert all('ambiguous_coding_candidate' in dataset.antigens[row['candidate_id']].tumor_specificity.rationale_code
+               for row in competing)
+    relaxed = antigens_from_isovar(producer, tumor_specificity=attestation(),
+        options={'admission': {'allow_partial': True, 'allow_ambiguous': True}})
+    assert all(relaxed.antigens[row['candidate_id']].tumor_specificity.admits_construct for row in competing)
 
 
 def test_live_python_api_uses_owner_controls_and_records_versions(variant_inputs):
