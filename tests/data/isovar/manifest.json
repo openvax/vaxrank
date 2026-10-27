@@ -1,0 +1,66 @@
+{
+  "files": {
+    "colo829_dynll2": {
+      "bytes": 1054625,
+      "origin": "reports/hcc1395_colo829/ncorf_rna_audit/results.json.gz; complete smallest DYNLL2 result",
+      "sha256": "e0ff2776bfeb464d95e74f61ba4f5f2a2d29142d788377a21e1ed184693b6151"
+    },
+    "isoforms": {
+      "bytes": 11221,
+      "origin": "tests/test_antigen_isoforms.py:target_models/reconstruct",
+      "sha256": "21338f8e315f266d56cf9c90b7a1fc013bf0be674d0291438ef5627e2406ba6c"
+    },
+    "isoforms_partial": {
+      "bytes": 13178,
+      "origin": "tests/test_antigen_isoforms.py:target_models/reconstruct",
+      "sha256": "7eb0d10b880c64a6c858c81c506532e00effb5d025e8a65365b0391b1236a67f"
+    },
+    "ncorf": {
+      "bytes": 6465,
+      "origin": "tests/test_variant_rna_orfs.py:noncoding_rna/assess",
+      "sha256": "abd089b0fb6bdd2c719b1e086bce84e173c7b86ba4622beb91e48edf0a928097"
+    },
+    "sv": {
+      "bytes": 259922,
+      "origin": "tests/test_sv_rna.py:Scenario/reads/run",
+      "sha256": "f6bf91f7128c639cde3cc89eb8ae4db24b189f6dcacd796419587ddfebea8983"
+    },
+    "sv_occurrences": {
+      "bytes": 5028,
+      "origin": "tests/test_sv_rna_orf_export.py:test_export_unions_witnesses_across_paths_and_does_not_mutate_input (two paths)",
+      "sha256": "48076bcb7e10bed48b07f17648555029c545824d772b244ed7d61f25fe18c357"
+    },
+    "sv_orfs": {
+      "bytes": 22502,
+      "origin": "export_sv_rna_orfs(sv)",
+      "sha256": "2d90b964463f1941de66d6031dea4e6253ade3f8330386ae531fc9d006112c09"
+    },
+    "synonymous": {
+      "bytes": 6466,
+      "origin": "tests/test_variant_rna_orfs.py:noncoding_rna/assess",
+      "sha256": "85a6e8822dcc71713679621c4720a8ff950ac46c3b8d551d46d1c73c588eb1f4"
+    },
+    "tiled": {
+      "bytes": 11079,
+      "origin": "tests/test_variant_rna_orfs.py:noncoding_rna/assess",
+      "sha256": "43865b049b82ab0838d55ed9df345f2d36a3b0fe64125e870f600e01a4a19e8c"
+    },
+    "unresolved": {
+      "bytes": 4222,
+      "origin": "tests/test_variant_rna_orfs.py:no_alt_reads",
+      "sha256": "c6a8b8c08deb30cef9aea6f292b762dde8c9c0b02ff28fefa8afa626a465be71"
+    },
+    "viral": {
+      "bytes": 15546,
+      "origin": "tests/test_viral_coding.py:hpv_inputs; unchanged reference slice as synthetic observed RNA",
+      "sha256": "6c9f2d761c9bd6f0bb6035ae7a9affa53fbc3c5b2bbc08ffa3282a9e8d006b81"
+    },
+    "viral_partial": {
+      "bytes": 9844,
+      "origin": "tests/test_viral_coding.py:hpv_inputs; partial unchanged reference slice",
+      "sha256": "5e8ed9f0961ab87f5c261e32d1bda3e17d17996106ae46f62740024cca2211f8"
+    }
+  },
+  "isovar_version": "1.61.0",
+  "upstream_commit": "7bc88001704e5e8ff7c7bf2a0cd49cf1ea376b9e"
+}

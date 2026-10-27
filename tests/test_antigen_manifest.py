@@ -33,7 +33,7 @@ def design_options(output, modality='peptide'):
         '--vaccine-peptide-length', '10', '--config-text', 'epitopes.score_expr=1.0',
         '--config-text', 'vaccine_peptides.combined_score_expr=target_epitope_score']
     if modality == 'mrna':
-        result += ['--mrna-antigens-per-construct', '6', '--mrna-max-constructs', '1',
+        result += ['--mrna-antigens-per-construct', str(len(test_antigen_input.ANTIGEN_KINDS)), '--mrna-max-constructs', '1',
                    '--mrna-no-optimize-linkers', '--mrna-codon-method', 'use_best_codon']
     return result
 
@@ -76,7 +76,7 @@ def test_manifest_mixes_new_sequences_and_saved_evidence(inputs, dependencies, t
     assert calls == [','.join(inputs.scope.mhc_alleles)]
     combined = EpitopeDataset.load(output / 'candidate_predictions.tsv')
     assert {a.kind for a in combined.antigens.values()} == test_antigen_input.ANTIGEN_KINDS
-    assert len(AntigenDataset.from_epitope_dataset(combined).antigens) == 7
+    assert len(AntigenDataset.from_epitope_dataset(combined).antigens) == len(inputs.antigens)
     originals = {e.prediction_id: e.predictions_flat() for e in saved.epitopes}
     assert {e.prediction_id: e.predictions_flat() for e in combined.epitopes
             if e.prediction_id in originals} == originals
@@ -88,7 +88,7 @@ def test_manifest_mixes_new_sequences_and_saved_evidence(inputs, dependencies, t
     product = json.loads((output / 'manifest.json').read_text())
     sequences = ([p['sequence'] for p in product] if modality == 'peptide' else
                  [a['aa'] for p in product for a in p['antigens']])
-    assert len(sequences) == 6
+    assert len(sequences) == len(test_antigen_input.ANTIGEN_KINDS)
     assert set(sequences) == {a.amino_acids for a in inputs.antigens.values()}
     # No upstream file, annotation or model is needed to replay the combined design.
     (tmp_path / 'new.json').unlink()

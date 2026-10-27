@@ -101,6 +101,7 @@ Full documentation: <https://openvax.github.io/vaxrank/>
 - [Development](docs/development.md): local setup, test data, release scripts.
 
 Experimental workflows: [unified antigen inputs](docs/antigen-inputs.md),
+[Isovar ncORF, SV, viral and isoform inputs](docs/isovar-inputs.md),
 [CTA expression inputs](docs/design/expression-cta-inputs.md),
 [mixed mutation/CTA/viral selection](docs/mixed-antigen-design.md) and
 [window exposure](docs/core-window-exposure.md).

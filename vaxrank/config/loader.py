@@ -329,6 +329,12 @@ def load_vaxrank_config(
 
     schema = msgspec.convert(raw, VaxrankConfigSchema)
     resolved = _schema_to_dict(schema)
+    from ..isovar_options import FAMILIES, source_options
+    sources = resolved.get('isovar', {}).get('sources', {})
+    if set(sources) - set(FAMILIES):
+        raise ValueError('Unknown Isovar source families: ' + ', '.join(sorted(set(sources) - set(FAMILIES))))
+    for value in sources.values():
+        source_options(value)
     return resolved
 
 

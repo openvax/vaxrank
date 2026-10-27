@@ -1,11 +1,12 @@
 # Isovar support compatibility
 
-Vaxrank requires Isovar 1.42.1 through 1.44.x. That release corrects
-flanking insertions/deletions in the anchored RNA candidate matcher. The fusion
-adapter still consumes and validates `isovar.fusion_rna.v3`; compatibility is
-tested with both the minimum 1.42.1 release and 1.44.2. Isovar 1.45 requires
-Osteosarc 0.15, while Vaxrank and Topiary currently share the 0.14 window;
-the coordinated update is tracked in [#571](https://github.com/openvax/vaxrank/issues/571).
+Vaxrank 3.47 requires Isovar 1.61.0 or later, below 2.0, with ORFdata
+0.39.1 or later and the compatible Osteosarc 0.15 series. Native
+[Isovar inputs](isovar-inputs.md) cover variant/ncORFs, SV ORFs, fusion,
+viral coding, targeted isoforms and ordinary protein-hypothesis exports.
+That guide documents exact supported schemas, reconstruction/admission controls,
+source-specific evidence boundaries and replay. The historical fusion API
+continues to accept `isovar.fusion_rna.v3`.
 
 ## Counts and candidate scores
 
@@ -36,10 +37,11 @@ and [matching specification](https://github.com/openvax/isovar/blob/v1.42.1/docs
 
 ## Ranking and provenance
 
-This adoption changes no frozen `openvax-v1` formula or selection golden.
-Vaxrank continues to consume Isovar's assembly-support counts and ordering;
+The ordinary VCF/BAM workflow keeps its frozen `openvax-v1` formula and
+selection policy. It continues to consume assembly-support counts and ordering;
 it does not enable fractional allocation or substitute those scores into RNA
-counts. Fusion admission still requires its own tumor-specificity evidence.
+counts. New Isovar source inputs retain every candidate before shared ranking;
+their admission requires independent tumor-specificity evidence.
 
 New direct fragments store the actual runtime Isovar version as
 `sequence_source_version`, carried into mixed-input evidence and native replay.

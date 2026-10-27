@@ -62,8 +62,8 @@ READERS = {
     "epitopes": partial(read_epitope_report, source_format="epitopes"),
     "exacto": read_exacto_report,
 }
-INPUT_FORMATS = (*READERS, 'antigens', 'cta_expression')
-SEQUENCE_FORMATS = ('antigens', 'cta_expression')
+INPUT_FORMATS = (*READERS, 'antigens', 'cta_expression', 'isovar')
+SEQUENCE_FORMATS = ('antigens', 'cta_expression', 'isovar')
 
 
 def external_inputs(args):
@@ -414,7 +414,8 @@ def _observed_alleles(report):
 
 def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, alleles=(),
                  antigen_predictor_factory=None, antigen_alleles=(), epitope_config=None,
-                 prepared_reports=(), cta_admission_writer=None, host_reference=None):
+                 prepared_reports=(), cta_admission_writer=None, host_reference=None,
+                 isovar_sources=None):
     """Validate every input before predicting new sequences or scoring evidence.
 
     Experimental ``antigens`` and admitted ``cta_expression`` inputs need an ``antigen_predictor_factory``
@@ -446,9 +447,9 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
     if host_reference is not None:
         resolved = []
         for (fmt, path), declarations in zip(inputs, scopes):
-            if fmt not in ('antigens', 'cta_expression', 'epitopes'):
+            if fmt not in ('antigens', 'cta_expression', 'epitopes', 'isovar'):
                 raise ValueError(f'{path}: host_reference currently requires native antigens or epitopes')
-            options = {k: v for k, v in declarations.items() if k in ('exacto', 'cta_expression')}
+            options = {k: v for k, v in declarations.items() if k in ('exacto', 'cta_expression', 'isovar')}
             scope = scope_from_mapping({k: v for k, v in declarations.items()
                                         if k not in (*options, 'host_reference')}, str(path))
             resolved.append({**scope_dict(host_reference.validate(scope, genome=genome, location=str(path))),
@@ -468,9 +469,14 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
         if fmt not in INPUT_FORMATS:
             raise ValueError("Unsupported external format: %s" % fmt)
         claims = [scope_from_mapping({k: v for k, v in declarations.items()
-                                      if k not in ('exacto', 'cta_expression', 'host_reference')}, str(path))]
+                                      if k not in ('exacto', 'cta_expression', 'isovar', 'host_reference')}, str(path))]
         if fmt == 'antigens':
             sequences[index] = AntigenDataset.load(path)
+            claims.append(sequences[index].scope)
+        elif fmt == 'isovar':
+            from .isovar_input import load_isovar_input
+            sequences[index] = load_isovar_input(path, scope=claims[0], genome=genome,
+                options=declarations.get('isovar'), configured_sources=isovar_sources)
             claims.append(sequences[index].scope)
         elif fmt not in SEQUENCE_FORMATS:
             if index not in preloaded:
@@ -504,7 +510,8 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             raise ValueError("The same external input was supplied more than once: %s" % path)
         seen.add(content_id)
         if fmt in SEQUENCE_FORMATS:
-            declared = scope_from_mapping({k: v for k, v in declarations.items() if k != 'cta_expression'}, str(path))
+            declared = scope_from_mapping({k: v for k, v in declarations.items()
+                                           if k not in ('cta_expression', 'isovar')}, str(path))
             if antigen_alleles:
                 declared = combine_scopes(declared, InputScope(
                     mhc_alleles=normalize_alleles(antigen_alleles, 'Antigen prediction')), str(path))
@@ -519,6 +526,8 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
                 provenance = source.prediction_provenance(
                     genome=genome, path=path, manifest_path=manifest_path,
                     manifest_declarations=declarations, host_reference=host_reference)
+                if fmt == 'isovar':
+                    provenance = replace(provenance, source_format='isovar')
             pending.append((len(reports), source, provenance))
             reports.append(None)
             continue
@@ -572,14 +581,14 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             raise ValueError('Inputs contain overlapping candidate identities; '
                              'do not load an input alongside its native export')
         cta_sources = [s for _, s, _ in pending if isinstance(s, CTAExpressionSource)]
-        needs_prediction = any(not isinstance(s, CTAExpressionSource) or s.admission.admitted_antigens
-                               for _, s, _ in pending)
+        needs_prediction = any(s.admission.admitted_antigens if isinstance(s, CTAExpressionSource)
+                               else s.antigens for _, s, _ in pending)
         if antigen_predictor_factory is None and needs_prediction:
             raise ValueError('Antigen sequence inputs require an antigen_predictor_factory')
         config = report_config(loaded, epitope_config)
         if cta_admission_writer is not None:
             cta_admission_writer(cta_sources)
-        if not needs_prediction and not loaded:
+        if not needs_prediction and not loaded and len(cta_sources) == len(pending):
             raise ValueError('No admitted CTA proteins; inspect the CTA admission decisions')
         predictor = antigen_predictor_factory(shared_scope) if needs_prediction else None
         for index, source, provenance in pending:
@@ -690,7 +699,8 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
     identities = [e.prediction_group_key for e in original]
     if len(set(identities)) != len(identities):
         raise ValueError("Inputs contain overlapping candidate identities; do not load an input alongside its native export")
-    if not original and not any(r.dataset is not None and not r.dataset.result.df.empty for r in reports):
+    if not original and not any(r.dataset is not None and (
+            not r.dataset.result.df.empty or r.dataset.selection.get('source_evidence')) for r in reports):
         raise ValueError("External inputs contain no candidate peptides to score")
     if input_predictions_path:
         Path(input_predictions_path).parent.mkdir(parents=True, exist_ok=True)
@@ -874,7 +884,7 @@ def load_unified_external(args, epitope_config, options, genome):
     direct = bool(getattr(args, 'vcf', None) or getattr(args, 'bam', None))
     specs = external_input_specs(args)
     cta = any(fmt == 'cta_expression' for fmt, _, _ in specs)
-    antigens = any(fmt == 'antigens' for fmt, _, _ in specs)
+    antigens = any(fmt in ('antigens', 'isovar') for fmt, _, _ in specs)
     antigen_predictor_factory, antigen_alleles = None, ()
     if antigens or cta:
         from .antigen_input import validate_antigen_args
@@ -919,12 +929,14 @@ def load_unified_external(args, epitope_config, options, genome):
             "--external-predictions fresh with --mhc-predictor to predict "
             "for an explicit HLA set.")
     from .cta_input import write_cta_admissions
+    from .config.loader import load_vaxrank_config
     loaded_reports = read_reports(
         [(fmt, path) for fmt, path, _ in specs],
         scopes=[scope for _, _, scope in specs],
         manifest_path=getattr(args, 'input_manifest', None), genome=genome,
         antigen_predictor_factory=antigen_predictor_factory, antigen_alleles=antigen_alleles,
         epitope_config=epitope_config,
+        isovar_sources=load_vaxrank_config(args).get('isovar', {}).get('sources', {}),
         cta_admission_writer=lambda sources: write_cta_admissions(args, sources))
     if getattr(args, 'index_native_references', False):
         native = [report.dataset for report in loaded_reports
@@ -1017,7 +1029,8 @@ def load_unified_external(args, epitope_config, options, genome):
     rankers = {'lens': lens_ranking_result, 'pvacseq': pvacseq_ranking_result,
                'topiary': dataset_ranking_result, 'epitopes': dataset_ranking_result,
                'vcf_bam': dataset_ranking_result, 'exacto': dataset_ranking_result,
-               'cta_expression': dataset_ranking_result, 'antigens': dataset_ranking_result}
+               'cta_expression': dataset_ranking_result, 'antigens': dataset_ranking_result,
+               'isovar': dataset_ranking_result}
     outcomes = []
     for report in reports:
         ranker = rankers[report.source_format]
@@ -1084,6 +1097,7 @@ def load_unified_external(args, epitope_config, options, genome):
     if dataset.selection.get('antigen_inputs') or any(key not in dataset.mutation_fragments for key in dataset.antigens):
         from collections import Counter
         from .antigen_input import AntigenDataset
+        from .isovar_antigens import isovar_evidence_summary
         records = list(AntigenDataset.from_epitope_dataset(dataset).antigens.values())
         patient.antigen_summary = dict(
             resolved_records=len(records),
@@ -1091,6 +1105,7 @@ def load_unified_external(args, epitope_config, options, genome):
             held_out_records=sum(not a.tumor_specificity.admits_construct for a in records),
             by_kind=dict(sorted(Counter(a.kind for a in records).items())),
             ranked_sources=len(ranked),
+            isovar_inputs=isovar_evidence_summary(dataset.selection.get('source_evidence', {})),
             unresolved_candidate_groups=len({e.prediction_group_source for e in dataset.epitopes
                                              if e.prediction_group_source not in dataset.antigens}))
     if dataset.selection.get('cta_expression_admission'):

@@ -189,6 +189,7 @@ class IsovarConfigSchema(
     protein_sequence_preference: Optional[str] = None
     min_protein_sequence_support_fraction: Optional[float] = None
     min_variant_sequence_coverage: Optional[int] = None
+    sources: Optional[dict[str, dict]] = None
 
 
 class VaxrankConfigSchema(
