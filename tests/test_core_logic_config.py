@@ -111,6 +111,42 @@ def test_vaccine_peptides_from_epitopes_length_used():
     mock_fragment.sorted_subsequences.assert_called_once_with(subsequence_length=30)
 
 
+def test_reranking_windows_before_mutation_keeps_valid_antigen_intervals():
+    from varcode import Variant
+
+    sequence = "ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY"
+    variant = Variant("1", 1000, "A", "G", ensembl=None)
+    fragment = MutantProteinFragment(
+        variant=variant,
+        gene_name="GENE1",
+        amino_acids=sequence,
+        mutant_amino_acid_start_offset=24,
+        mutant_amino_acid_end_offset=25,
+        supporting_reference_transcripts=[],
+        n_overlapping_reads=10,
+        n_alt_reads=5,
+        n_ref_reads=5,
+        n_alt_reads_supporting_protein_sequence=5,
+    )
+    epitopes = [
+        _make_epitope(sequence[offset:offset + 9], 100,
+                      source_sequence=sequence, offset=offset,
+                      overlaps_mutation=fragment.interval_overlaps_mutation(
+                          offset, offset + 9))
+        for offset in range(len(sequence) - 8)
+    ]
+    peptides = vaccine_peptides_from_epitopes(
+        variant=variant, long_protein_fragment=fragment, epitopes=epitopes,
+        vaccine_peptide_length=15, max_vaccine_peptides_per_variant=50,
+    )
+    assert peptides
+    for peptide in peptides:
+        peptide.antigen.targetable_mask.validate_for_sequence(
+            peptide.mutant_protein_fragment.amino_acids)
+    assert any(not peptide.antigen.interval_is_targetable(0, 15)
+               for peptide in peptides)
+
+
 # =============================================================================
 # vaccine_peptides_for_variant Tests
 # =============================================================================

@@ -13,6 +13,7 @@
 from dataclasses import fields
 from math import sqrt
 
+import pytest
 from mhctools import RandomBindingPredictor
 from topiary import FRAGMENTS
 
@@ -27,6 +28,36 @@ from .common import eq_, almost_eq_
 from .testing_helpers import data_path
 
 random_binding_predictor = RandomBindingPredictor(["H-2-Kb", "H-2-Db"])
+
+
+@pytest.mark.parametrize("mutation", [(18, 19), (18, 22), (18, 18)])
+def test_cropped_mutation_intervals_preserve_overlap(mutation):
+    from varcode import Variant
+    from vaxrank.vaccine_antigen import VaccineAntigen
+
+    fragment = MutantProteinFragment(
+        variant=Variant("1", 1000, "A", "G", ensembl=None),
+        gene_name="GENE1",
+        amino_acids="ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY",
+        mutant_amino_acid_start_offset=mutation[0],
+        mutant_amino_acid_end_offset=mutation[1],
+        supporting_reference_transcripts=[],
+        n_overlapping_reads=10,
+        n_alt_reads=5,
+        n_ref_reads=5,
+        n_alt_reads_supporting_protein_sequence=5,
+    )
+
+    for offset, window in fragment.generate_subsequences(15):
+        assert 0 <= window.mutant_amino_acid_start_offset <= (
+            window.mutant_amino_acid_end_offset) <= len(window)
+        antigen = VaccineAntigen.from_mutant_protein_fragment(window)
+        for start in range(len(window)):
+            for end in range(start + 1, len(window) + 1):
+                expected = fragment.interval_overlaps_mutation(
+                    offset + start, offset + end)
+                assert window.interval_overlaps_mutation(start, end) == expected
+                assert antigen.interval_is_targetable(start, end) == expected
 
 
 def test_generate_subsequences_preserves_evidence_and_provenance():
