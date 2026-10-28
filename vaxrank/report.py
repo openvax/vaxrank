@@ -14,6 +14,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from importlib import import_module
 import logging
+import json
 import math
 import os
 import sys
@@ -1090,24 +1091,16 @@ def make_pdf_report(
     logger.info('Wrote PDF report to %s (backend=%s)', pdf_report_path, backend)
 
 def new_columns():
-    columns = OrderedDict([
-        ("amino_acids", []),
-        ("chr", []),
-        ("pos", []),
-        ("ref", []),
-        ("alt", []),
-        ("gene_name", []),
-        ("variant_rank", []),
-        ("peptide_rank", []),
-        ("mutation_start", []),
-        ("mutation_end", []),
-        ("combined_score", []),
-        ("expression_score", []),
-        ("target_epitope_score", []),
-    ])
-    for field in ManufacturabilityScores._fields:
-        columns[field] = []
-    return columns
+    """Stable candidate-window schema, including successful empty results."""
+    names = [
+        'source_rank', 'window_rank', 'source_kind', 'source_identifier',
+        'gene_name', 'gene_ids', 'transcript_ids', 'protein_ids', 'source_species',
+        'amino_acids', 'targetable_intervals', 'chr', 'pos', 'ref', 'alt',
+        'mutation_start', 'mutation_end', 'combined_score', 'expression_score',
+        'target_epitope_score', *ManufacturabilityScores._fields,
+    ]
+    return OrderedDict((name, []) for name in names)
+
 
 def _str_sig_figs(input, n_sig_figs):
     return '{:g}'.format(float('{:.{p}g}'.format(input, p=n_sig_figs)))
@@ -1128,15 +1121,6 @@ def _format_ic50(value):
     except (TypeError, ValueError):
         pass
     return '%.2f nM' % value
-
-def resize_columns(worksheet, amino_acids_col, pos_col):
-    """
-    Resizes amino acid and mutant position columns in the Excel sheet so that they don't
-    have to be expanded.
-    """
-    worksheet.column_dimensions[amino_acids_col].width = 40
-    worksheet.column_dimensions[pos_col].width = 12
-
 
 def make_minimal_neoepitope_report(
         ranked_variants_with_vaccine_peptides,
@@ -1201,116 +1185,74 @@ def make_minimal_neoepitope_report(
                         vaccine_peptide.mutant_protein_fragment.n_alt_reads)
                     rows.append(row)
 
-    if len(rows) > 0:
-        df = pd.DataFrame.from_dict(rows)
-        ensure_parent_dir(excel_report_path)
-        writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
-        df.to_excel(writer, sheet_name='Neoepitopes', index=False)
-
-        # resize columns to be not crappy
-        worksheet = writer.sheets['Neoepitopes']
-        worksheet.column_dimensions['B'].width = 23
-        worksheet.column_dimensions['D'].width = 27
-        worksheet.column_dimensions['E'].width = 26
-        worksheet.column_dimensions['F'].width = 17
-        worksheet.column_dimensions['G'].width = 30
-        worksheet.column_dimensions['H'].width = 9
-        worksheet.column_dimensions['I'].width = 18
-        writer.close()
-        logger.info('Wrote XLSX neoepitope report file to %s', excel_report_path)
+    if excel_report_path:
+        from .epitope_io import neoepitope_core_row, write_neoepitope_table
+        columns = list(neoepitope_core_row('', '', None, '', None, '', '', score=0))
+        columns.append('Variant allele RNA read count')
+        write_neoepitope_table(pd.DataFrame(rows, columns=columns), excel_report_path)
 
 
 def make_csv_report(
         ranked_variants_with_vaccine_peptides,
         excel_report_path=None,
         csv_report_path=None):
+    """Write ranked source windows with one schema for every input route.
+
+    Rows describe candidate windows, not emitted products. Missing mutation
+    coordinates/RNA evidence remain empty for antigen-only sources. Empty
+    results still write headers and an empty ``All`` workbook sheet.
     """
-    Writes out CSV/XLSX reports as needed.
-    """
-    # make a bunch of pd frames, save them in an OrderedDict with keys being descriptive Excel
-    # sheet names (will be used later for making the Excel report if needed)
+    columns = list(new_columns())
     frames = OrderedDict()
-    for i, (variant, vaccine_peptides) in enumerate(ranked_variants_with_vaccine_peptides):
-        any_vaccine_peptides = False
-        if not vaccine_peptides:
-            continue
-
-        sheet_name = '%d_%s_chr%s_%d_%s_%s' % (
-            i + 1, vaccine_peptides[0].mutant_protein_fragment.gene_name,
-            variant.contig, variant.start, variant.ref, variant.alt)
-        columns = new_columns()
-        for j, vaccine_peptide in enumerate(vaccine_peptides):
-
-            # if there are no predicted epitopes, exclude this peptide from the report
-            if not vaccine_peptide.contains_target_epitopes():
-                logger.info('No epitopes for peptide: %s', vaccine_peptide)
-                continue
-
-            columns["chr"].append(variant.contig)
-            columns["pos"].append(variant.original_start)
-            columns["ref"].append(variant.original_ref)
-            columns["alt"].append(variant.original_alt)
-            columns["gene_name"].append(vaccine_peptide.mutant_protein_fragment.gene_name)
-            columns["variant_rank"].append(i + 1)
-            columns["peptide_rank"].append(j + 1)
-            columns["amino_acids"].append(vaccine_peptide.mutant_protein_fragment.amino_acids)
-            columns["mutation_start"].append(
-                vaccine_peptide.mutant_protein_fragment.mutant_amino_acid_start_offset)
-            columns["mutation_end"].append(
-                vaccine_peptide.mutant_protein_fragment.mutant_amino_acid_end_offset)
-            columns["combined_score"].append(_sanitize(vaccine_peptide.combined_score))
-            columns["expression_score"].append(_sanitize(vaccine_peptide.expression_score))
-            columns["target_epitope_score"].append(_sanitize(vaccine_peptide.target_epitope_score))
-            for field in ManufacturabilityScores._fields:
-                columns[field].append(
-                    _sanitize(getattr(vaccine_peptide.manufacturability_scores, field)))
-            any_vaccine_peptides = True
-
-        if not any_vaccine_peptides:
-            continue
-
-        df = pd.DataFrame(columns, columns=columns.keys())
-        frames[sheet_name] = df
-
-    if not frames:
-        # The paths were explicitly requested and no file will appear, so this
-        # is a warning naming them rather than an INFO line about "no data":
-        # an empty VCF used to exit 0 having written nothing an operator asked
-        # for, with only a quiet note about it.
-        requested = [str(p) for p in (csv_report_path, excel_report_path) if p]
-        logger.warning(
-            'No vaccine peptides passed filtering, so nothing was written to '
-            '%s. An empty input, or one whose variants were all filtered out, '
-            'produces no rows.',
-            ', '.join(requested) or 'the CSV/XLSX report')
-        return
-
-    all_dfs = pd.concat(frames.values())
+    for i, (source, peptides) in enumerate(ranked_variants_with_vaccine_peptides, 1):
+        rows = []
+        for j, peptide in enumerate(peptides, 1):
+            antigen = peptide.antigen
+            fragment = peptide.mutant_protein_fragment
+            variant = source if fragment is not None else None
+            genes = set(json.loads(dict(antigen.source_metadata).get('gene_ids', '[]')))
+            if antigen.gene_id:
+                genes.add(antigen.gene_id)
+            genes.update(t.gene_id for t in getattr(fragment, 'supporting_reference_transcripts', ())
+                         if getattr(t, 'gene_id', None))
+            row = dict(
+                source_rank=i, window_rank=j, source_kind=antigen.kind,
+                source_identifier=(variant.short_description if variant is not None else antigen.display_identifier),
+                gene_name=antigen.gene_name, gene_ids=json.dumps(sorted(genes)),
+                transcript_ids=json.dumps(list(antigen.transcript_ids)),
+                protein_ids=json.dumps(list(antigen.protein_ids)), source_species=antigen.species,
+                amino_acids=peptide.amino_acids,
+                targetable_intervals=json.dumps([[r.start, r.end] for r in antigen.targetable_mask.intervals]),
+                chr=variant.contig if variant is not None else None,
+                pos=variant.original_start if variant is not None else None,
+                ref=variant.original_ref if variant is not None else None,
+                alt=variant.original_alt if variant is not None else None,
+                mutation_start=fragment.mutant_amino_acid_start_offset if fragment is not None else None,
+                mutation_end=fragment.mutant_amino_acid_end_offset if fragment is not None else None,
+                combined_score=peptide.combined_score,
+                expression_score=peptide.expression_score if fragment is not None else None,
+                target_epitope_score=peptide.target_epitope_score)
+            row.update({name: getattr(peptide.manufacturability_scores, name)
+                        for name in ManufacturabilityScores._fields})
+            rows.append(row)
+        if rows:
+            label = peptides[0].antigen.display_gene_name
+            label = ''.join('_' if c in '\\/*?:[]' else c for c in label)
+            frames[('%d_%s' % (i, label))[:31]] = pd.DataFrame(rows, columns=columns)
+    combined = (pd.concat(frames.values(), ignore_index=True) if frames else pd.DataFrame(columns=columns))
     if csv_report_path:
         ensure_parent_dir(csv_report_path)
-        all_dfs.to_csv(csv_report_path, index=False)
-        logger.info('Wrote CSV report file to %s', csv_report_path)
-
+        combined.to_csv(csv_report_path, index=False)
+        logger.info('Wrote ranked candidate CSV to %s (%d windows)', csv_report_path, len(combined))
     if excel_report_path:
         ensure_parent_dir(excel_report_path)
-        writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
-
-        # copy the variant rank column to position 0, make first sheet called "All"
-        all_dfs[''] = all_dfs['variant_rank']
-        colnames = all_dfs.columns.tolist()
-        colnames.insert(0, colnames.pop(colnames.index('')))
-        all_dfs = all_dfs.reindex(columns=colnames)
-        all_dfs.to_excel(writer, sheet_name='All', index=False)
-        resize_columns(writer.sheets['All'], 'B', 'D')
-
-        # add one sheet per variant
-        for sheet_name, df in frames.items():
-            # trim sheet names to 31 characters due to limit in Excel
-            # should still be unique since they start with the variant
-            # index
-            shortened_sheet_name = sheet_name[:31]
-            df.to_excel(writer, sheet_name=shortened_sheet_name, index=False)
-            resize_columns(writer.sheets[shortened_sheet_name], 'A', 'C')
-
-        writer.close()
-        logger.info('Wrote manufacturability XLSX file to %s', excel_report_path)
+        with pd.ExcelWriter(excel_report_path, engine='openpyxl') as writer:
+            for sheet, frame in [('All', combined), *frames.items()]:
+                frame.to_excel(writer, sheet_name=sheet, index=False)
+                worksheet = writer.sheets[sheet]
+                worksheet.freeze_panes = 'A2'
+                worksheet.auto_filter.ref = worksheet.dimensions
+                for cell in worksheet[1]:
+                    worksheet.column_dimensions[cell.column_letter].width = (
+                        40 if cell.value in ('amino_acids', 'source_identifier') else 20)
+        logger.info('Wrote ranked candidate workbook to %s (%d windows)', excel_report_path, len(combined))

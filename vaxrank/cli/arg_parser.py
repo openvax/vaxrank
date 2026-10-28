@@ -13,6 +13,7 @@
 
 
 import sys
+import os
 from argparse import SUPPRESS, Action, ArgumentParser, ArgumentTypeError
 from importlib.resources import files
 
@@ -402,13 +403,8 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-csv",
         default="",
-        help="Path to CSV with ranked antigens. Format depends on "
-             "input source: pipeline (--vcf + --bam) emits "
-             "per-variant rows (gene, mutation, antigen sequence, "
-             "scores); LENS / pVACseq emit per-(peptide, allele) "
-             "rows (the upstream tool's native granularity). "
-             "Antigen-centric in both cases; content does not "
-             "change with --vaccine-type.")
+        help="CSV of ranked candidate windows, with source identity and scores. "
+             "Same schema for VCF/BAM, native and external inputs; not final products.")
 
     output_args_group.add_argument(
         "--output-ascii-report",
@@ -448,17 +444,21 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-xlsx-report",
         default="",
-        help="Path to XLSX summary report (one sheet per variant). "
-             "Antigen-centric; intended for hand-off to a vaccine "
-             "manufacturer / reviewer regardless of modality.")
+        help="XLSX of ranked candidate windows: All sheet plus one per source. "
+             "Same rows and columns as --output-csv; not final products.")
 
     output_args_group.add_argument(
         "--output-neoepitope-report",
         default="",
-        help="Path to per-(peptide, allele) neoepitope XLSX. "
+        help="Per-(peptide, allele) prediction table: CSV for a .csv path, otherwise XLSX. "
              "Focused on the predicted minimal MHC ligands; available "
              "from any --vaccine-type and from the LENS / pVACseq "
              "external paths.")
+
+    output_args_group.add_argument(
+        '--output-policy-dir', default='', metavar='DIRECTORY',
+        help='Optional resolved configuration and policy decision/evidence tables. '
+             'Native datasets already retain this replay evidence.')
 
     output_args_group.add_argument(
         "--output-reviewed-by",
@@ -863,6 +863,8 @@ _PRIMARY_OUTPUT_FLAGS = (
         "experimental resolved antigen sequences and admission evidence"),
     ("--output-input-predictions",      "output_input_predictions",
         "original external-table predictions"),
+    ("--output-policy-dir",             "output_policy_dir",
+        "resolved policy configuration and decision tables"),
     ("--output-dir",                    "output_dir",
         "directory for assembled vaccine constructs "
         "(per-modality subdirs when --vaccine-type has 2+ entries)"),
@@ -890,6 +892,23 @@ def check_args(args):
             "No output path specified. Pass at least one of the "
             "following flags so vaxrank knows where to write "
             "results:\n%s" % flag_lines)
+
+    output_files = {}
+    for flag, attr, _ in _PRIMARY_OUTPUT_FLAGS:
+        value = getattr(args, attr, None)
+        if not value or attr in ('output_dir', 'output_policy_dir'):
+            continue
+        path = os.path.realpath(value)
+        if path in output_files:
+            raise ValueError('%s and %s must use different output files' % (output_files[path], flag))
+        output_files[path] = flag
+    policy_dir = getattr(args, 'output_policy_dir', None)
+    if policy_dir and os.path.isfile(policy_dir):
+        raise ValueError('--output-policy-dir must be a directory, not an existing file')
+
+    if getattr(args, 'input_json_file', None) and getattr(args, 'output_epitopes', None):
+        raise ValueError('Legacy ranked JSON has no complete native prediction dataset. '
+                         'Use --input-epitopes for replayable native evidence export.')
 
     # ``--output-dir`` is contractually a directory; the file-path
     # form was removed when single-file outputs went away. Reject

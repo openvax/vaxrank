@@ -216,33 +216,13 @@ def test_log_args_summary_verbose_shows_defaults():
 # -- populate_default_output_paths -------------------------------------
 
 
-def test_auto_populate_pipeline_path_fills_csv_and_json():
-    """Pipeline run (no LENS / pVACseq input) with just
-    ``--output-dir`` set should auto-fill canonical CSV + JSON
-    paths inside the directory."""
+@pytest.mark.parametrize('input_flag', ['vcf', 'input_lens', 'input_epitopes', 'input_antigens', 'input_manifest'])
+def test_auto_populate_uses_one_bundle(input_flag):
     from vaxrank.cli.entry_point import populate_default_output_paths
-    args = SimpleNamespace(
-        output_dir='/tmp/run',
-        input_lens=None, input_pvacseq=None,
-        output_csv='', output_json_file='')
+    args = SimpleNamespace(output_dir='/tmp/run', output_csv='', output_json_file='', **{input_flag: 'input'})
     populate_default_output_paths(args)
-    assert args.output_csv == '/tmp/run/ranked_vaccine_peptides.csv'
-    assert args.output_json_file == '/tmp/run/ranked_vaccine_peptides.json'
-
-
-def test_auto_populate_lens_path_fills_neoepitope_csv():
-    """LENS path's natural rank report is per-(peptide, allele) —
-    the auto-fill picks ``neoepitope_predictions.csv`` instead of
-    ``ranked_vaccine_peptides.csv`` so the filename matches the
-    content. JSON dump is skipped (the LENS path doesn't build the
-    rich in-memory result that --output-json-file serializes)."""
-    from vaxrank.cli.entry_point import populate_default_output_paths
-    args = SimpleNamespace(
-        output_dir='/tmp/lens-run',
-        input_lens='/path/to/lens.tsv', input_pvacseq=None,
-        output_csv='', output_json_file='')
-    populate_default_output_paths(args)
-    assert args.output_csv == '/tmp/lens-run/neoepitope_predictions.csv'
+    assert args.output_csv == '/tmp/run/ranked_candidates.csv'
+    assert args.output_epitopes == '/tmp/run/candidate_predictions.tsv'
     assert args.output_json_file == ''
 
 
@@ -494,11 +474,17 @@ def _stub_vaccine_peptide():
     and return without writing anything when every peptide is skipped, so a
     writer test needs one that survives the filter."""
     from vaxrank.manufacturability import ManufacturabilityScores
+    from vaxrank.vaccine_antigen import VaccineAntigen, TargetableMask, AminoAcidInterval, TumorSpecificityAttestation
     fragment = SimpleNamespace(
         gene_name="GENE1", amino_acids="SIINFEKLSIINFEKL",
         mutant_amino_acid_start_offset=3, mutant_amino_acid_end_offset=4,
         n_alt_reads=10)
     return SimpleNamespace(
+        antigen=VaccineAntigen(kind='mutation', amino_acids=fragment.amino_acids, gene_name='GENE1',
+                              tumor_specificity=TumorSpecificityAttestation(
+                                  status='admitted', evidence_kind='synthetic_fixture', evidence_source='test'),
+                              targetable_mask=TargetableMask((AminoAcidInterval(3, 4),))),
+        amino_acids=fragment.amino_acids,
         mutant_protein_fragment=fragment,
         contains_target_epitopes=lambda: True,
         target_epitopes=[_stub_epitope()],
@@ -608,16 +594,14 @@ def test_json_dump_creates_its_parent_directory(tmp_path, monkeypatch):
     assert (tmp_path / "pv" / "passing.csv").exists()
 
 
-def test_output_dir_bundle_is_written_into_a_missing_directory(
+def test_explicit_legacy_json_is_written_into_a_missing_directory(
         tmp_path, monkeypatch):
-    """``--output-dir DIR`` is the documented way to get the full bundle and
-    ``populate_default_output_paths`` fills in paths inside DIR. Nothing
-    creates DIR before the JSON dump, so the whole flow used to die on a
-    directory the operator hadn't pre-created."""
+    """Explicit legacy JSON export still creates its parent directory."""
     entry_point, args = _pipeline_args(tmp_path, monkeypatch)
     out_dir = tmp_path / "brand" / "new" / "dir"
     args.output_dir = str(out_dir)
     args.output_csv = ''
+    args.output_json_file = str(out_dir / 'ranked_vaccine_peptides.json')
     args.input_lens = None
     args.input_pvacseq = None
     entry_point.populate_default_output_paths(args)

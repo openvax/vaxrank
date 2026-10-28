@@ -87,10 +87,10 @@ def test_simple_table_and_native_cli_reload(tmp_path, monkeypatch):
     native = tmp_path / 'native.tsv'
     first_report = tmp_path / 'first.csv'
     run_cli(['--input-topiary', str(source), '--output-epitopes', str(native),
-             '--output-csv', str(first_report),
+             '--output-neoepitope-report', str(first_report),
              '--config-value', 'epitopes.score_expr=new_feature / affinity.value'])
     second_report = tmp_path / 'second.csv'
-    run_cli(['--input-epitopes', str(native), '--output-csv', str(second_report)])
+    run_cli(['--input-epitopes', str(native), '--output-neoepitope-report', str(second_report)])
     first, second = pd.read_csv(first_report), pd.read_csv(second_report)
     assert first.vaxrank_score.tolist() == second.vaxrank_score.tolist() == [0.2, 0.02]
     assert first['Construction limitation'].str.contains('missing antigen').all()
@@ -103,7 +103,7 @@ def test_legacy_native_payload_uses_shared_cli(tmp_path):
     source = tmp_path / 'legacy.tsv'
     save_predictions(candidates, source)
     output = tmp_path / 'report.csv'
-    run_cli(['--input-epitopes', str(source), '--output-csv', str(output),
+    run_cli(['--input-epitopes', str(source), '--output-neoepitope-report', str(output),
              '--no-processing-aware-annotation'])
     assert len(pd.read_csv(output)) == 2
 

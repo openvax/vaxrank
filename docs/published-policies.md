@@ -80,16 +80,17 @@ For a report, select its corresponding bundle and save native evidence:
 
 ```sh
 vaxrank --input-lens report.tsv --no-processing-aware-annotation --config builtin:lens-v1 \
-  --output-epitopes evidence.tsv --output-csv lens-comparison.csv
+  --output-epitopes evidence.tsv --output-neoepitope-report lens-comparison.csv
 vaxrank --input-pvacseq aggregate.tsv --no-processing-aware-annotation --config builtin:pvacseq-aggregate-v1 \
-  --output-epitopes evidence.tsv --output-csv pvacseq-comparison.csv
+  --output-epitopes evidence.tsv --output-neoepitope-report pvacseq-comparison.csv
 vaxrank --input-topiary measured.tsv --config builtin:tesla-recognition-v1 \
-  --output-epitopes evidence.tsv --output-csv tesla-comparison.csv
-vaxrank --input-epitopes evidence.tsv --output-csv replay.csv
+  --output-epitopes evidence.tsv --output-neoepitope-report tesla-comparison.csv
+vaxrank --input-epitopes evidence.tsv --output-neoepitope-report replay.csv
 ```
 
 Native evidence retains the effective policy, all source measurements and
-per-occurrence decisions. The adjacent `.policy` directory records configuration
-derivation, source citations, model choices and replayable Topiary audit tables.
+per-occurrence decisions, configuration derivation, source citations and model
+choices. Add `--output-policy-dir DIR` to export separate replayable Topiary audit
+tables. Use `--output-csv candidates.csv` for ranked candidate windows.
 Evaluation and replay do not run predictors. Percentile-only rows remain in the
 evidence even when they cannot create a quantitative native prediction object.

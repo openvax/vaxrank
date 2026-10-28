@@ -2,7 +2,6 @@
 
 from dataclasses import replace
 import gzip
-import json
 from pathlib import Path
 
 import pytest
@@ -279,7 +278,8 @@ def test_legacy_native_evidence_does_not_invent_saved_assembly_settings(source, 
            '--mrna-no-optimize-linkers')
     saved = EpitopeDataset.load(tmp_path / 'modern.tsv')
     assert saved.selection['construct_assembly']['mrna']['configuration']['poly_a_length'] == 120
-    assert json.loads((directory / 'selection_policy.json').read_text())['effective_constructs']
+    assert saved.selection['run_configuration']['effective_constructs']
+    assert not (directory / 'selection_policy.json').exists()
 
 
 def test_saved_source_limit_replays_without_losing_unselected_evidence(source, tmp_path, monkeypatch):

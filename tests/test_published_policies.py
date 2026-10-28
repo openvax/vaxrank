@@ -170,13 +170,14 @@ def test_published_table_cli_replays_without_predictors(tmp_path, monkeypatch):
     native, first, second = (tmp_path / name for name in ('native.tsv', 'first.csv', 'second.csv'))
     replayed = tmp_path / 'replayed.tsv'
     run_cli(['--input-topiary', str(normalized), '--config', 'builtin:pvacseq-aggregate-v1',
-             '--output-epitopes', str(native), '--output-csv', str(first)])
-    run_cli(['--input-epitopes', str(native), '--output-csv', str(second),
+             '--output-epitopes', str(native), '--output-neoepitope-report', str(first),
+             '--output-policy-dir', str(tmp_path / 'policy')])
+    run_cli(['--input-epitopes', str(native), '--output-neoepitope-report', str(second),
              '--output-epitopes', str(replayed)])
     a, b = pd.read_csv(first), pd.read_csv(second)
     pd.testing.assert_frame_equal(a[['rank', 'variant', 'vaxrank_score']],
                                   b[['rank', 'variant', 'vaxrank_score']])
-    assert (tmp_path / 'native.tsv.policy/selection_policy.json').exists()
+    assert (tmp_path / 'policy/selection_policy.json').exists()
     saved = EpitopeDataset.load(replayed).selection['run_configuration']
     assert saved['configuration']['policy_metadata'] == show_policy('pvacseq-aggregate-v1')['policy_metadata']
     assert saved['effective_vaccine_peptides']['combined_score_expr'] == 'target_epitope_score'
@@ -231,8 +232,8 @@ def test_published_construct_scores_replay_and_explicit_override(tmp_path, monke
     native = tmp_path / 'native.tsv'
     run_cli(['--input-topiary', str(source), '--config', 'builtin:lens-v1',
              '--output-epitopes', str(native)])
-    run_cli(['--input-epitopes', str(native), '--output-csv', str(tmp_path / 'replay.csv')])
-    run_cli(['--input-epitopes', str(native), '--output-csv', str(tmp_path / 'derived.csv'), '--config-text',
+    run_cli(['--input-epitopes', str(native), '--output-neoepitope-report', str(tmp_path / 'replay.csv')])
+    run_cli(['--input-epitopes', str(native), '--output-neoepitope-report', str(tmp_path / 'derived.csv'), '--config-text',
              'vaccine_peptides.combined_score_expr=2 * target_epitope_score'])
     assert outcomes[0] == pytest.approx([.5, .475])
     assert outcomes[1] == pytest.approx(outcomes[0])
@@ -251,8 +252,8 @@ def test_original_reports_keep_all_ranked_rows_on_cli_native_replay(flag, path, 
     native, first, second = (tmp_path / name for name in ('native.tsv', 'first.csv', 'second.csv'))
     run_cli([flag, str(path), '--config', 'builtin:' + name,
              '--no-processing-aware-annotation', '--output-epitopes', str(native),
-             '--output-csv', str(first)])
-    run_cli(['--input-epitopes', str(native), '--output-csv', str(second)])
+             '--output-neoepitope-report', str(first)])
+    run_cli(['--input-epitopes', str(native), '--output-neoepitope-report', str(second)])
     a, b = pd.read_csv(first), pd.read_csv(second)
     columns = ['Prediction identity', 'Allele', 'vaxrank_score', 'vaxrank_rank_eligible']
     pd.testing.assert_frame_equal(a[columns], b[columns])

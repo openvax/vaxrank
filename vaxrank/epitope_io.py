@@ -1443,6 +1443,21 @@ def ensure_parent_dir(path):
         logger.info("Created output directory %s", parent)
 
 
+def write_neoepitope_table(frame, path):
+    """Write a prediction table, including its empty schema, by file extension."""
+    ensure_parent_dir(path)
+    if str(path).lower().endswith('.csv'):
+        frame.to_csv(path, index=False)
+    else:
+        with pd.ExcelWriter(path, engine='openpyxl') as writer:
+            frame.to_excel(writer, sheet_name='Neoepitopes', index=False)
+            worksheet = writer.sheets['Neoepitopes']
+            worksheet.freeze_panes = 'A2'
+            for cell in worksheet[1]:
+                worksheet.column_dimensions[cell.column_letter].width = 24
+    logger.info('Wrote neoepitope table to %s (%d rows)', path, len(frame))
+
+
 def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
                             csv_report_path=None, epitope_config=None,
                             topiary_df=None):
@@ -1477,6 +1492,17 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
         pVACseq annotation columns remain available to custom DSL
         expressions.
     """
+    paths = [path for path in (csv_report_path, excel_report_path) if path]
+    if not paths:
+        return
+    if report_df.empty:
+        columns = list(report_df.columns) or list(neoepitope_core_row('', '', None, '', None, '', ''))
+        frame = pd.DataFrame(columns=list(dict.fromkeys([
+            'rank', *columns, 'vaxrank_score', 'vaxrank_filter_passed',
+            'vaxrank_rank_eligible', 'vaxrank_exclusion_reason'])))
+        for path in paths:
+            write_neoepitope_table(frame, path)
+        return
     from .epitope_config import EpitopeConfig
     from .epitope_dsl import (
         epitopes_to_topiary_df,
@@ -1593,20 +1619,5 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
         report_df.insert(1, 'source_rank',
                          report_df.groupby('Input source', sort=False).cumcount() + 1)
 
-    if csv_report_path:
-        ensure_parent_dir(csv_report_path)
-        report_df.to_csv(csv_report_path, index=False)
-        logger.info('Wrote CSV neoepitope report to %s', csv_report_path)
-
-    if excel_report_path:
-        ensure_parent_dir(excel_report_path)
-        writer = pd.ExcelWriter(excel_report_path, engine='openpyxl')
-        report_df.to_excel(writer, sheet_name='Neoepitopes', index=False)
-        worksheet = writer.sheets['Neoepitopes']
-        worksheet.column_dimensions['C'].width = 23
-        worksheet.column_dimensions['E'].width = 27
-        worksheet.column_dimensions['F'].width = 17
-        worksheet.column_dimensions['G'].width = 30
-        worksheet.column_dimensions['H'].width = 18
-        writer.close()
-        logger.info('Wrote XLSX neoepitope report to %s', excel_report_path)
+    for path in paths:
+        write_neoepitope_table(report_df, path)

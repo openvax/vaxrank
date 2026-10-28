@@ -322,7 +322,7 @@ def test_cli_reports_and_resolved_provenance_preserve_scope(tmp_path):
     args = manifest_args(tmp_path, sample_id='tumor')
     native, report = tmp_path / 'predictions.tsv', tmp_path / 'report.csv'
     main(['--input-manifest', args.input_manifest, '--output-epitopes', str(native),
-          '--output-csv', str(report), '--no-processing-aware-annotation'])
+          '--output-neoepitope-report', str(report), '--no-processing-aware-annotation'])
     recovered = load_predictions(native)
     assert {e.input_provenance.scope.sample_id for e in recovered} == {'tumor'}
     frame = pd.read_csv(report)
@@ -331,10 +331,11 @@ def test_cli_reports_and_resolved_provenance_preserve_scope(tmp_path):
     patient = load_external_ranked(args)[3]
     args.output_dir = str(tmp_path)
     write_run_summary(args, patient, 'external')
-    saved = json.loads((tmp_path / 'input_provenance.json').read_text())
-    assert saved['inputs'][0]['scope']['sample_id'] == 'tumor'
-    assert saved['inputs'][0]['report_declarations'] == {}
-    assert saved['inputs'][0]['manifest_declarations']['patient_id'] == 'fixture-patient'
+    saved = recovered[0].input_provenance
+    assert saved.scope.sample_id == 'tumor'
+    assert saved.report_declarations == {}
+    assert saved.manifest_declarations['patient_id'] == 'fixture-patient'
+    assert not (tmp_path / 'input_provenance.json').exists()
     assert 'Declared genotype:' in (tmp_path / 'run_summary.txt').read_text()
 
 
@@ -359,5 +360,5 @@ def test_run_summary_creates_directory_before_writing_provenance(tmp_path):
     destination = tmp_path / 'new' / 'output'
     args.output_dir = str(destination)
     write_run_summary(args, patient, 'external')
-    assert (destination / 'input_provenance.json').is_file()
+    assert not (destination / 'input_provenance.json').exists()
     assert (destination / 'run_summary.txt').is_file()

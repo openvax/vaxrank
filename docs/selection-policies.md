@@ -40,14 +40,17 @@ formula: do not also set `filter_expr` or `score_expr`. Use policy fields to edi
 its formula; `--min-epitope-score` explicitly overrides its minimum. Vaxrank
 requires higher-is-better scores because it aggregates epitope contributions.
 
-`selection_policy.json` records resolved settings, ordered configuration sources
-and hashes. `policy_evidence/` contains Topiary typed evidence, occurrence
-decisions and named-criterion audit tables, including rejected observations.
-Topiary's `replay_selection_policy(read_tsv(path))` reproduces those decisions
-without predictors. Native `--output-epitopes` datasets embed the policy evidence
-and retain original predictions. Direct VCF/BAM runs also write complete policy
-evidence alongside their legacy selected-epitope export. If only
-`--output-epitopes FILE` is requested, the decision sidecars go in `FILE.policy/`.
+Native `--output-epitopes` datasets embed the policy evidence, resolved settings,
+ordered configuration sources, hashes and original predictions. This includes
+VCF/BAM runs. They replay without loose decision files.
+
+For separate human-readable decision tables, pass `--output-policy-dir DIR`.
+`DIR/selection_policy.json` records configuration; `DIR/policy_evidence/` contains
+Topiary typed evidence, occurrence decisions and named-criterion audit tables,
+including rejected observations. Topiary's
+`replay_selection_policy(read_tsv(path))` reproduces those decisions without
+predictors. These exports are optional; no adjacent `FILE.policy/` directory is
+created automatically.
 
 The frozen definition fixes selection rules, not the measurements supplied to
 them. Predictor versions, resolved defaults and source-specific evaluation

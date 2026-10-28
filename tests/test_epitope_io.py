@@ -2507,7 +2507,7 @@ def test_pvacseq_cli_csv_output(tmp_path):
     csv_path = str(tmp_path / "output.csv")
     main([
         "--input-pvacseq", pvacseq_path,
-        "--output-csv", csv_path,
+        "--output-neoepitope-report", csv_path,
     ])
     assert os.path.exists(csv_path)
     import pandas as pd

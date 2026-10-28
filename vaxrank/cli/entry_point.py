@@ -310,14 +310,14 @@ def emit_external_neoepitope_report(
         epitope_config = dataset.config
     if getattr(args, 'output_epitopes', ''):
         save_predictions(epitopes, args.output_epitopes, dataset=dataset)
-    if report_df is None or report_df.empty:
+    if report_df is None:
         return
     write_neoepitope_report(
         report_df=report_df,
         epitopes=epitopes,
         excel_report_path=(
             getattr(args, 'output_neoepitope_report', '') or None),
-        csv_report_path=getattr(args, 'output_csv', '') or None,
+        csv_report_path=None,
         epitope_config=epitope_config,
     )
 
@@ -484,7 +484,7 @@ _ARG_GROUPS = (
         'pepsickle_threshold',
     )),
     ("Outputs", (
-        'output_dir', 'output_csv', 'output_xlsx_report',
+        'output_dir', 'output_policy_dir', 'output_csv', 'output_xlsx_report',
         'output_ascii_report', 'output_html_report',
         'output_pdf_report', 'output_neoepitope_report',
         'output_json_file', 'output_passing_variants_csv',
@@ -857,22 +857,9 @@ def emit_outputs(args, ranked, source):
     """
     vaccine_types = resolve_vaccine_types(args)
 
-    # Rank reports run for both sources; on the external-input path
-    # the LENS-native per-(peptide, allele) report already consumed
-    # ``--output-csv`` (via emit_external_neoepitope_report) so the
-    # rank-report writer would collide — skip it there.
-    if (args.output_csv or args.output_xlsx_report) and source != 'external':
-        make_csv_report(
-            ranked,
-            excel_report_path=args.output_xlsx_report,
-            csv_report_path=args.output_csv)
-    elif args.output_xlsx_report and getattr(args, 'vcf', None):
-        make_csv_report(ranked, excel_report_path=args.output_xlsx_report, csv_report_path=None)
-    elif args.output_xlsx_report and source == 'external':
-        logger.info(
-            "--output-xlsx-report ignored on external-input path "
-            "(use --output-neoepitope-report for the LENS / pVACseq "
-            "XLSX format).")
+    if args.output_csv or args.output_xlsx_report:
+        make_csv_report(ranked, excel_report_path=args.output_xlsx_report,
+                        csv_report_path=args.output_csv)
 
     if args.output_neoepitope_report and source == 'pipeline':
         num_epitopes = getattr(args, 'num_epitopes_per_vaccine_peptide', None)
@@ -942,58 +929,25 @@ def emit_outputs(args, ranked, source):
 
 
 _AUTO_OUTPUT_FILENAMES = {
-    # Pipeline path → ranked-peptides CSV / JSON + the human-readable
-    # ASCII and PDF vaccine reports.
-    'pipeline': {
-        'output_csv': 'ranked_vaccine_peptides.csv',
-        'output_json_file': 'ranked_vaccine_peptides.json',
-        'output_ascii_report': 'vaccine_report.txt',
-        'output_pdf_report': 'vaccine_report.pdf',
-    },
-    # External path → per-(peptide, allele) neoepitope CSV plus the
-    # same ASCII + PDF reports. No JSON dump (the LENS / pVACseq path
-    # doesn't build the rich in-memory result that
-    # ``--output-json-file`` serializes).
-    'external': {
-        'output_csv': 'neoepitope_predictions.csv',
-        'output_epitopes': 'candidate_predictions.tsv',
-        'output_ascii_report': 'vaccine_report.txt',
-        'output_pdf_report': 'vaccine_report.pdf',
-    },
+    'output_csv': 'ranked_candidates.csv',
+    'output_epitopes': 'candidate_predictions.tsv',
+    'output_ascii_report': 'vaccine_report.txt',
+    'output_pdf_report': 'vaccine_report.pdf',
 }
 
 
 def populate_default_output_paths(args):
-    """When ``--output-dir`` is set and the per-format output flags
-    are not, default them to canonical filenames inside the
-    directory. Lets ``--output-dir DIR`` produce the full bundle
-    (FASTAs + manifest + ranked-peptides CSV + JSON) without making
-    the operator list every flag.
+    """Use one predictable output bundle for all evidence input routes.
 
-    Source-aware filename pick: pipeline (VCF/BAM) writes
-    ``ranked_vaccine_peptides.{csv,json}``; LENS / pVACseq writes
-    ``neoepitope_predictions.csv`` (the per-(peptide, allele) report
-    that's the LENS path's natural rank-report shape).
-
-    Explicit ``--output-csv`` / ``--output-json-file`` always win;
-    we only fill when the attribute is empty / None.
+    Explicit paths win. Legacy ranked-object JSON lacks a complete native
+    prediction dataset, so its compatibility reader only emits reports/products.
     """
     output_dir = getattr(args, 'output_dir', '') or ''
     if not output_dir:
         return
-    source = (
-        'external'
-        if (getattr(args, 'input_lens', None)
-            or getattr(args, 'input_pvacseq', None)
-            or getattr(args, 'input_epitopes', None)
-            or getattr(args, 'input_topiary', None)
-            or getattr(args, 'input_cta_expression', None)
-            or getattr(args, 'input_antigens', None)
-            or getattr(args, 'input_isovar', None)
-            or getattr(args, 'external_input', None)
-            or getattr(args, 'input_manifest', None))
-        else 'pipeline')
-    auto_paths = _AUTO_OUTPUT_FILENAMES[source]
+    auto_paths = dict(_AUTO_OUTPUT_FILENAMES)
+    if getattr(args, 'input_json_file', None):
+        auto_paths.pop('output_epitopes')
     filled = []
     for attr, filename in auto_paths.items():
         if not getattr(args, attr, ''):
@@ -1024,9 +978,6 @@ def write_run_summary(args, patient_info, source, products=None):
     lines = ["Vaxrank run summary", "=" * 19, ""]
     provenance = getattr(patient_info, 'input_provenance', ())
     if source == 'external':
-        from dataclasses import asdict
-        import json
-        from ..input_scope import PROVENANCE_SCHEMA
         if not getattr(patient_info, 'inputs', None):
             from ..external_rescoring import external_inputs
             labels = {'lens': 'LENS', 'pvacseq': 'pVACseq', 'exacto': 'Exacto',
@@ -1053,11 +1004,6 @@ def write_run_summary(args, patient_info, source, products=None):
                 lines.append("    Declared genotype: %s; report coverage: %s" % (
                     ', '.join(scope.mhc_alleles) if scope.mhc_alleles else 'unknown',
                     ', '.join(source_input.observed_mhc_alleles) or 'none'))
-            with open(os.path.join(output_dir, 'input_provenance.json'), 'w') as stream:
-                json.dump({
-                    'schema': PROVENANCE_SCHEMA,
-                    'inputs': [asdict(p) for p in provenance],
-                }, stream, indent=2)
     else:
         lines.append("Input: full pipeline")
         for label, attr in (("vcf", "vcf"), ("bam", "bam")):
@@ -1135,7 +1081,11 @@ def write_run_summary(args, patient_info, source, products=None):
 
     lines += ["", "Outputs (relative to this directory):"]
     for label, attr in (
-            ("neoepitope table", "output_csv"),
+            ("ranked candidates", "output_csv"),
+            ("ranked workbook", "output_xlsx_report"),
+            ("prediction table", "output_neoepitope_report"),
+            ("native evidence", "output_epitopes"),
+            ("policy exports", "output_policy_dir"),
             ("input predictions", "output_input_predictions"),
             ("ASCII report", "output_ascii_report"),
             ("PDF report", "output_pdf_report")):
@@ -1241,7 +1191,7 @@ def run_cli(args_list=None):
         skipping the predict-from-genome stages
 
     Vaccine-type dispatch is multi-valued (``--vaccine-type``;
-    default ``[peptide]``). Each active type's writer fires when
+    default ``[peptide, mrna]``). Each active type's writer fires when
     ``--output-dir`` is set. Single-mode runs land directly in the
     directory; multi-mode runs land in per-modality subdirs.
 
