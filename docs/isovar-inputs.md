@@ -166,6 +166,8 @@ with `rna_fragment_support_unavailable`; a single occurrence can use its candida
 union. Use the raw v5 reconstruction or re-export with Isovar 1.62.2 to recover
 placement support. Explicit inconsistent fields fail instead of falling back.
 All ambiguity, partial-sequence and tumor-specificity gates still apply.
+Admission opt-ins do not bypass evidence validation: contradictory source scopes
+or measured counts are input errors even when ambiguous products are allowed.
 
 ## Reconstruction requests and controls
 
