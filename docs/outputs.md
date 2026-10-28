@@ -112,9 +112,9 @@ that no construct files were emitted. HTML/PDF styling is bundled locally.
 
 ## Neoepitope report
 
-A per-(peptide, allele) table in XLSX or CSV, chosen by file extension. It is
-the default output of the LENS / pVACseq input path and is also available on
-the full pipeline.
+A per-(peptide, allele) table in XLSX or CSV, chosen by file extension. Request
+it explicitly for VCF/BAM, external or native input; it supplements the ranked
+candidate table and native prediction dataset.
 
 | Flag | Output |
 |---|---|
