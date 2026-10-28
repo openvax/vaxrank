@@ -1144,20 +1144,11 @@ def write_run_summary(args, patient_info, source, products=None):
             lines.append("  %-18s %s" % (
                 label + ":", os.path.relpath(path, output_dir)))
     vaccine_types = resolve_vaccine_types(args)
-    # In the split-report layout (multi-type + reports requested) each
-    # modality subdir also holds its own vaccine_report; say so.
-    split_reports = len(vaccine_types) > 1 and any(
-        getattr(args, a, '') for a in (
-            'output_ascii_report', 'output_html_report', 'output_pdf_report'))
     for vtype in vaccine_types:
         target_dir = vaccine_target_dir(output_dir, vtype, vaccine_types)
         if target_dir:
-            contents = (
-                "constructs + vaccine_report" if split_reports
-                else "constructs")
-            lines.append("  %-18s %s/  (%s)" % (
-                vtype + ":", os.path.relpath(target_dir, output_dir),
-                contents))
+            lines.append("  %-18s %s/  (constructs)" % (
+                vtype + ":", os.path.relpath(target_dir, output_dir)))
 
     summary_path = os.path.join(output_dir, "run_summary.txt")
     with open(summary_path, 'w') as f:
@@ -1502,149 +1493,37 @@ def run_cli(args_list=None):
     if not (args.output_ascii_report or args.output_html_report or args.output_pdf_report):
         return
 
-    # Per-modality "Vaccine construction" blocks (#269 + #270).
-    # Each active modality gets a coverage-aware view of which
-    # antigens landed in the vaccine, plus per-allele coverage of
-    # the selected pool. The selector is the same one
-    # ``_emit_*_constructs`` runs at write time, so the report
-    # matches what would actually be assembled with --output-dir.
-    target_alleles = resolve_target_alleles(args)
-    vaccine_constructions = {}
-    modality_ranked = {}
-    if ranked_variants_with_vaccine_peptides:
-        from ..coverage import (
-            select_antigens_for_coverage, summarize_construction_decisions,
-        )
-        active_types = resolve_vaccine_types(args)
-        if 'mrna' in active_types:
-            from ..mrna import RNAConstructConfig
-            yaml_kwargs = construct_config_for_modality(args, 'mrna')
-
-            def _mrna_cfg(cli_attr, yaml_key):
-                return coalesce_config_value(
-                    args, cli_attr, yaml_kwargs, yaml_key)
-            mrna_options = RNAConstructConfig(
-                antigens_per_construct=_mrna_cfg(
-                    'mrna_antigens_per_construct',
-                    'antigens_per_construct'),
-                max_constructs=_mrna_cfg(
-                    'mrna_max_constructs', 'max_constructs'),
-            )
-            cap = (
-                mrna_options.antigens_per_construct
-                * mrna_options.max_constructs)
-            selected = (
-                select_antigens_for_coverage(
-                    ranked_variants_with_vaccine_peptides,
-                    target_alleles, cap)
-                if target_alleles else
-                list(ranked_variants_with_vaccine_peptides[:cap]))
-            vaccine_constructions['mrna'] = {
-                **summarize_construction_decisions(
-                    ranked_variants_with_vaccine_peptides,
-                    cap=cap, target_alleles=target_alleles,
-                    selected=selected),
-                'antigens_per_construct': mrna_options.antigens_per_construct,
-                'max_constructs': mrna_options.max_constructs,
-            }
-        if 'peptide' in active_types:
-            pep_options = _peptide_construct_options(args)
-            peptide_ranked = ranked_variants_with_vaccine_peptides
-            if pep_options.window_selection is not None:
-                from ..window_selection import optimize_peptide_windows
-                peptide_ranked = optimize_peptide_windows(peptide_ranked, pep_options)
-                modality_ranked['peptide'] = peptide_ranked
-            cap = (
-                pep_options.antigens_per_construct
-                * pep_options.max_constructs)
-            selected = (
-                select_antigens_for_coverage(
-                    peptide_ranked,
-                    target_alleles, cap)
-                if target_alleles else
-                list(peptide_ranked[:cap]))
-            vaccine_constructions['peptide'] = {
-                **summarize_construction_decisions(
-                    peptide_ranked,
-                    cap=cap, target_alleles=target_alleles,
-                    selected=selected),
-                'antigens_per_construct': pep_options.antigens_per_construct,
-                'max_constructs': pep_options.max_constructs,
-            }
-
-
-    def _template_data(vc_subset, include_manufacturability, modality=None):
-        return TemplateDataCreator(
-            ranked_variants_with_vaccine_peptides=(
-                modality_ranked.get(modality, ranked_variants_with_vaccine_peptides)),
-            patient_info=patient_info,
-            final_review=getattr(args, 'output_final_review', '') or '',
-            reviewers=getattr(args, 'output_reviewed_by', '') or '',
-            args_for_report=args_for_report,
-            input_json_file=getattr(args, 'input_json_file', None),
-            cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
-            dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
-            processing_predictions_by_key=processing_predictions_by_key,
-            mrna_ranking_decisions=vc_subset.get('mrna'),
-            vaccine_constructions=vc_subset,
-            target_alleles=target_alleles,
-            include_manufacturability=include_manufacturability,
-        ).compute_template_data()
-
-    def _render(template_data, ascii_path, html_path, pdf_path):
-        if ascii_path:
-            make_ascii_report(
-                template_data=template_data, ascii_report_path=ascii_path)
-        if html_path:
-            make_html_report(
-                template_data=template_data, html_report_path=html_path)
-        if pdf_path:
-            make_pdf_report(
-                template_data=template_data, pdf_report_path=pdf_path,
-                backend=args.pdf_backend)
-
-    active_types = resolve_vaccine_types(args)
-    report_output_dir = getattr(args, 'output_dir', '') or ''
-    if len(active_types) > 1 and report_output_dir:
-        # Split layout (#269): a modality-agnostic core report at the
-        # top level (antigen ranking + coverage, no construction blocks
-        # or manufacturability), plus a per-modality report in each
-        # subdir = core + that modality's construction detail
-        # (manufacturability follows --manufacturability for peptide,
-        # off for mRNA).
-        _render(
-            _template_data({}, include_manufacturability=False),
-            args.output_ascii_report, args.output_html_report,
-            args.output_pdf_report)
-        for vtype in active_types:
-            target_dir = vaccine_target_dir(
-                report_output_dir, vtype, active_types)
-            if not target_dir:
-                continue
-            vc = vaccine_constructions.get(vtype)
-            subset = {vtype: vc} if vc else {}
-            td = _template_data(
-                subset,
-                include_manufacturability=(
-                    None if vtype == 'peptide' else False), modality=vtype)
-            os.makedirs(target_dir, exist_ok=True)
-            _render(
-                td,
-                (os.path.join(target_dir, 'vaccine_report.txt')
-                    if args.output_ascii_report else ''),
-                (os.path.join(target_dir, 'vaccine_report.html')
-                    if args.output_html_report else ''),
-                (os.path.join(target_dir, 'vaccine_report.pdf')
-                    if args.output_pdf_report else ''))
-    else:
-        # Single modality (or no --output-dir): one combined report —
-        # core + the single modality + its manufacturability.
-        _render(
-            _template_data(
-                vaccine_constructions, include_manufacturability=None,
-                modality=active_types[0] if len(active_types) == 1 else None),
-            args.output_ascii_report, args.output_html_report,
-            args.output_pdf_report)
+    # Reports consume the products emitted above. Re-running a selector here
+    # would guess at packing, deduplication, refined windows and saved replay.
+    product_files = {}
+    output_dir = getattr(args, 'output_dir', None)
+    if output_dir:
+        types = resolve_vaccine_types(args)
+        for modality in products:
+            directory = vaccine_target_dir(output_dir, modality, types)
+            names = ('vaccine.fasta', 'manifest.json', 'order_form.csv') if modality == 'peptide' else (
+                'full.fasta', 'cds.fasta', 'no_polyA.fasta', 'manifest.json', 'mrna-sequence-parts.csv')
+            product_files[modality] = [os.path.relpath(os.path.join(directory, name), output_dir) for name in names]
+    template_data = TemplateDataCreator(
+        ranked_variants_with_vaccine_peptides=ranked_variants_with_vaccine_peptides,
+        patient_info=patient_info,
+        final_review=getattr(args, 'output_final_review', '') or '',
+        reviewers=getattr(args, 'output_reviewed_by', '') or '',
+        args_for_report=args_for_report,
+        input_json_file=getattr(args, 'input_json_file', None),
+        cosmic_vcf_filename=getattr(args, 'cosmic_vcf_filename', ''),
+        dna_vaf_by_variant=data.get('dna_vaf_by_variant') or {},
+        processing_predictions_by_key=processing_predictions_by_key,
+        products=products, product_files=product_files,
+        candidate_details=getattr(args, 'report_candidate_details', False),
+    ).compute_template_data()
+    if args.output_ascii_report:
+        make_ascii_report(template_data=template_data, ascii_report_path=args.output_ascii_report)
+    if args.output_html_report:
+        make_html_report(template_data=template_data, html_report_path=args.output_html_report)
+    if args.output_pdf_report:
+        make_pdf_report(template_data=template_data, pdf_report_path=args.output_pdf_report,
+                        backend=args.pdf_backend)
 
 
 def main(args_list=None):

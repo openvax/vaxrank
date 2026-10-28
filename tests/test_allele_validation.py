@@ -205,12 +205,15 @@ def test_template_pipeline_keeps_unknown_and_known_allele_rows(tmp_path):
     known = replace(candidate(), overlaps_mutation=True,
                     per_allele_scores={"HLA-A*02:01": .25})
     fragment = SimpleNamespace(gene_name="GENE", predicted_effect=lambda **kw: None)
+    from .test_assembly_antigens import candidate as ranked_candidate
+    antigen, _ = ranked_candidate(0)
     vaccine = SimpleNamespace(
+        antigen=antigen, amino_acids='SIINFEKL', combined_score=.25, epitopes=[unknown, known],
         mutant_protein_fragment=fragment, target_epitopes=[unknown, known],
         self_epitopes=[], contains_target_epitopes=lambda: True)
     creator = TemplateDataCreator(
         [(Variant('1', 1000, 'A', 'T'), [vaccine])],
-        PatientInfo("TEST"), final_review="", reviewers="", input_json_file=None,
+        PatientInfo("TEST"), candidate_details=True, final_review="", reviewers="", input_json_file=None,
         args_for_report={"manufacturability": False, "wt_epitopes": False})
     # Variant annotation is orthogonal to epitope table rendering.
     for method in ("_variant_data", "effect_data", "_databases", "_peptide_data",

@@ -119,6 +119,7 @@ def run_example(output_dir, scratch_dir=None, *, allele=ALLELE, predictor="rando
             **patient_counts,
         )
         template = TemplateDataCreator(
+            candidate_details=True,
             ranked_variants_with_vaccine_peptides=result.ranked_vaccine_peptides,
             patient_info=patient,
             final_review="",

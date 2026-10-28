@@ -1,20 +1,15 @@
+Vaccine Design Report
 {% for key, val in patient_info.items() %}
 {{ key }}: {{ val }}
 {% endfor %}
 
-Package version info
-{% for key, val in package_versions.items() %}
-    {{ key }}: {{ val }}
-{% endfor %}
----
+{% include "templates/products.txt" %}
 
-{% if variants %}
-=== Antigen ranking ===
-Per-antigen ranked windows by combined_score. Modality-agnostic;
-modality-specific decisions (which antigens land in the vaccine, the
-manufacturability tuple, allele coverage) are in the
-{% if vaccine_constructions %}"Vaccine construction" sections below.{% else %}per-modality reports (peptide/, mrna/).{% endif %}
+{% if ranked_candidates is defined %}{% include "templates/ranking.txt" %}{% endif %}
 
+{% if candidate_details | default(true) and variants %}
+=== Candidate window details ===
+Candidate context only. Final sequences are listed under Emitted products.
 {% for v in variants %}
 {{ v.num }}) {{ v.short_description }} ({{ v.variant_data['Gene name'] }})
         {% for key, val in v.variant_data.items() %}
@@ -25,73 +20,31 @@ manufacturability tuple, allele coverage) are in the
         {{ key }}: {{ val }}
         {% endfor %}
 
-        Vaccine antigens:
+        Candidate windows:
         {% for p in v.peptides %}
                 {{ p.header_display_data.num }}. {{ p.header_display_data.aa_before_mutation }}_{{ p.header_display_data.aa_mutant }}_{{ p.header_display_data.aa_after_mutation }} (score = {{ v.variant_data["Top score"] }})
                   {% for key, val in p.peptide_data.items() %}
                   - {{ key }}: {{ val }}
                   {% endfor %}
 
-                  Predicted mutant epitopes:
+                  Predicted target epitopes:
                   {{ p.ascii_epitopes|indent(18) }}
 
                   {% if include_wt_epitopes and p.wt_epitopes %}
-                  Predicted strong binders that do not overlap the mutation:
+                  Predicted self epitopes:
                   {{ p.ascii_wt_epitopes|indent(18) }}
                   {% endif %}
 
         {% endfor %}
 {% endfor %}
-{% else %}
-No variants with sufficient ranked antigens were found.
 {% endif %}
 
-{% for modality, vc in (vaccine_constructions|default({})).items() %}
----
-
-=== Vaccine construction — {{ modality }} ===
-Cap: {{ vc.antigens_per_construct }} antigens × {{ vc.max_constructs }} constructs = {{ vc.cap }} antigen slots.
-Selected {{ vc.selected|length }} of {{ vc.total_ranked }} ranked antigen(s).
-
-  {% if vc.coverage %}
-  Allele coverage of the selected pool:
-    {% for ac in vc.coverage %}
-    {% if ac.tier %}{{ '✓' }} {{ '%-7s' % ac.tier }}{% else %}{{ '✗' }} {{ '%-7s' % 'none' }}{% endif %}  {{ ac.allele }}{% if ac.tier %}  (n={{ ac.n_peptides }}{% if ac.best_presentation_pct is not none %}, best presentation_pct={{ '%.2f' % ac.best_presentation_pct }}{% endif %}{% if ac.best_affinity_pct is not none %}, best affinity_pct={{ '%.2f' % ac.best_affinity_pct }}{% endif %}){% endif %}
-    {% endfor %}
-  {% endif %}
-
-  Selected antigens:
-  {% for a in vc.selected %}
-    {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}{% if a.allele_tiers %}    covers {% for allele, tier in a.allele_tiers.items() %}{{ allele }} ({{ tier }}){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
-        {% if include_manufacturability and modality == 'peptide' and a.manufacturability %}
-        Manufacturability:
-        {% for key, val in a.manufacturability.items() %}
-        - {{ key }}: {{ val }}
-        {% endfor %}
-        {% endif %}
-  {% endfor %}
-  {% if vc.dropped %}
-
-  Not selected — past the cap (raise --{{ modality }}-max-constructs to include more):
-  {% for a in vc.dropped %}
-    {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}{% if a.allele_tiers %}    would add: {% for allele, tier in a.allele_tiers.items() %}{{ allele }} ({{ tier }}){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
-  {% endfor %}
-  {% endif %}
+Run arguments
+{% for key, val in args %}
+  {{ key }}: {{ val }}
 {% endfor %}
 
-{% if not vaccine_constructions and mrna_ranking %}
----
-
-=== Vaccine construction — mrna (legacy block) ===
-Selected ({{ mrna_ranking.selected|length }} of {{ mrna_ranking.total_ranked }} ranked) at cap = {{ mrna_ranking.cap }} antigen slots.
-{% for a in mrna_ranking.selected %}
-  {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}
+Package versions
+{% for key, val in package_versions.items() %}
+  {{ key }}: {{ val }}
 {% endfor %}
-{% if mrna_ranking.dropped %}
-
-Not selected — past the cap:
-{% for a in mrna_ranking.dropped %}
-  {{ a.rank }}. {{ a.description }}    combined_score = {{ '%.3f' % a.combined_score }}
-{% endfor %}
-{% endif %}
-{% endif %}

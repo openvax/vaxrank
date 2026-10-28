@@ -2588,7 +2588,7 @@ def test_lens_cli_writes_ascii_report():
     assert "Total number of somatic variants:" in text
     # At least one variant block — exact count depends on the fixture
     # but we want the loop to have run, not be silently empty.
-    assert "Vaccine antigens:" in text
+    assert "Candidate ranking" in text and "Candidate window details" not in text
 
 
 def test_lens_cli_errors_when_template_report_missing_ensembl_release(capsys):
@@ -2600,7 +2600,7 @@ def test_lens_cli_errors_when_template_report_missing_ensembl_release(capsys):
     # (openvax/vaxrank#457); the message is what still matters.
     with pytest.raises(SystemExit) as exit_info:
         main([
-            "--input-lens", lens_path,
+            "--input-lens", lens_path, "--report-candidate-details",
             "--output-ascii-report", "/tmp/should-not-be-written.txt",
         ])
     assert exit_info.value.code == 1

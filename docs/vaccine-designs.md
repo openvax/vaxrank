@@ -71,14 +71,14 @@ SLP (the default): mutation-spanning long peptide, one antigen per construct,
 as in the PGV-001 design.
 
 ```sh
-vaxrank --input-epitopes candidates.tsv --output-dir vaccine_out/
+vaxrank --input-epitopes candidates.tsv --vaccine-type peptide --output-dir vaccine_out/
 # → vaccine_out/{vaccine.fasta, manifest.json, order_form.csv}
 ```
 
 Concatenate five antigens with an `AAY` spacer:
 
 ```sh
-vaxrank --input-epitopes candidates.tsv \
+vaxrank --input-epitopes candidates.tsv --vaccine-type peptide \
         --output-dir vaccine_out/ \
         --peptide-antigens-per-construct 5 --peptide-linker AAY
 ```
@@ -86,7 +86,7 @@ vaxrank --input-epitopes candidates.tsv \
 Select a single short MHC ligand per construct:
 
 ```sh
-vaxrank --input-epitopes candidates.tsv \
+vaxrank --input-epitopes candidates.tsv --vaccine-type peptide \
         --output-dir vaccine_out/ \
         --antigen-content minimal_epitope
 ```
@@ -99,7 +99,7 @@ manifest.
 
 ```sh
 vaxrank --input-epitopes candidates.tsv --vaccine-type mrna --output-dir mrna_out/
-# → mrna_out/{cds.fasta, no_polyA.fasta, full.fasta, manifest.json, layers.csv}
+# → mrna_out/{cds.fasta, no_polyA.fasta, full.fasta, manifest.json, mrna-sequence-parts.csv}
 ```
 
 String-of-beads mRNA: short MHC ligands linked together rather than
@@ -122,7 +122,7 @@ vaxrank --input-epitopes candidates.tsv --vaccine-type mrna --output-dir out/ \
 
 ## Output modes
 
-`--vaccine-type` defaults to `peptide`. `--output-dir` enables construct files:
+`--vaccine-type` defaults to `peptide mrna`. Specify one type to emit only that modality. `--output-dir` enables construct files:
 a single vaccine type writes directly into the directory, while multiple types
 write into `peptide/` and `mrna/` subdirectories. Analysis reports have their
 own `--output-*` flags and can be requested without writing construct files.
@@ -139,9 +139,27 @@ vaxrank --input-lens patient.lens.tsv --vaccine-type mrna \
         --output-dir mrna_out/ --ensembl-release 102
 ```
 
-Reports use retained annotation when available. Saved native CTA/viral reports need no
-Ensembl release; mutation reports need `--ensembl-release` when annotation is
-missing. This holds equally for single files, external inputs and manifests.
+One text/PDF report in the run directory shows **emitted products first**, then
+compact candidate rankings linked to those products. Product sequences, lengths,
+antigen placements and source counts come from the actual assembly outputs.
+Candidate windows may be longer than a selected minimal epitope or differ from a
+trimmed product. Candidate prediction scores do not establish final-product or
+junction coverage. Per-modality directories contain construct files; they do not
+repeat the report.
+
+Add `--report-candidate-details` to append annotated source windows and epitope
+tables. This appendix labels target and self epitopes consistently for mutations,
+noncanonical ORFs and other admitted sources. Full producer JSON stays in the
+native dataset. Compact reports need no annotation queries; the detailed mutation
+appendix uses retained annotation or needs `--ensembl-release` when it is missing.
+This holds equally for single files, external inputs and manifests.
+
+The Python report API accepts `TemplateDataCreator(..., products={"peptide":
+peptides, "mrna": rnas}, candidate_details=False)`, where values are the emitted
+construct lists. An empty list means a successful run with no products; omitting
+`products` produces an analysis-only report. This replaces the old
+`vaccine_constructions`, `mrna_ranking_decisions` and `target_alleles` report
+arguments: selection forecasts are no longer displayed as final products.
 
 ## Peptide construct files
 
@@ -160,7 +178,7 @@ comes from `--antigen-content` and `--peptide-antigens-per-construct`.
 ## mRNA construct files
 
 A directory holding three FASTAs (`cds.fasta`, `no_polyA.fasta`, `full.fasta`)
-plus `manifest.json` (per-element view) and `layers.csv` (long-format
+plus `manifest.json` (per-element view) and `mrna-sequence-parts.csv` (long-format
 per-element table with AA and nt). Codon optimization uses
 [DnaChisel](https://github.com/Edinburgh-Genome-Foundry/DnaChisel); 2A
 self-cleaving peptides keep their published codon usage automatically.
@@ -194,7 +212,7 @@ Codon optimization:
 |---|---|
 | `--mrna-codon-species` | Target organism for codon usage (default `h_sapiens`) |
 | `--mrna-codon-method` | DnaChisel optimization strategy |
-| `--mrna-csv-no-full-rows` | Skip the `full` polyA'd rows in `layers.csv` (saves disk space) |
+| `--mrna-csv-no-full-rows` | Skip the `full` polyA'd rows in `mrna-sequence-parts.csv` (saves disk space) |
 
 ### Junction linker optimization
 

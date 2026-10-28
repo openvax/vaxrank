@@ -1,0 +1,12 @@
+<h2 id="ranking">Candidate ranking</h2>
+<p>Ranked source windows and their combined scores. These windows are candidates for assembly; final sequences and placements are listed under Emitted products.</p>
+{% if ranked_candidates %}
+<table class="pure-table pure-table-bordered candidate-ranking">
+<thead><tr><th>Rank</th><th>Source / gene</th><th>Score</th><th>Top candidate window</th><th>Linked products</th></tr></thead>
+<tbody>{% for candidate in ranked_candidates %}<tr>
+<td>{{ candidate.rank }}</td><td>{{ candidate.gene }} ({{ candidate.kind }})<br>{{ candidate.identifier }}</td>
+<td>{{ candidate.score }}</td><td class="sequence-cell">{{ candidate.window }}<br>{{ candidate.window_count }} candidate window(s)</td>
+<td>{{ candidate.products }}</td>
+</tr>{% endfor %}</tbody></table>
+{% if not candidate_details %}<p>Use <code>--report-candidate-details</code> to append detailed source windows and epitope tables.</p>{% endif %}
+{% else %}<p>No candidates passed ranking.</p>{% endif %}

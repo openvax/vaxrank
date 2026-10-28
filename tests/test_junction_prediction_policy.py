@@ -317,8 +317,12 @@ def test_osteosarc_vcf_bam_with_multiple_models_emits_default_reports(tmp_path, 
     assert model_calls
     for modality in ['peptide', 'mrna']:
         assert json.loads((output / modality / 'manifest.json').read_text())
-        assert (output / modality / 'vaccine_report.pdf').stat().st_size > 0
-        assert (output / modality / 'vaccine_report.txt').stat().st_size > 0
+        assert not (output / modality / 'vaccine_report.pdf').exists()
+        assert not (output / modality / 'vaccine_report.txt').exists()
+    assert (output / 'vaccine_report.pdf').stat().st_size > 0
+    report = (output / 'vaccine_report.txt').read_text()
+    assert 'Emitted products' in report and 'Candidate ranking' in report
+    assert 'Candidate window details' not in report
     construct, = json.loads((output / 'mrna/manifest.json').read_text())
     assert len(construct['antigens']) == 2
     assert construct['elements']['junction_swap'] == {

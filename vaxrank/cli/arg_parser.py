@@ -824,6 +824,10 @@ def add_peptide_output_args(group):
 
 def add_supplemental_report_args(arg_parser):
     report_args_group = arg_parser.add_argument_group("Supplemental report options")
+    report_args_group.add_argument(
+        '--report-candidate-details', action='store_true',
+        help='Append detailed candidate windows and epitope tables to the product report. '
+             'The default shows emitted products and a compact candidate ranking.')
     # Primary option uses dashes; underscore version kept for backwards compatibility
     report_args_group.add_argument(
         "--cosmic-vcf-filename",
@@ -964,7 +968,7 @@ def require_annotations_for_template_reports(args, ranked):
             'output_pdf_report',
         )
     )
-    if not needs_transcripts:
+    if not needs_transcripts or not getattr(args, 'report_candidate_details', False):
         return
     if getattr(args, 'ensembl_release', None) is not None:
         return

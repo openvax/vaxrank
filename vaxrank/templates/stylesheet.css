@@ -1,222 +1,50 @@
 /* this is to fix HTML->PDF rendering on Debian: wkhtmltopdf screws up the 
 line heights otherwise */
-table, table.th, table.td {
-    line-height: 1.1em;
-}
-
-#main {
-	padding: 4em;
-}
-
-/* Various headers */
-#report-header {
-	padding-bottom: 1em;
-	margin-top: -2em;
-}
-
-#patient-info {
-	padding-bottom: 1em;
-}
-
-#variants {
-	padding-top: 1em;
-	padding-bottom: 1em;
-}
-
-#effects {
-	margin-bottom: 1.5em;
-}
-
-#peptides {
-	margin-bottom: 1.5em;
-}
-
-#args {
-	padding-top: 2em;
-	padding-bottom: 1em;
-}
-
-/* Patient info */
-table.patient-info {
-	width: 90%;
-}
-
-col.patient-info-column-one {
-	width: 40%;
-}
-
-/* Command-line args */
-table.args {
-	width: 90%;
-}
-
-col.args-column-one {
-	width: 40%;
-}
-
-/* Variants */
-ol.main {
-	padding-left: 1.2em;
-	margin-left: 0.1em;
-	font-size: 2em;
-	color: #b3b3b3;
-}
-
-li.variant-list-item {
-	border-left: 0.3em solid;
-	padding: 0 2em 0 2em;
-	margin-bottom: 2em;
-	page-break-before: always;
-	page-break-after: always;
-}
-
-li.variant-list-item:nth-child(odd) {
-	border-left: 0.3em dotted;
-	padding: 0 2em 0 2em;
-	margin-bottom: 2em;
-	page-break-before: always;
-	page-break-after: always;
-}
-
-div.variant-span {
-	font-size: 16px;
-	color: black;
-}
-
-table.variant {
-	margin-top: -2em;
-	width: 90%;
-}
-
-col.variant-column-one {
-	width: 40%;
-}
-
-col.variant-column-two {
-	width: 60%;
-}
-
-thead.variant-head {
-	font-size: 135%;
-	margin-left: -2px;
-}
-
-td.variant-head {
-	padding-left: 0.7em;
-}
-
-/* Peptides */
-h4.peptides {
-	page-break-before: always;
-}
-
-div.wt-epitopes {
-	page-break-after: always;
-	page-break-inside: avoid;
-	margin: 2em 0 2em 2em;
-}
-
-table.wt-epitopes {
-	font-size: 80%;
-}
-
-ol.peptides {
-	padding-left: 0;
-	list-style-position: inside;
-}
-
-li.peptide {
-	page-break-inside: avoid;
-	page-break-before: always;
-}
-
-table.peptide {
-	margin: -1em 0 2em 2em;
-	width: 80%;
-}
-
-span.mutant {
-	background-color: yellow;
-	border: 1px;
-	border-style: solid;
-	border-color: red;
-	padding: 2px;
-	margin-left: 2px;
-	margin-right: 2px;
-}
-
-table.peptide-inner {
-	width: 100%;
-	border: none;
-}
-
-td.peptide-inner {
-	padding: 0;
-}
-
-td.peptide-inner-header {
-	font-weight: bold;
-	text-align: center;
-	font-size: 125%;
-	padding: 0.75em;
-}
-
-col.peptide-data-column-one {
-	width: 70%;
-}
-
-col.peptide-data-column-two {
-	width: 30%;
-}
-
-col.epitope-data-column-one {
-	width: 16%;
-}
-
-col.epitope-data-column-two {
-	width: 16%;
-}
-
-col.epitope-data-column-three {
-	width: 16%;
-}
-
-col.epitope-data-column-four {
-	width: 16%;
-}
-
-col.epitope-data-column-five {
-	width: 16%;
-}
-
-col.epitope-data-column-six {
-	width: 16%;
-}
-
-table.epitope-inner {
-	font-size: 80%;
-	width: 100%;
-	border: none;
-}
-
-/* Signatures */
-table.signature {
-	width: 70%;
-}
-
-table.signature-inner {
-	width: 100%;
-	border: none;
-}
-
-td.signature-inner {
-	padding: 0;
-}
-
-col.signature-column-one {
-	width: 30%;
-}
-
-col.signature-column-two {
-	width: 70%;
-}
+html { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #182431; }
+body { margin: 0; }
+@page { size: A4; margin: 16mm; }
+* { box-sizing: border-box; }
+.pure-table { border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 12px; }
+.pure-table th, .pure-table td { padding: 0.5em; text-align: left; vertical-align: top;
+    border: 1px solid #b7c4cf; overflow-wrap: anywhere; word-wrap: break-word; }
+.pure-table th, .pure-table thead { background: #e9f0f4; font-weight: bold; }
+thead { display: table-header-group; }
+tr { page-break-inside: avoid; }
+h2 { margin-top: 1.8em; border-bottom: 2px solid #326681; padding-bottom: 0.3em; }
+h3, h4, h5 { page-break-after: avoid; }
+p { line-height: 1.45; }
+.sequence { font: 12px/1.5 monospace; white-space: pre-wrap; word-wrap: break-word;
+    padding: 0.8em; background: #f2f6f8; border-left: 3px solid #326681; }
+.sequence-cell { font-family: monospace; word-break: break-all; }
+.candidate-ranking { table-layout: fixed; }
+.candidate-ranking th:nth-child(1) { width: 6%; }
+.candidate-ranking th:nth-child(2) { width: 27%; }
+.candidate-ranking th:nth-child(3) { width: 9%; }
+.candidate-ranking th:nth-child(4) { width: 35%; }
+.candidate-ranking th:nth-child(5) { width: 23%; }
+.product-antigens { table-layout: fixed; }
+.product-antigens th:nth-child(1) { width: 30%; }
+.product-antigens th:nth-child(2) { width: 35%; }
+.product-antigens th:nth-child(3) { width: 15%; }
+.product-antigens th:nth-child(4) { width: 20%; }
+.note { font-size: 11px; color: #465765; }
+.product { margin: 1.5em 0; }
+.manufacturability table { width: 70%; }
+/* Keep long source IDs and run arguments within the printable page. */
+.pure-table { table-layout: fixed; }
+#main { padding: 1em; }
+#report-header { margin-top: 0; }
+.patient-info-column-one, .args-column-one, .variant-column-one { width: 40%; }
+.variant-column-two { width: 60%; }
+.args .arg { word-break: break-all; }
+ol.main, ol.peptides { padding-left: 1.3em; }
+.variant-list-item { margin: 2em 0; page-break-before: always; }
+.peptide { margin: 2em 0; }
+.candidate-sequence { font-family: monospace; overflow-wrap: anywhere; word-wrap: break-word; }
+.mutant { background: #fff0a8; border-bottom: 2px solid #bb5e00; }
+.epitopes { font-size: 10px; }
+.epitopes td, .epitopes th { word-break: break-all; padding: 0.4em; }
+.signature { width: 70%; margin-top: 2em; }
+.signature-inner { border: none; }
+.signature-column-one { width: 30%; }
+.signature-column-two { width: 70%; }

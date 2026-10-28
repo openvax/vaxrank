@@ -59,6 +59,7 @@ def _assert_outputs_choose_lowest_epitope_score(ranked, tmp_path):
     assert len(mrna_constructs) == 1
     assert mrna_constructs[0].antigen_names == [expected_name]
     data = TemplateDataCreator(
+        candidate_details=True,
         ranked_variants_with_vaccine_peptides=ranked,
         patient_info=PatientInfo(patient_id="construct-ranking"),
         final_review=None, reviewers=None,

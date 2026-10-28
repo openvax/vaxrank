@@ -1,0 +1,36 @@
+=== Emitted products ===
+{% if product_groups %}
+Exact products written by this run. Positions are zero-based, end-exclusive amino-acid positions in the peptide or encoded protein.
+{% for group in product_groups %}
+
+{{ group.modality }}: constructs {{ group.counts.constructs }} ({{ group.counts.unique_construct_sequences }} unique sequences); antigen slots {{ group.counts.antigen_slots }}; unique antigen sequences {{ group.counts.unique_antigen_sequences if group.counts.unique_antigen_sequences is not none else 'unavailable' }}.
+{% if group.counts.source_candidates %}
+Recorded source events: {{ group.counts.source_events }}; candidate mappings without a recorded event: {{ group.counts.source_candidates_without_event }}.
+Related alternative sequences do not establish independent target coverage.
+{% endif %}
+{% if group.files %}Product files (relative to the run output directory): {{ group.files | join(', ') }}.
+{% endif %}
+{% for product in group.products %}
+
+{{ product.name }}: {{ product.length }} {{ product.unit }}
+{% if product.unit == 'aa' %}N-terminal acetylation: {{ 'yes' if product.n_terminal_acetylation else 'no' }}; C-terminal amidation: {{ 'yes' if product.c_terminal_amidation else 'no' }}.
+{% endif %}
+{{ 'Full nucleotide sequence, including polyA' if product.unit == 'nt' else 'Manufactured amino-acid sequence' }}:
+{{ product.sequence | wordwrap(70, break_long_words=True) }}
+{% if product.protein %}Encoded protein:
+{{ product.protein | wordwrap(70, break_long_words=True) }}
+{% endif %}
+{% for antigen in product.antigens %}
+  {{ antigen.name }}: [{{ antigen.start }}, {{ antigen.end }}), {{ antigen.length }} aa
+  {{ antigen.sequence }}
+  Source mappings: {{ antigen.sources if antigen.sources is not none else "unavailable" }} candidates, {{ antigen.transcripts if antigen.transcripts is not none else "unavailable" }} transcripts; genes: {{ antigen.genes or 'unavailable' }}.
+{% else %}Historical product: antigen placement/source mappings were not recorded. Labels: {{ product.antigen_names | join(', ') }}.
+{% endfor %}
+{% if include_manufacturability and product.manufacturability %}Manufacturability:
+{% for key, value in product.manufacturability.items() %}  {{ key | replace('_', ' ') }}: {{ value }}
+{% endfor %}{% endif %}
+{% else %}No {{ group.modality }} products were emitted.
+{% endfor %}
+{% endfor %}
+{% else %}No construct files were emitted. Use --output-dir to request product assembly. Candidate windows below are analysis results.
+{% endif %}

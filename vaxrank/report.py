@@ -129,12 +129,19 @@ class TemplateDataCreator(object):
             dna_vaf_by_variant=None,
             source_vaf_by_variant=None,
             processing_predictions_by_key=None,
-            mrna_ranking_decisions=None,
-            vaccine_constructions=None,
-            target_alleles=None,
-            include_manufacturability=None):
+            include_manufacturability=None,
+            products=None,
+            product_files=None,
+            candidate_details=False):
         """
-        Construct a TemplateDataCreator object, from the output of the vaxrank pipeline.
+        Build a report from ranked candidates and actual assembly products.
+
+        ``products`` maps modality names (``peptide`` / ``mrna``) to emitted
+        construct objects. Omit it for analysis-only reports. Empty modality
+        lists represent successful runs with no products. ``product_files``
+        supplies paths for the file listing. ``candidate_details=True`` adds
+        the annotated candidate-window and epitope appendix; the default
+        shows products and a compact ranking without querying annotation.
 
         ``processing_predictions_by_key`` is the map returned by
         :func:`vaxrank.processing.annotate_processing` —
@@ -149,22 +156,13 @@ class TemplateDataCreator(object):
         self.source_vaf_by_variant = source_vaf_by_variant or {}
         self.processing_predictions_by_key = (
             processing_predictions_by_key or {})
-        # Issue #270: mRNA ranking-decisions section. Legacy field;
-        # superseded by ``vaccine_constructions['mrna']`` in the new
-        # report layout (#269). Both reach the template so existing
-        # tests / consumers keep working.
-        self.mrna_ranking_decisions = mrna_ranking_decisions
-        # Issue #269: per-modality "Vaccine construction" sections —
-        # coverage block + selected antigens with allele tiers
-        # + dropped-past-cap list. Keys are modality names; values
-        # are the dicts produced by
-        # :func:`vaxrank.coverage.summarize_construction_decisions`.
-        self.vaccine_constructions = vaccine_constructions or {}
-        self.target_alleles = list(target_alleles or [])
+        self.products = products or {}
+        self.product_files = product_files or {}
+        self.candidate_details = candidate_details
 
         # ``vaccine_type`` is rendered in the patient-info block so
         # the reader can tell at a glance what's being designed.
-        # Multi-valued (default ``['peptide']``); render as a
+        # Multi-valued (CLI default ``['peptide', 'mrna']``); render as a
         # comma-list so multi-mode runs (peptide+mrna) read cleanly.
         raw_types = args_for_report.get('vaccine_type') or ['peptide']
         if isinstance(raw_types, str):
@@ -206,11 +204,7 @@ class TemplateDataCreator(object):
             'reviewers': reviewers.split(',') if reviewers else [],
             'final_review': final_review,
             'input_json_file': input_json_file,
-            # these report sections are optional. ``include_manufacturability``
-            # can be overridden per report (the split-report layout turns it
-            # off for the modality-agnostic core report and the mRNA report,
-            # on for the peptide report); when None it follows the run's
-            # ``--manufacturability`` resolution.
+            # Optional product metrics and detailed candidate epitope tables.
             'include_manufacturability': (
                 args_for_report['manufacturability']
                 if include_manufacturability is None
@@ -219,7 +213,7 @@ class TemplateDataCreator(object):
         }
 
         # map from peptide objects to their COSMIC IDs if they exist
-        if cosmic_vcf_filename:
+        if cosmic_vcf_filename and candidate_details:
             logger.info('Loading COSMIC data...')
             self.cosmic_variant_collection = load_vcf_fast(
                 cosmic_vcf_filename, allow_extended_nucleotides=True, include_info=False)
@@ -443,8 +437,16 @@ class TemplateDataCreator(object):
             ('Effect type', antigen.kind),
             ('Source identifier', antigen.display_identifier),
         ])
-        for name, value in antigen.source_metadata:
-            result[name.replace('_', ' ').title()] = value
+        metadata = dict(antigen.source_metadata)
+        for name in (
+                'antigen_source', 'isovar_family', 'isovar_evidence_id', 'sequence_source',
+                'junction_offset_aa', 'origin_descriptor', 'left_breakpoint', 'right_breakpoint',
+                'left_gene', 'right_gene', 'left_transcript', 'right_transcript', 'fusion_type',
+                'rna_reads_covering_breakpoint', 'rna_reads_supporting_fusion'):
+            if name in metadata:
+                result[name.replace('_', ' ').title()] = metadata[name]
+        if metadata:
+            result['Full source evidence'] = 'Retained in the native dataset and source mappings in the manifest'
         return result
 
     def effect_data(self, predicted_effect, selected_effect=None):
@@ -786,13 +788,62 @@ class TemplateDataCreator(object):
 
         return databases
 
+    def _ranked_candidates(self):
+        """Compact ranking with selection links from actual emitted products."""
+        from .assembly_antigens import emitted_antigens_for_candidate
+        products = [p for group in self.products.values() for p in group]
+        mappings_available = any(p.antigen_sources for p in products)
+        rows = []
+        for source, peptides in self.ranked_variants_with_vaccine_peptides:
+            if not peptides:
+                continue
+            top = peptides[0]
+            selected = {name for peptide in peptides for name, antigens in emitted_antigens_for_candidate(
+                peptide.antigen, peptide.amino_acids, peptide.epitopes, products).items() if antigens}
+            rows.append(dict(rank=len(rows) + 1, gene=top.antigen.display_gene_name,
+                identifier=(source.short_description if isinstance(source, Variant) else top.antigen.display_identifier),
+                kind=top.antigen.kind, score=_sanitize(top.combined_score),
+                window=top.amino_acids, window_count=len(peptides),
+                products=', '.join(sorted(selected)) if selected else
+                    'Not selected' if mappings_available else 'Selection mappings unavailable' if products
+                    else 'No products emitted'))
+        return rows
+
+    def _product_data(self):
+        """Small template view of the products already written by the CLI."""
+        from .assembly_antigens import summarize_products
+        groups = []
+        for modality, products in self.products.items():
+            rows = []
+            for product in products:
+                antigens = []
+                for antigen in product.antigens:
+                    sources = antigen.get('sources', ())
+                    antigens.append(dict(name=antigen['name'], sequence=antigen['aa'],
+                        start=antigen['start_aa'], end=antigen['end_aa'], length=len(antigen['aa']),
+                        sources=len(sources) if 'sources' in antigen else None,
+                        genes=', '.join(sorted({s['gene_name'] for s in sources if s['gene_name']})),
+                        transcripts=len({t for s in sources for t in s['transcript_ids']}) if 'sources' in antigen else None))
+                rows.append(dict(name=product.name, sequence=product.sequence, length=len(product.sequence),
+                    unit='aa' if modality == 'peptide' else 'nt',
+                    protein=product.cds_aa if modality == 'mrna' else None,
+                    antigens=antigens, antigen_names=product.antigen_names,
+                    n_terminal_acetylation=product.components.get('n_terminal_acetylation'),
+                    c_terminal_amidation=product.components.get('c_terminal_amidation'),
+                    manufacturability={k: _sanitize(v) for k, v in product.manufacturability.items()}
+                        if modality == 'peptide' else {}))
+            groups.append(dict(modality=modality, products=rows, counts=summarize_products(products),
+                               files=self.product_files.get(modality, ())))
+        return groups
+
     def compute_template_data(self):
         patient_info = self._patient_info()
 
         # list ranked variants with their peptides
         variants = []
         num = 0
-        for (variant, vaccine_peptides) in self.ranked_variants_with_vaccine_peptides:
+        detailed = self.ranked_variants_with_vaccine_peptides if self.candidate_details else ()
+        for (variant, vaccine_peptides) in detailed:
             if len(vaccine_peptides) == 0:
                 try:
                     gene_names = variant.gene_names
@@ -950,17 +1001,9 @@ class TemplateDataCreator(object):
             'patient_info': patient_info,
             'variants': variants,
             'package_versions': package_versions,
-            # Issue #270: legacy mRNA-only ranking block. Kept for
-            # back-compat with older templates / tests; new
-            # consumers read ``vaccine_constructions['mrna']``.
-            'mrna_ranking': self.mrna_ranking_decisions,
-            # Issue #269: per-modality "Vaccine construction"
-            # blocks. Keyed by modality name (``'peptide'`` /
-            # ``'mrna'`` / future ``'dna'``). Empty dict when no
-            # ranked antigens exist; the template renders blocks
-            # only for keys present here.
-            'vaccine_constructions': self.vaccine_constructions,
-            'target_alleles': self.target_alleles,
+            'ranked_candidates': self._ranked_candidates(),
+            'product_groups': self._product_data(),
+            'candidate_details': self.candidate_details,
         })
         return self.template_data
 
@@ -994,8 +1037,9 @@ def _pdf_via_pdfkit(html_path, pdf_report_path):
     import pdfkit
 
     options = {
-        'zoom': 0.55,
-        'margin-top': '20mm'
+        'page-size': 'A4',
+        'margin-top': '16mm', 'margin-bottom': '16mm',
+        'margin-left': '16mm', 'margin-right': '16mm'
     }
 
     if sys.platform in ('linux', 'linux2'):

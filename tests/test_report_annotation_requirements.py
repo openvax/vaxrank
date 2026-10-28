@@ -58,7 +58,7 @@ def test_native_nonmutation_reports_and_design_need_no_ensembl(
     html = tmp_path / 'report.html'
     run_cli(input_args(route, native_antigens, tmp_path) + [
         '--output-dir', str(directory), '--output-html-report', str(html),
-        '--vaccine-type', 'peptide', '--no-processing-aware-annotation'])
+        '--vaccine-type', 'peptide', '--no-processing-aware-annotation', '--report-candidate-details'])
     text = html.read_text()
     assert 'CTA-source' in text and 'viral-source' in text
     assert 'Source provenance' in text
@@ -77,7 +77,7 @@ def test_pooled_native_inputs_render_real_reports_without_ensembl(native_antigen
     manifest = write_input_manifest(tmp_path / 'pool.json', paths, patient_id='patient')
     report = tmp_path / 'pool.txt'
     run_cli(['--input-manifest', manifest, '--output-ascii-report', str(report),
-             '--no-processing-aware-annotation'])
+             '--no-processing-aware-annotation', '--report-candidate-details'])
     text = report.read_text()
     assert 'CTA-source' in text and 'viral-source' in text
 
@@ -90,7 +90,7 @@ def test_mutation_and_mixed_reports_still_require_annotation(native_antigens, tm
     report = tmp_path / 'report.txt'
     with pytest.raises(ValueError, match='mutation antigen.*--ensembl-release'):
         run_cli(['--input-manifest', manifest, '--output-ascii-report', str(report),
-                 '--config-text', 'epitopes.score_expr=1.0', '--no-processing-aware-annotation'])
+                 '--config-text', 'epitopes.score_expr=1.0', '--no-processing-aware-annotation', '--report-candidate-details'])
     assert not report.exists()
 
 
@@ -99,7 +99,7 @@ def test_mutations_filtered_out_of_report_do_not_require_annotation(tmp_path):
     report = tmp_path / 'empty.txt'
     run_cli(['--external-input', 'lens=' + str(lens), '--output-ascii-report', str(report),
              '--config-text', 'epitopes.filter_expr=affinity.value < 0',
-             '--no-processing-aware-annotation'])
+             '--no-processing-aware-annotation', '--report-candidate-details'])
     assert report.is_file()
 
 
@@ -117,7 +117,7 @@ def test_native_mutation_reports_use_retained_annotation(mutation_native, tmp_pa
     report = tmp_path / 'mutation.txt'
     run_cli(input_args(route, path, tmp_path, reference_assembly='support-test-+') + [
         '--index-native-references', '--output-ascii-report', str(report),
-        '--vaccine-peptide-length', '10', '--no-processing-aware-annotation'])
+        '--vaccine-peptide-length', '10', '--no-processing-aware-annotation', '--report-candidate-details'])
     text = report.read_text()
     assert 'Effect type: Substitution' in text and 'Effect description: p.K6Q' in text
 
@@ -127,7 +127,7 @@ def test_native_manifest_rejects_conflicting_retained_reference(mutation_native,
     report = tmp_path / 'wrong-reference.txt'
     with pytest.raises(ValueError, match='conflicting reference_assembly'):
         run_cli(input_args('manifest', path, tmp_path, reference_assembly='GRCh38') + [
-            '--output-ascii-report', str(report), '--no-processing-aware-annotation'])
+            '--output-ascii-report', str(report), '--no-processing-aware-annotation', '--report-candidate-details'])
     assert not report.exists()
 
 
@@ -139,7 +139,7 @@ def test_native_mutation_without_transcripts_requires_annotation(mutation_native
     report = tmp_path / 'unannotated.txt'
     with pytest.raises(ValueError, match='mutation antigen.*--ensembl-release'):
         run_cli(['--external-input', 'epitopes=' + str(path), '--output-ascii-report', str(report),
-                 '--vaccine-peptide-length', '10', '--no-processing-aware-annotation'])
+                 '--vaccine-peptide-length', '10', '--no-processing-aware-annotation', '--report-candidate-details'])
     assert not report.exists()
 
 
@@ -151,8 +151,24 @@ def test_missing_native_annotation_is_a_clear_cli_error(mutation_native, tmp_pat
     report = tmp_path / 'missing.txt'
     with pytest.raises(SystemExit) as error:
         main(['--input-epitopes', str(path), '--output-ascii-report', str(report),
-              '--vaccine-peptide-length', '10', '--no-processing-aware-annotation'])
+              '--vaccine-peptide-length', '10', '--no-processing-aware-annotation', '--report-candidate-details'])
     assert error.value.code == 1
     message = capsys.readouterr().err
     assert 'vaxrank: error:' in message and '.references' in message
     assert 'Traceback' not in message and not report.exists()
+
+
+@pytest.mark.parametrize('route', ['single', 'external', 'manifest'])
+def test_compact_mutation_report_needs_no_annotation_queries(mutation_native, tmp_path, monkeypatch, route):
+    _, path = mutation_native
+    delete_original_reference(tmp_path)
+    shutil.rmtree(str(path) + '.references')
+    monkeypatch.setattr('pyensembl.download_cache.DownloadCache._fetch', forbidden)
+    monkeypatch.setattr('vaxrank.report.TemplateDataCreator.effect_data', forbidden)
+    report = tmp_path / 'compact.txt'
+    run_cli(input_args(route, path, tmp_path, reference_assembly='support-test-+') + [
+        '--output-ascii-report', str(report), '--vaccine-peptide-length', '10',
+        '--no-processing-aware-annotation'])
+    text = report.read_text()
+    assert 'Candidate ranking' in text and 'AAAAQGG' in text
+    assert 'Candidate window details' not in text

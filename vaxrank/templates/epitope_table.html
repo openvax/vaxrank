@@ -1,0 +1,8 @@
+{% if epitope_rows %}
+<table class="pure-table epitopes">
+<thead><tr>{% for key in epitope_rows[0] %}<th>{{ key }}</th>{% endfor %}</tr></thead>
+<tbody>{% for epitope in epitope_rows %}<tr>
+{% for key, value in epitope.items() %}<td>{{ value | display_epitope_value }}</td>{% endfor %}
+</tr>{% endfor %}</tbody>
+</table>
+{% else %}<p>No predicted epitopes in this category.</p>{% endif %}

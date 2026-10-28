@@ -121,3 +121,16 @@ def summarize_products(products):
                     if len(antigens) == sum(len(p.antigen_names) for p in products) else None),
                 source_candidates=len(sources), source_events=len(events),
                 source_candidates_without_event=unassigned, evidence_groups=len(evidence_groups))
+
+
+def emitted_antigens_for_candidate(antigen, sequence, epitopes, products):
+    """Map a ranked candidate to actual product/antigen names using retained evidence."""
+    prediction_ids = {e.prediction_group_source for e in epitopes}
+    input_ids = {e.input_provenance.input_id for e in epitopes if e.input_provenance}
+    return {product.name: sorted({name for name, sources in product.antigen_sources.items()
+        for source in sources
+        if source['source_identifier'] == antigen.source_identifier
+        and source['gene_name'] == antigen.gene_name
+        and set(source['input_ids']) <= input_ids
+        and set(source['prediction_ids']) <= prediction_ids
+        and source['candidate_sequence'] in sequence}) for product in products}
