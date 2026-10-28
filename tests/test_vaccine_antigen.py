@@ -4,6 +4,7 @@
 #
 #       http://www.apache.org/licenses/LICENSE-2.0
 
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
@@ -190,12 +191,6 @@ def test_vaccine_peptide_uses_targetable_mask_and_antigen_self_result():
     vaccine_peptide = VaccinePeptide(
         antigen=antigen,
         epitopes=[target, non_target, exact_self],
-        combined_score_expr="target_epitope_score",
-        ranking_rules=(
-            "target_epitope_score",
-            "manufacturability",
-            "self_epitope_score",
-        ),
     )
 
     assert vaccine_peptide.mutant_protein_fragment is None
@@ -208,6 +203,9 @@ def test_vaccine_peptide_uses_targetable_mask_and_antigen_self_result():
     assert restored.antigen == antigen
     assert restored.mutant_protein_fragment is None
     assert restored.amino_acids == antigen.amino_acids
+    assert restored.combined_score == vaccine_peptide.combined_score
+    assert restored.ranking_rules == vaccine_peptide.ranking_rules
+    assert restored.lexicographic_sort_key() == vaccine_peptide.lexicographic_sort_key()
 
 
 def test_vaccine_peptide_fails_closed_for_held_out_or_mismatched_policy():
@@ -245,8 +243,9 @@ def test_vaccine_peptide_fails_closed_for_held_out_or_mismatched_policy():
 def test_antigen_backed_vaccine_peptide_rejects_mutation_only_scoring():
     antigen = cta_antigen()
 
+    assert VaccinePeptide(antigen=antigen).combined_score == 0.0
     with pytest.raises(ValueError, match="combined_score_expr uses"):
-        VaccinePeptide(antigen=antigen)
+        VaccinePeptide(antigen=antigen, combined_score_expr="sqrt(n_rna_alt) * target_epitope_score")
     with pytest.raises(ValueError, match="combined_score_expr uses"):
         VaccinePeptide(
             antigen=antigen,
@@ -429,3 +428,28 @@ def test_vaccine_antigen_json_roundtrip_preserves_policy():
 
     assert restored == antigen
     assert restored.self_reference_excluded_gene_ids == ("ENSG00000185686",)
+
+
+@pytest.mark.parametrize("kind", ["mutation", "fusion", "CTA", "ERV", "splice", "viral", "SV", "isoform"])
+def test_antigen_defaults_follow_available_evidence_not_source_kind(kind):
+    from vaxrank.ranking import SOURCE_AGNOSTIC_RANKING_RULES
+    antigen = replace(cta_antigen(), kind=kind)
+    peptide = VaccinePeptide(antigen=antigen)
+    assert peptide.combined_score_expr == "target_epitope_score"
+    assert peptide.ranking_rules == SOURCE_AGNOSTIC_RANKING_RULES
+    assert peptide.combined_score == 0.0
+    peptide.lexicographic_sort_key()  # Does not attempt mutation-only RNA/position access.
+    restored = VaccinePeptide.from_json(peptide.to_json())
+    assert restored.antigen == antigen and restored.ranking_rules == peptide.ranking_rules
+
+
+@pytest.mark.parametrize("expression,rules", [("2.0", None), (None, ()), ("2.0", ("self_epitope_score",))])
+def test_antigen_defaults_do_not_replace_explicit_options(expression, rules):
+    from vaxrank.ranking import SOURCE_AGNOSTIC_RANKING_RULES
+    peptide = VaccinePeptide(antigen=cta_antigen(), combined_score_expr=expression, ranking_rules=rules)
+    assert peptide.combined_score_expr == (expression or "target_epitope_score")
+    assert peptide.ranking_rules == (SOURCE_AGNOSTIC_RANKING_RULES if rules is None else rules)
+    assert peptide.combined_score == (2.0 if expression else 0.0)
+    restored = VaccinePeptide.from_json(peptide.to_json())
+    assert restored.combined_score_expr == peptide.combined_score_expr
+    assert restored.ranking_rules == peptide.ranking_rules

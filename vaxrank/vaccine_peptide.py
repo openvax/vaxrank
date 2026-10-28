@@ -27,11 +27,11 @@ from .manufacturability import (
     compute_manufacturability_tuple,
 )
 from .ranking import (
-    DEFAULT_RANKING_RULES,
+    SOURCE_AGNOSTIC_RANKING_RULES,
     MUTATION_SPECIFIC_RANKING_RULES,
     compute_ranking_tuple,
 )
-from .vaccine_config import DEFAULT_COMBINED_SCORE_EXPR
+from .vaccine_config import DEFAULT_COMBINED_SCORE_EXPR, SOURCE_AGNOSTIC_COMBINED_SCORE_EXPR
 from .vaccine_antigen import ANTIGEN_KIND_MUTATION, VaccineAntigen
 
 
@@ -85,17 +85,24 @@ class VaccinePeptide(DataclassSerializable):
         :mod:`vaxrank.combined_score_dsl` for grammar and bindings
         (``target_epitope_score``, ``n_alt_reads``,
         ``expression_score``, ...). ``None`` resolves to
-        :data:`vaxrank.vaccine_config.DEFAULT_COMBINED_SCORE_EXPR`.
-        There is no separate mode enum — the expression IS the
-        mechanism.
+        ``sqrt(n_rna_alt) * target_epitope_score`` with a mutation fragment,
+        or ``target_epitope_score`` for an antigen without one. Explicit
+        expressions are preserved and must use available bindings.
 
     ranking_rules : sequence of str or None
         Ordered list of ranking rule names driving the lexicographic
         sort tuple on ``lexicographic_sort_key``. Names must appear in
         ``RANKING_RULE_REGISTRY``; the special sentinel
         ``"manufacturability"`` expands to the peptide's manufacturability
-        sort tuple. When None the 7-entry default order is used
-        (byte-identical with prior releases).
+        sort tuple. ``None`` uses the seven-entry mutation default when a
+        fragment is present. Without a fragment it uses target epitope score,
+        manufacturability, then self epitope score. Explicit rules are preserved;
+        mutation-only rules require a fragment.
+
+    antigen : VaccineAntigen, optional
+        Source sequence, targetable intervals and provenance. Required when no
+        mutation fragment is supplied. Its source kind does not fabricate RNA
+        support: defaults depend on the available fragment evidence.
     """
 
     mutant_protein_fragment: Any = None
@@ -105,8 +112,8 @@ class VaccinePeptide(DataclassSerializable):
     manufacturability_thresholds: Optional[dict] = None
     manufacturability_rules: Optional[tuple] = None
     # DSL expression that produces this peptide's ``combined_score``.
-    # ``None`` resolves to :data:`DEFAULT_COMBINED_SCORE_EXPR`. There
-    # is no fallback mode enum — this string is the single mechanism.
+    # ``None`` resolves from the available fragment evidence. The resolved
+    # expression is used by the DSL and retained during serialization.
     combined_score_expr: Optional[str] = None
     ranking_rules: Optional[tuple] = None
     antigen: Optional[VaccineAntigen] = None
@@ -175,7 +182,10 @@ class VaccinePeptide(DataclassSerializable):
         # the single artifact ``combined_score`` evaluates against —
         # there is no fallback Python branch for the default formula.
         if self.combined_score_expr is None:
-            self.combined_score_expr = DEFAULT_COMBINED_SCORE_EXPR
+            self.combined_score_expr = (DEFAULT_COMBINED_SCORE_EXPR if fragment is not None
+                                        else SOURCE_AGNOSTIC_COMBINED_SCORE_EXPR)
+        if self.ranking_rules is None and fragment is None:
+            self.ranking_rules = SOURCE_AGNOSTIC_RANKING_RULES
         self._combined_score_expr_ast = parse_combined_score_expr(
             self.combined_score_expr)
         if fragment is None:
@@ -189,14 +199,7 @@ class VaccinePeptide(DataclassSerializable):
                     "mutation-only or unknown binding(s): %s"
                     % ", ".join(sorted(unavailable_bindings))
                 )
-            resolved_ranking_rules = (
-                DEFAULT_RANKING_RULES
-                if self.ranking_rules is None
-                else self.ranking_rules
-            )
-            mutation_rules = (
-                set(resolved_ranking_rules) & MUTATION_SPECIFIC_RANKING_RULES
-            )
+            mutation_rules = set(self.ranking_rules) & MUTATION_SPECIFIC_RANKING_RULES
             if mutation_rules:
                 raise ValueError(
                     "Antigen-backed VaccinePeptide ranking_rules use "

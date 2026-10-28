@@ -46,6 +46,7 @@ from .ranking import RANKING_RULE_REGISTRY
 # Everything that computes ``combined_score`` reads this constant (or a
 # user-supplied override) via the DSL — no parallel hardcoded branch.
 DEFAULT_COMBINED_SCORE_EXPR = "sqrt(n_rna_alt) * target_epitope_score"
+SOURCE_AGNOSTIC_COMBINED_SCORE_EXPR = "target_epitope_score"
 
 # LENS source categories admitted to construct ranking by default.  The
 # expression-derived self targets need an explicit opt-in: a CTA/SELF or ERV
