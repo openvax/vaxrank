@@ -188,6 +188,30 @@ class AntigenDataset:
                                 source_evidence=self.source_evidence)
 
 
+def _batched_self_matches(frame, antigens, genome):
+    """Share exhaustive queries, retaining each source's own match metadata."""
+    queries = {name: tuple(dict.fromkeys(rows.peptide))
+               for name, rows in frame.groupby('source_sequence_name', sort=False, observed=True)}
+    groups = {}
+    for name, peptides in queries.items():
+        antigen = antigens[name]
+        excluded = antigen.self_reference_excluded_gene_ids
+        for exclusions in (excluded, ()) if excluded else ((),):
+            key = (antigen.kind, exclusions)
+            if key not in groups:
+                groups[key] = (replace(antigen, self_reference_excluded_gene_ids=exclusions), {})
+            groups[key][1].update(dict.fromkeys(peptides))
+    answers = {key: self_reference_matches(peptides, antigen, genome)
+               for key, (antigen, peptides) in groups.items()}
+    matches, host_matches = {}, {}
+    for name, peptides in queries.items():
+        antigen = antigens[name]
+        matches[name] = {p: answers[(antigen.kind, antigen.self_reference_excluded_gene_ids)][p]
+                         for p in peptides}
+        host_matches[name] = {p: answers[(antigen.kind, ())][p] for p in peptides}
+    return matches, host_matches
+
+
 def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
                      annotate=None, self_matcher=None, host_reference=None, source_evidence=None):
     """Shared native-protein prediction for source-specific admission adapters.
@@ -196,6 +220,7 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     shared adaptation. It must not change sequence coordinates or measurements.
     Distinct source names and repeated native occurrences remain distinct.
     """
+    batch_reference_queries = self_matcher is None and host_reference is None
     if host_reference is not None:
         from .host_reference import HostReference
         host_reference = HostReference.load(host_reference)
@@ -255,13 +280,16 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     observed = {e.source_name for e in candidates}
     dataset.antigens.update({provenance.input_id + ':unmeasured:' + name: a
                             for name, a in antigens.items() if name not in observed})
-    matches = {name: self_matcher(frame.loc[frame.source_sequence_name.eq(name), 'peptide'], antigen, genome)
-               for name, antigen in antigens.items() if name in observed}
-    host_matches = {name: self_matcher(
-        frame.loc[frame.source_sequence_name.eq(name), 'peptide'],
-        replace(antigen, self_reference_excluded_gene_ids=()), genome)
-        if antigen.self_reference_excluded_gene_ids else matches[name]
-        for name, antigen in antigens.items() if name in observed}
+    if batch_reference_queries:
+        matches, host_matches = _batched_self_matches(frame, antigens, genome)
+    else:
+        matches = {name: self_matcher(frame.loc[frame.source_sequence_name.eq(name), 'peptide'], antigen, genome)
+                   for name, antigen in antigens.items() if name in observed}
+        host_matches = {name: self_matcher(
+            frame.loc[frame.source_sequence_name.eq(name), 'peptide'],
+            replace(antigen, self_reference_excluded_gene_ids=()), genome)
+            if antigen.self_reference_excluded_gene_ids else matches[name]
+            for name, antigen in antigens.items() if name in observed}
     dataset.epitopes = tuple(replace(
         e, input_provenance=provenance, patient_alleles=alleles,
         occurs_in_reference=host_matches[e.source_name][e.sequence].occurs,
