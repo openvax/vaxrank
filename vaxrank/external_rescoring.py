@@ -699,8 +699,11 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
     identities = [e.prediction_group_key for e in original]
     if len(set(identities)) != len(identities):
         raise ValueError("Inputs contain overlapping candidate identities; do not load an input alongside its native export")
+    # The native reader validates the dataset contract independently of row
+    # count. A successful empty analysis is replayable without invented rows.
     if not original and not any(r.dataset is not None and (
-            not r.dataset.result.df.empty or r.dataset.selection.get('source_evidence')) for r in reports):
+            r.source_format == 'epitopes' or not r.dataset.result.df.empty
+            or r.dataset.selection.get('source_evidence')) for r in reports):
         raise ValueError("External inputs contain no candidate peptides to score")
     if input_predictions_path:
         Path(input_predictions_path).parent.mkdir(parents=True, exist_ok=True)

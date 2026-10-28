@@ -234,6 +234,12 @@ settings, source mappings and audits. Unchanged replay reuses those products
 without prediction, codon optimization or annotation downloads, including
 optimized linkers and their provenance.
 
+A successful native run with zero candidates is also replayable. It retains its
+input scope and settings, and writes empty product manifests when construct
+outputs are requested. It does not acquire predictions or create placeholder
+evidence. Empty external tables and legacy prediction-only files do not carry
+this dataset contract and are rejected.
+
 Current YAML and explicit CLI options override saved defaults. Changed sources,
 policies or assembly settings invalidate retained products and audits. Combined
 designs need compatible settings or explicit overrides, and are assembled anew.

@@ -446,3 +446,11 @@ def test_empty_candidate_input_is_explicit(tmp_path):
     pd.read_csv(INPUTS[0][1], sep='\t').iloc[:0].to_csv(path, sep='\t', index=False)
     with pytest.raises(ValueError, match='no candidate peptides'):
         scoped_reports([('lens', str(path))])
+
+
+@pytest.mark.parametrize('contents', ['unrelated_column\n', 'candidate_epitope_json\n'])
+def test_empty_prediction_table_is_not_an_empty_native_run(tmp_path, contents):
+    path = tmp_path / 'empty.tsv'
+    path.write_text(contents)
+    with pytest.raises(ValueError, match='empty replay requires a native epitope dataset'):
+        prepare_reports([('epitopes', path)])
