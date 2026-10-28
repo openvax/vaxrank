@@ -17,35 +17,29 @@
                     <col class="patient-info-column-one">
                     <col class="patient-info-column-two">
                 </colgroup>
-                {% for key, val in patient_info.items() %}
+                {% for key, val in (patient_summary | default(patient_info)).items() %}
                 <tr><td>{{ key }}</td><td>{{ val }}</td></tr>
                 {% endfor %}
             </table>
             <br>
 
-            {% include "templates/products.html" %}
-            {% if ranked_candidates is defined %}{% include "templates/ranking.html" %}{% endif %}
-
-            <h3 id="args">COMMAND LINE ARGUMENTS</h3>
-            <table class="pure-table pure-table-bordered args">
-                <colgroup>
-                    <col class="args-column-one">
-                    <col class="args-column-two">
-                </colgroup>
-                {% for key, val in args %}
-                <tr><td class="arg">{{ key }}</td><td class="arg">{{ val }}</td></tr>
-                {% endfor %}
-            </table>
-            {% if input_json_file %}
-            <br><br><h4>Report generated from saved location: {{ input_json_file }}</h4>
-            {% endif %}
+            <nav class="contents" aria-label="Report contents">
+                {% if candidate_details and variants %}<a href="#candidate-details">Candidate details</a> &middot; {% endif %}
+                <a href="#ranking">Candidate ranking</a> &middot; <a href="#products">Emitted products</a> &middot;
+                <a href="#score-guide">Score guide</a> &middot; <a href="#run-details">Run details</a>
+            </nav>
+            {% include "templates/prediction_models.html" %}
             {% if candidate_details | default(true) and variants %}
-            <h2>Candidate window details</h2>
-            <p>Candidate context only. Targetable residues are highlighted; consult Emitted products for final sequences.</p>
+            <h2 id="candidate-details">Candidate window details</h2>
+            <p>Targetable residues are <span class="mutant">highlighted</span>; a vertical bar marks a deletion junction.
+            These are candidate windows. <a href="#products">Emitted products</a> lists the exact manufactured sequences.</p>
+            <p>Each epitope is paired with its recorded WT comparator when available. <span class="reference-change">Underlined WT residues</span>
+            differ at the same sequence position. WT does not establish an observed patient-normal sequence.</p>
             <ol class="main">
             {% for v in variants %}
-            <li class="variant-list-item">
+            <li class="variant-list-item" id="candidate-{{ v.num }}">
                 <div class="variant-span">
+                    <h3>{{ v.variant_data.get("Gene name", v.short_description) | e }} &middot; {{ v.short_description | e }}</h3>
                     <table class="pure-table pure-table-bordered variant">
                         <colgroup>
                             <col class="variant-column-one">
@@ -63,7 +57,7 @@
                     </table>
                     <br>
 
-                    <h4 id="effects">{{ v.effect_label | default('Predicted Effect') }}</h4>
+                    <h4>{{ v.effect_label | default('Predicted Effect') }}</h4>
                     <table class="pure-table pure-table-bordered">
                         {% for key, val in v.effect_data.items() %}
                         <tr><td>{{ key }}</td><td>{{ val }}</td></tr>
@@ -72,7 +66,7 @@
                     <br>
 
                     {% if v.databases %}
-                    <h4 id="effects">Databases</h4>
+                    <h4>Databases</h4>
                     <table class="pure-table pure-table-bordered">
                         {% for key, val in v.databases.items() %}
                         <tr><td>{{ key }}</td><td><a href="{{ val }}">{{ val }}</a></td></tr>
@@ -84,7 +78,7 @@
                     <ol class="peptides" type="i">
                         {% for p in v.peptides %}
                         <li class="peptide">
-                            <h4 class="candidate-sequence">{{ p.header_display_data.aa_before_mutation }}<span class="mutant">{{ p.header_display_data.aa_mutant }}</span>{{ p.header_display_data.aa_after_mutation }}</h4>
+                            <h4 class="candidate-sequence">{{ p.header_display_data.sequence_html }}</h4>
                             <table class="pure-table peptide-data">
                                 {% for key, val in p.peptide_data.items() %}<tr><td>{{ key }}</td><td>{{ val }}</td></tr>{% endfor %}
                             </table>
@@ -95,8 +89,7 @@
                             </table>
                             {% endif %}
                             <h5>Predicted target epitopes</h5>
-                            {% set epitope_rows = p.epitopes %}
-                            {% include "templates/epitope_table.html" %}
+                            {% include "templates/target_epitopes.html" %}
                             {% if include_wt_epitopes %}
                             <h5>Predicted self epitopes</h5>
                             {% set epitope_rows = p.wt_epitopes %}
@@ -111,6 +104,29 @@
             </ol>
 
             {% endif %}
+            {% if ranked_candidates is defined %}{% include "templates/ranking.html" %}{% endif %}
+            <section class="appendix">{% include "templates/products.html" %}</section>
+            <section class="appendix">{% include "templates/score_guide.html" %}</section>
+            <section class="appendix" id="run-details">
+            <h2>Run details</h2>
+            <table class="pure-table patient-info">
+                {% for key, val in patient_info.items() %}<tr><th>{{ key | e }}</th><td>{{ val | e }}</td></tr>{% endfor %}
+            </table>
+
+            <h3 id="args">COMMAND LINE ARGUMENTS</h3>
+            <table class="pure-table pure-table-bordered args">
+                <colgroup>
+                    <col class="args-column-one">
+                    <col class="args-column-two">
+                </colgroup>
+                {% for key, val in args %}
+                <tr><td class="arg">{{ key }}</td><td class="arg">{{ val }}</td></tr>
+                {% endfor %}
+            </table>
+            {% if input_json_file %}
+            <br><br><h4>Report generated from saved location: {{ input_json_file }}</h4>
+            {% endif %}
+            </section>
             {% if reviewers %}
             <table class="pure-table pure-table-bordered reviewed-by">
                 <thead>
