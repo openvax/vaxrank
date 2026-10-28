@@ -42,6 +42,13 @@ exact-self assessment. Conflicting reference or genotype declarations fail.
 The Python equivalent is `inputs.predict(predictor, genome=genome)`, using a
 Topiary predictor. It returns the shared `EpitopeDataset`.
 
+Exact-self lookup shares repeated peptide queries within the same antigen kind
+and gene-exclusion policy. Overlapping ORF windows therefore do not each rescan
+the complete host proteome. Every source retains its own candidate identity,
+admission evidence and full matching gene/transcript/protein provenance; shared
+queries do not pool RNA support or merge candidates. Explicit host-reference
+snapshots and custom matching callbacks retain their own matching behavior.
+
 ## Combine new sequences and saved evidence
 
 A manifest can mix new sequences with saved predictions. Paths are relative
