@@ -27,8 +27,10 @@
             {% if prediction_configuration %}
             <h2>Effective prediction configuration</h2>
             {% for stage in prediction_configuration %}
+            <div style="break-inside: avoid; page-break-inside: avoid;">
             <h3>{{ stage.stage }}: {{ stage.status }}</h3>
             <ul>{% for detail in stage.details %}<li>{{ detail }}</li>{% endfor %}</ul>
+            </div>
             {% endfor %}
             {% endif %}
             {% if ranked_candidates is defined %}{% include "templates/ranking.html" %}{% endif %}

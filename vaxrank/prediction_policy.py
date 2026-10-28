@@ -109,7 +109,8 @@ def effective_prediction_configuration(args, ranked, predictions, products, proc
     annotation = dict(
         status=('executed' if processing and getattr(args, 'processing_aware_annotation', False)
                 else 'replayed evidence; no new inference' if processing else 'skipped'),
-        reason=None if processing else 'disabled, unavailable, or no assessable occurrences; see run log',
+        reason=(None if processing else 'disabled' if not getattr(args, 'processing_aware_annotation', False)
+                else 'enabled but no annotations returned: model unavailable or no assessable occurrences; see run log'),
         models=processing_models, alleles=[],
         lengths=sorted({len(p.peptide_sequence) for p in processing.values()}),
         context='exact source sequence and peptide offset',
@@ -122,7 +123,7 @@ def effective_prediction_configuration(args, ranked, predictions, products, proc
                        if getattr(args, 'processing_aware_annotation', False) else getattr(
                            args, '_recorded_prediction_configuration', {}).get(
                                'processing', {}).get('configuration')),
-        cache='retained native annotations')
+        cache='retained native annotations' if processing else None)
     configuration = dict(candidate=candidate, junction=junction, processing=annotation)
     if dataset is not None:
         dataset.selection['processing_annotations'] = [asdict(p) for p in processing.values()]
