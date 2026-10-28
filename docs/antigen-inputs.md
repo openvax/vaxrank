@@ -49,6 +49,29 @@ admission evidence and full matching gene/transcript/protein provenance; shared
 queries do not pool RNA support or merge candidates. Explicit host-reference
 snapshots and custom matching callbacks retain their own matching behavior.
 
+## Direct candidate API
+
+For an admitted antigen and its scored `CandidateEpitope` records:
+
+```python
+from vaxrank.vaccine_peptide import VaccinePeptide
+
+candidate = VaccinePeptide(antigen=antigen, epitopes=epitopes)
+```
+
+With no mutation fragment, the default combined score is `target_epitope_score`;
+ranking uses target epitope score, manufacturability, then self epitope score.
+These are the same defaults used for antigen-only candidates through the CLI and
+`vaccine_peptides_for_antigen`. No fabricated RNA counts are required. The source
+kind alone does not imply that single-variant RNA support is available.
+
+Candidates with a `mutant_protein_fragment` retain the mutation default
+`sqrt(n_rna_alt) * target_epitope_score` and its RNA/position ranking rules.
+Explicit `combined_score_expr` and `ranking_rules` are preserved. Referencing
+mutation-only fields without a fragment raises an error. Resolved defaults and
+explicit overrides survive JSON serialization. Admission and self-reference
+requirements still apply to direct construction.
+
 ## Combine new sequences and saved evidence
 
 A manifest can mix new sequences with saved predictions. Paths are relative

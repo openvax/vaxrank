@@ -48,7 +48,7 @@ from .external_prediction import (
 )
 from .external_report import GENOMIC_VARIANT_COLUMN, ExternalRecord
 from .mutant_protein_fragment import MutantProteinFragment
-from .ranking import DEFAULT_RANKING_RULES, rank_constructs
+from .ranking import DEFAULT_RANKING_RULES, SOURCE_AGNOSTIC_RANKING_RULES, rank_constructs
 from .reference_proteome import self_reference_matches
 from .vaccine_antigen import (
     ANTIGEN_KIND_CTA,
@@ -65,6 +65,7 @@ from .vaccine_antigen import (
 )
 from .vaccine_config import (
     DEFAULT_COMBINED_SCORE_EXPR,
+    SOURCE_AGNOSTIC_COMBINED_SCORE_EXPR,
     DEFAULT_INCLUDED_ANTIGEN_SOURCES,
 )
 from .vaccine_library import truncate_at_stop_codon
@@ -944,13 +945,6 @@ class ExternalConstructOptions:
         )
 
 
-_SOURCE_AGNOSTIC_RANKING_RULES = (
-    "target_epitope_score",
-    "manufacturability",
-    "self_epitope_score",
-)
-
-
 def source_agnostic_construct_options(options):
     """Use safe defaults for antigens with no mutation read-count fields.
 
@@ -961,12 +955,12 @@ def source_agnostic_construct_options(options):
     """
     expression = options.combined_score_expr
     if expression in (None, DEFAULT_COMBINED_SCORE_EXPR):
-        expression = "target_epitope_score"
+        expression = SOURCE_AGNOSTIC_COMBINED_SCORE_EXPR
     elif expression == 'sqrt(n_rna_alt) * window_epitope_score':
         expression = 'window_epitope_score'
     rules = options.ranking_rules
     if rules is None or tuple(rules) == tuple(DEFAULT_RANKING_RULES):
-        rules = _SOURCE_AGNOSTIC_RANKING_RULES
+        rules = SOURCE_AGNOSTIC_RANKING_RULES
     return dataclasses.replace(
         options,
         combined_score_expr=expression,

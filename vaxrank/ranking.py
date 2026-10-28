@@ -153,6 +153,13 @@ DEFAULT_RANKING_RULES = (
     "mutation_distance_from_edge",
 )
 
+# Antigen-only candidates have no single-variant RNA/position fields.
+SOURCE_AGNOSTIC_RANKING_RULES = (
+    "target_epitope_score",
+    MANUFACTURABILITY_SENTINEL,
+    "self_epitope_score",
+)
+
 MUTATION_SPECIFIC_RANKING_RULES = frozenset({
     "n_alt_reads",
     "n_alt_reads_supporting",
