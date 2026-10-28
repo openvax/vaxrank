@@ -17,9 +17,10 @@ pyensembl>=2.29.0,<3.0.0
 # Varcode 10 also supplies candidate-local SV sequence-change checks, including
 # partial proteins and uncertain selenocysteine decoding.
 varcode>=10.20.2,<11.0.0
+# 1.62.2 adds occurrence-scoped RNA support for exported SV ORF placements.
 # 1.61 adds reference-frame ncORF reconstruction. The Isovar input adapters
 # validate each supported result schema; producer evidence is retained losslessly.
-isovar>=1.61.0,<2.0.0
+isovar>=1.62.2,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.64.4,<4.0.0
 # 4.0.0 makes PeptideInput the single cleavage record, removing CleavageInput.

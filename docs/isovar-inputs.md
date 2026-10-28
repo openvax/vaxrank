@@ -149,16 +149,25 @@ Support retains its original units and scope:
 - Annotated SV products: the minimum direct fragment count across their altered
   junctions; this is not a whole-protein spanning-read count.
 - Exploratory SV products: full-interval, junction-linked witnesses for the
-  particular occurrence when the raw observation ledger is available.
+  particular occurrence, using the measured occurrence field exported by
+  Isovar 1.62.2 or the raw observation ledger.
 - Viral/isoform products: sequence-supporting fragments, with coding-base
   coverage and whole-CDS segments retained separately.
 - Ordinary protein exports: raw assembly support. Optional fractional catalog
   support and abundance estimates are retained without replacing raw counts.
 
-The v4 SV ORF export lacks the observation ledger needed to resolve support for
-individual placements when it contains several occurrences. These are retained
-with `rna_fragment_support_unavailable`; use the raw v5 reconstruction to retain
-that support. See [Isovar #589](https://github.com/openvax/isovar/issues/589).
+New v4 exports carry `occurrences[].rna_support` separately from the candidate
+union. Vaxrank validates its scope, identities and counts and uses only that
+placement's fragments. A measured empty set is zero. Overlapping sets are not
+independent evidence, and an unsupported alternative cannot borrow the union.
+
+Historical v4 files without this field still retain multiple unmeasured placements
+with `rna_fragment_support_unavailable`; a single occurrence can use its candidate
+union. Use the raw v5 reconstruction or re-export with Isovar 1.62.2 to recover
+placement support. Explicit inconsistent fields fail instead of falling back.
+All ambiguity, partial-sequence and tumor-specificity gates still apply.
+Admission opt-ins do not bypass evidence validation: contradictory source scopes
+or measured counts are input errors even when ambiguous products are allowed.
 
 ## Reconstruction requests and controls
 

@@ -143,6 +143,90 @@ def test_exported_sv_occurrences_do_not_borrow_union_support():
                for a in dataset.antigens.values())
 
 
+def measured_occurrences(second=True):
+    from isovar.rna_evidence import evidence_set
+
+    producer = result('sv_occurrences')
+    candidate, = producer['candidates']
+    identities = [('rg', 'fragment-A', 64), ('rg', 'fragment-B', 64)]
+    scope = [producer['sample_id'], producer['source']]
+    candidate['rna_support'].update(evidence_set(scope, identities))
+    for occurrence, keys in zip(candidate['occurrences'], [identities, identities[:1] if second else []]):
+        witness = occurrence['witnesses'][0]
+        occurrence['witnesses'] = [dict(witness, observation=key[1]) for key in keys]
+        occurrence['rna_support'] = dict(evidence_set(scope, keys),
+                                         scope='full_interval_junction_linked_witnesses_for_occurrence')
+    return producer
+
+
+def test_measured_sv_placements_use_their_own_support_and_keep_admission_gates():
+    producer = measured_occurrences()
+    dataset = antigens_from_isovar(producer, tumor_specificity=attestation(),
+        options={'admission': {'allow_ambiguous': True, 'min_fragments': 2}})
+    supports = []
+    admitted = []
+    for antigen in dataset.antigens.values():
+        support = json.loads(dict(antigen.source_metadata)['isovar_candidate'])['occurrence_rna_support']
+        supports.append(support['fragments'])
+        admitted.append(antigen.tumor_specificity.admits_construct)
+    assert supports == [2, 1] and admitted == [True, False]
+    assert not any(a.tumor_specificity.admits_construct
+                   for a in antigens_from_isovar(producer).antigens.values())
+    for occurrence in producer['candidates'][0]['occurrences']:
+        occurrence['frame_status'] = 'no_gene_anchor'
+    assert not any(a.tumor_specificity.admits_construct for a in
+                   antigens_from_isovar(producer, tumor_specificity=attestation()).antigens.values())
+    assert next(iter(dataset.source_evidence.values()))['isovar_result']['candidates'][0]['rna_support']['fragments'] == 2
+
+
+def test_measured_empty_sv_support_is_zero_and_not_unknown():
+    from vaxrank.isovar_antigens import _sv_export
+
+    candidates = list(_sv_export(measured_occurrences(second=False)))
+    assert [c.fragments for c in candidates] == [2, 0]
+
+
+def test_partially_measured_export_preserves_unmeasured_alternative():
+    from vaxrank.isovar_antigens import _sv_export
+
+    producer = measured_occurrences()
+    del producer['candidates'][0]['occurrences'][1]['rna_support']
+    assert [c.fragments for c in _sv_export(producer)] == [2, None]
+    producer['candidates'][0]['occurrences'][1]['rna_support'] = None
+    with pytest.raises(ValueError, match='scope'):
+        list(_sv_export(producer))
+
+
+@pytest.mark.parametrize('field,value', [
+    ('scope', 'union_of_full_interval_junction_linked_witnesses_within_input'),
+    ('evidence_scope', ['another-patient', 'another-library']),
+    ('reads', True), ('fragments', 99), ('evidence_set_id', 'different'),
+    ('read_ids', ['duplicate', 'duplicate']),
+])
+def test_inconsistent_measured_support_fails_without_union_fallback(field, value):
+    producer = measured_occurrences()
+    producer['candidates'][0]['occurrences'][0]['rna_support'][field] = value
+    with pytest.raises(ValueError, match='Isovar SV RNA'):
+        antigens_from_isovar(producer)
+
+
+def test_fresh_raw_and_offline_sv_exports_have_the_same_placement_support():
+    from isovar import export_sv_rna_orfs
+    from vaxrank.isovar_antigens import _sv_export
+
+    raw = result('sv')
+    export = export_sv_rna_orfs(raw)
+    offline = list(_sv_export(export))
+    original = list(_sv_export(export, raw['observations']))
+    assert offline == original and all(c.fragments is not None for c in offline)
+    export = measured_occurrences()
+    observations = {name: {'identity': ['rg', name, 64]} for name in ('fragment-A', 'fragment-B')}
+    assert list(_sv_export(export)) == list(_sv_export(export, observations))
+    observations['fragment-A']['identity'][1] = 'mismatching-ledger'
+    with pytest.raises(ValueError, match='original observations'):
+        list(_sv_export(export, observations))
+
+
 def test_isoform_reference_only_never_becomes_observed_protein():
     dataset = antigens_from_isovar(result('isoforms'), tumor_specificity=attestation())
     assert len(dataset.antigens) == 2

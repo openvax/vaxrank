@@ -11,6 +11,7 @@ import json
 
 import msgspec
 from isovar.genetic_code import genetic_code_by_id
+from isovar.rna_evidence import content_identifier, evidence_set
 from orfdata.reference import canonical_species
 
 from .antigen_input import AntigenDataset, _typed_record
@@ -147,9 +148,48 @@ def _variants(result):
                           sequence_extent=row['sequence_extent'], translation_table=table))
 
 
+def _sv_support(support, result, scope):
+    """Validate the source-qualified set carried by a measured SV placement."""
+    evidence_scope = [result.get('sample_id'), result.get('source')]
+    if (any(not isinstance(value, str) or not value.strip() for value in evidence_scope)
+            or not isinstance(support, dict) or support.get('scope') != scope
+            or support.get('evidence_scope') != evidence_scope):
+        raise ValueError('Isovar SV RNA support has an inconsistent scope')
+    for unit in ('read', 'fragment'):
+        ids = support.get(unit + '_ids')
+        if (not isinstance(ids, list) or any(not isinstance(key, str) or not key for key in ids)
+                or len(set(ids)) != len(ids) or type(support.get(unit + 's')) is not int
+                or support[unit + 's'] != len(ids)):
+            raise ValueError('Isovar SV RNA support counts disagree with its identities')
+    if (support.get('evidence_set_id') != content_identifier('evidence', sorted(support['read_ids']))
+            or support['fragments'] > support['reads'] or bool(support['fragments']) != bool(support['reads'])):
+        raise ValueError('Isovar SV RNA evidence identity is inconsistent')
+    return support
+
+
 def _sv_export(result, observations=None):
     for row in result['candidates']:
         _translation(row['nucleotide_sequence'], row['amino_acids'], row['ends_with_stop_codon'], start=True)
+        measured = [o for o in row['occurrences'] if 'rna_support' in o]
+        if measured:
+            union = _sv_support(row['rna_support'], result, 'union_of_full_interval_junction_linked_witnesses_within_input')
+            for occurrence in measured:
+                scoped = _sv_support(occurrence['rna_support'], result,
+                                     'full_interval_junction_linked_witnesses_for_occurrence')
+                if bool(occurrence['witnesses']) != bool(scoped['reads']):
+                    raise ValueError('Isovar SV witnesses disagree with measured RNA support')
+                for ids in ('read_ids', 'fragment_ids'):
+                    if not set(scoped[ids]) <= set(union[ids]):
+                        raise ValueError('Isovar SV occurrence support is outside the candidate union')
+                if observations is not None:
+                    expected = evidence_set(scoped['evidence_scope'],
+                        {tuple(observations[w['observation']]['identity']) for w in occurrence['witnesses']})
+                    if any(set(scoped[ids]) != set(expected[ids]) for ids in ('read_ids', 'fragment_ids')):
+                        raise ValueError('Isovar SV occurrence support disagrees with original observations')
+            if len(measured) == len(row['occurrences']):
+                for ids in ('read_ids', 'fragment_ids'):
+                    if set(union[ids]) != {key for o in measured for key in o['rna_support'][ids]}:
+                        raise ValueError('Isovar SV candidate union disagrees with measured occurrences')
         for index, occurrence in enumerate(row['occurrences']):
             low, high = occurrence['query_interval']
             if high - low != len(row['nucleotide_sequence']):
@@ -157,7 +197,9 @@ def _sv_export(result, observations=None):
             transcripts = tuple(c['transcript_id'] for c in occurrence['reference_comparisons']
                                 if c.get('transcript_id'))
             support = None
-            if observations is not None:
+            if 'rna_support' in occurrence:
+                support = occurrence['rna_support']
+            elif observations is not None:
                 from isovar.rna_evidence import rna_support
                 support = rna_support({tuple(observations[w['observation']]['identity'])
                                        for w in occurrence['witnesses']})
