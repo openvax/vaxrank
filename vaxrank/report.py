@@ -792,7 +792,14 @@ class TemplateDataCreator(object):
         """Compact ranking with selection links from actual emitted products."""
         from .assembly_antigens import emitted_antigens_for_candidate
         products = [p for group in self.products.values() for p in group]
-        mappings_available = any(p.antigen_sources for p in products)
+        if not products:
+            unmapped_label = 'No products emitted'
+        elif not any(p.antigen_sources for p in products):
+            unmapped_label = 'Selection mappings unavailable'
+        elif all(p.antigen_names and set(p.antigen_sources) == set(p.antigen_names) for p in products):
+            unmapped_label = 'Not selected'
+        else:
+            unmapped_label = 'Selection mappings incomplete'
         rows = []
         for source, peptides in self.ranked_variants_with_vaccine_peptides:
             if not peptides:
@@ -804,9 +811,7 @@ class TemplateDataCreator(object):
                 identifier=(source.short_description if isinstance(source, Variant) else top.antigen.display_identifier),
                 kind=top.antigen.kind, score=_sanitize(top.combined_score),
                 window=top.amino_acids, window_count=len(peptides),
-                products=', '.join(sorted(selected)) if selected else
-                    'Not selected' if mappings_available else 'Selection mappings unavailable' if products
-                    else 'No products emitted'))
+                products=', '.join(sorted(selected)) if selected else unmapped_label))
         return rows
 
     def _product_data(self):
