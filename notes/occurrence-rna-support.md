@@ -19,3 +19,7 @@ and documentation, run lint/full tests/CI, then merge and deploy.
 Evidence units follow the SAM specification (templates vs segments vs alignment
 records): https://samtools.github.io/hts-specs/SAMv1.pdf, and the released producer
 contract: https://github.com/openvax/isovar/blob/v1.62.2/docs/sv-rna.md.
+
+Release order: follow the existing #711 → #712 → #715 series as version
+3.47.8. This dependency coordinates release versions; the SV reader change is
+independent of report/export behavior. Retarget to main after #715 ships.
