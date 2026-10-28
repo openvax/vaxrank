@@ -3,9 +3,16 @@ Vaccine Design Report
 {{ key }}: {{ val }}
 {% endfor %}
 
-{% include "templates/products.txt" %}
-
-{% if ranked_candidates is defined %}{% include "templates/ranking.txt" %}{% endif %}
+Prediction evidence
+{% for model in prediction_models %}
+{{ model.name }} {{ model.version }}: {{ model.status }}
+{% endfor %}
+Presentation score: the named predictor's presentation output (NetMHCpan: Score_EL).
+Presentation score: higher is stronger; presentation percentile: lower is stronger.
+Score: Vaxrank's configured per-allele ranking score, shared across predictor rows.
+Integrated processing: the named predictor's antigen-processing model, not Pepsickle.
+Processing: Pepsickle cleavage annotation; combined is sqrt(C-term * (1 - max internal)).
+WT: recorded comparator, not evidence of an observed patient-normal sequence.
 
 {% if candidate_details | default(true) and variants %}
 === Candidate window details ===
@@ -38,6 +45,11 @@ Candidate context only. Final sequences are listed under Emitted products.
         {% endfor %}
 {% endfor %}
 {% endif %}
+
+{% include "templates/products.txt" %}
+
+{% if ranked_candidates is defined %}{% include "templates/ranking.txt" %}{% endif %}
+
 
 Run arguments
 {% for key, val in args %}

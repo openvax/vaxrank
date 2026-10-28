@@ -105,8 +105,30 @@ windows to the products that use them. Historical files without source mappings
 say that the information is unavailable. Successful empty designs explicitly
 report zero products.
 
-`--report-candidate-details` adds the detailed source-window and epitope appendix.
-Those tables describe candidate evidence, not manufactured product coverage.
+`--report-candidate-details` puts annotated source windows and paired epitope/WT
+comparisons first, after a short patient and predictor overview. Exact emitted
+products and raw run settings follow as linked appendices. Without that flag,
+the report retains its compact, annotation-free ranking view. Candidate evidence
+and manufactured product coverage remain separately labeled.
+
+Target highlighting follows recorded intervals (including disjoint regions and
+deletion junctions). WT differences are marked for equal-length recorded pairs;
+unequal-length pairs are not given an invented alignment. WT is a comparator,
+not evidence of an observed patient-normal protein. Product highlights require
+unambiguous placement and agreement among the linked source masks.
+
+The predictor overview describes evidence actually available in the reported
+candidates, including imported results. Missing MHCflurry results are explicit;
+disabled Pepsickle is distinguished from missing or partial cleavage evidence.
+NetMHCpan presentation is labeled **Score_EL**, while MHCflurry presentation and
+processing retain their model names. Presentation scores run higher-is-stronger;
+presentation percentile ranks run lower-is-stronger. These model outputs are
+separate from Vaxrank's configured ranking score and from Pepsickle cleavage
+annotations. The report's score guide defines each quantity.
+
+The per-row WT affinity must match the target's allele, predictor and version;
+a missing matching value is reported as unavailable. Gene/antigen names lead
+product headings, with stable product IDs retained for manifest/order-form lookup.
 Report-only commands without `--output-dir` show candidate results and state
 that no construct files were emitted. HTML/PDF styling is bundled locally.
 

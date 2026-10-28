@@ -1,0 +1,12 @@
+<section class="model-summary">
+<h3>Prediction evidence in this report</h3>
+<table class="pure-table models">
+<thead><tr><th>Model</th><th>Available evidence</th></tr></thead>
+<tbody>{% for model in prediction_models %}<tr>
+<td><strong>{{ model.name | e }}</strong>{% if model.version %} <span class="model-version">{{ model.version | e }}</span>{% endif %}</td>
+<td>{{ model.status | e }}</td></tr>{% endfor %}</tbody>
+</table>
+<p class="note">Availability describes recorded results, including imported predictions; it does not imply fresh inference.
+NetMHCpan <strong>Score_EL</strong> and MHCflurry presentation scores predict presentation.
+Pepsickle predicts cleavage separately. <a href="#score-guide">Score definitions and directions</a>.</p>
+</section>

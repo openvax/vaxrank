@@ -1,0 +1,36 @@
+<h2 id="score-guide">Score guide</h2>
+<dl class="score-guide">
+<dt>Target and WT comparator sequences</dt>
+<dd>Highlighting follows the recorded targetable intervals, which can describe mutations, junctions or other target regions.
+It does not establish tumor specificity by itself. A vertical bar marks a zero-length deletion junction.
+Underlined WT residues differ at the same position in equal-length sequences. Unequal-length pairs are shown without an inferred alignment.
+WT is the recorded comparator; Vaxrank's mutation workflow currently uses annotation-reference peptides.
+It is not evidence of an observed patient-normal protein. A missing sequence or prediction is reported as unavailable.</dd>
+<dt>IC50 (nM): lower indicates stronger predicted binding</dt>
+<dd>Binding affinity from the named predictor. Target and WT values use the same allele and predictor.
+Missing affinity is not zero affinity.</dd>
+<dt>Vaxrank score</dt>
+<dd>The configured per-allele ranking score. The default transforms predicted binding affinity onto a 0-1 scale,
+with higher values favored. A custom scoring expression can use other evidence; see the recorded run configuration.
+This score is shared across predictor rows for the same epitope and allele, not an additional output of each predictor.</dd>
+<dt>Combined score</dt>
+<dd>The configured candidate-window ranking score, combining epitope evidence and, when available and configured,
+expression evidence. It is distinct from a model's presentation score.</dd>
+<dt>NetMHCpan Score_EL: higher indicates stronger predicted presentation</dt>
+<dd>The eluted-ligand prediction score for this peptide and allele.
+It is not a measured presentation rate or a probability of vaccine effectiveness.
+<a href="https://services.healthtech.dtu.dk/services/NetMHCpan-4.1a/3-Output_format.php">NetMHCpan output definitions</a>.</dd>
+<dt>MHCflurry presentation and processing: higher is stronger</dt>
+<dd>MHCflurry's presentation model combines binding and antigen-processing predictions.
+Its allele-independent processing score is a separate model output, not a Pepsickle cleavage score.
+<a href="https://openvax.github.io/mhcflurry/intro.html">MHCflurry output definitions</a>.</dd>
+<dt>Presentation rank (%): lower is stronger</dt>
+<dd>The predictor's percentile rank relative to its reference distribution. Raw presentation scores from different models
+are not interchangeable; model and version are retained alongside the values.</dd>
+<dt>Pepsickle cleavage annotations</dt>
+<dd>C-term is the predicted cleavage probability at the epitope's C-terminal bond; max internal is the largest
+predicted cleavage probability inside it. A source-sequence endpoint has no measured boundary bond and is labeled accordingly.
+Vaxrank's cleavage composite is sqrt(C-term &times; (1 - max internal)); it is not a calibrated presentation probability.
+<a href="https://doi.org/10.1093/bioinformatics/btab628">Pepsickle model description</a>.
+These annotations do not change ranking. Disabled or missing cleavage evidence means unassessed.</dd>
+</dl>
