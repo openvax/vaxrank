@@ -670,9 +670,11 @@ class MutantProteinFragment(DataclassSerializable):
                 subsequence_end_offset = subsequence_start_offset + subsequence_length
                 amino_acids = self.amino_acids[
                     subsequence_start_offset:subsequence_end_offset]
-                mutant_amino_acid_start_offset = max(
-                    0,
-                    self.mutant_amino_acid_start_offset - subsequence_start_offset)
+                mutant_amino_acid_start_offset = min(
+                    len(amino_acids),
+                    max(
+                        0,
+                        self.mutant_amino_acid_start_offset - subsequence_start_offset))
                 mutant_amino_acid_end_offset = min(
                     len(amino_acids),
                     max(
