@@ -138,3 +138,17 @@ def test_adjacent_target_residue_does_not_become_a_deletion_junction(interval):
     antigen = replace(antigen, targetable_mask=TargetableMask((AminoAcidInterval(*interval),)))
     display = epitope_display(peptides[0].epitopes[0], antigen, {}, prediction())
     assert str(display['target']) == 'KRFHATISF'
+
+
+def test_product_with_an_unavailable_source_mask_is_not_partially_highlighted():
+    from copy import deepcopy
+    from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
+    from vaxrank.report_display import product_target_intervals
+
+    ranked = ranked_pair()
+    product, = assemble_peptide_constructs(ranked, PeptideConstructConfig())
+    antigens = deepcopy(product.antigens)
+    missing = dict(antigens[0]['sources'][0], source_identifier='unavailable-source')
+    antigens[0]['sources'].append(missing)
+    product = replace(product, antigens=antigens)
+    assert list(product_target_intervals(product, ranked).values()) == [None]

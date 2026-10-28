@@ -74,22 +74,28 @@ def model_inventory(ranked, processing_predictions, processing_enabled):
 
 def product_target_intervals(product, ranked):
     """Map candidate masks to products only when all matching placements agree."""
-    from .assembly_antigens import emitted_antigens_for_candidate
+    from .assembly_antigens import source_matches_candidate
 
-    masks = {antigen['name']: [] for antigen in product.antigens}
+    masks = {antigen['name']: [[] for _ in antigen.get('sources', ())] for antigen in product.antigens}
     for _, peptides in ranked:
         for peptide in peptides:
-            matches = emitted_antigens_for_candidate(
-                peptide.antigen, peptide.amino_acids, peptide.epitopes, [product])[product.name]
+            prediction_ids = {e.prediction_group_source for e in peptide.epitopes}
+            input_ids = {e.input_provenance.input_id for e in peptide.epitopes if e.input_provenance}
             for antigen in product.antigens:
-                if antigen['name'] not in matches:
-                    continue
                 sequence = antigen['aa']
                 offset = peptide.amino_acids.find(sequence)
+                intervals = None
                 if offset < 0 or peptide.amino_acids.find(sequence, offset + 1) >= 0:
-                    masks[antigen['name']].append(None)
-                    continue
-                mask = peptide.antigen.targetable_mask.sliced(offset, offset + len(sequence))
-                masks[antigen['name']].append(tuple((i.start, i.end) for i in mask.intervals))
-    return {name: values[0] if values and values[0] is not None and all(v == values[0] for v in values) else None
-            for name, values in masks.items()}
+                    intervals = None
+                else:
+                    mask = peptide.antigen.targetable_mask.sliced(offset, offset + len(sequence))
+                    intervals = tuple((i.start, i.end) for i in mask.intervals)
+                for index, source in enumerate(antigen.get('sources', ())):
+                    if source_matches_candidate(source, peptide.antigen, peptide.amino_acids, prediction_ids, input_ids):
+                        masks[antigen['name']][index].append(intervals)
+    result = {}
+    for name, sources in masks.items():
+        values = [value for source in sources for value in source]
+        result[name] = (values[0] if sources and all(sources) and values[0] is not None
+                        and all(v == values[0] for v in values) else None)
+    return result

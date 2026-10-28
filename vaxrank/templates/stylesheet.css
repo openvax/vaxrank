@@ -70,3 +70,7 @@ a { color: #245d7a; }
 .score-guide dt { font-weight: bold; margin-top: 1em; page-break-after: avoid; }
 .score-guide dd { margin: 0.4em 0; line-height: 1.5; }
 @page { @bottom-right { content: counter(page) " / " counter(pages); font-size: 9px; color: #465765; } }
+.variant, .peptide-data { font-size: 11px; }
+.variant td, .peptide-data td { padding: 0.35em 0.5em; }
+.candidate-ranking { page-break-inside: avoid; }
+.manufacturability { page-break-inside: avoid; }
