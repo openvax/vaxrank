@@ -130,14 +130,6 @@ def write_run_policy(args, evaluations, epitope_config, vaccine_config):
     """Record resolved settings, CLI overrides and predictor decision context."""
     import msgspec
     from .version import __version__
-    output_dir = getattr(args, "output_dir", None)
-    if not output_dir:
-        output = getattr(args, "output_epitopes", None)
-        if not output:
-            return
-        output_dir = str(output) + ".policy"
-    directory = Path(output_dir)
-    directory.mkdir(parents=True, exist_ok=True)
     from .config.loader import configuration_provenance
     resolved = configuration_provenance(args)
     resolved["effective_epitopes"] = msgspec.to_builtins(epitope_config)
@@ -147,8 +139,12 @@ def write_run_policy(args, evaluations, epitope_config, vaccine_config):
                                       vaccine_types=resolve_vaccine_types(args))
     resolved["vaxrank_version"] = __version__
     resolved["effective_sha256"] = configuration_digest(resolved)
-    resolved["evaluations"] = save_policy_evaluations(evaluations, directory / "policy_evidence")
-    (directory / "selection_policy.json").write_text(json.dumps(resolved, indent=2) + "\n")
+    resolved["evaluations"] = [dict(name=e.policy.name, sha256=e.policy.sha256) for e in evaluations]
+    if getattr(args, 'output_policy_dir', None):
+        directory = Path(args.output_policy_dir)
+        directory.mkdir(parents=True, exist_ok=True)
+        resolved["evaluations"] = save_policy_evaluations(evaluations, directory / "policy_evidence")
+        (directory / "selection_policy.json").write_text(json.dumps(resolved, indent=2) + "\n")
     return resolved
 
 
@@ -174,14 +170,10 @@ def modality_configuration(modality, options):
 def record_construct_configuration(args, modality, options):
     """Include actual CLI-resolved construct settings in the run identity."""
     from dataclasses import asdict
-    directory = getattr(args, 'output_dir', None)
+    directory = getattr(args, 'output_policy_dir', None)
     dataset = getattr(args, '_design_dataset', None)
     record = dataset.selection.get('run_configuration') if dataset is not None else None
-    if not directory and getattr(args, 'output_epitopes', None):
-        directory = str(args.output_epitopes) + '.policy'
     path = Path(directory) / 'selection_policy.json' if directory else None
-    if record is None and path is not None and path.exists():
-        record = json.loads(path.read_text())
     if record is None:
         return
     record.setdefault('effective_constructs', {})[modality] = asdict(options)

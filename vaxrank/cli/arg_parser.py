@@ -13,6 +13,7 @@
 
 
 import sys
+import os
 from argparse import SUPPRESS, Action, ArgumentParser, ArgumentTypeError
 from importlib.resources import files
 
@@ -300,14 +301,12 @@ def add_output_args(arg_parser):
         "--output-dir",
         default="",
         metavar="DIR",
-        help="Destination directory for the assembled vaccine "
-             "constructs. Single-mode runs (one --vaccine-type) write "
-             "files directly into DIR; multi-mode runs write to "
-             "per-modality subdirs (DIR/peptide/, DIR/mrna/, etc.). "
-             "Required when designing a vaccine; omit for "
-             "ranking-only / report-only runs. Vaxrank picks "
-             "canonical filenames inside (vaccine.fasta / cds.fasta / "
-             "manifest.json / order_form.csv / mrna-sequence-parts.csv).")
+        help="Directory for assembled products and reports. Construct files "
+             "go directly into DIR for one --vaccine-type, or into "
+             "per-modality subdirs for multiple types. Default analysis files "
+             "in DIR are ranked_candidates.csv, candidate_predictions.tsv, "
+             "vaccine_report.txt and vaccine_report.pdf. Omit for "
+             "ranking-only / report-only runs with explicit output paths.")
     output_args_group.add_argument(
         "--force-overwrite",
         dest="force_overwrite",
@@ -402,22 +401,15 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-csv",
         default="",
-        help="Path to CSV with ranked antigens. Format depends on "
-             "input source: pipeline (--vcf + --bam) emits "
-             "per-variant rows (gene, mutation, antigen sequence, "
-             "scores); LENS / pVACseq emit per-(peptide, allele) "
-             "rows (the upstream tool's native granularity). "
-             "Antigen-centric in both cases; content does not "
-             "change with --vaccine-type.")
+        help="CSV of ranked candidate windows, with source identity and scores. "
+             "Same schema for VCF/BAM, native and external inputs; not final products.")
 
     output_args_group.add_argument(
         "--output-ascii-report",
         default="",
-        help="Path to ASCII summary report: ranked antigens with "
-             "their predicted MHC ligands, manufacturability metrics "
-             "(peptide-mode only by default), and processing-credibility "
-             "scores. Antigen-centric: content adapts to --vaccine-type "
-             "but the same flag works for all modes.")
+        help="Plain-text report of emitted products and a compact candidate "
+             "ranking. Add --report-candidate-details for source windows "
+             "and epitope tables. The same flag works for all vaccine types.")
 
     output_args_group.add_argument(
         "--output-html-report",
@@ -441,24 +433,28 @@ def add_output_args(arg_parser):
     output_args_group.add_argument(
         "--output-json-file",
         default="",
-        help="Path to JSON dump of the ranked antigen set + "
-             "command-line state. Same structure regardless of "
-             "--vaccine-type.")
+        help="Explicit legacy JSON export of ranked candidates and "
+             "command-line state. Use --output-epitopes for the "
+             "native prediction dataset and replay evidence.")
 
     output_args_group.add_argument(
         "--output-xlsx-report",
         default="",
-        help="Path to XLSX summary report (one sheet per variant). "
-             "Antigen-centric; intended for hand-off to a vaccine "
-             "manufacturer / reviewer regardless of modality.")
+        help="XLSX of ranked candidate windows: All sheet plus one per source. "
+             "Same rows and columns as --output-csv; not final products.")
 
     output_args_group.add_argument(
         "--output-neoepitope-report",
         default="",
-        help="Path to per-(peptide, allele) neoepitope XLSX. "
+        help="Per-(peptide, allele) prediction table: CSV for a .csv path, otherwise XLSX. "
              "Focused on the predicted minimal MHC ligands; available "
              "from any --vaccine-type and from the LENS / pVACseq "
              "external paths.")
+
+    output_args_group.add_argument(
+        '--output-policy-dir', default='', metavar='DIRECTORY',
+        help='Optional resolved configuration and policy decision/evidence tables. '
+             'Native datasets already retain this replay evidence.')
 
     output_args_group.add_argument(
         "--output-reviewed-by",
@@ -704,9 +700,9 @@ def add_mrna_output_args(group):
         "--mrna-candidates-per-slot",
         default=1,
         type=int,
-        help="Alternative windows per variant slot in the mRNA construct. "
-             "Default: 1. Higher emits alternative constructs with the "
-             "same antigen lineup but different per-variant windows.")
+        help="Candidate windows considered per ranked source group. Default: 1. "
+             "Distinct emitted sequences occupy separate antigen slots; "
+             "identical sequences share a slot and retain all source mappings.")
     group.add_argument(
         "--mrna-max-length-nt",
         default=4000,
@@ -791,9 +787,9 @@ def add_peptide_output_args(group):
         "--peptide-candidates-per-slot",
         default=1,
         type=int,
-        help="Alternative windows per variant slot. Default: 1. Set higher "
-             "(e.g. 3) to emit alternates that the vaccine designer can "
-             "choose between at synthesis time.")
+        help="Candidate windows considered per ranked source group. Default: 1. "
+             "Distinct emitted sequences occupy separate antigen slots; "
+             "identical sequences share a slot and retain all source mappings.")
     group.add_argument(
         "--peptide-n-terminal-acetyl",
         action="store_true",
@@ -840,31 +836,33 @@ def add_supplemental_report_args(arg_parser):
 _PRIMARY_OUTPUT_FLAGS = (
     # (CLI flag, args attribute, one-line purpose)
     ("--output-csv",                    "output_csv",
-        "ranked vaccine peptides as CSV"),
+        "ranked candidate windows as CSV"),
     ("--output-xlsx-report",            "output_xlsx_report",
-        "ranked vaccine peptides as XLSX"),
+        "ranked candidate windows as XLSX"),
     ("--output-ascii-report",           "output_ascii_report",
-        "ASCII summary report"),
+        "plain-text product and candidate report"),
     ("--output-html-report",            "output_html_report",
         "HTML summary report"),
     ("--output-pdf-report",             "output_pdf_report",
         "PDF summary report"),
     ("--output-neoepitope-report",      "output_neoepitope_report",
-        "per-(peptide, allele) neoepitope XLSX"),
+        "per-(peptide, allele) prediction table as CSV or XLSX"),
     ("--output-json-file",              "output_json_file",
-        "machine-readable JSON of ranked vaccine peptides"),
+        "legacy ranked-candidate JSON"),
     ("--output-passing-variants-csv",   "output_passing_variants_csv",
         "filter-passing variants as CSV"),
     ("--output-isovar-csv",             "output_isovar_csv",
         "Isovar transcript-assembly intermediate CSV"),
     ("--output-epitopes",               "output_epitopes",
-        "raw epitope predictions"),
+        "native prediction dataset and replay evidence"),
     ("--output-antigens",               "output_antigens",
         "experimental resolved antigen sequences and admission evidence"),
     ("--output-input-predictions",      "output_input_predictions",
         "original external-table predictions"),
+    ("--output-policy-dir",             "output_policy_dir",
+        "resolved policy configuration and decision tables"),
     ("--output-dir",                    "output_dir",
-        "directory for assembled vaccine constructs "
+        "directory for default analysis files and assembled products "
         "(per-modality subdirs when --vaccine-type has 2+ entries)"),
 )
 
@@ -890,6 +888,23 @@ def check_args(args):
             "No output path specified. Pass at least one of the "
             "following flags so vaxrank knows where to write "
             "results:\n%s" % flag_lines)
+
+    output_files = {}
+    for flag, attr, _ in _PRIMARY_OUTPUT_FLAGS:
+        value = getattr(args, attr, None)
+        if not value or attr in ('output_dir', 'output_policy_dir'):
+            continue
+        path = os.path.realpath(value)
+        if path in output_files:
+            raise ValueError('%s and %s must use different output files' % (output_files[path], flag))
+        output_files[path] = flag
+    policy_dir = getattr(args, 'output_policy_dir', None)
+    if policy_dir and os.path.isfile(policy_dir):
+        raise ValueError('--output-policy-dir must be a directory, not an existing file')
+
+    if getattr(args, 'input_json_file', None) and getattr(args, 'output_epitopes', None):
+        raise ValueError('Legacy ranked JSON has no complete native prediction dataset. '
+                         'Use --input-epitopes for replayable native evidence export.')
 
     # ``--output-dir`` is contractually a directory; the file-path
     # form was removed when single-file outputs went away. Reject

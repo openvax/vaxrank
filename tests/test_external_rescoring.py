@@ -272,7 +272,7 @@ def test_mixed_cli_reranks_with_fresh_values_and_exports_originals(monkeypatch, 
     inputs = ['--input-manifest', write_input_manifest(tmp_path / 'inputs.json', INPUTS)]
     original_csv = tmp_path / 'original.csv'
     original_native = tmp_path / 'original.tsv'
-    main(inputs + ['--output-csv', str(original_csv),
+    main(inputs + ['--output-neoepitope-report', str(original_csv),
                    '--output-input-predictions', str(original_native)])
     original_predictions = load_predictions(original_native)
     assert {p.predictor_version for e in original_predictions for p in e.predictions_flat()
@@ -296,7 +296,7 @@ def test_mixed_cli_reranks_with_fresh_values_and_exports_originals(monkeypatch, 
         '--mhc-alleles', ','.join(ALLELES),
         '--config-text', 'epitopes.filter_expr=affinity[unified].value < 500',
         '--config-text', 'epitopes.score_expr=affinity[unified].score',
-        '--output-csv', str(fresh_csv), '--output-epitopes', str(fresh_native),
+        '--output-neoepitope-report', str(fresh_csv), '--output-epitopes', str(fresh_native),
         '--output-input-predictions', str(original_copy)])
     fresh_frame = pd.read_csv(fresh_csv).sort_values('rank')
     assert original_frame.iloc[0]['Mutant peptide sequence'] != promoted

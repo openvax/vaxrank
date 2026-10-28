@@ -199,9 +199,10 @@ alone; Vaxrank does not fetch its separate mutant/wild-type FASTAs. LENS splice,
 CTA/self and ERV construction require [source opt-ins](how-it-works.md#lens-antigen-source-opt-ins).
 
 Native exports retain source rows, scope, content hashes, producer declarations,
-manifest assertions, comparators and RNA units/derivation. External output
-directories include `candidate_predictions.tsv` and `input_provenance.json`.
-CSV includes scope columns and `input_provenance_json`. See the
+manifest assertions, comparators and RNA units/derivation. Output directories
+include `candidate_predictions.tsv` for replay and `ranked_candidates.csv` for
+reviewing source windows. `--output-neoepitope-report predictions.csv` exports
+prediction evidence with scope columns and `input_provenance_json`. See the
 [evidence model](unified_evidence.md) for identities and source relationships.
 
 ## Reload or rank a normalized table

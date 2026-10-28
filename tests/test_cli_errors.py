@@ -163,13 +163,10 @@ def test_weasyprint_without_pango_names_the_fix(monkeypatch):
     assert isinstance(error.value, USER_ERRORS)
 
 
-def test_empty_report_warns_and_names_the_unwritten_path(tmp_path, caplog):
-    """An empty input used to exit 0 having written nothing that was asked for."""
+def test_empty_ranked_table_writes_a_schema(tmp_path):
+    import pandas as pd
     from vaxrank import report
-
-    csv_path = tmp_path / "vaccine-peptides.csv"
-    with caplog.at_level("WARNING", logger="vaxrank.report"):
-        report.make_csv_report([], csv_report_path=str(csv_path))
-    assert not csv_path.exists()
-    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
-    assert any(str(csv_path) in message for message in warnings), warnings
+    path = tmp_path / 'candidates.csv'
+    report.make_csv_report([], csv_report_path=path)
+    frame = pd.read_csv(path)
+    assert frame.empty and list(frame) == list(report.new_columns())

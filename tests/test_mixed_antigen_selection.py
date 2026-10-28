@@ -51,6 +51,7 @@ def test_mixed_native_design_and_source_strata(mixed_native, tmp_path, monkeypat
     saved = tmp_path / 'selected.tsv'
     options = ['--input-epitopes', str(mixed_native), '--output-dir', str(output),
                '--output-epitopes', str(saved), '--vaccine-type', modality,
+               '--output-neoepitope-report', str(output / 'prediction-evidence.csv'),
                '--pdf-backend', 'weasyprint',
                '--index-native-references', '--vaccine-peptide-length', '10',
                '--no-processing-aware-annotation',
@@ -69,7 +70,7 @@ def test_mixed_native_design_and_source_strata(mixed_native, tmp_path, monkeypat
     assert len(sequences) == len(expected)
     assert all(sequence in by_kind[k] for k, sequence in zip(expected, sequences))
     assert 'SLYNTVATL' not in sequences
-    table = pd.read_csv(output / 'neoepitope_predictions.csv')
+    table = pd.read_csv(output / 'prediction-evidence.csv')
     held = table.loc[table['vaxrank_admission_status'] == 'held_out']
     assert len(held) == 1 and 'held out' in held.iloc[0]['Construction limitation']
     replay = tmp_path / 'replay'

@@ -208,4 +208,5 @@ def test_report_no_peptides(mock_vaccine_peptides_for_variant):
         # test that this doesn't crash and that the CSV output is empty
         run_shell_script(html_args)
         contents = f.read()
-        assert contents == ''
+        assert contents.startswith('source_rank,window_rank,')
+        assert pd.read_csv(f.name).empty

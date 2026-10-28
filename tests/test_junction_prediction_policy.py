@@ -89,8 +89,8 @@ def test_historical_cli_scores_unchanged_and_only_junctions_are_predicted(
     original = load_predictions(baseline / 'candidate_predictions.tsv')
     recovered = load_predictions(selected / 'candidate_predictions.tsv')
     assert [e.to_json() for e in recovered] == [e.to_json() for e in original]
-    pd.testing.assert_frame_equal(pd.read_csv(baseline / 'neoepitope_predictions.csv'),
-                                  pd.read_csv(selected / 'neoepitope_predictions.csv'))
+    pd.testing.assert_frame_equal(pd.read_csv(baseline / 'ranked_candidates.csv'),
+                                  pd.read_csv(selected / 'ranked_candidates.csv'))
     manifest = json.loads((selected / 'manifest.json').read_text())[0]
     details = manifest['elements']['junction_swap']
     assert details['enabled'] and details['policy'] == 'explicit_junction_model'

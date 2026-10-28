@@ -43,3 +43,18 @@ Acceptance uses the preserved Sid, COLO829 and synthetic source controls, plus
 small focused regression fixtures. Each PR bumps the version, passes lint/full
 tests and CI, and is deployed after merging. Scientific admission and prediction
 policies remain explicit; these usability changes do not assert clinical safety.
+
+Export cleanup implementation:
+
+- `--output-csv` and `--output-xlsx-report` always describe ranked source windows,
+  including antigen-only and empty results. Use source/window ranks, explicit
+  source kind/identifier, targetable intervals and nullable mutation fields.
+- `--output-neoepitope-report` requests prediction tables; it no longer shares
+  `--output-csv`. One default bundle uses ranked candidates, native predictions,
+  the human-readable reports and modality products for every input route.
+- Retain legacy JSON only when explicitly requested. Native datasets own source
+  provenance, configuration and policy evidence. `--output-policy-dir` explicitly
+  requests decomposed policy/decision tables. Never recover current policy state
+  by reading an unrelated file in the output directory.
+- Retain checksum-verified native reference bundles. Validate CSV/XLSX parity,
+  offline native replay after removing optional exports, and empty table schemas.

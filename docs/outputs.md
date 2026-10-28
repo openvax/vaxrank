@@ -13,9 +13,40 @@ manufacturability metrics.
 | `--output-ascii-report` | Plain-text summary |
 | `--output-html-report` | HTML report |
 | `--output-pdf-report` | PDF report (wkhtmltopdf or WeasyPrint backend) |
-| `--output-xlsx-report` | Excel workbook with one sheet per variant |
-| `--output-csv` | Flat CSV |
-| `--output-json-file` | Full ranked-vaccine-peptides graph as JSON |
+| `--output-xlsx-report` | Ranked candidate windows: All sheet and one sheet per source |
+| `--output-csv` | The same ranked candidate rows and columns as the workbook |
+| `--output-json-file` | Explicit legacy ranked-object JSON export |
+| `--output-policy-dir` | Optional resolved configuration and policy decision/evidence tables |
+
+CSV/XLSX candidate rows use one schema for VCF/BAM, external and native inputs.
+`source_rank` orders the ranked source groups; `window_rank` orders candidate
+windows within each group. Source kind, identifiers, genes, transcripts, species
+and zero-based, end-exclusive targetable intervals accompany each sequence.
+Mutation coordinates and expression scores are blank when no mutation fragment
+is available. Scores retain their numeric precision. These are candidate windows;
+manifests and FASTAs describe the emitted products. Empty results still write
+headers and an empty `All` worksheet.
+
+With `--output-dir`, the default bundle is `ranked_candidates.csv`,
+`candidate_predictions.tsv`, `vaccine_report.txt`, `vaccine_report.pdf` and the
+modality construct files. Native evidence retains source provenance, configuration
+and policy decisions. `--output-policy-dir DIR` additionally writes
+`DIR/selection_policy.json` and `DIR/policy_evidence/` for inspecting individual
+criteria. Removing those optional exports does not prevent native replay.
+Checksum-verified `candidate_predictions.tsv.references/` resources, when present,
+are required for portable annotation/reference access; keep them with the dataset.
+
+Migration from earlier output bundles:
+
+- `--output-csv` now always exports ranked windows. To export prediction evidence
+  from external/native input, use `--output-neoepitope-report predictions.csv`.
+- `source_rank` / `window_rank` replace the mutation-specific `variant_rank` /
+  `peptide_rank` column names. The workbook no longer repeats rank in an unnamed column.
+- Default runs no longer write `input_provenance.json`, a sibling `.policy/`
+  directory or legacy ranked JSON. Explicit `--output-json-file` still works.
+- Legacy `--input-json-file` supports reports/products but cannot reconstruct a
+  complete native prediction dataset. It does not auto-export native evidence;
+  an explicit `--output-epitopes` request with that input raises an explanatory error.
 
 ## Joint protein collections
 
@@ -81,9 +112,9 @@ that no construct files were emitted. HTML/PDF styling is bundled locally.
 
 ## Neoepitope report
 
-A per-(peptide, allele) table in XLSX or CSV, chosen by file extension. It is
-the default output of the LENS / pVACseq input path and is also available on
-the full pipeline.
+A per-(peptide, allele) table in XLSX or CSV, chosen by file extension. Request
+it explicitly for VCF/BAM, external or native input; it supplements the ranked
+candidate table and native prediction dataset.
 
 | Flag | Output |
 |---|---|
