@@ -126,6 +126,38 @@ def test_pre_species_design_restores_both_products_without_reassembly(tmp_path, 
     assert {path.parent.name for path in output.rglob('*.fasta')} == {'peptide', 'mrna'}
 
 
+def test_legacy_duplicate_slots_rebuild_once_then_replay_offline(tmp_path, monkeypatch):
+    # Actual bf1634b / 3.47.3 export: different source windows and predicted
+    # ligands both emit SIINFEKLA. Previously they occupied two design slots.
+    native = tmp_path / 'legacy.tsv'
+    native.write_bytes(gzip.decompress((Path(__file__).parent /
+        'data/epitope_fixtures/native_duplicate_design_3_47_3.tsv.gz').read_bytes()))
+    before = EpitopeDataset.load(native)
+    assert len(from_native_json(before.selection['construct_assembly']['peptide']['products'], list)) == 2
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
+    first, second = tmp_path / 'corrected', tmp_path / 'again'
+    replay(native, first)
+    corrected = EpitopeDataset.load(first / 'candidate_predictions.tsv')
+    assert corrected.provenance == before.provenance
+    assert corrected.antigens == before.antigens
+    assert len(corrected.epitopes) == len(before.epitopes) == 2
+    for modality in ('peptide', 'mrna'):
+        assembly = corrected.selection['construct_assembly'][modality]
+        product, = from_native_json(assembly['products'], list)
+        assert len(product.antigen_names) == 1
+        sources, = product.antigen_sources.values()
+        assert {s['source_identifier'] for s in sources} == {'source-0', 'source-1'}
+        assert {s['gene_ids'][0] for s in sources} == {'gene-0', 'gene-1'}
+        graph = from_native_json(assembly['source_graph'], dict)
+        assert len(graph['inputs']) == 2
+        assert all(c['emitted_antigen_names'] == product.antigen_names
+                   for row in graph['inputs'] for c in row['candidates'])
+    monkeypatch.setattr('vaxrank.cli.entry_point.assemble_peptide_constructs', forbidden)
+    monkeypatch.setattr('vaxrank.cli.entry_point.assemble_mrna_constructs', forbidden)
+    replay(first / 'candidate_predictions.tsv', second)
+    assert product_files(first) == product_files(second)
+
+
 @pytest.mark.parametrize('optimized', [False, True])
 @pytest.mark.parametrize('content', ['mutation_spanning', 'minimal_epitope'])
 def test_actual_general_products_replay_offline(source, tmp_path, monkeypatch, optimized, content):
@@ -160,6 +192,9 @@ def test_actual_general_products_replay_offline(source, tmp_path, monkeypatch, o
     assert set(mrna.antigen_names) == {name for row in graph['inputs'] for candidate in row['candidates']
                                      for name in candidate['emitted_antigen_names']}
     assert {row['candidates'][0]['antigen'].source_identifier for row in graph['inputs']} == {'source-0', 'source-1'}
+    peptide_graph = from_native_json(assembly['peptide']['source_graph'], dict)
+    assert set(peptide.antigen_names) == {name for row in peptide_graph['inputs'] for c in row['candidates']
+                                        for name in c['emitted_antigen_names']}
     assert assembly['mrna']['configuration']['optimize_linkers'] == optimized
     if optimized:
         assert mrna.elements['junction_swap']['enabled']

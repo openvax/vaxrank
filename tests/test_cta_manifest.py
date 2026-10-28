@@ -113,7 +113,10 @@ def test_cta_viral_and_saved_mutation_share_design_and_replay(inputs, tmp_path, 
     assert 'cta_product_audit' not in result.selection
     product = json.loads((output / 'manifest.json').read_text())
     count = len(product) if modality == 'peptide' else sum(len(p['antigens']) for p in product)
-    assert count == 4
+    assert count == 3  # The two CTA sources produce one identical sequence.
+    mappings = [s for p in product for a in p['antigens'] for s in a['sources']]
+    assert {s['kind'] for s in mappings} == {'CTA', 'mutation', 'viral'}
+    assert {gene for s in mappings if s['kind'] == 'CTA' for gene in s['gene_ids']} == {PRAME, MAGEA4}
     for name in ('expression.tsv', 'viral.json', 'mutation.tsv', 'inputs.json'):
         (tmp_path / name).unlink()
     monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)

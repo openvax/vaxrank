@@ -169,7 +169,7 @@ def test_multi_epitope_splits_on_max_length():
     # 4 antigens at 20 aa each. With antigens_per_construct=2 and
     # max_antigen_length_aa=20, each construct caps at ~45 aa (2*20 + 1*5).
     # We'd need 2 constructs to fit all 4.
-    pairs = [_variant_pair("A" * 20, start=i) for i in range(4)]
+    pairs = [_variant_pair("A" * 19 + aa, start=i) for i, aa in enumerate("ACDE")]
     constructs = assemble_peptide_constructs(
         pairs,
         options=PeptideConstructConfig(mode='multi_epitope', linker='GS',
@@ -346,7 +346,7 @@ def test_max_constructs_caps_peptide_pool():
     from varcode import Variant
     for i in range(25):
         fragment = SimpleNamespace(
-            amino_acids="KLQGHSAPVLD", gene_name='G%d' % i,
+            amino_acids="A" * 9 + "ACDEF"[i // 5] + "ACDEF"[i % 5], gene_name='G%d' % i,
             mutant_amino_acid_start_offset=0,
             mutant_amino_acid_end_offset=11)
         peptide = mutation_vaccine_peptide(
@@ -379,7 +379,7 @@ def test_multi_epitope_warns_on_dropped_antigens(caplog):
     # the first 2 antigens fit; the last 2 must produce a drop warning
     # so the user can see they're being silently dropped.
     import logging
-    pairs = [_variant_pair("A" * 20, start=i) for i in range(4)]
+    pairs = [_variant_pair("A" * 19 + aa, start=i) for i, aa in enumerate("ACDE")]
     with caplog.at_level(logging.WARNING):
         constructs = assemble_peptide_constructs(
             pairs,

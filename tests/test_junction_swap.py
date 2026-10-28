@@ -549,7 +549,7 @@ def test_packing_uses_longest_candidate_for_size_cap():
     pairs = []
     for k in range(3):
         frag = SimpleNamespace(
-            amino_acids="KLQGHSAPVL", gene_name='G%d' % k,
+            amino_acids="KLQGHSAPV" + "ACD"[k], gene_name='G%d' % k,
             mutant_amino_acid_start_offset=0,
             mutant_amino_acid_end_offset=10)
         pep = VaccinePeptide(mutant_protein_fragment=frag)

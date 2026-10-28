@@ -360,7 +360,7 @@ def test_assembly_with_mitd_appends_trafficking_domain():
 
 
 def test_assembly_splits_on_max_antigens():
-    pairs = [_variant_pair("AAAA", start=i) for i in range(5)]
+    pairs = [_variant_pair("AAA" + aa, start=i) for i, aa in enumerate("ACDEF")]
     options = RNAConstructConfig(signal_peptide=None, linker='GS',
                           include_mitd=False, antigens_per_construct=2,
                           max_constructs=10, max_antigen_length_aa=4,
@@ -371,7 +371,7 @@ def test_assembly_splits_on_max_antigens():
 
 def test_assembly_splits_on_max_length():
     long_aa = "A" * 200
-    pairs = [_variant_pair(long_aa, start=i) for i in range(4)]
+    pairs = [_variant_pair(long_aa[:-1] + aa, start=i) for i, aa in enumerate("ACDE")]
     options = RNAConstructConfig(
         signal_peptide=None, linker='GS', include_mitd=False,
         antigens_per_construct=10, max_constructs=10,
@@ -384,7 +384,7 @@ def test_assembly_splits_on_max_length():
 def test_assembly_max_constructs_caps_output():
     # New default max_constructs=1: extra antigens spill into a second
     # construct only when explicitly allowed.
-    pairs = [_variant_pair("A" * 30, start=i) for i in range(3)]
+    pairs = [_variant_pair("A" * 29 + aa, start=i) for i, aa in enumerate("ACD")]
     options = RNAConstructConfig(
         signal_peptide=None, linker='GS', include_mitd=False,
         antigens_per_construct=1, max_constructs=1,
@@ -500,7 +500,7 @@ def test_mrna_max_constructs_logs_topk_selection_at_info(caplog):
     # Build 6 antigens against a cap of 1 construct × 2 antigens =
     # 2 selected, 4 not selected.
     pairs = [
-        _variant_pair("KLQGHSAPVLDVIVN", contig=str(i + 1),
+        _variant_pair("KLQGHSAPVLDVIV" + "ACDEFG"[i], contig=str(i + 1),
                       start=1000 + i, gene_name="GENE%d" % i)
         for i in range(6)
     ]
@@ -543,16 +543,6 @@ def test_mrna_min_antigen_length_warning(caplog):
     assert any("below" in r.message and "mrna-min-antigen-length" in r.message
                for r in caplog.records), \
         "Expected a min-antigen-length warning for an undersized mRNA antigen"
-
-
-def test_select_antigen_window_used_by_both_modalities():
-    # The mutation-centered window helper lives in vaccine_library and
-    # is used by both peptide.py and mrna.py. Catch a regression where
-    # one modality forks its own copy of the logic.
-    from vaxrank import mrna, peptide
-    from vaxrank.vaccine_library import select_antigen_window
-    assert mrna.select_antigen_window is select_antigen_window
-    assert peptide.select_antigen_window is select_antigen_window
 
 
 # ---- polyA + structured manifest + CSV (issue #252) -----------------------

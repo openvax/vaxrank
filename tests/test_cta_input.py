@@ -163,7 +163,11 @@ def test_expression_only_cli_outputs_and_offline_replay(tmp_path, monkeypatch, c
     assert changed_design['final_product_audit']['reason'] == 'mhc_predictor_not_requested'
     assert all(p.poly_a_nt == 'A' * 120 for p in changed_design['final_product_audit']['products']['mrna'])
     if level == 'gene':
-        assert len(changed_design['final_product_audit']['products']['peptide']) > 1
+        # These two source genes supply the same emitted sequence. Raising
+        # capacity must not duplicate it or drop either gene's provenance.
+        peptide, = changed_design['final_product_audit']['products']['peptide']
+        assert {gene for sources in peptide.antigen_sources.values() for source in sources
+                for gene in source['gene_ids']} == {PRAME, MAGEA4}
     assert (first / 'peptide' / 'manifest.json').read_bytes() != (changed / 'peptide' / 'manifest.json').read_bytes()
 
 

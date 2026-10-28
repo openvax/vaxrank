@@ -134,6 +134,9 @@ def _canonical_native(value):
         return value
     result = {key: _canonical_native(item) for key, item in value.items()}
     metadata = result.get('__class__')
+    if (metadata == dict(__module__='vaxrank.peptide', __name__='PeptideConstruct')
+            and not result.get('antigens')):
+        result.pop('antigens', None)
     if metadata == dict(__module__='vaxrank.input_scope', __name__='InputScope'):
         for key in ('host_taxon_id', 'mhc_species', 'host_reference_sha256'):
             if result.get(key) is None:
@@ -189,7 +192,23 @@ def restore_products(args, ranked, modality, options, context=None):
             saved['products'], saved.get('window_audit'), saved['source_graph']):
         raise ValueError('Saved construct products do not match their checksum')
     if saved['identity'] == _assembly_identity(args, ranked, options, context):
-        return from_native_json(saved['products'], list)
+        products = from_native_json(saved['products'], list)
+        # Older snapshots can contain the duplicate-slot bug. Rebuild those
+        # designs under the corrected policy, retaining their input evidence.
+        # Unique historical products remain exactly replayable offline.
+        if products and not any(p.antigen_sources for p in products):
+            if modality == 'mrna':
+                sequences = [a['aa'] for p in products for a in p.antigens]
+            elif options.antigens_per_construct <= 1:
+                sequences = [p.sequence for p in products]
+            else:
+                from .assembly_antigens import antigen_occurrences
+                selected_names = {name for p in products for name in p.antigen_names}
+                sequences = [a.amino_acids for a in antigen_occurrences(ranked, options, modality)
+                             if a.name in selected_names]
+            if len(sequences) != len(set(sequences)):
+                return None
+        return products
     return None
 
 
@@ -202,8 +221,26 @@ def record_products(args, ranked, modality, options, products, context=None, win
     configuration.update(context or {})
     payload = to_native_json(products)
     window_audit = json.loads(json.dumps(window_audit, allow_nan=False))
+    inputs = _source_graph(ranked, options)
+    if any(p.antigen_sources for p in products):
+        mappings = [(name, source) for product in products
+                    for name, sources in product.antigen_sources.items() for source in sources]
+        for row in inputs:
+            for candidate in row['candidates']:
+                antigen = candidate['antigen']
+                prediction_ids = {e.prediction_group_source for e in candidate['epitopes']}
+                input_ids = {e.input_provenance.input_id for e in candidate['epitopes'] if e.input_provenance}
+                # Window refinement can crop a candidate and renumber its
+                # alternates. Link by retained source/evidence identities and
+                # exact contained sequence, not the mutable display label.
+                candidate['emitted_antigen_names'] = sorted({name for name, source in mappings
+                    if source['source_identifier'] == antigen.source_identifier
+                    and source['gene_name'] == antigen.gene_name
+                    and set(source['input_ids']) <= input_ids
+                    and set(source['prediction_ids']) <= prediction_ids
+                    and source['candidate_sequence'] in candidate['amino_acids']})
     graph = to_native_json(dict(
-        inputs=_source_graph(ranked, options),
+        inputs=inputs,
         products={p.name: list(p.antigen_names) for p in products}))
     assembly[modality] = dict(
         contract=1, identity=_assembly_identity(args, ranked, options, context),
