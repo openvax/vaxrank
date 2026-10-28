@@ -92,3 +92,14 @@ def test_detailed_appendix_uses_target_terms_and_compact_provenance(extension):
     assert 'Mutant epitopes' not in text and 'Wildtype epitopes' not in text
     assert 'private_raw_payload' not in text and 'raw_internal_key' not in text
     assert 'shared-reconstruction' in text
+
+
+def test_mixed_historical_and_current_products_do_not_claim_unselected_sources():
+    ranked = [candidate(0), candidate(1, 'GILGFVFTL')]
+    old, = assemble_peptide_constructs(ranked[:1], PeptideConstructConfig())
+    old = replace(old, antigens=[])
+    current = assemble_mrna_constructs(ranked[1:], RNAConstructConfig(
+        optimize_linkers=False, codon_method='use_best_codon'))
+    data = template(ranked, {'peptide': [old], 'mrna': current})
+    assert data['ranked_candidates'][0]['products'] == 'Selection mappings incomplete'
+    assert data['ranked_candidates'][1]['products'] == current[0].name
