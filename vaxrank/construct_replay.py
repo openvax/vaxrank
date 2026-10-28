@@ -223,22 +223,15 @@ def record_products(args, ranked, modality, options, products, context=None, win
     window_audit = json.loads(json.dumps(window_audit, allow_nan=False))
     inputs = _source_graph(ranked, options)
     if any(p.antigen_sources for p in products):
-        mappings = [(name, source) for product in products
-                    for name, sources in product.antigen_sources.items() for source in sources]
+        from .assembly_antigens import emitted_antigens_for_candidate
         for row in inputs:
             for candidate in row['candidates']:
-                antigen = candidate['antigen']
-                prediction_ids = {e.prediction_group_source for e in candidate['epitopes']}
-                input_ids = {e.input_provenance.input_id for e in candidate['epitopes'] if e.input_provenance}
                 # Window refinement can crop a candidate and renumber its
                 # alternates. Link by retained source/evidence identities and
                 # exact contained sequence, not the mutable display label.
-                candidate['emitted_antigen_names'] = sorted({name for name, source in mappings
-                    if source['source_identifier'] == antigen.source_identifier
-                    and source['gene_name'] == antigen.gene_name
-                    and set(source['input_ids']) <= input_ids
-                    and set(source['prediction_ids']) <= prediction_ids
-                    and source['candidate_sequence'] in candidate['amino_acids']})
+                mapping = emitted_antigens_for_candidate(candidate['antigen'], candidate['amino_acids'],
+                                                         candidate['epitopes'], products)
+                candidate['emitted_antigen_names'] = sorted({name for names in mapping.values() for name in names})
     graph = to_native_json(dict(
         inputs=inputs,
         products={p.name: list(p.antigen_names) for p in products}))

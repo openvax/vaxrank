@@ -366,6 +366,7 @@ def test_real_lens_fusion_becomes_ranked_construct_with_provenance(tmp_path):
     assert mrna_constructs[0].antigen_names == ["ANKLE2::CRY1 (fusion)"]
 
     creator = TemplateDataCreator(
+        candidate_details=True,
         ranked_variants_with_vaccine_peptides=fusion_pairs,
         patient_info=PatientInfo(patient_id="fusion-test"),
         final_review=None,
@@ -535,6 +536,7 @@ def test_lens_nonvariant_antigens_require_opt_in_and_retain_provenance():
         }
     ]
     template_data = TemplateDataCreator(
+        candidate_details=True,
         ranked_variants_with_vaccine_peptides=report_pairs,
         patient_info=PatientInfo(patient_id="source-policy-test"),
         final_review=None,

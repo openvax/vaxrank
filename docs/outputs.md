@@ -65,6 +65,20 @@ window and mutation intervals; they are not presented as reconstructed
 full-length proteins. Unknown source references remain unknown and require
 ORFdata's explicit compatibility policy when composed with a known host.
 
+## Reviewing a vaccine design
+
+With `--output-dir`, one `vaccine_report.txt` and `vaccine_report.pdf` summarize
+all emitted modalities. The product section shows exact sequences, lengths,
+antigen placements and source mappings; the candidate table links ranked source
+windows to the products that use them. Historical files without source mappings
+say that the information is unavailable. Successful empty designs explicitly
+report zero products.
+
+`--report-candidate-details` adds the detailed source-window and epitope appendix.
+Those tables describe candidate evidence, not manufactured product coverage.
+Report-only commands without `--output-dir` show candidate results and state
+that no construct files were emitted. HTML/PDF styling is bundled locally.
+
 ## Neoepitope report
 
 A per-(peptide, allele) table in XLSX or CSV, chosen by file extension. It is

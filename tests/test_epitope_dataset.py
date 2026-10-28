@@ -181,7 +181,7 @@ def test_explicit_antigens_survive_file_reload_and_build(kind, tmp_path):
     ascii_report = tmp_path / 'report.txt'
     html_report = tmp_path / 'report.html'
     run_cli(['--input-epitopes', str(native), '--output-ascii-report', str(ascii_report),
-             '--output-html-report', str(html_report)])
+             '--output-html-report', str(html_report), '--report-candidate-details'])
     for report_path in (ascii_report, html_report):
         text = report_path.read_text()
         assert 'Antigen source' in text

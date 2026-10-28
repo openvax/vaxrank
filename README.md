@@ -60,8 +60,8 @@ For a real VCF + RNA run, supply:
 - `--mhc-predictor`: which binding predictor to run
   ([available predictors](docs/mhc-predictors.md))
 
-To get vaccine constructs rather than reports, add `--output-dir` and, for mRNA,
-`--vaccine-type mrna`. [Vaccine designs](docs/vaccine-designs.md) describes the
+To emit vaccine constructs, add `--output-dir` (both modalities by default).
+Use `--vaccine-type peptide` or `--vaccine-type mrna` to select one modality. [Vaccine designs](docs/vaccine-designs.md) describes the
 peptide and mRNA designs and the files each one writes.
 
 ### Start from an already-scored report

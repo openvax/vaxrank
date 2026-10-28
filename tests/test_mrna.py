@@ -185,10 +185,8 @@ def test_summarize_mrna_ranking_decisions_empty_input():
     assert summary['dropped'] == []
 
 
-def test_ascii_report_renders_mrna_ranking_section():
-    """End-to-end: the ASCII report includes a ``mRNA vaccine
-    antigen selection`` section when the
-    ``mrna_ranking`` template-data field is populated."""
+def test_ascii_report_does_not_present_forecast_as_products():
+    """A selection forecast is not a record of actual emitted products."""
     from vaxrank.report import render_report
     import io
 
@@ -230,16 +228,10 @@ def test_ascii_report_renders_mrna_ranking_section():
     f = io.StringIO()
     render_report(template_data, f, 'templates/template.txt')
     rendered = f.getvalue()
-    # Post-2.25 section header (was "mRNA vaccine antigen selection").
-    assert 'Vaccine construction — mrna' in rendered
-    assert '2 of 12 ranked' in rendered
-    assert 'GENEA_1_100_A_T' in rendered
-    assert 'GENEB_2_200_A_T' in rendered
-    assert 'Not selected' in rendered
-    assert 'GENEK_3_300_A_T' in rendered
-    # Cap params named in the header.
-    assert '5' in rendered  # antigens_per_construct
-    assert '10' in rendered  # cap
+    assert 'Emitted products' in rendered
+    assert 'No construct files were emitted' in rendered
+    assert 'Vaccine construction — mrna' not in rendered
+    assert 'covers HLA-' not in rendered
 
 
 def test_ascii_report_skips_construction_section_when_no_modalities():

@@ -1,0 +1,47 @@
+<h2 id="products">Emitted products</h2>
+{% if product_groups %}
+<p>Exact products written by this run. Antigen positions are zero-based, end-exclusive amino-acid positions in the peptide or encoded protein.</p>
+{% for group in product_groups %}
+<section class="product-group">
+<h3>{{ group.modality }}</h3>
+<p>Constructs: <strong>{{ group.counts.constructs }}</strong> ({{ group.counts.unique_construct_sequences }} unique sequences).
+Antigen slots: <strong>{{ group.counts.antigen_slots }}</strong>.
+Unique antigen sequences: {{ group.counts.unique_antigen_sequences if group.counts.unique_antigen_sequences is not none else 'unavailable in this historical design' }}.</p>
+{% if group.counts.source_candidates %}
+<p>Recorded source events: {{ group.counts.source_events }}.
+Candidate mappings without a recorded event: {{ group.counts.source_candidates_without_event }}.
+Related alternative sequences do not establish independent target coverage.</p>
+{% endif %}
+{% if group.files %}<p>Product files (relative to the run output directory):
+{% for file in group.files %}<code>{{ file }}</code>{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+{% for product in group.products %}
+<article class="product">
+<h4>{{ product.name }} &middot; {{ product.length }} {{ product.unit }}</h4>
+{% if product.unit == 'aa' %}
+<p>N-terminal acetylation: {{ 'yes' if product.n_terminal_acetylation else 'no' }};
+C-terminal amidation: {{ 'yes' if product.c_terminal_amidation else 'no' }}.</p>
+{% endif %}
+<p>{{ 'Full nucleotide sequence, including polyA' if product.unit == 'nt' else 'Manufactured amino-acid sequence' }}:</p>
+<pre class="sequence">{{ product.sequence | wordwrap(70, break_long_words=True) }}</pre>
+{% if product.protein %}<p>Encoded protein:</p>
+<pre class="sequence">{{ product.protein | wordwrap(70, break_long_words=True) }}</pre>{% endif %}
+{% if product.antigens %}
+<table class="pure-table pure-table-bordered product-antigens">
+<thead><tr><th>Antigen / source genes</th><th>Exact antigen sequence</th><th>Position [start, end)</th><th>Source mappings</th></tr></thead>
+<tbody>{% for antigen in product.antigens %}
+<tr><td>{{ antigen.name }}{% if antigen.genes %}<br>{{ antigen.genes }}{% endif %}</td>
+<td class="sequence-cell">{{ antigen.sequence }}</td><td>[{{ antigen.start }}, {{ antigen.end }})<br>{{ antigen.length }} aa</td>
+<td>{{ antigen.sources if antigen.sources is not none else "unavailable" }} candidate mappings; {{ antigen.transcripts if antigen.transcripts is not none else "unavailable" }} transcripts</td></tr>
+{% endfor %}</tbody></table>
+<p class="note">Recorded source identifiers and evidence mappings are available in the manifest and native dataset.</p>
+{% else %}<p>Historical product: antigen placement/source mappings were not recorded. Labels: {{ product.antigen_names | join(', ') }}.</p>{% endif %}
+{% if include_manufacturability and product.manufacturability %}
+<div class="manufacturability"><h5>Manufacturability metrics</h5>
+<table class="pure-table pure-table-bordered">{% for key, value in product.manufacturability.items() %}
+<tr><td>{{ key | replace('_', ' ') }}</td><td>{{ value }}</td></tr>{% endfor %}</table></div>
+{% endif %}
+</article>
+{% else %}<p>No {{ group.modality }} products were emitted.</p>{% endfor %}
+</section>
+{% endfor %}
+{% else %}<p>No construct files were emitted. Use <code>--output-dir</code> to request product assembly. Candidate windows below are analysis results.</p>{% endif %}

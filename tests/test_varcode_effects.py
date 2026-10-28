@@ -202,6 +202,7 @@ def test_template_data_include_manufacturability_override():
 
     def make(**kw):
         return TemplateDataCreator(
+            candidate_details=True,
             ranked_variants_with_vaccine_peptides=[], patient_info=patient,
             final_review='', reviewers='', args_for_report=args,
             input_json_file=None, **kw).template_data

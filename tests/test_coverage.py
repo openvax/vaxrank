@@ -285,11 +285,8 @@ def test_summarize_includes_coverage_for_selected_pool():
     assert coverage_by_allele['HLA-B*07:02'].tier is None
 
 
-def test_ascii_report_renders_coverage_block_in_construction_section():
-    """End-to-end render: a populated ``vaccine_constructions``
-    block produces the new coverage section in the ASCII output —
-    section header, per-allele coverage lines, per-antigen
-    ``covers A (tier)`` annotations."""
+def test_ascii_report_does_not_present_candidate_coverage_as_product_coverage():
+    """A selection forecast is not a record of actual emitted products."""
     import io
     from vaxrank.report import render_report
 
@@ -334,17 +331,10 @@ def test_ascii_report_renders_coverage_block_in_construction_section():
     f = io.StringIO()
     render_report(template_data, f, 'templates/template.txt')
     rendered = f.getvalue()
-    # Section header.
-    assert 'Vaccine construction — mrna' in rendered
-    # Per-allele coverage lines: one covered, one uncovered.
-    assert 'HLA-A*02:01' in rendered
-    assert 'HLA-B*07:02' in rendered
-    assert 'strong' in rendered
-    assert 'none' in rendered
-    # Per-antigen tier annotation.
-    assert 'covers HLA-A*02:01 (strong)' in rendered
-    # Best presentation %-rank surfaces in the coverage detail line.
-    assert '0.30' in rendered
+    assert 'Emitted products' in rendered
+    assert 'No construct files were emitted' in rendered
+    assert 'Vaccine construction — mrna' not in rendered
+    assert 'covers HLA-' not in rendered
 
 
 def test_summarize_per_row_has_allele_tiers_and_manufacturability():
