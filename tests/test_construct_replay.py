@@ -61,6 +61,50 @@ def product_files(directory):
             and path.parent.name in ('peptide', 'mrna')}
 
 
+@pytest.mark.parametrize('suffix', ['csv', 'tsv'])
+def test_empty_native_result_replays_scope_settings_and_products(tmp_path, monkeypatch, suffix):
+    from vaxrank.epitope_config import EpitopeConfig
+    from vaxrank.external_rescoring import prepare_reports
+    from vaxrank.input_scope import InputProvenance, InputScope
+
+    scope = InputScope(patient_id='empty-patient', reference_assembly='GRCh38',
+                       mhc_alleles=('HLA-A*02:01',))
+    original = EpitopeDataset.from_predictions((), config=EpitopeConfig(score_expr='1.0'))
+    original.provenance = (InputProvenance('empty-input', 'vcf_bam', 'input.vcf', 'a' * 64, scope),)
+    native = tmp_path / ('empty.' + suffix)
+    original.save(native)
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
+    monkeypatch.setattr('vaxrank.cli.entry_point.mhc_binding_predictor_from_args', forbidden)
+    _, frame, candidates = prepare_reports([('epitopes', native)])
+    loaded = frame.attrs['epitope_dataset']
+    assert not candidates and loaded.result.df.empty
+    assert loaded.provenance == original.provenance
+    assert loaded.config == original.config
+    assert not loaded.antigens and not loaded.selection.get('source_evidence')
+
+    first, second = tmp_path / 'first', tmp_path / 'second'
+    replay(native, first, '--peptide-max-constructs', '3', '--mrna-max-constructs', '2')
+    saved = EpitopeDataset.load(first / 'candidate_predictions.tsv')
+    assembly = saved.selection['construct_assembly']
+    assert set(assembly) == {'peptide', 'mrna'}
+    assert assembly['peptide']['configuration']['max_constructs'] == 3
+    assert assembly['mrna']['configuration']['max_constructs'] == 2
+    for record in assembly.values():
+        assert from_native_json(record['products'], list) == []
+        assert from_native_json(record['source_graph'], dict) == {'inputs': [], 'products': {}}
+    monkeypatch.setattr('vaxrank.cli.entry_point.assemble_peptide_constructs', forbidden)
+    monkeypatch.setattr('vaxrank.cli.entry_point.assemble_mrna_constructs', forbidden)
+    replay(first / 'candidate_predictions.tsv', second)
+    restored = EpitopeDataset.load(second / 'candidate_predictions.tsv')
+    assert restored.provenance == original.provenance
+    assert restored.config == original.config
+    assert restored.selection['construct_assembly'] == assembly
+    assert restored.result.df.empty and not restored.epitopes and not restored.antigens
+    files = product_files(first)
+    assert files and files == product_files(second)
+    assert all(not contents for path, contents in files.items() if path.endswith('.fasta'))
+
+
 def test_pre_species_design_restores_both_products_without_reassembly(tmp_path, monkeypatch):
     # Actual 3.44.3 export (3eaa3d0), generated with this module's source/design
     # helpers and --mrna-no-optimize-linkers --mrna-codon-method use_best_codon.

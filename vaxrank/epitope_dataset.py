@@ -428,6 +428,9 @@ def read_epitope_report(path, *, source_format, scope_declarations=None, **_):
             enriched = stream.readline().startswith("#")
         dataset = (EpitopeDataset.load(path) if enriched else
                    EpitopeDataset.from_predictions(load_predictions(path)))
+        if not enriched and not dataset.epitopes:
+            raise ValueError("External inputs contain no candidate peptides to score; "
+                             "empty replay requires a native epitope dataset")
         if not enriched and any(e.per_allele_scores for e in dataset.epitopes):
             # Older native files retained results but not the expression or
             # annotations that produced them. Expose those results to the
