@@ -281,9 +281,17 @@ for allele-free Exacto observations.
 
 Fresh and additive inference retain distinct occurrence flanks and comparator
 contexts. `--external-peptide-only` explicitly discards flanks for inference.
-External `--prediction-cache` currently requires that option and a single model;
-[contextual cache integration](https://github.com/openvax/vaxrank/issues/624) is
-pending. Original-only replay needs neither a model nor a cache. Optional
+External `--prediction-cache predictions.tsv` accepts contextual Topiary output
+with one configured fallback model. The cache is queried for each supplied
+primary and comparator peptide, its actual flanks, requested genotype and
+prediction kind. Distinct contexts stay distinct; unknown flanks do not stand
+in for known sequence termini. Missing coverage invokes the configured model,
+and Topiary requires matching model/version evidence before adding its results.
+Cached measurements and input source identities remain unchanged. The explicit
+`--external-peptide-only` mode instead queries without flanks; it does not reuse
+context-dependent measurements as peptide-only results.
+
+Original-only native replay needs neither a model nor a cache. Optional
 processing annotation requires `--processing-aware-annotation`.
 
 ## Native Exacto inputs

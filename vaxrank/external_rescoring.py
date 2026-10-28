@@ -915,12 +915,14 @@ def load_unified_external(args, epitope_config, options, genome):
             cache_path = getattr(args, 'prediction_cache', None)
             if cache_path:
                 from topiary import CachedPredictor
-                if not getattr(args, 'external_peptide_only', False):
-                    raise ValueError('External prediction caches require --external-peptide-only; '
-                                     'contextual exact-cache queries are tracked in Topiary #468')
                 if len(models) != 1:
                     raise ValueError('--prediction-cache requires one configured external predictor')
-                models = [CachedPredictor.from_topiary_output(cache_path, fallback=models[0])]
+                cached = CachedPredictor.from_topiary_output(cache_path, fallback=models[0])
+                # A reusable cache can contain more genotypes than this run.
+                # Select the requested scope; Topiary checks each occurrence,
+                # kind and context and version-checks fallback predictions.
+                cached.alleles = alleles
+                models = [cached]
             return models
     elif not direct and not cta and not antigens and getattr(args, 'mhc_predictor', None):
         raise ValueError("Use --external-predictions fresh or additive to run --mhc-predictor")
