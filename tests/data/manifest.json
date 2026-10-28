@@ -57,6 +57,7 @@
     "epitope_fixtures/lens_v1.4_with_stability.tsv": "65d5c6a863242b9d89ece508ea91770106a246b959d1890f076002ec4ff59f35",
     "epitope_fixtures/lens_v1.9_mhcflurry_only.tsv": "fdfad58be48043ecaaa1d45bfada929b1f38a1266a6e9f3e24cde04fe8c4f76c",
     "epitope_fixtures/native_design_3_44_3.tsv.gz": "63904b8f4f6085a83be698790f8f4405f92f75f6765c947128168fa76b743d0c",
+    "epitope_fixtures/native_duplicate_design_3_47_3.tsv.gz": "c175c5ede3c0fa6ab08eac2b78e41932e9ffaf2427409faa0a9a946a8326a6b5",
     "epitope_fixtures/pvacseq_example.tsv": "09463758c13eec58dcc95b18acdde0ca47269d492a2ca11329ba6774b93cc8b9",
     "epitope_fixtures/real_lens_subsets/lens_v1.4_real_subset.tsv": "a2ddc0557a57f434062077e1c17122ee84ca25a8f8931be1111881464b2839e5",
     "epitope_fixtures/real_lens_subsets/lens_v1.5_real_subset.tsv": "d0ab33119fe67b68ed93bc2fbe196fd7043bff09eb0db936e1c49a3fdfc7b0ce",

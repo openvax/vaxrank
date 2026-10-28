@@ -34,6 +34,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
+from .assembly_antigens import antigens_for_assembly
 from .manufacturability import ManufacturabilityScores
 from .construct_sequence import ConstructPlacement, validate_construct_placements
 from .native_serialization import to_native_json
@@ -41,8 +42,6 @@ from .vaccine_library import (
     gene_names_from_antigen_names,
     get_linker,
     iter_named_antigens,
-    select_antigen_window,
-    top_target_epitopes,
 )
 
 logger = logging.getLogger(__name__)
@@ -161,6 +160,12 @@ class PeptideConstruct:
     components: dict = field(default_factory=dict)
     manufacturability: dict = field(default_factory=dict)
     construct_placements: tuple = field(default_factory=tuple)
+    antigens: list = field(default_factory=list)
+
+    @property
+    def antigen_sources(self):
+        """Separate source mappings for each emitted antigen segment."""
+        return {a['name']: a['sources'] for a in self.antigens if a.get('sources')}
 
     def __post_init__(self):
         self.construct_placements = tuple(self.construct_placements)
@@ -180,51 +185,6 @@ def peptide_construct_from_sequence(record):
         manufacturability=_manufacturability_for(record.sequence),
         construct_placements=(ConstructPlacement(record, 0),),
     )
-
-
-def _antigen_records(ranked_vaccine_peptides, antigen_content,
-                     max_antigen_length_aa, epitopes_per_antigen=1,
-                     candidates_per_slot=1):
-    """Yield ``(name, amino_acids)`` per antigen.
-
-    Dispatch on ``antigen_content``:
-      - ``'mutation_spanning'``: legacy configuration name for one window
-        preserving all targetable antigen content per VaccinePeptide (or per
-        ``candidates_per_slot`` alternates).
-      - ``'minimal_epitope'``: emit the top
-        ``epitopes_per_antigen`` MHC ligands per VaccinePeptide as
-        independent antigens. ``epitopes_per_antigen=1`` (default) is
-        the legacy "single top ligand" semantics; >1 packs multiple
-        ligands from the same variant.
-
-    Naming + alt-suffix logic comes from ``iter_named_antigens``,
-    shared with mRNA assembly so antigen names match across types.
-    """
-    for base_name, antigen, peptide in iter_named_antigens(
-            ranked_vaccine_peptides, candidates_per_slot=candidates_per_slot):
-        if antigen_content == "minimal_epitope":
-            tops = top_target_epitopes(peptide, n=epitopes_per_antigen)
-            if not tops:
-                logger.info(
-                    "Skipping %s in minimal_epitope mode: no mutant "
-                    "epitope predictions available.", base_name)
-                continue
-            for k, ep in enumerate(tops):
-                # Tag the minimal-epitope antigen inside the category
-                # parens so the gene stays cleanly parseable:
-                # "GENE (SNV)" → "GENE (SNV, epitope)". For >1 per
-                # antigen, number them.
-                tag = "epitope" if len(tops) == 1 else "epitope%d" % (k + 1)
-                if base_name.endswith(")"):
-                    name = "%s, %s)" % (base_name[:-1], tag)
-                else:
-                    name = "%s (%s)" % (base_name, tag)
-                yield name, ep.sequence
-        else:
-            # Legacy-named mutation_spanning mode is target-mask based for all
-            # antigen kinds.
-            yield base_name, select_antigen_window(
-                antigen, base_name, max_antigen_length_aa)
 
 
 def _manufacturability_for(sequence):
@@ -291,7 +251,7 @@ def _pack_multi_epitope(records, options, linker):
 
 def assemble_peptide_constructs(
         ranked_vaccine_peptides, options=None, *,
-        target_alleles=None, window_audit=None):
+        target_alleles=None, window_audit=None, source_evidence=None):
     """Assemble peptide constructs from ranked vaccine peptides.
 
     Parameters
@@ -305,6 +265,10 @@ def assemble_peptide_constructs(
         When empty / None, the input order is preserved (today's
         pure-score behavior). Animal-agnostic: HLA, mouse H-2, swine
         SLA all work the same way.
+    source_evidence : optional, dict
+        Retained source evidence keyed by producer evidence ID, as in
+        ``EpitopeDataset.selection['source_evidence']``. Supplies recorded
+        source-event identities for product provenance; never changes scores.
 
     Returns
     -------
@@ -327,11 +291,10 @@ def assemble_peptide_constructs(
                 if id(item) not in head_keys]
         ranked_vaccine_peptides = head + tail
 
-    records = list(_antigen_records(
-        ranked_vaccine_peptides, options.antigen_content,
-        options.max_antigen_length_aa,
-        epitopes_per_antigen=options.epitopes_per_antigen,
-        candidates_per_slot=options.candidates_per_slot))
+    antigens = antigens_for_assembly(
+        ranked_vaccine_peptides, options, 'peptide', source_evidence=source_evidence)
+    records = [(a.name, a.amino_acids) for a in antigens]
+    source_mappings = {a.name: a.sources for a in antigens}
     audits = {}
     for name, _, vp in iter_named_antigens(ranked_vaccine_peptides, options.candidates_per_slot):
         audits.setdefault((name, vp.amino_acids), []).append(vp.window_selection_audit)
@@ -351,7 +314,7 @@ def assemble_peptide_constructs(
 
     constructs = []
     if options.antigens_per_construct <= 1:
-        # One construct per (variant, candidate) record. Covers both
+        # One construct per distinct emitted sequence. Covers both
         # SLP (mutation_spanning, 1 per construct) and minimal-epitope
         # (one short ligand per variant) designs.
         for i, (name, sequence) in enumerate(records):
@@ -361,17 +324,14 @@ def assemble_peptide_constructs(
                     "remaining %d candidate(s).",
                     options.max_constructs, len(records) - i)
                 break
-            if len(sequence) < options.min_antigen_length_aa:
-                logger.warning(
-                    "Antigen %s emitted at %d aa, below "
-                    "--peptide-min-antigen-length-aa (%d).",
-                    name, len(sequence), options.min_antigen_length_aa)
             audit_queue = audits.get((name, sequence), [])
             audit = audit_queue.pop(0) if audit_queue else {}
             constructs.append(PeptideConstruct(
                 name="peptide_%03d" % (len(constructs) + 1),
                 sequence=sequence,
                 antigen_names=[name],
+                antigens=[dict(name=name, aa=sequence, length_aa=len(sequence), start_aa=0,
+                               end_aa=len(sequence), sources=source_mappings[name])],
                 components={**base_components, **({'window_selection': audit} if audit else {})},
                 manufacturability=_manufacturability_for(sequence),
             ))
@@ -392,6 +352,11 @@ def assemble_peptide_constructs(
     for group in packed:
         names = [n for n, _ in group]
         sequence = linker.amino_acids.join(aa for _, aa in group)
+        segments, offset = [], 0
+        for name, aa in group:
+            segments.append(dict(name=name, aa=aa, length_aa=len(aa), start_aa=offset,
+                                 end_aa=offset + len(aa), sources=source_mappings[name]))
+            offset += len(aa) + len(linker.amino_acids)
         components = dict(base_components)
         components.update({
             'linker': options.linker,
@@ -401,6 +366,7 @@ def assemble_peptide_constructs(
             name="peptide_%03d" % (len(constructs) + 1),
             sequence=sequence,
             antigen_names=names,
+            antigens=segments,
             components=components,
             manufacturability=_manufacturability_for(sequence),
         ))
@@ -459,6 +425,7 @@ def write_peptide_outputs(constructs, fasta_path, manifest_path=None,
                 'length': len(c.sequence),
                 'length_unit': 'aa',
                 'antigen_names': c.antigen_names,
+                **({'antigens': c.antigens} if c.antigens else {}),
                 'components': c.components,
                 'manufacturability': c.manufacturability,
                 **({'construct_provenance': json.loads(to_native_json(c.construct_placements))}

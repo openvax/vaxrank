@@ -137,6 +137,11 @@ An overlapping viral CDS is not automatically proof of the sample's translated
 product. Reference annotation, RNA coverage, initiation and protein translation
 are distinct claims.
 
+Alternative Isovar candidate IDs do not imply distinct vaccine products.
+Identical emitted sequences share a design slot, with all contributing source
+mappings retained; related but different windows remain alternatives from the
+same recorded event. See [distinct sequences and source mappings](vaccine-designs.md#distinct-sequences-and-source-mappings).
+
 Support retains its original units and scope:
 
 - Variant ORFs: assembled RNA fragments; coding tiling and single-read spans are

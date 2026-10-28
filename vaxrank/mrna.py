@@ -47,6 +47,7 @@ from dnachisel import (
 )
 from dnachisel.biotools import reverse_translate
 
+from .assembly_antigens import antigens_for_assembly
 from .mrna_library import (
     MITDS,
     SIGNAL_PEPTIDES,
@@ -56,9 +57,6 @@ from .mrna_library import (
 from .vaccine_library import (
     gene_names_from_antigen_names,
     get_linker,
-    iter_named_antigens,
-    select_antigen_window,
-    top_target_epitopes,
 )
 from .construct_sequence import validate_construct_placements
 from .native_serialization import to_native_json
@@ -226,6 +224,11 @@ class RNAConstruct:
     elements: dict = field(default_factory=dict)
     antigens: list = field(default_factory=list)
     construct_placements: tuple = field(default_factory=tuple)
+
+    @property
+    def antigen_sources(self):
+        """Separate source mappings for each emitted antigen segment."""
+        return {a['name']: a['sources'] for a in self.antigens if a.get('sources')}
 
     def __post_init__(self):
         self.construct_placements = tuple(self.construct_placements)
@@ -397,60 +400,6 @@ def summarize_mrna_ranking_decisions(
             for row in construction_summary['dropped']
         ],
     }
-
-
-def _antigen_aa_sequences(ranked_vaccine_peptides, max_antigen_length_aa,
-                          min_antigen_length_aa=0, candidates_per_slot=1,
-                          antigen_content="mutation_spanning",
-                          epitopes_per_antigen=1):
-    """Yield ``(name, amino_acid_string)`` per antigen.
-
-    Dispatches on ``antigen_content`` (shared semantics with
-    ``peptide._antigen_records``):
-
-    - ``'mutation_spanning'``: legacy configuration name for a window that
-      preserves the antigen's targetable span, up to
-      ``max_antigen_length_aa`` per VaccinePeptide (canonical mRNA antigen —
-      BioNTech FixVac-style 25mer for mutation antigens).
-    - ``'minimal_epitope'``: emit the top ``epitopes_per_antigen``
-      MHC ligands per VaccinePeptide as separate (short) antigens.
-      Concatenated minimal-epitope mRNA constructs (the
-      "string-of-beads" design — Whitton et al., J Virol 67:348,
-      1993, PMID 7677954) become first-class.
-
-    Warns when a mutation_spanning window falls below
-    ``min_antigen_length_aa`` (typically a stop-loss / frameshift
-    fragment shorter than the floor); for minimal_epitope content,
-    skip-with-info when no epitope predictions are available.
-
-    Naming + alt-suffix logic comes from ``iter_named_antigens`` so
-    the antigen names match the peptide-modality output.
-    """
-    if antigen_content not in ('mutation_spanning', 'minimal_epitope'):
-        raise ValueError(
-            "antigen_content must be 'mutation_spanning' or "
-            "'minimal_epitope'; got %r" % antigen_content)
-    for name, antigen, peptide in iter_named_antigens(
-            ranked_vaccine_peptides, candidates_per_slot=candidates_per_slot):
-        if antigen_content == "minimal_epitope":
-            tops = top_target_epitopes(peptide, n=epitopes_per_antigen)
-            if not tops:
-                logger.info(
-                    "Skipping %s in minimal_epitope mode: no mutant "
-                    "epitope predictions available.", name)
-                continue
-            for k, ep in enumerate(tops):
-                suffix = "_epitope" if len(tops) == 1 else "_epitope%d" % (k + 1)
-                yield name + suffix, ep.sequence
-        else:
-            window = select_antigen_window(
-                antigen, name, max_antigen_length_aa)
-            if len(window) < min_antigen_length_aa:
-                logger.warning(
-                    "Antigen %s emitted at %d aa, below "
-                    "--mrna-min-antigen-length-aa (%d).",
-                    name, len(window), min_antigen_length_aa)
-            yield name, window
 
 
 def build_protein_with_segments(antigen_aas, antigen_names, signal_peptide_aa,
@@ -679,7 +628,7 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
 def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                              mhc_predictor=None, mhc_alleles=None,
                              reference_proteome=None, *,
-                             target_alleles=None):
+                             target_alleles=None, source_evidence=None):
     """Assemble mRNA constructs from ranked vaccine peptides.
 
     Parameters
@@ -706,6 +655,10 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
         optimizer's input); kept separate so the two can diverge if
         a future caller wants to optimize against a population
         cohort while ranking against the patient.
+    source_evidence : optional, dict
+        Retained source evidence keyed by producer evidence ID, as in
+        ``EpitopeDataset.selection['source_evidence']``. Supplies recorded
+        source-event identities for product provenance; never changes scores.
 
     Returns
     -------
@@ -743,13 +696,10 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     utr_3p_dna = resolve_named_mrna_element(
         UTRS_3P, options.utr_3p, "3' UTR")
 
-    antigens = list(_antigen_aa_sequences(
-        ranked_vaccine_peptides,
-        max_antigen_length_aa=options.max_antigen_length_aa,
-        min_antigen_length_aa=options.min_antigen_length_aa,
-        candidates_per_slot=options.candidates_per_slot,
-        antigen_content=options.antigen_content,
-        epitopes_per_antigen=options.epitopes_per_antigen))
+    selected_antigens = antigens_for_assembly(
+        ranked_vaccine_peptides, options, 'mrna', source_evidence=source_evidence)
+    antigens = [(a.name, a.amino_acids) for a in selected_antigens]
+    source_mappings = {a.name: a.sources for a in selected_antigens}
     if not antigens:
         return []
 
@@ -888,6 +838,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                 'end_aa': seg['end_aa'],
             }
             if seg['kind'] == 'antigen':
+                seg_record['sources'] = source_mappings[seg['name']]
                 antigens_meta.append(seg_record)
             elif seg['kind'] == 'linker':
                 ls = dict(seg_record)

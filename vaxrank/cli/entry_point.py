@@ -402,8 +402,10 @@ def _emit_peptide_constructs(args, ranked, target_dir):
     from ..construct_replay import restore_products, record_products
     constructs = restore_products(args, ranked, 'peptide', peptide_options, context)
     if constructs is None:
+        dataset = getattr(args, '_design_dataset', None)
         constructs = assemble_peptide_constructs(
             ranked, options=peptide_options, target_alleles=target_alleles,
+            source_evidence=dataset.selection.get('source_evidence') if dataset else None,
             **({'window_audit': window_audit} if peptide_options.window_selection else {}))
     else:
         window_audit = args._construct_assembly['peptide'].get('window_audit') or []
@@ -792,10 +794,12 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     constructs = restore_products(args, ranked, 'mrna', options, junction_context)
     if constructs is None:
         mhc_predictor, mhc_alleles = resolve_mhc_for_linker_optimizer(args, yaml_kwargs)
+        dataset = getattr(args, '_design_dataset', None)
         constructs = assemble_mrna_constructs(
             ranked, options=options,
             mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles,
-            target_alleles=target_alleles)
+            target_alleles=target_alleles,
+            source_evidence=dataset.selection.get('source_evidence') if dataset else None)
         policy = 'none'
         if mhc_predictor is not None:
             policy = ('explicit_junction_model' if cfg('mrna_junction_predictor', 'junction_predictor')
@@ -1004,7 +1008,7 @@ def populate_default_output_paths(args):
             ", ".join("%s -> %s" % (a, p) for a, p in filled))
 
 
-def write_run_summary(args, patient_info, source):
+def write_run_summary(args, patient_info, source, products=None):
     """Write a top-level ``run_summary.txt`` in --output-dir.
 
     In multi-vaccine-type runs the constructs live in per-modality
@@ -1111,6 +1115,23 @@ def write_run_summary(args, patient_info, source):
             "  with vaccine peptide(s):   %d" % (
                 patient_info.num_variants_with_vaccine_peptides or 0),
         ]
+
+    if products is not None:
+        from ..assembly_antigens import summarize_products
+        lines += ['', 'Emitted products:']
+        for modality, constructed in products.items():
+            counts = summarize_products(constructed)
+            lines.append('  %s: constructs %d (%d unique sequences); antigen slots %d; '
+                         'unique antigen sequences: %s' % (
+                             modality, counts['constructs'], counts['unique_construct_sequences'],
+                             counts['antigen_slots'], counts['unique_antigen_sequences']
+                             if counts['unique_antigen_sequences'] is not None else 'unavailable'))
+            if counts['source_candidates']:
+                lines.append('    recorded source events: %d; candidate mappings without an event: %d; '
+                             'shared evidence groups: %d' % (
+                                 counts['source_events'], counts['source_candidates_without_event'],
+                                 counts['evidence_groups']))
+        lines.append('  Related alternative sequences do not establish independent target coverage.')
 
     lines += ["", "Outputs (relative to this directory):"]
     for label, attr in (
@@ -1465,7 +1486,7 @@ def run_cli(args_list=None):
         if dataset is None:
             raise ValueError('Antigen export requires resolved native input evidence')
         AntigenDataset.from_epitope_dataset(dataset).save(args.output_antigens)
-    write_run_summary(args, patient_info, source)
+    write_run_summary(args, patient_info, source, products=products)
 
     ########################
     # Template-based reports (PDF / HTML / ASCII)

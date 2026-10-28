@@ -25,6 +25,42 @@ That matrix yields eight designs, four per vaccine type:
 `--epitopes-per-antigen` sets how many top ligands to take from each ranked
 vaccine peptide in `minimal_epitope` mode (default `1`).
 
+## Distinct sequences and source mappings
+
+Peptide and mRNA assembly group identical **emitted antigen sequences** after
+window selection or minimal-epitope selection, before packing or applying
+construct caps. Ten candidate IDs producing the same sequence occupy one
+antigen slot. The first candidate in selection order supplies its display name;
+all contributing source mappings remain separate. Scores and RNA support are
+not added across those mappings.
+
+`--peptide-candidates-per-slot` and `--mrna-candidates-per-slot` control how many
+ranked alternative windows per source to consider. Distinct alternatives remain
+eligible; repeating an identical sequence does not create another slot. These
+settings do not request repeated doses or repeated copies within a construct.
+Explicitly supplied constructs retain their stated sequence, including repeats.
+
+Both modality manifests contain `antigens`: exact amino-acid sequences, lengths,
+zero-based half-open positions in the peptide or mRNA's encoded protein, and a
+`sources` list. Source records retain candidate and prediction IDs, genes,
+transcripts, proteins, species, input IDs, and recorded event/evidence-group
+identities. The Python products expose the same records as `.antigens` and a
+derived `.antigen_sources` mapping. Full prediction and reconstruction evidence
+remains in the native dataset and its assembly source graph.
+
+Overlapping but different sequences are not merged. In particular, several
+ncORF windows from one event are alternative sequences, not independent target
+events. `run_summary.txt` counts actual products, distinct antigen sequences,
+recorded source events and candidate mappings without known events separately.
+An evidence group identifies shared reconstruction evidence; it is not itself a
+claim of an independent biological event.
+
+Native designs saved before 3.47.4 with duplicate slots are rebuilt on replay.
+That may require the configured junction predictor again. Save the corrected
+native output to replay it offline afterward. Historical designs without
+duplicate slots still restore their original products unchanged; their older
+manifests may lack the newer source mappings.
+
 The commands below start from `candidates.tsv`, a native export with admitted
 antigens and retained sequence/annotation evidence. See [input workflows](input-workflows.md)
 to create one.
