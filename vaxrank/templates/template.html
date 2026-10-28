@@ -24,6 +24,13 @@
             <br>
 
             {% include "templates/products.html" %}
+            {% if prediction_configuration %}
+            <h2>Effective prediction configuration</h2>
+            {% for stage in prediction_configuration %}
+            <h3>{{ stage.stage }}: {{ stage.status }}</h3>
+            <ul>{% for detail in stage.details %}<li>{{ detail }}</li>{% endfor %}</ul>
+            {% endfor %}
+            {% endif %}
             {% if ranked_candidates is defined %}{% include "templates/ranking.html" %}{% endif %}
 
             <h3 id="args">COMMAND LINE ARGUMENTS</h3>

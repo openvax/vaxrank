@@ -12,7 +12,6 @@
 
 """Tests for per-junction linker optimization (vaxrank issue #247)."""
 
-import warnings
 from types import SimpleNamespace
 
 import pytest
@@ -21,7 +20,6 @@ from mhctools.base_predictor import BasePredictor
 from mhctools.pred import PeptideResult, Prediction
 
 from vaxrank.junction_swap import (
-    JunctionPredictionWarning,
     JunctionSwapResult,
     junction_kmers,
     optimize_linkers,
@@ -41,7 +39,10 @@ class StubPredictor(BasePredictor):
         self.rank_table = rank_table or {}
         self.default_rank = default_rank
 
-    def predict(self, peptides):
+    def kind_support(self):
+        return {'pMHC_presentation': {'mhc_dependence': 'single_allele'}}
+
+    def predict(self, peptides, n_flanks=None, c_flanks=None):
         out = []
         seen_alleles = set()
         for kmer, allele in self.rank_table.keys():
@@ -358,56 +359,26 @@ def test_optimize_default_linker_burden_tracked_in_sweep():
 
 # ---- review-fix coverage -----------------------------------------------------
 
-def test_score_junction_kmers_warns_once_at_repeated_call_site():
-    """A predictor that returns predictions without percentile_rank
-    should produce exactly one standard warning per call site — not one per
-    junction × candidate."""
-    class NoRankPredictor:
-        def predict(self, peptides):
-            return [PeptideResult((Prediction(kind="pMHC_affinity", score=None,
+def test_score_junction_kmers_rejects_missing_ranks():
+    class NoRankPredictor(StubPredictor):
+        def predict(self, peptides, n_flanks=None, c_flanks=None):
+            return [PeptideResult((Prediction(kind="pMHC_presentation", score=.1,
                                               peptide=p, allele="HLA-A*02:01"),))
                     for p in peptides]
 
-    with warnings.catch_warnings(record=True) as captured:
-        warnings.simplefilter("default", JunctionPredictionWarning)
-        for _ in range(5):
-            score_junction_kmers(
-                ["KLQGHSAPV"], ["HLA-A*02:01"], NoRankPredictor()
-            )
-    no_rank_warnings = [
-        item for item in captured
-        if "usable percentile_rank" in str(item.message)
-    ]
-    assert len(no_rank_warnings) == 1, (
-        "Expected exactly one no-rank warning across 5 calls, got %d"
-        % len(no_rank_warnings))
+    with pytest.raises(ValueError, match='finite percentile_rank'):
+        score_junction_kmers(["KLQGHSAPV"], ["HLA-A*02:01"], NoRankPredictor())
 
 
-def test_score_junction_kmers_warns_when_allele_filter_drops_all():
-    """If the predictor returns only alleles outside the patient set,
-    warn once per call site (the optimizer would otherwise silently pick the first
-    candidate)."""
-    class WrongAllelePredictor:
-        def predict(self, peptides):
-            # Returns only HLA-B*07:02 predictions; caller asks for A*02:01
+def test_score_junction_kmers_rejects_missing_allele_coverage():
+    class WrongAllelePredictor(StubPredictor):
+        def predict(self, peptides, n_flanks=None, c_flanks=None):
             return [PeptideResult((Prediction(kind="pMHC_presentation", score=.1,
                 peptide=p, allele="HLA-B*07:02", percentile_rank=10.0),))
                 for p in peptides]
 
-    with warnings.catch_warnings(record=True) as captured:
-        warnings.simplefilter("default", JunctionPredictionWarning)
-        for _ in range(2):
-            rows = score_junction_kmers(
-                ["KLQGHSAPV"], ["HLA-A*02:01"], WrongAllelePredictor()
-            )
-    assert rows == [], "All predictions filtered out → no rows"
-    filter_warnings = [
-        item for item in captured
-        if "allele filter dropped all" in str(item.message)
-    ]
-    assert len(filter_warnings) == 1, (
-        "Expected exactly one allele-filter warning, got %d"
-        % len(filter_warnings))
+    with pytest.raises(ValueError, match='prediction|allele'):
+        score_junction_kmers(["KLQGHSAPV"], ["HLA-A*02:01"], WrongAllelePredictor())
 
 
 def test_assemble_manifest_chosen_uses_canonical_linker_names():
@@ -584,7 +555,12 @@ def test_packing_uses_longest_candidate_for_size_cap():
 
 def test_public_api_preserves_occurrences_and_separates_endpoints():
     class MultiKindPredictor(BasePredictor):
-        def predict(self, peptides):
+        def kind_support(self):
+            return {'pMHC_affinity': {'mhc_dependence': 'single_allele'},
+                    'pMHC_presentation': {'mhc_dependence': 'single_allele'},
+                    'antigen_processing': {'mhc_dependence': 'none'}}
+
+        def predict(self, peptides, n_flanks=None, c_flanks=None):
             return [PeptideResult(tuple(Prediction(
                 peptide=p, allele=a, kind=k, percentile_rank=r, score=.1, value=100. if k == 'pMHC_affinity' else None,
                 predictor_name='multi', predictor_version='3') for a, k, r in [
@@ -596,6 +572,9 @@ def test_public_api_preserves_occurrences_and_separates_endpoints():
     models = []
     rows = score_junction_kmers(['SIINFEKLA'] * 2, model.alleles, model, models=models)
     assert rows == [('SIINFEKLA', 'HLA-A*02:01', 5.)] * 2
+    assert score_junction_kmers(['SIINFEKLA'], model.alleles, model,
+                                rank_kind='pMHC_presentation') == [
+        ('SIINFEKLA', 'HLA-A*02:01', .1)]
     assert {m['kind'] for m in models} == {
         'pMHC_affinity', 'pMHC_presentation', 'antigen_processing'}
     assert all(m['predictor_name'] == 'multi' and m['predictor_version'] == '3'
@@ -611,23 +590,57 @@ def test_legacy_predictor_uses_mhctools_adapter():
 
 
 @pytest.mark.parametrize('kind,message', [
-    ('pMHC_presentation', 'allele filter'), ('antigen_processing', 'no affinity or presentation')])
+    ('pMHC_presentation', 'single-allele'), ('antigen_processing', 'single-allele')])
 def test_allele_free_predictions_are_not_junction_hits(kind, message):
-    class AlleleFreePredictor:
-        def predict(self, peptides):
+    class AlleleFreePredictor(BasePredictor):
+        def kind_support(self):
+            return {kind: {'mhc_dependence': 'none'}}
+
+        def predict(self, peptides, n_flanks=None, c_flanks=None):
             return [PeptideResult((Prediction(kind=kind, peptide=p, score=.1,
                                              percentile_rank=.5),)) for p in peptides]
 
-    with pytest.warns(JunctionPredictionWarning, match=message):
-        assert score_junction_kmers(['SIINFEKLA'], [], AlleleFreePredictor()) == []
+    with pytest.raises(ValueError, match=message):
+        score_junction_kmers(['SIINFEKLA'], [], AlleleFreePredictor(alleles=[]))
 
 
 @pytest.mark.parametrize('peptides, message', [
-    ([], 'one result per peptide'), (['WRONGPEPT'], 'mismatched peptide')])
+    ([], 'prediction'), (['WRONGPEPT'], 'peptide|prediction')])
 def test_invalid_public_api_result_fails(peptides, message):
     class InvalidPredictor(StubPredictor):
-        def predict(self, requested):
+        def predict(self, requested, n_flanks=None, c_flanks=None):
             return super().predict(peptides)
 
     with pytest.raises(ValueError, match=message):
         score_junction_kmers(['SIINFEKLA'], ['HLA-A*02:01'], InvalidPredictor())
+
+
+@pytest.mark.parametrize('bad_rank', [None, float('nan'), float('inf'), -1, 101])
+def test_partial_junction_rank_coverage_cannot_win_as_zero_burden(bad_rank):
+    predictor = StubPredictor(rank_table={
+        ('SIINFEKLA', 'HLA-A*02:01'): .1,
+        ('GILGFVFTL', 'HLA-A*02:01'): bad_rank,
+    })
+    with pytest.raises(ValueError, match='percentile_rank'):
+        score_junction_kmers(['SIINFEKLA', 'GILGFVFTL'], predictor.alleles, predictor)
+
+
+def test_selected_junction_endpoint_requires_one_model_identity():
+    from dataclasses import replace
+
+    class MixedModels(StubPredictor):
+        def predict(self, peptides, n_flanks=None, c_flanks=None):
+            return [PeptideResult(tuple(replace(p, predictor_name=model, predictor_version='1')
+                                        for model in ('first', 'second') for p in result.preds))
+                    for result in super().predict(peptides)]
+
+    model = MixedModels()
+    with pytest.raises(ValueError, match='one model/version|ambiguous'):
+        score_junction_kmers(['SIINFEKLA'], model.alleles, model)
+
+
+@pytest.mark.parametrize('strong,mild', [(-1, 2), (3, 2), (.5, 101), (float('nan'), 2)])
+def test_invalid_junction_thresholds_fail_before_prediction(strong, mild):
+    with pytest.raises(ValueError, match='thresholds require'):
+        optimize_linkers(['SIINFEKLA', 'GILGFVFTL'], ['HLA-A*02:01'], StubPredictor(),
+                         rank_strong=strong, rank_mild=mild)

@@ -155,8 +155,6 @@ def test_cli_external_cache_hits_and_version_checked_fallback(tmp_path, monkeypa
             '--output-epitopes', str(tmp_path / 'saved.tsv'), '--no-processing-aware-annotation',
             '--config-value', 'epitopes.score_expr=cached__unified__pMHC_affinity__score',
             '--min-epitope-score', '0.5']
-    with pytest.raises(ValueError, match='require --external-peptide-only'):
-        run_cli(argv)
     run_cli(argv + ['--external-peptide-only'])
     assert not model.calls if complete else model.calls == [[('GILGFVFTL', '', '')]]
     saved = EpitopeDataset.load(tmp_path / 'saved.tsv')

@@ -165,7 +165,12 @@ def design_digest(args, value):
 
 
 def _assembly_identity(args, ranked, options, context):
-    definition = (_source_graph(ranked, options), asdict(options), context, args._construct_policy)
+    configuration = asdict(options)
+    # The explicit auto spelling preserves the historical endpoint rule.
+    # Adding that spelling must not force inference during native replay.
+    if configuration.get('junction_rank_kind') == 'auto':
+        configuration.pop('junction_rank_kind')
+    definition = (_source_graph(ranked, options), configuration, context, args._construct_policy)
     if args._design_dataset.host_reference is not None:
         definition += (args._design_dataset.host_reference.identity,)
     return design_digest(args, definition)

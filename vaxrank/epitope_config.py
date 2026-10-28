@@ -88,9 +88,9 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
 
     filter_expr : str, optional
         Topiary DSL string used to drop epitope rows wholesale, e.g.
-        ``"affinity <= 500 & affinity.rank <= 2.0"``. When omitted the
-        filter is synthesized from ``binding_affinity_cutoff`` /
-        ``percentile_rank_cutoff`` so default behavior is unchanged.
+        ``"affinity <= 500 & affinity.rank <= 2.0"``. When omitted there
+        is no row filter: scalar cutoffs mask the score, followed by the
+        minimum-score gate. A selection_policy supplies its own rules.
 
     score_expr : str, optional
         Topiary DSL string producing a per-peptide-allele score, e.g.

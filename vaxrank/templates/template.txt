@@ -4,6 +4,14 @@ Vaccine Design Report
 {% endfor %}
 
 {% include "templates/products.txt" %}
+{% if prediction_configuration %}
+=== Effective prediction configuration ===
+{% for stage in prediction_configuration %}
+{{ stage.stage }}: {{ stage.status }}
+{% for detail in stage.details %}  {{ detail }}
+{% endfor %}
+{% endfor %}
+{% endif %}
 
 {% if ranked_candidates is defined %}{% include "templates/ranking.txt" %}{% endif %}
 
