@@ -4,15 +4,36 @@ Exact products written by this run. Positions are zero-based, end-exclusive amin
 {% for group in product_groups %}
 
 {{ group.modality }}: constructs {{ group.counts.constructs }} ({{ group.counts.unique_construct_sequences }} unique sequences); antigen slots {{ group.counts.antigen_slots }}; unique antigen sequences {{ group.counts.unique_antigen_sequences if group.counts.unique_antigen_sequences is not none else 'unavailable' }}.
+{% if selection_policy and group.modality in selection_policy.modalities %}{% set settings = selection_policy.modalities[group.modality] %}
+{{ settings.origin }}:
+{% for label, value in settings.rows %}  {{ label }}: {{ value }}
+{% endfor %}{% endif %}
 {% if group.counts.source_candidates %}
 Recorded source events: {{ group.counts.source_events }}; candidate mappings without a recorded event: {{ group.counts.source_candidates_without_event }}.
 Related alternative sequences do not establish independent target coverage.
 {% endif %}
 {% if group.files %}Product files (relative to the run output directory): {{ group.files | join(', ') }}.
 {% endif %}
+{% if group.assembly_decisions is defined %}{% if group.assembly_decisions is not none %}
+Assembly order: {{ group.assembly_decisions.order | replace('_', ' ') }}.
+Identical final amino-acid sequences share one antigen slot, retaining all mappings. Distinct overlapping sequences remain separate; source-event counts are reported above.
+{% for decision in group.assembly_decisions.rows %}  {{ decision.order }}. {{ decision.sequence }}; sources {{ decision.sources | join(', ') }}; {{ decision.mapping_count }} candidate mappings: {{ decision.outcome | replace('_', ' ') }}{% if decision.products %} ({{ decision.products | join(', ') }}){% endif %}.
+{% endfor %}{% else %}Historical assembly ordering, deduplication and capacity decisions were not recorded. Product mappings describe the saved result.
+{% endif %}{% endif %}
 {% for product in group.products %}
 
 {{ product.name }}: {{ product.length }} {{ product.unit }}
+{% if product.window_decisions %}Recorded window rationale: {{ product.window_decisions | join(', ') }}.
+{% else %}A window-selection rationale was not recorded for this product.
+{% endif %}{% if product.junction %}Linker decisions: {{ product.junction.status }}.
+{% for label, value in product.junction.rows %}  {{ label }}: {{ value }}
+{% endfor %}{% if product.junction.rows and not product.junction.decisions %}The recorded comparison is for the complete construct. Independent per-junction benefit was not recorded.
+{% endif %}{% for linker in product.junction.linkers %}  Junction {{ linker.junction_index }}: {{ linker.name }}; {{ linker.aa }}; encoded protein [{{ linker.start_aa }}, {{ linker.end_aa }}).
+{% endfor %}{% endif %}
+{% if product.junction and product.junction.decisions %}Per-junction preference minimizes strong count, mild count, negative minimum rank, then candidate order. The complete construct comparison determines whether preferred linkers or the shared default are emitted.
+{% for decision in product.junction.decisions %}  Junction {{ decision.junction_index }}: preferred {{ decision.preferred_linker }}, emitted {{ decision.emitted_linker }}.
+{% for alternative in decision.candidates %}    {{ alternative.linker }}: key {{ alternative.key | tojson }}, order {{ alternative.candidate_order }}.
+{% endfor %}{% endfor %}{% endif %}
 {% if product.unit == 'aa' %}N-terminal acetylation: {{ 'yes' if product.n_terminal_acetylation else 'no' }}; C-terminal amidation: {{ 'yes' if product.c_terminal_amidation else 'no' }}.
 {% endif %}
 {{ 'Full nucleotide sequence, including polyA' if product.unit == 'nt' else 'Manufactured amino-acid sequence' }}:
@@ -26,6 +47,9 @@ Related alternative sequences do not establish independent target coverage.
 {% for label in antigen.context_labels %}    Source context: {{ label }}
 {% endfor %}
   {{ antigen.sequence }}
+{% if antigen.target_intervals %}  Targetable regions within this antigen: {% for start, end in antigen.target_intervals %}[{{ start }}, {{ end }}){% if not loop.last %}, {% endif %}{% endfor %}.
+{% else %}  Target coordinates unavailable or differ across sources.
+{% endif %}
   Source mappings: {{ antigen.sources if antigen.sources is not none else "unavailable" }} candidates, {{ antigen.transcripts if antigen.transcripts is not none else "unavailable" }} transcripts; genes: {{ antigen.genes or 'unavailable' }}.
 {% if antigen.source_ids %}  Report sources: {{ antigen.source_ids | join(', ') }}.
 {% endif %}

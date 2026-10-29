@@ -34,7 +34,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
-from .assembly_antigens import antigens_for_assembly
+from .assembly_antigens import antigens_for_assembly, record_assembly_decisions
 from .manufacturability import ManufacturabilityScores
 from .construct_sequence import ConstructPlacement, validate_construct_placements
 from .native_serialization import to_native_json
@@ -251,7 +251,7 @@ def _pack_multi_epitope(records, options, linker):
 
 def assemble_peptide_constructs(
         ranked_vaccine_peptides, options=None, *,
-        target_alleles=None, window_audit=None, source_evidence=None):
+        target_alleles=None, window_audit=None, source_evidence=None, selection_audit=None):
     """Assemble peptide constructs from ranked vaccine peptides.
 
     Parameters
@@ -269,6 +269,9 @@ def assemble_peptide_constructs(
         Retained source evidence keyed by producer evidence ID, as in
         ``EpitopeDataset.selection['source_evidence']``. Supplies recorded
         source-event identities for product provenance; never changes scores.
+    selection_audit : optional, dict
+        Filled with exact-sequence deduplication and packing outcomes, including
+        eligible antigens excluded by the construct capacity limit.
 
     Returns
     -------
@@ -299,6 +302,7 @@ def assemble_peptide_constructs(
     for name, _, vp in iter_named_antigens(ranked_vaccine_peptides, options.candidates_per_slot):
         audits.setdefault((name, vp.amino_acids), []).append(vp.window_selection_audit)
     if not records:
+        record_assembly_decisions(selection_audit, antigens, [], target_alleles)
         return []
 
     # ``mode`` retained in the manifest for back-compat; ``antigen_content``
@@ -335,6 +339,7 @@ def assemble_peptide_constructs(
                 components={**base_components, **({'window_selection': audit} if audit else {})},
                 manufacturability=_manufacturability_for(sequence),
             ))
+        record_assembly_decisions(selection_audit, antigens, constructs, target_alleles)
         return constructs
 
     # antigens_per_construct > 1: bin-pack into multi-antigen
@@ -370,6 +375,7 @@ def assemble_peptide_constructs(
             components=components,
             manufacturability=_manufacturability_for(sequence),
         ))
+    record_assembly_decisions(selection_audit, antigens, constructs, target_alleles)
     return constructs
 
 

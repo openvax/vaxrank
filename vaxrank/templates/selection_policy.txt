@@ -1,0 +1,21 @@
+=== Selection rules and score calculations ===
+{% if selection_policy.available %}
+Recorded policy: {{ selection_policy.name }}; Vaxrank {{ selection_policy.version }}.
+Effective configuration identity: {{ selection_policy.identity }}.
+These are resolved settings. Invocation defaults do not override saved assembly settings.
+{% for section in selection_policy.sections %}
+{{ section.title }}:
+{% for label, value in section.rows %}  {{ label }}: {{ value }}
+{% endfor %}{% endfor %}
+{% else %}Effective run configuration was not recorded or supplied. Invocation defaults are not substituted for historical settings.
+{% endif %}
+{% if score_calculations %}
+Candidate score calculations:
+target_epitope_score sums retained target-occurrence scores; each occurrence sums its credited allele scores. A window utility can instead use unique sequence/allele pairs. Only named expression terms contribute to this calculation; admission and window constraints act separately.
+{% for calculation in score_calculations %}
+{{ calculation.sources | join(', ') }}: {{ calculation.expression }} = {{ calculation.result }}
+{% for term in calculation.terms %}  {{ term.name }} = {{ term.display }} ({{ term.unit }}){% if term.evidence %}; {{ term.evidence }}{% endif %}
+{% endfor %}  Target-epitope total: {{ calculation.target_score }}
+{% for target in calculation.targets %}  {{ target.sequence }}, offset {{ target.offset }}: {% for allele, score in target.allele_scores.items() %}{{ allele }}: {{ '%.6g' | format(score) }}{% if not loop.last %}; {% endif %}{% endfor %}
+{% endfor %}{% endfor %}{% endif %}
+{% include "templates/window_decisions.txt" %}

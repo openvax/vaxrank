@@ -111,7 +111,7 @@ windows to the products that use them. Historical files without source mappings
 say that the information is unavailable. Successful empty designs explicitly
 report zero products.
 
-The report follows input coverage, emitted products, candidate ranking, source
+The report follows input coverage, emitted products and selection reasons, candidate ranking, source
 outcomes, optional candidate evidence, then methods and provenance.
 `--report-candidate-details` adds annotated source windows and paired epitope/WT
 comparisons after the source outcomes. Without that flag, the report retains
@@ -153,6 +153,41 @@ a missing matching value is reported as unavailable. Gene/antigen names lead
 product headings, with stable product IDs retained for manifest/order-form lookup.
 Report-only commands without `--output-dir` show candidate results and state
 that no construct files were emitted. HTML/PDF styling is bundled locally.
+
+### Selection explanations
+
+Effective settings come from the native dataset's resolved run configuration
+and actual modality assembly configuration. Saved assembly settings take
+precedence: a saved peptide cap of 10 remains 10 even when a replay parser has a
+default of 20. The Methods table labels raw invocation arguments separately.
+
+Candidate calculations show the actual combined-score expression, bound RNA
+values and units, and retained target contributions by allele. Binding,
+presentation, comparator and processing annotations do not automatically
+contribute to that expression. Admission and window constraints can act
+separately. The optional window utility deduplicates sequence/allele pairs;
+the ordinary target-epitope score sums retained occurrences.
+
+Window decision references link products and candidates to recorded coordinates,
+constraints, ordering keys and a labeled preview of alternatives. New selections
+record score-fraction/lexicographic choices as well as optional window-utility
+choices. Exact-sequence deduplication precedes construct limits; distinct
+overlapping sequences can occupy separate slots without representing separate
+source events. New assembly audits distinguish final capacity exclusion from
+window eligibility failure. Linker sections show actual per-junction choices and
+the recorded whole-construct burden comparison, or why prediction was skipped.
+A zero self/serum weight does not establish a completed assessment.
+
+Historical missing decisions remain explicitly unavailable. Report generation
+never reruns selectors or changes product manifests. Native replay preserves
+saved assembly records; new explanatory metadata is checksummed with the
+products but does not invalidate an otherwise identical historical assembly.
+No additional decision sidecar is required.
+
+Length settings retain their existing semantics: without window refinement,
+the minimum antigen length is a warning threshold. A single antigen exceeding
+a packer's length target can still be emitted with a warning. The report shows
+actual product lengths as well as these settings.
 
 ## Neoepitope report
 

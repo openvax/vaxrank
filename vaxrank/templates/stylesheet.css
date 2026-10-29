@@ -79,3 +79,5 @@ a { color: #245d7a; }
 .evidence-groups th:first-child { width: 14%; }
 .evidence-groups th:nth-child(2) { width: 40%; }
 .evidence-table { margin-top: 1.8em; }
+.score-calculations th:first-child { width: 18%; }
+.score-calculations th:nth-child(2) { width: 43%; }

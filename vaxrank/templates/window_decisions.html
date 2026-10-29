@@ -1,0 +1,30 @@
+{% autoescape true %}
+{% if window_decisions %}
+<h3>Recorded window decisions</h3>
+<p>Identical displayed decision summaries share a reference. The native dataset retains all alternatives and source evidence.
+New records include the actual ordering rules and sort keys.</p>
+{% for window in window_decisions %}<section class="window-decision">
+<h4 id="window-{{ window.identifier }}">{{ window.identifier }} &middot; {{ window.sequence or 'No eligible window' }}</h4>
+<p>Sources: {% for source in window.sources %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.
+{% if window.products %}Products: {{ window.products | join(', ') }}.{% endif %}</p>
+{% if window.parent %}<p>Selected [{{ window.parent.start }}, {{ window.parent.end }}) in parent candidate sequence <span class="sequence-cell">{{ window.parent.sequence }}</span> (zero-based, end-exclusive).</p>
+{% else %}<p class="note">Parent candidate coordinates were not recorded.</p>{% endif %}
+{% if window.none_eligible %}<p>No windows met the recorded eligibility constraints.</p>
+{% elif window.decision %}<p>Recorded rank {{ window.decision.selection_rank }}; {{ window.decision.decision_reason | replace('_', ' ') }}.
+Sort key: {{ window.decision.ordering_key | tojson | e }}. Ranking rules: {{ window.decision.ranking_rules | join(', ') }}.</p>
+{% else %}<p class="note">Historical selection order and tie-break decisions were not recorded.</p>{% endif %}
+<p>{{ window.self_status }}. {{ window.serum_status }}.</p>
+<p class="note">Ordering: {{ window.ordering_description }}. Recorded policy: {{ window.policy | tojson | e }}.
+{% if window.utility_selector %}Utility uses (target score − serum weight × at-risk target score) / (1 + self weight × non-CTA self score).{% endif %}</p>
+<table class="pure-table"><tbody>{% for label, value in window.metrics %}<tr><th>{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody></table>
+{% if window.targets %}<p>Retained target occurrences (window offsets{% if window.utility_selector %}; each sequence/allele contributes its maximum score once{% else %}; occurrence scores are summed{% endif %}):</p>
+{% for target in window.targets %}<p class="note">{{ target.sequence }} at {{ target.offset }}: {% for allele, score in target.allele_scores.items() %}{{ allele }}: {{ '%.6g' | format(score) }}{% if not loop.last %}; {% endif %}{% endfor %}{% if target.internal_cuts is defined %}; internal supported cuts {{ target.internal_cuts | tojson | e }}{% endif %}.</p>{% endfor %}{% endif %}
+{% if window.alternatives %}<p>Alternative preview: {{ window.alternatives | length }} of {{ window.alternative_count }} recorded windows; complete alternatives are in the native audit.
+{% if not window.decision %}Producer order is shown; historical preference order is unavailable.{% endif %}</p>
+<table class="pure-table"><thead><tr><th>Alternative</th><th>Target / {{ 'utility' if window.utility_selector else 'combined score' }}</th><th>Decision</th></tr></thead><tbody>
+{% for alternative in window.alternatives %}<tr><td class="sequence-cell">{{ alternative.sequence }}</td>
+<td>{{ alternative.target_score }} / {{ alternative.utility if window.utility_selector else alternative.combined_score }}</td><td>{{ (alternative.decision_reason or alternative.ineligibility_reason or 'Eligible; final choice not recorded') | replace('_', ' ') }}
+{% if alternative.selection_rank %}; rank {{ alternative.selection_rank }}{% endif %}
+{% if alternative.ordering_key %}<br>Sort key: {{ alternative.ordering_key | tojson | e }}{% endif %}</td></tr>{% endfor %}</tbody></table>{% endif %}
+</section>{% endfor %}{% endif %}
+{% endautoescape %}

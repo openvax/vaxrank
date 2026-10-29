@@ -6,7 +6,8 @@
 <tbody>{% for candidate in ranked_candidates %}<tr>
 <td>{% if candidate_details %}<a href="#candidate-{{ candidate.rank }}">{{ candidate.rank }}</a>{% else %}{{ candidate.rank }}{% endif %}</td><td>{{ candidate.gene }} ({{ candidate.kind }})<br><a href="#source-{{ candidate.source_id }}">{{ candidate.source_id }}</a></td>
 <td>{{ candidate.score }}</td><td class="sequence-cell">{{ candidate.window }}{% if candidate.window_count > 1 %}<br><span class="note">{{ candidate.window_count }} retained windows</span>{% endif %}</td>
-<td>{{ candidate.products }}</td>
+<td>{{ candidate.products }}{% for outcome in candidate.assembly_outcomes %}<br>{{ outcome.modality }}: {{ outcome.outcome | replace('_', ' ') }}{% if outcome.shared %}; shared exact sequence{% endif %}{% endfor %}
+{% for decision in candidate.window_decisions %}<br><a href="#window-{{ decision }}">Window decision {{ decision }}</a>{% endfor %}</td>
 </tr>{% endfor %}</tbody></table>
 {% if not candidate_details %}<p>Use <code>--report-candidate-details</code> to include grouped source windows and epitope tables.</p>{% endif %}
 {% else %}<p>No candidates passed ranking.</p>{% endif %}

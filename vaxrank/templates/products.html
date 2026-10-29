@@ -7,17 +7,37 @@
 <p>Constructs: <strong>{{ group.counts.constructs }}</strong> ({{ group.counts.unique_construct_sequences }} unique sequences).
 Antigen slots: <strong>{{ group.counts.antigen_slots }}</strong>.
 Unique antigen sequences: {{ group.counts.unique_antigen_sequences if group.counts.unique_antigen_sequences is not none else 'unavailable in this historical design' }}.</p>
+{% if selection_policy and group.modality in selection_policy.modalities %}{% set settings = selection_policy.modalities[group.modality] %}
+<p class="note">{{ settings.origin | e }}</p><table class="pure-table"><tbody>
+{% for label, value in settings.rows %}<tr><th>{{ label | e }}</th><td>{{ value | e }}</td></tr>{% endfor %}</tbody></table>{% endif %}
 {% if group.counts.source_candidates %}
 <p>Recorded source events: {{ group.counts.source_events }}.
 Candidate mappings without a recorded event: {{ group.counts.source_candidates_without_event }}.
 Related alternative sequences do not establish independent target coverage.</p>
 {% endif %}
+{% if group.assembly_decisions is defined %}
+{% if group.assembly_decisions is not none %}
+<p>Assembly order: {{ group.assembly_decisions.order | replace('_', ' ') }}. Identical final amino-acid sequences share one antigen slot, retaining all source mappings. Distinct overlapping sequences remain separate; their source-event count is reported above.</p>
+<table class="pure-table"><thead><tr><th>Order / sources</th><th>Final antigen sequence</th><th>Packing outcome</th></tr></thead><tbody>
+{% for decision in group.assembly_decisions.rows %}<tr><td>{{ decision.order }}: {% for source in decision.sources %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}<br>{{ decision.mapping_count }} candidate mappings</td>
+<td class="sequence-cell">{{ decision.sequence }}</td><td>{{ decision.outcome | replace('_', ' ') }}{% if decision.products %}: {{ decision.products | join(', ') }}{% endif %}</td></tr>{% endfor %}</tbody></table>
+{% else %}<p class="note">Historical assembly ordering, deduplication and capacity decisions were not recorded. Product mappings below describe the saved result.</p>{% endif %}{% endif %}
 {% if group.files %}<p>Product files (relative to the run output directory):
 {% for file in group.files %}<code>{{ file }}</code>{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
 {% for product in group.products %}
 <article class="product">
 <h4 id="product-{{ product.name | e }}">{{ product.display_name | e }} &middot; {{ product.length }} {{ product.unit }}</h4>
 <p class="note">Product ID: <code>{{ product.name | e }}</code></p>
+{% if product.window_decisions %}<p>Recorded window rationale: {% for decision in product.window_decisions %}<a href="#window-{{ decision }}">{{ decision }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+{% else %}<p class="note">A window-selection rationale was not recorded for this product.</p>{% endif %}
+{% if product.junction %}<h5>Linker decisions</h5><p>{{ product.junction.status | e }}.</p>
+{% if product.junction.rows %}<table class="pure-table"><tbody>{% for label, value in product.junction.rows %}<tr><th>{{ label | e }}</th><td>{{ value | e }}</td></tr>{% endfor %}</tbody></table>
+{% if not product.junction.decisions %}<p class="note">The recorded comparison is for the complete construct. Independent per-junction benefit was not recorded.</p>{% endif %}{% endif %}
+{% for linker in product.junction.linkers %}<p class="note">Junction {{ linker.junction_index }}: {{ linker.name | e }}; {{ linker.aa }}. Encoded protein [{{ linker.start_aa }}, {{ linker.end_aa }}).</p>{% endfor %}{% endif %}
+{% if product.junction and product.junction.decisions %}
+<p class="note">Per-junction preference minimizes strong count, mild count, then negative minimum rank; exact ties retain candidate order. The complete construct comparison above determines whether the preferred linkers or the shared default are emitted.</p>
+<table class="pure-table"><thead><tr><th>Junction</th><th>Preferred / emitted</th><th>Candidate ordering keys</th></tr></thead><tbody>
+{% for decision in product.junction.decisions %}<tr><td>{{ decision.junction_index }}</td><td>{{ decision.preferred_linker | e }} / {{ decision.emitted_linker | e }}</td><td>{% for alternative in decision.candidates %}{{ alternative.linker | e }}: {{ alternative.key | tojson | e }}, order {{ alternative.candidate_order }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table>{% endif %}
 {% if product.unit == 'aa' %}
 <p>N-terminal acetylation: {{ 'yes' if product.n_terminal_acetylation else 'no' }};
 C-terminal amidation: {{ 'yes' if product.c_terminal_amidation else 'no' }}.</p>
@@ -37,6 +57,7 @@ C-terminal amidation: {{ 'yes' if product.c_terminal_amidation else 'no' }}.</p>
 {% if antigen.source_ids %}<br>Report sources: {% for source in antigen.source_ids %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</td></tr>
 {% endfor %}</tbody></table>
 <p class="note">Full antigen labels and source identities are in Methods and provenance. Exact evidence mappings remain in the manifest and native dataset.</p>
+{% for antigen in product.antigens %}{% if antigen.target_intervals %}<p class="note">Antigen {{ loop.index }} targetable regions within its sequence: {% for start, end in antigen.target_intervals %}[{{ start }}, {{ end }}){% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}{% endfor %}
 {% else %}<p>Historical product: antigen placement/source mappings were not recorded. Labels: {{ product.antigen_names | join(', ') }}.</p>{% endif %}
 {% if include_manufacturability and product.manufacturability %}
 <div class="manufacturability"><h5>Manufacturability metrics</h5>

@@ -13,6 +13,7 @@ from mhctools.peptidases import get_cleavage_model
 
 from .cleavage_inference import audit_peptidase_inputs
 from .epitope_logic import slice_epitopes
+from .ranking import DEFAULT_RANKING_RULES
 
 
 SERUM_PANEL = ('dpp4-qpisa', 'fap-endo-gp', 'fap-dipeptidyl',
@@ -120,30 +121,78 @@ def select_windows(candidates, policy, *, preferred_length, limit,
     best_target = max(m['target_score'] for m in metrics)
     alternatives = []
     retained = []
-    for vp, metric in zip(candidates, metrics):
+    for index, (vp, metric) in enumerate(zip(candidates, metrics)):
         metric['source'] = {key: getattr(vp.antigen, key) for key in (
             'source_identifier', 'gene_name', 'gene_id', 'transcript_ids',
             'protein_ids', 'species', 'source_metadata')}
         eligible = (best_target > 0 and metric['target_score'] >= best_target * policy.min_target_fraction
                     and not metric['unassessed_models'])
+        parent_window = vp.window_selection_audit.get('parent_window')
+        vp.window_selection_audit = dict(policy=asdict(policy), **metric)
+        ordering_key = ([-metric['utility'], abs(len(vp.amino_acids) - preferred_length),
+                         list(vp.lexicographic_sort_key()), index] if eligible else None)
         alternatives.append(dict(sequence=vp.amino_acids, eligible=eligible,
+                                 input_order=index, ordering_key=ordering_key,
+                                 ranking_rules=list(vp.ranking_rules if vp.ranking_rules is not None
+                                                    else DEFAULT_RANKING_RULES),
                                  ineligibility_reason=('unassessed_serum_model' if metric['unassessed_models']
                                                        else 'target_retention' if not eligible else None),
                                  **{k: v for k, v in metric.items() if k not in (
                                      'cleavage_profiles', 'target_details', 'non_cta_self_details')}))
-        vp.window_selection_audit = dict(policy=asdict(policy), **metric)
+        if parent_window is not None:
+            alternatives[-1]['parent_window'] = parent_window
         if eligible:
-            retained.append(vp)
-    retained.sort(key=lambda vp: (-vp.window_selection_audit['utility'],
-                                 abs(len(vp.amino_acids) - preferred_length),
-                                 vp.lexicographic_sort_key()))
-    selected = retained[:limit]
+            retained.append(index)
+    retained.sort(key=lambda index: alternatives[index]['ordering_key'])
+    ranks = {index: rank for rank, index in enumerate(retained, 1)}
+    chosen = set(retained[:limit])
+    for index, (vp, alternative) in enumerate(zip(candidates, alternatives)):
+        alternative.update(selection_rank=ranks.get(index), selected=index in chosen,
+                           decision_reason=(alternative['ineligibility_reason'] or
+                                            ('within_window_limit' if index in chosen else 'window_limit')))
+        vp.window_selection_audit.update(
+            decision={key: alternative[key] for key in (
+                'input_order', 'ordering_key', 'ranking_rules', 'selection_rank', 'selected', 'decision_reason')},
+            preferred_length=preferred_length, limit=limit)
+        if 'parent_window' in alternative:
+            vp.window_selection_audit['parent_window'] = alternative['parent_window']
+    selected = [candidates[index] for index in retained[:limit]]
     for vp in selected:
         vp.window_selection_audit['alternatives'] = alternatives
     if audit_out is not None:
         audit_out.append(dict(policy=asdict(policy), alternatives=alternatives,
+                              preferred_length=preferred_length, limit=limit,
                               selected=[vp.amino_acids for vp in selected]))
     return selected
+
+
+def record_ranked_window_decisions(candidates, retained, selected, *, score_fraction, fraction_applied, limit):
+    """Capture the existing score-fraction/lexicographic selection, without reranking."""
+    ranks = {id(peptide): rank for rank, peptide in enumerate(retained, 1)}
+    chosen = {id(peptide) for peptide in selected}
+    alternatives = []
+    for index, peptide in enumerate(candidates):
+        eligible = id(peptide) in ranks
+        alternatives.append(dict(sequence=peptide.amino_acids, input_order=index,
+            eligible=eligible, selected=id(peptide) in chosen, selection_rank=ranks.get(id(peptide)),
+            decision_reason=('score_fraction' if not eligible else
+                             'within_window_limit' if id(peptide) in chosen else 'window_limit'),
+            ordering_key=[list(peptide.lexicographic_sort_key()), index] if eligible else None,
+            ranking_rules=list(peptide.ranking_rules if peptide.ranking_rules is not None else DEFAULT_RANKING_RULES),
+            combined_score=peptide.combined_score, target_score=peptide.target_epitope_score,
+            parent_window=peptide.window_selection_audit.get('parent_window')))
+    for peptide in selected:
+        index = next(i for i, candidate in enumerate(candidates) if candidate is peptide)
+        decision = alternatives[index]
+        peptide.window_selection_audit = dict(
+            algorithm='score_fraction_then_ranking',
+            policy=dict(score_fraction_of_best=score_fraction, fraction_applied=fraction_applied),
+            limit=limit, decision={key: decision[key] for key in (
+                'input_order', 'ordering_key', 'ranking_rules', 'selection_rank', 'selected', 'decision_reason')},
+            parent_window=decision['parent_window'], alternatives=alternatives,
+            target_score=peptide.target_epitope_score, combined_score=peptide.combined_score,
+            target_details=[dict(sequence=e.sequence, offset=e.offset, allele_scores=e.per_allele_scores)
+                            for e in peptide.target_epitopes])
 
 
 def optimize_peptide_windows(ranked, options, audit_out=None):
@@ -177,7 +226,8 @@ def optimize_peptide_windows(ranked, options, audit_out=None):
                             name in peptide.combined_score_expr for name in (
                                 'window_epitope_score', 'window_selection_factor')) else
                             '(' + peptide.combined_score_expr + ') * window_selection_factor'),
-                        window_selection_audit={}))
+                        window_selection_audit={'parent_window': dict(
+                            sequence=peptide.amino_acids, start=start, end=end)}))
         chosen = select_windows(candidates, policy,
                                 preferred_length=options.max_antigen_length_aa,
                                 limit=options.candidates_per_slot,

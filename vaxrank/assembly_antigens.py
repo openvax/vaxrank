@@ -128,6 +128,21 @@ def summarize_products(products):
                 source_candidates_without_event=unassigned, evidence_groups=len(evidence_groups))
 
 
+def record_assembly_decisions(audit, antigens, products, target_alleles):
+    """Record outcomes of the current packer; never reconstruct historical reasons."""
+    if audit is None:
+        return
+    audit.update(
+        order='allele_coverage_then_input_order' if target_alleles else 'input_order',
+        deduplication='exact_amino_acid_sequence', overlap='retain_distinct_sequences',
+        antigens=[dict(name=antigen.name, sequence=antigen.amino_acids, order=index,
+                       sources=antigen.sources,
+                       products=[p.name for p in products if antigen.name in p.antigen_names],
+                       outcome=('emitted' if any(antigen.name in p.antigen_names for p in products)
+                                else 'construct_capacity'))
+                  for index, antigen in enumerate(antigens, 1)])
+
+
 def source_matches_candidate(source, antigen, sequence, prediction_ids, input_ids):
     """Match one retained product source to a candidate's exact evidence identity."""
     return (source['source_identifier'] == antigen.source_identifier

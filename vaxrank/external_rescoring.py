@@ -1060,7 +1060,7 @@ def load_unified_external(args, epitope_config, options, genome):
         if options.vaccine_config is not None and options.vaccine_config.window_selection is not None:
             from .window_selection import optimize_antigen_windows
             candidates = [item for candidate in candidates for item in (
-                [candidate] if all(p.window_selection_audit for p in candidate[1]) else
+                [candidate] if all('utility' in p.window_selection_audit for p in candidate[1]) else
                 optimize_antigen_windows([candidate], options.vaccine_config))]
         if candidates:
             ranked.append(rank_constructs(candidates)[0])

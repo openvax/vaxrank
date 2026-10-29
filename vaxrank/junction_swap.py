@@ -305,6 +305,7 @@ def optimize_linkers(
         'models': [],
         'requests': [],
         'scored_prediction_count': 0,
+        'junction_decisions': [],
     }
     default_total_strong = 0
 
@@ -326,6 +327,11 @@ def optimize_linkers(
             if best is None or key < best[0]:
                 best = (key, cand, rows)
         key, cand, rows = best
+        prediction_metadata['junction_decisions'].append(dict(
+            junction_index=j, preferred_linker=cand.name,
+            ordering='strong_count, mild_count, negative_minimum_rank, candidate_order',
+            candidates=[dict(linker=candidate.name, key=list(key), candidate_order=index)
+                        for index, (candidate, key) in enumerate(zip(candidates, per_cand_keys))]))
         strong, mild, _ = key
         chosen.append(cand)
         total_burden += mild

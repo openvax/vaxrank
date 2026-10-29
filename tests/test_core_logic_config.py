@@ -16,7 +16,6 @@ Tests for core_logic.py integration with config objects.
 
 from inspect import signature
 from unittest.mock import MagicMock, patch
-from types import SimpleNamespace
 
 from vaxrank.epitope_config import EpitopeConfig
 from vaxrank.vaccine_config import VaccineConfig
@@ -324,78 +323,26 @@ def test_config_integration_vaccine_config_affects_peptide_generation():
 
 
 def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
-    class DummyCandidateFragment:
-        def __init__(self, amino_acids):
-            self.amino_acids = amino_acids
-
-        def __len__(self):
-            return len(self.amino_acids)
-
-    class DummyLongFragment:
-        def sorted_subsequences(self, subsequence_length):
-            return [
-                (0, DummyCandidateFragment("A" * subsequence_length)),
-                (1, DummyCandidateFragment("C" * subsequence_length)),
-            ]
-
-    class FakeVaccinePeptide:
-        def __init__(
-            self,
-            mutant_protein_fragment,
-            epitopes,
-            num_target_epitopes_to_keep=None,
-            manufacturability_thresholds=None,
-            manufacturability_rules=None,
-            combined_score_expr=None,
-            ranking_rules=None,
-        ):
-            self.mutant_protein_fragment = mutant_protein_fragment
-            self.combined_score = 10.0 if mutant_protein_fragment.amino_acids == "A" * 25 else 8.5
-
-        @staticmethod
-        def lexicographic_sort_key(obj):
-            return (-obj.combined_score,)
-
-    def fake_slice_epitopes(epitopes, start_offset, end_offset):
-        amino_acids = ("A" if start_offset == 0 else "C") * (end_offset - start_offset)
-        return [SimpleNamespace(
-            source_sequence=amino_acids)]
-
-    mock_variant = MagicMock()
-    mock_variant.short_description = "test_variant"
-
-    with patch("vaxrank.core_logic.VaccinePeptide", FakeVaccinePeptide), patch(
-        "vaxrank.core_logic.slice_epitopes",
-        side_effect=fake_slice_epitopes,
-    ):
-        default_result = vaccine_peptides_from_epitopes(
-            variant=mock_variant,
-            long_protein_fragment=DummyLongFragment(),
-            epitopes=[MagicMock()],
-        )
-        relaxed_result = vaccine_peptides_from_epitopes(
-            variant=mock_variant,
-            long_protein_fragment=DummyLongFragment(),
-            epitopes=[MagicMock()],
-            vaccine_config=VaccineConfig(
-                score_fraction_of_best=0.8,
-                max_vaccine_peptides_per_variant=2,
-            ),
-        )
-        strict_result = vaccine_peptides_from_epitopes(
-            variant=mock_variant,
-            long_protein_fragment=DummyLongFragment(),
-            epitopes=[MagicMock()],
-            vaccine_config=VaccineConfig(
-                score_fraction_of_best=1.0,
-                max_vaccine_peptides_per_variant=2,
-            ),
-        )
-
-    eq_(len(default_result), 1)
-    eq_(len(relaxed_result), 2)
-    eq_(len(strict_result), 1)
-    eq_(strict_result[0].combined_score, 10.0)
+    from varcode import Variant
+    from vaxrank.candidate_epitope import CandidateEpitope
+    variant = Variant("1", 1000, "A", "G", ensembl=None)
+    sequence = "ACDEFGHIKLMNPQRSTVWYACDEFGH"
+    fragment = MutantProteinFragment(
+        variant=variant, gene_name="GENE", amino_acids=sequence,
+        mutant_amino_acid_start_offset=12, mutant_amino_acid_end_offset=13,
+        supporting_reference_transcripts=[], n_overlapping_reads=4, n_alt_reads=4,
+        n_ref_reads=0, n_alt_reads_supporting_protein_sequence=4)
+    epitopes = [CandidateEpitope(sequence=sequence[offset:offset + 25],
+        source_sequence=sequence, offset=offset, overlaps_targetable=True,
+        per_allele_scores={'HLA-A*02:01': score}) for offset, score in [(0, 1.), (1, .85)]]
+    results = [vaccine_peptides_from_epitopes(
+        variant, fragment, epitopes, vaccine_config=VaccineConfig(
+            score_fraction_of_best=fraction, max_vaccine_peptides_per_variant=2))
+        for fraction in (.99, .8, 1.)]
+    assert [len(result) for result in results] == [1, 2, 1]
+    assert [p.target_epitope_score for p in results[1]] == [1., .85]
+    assert results[0][0].window_selection_audit['alternatives'][1]['decision_reason'] == 'score_fraction'
+    assert results[1][0].window_selection_audit['algorithm'] == 'score_fraction_then_ranking'
 
 
 def test_target_epitope_score_flows_from_per_allele_scores():
@@ -425,6 +372,7 @@ def test_target_epitope_score_flows_from_per_allele_scores():
     class DummyLongFragment:
         def __init__(self, fragment):
             self.fragment = fragment
+            self.amino_acids = fragment.amino_acids
 
         def sorted_subsequences(self, subsequence_length):
             return [(0, self.fragment)]
@@ -585,6 +533,7 @@ def test_manufacturability_thresholds_flow_from_manufacturability_config():
     class DummyLongFragment:
         def __init__(self, fragment):
             self.fragment = fragment
+            self.amino_acids = fragment.amino_acids
 
         def sorted_subsequences(self, subsequence_length):
             return [(0, self.fragment)]

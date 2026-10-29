@@ -146,7 +146,8 @@ class TemplateDataCreator(object):
             products=None,
             product_files=None,
             candidate_details=False,
-            source_evidence=None):
+            source_evidence=None,
+            selection=None):
         """
         Build a report from ranked candidates and actual assembly products.
 
@@ -160,6 +161,10 @@ class TemplateDataCreator(object):
         ``source_evidence`` is the native antigen source catalog. It supplies
         sample support, coding context and reference attribution in candidate
         details; absent historical fields are displayed as unrecorded.
+
+        ``selection`` is the existing native dataset's selection record. It
+        supplies resolved policy and saved assembly decisions. Invocation
+        defaults do not substitute for missing historical settings.
 
         ``processing_predictions_by_key`` is the map returned by
         :func:`vaxrank.processing.annotate_processing` —
@@ -178,6 +183,7 @@ class TemplateDataCreator(object):
         self.product_files = product_files or {}
         self.candidate_details = candidate_details
         self.source_evidence = source_evidence or {}
+        self.selection = selection or {}
         self.prediction_configuration = args_for_report.get('_effective_prediction_configuration', {})
         self.processing_enabled = args_for_report.get('processing_aware_annotation')
 
@@ -895,6 +901,7 @@ class TemplateDataCreator(object):
                         context_labels=context_labels,
                         sequence_html=marked_sequence(antigen['aa'], intervals or ()),
                         target_coordinates_known=intervals is not None,
+                        target_intervals=intervals,
                         start=antigen['start_aa'], end=antigen['end_aa'], length=len(antigen['aa']),
                         sources=len(sources) if 'sources' in antigen else None,
                         genes=genes if genes != antigen['name'].rsplit(' (', 1)[0] else '',
@@ -1115,6 +1122,12 @@ class TemplateDataCreator(object):
         from .prediction_policy import prediction_summary
         self.template_data['prediction_configuration'] = prediction_summary(self.prediction_configuration)
         group_report_evidence(self.template_data)
+        from .report_selection import selection_policy_view, score_calculations, attach_selection_decisions
+        self.template_data['selection_policy'] = selection_policy_view(self.selection)
+        self.template_data['score_calculations'] = score_calculations(
+            self.ranked_variants_with_vaccine_peptides, self.template_data['ranked_candidates'])
+        attach_selection_decisions(self.template_data, self.selection,
+                                   self.ranked_variants_with_vaccine_peptides, self.products)
         return self.template_data
 
 
