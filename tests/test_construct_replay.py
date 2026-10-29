@@ -90,7 +90,11 @@ def test_empty_native_result_replays_scope_settings_and_products(tmp_path, monke
     assert assembly['mrna']['configuration']['max_constructs'] == 2
     for record in assembly.values():
         assert from_native_json(record['products'], list) == []
-        assert from_native_json(record['source_graph'], dict) == {'inputs': [], 'products': {}}
+        assert from_native_json(record['source_graph'], dict) == {
+            'inputs': [], 'products': {}, 'assembly_decisions': {
+                'order': 'allele_coverage_then_input_order',
+                'deduplication': 'exact_amino_acid_sequence',
+                'overlap': 'retain_distinct_sequences', 'antigens': []}}
     monkeypatch.setattr('vaxrank.cli.entry_point.assemble_peptide_constructs', forbidden)
     monkeypatch.setattr('vaxrank.cli.entry_point.assemble_mrna_constructs', forbidden)
     replay(first / 'candidate_predictions.tsv', second)
@@ -195,9 +199,17 @@ def test_actual_general_products_replay_offline(source, tmp_path, monkeypatch, o
     assert set(peptide.antigen_names) == {name for row in peptide_graph['inputs'] for c in row['candidates']
                                         for name in c['emitted_antigen_names']}
     assert assembly['mrna']['configuration']['optimize_linkers'] == optimized
+    assert peptide_graph['assembly_decisions']['antigens'][0]['outcome'] == 'emitted'
+    assert any(a['outcome'] == 'construct_capacity' for a in peptide_graph['assembly_decisions']['antigens'])
     if optimized:
         assert mrna.elements['junction_swap']['enabled']
         assert mrna.elements['junction_swap']['prediction']['scored_prediction_count'] > 0
+        decisions = mrna.elements['junction_swap']['prediction']['junction_decisions']
+        assert [d['emitted_linker'] for d in decisions] == mrna.elements['junction_swap']['chosen']
+        assert decisions[-1]['junction_index'] == 'mitd'
+        for decision in decisions:
+            preferred = min(decision['candidates'], key=lambda row: (row['key'], row['candidate_order']))
+            assert preferred['linker'] == decision['preferred_linker']
     assert saved.selection['run_configuration']['effective_constructs']['mrna']['poly_a_length'] == 73
     assert bool(model.calls) == optimized
     source.unlink()
@@ -208,6 +220,9 @@ def test_actual_general_products_replay_offline(source, tmp_path, monkeypatch, o
     monkeypatch.setattr('vaxrank.mrna.reverse_translate', forbidden)
     replay(native, second)
     assert product_files(first) == product_files(second)
+    restored = EpitopeDataset.load(second / 'candidate_predictions.tsv').selection['construct_assembly']
+    assert {m: r['source_graph'] for m, r in restored.items()} == {
+        m: r['source_graph'] for m, r in assembly.items()}
 
 
 def test_current_yaml_and_explicit_default_cli_options_override_saved_settings(source, tmp_path):
@@ -257,14 +272,20 @@ def test_changed_design_inputs_do_not_reuse_products_or_window_audits(source, tm
     assert calls == ['assemble_peptide_constructs', 'assemble_mrna_constructs']
 
 
-def test_corrupt_saved_products_are_rejected(source, tmp_path):
+@pytest.mark.parametrize('corruption', ['product', 'assembly_decision'])
+def test_corrupt_saved_products_are_rejected(source, tmp_path, corruption):
     native = tmp_path / 'native.tsv'
     design(source, tmp_path / 'first', native, '--mrna-no-optimize-linkers')
     saved = EpitopeDataset.load(native)
     payload = saved.selection['construct_assembly']['peptide']
-    products = from_native_json(payload['products'], list)
-    products[0].components['counterion'] = 'changed'
-    payload['products'] = to_native_json(products)
+    if corruption == 'product':
+        products = from_native_json(payload['products'], list)
+        products[0].components['counterion'] = 'changed'
+        payload['products'] = to_native_json(products)
+    else:
+        graph = from_native_json(payload['source_graph'], dict)
+        graph['assembly_decisions']['antigens'][0]['outcome'] = 'construct_capacity'
+        payload['source_graph'] = to_native_json(graph)
     saved.save(native)
     with pytest.raises(ValueError, match='checksum'):
         replay(native, tmp_path / 'replay')

@@ -1,0 +1,23 @@
+{% if window_decisions %}
+Recorded window decisions:
+Identical displayed summaries share a reference. Full alternatives and source evidence remain in the native dataset.
+New records include actual ordering rules and sort keys.
+{% for window in window_decisions %}
+{{ window.identifier }}: {{ window.sequence or 'No eligible window' }}; sources {{ window.sources | join(', ') }}; products {{ window.products | join(', ') }}.
+{% if window.parent %}  Selected [{{ window.parent.start }}, {{ window.parent.end }}) in parent {{ window.parent.sequence }} (zero-based, end-exclusive).
+{% else %}  Parent candidate coordinates were not recorded.
+{% endif %}{% if window.none_eligible %}  No windows met the recorded eligibility constraints.
+{% elif window.decision %}  Rank {{ window.decision.selection_rank }}; {{ window.decision.decision_reason | replace('_', ' ') }}.
+  Sort key: {{ window.decision.ordering_key | tojson }}; rules {{ window.decision.ranking_rules | join(', ') }}.
+{% else %}  Historical selection order and tie-break decisions were not recorded.
+{% endif %}  {{ window.self_status }}. {{ window.serum_status }}.
+  Policy: {{ window.policy | tojson }}.
+  Ordering: {{ window.ordering_description }}.
+{% if window.utility_selector %}  Utility = (target score - serum weight * at-risk target score) / (1 + self weight * non-CTA self score).
+{% endif %}
+{% for label, value in window.metrics %}  {{ label }}: {{ value }}
+{% endfor %}{% for target in window.targets %}  Target {{ target.sequence }} at window offset {{ target.offset }}: {% for allele, score in target.allele_scores.items() %}{{ allele }}: {{ '%.6g' | format(score) }}{% if not loop.last %}; {% endif %}{% endfor %}{% if target.internal_cuts is defined %}; internal supported cuts {{ target.internal_cuts | tojson }}{% endif %}.
+{% endfor %}  Alternative preview: {{ window.alternatives | length }} of {{ window.alternative_count }} recorded windows; full alternatives in native audit.
+{% if not window.decision %}  Producer order shown; historical preference order unavailable.
+{% endif %}{% for alternative in window.alternatives %}  {{ alternative.sequence }}: target {{ alternative.target_score | display_epitope_value }}, {{ 'utility' if window.utility_selector else 'combined score' }} {{ (alternative.utility if window.utility_selector else alternative.combined_score) | display_epitope_value }}; {{ (alternative.decision_reason or alternative.ineligibility_reason or 'Eligible; final choice not recorded') | replace('_', ' ') }}{% if alternative.selection_rank %}; rank {{ alternative.selection_rank }}{% endif %}{% if alternative.ordering_key %}; key {{ alternative.ordering_key | tojson }}{% endif %}
+{% endfor %}{% endfor %}{% endif %}

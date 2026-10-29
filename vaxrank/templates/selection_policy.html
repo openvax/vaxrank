@@ -1,0 +1,25 @@
+{% autoescape true %}
+<h2 id="selection-rules">Selection rules and score calculations</h2>
+{% if selection_policy.available %}
+<p>Recorded policy: <strong>{{ selection_policy.name }}</strong>; Vaxrank {{ selection_policy.version }}.
+These are resolved design settings. Raw invocation defaults in Methods and provenance do not override saved assembly settings.</p>
+<p class="note">Effective configuration identity: {{ selection_policy.identity }}</p>
+{% for section in selection_policy.sections %}<h3>{{ section.title }}</h3>
+<table class="pure-table"><tbody>{% for label, value in section.rows %}<tr><th>{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody></table>
+{% endfor %}
+{% else %}<p>Effective run configuration was not recorded or was not supplied to this report.
+The calculations below use the actual candidate objects; invocation defaults are not substituted for historical design settings.</p>{% endif %}
+{% if score_calculations %}
+<h3>Candidate score calculations</h3>
+<p>The expression is taken from each candidate. Its <code>target_epitope_score</code> sums the stored scores of retained target occurrences;
+each occurrence score sums its credited allele scores. This is distinct from a window utility that uses unique sequence/allele pairs.
+Presentation, WT comparison, cleavage, RNA support and manufacturability affect this expression only when its recorded terms use them.
+Admission and window-selection constraints may act separately.</p>
+<table class="pure-table score-calculations"><thead><tr><th>Sources</th><th>Expression and inputs</th><th>Result / target contributions</th></tr></thead><tbody>
+{% for calculation in score_calculations %}<tr><td>{% for source in calculation.sources %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td>
+<td><code>{{ calculation.expression }}</code>{% for term in calculation.terms %}<br>{{ term.name }} = {{ term.display }} ({{ term.unit }}){% if term.evidence %}<br><span class="note">{{ term.evidence }}</span>{% endif %}{% endfor %}</td>
+<td>Combined score: <strong>{{ calculation.result }}</strong><br>Target-epitope total: {{ calculation.target_score }}
+{% for target in calculation.targets %}<p class="note">{{ target.sequence }}, offset {{ target.offset }}: {% for allele, score in target.allele_scores.items() %}{{ allele }}: {{ '%.6g' | format(score) }}{% if not loop.last %}; {% endif %}{% endfor %}</p>{% endfor %}</td></tr>{% endfor %}
+</tbody></table>{% endif %}
+{% include "templates/window_decisions.html" %}
+{% endautoescape %}

@@ -4,6 +4,9 @@ Ranked source windows and combined scores. Final sequences and placements are li
 {{ candidate.rank }}. {{ candidate.gene }} ({{ candidate.kind }}), {{ candidate.source_id }}; score {{ candidate.score }}
    Top candidate window: {{ candidate.window }} {% if candidate.window_count > 1 %}({{ candidate.window_count }} retained windows){% endif %}
    Linked products: {{ candidate.products }}
+{% for outcome in candidate.assembly_outcomes %}   {{ outcome.modality }}: {{ outcome.outcome | replace('_', ' ') }}{% if outcome.shared %}; shared exact sequence{% endif %}
+{% endfor %}{% if candidate.window_decisions %}   Window decisions: {{ candidate.window_decisions | join(', ') }}.
+{% endif %}
 {% else %}No candidates passed ranking.
 {% endfor %}
 {% if ranked_candidates and not candidate_details %}Use --report-candidate-details to include grouped source windows and epitope tables.

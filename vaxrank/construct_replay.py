@@ -177,7 +177,23 @@ def _assembly_identity(args, ranked, options, context):
     # Adding that spelling must not force inference during native replay.
     if configuration.get('junction_rank_kind') == 'auto':
         configuration.pop('junction_rank_kind')
-    definition = (_source_graph(ranked, options), configuration, context, args._construct_policy)
+    graph = _source_graph(ranked, options)
+    # Explanatory metadata added in 3.47.24 is protected by the payload
+    # checksum, but does not change assembly inputs or invalidate old designs.
+    for source in graph:
+        for candidate in source['candidates']:
+            audit = candidate['window_selection']
+            if audit.get('algorithm') == 'score_fraction_then_ranking':
+                candidate['window_selection'] = {}
+            else:
+                audit = {key: value for key, value in audit.items() if key not in (
+                    'decision', 'parent_window', 'preferred_length', 'limit')}
+                if 'alternatives' in audit:
+                    audit['alternatives'] = [{key: value for key, value in item.items() if key not in (
+                        'input_order', 'ordering_key', 'ranking_rules', 'selection_rank',
+                        'selected', 'decision_reason', 'parent_window')} for item in audit['alternatives']]
+                candidate['window_selection'] = audit
+    definition = (graph, configuration, context, args._construct_policy)
     if args._design_dataset.host_reference is not None:
         definition += (args._design_dataset.host_reference.identity,)
     return design_digest(args, definition)
@@ -224,7 +240,8 @@ def restore_products(args, ranked, modality, options, context=None):
     return None
 
 
-def record_products(args, ranked, modality, options, products, context=None, window_audit=None):
+def record_products(args, ranked, modality, options, products, context=None, window_audit=None,
+                    selection_audit=None):
     assembly = getattr(args, '_construct_assembly', None)
     if assembly is None:
         return
@@ -244,9 +261,12 @@ def record_products(args, ranked, modality, options, products, context=None, win
                 mapping = emitted_antigens_for_candidate(candidate['antigen'], candidate['amino_acids'],
                                                          candidate['epitopes'], products)
                 candidate['emitted_antigen_names'] = sorted({name for names in mapping.values() for name in names})
-    graph = to_native_json(dict(
+    graph = dict(
         inputs=inputs,
-        products={p.name: list(p.antigen_names) for p in products}))
+        products={p.name: list(p.antigen_names) for p in products})
+    if selection_audit is not None:
+        graph['assembly_decisions'] = selection_audit
+    graph = to_native_json(graph)
     assembly[modality] = dict(
         contract=1, identity=_assembly_identity(args, ranked, options, context),
         configuration=configuration, products=payload, window_audit=window_audit,

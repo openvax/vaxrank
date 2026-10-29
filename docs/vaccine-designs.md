@@ -163,6 +163,14 @@ construct lists. An empty list means a successful run with no products; omitting
 `vaccine_constructions`, `mrna_ranking_decisions` and `target_alleles` report
 arguments: selection forecasts are no longer displayed as final products.
 
+Pass `selection=dataset.selection` to `TemplateDataCreator` to show the saved
+effective configuration and decision audits. The CLI passes this automatically.
+Omitting it leaves unavailable settings explicitly unknown; parser arguments
+are never treated as authoritative assembly settings. Library assemblers accept
+an optional `selection_audit={}` dictionary, filled with deduplication and
+packing outcomes. Reports are read-only views of these records and products.
+
+
 ## Peptide construct files
 
 `vaccine.fasta`, `manifest.json` and `order_form.csv`, written into

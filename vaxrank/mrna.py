@@ -47,7 +47,7 @@ from dnachisel import (
 )
 from dnachisel.biotools import reverse_translate
 
-from .assembly_antigens import antigens_for_assembly
+from .assembly_antigens import antigens_for_assembly, record_assembly_decisions
 from .mrna_library import (
     MITDS,
     SIGNAL_PEPTIDES,
@@ -629,7 +629,7 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
 def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                              mhc_predictor=None, mhc_alleles=None,
                              reference_proteome=None, *,
-                             target_alleles=None, source_evidence=None):
+                             target_alleles=None, source_evidence=None, selection_audit=None):
     """Assemble mRNA constructs from ranked vaccine peptides.
 
     Parameters
@@ -660,6 +660,9 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
         Retained source evidence keyed by producer evidence ID, as in
         ``EpitopeDataset.selection['source_evidence']``. Supplies recorded
         source-event identities for product provenance; never changes scores.
+    selection_audit : optional, dict
+        Filled with exact-sequence deduplication and packing outcomes, including
+        eligible antigens excluded by the construct capacity limit.
 
     Returns
     -------
@@ -702,6 +705,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     antigens = [(a.name, a.amino_acids) for a in selected_antigens]
     source_mappings = {a.name: a.sources for a in selected_antigens}
     if not antigens:
+        record_assembly_decisions(selection_audit, selected_antigens, [], target_alleles)
         return []
 
     packed = _pack_constructs(
@@ -799,6 +803,11 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                         'note': "default linker beat or tied all candidates",
                     }
                 junction_swap_meta['prediction'] = swap.prediction_metadata
+                for decision in swap.prediction_metadata.get('junction_decisions', ()):
+                    index = decision['junction_index']
+                    decision['emitted_linker'] = junction_swap_meta['chosen'][index]
+                    if mitd_aa and index == n_junctions:
+                        decision['junction_index'] = 'mitd'
 
         protein, frozen_segments, aa_segments = build_protein_with_segments(
             antigen_aas, names, signal_peptide_aa, options.signal_peptide,
@@ -927,6 +936,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             elements=elements,
             antigens=antigens_meta,
         ))
+    record_assembly_decisions(selection_audit, selected_antigens, constructs, target_alleles)
     return constructs
 
 

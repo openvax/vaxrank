@@ -350,12 +350,14 @@ def vaccine_peptides_for_antigen(
             num_target_epitopes_to_keep=num_target_epitopes_to_keep,
             manufacturability_thresholds=mfg.thresholds_dict(),
             manufacturability_rules=mfg.rules,
+            window_selection_audit={'parent_window': dict(sequence=antigen.amino_acids, start=start, end=end)},
         )
         if require_target_epitopes and not candidate.contains_target_epitopes():
             continue
         candidates.append(candidate)
     if not candidates:
         return []
+    all_candidates = list(candidates)
     max_score = max(candidate.combined_score for candidate in candidates)
     if not isclose(max_score, 0.0):
         candidates = [
@@ -363,7 +365,12 @@ def vaccine_peptides_for_antigen(
             if candidate.combined_score / max_score >= 0.99
         ]
     candidates.sort(key=VaccinePeptide.lexicographic_sort_key)
-    return candidates[:max_vaccine_peptides]
+    selected = candidates[:max_vaccine_peptides]
+    from .window_selection import record_ranked_window_decisions
+    record_ranked_window_decisions(all_candidates, candidates, selected,
+                                  score_fraction=.99, fraction_applied=not isclose(max_score, 0.0),
+                                  limit=max_vaccine_peptides)
+    return selected
 
 
 def vaccine_peptides_from_epitopes(
@@ -492,6 +499,8 @@ def vaccine_peptides_from_epitopes(
             manufacturability_rules=mfg.rules,
             combined_score_expr=vaccine_config.combined_score_expr,
             ranking_rules=vaccine_config.ranking_rules,
+            window_selection_audit={'parent_window': dict(
+                sequence=long_protein_fragment.amino_acids, start=offset, end=offset + len(candidate_fragment))},
         )
 
         logger.debug(
@@ -511,6 +520,7 @@ def vaccine_peptides_from_epitopes(
         logger.info("No candidate peptides for variant %s", variant.short_description)
         return []
 
+    all_candidates = list(candidate_vaccine_peptides)
     max_score = max(vp.combined_score for vp in candidate_vaccine_peptides)
     if isclose(max_score, 0.0):
         filtered_candidate_vaccine_peptides = candidate_vaccine_peptides
@@ -541,7 +551,13 @@ def vaccine_peptides_from_epitopes(
             vaccine_peptide.combined_score,
         )
 
-    return filtered_candidate_vaccine_peptides[:vaccine_config.max_vaccine_peptides_per_variant]
+    selected = filtered_candidate_vaccine_peptides[:vaccine_config.max_vaccine_peptides_per_variant]
+    from .window_selection import record_ranked_window_decisions
+    record_ranked_window_decisions(all_candidates, filtered_candidate_vaccine_peptides, selected,
+                                  score_fraction=vaccine_config.score_fraction_of_best,
+                                  fraction_applied=not isclose(max_score, 0.0),
+                                  limit=vaccine_config.max_vaccine_peptides_per_variant)
+    return selected
 
 
 def ranked_vaccine_peptides(variant_to_vaccine_peptides_dict):

@@ -5,6 +5,7 @@ Vaccine Design Report
 
 {% if input_coverage %}{% include "templates/input_coverage.txt" %}{% endif %}
 {% include "templates/products.txt" %}
+{% if selection_policy is defined %}{% include "templates/selection_policy.txt" %}{% endif %}
 {% if ranked_candidates is defined %}{% include "templates/ranking.txt" %}{% endif %}
 {% if input_coverage %}{% include "templates/source_outcomes.txt" %}{% endif %}
 
@@ -38,7 +39,8 @@ WT: recorded comparator, not evidence of an observed patient-normal sequence.
 {% endfor %}
 {% endif %}
 
-Run arguments
+Invocation arguments, including parser defaults
+Resolved selection and assembly settings are shown separately.
 {% for key, val in args %}
   {{ key }}: {{ val }}
 {% endfor %}

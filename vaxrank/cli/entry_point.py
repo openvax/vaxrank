@@ -401,16 +401,18 @@ def _emit_peptide_constructs(args, ranked, target_dir):
                    if target_alleles else [])
     from ..construct_replay import restore_products, record_products
     constructs = restore_products(args, ranked, 'peptide', peptide_options, context)
+    selection_audit = {}
     if constructs is None:
         dataset = getattr(args, '_design_dataset', None)
         constructs = assemble_peptide_constructs(
             ranked, options=peptide_options, target_alleles=target_alleles,
             source_evidence=dataset.selection.get('source_evidence') if dataset else None,
+            **({'selection_audit': selection_audit} if dataset is not None else {}),
             **({'window_audit': window_audit} if peptide_options.window_selection else {}))
+        record_products(args, ranked, 'peptide', peptide_options, constructs, context,
+                        window_audit=window_audit, selection_audit=selection_audit)
     else:
         window_audit = args._construct_assembly['peptide'].get('window_audit') or []
-    record_products(args, ranked, 'peptide', peptide_options, constructs, context,
-                    window_audit=window_audit)
     # Canonical filenames inside the per-modality target directory:
     # vaccine.fasta + manifest.json + order_form.csv. Single-mode
     # runs land directly in args.output_dir; multi-mode runs land in
@@ -789,6 +791,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     from ..construct_replay import restore_products, record_products
     constructs = restore_products(args, ranked, 'mrna', options, junction_context)
     args._junction_replayed = constructs is not None
+    selection_audit = {}
     if constructs is None:
         mhc_predictor, mhc_alleles = resolve_mhc_for_linker_optimizer(args, yaml_kwargs)
         dataset = getattr(args, '_design_dataset', None)
@@ -796,14 +799,16 @@ def _emit_mrna_constructs(args, ranked, target_dir):
             ranked, options=options,
             mhc_predictor=mhc_predictor, mhc_alleles=mhc_alleles,
             target_alleles=target_alleles,
-            source_evidence=dataset.selection.get('source_evidence') if dataset else None)
+            source_evidence=dataset.selection.get('source_evidence') if dataset else None,
+            **({'selection_audit': selection_audit} if dataset is not None else {}))
         policy = 'none'
         if mhc_predictor is not None:
             policy = ('explicit_junction_model' if cfg('mrna_junction_predictor', 'junction_predictor')
                       else 'candidate_model')
         for construct in constructs:
             construct.elements['junction_swap']['policy'] = policy
-    record_products(args, ranked, 'mrna', options, constructs, junction_context)
+        record_products(args, ranked, 'mrna', options, constructs, junction_context,
+                        selection_audit=selection_audit)
     # Canonical filenames inside the per-modality target directory:
     # cds.fasta + no_polyA.fasta + full.fasta + manifest.json +
     # mrna-sequence-parts.csv. The cds/no_polyA/full FASTAs are
@@ -1483,6 +1488,8 @@ def run_cli(args_list=None):
         candidate_details=getattr(args, 'report_candidate_details', False),
         source_evidence=(getattr(args, '_design_dataset').selection.get('source_evidence', {})
                          if getattr(args, '_design_dataset', None) is not None else {}),
+        selection=(getattr(args, '_design_dataset').selection
+                   if getattr(args, '_design_dataset', None) is not None else {}),
     ).compute_template_data()
     if args.output_ascii_report:
         make_ascii_report(template_data=template_data, ascii_report_path=args.output_ascii_report)
