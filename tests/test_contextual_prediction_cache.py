@@ -1,6 +1,7 @@
 """Compose the CLI, Topiary contextual cache, and native replay contracts."""
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 import pandas as pd
@@ -10,6 +11,7 @@ from topiary import CachedPredictor, TopiaryResult, predict_peptide_occurrences
 from vaxrank.cli.entry_point import run_cli
 from vaxrank.epitope_dataset import EpitopeDataset
 from vaxrank.external_rescoring import rescore_candidates
+from vaxrank.prediction_policy import configured_prediction_models
 
 from .input_scope_helpers import write_input_manifest
 from .test_external_rescoring import ALLELES, DATA, ContextPredictor, candidate, config
@@ -137,8 +139,19 @@ def test_contextual_cache_rejects_incompatible_or_incomplete_fallback(tmp_path, 
                 return [PeptideResult(result.preds[:1]) for result in results]
             return results
 
-    cache = CachedPredictor.from_topiary_output(
-        contextual_cache(tmp_path / 'cache.tsv'), fallback=Invalid())
-    cache.alleles = ALLELES
+    path = contextual_cache(tmp_path / 'cache.tsv')
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr('mhctools.cli.predictors_from_args', lambda args: [Invalid()])
+        cache, = configured_prediction_models(
+            SimpleNamespace(prediction_cache=str(path)), ALLELES)
     with pytest.raises(ValueError, match='version|complete .*prediction'):
         rescore_candidates([candidate('miss', 'CC')], [cache], ALLELES)
+
+
+def test_contextual_cache_requires_one_live_model(tmp_path, monkeypatch):
+    path = contextual_cache(tmp_path / 'cache.tsv')
+    monkeypatch.setattr(
+        'mhctools.cli.predictors_from_args',
+        lambda args: [ContextPredictor(), ContextPredictor()])
+    with pytest.raises(ValueError, match='one configured predictor'):
+        configured_prediction_models(SimpleNamespace(prediction_cache=str(path)), ALLELES)

@@ -147,5 +147,8 @@ exclusions on replay. No genome cache migration or reindexing is required.
 ## Released prerequisites
 
 Core version requirements are installed with Vaxrank. Hitlist is optional.
-CTA inputs currently reject `--prediction-cache`; contextual cache support is
-tracked in [#624](https://github.com/openvax/vaxrank/issues/624).
+CTA protein inference accepts `--prediction-cache` under the same contextual
+contract as native antigens and direct variants. Exact source neighbours,
+endpoint and the validated patient genotype must match; missing coverage uses
+the single configured live predictor. Native CTA evidence retains the completed
+predictions for predictor-free replay.

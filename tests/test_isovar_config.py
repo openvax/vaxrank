@@ -17,6 +17,7 @@ from vaxrank.vaccine_config import VaccineConfig
 
 @pytest.fixture
 def run_config(monkeypatch, tmp_path):
+    import mhctools.cli
     from vaxrank.cli import entry_point
 
     # Stub only I/O and expensive downstream ranking, not config or the creator.
@@ -24,7 +25,8 @@ def run_config(monkeypatch, tmp_path):
     monkeypatch.setattr(entry_point, "filter_unannotatable_variants", lambda v: v)
     monkeypatch.setattr(entry_point, "alignment_file_from_args", lambda args: None)
     monkeypatch.setattr(entry_point, "read_collector_from_args", lambda args: None)
-    monkeypatch.setattr(entry_point, "predictors_from_args", lambda args: [RandomBindingPredictor(['A0201'])])
+    monkeypatch.setattr(mhctools.cli, "predictors_from_args",
+                        lambda args: [RandomBindingPredictor(['A0201'])])
     monkeypatch.setattr(entry_point, "run_vaxrank", lambda **kwargs: kwargs)
     captured = {}
 

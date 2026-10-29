@@ -1,10 +1,52 @@
 """Describe effective prediction stages without loading or executing models."""
 
 from dataclasses import asdict
+import logging
 
 import pandas as pd
 
 from .processing_prediction import ProcessingPrediction
+
+logger = logging.getLogger(__name__)
+
+
+def configured_prediction_models(args, alleles):
+    """Build the candidate models requested by one CLI prediction stage.
+
+    A prediction cache is a model adapter, not a separate inference path. The
+    same construction therefore serves direct variants, sequence-backed
+    antigens and CTA proteins, and fresh/additive occurrence rescoring.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed CLI arguments accepted by ``mhctools.cli.predictors_from_args``.
+    alleles : iterable of str
+        Validated patient genotype for this prediction stage.
+
+    Returns
+    -------
+    list
+        Configured live models, or one contextual cache with the sole live
+        model as its version-checked fallback.
+    """
+    from mhctools.cli import predictors_from_args
+    models = predictors_from_args(args)
+    cache_path = getattr(args, 'prediction_cache', None)
+    if cache_path:
+        from topiary import CachedPredictor
+        if len(models) != 1:
+            raise ValueError('--prediction-cache requires one configured predictor')
+        cached = CachedPredictor.from_topiary_output(cache_path, fallback=models[0])
+        # Cache files may contain multiple patient repertoires. Prediction
+        # always queries the genotype that passed this input stage's scope
+        # validation; stored rows never expand it.
+        cached.alleles = alleles
+        models = [cached]
+        logger.info("Loaded contextual prediction cache from %s for %d selected allele(s)",
+                    cache_path, len(cached.alleles))
+    record_candidate_models(args, models)
+    return models
 
 
 def record_candidate_models(args, models):

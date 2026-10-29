@@ -243,8 +243,8 @@ def add_prediction_cache_arg(arg_parser):
     arg_parser.add_argument(
         "--prediction-cache", default=None,
         help="Path to pre-computed MHC binding predictions (topiary TSV/Parquet "
-             "or CSV). Cache misses use the configured live predictor. External "
-             "inference requires a single model and --external-peptide-only.")
+             "or CSV). Exact context/genotype hits are reused and misses use "
+             "the single configured live predictor.")
 
 
 def add_advanced_args(arg_parser):

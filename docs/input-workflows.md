@@ -287,12 +287,15 @@ flanks from that exact sequence and local peptide offset. Its saved
 rewrites them, and a sliced source window is interpreted at its rebased offset.
 Without a source window, `None` still means unknown context and `""` a known
 sequence terminus.
-External `--prediction-cache predictions.tsv` accepts contextual Topiary output
-with one configured fallback model. The cache is queried for each supplied
-primary and comparator peptide, its actual flanks, requested genotype and
-prediction kind. Distinct contexts stay distinct; unknown flanks do not stand
-in for known sequence termini. Missing coverage invokes the configured model,
-and Topiary requires matching model/version evidence before adding its results.
+`--prediction-cache predictions.tsv` accepts contextual Topiary output with one
+configured fallback model. The same cache policy applies to direct variants,
+native antigen and CTA proteins, and fresh/additive external occurrences. Each
+stage first validates its patient genotype and source scope, then queries exact
+peptide, endpoint, genotype and flanking context. A reusable cache may contain
+other genotypes; those rows never expand the current patient repertoire.
+Distinct contexts stay distinct, and unknown flanks do not stand in for known
+sequence termini. Missing coverage invokes the configured model, and Topiary
+requires matching model/version/endpoint evidence before adding its results.
 Cached measurements and input source identities remain unchanged. The explicit
 `--external-peptide-only` mode instead queries without flanks; it does not reuse
 context-dependent measurements as peptide-only results.

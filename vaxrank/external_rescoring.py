@@ -890,7 +890,7 @@ def load_unified_external(args, epitope_config, options, genome):
     if antigens or cta:
         from .antigen_input import validate_antigen_args
         from .cta_input import validate_cta_args
-        from mhctools.cli import mhc_alleles_from_args, predictors_from_args
+        from mhctools.cli import mhc_alleles_from_args
         from topiary import TopiaryPredictor
         validate_antigen_args(args)
         validate_cta_args(args)
@@ -901,34 +901,19 @@ def load_unified_external(args, epitope_config, options, genome):
             args._candidate_prediction_mode = 'sequence inference'
             args.mhc_alleles = ','.join(scope.mhc_alleles)
             args.mhc_alleles_file = None  # Genotype already read and reconciled.
-            predictor = TopiaryPredictor(models=predictors_from_args(args))
-            from .prediction_policy import record_candidate_models
-            record_candidate_models(args, predictor)
-            return predictor
+            from .prediction_policy import configured_prediction_models
+            return TopiaryPredictor(models=configured_prediction_models(args, scope.mhc_alleles))
     if direct and mode == 'fresh':
         raise ValueError('Direct/table composition requires --external-predictions input or additive')
     if mode in ('fresh', 'additive'):
-        from mhctools.cli import predictors_from_args, mhc_alleles_from_args
+        from mhctools.cli import mhc_alleles_from_args
         if not getattr(args, 'mhc_predictor', None):
             raise ValueError("Fresh/additive external predictions require --mhc-predictor")
         alleles = sorted({normalize_hla_allele(a) for a in mhc_alleles_from_args(args)})
         def model_factory():
             args._candidate_prediction_mode = mode
-            models = predictors_from_args(args)
-            cache_path = getattr(args, 'prediction_cache', None)
-            if cache_path:
-                from topiary import CachedPredictor
-                if len(models) != 1:
-                    raise ValueError('--prediction-cache requires one configured external predictor')
-                cached = CachedPredictor.from_topiary_output(cache_path, fallback=models[0])
-                # A reusable cache can contain more genotypes than this run.
-                # Select the requested scope; Topiary checks each occurrence,
-                # kind and context and version-checks fallback predictions.
-                cached.alleles = alleles
-                models = [cached]
-            from .prediction_policy import record_candidate_models
-            record_candidate_models(args, models)
-            return models
+            from .prediction_policy import configured_prediction_models
+            return configured_prediction_models(args, alleles)
     elif not direct and not cta and not antigens and getattr(args, 'mhc_predictor', None):
         raise ValueError("Use --external-predictions fresh or additive to run --mhc-predictor")
     elif not direct and not cta and not antigens and (getattr(args, 'mhc_alleles', None)

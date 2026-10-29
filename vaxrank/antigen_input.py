@@ -321,8 +321,6 @@ def validate_antigen_args(args):
         raise ValueError('--input-antigens requires --mhc-predictor for new predictions')
     if getattr(args, 'external_predictions', 'input') != 'input' or getattr(args, 'external_peptide_only', False):
         raise ValueError('--input-antigens predicts native sequences; external prediction modes do not apply')
-    if getattr(args, 'prediction_cache', None):
-        raise ValueError('Antigen context prediction caches are not yet supported')
 
 
 def antigen_report(inputs, predictor, *, genome, provenance, config=None, host_reference=None):

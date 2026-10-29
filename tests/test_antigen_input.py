@@ -6,7 +6,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from topiary import TopiaryPredictor
+from topiary import TopiaryPredictor, TopiaryResult
 
 from vaxrank import AntigenDataset
 from vaxrank.antigen_input import ANTIGEN_DATASET_SCHEMA
@@ -133,6 +133,51 @@ def test_all_sources_use_shared_design_and_offline_replay(inputs, dependencies, 
     for fasta in output.glob('*.fasta'):
         assert fasta.read_bytes() == (replay / fasta.name).read_bytes()
     assert (output / 'manifest.json').read_bytes() == (replay / 'manifest.json').read_bytes()
+
+
+def test_contextual_cache_hits_misses_genotype_and_native_replay(
+        inputs, dependencies, tmp_path, monkeypatch):
+    source = tmp_path / 'input.json'
+    inputs.save(source)
+    seed = ContextPredictor()
+    seed.alleles = [*ALLELES, 'HLA-A*03:01']
+    cached_antigen = inputs.antigens['CTA']
+    cache_frame = TopiaryPredictor(models=[seed]).predict_from_named_sequences(
+        {'cached': cached_antigen.amino_acids})
+    cache = tmp_path / 'cache.tsv'
+    TopiaryResult(cache_frame).to_tsv(cache)
+    cached_requests = set(zip(
+        cache_frame.peptide, cache_frame.n_flank, cache_frame.c_flank))
+
+    fallback, _ = dependencies
+    fallback.calls.clear()
+    native = tmp_path / 'predictions.tsv'
+    run_cli([
+        '--input-antigens', str(source), '--mhc-predictor', 'random',
+        '--ensembl-release', '93', '--prediction-cache', str(cache),
+        '--output-epitopes', str(native), '--config-text', 'epitopes.score_expr=1.0',
+        '--no-processing-aware-annotation',
+    ])
+    fallback_requests = {request for batch in fallback.calls for request in batch}
+    assert fallback_requests
+    assert cached_requests.isdisjoint(fallback_requests)
+    # CDEFGHIKL occurs in another source with different neighbours. It is a
+    # context miss even though the peptide itself is present in the cache.
+    assert any(peptide == 'CDEFGHIKL' for peptide, _, _ in cached_requests)
+    assert any(peptide == 'CDEFGHIKL' for peptide, _, _ in fallback_requests)
+    saved = EpitopeDataset.load(native)
+    assert set(saved.result.long_df.allele) == set(ALLELES)
+    assert 'HLA-A*03:01' not in set(saved.result.long_df.allele)
+
+    source.unlink()
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
+    monkeypatch.setattr('vaxrank.antigen_input.self_reference_matches', forbidden)
+    replay = tmp_path / 'replay.tsv'
+    run_cli(['--input-epitopes', str(native), '--output-epitopes', str(replay),
+             '--no-processing-aware-annotation'])
+    restored = EpitopeDataset.load(replay)
+    assert restored.epitopes == saved.epitopes
+    assert restored.provenance == saved.provenance
 
 
 @pytest.mark.parametrize('field,value', [('reference_assembly', 'GRCh37'),

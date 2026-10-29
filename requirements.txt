@@ -50,7 +50,9 @@ mhctools>=4.2.0,<5.0.0
 # handling used by effective prediction-policy reports (vaxrank#718).
 # 5.106.0 derives current inference flanks from exact source windows while
 # preserving historical invocation metadata (openvax/topiary#545; vaxrank#721).
-topiary>=5.106.0,<6.0.0
+# 5.106.1 applies an explicitly selected genotype to contextual protein scans,
+# required when antigen/CTA caches contain other patients (topiary#547; vaxrank#725).
+topiary>=5.106.1,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0

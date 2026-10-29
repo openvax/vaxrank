@@ -296,9 +296,7 @@ def test_b16_mixed_cli_assembly_and_reload(tmp_path, mouse_genome, monkeypatch):
              '--mhc-predictor', 'random', '--mhc-alleles', 'H2-Kb,H2-Db',
              '--mhc-epitope-lengths', '8', '--padding-around-mutation', '0',
              '--input-manifest', manifest, '--output-epitopes', str(native)] + common)
-    import vaxrank.cli.entry_point as entry
     import mhctools.cli
-    monkeypatch.setattr(entry, 'predictors_from_args', forbidden)
     monkeypatch.setattr(mhctools.cli, 'predictors_from_args', forbidden)
     reloaded = tmp_path / 'again.tsv'
     run_cli(['--input-epitopes', str(native), '--output-epitopes', str(reloaded)] + common)

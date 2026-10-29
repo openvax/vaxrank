@@ -42,6 +42,23 @@ exact-self assessment. Conflicting reference or genotype declarations fail.
 The Python equivalent is `inputs.predict(predictor, genome=genome)`, using a
 Topiary predictor. It returns the shared `EpitopeDataset`.
 
+Reuse contextual Topiary predictions while retaining live coverage for cache
+misses:
+
+```sh
+vaxrank --input-antigens antigens.json \
+  --mhc-predictor mhcflurry --prediction-cache prior-predictions.tsv \
+  --ensembl-release 93 --output-dir design
+```
+
+The cache must describe the same single model/version as the configured live
+predictor. Lookup uses each native protein occurrence's exact neighbours,
+endpoint and validated patient genotype. A peptide measured beside different
+neighbours is a miss, not a reusable score; the live model fills that occurrence
+and Topiary validates its returned allele, endpoint and version before merging
+it. Native output retains the completed evidence and replays without either the
+cache or predictor.
+
 Exact-self lookup shares repeated peptide queries within the same antigen kind
 and gene-exclusion policy. Overlapping ORF windows therefore do not each rescan
 the complete host proteome. Every source retains its own candidate identity,

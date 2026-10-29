@@ -7,6 +7,7 @@ import shutil
 
 import pandas as pd
 import pytest
+from topiary import TopiaryResult
 
 from . import test_cta_expression
 from .test_cta_expression import (PRAME, MAGEA3, MAGEA4, NOT_CTA,
@@ -169,6 +170,64 @@ def test_expression_only_cli_outputs_and_offline_replay(tmp_path, monkeypatch, c
         assert {gene for sources in peptide.antigen_sources.values() for source in sources
                 for gene in source['gene_ids']} == {PRAME, MAGEA4}
     assert (first / 'peptide' / 'manifest.json').read_bytes() != (changed / 'peptide' / 'manifest.json').read_bytes()
+
+
+def test_cta_contextual_cache_hits_misses_and_native_replay(
+        tmp_path, monkeypatch, cli_dependencies):
+    path = tmp_path / 'expression.tsv'
+    pd.DataFrame([(PRAME, 3), (MAGEA4, 4)],
+                 columns=['feature_id', 'patient_tpm']).to_csv(path, sep='\t', index=False)
+    baseline = tmp_path / 'baseline.tsv'
+    run_cli(argv(path, tmp_path / 'baseline') + [
+        '--output-epitopes', str(baseline), '--vaccine-type', 'peptide',
+        '--config-text', 'epitopes.score_expr=1.0'])
+    first = EpitopeDataset.load(baseline)
+    frame = first.result.long_df
+    row = frame.iloc[0]
+    same_occurrence = (
+        frame.source_sequence_name.eq(row.source_sequence_name)
+        & frame.peptide.eq(row.peptide)
+        & frame.peptide_offset.eq(row.peptide_offset)
+        & frame.kind.eq(row.kind))
+    cached_frame = frame.loc[same_occurrence].copy()
+    archived_value = float(row.value) + 1000
+    cached_frame['value'] = archived_value
+    if row.kind == 'pMHC_affinity':
+        cached_frame['affinity'] = archived_value
+    cache = tmp_path / 'cache.tsv'
+    TopiaryResult(cached_frame).to_tsv(cache)
+    cached_request = (row.peptide, row.n_flank, row.c_flank)
+
+    cli_dependencies.calls.clear()
+    native = tmp_path / 'cached.tsv'
+    run_cli(argv(path, tmp_path / 'cached') + [
+        '--prediction-cache', str(cache), '--output-epitopes', str(native),
+        '--vaccine-type', 'peptide', '--config-text', 'epitopes.score_expr=1.0'])
+    fallback_requests = [request for batch in cli_dependencies.calls for request in batch]
+    assert fallback_requests
+    # A protein fallback may rescan an affected full source, including cached
+    # windows. The stored measurement remains authoritative for an exact hit.
+    assert cached_request in fallback_requests
+    saved = EpitopeDataset.load(native)
+    saved_frame = saved.result.long_df
+    saved_occurrence = (
+        saved_frame.source_sequence_name.eq(row.source_sequence_name)
+        & saved_frame.peptide.eq(row.peptide)
+        & saved_frame.peptide_offset.eq(row.peptide_offset)
+        & saved_frame.kind.eq(row.kind))
+    assert saved_frame.loc[saved_occurrence, 'value'].eq(archived_value).all()
+    assert not frame.loc[same_occurrence, 'value'].eq(archived_value).any()
+    assert set(saved.result.long_df.allele) == set(ALLELES)
+
+    path.unlink()
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
+    monkeypatch.setattr('vaxrank.cta_input.admit_cta_expression', forbidden)
+    replay = tmp_path / 'replay.tsv'
+    run_cli(['--input-epitopes', str(native), '--output-epitopes', str(replay),
+             '--no-processing-aware-annotation'])
+    restored = EpitopeDataset.load(replay)
+    assert restored.epitopes == saved.epitopes
+    assert restored.provenance == saved.provenance
 
 
 def test_expression_dsl_changes_selected_targets(tmp_path, cli_dependencies):
