@@ -409,3 +409,20 @@ The Python report API can also render existing products directly: pass the
 retained product objects to `TemplateDataCreator(products=...)` and then call
 `make_html_report`, `make_pdf_report` or `make_ascii_report`. Report rendering
 itself does not export native evidence.
+
+## Reading event kind and coding context
+
+An additional variant ORF can describe a mutation in an annotated CDS or in a
+noncanonical ORF. Reports keep these dimensions separate: for example,
+`mutation / noncanonical dORF`. The Isovar producer's reference kind, ORF type,
+ORF ID, catalog, reference identity and source transcript travel with the
+candidate and its product source mappings. Catalog context does not establish
+translation or tumor specificity in this sample.
+
+Candidate CSV/XLSX exports retain `source_kind` and add `coding_context` plus
+the structured `coding_references` JSON column. A shared product can have
+multiple coding contexts; neither the first display name nor a shared peptide
+sequence erases the other origins. Historical exports recover context only
+from an unambiguous linked reference model; otherwise the report says
+`coding context not recorded`. Rendering historical products does not rewrite
+their saved names, sequences or manifests.

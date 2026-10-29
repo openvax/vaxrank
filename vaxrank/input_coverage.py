@@ -9,6 +9,7 @@ from dataclasses import asdict
 from varcode import StructuralVariant, Variant
 
 from .antigen_report import metadata_values
+from .coding_context import coding_context_label, coding_contexts
 from .native_serialization import to_native_json
 
 
@@ -58,6 +59,11 @@ def ranking_coverage(dataset, reports, outcomes, ranked):
     def add(source, input_ids=()):
         key = report_source_key(source)
         row = rows.setdefault(key, dict(_source_row(source), inputs=set(), has_window=False))
+        if not isinstance(source, Variant):
+            contexts = coding_contexts(source, dataset.selection.get('source_evidence'))
+            if contexts or ('isovar_family', 'variant_orfs') in source.source_metadata:
+                row['context'] = ' / '.join((coding_context_label(contexts),
+                    *source.protein_ids, *source.transcript_ids))
         row['inputs'].update(input_ids)
         return row
 

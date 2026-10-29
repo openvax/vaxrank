@@ -22,6 +22,8 @@ Related alternative sequences do not establish independent target coverage.
 {% endif %}
 {% for antigen in product.antigens %}
   {{ antigen.name }}: [{{ antigen.start }}, {{ antigen.end }}), {{ antigen.length }} aa
+{% for label in antigen.context_labels %}    Source context: {{ label }}
+{% endfor %}
   {{ antigen.sequence }}
   Source mappings: {{ antigen.sources if antigen.sources is not none else "unavailable" }} candidates, {{ antigen.transcripts if antigen.transcripts is not none else "unavailable" }} transcripts; genes: {{ antigen.genes or 'unavailable' }}.
 {% else %}Historical product: antigen placement/source mappings were not recorded. Labels: {{ product.antigen_names | join(', ') }}.

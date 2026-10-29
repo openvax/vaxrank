@@ -856,7 +856,9 @@ def emit_outputs(args, ranked, source):
 
     if args.output_csv or args.output_xlsx_report:
         make_csv_report(ranked, excel_report_path=args.output_xlsx_report,
-                        csv_report_path=args.output_csv)
+                        csv_report_path=args.output_csv,
+                        source_evidence=(getattr(args, '_design_dataset').selection.get('source_evidence', {})
+                            if getattr(args, '_design_dataset', None) is not None else None))
 
     if args.output_neoepitope_report and source == 'pipeline':
         num_epitopes = getattr(args, 'num_epitopes_per_vaccine_peptide', None)
