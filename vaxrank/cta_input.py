@@ -53,8 +53,6 @@ def validate_cta_args(args):
         raise ValueError('CTA expression inputs require --ensembl-release or a mapped host_reference')
     if getattr(args, 'external_predictions', 'input') != 'input' or getattr(args, 'external_peptide_only', False):
         raise ValueError('CTA expression inputs predict native proteins; external prediction modes do not apply')
-    if getattr(args, 'prediction_cache', None):
-        raise ValueError('CTA expression context prediction caches are not yet supported')
     if getattr(args, 'cta_no_gene_exclusions', False) and args.cta_exclude_gene_pattern:
         raise ValueError('--cta-no-gene-exclusions conflicts with --cta-exclude-gene-pattern')
 
@@ -270,7 +268,7 @@ def write_cta_admissions(args, sources):
 
 def prepare_cta_report(args, genome, epitope_config=None):
     """Compatibility entry point using the shared input preparation API."""
-    from mhctools.cli import mhc_alleles_from_args, predictors_from_args
+    from mhctools.cli import mhc_alleles_from_args
     from .external_rescoring import external_input_specs, read_reports
     validate_cta_args(args)
     specs = external_input_specs(args)
@@ -280,7 +278,8 @@ def prepare_cta_report(args, genome, epitope_config=None):
     def factory(scope):
         args.mhc_alleles = ','.join(scope.mhc_alleles)
         args.mhc_alleles_file = None
-        return TopiaryPredictor(models=predictors_from_args(args))
+        from .prediction_policy import configured_prediction_models
+        return TopiaryPredictor(models=configured_prediction_models(args, scope.mhc_alleles))
 
     return read_reports(
         [(fmt, path) for fmt, path, _ in specs], scopes=[s for _, _, s in specs],

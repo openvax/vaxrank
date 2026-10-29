@@ -278,6 +278,7 @@ def test_native_replay_checks_actual_prediction_species(tmp_path, location):
 
 
 def test_direct_hla_mouse_checks_species_before_model_acquisition(monkeypatch):
+    import mhctools.cli
     from varcode import Variant, VariantCollection
     from vaxrank.cli import entry_point as entry
     from vaxrank.cli.arg_parser import parse_vaxrank_args
@@ -285,7 +286,7 @@ def test_direct_hla_mouse_checks_species_before_model_acquisition(monkeypatch):
     variants = VariantCollection([Variant('1', 100, 'A', 'T', ensembl=genome)])
     monkeypatch.setattr(entry, 'variant_collection_from_args', lambda args: variants)
     monkeypatch.setattr(entry, 'filter_unannotatable_variants', lambda variants: variants)
-    monkeypatch.setattr(entry, 'predictors_from_args', forbidden)
+    monkeypatch.setattr(mhctools.cli, 'predictors_from_args', forbidden)
     args = parse_vaxrank_args(['--vcf', 'mouse.vcf', '--bam', 'mouse.bam',
                                '--mhc-predictor', 'random', '--mhc-alleles', 'HLA-A*02:01',
                                '--host-taxon-id', '10090'])

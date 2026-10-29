@@ -39,7 +39,6 @@ from isovar.cli.main_args import phasing_parameters_from_args
 from mhctools.cli import (
     mhc_alleles_from_args,
     mhc_binding_predictor_from_args,
-    predictors_from_args,
 )
 
 from .arg_parser import parse_vaxrank_args, check_args, require_annotations_for_template_reports
@@ -1566,7 +1565,8 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         references.append(args.genome)
     args._input_species_scope = scope_dict(validate_prediction_species(
         args, references, mhc_alleles_from_args(args), 'Direct prediction'))
-    predictors_list = predictors_from_args(args)
+    from ..prediction_policy import configured_prediction_models
+    predictors_list = configured_prediction_models(args, mhc_alleles_from_args(args))
     args._candidate_prediction_mode = 'direct inference'
     if len(predictors_list) == 1:
         mhc_predictor = predictors_list[0]
@@ -1581,17 +1581,6 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
             len(predictors_list),
             [getattr(p, '__class__', type(p)).__name__
              for p in predictors_list])
-
-    prediction_cache = getattr(args, 'prediction_cache', None)
-    if prediction_cache:
-        from topiary import CachedPredictor
-        cached = CachedPredictor.from_topiary_output(
-            prediction_cache, fallback=mhc_predictor)
-        logger.info("Loaded prediction cache from %s", prediction_cache)
-        mhc_predictor = cached
-
-    from ..prediction_policy import record_candidate_models
-    record_candidate_models(args, mhc_predictor)
 
     capture_native = epitope_dataset is None and bool(
         getattr(args, 'output_epitopes', None) or getattr(args, 'output_antigens', None))
