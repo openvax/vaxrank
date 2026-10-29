@@ -281,6 +281,12 @@ for allele-free Exacto observations.
 
 Fresh and additive inference retain distinct occurrence flanks and comparator
 contexts. `--external-peptide-only` explicitly discards flanks for inference.
+When a native candidate has a source window, Vaxrank derives current inference
+flanks from that exact sequence and local peptide offset. Its saved
+`n_flank`/`c_flank` fields remain historical prediction metadata: replay never
+rewrites them, and a sliced source window is interpreted at its rebased offset.
+Without a source window, `None` still means unknown context and `""` a known
+sequence terminus.
 External `--prediction-cache predictions.tsv` accepts contextual Topiary output
 with one configured fallback model. The cache is queried for each supplied
 primary and comparator peptide, its actual flanks, requested genotype and

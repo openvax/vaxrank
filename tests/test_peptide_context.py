@@ -682,6 +682,27 @@ def test_peptide_context_flanks_default_to_empty():
     assert ctx.source_name == ''
 
 
+def test_occurrence_flanks_prefer_exact_source_geometry_without_rewriting_history():
+    ctx = Peptide(
+        sequence='SIINFEKL', n_flank='', c_flank='',
+        source_sequence='AAASIINFEKLCCC', offset=3)
+    assert ctx.occurrence_flanks == ('AAA', 'CCC')
+    assert (ctx.n_flank, ctx.c_flank) == ('', '')
+
+
+def test_occurrence_flanks_preserve_unknown_and_terminal_without_source():
+    assert Peptide(
+        sequence='SIINFEKL', n_flank=None,
+        c_flank='').occurrence_flanks == (None, '')
+
+
+def test_occurrence_flanks_reject_inconsistent_source_geometry():
+    ctx = Peptide(
+        sequence='SIINFEKL', source_sequence='AAASIINFEKMCCC', offset=3)
+    with pytest.raises(ValueError, match='does not occur'):
+        _ = ctx.occurrence_flanks
+
+
 # ---- CandidateEpitope ---------------------------------------------------
 
 
@@ -814,6 +835,7 @@ def test_peptide_context_sliced_narrows_source_window():
     assert sliced.source_sequence == 'AAASIINFEKLCCC'
     assert sliced.source_name == 'OVA'
     assert sliced.offset == 3  # 6 - 3
+    assert sliced.occurrence_flanks == ('AAA', 'CCC')
     assert sliced.best_affinity().value == 50.0
 
 
