@@ -1,6 +1,6 @@
 """Views of recorded antigen evidence, without inferring biological confidence."""
 
-import json
+from .coding_context import coding_contexts, isovar_candidates
 
 
 UNRECORDED = 'Not recorded'
@@ -82,15 +82,15 @@ def antigen_evidence_sections(antigen, source_evidence=None):
     metadata = metadata_values(antigen)
     identities = metadata.get('isovar_evidence_id', [])
     sources = [(identity, (source_evidence or {}).get(identity, {})) for identity in identities]
-    candidates = []
-    for value in metadata.get('isovar_candidate', []):
-        try:
-            candidate = json.loads(value)
-        except (ValueError, TypeError) as error:
-            raise ValueError('Invalid isovar_candidate report metadata: expected a JSON object') from error
-        if not isinstance(candidate, dict):
-            raise ValueError('Invalid isovar_candidate report metadata: expected a JSON object')
-        candidates.append(candidate)
+    candidates = isovar_candidates(antigen)
+    for index, context in enumerate(coding_contexts(antigen, source_evidence), 1):
+        sections.append(_section('Coding reference context %d' % index,
+            [(label, context.get(name)) for name, label in (
+                ('kind', 'Reference kind'), ('orf_type', 'ORF type'),
+                ('orf_id', 'ORF identity'), ('source', 'Reference catalog'),
+                ('reference_key', 'Reference identity'),
+                ('source_transcript_id', 'Source transcript'))],
+            'The coding reference is separate from the source event and sample evidence.'))
     for index, candidate in enumerate(candidates, 1):
         # Older exports already record this fact as sequence_extent. Reading
         # that explicit state does not re-run admission or infer missing RNA.

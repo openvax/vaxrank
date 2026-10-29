@@ -15,6 +15,7 @@ from isovar.rna_evidence import content_identifier, evidence_set
 from orfdata.reference import canonical_species
 
 from .antigen_input import AntigenDataset, _typed_record
+from .coding_context import reference_context
 from .input_scope import InputScope, combine_scopes
 from .isovar_options import source_options
 from .vaccine_antigen import (
@@ -142,6 +143,7 @@ def _variants(result):
             transcripts=(row['transcript_id'],), proteins=(row['orf_id'],),
             species=reference['resolved_transcript'].get('species') or '',
             evidence=dict(model_id=row['model_id'], rna_candidate_id=row['rna_candidate_id'],
+                          coding_reference=reference_context(reference),
                           rna_support=support, coding_support=row['coding_support'],
                           reference_orf_source_gene_id=reference.get('source_gene_id'),
                           reference_strand=strand, variant_codon_phase=phase,

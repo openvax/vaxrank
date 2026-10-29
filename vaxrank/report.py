@@ -32,6 +32,7 @@ from . import cells
 from .epitope_io import ensure_parent_dir
 from .manufacturability import ManufacturabilityScores
 from .antigen_report import ADMISSION_NOTE, antigen_evidence_sections, metadata_values
+from .coding_context import antigen_source_label, coding_context_label, coding_contexts
 from .prediction_input import finite_prediction_value
 from .processing import PEPSICKLE_PREDICTOR_NAME, resolve_peptide_offset
 from .report_display import (
@@ -426,7 +427,7 @@ class TemplateDataCreator(object):
         antigen = top_vaccine_peptide.antigen
         source_metadata = metadata_values(antigen)
         result = OrderedDict([
-            ('Antigen source', antigen.kind),
+            ('Antigen source', antigen_source_label(antigen, self.source_evidence)),
             ('Gene name', antigen.display_gene_name),
             ('Source identifier', antigen.display_identifier),
             ('Top score', _sanitize(top_vaccine_peptide.combined_score)),
@@ -450,11 +451,11 @@ class TemplateDataCreator(object):
             result['Protein sequence source'] = '; '.join(source_metadata['sequence_source'])
         return result
 
-    @staticmethod
-    def _antigen_effect_data(antigen):
+    def _antigen_effect_data(self, antigen):
         """Render caller provenance where a varcode effect does not exist."""
         result = OrderedDict([
-            ('Effect type', antigen.kind),
+            ('Source event type', antigen.kind),
+            ('Coding context', coding_context_label(coding_contexts(antigen, self.source_evidence))),
             ('Source identifier', antigen.display_identifier),
         ])
         metadata = metadata_values(antigen)
@@ -836,7 +837,7 @@ class TemplateDataCreator(object):
             rows.append(dict(rank=len(rows) + 1, gene=top.antigen.display_gene_name,
                 source_key=report_source_key(source),
                 identifier=(source.short_description if isinstance(source, Variant) else top.antigen.display_identifier),
-                kind=top.antigen.kind, score=_sanitize(top.combined_score),
+                kind=antigen_source_label(top.antigen, self.source_evidence), score=_sanitize(top.combined_score),
                 window=top.amino_acids, window_count=len(peptides),
                 products=', '.join(sorted(selected)) if selected else unmapped_label,
                 selected_products=sorted(selected)))
@@ -844,7 +845,27 @@ class TemplateDataCreator(object):
 
     def _product_data(self):
         """Small template view of the products already written by the CLI."""
-        from .assembly_antigens import summarize_products
+        from .assembly_antigens import source_matches_candidate, summarize_products
+        candidates = {}
+        for _, peptides in self.ranked_variants_with_vaccine_peptides:
+            for peptide in peptides:
+                candidates.setdefault(peptide.antigen.source_identifier, []).append(peptide)
+
+        def source_label(source):
+            if 'coding_contexts' in source:
+                return source['kind'] + ' / ' + coding_context_label(source['coding_contexts'])
+            contexts = []
+            applicable = False
+            for peptide in candidates.get(source['source_identifier'], ()):
+                if source_matches_candidate(source, peptide.antigen, peptide.amino_acids,
+                        {e.prediction_group_source for e in peptide.epitopes},
+                        {e.input_provenance.input_id for e in peptide.epitopes if e.input_provenance}):
+                    applicable |= ('isovar_family', 'variant_orfs') in peptide.antigen.source_metadata
+                    for context in coding_contexts(peptide.antigen, self.source_evidence):
+                        if context not in contexts:
+                            contexts.append(context)
+            return (source['kind'] + ' / ' + coding_context_label(contexts)
+                    if applicable or contexts else source['kind'])
         groups = []
         for modality, products in self.products.items():
             rows = []
@@ -854,12 +875,14 @@ class TemplateDataCreator(object):
                 product_intervals = []
                 for antigen in product.antigens:
                     sources = antigen.get('sources', ())
+                    context_labels = list(dict.fromkeys(source_label(source) for source in sources))
                     genes = ', '.join(sorted({s['gene_name'] for s in sources if s['gene_name']}))
                     intervals = target_intervals[antigen['name']]
                     if intervals is not None:
                         product_intervals.extend((start + antigen['start_aa'], end + antigen['start_aa'])
                                                  for start, end in intervals)
                     antigens.append(dict(name=antigen['name'], sequence=antigen['aa'],
+                        context_labels=context_labels,
                         sequence_html=marked_sequence(antigen['aa'], intervals or ()),
                         target_coordinates_known=intervals is not None,
                         start=antigen['start_aa'], end=antigen['end_aa'], length=len(antigen['aa']),
@@ -1157,6 +1180,7 @@ def new_columns():
     """Stable candidate-window schema, including successful empty results."""
     names = [
         'source_rank', 'window_rank', 'source_kind', 'source_identifier',
+        'coding_context', 'coding_references',
         'gene_name', 'gene_ids', 'transcript_ids', 'protein_ids', 'source_species',
         'amino_acids', 'targetable_intervals', 'chr', 'pos', 'ref', 'alt',
         'mutation_start', 'mutation_end', 'combined_score', 'expression_score',
@@ -1258,7 +1282,7 @@ def make_minimal_neoepitope_report(
 def make_csv_report(
         ranked_variants_with_vaccine_peptides,
         excel_report_path=None,
-        csv_report_path=None):
+        csv_report_path=None, *, source_evidence=None):
     """Write ranked source windows with one schema for every input route.
 
     Rows describe candidate windows, not emitted products. Missing mutation
@@ -1280,6 +1304,8 @@ def make_csv_report(
                          if getattr(t, 'gene_id', None))
             row = dict(
                 source_rank=i, window_rank=j, source_kind=antigen.kind,
+                coding_context=coding_context_label(coding_contexts(antigen, source_evidence)),
+                coding_references=json.dumps(coding_contexts(antigen, source_evidence), sort_keys=True),
                 source_identifier=(variant.short_description if variant is not None else antigen.display_identifier),
                 gene_name=antigen.gene_name, gene_ids=json.dumps(sorted(genes)),
                 transcript_ids=json.dumps(list(antigen.transcript_ids)),

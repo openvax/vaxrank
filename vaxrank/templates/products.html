@@ -30,7 +30,8 @@ C-terminal amidation: {{ 'yes' if product.c_terminal_amidation else 'no' }}.</p>
 <table class="pure-table pure-table-bordered product-antigens">
 <thead><tr><th>Antigen / source genes</th><th>Exact antigen sequence</th><th>Position [start, end)</th><th>Source mappings</th></tr></thead>
 <tbody>{% for antigen in product.antigens %}
-<tr><td>{{ antigen.name }}{% if antigen.genes %}<br>{{ antigen.genes }}{% endif %}</td>
+<tr><td>{{ antigen.name }}{% if antigen.genes %}<br>{{ antigen.genes }}{% endif %}
+{% for label in antigen.context_labels %}<br>{{ label }}{% endfor %}</td>
 <td class="sequence-cell">{{ antigen.sequence_html }}{% if not antigen.target_coordinates_known %}<br><span class="note">Target coordinates unavailable or differ across sources.</span>{% endif %}</td><td>[{{ antigen.start }}, {{ antigen.end }})<br>{{ antigen.length }} aa</td>
 <td>{{ antigen.sources if antigen.sources is not none else "unavailable" }} candidate mapping{{ "" if antigen.sources == 1 else "s" }}; {{ antigen.transcripts if antigen.transcripts is not none else "unavailable" }} transcript{{ "" if antigen.transcripts == 1 else "s" }}</td></tr>
 {% endfor %}</tbody></table>

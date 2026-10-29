@@ -7,6 +7,7 @@ import logging
 from varcode import Variant
 
 from .vaccine_library import iter_named_antigens, select_antigen_window, top_target_epitopes
+from .coding_context import coding_contexts
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def _source_record(source, name, antigen, peptide, source_evidence):
     fragment = peptide.mutant_protein_fragment
     genes.update(t.gene_id for t in getattr(fragment, 'supporting_reference_transcripts', ())
                  if getattr(t, 'gene_id', None))
-    return dict(
+    record = dict(
         candidate_name=name, candidate_sequence=peptide.amino_acids,
         source_identifier=antigen.source_identifier, kind=antigen.kind,
         gene_name=antigen.gene_name, gene_ids=sorted(genes),
@@ -52,6 +53,10 @@ def _source_record(source, name, antigen, peptide, source_evidence):
         prediction_ids=sorted({e.prediction_group_source for e in peptide.epitopes}),
         input_ids=sorted({e.input_provenance.input_id for e in peptide.epitopes if e.input_provenance}),
         evidence_group=evidence_id, source_event=event)
+    contexts = coding_contexts(antigen, source_evidence)
+    if contexts or ('isovar_family', 'variant_orfs') in antigen.source_metadata:
+        record['coding_contexts'] = contexts
+    return record
 
 
 def antigen_occurrences(ranked, options, modality, *, source_evidence=None):
