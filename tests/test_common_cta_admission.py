@@ -9,6 +9,8 @@ import hashlib
 import json
 import shutil
 
+import oncoref
+from packaging.version import Version
 from oncoref.cta_evidence_adapters import native_observation_facts
 from oncoref.expression_contract import ExpressionContract, ExpressionMeasurement
 from oncoref.reference_identity import ReferenceIdentity
@@ -27,6 +29,9 @@ from vaxrank.native_serialization import from_native_json, to_native_json
 
 from .test_cta_expression import contract, SEQUENCE
 from .test_cta_restriction import evidence, policy
+
+pytestmark = pytest.mark.skipif(Version(oncoref.__version__) < Version('1.23.1'),
+                               reason='Common CTA integration requires the cta install extra')
 
 
 def fixture(tmp_path, taxon=9615, namespace='ncbi', shared=False, counterevidence=False, native_rna=None):

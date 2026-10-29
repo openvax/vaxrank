@@ -217,7 +217,8 @@ queries or the original expression table.
 ### Common RNA restriction policy (experimental)
 
 An explicit `restriction_policy` selects the same admission contract for human,
-dog and mouse. This opt-in path requires OncoRef 1.23.1 and ORFdata 0.42.5. It
+dog and mouse. Install `vaxrank[cta]` to resolve the required OncoRef 1.23.1 and
+ORFdata 0.42.5 together; see the [dependency constraints](installation.md#common-cta-evidence). It
 uses the snapshot's identifier namespaces: Ensembl gene IDs and exact versioned
 transcripts, or NCBI Gene IDs and exact versioned RefSeq transcripts. It does not
 use gene symbols, human orthology, or human default CTA exclusions to admit targets.

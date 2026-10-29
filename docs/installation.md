@@ -6,6 +6,23 @@ pip install vaxrank
 
 Vaxrank requires Python 3.11 or newer.
 
+## Common CTA evidence
+
+Install the opt-in [common RNA restriction policy](antigen-inputs.md#common-rna-restriction-policy-experimental)
+with its required OncoRef data version:
+
+```sh
+pip install 'vaxrank[cta]'
+pip check
+```
+
+This extra requires OncoRef 1.23.1. PirlyGenes 6.0.18 pins OncoRef 1.19.2,
+so these features currently need separate environments. On a fresh installation,
+the resolver selects Topiary 5.106.1, the latest compatible release, because newer
+Topiary releases require PirlyGenes. The coordinated owner-pin update is tracked
+in [PirlyGenes #656](https://github.com/pirl-unc/pirlygenes/issues/656).
+Do not override installed package constraints with `--no-deps`.
+
 ## Reference annotation
 
 Vaxrank uses [PyEnsembl](https://github.com/openvax/pyensembl) for reference

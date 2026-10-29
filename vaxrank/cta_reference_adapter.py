@@ -9,7 +9,7 @@ def require_common_cta_data():
     from oncoref import __version__
     from packaging.version import Version
     if Version(__version__) < Version('1.23.1'):
-        raise ValueError('Common CTA restriction requires OncoRef >=1.23.1')
+        raise ValueError("Common CTA restriction requires OncoRef >=1.23.1; install 'vaxrank[cta]' in a compatible environment")
 
 
 def reference_namespace(reference):

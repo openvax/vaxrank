@@ -5,6 +5,13 @@ human, dog and mouse. Taxon scopes the reference; it does not decide admission.
 Keep the existing human default and saved decisions intact. Select the new policy
 explicitly in the existing `cta_expression` API/manifest.
 
+Declare the common policy's OncoRef floor in the `cta` install extra. Resolve all
+CI features together and run `pip check`; a base-only install may select the
+historical owner version through PirlyGenes' exact pin. Keep that lower endpoint
+usable for existing workflows, with a capability error before source access when
+the common policy is requested. The owner-pin coordination is already tracked in
+pirl-unc/pirlygenes#656; do not weaken its materialized-data contract here.
+
 Use a named, versioned policy with explicit native RNA units, required somatic and
 reproductive tissues, quantitative bounds and independent sample/donor minima.
 Do not supply a purportedly validated biological threshold as a library default.

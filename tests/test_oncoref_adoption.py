@@ -19,6 +19,17 @@ from .test_cta_expression import run
 from .test_cta_identity import Annotation
 
 
+def test_common_host_builder_rejects_old_owner_before_source_access(monkeypatch):
+    from vaxrank.cta_reference_adapter import build_cta_host_reference
+
+    monkeypatch.setattr(oncoref, '__version__', '1.19.2')
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Unsupported common policy accessed source data')
+    monkeypatch.setattr(oncoref, 'for_species', forbidden)
+    with pytest.raises(ValueError, match=r"requires OncoRef >=1.23.1; install 'vaxrank\[cta\]'"):
+        build_cta_host_reference('human')
+
+
 def test_public_default_cta_admission_keeps_extended_targets_explicit():
     core = cta.cta_df().set_index("Symbol")
     assert "PRAME" in cta.cta_gene_names()
