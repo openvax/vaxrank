@@ -8,6 +8,12 @@ files.
 Tables of ranked candidates, predicted epitopes and applicable
 manufacturability metrics.
 
+The console run summary and human-readable reports use the same rule for
+resolved provenance. Patient alleles and host-species scope inferred or copied
+from an input are shown; parser snapshots, assembly graphs and other runtime
+state remain internal. A leading underscore is storage convention, not the
+classification rule.
+
 | Flag | Output |
 |---|---|
 | `--output-ascii-report` | Plain-text summary |

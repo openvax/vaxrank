@@ -3,6 +3,28 @@
 from markupsafe import Markup, escape
 
 
+_RUN_PROVENANCE_ARGUMENT_NAMES = frozenset({
+    '_declared_mhc_alleles',
+    '_inferred_mhc_alleles_from_lens',
+    '_input_species_scope',
+})
+
+
+def run_provenance_arguments(arguments):
+    """Return non-empty resolved scope that belongs in human-readable output.
+
+    Runtime state is stored on the argument namespace with leading underscores,
+    but an underscore alone does not make a value either reportable or internal.
+    Keep this allow-list as the one classification rule used by the console and
+    report renderers.
+    """
+    return {
+        name: value
+        for name, value in arguments.items()
+        if name in _RUN_PROVENANCE_ARGUMENT_NAMES and bool(value)
+    }
+
+
 def marked_sequence(sequence, intervals=(), css_class="mutant"):
     """Render exact intervals, including deletion junctions, without filling gaps."""
     starts = {start for start, end in intervals if start == end}

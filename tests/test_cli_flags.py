@@ -390,3 +390,33 @@ def test_report_args_table_keeps_auto_wired_provenance():
     args._inferred_mhc_alleles_from_lens = []
     rows = dict(_template_data_for_args(args)["args"])
     assert "_inferred_mhc_alleles_from_lens" not in rows
+
+
+def test_console_and_report_share_run_provenance_classification():
+    """The two human-readable views expose the same private provenance keys."""
+    from vaxrank.cli.entry_point import log_args_summary
+
+    args = _args_for_report_test()
+    visible = {
+        '_inferred_mhc_alleles_from_lens': ['HLA-A*02:01'],
+        '_declared_mhc_alleles': ['HLA-B*07:02'],
+        '_input_species_scope': {'host_taxon_id': 9606},
+    }
+    internal = {
+        '_construct_assembly': {'product': 'internal-product'},
+        '_future_runtime_state': {'value': 'internal-state'},
+    }
+    vars(args).update(visible | internal)
+
+    with patch.object(logging.getLogger('vaxrank.cli.entry_point'), 'info') as log:
+        log_args_summary(args)
+    console = log.call_args.args[0]
+    report = dict(_template_data_for_args(args)['args'])
+
+    for name, value in visible.items():
+        assert name in console
+        assert report[name] == value
+    for name, value in internal.items():
+        assert name not in console
+        assert name not in report
+        assert next(iter(value.values())) not in console

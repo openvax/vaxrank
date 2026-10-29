@@ -33,7 +33,13 @@ from .epitope_io import ensure_parent_dir
 from .manufacturability import ManufacturabilityScores
 from .prediction_input import finite_prediction_value
 from .processing import PEPSICKLE_PREDICTOR_NAME, resolve_peptide_offset
-from .report_display import epitope_display, marked_sequence, model_inventory, product_target_intervals
+from .report_display import (
+    epitope_display,
+    marked_sequence,
+    model_inventory,
+    product_target_intervals,
+    run_provenance_arguments,
+)
 from .varcode_effects import (
     OUTCOME_SELECTION_MULTI_OUTCOME,
     is_multi_outcome_effect,
@@ -187,12 +193,9 @@ class TemplateDataCreator(object):
             'version', 'config', 'config_set_overrides',
             'config_expr_overrides', '_parser_defaults',
         }
-        # Retain inferred biological scope, while assembly graphs, policy
+        # Retain resolved biological scope, while assembly graphs, policy
         # internals and future runtime fields stay in their native artifacts.
-        _provenance_keys = {
-            '_inferred_mhc_alleles_from_lens', '_declared_mhc_alleles',
-            '_input_species_scope',
-        }
+        provenance_arguments = run_provenance_arguments(args_for_report)
         args_to_display_in_report = {
             k: v for k, v in args_for_report.items()
             if not k.startswith("output")
@@ -200,7 +203,7 @@ class TemplateDataCreator(object):
             and v is not None
             and v != ''
             and v != '==SUPPRESS=='
-            and (not k.startswith("_") or (k in _provenance_keys and bool(v)))
+            and (not k.startswith("_") or k in provenance_arguments)
         }
 
         self.template_data = {
