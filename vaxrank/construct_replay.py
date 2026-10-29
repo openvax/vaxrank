@@ -53,6 +53,13 @@ def saved_modalities(dataset):
         for modality in ('peptide', 'mrna')}
 
 
+def capture_direct_sources(dataset, results, **property_options):
+    """Keep every annotated direct source, including those with no predictions."""
+    dataset.direct_sources = [
+        {'variant': to_native_json(result.variant), 'properties': properties}
+        for result, properties in zip(results.isovar_results, results.variant_properties(**property_options))]
+
+
 def resolved_saved_design(args, config, dataset):
     """Compare saved defaults after explicit current YAML and CLI overrides."""
     from .config.loader import extract_construct_kwargs

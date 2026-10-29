@@ -211,6 +211,18 @@ def coverage_view(coverage, source_evidence, ranked_candidates, products):
                 input_count=len({p['input_id'] for p in coverage.get('original_inputs', ())}))
 
 
+def direct_ranking_coverage(dataset, results, ranked):
+    """Adapt already computed direct outcomes to the shared report inventory."""
+    from .external_input import ExternalRankingResult, ExternalVariantEntry
+    from .external_report import ExternalReport
+    provenance, = dataset.provenance
+    report = ExternalReport('vcf_bam', provenance.path, input_provenance=provenance, dataset=dataset)
+    outcome = ExternalRankingResult(entries=tuple(ExternalVariantEntry(
+        variant=result.variant, vaccine_peptides=tuple(results.variant_to_vaccine_peptides_dict.get(result.variant, ())))
+        for result in results.isovar_results))
+    return ranking_coverage(dataset, [report], [outcome], ranked)
+
+
 def record_direct_coverage(dataset, results, loaded_variants, *, window_selection_performed=True,
                            filter_thresholds=None):
     """Retain direct VCF/BAM denominators and outcomes before native export.

@@ -170,3 +170,33 @@ def test_deferred_window_selection_is_not_a_zero_candidate_observation():
     assert record['counts']['coding_with_rna_protein'] == 1
 
     assert record['variant_outcomes'][0]['isovar_filter_results'] == result.filter_values
+
+
+def test_real_direct_pipeline_and_native_replay_keep_original_coverage(tmp_path, monkeypatch):
+    from pathlib import Path
+    from vaxrank.cli.entry_point import run_cli
+    data = Path(__file__).parent / 'data/b16.f10'
+    native = tmp_path / 'native.tsv'
+    run_cli(['--vcf', str(data / 'b16.vcf'), '--bam', str(data / 'b16.combined.bam'),
+        '--mhc-predictor', 'random', '--mhc-alleles', 'H2-Kb,H2-Db', '--mhc-epitope-lengths', '8',
+        '--no-processing-aware-annotation', '--vaccine-peptide-length', '15',
+        '--output-epitopes', str(native), '--output-ascii-report', str(tmp_path / 'fresh.txt')])
+    dataset = EpitopeDataset.load(native)
+    observation, = (r['direct_input_coverage'] for r in dataset.selection['source_evidence'].values())
+    assert observation['counts']['loaded'] == 5
+    assert len(dataset.direct_sources) == observation['counts']['annotatable'] == 5
+    assert observation['counts']['with_candidate_windows'] > 0
+    assert observation['isovar_filter_thresholds']
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Coverage replay cannot acquire predictions')
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
+    run_cli(['--input-epitopes', str(native), '--no-processing-aware-annotation',
+        '--output-epitopes', str(tmp_path / 'replay.tsv'),
+        '--output-ascii-report', str(tmp_path / 'replay.txt')])
+    assert EpitopeDataset.load(tmp_path / 'replay.tsv').selection['source_evidence'] == dataset.selection['source_evidence']
+    fresh, replay = ((tmp_path / (name + '.txt')).read_text() for name in ('fresh', 'replay'))
+    def coverage(text):
+        return text.split('=== Input coverage ===', 1)[1].split('Emitted products', 1)[0]
+    assert coverage(fresh) == coverage(replay)
+    assert 'Recorded sources: 5' in coverage(fresh)
