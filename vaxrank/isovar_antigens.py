@@ -102,7 +102,8 @@ def _variant_frame(row, reference):
     coding_start, _ = _interval(row['coding_interval'], length)
     variant_start, _ = _interval(row['variant_cdna_interval'], length)
     model = reference['model']
-    strand = model['strand'] if model is not None else None
+    resolved = reference['resolved_transcript']
+    strand = resolved['strand'] if 'strand' in resolved else (model['strand'] if model is not None else None)
     if strand is not None and strand not in ('+', '-'):
         raise ValueError('Isovar reference strand must be + or -')
     return strand, (variant_start - coding_start) % 3, reference['translation_table']
@@ -114,9 +115,8 @@ def _variants(result):
     for row in result['protein_candidates']:
         reference = models[row['model_id']]
         strand, phase, table = _variant_frame(row, reference)
-        # TranscriptORF.at/annotated-CDS exports currently omit strand. The
-        # same identified transcript still defines one orientation; different
-        # transcripts cannot be proven to share it from these exports.
+        # Unknown carrier orientation (including historical exports without
+        # strand) only establishes a shared frame within the same transcript.
         orientation = strand or (reference['reference_key'], reference['resolved_transcript']['id'])
         frames.setdefault(row['rna_candidate_id'], set()).add(
             (orientation, phase, table))

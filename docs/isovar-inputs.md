@@ -110,15 +110,17 @@ They do not bypass absent targetable content, unobserved isoform coding bases,
 unavailable support, failed producer filters, or the minimum support gate.
 Relaxing partialness does not relax frame ambiguity.
 For variant ORFs, frames are compared within each RNA candidate using the
-reference model's strand, the focal allele's codon phase (0, 1 or 2 in
+resolved carrier transcript's strand, the focal allele's codon phase (0, 1 or 2 in
 transcript orientation), and the translation table. Trimming a noncoding
 prefix cannot change this comparison. Candidate evidence records
 `reference_strand` and `variant_codon_phase` so the decision can be inspected.
-Some producer reference exports omit strand (`reference_strand: null`). For
-these, phase comparisons can establish a shared frame only within the same
+ORFdata 0.42.1 exports `resolved_transcript.strand` for every ORF kind, including
+annotated CDSs and `TranscriptORF.at` placements. This carrier field is authoritative,
+including an explicit `null` for unknown orientation. Historical snapshots without
+the field retain their original source-model strand fallback.
+For unknown orientation (`reference_strand: null`), phase comparisons can establish a shared frame only within the same
 identified transcript and reference; alternatives across different transcripts
 remain ambiguous because their relative orientation is unavailable.
-The missing field is tracked in [ORFdata #135](https://github.com/openvax/orfdata/issues/135).
 
 The envelope accepts the existing `TumorSpecificityAttestation` record as
 `tumor_specificity`, applying to every candidate in that source, or a

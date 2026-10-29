@@ -72,9 +72,8 @@ serializable>=1.1.0,<2.0.0
 # Keep the exact owner pin aligned with PirlyGenes 6.0.17 (pirlygenes#649).
 # 1.19.2 accepts pinned dated annotations and resolved biological assemblies.
 oncoref==1.19.2
-# 0.39.1 supplies the validated TranscriptORF/catalog contracts consumed by
-# Isovar 1.61, including source-defined frames and explicit genetic codes.
-orfdata>=0.39.1,<1.0.0
+# 0.42.1 exports the resolved carrier strand for every TranscriptORF kind.
+orfdata>=0.42.1,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
 # of predictor_version strings. Always pulled in transitively via setuptools
 # / pip, but pinned explicitly so minimal / --no-deps installs don't break
