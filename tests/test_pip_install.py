@@ -85,18 +85,20 @@ def test_workflow_routes_dependency_installs_through_retry_script(tmp_path, pip_
     name = "Install dependencies" if job == "build" else "Install supported msgspec and application dependencies"
     command = next(step["run"] for step in steps if step.get("name") == name)
     command = command.replace("${{ matrix.msgspec-version }}", "0.18.6")
-    env["FAIL_REQUIREMENT"] = "-r" if job == "build" else "."
+    env["FAIL_REQUIREMENT"] = ".[hitlist,cta]" if job == "build" else "."
     # Tooling-only installs also call this interpreter, but must remain ordinary installs.
     (tmp_path / "python").symlink_to(env["PYTHON"])
     result = subprocess.run(["bash", "-eo", "pipefail", "-c", command],
                             cwd=ROOT, env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     calls = [json.loads(line) for line in log.read_text().splitlines()]
+    installs = [call for call in calls if call[:3] == ["-m", "pip", "install"]]
     expected = ([["-m", "pip", "install", "--upgrade", "pip"],
                  ["-m", "pip", "install", "pytest", "pytest-cov", "ruff"],
-                 ["-m", "pip", "install", "-r", "requirements.txt"],
-                 ["-m", "pip", "install", "--no-cache-dir", "-r", "requirements.txt"],
-                 ["-m", "pip", "install", ".[hitlist]", "topiary[weirdo]>=5.95.0,<6"]]
+                 ["-m", "pip", "install", ".[hitlist,cta]", "topiary[weirdo]>=5.95.0,<6"],
+                 ["-m", "pip", "install", "--no-cache-dir", ".[hitlist,cta]", "topiary[weirdo]>=5.95.0,<6"]]
                 if job == "build" else [["-m", "pip", "install", ".", "pytest", "msgspec==0.18.6"],
                                          ["-m", "pip", "install", "--no-cache-dir", ".", "pytest", "msgspec==0.18.6"]])
-    assert calls == expected
+    assert installs == expected
+    if job == "build":
+        assert ["-m", "pip", "check"] in calls
