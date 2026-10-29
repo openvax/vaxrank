@@ -200,3 +200,20 @@ def test_real_direct_pipeline_and_native_replay_keep_original_coverage(tmp_path,
         return text.split('=== Input coverage ===', 1)[1].split('Emitted products', 1)[0]
     assert coverage(fresh) == coverage(replay)
     assert 'Recorded sources: 5' in coverage(fresh)
+
+
+def test_saved_coverage_matches_source_identity_when_report_order_or_limit_changes():
+    from vaxrank.input_coverage import coverage_view
+    from vaxrank.peptide import assemble_peptide_constructs, PeptideConstructConfig
+    from .test_product_reports import template
+    _, _, _, ranked, coverage = _coverage_fixture()
+    products = {'peptide': assemble_peptide_constructs(ranked, PeptideConstructConfig(max_constructs=1))}
+    reordered = list(reversed(ranked))
+    view = coverage_view(coverage, {}, template(reordered, products)['ranked_candidates'], products)
+    rows = {r['identity']: r for r in view['sources']}
+    assert rows['candidate-0']['selected'] is True and rows['candidate-0']['rank'] == 2
+    assert rows['candidate-1']['selected'] is False and rows['candidate-1']['rank'] == 1
+    limited = coverage_view(coverage, {}, template(ranked[:1], products)['ranked_candidates'], products)
+    missing = next(r for r in limited['sources'] if r['identity'] == 'candidate-1')
+    assert missing['rank'] is None and missing['selected'] is None
+    assert missing['product_outcome'] == 'Current source mapping unavailable'

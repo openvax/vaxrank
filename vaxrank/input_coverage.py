@@ -19,10 +19,10 @@ FAMILIES = {
 }
 
 
-def _key(source):
+def report_source_key(source):
     # Same identity as the shared ranker's observation grouping. Input scope is
     # validated before pooling; duplicate observations do not become new events.
-    return type(source).__name__ + ':' + str(source)
+    return canonical_digest([type(source).__name__, str(source)])
 
 
 def _source_row(source):
@@ -52,10 +52,10 @@ def ranking_coverage(dataset, reports, outcomes, ranked):
     rows = {}
     retained = Counter()
     target_overlap = Counter()
-    ranked_keys = {_key(source): i for i, (source, _) in enumerate(ranked, 1)}
+    ranked_keys = {report_source_key(source): i for i, (source, _) in enumerate(ranked, 1)}
 
     def add(source, input_ids=()):
-        key = _key(source)
+        key = report_source_key(source)
         row = rows.setdefault(key, dict(_source_row(source), inputs=set(), has_window=False))
         row['inputs'].update(input_ids)
         return row
@@ -83,13 +83,13 @@ def ranking_coverage(dataset, reports, outcomes, ranked):
             for antigen in AntigenDataset.from_epitope_dataset(native).antigens.values():
                 if to_native_json(antigen) not in fragment_antigens:
                     add(antigen, origins.get(to_native_json(antigen), ()))
-                    retained.setdefault(_key(antigen), 0)
+                    retained.setdefault(report_source_key(antigen), 0)
             for epitope in native.epitopes:
                 group = epitope.prediction_group_source
                 source = (native.mutation_fragments[group].variant if group in native.mutation_fragments
                           else native.antigens.get(group))
                 if source is not None:
-                    key = _key(source)
+                    key = report_source_key(source)
                     row = add(source, [epitope.input_provenance.input_id] if epitope.input_provenance else ())
                     if group in native.antigens:
                         row['admitted'] = native.antigens[group].tumor_specificity.admits_construct
@@ -109,6 +109,7 @@ def ranking_coverage(dataset, reports, outcomes, ranked):
             if entry.ranking_peptides:
                 row['gene'] = entry.ranking_peptides[0].antigen.display_gene_name
     for key, row in rows.items():
+        row['source_key'] = key
         row['inputs'] = sorted(row['inputs'])
         row['rank'] = ranked_keys.get(key)
         # Zero retained rows is a fact only for a known native source catalog.
@@ -144,14 +145,21 @@ def coverage_view(coverage, source_evidence, ranked_candidates, products):
                             for p in all_products)
     input_labels = {p['input_id']: 'Input %d' % (i + 1)
                     for i, p in enumerate(coverage.get('original_inputs', ()))}
+    current_ranking = {row['source_key']: row for row in ranked_candidates}
     for row in rows:
         row['origin'] = '; '.join(input_labels.get(identity, identity) for identity in row['inputs']) or 'Origin not recorded'
         row['selected'] = None
-        if row['rank'] is not None:
-            selected = ranked_candidates[row['rank'] - 1]['products']
-            row['product_outcome'] = selected
+        current = current_ranking.get(row.get('source_key'))
+        if current is not None:
+            row['rank'] = current['rank']
+            row['product_outcome'] = current['products']
             if products and mappings_complete:
-                row['selected'] = bool(ranked_candidates[row['rank'] - 1]['selected_products'])
+                row['selected'] = bool(current['selected_products'])
+        elif row['rank'] is not None:
+            row['rank'] = None
+            row['stage'] = 'Current report ranking'
+            row['product_outcome'] = 'Current source mapping unavailable'
+            row['reasons'] = row['reasons'] + ['Previously ranked source absent from the current report ranking']
         else:
             row['product_outcome'] = 'Not ranked'
             if products and mappings_complete:
@@ -202,7 +210,9 @@ def coverage_view(coverage, source_evidence, ranked_candidates, products):
             records=len(sources) if coverage else None,
             admitted=sum(r['admitted'] for r in sources) if known_admission and sources else None,
             ranked=sum(r['rank'] is not None for r in sources) if coverage else None,
-            represented=sum(r['selected'] for r in sources) if products and mappings_complete and coverage else None))
+            represented=(sum(r['selected'] for r in sources)
+                         if products and mappings_complete and coverage
+                         and all(r['selected'] is not None for r in sources) else None)))
     return dict(families=families, sources=rows, direct=observations,
                 producers=producer_rows, expression=expression_rows,
                 original_inputs=coverage.get('original_inputs', ()),

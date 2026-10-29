@@ -816,6 +816,7 @@ class TemplateDataCreator(object):
     def _ranked_candidates(self):
         """Compact ranking with selection links from actual emitted products."""
         from .assembly_antigens import emitted_antigens_for_candidate
+        from .input_coverage import report_source_key
         products = [p for group in self.products.values() for p in group]
         if not products:
             unmapped_label = 'No products emitted'
@@ -833,6 +834,7 @@ class TemplateDataCreator(object):
             selected = {name for peptide in peptides for name, antigens in emitted_antigens_for_candidate(
                 peptide.antigen, peptide.amino_acids, peptide.epitopes, products).items() if antigens}
             rows.append(dict(rank=len(rows) + 1, gene=top.antigen.display_gene_name,
+                source_key=report_source_key(source),
                 identifier=(source.short_description if isinstance(source, Variant) else top.antigen.display_identifier),
                 kind=top.antigen.kind, score=_sanitize(top.combined_score),
                 window=top.amino_acids, window_count=len(peptides),
