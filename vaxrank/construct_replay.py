@@ -138,7 +138,7 @@ def _canonical_native(value):
             and not result.get('antigens')):
         result.pop('antigens', None)
     if metadata == dict(__module__='vaxrank.input_scope', __name__='InputScope'):
-        for key in ('host_taxon_id', 'mhc_species', 'host_reference_sha256'):
+        for key in ('host_taxon_id', 'mhc_species', 'host_reference_sha256', 'rna_evidence_extent'):
             if result.get(key) is None:
                 result.pop(key, None)
     if metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='SelfReferenceSource'):

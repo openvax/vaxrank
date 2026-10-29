@@ -7,6 +7,8 @@ No supplied evidence recorded does not establish that a family was assessed or e
   Recorded sources: {{ family.records if family.records is not none else 'Unknown' }}; admitted: {{ family.admitted if family.admitted is not none else 'Unknown' }}; ranked: {{ family.ranked if family.ranked is not none else 'Unknown' }}; in products: {{ family.represented if family.represented is not none else 'Unknown' }}
 {% endfor %}
 In products uses retained mappings from actual products; unknown also covers analysis-only reports.
+{% for expression in input_coverage.expression %}Expression features: {{ expression.decisions | length }}; {{ expression.contract.measurement_level }} / {{ expression.contract.expression_unit }}; sample {{ expression.contract.sample_id }}; assay {{ expression.contract.assay }}
+{% endfor %}
 {% for original in input_coverage.direct %}
 Original variant observation: {{ original.input_id }}; Vaxrank {{ original.producer_version }}
 Unit: {{ original.unit }}; {{ original.stage }}
