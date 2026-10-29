@@ -51,6 +51,15 @@ Candidate context only. Final sequences are listed under Emitted products.
 {% if ranked_candidates is defined %}{% include "templates/ranking.txt" %}{% endif %}
 
 
+{% if prediction_configuration %}
+=== Effective prediction configuration ===
+{% for stage in prediction_configuration %}
+{{ stage.stage }}: {{ stage.status }}
+{% for detail in stage.details %}  {{ detail }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+
 Run arguments
 {% for key, val in args %}
   {{ key }}: {{ val }}

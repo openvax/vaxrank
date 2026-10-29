@@ -173,6 +173,7 @@ class MrnaConstructConfigSchema(
     junction_predictor_models_path: Optional[str] = None
     junction_candidates: Optional[str] = None
     junction_rank_strong: Optional[float] = None
+    junction_rank_kind: Optional[str] = None
     junction_rank_mild: Optional[float] = None
 
 

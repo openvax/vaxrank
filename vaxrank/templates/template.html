@@ -113,6 +113,16 @@
                 {% for key, val in patient_info.items() %}<tr><th>{{ key | e }}</th><td>{{ val | e }}</td></tr>{% endfor %}
             </table>
 
+            {% if prediction_configuration %}
+            <h3 id="effective-predictions">Effective prediction configuration</h3>
+            {% for stage in prediction_configuration %}
+            <div style="break-inside: avoid; page-break-inside: avoid;">
+            <h4>{{ stage.stage }}: {{ stage.status }}</h4>
+            <ul>{% for detail in stage.details %}<li>{{ detail }}</li>{% endfor %}</ul>
+            </div>
+            {% endfor %}
+            {% endif %}
+
             <h3 id="args">COMMAND LINE ARGUMENTS</h3>
             <table class="pure-table pure-table-bordered args">
                 <colgroup>

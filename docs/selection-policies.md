@@ -175,3 +175,20 @@ panel differs from parts of the reported typing. The report retains those discre
 RNA rejection, missing cleavage context and disagreements with historical
 selections. See the [checked-in comparison](https://github.com/openvax/vaxrank/blob/main/examples/osteosarc_test_data/policy_comparison/README.md)
 for measured results.
+
+## Legacy controls and effective reporting
+
+Prefer `epitopes.selection_policy` for a new named, portable policy. The scalar
+and expression controls remain supported through the same Topiary DSL. Without
+a selection policy, `score_expr` overrides the scalar-derived score; otherwise
+`scoring_mode` selects the affinity or percentile-rank formula. An omitted
+`filter_expr` means no hard row filter. The default score applies the configured
+cutoff, then `min_epitope_score` gates the contribution. The report shows that
+resolved expression and minimum, so a cutoff mask cannot be mistaken for a
+separate hidden filtering stage.
+
+A named selection policy cannot be combined with `score_expr` or `filter_expr`.
+The explicit minimum-score override and model-default resolution described
+above still apply. Epitope evidence/scoring is separate from RNA-weighted
+vaccine-window ranking and product assembly; the native run configuration
+records all three.
