@@ -6,7 +6,7 @@ from .version import __version__
 from collections import Counter
 from dataclasses import asdict
 
-from varcode import Variant
+from varcode import StructuralVariant, Variant
 
 from .antigen_report import metadata_values
 from .native_serialization import to_native_json
@@ -14,7 +14,7 @@ from .native_serialization import to_native_json
 
 FAMILIES = {
     'mutation': 'Small variants', 'variant_orfs': 'Additional variant ORFs',
-    'sv': 'Structural-variant ORFs', 'fusion': 'Fusions', 'isoforms': 'Isoforms',
+    'sv': 'Structural variants', 'fusion': 'Fusions', 'isoforms': 'Isoforms',
     'cta': 'CTAs', 'viral': 'Viral sequences', 'erv': 'ERVs', 'splice': 'Splice antigens',
 }
 
@@ -27,7 +27,8 @@ def report_source_key(source):
 
 def _source_row(source):
     if isinstance(source, Variant):
-        return dict(identity=source.short_description, gene='', context='', family='mutation',
+        return dict(identity=source.short_description, gene='', context='',
+                    family='sv' if isinstance(source, StructuralVariant) else 'mutation',
                     admitted=None, reasons=[])
     families = metadata_values(source).get('isovar_family', ())
     family = families[0] if len(set(families)) == 1 else source.kind.lower()

@@ -217,3 +217,21 @@ def test_saved_coverage_matches_source_identity_when_report_order_or_limit_chang
     missing = next(r for r in limited['sources'] if r['identity'] == 'candidate-1')
     assert missing['rank'] is None and missing['selected'] is None
     assert missing['product_outcome'] == 'Current source mapping unavailable'
+
+
+def test_direct_structural_variant_is_not_counted_as_a_small_variant():
+    from pyensembl import EnsemblRelease
+    from varcode import StructuralVariant
+    from vaxrank.external_input import ExternalRankingResult, ExternalVariantEntry
+    from vaxrank.external_report import ExternalReport
+    from vaxrank.input_coverage import ranking_coverage, coverage_view
+    variant = StructuralVariant('1', 100, 'DEL', end=200, genome=EnsemblRelease(110))
+    dataset = EpitopeDataset.from_predictions(())
+    provenance = InputProvenance('direct', 'vcf_bam', 'sv.vcf', 'test', InputScope())
+    dataset.provenance = (provenance,)
+    report = ExternalReport('vcf_bam', 'sv.vcf', dataset=dataset, input_provenance=provenance)
+    outcome = ExternalRankingResult(entries=(ExternalVariantEntry(variant=variant),))
+    coverage = ranking_coverage(dataset, [report], [outcome], [])
+    families = {f['name']: f for f in coverage_view(coverage, {}, [], {})['families']}
+    assert families['Structural variants']['records'] == 1
+    assert families['Small variants']['records'] == 0
