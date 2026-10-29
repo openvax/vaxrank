@@ -8,6 +8,11 @@ from vaxrank.native_serialization import from_native_json, to_native_json
 from vaxrank.processing import annotate_processing, processing_component_probabilities
 from vaxrank.processing_prediction import ProcessingPrediction
 from vaxrank.report import TemplateDataCreator, make_ascii_report, make_html_report
+from vaxrank.vaccine_antigen import AminoAcidInterval, TargetableMask
+from vaxrank.vaccine_peptide import VaccinePeptide
+
+from .test_assembly_antigens import candidate
+from .test_product_reports import template
 
 from .test_processing import StubPepsickle, _ep
 
@@ -35,10 +40,11 @@ def test_endpoint_retains_internal_evidence_but_no_cleavage_or_composite(sentine
     assert row["Processing: max internal"] == "0.92"
     assert row["Processing: combined"] == "—"
     # Exercise the actual report templates, not just the Python row mapping.
-    template_data = dict(patient_info={}, package_versions={}, args=[], vaccine_constructions={},
-        variants=[dict(num=1, short_description="endpoint regression", variant_data={}, effect_data={},
-            peptides=[dict(header_display_data={}, peptide_data={}, epitopes=[row],
-                           ascii_epitopes=" | ".join(map(str, row.values())))])])
+    antigen, _ = candidate(0)
+    antigen = replace(antigen, amino_acids=source,
+        targetable_mask=TargetableMask((AminoAcidInterval(15, len(source)),)))
+    template_data = template([(antigen, [VaccinePeptide(antigen=antigen, epitopes=[epitope])])],
+                             candidate_details=True, processing_predictions_by_key=records)
     for write, suffix in ((make_ascii_report, "txt"), (make_html_report, "html")):
         path = tmp_path / ("endpoint." + suffix)
         write(template_data, path)
