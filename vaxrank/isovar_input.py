@@ -24,6 +24,18 @@ def _read_json(path):
     return _json_loads(content)
 
 
+def _configured_read_collector(family, settings):
+    """Validate controls against the owner and preserve its family defaults."""
+    from isovar import ReadCollector
+
+    excluded = ('read_filter', 'read_end_profile')
+    baseline = ReadCollector.for_rna_paths() if family in ('viral', 'isoforms') else ReadCollector()
+    names = producer_options(ReadCollector, {}, exclude=excluded)
+    resolved = producer_options(ReadCollector, settings, exclude=excluded,
+                                defaults={name: getattr(baseline, name) for name in names})
+    return ReadCollector(**resolved), resolved
+
+
 def reconstruct_isovar_antigens(family, *, inputs, options=None, scope=None, species='',
                                 tumor_specificity=None, candidate_attestations=None):
     """Call a public Isovar producer and adapt its complete result.
@@ -39,17 +51,18 @@ def reconstruct_isovar_antigens(family, *, inputs, options=None, scope=None, spe
         raise ValueError('Unknown Isovar source family: ' + str(family))
     options = source_options(options)
     data = dict(inputs)
-    if options.reads and family not in ('variant_orfs', 'sv'):
-        raise ValueError('ReadCollector controls apply only to variant_orfs and sv')
+    read_families = ('variant_orfs', 'sv', 'viral', 'isoforms')
+    if options.reads and family not in read_families:
+        raise ValueError('ReadCollector controls apply only to variant_orfs, sv, viral and isoforms')
+    if 'read_collector' in data:
+        raise ValueError('Configure ReadCollector through options.reads, or reconstruct in Isovar and replay its result')
     if options.protein and family != 'variant_orfs':
         raise ValueError('ProteinSequenceCreator controls apply only to variant_orfs')
     resolved = dict(admission=msgspec.to_builtins(options.admission))
-    if family in ('variant_orfs', 'sv'):
-        reads = producer_options(isovar.ReadCollector, options.reads,
-                                 exclude=('read_filter', 'read_end_profile'))
+    if family in read_families:
+        collector, reads = _configured_read_collector(family, options.reads)
         resolved['reads'] = reads
-        collector = isovar.ReadCollector(**reads)
-        if family == 'sv':
+        if family != 'variant_orfs':
             data['read_collector'] = collector
         elif 'read_evidence' not in data:
             data['read_evidence'] = collector.read_evidence_for_variant(data['variant'], data.pop('bam'))
@@ -74,6 +87,7 @@ def reconstruct_isovar_antigens(family, *, inputs, options=None, scope=None, spe
                  'targets', 'sample_id', 'source', 'genome_fasta', 'contigs', 'reference_identity',
                  'event_id', 'reference_name', 'donor', 'acceptor', 'regions', 'event_provenance',
                  'read_collector', 'protein_sequence_creator', 'isovar_results', 'alignment_header',
+                 'library_index', 'read_filter_identity',
                  'cell_labels', 'base_quality_policy', 'rna_support_scopes', 'scratch_dir', 'reference_cache')
     controls = producer_options(function, options.reconstruction, exclude=data_keys,
                                 nullable=('reference_profile',) if family == 'viral' else ())

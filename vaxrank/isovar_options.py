@@ -34,7 +34,7 @@ class IsovarSourceOptions(msgspec.Struct, frozen=True, kw_only=True, forbid_unkn
     """One source family's controls, with strict producer-specific validation.
 
     ``reconstruction`` supplies the selected reconstruction function's scalar
-    controls. ``reads`` configures ReadCollector for variant/SV sources;
+    controls. ``reads`` configures ReadCollector for variant/SV/viral/isoform sources;
     ``protein`` configures ProteinSequenceCreator for variant ORFs. Inputs
     such as BAMs, variants and reference models belong in ``inputs`` instead.
     """

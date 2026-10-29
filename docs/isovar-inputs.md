@@ -222,7 +222,7 @@ an explicit CRAM reference. Scratch/reference cache directories belong in
 `options` has four sections. `admission` is the typed policy above;
 `reconstruction` uses the selected public producer's optional JSON-valued
 controls with their **actual installed defaults**. `reads` configures
-`ReadCollector` for `variant_orfs` and `sv`; `protein` configures
+`ReadCollector` for `variant_orfs`, `sv`, `viral` and `isoforms`; `protein` configures
 `ProteinSequenceCreator` for `variant_orfs`. Required data objects cannot be
 passed as controls. Unknown/inapplicable names and incompatible types fail.
 Saved results reject reconstruction/read/protein controls rather than pretending
@@ -231,6 +231,15 @@ to rerun with them.
 Common controls are listed below; see the corresponding Isovar public function's
 docstring for its full definition. Vaxrank retains the resolved values and
 producer package versions in every live result's evidence.
+
+Viral and targeted-isoform reconstruction inherit
+`ReadCollector.for_rna_paths()` defaults from Isovar: MAPQ-zero and secondary
+alignments, and reads without base qualities, remain eligible; duplicate-marked
+reads and soft-clipped bases are excluded. Override these through `options.reads`
+to apply the same policy to discovery and complete-input support. The resolved
+policy is recorded even when no override is supplied. A Python `read_collector`
+object is not accepted in `inputs`; for callbacks or custom read-end profiles,
+run Isovar directly and replay the resulting evidence.
 
 | Section / producer | Useful controls |
 | --- | --- |
