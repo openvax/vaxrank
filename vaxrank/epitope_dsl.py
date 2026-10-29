@@ -150,6 +150,7 @@ def epitopes_to_topiary_df(epitopes):
             rows.append({
                 PREDICTION_ID_COLUMN: prediction_id,
                 "source_sequence_name": ctx.source_sequence or ctx.sequence,
+                "source_sequence": ctx.source_sequence,
                 "peptide": p.peptide,
                 "peptide_offset": ctx.offset,
                 "peptide_length": len(p.peptide),

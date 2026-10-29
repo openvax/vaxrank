@@ -39,10 +39,17 @@ def forbidden(*args, **kwargs):
 @pytest.mark.parametrize('mode', ['fresh', 'additive'])
 def test_cli_contextual_cache_preserves_occurrences_and_native_replay(
         tmp_path, monkeypatch, mode):
+    middle = replace(
+        candidate('b', 'CC'),
+        source_sequence='XXCCSIINFEKLAKKYY', offset=4).sliced(2, 15)
     originals = rescore_candidates(
-        [replace(candidate(name, flank), n_flank=flank, c_flank='KK')
-         for name, flank in [('a', 'AA'), ('b', 'CC'), ('c', 'AA')]],
+        [candidate('a', 'AA'), middle, candidate('c', 'AA')],
         [ContextPredictor()], ALLELES)
+    # Historical invocation metadata stays untouched. Current inference uses
+    # each exact source window, including the rebased sliced occurrence.
+    assert [(e.n_flank, e.c_flank) for e in originals] == [('', '')] * 3
+    assert [e.occurrence_flanks for e in originals] == [
+        ('AA', 'KK'), ('CC', 'KK'), ('AA', 'KK')]
     source = tmp_path / 'source.tsv'
     if mode == 'fresh':
         from vaxrank.epitope_io import read_lens_report
@@ -54,7 +61,10 @@ def test_cli_contextual_cache_preserves_occurrences_and_native_replay(
         options = ['--config-text', 'epitopes.score_expr=affinity[unified].score']
         fmt = 'lens'
     else:
-        EpitopeDataset.from_predictions(originals, config=config()).save(source)
+        dataset = EpitopeDataset.from_predictions(originals, config=config())
+        assert dataset.result.df.groupby('prediction_id', sort=False).source_sequence.first().tolist() == [
+            epitope.source_sequence for epitope in originals]
+        dataset.save(source)
         options = ['--external-prediction-prefix', 'cached']
         fmt = 'epitopes'
     before = source.read_bytes()
@@ -78,6 +88,8 @@ def test_cli_contextual_cache_preserves_occurrences_and_native_replay(
     assert len(result.epitopes) == 3
     assert [epitope.source_sequence for epitope in result.epitopes] == [
         epitope.source_sequence for epitope in originals]
+    assert [(epitope.n_flank, epitope.c_flank) for epitope in result.epitopes] == [
+        ('', '')] * 3
     assert all(set(epitope.patient_alleles) == set(ALLELES) for epitope in result.epitopes)
     assert source.read_bytes() == before
     assert cache.read_bytes() == cache_bytes

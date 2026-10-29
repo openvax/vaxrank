@@ -313,6 +313,31 @@ class Peptide(DataclassSerializable):
         # land in sets / dict keys without surprise.
         return hash((self.sequence, self.source_sequence, self.offset))
 
+    @property
+    def occurrence_flanks(self) -> tuple[Optional[str], Optional[str]]:
+        """Return the flanks for this exact peptide occurrence.
+
+        Returns
+        -------
+        tuple[str | None, str | None]
+            N- and C-terminal flanks. When ``source_sequence`` is present,
+            these are derived from its exact ``sequence``/``offset``
+            geometry. Otherwise the recorded ``n_flank`` and ``c_flank``
+            values are returned unchanged, including ``None`` for unknown
+            context and ``""`` for a known sequence terminus.
+
+        Notes
+        -----
+        Recorded flank fields describe the historical prediction invocation;
+        they are not rewritten when a source window can supply current
+        occurrence context.
+        """
+        if self.source_sequence:
+            from topiary import peptide_occurrence_flanks
+            return peptide_occurrence_flanks(
+                self.source_sequence, self.sequence, self.offset)
+        return self.n_flank, self.c_flank
+
     def kinds(self) -> tuple[str, ...]:
         """Sorted tuple of distinct ``kind`` values in this context.
         Empty when the context has no predictions (e.g. a
@@ -510,9 +535,10 @@ class Peptide(DataclassSerializable):
         to ``[start_offset, end_offset)``. Returns ``None`` if the
         peptide doesn't fit inside the window.
 
-        The peptide sequence, flanks, source name, and predictions
-        are preserved — only ``source_sequence`` is sliced and
-        ``offset`` is rebased relative to the new source start.
+        The peptide sequence, historical flank metadata, source name, and
+        predictions are preserved — only ``source_sequence`` is sliced and
+        ``offset`` is rebased relative to the new source start. Read
+        :attr:`occurrence_flanks` for the exact flanks of the narrowed window.
         """
         if not self._slice_fits(start_offset, end_offset):
             return None

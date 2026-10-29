@@ -213,15 +213,9 @@ class InputTablePredictor:
 
 
 def _context(peptide):
-    # Readers retain the real source window even when their Prediction leaves
-    # contain no flanks. Use that window, never a guessed reference extension.
-    if peptide.source_sequence:
-        start, end = peptide.offset, peptide.offset + len(peptide.sequence)
-        if peptide.source_sequence[start:end] != peptide.sequence:
-            raise ValueError("Peptide does not match its source context")
-        return (peptide.sequence, peptide.source_sequence[:start],
-                peptide.source_sequence[end:])
-    return peptide.sequence, peptide.n_flank, peptide.c_flank
+    # The public Peptide view delegates exact source geometry to Topiary and
+    # falls back to recorded historical metadata only when no source exists.
+    return peptide.sequence, *peptide.occurrence_flanks
 
 
 def rescore_candidates(epitopes, models, alleles, *, use_flanks=True):
