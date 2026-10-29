@@ -43,6 +43,20 @@ def marked_sequence(sequence, intervals=(), css_class="mutant"):
     return Markup('').join(pieces)
 
 
+def reference_affinity_values(epitope, allele, predictor, version):
+    """Distinct recorded affinities for the exact displayed comparison model.
+
+    No values means unmeasured; multiple values means conflicting evidence.
+    Both human-readable and spreadsheet reports preserve that distinction
+    rather than choosing a leaf by sort order or another predictor version.
+    """
+    comparator = epitope.reference_comparator
+    return {p.value for p in comparator.predictions_flat()
+            if p.kind == 'pMHC_affinity' and p.allele == allele
+            and p.predictor_name == predictor and p.predictor_version == version
+            and p.value is not None} if comparator is not None else set()
+
+
 def epitope_display(epitope, antigen, row, prediction):
     """Pair recorded sequences; highlight only coordinates supported by the source."""
     offset = epitope.offset
@@ -53,16 +67,35 @@ def epitope_display(epitope, antigen, row, prediction):
         and source[offset:offset + len(epitope.sequence)] == epitope.sequence)
     intervals = ([(i.start, i.end) for i in antigen.targetable_mask.sliced(
         offset, offset + len(epitope.sequence)).intervals] if located else [])
-    wt = epitope.wt.sequence if epitope.wt is not None else ''
+    comparator = epitope.reference_comparator
+    wt = comparator.sequence if comparator is not None else ''
+    evidence = epitope.comparison_evidence
+    comparison_label = ('Patient background (' + evidence['baseline_policy'] + ')'
+                        if evidence else 'Annotation / supplied WT')
+    comparison_notes = []
+    if evidence:
+        comparison_notes.append(evidence['comparison'].replace('_', ' ') + '.')
+        comparison_notes.extend(sorted({a['reason'].replace('_', ' ') + '.'
+                                        for a in evidence.get('alternatives', ()) if a.get('reason')}))
+        if evidence.get('reason'):
+            comparison_notes.append(evidence['reason'].replace('_', ' ') + '.')
+        prediction_state = evidence.get('prediction_state')
+        if prediction_state == 'outside_requested_peptide_lengths':
+            comparison_notes.append('Comparator unmeasured: length outside the requested prediction lengths.')
+        elif prediction_state == 'no_measurements_recorded':
+            comparison_notes.append('Comparator sequence available; no predictions recorded.')
+    if wt and len(wt) != len(epitope.sequence):
+        comparison_notes.append('Different lengths; no residue alignment inferred.')
     differences = [(i, i + 1) for i, (target, reference) in enumerate(zip(epitope.sequence, wt))
-                   if target != reference] if len(wt) == len(epitope.sequence) else []
+                   if target != reference] if (len(wt) == len(epitope.sequence)
+                       and (evidence is None or evidence.get('position_aligned') is True)) else []
     return dict(
         values=row, version=prediction.predictor_version,
         target=marked_sequence(epitope.sequence, intervals),
         reference=marked_sequence(wt, differences, "reference-change"),
         location_known=located,
-        comparison_note=('Different lengths; no residue alignment inferred.'
-                         if wt and len(wt) != len(epitope.sequence) else ''),
+        comparison_label=comparison_label,
+        comparison_note=' '.join(comparison_notes),
         presentation_label=('NetMHCpan Score_EL' if prediction.predictor_name.lower().startswith('netmhcpan')
                             else prediction.predictor_name + ' presentation'),
     )

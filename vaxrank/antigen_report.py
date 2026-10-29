@@ -57,6 +57,92 @@ def metadata_values(antigen):
     return metadata
 
 
+def patient_background_sections(peptides, source_evidence):
+    """Show exact pair provenance once, with bounded construction/phase states."""
+    import json
+
+    def interval(value):
+        return '[%s, %s)' % tuple(value) if value is not None else None
+
+    def state(value):
+        return value.replace('_', ' ') if value else None
+
+    references = {}
+    for peptide in peptides:
+        for epitope in peptide.epitopes:
+            evidence = epitope.comparison_evidence
+            if evidence is None:
+                continue
+            for alternative in evidence.get('alternatives', ()):
+                key = (evidence.get('evidence_id'), evidence['event_id'], evidence['hypothesis_id'],
+                       alternative['translation_id'], alternative['transcript_id'], alternative.get('pair_id'))
+                references.setdefault(key, []).append((epitope.sequence, alternative))
+    sections = []
+    for index, ((identity, event_id, hypothesis_id, translation_id, transcript_id, pair_id), comparisons) in enumerate(references.items(), 1):
+        source = (source_evidence or {}).get(identity, {}).get('result', {})
+        event = next((e for e in source.get('events', ()) if e['event_id'] == event_id), {})
+        pair = next((p for p in event.get('pairs', ()) if p['pair_id'] == pair_id), {})
+        mutant, baseline = pair.get('mutant', {}), pair.get('baseline') or {}
+        rows = [('Sample', source.get('sample_id')), ('RNA read set', source.get('source')),
+                ('Source evidence identity', identity), ('Event identity', event_id),
+                ('Hypothesis identity', hypothesis_id), ('Pair identity', pair_id),
+                ('Translation identity', translation_id),
+                ('Transcript identity', transcript_id),
+                ('Somatic reversion policy', state(source.get('baseline_policy'))),
+                ('Pair state', state(pair.get('state')) or 'Exact pair not recorded'),
+                ('Pair reason', state(pair.get('reason'))),
+                ('Retained hypothesis set complete', event.get('protein_hypotheses_complete')),
+                ('Producer hypothesis cap', 'Unlimited (0)' if event.get('protein_sequence_limit') == 0
+                 else event.get('protein_sequence_limit')),
+                ('Mutant nucleotide identity', mutant.get('nucleotide_sequence_id')),
+                ('Mutant coding interval (nt, 0-based half-open)', interval(mutant.get('coding_interval'))),
+                ('Mutant bounded protein', mutant.get('protein_sequence')),
+                ('Mutant coding-window phase', state(pair.get('phase', {}).get('state'))),
+                ('Baseline construction', state(baseline.get('construction'))),
+                ('Baseline observation', state(baseline.get('observation'))),
+                ('Baseline nucleotide identity', baseline.get('nucleotide_sequence_id')),
+                ('Baseline coding interval (nt, 0-based half-open)', interval(baseline.get('coding_interval'))),
+                ('Baseline available interval (nt, 0-based half-open)', interval(baseline.get('available_coding_interval'))),
+                ('Baseline bounded protein', baseline.get('protein_sequence')),
+                ('Original REF-allele phase', state(baseline.get('reference_allele_phase')))]
+        for label, field in (('Removed edit', 'removed_edits'), ('Retained edit', 'retained_edits')):
+            edits = pair.get(field)
+            if not edits:
+                rows.append((label + 's', 'None recorded' if edits == [] else None))
+            for number, edit in enumerate(edits or (), 1):
+                prefix = '%s %d' % (label, number)
+                rows += [(prefix + ' — origin', edit['origin'].replace('_', ' ')),
+                         (prefix + ' — reference → alternate', '%s → %s' % (
+                             edit['reference_bases'] or '∅', edit['alt_bases'] or '∅')),
+                         (prefix + ' — transcript', edit['transcript_id']),
+                         (prefix + ' — reference cDNA interval', interval(edit['cdna_interval'])),
+                         (prefix + ' — observed cDNA interval', interval(edit['observed_interval'])),
+                         (prefix + ' — source event', edit['source_event_id'])]
+        rows += _support(mutant.get('rna_support'), 'Mutant RNA reconstruction')
+        support = baseline.get('reference_allele_coding_support') or {}
+        rows += _support(support.get('single_read_span_support'), 'Separate original REF-allele single-read spans')
+        rows += _support(support.get('allele_observation_span_support'), 'Separate original REF-allele observation spans')
+        seen = set()
+        for sequence, comparison in comparisons:
+            value = json.dumps(comparison, sort_keys=True)
+            if value not in seen:
+                detail = [comparison['state'], 'target aa ' + interval(comparison['mutant_protein_interval'])]
+                if comparison.get('baseline_protein_interval') is not None:
+                    detail.append('baseline aa ' + interval(comparison['baseline_protein_interval']))
+                if comparison.get('sequence') is not None:
+                    detail.append('baseline sequence ' + comparison['sequence'])
+                if comparison.get('reason'):
+                    detail.append(comparison['reason'].replace('_', ' '))
+                rows.append(('Peptide comparison: ' + sequence, '; '.join(detail)))
+                seen.add(value)
+        sections.append(_section('Patient-background comparison %d' % index, rows,
+            'A computed bounded counterfactual retains germline and unexplained edits. '
+            'Separate REF-allele RNA spans are not evidence of patient-normal tissue or protein expression. '
+            'All displayed intervals are zero-based, half-open; peptide predictions use peptide-only context. '
+            'Complete source and read-set records remain in the native evidence export.'))
+    return sections
+
+
 def antigen_evidence_sections(antigen, source_evidence=None):
     """Render every recorded attestation and source context without merging counts.
 

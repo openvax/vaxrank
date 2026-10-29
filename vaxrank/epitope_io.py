@@ -501,6 +501,33 @@ def neoepitope_core_row(allele, mutant_peptide, mutant_affinity,
     return row
 
 
+def neoepitope_comparison_row(epitope, allele, predictor=None, version=None):
+    """Display patient comparisons separately from the historical WT columns.
+
+    Affinity is shown only for the requested allele, predictor and version.
+    Missing or conflicting measurements stay unreported rather than selecting
+    an arbitrary leaf. This view does not change scoring evidence.
+    """
+    from .report_display import reference_affinity_values
+
+    evidence = epitope.comparison_evidence
+    if evidence is None:
+        return {}
+    comparator = epitope.reference_comparator
+    values = reference_affinity_values(epitope, allele, predictor, version)
+    return {
+        'Comparison reference': 'Patient background (' + evidence['baseline_policy'] + ')',
+        'Comparison sequence': comparator.sequence if comparator is not None else '',
+        'Predicted comparison pMHC affinity': _format_nm(next(iter(values)) if len(values) == 1 else None),
+        'Comparison affinity state': ('model_not_selected' if predictor is None else
+                                      'conflicting' if len(values) > 1 else 'recorded' if values else 'unmeasured'),
+        'Comparison state': evidence['comparison'],
+        'Comparison prediction state': evidence.get('prediction_state', ''),
+        'Comparison prediction context': evidence.get('prediction_context', ''),
+        'Comparison source evidence': evidence.get('evidence_id', ''),
+    }
+
+
 def _topiary_group_source(row):
     """Source key matching topiary.ranking.EvalContext grouping."""
     return (

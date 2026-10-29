@@ -24,6 +24,7 @@ nav:
   - How Vaxrank works: how-it-works.md
   - Varcode, Isovar & Vaxrank: library-responsibilities.md
   - Isovar support: isovar-support.md
+  - Patient-background comparisons: patient-background-comparisons.md
   - Published comparison policies: published-policies.md
   - Named selection policies: selection-policies.md
   - Moving native datasets: native-references.md

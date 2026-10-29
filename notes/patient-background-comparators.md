@@ -1,0 +1,55 @@
+# Exact patient-background comparisons (#716)
+
+Keep `annotation_reference` as the default comparison policy. Add an opt-in
+`patient_background` policy with separately declared `focal` or
+`supplied_somatic_haplotype` reversion. Use Isovar's released exports and
+Topiary's validating reader; do not infer a pair from peptide similarity.
+
+The source export lives once in the existing native source-evidence store.
+Candidate evidence refers to its exact event, hypothesis, translation,
+transcript and pair IDs and records the peptide's original coordinate interval.
+Match against the actual selected Isovar hypothesis and every compatible
+nucleotide/transcript alternative, checking sample/read-set provenance. Generic
+Isovar protein hypotheses use the same contract. Other source families have no
+implied patient-background pair.
+
+Project peptide boundaries through the recorded reverted cDNA edits. Keep
+germline and unexplained changes. A boundary inside a reverted edit, a changed
+reading frame at a boundary, a stop before the required interval, or a missing
+alternative gives an explicit unavailable comparison. Reconcile every matched
+alternative before reporting a single sequence; differing sequences or mixed
+availability remain ambiguous. Unequal lengths are explicit and must be within
+the configured predictor's supported lengths before prediction.
+
+Use the existing `comparators` map for predicted peptides, keeping
+`patient_background` distinct from the legacy annotation `wt` role. Exact
+bounded equality, absent sequence and absent prediction remain separate states.
+Do not drop an identical comparison or replace an unavailable patient comparison
+with annotation. Predictions go through Topiary. Default ranking remains the
+existing mutant-evidence DSL; comparison evidence is explanatory unless a policy
+explicitly uses its supported fields.
+
+The API, YAML and CLI must resolve the same effective policy. Live RNA runs
+export evidence from the already reconstructed results, with explicit sample
+and read-set identities. Saved comparisons replay without source files or new
+inference. Reports show the selected comparison, alternative counts, phase,
+construction versus original REF-allele RNA support, and evidence links. A
+computed baseline is not observed normal-tissue or protein expression.
+
+Validate real Sid NTF3 provenance, retained germline indels, in-frame and
+frameshifting focal edits, multiple transcripts, capped/partial contexts,
+missing phase and inconsistent provenance. Verify native replay, CLI/config,
+prediction routing and reports; then lint/full tests/CI and ordered release.
+
+Consumer integration found valid unlimited caps and repeated pair records that
+Topiary rejected. Topiary #563 fixes #561/#562; this change requires its 5.108.4
+release. Report review also reproduced Vaxrank #753: conflicting comparator
+affinities were reduced to the first leaf. Human-readable and spreadsheet views
+now share exact model/version matching and explicitly preserve conflicts.
+
+Scientific context: Rubinsteyn et al., *Computational Pipeline for the PGV-001
+Neoantigen Vaccine Trial*, doi:10.3389/fimmu.2017.01807; Hundal et al.,
+*Accounting for proximal variants improves neoantigen prediction*,
+doi:10.1038/s41588-018-0283-9. The executable exchange contract is Isovar's
+versioned patient-background-pairs documentation and Topiary's validating
+`read_isovar_patient_background_pairs` reader.

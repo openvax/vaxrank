@@ -43,6 +43,7 @@ from .report_display import (
     marked_sequence,
     model_inventory,
     product_target_intervals,
+    reference_affinity_values,
     run_provenance_arguments,
 )
 from .varcode_effects import (
@@ -629,33 +630,9 @@ class TemplateDataCreator(object):
         key = (peptide, source, offset, PEPSICKLE_PREDICTOR_NAME)
         return self.processing_predictions_by_key.get(key)
 
-    def _wt_ic50_for_allele(self, epitope, allele, predictor=None, version=None):
-        """Return the WT pMHC_affinity IC50 for ``allele`` (optionally
-        scoped to ``predictor``) from this epitope's WT comparator,
-        or ``None`` when no WT record exists (e.g. WT peptide was
-        too short, or peptide doesn't overlap the mutation).
-
-        Iterates ``predictions_flat()`` rather than
-        ``predictions_for('pMHC_affinity')`` so multi-predictor WT
-        comparators don't trip the disambiguation check.
-        """
-        if epitope.wt is None:
-            return None
-        for p in epitope.wt.predictions_flat():
-            if p.kind != 'pMHC_affinity':
-                continue
-            if p.allele != allele:
-                continue
-            if predictor is not None and p.predictor_name != predictor:
-                continue
-            if version is not None and p.predictor_version != version:
-                continue
-            if p.value is not None:
-                return p.value
-        return None
-
     def epitope_data(self, epitope, prediction, include_processing=False,
-                     include_additional_prediction_axes=False, allele=None):
+                     include_additional_prediction_axes=False, allele=None,
+                     include_comparison=False):
         """Returns an OrderedDict with epitope data for one
         (CandidateEpitope, mutant Prediction) row.
 
@@ -696,13 +673,13 @@ class TemplateDataCreator(object):
         so mixed-predictor tables retain consistent columns.
         """
         row_allele = cells.text(prediction.allele if allele is None else allele)
-        wt_ic50 = self._wt_ic50_for_allele(
-            epitope, row_allele, predictor=prediction.predictor_name,
-            version=prediction.predictor_version)
-        wt_ic50_str = _format_ic50(wt_ic50)
+        reference_values = reference_affinity_values(
+            epitope, row_allele, prediction.predictor_name, prediction.predictor_version)
+        wt_ic50_str = ('Conflicting predictions' if len(reference_values) > 1 else
+                      _format_ic50(next(iter(reference_values), None)))
         ic50_str = _format_ic50(prediction.value)
         wt_peptide_sequence = (
-            epitope.wt.sequence if epitope.wt is not None else '')
+            epitope.reference_comparator.sequence if epitope.reference_comparator is not None else '')
         epitope_data = OrderedDict([
             ('Sequence', epitope.sequence),
             # ``Predictor`` names which MHC affinity tool produced
@@ -727,6 +704,16 @@ class TemplateDataCreator(object):
             ('WT sequence', wt_peptide_sequence),
             ('WT IC50', wt_ic50_str),
         ])
+        if include_comparison or epitope.comparison_evidence is not None:
+            evidence = epitope.comparison_evidence
+            epitope_data['Comparison reference'] = ('Patient background (' + evidence['baseline_policy'] + ')'
+                if evidence else 'Annotation / supplied WT')
+            epitope_data['Comparison sequence'] = epitope_data.pop('WT sequence')
+            epitope_data['Comparison IC50'] = epitope_data.pop('WT IC50')
+            epitope_data['Comparison state'] = (evidence['comparison'] if evidence else
+                'recorded' if epitope.reference_comparator is not None else 'unavailable')
+            epitope_data['Comparison prediction state'] = (
+                evidence.get('prediction_state', '').replace('_', ' ') if evidence else '')
         if include_additional_prediction_axes:
             presentation = None
             antigen_processing = None
@@ -1011,6 +998,8 @@ class TemplateDataCreator(object):
                     for prediction in epitope.predictions_flat())
 
                 epitopes = []
+                any_patient_comparison = any(e.comparison_evidence is not None
+                                             for e in vaccine_peptide.target_epitopes)
                 epitope_displays = []
                 wt_epitopes = []
                 # One row per explicit report input. Affinity remains the
@@ -1023,7 +1012,7 @@ class TemplateDataCreator(object):
                             include_processing=any_processing,
                             include_additional_prediction_axes=(
                                 any_additional_prediction_axes),
-                            allele=row_input.allele)
+                            allele=row_input.allele, include_comparison=any_patient_comparison)
                         epitopes.append(row)
                         epitope_displays.append(epitope_display(
                             e, vaccine_peptide.antigen, row, row_input.prediction))
@@ -1094,6 +1083,9 @@ class TemplateDataCreator(object):
             variant_dict['source_evidence_sections'] = (
                 antigen_evidence_sections(antigen, self.source_evidence)
                 if entity_label == 'Antigen' else [])
+            from .antigen_report import patient_background_sections
+            variant_dict['source_evidence_sections'] += patient_background_sections(
+                vaccine_peptides, self.source_evidence)
             variants.append(variant_dict)
 
         # add package metadata to the report
@@ -1293,7 +1285,7 @@ def make_minimal_neoepitope_report(
                     # three input paths emit identical core columns and
                     # the same missing-value convention. The RNA-read
                     # count is this path's only source-specific column.
-                    from .epitope_io import neoepitope_core_row
+                    from .epitope_io import neoepitope_core_row, neoepitope_comparison_row
                     row = neoepitope_core_row(
                         allele=p.allele,
                         mutant_peptide=epitope.sequence,
@@ -1304,6 +1296,8 @@ def make_minimal_neoepitope_report(
                             vaccine_peptide.mutant_protein_fragment.gene_name),
                         variant=variant.short_description,
                         score=vaccine_peptide.target_epitope_score)
+                    row.update(neoepitope_comparison_row(epitope, p.allele, p.predictor_name,
+                                                        p.predictor_version))
                     row['Variant allele RNA read count'] = (
                         vaccine_peptide.mutant_protein_fragment.n_alt_reads)
                     rows.append(row)
@@ -1312,6 +1306,8 @@ def make_minimal_neoepitope_report(
         from .epitope_io import neoepitope_core_row, write_neoepitope_table
         columns = list(neoepitope_core_row('', '', None, '', None, '', '', score=0))
         columns.append('Variant allele RNA read count')
+        columns.extend(key for row in rows for key in row if key not in columns)
+        columns = list(dict.fromkeys(columns))
         write_neoepitope_table(pd.DataFrame(rows, columns=columns), excel_report_path)
 
 

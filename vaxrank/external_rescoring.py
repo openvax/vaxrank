@@ -291,11 +291,17 @@ def _predict_selected_occurrences(epitopes, models, alleles, *, use_flanks=True)
         predicted_frames.append(primary)
     fresh = []
     for index, epitope in enumerate(epitopes):
+        evidence = epitope.input_evidence
+        if epitope.comparison_evidence is not None and epitope.reference_comparator is not None:
+            state = ('measurements_recorded' if leaves[(index, 'patient_background')]
+                     else 'no_measurements_recorded')
+            evidence = tuple(dict(record, prediction_state=state)
+                if record.get('kind') == 'patient_background_comparison' else record for record in evidence)
         fresh.append(replace(
             epitope, predictions=tuple(leaves[(index, None)]),
             comparators={name: replace(peptide, predictions=tuple(leaves[(index, name)]))
                          for name, peptide in epitope.comparators.items()},
-            patient_alleles=alleles, per_allele_scores={}, allele_attributions=()))
+            patient_alleles=alleles, per_allele_scores={}, allele_attributions=(), input_evidence=evidence))
     # Native leaves preserve comparators; the public prediction frame retains
     # declared MHC dependence, configured genotype and supplied flank context.
     scoring = pd.concat(predicted_frames, ignore_index=True) if predicted_frames else pd.DataFrame()
@@ -320,6 +326,8 @@ def _fresh_report_frame(report, epitopes):
                 allele, epitope.sequence, None,
                 epitope.wt.sequence if epitope.wt else '', None,
                 metadata.get('Gene name'), metadata.get('Genomic variant')))
+            from .epitope_io import neoepitope_comparison_row
+            row.update(neoepitope_comparison_row(epitope, allele))
             if report.input_provenance is not None:
                 row.update(provenance_columns(report.input_provenance))
             row['Prediction evidence'] = 'fresh'
@@ -327,7 +335,8 @@ def _fresh_report_frame(report, epitopes):
             # no old value is presented as a new-model result or a new allele.
             for key, value in original_by_allele.get(allele, {}).items():
                 row['Input ' + key] = value
-            for prefix, peptide in (('', epitope), ('WT ', epitope.wt)):
+            for prefix, peptide in (('', epitope), ('WT ', epitope.wt),
+                                    ('Patient background ', epitope.comparators.get('patient_background'))):
                 if peptide is None:
                     continue
                 for p in peptide.predictions_flat():
@@ -409,7 +418,7 @@ def _observed_alleles(report):
 def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, alleles=(),
                  antigen_predictor_factory=None, antigen_alleles=(), epitope_config=None,
                  prepared_reports=(), cta_admission_writer=None, host_reference=None,
-                 isovar_sources=None):
+                 isovar_sources=None, patient_backgrounds=None):
     """Validate every input before predicting new sequences or scoring evidence.
 
     Experimental ``antigens`` and admitted ``cta_expression`` inputs need an ``antigen_predictor_factory``
@@ -422,6 +431,9 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
     from .input_scope import InputScope, with_species_declarations
     from .host_reference import combine_host_references
     inputs = list(inputs)
+    if patient_backgrounds and not any(fmt in ('antigens', 'isovar') for fmt, _ in inputs):
+        raise ValueError('Patient-background pairs require new Isovar antigen inputs; '
+                         'saved comparisons already contain their source evidence')
     if scopes is None:
         scopes = [{} for _ in inputs]
     if len(scopes) != len(inputs):
@@ -592,7 +604,8 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             else:
                 reports[index] = antigen_report(source, predictor, genome=genome,
                                                 provenance=provenance, config=config,
-                                                host_reference=host_reference)
+                                                host_reference=host_reference,
+                                                patient_backgrounds=patient_backgrounds)
     # Persist the scope that passed batch validation, including on each saved
     # candidate, so constituent reports can also be replayed independently.
     for index, report in enumerate(reports):
@@ -612,6 +625,12 @@ def report_config(reports, epitope_config=None):
         if configs and any(cfg != configs[0] for cfg in configs):
             raise ValueError("Saved inputs use different scoring policies; supply an explicit epitope config")
         epitope_config = configs[0] if configs else EpitopeConfig()
+    for report in reports:
+        saved = report.dataset.config if report.dataset is not None else None
+        if saved is not None and any(getattr(saved, name) != getattr(epitope_config, name)
+                for name in ('comparison_reference', 'patient_background_baseline')):
+            raise ValueError('Saved comparisons retain their reference and baseline policy. '
+                             'Keep those settings when rescoring, or create new comparisons from Isovar inputs.')
     return epitope_config
 
 
@@ -886,6 +905,12 @@ def load_unified_external(args, epitope_config, options, genome):
     specs = external_input_specs(args)
     cta = any(fmt == 'cta_expression' for fmt, _, _ in specs)
     antigens = any(fmt in ('antigens', 'isovar') for fmt, _, _ in specs)
+    if not direct:
+        if getattr(args, 'rna_sample_id', None) or getattr(args, 'rna_source', None):
+            raise ValueError('--rna-sample-id and --rna-source require direct VCF/BAM inputs')
+        if getattr(args, 'patient_background_pairs', None) and not antigens:
+            raise ValueError('Patient-background pairs require new Isovar antigen inputs; '
+                             'saved comparisons already contain their source evidence')
     antigen_predictor_factory, antigen_alleles = None, ()
     if antigens or cta:
         from .antigen_input import validate_antigen_args
@@ -931,6 +956,7 @@ def load_unified_external(args, epitope_config, options, genome):
         manifest_path=getattr(args, 'input_manifest', None), genome=genome,
         antigen_predictor_factory=antigen_predictor_factory, antigen_alleles=antigen_alleles,
         epitope_config=epitope_config,
+        patient_backgrounds=getattr(args, 'patient_background_pairs', None) if antigens else None,
         isovar_sources=load_vaxrank_config(args).get('isovar', {}).get('sources', {}),
         cta_admission_writer=lambda sources: write_cta_admissions(args, sources))
     if getattr(args, 'index_native_references', False):

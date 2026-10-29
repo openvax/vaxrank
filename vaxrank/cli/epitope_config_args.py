@@ -21,6 +21,24 @@ from ..epitope_config import EpitopeConfig
 def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
     epitope_prediction_args = arg_parser.add_argument_group("T-cell epitope prediction options")
     epitope_prediction_args.add_argument(
+        '--comparison-reference', choices=('annotation_reference', 'patient_background'),
+        help='Comparator sequence policy. Default: annotation_reference. Patient backgrounds '
+             'require exact Isovar pair provenance; unavailable comparisons never fall back to annotation.')
+    epitope_prediction_args.add_argument(
+        '--patient-background-baseline', choices=('focal', 'supplied_somatic_haplotype'),
+        help='Somatic edits reverted for patient_background comparisons: focal (default) or '
+             'all supplied somatic edits on the RNA haplotype. Germline edits remain.')
+    epitope_prediction_args.add_argument(
+        '--patient-background-pairs', action='append', metavar='JSON_OR_GZ',
+        help='Isovar patient-background pair export for new comparisons. Repeat for distinct '
+             'sample/read sets. Saved native comparisons need no source file. Live VCF/RNA '
+             'runs can export their own pairs with --rna-sample-id and --rna-source, '
+             'or a manifest declaring direct sample_id and library_id.')
+    epitope_prediction_args.add_argument('--rna-sample-id',
+        help='Sample identity for the direct VCF/RNA input and its patient-background evidence.')
+    epitope_prediction_args.add_argument('--rna-source',
+        help='Read-set/library identity for the direct RNA input; preserved as library_id in native scope.')
+    epitope_prediction_args.add_argument(
         "--min-epitope-score",
         type=float,
         help=(
@@ -104,6 +122,10 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
     if merged_config is None:
         merged_config = load_vaxrank_config(args)
     epitope_config_kwargs = extract_epitope_config_kwargs(merged_config)
+    for name in ('comparison_reference', 'patient_background_baseline'):
+        value = getattr(args, name, None)
+        if value is not None:
+            epitope_config_kwargs[name] = value
 
     if args.min_epitope_score is not None:
         epitope_config_kwargs["min_epitope_score"] = args.min_epitope_score
@@ -147,4 +169,5 @@ def has_epitope_config_overrides(args, merged_config):
         getattr(args, name, None) is not None for name in (
             "min_epitope_score", "scoring_mode", "allele_free_evidence",
             "allele_selection_axis", "default_affinity_predictor",
-            "default_stability_predictor", "default_presentation_predictor"))
+            "default_stability_predictor", "default_presentation_predictor",
+            "comparison_reference", "patient_background_baseline"))

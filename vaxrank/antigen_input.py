@@ -177,15 +177,22 @@ class AntigenDataset:
             manifest_declarations=dict(manifest_declarations or {}),
             report_declarations={'input_history': [provenance_dict(p) for p in self.provenance]})
 
-    def predict(self, predictor, *, genome=None, config=None, path='', host_reference=None):
-        """Predict native occurrences through Topiary and return shared evidence."""
+    def predict(self, predictor, *, genome=None, config=None, path='', host_reference=None,
+                patient_backgrounds=None):
+        """Predict native occurrences through Topiary and return shared evidence.
+
+        ``patient_backgrounds`` accepts a list of exact Isovar pair exports,
+        paths or PatientBackgroundPairs, one per sample/read set. The config
+        must select the matching patient-background baseline. Comparisons apply
+        only to exact retained Isovar protein-hypothesis contexts.
+        """
         if host_reference is not None:
             from .host_reference import HostReference
             host_reference = HostReference.load(host_reference)
         provenance = self.prediction_provenance(genome=genome, path=path, host_reference=host_reference)
         return predict_antigens(self.antigens, predictor, genome=genome,
                                 provenance=provenance, config=config, host_reference=host_reference,
-                                source_evidence=self.source_evidence)
+                                source_evidence=self.source_evidence, patient_backgrounds=patient_backgrounds)
 
 
 def _batched_self_matches(frame, antigens, genome):
@@ -213,13 +220,17 @@ def _batched_self_matches(frame, antigens, genome):
 
 
 def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
-                     annotate=None, self_matcher=None, host_reference=None, source_evidence=None):
+                     annotate=None, self_matcher=None, host_reference=None, source_evidence=None,
+                     patient_backgrounds=None):
     """Shared native-protein prediction for source-specific admission adapters.
 
     ``annotate`` may add source evidence columns to the prediction frame before
     shared adaptation. It must not change sequence coordinates or measurements.
     Distinct source names and repeated native occurrences remain distinct.
     """
+    from .patient_background import load_patient_backgrounds, attach_antigen_backgrounds
+    config = config or EpitopeConfig()
+    patient_backgrounds = load_patient_backgrounds(patient_backgrounds, config)
     batch_reference_queries = self_matcher is None and host_reference is None
     if host_reference is not None:
         from .host_reference import HostReference
@@ -240,6 +251,8 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
         dataset.provenance = (provenance,)
         dataset.selection['antigen_inputs'] = {provenance.input_id: {}}
         dataset.selection['source_evidence'] = source_evidence
+        if config.comparison_reference == 'patient_background':
+            attach_antigen_backgrounds(dataset, predictor, patient_backgrounds, source_evidence)
         return dataset
     frame = predictor.predict_from_named_sequences({name: a.amino_acids for name, a in antigens.items()})
     if frame.empty:
@@ -305,6 +318,8 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     dataset.selection['antigen_inputs'] = {provenance.input_id: {name: asdict(a) for name, a in antigens.items()}}
     if source_evidence:
         dataset.selection['source_evidence'] = source_evidence
+    if config.comparison_reference == 'patient_background':
+        attach_antigen_backgrounds(dataset, predictor, patient_backgrounds, source_evidence)
     return dataset
 
 
@@ -323,12 +338,13 @@ def validate_antigen_args(args):
         raise ValueError('--input-antigens predicts native sequences; external prediction modes do not apply')
 
 
-def antigen_report(inputs, predictor, *, genome, provenance, config=None, host_reference=None):
+def antigen_report(inputs, predictor, *, genome, provenance, config=None, host_reference=None,
+                   patient_backgrounds=None):
     """Adapt validated sequences into the common report representation."""
     from .external_report import ExternalReport
     dataset = predict_antigens(inputs.antigens, predictor, genome=genome,
                                provenance=provenance, config=config, host_reference=host_reference,
-                               source_evidence=inputs.source_evidence)
+                               source_evidence=inputs.source_evidence, patient_backgrounds=patient_backgrounds)
     return ExternalReport(provenance.source_format, provenance.path, report_df=dataset.report_frame(),
                           epitopes=dataset.epitopes, dataset=dataset,
                           input_provenance=provenance)

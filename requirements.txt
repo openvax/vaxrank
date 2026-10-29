@@ -53,7 +53,9 @@ mhctools>=4.2.0,<5.0.0
 # preserving historical invocation metadata (openvax/topiary#545; vaxrank#721).
 # 5.106.1 applies an explicitly selected genotype to contextual protein scans,
 # required when antigen/CTA caches contain other patients (topiary#547; vaxrank#725).
-topiary>=5.106.1,<6.0.0
+# 5.108.4 accepts Isovar's unlimited hypothesis cap and exact repeated pairs
+# for patient-background comparisons (topiary#561/#562; vaxrank#716).
+topiary>=5.108.4,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0

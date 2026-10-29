@@ -49,6 +49,8 @@ class EpitopesConfigSchema(
     # is attributed to alleles — see vaxrank.allele_evidence.
     allele_free_evidence: Optional[str] = None
     allele_selection_axis: Optional[str] = None
+    comparison_reference: Optional[str] = None
+    patient_background_baseline: Optional[str] = None
 
 
 class ManufacturabilityConfigSchema(

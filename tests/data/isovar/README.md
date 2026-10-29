@@ -6,6 +6,18 @@ its generating source. Upstream is Isovar 1.61.0, commit
 `7bc88001704e5e8ff7c7bf2a0cd49cf1ea376b9e` (Apache-2.0):
 https://github.com/openvax/isovar/tree/7bc88001704e5e8ff7c7bf2a0cd49cf1ea376b9e
 
+The later `patient_background` test bundle is pinned by the repository-wide
+`tests/data/manifest.json`. It contains public Isovar **1.76.0** exports, using `test_edit_attribution.py`
+helpers from commit `511ae460a383485beff6f47c9c1f8e22dfdd8346`. It contains complete
+protein-hypothesis and paired-background exports for synthetic focal/haplotype,
+germline deletion, in-frame deletion, frameshift, tiled-read and two-transcript
+cases. The Sid NTF3 case uses the original upstream read corpus and its local
+reference reconstruction, case `28-NTF3-chr12-5494381-53f498a544883d51`.
+The adjacent change is **supplied as germline for this regression**, exercising
+retention of caller-declared edits; that classification is not independently
+established by the RNA fixture. Sample/read-set labels `patient` / `RNA` are
+test identities. No MHC measurements are included in this fixture.
+
 - `ncorf`, `synonymous`, `tiled`, `unresolved`: the tiny noncoding transcript
   from `tests/test_variant_rna_orfs.py`, plus-strand fixture and its `assess`
   helper. They cover a changed residue, synonymous context, tiled RNA without

@@ -47,6 +47,7 @@ def run_vaxrank(
     epitope_dataset=None,
     policy_evaluations=None,
     defer_window_selection=True,
+    patient_background=None,
 ):
     """
     Parameters
@@ -80,6 +81,12 @@ def run_vaxrank(
         mutation fragments. Selection is deferred unless defer_window_selection
         is False, which captures evidence while retaining ordinary selection.
 
+    patient_background : PatientBackgroundPairs or mapping or path, optional
+        Exact Isovar comparison export for the selected RNA hypotheses. Requires
+        ``epitope_config.comparison_reference='patient_background'`` and the same
+        baseline policy. No source is inferred by sequence similarity. Missing
+        contexts remain unavailable, including for DNA-only fallback fragments.
+
     defer_window_selection
         When False, collect evidence and also return selected vaccine peptides.
 
@@ -91,6 +98,19 @@ def run_vaxrank(
     selection, including DNA fallback windows that produce no MHC binder.
     """
     retained_protein_fragments = []
+    comparison_contexts = None
+    if patient_background is not None:
+        from .patient_background import PatientBackgroundPairs
+        if (epitope_config or EpitopeConfig()).comparison_reference != 'patient_background':
+            raise ValueError('Patient-background evidence requires comparison_reference=patient_background')
+        if not isinstance(patient_background, PatientBackgroundPairs):
+            patient_background = PatientBackgroundPairs(patient_background)
+        if patient_background.export['baseline_policy'] != epitope_config.patient_background_baseline:
+            raise ValueError('Patient-background evidence and configured baseline disagree')
+        isovar_results = list(isovar_results)
+        comparison_contexts = patient_background.contexts_for_results(isovar_results)
+        if epitope_dataset is not None:
+            epitope_dataset.selection.setdefault('source_evidence', {}).update(patient_background.source_evidence)
     variant_to_vaccine_peptides_dict = create_vaccine_peptides_dict(
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
@@ -105,6 +125,7 @@ def run_vaxrank(
         policy_evaluations=policy_evaluations,
         defer_window_selection=defer_window_selection,
         retained_protein_fragments=retained_protein_fragments,
+        patient_background_contexts=comparison_contexts,
     )
     ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
 
@@ -113,6 +134,7 @@ def run_vaxrank(
         variant_to_vaccine_peptides_dict=variant_to_vaccine_peptides_dict,
         ranked_vaccine_peptides=ranked_list,
         retained_protein_fragments=retained_protein_fragments,
+        patient_background_pairs=patient_background.export if patient_background is not None else None,
     )
 
 
@@ -130,6 +152,7 @@ def create_vaccine_peptides_dict(
     policy_evaluations=None,
     defer_window_selection=True,
     retained_protein_fragments=None,
+    patient_background_contexts=None,
 ):
     """
     Parameters
@@ -186,6 +209,8 @@ def create_vaccine_peptides_dict(
             policy_evaluations=policy_evaluations,
             defer_window_selection=defer_window_selection,
             retained_protein_fragments=retained_protein_fragments,
+            **({'patient_background': patient_background_contexts.get(id(isovar_result))}
+               if patient_background_contexts is not None else {}),
         )
 
         if not vaccine_peptides:
@@ -212,6 +237,7 @@ def vaccine_peptides_for_variant(
     policy_evaluations=None,
     defer_window_selection=True,
     retained_protein_fragments=None,
+    patient_background=None,
 ):
     """
     Parameters
@@ -276,6 +302,7 @@ def vaccine_peptides_for_variant(
         epitope_config=epitope_config,
         genome=variant.ensembl,
         **({"policy_evaluations": policy_evaluations} if policy_evaluations is not None else {}),
+        **({'patient_background': patient_background} if patient_background is not None else {}),
     )
     if epitope_dataset is not None:
         epitopes = epitope_dataset.add_mutation(long_protein_fragment, epitopes)

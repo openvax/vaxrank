@@ -57,8 +57,12 @@ def selection_policy_view(selection):
     ] + (_rows(policy, [('unknown', 'Unknown criterion outcome'),
                        ('ranking_by', 'Policy ranking terms'), ('strata', 'Policy strata')]) if policy else [])
       + _rows(epitopes, [('default_methods', 'Default methods'),
+                        ('comparison_reference', 'Reference comparator policy'),
                         ('allele_free_evidence', 'Credit for evidence without an allele'),
                         ('allele_selection_axis', 'Allele selection axis')]))]
+    if epitopes.get('comparison_reference') == 'patient_background':
+        sections[0]['rows'] += _rows(epitopes, [
+            ('patient_background_baseline', 'Patient-background somatic reversion policy')])
     sections.append(dict(title='Candidate window settings', rows=_rows(vaccine, [
         ('combined_score_expr', 'Configured combined-score expression'),
         ('min_peptide_length', 'Minimum candidate length (aa)'),

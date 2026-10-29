@@ -1,14 +1,15 @@
 <h2 id="score-guide">Score guide</h2>
 <dl class="score-guide">
-<dt>Target and WT comparator sequences</dt>
+<dt>Target and reference sequences</dt>
 <dd>Highlighting follows the recorded targetable intervals, which can describe mutations, junctions or other target regions.
 It does not establish tumor specificity by itself. A vertical bar marks a zero-length deletion junction.
-Underlined WT residues differ at the same position in equal-length sequences. Unequal-length pairs are shown without an inferred alignment.
-WT is the recorded comparator; Vaxrank's mutation workflow currently uses annotation-reference peptides.
-It is not evidence of an observed patient-normal protein. A missing sequence or prediction is reported as unavailable.</dd>
+Underlining marks differences only where the recorded comparison supports corresponding positions.
+Unequal-length pairs are shown without an inferred alignment. The reference label identifies annotation/supplied WT
+or an exact Isovar patient-background comparison, including its somatic reversion policy.
+A constructed comparator is not evidence of an observed patient-normal protein. Missing sequences and missing predictions remain distinct.</dd>
 <dt>IC50 (nM): lower indicates stronger predicted binding</dt>
-<dd>Binding affinity from the named predictor. Target and WT values use the same allele and predictor.
-Missing affinity is not zero affinity.</dd>
+<dd>Binding affinity from the named predictor. Target and reference values use the same allele, predictor and version.
+Missing affinity is not zero affinity. Conflicting comparator measurements are labeled rather than reduced to one value.</dd>
 <dt>Vaxrank score</dt>
 <dd>The configured per-allele ranking score. The default transforms predicted binding affinity onto a 0-1 scale,
 with higher values favored. A custom scoring expression can use other evidence; see the recorded run configuration.
