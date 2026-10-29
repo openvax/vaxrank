@@ -340,6 +340,9 @@ def test_live_python_api_uses_owner_controls_and_records_versions(variant_inputs
     assert evidence['reconstruction']['controls']['protein']['min_variant_sequence_coverage'] == 1
     assert evidence['reconstruction']['controls']['protein']['max_protein_sequences_per_variant'] == 0
     assert evidence['reconstruction']['versions']['isovar']
+    reference, = (m['reference'] for m in evidence['isovar_result']['models'])
+    assert reference['resolved_transcript']['strand'] == '+'
+    assert json.loads(dict(antigen.source_metadata)['isovar_candidate'])['reference_strand'] == '+'
     with pytest.raises(ValueError, match='unknown or inapplicable'):
         reconstruct_isovar_antigens('variant_orfs', inputs=variant_inputs, options={'protein': {'bogus': 1}})
     with pytest.raises(ValueError, match='ReadEvidence'):
