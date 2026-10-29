@@ -41,3 +41,4 @@ class PatientInfo(DataclassSerializable):
     input_provenance: list["InputProvenance"] = field(default_factory=list)
     cta_expression_summary: Optional[dict] = None
     antigen_summary: Optional[dict] = None
+    input_coverage: Optional[dict] = None

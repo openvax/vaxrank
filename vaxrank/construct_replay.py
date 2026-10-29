@@ -53,6 +53,13 @@ def saved_modalities(dataset):
         for modality in ('peptide', 'mrna')}
 
 
+def capture_direct_sources(dataset, results, **property_options):
+    """Keep every annotated direct source, including those with no predictions."""
+    dataset.direct_sources = [
+        {'variant': to_native_json(result.variant), 'properties': properties}
+        for result, properties in zip(results.isovar_results, results.variant_properties(**property_options))]
+
+
 def resolved_saved_design(args, config, dataset):
     """Compare saved defaults after explicit current YAML and CLI overrides."""
     from .config.loader import extract_construct_kwargs
@@ -138,7 +145,7 @@ def _canonical_native(value):
             and not result.get('antigens')):
         result.pop('antigens', None)
     if metadata == dict(__module__='vaxrank.input_scope', __name__='InputScope'):
-        for key in ('host_taxon_id', 'mhc_species', 'host_reference_sha256'):
+        for key in ('host_taxon_id', 'mhc_species', 'host_reference_sha256', 'rna_evidence_extent'):
             if result.get(key) is None:
                 result.pop(key, None)
     if metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='SelfReferenceSource'):

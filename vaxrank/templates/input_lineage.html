@@ -1,0 +1,13 @@
+<h3 id="input-lineage">Input lineage and scope</h3>
+<p>Original input receipts and current report inputs remain separate. Scope values are declarations, not measurements.
+RNA evidence extent is unknown unless explicitly declared; neither filenames nor retained predictions establish whole-library coverage.</p>
+{% for label, inputs in [('Original input receipts', input_coverage.original_inputs), ('Current report inputs / replay containers', input_coverage.current_inputs)] %}
+<h4>{{ label }}</h4>{% if not inputs %}<p>Not recorded.</p>{% endif %}
+{% for input in inputs %}<h5>Input {{ loop.index }}</h5><table class="pure-table pure-table-bordered">
+<tr><th>Input identity</th><td>{{ input.input_id | e }}</td></tr><tr><th>Format / path</th><td>{{ input.source_format | e }} / {{ input.path | e }}</td></tr>
+<tr><th>Content SHA-256</th><td>{{ input.content_sha256 | e }}</td></tr>
+{% for key, label in [('patient_id', 'Patient'), ('sample_id', 'Sample'), ('library_id', 'Library'), ('timepoint', 'Timepoint'), ('reference_assembly', 'Reference assembly'), ('annotation', 'Annotation'), ('rna_evidence_extent', 'RNA evidence extent')] %}
+<tr><th>{{ label }}</th><td>{{ input.scope.get(key) or 'Unknown' }}</td></tr>{% endfor %}
+<tr><th>Manifest</th><td>{{ input.manifest_path or 'Not recorded' }}</td></tr>
+<tr><th>Manifest declarations</th><td>{{ input.manifest_declarations | tojson | e }}</td></tr>
+<tr><th>Report declarations</th><td>{{ input.report_declarations | tojson | e }}</td></tr></table>{% endfor %}{% endfor %}

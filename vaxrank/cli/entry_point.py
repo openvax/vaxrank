@@ -1553,8 +1553,8 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     # ``prediction_method_name`` ends up on every flat record.
     # Resolve actual VCF references before models or RNA processing. An explicit
     # MHC repertoire permits HLA mice without changing the host reference.
-    variants = variant_collection_from_args(args)
-    variants = filter_unannotatable_variants(variants)
+    loaded_variants = variant_collection_from_args(args)
+    variants = filter_unannotatable_variants(loaded_variants)
     if getattr(args, 'host_reference', None):
         raise ValueError('Use --host-reference with native antigen inputs or saved --input-epitopes')
     from ..input_scope import validate_prediction_species, scope_dict
@@ -1580,8 +1580,8 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
             [getattr(p, '__class__', type(p)).__name__
              for p in predictors_list])
 
-    capture_native = epitope_dataset is None and bool(
-        getattr(args, 'output_epitopes', None) or getattr(args, 'output_antigens', None))
+    capture_native = epitope_dataset is None and any(getattr(args, name, None) for name in (
+        'output_epitopes', 'output_antigens', 'output_ascii_report', 'output_html_report', 'output_pdf_report'))
     if capture_native:
         from ..construct_replay import pipeline_native_dataset
         epitope_dataset = pipeline_native_dataset(args, variants, epitope_config)
@@ -1625,10 +1625,16 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
 
     from ..selection_policy import write_run_policy
     run_policy = write_run_policy(args, policy_evaluations, epitope_config, vaccine_config)
+    if epitope_dataset is not None:
+        from ..input_coverage import record_direct_coverage
+        record_direct_coverage(epitope_dataset, vaxrank_results, loaded_variants,
+                               window_selection_performed=capture_native,
+                               filter_thresholds=filter_threshold_dict_from_args(args))
     if capture_native:
-        from ..construct_replay import initialize_construct_replay
+        from ..construct_replay import initialize_construct_replay, capture_direct_sources
         from ..epitope_dataset import EpitopeDataset
         epitope_dataset.result = EpitopeDataset.from_predictions(epitope_dataset.epitopes).result
+        capture_direct_sources(epitope_dataset, vaxrank_results)
         epitope_dataset.policy_evaluations = policy_evaluations
         if run_policy is not None:
             epitope_dataset.selection['run_configuration'] = run_policy
@@ -1720,6 +1726,10 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
         num_variants_with_vaccine_peptides=variants_count_dict['num_variants_with_vaccine_peptides'],
         inputs=pipeline_inputs,
     )
+    if getattr(args, '_design_dataset', None) is not None:
+        from ..input_coverage import direct_ranking_coverage
+        patient_info.input_coverage = direct_ranking_coverage(
+            args._design_dataset, vaxrank_results, ranked_variants_with_vaccine_peptides_for_report)
     # return variants, patient info, and command-line args
     data = {
         # TODO:

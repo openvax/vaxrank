@@ -203,5 +203,5 @@ def test_source_evidence_survives_fresh_and_replayed_full_report(family, tmp_pat
         assert 'completed scientific review is not recorded' in text
     # Compare the complete candidate sections, including all evidence rows.
     def candidates(text):
-        return text.split('<h2 id="candidate-details">', 1)[1].split('<h2 id="ranking">', 1)[0]
+        return text.split('<h2 id="candidate-details">', 1)[1].split('<section class="appendix">', 1)[0]
     assert candidates(fresh) == candidates(replay)

@@ -37,10 +37,11 @@ def ranked_pair(wt='KRFHATVSF', include_flurry=False):
     return [(antigen, [VaccinePeptide(antigen=antigen, epitopes=[epitope])])]
 
 
-def test_full_report_leads_with_evidence_and_attributes_scores_and_comparator():
+def test_full_report_leads_with_coverage_and_products_and_attributes_scores_and_comparator():
     data = template(ranked_pair(), candidate_details=True)
     html = render(data, 'html')
-    assert html.index('id="candidate-details"') < html.index('id="products"') < html.index('id="run-details"')
+    assert (html.index('id="input-coverage"') < html.index('id="products"')
+            < html.index('id="candidate-details"') < html.index('id="run-details"'))
     assert 'KRFHAT<span class="mutant">I</span>SF' in html
     assert 'KRFHAT<span class="reference-change">V</span>SF' in html
     assert 'NetMHCpan Score_EL: <strong>0.990</strong>' in html
@@ -52,7 +53,7 @@ def test_full_report_leads_with_evidence_and_attributes_scores_and_comparator():
     assert 'No results in the reported candidates.' in html
     assert 'WT does not establish an observed patient-normal sequence.' in html
     text = render(data, 'txt')
-    assert text.index('=== Candidate window details') < text.index('Emitted products')
+    assert text.index('Emitted products') < text.index('=== Candidate window details')
     assert 'NetMHCpan: Score_EL' in text
 
 
