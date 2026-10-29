@@ -133,6 +133,7 @@ def write_run_policy(args, evaluations, epitope_config, vaccine_config):
     from .config.loader import configuration_provenance
     resolved = configuration_provenance(args)
     resolved["effective_epitopes"] = msgspec.to_builtins(epitope_config)
+    args._effective_epitope_configuration = resolved['effective_epitopes']
     resolved["effective_vaccine_peptides"] = msgspec.to_builtins(vaccine_config)
     from .cli.entry_point import resolve_vaccine_types
     resolved["effective_design"] = dict(max_ranked_sources=getattr(args, 'max_mutations_in_report', None),
@@ -165,6 +166,19 @@ def modality_configuration(modality, options):
             value = options.pop(source)
             options[target] = ','.join(value) if source == 'junction_swap_candidates' else value
     return options
+
+
+def record_prediction_configuration(args, configuration):
+    """Keep the effective stages in the existing native policy record."""
+    dataset = getattr(args, '_design_dataset', None)
+    record = dataset.selection.get('run_configuration') if dataset is not None else None
+    if record is None:
+        return
+    record['effective_predictions'] = configuration
+    record['effective_sha256'] = configuration_digest(record)
+    directory = getattr(args, 'output_policy_dir', None)
+    if directory:
+        (Path(directory) / 'selection_policy.json').write_text(json.dumps(record, indent=2) + '\n')
 
 
 def record_construct_configuration(args, modality, options):

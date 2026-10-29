@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from mhctools.base_predictor import BasePredictor
 from mhctools.pred import PeptideResult, Prediction
 
 from vaxrank.cli import entry_point as ep
@@ -25,12 +26,18 @@ def forbidden(*args, **kwargs):
     raise AssertionError('An unrequested prediction model was used')
 
 
-class JunctionPredictor:
+class JunctionPredictor(BasePredictor):
+    prediction_method_name = 'junction-test'
+    predictor_version = '2.0'
+
     def __init__(self, alleles):
-        self.alleles = alleles
+        super().__init__(alleles=alleles)
         self.calls = []
 
-    def predict(self, peptides):
+    def kind_support(self):
+        return {'pMHC_presentation': {'mhc_dependence': 'single_allele'}}
+
+    def predict(self, peptides, n_flanks=None, c_flanks=None):
         self.calls.append(list(peptides))
         return [PeptideResult(tuple(Prediction(
             peptide=p, allele=a, kind='pMHC_presentation', value=None, score=.1,
@@ -84,7 +91,7 @@ def test_historical_cli_scores_unchanged_and_only_junctions_are_predicted(
     assert len(junction_factory) == 1
     args, model = junction_factory[0]
     assert args.mhc_predictor == [['junction-test']]
-    assert model.alleles == ALLELES
+    assert set(model.alleles) == set(ALLELES)
     assert model.calls
     original = load_predictions(baseline / 'candidate_predictions.tsv')
     recovered = load_predictions(selected / 'candidate_predictions.tsv')
@@ -99,8 +106,8 @@ def test_historical_cli_scores_unchanged_and_only_junctions_are_predicted(
     assert prediction['peptide_lengths'] == [8, 9, 10, 11]
     assert prediction['models'] == [{'predictor_name': 'junction-test',
                                      'predictor_version': '2.0', 'kind': 'pMHC_presentation'}]
-    assert [q['peptides'] for q in prediction['requests']] == model.calls
-    assert prediction['scored_prediction_count'] == sum(map(len, model.calls)) * len(ALLELES)
+    assert [list(dict.fromkeys(q['peptides'])) for q in prediction['requests']] == model.calls
+    assert prediction['scored_prediction_count'] == sum(len(q['peptides']) for q in prediction['requests']) * len(ALLELES)
     # Every recorded query is a chimeric junction window, not a candidate rescore.
     from vaxrank.junction_swap import junction_kmers
     from vaxrank.vaccine_library import get_linker

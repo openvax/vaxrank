@@ -161,6 +161,7 @@ class TemplateDataCreator(object):
         self.products = products or {}
         self.product_files = product_files or {}
         self.candidate_details = candidate_details
+        self.prediction_configuration = args_for_report.get('_effective_prediction_configuration', {})
         self.processing_enabled = args_for_report.get('processing_aware_annotation')
 
         # ``vaccine_type`` is rendered in the patient-info block so
@@ -1039,6 +1040,8 @@ class TemplateDataCreator(object):
             'product_groups': self._product_data(),
             'candidate_details': self.candidate_details,
         })
+        from .prediction_policy import prediction_summary
+        self.template_data['prediction_configuration'] = prediction_summary(self.prediction_configuration)
         return self.template_data
 
 

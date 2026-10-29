@@ -46,6 +46,8 @@ mhctools>=4.2.0,<5.0.0
 # 5.95.0 adds the optional foreignness DSL and preserves measurement context
 # through every cache path. Keep the consumer coordinated with that API.
 # 5.95.1 restores typed native TSV/CSV replay under pandas 3.1 (topiary#507).
+# 5.104.0 supplies the public model inventory and correct unknown-length
+# handling used by effective prediction-policy reports (vaxrank#718).
 # 5.106.0 derives current inference flanks from exact source windows while
 # preserving historical invocation metadata (openvax/topiary#545; vaxrank#721).
 topiary>=5.106.0,<6.0.0

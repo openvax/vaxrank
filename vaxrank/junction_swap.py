@@ -32,10 +32,11 @@ Issue: openvax/vaxrank#247.
 """
 
 import logging
-import warnings
+import math
 from dataclasses import dataclass, field
+from numbers import Real
 
-from mhctools.pred import Kind
+from topiary import is_stated, predict_peptide_occurrences
 
 from .vaccine_library import JUNCTION_SWAP_CANDIDATES, get_linker
 
@@ -116,88 +117,57 @@ def junction_kmers(left_aa, linker_aa, right_aa, k_lengths,
     return out
 
 
-def score_junction_kmers(kmers, alleles, predictor, models=None):
-    """Run the predictor and return rows of (kmer, allele, rank).
+def junction_rank_kind(predictor, rank_kind='auto'):
+    """Resolve one declared allele-specific rank endpoint before inference."""
+    if rank_kind not in ('auto', 'pMHC_affinity', 'pMHC_presentation'):
+        raise ValueError('Junction rank kind must be auto, pMHC_affinity or pMHC_presentation')
+    support = {str(getattr(kind, 'value', kind)): spec
+               for kind, spec in predictor.kind_support().items()}
+    selected = ('pMHC_affinity' if 'pMHC_affinity' in support else 'pMHC_presentation'
+                ) if rank_kind == 'auto' else rank_kind
+    if support.get(selected, {}).get('mhc_dependence') != 'single_allele':
+        raise ValueError('Junction ranking requires a declared single-allele %s endpoint' % selected)
+    return selected
 
-    Uses Python's standard warning filter to warn once per call site when:
-      - the predictor returned predictions but none had a usable
-        ``percentile_rank``, or
-      - the predictor returned predictions but the allele filter
-        dropped all of them (the optimizer would silently pick the
-        first candidate).
-    Callers can configure repetition through the standard :mod:`warnings` API.
-    Use affinity ranks when available (preserving legacy MHCflurry scoring),
-    otherwise presentation ranks. Never combine the two endpoints or count
-    allele-independent processing predictions as allele-specific evidence.
-    If ``models`` is supplied, retain the distinct model identities actually
-    returned by the predictor; missing names or versions remain unknown.
+
+def score_junction_kmers(kmers, alleles, predictor, models=None, *, rank_kind='auto'):
+    """Predict exact peptide occurrences through Topiary and select one endpoint.
+
+    ``auto`` explicitly preserves the historical affinity-first preference.
+    The selected endpoint must have one model/version and a finite percentile
+    rank for every requested occurrence and allele. Other endpoints remain in
+    model metadata but never contribute to the rank burden. Missing coverage
+    raises instead of making a linker appear to have zero burden.
     """
     if not kmers:
         return []
-    # The public API returns one PeptideResult per input occurrence. Its
-    # BasePredictor adapter also supports legacy production predictors.
-    results = list(predictor.predict(kmers))
-    if len(results) != len(kmers):
-        raise ValueError('Junction predictor must return one result per peptide occurrence')
-    predictions = []
-    for peptide, result in zip(kmers, results):
-        for prediction in result.preds:
-            if prediction.peptide != peptide:
-                raise ValueError('Junction predictor returned a mismatched peptide: '
-                                 f'expected {peptide!r}, got {prediction.peptide!r}')
-            predictions.append(prediction)
-    rank_kind = (Kind.pMHC_affinity if any(
-        p.kind == Kind.pMHC_affinity for p in predictions) else Kind.pMHC_presentation)
-    rows = []
-    allele_set = set(alleles) if alleles else None
-    n_total = 0
-    n_seen = 0
-    n_with_rank = 0
-    for p in predictions:
-        if models is not None:
-            model = {name: getattr(p, name, None) or None for name in (
-                'predictor_name', 'predictor_version', 'kind')}
+    from .input_scope import normalize_alleles
+    selected = junction_rank_kind(predictor, rank_kind)
+    requested = normalize_alleles(alleles, 'Junction prediction')
+    if not requested or set(requested) != set(normalize_alleles(
+            predictor.alleles, 'Junction predictor')):
+        raise ValueError('Junction predictor allele coverage must match the requested genotype')
+    frame = predict_peptide_occurrences([
+        dict(prediction_id=str(i), peptide=peptide) for i, peptide in enumerate(kmers)
+    ], predictor, use_flanks=False)
+    if models is not None:
+        for record in frame.to_dict('records'):
+            model = {target: (record.get(source) if is_stated(record.get(source)) else None)
+                     for target, source in (
+                         ('predictor_name', 'prediction_method_name'),
+                         ('predictor_version', 'predictor_version'), ('kind', 'kind'))}
             if model not in models:
                 models.append(model)
-        if p.kind != rank_kind:
-            continue
-        n_total += 1
-        if not p.allele or (allele_set and p.allele not in allele_set):
-            continue
-        n_seen += 1
-        rank = getattr(p, 'percentile_rank', None)
-        if rank is None:
-            continue
-        n_with_rank += 1
-        rows.append((p.peptide, p.allele, float(rank)))
-    if n_seen and not n_with_rank:
-        warnings.warn(
-            f"Junction-swap predictor returned {n_seen} predictions but none had "
-            "a usable percentile_rank field; the optimizer cannot rank "
-            "chimeric k-mers and will fall back to the first candidate. "
-            "Use --mrna-junction-predictor mhcflurry or a predictor that exposes "
-            "percentile rank.",
-            JunctionPredictionWarning,
-            stacklevel=2,
-        )
-    if n_total and not n_seen:
-        warnings.warn(
-            f"Junction-swap predictor returned {n_total} predictions but the "
-            "allele filter dropped all of them; the optimizer cannot "
-            "rank chimeric k-mers and will fall back to the first "
-            "candidate. Check that the predictor's configured alleles "
-            "include the patient MHC set and return allele-specific ranks.",
-            JunctionPredictionWarning,
-            stacklevel=2,
-        )
-    if predictions and not n_total:
-        warnings.warn(
-            "Junction-swap predictor returned no affinity or presentation predictions; "
-            "the optimizer cannot rank chimeric k-mers and will fall back to the first candidate.",
-            JunctionPredictionWarning,
-            stacklevel=2,
-        )
-    return rows
+    chosen = frame.loc[frame.kind.eq(selected)]
+    if len(chosen[['prediction_method_name', 'predictor_version']].drop_duplicates()) != 1:
+        raise ValueError('Junction ranks require one model/version for the selected endpoint')
+    if not chosen.percentile_rank.map(
+            lambda value: is_stated(value) and math.isfinite(float(value))
+            and 0 <= float(value) <= 100).all():
+        raise ValueError('Junction ranking requires a finite percentile_rank in [0, 100] '
+                         'for every requested peptide and allele')
+    return [(row.peptide, row.allele, float(row.percentile_rank))
+            for row in chosen.itertuples()]
 
 
 def _burden_key(rows, rank_strong=RANK_STRONG, rank_mild=RANK_MILD):
@@ -205,15 +175,14 @@ def _burden_key(rows, rank_strong=RANK_STRONG, rank_mild=RANK_MILD):
     pick the linker with lowest junction burden. Lower = better.
 
     Tie-breaking order:
-      1. Fewer rank ≤ rank_strong hits (high-confidence presentation)
+      1. Fewer rank ≤ rank_strong predictions
       2. Fewer rank ≤ rank_mild hits
       3. Higher worst-case rank (push the worst hit's rank as high as
          possible — i.e. minimize negated worst-rank)
 
     The 100.0 default for empty-rows is the upper bound of the
-    mhcflurry-presentation percentile rank (0..100); a linker with
-    no detectable presentation should sort better than any linker
-    with a hit.
+    percentile-rank range (0..100). Empty rows are allowed only when no
+    junction peptides were requested; missing predictions fail upstream.
     """
     strong = sum(1 for r in rows if r[2] <= rank_strong)
     mild = sum(1 for r in rows if r[2] <= rank_mild)
@@ -227,6 +196,7 @@ def optimize_linkers(
         k_lengths=(8, 9, 10, 11),
         reference_proteome=None,
         rank_strong=RANK_STRONG, rank_mild=RANK_MILD,
+        rank_kind='auto',
         mitd_aa=None,
         default_linker_name=None):
     """Pick the candidate linker at each junction that minimizes
@@ -275,6 +245,10 @@ def optimize_linkers(
     """
     alleles = tuple(alleles or ())
     k_lengths = tuple(k_lengths)
+    if (not all(isinstance(value, Real) and not isinstance(value, bool)
+                and math.isfinite(value) for value in (rank_strong, rank_mild))
+            or not 0 <= rank_strong <= rank_mild <= 100):
+        raise ValueError('Junction thresholds require 0 <= strong <= mild <= 100')
     if len(antigen_aas) == 0:
         return JunctionSwapResult(
             chosen_linker_per_junction=[],
@@ -313,11 +287,21 @@ def optimize_linkers(
     total_burden = 0
     total_strong = 0
     default_total_burden = 0
+    from topiary import TopiaryPredictor, describe_prediction_models
+    configured = predictor if isinstance(predictor, TopiaryPredictor) else TopiaryPredictor(models=[predictor])
     prediction_metadata = {
+        'configured_models': describe_prediction_models(configured),
         'predictor_class': type(predictor).__module__ + '.' + type(predictor).__name__,
         'alleles': list(alleles),
         'peptide_lengths': list(k_lengths),
-        'rank_kind_policy': 'affinity_if_available_else_presentation',
+        'rank_kind_policy': ('affinity_if_available_else_presentation'
+                             if rank_kind == 'auto' else 'explicit'),
+        'rank_kind': junction_rank_kind(predictor, rank_kind),
+        'rank_metric': 'percentile_rank',
+        'rank_strong': rank_strong,
+        'rank_mild': rank_mild,
+        'context': 'peptide_only',
+        'coverage': 'complete',
         'models': [],
         'requests': [],
         'scored_prediction_count': 0,
@@ -335,7 +319,7 @@ def optimize_linkers(
                 prediction_metadata['requests'].append({
                     'junction_index': j, 'linker_name': cand.name, 'peptides': list(kmers)})
             rows = score_junction_kmers(
-                kmers, alleles, predictor, models=prediction_metadata['models'])
+                kmers, alleles, predictor, models=prediction_metadata['models'], rank_kind=rank_kind)
             prediction_metadata['scored_prediction_count'] += len(rows)
             key = _burden_key(rows, rank_strong, rank_mild)
             per_cand_keys.append(key)

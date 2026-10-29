@@ -642,17 +642,23 @@ def add_mrna_output_args(group):
              "(e.g. 'G3S,G4S,(G3S)2,(G4S)2,AAA'). Empty = use the "
              "library default JUNCTION_SWAP_CANDIDATES.")
     group.add_argument(
+        "--mrna-junction-rank-kind", default="auto",
+        choices=("auto", "pMHC_affinity", "pMHC_presentation"),
+        help="Endpoint whose percentile ranks guide junction optimization. "
+             "auto uses affinity when declared by the model, otherwise presentation. "
+             "Complete rank coverage is required; endpoints are never pooled.")
+    group.add_argument(
         "--mrna-junction-rank-strong",
         default=0.5,
         type=float,
-        help="Presentation rank below which a chimeric k-mer counts as "
+        help="Selected endpoint percentile rank at or below which a chimeric k-mer counts as "
              "a strong-binder hit (primary minimization target). "
              "Default: 0.5%%.")
     group.add_argument(
         "--mrna-junction-rank-mild",
         default=2.0,
         type=float,
-        help="Presentation rank below which a chimeric k-mer counts as "
+        help="Selected endpoint percentile rank at or below which a chimeric k-mer counts as "
              "a mild-binder hit (secondary minimization target). "
              "Default: 2.0%%.")
     group.add_argument(

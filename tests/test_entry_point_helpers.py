@@ -615,7 +615,7 @@ def test_explicit_legacy_json_is_written_into_a_missing_directory(
 def test_isovar_csv_creates_its_parent_directory(tmp_path, monkeypatch):
     """``--output-isovar-csv`` is written from ``run_vaxrank_from_parsed_args``,
     the earliest of the output writers."""
-    from unittest.mock import Mock
+    from mhctools import RandomBindingPredictor
     from vaxrank.cli import entry_point
     from vaxrank.cli.arg_parser import parse_vaxrank_args
 
@@ -623,7 +623,7 @@ def test_isovar_csv_creates_its_parent_directory(tmp_path, monkeypatch):
     monkeypatch.setattr(entry_point, "filter_unannotatable_variants", lambda v: v)
     monkeypatch.setattr(entry_point, "alignment_file_from_args", lambda args: None)
     monkeypatch.setattr(entry_point, "read_collector_from_args", lambda args: None)
-    monkeypatch.setattr(entry_point, "predictors_from_args", lambda args: [Mock()])
+    monkeypatch.setattr(entry_point, "predictors_from_args", lambda args: [RandomBindingPredictor(['A0201'])])
     monkeypatch.setattr(entry_point, "run_isovar", lambda **kwargs: [])
     monkeypatch.setattr(entry_point, "run_vaxrank", lambda **kwargs: kwargs)
 

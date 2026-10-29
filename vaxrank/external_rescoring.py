@@ -830,6 +830,10 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             })
     dataset.selection = (dict(updated[0].dataset.selection)
                          if len(updated) == 1 and updated[0].dataset is not None else {})
+    from .prediction_policy import retained_processing
+    processing = retained_processing(r.dataset for r in updated if r.dataset is not None)
+    if processing:
+        dataset.selection['processing_annotations'] = [asdict(p) for p in processing.values()]
     catalogs = {}
     for report in updated:
         if report.dataset is not None:
@@ -894,9 +898,13 @@ def load_unified_external(args, epitope_config, options, genome):
             antigen_alleles = normalize_alleles(mhc_alleles_from_args(args), 'Antigen prediction')
 
         def antigen_predictor_factory(scope):
+            args._candidate_prediction_mode = 'sequence inference'
             args.mhc_alleles = ','.join(scope.mhc_alleles)
             args.mhc_alleles_file = None  # Genotype already read and reconciled.
-            return TopiaryPredictor(models=predictors_from_args(args))
+            predictor = TopiaryPredictor(models=predictors_from_args(args))
+            from .prediction_policy import record_candidate_models
+            record_candidate_models(args, predictor)
+            return predictor
     if direct and mode == 'fresh':
         raise ValueError('Direct/table composition requires --external-predictions input or additive')
     if mode in ('fresh', 'additive'):
@@ -905,6 +913,7 @@ def load_unified_external(args, epitope_config, options, genome):
             raise ValueError("Fresh/additive external predictions require --mhc-predictor")
         alleles = sorted({normalize_hla_allele(a) for a in mhc_alleles_from_args(args)})
         def model_factory():
+            args._candidate_prediction_mode = mode
             models = predictors_from_args(args)
             cache_path = getattr(args, 'prediction_cache', None)
             if cache_path:
@@ -917,6 +926,8 @@ def load_unified_external(args, epitope_config, options, genome):
                 # kind and context and version-checks fallback predictions.
                 cached.alleles = alleles
                 models = [cached]
+            from .prediction_policy import record_candidate_models
+            record_candidate_models(args, models)
             return models
     elif not direct and not cta and not antigens and getattr(args, 'mhc_predictor', None):
         raise ValueError("Use --external-predictions fresh or additive to run --mhc-predictor")
@@ -1006,6 +1017,8 @@ def load_unified_external(args, epitope_config, options, genome):
         frame.attrs['cta_predictor'] = loaded_reports[0].report_df.attrs['cta_predictor']
     epitope_config = frame.attrs['epitope_dataset'].config
     dataset = frame.attrs['epitope_dataset']
+    args._recorded_prediction_configuration = dataset.selection.get(
+        'run_configuration', {}).get('effective_predictions', {})
     args._input_species_scope = scope_dict(_validate_report_scopes(reports, genome=genome))
     from .construct_replay import initialize_construct_replay
     initialize_construct_replay(args, dataset, options.vaccine_config, options.manufacturability_config)

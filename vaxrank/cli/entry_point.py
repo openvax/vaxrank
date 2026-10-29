@@ -473,7 +473,7 @@ _ARG_GROUPS = (
         'mrna_optimize_linkers', 'mrna_junction_candidates',
         'mrna_junction_predictor', 'mrna_junction_alleles',
         'mrna_junction_predictor_path', 'mrna_junction_predictor_models_path',
-        'mrna_junction_rank_strong', 'mrna_junction_rank_mild',
+        'mrna_junction_rank_strong', 'mrna_junction_rank_mild', 'mrna_junction_rank_kind',
         'mrna_poly_a_length', 'mrna_poly_a_segmented',
         'mrna_poly_a_first_segment', 'mrna_poly_a_segment_linker',
         'mrna_csv_full_rows', 'mrna_antigen_content',
@@ -781,6 +781,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
             'mrna_junction_rank_strong', 'junction_rank_strong'),
         junction_rank_mild=cfg(
             'mrna_junction_rank_mild', 'junction_rank_mild'),
+        junction_rank_kind=cfg('mrna_junction_rank_kind', 'junction_rank_kind'),
         poly_a_length=cfg('mrna_poly_a_length', 'poly_a_length'),
         poly_a_segmented=cfg('mrna_poly_a_segmented', 'poly_a_segmented'),
         poly_a_first_segment=cfg(
@@ -792,6 +793,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     target_alleles = resolve_target_alleles(args)
     from ..construct_replay import restore_products, record_products
     constructs = restore_products(args, ranked, 'mrna', options, junction_context)
+    args._junction_replayed = constructs is not None
     if constructs is None:
         mhc_predictor, mhc_alleles = resolve_mhc_for_linker_optimizer(args, yaml_kwargs)
         dataset = getattr(args, '_design_dataset', None)
@@ -1079,6 +1081,13 @@ def write_run_summary(args, patient_info, source, products=None):
                                  counts['evidence_groups']))
         lines.append('  Related alternative sequences do not establish independent target coverage.')
 
+    from ..prediction_policy import prediction_summary
+    stages = prediction_summary(getattr(args, '_effective_prediction_configuration', {}))
+    if stages:
+        lines += ['', 'Effective prediction configuration:']
+        for stage in stages:
+            lines.append('  %s: %s' % (stage['stage'], stage['status']))
+            lines += ['    ' + detail for detail in stage['details']]
     lines += ["", "Outputs (relative to this directory):"]
     for label, attr in (
             ("ranked candidates", "output_csv"),
@@ -1406,7 +1415,9 @@ def run_cli(args_list=None):
     # information surfaced in the per-epitope report tables, joined in
     # at render time by ``(peptide, source, peptide_offset, predictor_name)``. On by
     # default; opt-out via --no-processing-aware-annotation.
-    processing_predictions_by_key = {}
+    from ..prediction_policy import retained_processing, effective_prediction_configuration
+    dataset = getattr(args, '_design_dataset', None)
+    processing_predictions_by_key = retained_processing([dataset]) if dataset is not None else {}
     if getattr(args, 'processing_aware_annotation', True):
         _, processing_predictions_by_key = annotate_predictions_with_processing(
             ranked_variants_with_vaccine_peptides, predictions,
@@ -1414,6 +1425,13 @@ def run_cli(args_list=None):
             threshold=getattr(args, 'pepsickle_threshold', 0.5))
 
     products = emit_outputs(args, ranked_variants_with_vaccine_peptides, source)
+    prediction_configuration = effective_prediction_configuration(
+        args, ranked_variants_with_vaccine_peptides, predictions, products,
+        processing_predictions_by_key)
+    args._effective_prediction_configuration = prediction_configuration
+    args_for_report['_effective_prediction_configuration'] = prediction_configuration
+    from ..selection_policy import record_prediction_configuration
+    record_prediction_configuration(args, prediction_configuration)
     if report_df is not None and report_df.attrs.get('epitope_dataset') is not None:
         from ..cta_design import write_cta_design
         write_cta_design(args, ranked_variants_with_vaccine_peptides,
@@ -1549,6 +1567,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     args._input_species_scope = scope_dict(validate_prediction_species(
         args, references, mhc_alleles_from_args(args), 'Direct prediction'))
     predictors_list = predictors_from_args(args)
+    args._candidate_prediction_mode = 'direct inference'
     if len(predictors_list) == 1:
         mhc_predictor = predictors_list[0]
     else:
@@ -1570,6 +1589,9 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
             prediction_cache, fallback=mhc_predictor)
         logger.info("Loaded prediction cache from %s", prediction_cache)
         mhc_predictor = cached
+
+    from ..prediction_policy import record_candidate_models
+    record_candidate_models(args, mhc_predictor)
 
     capture_native = epitope_dataset is None and bool(
         getattr(args, 'output_epitopes', None) or getattr(args, 'output_antigens', None))

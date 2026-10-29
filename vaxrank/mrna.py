@@ -190,6 +190,7 @@ class RNAConstructConfig:
     optimize_linkers: bool = True
     junction_swap_candidates: tuple = ()  # empty → use library default
     junction_kmer_lengths: tuple = (8, 9, 10, 11)
+    junction_rank_kind: str = 'auto'
     junction_rank_strong: float = 0.5
     junction_rank_mild: float = 2.0
     # PolyA tail (issue #252). Default A120 matches BioNTech IVAC
@@ -752,6 +753,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                     reference_proteome=reference_proteome,
                     rank_strong=options.junction_rank_strong,
                     rank_mild=options.junction_rank_mild,
+                    rank_kind=options.junction_rank_kind,
                     mitd_aa=mitd_aa or None,
                     default_linker_name=options.linker,
                 )

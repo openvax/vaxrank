@@ -7,6 +7,7 @@ from unittest.mock import Mock
 
 import msgspec
 import pytest
+from mhctools import RandomBindingPredictor
 from isovar.cli import protein_sequence_creator_from_args
 
 from vaxrank.cli import make_vaxrank_arg_parser, run_vaxrank_from_parsed_args
@@ -23,7 +24,7 @@ def run_config(monkeypatch, tmp_path):
     monkeypatch.setattr(entry_point, "filter_unannotatable_variants", lambda v: v)
     monkeypatch.setattr(entry_point, "alignment_file_from_args", lambda args: None)
     monkeypatch.setattr(entry_point, "read_collector_from_args", lambda args: None)
-    monkeypatch.setattr(entry_point, "predictors_from_args", lambda args: [Mock()])
+    monkeypatch.setattr(entry_point, "predictors_from_args", lambda args: [RandomBindingPredictor(['A0201'])])
     monkeypatch.setattr(entry_point, "run_vaxrank", lambda **kwargs: kwargs)
     captured = {}
 
@@ -180,7 +181,7 @@ def test_python_callers_explicit_requests_survive_resolution():
 def test_prediction_cache_does_not_change_rna_context_and_provenance(run_config, monkeypatch):
     from topiary import CachedPredictor
 
-    cached = Mock()
+    cached = RandomBindingPredictor(['A0201'])
     loader = Mock(return_value=cached)
     monkeypatch.setattr(CachedPredictor, "from_topiary_output", loader)
     args, creator, result = run_config([

@@ -74,3 +74,56 @@ This is an experimental category score, with no confirmed immune-response
 ranking benefit. It is not a self-safety verdict or a substitute for binding,
 presentation, or self-proteome evidence. It is also distinct from the published
 IEDB similarity feature used by `tesla-recognition-v1`.
+
+## Effective prediction stages
+
+The normal text/HTML/PDF reports and `run_summary.txt` include the effective
+prediction configuration. Native output embeds the same record under
+`run_configuration.effective_predictions`; it includes actual model/version
+identities, endpoints, recorded alleles and peptide lengths, context, cache
+behavior, coverage and whether each stage executed, skipped or replayed evidence.
+Unknown historical versions and unrecorded coverage remain explicit.
+
+Candidate and junction inference both use Topiary's public prediction contract.
+Candidate selection uses `epitopes.selection_policy`, or the legacy controls
+translated to the displayed Topiary DSL expression. See
+[selection policies](selection-policies.md). The separate RNA support, vaccine
+window ranking and construct assembly settings continue to apply afterward.
+
+Junction optimization selects one percentile-rank endpoint:
+
+```bash
+vaxrank ... --mrna-junction-predictor netmhcpan42 \
+  --mrna-junction-rank-kind pMHC_presentation \
+  --mrna-junction-rank-strong 0.5 --mrna-junction-rank-mild 2.0
+```
+
+The API counterpart is `RNAConstructConfig(junction_rank_kind=...)`;
+YAML uses `mrna.junction_rank_kind`. `auto` preserves the historical preference:
+use affinity when the model declares it, otherwise presentation. It never pools
+endpoints. Every requested peptide/allele needs a finite percentile rank from
+one model/version. Missing coverage now fails; it cannot win as zero burden.
+The thresholds count ranks **at or below** their values. They are configurable
+selection heuristics, not calibrated probabilities of an immune response.
+NetMHCpan's BA and EL ranks describe different trained endpoints
+([DTU output documentation](https://services.healthtech.dtu.dk/services/NetMHCpan-4.2/)).
+
+Processing annotation still uses mhctools' source-sequence Pepsickle interface,
+which supplies the cleavage profile needed for occurrence-specific annotation.
+It has no allele axis and does not change ranking. Its geometric-mean summary
+is displayed explicitly and is not a calibrated presentation probability.
+Native output retains the source sequence, offset, model/version and boundary
+status for each annotation. Replay restores those records without inference;
+`--processing-aware-annotation` explicitly requests a new annotation pass.
+A sequence endpoint keeps its missing C-boundary score.
+
+Configured candidate and junction models are described through Topiary's public
+`describe_prediction_models` API. The report keeps this configuration separate
+from identities observed in prediction rows: configuring a model is not proof
+that it returned complete coverage. Older native files without that inventory
+continue to report only the evidence they actually retained.
+
+External/native replay runs no candidate or junction inference implicitly.
+Select fresh/additive candidate inference or an explicit junction model to
+request it. Direct VCF/BAM runs may reuse their single candidate model for
+junctions; multiple candidate models require an explicit junction choice.

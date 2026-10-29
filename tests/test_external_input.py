@@ -640,6 +640,7 @@ def test_cli_applies_external_score_config_before_ranking(
     def capture_ranked(_args, ranked, source):
         captured["ranked"] = ranked
         captured["source"] = source
+        return {}
 
     monkeypatch.setattr(entry_point, "emit_outputs", capture_ranked)
     entry_point.main([
