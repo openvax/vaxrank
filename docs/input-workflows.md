@@ -384,3 +384,28 @@ Original receipts and current replay-container declarations are displayed
 separately. Neither later manifests nor unknown scope fields overwrite the
 original sample, library, timepoint or reference record. All of this uses the
 existing native dataset; no additional evidence sidecar is required.
+
+## Inspect a saved design without copying its prediction table
+
+Use `--no-output-epitopes` to keep the report/product bundle while disabling its
+default native evidence export:
+
+```sh
+vaxrank --input-epitopes saved/candidate_predictions.tsv \
+  --output-dir review --no-output-epitopes \
+  --output-html-report review/report.html
+```
+
+This writes the usual product files, text/PDF reports and ranked CSV, plus the
+requested HTML report. It does not rewrite `candidate_predictions.tsv`.
+Original native inputs and their reference bundles remain the evidence source;
+keep them together. Effective policy, saved product mappings and replay checks
+remain active. Changing design controls can still request a new assembly;
+this flag only controls the native output file. It cannot be combined with an
+explicit `--output-epitopes PATH`. Without it, the default output bundle is
+unchanged.
+
+The Python report API can also render existing products directly: pass the
+retained product objects to `TemplateDataCreator(products=...)` and then call
+`make_html_report`, `make_pdf_report` or `make_ascii_report`. Report rendering
+itself does not export native evidence.

@@ -639,3 +639,16 @@ def test_isovar_csv_creates_its_parent_directory(tmp_path, monkeypatch):
     entry_point.run_vaxrank_from_parsed_args(args)
 
     assert target.exists()
+
+
+def test_native_export_can_be_explicitly_disabled_without_disabling_reports():
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    from vaxrank.cli.entry_point import populate_default_output_paths
+    args = parse_vaxrank_args(['--input-epitopes', 'saved.tsv', '--output-dir', '/tmp/reports',
+                              '--no-output-epitopes'])
+    populate_default_output_paths(args)
+    assert not args.output_epitopes
+    assert args.output_ascii_report == '/tmp/reports/vaccine_report.txt'
+    assert args.output_pdf_report == '/tmp/reports/vaccine_report.pdf'
+    with pytest.raises(SystemExit):
+        parse_vaxrank_args(['--output-epitopes', '/tmp/export.tsv', '--no-output-epitopes'])

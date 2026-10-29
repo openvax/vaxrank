@@ -943,7 +943,7 @@ def populate_default_output_paths(args):
     if not output_dir:
         return
     auto_paths = dict(_AUTO_OUTPUT_FILENAMES)
-    if getattr(args, 'input_json_file', None):
+    if getattr(args, 'input_json_file', None) or getattr(args, 'no_output_epitopes', False):
         auto_paths.pop('output_epitopes')
     filled = []
     for attr, filename in auto_paths.items():

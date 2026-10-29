@@ -472,12 +472,16 @@ def add_output_args(arg_parser):
         help="Path to CSV file containing some metadata about every variant that has passed all "
              "variant caller filters")
 
-    output_args_group.add_argument(
+    native_output_group = output_args_group.add_mutually_exclusive_group()
+    native_output_group.add_argument(
         "--output-epitopes",
         default="",
-        help="Path to save epitope predictions as a TSV/CSV file (format inferred "
-             "from extension). Written as a record of what was predicted; "
-             "there is no CLI flag to load one back yet (openvax/vaxrank#346).")
+        help="Path to save native prediction evidence and design state as TSV/CSV "
+             "(format inferred from extension). Replay with --input-epitopes.")
+    native_output_group.add_argument(
+        '--no-output-epitopes', action='store_true',
+        help='Do not write the default candidate_predictions.tsv under --output-dir. '
+             'Reports and product files still use the loaded native evidence and saved design.')
 
     output_args_group.add_argument(
         "--output-isovar-csv",
