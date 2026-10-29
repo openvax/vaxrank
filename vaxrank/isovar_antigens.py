@@ -382,7 +382,9 @@ def antigens_from_isovar(result, *, scope=None, species='', tumor_specificity=No
             transcript_ids=tuple(sorted(set(candidate.transcripts))),
             protein_ids=tuple(sorted({s for s in candidate.proteins if s})), species=candidate.species or species,
             source_identifier=key, source_metadata=(('isovar_evidence_id', identity), ('isovar_family', family),
-                ('gene_ids', _json(genes)), ('isovar_candidate', _json(candidate.evidence))))
+                ('gene_ids', _json(genes)), ('isovar_candidate', _json(dict(
+                    candidate.evidence, partial_coding_candidate=candidate.partial,
+                    ambiguous_coding_candidate=candidate.ambiguous)))))
         decisions.append(dict(candidate_id=key, status=attestation.status, reasons=reasons,
                               requested_tumor_specificity=asdict(requested)))
     if set(candidate_attestations) - set(antigens):

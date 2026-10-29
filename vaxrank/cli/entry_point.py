@@ -1479,6 +1479,8 @@ def run_cli(args_list=None):
         processing_predictions_by_key=processing_predictions_by_key,
         products=products, product_files=product_files,
         candidate_details=getattr(args, 'report_candidate_details', False),
+        source_evidence=(getattr(args, '_design_dataset').selection.get('source_evidence', {})
+                         if getattr(args, '_design_dataset', None) is not None else {}),
     ).compute_template_data()
     if args.output_ascii_report:
         make_ascii_report(template_data=template_data, ascii_report_path=args.output_ascii_report)

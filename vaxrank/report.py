@@ -31,6 +31,7 @@ from .cancer_hotspots import get_hotspot_url
 from . import cells
 from .epitope_io import ensure_parent_dir
 from .manufacturability import ManufacturabilityScores
+from .antigen_report import ADMISSION_NOTE, antigen_evidence_sections, metadata_values
 from .prediction_input import finite_prediction_value
 from .processing import PEPSICKLE_PREDICTOR_NAME, resolve_peptide_offset
 from .report_display import (
@@ -140,7 +141,8 @@ class TemplateDataCreator(object):
             include_manufacturability=None,
             products=None,
             product_files=None,
-            candidate_details=False):
+            candidate_details=False,
+            source_evidence=None):
         """
         Build a report from ranked candidates and actual assembly products.
 
@@ -150,6 +152,10 @@ class TemplateDataCreator(object):
         supplies paths for the file listing. ``candidate_details=True`` adds
         the annotated candidate-window and epitope appendix; the default
         shows products and a compact ranking without querying annotation.
+
+        ``source_evidence`` is the native antigen source catalog. It supplies
+        sample support, coding context and reference attribution in candidate
+        details; absent historical fields are displayed as unrecorded.
 
         ``processing_predictions_by_key`` is the map returned by
         :func:`vaxrank.processing.annotate_processing` —
@@ -167,6 +173,7 @@ class TemplateDataCreator(object):
         self.products = products or {}
         self.product_files = product_files or {}
         self.candidate_details = candidate_details
+        self.source_evidence = source_evidence or {}
         self.prediction_configuration = args_for_report.get('_effective_prediction_configuration', {})
         self.processing_enabled = args_for_report.get('processing_aware_annotation')
 
@@ -415,26 +422,30 @@ class TemplateDataCreator(object):
     def _antigen_data(self, top_vaccine_peptide):
         """Report summary for a source that is not a single-locus variant."""
         antigen = top_vaccine_peptide.antigen
-        source_metadata = dict(antigen.source_metadata)
+        source_metadata = metadata_values(antigen)
         result = OrderedDict([
             ('Antigen source', antigen.kind),
             ('Gene name', antigen.display_gene_name),
             ('Source identifier', antigen.display_identifier),
             ('Top score', _sanitize(top_vaccine_peptide.combined_score)),
             ('Transcript IDs', ', '.join(antigen.transcript_ids) or '—'),
-            ('Evidence source', antigen.tumor_specificity.evidence_source),
-            ('Tumor specificity status', antigen.tumor_specificity.status),
-            ('Tumor specificity rationale',
+            ('Protein / ORF IDs', ', '.join(antigen.protein_ids) or '—'),
+            ('Source species', antigen.species or '—'),
+            ('Admission evidence type', antigen.tumor_specificity.evidence_kind),
+            ('Admission evidence source', antigen.tumor_specificity.evidence_source),
+            ('Construct admission', antigen.tumor_specificity.status),
+            ('Admission rationale',
              antigen.tumor_specificity.rationale_code or '—'),
-            ('Requires review',
-             'yes' if antigen.tumor_specificity.requires_review else 'no'),
+            ('Admission review flag',
+             'review requested' if antigen.tumor_specificity.requires_review else
+             'not set; completed scientific review is not recorded by this flag'),
         ])
         if antigen.tumor_specificity.override_reason:
             result['Override reason'] = (
                 antigen.tumor_specificity.override_reason
             )
         if source_metadata.get('sequence_source'):
-            result['Protein sequence source'] = source_metadata['sequence_source']
+            result['Protein sequence source'] = '; '.join(source_metadata['sequence_source'])
         return result
 
     @staticmethod
@@ -444,14 +455,14 @@ class TemplateDataCreator(object):
             ('Effect type', antigen.kind),
             ('Source identifier', antigen.display_identifier),
         ])
-        metadata = dict(antigen.source_metadata)
+        metadata = metadata_values(antigen)
         for name in (
                 'antigen_source', 'isovar_family', 'isovar_evidence_id', 'sequence_source',
                 'junction_offset_aa', 'origin_descriptor', 'left_breakpoint', 'right_breakpoint',
                 'left_gene', 'right_gene', 'left_transcript', 'right_transcript', 'fusion_type',
                 'rna_reads_covering_breakpoint', 'rna_reads_supporting_fusion'):
             if name in metadata:
-                result[name.replace('_', ' ').title()] = metadata[name]
+                result[name.replace('_', ' ').title()] = '; '.join(metadata[name])
         if metadata:
             result['Full source evidence'] = 'Retained in the native dataset and source mappings in the manifest'
         return result
@@ -1022,6 +1033,10 @@ class TemplateDataCreator(object):
                 'peptides': peptides,
                 'databases': databases,
             }
+            variant_dict['admission_note'] = ADMISSION_NOTE if entity_label == 'Antigen' else ''
+            variant_dict['source_evidence_sections'] = (
+                antigen_evidence_sections(antigen, self.source_evidence)
+                if entity_label == 'Antigen' else [])
             variants.append(variant_dict)
 
         # add package metadata to the report
