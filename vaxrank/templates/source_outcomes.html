@@ -1,10 +1,11 @@
 <section id="source-outcomes" class="appendix">
 <h2>Source outcomes</h2>
-<p>Each recorded source is retained here, including sources that never produced a ranked window. Reasons can overlap;
+<p>Each recorded source is retained here, including sources that never produced a ranked window. Rows group sources with the same recorded outcome and context; every member links to its full identity. Reasons can overlap;
 they are not disjoint losses. “No ranked window” does not identify a biological absence. Product mappings are listed in the ranking and product sections.</p>
 <table class="pure-table pure-table-bordered"><thead><tr><th>Source / gene</th><th>Family</th><th>Stage / recorded reason</th><th>Product outcome</th></tr></thead><tbody>
-{% for source in input_coverage.sources %}<tr><td>{{ source.identity | e }}{% if source.gene %}<br>{{ source.gene | e }}{% endif %}{% if source.context %}<br>{{ source.context | e }}{% endif %}<br>{{ source.origin | e }}</td><td>{{ source.family }}</td>
-<td>{{ source.stage }}{% if source.rank %} (rank {{ source.rank }}){% endif %}{% for reason in source.reasons %}<br>{{ reason | e }}{% endfor %}
+{% for source in input_coverage.source_groups %}<tr><td>{{ source.members | length }} source record(s){% if source.gene %}<br>{{ source.gene | e }}{% endif %}{% if source.context %}<br>{{ source.context | e }}{% endif %}<br>{{ source.origin | e }}<br>
+{% for member in source.members %}<a href="#source-{{ member.identifier }}">{{ member.identifier }}</a>{% if member.rank %} (rank {{ member.rank }}){% endif %}{% if not loop.last %}; {% endif %}{% endfor %}</td><td>{{ source.family }}</td>
+<td>{{ source.stage }}{% for reason in source.reasons %}<br>{{ reason | e }}{% endfor %}
 {% if source.retained_epitopes is not none %}<br>{{ source.retained_epitopes }} retained epitope records{% endif %}</td><td>{{ source.product_outcome | e }}</td></tr>{% endfor %}
 </tbody></table>
 {% for producer in input_coverage.producers %}{% if producer.unresolved %}

@@ -111,11 +111,27 @@ windows to the products that use them. Historical files without source mappings
 say that the information is unavailable. Successful empty designs explicitly
 report zero products.
 
-`--report-candidate-details` puts annotated source windows and paired epitope/WT
-comparisons first, after a short patient and predictor overview. Exact emitted
-products and raw run settings follow as linked appendices. Without that flag,
-the report retains its compact, annotation-free ranking view. Candidate evidence
-and manufactured product coverage remain separately labeled.
+The report follows input coverage, emitted products, candidate ranking, source
+outcomes, optional candidate evidence, then methods and provenance.
+`--report-candidate-details` adds annotated source windows and paired epitope/WT
+comparisons after the source outcomes. Without that flag, the report retains
+its compact, annotation-free ranking view. Candidate evidence and manufactured
+product coverage remain separately labeled.
+
+Detailed reports group candidates only when their recorded evidence agrees,
+including source support, admission, coding context, target masks, flanks,
+comparators and unrounded prediction values. Exact repeated tables are displayed
+once and linked from every group that uses them. A shared prediction table can
+accompany different source/window contexts; it does not make those observations
+equivalent or independent. Recorded source sequences, offsets and flank strings
+remain in the window-context tables. Empty flank strings do not establish a
+biological sequence endpoint.
+
+Short identifiers (`S1` for a source, `G1` for an evidence group and `E1` for a
+table) are local navigation aids. Full source identities and saved antigen
+labels appear under methods/provenance. Native prediction IDs, every source
+record, CSV/XLSX candidate rows, product sequences and manifest mappings remain
+unchanged. Grouping is a report view, not a ranking or filtering operation.
 
 Target highlighting follows recorded intervals (including disjoint regions and
 deletion junctions). WT differences are marked for equal-length recorded pairs;

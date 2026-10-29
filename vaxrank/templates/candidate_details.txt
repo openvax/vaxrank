@@ -1,0 +1,38 @@
+=== Candidate window details ===
+Candidate context only. Final sequences are listed under Emitted products.
+Groups share recorded evidence, not independent biological events. Different support, flanks, target masks, comparators, admission and unrounded predictions remain distinct. Repeated tables are printed once with all their source memberships; full identities are in Methods and provenance.
+Grouping uses full recorded precision. Displayed numeric values are rounded.
+{% for group in candidate_groups %}
+{{ group.identifier }}: {{ group.gene }}
+  Sources: {% for source in group.sources %}{{ source.identifier }} (rank {{ source.rank }}){% if not loop.last %}; {% endif %}{% endfor %}
+  Context and support: {{ group.evidence | join(', ') }}
+  Windows: {{ group.windows | join(', ') }}
+  Predictions: {{ group.predictions | join(', ') }}
+{% for key, val in group.databases.items() %}  {{ key }}: {{ val }}
+{% endfor %}{% endfor %}
+
+=== Supporting evidence tables ===
+{% for table in evidence_tables %}
+{{ table.identifier }}: {{ table.value.title if table.kind == 'section' else ('Candidate window and context' if table.kind == 'window' else 'Recorded predictions') }}
+Sources: {{ table.sources | join(', ') }}
+{% if table.kind == 'section' %}{% if table.value.note %}{{ table.value.note }}
+{% endif %}{% for label, value in table.value.rows %}{{ label }}: {{ value }}
+{% endfor %}
+{% elif table.kind == 'window' %}{% set p = table.value %}
+{{ p.header_display_data.aa_before_mutation }}_{{ p.header_display_data.aa_mutant }}_{{ p.header_display_data.aa_after_mutation }}
+{% for key, val in p.peptide_data.items() %}{{ key }}: {{ val }}
+{% endfor %}
+{% if include_manufacturability %}Candidate-window manufacturability:
+{% for key, val in p.manufacturability_data.items() %}{{ key }}: {{ val }}
+{% endfor %}{% endif %}
+Predictions: {{ p.prediction_table }}. Source support and admission remain in each group's context tables.
+{% for context in p.contexts %}Recorded prediction source sequence: {{ context.sequence or 'Not recorded' }}
+{% for occurrence in context.occurrences %}{{ occurrence.peptide }}: offset {{ occurrence.offset }} (0-based); N / C flank strings: {{ occurrence.n_flank or '(empty)' }} / {{ occurrence.c_flank or '(empty)' }}
+{% endfor %}{% endfor %}
+{% else %}{% set p = table.value %}
+Sources share recorded prediction values; occurrence context, support and admission remain separate.
+Predicted target epitopes:
+{{ p.ascii_epitopes }}
+{% if include_wt_epitopes and p.wt_epitopes %}Predicted self epitopes:
+{{ p.ascii_wt_epitopes }}
+{% endif %}{% endif %}{% endfor %}

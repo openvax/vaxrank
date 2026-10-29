@@ -4,9 +4,9 @@
 <table class="pure-table pure-table-bordered candidate-ranking">
 <thead><tr><th>Rank</th><th>Source / gene</th><th>Combined score</th><th>Top candidate window</th><th>Linked products</th></tr></thead>
 <tbody>{% for candidate in ranked_candidates %}<tr>
-<td>{% if candidate_details %}<a href="#candidate-{{ candidate.rank }}">{{ candidate.rank }}</a>{% else %}{{ candidate.rank }}{% endif %}</td><td>{{ candidate.gene }} ({{ candidate.kind }})<br>{{ candidate.identifier }}</td>
+<td>{% if candidate_details %}<a href="#candidate-{{ candidate.rank }}">{{ candidate.rank }}</a>{% else %}{{ candidate.rank }}{% endif %}</td><td>{{ candidate.gene }} ({{ candidate.kind }})<br><a href="#source-{{ candidate.source_id }}">{{ candidate.source_id }}</a></td>
 <td>{{ candidate.score }}</td><td class="sequence-cell">{{ candidate.window }}{% if candidate.window_count > 1 %}<br><span class="note">{{ candidate.window_count }} retained windows</span>{% endif %}</td>
 <td>{{ candidate.products }}</td>
 </tr>{% endfor %}</tbody></table>
-{% if not candidate_details %}<p>Use <code>--report-candidate-details</code> to lead with detailed source windows and epitope tables.</p>{% endif %}
+{% if not candidate_details %}<p>Use <code>--report-candidate-details</code> to include grouped source windows and epitope tables.</p>{% endif %}
 {% else %}<p>No candidates passed ranking.</p>{% endif %}

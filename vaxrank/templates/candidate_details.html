@@ -1,0 +1,46 @@
+<h2 id="candidate-details">Candidate window details</h2>
+<p>Targetable residues are <span class="mutant">highlighted</span>; a vertical bar marks a deletion junction.
+These are candidate windows. <a href="#products">Emitted products</a> lists the exact manufactured sequences.</p>
+<p>Each epitope is paired with its recorded WT comparator when available. <span class="reference-change">Underlined WT residues</span>
+differ at the same sequence position. WT does not establish an observed patient-normal sequence.</p>
+<p>Groups share recorded window evidence, not independent biological events. Differences in source support, flanks, target masks,
+comparators, admission or unrounded predictions keep groups distinct. Exact repeated tables are shown once below;
+each table lists all linked sources. Full source identities are in <a href="#source-directory">Methods and provenance</a>.</p>
+<p class="note">Grouping uses full recorded precision. Displayed numeric values are rounded.</p>
+<table class="pure-table evidence-groups"><thead><tr><th>Group / gene</th><th>Sources and ranks</th><th>Context and support tables</th><th>Window / prediction tables</th></tr></thead><tbody>
+{% for group in candidate_groups %}
+<tr id="group-{{ group.identifier }}"><th>{{ group.identifier }}<br>{{ group.gene }}</th>
+<td>{% for source in group.sources %}<span id="candidate-{{ source.rank }}"></span><a href="#source-{{ source.identifier }}">{{ source.identifier }}</a> (rank {{ source.rank }}){% if not loop.last %}; {% endif %}{% endfor %}</td>
+<td>{% for evidence in group.evidence %}<a href="#evidence-{{ evidence }}">{{ evidence }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+{% for key, val in group.databases.items() %}<br><a href="{{ val | e }}">{{ key | e }}</a>{% endfor %}</td>
+<td>Windows: {% for evidence in group.windows %}<a href="#evidence-{{ evidence }}">{{ evidence }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+<br>Predictions: {% for evidence in group.predictions %}<a href="#evidence-{{ evidence }}">{{ evidence }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
+{% endfor %}</tbody></table>
+
+<h2 id="shared-evidence">Supporting evidence tables</h2>
+{% for table in evidence_tables %}
+<section class="evidence-table" id="evidence-{{ table.identifier }}">
+{% if table.kind == 'section' %}{% set section = table.value %}
+<h3>{{ table.identifier }} &middot; {{ section.title | e }}</h3>
+{% elif table.kind == 'window' %}<h3>{{ table.identifier }} &middot; Candidate window and context</h3>
+{% else %}<h3>{{ table.identifier }} &middot; Recorded predictions</h3>{% endif %}
+<p class="note">Sources: {% for source in table.sources %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+{% if table.kind == 'section' %}
+{% if section.note %}<p class="note">{{ section.note | e }}</p>{% endif %}
+<table class="pure-table"><tbody>{% for label, value in section.rows %}<tr><th>{{ label | e }}</th><td>{{ value | e }}</td></tr>{% endfor %}</tbody></table>
+{% elif table.kind == 'window' %}{% set p = table.value %}
+<h4 class="candidate-sequence">{{ p.header_display_data.sequence_html }}</h4>
+<table class="pure-table peptide-data">{% for key, val in p.peptide_data.items() %}<tr><td>{{ key }}</td><td>{{ val }}</td></tr>{% endfor %}</table>
+{% if include_manufacturability %}<h5>Candidate-window manufacturability</h5>
+<table class="pure-table peptide-data">{% for key, val in p.manufacturability_data.items() %}<tr><td>{{ key }}</td><td>{{ val }}</td></tr>{% endfor %}</table>{% endif %}
+<p>Predictions: <a href="#evidence-{{ p.prediction_table }}">{{ p.prediction_table }}</a>. Source support and admission are listed in each group's context tables.</p>
+{% for context in p.contexts %}<h5>Recorded prediction source sequence</h5>
+{% if context.sequence %}<pre class="sequence">{{ context.sequence | e | wordwrap(70, break_long_words=True) }}</pre>{% else %}<p>Not recorded.</p>{% endif %}
+<table class="pure-table"><thead><tr><th>Peptide</th><th>Recorded offset (0-based)</th><th>Recorded N / C flanks</th></tr></thead><tbody>
+{% for occurrence in context.occurrences %}<tr><td class="epitope-sequence">{{ occurrence.peptide }}</td><td>{{ occurrence.offset }}</td><td>{{ occurrence.n_flank or '(empty)' }} / {{ occurrence.c_flank or '(empty)' }}</td></tr>{% endfor %}</tbody></table>{% endfor %}
+{% else %}{% set p = table.value %}
+<p class="note">These sources share recorded prediction values. Their occurrence coordinates, input evidence and admission remain in their linked groups and window-context tables.</p>
+<h5>Predicted target epitopes</h5>{% include "templates/target_epitopes.html" %}
+{% if include_wt_epitopes %}<h5>Predicted self epitopes</h5>{% set epitope_rows = p.wt_epitopes %}{% include "templates/epitope_table.html" %}{% endif %}
+{% endif %}</section>
+{% endfor %}

@@ -21,11 +21,14 @@ Related alternative sequences do not establish independent target coverage.
 {{ product.protein | wordwrap(70, break_long_words=True) }}
 {% endif %}
 {% for antigen in product.antigens %}
-  {{ antigen.name }}: [{{ antigen.start }}, {{ antigen.end }}), {{ antigen.length }} aa
+  Antigen {{ loop.index }} / {{ antigen.display_name }}: [{{ antigen.start }}, {{ antigen.end }}), {{ antigen.length }} aa
+  Full antigen label: see Methods and provenance, {{ group.modality }} / {{ product.name }} / antigen {{ loop.index }}.
 {% for label in antigen.context_labels %}    Source context: {{ label }}
 {% endfor %}
   {{ antigen.sequence }}
   Source mappings: {{ antigen.sources if antigen.sources is not none else "unavailable" }} candidates, {{ antigen.transcripts if antigen.transcripts is not none else "unavailable" }} transcripts; genes: {{ antigen.genes or 'unavailable' }}.
+{% if antigen.source_ids %}  Report sources: {{ antigen.source_ids | join(', ') }}.
+{% endif %}
 {% else %}Historical product: antigen placement/source mappings were not recorded. Labels: {{ product.antigen_names | join(', ') }}.
 {% endfor %}
 {% if include_manufacturability and product.manufacturability %}Manufacturability:

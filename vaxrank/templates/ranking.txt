@@ -1,10 +1,10 @@
 === Candidate ranking ===
 Ranked source windows and combined scores. Final sequences and placements are listed under Emitted products.
 {% for candidate in ranked_candidates %}
-{{ candidate.rank }}. {{ candidate.gene }} ({{ candidate.kind }}), {{ candidate.identifier }}; score {{ candidate.score }}
+{{ candidate.rank }}. {{ candidate.gene }} ({{ candidate.kind }}), {{ candidate.source_id }}; score {{ candidate.score }}
    Top candidate window: {{ candidate.window }} {% if candidate.window_count > 1 %}({{ candidate.window_count }} retained windows){% endif %}
    Linked products: {{ candidate.products }}
 {% else %}No candidates passed ranking.
 {% endfor %}
-{% if ranked_candidates and not candidate_details %}Use --report-candidate-details to lead with detailed source windows and epitope tables.
+{% if ranked_candidates and not candidate_details %}Use --report-candidate-details to include grouped source windows and epitope tables.
 {% endif %}

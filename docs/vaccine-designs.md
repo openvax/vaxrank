@@ -139,16 +139,18 @@ vaxrank --input-lens patient.lens.tsv --vaccine-type mrna \
         --output-dir mrna_out/ --ensembl-release 102
 ```
 
-One text/PDF report in the run directory shows **emitted products first**, then
-compact candidate rankings linked to those products. Product sequences, lengths,
+One text/PDF report in the run directory starts with **input coverage and emitted
+products**, then compact candidate rankings linked to those products. Product sequences, lengths,
 antigen placements and source counts come from the actual assembly outputs.
 Candidate windows may be longer than a selected minimal epitope or differ from a
 trimmed product. Candidate prediction scores do not establish final-product or
 junction coverage. Per-modality directories contain construct files; they do not
 repeat the report.
 
-Add `--report-candidate-details` to append annotated source windows and epitope
-tables. This appendix labels target and self epitopes consistently for mutations,
+Add `--report-candidate-details` to append grouped source windows and shared
+epitope tables. Source IDs link to their complete identities, and tables retain
+all source memberships. Differing support, context or predictions remain separate.
+This appendix labels target and self epitopes consistently for mutations,
 noncanonical ORFs and other admitted sources. Full producer JSON stays in the
 native dataset. Compact reports need no annotation queries; the detailed mutation
 appendix uses retained annotation or needs `--ensembl-release` when it is missing.
