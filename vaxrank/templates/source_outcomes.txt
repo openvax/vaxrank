@@ -1,8 +1,10 @@
 === Source outcomes ===
 Reasons can overlap and are not disjoint losses. No ranked window does not establish biological absence.
-{% for source in input_coverage.sources %}
-{{ source.identity }} / {{ source.gene }} / {{ source.context }} ({{ source.family }})
-  {{ source.origin }}; {{ source.stage }}{% if source.rank %}, rank {{ source.rank }}{% endif %}: {{ source.reasons | join('; ') }}
+Rows group identical recorded outcomes and context; every source identity is retained in Methods and provenance.
+{% for source in input_coverage.source_groups %}
+{{ source.members | length }} source record(s) / {{ source.gene }} / {{ source.context }} ({{ source.family }})
+  Sources: {% for member in source.members %}{{ member.identifier }}{% if member.rank %} (rank {{ member.rank }}){% endif %}{% if not loop.last %}; {% endif %}{% endfor %}
+  {{ source.origin }}; {{ source.stage }}: {{ source.reasons | join('; ') }}
   {{ source.product_outcome }}{% if source.retained_epitopes is not none %}; {{ source.retained_epitopes }} retained epitope records{% endif %}
 {% endfor %}
 {% for producer in input_coverage.producers %}{% for model in producer.unresolved %}

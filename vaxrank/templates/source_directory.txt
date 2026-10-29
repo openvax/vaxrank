@@ -1,0 +1,12 @@
+{% if source_directory %}Source identities
+Short IDs are local to this report; native evidence and manifests retain the original identities.
+{% for source in source_directory %}
+{{ source.identifier }}{% if source.groups %} / {{ source.groups | join(', ') }}{% endif %}: {{ source.full_identifier }}
+{{ source.gene }} / {{ source.kind }}{% if source.context %} / {{ source.context }}{% endif %}
+Origin: {{ source.origin }}
+{% for label, value in source.rows %}{{ label }}: {{ value }}
+{% endfor %}{% endfor %}{% endif %}
+{% for group in product_groups %}{% if group.products %}
+Recorded {{ group.modality }} antigen labels:
+{% for product in group.products %}{% for antigen in product.antigens %}{{ product.name }} / antigen {{ loop.index }}: {{ antigen.name }}
+{% endfor %}{% endfor %}{% endif %}{% endfor %}

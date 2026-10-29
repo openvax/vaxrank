@@ -197,30 +197,21 @@ def test_nonfinite_report_score_is_missing_not_zero(score):
 
 def test_template_pipeline_keeps_unknown_and_known_allele_rows(tmp_path):
     """Exercise real table assembly and packaged HTML/ASCII templates."""
-    from varcode import Variant
     from vaxrank.patient_info import PatientInfo
     from vaxrank.report import make_ascii_report, make_html_report
+    from vaxrank.vaccine_peptide import VaccinePeptide
 
     unknown = replace(candidate(allele=""), overlaps_mutation=True)
     known = replace(candidate(), overlaps_mutation=True,
                     per_allele_scores={"HLA-A*02:01": .25})
-    fragment = SimpleNamespace(gene_name="GENE", predicted_effect=lambda **kw: None)
     from .test_assembly_antigens import candidate as ranked_candidate
     antigen, _ = ranked_candidate(0)
-    vaccine = SimpleNamespace(
-        antigen=antigen, amino_acids='SIINFEKL', combined_score=.25, epitopes=[unknown, known],
-        mutant_protein_fragment=fragment, target_epitopes=[unknown, known],
-        self_epitopes=[], contains_target_epitopes=lambda: True)
+    vaccine = VaccinePeptide(antigen=antigen, epitopes=[
+        replace(e, source_sequence=antigen.amino_acids, offset=2) for e in (unknown, known)])
     creator = TemplateDataCreator(
-        [(Variant('1', 1000, 'A', 'T'), [vaccine])],
+        [(antigen, [vaccine])],
         PatientInfo("TEST"), candidate_details=True, final_review="", reviewers="", input_json_file=None,
         args_for_report={"manufacturability": False, "wt_epitopes": False})
-    # Variant annotation is orthogonal to epitope table rendering.
-    for method in ("_variant_data", "effect_data", "_databases", "_peptide_data",
-                   "_manufacturability_data"):
-        setattr(creator, method, lambda *a, **kw: {})
-    creator._peptide_header_display_data = lambda *a: {
-        "num": 1, "aa_before_mutation": "SII", "aa_mutant": "N", "aa_after_mutation": "FEKL"}
     data = creator.compute_template_data()
     peptide = data["variants"][0]["peptides"][0]
     assert len(peptide["epitopes"]) == 2

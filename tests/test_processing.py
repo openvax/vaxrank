@@ -305,51 +305,23 @@ def test_ascii_report_surfaces_each_predictor_in_per_epitope_table():
     a ``Predictor`` column distinguishing them. Pre-2.24 the
     VCF/BAM path collapsed via dict-overwrite so this test would
     have only seen one row."""
-    import io
-    from vaxrank.report import render_report
-    template_data = {
-        'patient_info': {'Patient ID': 'TEST'},
-        'package_versions': {},
-        'reviewers': [], 'final_review': '',
-        'input_json_file': None,
-        'include_manufacturability': False,
-        'include_wt_epitopes': False,
-        'args': [], 'mrna_ranking': None,
-        'variants': [{
-            'num': 1,
-            'short_description': 'chr1:100 A>T',
-            'variant_data': {'Gene name': 'GENEA', 'Top score': 1.0},
-            'effect_data': {'effect': 'missense'},
-            'peptides': [{
-                'header_display_data': {
-                    'num': 1,
-                    'aa_before_mutation': 'KLQ',
-                    'aa_mutant': 'X',
-                    'aa_after_mutation': 'GHS'},
-                'peptide_data': {},
-                'manufacturability_data': {},
-                'wt_epitopes': [], 'ascii_wt_epitopes': None,
-                'epitopes': [
-                    {'Sequence': 'SIINFEKL', 'Predictor': 'mhcflurry',
-                     'IC50': '50.00 nM', 'Allele': 'A*02:01'},
-                    {'Sequence': 'SIINFEKL', 'Predictor': 'netmhcpan',
-                     'IC50': '75.00 nM', 'Allele': 'A*02:01'},
-                ],
-                'ascii_epitopes': (
-                    "Sequence Predictor IC50 Allele\n"
-                    "SIINFEKL mhcflurry 50.00 A*02:01\n"
-                    "SIINFEKL netmhcpan 75.00 A*02:01\n"),
-            }],
-        }],
-    }
-    f = io.StringIO()
-    render_report(template_data, f, 'templates/template.txt')
-    rendered = f.getvalue()
-    # Both predictors named in the per-epitope ASCII table; same
-    # peptide+allele appears twice (one row per predictor).
-    assert 'mhcflurry' in rendered
-    assert 'netmhcpan' in rendered
-    assert rendered.count('SIINFEKL') >= 2
+    from dataclasses import replace
+    from vaxrank.vaccine_peptide import VaccinePeptide
+    from .test_assembly_antigens import candidate
+    from .test_product_reports import render, template
+
+    antigen, _ = candidate(0, sequence='SIINFEKL')
+    first = _ep('SIINFEKL', antigen.amino_acids, 2, ic50=50., predictor='mhcflurry')
+    second = _ep('SIINFEKL', antigen.amino_acids, 2, ic50=75., predictor='netmhcpan')
+    epitope = replace(first, predictions=first.predictions_flat() + second.predictions_flat())
+    data = template([(antigen, [VaccinePeptide(antigen=antigen, epitopes=[epitope])])],
+                    candidate_details=True)
+    table = data['variants'][0]['peptides'][0]['ascii_epitopes']
+    rendered = render(data, 'txt')
+    # Check the assembled per-epitope table, not only the model inventory.
+    assert 'mhcflurry' in table and 'netmhcpan' in table
+    assert table.count('SIINFEKL') == 2
+    assert table in rendered
 
 
 def test_epitope_data_renders_one_row_per_predictor_for_same_pep_allele():

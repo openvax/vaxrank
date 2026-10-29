@@ -1,0 +1,13 @@
+{% if source_directory %}<h3 id="source-directory">Source identities</h3>
+<p>Short identifiers are local to this report. Full source identities and recorded origin fields are retained here;
+the native dataset and product manifests keep their original identifiers. Grouping displays does not merge source observations.</p>
+<table class="pure-table source-directory"><thead><tr><th>Source / detail group</th><th>Full identity and origin</th></tr></thead><tbody>
+{% for source in source_directory %}<tr id="source-{{ source.identifier }}"><th>{{ source.identifier }}{% for group in source.groups %}<br><a href="#group-{{ group }}">{{ group }}</a>{% endfor %}</th>
+<td>{{ source.full_identifier | e }}<br>{{ source.gene | e }} / {{ source.kind | e }}
+{% if source.context %}<br>{{ source.context | e }}{% endif %}<br>{{ source.origin | e }}
+{% for label, value in source.rows %}<br>{{ label | e }}: {{ value | e }}{% endfor %}</td></tr>{% endfor %}</tbody></table>{% endif %}
+{% for group in product_groups %}{% if group.products %}<h3>Recorded {{ group.modality }} antigen labels</h3>
+<table class="pure-table"><thead><tr><th>Product / antigen</th><th>Full saved label</th></tr></thead><tbody>
+{% for product in group.products %}{% for antigen in product.antigens %}
+<tr id="product-label-{{ group.modality }}-{{ product.name | e }}-{{ loop.index }}"><th>{{ product.name }} / antigen {{ loop.index }}</th><td>{{ antigen.name | e }}</td></tr>
+{% endfor %}{% endfor %}</tbody></table>{% endif %}{% endfor %}

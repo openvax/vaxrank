@@ -33,6 +33,9 @@ from .epitope_io import ensure_parent_dir
 from .manufacturability import ManufacturabilityScores
 from .antigen_report import ADMISSION_NOTE, antigen_evidence_sections, metadata_values
 from .coding_context import antigen_source_label, coding_context_label, coding_contexts
+from .report_grouping import (group_report_evidence, prediction_origins, prediction_table_key,
+                             source_evidence_key, window_contexts, window_evidence_key,
+                             window_measurements_key)
 from .prediction_input import finite_prediction_value
 from .processing import PEPSICKLE_PREDICTOR_NAME, resolve_peptide_offset
 from .report_display import (
@@ -846,24 +849,28 @@ class TemplateDataCreator(object):
     def _product_data(self):
         """Small template view of the products already written by the CLI."""
         from .assembly_antigens import source_matches_candidate, summarize_products
+        from .input_coverage import report_source_key
         candidates = {}
-        for _, peptides in self.ranked_variants_with_vaccine_peptides:
+        for source, peptides in self.ranked_variants_with_vaccine_peptides:
             for peptide in peptides:
-                candidates.setdefault(peptide.antigen.source_identifier, []).append(peptide)
+                candidates.setdefault(peptide.antigen.source_identifier, []).append((source, peptide))
+
+        def matching_candidates(source):
+            return [(key, peptide) for key, peptide in candidates.get(source['source_identifier'], ())
+                    if source_matches_candidate(source, peptide.antigen, peptide.amino_acids,
+                        {e.prediction_group_source for e in peptide.epitopes},
+                        {e.input_provenance.input_id for e in peptide.epitopes if e.input_provenance})]
 
         def source_label(source):
             if 'coding_contexts' in source:
                 return source['kind'] + ' / ' + coding_context_label(source['coding_contexts'])
             contexts = []
             applicable = False
-            for peptide in candidates.get(source['source_identifier'], ()):
-                if source_matches_candidate(source, peptide.antigen, peptide.amino_acids,
-                        {e.prediction_group_source for e in peptide.epitopes},
-                        {e.input_provenance.input_id for e in peptide.epitopes if e.input_provenance}):
-                    applicable |= ('isovar_family', 'variant_orfs') in peptide.antigen.source_metadata
-                    for context in coding_contexts(peptide.antigen, self.source_evidence):
-                        if context not in contexts:
-                            contexts.append(context)
+            for _, peptide in matching_candidates(source):
+                applicable |= ('isovar_family', 'variant_orfs') in peptide.antigen.source_metadata
+                for context in coding_contexts(peptide.antigen, self.source_evidence):
+                    if context not in contexts:
+                        contexts.append(context)
             return (source['kind'] + ' / ' + coding_context_label(contexts)
                     if applicable or contexts else source['kind'])
         groups = []
@@ -873,7 +880,7 @@ class TemplateDataCreator(object):
                 antigens = []
                 target_intervals = product_target_intervals(product, self.ranked_variants_with_vaccine_peptides)
                 product_intervals = []
-                for antigen in product.antigens:
+                for antigen_index, antigen in enumerate(product.antigens, 1):
                     sources = antigen.get('sources', ())
                     context_labels = list(dict.fromkeys(source_label(source) for source in sources))
                     genes = ', '.join(sorted({s['gene_name'] for s in sources if s['gene_name']}))
@@ -882,6 +889,9 @@ class TemplateDataCreator(object):
                         product_intervals.extend((start + antigen['start_aa'], end + antigen['start_aa'])
                                                  for start, end in intervals)
                     antigens.append(dict(name=antigen['name'], sequence=antigen['aa'],
+                        display_name=genes or 'Antigen %d' % antigen_index,
+                        source_keys=list(dict.fromkeys(report_source_key(key)
+                            for source in sources for key, _ in matching_candidates(source))),
                         context_labels=context_labels,
                         sequence_html=marked_sequence(antigen['aa'], intervals or ()),
                         target_coordinates_known=intervals is not None,
@@ -892,7 +902,7 @@ class TemplateDataCreator(object):
                 rows.append(dict(name=product.name, sequence=product.sequence, length=len(product.sequence),
                     sequence_html=marked_sequence(product.sequence, product_intervals) if modality == 'peptide' else None,
                     protein_html=marked_sequence(product.cds_aa, product_intervals) if modality == 'mrna' else None,
-                    display_name=' / '.join(dict.fromkeys(a['name'] for a in antigens)) or product.name,
+                    display_name=' / '.join(dict.fromkeys(a['display_name'] for a in antigens)) or product.name,
                     unit='aa' if modality == 'peptide' else 'nt',
                     protein=product.cds_aa if modality == 'mrna' else None,
                     antigens=antigens, antigen_names=product.antigen_names,
@@ -905,6 +915,7 @@ class TemplateDataCreator(object):
         return groups
 
     def compute_template_data(self):
+        from .input_coverage import report_source_key
         patient_info = self._patient_info()
 
         # list ranked variants with their peptides
@@ -1044,6 +1055,13 @@ class TemplateDataCreator(object):
                     'wt_epitopes': wt_epitopes,
                     'ascii_wt_epitopes': ascii_wt_epitopes,
                 }
+                processing = [
+                    self._processing_prediction_for(e, prediction)
+                    for e in vaccine_peptide.epitopes for prediction in e.predictions_flat()]
+                peptide_dict['_evidence_key'] = window_evidence_key(vaccine_peptide, processing)
+                peptide_dict['_prediction_key'] = prediction_table_key(vaccine_peptide, processing)
+                peptide_dict['_measurement_key'] = window_measurements_key(vaccine_peptide)
+                peptide_dict['contexts'] = window_contexts(vaccine_peptide)
                 peptides.append(peptide_dict)
 
             # if there are no peptides for this variant, exclude from report
@@ -1060,6 +1078,10 @@ class TemplateDataCreator(object):
                 'effect_data': effect_data,
                 'peptides': peptides,
                 'databases': databases,
+                'source_id': 'S%d' % num,
+                'source_key': report_source_key(variant),
+                '_evidence_key': source_evidence_key(antigen),
+                'prediction_origins': prediction_origins(vaccine_peptides),
             }
             variant_dict['admission_note'] = ADMISSION_NOTE if entity_label == 'Antigen' else ''
             variant_dict['source_evidence_sections'] = (
@@ -1092,6 +1114,7 @@ class TemplateDataCreator(object):
             self.template_data['ranked_candidates'], self.products)
         from .prediction_policy import prediction_summary
         self.template_data['prediction_configuration'] = prediction_summary(self.prediction_configuration)
+        group_report_evidence(self.template_data)
         return self.template_data
 
 

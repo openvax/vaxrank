@@ -75,3 +75,7 @@ a { color: #245d7a; }
 .variant td, .peptide-data td { padding: 0.3em 0.5em; }
 .candidate-ranking { page-break-inside: avoid; }
 .manufacturability { page-break-inside: avoid; }
+.source-directory th:first-child { width: 10%; }
+.evidence-groups th:first-child { width: 14%; }
+.evidence-groups th:nth-child(2) { width: 40%; }
+.evidence-table { margin-top: 1.8em; }
