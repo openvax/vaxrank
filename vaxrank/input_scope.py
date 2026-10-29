@@ -36,8 +36,11 @@ class InputScope(DataclassSerializable):
     host_taxon_id: int | None = None
     mhc_species: tuple[str, ...] | None = None
     host_reference_sha256: str | None = None
+    rna_evidence_extent: str | None = None
 
     def __post_init__(self):
+        if self.rna_evidence_extent not in (None, 'whole_library', 'regional_subset', 'targeted'):
+            raise ValueError('rna_evidence_extent must be whole_library, regional_subset or targeted')
         if self.host_taxon_id is not None and (
                 type(self.host_taxon_id) is not int or self.host_taxon_id < 1):
             raise ValueError("host_taxon_id must be a positive integer NCBI taxonomy ID")
@@ -78,7 +81,7 @@ class InputProvenance(DataclassSerializable):
 def scope_dict(scope):
     """Keep historical identities unchanged when no host taxon was declared."""
     result = asdict(scope)
-    for name in (*SPECIES_FIELDS, 'host_reference_sha256'):
+    for name in (*SPECIES_FIELDS, 'host_reference_sha256', 'rna_evidence_extent'):
         if result[name] is None:
             del result[name]
     return result

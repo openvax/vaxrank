@@ -294,7 +294,9 @@ class TemplateDataCreator(object):
         antigen_summary = getattr(self.patient_info, 'antigen_summary', None)
         if antigen_summary is not None:
             patient_info['Workflow'] = 'Experimental antigen design'
-        if getattr(self.patient_info, 'cta_expression_summary', None) is not None:
+        if getattr(self.patient_info, 'input_coverage', None) is not None:
+            patient_info['Recorded source identities'] = len(self.patient_info.input_coverage['sources'])
+        elif getattr(self.patient_info, 'cta_expression_summary', None) is not None:
             summary = self.patient_info.cta_expression_summary
             patient_info['Expression features'] = summary['input_features']
             patient_info['Admitted CTA reference proteins'] = summary['admitted_targets']
@@ -834,7 +836,8 @@ class TemplateDataCreator(object):
                 identifier=(source.short_description if isinstance(source, Variant) else top.antigen.display_identifier),
                 kind=top.antigen.kind, score=_sanitize(top.combined_score),
                 window=top.amino_acids, window_count=len(peptides),
-                products=', '.join(sorted(selected)) if selected else unmapped_label))
+                products=', '.join(sorted(selected)) if selected else unmapped_label,
+                selected_products=sorted(selected)))
         return rows
 
     def _product_data(self):
@@ -1058,6 +1061,10 @@ class TemplateDataCreator(object):
             'product_groups': self._product_data(),
             'candidate_details': self.candidate_details,
         })
+        from .input_coverage import coverage_view
+        self.template_data['input_coverage'] = coverage_view(
+            getattr(self.patient_info, 'input_coverage', None), self.source_evidence,
+            self.template_data['ranked_candidates'], self.products)
         from .prediction_policy import prediction_summary
         self.template_data['prediction_configuration'] = prediction_summary(self.prediction_configuration)
         return self.template_data

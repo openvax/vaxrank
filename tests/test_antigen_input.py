@@ -119,10 +119,15 @@ def test_all_sources_use_shared_design_and_offline_replay(inputs, dependencies, 
     for filename in ('run_summary.txt', 'vaccine_report.txt'):
         summary = (output / filename).read_text()
         assert 'Experimental antigen design' in summary
-        assert f'Resolved antigen records: {len(inputs.antigens)}' in summary
-        assert f'Admitted antigen records: {len(ANTIGEN_KINDS)}' in summary
-        assert 'Held-out antigen records: 1' in summary
-        assert 'viral: 2' in summary
+        if filename == 'run_summary.txt':
+            assert f'Resolved antigen records: {len(inputs.antigens)}' in summary
+            assert f'Admitted antigen records: {len(ANTIGEN_KINDS)}' in summary
+            assert 'Held-out antigen records: 1' in summary
+            assert 'viral: 2' in summary
+        else:
+            assert f'Recorded source identities: {len(inputs.antigens)}' in summary
+            assert 'Viral sequences: Supplied' in summary
+            assert 'Construct admission' in summary
         assert 'variants with antigens' not in summary
     path.unlink()
     monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)

@@ -1,0 +1,38 @@
+<section id="input-coverage">
+<h2>Input coverage</h2>
+<p>Counts below describe recorded source identities, deduplicated across inputs. They are not counts of independent
+biological events, RNA reads, reference ORF models, peptide occurrences or unique products.
+No supplied evidence recorded means this report cannot establish that a family was assessed or excluded.</p>
+{% if not input_coverage.available %}<p class="note">The source inventory was not recorded for this report. Historical input denominators are unknown.</p>{% endif %}
+<table class="pure-table pure-table-bordered">
+<thead><tr><th>Source family</th><th>Input evidence</th><th>Recorded sources</th><th>Admitted</th><th>Ranked</th><th>In products</th></tr></thead>
+<tbody>{% for family in input_coverage.families %}<tr><td>{{ family.name }}</td><td>{{ family.status }}</td>
+{% for key in ('records', 'admitted', 'ranked', 'represented') %}<td>{{ family[key] if family[key] is not none else 'Unknown' }}</td>{% endfor %}
+</tr>{% endfor %}</tbody></table>
+<p class="note">Admission is the recorded construct-admission decision where available. Ranked counts reflect the current configuration.
+“In products” uses retained source mappings from the actual emitted products; unknown also covers analysis-only reports.
+Retained predictions do not prove complete inference coverage. Original input denominators are shown separately below.</p>
+{% for original in input_coverage.direct %}
+<h3>Original variant input observation {{ loop.index }}</h3>
+<p>Input {{ original.input_id | e }}; Vaxrank {{ original.producer_version }}. Unit: {{ original.unit }}.
+Stage: {{ original.stage }}. Distinct observations of one input are separate histories and must not be added.</p>
+<table class="pure-table pure-table-bordered">
+{% for key, label in [('loaded', 'Parsed variants loaded'), ('annotatable', 'Variants with annotation results'), ('coding_effect', 'Coding-effect variants'), ('coding_with_rna_protein', 'Coding-effect variants with an RNA-derived protein'), ('with_candidate_windows', 'Variants with candidate windows')] %}
+<tr><th>{{ label }}</th><td>{{ original.counts[key] if original.counts[key] is not none else "Not assessed at this stage" }}</td></tr>{% endfor %}</table>
+{% endfor %}
+{% if not input_coverage.direct %}<p>Original VCF/BAM stage counts: unknown (not retained in these inputs). Surviving antigen or prediction rows cannot recover that denominator.</p>{% endif %}
+{% if input_coverage.producers %}<h3>Producer observations</h3>
+<table class="pure-table pure-table-bordered"><thead><tr><th>Family / sample</th><th>Reference models</th><th>Resolved coding candidates</th><th>Producer state</th></tr></thead><tbody>
+{% for producer in input_coverage.producers %}<tr><td>{{ producer.family }} / {{ producer.sample or 'Unknown' }}</td><td>{{ producer.models if producer.models is not none else 'Unknown' }}</td><td>{{ producer.candidates }}<br>RNA reconstructions: {{ producer.rna_reconstructions if producer.rna_reconstructions is not none else "Unknown" }}</td><td>{{ producer.state or 'Not recorded' }}</td></tr>{% endfor %}</tbody></table>
+<ul>{% for producer in input_coverage.producers %}<li>{{ producer.family }} event identity: {{ producer.event | tojson | e if producer.event else "Not recorded" }}</li>{% endfor %}</ul>
+{% for producer in input_coverage.producers %}{% if producer.model_outcomes %}
+<h4>Reference-model outcomes: {{ producer.family }}</h4>
+<table class="pure-table pure-table-bordered"><thead><tr><th>Reference model</th><th>Compatible RNA reconstructions</th><th>Coding candidates</th><th>Outcome</th></tr></thead><tbody>
+{% for model in producer.model_outcomes %}<tr><td>{{ model.reference or model.identity }}</td><td>{{ model.compatible_rna if model.compatible_rna is not none else 'Unknown' }}</td><td>{{ model.candidates if model.candidates is not none else 'Unknown' }}</td><td>{{ model.reason or model.state or 'Not recorded' }}</td></tr>{% endfor %}</tbody></table>{% endif %}{% endfor %}
+<p>One event can produce several reference-model interpretations and many RNA reconstructions. These are separate counting units.
+See <a href="#source-outcomes">source outcomes</a> for unresolved models and rejected sources.</p>{% endif %}
+{% for expression in input_coverage.expression %}<p>CTA expression input: {{ expression.decisions | length }} measured features;
+{{ expression.contract.measurement_level }} / {{ expression.contract.expression_unit }};
+sample {{ expression.contract.sample_id | e }}; assay {{ expression.contract.assay | e }}.</p>{% endfor %}
+<p><a href="#source-outcomes">Source outcomes</a> &middot; <a href="#input-lineage">Original inputs and current report inputs</a></p>
+</section>

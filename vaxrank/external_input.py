@@ -278,6 +278,7 @@ class ExternalRankingResult:
     source_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
     input_summary: ExternalInputSummary = dataclasses.field(
         default_factory=ExternalInputSummary)
+    excluded_sources: tuple = ()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -674,6 +675,7 @@ class ExternalRankingAccumulator:
     require_target_epitopes: bool = True
     ranked: list = dataclasses.field(default_factory=list)
     entries: list = dataclasses.field(default_factory=list)
+    excluded_sources: list = dataclasses.field(default_factory=list)
     dna_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
     source_vaf_by_variant: dict = dataclasses.field(default_factory=dict)
     annotation_results: list = dataclasses.field(default_factory=list)
@@ -724,6 +726,7 @@ class ExternalRankingAccumulator:
         log_varcode_agreement(self.annotation_results, source_name)
         return ExternalRankingResult(
             entries=tuple(self.entries),
+            excluded_sources=tuple(self.excluded_sources),
             ranked=rank_constructs(self.ranked),
             dna_vaf_by_variant=self.dna_vaf_by_variant,
             source_vaf_by_variant=self.source_vaf_by_variant,
@@ -1516,10 +1519,13 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
     # an upstream bug worth surfacing distinctly.
     skipped_kinds = {}  # antigen_source value → count
     policy_excluded_kinds = {}
-    for r in rows:
+    exclusions = []
+    for row_number, r in enumerate(rows, 1):
         coords = r.get('variant')
         kind = external_text(r.get('antigen_source')).upper()
         if kind and kind not in options.included_antigen_sources:
+            exclusions.append(dict(identity=lens_variant_id(r) or 'Input row %d' % row_number,
+                family=kind, reason='Excluded by included_antigen_sources', stage='Source policy'))
             n_policy_excluded += 1
             policy_excluded_kinds[kind] = (
                 policy_excluded_kinds.get(kind, 0) + 1
@@ -1536,6 +1542,8 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
                 groups.setdefault(lens_variant_id(r), []).append(r)
                 continue
             n_skipped_empty_coords += 1
+            exclusions.append(dict(identity=lens_variant_id(r) or 'Input row %d' % row_number,
+                family=kind, reason='No usable source coordinates or antigen identity', stage='Source resolution'))
             kind = r.get('antigen_source')
             kind_key = (
                 str(kind).strip() if kind is not None and not (
@@ -1570,7 +1578,8 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
                 '/'.join(sorted(unexpected)))
 
     tally = ExternalRankingAccumulator(
-        require_target_epitopes=options.require_target_epitopes_in_variant)
+        require_target_epitopes=options.require_target_epitopes_in_variant,
+        excluded_sources=exclusions)
     for variant_id, group_rows in groups.items():
         antigen_source = external_text(
             group_rows[0].get('antigen_source')).upper()
@@ -1583,12 +1592,16 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
             if antigen_source in _LENS_ANTIGEN_KINDS
             else lens_variant_metadata(variant_id, group_rows, genome=genome)
         )
-        tally.add(lens_vaccine_entry(
+        entry = lens_vaccine_entry(
             metadata,
             select_external_construct(records_by_variant.get(variant_id, [])),
             genome=genome,
             options=options,
-        ))
+        )
+        if entry.unparseable:
+            tally.excluded_sources.append(dict(identity=variant_id, family=antigen_source,
+                reason='Source coordinates or alleles could not be parsed', stage='Source resolution'))
+        tally.add(entry)
     n_unparseable = tally.n_unparseable
     ranked = tally.ranked
 
@@ -1954,9 +1967,12 @@ def pvacseq_ranking_result(report, epitopes, genome=None, options=None):
 
     rows = list(report.rows)
     groups = {}
-    for r in rows:
+    exclusions = []
+    for row_number, r in enumerate(rows, 1):
         variant_id = pvacseq_variant_id(r)
         if not variant_id:
+            exclusions.append(dict(identity='Input row %d' % row_number, family='mutation',
+                reason='No source variant identity', stage='Source resolution'))
             continue
         groups.setdefault(variant_id, []).append(r)
 
@@ -1966,14 +1982,19 @@ def pvacseq_ranking_result(report, epitopes, genome=None, options=None):
             pvacseq_variant_id(record.row), []).append(record)
 
     tally = ExternalRankingAccumulator(
-        require_target_epitopes=options.require_target_epitopes_in_variant)
+        require_target_epitopes=options.require_target_epitopes_in_variant,
+        excluded_sources=exclusions)
     for variant_id, group_rows in groups.items():
-        tally.add(pvacseq_vaccine_entry(
+        entry = pvacseq_vaccine_entry(
             pvacseq_variant_metadata(variant_id, group_rows, genome=genome),
             select_external_construct(records_by_variant.get(variant_id, [])),
             genome=genome,
             options=options,
-        ))
+        )
+        if entry.unparseable:
+            tally.excluded_sources.append(dict(identity=variant_id, family='mutation',
+                reason='Source coordinates could not be parsed', stage='Source resolution'))
+        tally.add(entry)
     if tally.n_unparseable:
         logger.warning(
             "Skipped %d pVACseq row group(s) whose rows carried no genomic "

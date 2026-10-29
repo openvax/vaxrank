@@ -1553,8 +1553,8 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     # ``prediction_method_name`` ends up on every flat record.
     # Resolve actual VCF references before models or RNA processing. An explicit
     # MHC repertoire permits HLA mice without changing the host reference.
-    variants = variant_collection_from_args(args)
-    variants = filter_unannotatable_variants(variants)
+    loaded_variants = variant_collection_from_args(args)
+    variants = filter_unannotatable_variants(loaded_variants)
     if getattr(args, 'host_reference', None):
         raise ValueError('Use --host-reference with native antigen inputs or saved --input-epitopes')
     from ..input_scope import validate_prediction_species, scope_dict
@@ -1625,6 +1625,11 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
 
     from ..selection_policy import write_run_policy
     run_policy = write_run_policy(args, policy_evaluations, epitope_config, vaccine_config)
+    if epitope_dataset is not None:
+        from ..input_coverage import record_direct_coverage
+        record_direct_coverage(epitope_dataset, vaxrank_results, loaded_variants,
+                               window_selection_performed=capture_native,
+                               filter_thresholds=filter_threshold_dict_from_args(args))
     if capture_native:
         from ..construct_replay import initialize_construct_replay
         from ..epitope_dataset import EpitopeDataset

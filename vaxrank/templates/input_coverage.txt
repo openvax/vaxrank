@@ -1,0 +1,23 @@
+=== Input coverage ===
+Counts describe recorded source identities, deduplicated across inputs. They are not independent events, reference models, RNA reads, peptide occurrences or unique products.
+No supplied evidence recorded does not establish that a family was assessed or excluded. Retained predictions do not prove complete inference coverage.
+{% if not input_coverage.available %}Source inventory not recorded; historical input denominators are unknown.{% endif %}
+{% for family in input_coverage.families %}
+{{ family.name }}: {{ family.status }}
+  Recorded sources: {{ family.records if family.records is not none else 'Unknown' }}; admitted: {{ family.admitted if family.admitted is not none else 'Unknown' }}; ranked: {{ family.ranked if family.ranked is not none else 'Unknown' }}; in products: {{ family.represented if family.represented is not none else 'Unknown' }}
+{% endfor %}
+In products uses retained mappings from actual products; unknown also covers analysis-only reports.
+{% for original in input_coverage.direct %}
+Original variant observation: {{ original.input_id }}; Vaxrank {{ original.producer_version }}
+Unit: {{ original.unit }}; {{ original.stage }}
+Distinct observations of one input are separate histories and must not be added.
+{% for key, label in [('loaded', 'Parsed variants loaded'), ('annotatable', 'Variants with annotation results'), ('coding_effect', 'Coding-effect variants'), ('coding_with_rna_protein', 'Coding-effect variants with an RNA-derived protein'), ('with_candidate_windows', 'Variants with candidate windows')] %}{{ label }}: {{ original.counts[key] if original.counts[key] is not none else "Not assessed at this stage" }}
+{% endfor %}{% endfor %}
+{% if not input_coverage.direct %}Original VCF/BAM stage counts: unknown (not retained). Surviving rows cannot recover that denominator.{% endif %}
+{% for producer in input_coverage.producers %}
+Producer: {{ producer.family }} / {{ producer.sample or 'Unknown' }}; reference models: {{ producer.models if producer.models is not none else 'Unknown' }}; resolved coding candidates: {{ producer.candidates }}; RNA reconstructions: {{ producer.rna_reconstructions if producer.rna_reconstructions is not none else "Unknown" }}; event: {{ producer.event | tojson }}; state: {{ producer.state or 'Not recorded' }}
+{% endfor %}
+
+{% for producer in input_coverage.producers %}{% for model in producer.model_outcomes %}
+Reference model: {{ model.reference or model.identity }}; compatible RNA reconstructions: {{ model.compatible_rna if model.compatible_rna is not none else 'Unknown' }}; coding candidates: {{ model.candidates if model.candidates is not none else 'Unknown' }}; outcome: {{ model.reason or model.state or 'Not recorded' }}
+{% endfor %}{% endfor %}

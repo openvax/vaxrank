@@ -501,6 +501,7 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
                          genome=source_genome, options=options)
         for entry in outcome.entries:
             accumulator.add(entry)
+        accumulator.excluded_sources.extend(outcome.excluded_sources)
     from varcode import Variant, StructuralVariant
     for source in dataset.direct_sources:
         properties = source['properties']

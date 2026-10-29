@@ -66,6 +66,9 @@ to the manifest. Shared fields can appear at the top level or on each input:
   wherever declared. Use the exact assembly name and, if known,
   `annotation: ensembl:110` with the producer's release.
 - `sample_id`, `library_id` and `timepoint` may differ per input.
+- `rna_evidence_extent` optionally declares `whole_library`, `regional_subset`
+  or `targeted` evidence per input. This is a user declaration, not an inference
+  from the filename or read count. Omit it when the extent is unknown.
 - Optional unknown fields may be omitted or `null`. `--output-patient-id` is
   only a display label, not a declaration for combining evidence.
 
@@ -352,3 +355,32 @@ Run `vaxrank --print-default-config` for current configuration defaults.
 `vaxrank-window-exposure` explores delivery of admitted SLP windows under explicit
 kinetic assumptions, without changing selection. See the
 [window exposure guide](core-window-exposure.md).
+
+## Coverage in design reports
+
+HTML, PDF and text reports lead with input coverage, then emitted products,
+ranking, source outcomes, optional candidate details, and methods/provenance.
+The source ledger retains held-out antigens, records without retained predictions,
+producer-unresolved ORF models, and sources that did not reach the ranked list.
+LENS source-policy exclusions and unparseable external sources appear explicitly.
+CTA expression decisions retain their measurement level, units, sample and assay.
+Reasons can overlap; they must not be added as disjoint losses.
+
+The family table counts recorded source identities, deduplicated by the shared
+ranker's identity rules. These are not counts of independent events, reference
+models, RNA reconstructions or unique vaccine products. The producer table and
+actual product section report those different units separately. A family with
+no supplied evidence recorded has not thereby been screened and excluded.
+Retained epitope records do not establish complete prediction coverage.
+
+New direct VCF/BAM runs retain parsed variant counts and per-variant outcomes
+in the native source-evidence catalog, before shared ranking and product
+assembly. Replay preserves those original observations. Different observations
+of the same input remain separate histories; do not sum them. Historical files
+without this metadata show unknown original denominators. The report does not
+reconstruct upstream VCF counts from surviving antigens.
+
+Original receipts and current replay-container declarations are displayed
+separately. Neither later manifests nor unknown scope fields overwrite the
+original sample, library, timepoint or reference record. All of this uses the
+existing native dataset; no additional evidence sidecar is required.

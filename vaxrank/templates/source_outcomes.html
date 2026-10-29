@@ -1,0 +1,22 @@
+<section id="source-outcomes" class="appendix">
+<h2>Source outcomes</h2>
+<p>Each recorded source is retained here, including sources that never produced a ranked window. Reasons can overlap;
+they are not disjoint losses. “No ranked window” does not identify a biological absence. Product mappings are listed in the ranking and product sections.</p>
+<table class="pure-table pure-table-bordered"><thead><tr><th>Source / gene</th><th>Family</th><th>Stage / recorded reason</th><th>Product outcome</th></tr></thead><tbody>
+{% for source in input_coverage.sources %}<tr><td>{{ source.identity | e }}{% if source.gene %}<br>{{ source.gene | e }}{% endif %}{% if source.context %}<br>{{ source.context | e }}{% endif %}<br>{{ source.origin | e }}</td><td>{{ source.family }}</td>
+<td>{{ source.stage }}{% if source.rank %} (rank {{ source.rank }}){% endif %}{% for reason in source.reasons %}<br>{{ reason | e }}{% endfor %}
+{% if source.retained_epitopes is not none %}<br>{{ source.retained_epitopes }} retained epitope records{% endif %}</td><td>{{ source.product_outcome | e }}</td></tr>{% endfor %}
+</tbody></table>
+{% for producer in input_coverage.producers %}{% if producer.unresolved %}
+<h3>Unresolved reference models: {{ producer.family }} / {{ producer.sample or 'Unknown' }}</h3>
+<p>Producer evidence identity: {{ producer.identity | e }}</p><ul>{% for model in producer.unresolved %}
+<li>{{ model.identity | e }} {{ model.context | e }}: {{ model.reason | e }}{% if model.status %} ({{ model.status | e }}){% endif %}</li>{% endfor %}</ul>{% endif %}{% endfor %}
+{% for original in input_coverage.direct %}<p>Recorded Isovar thresholds: {{ original.isovar_filter_thresholds | tojson | e }}. Failed RNA filters alone do not establish final exclusion when DNA fallback is enabled.</p><h3>Original variant outcomes: {{ original.input_id | e }}</h3>
+<table class="pure-table pure-table-bordered"><thead><tr><th>Variant</th><th>Coding effect</th><th>RNA protein</th><th>Candidate window</th><th>Isovar filter outcomes</th></tr></thead><tbody>
+{% for row in original.variant_outcomes %}<tr><td>{{ row.gene_name | e }} {{ row.contig }}:{{ row.start }} {{ row.ref }}&gt;{{ row.alt }}</td>
+{% for key in ('is_coding_nonsynonymous', 'rna_support', 'has_vaccine_peptide') %}<td>{{ ('Yes' if row[key] else 'No') if row[key] is not none else 'Not assessed at this stage' }}</td>{% endfor %}<td>{% if row.isovar_filter_results %}{% for name, passed in row.isovar_filter_results.items() %}{{ name | e }}: {{ 'Pass' if passed else 'Fail' }}<br>{% endfor %}{% else %}Not recorded{% endif %}</td></tr>{% endfor %}
+{% for row in original.annotation_unavailable %}<tr><td>{{ row.contig }}:{{ row.start }} {{ row.ref }}&gt;{{ row.alt }}</td><td colspan="4">Annotation result unavailable</td></tr>{% endfor %}</tbody></table>{% endfor %}
+{% for expression in input_coverage.expression %}<h3>CTA expression admission: {{ expression.identity | e }}</h3>
+<table class="pure-table pure-table-bordered"><thead><tr><th>Feature / gene</th><th>Expression ({{ expression.contract.expression_unit }})</th><th>Recorded decision</th></tr></thead><tbody>
+{% for row in expression.decisions %}<tr><td>{{ row.input_identifier | e }} {{ row.gene_name | e }}</td><td>{{ row.value if row.value is not none else 'Unknown' }}</td><td>{{ row.status | e }}</td></tr>{% endfor %}</tbody></table>{% endfor %}
+</section>

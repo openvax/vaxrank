@@ -1,0 +1,22 @@
+=== Source outcomes ===
+Reasons can overlap and are not disjoint losses. No ranked window does not establish biological absence.
+{% for source in input_coverage.sources %}
+{{ source.identity }} / {{ source.gene }} / {{ source.context }} ({{ source.family }})
+  {{ source.origin }}; {{ source.stage }}{% if source.rank %}, rank {{ source.rank }}{% endif %}: {{ source.reasons | join('; ') }}
+  {{ source.product_outcome }}{% if source.retained_epitopes is not none %}; {{ source.retained_epitopes }} retained epitope records{% endif %}
+{% endfor %}
+{% for producer in input_coverage.producers %}{% for model in producer.unresolved %}
+Unresolved reference model: {{ model.identity }}; {{ model.reason }}; producer {{ producer.identity }}
+{% endfor %}{% endfor %}
+{% for original in input_coverage.direct %}
+Original variant outcomes: {{ original.input_id }}
+Recorded Isovar thresholds: {{ original.isovar_filter_thresholds | tojson }}
+Failed RNA filters alone do not establish final exclusion when DNA fallback is enabled.
+{% for row in original.variant_outcomes %}{{ row.gene_name }} {{ row.contig }}:{{ row.start }} {{ row.ref }}>{{ row.alt }}: coding={{ row.is_coding_nonsynonymous }}, RNA protein={{ row.rna_support }}, candidate window={{ row.has_vaccine_peptide if row.has_vaccine_peptide is not none else "Not assessed at this stage" }}
+  Isovar filter outcomes: {{ row.isovar_filter_results | tojson }}
+{% endfor %}{% for row in original.annotation_unavailable %}{{ row.contig }}:{{ row.start }} {{ row.ref }}>{{ row.alt }}: annotation result unavailable
+{% endfor %}{% endfor %}
+{% for expression in input_coverage.expression %}
+CTA expression: {{ expression.identity }}; sample {{ expression.contract.sample_id }}; {{ expression.contract.measurement_level }} / {{ expression.contract.expression_unit }}; assay {{ expression.contract.assay }}
+{% for row in expression.decisions %}{{ row.input_identifier }} {{ row.gene_name }}: {{ row.value if row.value is not none else 'Unknown' }}; {{ row.status }}
+{% endfor %}{% endfor %}

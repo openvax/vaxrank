@@ -24,11 +24,15 @@
             <br>
 
             <nav class="contents" aria-label="Report contents">
+                <a href="#input-coverage">Input coverage</a> &middot; <a href="#products">Emitted products</a> &middot;
+                <a href="#ranking">Candidate ranking</a> &middot; <a href="#source-outcomes">Source outcomes</a> &middot;
                 {% if candidate_details and variants %}<a href="#candidate-details">Candidate details</a> &middot; {% endif %}
-                <a href="#ranking">Candidate ranking</a> &middot; <a href="#products">Emitted products</a> &middot;
-                <a href="#score-guide">Score guide</a> &middot; <a href="#run-details">Run details</a>
+                <a href="#score-guide">Score guide</a> &middot; <a href="#run-details">Methods and provenance</a>
             </nav>
-            {% include "templates/prediction_models.html" %}
+            {% if input_coverage %}{% include "templates/input_coverage.html" %}{% endif %}
+            <section class="appendix">{% include "templates/products.html" %}</section>
+            {% if ranked_candidates is defined %}{% include "templates/ranking.html" %}{% endif %}
+            {% if input_coverage %}{% include "templates/source_outcomes.html" %}{% endif %}
             {% if candidate_details | default(true) and variants %}
             <h2 id="candidate-details">Candidate window details</h2>
             <p>Targetable residues are <span class="mutant">highlighted</span>; a vertical bar marks a deletion junction.
@@ -113,11 +117,11 @@
             </ol>
 
             {% endif %}
-            {% if ranked_candidates is defined %}{% include "templates/ranking.html" %}{% endif %}
-            <section class="appendix">{% include "templates/products.html" %}</section>
             <section class="appendix">{% include "templates/score_guide.html" %}</section>
             <section class="appendix" id="run-details">
-            <h2>Run details</h2>
+            <h2>Methods and provenance</h2>
+            {% include "templates/prediction_models.html" %}
+            {% if input_coverage %}{% include "templates/input_lineage.html" %}{% endif %}
             <table class="pure-table patient-info">
                 {% for key, val in patient_info.items() %}<tr><th>{{ key | e }}</th><td>{{ val | e }}</td></tr>{% endfor %}
             </table>

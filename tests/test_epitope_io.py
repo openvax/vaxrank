@@ -2585,7 +2585,8 @@ def test_lens_cli_writes_ascii_report():
         with open(out) as f:
             text = f.read()
     # Patient-info header populated from the synthesized PatientInfo
-    assert "Total number of somatic variants:" in text
+    assert "Recorded source identities:" in text
+    assert "Original VCF/BAM stage counts: unknown" in text
     # At least one variant block — exact count depends on the fixture
     # but we want the loop to have run, not be silently empty.
     assert "Candidate ranking" in text and "Candidate window details" not in text

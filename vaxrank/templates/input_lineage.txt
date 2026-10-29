@@ -1,0 +1,12 @@
+=== Input lineage and scope ===
+Scope values are declarations. RNA evidence extent is unknown unless explicitly declared; filenames do not establish whole-library coverage.
+{% for label, inputs in [('Original input receipts', input_coverage.original_inputs), ('Current report inputs / replay containers', input_coverage.current_inputs)] %}
+{{ label }}
+{% if not inputs %}Not recorded.{% endif %}
+{% for input in inputs %}Input {{ loop.index }}: {{ input.input_id }}: {{ input.source_format }} / {{ input.path }}
+  Content SHA-256: {{ input.content_sha256 }}
+{% for key, label in [('patient_id', 'Patient'), ('sample_id', 'Sample'), ('library_id', 'Library'), ('timepoint', 'Timepoint'), ('reference_assembly', 'Reference assembly'), ('annotation', 'Annotation'), ('rna_evidence_extent', 'RNA evidence extent')] %}  {{ label }}: {{ input.scope.get(key) or 'Unknown' }}
+{% endfor %}  Manifest: {{ input.manifest_path or 'Not recorded' }}
+  Manifest declarations: {{ input.manifest_declarations | tojson }}
+  Report declarations: {{ input.report_declarations | tojson }}
+{% endfor %}{% endfor %}

@@ -453,6 +453,9 @@ def test_lens_nonvariant_antigens_require_opt_in_and_retain_provenance():
         DATA_DIR, "real_lens_subsets", "lens_v1.9_real_subset.tsv")
     report = read_lens_report(path)
     default_result = lens_ranking_result(report, list(report.epitopes))
+    assert {r['family'] for r in default_result.excluded_sources} >= {'CTA/SELF', 'ERV', 'SPLICE'}
+    assert all(r['reason'] == 'Excluded by included_antigen_sources'
+               for r in default_result.excluded_sources if r['family'] == 'CTA/SELF')
     assert not any(
         isinstance(source, VaccineAntigen)
         and source.kind in {
