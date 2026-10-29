@@ -135,4 +135,11 @@ def test_released_species_cta_snapshots_keep_evidence_and_offline_identity(tmp_p
     assert dog.gene_ids(reference='refseq106')
     assert any(c['mapping']['status'] == 'ambiguous' for c in dog.candidates())
     assert any(e['tissue'] == 'kidney' for e in dog.evidence())
-    assert oncoref.mouse.cta_snapshot().coverage['status'] == 'unavailable'
+    from packaging.version import Version
+    mouse = oncoref.mouse.cta_snapshot()
+    if Version(oncoref.__version__) >= Version('1.22.1'):
+        assert mouse.coverage['status'] == 'partial'
+        assert mouse.gene_ids(reference='p1a-refseq-rs2024-02') == frozenset({'22037'})
+        assert any(e['tissue_role'] == 'somatic' for e in mouse.evidence())
+    else:
+        assert mouse.coverage['status'] == 'unavailable'

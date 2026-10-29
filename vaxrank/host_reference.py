@@ -1,6 +1,9 @@
 """Experimental consumption of checksummed ORFdata host proteomes."""
 
 from collections import defaultdict
+from functools import cached_property
+import hashlib
+import json
 from pathlib import Path
 import re
 
@@ -76,6 +79,7 @@ class HostReference:
 
     def matches(self, peptides, antigen):
         """Keep all mapped occurrences, including extra ORFs at excluded genes."""
+        self.validate_antigen(antigen, native_sequence=False)
         peptides = tuple(dict.fromkeys(peptides))
         if not peptides:
             return {}
@@ -92,6 +96,43 @@ class HostReference:
             sources=tuple(records), source_provenance_complete=True,
             genome_release=str(self.proteome.reference.annotation_version or ''),
             reference_sha256=self.identity) for peptide, records in sources.items()}
+
+    @cached_property
+    def _sequence_hashes(self):
+        sequences = defaultdict(set)
+        for sequence, _ in self._sources:
+            sequences[hashlib.sha256(sequence.encode()).hexdigest()].add(sequence)
+        return sequences
+
+    def validate_antigen(self, antigen, *, native_sequence=True):
+        """Check frozen restriction evidence against the actual complete host."""
+        records = [r for r in antigen.tumor_specificity.evidence_records if r.evidence_kind == 'cta_rna_restriction']
+        expected = dict(antigen.source_metadata).get('cta_restriction_sha256')
+        if not records and expected is None:
+            return
+        if len(records) != 1 or expected is None:
+            raise ValueError('CTA antigen lost its frozen restriction evidence')
+        from .cta_restriction import CTARestrictionAssessment, host_occurrences
+        from .native_serialization import from_native_json
+        details = dict(records[0].details)
+        if set(details) != {'assessment'} or hashlib.sha256(details['assessment'].encode()).hexdigest() != expected:
+            raise ValueError('CTA antigen restriction evidence checksum differs')
+        assessment = from_native_json(details['assessment'], CTARestrictionAssessment)
+        native = json.loads(assessment.native_evidence_json)
+        # Final-product audit views can include leaders/linkers and edited flanks.
+        # Their restriction evidence remains bound to the original source protein;
+        # ConstructSequence separately validates the actual placement and edits.
+        digest = dict(antigen.source_metadata).get('protein_sequence_sha256')
+        sequences = self._sequence_hashes.get(digest, ())
+        source_sequence = next(iter(sequences)) if len(sequences) == 1 else None
+        if (native['taxon_id'] != self.scope.host_taxon_id
+                or source_sequence is None
+                or (native_sequence and antigen.amino_acids not in source_sequence)
+                or set(assessment.occurrences) != set(host_occurrences(self, source_sequence))
+                or (assessment.evidence is not None and assessment.evidence.host_reference_sha256 != self.identity)
+                or (antigen.tumor_specificity.admits_construct and not assessment.passed)
+                or antigen.tumor_specificity.status == 'overridden'):
+            raise ValueError('CTA antigen restriction differs from its complete host reference')
 
     def save(self, path):
         """Use ORFdata's lossless snapshot, including layers and exclusions."""

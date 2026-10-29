@@ -81,7 +81,8 @@ def cta_options_from_args(args):
 def cta_expression_contract(options, scope, location):
     """Validate per-source options without annotation, admission or prediction."""
     names = {f.name for f in fields(CTAExpressionInput)} - {'sample_id'}
-    allowed = names | {'min_expression', 'exclusion_policy', 'hitlist_evidence_bundle', 'overrides', 'evidence_snapshot'}
+    allowed = names | {'min_expression', 'exclusion_policy', 'hitlist_evidence_bundle', 'overrides',
+                       'evidence_snapshot', 'restriction_policy', 'restriction_evidence'}
     if not isinstance(options, dict) or set(options) - allowed:
         raise ValueError(f'{location}: invalid or unknown cta_expression options')
     missing = sorted(names - set(options))
@@ -92,7 +93,7 @@ def cta_expression_contract(options, scope, location):
         raise ValueError(f'{location}: CTA min_expression must be an explicit number')
     contract = CTAExpressionInput(sample_id=scope.sample_id, **{k: options[k] for k in names})
     policy = CTAAdmissionPolicy(minimum, contract.expression_unit)
-    excluded = options.get('exclusion_policy', {} if scope.host_taxon_id in (None, 9606)
+    excluded = options.get('exclusion_policy', {} if scope.host_taxon_id in (None, 9606) and 'restriction_policy' not in options
                            else dict(gene_patterns=[], gene_exceptions=[]))
     if not isinstance(excluded, dict) or set(excluded) - {'gene_patterns', 'gene_exceptions'}:
         raise ValueError(f'{location}: invalid or unknown CTA exclusion_policy')
@@ -107,7 +108,30 @@ def cta_expression_contract(options, scope, location):
         raise ValueError(f'{location}: evidence_snapshot must be a nonempty path')
     from .species_cta import cta_overrides
     cta_overrides(options)
+    restriction_options(options)
     return contract, policy, exclusions, bundle
+
+
+def restriction_options(options):
+    """Validate a declared common policy without acquiring any data/models."""
+    from .cta_restriction import CTARestrictionPolicy
+    record = options.get('restriction_policy')
+    evidence = options.get('restriction_evidence')
+    if record is None:
+        if 'restriction_policy' in options or 'restriction_evidence' in options:
+            raise ValueError('CTA restriction evidence requires an explicit policy object')
+        return None, None
+    if not isinstance(record, dict):
+        raise ValueError('CTA restriction_policy must be an object')
+    try:
+        policy = CTARestrictionPolicy(**record)
+    except TypeError as error:
+        raise ValueError('Invalid CTA restriction policy fields') from error
+    if 'restriction_evidence' in options and (not isinstance(evidence, str) or not evidence.strip()):
+        raise ValueError('CTA restriction_evidence must be a nonempty path')
+    if options.get('overrides') or options.get('hitlist_evidence_bundle'):
+        raise ValueError('Common CTA restriction uses its declared evidence, without overrides or historical Hitlist bundles')
+    return policy, evidence
 
 
 @dataclass(frozen=True)
@@ -134,9 +158,11 @@ class CTAExpressionSource:
         validate_input_scopes([InputProvenance('validation', 'cta_expression', str(path), '', scope)],
                               genome=genome, host_reference=host_reference)
         from .species_cta import cta_overrides
+        restriction_policy, restriction_evidence = restriction_options(options)
         admission = admit_cta_expression(path, input_contract=contract, admission_policy=policy,
                                         exclusion_policy=exclusions, genome=genome, host_reference=host_reference,
-                                        overrides=cta_overrides(options), evidence_snapshot=options.get('evidence_snapshot'))
+                                        overrides=cta_overrides(options), evidence_snapshot=options.get('evidence_snapshot'),
+                                        restriction_policy=restriction_policy, restriction_evidence=restriction_evidence)
         if bundle_path and scope.host_taxon_id not in (None, 9606):
             raise ValueError('Hitlist CTA bundles currently require the human expression contract')
         bundle = load_hitlist_bundle(bundle_path, admission) if bundle_path else None

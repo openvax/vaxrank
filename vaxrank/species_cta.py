@@ -8,7 +8,11 @@ import re
 from serializable import DataclassSerializable
 
 from .cta_admission import CTAAdmissionPolicy, CTAOverrideEvidence, PatientTumorExpressionEvidence
-from .cta_identity import identity_digest
+from .cta_reference_adapter import feature_id, reference_namespace, require_common_cta_data, validate_host_mapping
+from .cta_restriction import (
+    CTARestrictionAssessment, CTARestrictionEvidence, CTARestrictionPolicy,
+    assess_restriction, host_occurrences, validate_restriction_evidence,
+)
 from .amino_acids import STANDARD_AMINO_ACIDS
 from .cta_expression import (
     CTAExpressionDecision, CTAExpressionInput, CTAExpressionResult,
@@ -22,10 +26,19 @@ from .vaccine_antigen import (
 
 @dataclass(frozen=True)
 class SpeciesCTAExpressionInput(CTAExpressionInput):
-    """NCBI Gene or versioned RefSeq RNA measurements, never gene symbols."""
+    """Reference-native gene or exact versioned RNA IDs, never gene symbols."""
+
+    namespace: str = 'ncbi'
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.namespace not in ('ncbi', 'ensembl'):
+            raise ValueError('Unsupported CTA expression namespace')
 
     @property
     def id_namespace(self):
+        if self.namespace == 'ensembl':
+            return f'ensembl_{self.measurement_level}_id'
         return 'ncbi_gene_id' if self.measurement_level == 'gene' else 'refseq_transcript_id'
 
 
@@ -59,6 +72,7 @@ class SpeciesCTAAdmission(DataclassSerializable):
     candidate_ids: tuple[str, ...]
     snapshot_id: str
     override_evidence: CTAOverrideEvidence | None = None
+    restriction: CTARestrictionAssessment | None = None
 
     def __post_init__(self):
         expression, antigen = self.tumor_expression, self.antigen
@@ -69,14 +83,19 @@ class SpeciesCTAAdmission(DataclassSerializable):
             raise ValueError('Species CTA admission requires mapped candidate evidence')
         passes = expression.value >= self.policy.min_tumor_expression
         reviewed = self.override_evidence is not None
-        expected = 'overridden' if passes and reviewed else 'held_out'
+        if self.restriction is not None:
+            if reviewed or not isinstance(self.restriction, CTARestrictionAssessment):
+                raise ValueError('Common CTA restriction cannot be replaced by an override')
+            expected = 'admitted' if passes and self.restriction.passed else 'held_out'
+        else:
+            expected = 'overridden' if passes and reviewed else 'held_out'
         if antigen.tumor_specificity.status != expected:
             raise ValueError('Species CTA selection requires expression and explicit evidence review')
         if (not antigen.tumor_specificity.requires_review or not antigen.tumor_specificity.patient_specific
                 or antigen.tumor_specificity.override_reason != (self.override_evidence.rationale
                     if expected == 'overridden' else '')):
             raise ValueError('Species CTA review attestation disagrees with its evidence')
-        expected_exclusions = (antigen.gene_id,) if expected == 'overridden' else ()
+        expected_exclusions = (antigen.gene_id,) if expected in ('admitted', 'overridden') else ()
         if antigen.self_reference_excluded_gene_ids != expected_exclusions:
             raise ValueError('Species CTA self exclusions must contain only the reviewed target')
         if expression.measurement_level == 'transcript' and antigen.transcript_ids != (expression.transcript_id,):
@@ -98,6 +117,9 @@ class SpeciesCTAExpressionResult(CTAExpressionResult):
             raise ValueError('Species CTA evidence cannot claim the historical human annotation contract')
         snapshot = CTAEvidenceSnapshot.from_dict(self.evidence_snapshot)
         reference, candidates = _snapshot_reference(snapshot)
+        namespace = reference_namespace(reference)
+        if self.input_contract.namespace != namespace:
+            raise ValueError('CTA expression namespace differs from its reference')
         if (reference['assembly_accession'] != self.reference_assembly
                 or reference['annotation_source'] != self.annotation_name
                 or reference['annotation_release'] != self.annotation_version):
@@ -106,7 +128,7 @@ class SpeciesCTAExpressionResult(CTAExpressionResult):
             raise ValueError('Species CTA result requires its host reference identity')
         by_gene = _unique_candidates(candidates)
         for decision in self.decisions:
-            _ncbi_feature_id(decision.input_identifier, self.input_contract.measurement_level)
+            feature_id(decision.input_identifier, self.input_contract.measurement_level, namespace)
             selected = by_gene.get(decision.gene_id, ())
             pairs = {(s['transcript_id'], s['protein_id']) for c in selected
                      for t in c['mapping']['targets'] if t['id'] == decision.gene_id
@@ -154,6 +176,25 @@ class SpeciesCTAExpressionResult(CTAExpressionResult):
                     or antigen.tumor_specificity.evidence_records[0] != _reference_evidence(
                         snapshot, selected, decision.gene_id, reference)):
                 raise ValueError('Species CTA antigen lost or changed its candidate observations')
+            restriction = assessment.restriction
+            if restriction is not None:
+                evidence = restriction.evidence
+                if evidence is not None and (
+                        evidence.snapshot_id != snapshot.snapshot_id
+                        or evidence.reference_id != reference['reference_id']
+                        or evidence.host_reference_sha256 != self.host_reference_sha256
+                        or evidence.taxon_id != snapshot.taxon_id):
+                    raise ValueError('Saved CTA restriction reference identity differs')
+                if (any(o.sequence_sha256 != decision.protein_sequence_sha256 for o in restriction.occurrences)
+                        or not any((o.gene_id, o.transcript_id, o.entry_id) ==
+                            (antigen.gene_id, decision.transcript_id, decision.protein_id)
+                            for o in restriction.occurrences)
+                        or restriction != assess_restriction(restriction.policy, evidence,
+                            restriction.occurrences, snapshot)
+                        or _restriction_record(restriction, antigen.gene_id) not in
+                            antigen.tumor_specificity.evidence_records
+                        or metadata.get('cta_restriction_sha256') != _restriction_digest(restriction)):
+                    raise ValueError('Saved CTA restriction assessment disagrees with its frozen evidence')
 
 
 def _snapshot_reference(snapshot):
@@ -163,9 +204,7 @@ def _snapshot_reference(snapshot):
     if len(references) != 1:
         raise ValueError('Species CTA input requires one explicit mapped reference')
     reference = references[0]['identity']
-    if reference['identifier_namespaces'] != {
-            'gene': 'NCBI Gene', 'transcript': 'NCBI RefSeq RNA', 'protein': 'NCBI RefSeq protein'}:
-        raise ValueError('Species CTA expression requires a supported NCBI Gene/RefSeq mapping')
+    reference_namespace(reference)
     return reference, snapshot.candidates(reference=references[0]['id'])
 
 
@@ -191,11 +230,20 @@ def _reference_evidence(snapshot, candidates, gene, reference):
                  ('candidate_records', encoded(candidates)), ('observations', encoded(observations))))
 
 
-def _ncbi_feature_id(value, level):
-    pattern = r'[1-9][0-9]*' if level == 'gene' else r'[NX]M_[0-9]+\.[1-9][0-9]*'
-    if not isinstance(value, str) or not re.fullmatch(pattern, value):
-        raise ValueError(f'Expected an NCBI Gene ID or versioned RefSeq transcript for {level}, got {value!r}')
-    return value
+def _restriction_record(assessment, gene):
+    return TumorSpecificityEvidence(
+        evidence_kind='cta_rna_restriction', evidence_source=assessment.policy.policy_id,
+        evidence_version=assessment.policy.policy_version, subject_id=gene,
+        passed=assessment.passed, details=(('assessment', _restriction_json(assessment)),))
+
+
+def _restriction_json(assessment):
+    from .native_serialization import to_native_json
+    return json.dumps(json.loads(to_native_json(assessment)), sort_keys=True, separators=(',', ':'))
+
+
+def _restriction_digest(assessment):
+    return hashlib.sha256(_restriction_json(assessment).encode()).hexdigest()
 
 
 def cta_overrides(options):
@@ -218,40 +266,34 @@ def cta_overrides(options):
 
 
 def admit_species_cta_expression(path, *, input_contract, admission_policy, host_reference,
-                                 exclusion_policy=None, overrides=None, evidence_snapshot=None):
+                                 exclusion_policy=None, overrides=None, evidence_snapshot=None,
+                                 restriction_policy=None, restriction_evidence=None):
     """Use mapped host sequences and retain all OncoRef evidence, including limits."""
     from pathlib import Path
     import pandas as pd
     from oncoref.species_antigens import cta_snapshot
 
+    if restriction_policy is not None:
+        require_common_cta_data()
     reference = host_reference.proteome.reference
     snapshot = cta_snapshot(reference.taxon_id, path=evidence_snapshot)
     mapped_reference, candidates = _snapshot_reference(snapshot)
-    expected = (mapped_reference['taxon_id'], mapped_reference['assembly_accession'],
-                mapped_reference['annotation_source'], mapped_reference['annotation_release'])
-    actual = (reference.taxon_id, reference.assembly_accession,
-              reference.annotation_name, reference.annotation_version)
-    if actual != expected:
-        raise ValueError('Host reference differs from the species CTA evidence annotation')
-    assets = {role: mapped_reference['content_provenance'][role] for role in ('protein', 'feature_table')}
-    layers = [layer for layer in host_reference.proteome.layers
-              if layer.get('kind') == 'annotated' and layer.get('role') == 'host']
-    if (len(layers) != 1 or dict(layers[0].get('content_provenance', {})) != assets
-            or layers[0].get('identifier_namespaces') != mapped_reference['identifier_namespaces']
-            or reference.source_sha256 != identity_digest(assets)):
-        raise ValueError('Species CTA host reference requires the mapped protein and feature-table source SHA-256 hashes')
-    inventory = [(e.accession, e.sequence) for e in host_reference.proteome if e.kind == 'annotated']
-    if (reference.sequence_sha256 != identity_digest(sorted(inventory))
-            or layers[0].get('added') != len(inventory)):
-        raise ValueError('Species CTA input requires the complete annotated protein inventory')
+    namespace = validate_host_mapping(host_reference, mapped_reference)
+    if restriction_policy is not None:
+        if not isinstance(restriction_policy, CTARestrictionPolicy) or overrides:
+            raise ValueError('Common CTA restriction requires a typed policy and no overrides')
+        if restriction_evidence is not None and not isinstance(restriction_evidence, CTARestrictionEvidence):
+            restriction_evidence = CTARestrictionEvidence.read(restriction_evidence)
+        validate_restriction_evidence(restriction_evidence, host_reference, snapshot, mapped_reference)
+    elif restriction_evidence is not None:
+        raise ValueError('CTA restriction evidence requires its explicit policy')
     if input_contract.expression_unit != admission_policy.expression_unit:
         raise ValueError('Expression input units do not match the CTA admission policy')
-    if not isinstance(input_contract, SpeciesCTAExpressionInput):
-        input_contract = SpeciesCTAExpressionInput(**input_contract.to_dict())
+    input_contract = SpeciesCTAExpressionInput(**{**input_contract.to_dict(), 'namespace': namespace})
     exclusions = exclusion_policy or CTATargetExclusionPolicy((), ())
     overrides = overrides or {}
     fingerprint = hashlib.sha256(Path(path).read_bytes()).hexdigest()
-    rows = _expression_rows(path, input_contract, normalize=_ncbi_feature_id)
+    rows = _expression_rows(path, input_contract, normalize=lambda value, level: feature_id(value, level, namespace))
     by_gene = _unique_candidates(candidates)
     ambiguous = {gid for c in candidates if c['mapping']['status'] != 'unique'
                  or not c['mapping']['complete'] for gid in c['gene_ids']}
@@ -261,12 +303,12 @@ def admit_species_cta_expression(path, *, input_contract, admission_policy, host
             for occurrence in entry.occurrences:
                 proteins.setdefault(occurrence.gene_id, []).append((entry, occurrence))
     decisions, used_overrides = [], set()
-    for identifier, feature_id, abundance in rows:
+    for identifier, feature, abundance in rows:
         value = None if pd.isna(abundance) else float(abundance)
-        measured_transcript = feature_id if input_contract.measurement_level == 'transcript' else ''
+        measured_transcript = feature if input_contract.measurement_level == 'transcript' else ''
         genes = {t['id'] for c in candidates for t in c['mapping']['targets']
                  if any(s['transcript_id'] == measured_transcript for s in t['sequences'])}
-        gene = feature_id if not measured_transcript else next(iter(genes)) if len(genes) == 1 else ''
+        gene = feature if not measured_transcript else next(iter(genes)) if len(genes) == 1 else ''
         decision = SpeciesCTAExpressionDecision(identifier, value, gene_id=gene, transcript_id=measured_transcript)
         selected = by_gene.get(gene, ())
         if not selected:
@@ -308,7 +350,9 @@ def admit_species_cta_expression(path, *, input_contract, admission_policy, host
             input_contract.measurement_level, measured_transcript, identifier, fingerprint)
         override = overrides.get(gene)
         passes = value >= admission_policy.min_tumor_expression
-        admitted = passes and override is not None
+        restriction = (assess_restriction(restriction_policy, restriction_evidence,
+            host_occurrences(host_reference, entry.sequence), snapshot) if restriction_policy is not None else None)
+        admitted = passes and (restriction.passed if restriction is not None else override is not None)
         records = [_reference_evidence(snapshot, selected, gene, mapped_reference),
             TumorSpecificityEvidence(
                 evidence_kind='patient_tumor_expression', evidence_source=expression.evidence_source,
@@ -321,16 +365,19 @@ def admit_species_cta_expression(path, *, input_contract, admission_policy, host
                 evidence_kind='cta_admission_override', evidence_source=override.evidence_source,
                 evidence_version=override.evidence_version, subject_id=gene, passed=True,
                 details=(('evidence_id', override.evidence_id), ('rationale', override.rationale))))
+        if restriction is not None:
+            records.append(_restriction_record(restriction, gene))
         antigen = VaccineAntigen(
             kind='CTA', amino_acids=entry.sequence,
             targetable_mask=TargetableMask((AminoAcidInterval(0, len(entry.sequence)),)),
             tumor_specificity=TumorSpecificityAttestation(
-                status='overridden' if admitted else 'held_out',
+                status=('admitted' if restriction is not None else 'overridden') if admitted else 'held_out',
                 evidence_kind='species_cta_and_patient_tumor_expression', evidence_source='OncoRef plus patient expression',
                 evidence_version=snapshot.as_dict()['source_version'], patient_specific=True,
-                rationale_code='cta_explicit_evidence_override' if admitted else
-                    'cta_expression_below_threshold' if not passes else 'cta_species_evidence_review_required',
-                requires_review=True, override_reason=override.rationale if admitted else '',
+                rationale_code=('cta_restriction_policy_pass' if restriction is not None else
+                    'cta_explicit_evidence_override') if admitted else 'cta_expression_below_threshold' if not passes else
+                    'cta_restriction_policy_held' if restriction is not None else 'cta_species_evidence_review_required',
+                requires_review=True, override_reason=override.rationale if admitted and override else '',
                 evidence_records=tuple(records)),
             self_reference_excluded_gene_ids=(gene,) if admitted else (),
             gene_id=gene, gene_name=decision.gene_name, transcript_ids=(occurrence.transcript_id,),
@@ -342,9 +389,11 @@ def admit_species_cta_expression(path, *, input_contract, admission_policy, host
                              ('expression_id_namespace', input_contract.id_namespace),
                              ('reference_assembly', mapped_reference['assembly_accession']),
                              ('annotation_name', mapped_reference['annotation_source']),
-                             ('annotation_version', mapped_reference['annotation_release'])))
+                             ('annotation_version', mapped_reference['annotation_release'])) +
+                            ((('cta_restriction_sha256', _restriction_digest(restriction)),)
+                             if restriction is not None else ()))
         assessment = SpeciesCTAAdmission(antigen, admission_policy, expression,
-                                        tuple(c['id'] for c in selected), snapshot.snapshot_id, override)
+                                        tuple(c['id'] for c in selected), snapshot.snapshot_id, override, restriction)
         decisions.append(replace(decision, status='admitted' if admitted else 'held_out',
                                  transcript_id=occurrence.transcript_id, assessment=assessment))
     if set(overrides) != used_overrides:

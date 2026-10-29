@@ -925,7 +925,7 @@ def assess_vaccine_antigen_window(
         })
     except Exception as error:
         raise SafetyAssessmentError(
-            f"MHC safety prediction failed for {source_name!r}"
+            f"MHC safety prediction failed for {source_name!r}: {type(error).__name__}: {error}"
         ) from error
 
     if (host_reference is not None or genome is not None or mhc_species is not None) and not predictions_df.empty:

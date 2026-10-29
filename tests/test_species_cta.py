@@ -208,9 +208,9 @@ def test_species_cta_saved_result_replays_without_current_reference(tmp_path, mo
                 evidence_records=antigen.tumor_specificity.evidence_records[1:])))),))
 
 
-def test_species_cta_unavailable_mouse_evidence_is_explicit(tmp_path):
+def test_species_cta_mouse_requires_its_mapped_reference(tmp_path):
     reference = HostReference(Proteome(ReferenceContext(10090, 'mouse', 'GRCm38', 'ensembl', '93'), []))
-    with pytest.raises(ValueError, match='evidence is unavailable'):
+    with pytest.raises(ValueError, match='evidence is unavailable|evidence annotation'):
         admit(tmp_path, reference=reference)
 
 
