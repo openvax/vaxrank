@@ -64,6 +64,7 @@ from ..report import (
     make_minimal_neoepitope_report,
     TemplateDataCreator,
 )
+from ..report_display import run_provenance_arguments
 from ..patient_info import PatientInfo
 from ..mrna import RNAConstructConfig, assemble_mrna_constructs, write_mrna_outputs
 from ..peptide import (
@@ -521,11 +522,9 @@ def log_args_summary(args):
       footer per section so the user knows the noise is suppressed,
       not lost.
 
-    With ``--verbose``, every key prints (including defaults). On
-    the LENS path, args carries auto-inferred state
-    (``_inferred_mhc_alleles_from_lens``); those underscore-prefixed
-    keys are surfaced separately so the operator can see what was
-    auto-wired.
+    With ``--verbose``, every public key prints (including defaults). Resolved
+    provenance such as LENS-inferred MHC alleles is surfaced separately. Other
+    underscore-prefixed runtime state remains internal even in verbose mode.
     """
     parser_defaults = getattr(args, '_parser_defaults', None) or {}
     namespace = vars(args).copy()
@@ -562,10 +561,7 @@ def log_args_summary(args):
     if other_rows:
         grouped['Other'] = other_rows
 
-    inferred_rows = [
-        (k, v) for k, v in sorted(vars(args).items())
-        if k.startswith('_') and k != '_parser_defaults' and v
-    ]
+    provenance_rows = sorted(run_provenance_arguments(vars(args)).items())
 
     lines = ["Vaxrank run configuration:"]
     for section, rows in grouped.items():
@@ -583,9 +579,9 @@ def log_args_summary(args):
                 lines.append(
                     "    (%d default(s) hidden — pass --verbose for all)"
                     % hidden)
-    if inferred_rows:
-        lines.append("  [auto-inferred]")
-        for k, v in inferred_rows:
+    if provenance_rows:
+        lines.append("  [resolved provenance]")
+        for k, v in provenance_rows:
             lines.append("    %-32s = %r" % (k, v))
     logger.info("\n".join(lines))
 

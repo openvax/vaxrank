@@ -182,20 +182,21 @@ def test_log_args_summary_surfaces_user_overrides():
     assert 'peptide_mode' not in msg
 
 
-def test_log_args_summary_shows_auto_inferred_block():
-    """LENS-path inferred state lives on underscore-prefixed attrs
-    on args. ``log_args_summary`` lifts them into a separate
-    ``[auto-inferred]`` section."""
+def test_log_args_summary_shows_resolved_provenance_block():
+    """LENS-path inferred state is visible without exposing runtime state."""
     from vaxrank.cli.entry_point import log_args_summary
     args = _basic_args()
     args._inferred_mhc_alleles_from_lens = ['HLA-A*02:01']
+    args._construct_assembly = {'internal': 'do-not-display'}
     with _capture_logger('vaxrank.cli.entry_point', logging.INFO) as records:
         log_args_summary(args)
     msg = [r.getMessage() for r in records
            if 'Vaxrank run configuration' in r.getMessage()][0]
-    assert 'auto-inferred' in msg
+    assert 'resolved provenance' in msg
     assert '_inferred_mhc_alleles_from_lens' in msg
     assert 'HLA-A*02:01' in msg
+    assert '_construct_assembly' not in msg
+    assert 'do-not-display' not in msg
 
 
 def test_log_args_summary_verbose_shows_defaults():
