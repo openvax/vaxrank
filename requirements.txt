@@ -20,7 +20,8 @@ varcode>=10.20.2,<11.0.0
 # 1.62.2 adds occurrence-scoped RNA support for exported SV ORF placements.
 # 1.61 adds reference-frame ncORF reconstruction. The Isovar input adapters
 # validate each supported result schema; producer evidence is retained losslessly.
-isovar>=1.62.2,<2.0.0
+# 1.76 exposes shared read policies for live viral and antigen-isoform sources.
+isovar>=1.76.0,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.64.4,<4.0.0
 # 4.0.0 makes PeptideInput the single cleavage record, removing CleavageInput.
@@ -69,9 +70,11 @@ dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
 # OncoRef supplies human CTA identity and species-scoped evidence snapshots.
 # Historical human admission still uses the annotation-bound identity contract.
-# Keep the exact owner pin aligned with PirlyGenes 6.0.17 (pirlygenes#649).
+# Keep the exact owner pin aligned with PirlyGenes 6.0.19.
 # 1.19.2 accepts pinned dated annotations and resolved biological assemblies.
-oncoref==1.19.2
+# 1.22 retains these legacy admission APIs and exposes versioned CTA nomination
+# for Isovar. This pin does not adopt cta_selection for vaccine admission (#687).
+oncoref==1.22.0
 # 0.42.1 exports the resolved carrier strand for every TranscriptORF kind.
 orfdata>=0.42.1,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
