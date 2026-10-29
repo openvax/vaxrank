@@ -372,7 +372,7 @@ def test_manifest_yaml_cli_override_contract_and_relative_result(tmp_path):
 
 
 @pytest.mark.parametrize('name', ['ncorf', 'unresolved'])
-def test_shared_cli_native_export_report_and_offline_replay(name, tmp_path, dependencies):
+def test_shared_cli_native_export_report_and_offline_replay(name, tmp_path, dependencies, monkeypatch):
     path = tmp_path / (name + '.json')
     producer = result(name)
     # Bind the synthetic producer to the shared deterministic host fixture.
@@ -383,7 +383,7 @@ def test_shared_cli_native_export_report_and_offline_replay(name, tmp_path, depe
     native, exported, ascii_path = tmp_path / 'predictions.tsv', tmp_path / 'antigens.json', tmp_path / 'report.txt'
     run_cli(['--input-isovar', str(path), '--mhc-predictor', 'random', '--ensembl-release', '93',
              '--output-antigens', str(exported), '--output-epitopes', str(native),
-             '--output-ascii-report', str(ascii_path), '--no-processing-aware-annotation',
+             '--output-ascii-report', str(ascii_path), '--report-candidate-details', '--no-processing-aware-annotation',
              '--vaccine-peptide-length', '10', '--config-text', 'epitopes.score_expr=1.0',
              '--config-text', 'vaccine_peptides.combined_score_expr=target_epitope_score'])
     dataset = AntigenDataset.load(exported)
@@ -394,9 +394,22 @@ def test_shared_cli_native_export_report_and_offline_replay(name, tmp_path, depe
     assert ascii_path.exists()
     if name == 'unresolved':
         assert 'no_alt_reads' in ascii_path.read_text()
+    else:
+        assert 'RNA reconstruction support — fragments: 2' in ascii_path.read_text()
+        assert 'Reference ORF: noncoding_orf' in ascii_path.read_text()
+        assert 'Construct admission: admitted' in ascii_path.read_text()
     replay = tmp_path / 'replay.json'
-    run_cli(['--input-epitopes', str(native), '--output-antigens', str(replay), '--no-processing-aware-annotation'])
+    html = tmp_path / 'replay.html'
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Native report replay must not predict or reconstruct')
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
+    monkeypatch.setattr('vaxrank.isovar_input.reconstruct_isovar_antigens', forbidden)
+    run_cli(['--input-epitopes', str(native), '--output-antigens', str(replay),
+             '--output-html-report', str(html), '--report-candidate-details', '--no-processing-aware-annotation'])
     assert AntigenDataset.load(replay).source_evidence == dataset.source_evidence
+    if name == 'ncorf':
+        assert 'RNA reconstruction support — fragments</th><td>2</td>' in html.read_text()
+        assert 'Reference ORF</th><td>noncoding_orf</td>' in html.read_text()
 
 
 def test_live_bam_request_and_saved_replay_share_owner_contract(variant_inputs, tmp_path):

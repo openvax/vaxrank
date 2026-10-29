@@ -554,9 +554,10 @@ def test_lens_nonvariant_antigens_require_opt_in_and_retain_provenance():
         section["effect_data"]["Antigen Source"]: section
         for section in template_data["variants"]
     }
-    assert by_kind["CTA/SELF"]["variant_data"]["Requires review"] == "yes"
-    assert by_kind["ERV"]["variant_data"]["Requires review"] == "yes"
-    assert by_kind["SPLICE"]["variant_data"]["Requires review"] == "no"
+    assert by_kind["CTA/SELF"]["variant_data"]["Admission review flag"] == "review requested"
+    assert by_kind["ERV"]["variant_data"]["Admission review flag"] == "review requested"
+    assert by_kind["SPLICE"]["variant_data"]["Admission review flag"] == (
+        "not set; completed scientific review is not recorded by this flag")
 
 
 def test_lens_source_antigens_degrade_explicitly_without_ensembl_database():

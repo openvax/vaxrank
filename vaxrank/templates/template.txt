@@ -26,6 +26,13 @@ Candidate context only. Final sequences are listed under Emitted products.
         {% for key, val in v.effect_data.items() %}
         {{ key }}: {{ val }}
         {% endfor %}
+        {% if v.admission_note %}{{ v.admission_note }}{% endif %}
+        {% for section in v.source_evidence_sections %}
+        {{ section.title }}
+        {% if section.note %}{{ section.note }}{% endif %}
+        {% for label, value in section.rows %}{{ label }}: {{ value }}
+        {% endfor %}
+        {% endfor %}
 
         Candidate windows:
         {% for p in v.peptides %}

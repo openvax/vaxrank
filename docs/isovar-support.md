@@ -41,10 +41,34 @@ The ordinary VCF/BAM workflow keeps its frozen `openvax-v1` formula and
 selection policy. It continues to consume assembly-support counts and ordering;
 it does not enable fractional allocation or substitute those scores into RNA
 counts. New Isovar source inputs retain every candidate before shared ranking;
-their admission requires independent tumor-specificity evidence.
+their admission requires an explicit tumor-specificity attestation. Reports
+distinguish that assertion from measured sample evidence and catalog attribution.
 
 New direct fragments store the actual runtime Isovar version as
 `sequence_source_version`, carried into mixed-input evidence and native replay.
 An older fragment without this field retains an unknown version. Historical
 fixture producer versions remain immutable and are never rewritten to the
 current installation.
+
+## Evidence in reports
+
+Full candidate details (`--report-candidate-details`) distinguish **construct
+admission** from biological evidence and workflow review flags. An admitted
+research assumption does not establish tumor specificity, and an unset admission
+review flag does not record scientific sign-off. The report shows the supplied
+evidence type, rationale, override, and effective partial/ambiguous admission
+controls. Each retained attestation lists its subject, source, sample and units.
+
+Isovar candidates show coding completeness and their recorded RNA evidence:
+reconstruction reads/fragments, coding-interval depth, ORF-occurrence support or
+direct junction support, as applicable. These are distinct subjects; none is
+automatically exact support for a chosen peptide. A catalog's ORF attribution
+and literature evidence appear separately from sample evidence. Missing fields
+remain **Not recorded**, including ambiguity flags absent from older exports.
+Multiple source contexts remain separate; a missing candidate-to-source pairing
+is reported explicitly instead of assigning one origin's evidence to another.
+
+HTML/PDF and text use the same evidence sections. Native prediction replay reads
+the linked source catalog already stored in the dataset; it needs no new
+sidecar, reconstruction or prediction. API callers can pass that catalog as
+`TemplateDataCreator(source_evidence=dataset.selection['source_evidence'], ...)`.

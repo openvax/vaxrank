@@ -82,10 +82,17 @@ def test_processing_occurrence_evidence_is_retained_without_reinference(tmp_path
     assert stage['coverage'] == dict(annotated_occurrences=1, assessed_c_boundaries=1)
     monkeypatch.setattr('vaxrank.cli.entry_point.annotate_predictions_with_processing', forbidden)
     output = tmp_path / 'replay.tsv'
-    run_cli(['--input-epitopes', str(source), '--output-epitopes', str(output)])
+    html_path = tmp_path / 'replay.html'
+    run_cli(['--input-epitopes', str(source), '--output-epitopes', str(output),
+             '--output-html-report', str(html_path)])
     replay = EpitopeDataset.load(output)
     assert retained_processing([replay]) == annotations
     replay_stage = replay.selection['run_configuration']['effective_predictions']['processing']
     assert replay_stage['status'] == 'replayed evidence; no new inference'
     assert replay_stage['configuration'] == stage['configuration']
     assert replay.epitopes == first.epitopes
+    html = html_path.read_text()
+    assert 'Recorded cleavage annotations' in html
+    assert 'Disabled for this run; cleavage unassessed' not in html
+    assert 'replayed evidence; no new inference' in html
+    assert 'test-1' in html

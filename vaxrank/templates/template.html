@@ -57,6 +57,7 @@
                     </table>
                     <br>
 
+                    {% if v.admission_note %}<p class="note">{{ v.admission_note | e }}</p>{% endif %}
                     <h4>{{ v.effect_label | default('Predicted Effect') }}</h4>
                     <table class="pure-table pure-table-bordered">
                         {% for key, val in v.effect_data.items() %}
@@ -64,6 +65,14 @@
                         {% endfor %}
                     </table>
                     <br>
+
+                    {% for section in v.source_evidence_sections %}
+                    <h4>{{ section.title | e }}</h4>
+                    {% if section.note %}<p class="note">{{ section.note | e }}</p>{% endif %}
+                    <table class="pure-table pure-table-bordered">
+                        {% for label, value in section.rows %}<tr><th>{{ label | e }}</th><td>{{ value | e }}</td></tr>{% endfor %}
+                    </table>
+                    {% endfor %}
 
                     {% if v.databases %}
                     <h4>Databases</h4>
