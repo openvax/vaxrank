@@ -828,7 +828,7 @@ def add_supplemental_report_args(arg_parser):
     report_args_group = arg_parser.add_argument_group("Supplemental report options")
     report_args_group.add_argument(
         '--report-candidate-details', action='store_true',
-        help='Append detailed candidate windows and epitope tables to the product report. '
+        help='Lead with detailed candidate windows and epitope tables; put products in an appendix. '
              'The default shows emitted products and a compact candidate ranking.')
     # Primary option uses dashes; underscore version kept for backwards compatibility
     report_args_group.add_argument(

@@ -48,3 +48,30 @@ ol.main, ol.peptides { padding-left: 1.3em; }
 .signature-inner { border: none; }
 .signature-column-one { width: 30%; }
 .signature-column-two { width: 70%; }
+
+/* Scientific evidence gets space before manufacturing and run appendices. */
+.contents { padding: 0.7em 0; line-height: 1.7; }
+a { color: #245d7a; }
+.models th:first-child { width: 28%; }
+.model-version { font-size: 11px; }
+.model-summary { page-break-inside: avoid; }
+.appendix { page-break-before: always; }
+.target-epitopes { font-size: 11px; line-height: 1.5; }
+.target-epitopes .paired-sequences { width: 27%; }
+.target-epitopes .prediction-model { width: 21%; }
+.target-epitopes .binding-values { width: 25%; }
+.target-epitopes .additional-values { width: 27%; }
+.target-epitopes th, .target-epitopes td { word-break: normal; overflow-wrap: normal; }
+.epitope-sequence { font-family: "DejaVu Sans Mono", Menlo, monospace; font-size: 11px; line-height: 1.6; }
+.sequence-label { color: #465765; font-size: 10px; margin-top: 0.25em; }
+.predictor-name { overflow-wrap: anywhere; }
+.allele { white-space: nowrap; }
+.reference-change { background: #e1edf7; border-bottom: 2px solid #296086; font-weight: bold; }
+.junction { color: #9a4900; font-weight: bold; }
+.score-guide dt { font-weight: bold; margin-top: 1em; page-break-after: avoid; }
+.score-guide dd { margin: 0.4em 0; line-height: 1.5; }
+@page { @bottom-right { content: counter(page) " / " counter(pages); font-size: 9px; color: #465765; } }
+.variant, .peptide-data { font-size: 11px; }
+.variant td, .peptide-data td { padding: 0.3em 0.5em; }
+.candidate-ranking { page-break-inside: avoid; }
+.manufacturability { page-break-inside: avoid; }

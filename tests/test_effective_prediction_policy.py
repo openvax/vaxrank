@@ -19,7 +19,8 @@ def test_explicit_junction_endpoint_is_reported_and_replayed_without_inference(t
     directory = run_external(tmp_path, 'first', [
         '--mrna-junction-predictor', 'junction-test',
         '--mrna-junction-rank-kind', 'pMHC_presentation',
-        '--mrna-junction-rank-strong', '0.7', '--mrna-junction-rank-mild', '3'])
+        '--mrna-junction-rank-strong', '0.7', '--mrna-junction-rank-mild', '3',
+        '--output-html-report', str(tmp_path / 'first.html'), '--report-candidate-details'])
     first = EpitopeDataset.load(directory / 'candidate_predictions.tsv')
     stages = first.selection['run_configuration']['effective_predictions']
     assert stages['candidate']['status'] == 'recorded evidence; no new inference'
@@ -38,6 +39,10 @@ def test_explicit_junction_endpoint_is_reported_and_replayed_without_inference(t
     assert 'junction-test [2.0]: pMHC_presentation' in summary
     assert 'strong ≤ 0.7%' in summary
     assert 'Effective prediction configuration' in (directory / 'vaccine_report.txt').read_text()
+    html = (tmp_path / 'first.html').read_text()
+    assert html.index('id="products"') < html.index('id="run-details"') < html.index('id="effective-predictions"')
+    assert 'Disabled for this run' in html
+    assert 'junction-test [2.0]: pMHC_presentation' in html
     monkeypatch.setattr('vaxrank.cli.entry_point.mhc_binding_predictor_from_args', forbidden)
     monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
     replay = tmp_path / 'replay'

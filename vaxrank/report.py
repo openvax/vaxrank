@@ -33,6 +33,7 @@ from .epitope_io import ensure_parent_dir
 from .manufacturability import ManufacturabilityScores
 from .prediction_input import finite_prediction_value
 from .processing import PEPSICKLE_PREDICTOR_NAME, resolve_peptide_offset
+from .report_display import epitope_display, marked_sequence, model_inventory, product_target_intervals
 from .varcode_effects import (
     OUTCOME_SELECTION_MULTI_OUTCOME,
     is_multi_outcome_effect,
@@ -161,6 +162,7 @@ class TemplateDataCreator(object):
         self.product_files = product_files or {}
         self.candidate_details = candidate_details
         self.prediction_configuration = args_for_report.get('_effective_prediction_configuration', {})
+        self.processing_enabled = args_for_report.get('processing_aware_annotation')
 
         # ``vaccine_type`` is rendered in the patient-info block so
         # the reader can tell at a glance what's being designed.
@@ -510,6 +512,8 @@ class TemplateDataCreator(object):
             'aa_before_mutation': aa_before_mutation,
             'aa_mutant': aa_mutant,
             'aa_after_mutation': aa_after_mutation,
+            'sequence_html': marked_sequence(vaccine_peptide.antigen.amino_acids,
+                [(i.start, i.end) for i in vaccine_peptide.antigen.targetable_mask.intervals]),
         }
         return header_display_data
 
@@ -599,7 +603,7 @@ class TemplateDataCreator(object):
         key = (peptide, source, offset, PEPSICKLE_PREDICTOR_NAME)
         return self.processing_predictions_by_key.get(key)
 
-    def _wt_ic50_for_allele(self, epitope, allele, predictor=None):
+    def _wt_ic50_for_allele(self, epitope, allele, predictor=None, version=None):
         """Return the WT pMHC_affinity IC50 for ``allele`` (optionally
         scoped to ``predictor``) from this epitope's WT comparator,
         or ``None`` when no WT record exists (e.g. WT peptide was
@@ -617,6 +621,8 @@ class TemplateDataCreator(object):
             if p.allele != allele:
                 continue
             if predictor is not None and p.predictor_name != predictor:
+                continue
+            if version is not None and p.predictor_version != version:
                 continue
             if p.value is not None:
                 return p.value
@@ -665,7 +671,8 @@ class TemplateDataCreator(object):
         """
         row_allele = cells.text(prediction.allele if allele is None else allele)
         wt_ic50 = self._wt_ic50_for_allele(
-            epitope, row_allele, predictor=prediction.predictor_name)
+            epitope, row_allele, predictor=prediction.predictor_name,
+            version=prediction.predictor_version)
         wt_ic50_str = _format_ic50(wt_ic50)
         ic50_str = _format_ic50(prediction.value)
         wt_peptide_sequence = (
@@ -824,14 +831,26 @@ class TemplateDataCreator(object):
             rows = []
             for product in products:
                 antigens = []
+                target_intervals = product_target_intervals(product, self.ranked_variants_with_vaccine_peptides)
+                product_intervals = []
                 for antigen in product.antigens:
                     sources = antigen.get('sources', ())
+                    genes = ', '.join(sorted({s['gene_name'] for s in sources if s['gene_name']}))
+                    intervals = target_intervals[antigen['name']]
+                    if intervals is not None:
+                        product_intervals.extend((start + antigen['start_aa'], end + antigen['start_aa'])
+                                                 for start, end in intervals)
                     antigens.append(dict(name=antigen['name'], sequence=antigen['aa'],
+                        sequence_html=marked_sequence(antigen['aa'], intervals or ()),
+                        target_coordinates_known=intervals is not None,
                         start=antigen['start_aa'], end=antigen['end_aa'], length=len(antigen['aa']),
                         sources=len(sources) if 'sources' in antigen else None,
-                        genes=', '.join(sorted({s['gene_name'] for s in sources if s['gene_name']})),
+                        genes=genes if genes != antigen['name'].rsplit(' (', 1)[0] else '',
                         transcripts=len({t for s in sources for t in s['transcript_ids']}) if 'sources' in antigen else None))
                 rows.append(dict(name=product.name, sequence=product.sequence, length=len(product.sequence),
+                    sequence_html=marked_sequence(product.sequence, product_intervals) if modality == 'peptide' else None,
+                    protein_html=marked_sequence(product.cds_aa, product_intervals) if modality == 'mrna' else None,
+                    display_name=' / '.join(dict.fromkeys(a['name'] for a in antigens)) or product.name,
                     unit='aa' if modality == 'peptide' else 'nt',
                     protein=product.cds_aa if modality == 'mrna' else None,
                     antigens=antigens, antigen_names=product.antigen_names,
@@ -932,18 +951,22 @@ class TemplateDataCreator(object):
                     for prediction in epitope.predictions_flat())
 
                 epitopes = []
+                epitope_displays = []
                 wt_epitopes = []
                 # One row per explicit report input. Affinity remains the
                 # preferred anchor; presentation-only and processing-only
                 # candidates still render rather than disappearing.
                 for e in vaccine_peptide.target_epitopes:
                     for row_input in epitope_report_row_inputs(e):
-                        epitopes.append(self.epitope_data(
+                        row = self.epitope_data(
                             e, row_input.prediction,
                             include_processing=any_processing,
                             include_additional_prediction_axes=(
                                 any_additional_prediction_axes),
-                            allele=row_input.allele))
+                            allele=row_input.allele)
+                        epitopes.append(row)
+                        epitope_displays.append(epitope_display(
+                            e, vaccine_peptide.antigen, row, row_input.prediction))
 
                 for e in vaccine_peptide.self_epitopes:
                     for p in e.predictions_flat():
@@ -974,6 +997,7 @@ class TemplateDataCreator(object):
                     'peptide_data': peptide_data,
                     'manufacturability_data': manufacturability_data,
                     'epitopes': epitopes,
+                    'epitope_displays': epitope_displays,
                     'ascii_epitopes': ascii_epitopes,
                     'wt_epitopes': wt_epitopes,
                     'ascii_wt_epitopes': ascii_wt_epitopes,
@@ -1006,6 +1030,10 @@ class TemplateDataCreator(object):
 
         self.template_data.update({
             'patient_info': patient_info,
+            'patient_summary': {key: value for key, value in patient_info.items()
+                                if key in {'Patient ID', 'Vaccine type', 'MHC alleles'}},
+            'prediction_models': model_inventory(self.ranked_variants_with_vaccine_peptides,
+                self.processing_predictions_by_key, self.processing_enabled),
             'variants': variants,
             'package_versions': package_versions,
             'ranked_candidates': self._ranked_candidates(),
