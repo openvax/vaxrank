@@ -392,3 +392,31 @@ def test_original_variant_prediction_captures_full_evidence_without_deferring_se
     assert set(captured.mutation_fragments) == {e.prediction_id for p in selected for e in p.epitopes}
     assert captured.provenance[0].source_format == 'vcf_bam'
     assert captured.provenance[0].scope.patient_id == 'patient'
+
+
+def test_full_report_replay_can_omit_redundant_native_export(tmp_path, monkeypatch, source):
+    from vaxrank import report as report_module
+    for name in ('make_ascii_report', 'make_html_report', 'make_pdf_report'):
+        monkeypatch.setattr('vaxrank.cli.entry_point.' + name, getattr(report_module, name))
+    native, first, reports = tmp_path / 'native.tsv', tmp_path / 'first', tmp_path / 'reports'
+    design(source, first, native, '--mrna-no-optimize-linkers',
+           '--mrna-codon-method', 'use_best_codon')
+    saved_bytes = native.read_bytes()
+    saved = EpitopeDataset.load(native)
+    monkeypatch.setattr('vaxrank.cli.entry_point.assemble_peptide_constructs', forbidden)
+    monkeypatch.setattr('vaxrank.cli.entry_point.assemble_mrna_constructs', forbidden)
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
+    monkeypatch.setattr('vaxrank.isovar_input.reconstruct_isovar_antigens', forbidden)
+    monkeypatch.setattr(EpitopeDataset, 'save', forbidden)
+    replay(native, reports, '--no-output-epitopes', '--output-html-report', str(reports / 'report.html'),
+           '--pdf-backend', 'weasyprint')
+    assert native.read_bytes() == saved_bytes
+    assert not (reports / 'candidate_predictions.tsv').exists()
+    assert product_files(first) == product_files(reports)
+    assert saved.selection['construct_assembly']
+    for filename in ('report.html', 'vaccine_report.txt'):
+        text = (reports / filename).read_text()
+        assert 'Emitted products' in text
+        assert 'Effective prediction configuration' in text
+        assert str(native) in text
+    assert (reports / 'vaccine_report.pdf').read_bytes().startswith(b'%PDF')
