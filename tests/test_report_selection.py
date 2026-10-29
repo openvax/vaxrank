@@ -132,6 +132,7 @@ def test_historical_window_metrics_do_not_invent_tie_decisions():
     del audit['decision']
     view = window_view(audit, peptide.amino_acids)
     assert view['decision'] is None and view['parent'] is None
+    assert view['ordering_description'] == 'Not recorded'
     data = template()
     data['window_decisions'] = [dict(view, identifier='W1', sources=[], products=[])]
     assert 'Historical selection order and tie-break decisions were not recorded' in render(data, 'html')

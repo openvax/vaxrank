@@ -159,7 +159,8 @@ def window_view(audit, sequence):
     utility = audit.get('algorithm') != 'score_fraction_then_ranking'
     return dict(sequence=sequence, parent=audit.get('parent_window'),
         utility_selector=utility,
-        ordering_description=('negative utility, preferred-length distance, ranking tuple, stable input order'
+        ordering_description=(UNRECORDED if not audit.get('decision') else
+                              'negative utility, preferred-length distance, ranking tuple, stable input order'
                               if utility else 'score-fraction eligibility, then ranking tuple and stable input order'),
         none_eligible=audit.get('selected') == [],
         decision=audit.get('decision'), policy=policy,
@@ -167,7 +168,7 @@ def window_view(audit, sequence):
             ('combined_score', 'Combined score'),
             ('non_cta_self_score', 'Recorded non-CTA self score'), ('at_risk_target_score', 'At-risk target score'),
             ('utility', 'Window utility'), ('preferred_length', 'Preferred length (aa)'),
-            ('limit', 'Maximum windows retained'), ('self_provenance_complete', 'Self provenance complete')]),
+            ('limit', 'Maximum windows retained'), ('self_provenance_complete', 'Self-reference provenance complete')]),
         serum_status=('Not evaluated by the score-fraction selector' if not utility else
                       'Skipped: serum weight is zero' if policy.get('serum_weight') == 0 else
                       'Unassessed models: ' + ', '.join(audit['unassessed_models'])
@@ -233,7 +234,7 @@ def attach_selection_decisions(data, selection, ranked, products):
             by_value[key] = len(groups)
             groups.append(dict(view, identifier='W%d' % (len(groups) + 1), sources=[], products=[]))
         group = groups[by_value[key]]
-        group['sources'] = sorted(set(group['sources']) | set(source_ids))
+        group['sources'] = sorted(set(group['sources']) | set(source_ids), key=lambda source: int(source[1:]))
         if product and product not in group['products']:
             group['products'].append(product)
         return group['identifier']
@@ -263,7 +264,8 @@ def attach_selection_decisions(data, selection, ranked, products):
                 ids = sorted({identifier for source in item['sources'] for identifier, peptide in candidates
                     if source_matches_candidate(source, peptide.antigen, peptide.amino_acids,
                         {e.prediction_group_source for e in peptide.epitopes},
-                        {e.input_provenance.input_id for e in peptide.epitopes if e.input_provenance})})
+                        {e.input_provenance.input_id for e in peptide.epitopes if e.input_provenance})},
+                    key=lambda source: int(source[1:]))
                 decisions['rows'].append(dict(order=item['order'], sequence=item['sequence'],
                     sources=ids, mapping_count=len(item['sources']), products=item['products'], outcome=item['outcome']))
                 for candidate in data['ranked_candidates']:

@@ -23,7 +23,7 @@ Sort key: {{ window.decision.ordering_key | tojson | e }}. Ranking rules: {{ win
 {% if not window.decision %}Producer order is shown; historical preference order is unavailable.{% endif %}</p>
 <table class="pure-table"><thead><tr><th>Alternative</th><th>Target / {{ 'utility' if window.utility_selector else 'combined score' }}</th><th>Decision</th></tr></thead><tbody>
 {% for alternative in window.alternatives %}<tr><td class="sequence-cell">{{ alternative.sequence }}</td>
-<td>{{ alternative.target_score }} / {{ alternative.utility if window.utility_selector else alternative.combined_score }}</td><td>{{ (alternative.decision_reason or alternative.ineligibility_reason or 'Eligible; final choice not recorded') | replace('_', ' ') }}
+<td>{{ alternative.target_score | display_epitope_value }} / {{ (alternative.utility if window.utility_selector else alternative.combined_score) | display_epitope_value }}</td><td>{{ (alternative.decision_reason or alternative.ineligibility_reason or 'Eligible; final choice not recorded') | replace('_', ' ') }}
 {% if alternative.selection_rank %}; rank {{ alternative.selection_rank }}{% endif %}
 {% if alternative.ordering_key %}<br>Sort key: {{ alternative.ordering_key | tojson | e }}{% endif %}</td></tr>{% endfor %}</tbody></table>{% endif %}
 </section>{% endfor %}{% endif %}
