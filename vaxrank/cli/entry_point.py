@@ -980,6 +980,10 @@ def write_run_summary(args, patient_info, source, products=None):
         return
     os.makedirs(output_dir, exist_ok=True)
     lines = ["Vaxrank run summary", "=" * 19, ""]
+    from ..reference_coverage import coverage_lines
+    host = getattr(getattr(args, '_design_dataset', None), 'host_reference', None)
+    lines.extend(coverage_lines(host.coverage if host is not None else None))
+    lines.append('')
     provenance = getattr(patient_info, 'input_provenance', ())
     if source == 'external':
         if not getattr(patient_info, 'inputs', None):
@@ -1490,6 +1494,7 @@ def run_cli(args_list=None):
                          if getattr(args, '_design_dataset', None) is not None else {}),
         selection=(getattr(args, '_design_dataset').selection
                    if getattr(args, '_design_dataset', None) is not None else {}),
+        host_reference=getattr(getattr(args, '_design_dataset', None), 'host_reference', None),
     ).compute_template_data()
     if args.output_ascii_report:
         make_ascii_report(template_data=template_data, ascii_report_path=args.output_ascii_report)

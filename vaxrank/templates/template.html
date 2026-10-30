@@ -24,6 +24,7 @@
             <br>
 
             <nav class="contents" aria-label="Report contents">
+                {% if host_coverage is defined %}<a href="#host-catalogue-coverage">Host ORF coverage</a> &middot; {% endif %}
                 <a href="#input-coverage">Input coverage</a> &middot; <a href="#products">Emitted products</a> &middot;
                 {% if selection_policy is defined %}<a href="#selection-rules">Selection rules</a> &middot; {% endif %}
                 <a href="#ranking">Candidate ranking</a> &middot; <a href="#source-outcomes">Source outcomes</a> &middot;
@@ -32,6 +33,7 @@
                 <a href="#score-guide">Score guide</a> &middot; <a href="#run-details">Methods and provenance</a>
             </nav>
             {% if input_coverage %}{% include "templates/input_coverage.html" %}{% endif %}
+            {% if host_coverage is defined %}{% include "templates/host_coverage.html" %}{% endif %}
             <section class="appendix">{% include "templates/products.html" %}</section>
             {% if selection_policy is defined %}{% include "templates/selection_policy.html" %}{% endif %}
             {% if ranked_candidates is defined %}{% include "templates/ranking.html" %}{% endif %}

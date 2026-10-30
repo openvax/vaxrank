@@ -283,11 +283,12 @@ def read_input_manifest(path, *, include_direct=False):
         reference = document['host_reference']
         if isinstance(reference, str) and reference.strip():
             shared['host_reference'] = str((path.parent / reference).resolve())
-        elif (isinstance(reference, dict) and set(reference) == {'path', 'identity'}
+        elif (isinstance(reference, dict) and {'path', 'identity'} <= set(reference)
+              and not set(reference) - {'path', 'identity', 'catalogues'}
               and isinstance(reference['path'], str) and reference['path'].strip()):
             shared['host_reference'] = {**reference, 'path': str((path.parent / reference['path']).resolve())}
         else:
-            raise ValueError(f'{path}: host_reference requires a snapshot path or path/identity mapping')
+            raise ValueError(f'{path}: host_reference requires a snapshot path or path/identity mapping with optional catalogues')
     inputs = document.get("inputs")
     if not isinstance(inputs, list) or not inputs:
         raise ValueError(f"{path}: inputs must be a nonempty list")

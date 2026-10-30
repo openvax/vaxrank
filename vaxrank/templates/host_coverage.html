@@ -1,0 +1,23 @@
+<section class="appendix" id="host-catalogue-coverage">
+<h2>Host ORF catalogue coverage</h2>
+{% for line in host_coverage.summary %}<p>{{ line | e }}</p>{% endfor %}
+{% if host_coverage.included %}
+<h3>Included catalogue sources</h3>
+<table class="pure-table">
+<thead><tr><th>Source release</th><th>Retained ORF records</th><th>Recorded selection</th></tr></thead>
+<tbody>{% for row in host_coverage.included %}<tr>
+<td>{{ row.source | e }}</td><td>{{ row.retained_entries }}</td><td>{{ row.selection | e }}</td>
+</tr>{% endfor %}</tbody></table>
+{% endif %}
+{% if host_coverage.catalogues %}
+<h3>Registered catalogue availability</h3>
+<table class="pure-table">
+<thead><tr><th>Catalogue release</th><th>Coverage in this reference</th><th>Source assembly</th><th>Required mapping</th></tr></thead>
+<tbody>{% for row in host_coverage.catalogues %}<tr>
+<td>{{ row.name | e }} {{ row.version | e }}</td><td>{{ row.status | e }}</td>
+<td>{{ row.genome_build | e }}</td><td>{{ row.route | join(', ') | e if row.route else 'Native assembly' }}</td>
+</tr>{% endfor %}</tbody></table>
+{% endif %}
+{% if host_coverage.identity %}<p>Reference SHA-256: <span style="overflow-wrap: anywhere">{{ host_coverage.identity | e }}</span></p>
+<p>A missing sequence match applies to this selected inventory. It does not establish absence from unsearched ORFs.</p>{% endif %}
+</section>

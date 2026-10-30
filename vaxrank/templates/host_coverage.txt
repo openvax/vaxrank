@@ -1,0 +1,12 @@
+=== Host ORF catalogue coverage ===
+{% for line in host_coverage.summary %}{{ line }}
+{% endfor %}
+{% for row in host_coverage.included %}Included source: {{ row.source }}; retained ORF records: {{ row.retained_entries }}
+  Recorded selection: {{ row.selection }}
+{% endfor %}
+{% for row in host_coverage.catalogues %}Catalogue {{ row.name }} {{ row.version }}: {{ row.status }}
+  Source assembly: {{ row.genome_build }}; mapping: {{ row.route | join(', ') if row.route else 'Native assembly' }}
+{% endfor %}
+{% if host_coverage.identity %}Reference SHA-256: {{ host_coverage.identity }}
+A missing sequence match applies to this selected inventory. It does not establish absence from unsearched ORFs.
+{% endif %}
