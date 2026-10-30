@@ -116,6 +116,8 @@ def test_pinned_predictions_are_complete_real_model_outputs():
     assert metadata["vaccine_config"] == expected_vaccine_config
     expected_epitope_config = msgspec.to_builtins(EpitopeConfig())
     assert expected_epitope_config.pop("selection_policy") is None
+    assert expected_epitope_config.pop("comparison_reference") == 'annotation_reference'
+    assert expected_epitope_config.pop("patient_background_baseline") == 'focal'
     assert metadata["epitope_config"] == expected_epitope_config
     cache = CachedPredictor.from_topiary_output(str(DATA / "netmhcpan42.tsv"))
     assert cache.fallback is None

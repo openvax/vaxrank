@@ -749,6 +749,18 @@ class CandidateEpitope(Peptide):
     def wt(self) -> Optional[Peptide]:
         return self.comparators.get(COMPARATOR_WT)
 
+    @property
+    def comparison_evidence(self):
+        """Saved patient-background decision, including unavailable contexts."""
+        return next((record for record in self.input_evidence
+                     if record.get('kind') == 'patient_background_comparison'), None)
+
+    @property
+    def reference_comparator(self) -> Optional[Peptide]:
+        """The explicitly selected reference; absent patient pairs never fall back."""
+        role = 'patient_background' if self.comparison_evidence is not None else COMPARATOR_WT
+        return self.comparators.get(role)
+
     def comparator(self, name: str) -> Optional[Peptide]:
         """Generic accessor for any comparator. Returns ``None``
         when the comparator isn't present for this candidate

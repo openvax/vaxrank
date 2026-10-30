@@ -4,21 +4,21 @@
 {% if p.epitope_displays %}
 <table class="pure-table target-epitopes">
 <colgroup><col class="paired-sequences"><col class="prediction-model"><col class="binding-values"><col class="additional-values"></colgroup>
-<thead><tr><th>Target / WT comparator</th><th>Predictor / allele</th><th>Binding and ranking</th><th>Presentation and processing</th></tr></thead>
+<thead><tr><th>Target / reference comparator</th><th>Predictor / allele</th><th>Binding and ranking</th><th>Presentation and processing</th></tr></thead>
 <tbody>{% for epitope in p.epitope_displays %}{% set row = epitope['values'] %}
 <tr>
 <td>
 <div class="sequence-label">Target</div><div class="epitope-sequence">{{ epitope.target }}</div>
-<div class="sequence-label">WT comparator</div>
+<div class="sequence-label">{{ epitope.comparison_label | e }}</div>
 {% if epitope.reference %}<div class="epitope-sequence">{{ epitope.reference }}</div>{% else %}<div class="note">Sequence unavailable</div>{% endif %}
 {% if not epitope.location_known %}<div class="note">Target coordinates unavailable.</div>{% endif %}
-{% if epitope.comparison_note %}<div class="note">{{ epitope.comparison_note }}</div>{% endif %}
+{% if epitope.comparison_note %}<div class="note">{{ epitope.comparison_note | e }}</div>{% endif %}
 </td>
 <td><div class="predictor-name">{{ row['Predictor'] | e }}</div>
 {% if epitope.version %}<div class="note">Version {{ epitope.version | e }}</div>{% endif %}
 <div class="allele">{{ row['Allele'] | e }}</div></td>
 <td><div>Target IC50: <strong>{{ row['IC50'] }}</strong></div>
-<div>WT IC50: {{ row['WT IC50'] }}</div>
+<div>Comparator IC50: {{ row.get('Comparison IC50', row.get('WT IC50')) }}</div>
 <div>Vaxrank score: {{ row['Score'] | display_epitope_value if row['Score'] is not none else 'Unavailable' }}</div></td>
 <td>
 {% if row.get('Presentation score', '—') != '—' %}

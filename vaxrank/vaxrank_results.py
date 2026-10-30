@@ -50,6 +50,7 @@ class VaxrankResults(DataclassSerializable):
     # products; Isovar's unfiltered results retain its complete alternatives.
     retained_protein_fragments: list[Any] = field(default_factory=list)
     isovar_protein_hypotheses: Any = None
+    patient_background_pairs: Any = None
 
     def to_json(self, *, sample_id=None, source=None):
         """Save RNA hypotheses portably without serializing live read objects.

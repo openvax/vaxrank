@@ -40,6 +40,9 @@ def prepare_direct_report(args, reports, epitope_config):
     _, declarations = read_input_manifest(manifest, include_direct=True)
     declarations = with_species_declarations(declarations, species_scope_from_args(args), 'Direct VCF/BAM input')
     scope = scope_from_mapping(declarations, 'Direct VCF/BAM input')
+    from .patient_background import direct_patient_background, direct_rna_scope
+    background = direct_patient_background(args, epitope_config)
+    scope = combine_scopes(scope, direct_rna_scope(args, background), 'Direct RNA')
     alleles = normalize_alleles(mhc_alleles_from_args(args), 'Direct prediction')
     if not alleles:
         raise ValueError('Direct VCF/BAM predictions require explicit MHC alleles')

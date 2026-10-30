@@ -53,7 +53,9 @@ mhctools>=4.2.0,<5.0.0
 # preserving historical invocation metadata (openvax/topiary#545; vaxrank#721).
 # 5.106.1 applies an explicitly selected genotype to contextual protein scans,
 # required when antigen/CTA caches contain other patients (topiary#547; vaxrank#725).
-topiary>=5.106.1,<6.0.0
+# 5.108.4 accepts Isovar's unlimited hypothesis cap and exact repeated pairs
+# for patient-background comparisons (topiary#561/#562; vaxrank#716).
+topiary>=5.108.4,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0
@@ -68,19 +70,12 @@ platformdirs
 msgspec>=0.18.6,<1.0.0
 dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
-# OncoRef supplies human CTA identity and species-scoped evidence snapshots.
-# Historical human admission still uses the annotation-bound identity contract.
-# The reviewed compatibility window permits coordinated consumer releases:
-# PirlyGenes 6.0.18 pins 1.19.2, while 6.0.19 targets 1.23.0. Both retain
-# the legacy annotation-bound admission and exclusion APIs. Results retain
-# their actual owner/data/snapshot versions; new CTA nomination is not an
-# automatic vaccine-admission policy change (#687). The opt-in common restriction
-# policy requires 1.23.1's sequence-backed shared snapshot; older supported
-# environments retain their existing policy and receive an explicit capability
-# error if they request the new one. The cta extra declares that feature's floor
-# so a fresh install resolves a compatible Topiary rather than losing capability
-# through PirlyGenes' exact owner pin (pirl-unc/pirlygenes#656).
-oncoref>=1.19.2,<=1.23.1
+# OncoRef 1.23.1 supplies sequence-backed common CTA snapshots alongside the
+# historical annotation-bound APIs. The tested range also accepts 1.24.0's
+# product-scoped clinical evidence. PirlyGenes supports the same bounded range.
+# Saved policy/data identities remain unchanged; package compatibility
+# does not silently adopt a new target-selection policy (#687).
+oncoref>=1.23.1,<=1.24.0
 # 0.42.6 accepts canonical PyEnsembl metadata for the pinned Ensembl builder.
 orfdata>=0.42.6,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering

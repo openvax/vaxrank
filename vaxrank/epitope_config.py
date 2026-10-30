@@ -139,6 +139,17 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
         Which kind ranks alleles for ``selected`` / ``top:N``. ``auto``
         (default) prefers whichever of presentation and affinity covers more
         of the genotype, and presentation on a tie.
+
+    comparison_reference : str
+        ``annotation_reference`` (default) retains the annotated/supplied WT
+        comparison. ``patient_background`` uses only exact Isovar paired cDNA
+        contexts. Missing or ambiguous pairs remain unavailable; there is no
+        annotation fallback. The default ranking score is unchanged.
+
+    patient_background_baseline : str
+        For patient-background comparisons, ``focal`` reverts the nominated
+        somatic edit; ``supplied_somatic_haplotype`` reverts all supplied somatic
+        edits on that RNA context. Germline and unexplained edits are retained.
     """
 
     logistic_epitope_score_midpoint: float = DEFAULT_LOGISTIC_EPITOPE_SCORE_MIDPOINT
@@ -153,6 +164,8 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     allele_free_evidence: str = POLICY_ALL
     allele_selection_axis: str = SELECTION_AUTO
     selection_policy: Optional[dict] = None
+    comparison_reference: str = 'annotation_reference'
+    patient_background_baseline: str = 'focal'
 
     @property
     def allele_policy(self):
@@ -163,6 +176,12 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
             self.allele_free_evidence, axis=self.allele_selection_axis)
 
     def __post_init__(self):
+        if self.comparison_reference not in ('annotation_reference', 'patient_background'):
+            raise ValueError('comparison_reference must be annotation_reference or patient_background')
+        if self.patient_background_baseline not in ('focal', 'supplied_somatic_haplotype'):
+            raise ValueError('patient_background_baseline must be focal or supplied_somatic_haplotype')
+        if self.comparison_reference == 'annotation_reference' and self.patient_background_baseline != 'focal':
+            raise ValueError('A patient-background reversion policy requires comparison_reference=patient_background')
         if self.selection_policy is not None:
             from topiary import resolve_selection_policy
             policy = resolve_selection_policy(self.selection_policy)

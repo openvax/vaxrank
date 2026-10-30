@@ -48,10 +48,10 @@ def test_full_report_leads_with_coverage_and_products_and_attributes_scores_and_
     assert 'Presentation rank: 0.004%' in html
     assert 'Version 4.2c' in html
     assert 'Target IC50: <strong>78.82 nM</strong>' in html
-    assert 'WT IC50: 89.19 nM' in html
+    assert 'Comparator IC50: 89.19 nM' in html
     assert '1 candidate window(s)' not in html
     assert 'No results in the reported candidates.' in html
-    assert 'WT does not establish an observed patient-normal sequence.' in html
+    assert 'Annotation and computed patient backgrounds do not establish observed patient-normal tissue or protein expression.' in html
     text = render(data, 'txt')
     assert text.index('Emitted products') < text.index('=== Candidate window details')
     assert 'NetMHCpan: Score_EL' in text
@@ -110,6 +110,29 @@ def test_wt_affinity_matches_predictor_version_without_fallback():
         prediction(version='4.1', value=200.), prediction(version='4.2c', value=89.19)])})
     assert creator.epitope_data(epitope, prediction())['WT IC50'] == '89.19 nM'
     assert creator.epitope_data(epitope, prediction(version='4.0'))['WT IC50'] == 'No prediction'
+
+
+@pytest.mark.parametrize('values,expected', [([89.19, 89.19], '89.19 nM'),
+                                             ([89.19, 200.0], 'Conflicting predictions')])
+@pytest.mark.parametrize('role', ['wt', 'patient_background'])
+def test_comparator_affinity_does_not_choose_between_conflicting_measurements(values, expected, role):
+    from vaxrank.epitope_io import neoepitope_comparison_row
+
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.processing_predictions_by_key = {}
+    original = ranked_pair()[0][1][0].epitopes[0]
+    evidence = ({'kind': 'patient_background_comparison', 'state': 'available',
+                 'baseline_policy': 'focal', 'comparison': 'amino_acid_divergent'},) if role != 'wt' else ()
+    for ordered in (values, list(reversed(values))):
+        epitope = replace(original, input_evidence=evidence, comparators={role: Peptide(
+            sequence='KRFHATVSF', predictions=[prediction(value=value) for value in ordered])})
+        row = creator.epitope_data(epitope, prediction())
+        assert row['WT IC50' if role == 'wt' else 'Comparison IC50'] == expected
+        if role == 'patient_background':
+            exported = neoepitope_comparison_row(epitope, 'HLA-B*27:05', 'netMHCpan', '4.2c')
+            assert bool(exported['Predicted comparison pMHC affinity']) == (expected != 'Conflicting predictions')
+            assert exported['Comparison affinity state'] == ('conflicting' if len(set(values)) > 1 else 'recorded')
+            assert neoepitope_comparison_row(epitope, 'HLA-B*27:05')['Comparison affinity state'] == 'model_not_selected'
 
 
 def test_product_highlighting_uses_consistent_mapped_masks_without_changing_products():

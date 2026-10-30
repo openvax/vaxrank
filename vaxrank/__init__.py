@@ -43,6 +43,7 @@ from .isovar_fusion import IsovarFusionAntigens, fusion_antigens_from_isovar
 from .isovar_antigens import antigens_from_isovar
 from .isovar_input import load_isovar_input, reconstruct_isovar_antigens
 from .isovar_options import IsovarAdmission, IsovarSourceOptions
+from .patient_background import PatientBackgroundPairs
 from .construct_sequence import (
     ConstructChemicalModification,
     ConstructEvidence,
@@ -165,6 +166,7 @@ from .proteome import to_proteome
 from .version import __version__
 
 __all__ = [
+    "PatientBackgroundPairs",
     "HostReference",
     "AntigenDataset",
     "predict_antigens",

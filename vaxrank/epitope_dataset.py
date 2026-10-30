@@ -375,6 +375,8 @@ class EpitopeDataset:
                     raise ValueError('Native candidate disagrees with its host reference')
         elif any(p.scope.host_reference_sha256 is not None for p in dataset.provenance):
             raise ValueError('Native evidence is missing its declared host reference')
+        from .patient_background import validate_native_comparisons
+        validate_native_comparisons(dataset)
         return dataset
 
     def index_native_references(self):
@@ -401,6 +403,15 @@ class EpitopeDataset:
         frame["Peptide offset"] = frame.peptide_offset
         frame["Mutant peptide sequence"] = frame.peptide
         frame["Allele"] = frame.allele
+        if any(e.comparison_evidence is not None for e in self.epitopes):
+            from .epitope_io import neoepitope_comparison_row
+            candidates = {e.prediction_group_key: e for e in self.epitopes}
+            comparison_rows = [neoepitope_comparison_row(
+                candidates[(row.prediction_id, row.peptide, row.peptide_offset)], row.allele,
+                row.prediction_method_name, row.predictor_version) for row in frame.itertuples()]
+            comparisons = pd.DataFrame(comparison_rows, index=frame.index)
+            for name in comparisons:
+                frame[name] = comparisons[name]
         from .external_report import ExternalRecord
         adapter_ids = {from_native_json(r, ExternalRecord).key.identifier
                        for saved in self.construction_reports for r in saved['records']}

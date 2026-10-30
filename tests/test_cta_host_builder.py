@@ -1,13 +1,9 @@
 """Registered source capabilities and total budgets are checked before transfer."""
 
 import oncoref
-from packaging.version import Version
 import pytest
 
 from vaxrank.cta_reference_adapter import _reference_context, build_cta_host_reference
-
-pytestmark = pytest.mark.skipif(Version(oncoref.__version__) < Version('1.23.1'),
-                               reason='Common CTA integration requires the cta install extra')
 
 
 def test_owner_reference_binds_the_matching_variant_annotation_without_indexing(monkeypatch):
@@ -27,6 +23,11 @@ def test_owner_reference_binds_the_matching_variant_annotation_without_indexing(
     host = HostReference(Proteome(context, []))
     scope = InputScope(reference_assembly=genome.assembly, annotation=f'ensembl:{genome.release}')
     assert host.validate(scope, genome=genome).reference_assembly == 'GRCh38'
+    # Matching assembly labels cannot relabel an older RNA/variant annotation
+    # as the sequence-backed OncoRef reference used for common CTA admission.
+    with pytest.raises(ValueError, match='annotation'):
+        host.validate(InputScope(reference_assembly='GRCh38', annotation='ensembl:93'),
+                      genome=EnsemblRelease(93))
     with pytest.raises(ValueError, match='evidence annotation'):
         _reference_context({**identity, 'assembly_accession': 'GCA_000001405.28'}, 'homo_sapiens')
 

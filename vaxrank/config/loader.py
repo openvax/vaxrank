@@ -372,6 +372,8 @@ _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("epitopes.selection_policy", "selection_policy"),
     ("epitopes.allele_free_evidence", "allele_free_evidence"),
     ("epitopes.allele_selection_axis", "allele_selection_axis"),
+    ("epitopes.comparison_reference", "comparison_reference"),
+    ("epitopes.patient_background_baseline", "patient_background_baseline"),
 ]
 
 # Declarative mapping: (dotted config path) → (VaccineConfig kwarg name)

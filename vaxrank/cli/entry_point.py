@@ -451,6 +451,10 @@ _ARG_GROUPS = (
         'mhc_predictor', 'mhc_alleles', 'mhc_alleles_file',
         'mhc_epitope_lengths',
     )),
+    ("Reference comparisons", (
+        'comparison_reference', 'patient_background_baseline', 'patient_background_pairs',
+        'rna_sample_id', 'rna_source',
+    )),
     ("Vaccine design", (
         'vaccine_type', 'vaccine_peptide_length',
         'padding_around_mutation', 'antigen_content',
@@ -1524,6 +1528,8 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
 
     merged_config = load_vaxrank_config(args)
     epitope_config = epitope_config_override or epitope_config_from_args(args, merged_config=merged_config)
+    from ..patient_background import direct_patient_background
+    prepared_background = direct_patient_background(args, epitope_config)
     vaccine_config = vaccine_config_from_args(args, merged_config=merged_config)
     # Resolve before syncing args: the built-in DNA fallback padding is not
     # an explicit RNA reconstruction request. Isovar owns context derivation.
@@ -1598,7 +1604,8 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         'output_epitopes', 'output_antigens', 'output_ascii_report', 'output_html_report', 'output_pdf_report'))
     if capture_native:
         from ..construct_replay import pipeline_native_dataset
-        epitope_dataset = pipeline_native_dataset(args, variants, epitope_config)
+        epitope_dataset = pipeline_native_dataset(args, variants, epitope_config,
+                                                 patient_background=prepared_background)
     isovar_results = run_isovar(
         variants=variants,
         germline_variants=germline_variants_from_args(args, variants),
@@ -1622,6 +1629,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         prediction_config = replace(epitope_config, selection_policy=None, filter_expr=None,
                                     score_expr='1.0', min_epitope_score=0)
     policy_evaluations = []
+    patient_background = prepared_background or direct_patient_background(args, epitope_config, isovar_results)
     vaxrank_results = run_vaxrank(
         isovar_results=isovar_results,
         mhc_predictor=mhc_predictor,
@@ -1635,6 +1643,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         **({'epitope_dataset': epitope_dataset} if epitope_dataset is not None else {}),
         **({'defer_window_selection': False} if capture_native else {}),
         **({'policy_evaluations': policy_evaluations} if epitope_config.selection_policy else {}),
+        **({'patient_background': patient_background} if patient_background is not None else {}),
     )
 
     from ..selection_policy import write_run_policy

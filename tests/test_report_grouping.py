@@ -108,7 +108,7 @@ def test_different_biological_evidence_is_not_merged(difference):
     elif difference == 'gene':
         antigen = replace(antigen, gene_name='OTHER_GENE', gene_id='other-gene')
     else:
-        epitope = replace(epitope, input_evidence=(('recorded_support', 'separate_observation'),))
+        epitope = replace(epitope, input_evidence=({'recorded_support': 'separate_observation'},))
     ranked[1] = (antigen, [VaccinePeptide(antigen=antigen, epitopes=[epitope])])
     data = template(ranked, candidate_details=True)
     assert len(data['candidate_groups']) == 2

@@ -1,5 +1,5 @@
-<section class="appendix" id="host-catalogue-coverage">
-<h2>Host ORF catalogue coverage</h2>
+<section{% if host_coverage.identity %} class="appendix"{% endif %} id="host-catalogue-coverage" aria-label="Host ORF catalogue coverage">
+{% if host_coverage.identity %}<h2>Host ORF catalogue coverage</h2>{% endif %}
 {% for line in host_coverage.summary %}<p>{{ line | e }}</p>{% endfor %}
 {% if host_coverage.included %}
 <h3>Included catalogue sources</h3>

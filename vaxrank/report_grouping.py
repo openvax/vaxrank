@@ -41,7 +41,8 @@ def prediction_table_key(peptide, processing):
     Keep predictor-specific inputs/flanks, comparator provenance, raw values,
     model identities and processing context in the shared prediction key.
     """
-    epitopes = [replace(e, prediction_id='', input_provenance=None, input_evidence=(),
+    epitopes = [replace(e, prediction_id='', input_provenance=None,
+        input_evidence=(() if e.comparison_evidence is None else (e.comparison_evidence,)),
         source_sequence='', source_name='', offset=0,
         predictions=[replace(p, source_sequence_name='') for p in e.predictions_flat()])
         for e in peptide.epitopes]

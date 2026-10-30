@@ -219,8 +219,8 @@ queries or the original expression table.
 ### Common RNA restriction policy (experimental)
 
 An explicit `restriction_policy` selects the same admission contract for human,
-dog and mouse. Install `vaxrank[cta]` to resolve the required OncoRef 1.23.1 and
-ORFdata 0.42.6 together; see the [dependency constraints](installation.md#common-cta-evidence). It
+dog and mouse. The ordinary Vaxrank install supports OncoRef 1.23.1 through 1.24.0
+and requires ORFdata 0.42.6 or newer; see [installation](installation.md#common-cta-evidence). It
 uses the snapshot's identifier namespaces: Ensembl gene IDs and exact versioned
 transcripts, or NCBI Gene IDs and exact versioned RefSeq transcripts. It does not
 use gene symbols, human orthology, or human default CTA exclusions to admit targets.
@@ -245,6 +245,10 @@ ORFdata when available, and retain their selection and coverage in that snapshot
 Ensembl inventories use PyEnsembl's assembly/annotation labels, checked against
 the owner's exact assembly accession and release, so a matching variant input
 can share the reference without relabeling its provenance.
+The current human snapshot is bound to **Ensembl 115 / GRCh38.p14**. A variant
+input annotated with another Ensembl release does not become compatible merely
+because it also says GRCh38. Use matching reference/annotation inputs for a
+joint design; historical snapshots retain their original identities.
 
 Python supplies `CTARestrictionPolicy` and `CTARestrictionEvidence` from
 `vaxrank.cta_restriction` to the existing entry point:

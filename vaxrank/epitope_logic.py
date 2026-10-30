@@ -97,7 +97,8 @@ def predict_epitopes(
         epitope_config : Optional[EpitopeConfig] = None,
         genome : Optional[Genome] = None,
         antigen: Optional[VaccineAntigen] = None,
-        policy_evaluations=None) -> list[CandidateEpitope]:
+        policy_evaluations=None,
+        patient_background=None) -> list[CandidateEpitope]:
     """
     Parameters
     ----------
@@ -297,6 +298,7 @@ def predict_epitopes(
 
         if (
             overlaps_mutation
+            and epitope_config.comparison_reference == 'annotation_reference'
             and protein_fragment is not None
             and peptide not in wt_peptides
         ):
@@ -476,4 +478,10 @@ def predict_epitopes(
         num_total,
         num_occurs_in_reference,
         num_low_scoring)
-    return candidate_epitopes_from_rows(rows)
+    candidates = candidate_epitopes_from_rows(rows)
+    if epitope_config.comparison_reference == 'patient_background':
+        from .patient_background import attach_patient_background
+        candidates = attach_patient_background(
+            candidates, topiary_predictor, patient_background,
+            baseline=epitope_config.patient_background_baseline)
+    return candidates

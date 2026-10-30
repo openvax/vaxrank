@@ -9,7 +9,7 @@ import msgspec
 from .native_serialization import from_native_json, to_native_json
 
 
-def pipeline_native_dataset(args, variants, epitope_config):
+def pipeline_native_dataset(args, variants, epitope_config, *, patient_background=None):
     """Capture original VCF/BAM evidence without requiring a pooling manifest."""
     from pathlib import Path
     from .direct_input import _file_digest
@@ -32,6 +32,8 @@ def pipeline_native_dataset(args, variants, epitope_config):
                        annotation='ensembl:' + str(release) if release is not None else None,
                        mhc_alleles=normalize_alleles(mhc_alleles_from_args(args), 'Direct prediction'))
     scope = combine_scopes(scope, species_scope_from_args(args), 'Direct prediction')
+    from .patient_background import direct_rna_scope
+    scope = combine_scopes(scope, direct_rna_scope(args, patient_background), 'Direct RNA')
     content_hash = canonical_digest(list(hashes.values()))
     provenance = InputProvenance(
         input_id='vcf_bam:' + content_hash + ':' + canonical_digest(scope_dict(scope)),
@@ -193,7 +195,17 @@ def _assembly_identity(args, ranked, options, context):
                         'input_order', 'ordering_key', 'ranking_rules', 'selection_rank',
                         'selected', 'decision_reason', 'parent_window')} for item in audit['alternatives']]
                 candidate['window_selection'] = audit
-    definition = (graph, configuration, context, args._construct_policy)
+    policy = dict(args._construct_policy)
+    epitopes = dict(policy.get('epitopes') or {})
+    # Historical annotation-reference designs predate these explicit defaults.
+    # Preserve their identity; a patient-background policy still changes it.
+    if (epitopes.get('comparison_reference', 'annotation_reference') == 'annotation_reference'
+            and epitopes.get('patient_background_baseline', 'focal') == 'focal'):
+        epitopes.pop('comparison_reference', None)
+        epitopes.pop('patient_background_baseline', None)
+    if 'epitopes' in policy:
+        policy['epitopes'] = epitopes
+    definition = (graph, configuration, context, policy)
     if args._design_dataset.host_reference is not None:
         definition += (args._design_dataset.host_reference.identity,)
     return design_digest(args, definition)

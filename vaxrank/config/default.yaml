@@ -52,6 +52,16 @@
 
 
 epitopes:
+  # ---- Reference comparisons ----
+  # annotation_reference keeps the annotated/supplied WT role. The opt-in
+  # patient_background uses exact Isovar cDNA pairs and never falls back to
+  # annotation when those pairs are missing. It does not change target ranking.
+  comparison_reference: annotation_reference
+  # For patient_background: focal or supplied_somatic_haplotype. Both retain
+  # germline and unexplained edits; a computed baseline is not observed normal
+  # tissue or protein expression. See docs/patient-background-comparisons.md.
+  patient_background_baseline: focal
+
   # ---- Scalar scoring knobs ----
   #
   # NOTE: these knobs feed the *implicit default* score expression

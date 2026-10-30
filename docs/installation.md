@@ -8,20 +8,35 @@ Vaxrank requires Python 3.11 or newer.
 
 ## Common CTA evidence
 
-Install the opt-in [common RNA restriction policy](antigen-inputs.md#common-rna-restriction-policy-experimental)
-with its required OncoRef data version:
+The ordinary installation supports OncoRef 1.23.1 through 1.24.0 and requires
+ORFdata 0.42.6 or newer,
+which support the [common RNA restriction policy](antigen-inputs.md#common-rna-restriction-policy-experimental).
+The older `vaxrank[cta]` spelling remains a compatible alias:
 
 ```sh
 pip install 'vaxrank[cta]'
 pip check
 ```
 
-This extra requires OncoRef 1.23.1. PirlyGenes 6.0.18 pins OncoRef 1.19.2,
-so these features currently need separate environments. On a fresh installation,
-the resolver selects Topiary 5.106.1, the latest compatible release, because newer
-Topiary releases require PirlyGenes. The coordinated owner-pin update is tracked
-in [PirlyGenes #656](https://github.com/pirl-unc/pirlygenes/issues/656).
-Do not override installed package constraints with `--no-deps`.
+Common CTA evidence and patient-background comparisons use one environment with
+Topiary 5.108.4 or newer. PirlyGenes also constrains the supported OncoRef range,
+so resolve
+related upgrades together:
+
+```sh
+pip install --upgrade 'vaxrank[cta]' topiary pirlygenes oncoref
+pip check
+```
+
+The resolver may retain an older supported OncoRef release until a compatible
+PirlyGenes release is available. Do not bypass these constraints with `--no-deps`.
+
+The common policy remains opt-in: supply `restriction_policy`, its RNA evidence
+and the complete host reference. Installing a newer reference package does not
+admit a target, change historical CTA defaults or reinterpret saved decisions.
+OncoRef 1.24's [TCR-T evidence](https://pirl-unc.github.io/oncoref/cta-release-1.24.0/)
+retains its peptide, HLA and product limits; it is not an automatic admission
+override for vaccine windows.
 
 ## Reference annotation
 

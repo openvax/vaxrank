@@ -14,6 +14,11 @@ For mRNA linker optimization, select `--mrna-junction-predictor` explicitly,
 as with other native sequence inputs; the candidate predictor alone does not
 request new junction predictions.
 
+[Patient-background comparisons](patient-background-comparisons.md) are an
+explicit alternative to annotation-reference comparators for direct RNA and
+saved protein-hypothesis inputs. They retain the exact somatic reversion policy,
+germline background, nucleotide/transcript alternatives and phase uncertainty.
+
 ## Supported sources
 
 | Family | Producer / accepted result | Candidate interpretation |
