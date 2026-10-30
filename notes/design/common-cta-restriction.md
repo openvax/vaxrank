@@ -32,6 +32,10 @@ threshold both pass. Keep all other loci and extra ORFs in downstream self check
 Reference adapters depend on declared identifier namespaces and source roles.
 Versioned Ensembl and RefSeq transcripts are matched exactly. A candidate-only
 reference subset cannot stand in for the complete host protein inventory.
+Use the annotation provider's metadata labels for Ensembl host scopes and verify
+the exact owner assembly accession and release before acquisition. Assembly
+display names and accession strings must not produce a false mismatch against a
+matching variant annotation; source names are compared without case differences.
 
 Freeze the policy, evidence, all equivalent occurrences and assessment reasons in
 native results and antigen evidence. Validate the same assessment on replay. Reuse

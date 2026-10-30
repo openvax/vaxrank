@@ -4,10 +4,31 @@ import oncoref
 from packaging.version import Version
 import pytest
 
-from vaxrank.cta_reference_adapter import build_cta_host_reference
+from vaxrank.cta_reference_adapter import _reference_context, build_cta_host_reference
 
 pytestmark = pytest.mark.skipif(Version(oncoref.__version__) < Version('1.23.1'),
                                reason='Common CTA integration requires the cta install extra')
+
+
+def test_owner_reference_binds_the_matching_variant_annotation_without_indexing(monkeypatch):
+    from orfdata import Proteome
+    from pyensembl import EnsemblRelease
+    from vaxrank.host_reference import HostReference
+    from vaxrank.input_scope import InputScope
+
+    genome = EnsemblRelease(115)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Reference metadata tried to download or index an annotation')
+    monkeypatch.setattr(type(genome), 'download', forbidden)
+    monkeypatch.setattr(type(genome), 'index', forbidden)
+    identity = oncoref.human.cta_snapshot().as_dict()['references'][0]['identity']
+    context = _reference_context(identity, 'homo_sapiens')
+    # No proteins are needed to exercise the scope/annotation binding boundary.
+    host = HostReference(Proteome(context, []))
+    scope = InputScope(reference_assembly=genome.assembly, annotation=f'ensembl:{genome.release}')
+    assert host.validate(scope, genome=genome).reference_assembly == 'GRCh38'
+    with pytest.raises(ValueError, match='evidence annotation'):
+        _reference_context({**identity, 'assembly_accession': 'GCA_000001405.28'}, 'homo_sapiens')
 
 
 @pytest.fixture

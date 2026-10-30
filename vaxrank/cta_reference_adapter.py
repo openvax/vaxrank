@@ -45,6 +45,32 @@ def _reference_roles(reference):
     return roles
 
 
+def _reference_context(identity, species):
+    """Use provider metadata labels while requiring the owner's exact identity."""
+    from orfdata import ReferenceContext
+
+    if reference_namespace(identity) == 'ensembl':
+        from pyensembl import EnsemblRelease
+        # Metadata only: constructing a release does not download or index it.
+        reference = ReferenceContext.from_genome(
+            EnsemblRelease(int(identity['annotation_release']), species=species))
+    else:
+        reference = ReferenceContext(identity['taxon_id'], species,
+            identity['assembly_accession'], identity['annotation_source'], identity['annotation_release'],
+            assembly_accession=identity['assembly_accession'])
+    _validate_reference_identity(reference, identity)
+    return reference
+
+
+def _validate_reference_identity(reference, identity):
+    expected = (identity['taxon_id'], identity['assembly_accession'],
+                identity['annotation_source'].casefold(), identity['annotation_release'])
+    actual = (reference.taxon_id, reference.assembly_accession,
+              (reference.annotation_name or '').casefold(), reference.annotation_version)
+    if actual != expected:
+        raise ValueError('Host reference differs from the species CTA evidence annotation')
+
+
 def build_cta_host_reference(species, *, evidence_snapshot=None, cache_root=None,
                              local_overrides=None, offline=False, max_bytes=0):
     """Build the snapshot's annotated host using verified OncoRef source assets.
@@ -55,7 +81,7 @@ def build_cta_host_reference(species, *, evidence_snapshot=None, cache_root=None
     """
     from oncoref import for_species
     from oncoref.species_assets import inspect_asset
-    from orfdata import Proteome, ReferenceContext
+    from orfdata import Proteome
     from .host_reference import HostReference
 
     require_common_cta_data()
@@ -74,6 +100,7 @@ def build_cta_host_reference(species, *, evidence_snapshot=None, cache_root=None
                        if r['identity'] == identity), None)
     if registered is None:
         raise ValueError('CTA reference has no matching registered source assets')
+    reference = _reference_context(identity, collection.species.name)
     assets = {a.id: a for a in collection.references.assets()}
     selected = {role: assets[registered['assets'][role]] for role in roles}
     options = dict(cache_root=cache_root, local_overrides=local_overrides)
@@ -83,9 +110,6 @@ def build_cta_host_reference(species, *, evidence_snapshot=None, cache_root=None
         raise ValueError(f'CTA host reference needs {needed} bytes; transfer budget is {max_bytes}')
     paths = {role: collection.references.ensure(asset.id, **options, offline=offline, max_bytes=max_bytes)
              for role, asset in selected.items()}
-    reference = ReferenceContext(identity['taxon_id'], collection.species.name,
-        identity['assembly_accession'], identity['annotation_source'], identity['annotation_release'],
-        assembly_accession=identity['assembly_accession'])
     pins = {role: identity['content_provenance'][role] for role in roles}
     if reference_namespace(identity) == 'ensembl':
         proteome = Proteome.from_ensembl(paths['protein'], paths['gtf'], paths['rna'], paths['ncrna'],
@@ -101,12 +125,7 @@ def build_cta_host_reference(species, *, evidence_snapshot=None, cache_root=None
 def validate_host_mapping(host_reference, mapped_reference):
     """Bind one complete annotated host layer to the source's pinned assets."""
     reference = host_reference.proteome.reference
-    expected = (mapped_reference['taxon_id'], mapped_reference['assembly_accession'],
-                mapped_reference['annotation_source'], mapped_reference['annotation_release'])
-    actual = (reference.taxon_id, reference.assembly_accession,
-              reference.annotation_name, reference.annotation_version)
-    if actual != expected:
-        raise ValueError('Host reference differs from the species CTA evidence annotation')
+    _validate_reference_identity(reference, mapped_reference)
     namespace = reference_namespace(mapped_reference)
     roles = _reference_roles(mapped_reference)
     assets = {role: mapped_reference['content_provenance'][role] for role in roles}

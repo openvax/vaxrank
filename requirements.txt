@@ -81,8 +81,8 @@ serializable>=1.1.0,<2.0.0
 # so a fresh install resolves a compatible Topiary rather than losing capability
 # through PirlyGenes' exact owner pin (pirl-unc/pirlygenes#656).
 oncoref>=1.19.2,<=1.23.1
-# 0.42.5 builds pinned Ensembl inventories with the same provenance as RefSeq.
-orfdata>=0.42.5,<1.0.0
+# 0.42.6 accepts canonical PyEnsembl metadata for the pinned Ensembl builder.
+orfdata>=0.42.6,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
 # of predictor_version strings. Always pulled in transitively via setuptools
 # / pip, but pinned explicitly so minimal / --no-deps installs don't break
