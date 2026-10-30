@@ -148,7 +148,8 @@ class TemplateDataCreator(object):
             product_files=None,
             candidate_details=False,
             source_evidence=None,
-            selection=None):
+            selection=None,
+            host_reference=None):
         """
         Build a report from ranked candidates and actual assembly products.
 
@@ -185,6 +186,7 @@ class TemplateDataCreator(object):
         self.candidate_details = candidate_details
         self.source_evidence = source_evidence or {}
         self.selection = selection or {}
+        self.host_reference = host_reference
         self.prediction_configuration = args_for_report.get('_effective_prediction_configuration', {})
         self.processing_enabled = args_for_report.get('processing_aware_annotation')
 
@@ -1111,6 +1113,9 @@ class TemplateDataCreator(object):
         self.template_data['input_coverage'] = coverage_view(
             getattr(self.patient_info, 'input_coverage', None), self.source_evidence,
             self.template_data['ranked_candidates'], self.products)
+        from .reference_coverage import coverage_view as host_coverage_view
+        self.template_data['host_coverage'] = host_coverage_view(
+            self.host_reference.coverage if self.host_reference is not None else None)
         from .prediction_policy import prediction_summary
         self.template_data['prediction_configuration'] = prediction_summary(self.prediction_configuration)
         group_report_evidence(self.template_data)

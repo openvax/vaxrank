@@ -4,6 +4,7 @@ Vaccine Design Report
 {% endfor %}
 
 {% if input_coverage %}{% include "templates/input_coverage.txt" %}{% endif %}
+{% if host_coverage is defined %}{% include "templates/host_coverage.txt" %}{% endif %}
 {% include "templates/products.txt" %}
 {% if selection_policy is defined %}{% include "templates/selection_policy.txt" %}{% endif %}
 {% if ranked_candidates is defined %}{% include "templates/ranking.txt" %}{% endif %}
