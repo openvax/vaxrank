@@ -73,11 +73,11 @@ serializable>=1.1.0,<2.0.0
 # OncoRef supplies human CTA identity and species-scoped evidence snapshots.
 # Historical human admission still uses the annotation-bound identity contract.
 # The reviewed compatibility window permits coordinated consumer releases:
-# PirlyGenes 6.0.18 pins 1.19.2, while 6.0.19 moves to 1.22.0. Both retain
+# PirlyGenes 6.0.18 pins 1.19.2, while 6.0.19 moves to 1.23.0. Both retain
 # the legacy annotation-bound admission and exclusion APIs. Results retain
 # their actual owner/data/snapshot versions; new CTA nomination is not an
 # automatic vaccine-admission policy change (#687).
-oncoref>=1.19.2,<=1.22.0
+oncoref>=1.19.2,<=1.23.0
 # 0.42.1 exports the resolved carrier strand for every TranscriptORF kind.
 orfdata>=0.42.1,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
