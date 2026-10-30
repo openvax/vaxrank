@@ -1,3 +1,5 @@
+import pytest
+
 from varcode import MultiOutcomeEffect
 from varcode.effect_candidates import EffectCandidate
 from varcode.effects.effect_classes import MutationEffect
@@ -106,7 +108,7 @@ def test_varcode_effect_outcome_summary_includes_candidates():
     summary = summarize_varcode_effect_outcomes(outcomes)
 
     assert summary["Outcome set type"] == "_FakeOutcomeSet"
-    assert summary["Most likely effect"] == "_LikelyEffect: likely"
+    assert summary["Producer-preferred effect"] == "_LikelyEffect: likely"
     assert summary["Highest priority effect"] == "_PriorityEffect: priority"
     assert "_LikelyEffect: likely (producer-order)" in summary[
         "Candidate effects"]
@@ -124,7 +126,7 @@ def test_report_effect_data_uses_selected_effect_and_shows_outcomes():
     assert effect_data["Transcript name"] == "TX-PRIORITY"
     assert effect_data["Transcript ID"] == "ENST-PRIORITY"
     assert effect_data["Outcome set type"] == "_FakeOutcomeSet"
-    assert effect_data["Most likely effect"] == "_LikelyEffect: likely"
+    assert effect_data["Producer-preferred effect"] == "_LikelyEffect: likely"
     assert effect_data["Highest priority effect"] == "_PriorityEffect: priority"
 
 
@@ -150,28 +152,34 @@ def test_mutant_protein_fragment_predicted_effect_selects_outcome():
         outcome_selection=OUTCOME_SELECTION_MULTI_OUTCOME) is outcomes
 
 
-def test_real_splice_outcomes_survive_dna_fallback_and_reporting(human_genome_grch37):
-    """Exercise Varcode's always-on outcomes through both annotation doors.
+@pytest.mark.parametrize("position,ref,alt,preferred_type", [
+    (117171168, "G", "T", "Substitution"),
+    (117171171, "A", "C", "Intronic"),
+])
+def test_real_splice_outcomes_survive_dna_fallback_and_reporting(
+        human_genome_grch37, position, ref, alt, preferred_type):
+    """Exercise Varcode 11's ordinary candidates through both annotation doors.
 
     The last base of CFTR exon 4 is G in Ensembl 75 (GRCh37). Its G>T
     substitution has a coding consequence if normal splicing persists, and
     a distinct exon-skipping candidate. This checks API composition, not
     which predicted splice mechanism occurs in a patient.
     """
-    from varcode import ExonSkipping, NormalSplicing, SpliceOutcomeSet, Variant
+    from varcode import Variant
+    from varcode.effects import Deletion
     from vaxrank.gene_pathway_check import GenePathwayCheck
 
-    variant = Variant("7", 117171168, "G", "T", human_genome_grch37)
-    fragment = MutantProteinFragment.from_variant_dna(variant, 35)
+    variant = Variant("7", position, ref, alt, human_genome_grch37)
+    fragment = MutantProteinFragment.from_variant_dna(variant, 35, effects=variant.effects())
     assert fragment is not None
     assert fragment.gene_name == "CFTR"
 
     outcomes = fragment.predicted_effect(OUTCOME_SELECTION_MULTI_OUTCOME)
-    assert isinstance(outcomes, SpliceOutcomeSet)
+    assert type(outcomes).__name__ == preferred_type
     likely = fragment.predicted_effect(OUTCOME_SELECTION_MOST_LIKELY)
     priority = fragment.predicted_effect(OUTCOME_SELECTION_HIGHEST_PRIORITY)
-    assert isinstance(likely, NormalSplicing)
-    assert isinstance(priority, ExonSkipping)
+    assert type(likely).__name__ == preferred_type
+    assert isinstance(priority, Deletion)
     assert likely.mutant_protein_sequence != priority.mutant_protein_sequence
     assert fragment.amino_acids in priority.mutant_protein_sequence
     assert fragment.amino_acids not in likely.mutant_protein_sequence
@@ -180,9 +188,27 @@ def test_real_splice_outcomes_survive_dna_fallback_and_reporting(human_genome_gr
     assert fragment.mutant_amino_acid_end_offset == 17
 
     summary = summarize_varcode_effect_outcomes(outcomes)
-    assert summary["Outcome set type"] == "SpliceOutcomeSet"
-    assert "NormalSplicing" in summary["Candidate effects"]
-    assert "ExonSkipping" in summary["Candidate effects"]
+    assert summary["Outcome set type"] == preferred_type
+    assert preferred_type in summary["Candidate effects"]
+    assert "Deletion" in summary["Candidate effects"]
+    assert "Unresolved" in summary["Candidate effects"]
+    assert "not calibrated probabilities" in summary["Outcome preference"]
+    # Preserve the source products and hypotheses in existing native fragment
+    # provenance. There is no reclassification of unknown outcomes as safe.
+    path = fragment.dna_effect_selection["candidate_path"]
+    evidence = path[-1]["evidence"]
+    assert path[-1]["source"] == "varcode.transcript_model"
+    assert evidence["probability"] is None
+    assert evidence["outcomes"][0]["baseline"]["cdna_sequence"]
+    assert evidence["outcomes"][0]["mutant"]["protein_sequence"] == priority.mutant_protein_sequence
+    assert evidence["outcomes"][0]["hypothesis"]["splice_plan"]
+    restored = MutantProteinFragment.from_json(fragment.to_json())
+    assert restored.dna_effect_selection == fragment.dna_effect_selection
+    assert restored.predicted_effect().mutant_protein_sequence == priority.mutant_protein_sequence
+    from vaxrank.native_serialization import from_native_json, to_native_json
+    archived = from_native_json(to_native_json(fragment), MutantProteinFragment)
+    assert archived.dna_effect_selection == fragment.dna_effect_selection
+    assert archived.predicted_effect().mutant_protein_sequence == priority.mutant_protein_sequence
     # Driver annotation uses Variant.effects(), while report metadata uses
     # effect_on_transcript(). Neither may require the removed keyword.
     assert GenePathwayCheck().make_variant_dict(variant)
@@ -214,8 +240,9 @@ def test_template_data_include_manufacturability_override():
         'include_manufacturability'] is False                   # forced off (core/mrna)
 
 
-def test_candidate_paths_preserve_nested_provenance_and_ignore_cycles():
-    from vaxrank.varcode_effects import iter_varcode_candidate_paths
+def test_shared_candidate_paths_preserve_nested_provenance_and_unknown_cycles():
+    from varcode import iter_candidate_paths
+    from topiary import varcode_candidate_provenance
     outer, likely, priority = _outcome_set()
     inner = _FakeOutcomeSet(likely, priority)
     outer._candidates = (EffectCandidate(inner, source="outer", evidence={"sample": "x"}),)
@@ -224,7 +251,9 @@ def test_candidate_paths_preserve_nested_provenance_and_ignore_cycles():
         EffectCandidate(priority, source="second"),
         EffectCandidate(outer, source="cycle"),
     )
-    paths = list(iter_varcode_candidate_paths(outer))
-    assert [[c.source for c in p] for p in paths] == [["outer", "first"], ["outer", "second"]]
-    assert [p[-1].effect for p in paths] == [likely, priority]
-    assert paths[0][0].evidence == {"sample": "x"}
+    paths = list(iter_candidate_paths(outer))
+    assert [effect for effect, _path in paths] == [likely, priority, None]
+    assert [[c.source for c in path] for _effect, path in paths] == [
+        ["outer", "first"], ["outer", "second"], ["outer", "cycle"]]
+    assert varcode_candidate_provenance(paths[0][1][0]) == dict(
+        source="outer", evidence={"sample": "x"})

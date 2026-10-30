@@ -48,7 +48,6 @@ from .report_display import (
 )
 from .varcode_effects import (
     OUTCOME_SELECTION_MULTI_OUTCOME,
-    is_multi_outcome_effect,
     summarize_varcode_effect_outcomes,
 )
 
@@ -505,9 +504,7 @@ class TemplateDataCreator(object):
             ('Transcript ID', display_effect.transcript_id or '—'),
             ('Effect description', display_effect.short_description),
         ])
-        if is_multi_outcome_effect(predicted_effect):
-            effect_data.update(summarize_varcode_effect_outcomes(
-                predicted_effect))
+        effect_data.update(summarize_varcode_effect_outcomes(predicted_effect))
         return effect_data
 
     def _peptide_header_display_data(self, vaccine_peptide, rank):

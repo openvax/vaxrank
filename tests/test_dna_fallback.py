@@ -148,6 +148,7 @@ def test_dna_fallback_disabled_returns_empty(genome):
     isovar_result = SimpleNamespace(
         variant=v,
         passes_all_filters=False,
+        predicted_effect=v.effects().top_priority_effect(),
     )
     result = vaccine_peptides_for_variant(
         isovar_result=isovar_result,
@@ -168,6 +169,7 @@ def test_dna_fallback_enabled_attempts_construction(genome):
     isovar_result = SimpleNamespace(
         variant=v,
         passes_all_filters=False,
+        predicted_effect=v.effects().top_priority_effect(),
     )
 
     # Mock predict_epitopes to avoid needing a real MHC predictor
@@ -248,7 +250,8 @@ def test_dna_fusion_selects_usable_alternative(fusion_candidates, primary_kind):
     assert selection["five_prime_transcript_id"] == transcript.id
     assert selection["three_prime_transcript_id"] == partner.id
     assert selection["candidate_path"] == [dict(
-        source="selection-fixture", evidence={"junction": "synthetic", "rna_support": None})]
+        source="selection-fixture", evidence={"junction": "synthetic", "rna_support": None}),
+        dict(source="varcode", evidence={"sv_type": "BND"})]
     assert fragment.sequence_source == "varcode_translation"
     assert fragment.rna_evidence_method == fragment.rna_evidence_subject == ""
     assert fragment.n_alt_reads == fragment.n_alt_reads_supporting_protein_sequence == 0
@@ -262,6 +265,61 @@ def test_dna_fusion_without_usable_protein_returns_none(fusion_candidates, alter
                "empty": "", "truncated": reference[:40]}[alternative_kind]
     variant, _, _ = build(None, protein)
     assert MutantProteinFragment.from_variant_dna(variant, 35) is None
+
+
+def test_supplied_patient_baseline_survives_fallback_and_json(genome, monkeypatch):
+    """A phased CFTR comparison must not revert to the canonical protein."""
+    from types import SimpleNamespace
+    from isovar import IsovarResult
+    from varcode import GermlineContext
+    from vaxrank.core_logic import vaccine_peptides_for_variant
+    from vaxrank.native_serialization import from_native_json, to_native_json
+
+    transcript = genome.transcript_by_id("ENST00000003084")
+    variant = varcode.Variant("7", 117171154, "T", "A", genome)
+    germline = varcode.Variant("7", 117171155, "T", "C", genome)
+    effect = variant.effect_on_transcript(
+        transcript, germline=GermlineContext.from_variants([germline]),
+        phase_resolver=SimpleNamespace(in_cis=lambda *args: True))
+    assert effect.short_description == "p.S159T"
+    assert effect.original_protein_sequence[158] == "S"
+    assert transcript.protein_sequence[158] == "L"
+    result = IsovarResult(variant, None, effect, filter_values={"rna_support": False})
+    monkeypatch.setattr("vaxrank.core_logic.predict_epitopes", lambda **kwargs: [])
+    retained = []
+    vaccine_peptides_for_variant(
+        result, mhc_predictor=None, allow_dna_only_fallback=True,
+        retained_protein_fragments=retained)
+    assert len(retained) == 1
+    fragment = retained[0]
+    for value in (fragment, MutantProteinFragment.from_json(fragment.to_json()),
+                  from_native_json(to_native_json(fragment), MutantProteinFragment)):
+        selected = value.predicted_effect()
+        assert selected.short_description == "p.S159T"
+        assert selected.original_protein_sequence[158] == "S"
+        assert selected.mutant_protein_sequence[158] == "T"
+        assert value.dna_effect_selection == fragment.dna_effect_selection
+
+    # Effect graph node classes must go through the same finite registry as
+    # ordinary native fields; nested metadata must not reopen arbitrary imports.
+    import json
+    payload = json.loads(to_native_json(fragment))
+    payload["annotated_effect"]["nodes"]["__value__"][0]["__value__"][0] = {
+        "__module__": "os", "__name__": "system"}
+    with pytest.raises(ValueError, match="not permitted"):
+        from_native_json(json.dumps(payload), MutantProteinFragment)
+
+
+def test_supplied_empty_or_unresolved_effects_do_not_reannotate(genome):
+    from varcode.effects import Unresolved
+
+    variant = varcode.Variant("7", 117171154, "T", "A", genome)
+    transcript = genome.transcript_by_id("ENST00000003084")
+    unresolved = Unresolved(variant, transcript, mechanism="supplied_rna",
+                            reason="The supplied RNA lacks a mapped baseline")
+    assert MutantProteinFragment.from_variant_dna(variant, 35) is not None
+    for effects in ([], [unresolved]):
+        assert MutantProteinFragment.from_variant_dna(variant, 35, effects=effects) is None
 
 
 def test_dna_fusion_selection_survives_json_and_subsequences(fusion_candidates):

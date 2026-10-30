@@ -1,7 +1,5 @@
 from collections import OrderedDict
-
-from varcode import MultiOutcomeEffect
-from varcode.effect_candidates import EffectCandidate
+from varcode import get_effect_candidates
 
 
 OUTCOME_SELECTION_HIGHEST_PRIORITY = "highest_priority"
@@ -15,47 +13,10 @@ OUTCOME_SELECTIONS = {
 }
 
 
-def is_multi_outcome_effect(effect):
-    return isinstance(effect, MultiOutcomeEffect)
-
-
-def iter_varcode_candidate_paths(effect):
-    """Yield concrete candidates with their enclosing provenance wrappers.
-
-    Structural effects include themselves as a concrete primary. Visit that
-    primary once, while still traversing alternatives and nested outcome sets.
-    Distinct transcript pairs and provenance paths are never deduplicated.
-    """
-    def walk(candidate, path, ancestors):
-        current = candidate.effect
-        if current is None:
-            return
-        if not is_multi_outcome_effect(current):
-            yield path + (candidate,)
-            return
-        if id(current) in ancestors:
-            return
-        for child in current.candidates:
-            if child.effect is current:
-                # Keep the incoming wrapper: it may carry external provenance.
-                yield path + (candidate,)
-            else:
-                yield from walk(child, path + (candidate,), ancestors | {id(current)})
-
-    if is_multi_outcome_effect(effect):
-        for candidate in effect.candidates:
-            if candidate.effect is effect:
-                yield (candidate,)
-            else:
-                yield from walk(candidate, (), {id(effect)})
-    elif effect is not None:
-        yield (EffectCandidate(effect),)
-
-
 def select_varcode_effect_outcome(
         effect,
         outcome_selection=OUTCOME_SELECTION_HIGHEST_PRIORITY):
-    """Collapse a varcode multi-outcome effect to one concrete effect.
+    """Select a concrete comparison from an ordinary or wrapped effect.
 
     ``most_likely_effect`` is producer-order-first; ``highest_priority_effect``
     is varcode's most protein-disruptive candidate. Vaxrank's peptide
@@ -72,11 +33,17 @@ def select_varcode_effect_outcome(
         return None
     if outcome_selection == OUTCOME_SELECTION_MULTI_OUTCOME:
         return effect
-    if not is_multi_outcome_effect(effect):
+    if not get_effect_candidates(effect):
         return effect
-    if outcome_selection == OUTCOME_SELECTION_MOST_LIKELY:
-        return effect.most_likely_effect
-    return effect.highest_priority_effect
+    name = ("most_likely" if outcome_selection == OUTCOME_SELECTION_MOST_LIKELY
+            else "highest_priority")
+    # Compatibility wrappers expose the effect; ordinary Varcode 11 results
+    # expose its candidate. Respect the producer's selection in both cases.
+    selected = getattr(effect, name + "_effect", None)
+    if selected is not None:
+        return selected
+    candidate = getattr(effect, name + "_candidate", None)
+    return candidate.effect if candidate is not None else effect
 
 
 def format_varcode_effect(effect):
@@ -95,15 +62,18 @@ def format_varcode_candidate(candidate):
 
 
 def summarize_varcode_effect_outcomes(effect):
-    """Report rows for varcode multi-outcome effects."""
-    if not is_multi_outcome_effect(effect):
+    """Report native alternatives without implying calibrated likelihoods."""
+    candidates = get_effect_candidates(effect)
+    if not candidates or (len(candidates) == 1 and candidates[0].effect is effect):
         return OrderedDict()
     return OrderedDict([
         ("Outcome set type", effect.__class__.__name__),
-        ("Most likely effect", format_varcode_effect(effect.most_likely_effect)),
+        ("Producer-preferred effect", format_varcode_effect(
+            select_varcode_effect_outcome(effect, OUTCOME_SELECTION_MOST_LIKELY))),
         ("Highest priority effect", format_varcode_effect(
-            effect.highest_priority_effect)),
+            select_varcode_effect_outcome(effect))),
+        ("Outcome preference", "Producer ordering and consequence severity; not calibrated probabilities"),
         ("Candidate effects", "; ".join(
             format_varcode_candidate(c)
-            for c in effect.candidates)),
+            for c in candidates)),
     ])

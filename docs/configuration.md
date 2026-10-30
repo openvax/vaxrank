@@ -151,6 +151,20 @@ transcript-pair IDs. Saved fragments retain the chosen candidate's provenance
 and protein coordinates. These are sequence predictions; the fallback assigns
 no RNA support.
 
+Varcode 11 can attach alternatives to an ordinary annotation: a preferred
+intronic comparison can retain a protein-changing exon-skip candidate. Vaxrank
+uses Varcode's shared candidate traversal. Reports distinguish the
+**producer-preferred effect**, **highest priority effect**, and **candidate
+effects**. Producer ordering and consequence severity are not calibrated
+probabilities or proof that a product was expressed.
+
+When Isovar supplies an annotation, fallback retains its patient baseline,
+phase and RNA hypotheses instead of reannotating the bare variant. An unavailable
+baseline or protein remains unavailable. Python callers can supply the same
+context with `MutantProteinFragment.from_variant_dna(..., effects=effects)`;
+an empty list produces no fragment. Saved fragments and their proteome records
+retain the annotation and selected-path evidence through JSON replay.
+
 ## Custom filtering and scoring with the Topiary DSL
 
 For anything beyond the scalar logistic and percentile-rank defaults, set

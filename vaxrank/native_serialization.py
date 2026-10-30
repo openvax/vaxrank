@@ -13,6 +13,7 @@
 """Allowlisted JSON serialization for native epitope object graphs."""
 
 import json
+from functools import lru_cache
 
 from serializable import to_json
 
@@ -26,6 +27,36 @@ _CLASS_FIELD = "__class__"
 _VALUE_FIELD = "__value__"
 _SERIALIZED_KEYS_FIELD = "__serialized_keys__"
 _SERIALIZED_KEY_PREFIX = _SERIALIZED_KEYS_FIELD + "element_"
+
+
+@lru_cache(maxsize=1)
+def _varcode_graph_classes():
+    """Reviewed Varcode 11 graph records; never import a class named by input."""
+    from varcode.effects import effect_classes
+    from varcode import effect_hypotheses, mutant_transcript
+    from varcode.effect_candidates import EffectCandidate
+    from varcode.splice_outcomes import SpliceOutcomeSet
+    from varcode.effects.structural_serialization import _EffectReference
+
+    names = (
+        "MutationEffect MultiOutcomeEffect TranscriptMutationEffect NonsilentCodingMutation "
+        "Failure GermlineAlleleOverlap HypothesisLimit Unresolved IncompleteTranscript "
+        "Intergenic Intragenic NoncodingTranscript Intronic ThreePrimeUTR FivePrimeUTR "
+        "Silent Substitution Insertion Deletion ComplexSubstitution AlternateStartCodon "
+        "IntronicSpliceSite ExonicSpliceSite StopLoss SpliceDonor SpliceAcceptor PrematureStop "
+        "FrameShiftTruncation StartLoss FrameShift ExonLoss CrypticExonCandidate GeneFusion "
+        "Inversion LargeDeletion LargeDuplication StructuralVariantEffect TranslocationToIntergenic "
+        "SpliceMechanismEffect NormalSplicing ExonSkipping IntronRetention CrypticDonor "
+        "CrypticAcceptor PhaseCandidateSet HaplotypeEffect"
+    ).split()
+    classes = [getattr(effect_classes, name) for name in names]
+    classes += [getattr(effect_hypotheses, name) for name in (
+        "ClassifiedOutcome EffectHypothesis RealizedEffectCandidate RealizedTranscriptProduct "
+        "SpliceOption SplicePlan SpliceSiteKey SpliceAxis").split()]
+    classes += [getattr(mutant_transcript, name) for name in (
+        "MutantTranscript ReferenceSegment TranscriptEdit _AssembledAllele").split()]
+    classes += [EffectCandidate, SpliceOutcomeSet, _EffectReference]
+    return {(cls.__module__, cls.__name__): cls for cls in classes}
 
 
 def _native_serializable_classes():
@@ -92,6 +123,7 @@ def _native_serializable_classes():
     )
 
     return {
+        **_varcode_graph_classes(),
         ("vaxrank.peptide", "PeptideConstruct"): PeptideConstruct,
         **{(cls.__module__, cls.__name__): cls for cls in (
             Variant, StructuralVariant, Genome, EnsemblRelease, Transcript, Species,
@@ -186,9 +218,14 @@ def _decode_native_repr(value, registry):
     if not isinstance(value, dict):
         raise TypeError("Invalid native serialized value %r" % (value,))
 
-    # Native epitope graphs contain no standalone class or function values.
+    # Varcode's graph node table names reviewed classes as inert values. Other
+    # standalone metadata remains forbidden, including every function.
     if "__module__" in value or "__name__" in value:
-        raise ValueError("Standalone class/function metadata is not permitted")
+        graph_registry = dict(_varcode_graph_classes())
+        from varcode import Variant, StructuralVariant
+        graph_registry.update({(cls.__module__, cls.__name__): cls
+                               for cls in (Variant, StructuralVariant)})
+        return _class_from_metadata(value, graph_registry)
 
     class_metadata = value.get(_CLASS_FIELD)
     class_object = (

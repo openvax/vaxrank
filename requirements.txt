@@ -12,16 +12,16 @@ pandas>=3.0.0,<4.0.0
 # Metadata-only Transcript/Gene restore defers annotation DB access (#563).
 # 2.29.0 exposes resolved assembly identity apart from the cache/display label.
 pyensembl>=2.29.0,<3.0.0
-# 10.4.1 ranks structural candidate sets that list themselves as candidates
-# without recursing, which DNA fallback relies on when comparing fusion outcomes.
-# Varcode 10 also supplies candidate-local SV sequence-change checks, including
-# partial proteins and uncertain selenocysteine decoding.
-varcode>=10.20.2,<11.0.0
+# 11.1 supplies shared candidate traversal and local consequence priority.
+# Ordinary annotations can retain realized splice/phase alternatives; the
+# selected comparison and its patient baseline remain distinct from the set.
+varcode>=11.1.0,<12.0.0
 # 1.62.2 adds occurrence-scoped RNA support for exported SV ORF placements.
 # 1.61 adds reference-frame ncORF reconstruction. The Isovar input adapters
 # validate each supported result schema; producer evidence is retained losslessly.
 # 1.76 exposes shared read policies for live viral and antigen-isoform sources.
-isovar>=1.76.0,<2.0.0
+# 1.78 retains Varcode 11 comparisons and filters by aggregate coding potential.
+isovar>=1.78.0,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.64.4,<4.0.0
 # 4.0.0 makes PeptideInput the single cleavage record, removing CleavageInput.
@@ -55,7 +55,7 @@ mhctools>=4.2.0,<5.0.0
 # required when antigen/CTA caches contain other patients (topiary#547; vaxrank#725).
 # 5.108.4 accepts Isovar's unlimited hypothesis cap and exact repeated pairs
 # for patient-background comparisons (topiary#561/#562; vaxrank#716).
-topiary>=5.108.4,<6.0.0
+topiary>=5.109.0,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0

@@ -280,7 +280,9 @@ def vaccine_peptides_for_variant(
         protein_sequence_length = (
             vc.preferred_peptide_length + 2 * vc.padding_around_mutation)
         long_protein_fragment = MutantProteinFragment.from_variant_dna(
-            variant, protein_sequence_length)
+            variant, protein_sequence_length,
+            effects=([isovar_result.predicted_effect]
+                     if isovar_result.predicted_effect is not None else []))
         if long_protein_fragment is None:
             logger.info(
                 "DNA-only fallback produced no protein fragment for %s",
