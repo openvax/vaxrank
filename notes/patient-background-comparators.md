@@ -71,7 +71,7 @@ owner package upgrade is separate from adopting the reviewed target policy
 tracked in #687. Re-run the combined full suite, real report replay, docs,
 joint installation and current-head CI before normal clean-main deployment.
 
-Before shipping, test both OncoRef endpoints with PirlyGenes 6.0.20 through
+Before shipping, test both OncoRef endpoints with PirlyGenes 6.1.0 through
 ordinary dependency resolution. That release supports the same bounded range,
 so it can publish against the previous Vaxrank before this release enables the
 new endpoint. Include current Tsarina 1.36.0: PirlyGenes #664 exposed a mix of
