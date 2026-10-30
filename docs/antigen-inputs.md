@@ -245,6 +245,10 @@ ORFdata when available, and retain their selection and coverage in that snapshot
 Ensembl inventories use PyEnsembl's assembly/annotation labels, checked against
 the owner's exact assembly accession and release, so a matching variant input
 can share the reference without relabeling its provenance.
+The current human snapshot is bound to **Ensembl 115 / GRCh38.p14**. A variant
+input annotated with another Ensembl release does not become compatible merely
+because it also says GRCh38. Use matching reference/annotation inputs for a
+joint design; historical snapshots retain their original identities.
 
 Python supplies `CTARestrictionPolicy` and `CTARestrictionEvidence` from
 `vaxrank.cta_restriction` to the existing entry point:
