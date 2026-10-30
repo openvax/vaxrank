@@ -70,19 +70,12 @@ platformdirs
 msgspec>=0.18.6,<1.0.0
 dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
-# OncoRef supplies human CTA identity and species-scoped evidence snapshots.
-# Historical human admission still uses the annotation-bound identity contract.
-# The reviewed compatibility window permits coordinated consumer releases:
-# PirlyGenes 6.0.18 pins 1.19.2, while 6.0.19 targets 1.23.0. Both retain
-# the legacy annotation-bound admission and exclusion APIs. Results retain
-# their actual owner/data/snapshot versions; new CTA nomination is not an
-# automatic vaccine-admission policy change (#687). The opt-in common restriction
-# policy requires 1.23.1's sequence-backed shared snapshot; older supported
-# environments retain their existing policy and receive an explicit capability
-# error if they request the new one. The cta extra declares that feature's floor
-# so a fresh install resolves a compatible Topiary rather than losing capability
-# through PirlyGenes' exact owner pin (pirl-unc/pirlygenes#656).
-oncoref>=1.19.2,<=1.23.1
+# OncoRef 1.23.1 supplies sequence-backed common CTA snapshots alongside the
+# historical annotation-bound APIs. Coordinate this reviewed owner pin with
+# PirlyGenes 6.0.20 so current Topiary and common CTA admission work together
+# (pirl-unc/pirlygenes#658). Saved policy/data identities remain unchanged;
+# new nomination evidence does not silently change admission defaults (#687).
+oncoref==1.23.1
 # 0.42.6 accepts canonical PyEnsembl metadata for the pinned Ensembl builder.
 orfdata>=0.42.6,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering

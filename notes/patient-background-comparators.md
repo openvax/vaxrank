@@ -53,3 +53,19 @@ Neoantigen Vaccine Trial*, doi:10.3389/fimmu.2017.01807; Hundal et al.,
 doi:10.1038/s41588-018-0283-9. The executable exchange contract is Isovar's
 versioned patient-background-pairs documentation and Topiary's validating
 `read_isovar_patient_background_pairs` reader.
+
+## Current OncoRef integration
+
+Integrate the released 3.48.0 common CTA admission path before shipping this PR
+as 3.48.1. Require reviewed OncoRef 1.23.1 in the ordinary install; the `cta`
+extra remains a compatibility alias. PirlyGenes #658 coordinates its exact
+owner pin so current Topiary and common CTA capabilities resolve together.
+Do not lower the Topiary floor or bypass dependency resolution.
+
+Check the actual common human/dog/mouse snapshot and native replay workflows,
+including normal-tissue counterevidence, incomplete or pooled RNA evidence,
+full-protein equivalent occurrences and missing host coverage. Preserve the
+historical default admission policy and every saved evidence identity. An
+owner package upgrade is separate from adopting the reviewed target policy
+tracked in #687. Re-run the combined full suite, real report replay, docs,
+joint installation and current-head CI before normal clean-main deployment.

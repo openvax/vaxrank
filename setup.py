@@ -67,7 +67,8 @@ if __name__ == "__main__":
         install_requires=requirements,
         extras_require={
             'hitlist': ['hitlist>=1.65.1,<3'],
-            'cta': ['oncoref>=1.23.1'],
+            # Compatibility spelling: common CTA dependencies are now core.
+            'cta': [],
         },
         long_description=readme_markdown,
         long_description_content_type="text/markdown",

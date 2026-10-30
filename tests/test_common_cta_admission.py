@@ -9,8 +9,6 @@ import hashlib
 import json
 import shutil
 
-import oncoref
-from packaging.version import Version
 from oncoref.cta_evidence_adapters import native_observation_facts
 from oncoref.expression_contract import ExpressionContract, ExpressionMeasurement
 from oncoref.reference_identity import ReferenceIdentity
@@ -29,10 +27,6 @@ from vaxrank.native_serialization import from_native_json, to_native_json
 
 from .test_cta_expression import contract, SEQUENCE
 from .test_cta_restriction import evidence, policy
-
-pytestmark = pytest.mark.skipif(Version(oncoref.__version__) < Version('1.23.1'),
-                               reason='Common CTA integration requires the cta install extra')
-
 
 def fixture(tmp_path, taxon=9615, namespace='ncbi', shared=False, counterevidence=False, native_rna=None):
     species = {9606: 'homo_sapiens', 9615: 'canis_lupus_familiaris', 10090: 'mus_musculus'}[taxon]
@@ -207,7 +201,7 @@ def test_exact_transcript_versions_and_patient_expression_remain_independent(tmp
         admit(tmp_path, host, path, supplemental, [(transcripts[0].split('.')[0], 10)], level='transcript')
 
 
-def test_older_supported_oncoref_reports_common_policy_capability_before_source_access(tmp_path, monkeypatch):
+def test_incompatible_oncoref_reports_common_policy_capability_before_source_access(tmp_path, monkeypatch):
     host, path, supplemental, genes, _ = fixture(tmp_path)
     monkeypatch.setattr('oncoref.__version__', '1.19.2')
     def forbidden(*args, **kwargs):
@@ -278,7 +272,9 @@ def test_common_dog_construct_checks_final_windows_and_keeps_unsupported_dla_unk
 @pytest.mark.parametrize('taxon,host_species,allele', [
     (9606, 'human', 'HLA-A*02:01'), (9615, 'dog', 'DLA-88*001:01'), (10090, 'mouse', 'H-2-Kb')])
 @pytest.mark.parametrize('modality', ['peptide', 'mrna'])
-def test_common_manifest_native_constructs_and_offline_replay(tmp_path, monkeypatch, taxon, host_species, allele, modality):
+@pytest.mark.parametrize('comparison', ['annotation_reference', 'patient_background'])
+def test_common_manifest_native_constructs_and_offline_replay(
+        tmp_path, monkeypatch, taxon, host_species, allele, modality, comparison):
     from vaxrank.antigen_input import AntigenDataset
     from vaxrank.cli.entry_point import run_cli
     from vaxrank.epitope_dataset import EpitopeDataset
@@ -302,12 +298,19 @@ def test_common_manifest_native_constructs_and_offline_replay(tmp_path, monkeypa
     args = ['--input-manifest', str(path), '--mhc-predictor', 'random',
         '--output-dir', str(output), '--output-epitopes', str(output / 'native.tsv'),
         '--vaccine-type', modality, '--pdf-backend', 'weasyprint',
+        '--comparison-reference', comparison,
         '--config-text', 'epitopes.score_expr=1.0', '--no-processing-aware-annotation']
     if modality == 'mrna':
         args += ['--mrna-codon-method', 'use_best_codon', '--mrna-no-optimize-linkers']
     run_cli(args)
     dataset = EpitopeDataset.load(output / 'native.tsv')
     assert dataset.host_reference.identity == host.identity
+    assert dataset.config.comparison_reference == comparison
+    assert dataset.epitopes
+    # Selecting a mutation comparison policy must not invent a reverted CTA
+    # sequence, change its source admission, or require an Isovar pair export.
+    assert all(e.comparison_evidence is None and e.reference_comparator is None
+               for e in dataset.epitopes)
     admission = CTAExpressionResult.load(output / 'cta_admission.json')
     assert admission.decisions[0].assessment.restriction.passed
     exported = AntigenDataset.from_epitope_dataset(dataset)

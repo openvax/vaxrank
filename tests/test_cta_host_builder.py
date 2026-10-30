@@ -1,14 +1,9 @@
 """Registered source capabilities and total budgets are checked before transfer."""
 
 import oncoref
-from packaging.version import Version
 import pytest
 
 from vaxrank.cta_reference_adapter import _reference_context, build_cta_host_reference
-
-pytestmark = pytest.mark.skipif(Version(oncoref.__version__) < Version('1.23.1'),
-                               reason='Common CTA integration requires the cta install extra')
-
 
 def test_owner_reference_binds_the_matching_variant_annotation_without_indexing(monkeypatch):
     from orfdata import Proteome
