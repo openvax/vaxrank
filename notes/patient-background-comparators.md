@@ -56,11 +56,12 @@ versioned patient-background-pairs documentation and Topiary's validating
 
 ## Current OncoRef integration
 
-Integrate the released 3.48.0 common CTA admission path before shipping this PR
-as 3.48.1. Require reviewed OncoRef 1.23.1 in the ordinary install; the `cta`
-extra remains a compatibility alias. PirlyGenes #658 coordinates its exact
-owner pin so current Topiary and common CTA capabilities resolve together.
-Do not lower the Topiary floor or bypass dependency resolution.
+Integrate the released 3.48.0 common CTA admission path and independent 3.48.2
+coverage reports before shipping this PR as 3.48.3. Require the reviewed
+OncoRef `>=1.23.1,<=1.24.0` range in the ordinary install; the `cta` extra remains
+a compatibility alias. PirlyGenes coordinates its exact owner pin so current
+Topiary and common CTA capabilities resolve together. Do not lower the Topiary
+floor or bypass dependency resolution.
 
 Check the actual common human/dog/mouse snapshot and native replay workflows,
 including normal-tissue counterevidence, incomplete or pooled RNA evidence,
@@ -69,3 +70,19 @@ historical default admission policy and every saved evidence identity. An
 owner package upgrade is separate from adopting the reviewed target policy
 tracked in #687. Re-run the combined full suite, real report replay, docs,
 joint installation and current-head CI before normal clean-main deployment.
+
+Before shipping, test the published 1.23.1/PirlyGenes 6.0.20 endpoint and the immutable
+PirlyGenes 6.0.21/OncoRef 1.24.0 candidate together through ordinary dependency
+resolution. This lets Vaxrank publish the tested compatibility range before
+PirlyGenes 6.0.21's current-consumer CI, avoiding a release dependency cycle.
+
+The 1.24 source comparison changes the reviewed CTA-selection policy and adds
+TCR-T product/cohort/event evidence; it leaves the historical CTA API and common
+species evidence/reference assets unchanged. Clinical credit belongs to that
+explicit owner policy and must not become implicit Vaxrank admission or ranking.
+Retain existing snapshot identities and rerun the public-data, common admission,
+native replay and full regression suite on the new endpoint. The scope of
+clinical evidence was checked against the primary
+[afami-cel](https://doi.org/10.1038/s41591-022-02128-z) and
+[IMA203](https://doi.org/10.1038/s41591-025-03650-6) reports: those studies evaluate
+particular TCR-T products in selected patients, not arbitrary vaccine windows.

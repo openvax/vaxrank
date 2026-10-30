@@ -71,11 +71,11 @@ msgspec>=0.18.6,<1.0.0
 dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
 # OncoRef 1.23.1 supplies sequence-backed common CTA snapshots alongside the
-# historical annotation-bound APIs. Coordinate this reviewed owner pin with
-# PirlyGenes 6.0.20 so current Topiary and common CTA admission work together
-# (pirl-unc/pirlygenes#658). Saved policy/data identities remain unchanged;
-# new nomination evidence does not silently change admission defaults (#687).
-oncoref==1.23.1
+# historical annotation-bound APIs. The tested range also accepts 1.24.0's
+# product-scoped clinical evidence, while PirlyGenes pins its matching owner
+# release. Saved policy/data identities remain unchanged; package compatibility
+# does not silently adopt a new target-selection policy (#687).
+oncoref>=1.23.1,<=1.24.0
 # 0.42.6 accepts canonical PyEnsembl metadata for the pinned Ensembl builder.
 orfdata>=0.42.6,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
