@@ -146,6 +146,8 @@ class AntigenDataset:
         scope = self.scope
         if host_reference is not None:
             scope = host_reference.validate(scope, genome=genome)
+            for antigen in self.antigens.values():
+                host_reference.validate_antigen(antigen)
         elif scope.host_reference_sha256 is not None:
             raise ValueError('Antigen input requires its declared host_reference snapshot')
         missing = [name for name in ('patient_id', 'reference_assembly', 'mhc_alleles')
@@ -236,6 +238,8 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
         from .host_reference import HostReference
         host_reference = HostReference.load(host_reference)
         provenance = replace(provenance, scope=host_reference.validate(provenance.scope, genome=genome))
+        for antigen in antigens.values():
+            host_reference.validate_antigen(antigen)
         def self_matcher(peptides, antigen, genome):
             return host_reference.matches(peptides, antigen)
     elif provenance.scope.host_reference_sha256 is not None:

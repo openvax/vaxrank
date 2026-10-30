@@ -174,10 +174,10 @@ For dogs, declare `host_species: dog` and a `host_reference` snapshot. The same
 It uses OncoRef's canine evidence mapped to RefSeq annotation 106 /
 GCF_011100685.1. From a source checkout or extracted source distribution, build
 the complete annotated reference from its pinned protein FASTA and feature table
-(about 14 MB of downloads):
+(the transfer budget below permits up to 100 MB):
 
 ```sh
-python examples/build_canine_host_reference.py dog.proteome.json.gz
+python examples/build_cta_host_reference.py dog dog.proteome.json.gz --max-download-bytes 100000000
 ```
 
 The example uses `Proteome.from_refseq()` and OncoRef's verified public assets.
@@ -206,15 +206,93 @@ coverage, family ambiguity and normal-tissue observations stay in native outputs
 Its canine evidence includes [kidney expression for CTCFL and DDX53](https://doi.org/10.1016/j.vetimm.2025.110946).
 OncoRef 1.22.1+ provides [partial P1A/Trap1a mouse evidence](https://github.com/pirl-unc/oncoref/pull/644),
 with explicit strain and normal-tissue coverage limitations. Its single-gene
-reference subset is currently unsupported by this expression-input route, so
-Vaxrank rejects it. Older snapshots without mouse evidence raise an explicit
-unavailable-evidence error.
+sequence seed is not a complete mouse host inventory; using it as that inventory
+fails before acquisition or prediction. Older snapshots without mouse evidence
+raise an explicit unavailable-evidence error.
 
 An optional `evidence_snapshot` path selects an exported OncoRef snapshot,
 relative to the manifest. Python uses the same adapter:
 `admit_cta_expression(..., host_reference=host, overrides={gene_id: evidence})`,
 with `CTAOverrideEvidence` records. Saved results replay without current OncoRef
 queries or the original expression table.
+
+### Common RNA restriction policy (experimental)
+
+An explicit `restriction_policy` selects the same admission contract for human,
+dog and mouse. Install `vaxrank[cta]` to resolve the required OncoRef 1.23.1 and
+ORFdata 0.42.6 together; see the [dependency constraints](installation.md#common-cta-evidence). It
+uses the snapshot's identifier namespaces: Ensembl gene IDs and exact versioned
+transcripts, or NCBI Gene IDs and exact versioned RefSeq transcripts. It does not
+use gene symbols, human orthology, or human default CTA exclusions to admit targets.
+
+Build the annotated inventory with the same API for each supported reference:
+
+```python
+from vaxrank.cta_reference_adapter import build_cta_host_reference
+
+host = build_cta_host_reference("human", max_bytes=300_000_000)
+host.save("human.proteome.json.gz")
+```
+
+The equivalent example is
+`python examples/build_cta_host_reference.py human human.proteome.json.gz --max-download-bytes 300000000`.
+The pinned human Ensembl source set is about 288 MB; the resulting snapshot is
+about 45 MB. The builder streams source files without annotation indexes and
+checks the total transfer budget before downloading. `offline=True, max_bytes=0`
+reuses verified local files; `local_overrides` accepts OncoRef's species-qualified
+asset paths. This produces an annotated-only inventory. Compose extra ORFs with
+ORFdata when available, and retain their selection and coverage in that snapshot.
+Ensembl inventories use PyEnsembl's assembly/annotation labels, checked against
+the owner's exact assembly accession and release, so a matching variant input
+can share the reference without relabeling its provenance.
+
+Python supplies `CTARestrictionPolicy` and `CTARestrictionEvidence` from
+`vaxrank.cta_restriction` to the existing entry point:
+
+```python
+result = admit_cta_expression(
+    expression_path, input_contract=input_contract, admission_policy=patient_policy,
+    host_reference=host, evidence_snapshot=snapshot_path,
+    restriction_policy=normal_rna_policy, restriction_evidence=normal_rna_evidence,
+)
+```
+
+In a manifest, `cta_expression.restriction_policy` contains the policy's JSON
+fields and `cta_expression.restriction_evidence` names a JSON file relative to
+the manifest. Export a typed bundle with `json.dumps(dataclasses.asdict(bundle))`;
+read it with `CTARestrictionEvidence.read(path)`. An `evidence_snapshot` path
+selects the exact OncoRef snapshot to which that bundle is bound.
+
+The caller must declare a policy ID/version, native RNA unit/scale, somatic upper
+and reproductive lower bounds, required tissues, independent donor/sample minima,
+and a rationale. Vaxrank supplies no validated biological thresholds. Observations
+retain exact protein/transcript occurrences, quantitative bounds, allocation,
+tissue role, donor/sample IDs, pooling, source checksums and locators, study lineage,
+and exclusion reasons. Donor and sample IDs must be reconciled across studies;
+repeated publications and technical replicates cannot be counted as new donors.
+
+Every full-protein equivalent occurrence in the host must have independently
+allocated transcript RNA coverage. Missing or ambiguous RNA, pooled negatives,
+unknown transcript mappings, and absent required tissues remain unresolved.
+Gene-level patient RNA remains gene-level RNA; it selects a reference protein
+without asserting isoform abundance or malignant-cell expression. Native OncoRef
+facts remain attached. Compatible, verified numeric transcript RNA can be compared
+with the policy, but never replaces independently allocated coverage. Incompatible
+or qualitative somatic facts require review. Exclusions cannot erase observed
+somatic counterevidence at the target or an identical protein at another locus.
+
+A target is admitted only if both patient expression and the restriction policy
+pass. `overrides` cannot be combined with this policy. Only the target's annotated
+gene is excluded from self matching; other loci and all extra ORFs remain. Native
+outputs freeze the policy, full evidence and findings for offline replay. A changed
+reference, omitted equivalent occurrence or altered decision is rejected.
+
+Admission remains a draft research selection requiring review. It does not
+establish binding, presentation, processing or immunogenicity. Existing allele
+capability checks and audits of every final peptide/mRNA product window still
+apply. The released dog and mouse candidate facts alone do not constitute a
+validated normal-tissue restriction panel. Existing human defaults and saved
+historical decisions retain their recorded semantics.
 
 ## Declare the host species (experimental)
 
@@ -271,8 +349,9 @@ An optional `{path: FILE, identity: SHA256}` declaration pins its content identi
 
 The snapshot must match the declared host and annotation. It supplies exact-self
 assessment for new native antigen predictions without a live Ensembl annotation.
-Human CTA expression still uses annotation for transcript/sequence selection;
-mapped canine CTA inputs select sequences directly from the snapshot.
+The historical human CTA path uses annotation for transcript/sequence selection.
+Mapped nonhuman inputs and the opt-in common restriction policy select sequences
+directly from the snapshot using its declared namespaces.
 Custom assembly names and versioned assembly accessions use the snapshot's
 reference metadata directly.
 CTA gene exclusions remove annotated proteins, leaving additional ORFs at those

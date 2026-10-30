@@ -5,8 +5,7 @@ git clone git@github.com:openvax/vaxrank.git
 cd vaxrank
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
-pip install -e ".[hitlist]" pytest pytest-cov ruff mkdocs-material
+pip install -e ".[hitlist,cta]" pytest pytest-cov ruff mkdocs-material
 # Reference releases exercised by the test suite
 pyensembl install --release 75 93 --species human
 pyensembl install --release 93 102 --species mouse

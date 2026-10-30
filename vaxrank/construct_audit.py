@@ -83,6 +83,10 @@ def audit_construct_sequence(construct, mhc_predictor=None, *, genome=None,
         reason = "self_reference_unavailable"
     if reason:
         return ConstructAudit(construct, "unassessed", reason_codes=(reason,))
+    if host_reference is not None:
+        from .host_reference import HostReference
+        host_reference = HostReference.load(host_reference)
+        host_reference.validate_antigen(construct.native_antigen)
     antigen = construct.assessment_antigen()
     boundaries = tuple(ConstructBoundary(offset, "construct_edit", "construct_edit")
                        for offset in construct.modification_boundaries)
