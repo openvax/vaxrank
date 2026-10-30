@@ -207,7 +207,7 @@ def _expression_rows(path, contract, *, normalize=_feature_id):
 
 def admit_cta_expression(path, *, input_contract, admission_policy, genome=None,
                          exclusion_policy=None, host_reference=None, overrides=None,
-                         evidence_snapshot=None):
+                         evidence_snapshot=None, restriction_policy=None, restriction_evidence=None):
     """Intersect patient gene/transcript expression with direct OncoRef CTAs.
 
     Canonical gene inputs choose the OncoRef canonical transcript. Alternate
@@ -227,12 +227,15 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome=None,
         host_reference = HostReference.load(host_reference)
         if genome is not None:
             host_reference.proteome.reference.validate_genome(genome)
-        if host_reference.scope.host_taxon_id != 9606:
+        if host_reference.scope.host_taxon_id != 9606 or restriction_policy is not None:
             from .species_cta import admit_species_cta_expression
             return admit_species_cta_expression(
                 path, input_contract=input_contract, admission_policy=admission_policy,
                 host_reference=host_reference, exclusion_policy=exclusion_policy,
-                overrides=overrides, evidence_snapshot=evidence_snapshot)
+                overrides=overrides, evidence_snapshot=evidence_snapshot,
+                restriction_policy=restriction_policy, restriction_evidence=restriction_evidence)
+    if restriction_policy is not None or restriction_evidence is not None:
+        raise ValueError('Common CTA restriction requires its explicit policy and mapped host_reference')
     if genome is None:
         raise ValueError('Human CTA expression requires a host annotation')
     if evidence_snapshot is not None:

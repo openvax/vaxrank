@@ -84,10 +84,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install pytest pytest-cov ruff
-          if [ -f requirements.txt ]; then bash scripts/pip_install.sh -r requirements.txt; fi
           # Exercise the optional portable Hitlist evidence consumer on every
-          # supported Python, alongside the ordinary CLI/persistence tests.
-          bash scripts/pip_install.sh '.[hitlist]' 'topiary[weirdo]>=5.95.0,<6'
+          # supported Python, alongside the common CTA policy. Resolve together:
+          # an earlier base-only install can leave an orphaned PirlyGenes pin.
+          bash scripts/pip_install.sh '.[hitlist,cta]' 'topiary[weirdo]>=5.95.0,<6'
+          python -m pip check
+          python -c "from vaxrank.cta_reference_adapter import require_common_cta_data; require_common_cta_data()"
       - name: Check package and CLI startup
         run: |
           python -c "import vaxrank; print(vaxrank.__version__)"

@@ -31,10 +31,10 @@ def test_distributions_include_sid_recipe_and_only_pinned_canine_reads(tmp_path)
     assert not any(name.startswith("tests/") for name in sdist)
     assert {"LICENSE", "MANIFEST.in", "setup.py", "requirements.txt", "TEST_DATA.md",
             "vaxrank/sid_test_data.py", "examples/osteosarc_test_data/pin_catalog.py",
-            "examples/build_canine_host_reference.py", "examples/wlos0001_tp53/README.md",
+            "examples/build_cta_host_reference.py", "examples/wlos0001_tp53/README.md",
             "examples/wlos0001_tp53/run.py"} <= set(sdist)
-    assert sdist['examples/build_canine_host_reference.py'] == (
-        ROOT / 'examples/build_canine_host_reference.py').read_bytes()
+    assert sdist['examples/build_cta_host_reference.py'] == (
+        ROOT / 'examples/build_cta_host_reference.py').read_bytes()
     canine_reads = {
         "examples/wlos0001_tp53/data/wlos0001-tp53.bam",
         "examples/wlos0001_tp53/data/wlos0001-tp53.bam.bai",

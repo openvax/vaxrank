@@ -230,7 +230,7 @@ def test_species_cta_partial_mouse_reference_remains_unsupported(tmp_path):
         identity['annotation_release'], assembly_accession=identity['assembly_accession'])
     # A native nomination and a single-gene reference subset cannot substitute
     # for the supported expression-mapping and complete-host inventory contract.
-    with pytest.raises(ValueError, match='supported NCBI Gene/RefSeq mapping'):
+    with pytest.raises(ValueError, match='candidate subsets are insufficient'):
         admit(tmp_path, reference=HostReference(Proteome(context, [])))
 
 
