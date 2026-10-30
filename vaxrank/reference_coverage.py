@@ -18,7 +18,7 @@ def _digest(value):
 def _inventory(proteome):
     counts = Counter(e.kind for e in proteome)
     sources = Counter(e.source for e in proteome if e.kind == 'extra_orf')
-    layers = [dict(layer) for layer in proteome.layers
+    layers = [deepcopy(dict(layer)) for layer in proteome.layers
               if layer.get('role') == 'host' and layer.get('kind') == 'extra_orf']
     labels = sorted(set(sources) | {layer['source'] for layer in layers})
     return dict(host_reference_sha256=proteome.identity,
@@ -46,6 +46,8 @@ def validate_catalogues(catalogues, proteome):
 
 
 def _catalogues(reference):
+    if reference.genome_build is None:
+        return None, None
     from orfdata import catalog_status
     from orfdata.catalogs import CatalogRegistry
     from orfdata.reference import species_taxon
@@ -107,7 +109,11 @@ def _validate_availability(record):
         return
     def text(value):
         return isinstance(value, str) and bool(value.strip())
-    if (not text(version) or not isinstance(rows, list) or not isinstance(labels, list)
+    if not text(version):
+        raise ValueError('Malformed frozen host catalogue availability')
+    if rows is None and labels is None:
+        return
+    if (not isinstance(rows, list) or not isinstance(labels, list)
             or any(not text(label) for label in labels) or len(set(labels)) != len(labels)):
         raise ValueError('Malformed frozen host catalogue availability')
     names = set()
@@ -134,9 +140,15 @@ def _selection(layers):
             'identical_to_annotated', 'length_filtered') if key in layer)
         if counts:
             parts.append('At composition: ' + counts)
+        if 'selection' in layer:
+            selection = layer['selection']
+            if isinstance(selection, dict):
+                selection = {key: value for key, value in selection.items() if key != 'input'}
+            parts.append('Source preselection: ' + json.dumps(selection, sort_keys=True))
         if 'evidence' in layer:
-            parts.append('Evidence filter: ' + (json.dumps(layer['evidence'], sort_keys=True)
-                                               if layer['evidence'] is not None else 'none'))
+            label = 'Additional evidence filter' if 'selection' in layer else 'Evidence filter'
+            parts.append(label + ': ' + (json.dumps(layer['evidence'], sort_keys=True)
+                                        if layer['evidence'] is not None else 'none'))
         if 'min_protein_length' in layer:
             parts.append(f"Minimum protein length: {layer['min_protein_length']} aa")
     parts.append('Full source and selection metadata are retained in the native dataset.')
@@ -153,7 +165,7 @@ def coverage_view(record):
     known = set(record['known_source_labels'] or ())
     labels = {r['source'] for r in included if r['layers']}
     unresolved = any(not r['layers'] or r['source'] not in known for r in included)
-    summary = [f"Host: {inventory['species']} / {inventory['genome_build']}.",
+    summary = [f"Host: {inventory['species']} / {inventory['genome_build'] or 'unspecified assembly'}.",
         f"Reference inventory: {inventory['annotated_entries']} annotated protein records; "
         f"{inventory['extra_orf_entries']} additional ORF records."]
     if not included:
@@ -161,7 +173,9 @@ def coverage_view(record):
     elif not inventory['extra_orf_entries']:
         summary.append('Catalogue layers were selected, but no additional ORF sequences were retained.')
     if record['catalogues'] is None:
-        summary.append('Catalogue availability was not recorded when this native reference was saved.')
+        summary.append('Host assembly is unspecified; compatible catalogue availability is unknown.'
+                       if inventory['genome_build'] is None else
+                       'Catalogue availability was not recorded when this native reference was saved.')
     elif not record['catalogues']:
         summary.append(f"ORFdata {record['orfdata_version']} has no registered ncORF catalogue "
                        'compatible with this host species and assembly; registered ncORF coverage is unavailable.')

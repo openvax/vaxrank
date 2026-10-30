@@ -370,6 +370,7 @@ summary and HTML/PDF/text reports show the same coverage, even with no ranked
 candidates. Registered availability does not mean installation or inclusion.
 Other registered releases are reported as unsearched; opaque custom/merged
 source labels retain unknown attribution instead of implying exclusions.
+An unspecified host assembly leaves compatible catalogue availability unknown.
 A selected layer with zero retained ORFs remains visible with its filters.
 
 With ORFdata 0.42.6, dog references have no compatible registered ncORF catalogue.

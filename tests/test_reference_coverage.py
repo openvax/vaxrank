@@ -79,6 +79,42 @@ def test_zero_retained_orfs_preserve_selection_and_source_identity():
     assert host.coverage['inventory']['included']
 
 
+def test_coverage_detaches_nested_source_metadata_from_the_in_memory_proteome():
+    proteome = mouse_reference()
+    host = HostReference(proteome)
+    before = host.coverage
+    proteome.layers[-1]['catalog']['records'] = 999
+    assert host.coverage == before
+
+
+@pytest.mark.parametrize('extension', ['html', 'txt'])
+def test_reports_preserve_preselection_when_no_further_evidence_filter_is_applied(extension):
+    original = mouse_reference()
+    selection = dict(complete_sources=['synthetic-complete-source'], evidence={'kind': 'ribosome'},
+                     input={'sha256': 'a' * 64})
+    layers = [dict(layer, selection=selection, evidence=None) if layer['kind'] == 'extra_orf'
+              else dict(layer) for layer in original.layers]
+    host = HostReference(Proteome(original.reference, original.proteins, layers))
+    report = render(template(host_reference=host), extension)
+    assert 'Source preselection:' in report and 'synthetic-complete-source' in report
+    assert 'ribosome' in report and 'Additional evidence filter: none' in report
+    assert host.coverage['inventory']['included'][0]['layers'][0]['selection'] == selection
+
+
+def test_unspecified_host_assembly_reports_unknown_compatibility(monkeypatch):
+    original = reference(extra=False)
+    context = replace(original.reference, genome_build=None, source_sha256='a' * 64)
+    proteome = Proteome(context, original.proteins,
+                       [dict(layer, reference=context.key) for layer in original.layers])
+    monkeypatch.setattr('orfdata.catalog_status', forbidden)
+    host = HostReference(proteome)
+    assert host.coverage['catalogues'] is None
+    summary = ' '.join(coverage_view(host.coverage)['summary'])
+    assert 'availability is unknown' in summary
+    assert 'coverage is unavailable' not in summary
+    assert HostReference(proteome, coverage=host.coverage).coverage == host.coverage
+
+
 @pytest.mark.parametrize('source,layers', [
     ('custom', True), ('ncorf-mammals-mouse:1+riborf-mouse:3', True), ('ncorf-mammals-mouse:1', False)])
 def test_custom_merged_or_unprovenanced_sources_do_not_invent_catalogue_exclusions(source, layers):
@@ -178,18 +214,22 @@ def test_zero_candidate_reports_show_missing_dog_coverage(extension):
     assert 'was not recorded' in render(template(), extension)
 
 
-def test_dog_cli_reports_native_coverage_and_replays_offline(inputs, tmp_path, monkeypatch):  # noqa: F811
+@pytest.mark.parametrize('species', ['dog', 'mouse'])
+def test_cli_reports_native_coverage_and_replays_offline(inputs, tmp_path, monkeypatch, species):  # noqa: F811
     monkeypatch.setattr('vaxrank.cli.entry_point.resolve_ensembl_release',
                         lambda args: setattr(args, 'genome', None))
-    host = HostReference(dog_reference(), catalogues=[])
+    proteome = dog_reference() if species == 'dog' else mouse_reference()
+    catalogues = [] if species == 'dog' else ['ncorf-mammals-mouse:1']
+    host = HostReference(proteome, catalogues=catalogues)
     host.save(tmp_path / 'host.json.gz')
     replace(inputs, antigens={'viral': inputs.antigens['viral']}, scope=InputScope(
-        patient_id='synthetic-dog', sample_id='synthetic-tumor', host_taxon_id=9615,
-        reference_assembly='ROS_Cfam_1.0',
-        annotation='ensembl:93', mhc_alleles=('DLA-88*001:01',))).save(tmp_path / 'antigens.json')
+        patient_id='synthetic-' + species, sample_id='synthetic-tumor',
+        host_taxon_id=proteome.reference.taxon_id, reference_assembly=proteome.reference.genome_build,
+        annotation='ensembl:93', mhc_alleles=(('DLA-88*001:01',) if species == 'dog' else ('H-2-Kb',))
+        )).save(tmp_path / 'antigens.json')
     manifest = tmp_path / 'inputs.json'
     manifest.write_text(json.dumps(dict(schema='vaxrank.input_manifest.v1',
-        host_reference=dict(path='host.json.gz', identity=host.identity, catalogues=[]),
+        host_reference=dict(path='host.json.gz', identity=host.identity, catalogues=catalogues),
         inputs=[dict(format='antigens', path='antigens.json')])))
     output = tmp_path / 'original'
     run_cli(['--input-manifest', str(manifest), '--mhc-predictor', 'random',
@@ -207,5 +247,11 @@ def test_dog_cli_reports_native_coverage_and_replays_offline(inputs, tmp_path, m
     for directory in (output, replay):
         for filename in ('run_summary.txt', 'vaccine_report.txt'):
             text = (directory / filename).read_text()
-            assert 'registered ncORF coverage is unavailable' in text
-            assert 'ncORF catalogues were not searched' in text
+            if species == 'dog':
+                assert 'registered ncORF coverage is unavailable' in text
+                assert 'ncORF catalogues were not searched' in text
+            else:
+                assert 'Catalogue ncorf-mammals-mouse 1: Included' in text
+                assert 'Catalogue riborf-mouse 3: Not searched' in text
+                if filename == 'vaccine_report.txt':
+                    assert 'Minimum protein length: 8 aa' in text
