@@ -325,8 +325,6 @@ Producer tables may leave host cells blank. Integer-valued numeric taxon cells
 are normalized when read; fractional IDs and booleans are rejected. Manifest
 and API taxon IDs must be positive integers.
 
-Donor/transgene self layers remain tracked in
-[#625](https://github.com/openvax/vaxrank/issues/625).
 Inputs without new scope fields keep their historical identities; known host
 annotation still enables species checks.
 
@@ -347,6 +345,39 @@ Build the snapshot with ORFdata's `Proteome.build(...).save(...)`; its selected
 evidence, source hashes, exclusions and every mapped occurrence are retained.
 An optional `{path: FILE, identity: SHA256}` declaration pins its content identity.
 
+To assert the ORF catalogue selection, add `catalogues` to that mapping:
+
+```yaml
+host_reference:
+  path: host.proteome.json.gz
+  identity: <snapshot SHA-256>
+  catalogues: []  # explicitly annotated-only
+```
+
+For a reference containing extra ORFs, supply the exact source release labels
+recorded in its host ORF layers, for example `[ncorf-mammals-mouse:1]`.
+Python uses `HostReference(proteome, catalogues=["ncorf-mammals-mouse:1"])`.
+This asserts the existing snapshot composition; it does not acquire or add ORFs.
+An omitted declaration accepts its recorded composition. A mismatch fails
+before predictor acquisition, including requests for missing dog extras.
+Compose the desired inventory with ORFdata first. Snapshot identity pins the
+catalogue content, evidence selections, filters and mappings as well as sequences.
+
+`HostReference.coverage` exposes a detached record of the actual retained
+annotated and extra-ORF counts, included source layers, and compatible registered
+catalogue releases observed with the installed ORFdata version. The CLI run
+summary and HTML/PDF/text reports show the same coverage, even with no ranked
+candidates. Registered availability does not mean installation or inclusion.
+Other registered releases are reported as unsearched; opaque custom/merged
+source labels retain unknown attribution instead of implying exclusions.
+An unspecified host assembly leaves compatible catalogue availability unknown.
+A selected layer with zero retained ORFs remains visible with its filters.
+
+With ORFdata 0.42.6, dog references have no compatible registered ncORF catalogue.
+An annotated-only dog report explicitly states that ncORFs were not searched;
+the canine RNA/protein datasets do not fill that gap. A missing sequence match
+only describes the selected inventory, not unsearched ORFs.
+
 The snapshot must match the declared host and annotation. It supplies exact-self
 assessment for new native antigen predictions without a live Ensembl annotation.
 The historical human CTA path uses annotation for transcript/sequence selection.
@@ -359,6 +390,11 @@ genes searchable. Viral entries never become host self.
 
 Native outputs bundle the snapshot in their `.references/` directory. Move that
 directory with the table for offline replay. Changed or missing snapshots fail.
+Coverage is frozen in the native dataset and validated against that snapshot;
+replay does not consult the current registry. Older native files with no coverage
+record retain their inventory but report historical availability as unrecorded.
+Inputs with conflicting frozen coverage cannot be combined; reuse the same saved
+reference/dataset to preserve one consistent coverage declaration.
 Saved predictions require their original reference; select a different reference
 by predicting the source antigens again. Legacy producer tables and direct
 VCF/BAM runs retain their existing annotated reference path.

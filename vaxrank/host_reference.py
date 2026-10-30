@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 
 from .input_scope import InputScope, combine_scopes
+from .reference_coverage import DISCOVER_CATALOGUES, reference_coverage, validate_catalogues
 from .vaccine_antigen import SelfReferenceMatch, SelfReferenceSource
 
 
@@ -16,14 +17,20 @@ class HostReference:
 
     Build and select ORFs with ORFdata, then pass its Proteome or saved snapshot.
     Viral entries remain in the snapshot but do not count as host self.
+    ``catalogues`` optionally asserts the exact source release labels recorded
+    in its host ORF layers; an empty list asserts annotated-only coverage.
+    ``coverage`` restores a saved coverage record (None means historical
+    availability was not recorded); by default availability is captured offline.
     """
 
-    def __init__(self, proteome):
+    def __init__(self, proteome, *, catalogues=None, coverage=DISCOVER_CATALOGUES):
         from orfdata import Proteome
         if not isinstance(proteome, Proteome):
             raise TypeError('host_reference requires an ORFdata Proteome or snapshot')
         self.proteome = proteome
         self.identity = proteome.identity
+        validate_catalogues(catalogues, proteome)
+        self._coverage = reference_coverage(proteome, coverage)
         reference = proteome.reference
         self.scope = InputScope(
             host_taxon_id=reference.taxon_id, reference_assembly=reference.genome_build,
@@ -49,26 +56,37 @@ class HostReference:
         self._sources = tuple((sequence, tuple(records)) for sequence, records in sources.items())
 
     @classmethod
-    def load(cls, value):
+    def load(cls, value, *, coverage=DISCOVER_CATALOGUES):
         """Accept a path, a pinned path mapping, a Proteome, or this wrapper."""
         if isinstance(value, cls):
+            if coverage is not DISCOVER_CATALOGUES and coverage != value.coverage:
+                raise ValueError('Cannot replace frozen host catalogue coverage')
             return value
         from orfdata import Proteome
         if isinstance(value, Proteome):
-            return cls(value)
-        expected = None
+            return cls(value, coverage=coverage)
+        expected, catalogues = None, None
         if isinstance(value, dict):
-            if set(value) != {'path', 'identity'}:
-                raise ValueError('host_reference mapping requires path and identity')
+            if not {'path', 'identity'} <= set(value) or set(value) - {'path', 'identity', 'catalogues'}:
+                raise ValueError('host_reference mapping requires path and identity, with optional catalogues')
+            catalogues = value.get('catalogues')
+            if 'catalogues' in value and catalogues is None:
+                raise ValueError('host_reference catalogues must be an explicit list')
             expected, value = value['identity'], value['path']
             if not isinstance(expected, str) or not re.fullmatch('[0-9a-f]{64}', expected):
                 raise ValueError('host_reference identity must be a SHA-256')
         if not isinstance(value, (str, Path)) or not str(value).strip():
             raise ValueError('host_reference requires an ORFdata snapshot path')
-        result = cls(Proteome.load(value))
+        result = cls(Proteome.load(value), catalogues=catalogues, coverage=coverage)
         if expected is not None and result.identity != expected:
             raise ValueError('Host reference snapshot differs from its declared identity')
         return result
+
+    @property
+    def coverage(self):
+        """Detached, frozen catalogue availability and actual inventory coverage."""
+        from copy import deepcopy
+        return deepcopy(self._coverage)
 
     def validate(self, scope, *, genome=None, location='Host reference'):
         """Reject incompatible host, annotation or previously saved identity."""
@@ -162,5 +180,7 @@ def combine_host_references(references):
         reference = HostReference.load(reference)
         if result is not None and result.identity != reference.identity:
             raise ValueError('Inputs contain conflicting host_reference snapshots')
+        if result is not None and result.coverage != reference.coverage:
+            raise ValueError('Inputs contain conflicting frozen host catalogue coverage; reuse the same saved reference')
         result = reference
     return result

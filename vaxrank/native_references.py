@@ -225,14 +225,16 @@ class NativeReferences:
         if host_reference is not None:
             from .host_reference import HostReference
             if decode:
-                if not isinstance(host_reference, dict) or set(host_reference) != {'path', 'sha256', 'size', 'identity'}:
+                if (not isinstance(host_reference, dict)
+                        or not {'path', 'sha256', 'size', 'identity'} <= set(host_reference)
+                        or set(host_reference) - {'path', 'sha256', 'size', 'identity', 'coverage'}):
                     raise ValueError('Malformed native host reference resource')
                 source = self._relative_path(host_reference['path'])
                 if (not source.is_file() or source.stat().st_size != host_reference['size']
                         or self._file_digest(source) != host_reference['sha256']):
                     raise ValueError(f'Native host reference is missing or corrupt: {source}')
                 payload['host_reference'] = HostReference.load({
-                    'path': source, 'identity': host_reference['identity']})
+                    'path': source, 'identity': host_reference['identity']}, coverage=host_reference.get('coverage'))
             else:
                 host_reference = HostReference.load(host_reference)
                 # ORFdata writes deterministic snapshots. Bundle once, then use
@@ -242,7 +244,7 @@ class NativeReferences:
                     source = Path(temporary) / 'host.proteome.json.gz'
                     host_reference.save(source)
                     resource = self._bundle_file(source)
-                payload['host_reference'] = dict(resource, identity=host_reference.identity)
+                payload['host_reference'] = dict(resource, identity=host_reference.identity, coverage=host_reference.coverage)
         for field in ("epitopes", "provenance"):
             payload[field] = [native(value) for value in payload[field]]
         for field in ("antigens", "mutation_fragments"):
