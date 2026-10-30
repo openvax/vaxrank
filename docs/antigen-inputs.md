@@ -204,7 +204,11 @@ Human `MAGE*` exclusions do not apply to dogs. Self checks omit only the reviewe
 target gene; other genes and extra ORFs remain searchable. OncoRef's partial
 coverage, family ambiguity and normal-tissue observations stay in native outputs.
 Its canine evidence includes [kidney expression for CTCFL and DDX53](https://doi.org/10.1016/j.vetimm.2025.110946).
-Mouse CTA evidence is currently unavailable; requesting it gives a clear error.
+OncoRef 1.22.1+ provides [partial P1A/Trap1a mouse evidence](https://github.com/pirl-unc/oncoref/pull/644),
+with explicit strain and normal-tissue coverage limitations. Its single-gene
+reference subset is currently unsupported by this expression-input route, so
+Vaxrank rejects it. Older snapshots without mouse evidence raise an explicit
+unavailable-evidence error.
 
 An optional `evidence_snapshot` path selects an exported OncoRef snapshot,
 relative to the manifest. Python uses the same adapter:
