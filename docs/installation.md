@@ -19,7 +19,8 @@ pip check
 ```
 
 Common CTA evidence and patient-background comparisons use one environment with
-Topiary 5.108.4 or newer. PirlyGenes pins its matching OncoRef release, so resolve
+Topiary 5.108.4 or newer. PirlyGenes also constrains the supported OncoRef range,
+so resolve
 related upgrades together:
 
 ```sh

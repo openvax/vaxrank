@@ -59,7 +59,7 @@ versioned patient-background-pairs documentation and Topiary's validating
 Integrate the released 3.48.0 common CTA admission path and independent 3.48.2
 coverage reports before shipping this PR as 3.48.3. Require the reviewed
 OncoRef `>=1.23.1,<=1.24.0` range in the ordinary install; the `cta` extra remains
-a compatibility alias. PirlyGenes coordinates its exact owner pin so current
+a compatibility alias. PirlyGenes coordinates its supported range so current
 Topiary and common CTA capabilities resolve together. Do not lower the Topiary
 floor or bypass dependency resolution.
 
@@ -71,10 +71,12 @@ owner package upgrade is separate from adopting the reviewed target policy
 tracked in #687. Re-run the combined full suite, real report replay, docs,
 joint installation and current-head CI before normal clean-main deployment.
 
-Before shipping, test the published 1.23.1/PirlyGenes 6.0.20 endpoint and the immutable
-PirlyGenes 6.0.21/OncoRef 1.24.0 candidate together through ordinary dependency
-resolution. This lets Vaxrank publish the tested compatibility range before
-PirlyGenes 6.0.21's current-consumer CI, avoiding a release dependency cycle.
+Before shipping, test both OncoRef endpoints with PirlyGenes 6.0.20 through
+ordinary dependency resolution. That release supports the same bounded range,
+so it can publish against the previous Vaxrank before this release enables the
+new endpoint. Include current Tsarina 1.36.0: PirlyGenes #664 exposed a mix of
+historical and current CTA membership and a null-unsafe comparison in its tests.
+Preserve the explicitly historical policy while updating dependency contracts.
 
 The 1.24 source comparison changes the reviewed CTA-selection policy and adds
 TCR-T product/cohort/event evidence; it leaves the historical CTA API and common

@@ -72,8 +72,8 @@ dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
 # OncoRef 1.23.1 supplies sequence-backed common CTA snapshots alongside the
 # historical annotation-bound APIs. The tested range also accepts 1.24.0's
-# product-scoped clinical evidence, while PirlyGenes pins its matching owner
-# release. Saved policy/data identities remain unchanged; package compatibility
+# product-scoped clinical evidence. PirlyGenes supports the same bounded range.
+# Saved policy/data identities remain unchanged; package compatibility
 # does not silently adopt a new target-selection policy (#687).
 oncoref>=1.23.1,<=1.24.0
 # 0.42.6 accepts canonical PyEnsembl metadata for the pinned Ensembl builder.
