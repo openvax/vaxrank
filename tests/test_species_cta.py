@@ -4,10 +4,12 @@ from dataclasses import replace
 import hashlib
 import json
 import shutil
+from types import SimpleNamespace
 
 import oncoref
 from orfdata import Occurrence, ProteinSequence, Proteome
 from orfdata.reference import ReferenceContext
+from packaging.version import Version
 import pandas as pd
 import pytest
 
@@ -208,10 +210,28 @@ def test_species_cta_saved_result_replays_without_current_reference(tmp_path, mo
                 evidence_records=antigen.tumor_specificity.evidence_records[1:])))),))
 
 
-def test_species_cta_mouse_requires_its_mapped_reference(tmp_path):
+def test_species_cta_unavailable_evidence_is_explicit(tmp_path, monkeypatch):
+    # Exercise unavailable evidence independently of additions to the owner's
+    # published species inventory.
+    snapshot = SimpleNamespace(taxon_id=10090, coverage={'status': 'unavailable'})
+    monkeypatch.setattr('oncoref.species_antigens.cta_snapshot', lambda *args, **kwargs: snapshot)
     reference = HostReference(Proteome(ReferenceContext(10090, 'mouse', 'GRCm38', 'ensembl', '93'), []))
-    with pytest.raises(ValueError, match='evidence is unavailable|evidence annotation'):
+    with pytest.raises(ValueError, match='evidence is unavailable'):
         admit(tmp_path, reference=reference)
+
+
+@pytest.mark.skipif(Version(oncoref.__version__) < Version('1.22.1'),
+                    reason='Native mouse P1A evidence was added in OncoRef 1.22.1')
+def test_species_cta_partial_mouse_reference_remains_unsupported(tmp_path):
+    snapshot = oncoref.mouse.cta_snapshot()
+    assert snapshot.coverage['status'] == 'partial'
+    identity = snapshot.as_dict()['references'][0]['identity']
+    context = ReferenceContext(10090, 'mouse', 'GRCm39', identity['annotation_source'],
+        identity['annotation_release'], assembly_accession=identity['assembly_accession'])
+    # A native nomination and a single-gene reference subset cannot substitute
+    # for the supported expression-mapping and complete-host inventory contract.
+    with pytest.raises(ValueError, match='candidate subsets are insufficient'):
+        admit(tmp_path, reference=HostReference(Proteome(context, [])))
 
 
 @pytest.mark.parametrize('modality', ['peptide', 'mrna'])
