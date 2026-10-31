@@ -31,6 +31,7 @@ def _isovar_result(variant, protein_sequence):
     n_reads = protein_sequence.num_supporting_reads
     n_fragments = protein_sequence.num_supporting_fragments
     return SimpleNamespace(
+        predicted_effect=None,
         variant=variant,
         top_protein_sequence=protein_sequence,
         num_total_reads=n_reads,

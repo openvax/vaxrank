@@ -383,6 +383,7 @@ def _isovar_backed_peptide():
         mutation_start_idx=2, mutation_end_idx=3,
         num_supporting_fragments=7, num_supporting_reads=13, transcripts=[])
     fragment = MutantProteinFragment.from_isovar_result(types.SimpleNamespace(
+        predicted_effect=None,
         variant=object(), top_protein_sequence=protein_sequence,
         num_total_fragments=20, num_alt_fragments=8, num_ref_fragments=12,
         num_total_reads=38, num_alt_reads=15, num_ref_reads=23))
