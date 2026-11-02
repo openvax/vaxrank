@@ -1,5 +1,5 @@
 [![Tests](https://github.com/openvax/vaxrank/actions/workflows/tests.yml/badge.svg)](https://github.com/openvax/vaxrank/actions/workflows/tests.yml)
-[![Coverage Status](https://coveralls.io/repos/github/openvax/vaxrank/badge.svg?branch=master)](https://coveralls.io/github/openvax/vaxrank?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/openvax/vaxrank/badge.svg?branch=main)](https://coveralls.io/github/openvax/vaxrank?branch=main)
 [![Docs](https://github.com/openvax/vaxrank/actions/workflows/docs.yml/badge.svg)](https://github.com/openvax/vaxrank/actions/workflows/docs.yml)
 [![GitHub Pages](https://github.com/openvax/vaxrank/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/openvax/vaxrank/actions/workflows/pages/pages-build-deployment)
 <a href="https://pypi.python.org/pypi/vaxrank/">
@@ -80,6 +80,20 @@ reused by default. [Input workflows](docs/input-workflows.md) covers pVACseq
 reports, saved Vaxrank evidence, combining several reports in one run, and when
 to compute new predictions instead.
 
+## Command line
+
+`vaxrank` is the main command; run `vaxrank --help` for every option and
+`vaxrank --version` for the installed release. Companion commands share the
+installed package:
+
+| Command | Purpose | Documented in |
+|---|---|---|
+| `vaxrank-mutation-figure` | Transcript and protein context figures from `--output-isovar-csv` | [Analysis outputs](docs/outputs.md#mutation-and-assembly-figures) |
+| `vaxrank-evidence-figure` | Evidence summary figure from an evidence JSON | [Analysis outputs](docs/outputs.md) |
+| `vaxrank-complex-result-figure` | Figures for complex-variant results JSON | [Analysis outputs](docs/outputs.md) |
+| `vaxrank-window-exposure` | Delivery exposure of admitted SLP windows | [Window exposure](docs/core-window-exposure.md) |
+| `vaxrank-test-data` | Download the shared Sid test data | [Test data](TEST_DATA.md) |
+
 ## Documentation
 
 Full documentation: <https://openvax.github.io/vaxrank/>
@@ -107,6 +121,19 @@ Experimental workflows: [unified antigen inputs](docs/antigen-inputs.md),
 [window exposure](docs/core-window-exposure.md).
 
 <a id="clinical-use"></a>
+
+## Development
+
+```sh
+git clone https://github.com/openvax/vaxrank.git && cd vaxrank
+python -m venv venv && source venv/bin/activate
+pip install -e ".[hitlist]" pytest pytest-cov ruff
+./lint.sh
+./test.sh
+```
+
+Always run tests through `./test.sh`, not bare `pytest`. See
+[Development](docs/development.md) for test data and reference downloads.
 
 ## Clinical studies
 
