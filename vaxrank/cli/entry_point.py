@@ -970,6 +970,28 @@ def populate_default_output_paths(args):
             ", ".join("%s -> %s" % (a, p) for a, p in filled))
 
 
+def processing_annotation_available(args_list):
+    """Whether proteasome-cleavage annotation can run, and say so once if not.
+
+    The annotation is on by default but pepsickle is an optional install, so a
+    default run on a plain ``pip install vaxrank`` used to print a WARNING that
+    read like a broken install (openvax/vaxrank#770). Not having it is normal:
+    that is one INFO line. Asking for it by name is different, so that fails.
+    """
+    from importlib.util import find_spec
+    if find_spec('pepsickle') is not None:
+        return True
+    if '--processing-aware-annotation' in args_list:
+        raise ValueError(
+            "--processing-aware-annotation: pepsickle is not installed. "
+            "Install it with `pip install mhctools[pepsickle]` or drop the flag.")
+    logger.info(
+        "pepsickle is not installed, so proteasome-cleavage annotation is skipped. "
+        "Install `mhctools[pepsickle]` to enable it, or pass "
+        "--no-processing-aware-annotation to silence this message.")
+    return False
+
+
 def write_run_summary(args, patient_info, source, products=None):
     """Write a top-level ``run_summary.txt`` in --output-dir.
 
@@ -1282,6 +1304,11 @@ def run_cli(args_list=None):
     # --output-* flag, with no default destination). Applies to both
     # the VCF/BAM pipeline path and the external-input path.
     check_args(args)
+    # Decide now, not after the pipeline, so an explicit request for a missing
+    # optional install fails in the first second.
+    args._pepsickle_available = (
+        processing_annotation_available(args_list)
+        if getattr(args, 'processing_aware_annotation', True) else False)
     confirm_output_dir_overwrite(args)
 
     # Architecture (post-#252):
@@ -1428,7 +1455,7 @@ def run_cli(args_list=None):
     from ..prediction_policy import retained_processing, effective_prediction_configuration
     dataset = getattr(args, '_design_dataset', None)
     processing_predictions_by_key = retained_processing([dataset]) if dataset is not None else {}
-    if getattr(args, 'processing_aware_annotation', True):
+    if getattr(args, 'processing_aware_annotation', True) and getattr(args, '_pepsickle_available', True):
         _, processing_predictions_by_key = annotate_predictions_with_processing(
             ranked_variants_with_vaccine_peptides, predictions,
             human_only=getattr(args, 'pepsickle_human_only', False),
