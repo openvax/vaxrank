@@ -1,5 +1,8 @@
 # Development
 
+Setting up a checkout, running lint and tests, the test data, and how releases
+are cut. For contributors; users need only [Installation](installation.md).
+
 ```bash
 git clone git@github.com:openvax/vaxrank.git
 cd vaxrank

@@ -1,7 +1,8 @@
 # Isovar support compatibility
 
-Vaxrank 3.47 requires Isovar 1.61.0 or later, below 2.0, with ORFdata
-0.39.1 or later and the compatible Osteosarc 0.15 series. Native
+Vaxrank requires Isovar 1.78.0 or later, below 2.0, with ORFdata 0.42.6 or
+later and Osteosarc 0.15.6 or later in the 0.15 series (the pins in
+`requirements.txt`). Native
 [Isovar inputs](isovar-inputs.md) cover variant/ncORFs, SV ORFs, fusion,
 viral coding, targeted isoforms and ordinary protein-hypothesis exports.
 That guide documents exact supported schemas, reconstruction/admission controls,

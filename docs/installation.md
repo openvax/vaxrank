@@ -1,5 +1,8 @@
 # Installation
 
+What to install besides the package itself: reference annotation, the PDF
+backends and compatible companion releases. Read this before a first real run.
+
 ```sh
 pip install vaxrank
 ```
@@ -58,11 +61,12 @@ default. Install a compatible executable and make it available on `PATH`.
 
 Alternatively, pass `--pdf-backend=weasyprint` to use
 [WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html)
-(experimental). It uses system libraries such as Pango:
+(experimental). WeasyPrint is installed with Vaxrank but needs system
+libraries such as Pango:
 
 ```sh
-pip install weasyprint
-# macOS also needs: brew install pango
+# macOS
+brew install pango
 ```
 
 On Apple Silicon, WeasyPrint loads Pango through dyld, which does not search
