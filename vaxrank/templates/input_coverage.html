@@ -6,9 +6,10 @@ No supplied evidence recorded means this report cannot establish that a family w
 {% if not input_coverage.available %}<p class="note">The source inventory was not recorded for this report. Historical input denominators are unknown.</p>{% endif %}
 <table class="pure-table pure-table-bordered">
 <thead><tr><th>Source family</th><th>Input evidence</th><th>Recorded sources</th><th>Admitted</th><th>Ranked</th><th>In products</th></tr></thead>
-<tbody>{% for family in input_coverage.families %}<tr><td>{{ family.name }}</td><td>{{ family.status }}</td>
+{% set quiet = namespace(names=[]) %}<tbody>{% for family in input_coverage.families %}{% if family.status != 'Supplied' and not family.records and not family.ranked and not family.represented %}{% set quiet.names = quiet.names + [family.name] %}{% else %}<tr><td>{{ family.name }}</td><td>{{ family.status }}</td>
 {% for key in ('records', 'admitted', 'ranked', 'represented') %}<td>{{ family[key] if family[key] is not none else 'Unknown' }}</td>{% endfor %}
-</tr>{% endfor %}</tbody></table>
+</tr>{% endif %}{% endfor %}</tbody></table>
+{% if quiet.names %}<p class="note">No supplied evidence recorded: {{ quiet.names | join(', ') | e }}.</p>{% endif %}
 <p class="note">Admission is the recorded construct-admission decision where available. Ranked counts reflect the current configuration.
 “In products” uses retained source mappings from the actual emitted products; unknown also covers analysis-only reports.
 Retained predictions do not prove complete inference coverage. Original input denominators are shown separately below.</p>

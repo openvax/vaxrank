@@ -49,6 +49,7 @@ from .vaccine_config_args import (
 from ..config import load_vaxrank_config
 from .errors import USER_ERRORS, exit_with_user_error
 from ..progress import timed_step
+from ..allele_validation import validate_allele_arguments
 
 from ..core_logic import run_vaxrank
 from ..epitope_io import (
@@ -945,6 +946,44 @@ _AUTO_OUTPUT_FILENAMES = {
 }
 
 
+# Output flags whose value is a file; their parent directory must be writable.
+_OUTPUT_FILE_FLAGS = (
+    'output_csv', 'output_xlsx_report', 'output_ascii_report', 'output_html_report',
+    'output_pdf_report', 'output_neoepitope_report', 'output_json_file',
+    'output_passing_variants_csv', 'output_isovar_csv', 'output_epitopes',
+    'output_antigens', 'output_input_predictions', 'output_cta_admission')
+
+
+def _require_creatable_directory(path, flag):
+    """Fail now, not after the pipeline, if ``path`` could never be written.
+
+    Output directories are created only when the first product is written, so
+    an unwritable ``--output-dir`` used to surface after the full analysis.
+    Nothing is created here: a run that fails for another reason leaves no
+    empty directory behind.
+    """
+    ancestor = os.path.abspath(path)
+    while not os.path.exists(ancestor):
+        ancestor = os.path.dirname(ancestor)
+    if not os.path.isdir(ancestor):
+        raise ValueError("%s: %s is not a directory, so %s cannot be created"
+                         % (flag, ancestor, path))
+    if not os.access(ancestor, os.W_OK | os.X_OK):
+        raise ValueError("%s: cannot create %s, %s is not writable" % (flag, path, ancestor))
+
+
+def validate_output_destinations(args):
+    """Check every output destination is writable before any work starts."""
+    # The directory first: defaults filled in from it must not take the blame.
+    if getattr(args, 'output_dir', ''):
+        _require_creatable_directory(args.output_dir, '--output-dir')
+    for attr in _OUTPUT_FILE_FLAGS:
+        path = getattr(args, attr, None)
+        if path and isinstance(path, str):
+            _require_creatable_directory(
+                os.path.dirname(os.path.abspath(path)), '--' + attr.replace('_', '-'))
+
+
 def populate_default_output_paths(args):
     """Use one predictable output bundle for all evidence input routes.
 
@@ -969,6 +1008,98 @@ def populate_default_output_paths(args):
             "Pass the explicit flag to override.",
             output_dir,
             ", ".join("%s -> %s" % (a, p) for a, p in filled))
+
+
+def warn_if_no_vaccine_peptides(patient_info):
+    """Say so when a run finished but produced nothing to put in a vaccine.
+
+    Such a run exits 0 and writes a complete-looking report, so without this the
+    only sign is a count in ``run_summary.txt`` (openvax/vaxrank#767). The hint
+    follows the stage where the funnel emptied.
+    """
+    if (patient_info is None or getattr(patient_info, 'antigen_summary', None) is not None
+            or getattr(patient_info, 'cta_expression_summary', None) is not None
+            or (patient_info.num_variants_with_vaccine_peptides or 0) > 0):
+        return
+    loaded = patient_info.num_somatic_variants or 0
+    coding = patient_info.num_coding_effect_variants or 0
+    rna = patient_info.num_variants_with_rna_support or 0
+    if not loaded:
+        hint = "no variants were loaded; check the variant input and --genome"
+    elif not coding:
+        hint = "none has a coding effect on a known transcript; check --genome and --ensembl-release"
+    elif not rna:
+        hint = ("none has RNA support; check that --bam is the tumor RNA and covers the variant, "
+                "and the --min-alt-rna-* thresholds")
+    else:
+        hint = ("none survived the RNA-evidence and peptide filters; check "
+                "--min-ratio-alt-to-other-fragments, --min-epitope-score and --scoring-mode")
+    logger.warning(
+        "No vaccine peptides were produced: %d variant(s) loaded, %d with a coding effect, "
+        "%d with RNA support; %s. The reports and constructs are empty.",
+        loaded, coding, rna, hint)
+
+
+def pepsickle_installed():
+    from importlib.util import find_spec
+    return find_spec('pepsickle') is not None
+
+
+def require_pepsickle_if_requested(args_list):
+    """Fail in the first second if ``--processing-aware-annotation`` was asked for by name
+    but pepsickle is not installed (openvax/vaxrank#770).
+
+    The flag defaults on, so a missing optional install must not fail by default;
+    that case is handled, with one INFO line, where annotation would actually run.
+    """
+    if '--processing-aware-annotation' in args_list and not pepsickle_installed():
+        raise ValueError(
+            "--processing-aware-annotation: pepsickle is not installed. "
+            "Install it with `pip install mhctools[pepsickle]` or drop the flag.")
+
+
+def processing_annotation_available():
+    """Whether annotation can run now; say once, at INFO, when it cannot."""
+    if pepsickle_installed():
+        return True
+    logger.info(
+        "pepsickle is not installed, so proteasome-cleavage annotation is skipped. "
+        "Install `mhctools[pepsickle]` to enable it, or pass "
+        "--no-processing-aware-annotation to silence this message.")
+    return False
+
+
+# Input flags whose value is a local file, and those whose value is a directory.
+# ``--host-reference`` and ``--reference-context`` are left out on purpose: they
+# can name a snapshot rather than a path.
+_INPUT_FILE_FLAGS = (
+    'vcf', 'maf', 'bam', 'json_variants', 'germline_vcf', 'genome_fasta', 'mhc_alleles_file',
+    'prediction_cache', 'input_epitopes', 'input_pvacseq', 'input_lens', 'input_antigens',
+    'input_isovar', 'input_manifest', 'input_cta_expression', 'input_topiary',
+    'input_json_file', 'patient_background_pairs')
+_INPUT_DIRECTORY_FLAGS = ('hitlist_evidence_bundle',)
+
+
+def validate_input_paths(args):
+    """Fail in the first second, naming the flag, if an input path is unusable.
+
+    A missing input used to surface as a bare ``[Errno 2]`` after the config dump
+    and Ensembl load, with no hint which flag it belonged to (openvax/vaxrank#769).
+    Values containing ``://`` are remote and left to their reader.
+    """
+    for attrs, want_directory in ((_INPUT_FILE_FLAGS, False), (_INPUT_DIRECTORY_FLAGS, True)):
+        for attr in attrs:
+            value = getattr(args, attr, None)
+            for path in ([value] if isinstance(value, str) else value if isinstance(value, list) else []):
+                if not isinstance(path, str) or '://' in path:
+                    continue
+                flag = '--' + attr.replace('_', '-')
+                if not os.path.exists(path):
+                    raise ValueError("%s: no such %s: %r" % (flag, 'directory' if want_directory else 'file', path))
+                if os.path.isdir(path) != want_directory:
+                    raise ValueError("%s: %r is a %s, expected a %s" % (
+                        flag, path, 'directory' if os.path.isdir(path) else 'file',
+                        'directory' if want_directory else 'file'))
 
 
 def write_run_summary(args, patient_info, source, products=None):
@@ -1273,6 +1404,7 @@ def run_cli(args_list=None):
     # JSON dump) without listing every flag. Explicit
     # ``--output-csv`` / ``--output-json-file`` paths win.
     populate_default_output_paths(args)
+    validate_output_destinations(args)
     if getattr(args, 'input_cta_expression', None) and args.output_dir and not args.output_cta_admission:
         args.output_cta_admission = os.path.join(args.output_dir, 'cta_admission.json')
     log_args_summary(args)
@@ -1283,6 +1415,14 @@ def run_cli(args_list=None):
     # --output-* flag, with no default destination). Applies to both
     # the VCF/BAM pipeline path and the external-input path.
     check_args(args)
+    validate_input_paths(args)
+    # Only the BAM pipeline rejects unparseable alleles later (species check);
+    # external-input runs accept them, so they must not start failing here.
+    if getattr(args, 'bam', None):
+        validate_allele_arguments(args)
+    # Decide now, not after the pipeline, so an explicit request for a missing
+    # optional install fails in the first second.
+    require_pepsickle_if_requested(args_list)
     confirm_output_dir_overwrite(args)
 
     # Architecture (post-#252):
@@ -1429,7 +1569,7 @@ def run_cli(args_list=None):
     from ..prediction_policy import retained_processing, effective_prediction_configuration
     dataset = getattr(args, '_design_dataset', None)
     processing_predictions_by_key = retained_processing([dataset]) if dataset is not None else {}
-    if getattr(args, 'processing_aware_annotation', True):
+    if getattr(args, 'processing_aware_annotation', True) and processing_annotation_available():
         _, processing_predictions_by_key = annotate_predictions_with_processing(
             ranked_variants_with_vaccine_peptides, predictions,
             human_only=getattr(args, 'pepsickle_human_only', False),
@@ -1457,6 +1597,7 @@ def run_cli(args_list=None):
             raise ValueError('Antigen export requires resolved native input evidence')
         AntigenDataset.from_epitope_dataset(dataset).save(args.output_antigens)
     write_run_summary(args, patient_info, source, products=products)
+    warn_if_no_vaccine_peptides(patient_info)
 
     ########################
     # Template-based reports (PDF / HTML / ASCII)

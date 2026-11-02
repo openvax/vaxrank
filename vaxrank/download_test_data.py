@@ -269,7 +269,10 @@ def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+        prog="vaxrank-test-data", description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    from .cli.companion import add_version_argument
+    add_version_argument(parser)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST,
                         help="Custom test-data manifest; omit for the Sid retrieval cases")
     parser.add_argument("--output", type=Path, help="New directory to export, or an existing identical dataset to verify")

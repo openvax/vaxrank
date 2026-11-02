@@ -1,5 +1,7 @@
 # Peptide SLP overlay; serum exposure does not apply to translated mRNA.
 name: peptide-serum-v1
+policy_metadata:
+  description: Peptide SLP overlay that weighs serum exposure in window selection; does not apply to translated mRNA
 peptide:
   window_selection:
     self_weight: 0.25
