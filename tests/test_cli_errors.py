@@ -264,10 +264,11 @@ def test_config_errors_say_which_inputs_built_the_configuration(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="config file not found: .*nope.yaml"):
         load_vaxrank_config(config_path=str(tmp_path / "nope.yaml"))
-    with pytest.raises(ValueError, match=r"unknown field `nosuchkey` \(configuration built from: nosuchkey=1\)"):
+    # msgspec.ValidationError is not a ValueError on every supported msgspec release.
+    with pytest.raises(USER_ERRORS, match=r"unknown field `nosuchkey` \(configuration built from: nosuchkey=1\)"):
         load_vaxrank_config(set_overrides=["nosuchkey=1"])
     # Overrides given as an ordered list are reported once, not once per list.
-    with pytest.raises(ValueError) as error:
+    with pytest.raises(USER_ERRORS) as error:
         load_vaxrank_config(ordered_overrides=[("set", "nosuchkey=1")], set_overrides=["nosuchkey=1"])
     assert str(error.value).count("nosuchkey=1") == 1
 
