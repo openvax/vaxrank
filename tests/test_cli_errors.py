@@ -356,3 +356,12 @@ def test_explicit_pepsickle_request_fails_before_the_pipeline(tmp_path, monkeypa
             tmp_path, "--processing-aware-annotation", "--output-csv", str(tmp_path / "o.csv")))
     assert exit_info.value.code == 1
     assert "--processing-aware-annotation: pepsickle is not installed" in capsys.readouterr().err
+
+
+def test_pepsickle_in_a_configured_interpreter_counts_as_installed(monkeypatch):
+    _without_pepsickle(monkeypatch)
+    monkeypatch.delenv("PEPSICKLE_PYTHON", raising=False)
+    monkeypatch.delenv("PEPSICKLE_GB_PYTHON", raising=False)
+    assert entry_point.pepsickle_installed() is False
+    monkeypatch.setenv("PEPSICKLE_PYTHON", "/opt/pepsickle-venv/bin/python")
+    assert entry_point.pepsickle_installed() is True
