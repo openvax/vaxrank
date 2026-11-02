@@ -48,6 +48,7 @@ from .vaccine_config_args import (
 )
 from ..config import load_vaxrank_config
 from .errors import USER_ERRORS, exit_with_user_error
+from ..progress import timed_step
 
 from ..core_logic import run_vaxrank
 from ..epitope_io import (
@@ -1606,15 +1607,18 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         from ..construct_replay import pipeline_native_dataset
         epitope_dataset = pipeline_native_dataset(args, variants, epitope_config,
                                                  patient_background=prepared_background)
-    isovar_results = run_isovar(
-        variants=variants,
-        germline_variants=germline_variants_from_args(args, variants),
-        alignment_file=alignment_file_from_args(args),
-        read_collector=read_collector_from_args(args),
-        protein_sequence_creator=protein_sequence_creator,
-        filter_thresholds=filter_threshold_dict_from_args(args),
-        **phasing_parameters_from_args(args, variants),
-    )
+    with timed_step(
+            logger, "Collecting RNA reads and assembling protein sequences for %d variant(s)",
+            "Assembled RNA-supported sequences for %d variant(s) in %.0fs", len(variants)):
+        isovar_results = run_isovar(
+            variants=variants,
+            germline_variants=germline_variants_from_args(args, variants),
+            alignment_file=alignment_file_from_args(args),
+            read_collector=read_collector_from_args(args),
+            protein_sequence_creator=protein_sequence_creator,
+            filter_thresholds=filter_threshold_dict_from_args(args),
+            **phasing_parameters_from_args(args, variants),
+        )
 
     if args.output_isovar_csv:
         df = isovar_results_to_dataframe(isovar_results)

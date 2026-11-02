@@ -1194,6 +1194,7 @@ def make_pdf_report(
         pdf_report_path,
         backend='pdfkit'):
     ensure_parent_dir(pdf_report_path)
+    logger.info('Rendering PDF report with %s (a few seconds to a minute for large reports)', backend)
     with tempfile.NamedTemporaryFile(mode='w', suffix='.html') as f:
         render_report(template_data, f, 'templates/template.html')
         f.flush()
