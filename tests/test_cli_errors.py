@@ -170,3 +170,112 @@ def test_empty_ranked_table_writes_a_schema(tmp_path):
     report.make_csv_report([], csv_report_path=path)
     frame = pd.read_csv(path)
     assert frame.empty and list(frame) == list(report.new_columns())
+
+
+def test_argparse_errors_name_the_problem_without_the_usage_dump(capsys):
+    """vaxrank's usage is over 150 lines; the one line that matters must not hide in it."""
+    for argv in ([], ["--bam", "x.bam", "--mhc-predictor", "notapredictor"],
+                 ["--input-pvacseq", "x.tsv", "--mhc-predictor", "notapredictor"]):
+        with pytest.raises(SystemExit) as exit_info:
+            entry_point.main(argv)
+        assert exit_info.value.code == 2
+        err = capsys.readouterr().err
+        assert err.startswith("vaxrank: error: "), err
+        assert "usage:" not in err
+        assert "vaxrank --help" in err
+        assert len(err.splitlines()) <= 3
+
+
+def test_unparseable_allele_names_the_flag_and_the_entry_as_typed(tmp_path, capsys, monkeypatch):
+    """mhctools drops the '*' from names it cannot parse, so a later check would
+    quote 'HLA-Z99:99' for input the user typed as 'HLA-Z*99:99'."""
+    def must_not_run(args):
+        raise AssertionError("input loading started before the alleles were checked")
+
+    monkeypatch.setattr(entry_point, "variant_collection_from_args", must_not_run)
+    with pytest.raises(SystemExit) as exit_info:
+        entry_point.main(_pipeline_args(
+            tmp_path, "--mhc-alleles", "H2-Kb,HLA-Z*99:99", "--output-csv", str(tmp_path / "o.csv")))
+    assert exit_info.value.code == 1
+    assert "--mhc-alleles: cannot parse 'HLA-Z*99:99' as an MHC allele" in capsys.readouterr().err
+
+
+def test_unwritable_output_destinations_fail_before_the_pipeline(tmp_path, capsys, monkeypatch):
+    """A bad destination used to surface only after the whole analysis had run."""
+    def must_not_run(args):
+        raise AssertionError("pipeline started before the destination was checked")
+
+    monkeypatch.setattr(entry_point, "variant_collection_from_args", must_not_run)
+    blocker = tmp_path / "a_file"
+    blocker.write_text("not a directory")
+    for flag in ("--output-dir", "--output-csv"):
+        target = blocker / "sub" if flag == "--output-dir" else blocker / "x.csv"
+        with pytest.raises(SystemExit) as exit_info:
+            entry_point.main(_pipeline_args(tmp_path, flag, str(target)))
+        assert exit_info.value.code == 1
+        assert "vaxrank: error: %s: " % flag in capsys.readouterr().err
+    assert not (tmp_path / "newdir").exists()
+
+
+def test_a_new_nested_output_dir_is_still_accepted_and_not_created_early(tmp_path):
+    args = type("Args", (), {"output_dir": str(tmp_path / "new" / "nested")})()
+    entry_point.populate_default_output_paths(args)
+    entry_point.validate_output_destinations(args)
+    assert not (tmp_path / "new").exists()
+    assert args.output_csv.endswith("ranked_candidates.csv")
+
+
+def test_figure_commands_report_input_mistakes_in_one_line(tmp_path, capsys):
+    """The companion commands leaked a traceback for a missing or wrong-shaped file."""
+    from vaxrank.cli import (
+        complex_variant_visualization, evidence_visualization, mutation_visualization)
+
+    wrong_shape = tmp_path / "wrong.json"
+    wrong_shape.write_text('{"unrelated": 1}')
+    cases = [
+        ("vaxrank-mutation-figure", mutation_visualization.main, [str(tmp_path / "nope.csv")], "nope.csv"),
+        ("vaxrank-evidence-figure", evidence_visualization.main, [str(tmp_path / "nope.json")], "nope.json"),
+        ("vaxrank-complex-result-figure", complex_variant_visualization.main,
+         [str(wrong_shape), "--output-root", str(tmp_path / "out")], "'records' and 'metadata'"),
+    ]
+    for prog, main, argv, expected in cases:
+        with pytest.raises(SystemExit) as exit_info:
+            main(argv)
+        assert exit_info.value.code == 1
+        err = capsys.readouterr().err
+        assert err.startswith("%s: error: " % prog), err
+        assert expected in err
+        assert "Traceback" not in err and "--verbose" not in err
+        assert len(err.splitlines()) == 1
+
+
+def test_every_bundled_policy_has_its_own_description():
+    from vaxrank.config.policies import list_policies
+
+    # openvax-v1 is a byte-hash-frozen baseline, so its YAML cannot carry one.
+    descriptions = [policy["description"] for policy in list_policies()
+                    if policy["name"] != "openvax-v1"]
+    assert not any("see --show-policy" in text for text in descriptions)
+    assert len(set(descriptions)) == len(descriptions)
+
+
+def test_config_errors_say_which_inputs_built_the_configuration(tmp_path):
+    from vaxrank.config import load_vaxrank_config
+
+    with pytest.raises(FileNotFoundError, match="config file not found: .*nope.yaml"):
+        load_vaxrank_config(config_path=str(tmp_path / "nope.yaml"))
+    with pytest.raises(ValueError, match=r"unknown field `nosuchkey` \(configuration built from: nosuchkey=1\)"):
+        load_vaxrank_config(set_overrides=["nosuchkey=1"])
+    # Overrides given as an ordered list are reported once, not once per list.
+    with pytest.raises(ValueError) as error:
+        load_vaxrank_config(ordered_overrides=[("set", "nosuchkey=1")], set_overrides=["nosuchkey=1"])
+    assert str(error.value).count("nosuchkey=1") == 1
+
+
+def test_fragments_without_epitopes_are_counted_not_logged_one_by_one():
+    import inspect
+    from vaxrank import core_logic
+
+    source = inspect.getsource(core_logic)
+    assert 'logger.info(\n                "No epitopes for mutant protein fragment' not in source
+    assert "n_fragments_without_epitopes" in source

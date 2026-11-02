@@ -1,6 +1,8 @@
 # Experimental class-I overlay; compose after builtin:openvax-v1.
 # Requires explicit MHCflurry/NetMHCpan-4.2 evidence. Weights are heuristics.
 name: presentation-ba-v1
+policy_metadata:
+  description: Experimental class-I overlay ranking by equal parts presentation and binding; needs explicit MHCflurry or NetMHCpan-4.2 evidence
 epitopes:
   selection_policy:
     schema_version: 2

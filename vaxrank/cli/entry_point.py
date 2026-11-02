@@ -48,6 +48,7 @@ from .vaccine_config_args import (
 )
 from ..config import load_vaxrank_config
 from .errors import USER_ERRORS, exit_with_user_error
+from ..allele_validation import validate_allele_arguments
 
 from ..core_logic import run_vaxrank
 from ..epitope_io import (
@@ -944,6 +945,44 @@ _AUTO_OUTPUT_FILENAMES = {
 }
 
 
+# Output flags whose value is a file; their parent directory must be writable.
+_OUTPUT_FILE_FLAGS = (
+    'output_csv', 'output_xlsx_report', 'output_ascii_report', 'output_html_report',
+    'output_pdf_report', 'output_neoepitope_report', 'output_json_file',
+    'output_passing_variants_csv', 'output_isovar_csv', 'output_epitopes',
+    'output_antigens', 'output_input_predictions', 'output_cta_admission')
+
+
+def _require_creatable_directory(path, flag):
+    """Fail now, not after the pipeline, if ``path`` could never be written.
+
+    Output directories are created only when the first product is written, so
+    an unwritable ``--output-dir`` used to surface after the full analysis.
+    Nothing is created here: a run that fails for another reason leaves no
+    empty directory behind.
+    """
+    ancestor = os.path.abspath(path)
+    while not os.path.exists(ancestor):
+        ancestor = os.path.dirname(ancestor)
+    if not os.path.isdir(ancestor):
+        raise ValueError("%s: %s is not a directory, so %s cannot be created"
+                         % (flag, ancestor, path))
+    if not os.access(ancestor, os.W_OK | os.X_OK):
+        raise ValueError("%s: cannot create %s, %s is not writable" % (flag, path, ancestor))
+
+
+def validate_output_destinations(args):
+    """Check every output destination is writable before any work starts."""
+    # The directory first: defaults filled in from it must not take the blame.
+    if getattr(args, 'output_dir', ''):
+        _require_creatable_directory(args.output_dir, '--output-dir')
+    for attr in _OUTPUT_FILE_FLAGS:
+        path = getattr(args, attr, None)
+        if path and isinstance(path, str):
+            _require_creatable_directory(
+                os.path.dirname(os.path.abspath(path)), '--' + attr.replace('_', '-'))
+
+
 def populate_default_output_paths(args):
     """Use one predictable output bundle for all evidence input routes.
 
@@ -1272,6 +1311,7 @@ def run_cli(args_list=None):
     # JSON dump) without listing every flag. Explicit
     # ``--output-csv`` / ``--output-json-file`` paths win.
     populate_default_output_paths(args)
+    validate_output_destinations(args)
     if getattr(args, 'input_cta_expression', None) and args.output_dir and not args.output_cta_admission:
         args.output_cta_admission = os.path.join(args.output_dir, 'cta_admission.json')
     log_args_summary(args)
@@ -1282,6 +1322,10 @@ def run_cli(args_list=None):
     # --output-* flag, with no default destination). Applies to both
     # the VCF/BAM pipeline path and the external-input path.
     check_args(args)
+    # Only the BAM pipeline rejects unparseable alleles later (species check);
+    # external-input runs accept them, so they must not start failing here.
+    if getattr(args, 'bam', None):
+        validate_allele_arguments(args)
     confirm_output_dir_overwrite(args)
 
     # Architecture (post-#252):
