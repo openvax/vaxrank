@@ -227,7 +227,7 @@ def _protein_source_snapshot(genome):
         getattr(getattr(genome, "species", None), "latin_name", "") or ""
     )
     sources_by_sequence: dict[str, set[SelfReferenceSource]] = {}
-    for transcript in progress(genome.transcripts(), "Reading annotated proteins", "transcripts"):
+    for transcript in progress(genome.transcripts(), "Reading annotated proteins", "transcripts", leave=False):
         if not transcript.protein_sequence:
             continue
         gene_id = normalize_ensembl_gene_id(
@@ -509,7 +509,7 @@ def genome_protein_dict(genome, exclude_gene_ids=None):
 
     proteins = {}
     num_excluded_transcripts = 0
-    for t in progress(genome.transcripts(), "Reading annotated proteins", "transcripts"):
+    for t in progress(genome.transcripts(), "Reading annotated proteins", "transcripts", leave=False):
         gene_id = normalize_ensembl_gene_id(t.gene_id)
         if gene_id in excluded_gene_ids:
             num_excluded_transcripts += 1
