@@ -174,6 +174,8 @@ def predict_epitopes(
         topiary_predictor = mhc_predictor
 
     # Run predictions via Topiary
+    logger.info("Predicting MHC epitopes for %s (%d aa); this is the slow step of a run",
+                source_name, len(antigen.amino_acids))
     try:
         predictions_df = topiary_predictor.predict_from_named_sequences(
             {source_name: antigen.amino_acids})

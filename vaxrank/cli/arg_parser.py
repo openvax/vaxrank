@@ -14,6 +14,7 @@
 
 import sys
 import os
+from functools import partial
 from argparse import SUPPRESS, Action, ArgumentParser, ArgumentTypeError
 from importlib.resources import files
 
@@ -41,6 +42,21 @@ def _linker_arg(value):
         raise ArgumentTypeError(str(e))
     return upper
 
+
+
+def _concise_error(parser, message):
+    """Exit 2 with the error and a pointer to --help, not the whole usage block.
+
+    The default argparse error repeats the complete usage string, which for
+    vaxrank is over 150 lines and pushes the one line that matters off screen.
+    """
+    parser.exit(2, "%s: error: %s\nRun '%s --help' to see every option.\n"
+                % (parser.prog, message, parser.prog))
+
+
+class _ConciseErrorParser(ArgumentParser):
+    def error(self, message):
+        _concise_error(self, message)
 
 
 class _PrintDefaultConfigAction(Action):
@@ -167,11 +183,13 @@ def make_vaxrank_arg_parser():
     add_output_args(arg_parser)
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
+    # isovar built this parser, so it does not inherit _ConciseErrorParser.
+    arg_parser.error = partial(_concise_error, arg_parser)
     return arg_parser
 
 
 def cached_run_arg_parser():
-    arg_parser = ArgumentParser(
+    arg_parser = _ConciseErrorParser(
         prog="vaxrank",
         description=(
             "Rank personalized cancer neoantigens from somatic variants, "
@@ -1154,7 +1172,7 @@ def add_external_rescoring_args(arg_parser):
 
 def external_input_arg_parser():
     """Parser for --input-pvacseq / --input-lens mode (no BAM/VCF required)."""
-    arg_parser = ArgumentParser(
+    arg_parser = _ConciseErrorParser(
         prog="vaxrank",
         description=(
             "Score and rank pre-computed epitope predictions from "
