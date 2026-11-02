@@ -1039,6 +1039,42 @@ def warn_if_no_vaccine_peptides(patient_info):
         loaded, coding, rna, hint)
 
 
+def pepsickle_installed():
+    """Whether mhctools can run pepsickle: here, or in the interpreter it is pointed at.
+
+    mhctools runs inference in the interpreter named by ``PEPSICKLE_PYTHON`` (or
+    ``PEPSICKLE_GB_PYTHON`` for the gradient-boosted model) when either is set, so
+    the parent process need not be able to import it.
+    """
+    from importlib.util import find_spec
+    return (find_spec('pepsickle') is not None
+            or bool(os.environ.get('PEPSICKLE_PYTHON') or os.environ.get('PEPSICKLE_GB_PYTHON')))
+
+
+def require_pepsickle_if_requested(args_list):
+    """Fail in the first second if ``--processing-aware-annotation`` was asked for by name
+    but pepsickle is not installed (openvax/vaxrank#770).
+
+    The flag defaults on, so a missing optional install must not fail by default;
+    that case is handled, with one INFO line, where annotation would actually run.
+    """
+    if '--processing-aware-annotation' in args_list and not pepsickle_installed():
+        raise ValueError(
+            "--processing-aware-annotation: pepsickle is not installed. "
+            "Install it with `pip install mhctools[pepsickle]` or drop the flag.")
+
+
+def processing_annotation_available():
+    """Whether annotation can run now; say once, at INFO, when it cannot."""
+    if pepsickle_installed():
+        return True
+    logger.info(
+        "pepsickle is not installed, so proteasome-cleavage annotation is skipped. "
+        "Install `mhctools[pepsickle]` to enable it, or pass "
+        "--no-processing-aware-annotation to silence this message.")
+    return False
+
+
 def write_run_summary(args, patient_info, source, products=None):
     """Write a top-level ``run_summary.txt`` in --output-dir.
 
@@ -1356,6 +1392,9 @@ def run_cli(args_list=None):
     # external-input runs accept them, so they must not start failing here.
     if getattr(args, 'bam', None):
         validate_allele_arguments(args)
+    # Decide now, not after the pipeline, so an explicit request for a missing
+    # optional install fails in the first second.
+    require_pepsickle_if_requested(args_list)
     confirm_output_dir_overwrite(args)
 
     # Architecture (post-#252):
@@ -1502,7 +1541,7 @@ def run_cli(args_list=None):
     from ..prediction_policy import retained_processing, effective_prediction_configuration
     dataset = getattr(args, '_design_dataset', None)
     processing_predictions_by_key = retained_processing([dataset]) if dataset is not None else {}
-    if getattr(args, 'processing_aware_annotation', True):
+    if getattr(args, 'processing_aware_annotation', True) and processing_annotation_available():
         _, processing_predictions_by_key = annotate_predictions_with_processing(
             ranked_variants_with_vaccine_peptides, predictions,
             human_only=getattr(args, 'pepsickle_human_only', False),
