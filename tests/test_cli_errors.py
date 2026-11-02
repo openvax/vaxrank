@@ -280,3 +280,34 @@ def test_fragments_without_epitopes_are_counted_not_logged_one_by_one():
     source = inspect.getsource(core_logic)
     assert 'logger.info(\n                "No epitopes for mutant protein fragment' not in source
     assert "n_fragments_without_epitopes" in source
+
+
+def _funnel(loaded, coding, rna, peptides):
+    from types import SimpleNamespace
+    return SimpleNamespace(
+        num_somatic_variants=loaded, num_coding_effect_variants=coding,
+        num_variants_with_rna_support=rna, num_variants_with_vaccine_peptides=peptides,
+        antigen_summary=None, cta_expression_summary=None)
+
+
+@pytest.mark.parametrize("funnel, expected", [
+    ((0, 0, 0, 0), "no variants were loaded"),
+    ((1, 0, 0, 0), "none has a coding effect"),
+    ((1, 1, 0, 0), "none has RNA support"),
+    ((1, 1, 1, 0), "none survived the RNA-evidence and peptide filters"),
+])
+def test_an_empty_result_is_warned_about_with_the_stage_that_emptied_it(funnel, expected, caplog):
+    import logging
+    with caplog.at_level(logging.WARNING, logger=entry_point.logger.name):
+        entry_point.warn_if_no_vaccine_peptides(_funnel(*funnel))
+    messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+    assert len(messages) == 1 and "No vaccine peptides were produced" in messages[0]
+    assert expected in messages[0]
+
+
+def test_a_run_with_peptides_or_without_funnel_counts_does_not_warn(caplog):
+    import logging
+    with caplog.at_level(logging.WARNING, logger=entry_point.logger.name):
+        entry_point.warn_if_no_vaccine_peptides(_funnel(3, 3, 2, 1))
+        entry_point.warn_if_no_vaccine_peptides(None)
+    assert not caplog.records

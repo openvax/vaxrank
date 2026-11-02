@@ -1009,6 +1009,36 @@ def populate_default_output_paths(args):
             ", ".join("%s -> %s" % (a, p) for a, p in filled))
 
 
+def warn_if_no_vaccine_peptides(patient_info):
+    """Say so when a run finished but produced nothing to put in a vaccine.
+
+    Such a run exits 0 and writes a complete-looking report, so without this the
+    only sign is a count in ``run_summary.txt`` (openvax/vaxrank#767). The hint
+    follows the stage where the funnel emptied.
+    """
+    if (patient_info is None or getattr(patient_info, 'antigen_summary', None) is not None
+            or getattr(patient_info, 'cta_expression_summary', None) is not None
+            or (patient_info.num_variants_with_vaccine_peptides or 0) > 0):
+        return
+    loaded = patient_info.num_somatic_variants or 0
+    coding = patient_info.num_coding_effect_variants or 0
+    rna = patient_info.num_variants_with_rna_support or 0
+    if not loaded:
+        hint = "no variants were loaded; check the variant input and --genome"
+    elif not coding:
+        hint = "none has a coding effect on a known transcript; check --genome and --ensembl-release"
+    elif not rna:
+        hint = ("none has RNA support; check that --bam is the tumor RNA and covers the variant, "
+                "and the --min-alt-rna-* thresholds")
+    else:
+        hint = ("none survived the RNA-evidence and peptide filters; check "
+                "--min-ratio-alt-to-other-fragments, --min-epitope-score and --scoring-mode")
+    logger.warning(
+        "No vaccine peptides were produced: %d variant(s) loaded, %d with a coding effect, "
+        "%d with RNA support; %s. The reports and constructs are empty.",
+        loaded, coding, rna, hint)
+
+
 def write_run_summary(args, patient_info, source, products=None):
     """Write a top-level ``run_summary.txt`` in --output-dir.
 
@@ -1500,6 +1530,7 @@ def run_cli(args_list=None):
             raise ValueError('Antigen export requires resolved native input evidence')
         AntigenDataset.from_epitope_dataset(dataset).save(args.output_antigens)
     write_run_summary(args, patient_info, source, products=products)
+    warn_if_no_vaccine_peptides(patient_info)
 
     ########################
     # Template-based reports (PDF / HTML / ASCII)
