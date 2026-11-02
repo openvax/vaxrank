@@ -970,6 +970,39 @@ def populate_default_output_paths(args):
             ", ".join("%s -> %s" % (a, p) for a, p in filled))
 
 
+# Input flags whose value is a local file, and those whose value is a directory.
+# ``--host-reference`` and ``--reference-context`` are left out on purpose: they
+# can name a snapshot rather than a path.
+_INPUT_FILE_FLAGS = (
+    'vcf', 'maf', 'bam', 'json_variants', 'germline_vcf', 'genome_fasta', 'mhc_alleles_file',
+    'prediction_cache', 'input_epitopes', 'input_pvacseq', 'input_lens', 'input_antigens',
+    'input_isovar', 'input_manifest', 'input_cta_expression', 'input_topiary',
+    'input_json_file', 'patient_background_pairs')
+_INPUT_DIRECTORY_FLAGS = ('hitlist_evidence_bundle',)
+
+
+def validate_input_paths(args):
+    """Fail in the first second, naming the flag, if an input path is unusable.
+
+    A missing input used to surface as a bare ``[Errno 2]`` after the config dump
+    and Ensembl load, with no hint which flag it belonged to (openvax/vaxrank#769).
+    Values containing ``://`` are remote and left to their reader.
+    """
+    for attrs, want_directory in ((_INPUT_FILE_FLAGS, False), (_INPUT_DIRECTORY_FLAGS, True)):
+        for attr in attrs:
+            value = getattr(args, attr, None)
+            for path in ([value] if isinstance(value, str) else value if isinstance(value, list) else []):
+                if not isinstance(path, str) or '://' in path:
+                    continue
+                flag = '--' + attr.replace('_', '-')
+                if not os.path.exists(path):
+                    raise ValueError("%s: no such %s: %r" % (flag, 'directory' if want_directory else 'file', path))
+                if os.path.isdir(path) != want_directory:
+                    raise ValueError("%s: %r is a %s, expected a %s" % (
+                        flag, path, 'directory' if os.path.isdir(path) else 'file',
+                        'directory' if want_directory else 'file'))
+
+
 def write_run_summary(args, patient_info, source, products=None):
     """Write a top-level ``run_summary.txt`` in --output-dir.
 
@@ -1282,6 +1315,7 @@ def run_cli(args_list=None):
     # --output-* flag, with no default destination). Applies to both
     # the VCF/BAM pipeline path and the external-input path.
     check_args(args)
+    validate_input_paths(args)
     confirm_output_dir_overwrite(args)
 
     # Architecture (post-#252):

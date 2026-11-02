@@ -170,3 +170,35 @@ def test_empty_ranked_table_writes_a_schema(tmp_path):
     report.make_csv_report([], csv_report_path=path)
     frame = pd.read_csv(path)
     assert frame.empty and list(frame) == list(report.new_columns())
+
+
+def test_missing_input_paths_name_the_flag_before_any_work(tmp_path, monkeypatch, capsys):
+    def must_not_run(args):
+        raise AssertionError("input loading started before the paths were checked")
+
+    monkeypatch.setattr(entry_point, "variant_collection_from_args", must_not_run)
+    out = ["--output-csv", str(tmp_path / "o.csv")]
+    cases = [
+        ("--bam", str(tmp_path / "nope.bam"), "--bam: no such file"),
+        ("--prediction-cache", str(tmp_path), "--prediction-cache: %r is a directory, expected a file" % str(tmp_path)),
+        ("--mhc-alleles-file", str(tmp_path / "alleles.txt"), "--mhc-alleles-file: no such file"),
+    ]
+    for flag, value, expected in cases:
+        with pytest.raises(SystemExit) as exit_info:
+            entry_point.main(_pipeline_args(tmp_path, flag, value, *out))
+        assert exit_info.value.code == 1
+        assert expected in capsys.readouterr().err, flag
+
+
+def test_remote_and_existing_inputs_pass_the_path_check(tmp_path):
+    from types import SimpleNamespace
+    present = tmp_path / "x.vcf"
+    present.write_text("")
+    entry_point.validate_input_paths(SimpleNamespace(
+        vcf=[str(present)], bam="https://example.org/sample.bam", hitlist_evidence_bundle=str(tmp_path)))
+
+
+def test_a_missing_directory_input_names_the_flag(tmp_path):
+    from types import SimpleNamespace
+    with pytest.raises(ValueError, match="--hitlist-evidence-bundle: no such directory"):
+        entry_point.validate_input_paths(SimpleNamespace(hitlist_evidence_bundle=str(tmp_path / "nope")))
