@@ -71,6 +71,8 @@ def test_processing_occurrence_evidence_is_retained_without_reinference(tmp_path
         return 1, annotations
 
     monkeypatch.setattr('vaxrank.cli.entry_point.annotate_predictions_with_processing', annotate)
+    # The stub stands in for a working pepsickle, so do not require the real install.
+    monkeypatch.setattr('vaxrank.cli.entry_point.pepsickle_installed', lambda: True)
     source = tmp_path / 'first.tsv'
     run_cli(['--input-manifest', write_input_manifest(tmp_path / 'inputs.json', INPUTS[:1]),
              '--output-epitopes', str(source), '--processing-aware-annotation',
