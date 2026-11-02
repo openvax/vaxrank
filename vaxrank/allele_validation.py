@@ -46,3 +46,24 @@ def validate_prediction_frame(frame, location):
             row.get("kind"), row.get("allele"),
             f"{location}, normalized row {row_number}, "
             f"variant {cells.text(row.get('variant'))!r}, peptide {row.get('peptide')!r}")
+
+
+def validate_allele_arguments(args):
+    """Reject an unparseable ``--mhc-alleles`` or ``--mhc-alleles-file`` entry as typed.
+
+    mhctools normalizes names it cannot parse (it strips the ``*`` separator),
+    so by the time a later check fails the message shows a spelling the user
+    never wrote. Checking the raw tokens first names the flag and the entry.
+    """
+    entries = [("--mhc-alleles", token)
+               for group in (getattr(args, "mhc_alleles", None) or "").split(",")
+               for token in group.split()]
+    path = getattr(args, "mhc_alleles_file", None)
+    if path:
+        with open(path) as stream:
+            entries += [("--mhc-alleles-file", line.strip()) for line in stream if line.strip()]
+    for flag, token in entries:
+        try:
+            parse_prediction_allele(token)
+        except (ParseError, TypeError, ValueError) as error:
+            raise ValueError(f"{flag}: cannot parse {token!r} as an MHC allele") from error

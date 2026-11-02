@@ -3,6 +3,7 @@
 import argparse
 
 from .companion import add_version_argument
+from .errors import run_reporting_user_errors
 from ..mutation_visualization import generate_mutation_figures
 
 
@@ -34,7 +35,8 @@ def make_parser():
 
 def main(argv=None):
     args = make_parser().parse_args(argv)
-    run_directory = generate_mutation_figures(
+    run_directory = run_reporting_user_errors(
+        'vaxrank-mutation-figure', generate_mutation_figures,
         args.input_isovar_csv,
         args.output_root,
         variants=args.variant,

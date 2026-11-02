@@ -3,6 +3,7 @@
 import argparse
 
 from .companion import add_version_argument
+from .errors import run_reporting_user_errors
 from ..complex_variant_visualization import generate_complex_variant_results
 
 
@@ -24,7 +25,8 @@ def make_parser():
 
 def main(argv=None):
     args = make_parser().parse_args(argv)
-    run = generate_complex_variant_results(
+    run = run_reporting_user_errors(
+        'vaxrank-complex-result-figure', generate_complex_variant_results,
         args.input_json,
         args.output_root,
         timestamp=args.timestamp,

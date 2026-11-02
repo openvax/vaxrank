@@ -470,6 +470,7 @@ def vaccine_peptides_from_epitopes(
                     param_name, config_val, param_name, explicit_val,
                 )
     candidate_vaccine_peptides = []
+    n_fragments_without_epitopes = 0
 
     lengths = [vaccine_config.preferred_peptide_length]
     if vaccine_config.window_selection is not None:
@@ -502,7 +503,8 @@ def vaccine_peptides_from_epitopes(
         )
         # filter out peptides that have no epitopes
         if not subsequence_epitopes:
-            logger.info(
+            n_fragments_without_epitopes += 1
+            logger.debug(
                 "No epitopes for mutant protein fragment %s",
                 candidate_fragment,
             )
@@ -563,7 +565,9 @@ def vaccine_peptides_from_epitopes(
         ]
     n_filtered = len(filtered_candidate_vaccine_peptides)
     logger.info(
-        "Keeping %d/%d vaccine peptides for %s", n_filtered, n_total_candidates, variant
+        "Keeping %d/%d vaccine peptides for %s%s", n_filtered, n_total_candidates, variant,
+        " (%d candidate fragment(s) had no epitopes; --verbose lists them)"
+        % n_fragments_without_epitopes if n_fragments_without_epitopes else "",
     )
 
     if n_filtered == 0:
