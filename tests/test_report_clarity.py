@@ -7,6 +7,7 @@ from mhctools.pred import Prediction
 
 from vaxrank.candidate_epitope import CandidateEpitope, Peptide
 from vaxrank.processing_prediction import ProcessingPrediction
+from vaxrank.patient_info import PatientInfo
 from vaxrank.report import TemplateDataCreator
 from vaxrank.report_display import epitope_display, marked_sequence, model_inventory
 from vaxrank.vaccine_antigen import AminoAcidInterval, TargetableMask
@@ -176,3 +177,41 @@ def test_product_with_an_unavailable_source_mask_is_not_partially_highlighted():
     antigens[0]['sources'].append(missing)
     product = replace(product, antigens=antigens)
     assert list(product_target_intervals(product, ranked).values()) == [None]
+
+
+def test_input_coverage_lists_families_without_evidence_once():
+    data = template(ranked_pair())
+    families = data["input_coverage"]["families"]
+    empty = [f["name"] for f in families if f["status"] != "Supplied"]
+    assert len(empty) >= 5
+    listing = "No supplied evidence recorded: " + ", ".join(empty) + "."
+    for kind in ("txt", "html"):
+        text = render(data, kind)
+        assert listing in text
+        assert text.count("No supplied evidence recorded") <= 3
+        assert "Recorded sources: 0" not in text
+    # It starts its own line instead of running on from the sentence before.
+    assert "\n" + listing in render(data, "txt")
+
+
+def test_family_with_evidence_keeps_its_own_block_in_both_formats():
+    data = template(ranked_pair())
+    data["input_coverage"]["families"][0].update(status="Supplied", records=3, ranked=2)
+    name = data["input_coverage"]["families"][0]["name"]
+    assert "%s: Supplied\n  Recorded sources: 3" % name in render(data, "txt")
+    assert "<td>%s</td><td>Supplied</td>" % name in render(data, "html")
+    listing = [line for line in render(data, "txt").splitlines()
+               if line.startswith("No supplied evidence recorded:")]
+    assert listing and name not in listing[0]
+
+
+def test_blank_patient_id_is_omitted_not_printed_empty():
+    def data_for(patient_id):
+        return TemplateDataCreator(
+            ranked_pair(), PatientInfo(patient_id), final_review='', reviewers='',
+            args_for_report={'manufacturability': False, 'wt_epitopes': True},
+            input_json_file=None, products=None).compute_template_data()
+
+    for kind in ("txt", "html"):
+        assert "Patient ID" not in render(data_for(""), kind)
+        assert "Patient ID" in render(data_for("SID-001"), kind)

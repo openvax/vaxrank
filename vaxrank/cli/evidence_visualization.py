@@ -2,6 +2,7 @@
 
 import argparse
 
+from .errors import run_reporting_user_errors
 from ..evidence_visualization import generate_evidence_figures
 
 
@@ -20,7 +21,8 @@ def make_parser():
 
 def main(argv=None):
     args = make_parser().parse_args(argv)
-    run = generate_evidence_figures(
+    run = run_reporting_user_errors(
+        'vaxrank-evidence-figure', generate_evidence_figures,
         args.input_json,
         args.output_root,
         formats=args.formats or ("svg", "pdf", "png"),

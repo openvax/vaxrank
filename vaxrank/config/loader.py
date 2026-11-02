@@ -38,8 +38,11 @@ def _schema_to_dict(schema: VaxrankConfigSchema) -> dict[str, Any]:
 
 def _read_single_config_file(config_path: str) -> dict[str, Any]:
     config_path = resolve_config_path(config_path)
-    with open(config_path) as f:
-        content = f.read()
+    try:
+        with open(config_path) as f:
+            content = f.read()
+    except FileNotFoundError as error:
+        raise FileNotFoundError("config file not found: %s" % config_path) from error
 
     if not content.strip():
         return {}
@@ -327,7 +330,19 @@ def load_vaxrank_config(
             path, value_text = _split_override(override)
             _set_nested_value(raw, path, value_text.strip())
 
-    schema = msgspec.convert(raw, VaxrankConfigSchema)
+    try:
+        schema = msgspec.convert(raw, VaxrankConfigSchema)
+    except msgspec.ValidationError as error:
+        # The merged result is what failed, so say which inputs built it.
+        inputs = [str(path) for path in ([config_path] if isinstance(config_path, str)
+                                         else config_path or [])]
+        applied = ([override for _, override in ordered_overrides]
+                   if ordered_overrides is not None
+                   else list(set_overrides or []) + list(expr_overrides or []))
+        inputs += applied
+        if inputs:
+            raise type(error)("%s (configuration built from: %s)" % (error, "; ".join(inputs))) from error
+        raise
     resolved = _schema_to_dict(schema)
     from ..isovar_options import FAMILIES, source_options
     sources = resolved.get('isovar', {}).get('sources', {})

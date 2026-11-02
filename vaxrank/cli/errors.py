@@ -67,14 +67,31 @@ def _verbose(args_list):
     return "--verbose" in argv or "-v" in argv
 
 
-def exit_with_user_error(error, args_list=None):
-    """Print one line on stderr, keep the traceback available, exit 1."""
+def exit_with_user_error(error, args_list=None, prog="vaxrank", traceback_hint=True):
+    """Print one line on stderr, keep the traceback available, exit 1.
+
+    ``prog`` names the command in the message. The companion figure commands
+    have no ``--verbose`` or ``--log-path``, so they pass ``traceback_hint=False``
+    rather than point at options that do not exist.
+    """
     logger.debug("Exiting on user error: %s", error, exc_info=True)
     message = str(error).strip() or error.__class__.__name__
-    print("vaxrank: error: %s" % message, file=sys.stderr)
+    print("%s: error: %s" % (prog, message), file=sys.stderr)
     if _verbose(args_list):
         traceback.print_exc()
-    else:
-        print("vaxrank: re-run with --verbose, or read the file named by "
-              "--log-path, for the full traceback.", file=sys.stderr)
+    elif traceback_hint:
+        print("%s: re-run with --verbose, or read the file named by "
+              "--log-path, for the full traceback." % prog, file=sys.stderr)
     raise SystemExit(1)
+
+
+def run_reporting_user_errors(prog, function, *args, **kwargs):
+    """Run a companion command's work, reporting an input mistake as one line.
+
+    Gives ``vaxrank-*-figure`` the manners ``vaxrank`` already has: a missing or
+    malformed input file is a message and exit status 1, not a traceback.
+    """
+    try:
+        return function(*args, **kwargs)
+    except USER_ERRORS as error:
+        exit_with_user_error(error, prog=prog, traceback_hint=False)

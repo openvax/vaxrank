@@ -1,5 +1,7 @@
 # Shared antigen-window overlay; exact non-CTA self evidence only.
 name: self-trim-v1
+policy_metadata:
+  description: Shared antigen-window overlay that trims against exact non-CTA self evidence
 vaccine_peptides:
   min_length: 15
   max_length: 25
