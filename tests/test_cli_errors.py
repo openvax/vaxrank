@@ -182,8 +182,9 @@ def _without_pepsickle(monkeypatch):
 def test_missing_pepsickle_is_one_info_line_not_a_warning_by_default(monkeypatch, caplog):
     import logging
     _without_pepsickle(monkeypatch)
+    entry_point.require_pepsickle_if_requested(["--mhc-predictor", "random"])  # not requested: no error
     with caplog.at_level(logging.INFO, logger=entry_point.logger.name):
-        assert entry_point.processing_annotation_available(["--mhc-predictor", "random"]) is False
+        assert entry_point.processing_annotation_available() is False
     assert [r.levelno for r in caplog.records] == [logging.INFO]
     assert "mhctools[pepsickle]" in caplog.records[0].getMessage()
 
@@ -191,13 +192,15 @@ def test_missing_pepsickle_is_one_info_line_not_a_warning_by_default(monkeypatch
 def test_asking_for_pepsickle_by_name_fails_when_it_is_missing(monkeypatch):
     _without_pepsickle(monkeypatch)
     with pytest.raises(ValueError, match=r"--processing-aware-annotation: pepsickle is not installed"):
-        entry_point.processing_annotation_available(["--processing-aware-annotation"])
+        entry_point.require_pepsickle_if_requested(["--processing-aware-annotation"])
 
 
-def test_installed_pepsickle_runs_the_annotation(monkeypatch):
+def test_installed_pepsickle_runs_the_annotation_silently(monkeypatch, caplog):
     import importlib.util
     monkeypatch.setattr(importlib.util, "find_spec", lambda name, *a, **k: object())
-    assert entry_point.processing_annotation_available([]) is True
+    entry_point.require_pepsickle_if_requested(["--processing-aware-annotation"])
+    assert entry_point.processing_annotation_available() is True
+    assert not caplog.records
 
 
 def test_explicit_pepsickle_request_fails_before_the_pipeline(tmp_path, monkeypatch, capsys):
