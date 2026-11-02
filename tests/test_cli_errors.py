@@ -18,6 +18,7 @@ traceback is still recoverable rather than discarded.
 """
 
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -170,3 +171,31 @@ def test_empty_ranked_table_writes_a_schema(tmp_path):
     report.make_csv_report([], csv_report_path=path)
     frame = pd.read_csv(path)
     assert frame.empty and list(frame) == list(report.new_columns())
+
+
+def test_undeclared_antigen_scope_says_where_to_declare_it():
+    from types import SimpleNamespace
+    from vaxrank.antigen_input import AntigenDataset
+    from vaxrank.input_scope import InputScope
+
+    stand_in = SimpleNamespace(
+        antigens={"a": object()}, source_evidence={},
+        scope=InputScope(patient_id=None, reference_assembly="GRCh38", mhc_alleles=("HLA-A*02:01",)))
+    with pytest.raises(ValueError) as error:
+        AntigenDataset.validate_for_prediction(stand_in, genome=object())
+    message = str(error.value)
+    assert "requires declared patient_id" in message
+    assert "--input-manifest" in message
+    assert "--output-patient-id only labels the report" in message
+
+
+def test_predictor_with_an_input_that_reuses_predictions_explains_the_choice(tmp_path, capsys):
+    lens = Path(__file__).parent / "data" / "epitope_fixtures" / "lens_example.tsv"
+    with pytest.raises(SystemExit) as exit_info:
+        entry_point.main(["--input-lens", str(lens), "--mhc-predictor", "random",
+                          "--mhc-alleles", "HLA-A*02:01", "--output-csv", str(tmp_path / "o.csv"),
+                          "--log-path", str(tmp_path / "python.log")])
+    assert exit_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "reuses the predictions already in its tables" in err
+    assert "--external-predictions fresh or additive" in err and "drop --mhc-predictor" in err
