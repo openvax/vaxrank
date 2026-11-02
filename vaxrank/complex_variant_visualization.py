@@ -581,6 +581,11 @@ def generate_complex_variant_results(
     if run_directory.exists():
         raise FileExistsError("Result run already exists: %s" % run_directory)
     payload = json.loads(input_json.read_text())
+    if not isinstance(payload, dict) or not {"records", "metadata"} <= payload.keys():
+        found = sorted(payload) if isinstance(payload, dict) else type(payload).__name__
+        raise ValueError(
+            "%s is not a complex-variant result: expected a JSON object with "
+            "'records' and 'metadata', found %s" % (input_json, found))
     records = payload["records"]
     metadata = payload["metadata"]
     orf_platform_audit = payload.get("orf_platform_audit")

@@ -259,7 +259,8 @@ class TemplateDataCreator(object):
         serialized PatientInfo JSON.
         """
         patient_info = OrderedDict()
-        patient_info['Patient ID'] = self.patient_info.patient_id
+        if str(self.patient_info.patient_id or '').strip():
+            patient_info['Patient ID'] = self.patient_info.patient_id
         # Modality is part of the report's identity — what the user
         # is actually designing. Generic up here; modality-specific
         # construct details (signal peptide, UTRs, etc. for mRNA;

@@ -2,11 +2,13 @@
 Counts describe recorded source identities, deduplicated across inputs. They are not independent events, reference models, RNA reads, peptide occurrences or unique products.
 No supplied evidence recorded does not establish that a family was assessed or excluded. Retained predictions do not prove complete inference coverage.
 {% if not input_coverage.available %}Source inventory not recorded; historical input denominators are unknown.{% endif %}
-{% for family in input_coverage.families %}
+{% set quiet = namespace(names=[]) %}
+{% for family in input_coverage.families %}{% if family.status != 'Supplied' and not family.records and not family.ranked and not family.represented %}{% set quiet.names = quiet.names + [family.name] %}{% else %}
 {{ family.name }}: {{ family.status }}
   Recorded sources: {{ family.records if family.records is not none else 'Unknown' }}; admitted: {{ family.admitted if family.admitted is not none else 'Unknown' }}; ranked: {{ family.ranked if family.ranked is not none else 'Unknown' }}; in products: {{ family.represented if family.represented is not none else 'Unknown' }}
-{% endfor %}
-In products uses retained mappings from actual products; unknown also covers analysis-only reports.
+{% endif %}{% endfor %}
+{% if quiet.names %}{{ '\n' }}No supplied evidence recorded: {{ quiet.names | join(', ') }}.
+{% endif %}In products uses retained mappings from actual products; unknown also covers analysis-only reports.
 {% for expression in input_coverage.expression %}Expression features: {{ expression.decisions | length }}; {{ expression.contract.measurement_level }} / {{ expression.contract.expression_unit }}; sample {{ expression.contract.sample_id }}; assay {{ expression.contract.assay }}
 {% endfor %}
 {% for original in input_coverage.direct %}
