@@ -2,11 +2,13 @@
 
 import argparse
 
+from .companion import add_version_argument
 from ..mutation_visualization import generate_mutation_figures
 
 
 def make_parser():
     parser = argparse.ArgumentParser(
+        prog="vaxrank-mutation-figure",
         description=(
             "Render reference, annotation-only, and RNA-assembled transcript and "
             "protein context from a Vaxrank --output-isovar-csv file."
@@ -27,7 +29,7 @@ def make_parser():
     parser.add_argument(
         "--timestamp",
         help="Reproducible UTC run name in YYYY-MM-DDTHHMMSSZ form")
-    return parser
+    return add_version_argument(parser)
 
 
 def main(argv=None):

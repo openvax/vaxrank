@@ -8,12 +8,14 @@ from pathlib import Path
 
 from mhctools import format_vaccine_window_report, vaccine_window_rows
 
+from .companion import add_version_argument
 from ..core_exposure import assess_dataset_windows
 from ..epitope_dataset import EpitopeDataset
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog='vaxrank-window-exposure', description=__doc__)
+    add_version_argument(parser)
     parser.add_argument('--input-epitopes', required=True, help='Enriched native --output-epitopes dataset with explicit antigen contexts')
     parser.add_argument('--profile', required=True, help='Scenario JSON: times, sourced rates and optional candidate-specific profiles')
     parser.add_argument('--min-length', type=int, required=True)
