@@ -13,7 +13,8 @@ from vaxrank.epitope_dataset import EpitopeDataset
 from vaxrank.host_reference import combine_host_references
 from vaxrank.input_scope import InputScope, read_input_manifest
 from vaxrank.native_references import NativeReferences
-from vaxrank.reference_coverage import _digest, coverage_view
+from vaxrank.reference_coverage import coverage_view
+from vaxrank.selection_policy import canonical_digest
 
 from .test_antigen_input import inputs  # noqa: F401
 from .test_epitope_dataset import forbidden
@@ -185,7 +186,7 @@ def test_native_coverage_rejects_tampering_and_malformed_registry(change):
         record['orfdata_version'] = None
     if change != 'digest':
         record.pop('sha256')
-        record['sha256'] = _digest(record)
+        record["sha256"] = canonical_digest(record)
     with pytest.raises(ValueError, match='coverage|availability|registry claims'):
         HostReference(host.proteome, coverage=record)
 

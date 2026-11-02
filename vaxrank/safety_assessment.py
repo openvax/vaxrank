@@ -29,7 +29,9 @@ from .near_self import (
     assess_near_self_queries,
 )
 from .reference_proteome import ReferenceProteome, self_reference_matches
-from .prediction_input import finite_prediction_value, prediction_integer
+from .prediction_input import (
+    prediction_integer, prediction_row_fields,
+)
 from .risk_ligand import PatientHLARiskLigandIndex, RiskLigandIndexProvenance
 from .vaccine_antigen import SelfReferenceMatch, VaccineAntigen
 
@@ -103,18 +105,7 @@ class SafetyPrediction(DataclassSerializable):
     @classmethod
     def from_prediction_row(cls, row: Any) -> "SafetyPrediction":
         """Build complete safety evidence from one topiary prediction row."""
-        value = finite_prediction_value(row.get("affinity"))
-        if value is None:
-            value = finite_prediction_value(row.get("value"))
-        return cls(
-            kind=str(row.get("kind") or "pMHC_affinity"),
-            predictor_name=str(row.get("prediction_method_name") or ""),
-            predictor_version=str(row.get("predictor_version") or ""),
-            allele=str(row.get("allele") or ""),
-            score=finite_prediction_value(row.get("score")),
-            value=value,
-            percentile_rank=finite_prediction_value(row.get("percentile_rank")),
-        )
+        return cls(**prediction_row_fields(row, default_kind="pMHC_affinity"))
 
     @property
     def identity(self) -> tuple[str, str, str, str]:

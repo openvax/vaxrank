@@ -25,6 +25,7 @@ from typing import Optional
 import pandas as pd
 from serializable import DataclassSerializable
 
+from .file_digest import file_sha256
 from .identifiers import normalize_ensembl_gene_id
 
 DEFAULT_HPA_LEVELS = ("High", "Medium")
@@ -239,10 +240,7 @@ def build_hpa_reference_provenance() -> HPAReferenceProvenance:
 
     hpa_version = reference_data.DEFAULT_HPA_VERSION
     path = reference_data.ensure(HPA_NORMAL_TISSUE_SOURCE, hpa_version)
-    source_digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(1024 * 1024):
-            source_digest.update(chunk)
+    source_digest = file_sha256(path)
     try:
         verified = reference_data.verify(HPA_NORMAL_TISSUE_SOURCE, hpa_version)
         verification_status = "verified" if verified else "checksum_mismatch"
@@ -256,7 +254,7 @@ def build_hpa_reference_provenance() -> HPAReferenceProvenance:
         hpa_version=hpa_version,
         source_path=str(path),
         source_bytes=path.stat().st_size,
-        source_sha256=source_digest.hexdigest(),
+        source_sha256=source_digest,
         verification_status=verification_status,
     )
 

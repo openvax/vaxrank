@@ -2,17 +2,13 @@
 
 from collections import Counter
 from copy import deepcopy
-import hashlib
 import json
+
+from .selection_policy import canonical_digest
 
 
 DISCOVER_CATALOGUES = object()
 SCHEMA = 'vaxrank.host_catalogue_coverage.v1'
-
-
-def _digest(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'),
-                                     allow_nan=False).encode()).hexdigest()
 
 
 def _inventory(proteome):
@@ -94,10 +90,10 @@ def reference_coverage(proteome, recorded=DISCOVER_CATALOGUES):
                 or record['schema'] != SCHEMA or record['inventory'] != inventory):
             raise ValueError('Host catalogue coverage differs from its reference inventory')
         digest = record.pop('sha256')
-        if digest != _digest(record):
+        if digest != canonical_digest(record):
             raise ValueError('Host catalogue coverage checksum differs')
     _validate_availability(record)
-    record['sha256'] = _digest(record)
+    record['sha256'] = canonical_digest(record)
     return record
 
 
