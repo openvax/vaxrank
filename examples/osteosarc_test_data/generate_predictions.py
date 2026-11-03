@@ -5,7 +5,7 @@ Run from the repository root with a licensed local NetMHCpan 4.2 on PATH:
     python -m examples.osteosarc_test_data.generate_predictions --output NEW_DIRECTORY
 
 The pinned reads are the Sid recipe's selected records from the shared
-openvax-v1 test data (vaxrank.sid_test_data). The runtime Isovar that reconstructs them is whatever
+openvax-v1 test data (vaxrank.testdata.sid). The runtime Isovar that reconstructs them is whatever
 satisfies the floor requirements.txt declares, and the generated manifest
 records which versions actually ran. Those versions are historical provenance;
 current-runtime compatibility is checked by reconstructing the frozen contexts

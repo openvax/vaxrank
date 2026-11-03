@@ -6,7 +6,7 @@ recursive-include notes *.md
 # Repository-only tests remain excluded.
 prune tests
 
-recursive-include vaxrank/data/sid-recipe *
+recursive-include vaxrank/testdata/sid-recipe *
 include examples/osteosarc_test_data/pin_catalog.py
 include examples/build_cta_host_reference.py
 include examples/wlos0001_tp53/README.md examples/wlos0001_tp53/run.py
