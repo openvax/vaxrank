@@ -488,7 +488,8 @@ def test_unique_flag_prefixes_still_work():
 
 def test_final_outputs_block_lists_what_was_written(tmp_path, capsys):
     out = tmp_path / "out"
-    entry_point.main(_pipeline_args(tmp_path, "--output-dir", str(out)))
+    entry_point.main(_pipeline_args(tmp_path, "--output-dir", str(out),
+                                    "--pdf-backend", "weasyprint"))
     err = capsys.readouterr().err
     assert "Outputs written:" in err
     assert str(out / "ranked_candidates.csv") in err
