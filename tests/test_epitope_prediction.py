@@ -93,6 +93,7 @@ def test_cta_comparison_excludes_only_for_a_human_host(mouse_genome, human):
     """Human CTA exclusions must not remove sequences from a mouse host."""
     from unittest.mock import patch
     from pyensembl import EnsemblRelease
+    from vaxrank.vaccine_antigen import SelfReferenceMatch
 
     genome = EnsemblRelease(102) if human else mouse_genome
     wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-201")[0]
@@ -110,7 +111,8 @@ def test_cta_comparison_excludes_only_for_a_human_host(mouse_genome, human):
     )
 
     with (patch("vaxrank.epitope_logic.ReferenceProteome") as reference_cls,
-          patch("vaxrank.epitope_logic.self_reference_matches", return_value={})):
+          patch("vaxrank.epitope_logic.self_reference_matches", side_effect=lambda peptides, antigen, genome: {
+              p: SelfReferenceMatch(p, True, antigen.kind) for p in peptides})):
         reference_cls.return_value.contains.return_value = True
         reference_cls.from_genome.return_value.contains.return_value = False
         epitopes = predict_epitopes(
