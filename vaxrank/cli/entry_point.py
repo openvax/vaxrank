@@ -1040,8 +1040,15 @@ def warn_if_no_vaccine_peptides(patient_info):
 
 
 def pepsickle_installed():
+    """Whether mhctools can run pepsickle: here, or in the interpreter it is pointed at.
+
+    mhctools runs inference in the interpreter named by ``PEPSICKLE_PYTHON`` (or
+    ``PEPSICKLE_GB_PYTHON`` for the gradient-boosted model) when either is set, so
+    the parent process need not be able to import it.
+    """
     from importlib.util import find_spec
-    return find_spec('pepsickle') is not None
+    return (find_spec('pepsickle') is not None
+            or bool(os.environ.get('PEPSICKLE_PYTHON') or os.environ.get('PEPSICKLE_GB_PYTHON')))
 
 
 def require_pepsickle_if_requested(args_list):

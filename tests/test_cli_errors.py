@@ -358,6 +358,15 @@ def test_explicit_pepsickle_request_fails_before_the_pipeline(tmp_path, monkeypa
     assert "--processing-aware-annotation: pepsickle is not installed" in capsys.readouterr().err
 
 
+def test_pepsickle_in_a_configured_interpreter_counts_as_installed(monkeypatch):
+    _without_pepsickle(monkeypatch)
+    monkeypatch.delenv("PEPSICKLE_PYTHON", raising=False)
+    monkeypatch.delenv("PEPSICKLE_GB_PYTHON", raising=False)
+    assert entry_point.pepsickle_installed() is False
+    monkeypatch.setenv("PEPSICKLE_PYTHON", "/opt/pepsickle-venv/bin/python")
+    assert entry_point.pepsickle_installed() is True
+
+
 def test_every_companion_command_answers_version_like_vaxrank(capsys):
     from vaxrank import download_test_data
     from vaxrank.cli import (
