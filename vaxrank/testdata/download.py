@@ -5,7 +5,7 @@ built from the shared openvax-v1 reads (downloaded once into the osteosarc
 cache; ``--offline`` never downloads them). Explicit custom manifests retain the
 generic verified-download API for existing callers.
 
-Run it as ``vaxrank-test-data`` or ``python -m vaxrank.download_test_data``.
+Run it as ``vaxrank-test-data`` or ``python -m vaxrank.testdata.download``.
 Both print one JSON object describing what was exported or inspected, so a
 caller can read a per-file status instead of parsing prose. From Python,
 ``inspect_dataset`` reports those statuses without raising, ``verify_dataset``
@@ -49,7 +49,7 @@ def cache_root_for(cache_root=None):
 def _sid_test_data(offline):
     """The Sid test files; offline, only if openvax-v1 is already cached."""
     import osteosarc
-    from .sid_test_data import READS, sid_test_data
+    from .sid import READS, sid_test_data
     if offline:
         osteosarc.fetch_bundle(READS, offline=True)
     return sid_test_data()
@@ -269,7 +269,10 @@ def download_test_data(output=None, *, manifest_path=DEFAULT_MANIFEST,
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+        prog="vaxrank-test-data", description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    from ..cli.companion import add_version_argument
+    add_version_argument(parser)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST,
                         help="Custom test-data manifest; omit for the Sid retrieval cases")
     parser.add_argument("--output", type=Path, help="New directory to export, or an existing identical dataset to verify")

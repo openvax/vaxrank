@@ -18,6 +18,7 @@ traceback is still recoverable rather than discarded.
 """
 
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -174,7 +175,7 @@ def test_empty_ranked_table_writes_a_schema(tmp_path):
 
 def test_argparse_errors_name_the_problem_without_the_usage_dump(capsys):
     """vaxrank's usage is over 150 lines; the one line that matters must not hide in it."""
-    for argv in ([], ["--bam", "x.bam", "--mhc-predictor", "notapredictor"],
+    for argv in (["--bam", "x.bam", "--mhc-predictor", "notapredictor"],
                  ["--input-pvacseq", "x.tsv", "--mhc-predictor", "notapredictor"]):
         with pytest.raises(SystemExit) as exit_info:
             entry_point.main(argv)
@@ -311,3 +312,184 @@ def test_a_run_with_peptides_or_without_funnel_counts_does_not_warn(caplog):
         entry_point.warn_if_no_vaccine_peptides(_funnel(3, 3, 2, 1))
         entry_point.warn_if_no_vaccine_peptides(None)
     assert not caplog.records
+
+
+def _without_pepsickle(monkeypatch):
+    import importlib.util
+    real = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec",
+                        lambda name, *a, **k: None if name == "pepsickle" else real(name, *a, **k))
+
+
+def test_missing_pepsickle_is_one_info_line_not_a_warning_by_default(monkeypatch, caplog):
+    import logging
+    _without_pepsickle(monkeypatch)
+    entry_point.require_pepsickle_if_requested(["--mhc-predictor", "random"])  # not requested: no error
+    with caplog.at_level(logging.INFO, logger=entry_point.logger.name):
+        assert entry_point.processing_annotation_available() is False
+    assert [r.levelno for r in caplog.records] == [logging.INFO]
+    assert "mhctools[pepsickle]" in caplog.records[0].getMessage()
+
+
+def test_asking_for_pepsickle_by_name_fails_when_it_is_missing(monkeypatch):
+    _without_pepsickle(monkeypatch)
+    with pytest.raises(ValueError, match=r"--processing-aware-annotation: pepsickle is not installed"):
+        entry_point.require_pepsickle_if_requested(["--processing-aware-annotation"])
+
+
+def test_installed_pepsickle_runs_the_annotation_silently(monkeypatch, caplog):
+    import importlib.util
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name, *a, **k: object())
+    entry_point.require_pepsickle_if_requested(["--processing-aware-annotation"])
+    assert entry_point.processing_annotation_available() is True
+    assert not caplog.records
+
+
+def test_explicit_pepsickle_request_fails_before_the_pipeline(tmp_path, monkeypatch, capsys):
+    _without_pepsickle(monkeypatch)
+
+    def must_not_run(args):
+        raise AssertionError("pipeline started before pepsickle availability was checked")
+
+    monkeypatch.setattr(entry_point, "variant_collection_from_args", must_not_run)
+    with pytest.raises(SystemExit) as exit_info:
+        entry_point.main(_pipeline_args(
+            tmp_path, "--processing-aware-annotation", "--output-csv", str(tmp_path / "o.csv")))
+    assert exit_info.value.code == 1
+    assert "--processing-aware-annotation: pepsickle is not installed" in capsys.readouterr().err
+
+
+def test_pepsickle_in_a_configured_interpreter_counts_as_installed(monkeypatch):
+    _without_pepsickle(monkeypatch)
+    monkeypatch.delenv("PEPSICKLE_PYTHON", raising=False)
+    monkeypatch.delenv("PEPSICKLE_GB_PYTHON", raising=False)
+    assert entry_point.pepsickle_installed() is False
+    monkeypatch.setenv("PEPSICKLE_PYTHON", "/opt/pepsickle-venv/bin/python")
+    assert entry_point.pepsickle_installed() is True
+
+
+def test_every_companion_command_answers_version_like_vaxrank(capsys):
+    from vaxrank.testdata import download
+    from vaxrank.cli import (
+        complex_variant_visualization, evidence_visualization, mutation_visualization, window_exposure)
+    from vaxrank.version import __version__
+
+    for prog, main in [("vaxrank-mutation-figure", mutation_visualization.main),
+                       ("vaxrank-evidence-figure", evidence_visualization.main),
+                       ("vaxrank-complex-result-figure", complex_variant_visualization.main),
+                       ("vaxrank-window-exposure", window_exposure.main),
+                       ("vaxrank-test-data", download.main)]:
+        with pytest.raises(SystemExit) as exit_info:
+            main(["--version"])
+        assert exit_info.value.code == 0
+        assert capsys.readouterr().out.strip() == "%s %s" % (prog, __version__)
+
+
+def test_companion_options_all_have_help():
+    from vaxrank.cli import complex_variant_visualization, evidence_visualization, mutation_visualization
+
+    for module in (mutation_visualization, evidence_visualization, complex_variant_visualization):
+        for action in module.make_parser()._actions:
+            assert action.help, "%s %s has no help" % (module.__name__, action.option_strings or action.dest)
+
+
+
+def test_missing_input_paths_name_the_flag_before_any_work(tmp_path, monkeypatch, capsys):
+    def must_not_run(args):
+        raise AssertionError("input loading started before the paths were checked")
+
+    monkeypatch.setattr(entry_point, "variant_collection_from_args", must_not_run)
+    out = ["--output-csv", str(tmp_path / "o.csv")]
+    cases = [
+        ("--bam", str(tmp_path / "nope.bam"), "--bam: no such file"),
+        ("--prediction-cache", str(tmp_path), "--prediction-cache: %r is a directory, expected a file" % str(tmp_path)),
+        ("--mhc-alleles-file", str(tmp_path / "alleles.txt"), "--mhc-alleles-file: no such file"),
+    ]
+    for flag, value, expected in cases:
+        with pytest.raises(SystemExit) as exit_info:
+            entry_point.main(_pipeline_args(tmp_path, flag, value, *out))
+        assert exit_info.value.code == 1
+        assert expected in capsys.readouterr().err, flag
+
+
+def test_remote_and_existing_inputs_pass_the_path_check(tmp_path):
+    from types import SimpleNamespace
+    present = tmp_path / "x.vcf"
+    present.write_text("")
+    entry_point.validate_input_paths(SimpleNamespace(
+        vcf=[str(present)], bam="https://example.org/sample.bam", hitlist_evidence_bundle=str(tmp_path)))
+
+
+def test_a_missing_directory_input_names_the_flag(tmp_path):
+    from types import SimpleNamespace
+    with pytest.raises(ValueError, match="--hitlist-evidence-bundle: no such directory"):
+        entry_point.validate_input_paths(SimpleNamespace(hitlist_evidence_bundle=str(tmp_path / "nope")))
+
+
+
+def test_undeclared_antigen_scope_says_where_to_declare_it():
+    from types import SimpleNamespace
+    from vaxrank.antigen_input import AntigenDataset
+    from vaxrank.input_scope import InputScope
+
+    stand_in = SimpleNamespace(
+        antigens={"a": object()}, source_evidence={},
+        scope=InputScope(patient_id=None, reference_assembly="GRCh38", mhc_alleles=("HLA-A*02:01",)))
+    with pytest.raises(ValueError) as error:
+        AntigenDataset.validate_for_prediction(stand_in, genome=object())
+    message = str(error.value)
+    assert "requires declared patient_id" in message
+    assert "--input-manifest" in message
+    assert "--output-patient-id only labels the report" in message
+
+
+def test_predictor_with_an_input_that_reuses_predictions_explains_the_choice(tmp_path, capsys):
+    lens = Path(__file__).parent / "data" / "epitope_fixtures" / "lens_example.tsv"
+    with pytest.raises(SystemExit) as exit_info:
+        entry_point.main(["--input-lens", str(lens), "--mhc-predictor", "random",
+                          "--mhc-alleles", "HLA-A*02:01", "--output-csv", str(tmp_path / "o.csv"),
+                          "--log-path", str(tmp_path / "python.log")])
+    assert exit_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "reuses the predictions already in its tables" in err
+    assert "--external-predictions fresh or additive" in err and "drop --mhc-predictor" in err
+
+
+def test_bare_vaxrank_prints_examples_and_exits_cleanly(capsys):
+    assert entry_point.main([]) is None
+    out = capsys.readouterr().out
+    assert "Examples:" in out and "--input-pvacseq" in out
+
+
+def test_mistyped_flag_gets_a_suggestion(capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        entry_point.main(["--bamm", "x.bam", "--mhc-predictor", "random"])
+    assert exit_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "did you mean --bam?" in err
+    assert len(err.strip().splitlines()) == 2
+
+
+def test_help_carries_worked_examples(capsys):
+    for args in (["--vcf", "a.vcf", "--help"], ["--input-lens", "a.tsv", "--help"],
+                 ["--input-json-file", "r.json", "--help"]):
+        with pytest.raises(SystemExit) as exit_info:
+            entry_point.main(args)
+        assert exit_info.value.code == 0
+        assert "Examples:" in capsys.readouterr().out
+
+
+def test_unique_flag_prefixes_still_work():
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    parsed = parse_vaxrank_args(["--vcf", "a.vcf", "--bam", "b.bam", "--mhc-predictor", "random",
+                                 "--output-d", "out"])
+    assert parsed.output_dir == "out"
+
+
+def test_final_outputs_block_lists_what_was_written(tmp_path, capsys):
+    out = tmp_path / "out"
+    entry_point.main(_pipeline_args(tmp_path, "--output-dir", str(out)))
+    err = capsys.readouterr().err
+    assert "Outputs written:" in err
+    assert str(out / "ranked_candidates.csv") in err
+    assert str(out / "run_summary.txt") in err

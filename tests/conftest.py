@@ -29,7 +29,7 @@ def platform_cache_home(tmp_path, monkeypatch):
     platformdirs after), so nothing inside datacache is patched.
     """
     from datacache import get_data_dir
-    from vaxrank.download_test_data import CACHE_NAMESPACE
+    from vaxrank.testdata.download import CACHE_NAMESPACE
 
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.delenv("XDG_CACHE_HOME", raising=False)

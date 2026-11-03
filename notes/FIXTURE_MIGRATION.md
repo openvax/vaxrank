@@ -8,7 +8,7 @@ and Vaxrank no longer acquires or packages reads itself. Keep the reviewed
 recipe format, source/correction/reference pins, data bytes and scientific
 expectations unchanged.
 
-`vaxrank.sid_test_data` selects each cohort's historical records by exact
+`vaxrank.testdata.sid` selects each cohort's historical records by exact
 digest and multiplicity from its openvax-v1 member, then writes them with the
 reviewed header and order, so the regressions run on unchanged inputs. This
 consumer uses published Osteosarc 0.14.x and Topiary releases. See

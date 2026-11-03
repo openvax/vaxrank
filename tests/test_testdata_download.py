@@ -13,8 +13,8 @@ from datacache import Cache, FileValidationError
 from isovar import ReadCollector
 import pytest
 
-from vaxrank import download_test_data as downloader
-from vaxrank.sid_test_data import sid_test_data, sid_reads
+from vaxrank.testdata import download as downloader
+from vaxrank.testdata.sid import sid_test_data, sid_reads
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -412,7 +412,7 @@ def test_osteosarc_cache_environment_is_honoured(tmp_path, tiny_manifest, monkey
 def test_test_data_cli_is_installed_as_a_console_script():
     """`vaxrank-test-data` is the documented entry point, so keep it declared."""
     setup = (ROOT / "setup.py").read_text()
-    assert "vaxrank-test-data = vaxrank.download_test_data:main" in setup
+    assert "vaxrank-test-data = vaxrank.testdata.download:main" in setup
 
 
 @pytest.mark.parametrize("envkey", ["OSTEOSARC_CACHE", "OPENVAX_DATA_CACHE"])

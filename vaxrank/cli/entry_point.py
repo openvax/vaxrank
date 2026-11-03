@@ -47,7 +47,9 @@ from .vaccine_config_args import (
     manufacturability_config_from_args, vaccine_config_from_args,
 )
 from ..config import load_vaxrank_config
+from .discoverability import format_outputs_block, print_bare_summary, written_outputs
 from .errors import USER_ERRORS, exit_with_user_error
+from ..progress import timed_step
 from ..allele_validation import validate_allele_arguments
 
 from ..core_logic import run_vaxrank
@@ -1039,6 +1041,75 @@ def warn_if_no_vaccine_peptides(patient_info):
         loaded, coding, rna, hint)
 
 
+def pepsickle_installed():
+    """Whether mhctools can run pepsickle: here, or in the interpreter it is pointed at.
+
+    mhctools runs inference in the interpreter named by ``PEPSICKLE_PYTHON`` (or
+    ``PEPSICKLE_GB_PYTHON`` for the gradient-boosted model) when either is set, so
+    the parent process need not be able to import it.
+    """
+    from importlib.util import find_spec
+    return (find_spec('pepsickle') is not None
+            or bool(os.environ.get('PEPSICKLE_PYTHON') or os.environ.get('PEPSICKLE_GB_PYTHON')))
+
+
+def require_pepsickle_if_requested(args_list):
+    """Fail in the first second if ``--processing-aware-annotation`` was asked for by name
+    but pepsickle is not installed (openvax/vaxrank#770).
+
+    The flag defaults on, so a missing optional install must not fail by default;
+    that case is handled, with one INFO line, where annotation would actually run.
+    """
+    if '--processing-aware-annotation' in args_list and not pepsickle_installed():
+        raise ValueError(
+            "--processing-aware-annotation: pepsickle is not installed. "
+            "Install it with `pip install mhctools[pepsickle]` or drop the flag.")
+
+
+def processing_annotation_available():
+    """Whether annotation can run now; say once, at INFO, when it cannot."""
+    if pepsickle_installed():
+        return True
+    logger.info(
+        "pepsickle is not installed, so proteasome-cleavage annotation is skipped. "
+        "Install `mhctools[pepsickle]` to enable it, or pass "
+        "--no-processing-aware-annotation to silence this message.")
+    return False
+
+
+# Input flags whose value is a local file, and those whose value is a directory.
+# ``--host-reference`` and ``--reference-context`` are left out on purpose: they
+# can name a snapshot rather than a path.
+_INPUT_FILE_FLAGS = (
+    'vcf', 'maf', 'bam', 'json_variants', 'germline_vcf', 'genome_fasta', 'mhc_alleles_file',
+    'prediction_cache', 'input_epitopes', 'input_pvacseq', 'input_lens', 'input_antigens',
+    'input_isovar', 'input_manifest', 'input_cta_expression', 'input_topiary',
+    'input_json_file', 'patient_background_pairs')
+_INPUT_DIRECTORY_FLAGS = ('hitlist_evidence_bundle',)
+
+
+def validate_input_paths(args):
+    """Fail in the first second, naming the flag, if an input path is unusable.
+
+    A missing input used to surface as a bare ``[Errno 2]`` after the config dump
+    and Ensembl load, with no hint which flag it belonged to (openvax/vaxrank#769).
+    Values containing ``://`` are remote and left to their reader.
+    """
+    for attrs, want_directory in ((_INPUT_FILE_FLAGS, False), (_INPUT_DIRECTORY_FLAGS, True)):
+        for attr in attrs:
+            value = getattr(args, attr, None)
+            for path in ([value] if isinstance(value, str) else value if isinstance(value, list) else []):
+                if not isinstance(path, str) or '://' in path:
+                    continue
+                flag = '--' + attr.replace('_', '-')
+                if not os.path.exists(path):
+                    raise ValueError("%s: no such %s: %r" % (flag, 'directory' if want_directory else 'file', path))
+                if os.path.isdir(path) != want_directory:
+                    raise ValueError("%s: %r is a %s, expected a %s" % (
+                        flag, path, 'directory' if os.path.isdir(path) else 'file',
+                        'directory' if want_directory else 'file'))
+
+
 def write_run_summary(args, patient_info, source, products=None):
     """Write a top-level ``run_summary.txt`` in --output-dir.
 
@@ -1313,7 +1384,27 @@ def run_cli(args_list=None):
     if args_list is None:
         args_list = sys.argv[1:]
 
+    if not args_list:
+        print_bare_summary()
+        return None
     args = parse_vaxrank_args(args_list)
+    result = _run_parsed_cli(args, args_list)
+    print_outputs_written(args)
+    return result
+
+
+def print_outputs_written(args):
+    """Close a run with one list of what it wrote, not a dozen scattered log lines."""
+    output_dir = getattr(args, 'output_dir', '') or ''
+    types = resolve_vaccine_types(args)
+    constructs = [(vtype + ' constructs', vaccine_target_dir(output_dir, vtype, types))
+                  for vtype in types] if output_dir else []
+    block = format_outputs_block(written_outputs(args, constructs))
+    if block:
+        print("\n" + block, end="", file=sys.stderr)
+
+
+def _run_parsed_cli(args, args_list):
     if getattr(args, 'reference_context', None):
         direct = any(getattr(args, name, None) for name in ('vcf', 'maf', 'variant', 'json_variants'))
         external = any(getattr(args, name, None) for name in (
@@ -1352,10 +1443,14 @@ def run_cli(args_list=None):
     # --output-* flag, with no default destination). Applies to both
     # the VCF/BAM pipeline path and the external-input path.
     check_args(args)
+    validate_input_paths(args)
     # Only the BAM pipeline rejects unparseable alleles later (species check);
     # external-input runs accept them, so they must not start failing here.
     if getattr(args, 'bam', None):
         validate_allele_arguments(args)
+    # Decide now, not after the pipeline, so an explicit request for a missing
+    # optional install fails in the first second.
+    require_pepsickle_if_requested(args_list)
     confirm_output_dir_overwrite(args)
 
     # Architecture (post-#252):
@@ -1502,7 +1597,7 @@ def run_cli(args_list=None):
     from ..prediction_policy import retained_processing, effective_prediction_configuration
     dataset = getattr(args, '_design_dataset', None)
     processing_predictions_by_key = retained_processing([dataset]) if dataset is not None else {}
-    if getattr(args, 'processing_aware_annotation', True):
+    if getattr(args, 'processing_aware_annotation', True) and processing_annotation_available():
         _, processing_predictions_by_key = annotate_predictions_with_processing(
             ranked_variants_with_vaccine_peptides, predictions,
             human_only=getattr(args, 'pepsickle_human_only', False),
@@ -1681,15 +1776,18 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         from ..construct_replay import pipeline_native_dataset
         epitope_dataset = pipeline_native_dataset(args, variants, epitope_config,
                                                  patient_background=prepared_background)
-    isovar_results = run_isovar(
-        variants=variants,
-        germline_variants=germline_variants_from_args(args, variants),
-        alignment_file=alignment_file_from_args(args),
-        read_collector=read_collector_from_args(args),
-        protein_sequence_creator=protein_sequence_creator,
-        filter_thresholds=filter_threshold_dict_from_args(args),
-        **phasing_parameters_from_args(args, variants),
-    )
+    with timed_step(
+            logger, "Collecting RNA reads and assembling protein sequences for %d variant(s)",
+            "Assembled RNA-supported sequences for %d variant(s) in %.0fs", len(variants)):
+        isovar_results = run_isovar(
+            variants=variants,
+            germline_variants=germline_variants_from_args(args, variants),
+            alignment_file=alignment_file_from_args(args),
+            read_collector=read_collector_from_args(args),
+            protein_sequence_creator=protein_sequence_creator,
+            filter_thresholds=filter_threshold_dict_from_args(args),
+            **phasing_parameters_from_args(args, variants),
+        )
 
     if args.output_isovar_csv:
         df = isovar_results_to_dataframe(isovar_results)
