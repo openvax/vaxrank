@@ -9,7 +9,7 @@ Sid test data, published by osteosarc 0.11
 cohort is the openvax-v1 member `vaxrank/<path>`, e.g.
 `vaxrank/osteosarc/shared-v1/00-ABCF2-chr7-151218156-f30f618fb76a0e49.bam`.
 
-The reviewed recipe ships in the package, in `vaxrank/data/sid-recipe`:
+The reviewed recipe ships in the package, in `vaxrank/testdata/sid-recipe`:
 
 * `selection.json.gz` lists every cohort's records by exact digest, in order
   and with multiplicity;
@@ -71,7 +71,7 @@ point of the commit.
 ## Use
 
 ```python
-from vaxrank.sid_test_data import sid_test_data, sid_reads, sid_variants
+from vaxrank.testdata.sid import sid_test_data, sid_reads, sid_variants
 
 root = sid_test_data()  # builds the test files once per process
 cases = root / "osteosarc/shared-v1/manifest.json"
@@ -93,7 +93,7 @@ the openvax-v1 manifest checksum, each cohort's source identity and the
 osteosarc version.
 
 `vaxrank-test-data` exports the 49 retrieval cases (`python -m
-vaxrank.download_test_data` is equivalent):
+vaxrank.testdata.download` is equivalent):
 
 ```bash
 vaxrank-test-data --output /tmp/sid-retrieval-tests --offline
@@ -141,7 +141,7 @@ always come from the same root.
 From Python:
 
 ```python
-from vaxrank.download_test_data import (
+from vaxrank.testdata.download import (
     download_test_data, inspect_dataset, verify_dataset)
 
 report = inspect_dataset("/tmp/sid-retrieval-tests")  # never raises

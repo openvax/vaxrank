@@ -1,6 +1,6 @@
 """The deliberately small Sid regression data, built from shared test reads.
 
-``vaxrank/data/sid-recipe`` lists every read record the Sid tests use, with the
+``vaxrank/testdata/sid-recipe`` lists every read record the Sid tests use, with the
 fixture headers, fusion templates and non-read reference, expectation and
 prediction files. The reads come from openvax-v1, the OpenVax libraries'
 shared Sid test data published by osteosarc (iskandr/osteosarc#56). The first
@@ -28,7 +28,7 @@ MEMBER_PREFIX = "vaxrank/"
 
 def recipe_directory():
     """The reviewed Sid recipe shipped with Vaxrank."""
-    return Path(str(files("vaxrank").joinpath("data", "sid-recipe")))
+    return Path(str(files("vaxrank.testdata").joinpath("sid-recipe")))
 
 
 def build_sid_test_data(destination):

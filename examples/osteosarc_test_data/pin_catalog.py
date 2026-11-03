@@ -11,7 +11,7 @@ from pathlib import Path
 from osteosarc import Cache
 from osteosarc.cohort_bundle import pin_catalog as pin_catalog
 
-from vaxrank.sid_test_data import recipe_directory
+from vaxrank.testdata.sid import recipe_directory
 
 
 RECIPE = recipe_directory()

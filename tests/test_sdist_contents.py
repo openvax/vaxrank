@@ -30,7 +30,7 @@ def test_distributions_include_sid_recipe_and_only_pinned_canine_reads(tmp_path)
         wheel = {name: source.read(name) for name in source.namelist()}
     assert not any(name.startswith("tests/") for name in sdist)
     assert {"LICENSE", "MANIFEST.in", "setup.py", "requirements.txt", "TEST_DATA.md",
-            "vaxrank/sid_test_data.py", "examples/osteosarc_test_data/pin_catalog.py",
+            "vaxrank/testdata/sid.py", "examples/osteosarc_test_data/pin_catalog.py",
             "examples/build_cta_host_reference.py", "examples/wlos0001_tp53/README.md",
             "examples/wlos0001_tp53/run.py"} <= set(sdist)
     assert sdist['examples/build_cta_host_reference.py'] == (
@@ -42,7 +42,7 @@ def test_distributions_include_sid_recipe_and_only_pinned_canine_reads(tmp_path)
     for name in canine_reads:
         assert sdist[name] == (ROOT / name).read_bytes()
         assert name not in wheel
-    recipe = ROOT / "vaxrank/data/sid-recipe"
+    recipe = ROOT / "vaxrank/testdata/sid-recipe"
     shipped = {p.relative_to(ROOT).as_posix(): p.read_bytes() for p in recipe.rglob("*") if p.is_file()}
     assert shipped
     for name, data in shipped.items():
@@ -54,7 +54,7 @@ def test_distributions_include_sid_recipe_and_only_pinned_canine_reads(tmp_path)
                     assert payload is sdist
                     continue
                 # The recipe's fixture SAM headers contain no read records.
-                assert name.startswith("vaxrank/data/sid-recipe/headers/"), name
+                assert name.startswith("vaxrank/testdata/sid-recipe/headers/"), name
                 assert all(line.startswith(b"@") for line in gzip.decompress(data).splitlines())
     installed = tmp_path / "installed"
     installed.mkdir()
@@ -72,7 +72,7 @@ import json, socket
 from pathlib import Path
 socket.socket.connect = lambda *a, **k: (_ for _ in ()).throw(AssertionError("network"))
 import vaxrank
-from vaxrank.sid_test_data import sid_test_data, sid_reads
+from vaxrank.testdata.sid import sid_test_data, sid_reads
 assert Path(vaxrank.__file__).is_relative_to(Path.cwd() / "installed")
 root = sid_test_data()
 m = json.loads((root / "osteosarc/shared-v1/manifest.json").read_text())

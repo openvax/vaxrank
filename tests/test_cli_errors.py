@@ -368,7 +368,7 @@ def test_pepsickle_in_a_configured_interpreter_counts_as_installed(monkeypatch):
 
 
 def test_every_companion_command_answers_version_like_vaxrank(capsys):
-    from vaxrank import download_test_data
+    from vaxrank.testdata import download
     from vaxrank.cli import (
         complex_variant_visualization, evidence_visualization, mutation_visualization, window_exposure)
     from vaxrank.version import __version__
@@ -377,7 +377,7 @@ def test_every_companion_command_answers_version_like_vaxrank(capsys):
                        ("vaxrank-evidence-figure", evidence_visualization.main),
                        ("vaxrank-complex-result-figure", complex_variant_visualization.main),
                        ("vaxrank-window-exposure", window_exposure.main),
-                       ("vaxrank-test-data", download_test_data.main)]:
+                       ("vaxrank-test-data", download.main)]:
         with pytest.raises(SystemExit) as exit_info:
             main(["--version"])
         assert exit_info.value.code == 0

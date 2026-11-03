@@ -5,7 +5,7 @@ from hashlib import sha256
 import json
 
 import pysam
-from vaxrank.sid_test_data import sid_test_data, sid_variants
+from vaxrank.testdata.sid import sid_test_data, sid_variants
 
 from .osteosarc_fixture_support import indexed_genome, verify_gzip_digests
 
