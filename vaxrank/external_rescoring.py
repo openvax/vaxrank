@@ -940,7 +940,9 @@ def load_unified_external(args, epitope_config, options, genome):
             from .prediction_policy import configured_prediction_models
             return configured_prediction_models(args, alleles)
     elif not direct and not cta and not antigens and getattr(args, 'mhc_predictor', None):
-        raise ValueError("Use --external-predictions fresh or additive to run --mhc-predictor")
+        raise ValueError(
+            "--mhc-predictor was given, but this input reuses the predictions already in its tables. "
+            "Add --external-predictions fresh or additive to run it, or drop --mhc-predictor.")
     elif not direct and not cta and not antigens and (getattr(args, 'mhc_alleles', None)
                          or getattr(args, 'mhc_alleles_file', None)):
         raise ValueError(
