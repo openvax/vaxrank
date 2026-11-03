@@ -92,7 +92,7 @@ installed package:
 | `vaxrank-evidence-figure` | Evidence summary figure from an evidence JSON | [Analysis outputs](docs/outputs.md) |
 | `vaxrank-complex-result-figure` | Figures for complex-variant results JSON | [Analysis outputs](docs/outputs.md) |
 | `vaxrank-window-exposure` | Delivery exposure of admitted SLP windows | [Window exposure](docs/core-window-exposure.md) |
-| `vaxrank-test-data` | Download the shared Sid test data | [Test data](TEST_DATA.md) |
+| `vaxrank-test-data` | Download the shared Sid test data | [Test data](https://github.com/openvax/vaxrank/blob/main/TEST_DATA.md) |
 
 ## Documentation
 
@@ -120,8 +120,6 @@ Experimental workflows: [unified antigen inputs](docs/antigen-inputs.md),
 [mixed mutation/CTA/viral selection](docs/mixed-antigen-design.md) and
 [window exposure](docs/core-window-exposure.md).
 
-<a id="clinical-use"></a>
-
 ## Development
 
 ```sh
@@ -134,6 +132,8 @@ pip install -e ".[hitlist]" pytest pytest-cov ruff
 
 Always run tests through `./test.sh`, not bare `pytest`. See
 [Development](docs/development.md) for test data and reference downloads.
+
+<a id="clinical-use"></a>
 
 ## Clinical studies
 
