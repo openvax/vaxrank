@@ -22,6 +22,7 @@ from isovar.cli import make_isovar_arg_parser
 from mhctools.cli import add_mhc_args
 
 
+from .discoverability import EXAMPLES, ExamplesHelpFormatter, check_unknown_flags
 from .epitope_config_args import add_epitope_prediction_args
 from .vaccine_config_args import add_vaccine_peptide_args
 from ..version import __version__
@@ -185,6 +186,8 @@ def make_vaxrank_arg_parser():
     add_supplemental_report_args(arg_parser)
     # isovar built this parser, so it does not inherit _ConciseErrorParser.
     arg_parser.error = partial(_concise_error, arg_parser)
+    arg_parser.epilog = EXAMPLES
+    arg_parser.formatter_class = ExamplesHelpFormatter
     return arg_parser
 
 
@@ -195,6 +198,8 @@ def cached_run_arg_parser():
             "Rank personalized cancer neoantigens from somatic variants, "
             "tumor RNA, and patient HLA type, and emit them as analysis "
             "reports, peptide constructs, or mRNA constructs."),
+        epilog=EXAMPLES,
+        formatter_class=ExamplesHelpFormatter,
     )
     arg_parser.add_argument(
         '--version',
@@ -1177,6 +1182,8 @@ def external_input_arg_parser():
         description=(
             "Score and rank pre-computed epitope predictions from "
             "pVACseq or LENS."),
+        epilog=EXAMPLES,
+        formatter_class=ExamplesHelpFormatter,
     )
     arg_parser.add_argument(
         '--version',
@@ -1278,6 +1285,7 @@ def choose_arg_parser(args_list):
 
 def parse_vaxrank_args(args_list):
     arg_parser = choose_arg_parser(args_list)
+    check_unknown_flags(arg_parser, args_list)
     parsed = arg_parser.parse_args(args_list)
     # Record supplied destinations, including values equal to defaults,
     # aliases, abbreviations and --option=value. Value comparison alone

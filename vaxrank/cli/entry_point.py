@@ -47,6 +47,7 @@ from .vaccine_config_args import (
     manufacturability_config_from_args, vaccine_config_from_args,
 )
 from ..config import load_vaxrank_config
+from .discoverability import format_outputs_block, print_bare_summary, written_outputs
 from .errors import USER_ERRORS, exit_with_user_error
 from ..progress import timed_step
 from ..allele_validation import validate_allele_arguments
@@ -1383,7 +1384,27 @@ def run_cli(args_list=None):
     if args_list is None:
         args_list = sys.argv[1:]
 
+    if not args_list:
+        print_bare_summary()
+        return None
     args = parse_vaxrank_args(args_list)
+    result = _run_parsed_cli(args, args_list)
+    print_outputs_written(args)
+    return result
+
+
+def print_outputs_written(args):
+    """Close a run with one list of what it wrote, not a dozen scattered log lines."""
+    output_dir = getattr(args, 'output_dir', '') or ''
+    types = resolve_vaccine_types(args)
+    constructs = [(vtype + ' constructs', vaccine_target_dir(output_dir, vtype, types))
+                  for vtype in types] if output_dir else []
+    block = format_outputs_block(written_outputs(args, constructs))
+    if block:
+        print("\n" + block, end="", file=sys.stderr)
+
+
+def _run_parsed_cli(args, args_list):
     if getattr(args, 'reference_context', None):
         direct = any(getattr(args, name, None) for name in ('vcf', 'maf', 'variant', 'json_variants'))
         external = any(getattr(args, name, None) for name in (
