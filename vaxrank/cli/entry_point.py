@@ -730,6 +730,9 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     """Build + write mRNA-vaccine constructs. Modality-specific."""
     from ..selection_policy import record_construct_configuration
     yaml_kwargs = construct_config_for_modality(args, 'mrna')
+    from ..input_scope import host_scope_from_args
+    from ..mrna import resolve_codon_species
+    host = host_scope_from_args(args, [getattr(source, 'genome', None) for source, _ in ranked])
 
     def cfg(cli_attr, yaml_key):
         return coalesce_config_value(args, cli_attr, yaml_kwargs, yaml_key)
@@ -765,7 +768,8 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         mitd=cfg('mrna_mitd', 'mitd'),
         utr_5p=cfg('mrna_5p_utr', 'utr_5p'),
         utr_3p=cfg('mrna_3p_utr', 'utr_3p'),
-        codon_species=cfg('mrna_codon_species', 'codon_species'),
+        codon_species=(resolve_codon_species(cfg('mrna_codon_species', 'codon_species'), host.host_taxon_id)
+                       if ranked else cfg('mrna_codon_species', 'codon_species')),
         codon_method=cfg('mrna_codon_method', 'codon_method'),
         antigen_content=antigen_content,
         epitopes_per_antigen=epitopes_per_antigen,
@@ -1597,6 +1601,9 @@ def _run_parsed_cli(args, args_list):
     from ..prediction_policy import retained_processing, effective_prediction_configuration
     dataset = getattr(args, '_design_dataset', None)
     processing_predictions_by_key = retained_processing([dataset]) if dataset is not None else {}
+    from ..input_scope import validate_processing_host
+    validate_processing_host(args, [getattr(source, 'genome', None)
+                                    for source, _ in ranked_variants_with_vaccine_peptides])
     if getattr(args, 'processing_aware_annotation', True) and processing_annotation_available():
         _, processing_predictions_by_key = annotate_predictions_with_processing(
             ranked_variants_with_vaccine_peptides, predictions,
@@ -1748,7 +1755,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     if getattr(args, 'host_reference', None):
         raise ValueError('Use --host-reference with native antigen inputs or saved --input-epitopes')
     from ..input_scope import validate_prediction_species, scope_dict
-    references = list({id(v.ensembl): v.ensembl for v in variants}.values())
+    references = list({id(v.ensembl): v.ensembl for v in loaded_variants}.values())
     if getattr(args, 'genome', None) is not None:
         references.append(args.genome)
     args._input_species_scope = scope_dict(validate_prediction_species(

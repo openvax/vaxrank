@@ -49,7 +49,8 @@ def test_distinct_products_preserve_every_source_before_caps(tmp_path, modality,
         write_peptide_outputs(products, tmp_path / 'products.fasta', tmp_path / 'manifest.json', options=options)
     else:
         options = RNAConstructConfig(**kwargs, optimize_linkers=False, codon_method='use_best_codon')
-        products = assemble_mrna_constructs(ranked, options, target_alleles=alleles, source_evidence=evidence)
+        products = assemble_mrna_constructs(ranked, options, target_alleles=alleles,
+                                           source_evidence=evidence, host_taxon_id=9606)
         write_mrna_outputs(products, tmp_path, tmp_path / 'manifest.json')
         assert [a['aa'] for p in products for a in p.antigens] == ['SIINFEKLA', 'GILGFVFTL']
     assert len(products) == 2 // per_construct

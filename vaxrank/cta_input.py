@@ -17,6 +17,7 @@ from .external_report import ExternalReport
 from .input_scope import (
     InputProvenance, InputScope, combine_scopes, normalize_alleles,
     resolved_reference_assembly, scope_dict, validate_input_scopes,
+    resolve_host_scope,
 )
 from .native_serialization import to_native_json
 from .reference_proteome import self_reference_matches
@@ -93,13 +94,17 @@ def cta_expression_contract(options, scope, location):
         raise ValueError(f'{location}: CTA min_expression must be an explicit number')
     contract = CTAExpressionInput(sample_id=scope.sample_id, **{k: options[k] for k in names})
     policy = CTAAdmissionPolicy(minimum, contract.expression_unit)
-    excluded = options.get('exclusion_policy', {} if scope.host_taxon_id in (None, 9606) and 'restriction_policy' not in options
+    excluded = options.get('exclusion_policy',
+                           None if scope.host_taxon_id is None else
+                           {} if scope.host_taxon_id == 9606 and 'restriction_policy' not in options
                            else dict(gene_patterns=[], gene_exceptions=[]))
-    if not isinstance(excluded, dict) or set(excluded) - {'gene_patterns', 'gene_exceptions'}:
-        raise ValueError(f'{location}: invalid or unknown CTA exclusion_policy')
-    if any(not isinstance(v, (list, tuple)) for v in excluded.values()):
-        raise ValueError(f'{location}: CTA exclusions must be lists')
-    exclusions = CTATargetExclusionPolicy(**excluded)
+    # Manifest validation may precede reference resolution. Defer defaults.
+    if excluded is not None or 'exclusion_policy' in options:
+        if not isinstance(excluded, dict) or set(excluded) - {'gene_patterns', 'gene_exceptions'}:
+            raise ValueError(f'{location}: invalid or unknown CTA exclusion_policy')
+        if any(not isinstance(v, (list, tuple)) for v in excluded.values()):
+            raise ValueError(f'{location}: CTA exclusions must be lists')
+    exclusions = CTATargetExclusionPolicy(**excluded) if excluded is not None else None
     bundle = options.get('hitlist_evidence_bundle')
     if 'hitlist_evidence_bundle' in options and (not isinstance(bundle, str) or not bundle.strip()):
         raise ValueError(f'{location}: hitlist_evidence_bundle must be a nonempty path')
@@ -146,7 +151,15 @@ class CTAExpressionSource:
     def load(cls, path, *, options, scope, genome, manifest_path=None, declarations=None, host_reference=None):
         if host_reference is not None:
             scope = host_reference.validate(scope, genome=genome, location=str(path))
+        scope = resolve_host_scope(scope, genome, location=str(path))
+        if scope.host_taxon_id is None:
+            raise ValueError('CTA expression requires a resolved host species')
+        if scope.host_taxon_id != 9606 and host_reference is None:
+            raise ValueError('Nonhuman CTA expression requires a mapped host_reference '
+                             'with species-specific evidence')
         contract, policy, exclusions, bundle_path = cta_expression_contract(options, scope, str(path))
+        if bundle_path and scope.host_taxon_id != 9606:
+            raise ValueError('Hitlist CTA bundles currently require the human expression contract')
         if genome is None and host_reference is None:
             raise ValueError('CTA expression requires a host annotation')
         if not scope.patient_id or not scope.mhc_alleles:
@@ -163,8 +176,6 @@ class CTAExpressionSource:
                                         exclusion_policy=exclusions, genome=genome, host_reference=host_reference,
                                         overrides=cta_overrides(options), evidence_snapshot=options.get('evidence_snapshot'),
                                         restriction_policy=restriction_policy, restriction_evidence=restriction_evidence)
-        if bundle_path and scope.host_taxon_id not in (None, 9606):
-            raise ValueError('Hitlist CTA bundles currently require the human expression contract')
         bundle = load_hitlist_bundle(bundle_path, admission) if bundle_path else None
         identity = dict(admission=to_native_json(admission), scope=scope_dict(scope),
                         bundle_manifest=bundle['manifest'] if bundle is not None else None)

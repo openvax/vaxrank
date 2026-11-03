@@ -718,7 +718,8 @@ def test_oncoref_cta_source_universe_includes_prame():
 def test_cta_source_exclusion_is_human_only():
     genome = create_mock_genome([], species_name="Mus musculus")
     with patch("oncoref.cta_annotation_gene_ids") as load_ctas:
-        assert cta_source_gene_ids_for_genome(genome) == frozenset()
+        with pytest.raises(ValueError, match='require a human reference'):
+            cta_source_gene_ids_for_genome(genome)
     load_ctas.assert_not_called()
 
 

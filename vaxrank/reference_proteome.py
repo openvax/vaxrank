@@ -64,12 +64,11 @@ def oncoref_cta_source_gene_ids() -> frozenset[str]:
 
 
 def cta_source_gene_ids_for_genome(genome) -> frozenset[str]:
-    """Human CTA source exclusions, or an empty set for other species."""
-    species = getattr(genome, "species", None)
-    latin_name = str(getattr(species, "latin_name", ""))
-    normalized = latin_name.strip().casefold().replace("_", " ")
-    if normalized not in {"homo sapiens", "human"}:
-        return frozenset()
+    """Human annotation-bound CTA exclusions; other hosts need mapped evidence."""
+    from .input_scope import InputScope, resolve_host_scope
+    if resolve_host_scope(InputScope(), genome).host_taxon_id != 9606:
+        raise ValueError('Human CTA source exclusions require a human reference; '
+                         'use mapped species-specific host-reference evidence')
     from oncoref import cta_annotation_gene_ids
     return frozenset(cta_annotation_gene_ids(genome, unfiltered=True))
 

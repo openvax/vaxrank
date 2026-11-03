@@ -404,9 +404,8 @@ def add_output_args(arg_parser):
         "--pepsickle-human-only",
         action="store_true",
         default=False,
-        help="Use pepsickle's human-only-trained model (default: "
-             "off, all-mammal). Pass when running on human samples "
-             "exclusively.")
+        help="Use pepsickle's experimental human-only training subset; requires "
+             "a resolved human host. Default: all-mammal, including human runs.")
     output_args_group.add_argument(
         "--pepsickle-threshold",
         type=float,
@@ -616,9 +615,10 @@ def add_mrna_output_args(group):
              "Default: GCATATGACT (BNT162b2 canonical).")
     group.add_argument(
         "--mrna-codon-species",
-        default="h_sapiens",
+        default=None,
         help="Species key passed to DnaChisel CodonOptimize (e.g. h_sapiens, "
-             "m_musculus). Default: h_sapiens.")
+             "m_musculus). Default: resolved host species from the reference "
+             "or --host-species. Required when the host is unknown.")
     group.add_argument(
         "--mrna-codon-method",
         default="use_best_codon",
@@ -1089,7 +1089,8 @@ def add_external_rescoring_args(arg_parser):
     arg_parser.add_argument('--reference-context', metavar='JSON',
                             help='Experimental: ORFdata ReferenceContext JSON for direct variants with a custom genome.')
     arg_parser.add_argument('--host-species', metavar='SPECIES',
-                            help='Experimental: host species name or NCBI taxonomy ID, e.g. mouse.')
+                            help='Host species name or NCBI taxonomy ID, e.g. mouse. Derived from the reference '
+                                 'when available; an explicit declaration must agree.')
     arg_parser.add_argument('--host-taxon-id', type=int,
                             help='Experimental: numeric alias for --host-species.')
     arg_parser.add_argument('--mhc-species', nargs='+', metavar='SPECIES',

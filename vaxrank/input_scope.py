@@ -190,6 +190,7 @@ def validate_prediction_species(args, references, alleles, location):
     for reference in references or (fallback,):
         validate_host_taxon(scope, resolve_input_genome(reference), location, alleles,
                             reference_context=context)
+        scope = resolve_host_scope(scope, context or reference, location=location)
     return scope
 
 
@@ -473,6 +474,58 @@ def resolved_reference_assembly(genome):
     return getattr(genome, "reference_name", None) if assembly is missing else assembly
 
 
+def resolve_host_scope(scope, reference=None, *, location='Host reference'):
+    """Derive one host taxon from reference metadata, checking declarations.
+
+    MHC repertoire and antigen source species never establish the host.
+    Missing metadata remains unknown instead of implying a human reference.
+    """
+    from orfdata import ReferenceContext
+    from orfdata.reference import species_taxon
+
+    reference = resolve_input_genome(reference)
+    if isinstance(reference, ReferenceContext):
+        taxon = reference.taxon_id
+    else:
+        species = getattr(reference, 'species', None)
+        if species is None and getattr(reference, 'reference_name', None):
+            from pyensembl import find_species_by_reference
+            try:
+                species = find_species_by_reference(reference.reference_name)
+            except ValueError:
+                pass
+        name = getattr(species, 'latin_name', species)
+        taxon = species_taxon(name) if isinstance(name, str) else None
+    return combine_scopes(scope, InputScope(host_taxon_id=taxon), location, SPECIES_FIELDS)
+
+
+def host_scope_from_args(args, references=(), *, location='Host reference'):
+    """Reconcile current and retained host evidence for downstream defaults."""
+    scope = combine_scopes(
+        scope_from_mapping(getattr(args, '_input_species_scope', {}), location),
+        species_scope_from_args(args), location)
+    context = load_reference_context(getattr(args, 'reference_context', None))
+    host = getattr(getattr(args, '_design_dataset', None), 'host_reference', None)
+    if host is not None:
+        scope = host.validate(scope, location=location)
+    references = tuple(reference for reference in
+                       (*references, getattr(args, 'genome', None), context) if reference is not None)
+    for reference in references:
+        scope = resolve_host_scope(scope, reference, location=location)
+    if scope.reference_assembly is not None and not references and host is None:
+        scope = resolve_host_scope(scope, scope.reference_assembly, location=location)
+    return scope
+
+
+def validate_processing_host(args, references=()):
+    """The experimental human training subset needs a known human host."""
+    if (getattr(args, 'processing_aware_annotation', True)
+            and getattr(args, 'pepsickle_human_only', False)
+            and host_scope_from_args(args, references).host_taxon_id != 9606):
+        raise ValueError('--pepsickle-human-only requires a resolved human host; '
+                         'the default mammalian model also supports human runs')
+
+
 @lru_cache(maxsize=128)
 def _species_for_taxon(taxon_id):
     """Resolve taxonomy without requiring an annotation for that species."""
@@ -492,7 +545,6 @@ def validate_host_taxon(scope, reference, location, observed_alleles=(), *, refe
     """
     from mhcgnomes import Species, parse
     from orfdata import ReferenceContext
-    from orfdata.reference import canonical_species
 
     if reference_context is not None:
         if not isinstance(reference_context, ReferenceContext):
@@ -505,7 +557,6 @@ def validate_host_taxon(scope, reference, location, observed_alleles=(), *, refe
         elif isinstance(reference, ReferenceContext) and reference != reference_context:
             raise ValueError(f'{location}: reference_context disagrees with host reference')
         reference = reference_context
-    host_species = _species_for_taxon(scope.host_taxon_id) if scope.host_taxon_id else None
     if reference is not None:
         if scope.host_taxon_id is not None or isinstance(reference, ReferenceContext):
             try:
@@ -513,20 +564,9 @@ def validate_host_taxon(scope, reference, location, observed_alleles=(), *, refe
                            else ReferenceContext.from_genome(reference))
             except (TypeError, ValueError) as error:
                 raise ValueError(f"{location}: cannot validate host_taxon_id against annotation: {error}") from error
-            if scope.host_taxon_id is not None and context.taxon_id != scope.host_taxon_id:
-                raise ValueError(f"{location}: conflicting host_taxon_id: "
-                                 f"{scope.host_taxon_id} versus annotation {context.taxon_id}")
-            host_species = Species.get(canonical_species(context.species).replace('_', ' ').capitalize())
-        else:
-            name = getattr(reference, 'species', None)
-            if name is None and getattr(reference, 'reference_name', None):
-                from pyensembl import find_species_by_reference
-                try:
-                    name = find_species_by_reference(reference.reference_name)
-                except ValueError:
-                    pass
-            name = getattr(name, 'latin_name', name)
-            host_species = Species.get(canonical_species(name).replace('_', ' ').capitalize()) if name else None
+            reference = context
+    scope = resolve_host_scope(scope, reference, location=location)
+    host_species = _species_for_taxon(scope.host_taxon_id) if scope.host_taxon_id else None
     if scope.host_taxon_id is not None and host_species is None:
         raise ValueError(f'{location}: cannot resolve host_taxon_id {scope.host_taxon_id} to an MHC species')
     expected = ([Species.get(name) for name in scope.mhc_species]

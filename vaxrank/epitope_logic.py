@@ -252,12 +252,15 @@ def predict_epitopes(
         min_kmer_length=min_peptide_length,
         max_kmer_length=max_peptide_length,
     )
-    non_cta_reference_proteome = ReferenceProteome.from_genome(
-        genome,
-        exclude_cta_genes=True,
-        min_kmer_length=min_peptide_length,
-        max_kmer_length=max_peptide_length,
-    )
+    from .input_scope import InputScope, resolve_host_scope
+    if resolve_host_scope(InputScope(), genome).host_taxon_id == 9606:
+        non_cta_reference_proteome = ReferenceProteome.from_genome(
+            genome, exclude_cta_genes=True,
+            min_kmer_length=min_peptide_length, max_kmer_length=max_peptide_length)
+    else:
+        logger.info('Human CTA exclusions do not apply to this host; '
+                    'retaining the full reference for the non-CTA comparison.')
+        non_cta_reference_proteome = reference_proteome
 
     antigen_self_matches = self_reference_matches(
         predictions_df["peptide"], antigen, genome
