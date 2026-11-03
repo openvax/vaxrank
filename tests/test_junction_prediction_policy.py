@@ -268,7 +268,7 @@ def test_osteosarc_vcf_bam_with_multiple_models_emits_default_reports(tmp_path, 
     from mhctools import RandomBindingPredictor
     from mhctools.cli import mhc_predictors
     from varcode import load_vcf
-    from vaxrank.sid_test_data import sid_reads, sid_variants
+    from vaxrank.testdata.sid import sid_reads, sid_variants
     from .osteosarc_selection_helpers import DATA as SID_DATA, load_selection_inputs
 
     monkeypatch.setattr(socket.socket, 'connect', forbidden)

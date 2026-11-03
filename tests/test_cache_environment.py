@@ -24,7 +24,7 @@ import os
 from pathlib import Path
 
 import pytest
-from vaxrank import download_test_data as downloader
+from vaxrank.testdata import download as downloader
 
 
 def test_declared_fallback_reads_its_own_cached_object(tmp_path, monkeypatch):

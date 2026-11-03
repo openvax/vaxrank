@@ -14,7 +14,7 @@ from packaging.requirements import Requirement
 import pysam
 import pytest
 
-from vaxrank.sid_test_data import (
+from vaxrank.testdata.sid import (
     READS, build_sid_test_data, recipe_directory, sid_test_data, sid_reads, sid_variants)
 
 
