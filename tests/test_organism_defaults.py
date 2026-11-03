@@ -76,3 +76,15 @@ def test_human_only_processing_rejects_unknown_and_nonhuman_hosts(host):
     validate_processing_host(args)
     args.host_species, args.pepsickle_human_only = 'human', True
     validate_processing_host(args)
+
+
+def test_antigen_origin_cannot_select_codon_usage():
+    from vaxrank.mrna import assemble_mrna_constructs
+    from .test_assembly_antigens import candidate
+    ranked = [candidate(0)]  # human antigen source, host intentionally unknown
+    options = RNAConstructConfig(optimize_linkers=False, min_antigen_length_aa=9)
+    with pytest.raises(ValueError, match='resolved host species'):
+        assemble_mrna_constructs(ranked, options)
+    products = assemble_mrna_constructs(ranked, options, host_taxon_id=10090)
+    assert products[0].elements['codon_species'] == 'm_musculus'
+    assert options.codon_species is None  # do not change the caller's config

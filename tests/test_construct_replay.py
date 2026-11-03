@@ -447,11 +447,11 @@ def test_full_report_replay_can_omit_redundant_native_export(tmp_path, monkeypat
 
 @pytest.mark.parametrize('explicit', [False, True])
 def test_transgenic_mouse_codon_choice_survives_offline_replay(source, tmp_path, monkeypatch, explicit):
-    import pandas as pd
-    table = pd.read_csv(source, sep='\t')
-    table['host_species'] = 'mouse'
-    table['mhc_species'] = 'human'
-    table.to_csv(source, sep='\t', index=False)
+    from topiary import read_tsv
+    result = read_tsv(source)
+    result.df['host_species'] = 'mouse'
+    result.df['mhc_species'] = 'human'
+    result.to_tsv(source)
     first, second, native = tmp_path / 'first', tmp_path / 'replay', tmp_path / 'native.tsv'
     options = ['--vaccine-type', 'mrna', '--mrna-no-optimize-linkers']
     if explicit:
