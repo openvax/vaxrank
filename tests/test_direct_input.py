@@ -223,7 +223,7 @@ def test_shared_dsl_changes_duplicate_selection_and_constructs(direct, tmp_path)
             (assemble_peptide_constructs, PeptideConstructConfig(
                 mode='minimal_epitope', min_antigen_length_aa=8)),
             (assemble_mrna_constructs, RNAConstructConfig(
-                antigen_content='minimal_epitope', optimize_linkers=False)),
+                antigen_content='minimal_epitope', optimize_linkers=False, codon_species='h_sapiens')),
         ):
             original = assembly(ranked, options=config)
             again = assembly(reloaded[0], options=config)

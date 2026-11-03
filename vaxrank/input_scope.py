@@ -567,6 +567,11 @@ def validate_host_taxon(scope, reference, location, observed_alleles=(), *, refe
             reference = context
     scope = resolve_host_scope(scope, reference, location=location)
     host_species = _species_for_taxon(scope.host_taxon_id) if scope.host_taxon_id else None
+    if host_species is None and isinstance(reference, ReferenceContext):
+        # Custom snapshots carry their scientific name even when a reverse
+        # taxonomy alias has not been registered by the annotation provider.
+        from orfdata.reference import canonical_species
+        host_species = Species.get(canonical_species(reference.species).replace('_', ' ').capitalize())
     if scope.host_taxon_id is not None and host_species is None:
         raise ValueError(f'{location}: cannot resolve host_taxon_id {scope.host_taxon_id} to an MHC species')
     expected = ([Species.get(name) for name in scope.mhc_species]

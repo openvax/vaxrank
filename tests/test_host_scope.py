@@ -250,7 +250,7 @@ def test_manifest_mhc_species_and_cli_assertions(tmp_path):
 def test_actual_annotation_species_checked_without_taxon_declaration():
     scope = InputScope(mhc_alleles=('HLA-A*02:01',))
     source = InputProvenance('test', 'antigens', 'test.json', '', scope)
-    with pytest.raises(ValueError, match='conflicts with host species'):
+    with pytest.raises(ValueError, match='conflicts with host_taxon_id'):
         validate_input_scopes([source], genome=EnsemblRelease(93, species='mouse'))
     assert validate_input_scopes([replace(source, scope=replace(scope, mhc_species=['human']))],
                                  genome=EnsemblRelease(93, species='mouse')).mhc_species == ('Homo sapiens',)
