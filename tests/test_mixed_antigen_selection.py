@@ -58,6 +58,7 @@ def test_mixed_native_design_and_source_strata(mixed_native, tmp_path, monkeypat
                '--config-text', 'vaccine_peptides.combined_score_expr=target_epitope_score']
     if modality == 'mrna':
         options += ['--mrna-antigens-per-construct', '3', '--mrna-max-constructs', '1',
+                    '--mrna-codon-species', 'h_sapiens',
                     '--mrna-no-optimize-linkers', '--mrna-codon-method', 'use_best_codon']
     if kind:
         options += ['--config-text', f'epitopes.filter_expr=vaxrank_antigen_kind == "{kind}"']

@@ -219,7 +219,8 @@ def test_native_cli_scores_and_constructs_replay_after_relocation(tmp_path, refe
     import pyensembl.download_cache
     _, path = native_dataset(tmp_path, reference)
     first = tmp_path / "first.tsv"
-    options = ["--vaccine-peptide-length", "10", "--no-processing-aware-annotation"]
+    options = ["--vaccine-peptide-length", "10", "--no-processing-aware-annotation",
+               "--mrna-codon-species", "h_sapiens"]
     run_cli(["--input-epitopes", str(path), "--output-epitopes", str(first)] + options)
     # Move the original archive, then remove both raw annotations and indexes.
     moved = tmp_path / "moved"

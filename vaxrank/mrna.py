@@ -34,7 +34,7 @@ import csv
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from dnachisel import (
@@ -134,6 +134,22 @@ def normalize_codon_species(name):
     return _SPECIES_ALIASES.get(key, name)
 
 
+def resolve_codon_species(species=None, host_taxon_id=None):
+    """Use an explicit expression target or the resolved host's codon table."""
+    if species:
+        return normalize_codon_species(species)
+    if host_taxon_id is None:
+        raise ValueError('mRNA codon optimization requires a resolved host species '
+                         'or explicit --mrna-codon-species / codon_species')
+    from python_codon_tables import available_codon_tables_names
+    for name in available_codon_tables_names:
+        key, taxon = name.rsplit('_', 1)
+        if taxon == str(host_taxon_id):
+            return key
+    raise ValueError(f'No bundled codon table for host taxon {host_taxon_id}; '
+                     'set --mrna-codon-species / codon_species explicitly')
+
+
 @dataclass
 class RNAConstructConfig:
     """User-configurable mRNA construct parameters.
@@ -159,7 +175,7 @@ class RNAConstructConfig:
     mitd: str = "HLA_B"
     utr_5p: str = "HBB"
     utr_3p: str = "HBB_FI"  # tandem 2× HBB
-    codon_species: str = "h_sapiens"
+    codon_species: Optional[str] = None
     codon_method: str = "use_best_codon"
     # Antigen-design axes — shared semantics with PeptideConstructConfig.
     # ``antigen_content`` ∈ {'mutation_spanning', 'minimal_epitope'};
@@ -254,7 +270,7 @@ def resolve_named_mrna_element(table, name, kind):
             kind, name, ', '.join(sorted(table))))
 
 
-def codon_optimize(amino_acids, species="h_sapiens", method="use_best_codon",
+def codon_optimize(amino_acids, species=None, method="use_best_codon",
                    avoid_patterns=(), frozen_segments=()):
     """Back-translate and codon-optimize an amino-acid sequence to DNA.
 
@@ -282,7 +298,7 @@ def codon_optimize(amino_acids, species="h_sapiens", method="use_best_codon",
     """
     if not amino_acids:
         return ""
-    species = normalize_codon_species(species)
+    species = resolve_codon_species(species)
     frozen_segments = sorted(frozen_segments)
     # Build the initial DNA by substituting blessed nt segments where
     # provided, otherwise back-translating freely. Track nt ranges to
@@ -629,7 +645,8 @@ def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
 def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                              mhc_predictor=None, mhc_alleles=None,
                              reference_proteome=None, *,
-                             target_alleles=None, source_evidence=None, selection_audit=None):
+                             target_alleles=None, source_evidence=None, selection_audit=None,
+                             host_taxon_id=None):
     """Assemble mRNA constructs from ranked vaccine peptides.
 
     Parameters
@@ -663,12 +680,16 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     selection_audit : optional, dict
         Filled with exact-sequence deduplication and packing outcomes, including
         eligible antigens excluded by the construct capacity limit.
+    host_taxon_id : optional, int
+        Host for automatic codon usage. Variant reference metadata is also
+        consulted; antigen source species and MHC alleles are independent.
 
     Returns
     -------
     list[RNAConstruct]
     """
     options = options or RNAConstructConfig()
+    ranked_vaccine_peptides = list(ranked_vaccine_peptides)
     if target_alleles:
         from .coverage import select_antigens_for_coverage
         cap = options.antigens_per_construct * options.max_constructs
@@ -707,6 +728,13 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     if not antigens:
         record_assembly_decisions(selection_audit, selected_antigens, [], target_alleles)
         return []
+
+    from .input_scope import InputScope, resolve_host_scope
+    host = InputScope(host_taxon_id=host_taxon_id)
+    for source, _ in ranked_vaccine_peptides:
+        host = resolve_host_scope(host, getattr(source, 'genome', None), location='mRNA assembly')
+    options = replace(options, codon_species=resolve_codon_species(
+        options.codon_species, host.host_taxon_id))
 
     packed = _pack_constructs(
         antigens, options, signal_peptide_aa, linker, mitd_aa,
