@@ -365,3 +365,61 @@ def test_pepsickle_in_a_configured_interpreter_counts_as_installed(monkeypatch):
     assert entry_point.pepsickle_installed() is False
     monkeypatch.setenv("PEPSICKLE_PYTHON", "/opt/pepsickle-venv/bin/python")
     assert entry_point.pepsickle_installed() is True
+
+
+def test_every_companion_command_answers_version_like_vaxrank(capsys):
+    from vaxrank import download_test_data
+    from vaxrank.cli import (
+        complex_variant_visualization, evidence_visualization, mutation_visualization, window_exposure)
+    from vaxrank.version import __version__
+
+    for prog, main in [("vaxrank-mutation-figure", mutation_visualization.main),
+                       ("vaxrank-evidence-figure", evidence_visualization.main),
+                       ("vaxrank-complex-result-figure", complex_variant_visualization.main),
+                       ("vaxrank-window-exposure", window_exposure.main),
+                       ("vaxrank-test-data", download_test_data.main)]:
+        with pytest.raises(SystemExit) as exit_info:
+            main(["--version"])
+        assert exit_info.value.code == 0
+        assert capsys.readouterr().out.strip() == "%s %s" % (prog, __version__)
+
+
+def test_companion_options_all_have_help():
+    from vaxrank.cli import complex_variant_visualization, evidence_visualization, mutation_visualization
+
+    for module in (mutation_visualization, evidence_visualization, complex_variant_visualization):
+        for action in module.make_parser()._actions:
+            assert action.help, "%s %s has no help" % (module.__name__, action.option_strings or action.dest)
+
+
+
+def test_missing_input_paths_name_the_flag_before_any_work(tmp_path, monkeypatch, capsys):
+    def must_not_run(args):
+        raise AssertionError("input loading started before the paths were checked")
+
+    monkeypatch.setattr(entry_point, "variant_collection_from_args", must_not_run)
+    out = ["--output-csv", str(tmp_path / "o.csv")]
+    cases = [
+        ("--bam", str(tmp_path / "nope.bam"), "--bam: no such file"),
+        ("--prediction-cache", str(tmp_path), "--prediction-cache: %r is a directory, expected a file" % str(tmp_path)),
+        ("--mhc-alleles-file", str(tmp_path / "alleles.txt"), "--mhc-alleles-file: no such file"),
+    ]
+    for flag, value, expected in cases:
+        with pytest.raises(SystemExit) as exit_info:
+            entry_point.main(_pipeline_args(tmp_path, flag, value, *out))
+        assert exit_info.value.code == 1
+        assert expected in capsys.readouterr().err, flag
+
+
+def test_remote_and_existing_inputs_pass_the_path_check(tmp_path):
+    from types import SimpleNamespace
+    present = tmp_path / "x.vcf"
+    present.write_text("")
+    entry_point.validate_input_paths(SimpleNamespace(
+        vcf=[str(present)], bam="https://example.org/sample.bam", hitlist_evidence_bundle=str(tmp_path)))
+
+
+def test_a_missing_directory_input_names_the_flag(tmp_path):
+    from types import SimpleNamespace
+    with pytest.raises(ValueError, match="--hitlist-evidence-bundle: no such directory"):
+        entry_point.validate_input_paths(SimpleNamespace(hitlist_evidence_bundle=str(tmp_path / "nope")))
