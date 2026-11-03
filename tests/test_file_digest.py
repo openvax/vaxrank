@@ -27,6 +27,14 @@ def test_file_sha256_missing_file_raises_oserror(tmp_path):
         file_sha256(tmp_path / "missing")
 
 
+@pytest.mark.parametrize('chunk_size', [0, -1, True, 1.5, '7'])
+def test_file_sha256_rejects_invalid_chunk_size(tmp_path, chunk_size):
+    path = tmp_path / 'nonempty'
+    path.write_bytes(b'content must not receive an empty-file digest')
+    with pytest.raises(ValueError, match='positive integer'):
+        file_sha256(path, chunk_size=chunk_size)
+
+
 def test_prediction_row_fields_prefers_affinity_and_defaults_kind():
     fields = prediction_row_fields(
         {"affinity": 50.0, "value": 7.0, "score": float("nan"),

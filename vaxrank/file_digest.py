@@ -26,7 +26,11 @@ def file_sha256(path, chunk_size=1024 * 1024):
     ------
     OSError
         If the file cannot be opened or read.
+    ValueError
+        If chunk_size is not a positive integer.
     """
+    if type(chunk_size) is not int or chunk_size <= 0:
+        raise ValueError('chunk_size must be a positive integer')
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
         while chunk := stream.read(chunk_size):
