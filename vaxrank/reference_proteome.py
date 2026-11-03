@@ -32,6 +32,7 @@ from pyensembl import Genome
 from .progress import progress
 
 from .config.defaults import DEFAULT_MAX_KMER_LENGTH, DEFAULT_MIN_KMER_LENGTH
+from .file_digest import file_sha256
 from .identifiers import normalize_ensembl_gene_id
 from .vaccine_antigen import (
     SelfReferenceMatch,
@@ -160,11 +161,7 @@ def ensembl_dataset_cache_identity(genome) -> Optional[str]:
             with _ensembl_source_digest_cache_lock:
                 source_digest = _ensembl_source_digest_cache.get(digest_key)
             if source_digest is None:
-                digest = hashlib.sha256()
-                with open(resolved_path, "rb") as source_file:
-                    while chunk := source_file.read(1024 * 1024):
-                        digest.update(chunk)
-                source_digest = digest.hexdigest()
+                source_digest = file_sha256(resolved_path)
                 with _ensembl_source_digest_cache_lock:
                     _ensembl_source_digest_cache[digest_key] = source_digest
             files.append((stat.st_size, source_digest))

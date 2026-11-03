@@ -9,6 +9,7 @@ from topiary import TopiaryResult, combine_sources
 from .epitope_dataset import EpitopeDataset
 from .epitope_dsl import epitopes_to_topiary_df
 from .epitope_io import normalize_hla_allele
+from .file_digest import file_sha256
 from .external_report import ExternalReport
 from .input_scope import (
     InputProvenance, combine_scopes, normalize_alleles, provenance_columns,
@@ -16,14 +17,6 @@ from .input_scope import (
     scope_dict, validate_input_scopes,
     species_scope_from_args, with_species_declarations, load_reference_context,
 )
-
-
-def _file_digest(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def prepare_direct_report(args, reports, epitope_config):
@@ -75,7 +68,7 @@ def prepare_direct_report(args, reports, epitope_config):
                           retained_genomes={'direct': tuple({id(v.ensembl): v.ensembl for v in variants}.values())},
                           reference_context=context)
     args._input_species_scope = scope_dict(shared)
-    hashes = {str(Path(path).resolve()): _file_digest(path) for path in paths}
+    hashes = {str(Path(path).resolve()): file_sha256(path) for path in paths}
     content_hash = hashlib.sha256(json.dumps(list(hashes.values())).encode()).hexdigest()
     scope_hash = hashlib.sha256(json.dumps(scope_dict(scope), sort_keys=True).encode()).hexdigest()
     provenance = replace(

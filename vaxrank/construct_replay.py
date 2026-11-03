@@ -12,7 +12,7 @@ from .native_serialization import from_native_json, to_native_json
 def pipeline_native_dataset(args, variants, epitope_config, *, patient_background=None):
     """Capture original VCF/BAM evidence without requiring a pooling manifest."""
     from pathlib import Path
-    from .direct_input import _file_digest
+    from .file_digest import file_sha256
     from .epitope_dataset import EpitopeDataset
     from .input_scope import (
         InputProvenance, InputScope, normalize_alleles, scope_dict,
@@ -24,7 +24,7 @@ def pipeline_native_dataset(args, variants, epitope_config, *, patient_backgroun
     paths = list(getattr(args, 'vcf', None) or []) + list(getattr(args, 'germline_vcf', None) or [])
     if getattr(args, 'bam', None):
         paths.append(args.bam)
-    hashes = {str(Path(path).resolve()): _file_digest(path) for path in paths}
+    hashes = {str(Path(path).resolve()): file_sha256(path) for path in paths}
     genomes = {(v.ensembl.reference_name, getattr(v.ensembl, 'release', None)) for v in variants}
     reference, release = next(iter(genomes)) if len(genomes) == 1 else (None, None)
     scope = InputScope(patient_id=getattr(args, 'output_patient_id', None) or None,
