@@ -365,3 +365,28 @@ def test_pepsickle_in_a_configured_interpreter_counts_as_installed(monkeypatch):
     assert entry_point.pepsickle_installed() is False
     monkeypatch.setenv("PEPSICKLE_PYTHON", "/opt/pepsickle-venv/bin/python")
     assert entry_point.pepsickle_installed() is True
+
+
+def test_every_companion_command_answers_version_like_vaxrank(capsys):
+    from vaxrank import download_test_data
+    from vaxrank.cli import (
+        complex_variant_visualization, evidence_visualization, mutation_visualization, window_exposure)
+    from vaxrank.version import __version__
+
+    for prog, main in [("vaxrank-mutation-figure", mutation_visualization.main),
+                       ("vaxrank-evidence-figure", evidence_visualization.main),
+                       ("vaxrank-complex-result-figure", complex_variant_visualization.main),
+                       ("vaxrank-window-exposure", window_exposure.main),
+                       ("vaxrank-test-data", download_test_data.main)]:
+        with pytest.raises(SystemExit) as exit_info:
+            main(["--version"])
+        assert exit_info.value.code == 0
+        assert capsys.readouterr().out.strip() == "%s %s" % (prog, __version__)
+
+
+def test_companion_options_all_have_help():
+    from vaxrank.cli import complex_variant_visualization, evidence_visualization, mutation_visualization
+
+    for module in (mutation_visualization, evidence_visualization, complex_variant_visualization):
+        for action in module.make_parser()._actions:
+            assert action.help, "%s %s has no help" % (module.__name__, action.option_strings or action.dest)
