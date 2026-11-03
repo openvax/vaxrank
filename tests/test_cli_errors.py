@@ -175,7 +175,7 @@ def test_empty_ranked_table_writes_a_schema(tmp_path):
 
 def test_argparse_errors_name_the_problem_without_the_usage_dump(capsys):
     """vaxrank's usage is over 150 lines; the one line that matters must not hide in it."""
-    for argv in ([], ["--bam", "x.bam", "--mhc-predictor", "notapredictor"],
+    for argv in (["--bam", "x.bam", "--mhc-predictor", "notapredictor"],
                  ["--input-pvacseq", "x.tsv", "--mhc-predictor", "notapredictor"]):
         with pytest.raises(SystemExit) as exit_info:
             entry_point.main(argv)
@@ -453,3 +453,43 @@ def test_predictor_with_an_input_that_reuses_predictions_explains_the_choice(tmp
     err = capsys.readouterr().err
     assert "reuses the predictions already in its tables" in err
     assert "--external-predictions fresh or additive" in err and "drop --mhc-predictor" in err
+
+
+def test_bare_vaxrank_prints_examples_and_exits_cleanly(capsys):
+    assert entry_point.main([]) is None
+    out = capsys.readouterr().out
+    assert "Examples:" in out and "--input-pvacseq" in out
+
+
+def test_mistyped_flag_gets_a_suggestion(capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        entry_point.main(["--bamm", "x.bam", "--mhc-predictor", "random"])
+    assert exit_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "did you mean --bam?" in err
+    assert len(err.strip().splitlines()) == 2
+
+
+def test_help_carries_worked_examples(capsys):
+    for args in (["--vcf", "a.vcf", "--help"], ["--input-lens", "a.tsv", "--help"],
+                 ["--input-json-file", "r.json", "--help"]):
+        with pytest.raises(SystemExit) as exit_info:
+            entry_point.main(args)
+        assert exit_info.value.code == 0
+        assert "Examples:" in capsys.readouterr().out
+
+
+def test_unique_flag_prefixes_still_work():
+    from vaxrank.cli.arg_parser import parse_vaxrank_args
+    parsed = parse_vaxrank_args(["--vcf", "a.vcf", "--bam", "b.bam", "--mhc-predictor", "random",
+                                 "--output-d", "out"])
+    assert parsed.output_dir == "out"
+
+
+def test_final_outputs_block_lists_what_was_written(tmp_path, capsys):
+    out = tmp_path / "out"
+    entry_point.main(_pipeline_args(tmp_path, "--output-dir", str(out)))
+    err = capsys.readouterr().err
+    assert "Outputs written:" in err
+    assert str(out / "ranked_candidates.csv") in err
+    assert str(out / "run_summary.txt") in err
