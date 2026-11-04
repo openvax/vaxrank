@@ -579,6 +579,7 @@ def test_cta_antigen_enters_peptide_and_mrna_constructs_without_fragment():
     )
     [mrna_construct] = assemble_mrna_constructs(
         ranked,
+        host_taxon_id=9606,
         options=RNAConstructConfig(
             signal_peptide=None,
             include_mitd=False,

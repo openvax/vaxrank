@@ -55,7 +55,7 @@ def _assert_outputs_choose_lowest_epitope_score(ranked, tmp_path):
         ranked, options=RNAConstructConfig(
             signal_peptide=None, include_mitd=False,
             min_antigen_length_aa=5, antigens_per_construct=1,
-            max_constructs=1, optimize_linkers=False))
+            max_constructs=1, optimize_linkers=False), host_taxon_id=9606)
     assert len(mrna_constructs) == 1
     assert mrna_constructs[0].antigen_names == [expected_name]
     data = TemplateDataCreator(

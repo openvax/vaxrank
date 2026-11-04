@@ -219,7 +219,7 @@ queries or the original expression table.
 ### Common RNA restriction policy (experimental)
 
 An explicit `restriction_policy` selects the same admission contract for human,
-dog and mouse. The ordinary Vaxrank install supports OncoRef 1.23.1 through 1.24.0
+dog and mouse. The ordinary Vaxrank install supports OncoRef 1.23.1 through 1.27.0
 and requires ORFdata 0.42.6 or newer; see [installation](installation.md#common-cta-evidence). It
 uses the snapshot's identifier namespaces: Ensembl gene IDs and exact versioned
 transcripts, or NCBI Gene IDs and exact versioned RefSeq transcripts. It does not
@@ -431,3 +431,34 @@ features. A new mixed design requires new product audits.
 
 See [mixed-source selection](mixed-antigen-design.md) for evidence requirements
 and current source-allocation limits.
+
+## Host, MHC repertoire and antigen origin
+
+The reference genome or mapped host snapshot establishes the host species.
+Use `--host-species mouse` (or `host_species: mouse` in an input manifest)
+when no reference establishes it. If both are supplied they must agree;
+`--host-taxon-id` is the numeric spelling of the same declaration.
+
+MHC alleles are checked against this host. `--mhc-species human` declares an
+intentional human MHC repertoire in a transgenic mouse; it does not turn the
+host into a human or change the antigen's source species. Each antigen keeps
+its own origin, so a human host can contain viral targets.
+
+New mRNA designs use the resolved host's bundled codon table. A mouse reference
+selects `m_musculus`; a human reference selects `h_sapiens`. With an unknown host
+or no bundled table, specify `--mrna-codon-species` (YAML `mrna.codon_species`)
+explicitly. This override can intentionally select another expression target.
+Native replay retains its recorded effective choice, and frozen named policies
+such as `builtin:openvax-v1` keep their explicit codon settings. In the Python
+API, `assemble_mrna_constructs(..., host_taxon_id=10090)` supplies the host for
+antigens without variant-reference metadata; `RNAConstructConfig(codon_species=...)`
+sets an explicit target.
+
+CTA exclusions and bundle checks use the same resolved host. Nonhuman CTA
+admission needs a mapped host reference and species-specific evidence; requesting
+human CTA source exclusions on another species raises an error.
+
+Pepsickle uses its mammalian model by default, including for human hosts.
+`--pepsickle-human-only` requires a known human host and selects the upstream
+experimental training subset. [Pepsickle documents the smaller training set](https://github.com/pdxgx/pepsickle#usage).
+Codon selection follows [DNA Chisel's target-species contract](https://edinburgh-genome-foundry.github.io/DnaChisel/ref/builtin_specifications.html#dnachisel.builtin_specifications.CodonOptimize).

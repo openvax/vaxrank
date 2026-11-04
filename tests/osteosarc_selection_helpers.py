@@ -5,7 +5,7 @@ import json
 from isovar import run_isovar
 from isovar.cli import protein_sequence_creator_from_args, read_collector_from_args
 import pysam
-from vaxrank.sid_test_data import sid_test_data, sid_variants
+from vaxrank.testdata.sid import sid_test_data, sid_variants
 
 from vaxrank.cli import make_vaxrank_arg_parser
 from vaxrank.cli.isovar_config_args import resolve_isovar_args

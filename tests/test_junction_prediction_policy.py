@@ -219,7 +219,7 @@ def test_offline_junction_checks_saved_host_without_a_taxon(junction_factory):
     args = external_args('--mrna-junction-predictor', 'junction-test',
                          '--mrna-junction-alleles', 'HLA-A*02:01')
     args._input_species_scope = dict(reference_assembly='GRCm38')
-    with pytest.raises(ValueError, match='conflicts with host species'):
+    with pytest.raises(ValueError, match='conflicts with host_taxon_id'):
         ep.resolve_mhc_for_linker_optimizer(args)
     assert not junction_factory
 
@@ -268,7 +268,7 @@ def test_osteosarc_vcf_bam_with_multiple_models_emits_default_reports(tmp_path, 
     from mhctools import RandomBindingPredictor
     from mhctools.cli import mhc_predictors
     from varcode import load_vcf
-    from vaxrank.sid_test_data import sid_reads, sid_variants
+    from vaxrank.testdata.sid import sid_reads, sid_variants
     from .osteosarc_selection_helpers import DATA as SID_DATA, load_selection_inputs
 
     monkeypatch.setattr(socket.socket, 'connect', forbidden)

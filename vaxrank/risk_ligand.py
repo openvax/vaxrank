@@ -19,7 +19,9 @@ from .amino_acids import (
     validate_amino_acid_sequence,
 )
 from .identifiers import normalize_ensembl_gene_id, normalize_mhc_allele
-from .prediction_input import finite_prediction_value, prediction_integer
+from .prediction_input import (
+    prediction_integer, prediction_row_fields,
+)
 from .tissue_risk import (
     TissueRiskAssessment,
     TissueRiskEvidence,
@@ -233,18 +235,7 @@ class RiskLigandPrediction(DataclassSerializable):
     @classmethod
     def from_prediction_row(cls, row: Any) -> "RiskLigandPrediction":
         """Build risk-ligand evidence from one topiary prediction row."""
-        value = finite_prediction_value(row.get("affinity"))
-        if value is None:
-            value = finite_prediction_value(row.get("value"))
-        return cls(
-            kind=str(row.get("kind") or ""),
-            predictor_name=str(row.get("prediction_method_name") or ""),
-            predictor_version=str(row.get("predictor_version") or ""),
-            allele=str(row.get("allele") or ""),
-            score=finite_prediction_value(row.get("score")),
-            value=value,
-            percentile_rank=finite_prediction_value(row.get("percentile_rank")),
-        )
+        return cls(**prediction_row_fields(row))
 
     @property
     def identity(self) -> tuple[str, str, str, str]:

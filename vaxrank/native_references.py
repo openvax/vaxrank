@@ -1,7 +1,6 @@
 """Verified relative resources for native custom annotation references."""
 
 from copy import deepcopy
-import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -9,19 +8,12 @@ import tempfile
 
 from pyensembl import Genome
 
+from .file_digest import file_sha256
 from .native_serialization import _json_loads
 
 
 REFERENCE_FIELD = "__vaxrank_reference__"
 REFERENCE_SCHEMA = "vaxrank.native_reference.v1"
-
-
-def _digest(path):
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 class NativeReferences:
@@ -52,7 +44,7 @@ class NativeReferences:
         stat = path.stat()
         key = (path, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
         if key not in self._digests:
-            self._digests[key] = _digest(path)
+            self._digests[key] = file_sha256(path)
         return self._digests[key]
 
     def _relative_path(self, relative):
@@ -78,7 +70,7 @@ class NativeReferences:
                 temporary = Path(stream.name)
             try:
                 shutil.copyfile(source, temporary)
-                if _digest(temporary) != digest:
+                if file_sha256(temporary) != digest:
                     raise ValueError(f"Reference changed during export: {source}")
                 temporary.replace(destination)
             finally:

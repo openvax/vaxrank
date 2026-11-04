@@ -60,7 +60,8 @@ def constructs(report, config):
     peptides = assemble_peptide_constructs(ranked, options=PeptideConstructConfig(
         mode='minimal_epitope', min_antigen_length_aa=8))
     mrna = assemble_mrna_constructs(ranked, options=RNAConstructConfig(
-        antigen_content='minimal_epitope', signal_peptide=None, include_mitd=False, optimize_linkers=False))
+        antigen_content='minimal_epitope', signal_peptide=None, include_mitd=False, optimize_linkers=False),
+        host_taxon_id=9606)
     return [p.sequence for p in peptides], [r.full_nt for r in mrna]
 
 
@@ -120,6 +121,7 @@ def test_cli_additive_feature_selection_and_construct_reload(tmp_path, monkeypat
     run_cli(['--input-topiary', str(source), '--external-predictions', 'additive',
              '--external-prediction-prefix', 'chosen', '--mhc-predictor', 'random',
              '--mhc-alleles', ','.join(ALLELES), '--output-dir', str(first),
+             '--host-species', 'human',
              '--output-epitopes', str(native), '--no-processing-aware-annotation',
              '--config-value', 'epitopes.score_expr=chosen__unified__pMHC_affinity__score',
              '--min-epitope-score', '0.5'])

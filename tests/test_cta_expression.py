@@ -289,7 +289,7 @@ def test_expression_antigen_reaches_existing_peptide_and_mrna_builders(tmp_path,
         mode="minimal_epitope", min_antigen_length_aa=8))
     mrna = assemble_mrna_constructs(ranked, options=RNAConstructConfig(
         antigen_content="minimal_epitope", signal_peptide=None, include_mitd=False,
-        optimize_linkers=False))
+        optimize_linkers=False), host_taxon_id=9606)
     assert peptides and mrna
     assert all(window.mutant_protein_fragment is None for window in windows)
     assert all(window.antigen.gene_id == PRAME for window in windows)

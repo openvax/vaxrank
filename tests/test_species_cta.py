@@ -279,7 +279,9 @@ def test_species_cta_manifest_design_and_offline_replay(tmp_path, monkeypatch, m
         '--vaccine-type', modality, '--pdf-backend', 'weasyprint',
         '--config-text', 'epitopes.score_expr=1.0', '--no-processing-aware-annotation']
     if modality == 'mrna':
-        args += ['--mrna-codon-method', 'use_best_codon', '--mrna-no-optimize-linkers']
+        # This fixture tests canine evidence/replay, with an explicit expression target.
+        args += ['--mrna-codon-species', 'h_sapiens',
+                 '--mrna-codon-method', 'use_best_codon', '--mrna-no-optimize-linkers']
     run_cli(args)
     dataset = EpitopeDataset.load(output / 'native.tsv')
     assert dataset.host_reference.identity == reference.identity

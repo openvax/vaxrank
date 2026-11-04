@@ -301,7 +301,8 @@ def test_common_manifest_native_constructs_and_offline_replay(
         '--comparison-reference', comparison,
         '--config-text', 'epitopes.score_expr=1.0', '--no-processing-aware-annotation']
     if modality == 'mrna':
-        args += ['--mrna-codon-method', 'use_best_codon', '--mrna-no-optimize-linkers']
+        args += ['--mrna-codon-species', 'h_sapiens',
+                 '--mrna-codon-method', 'use_best_codon', '--mrna-no-optimize-linkers']
     run_cli(args)
     dataset = EpitopeDataset.load(output / 'native.tsv')
     assert dataset.host_reference.identity == host.identity

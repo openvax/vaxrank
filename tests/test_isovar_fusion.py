@@ -4,7 +4,7 @@ from dataclasses import replace
 import gzip
 from hashlib import sha256
 import json
-from vaxrank.sid_test_data import sid_test_data
+from vaxrank.testdata.sid import sid_test_data
 
 import pytest
 from isovar import FusionBlock, FusionBreakpoint, FusionRead, FusionReference, FusionTranscript, reconstruct_fusion
