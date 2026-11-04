@@ -6,7 +6,7 @@
 
 from dataclasses import replace
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from mhctools import RandomBindingPredictor
@@ -359,14 +359,8 @@ def test_cta_prediction_uses_antigen_specific_self_reference():
     assert epitopes
     assert all(epitope.occurs_in_reference for epitope in epitopes)
     assert all(not epitope.occurs_in_self_reference for epitope in epitopes)
-    assert reference_cls.from_genome.call_args_list == [
-        call(
-            None,
-            exclude_cta_genes=True,
-            min_kmer_length=9,
-            max_kmer_length=9,
-        ),
-    ]
+    # Source species alone does not establish a human host reference.
+    reference_cls.from_genome.assert_not_called()
 
 
 def test_assembled_mutation_prediction_and_ranking_need_no_fake_wild_type():

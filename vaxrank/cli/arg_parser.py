@@ -22,6 +22,7 @@ from isovar.cli import make_isovar_arg_parser
 from mhctools.cli import add_mhc_args
 
 
+from .discoverability import EXAMPLES, ExamplesHelpFormatter, check_unknown_flags
 from .epitope_config_args import add_epitope_prediction_args
 from .vaccine_config_args import add_vaccine_peptide_args
 from ..version import __version__
@@ -185,6 +186,8 @@ def make_vaxrank_arg_parser():
     add_supplemental_report_args(arg_parser)
     # isovar built this parser, so it does not inherit _ConciseErrorParser.
     arg_parser.error = partial(_concise_error, arg_parser)
+    arg_parser.epilog = EXAMPLES
+    arg_parser.formatter_class = ExamplesHelpFormatter
     return arg_parser
 
 
@@ -195,6 +198,8 @@ def cached_run_arg_parser():
             "Rank personalized cancer neoantigens from somatic variants, "
             "tumor RNA, and patient HLA type, and emit them as analysis "
             "reports, peptide constructs, or mRNA constructs."),
+        epilog=EXAMPLES,
+        formatter_class=ExamplesHelpFormatter,
     )
     arg_parser.add_argument(
         '--version',
@@ -399,9 +404,8 @@ def add_output_args(arg_parser):
         "--pepsickle-human-only",
         action="store_true",
         default=False,
-        help="Use pepsickle's human-only-trained model (default: "
-             "off, all-mammal). Pass when running on human samples "
-             "exclusively.")
+        help="Use pepsickle's experimental human-only training subset; requires "
+             "a resolved human host. Default: all-mammal, including human runs.")
     output_args_group.add_argument(
         "--pepsickle-threshold",
         type=float,
@@ -611,9 +615,10 @@ def add_mrna_output_args(group):
              "Default: GCATATGACT (BNT162b2 canonical).")
     group.add_argument(
         "--mrna-codon-species",
-        default="h_sapiens",
+        default=None,
         help="Species key passed to DnaChisel CodonOptimize (e.g. h_sapiens, "
-             "m_musculus). Default: h_sapiens.")
+             "m_musculus). Default: resolved host species from the reference "
+             "or --host-species. Required when the host is unknown.")
     group.add_argument(
         "--mrna-codon-method",
         default="use_best_codon",
@@ -1084,7 +1089,8 @@ def add_external_rescoring_args(arg_parser):
     arg_parser.add_argument('--reference-context', metavar='JSON',
                             help='Experimental: ORFdata ReferenceContext JSON for direct variants with a custom genome.')
     arg_parser.add_argument('--host-species', metavar='SPECIES',
-                            help='Experimental: host species name or NCBI taxonomy ID, e.g. mouse.')
+                            help='Host species name or NCBI taxonomy ID, e.g. mouse. Derived from the reference '
+                                 'when available; an explicit declaration must agree.')
     arg_parser.add_argument('--host-taxon-id', type=int,
                             help='Experimental: numeric alias for --host-species.')
     arg_parser.add_argument('--mhc-species', nargs='+', metavar='SPECIES',
@@ -1177,6 +1183,8 @@ def external_input_arg_parser():
         description=(
             "Score and rank pre-computed epitope predictions from "
             "pVACseq or LENS."),
+        epilog=EXAMPLES,
+        formatter_class=ExamplesHelpFormatter,
     )
     arg_parser.add_argument(
         '--version',
@@ -1278,6 +1286,7 @@ def choose_arg_parser(args_list):
 
 def parse_vaxrank_args(args_list):
     arg_parser = choose_arg_parser(args_list)
+    check_unknown_flags(arg_parser, args_list)
     parsed = arg_parser.parse_args(args_list)
     # Record supplied destinations, including values equal to defaults,
     # aliases, abbreviations and --option=value. Value comparison alone

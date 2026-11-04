@@ -32,7 +32,8 @@ def test_reports_use_actual_refined_packed_products_and_preserve_candidate_ranki
     options = dict(min_antigen_length_aa=9, max_antigen_length_aa=9, max_constructs=1)
     peptide = assemble_peptide_constructs(ranked, PeptideConstructConfig(**options))
     mrna = assemble_mrna_constructs(ranked, RNAConstructConfig(
-        **options, antigens_per_construct=2, optimize_linkers=False, codon_method='use_best_codon'))
+        **options, antigens_per_construct=2, optimize_linkers=False, codon_method='use_best_codon'),
+        host_taxon_id=9606)
     data = template(ranked, {'peptide': peptide, 'mrna': mrna})
     peptide_group, mrna_group = data['product_groups']
     assert peptide_group['products'][0]['sequence'] == 'SIINFEKLA'
@@ -70,7 +71,7 @@ def test_no_assembly_and_successful_empty_assembly_are_distinct(extension):
 def test_historical_product_does_not_claim_zero_source_evidence():
     ranked = [candidate(0)]
     product, = assemble_mrna_constructs(ranked, RNAConstructConfig(
-        optimize_linkers=False, codon_method='use_best_codon'))
+        optimize_linkers=False, codon_method='use_best_codon'), host_taxon_id=9606)
     old_product = replace(product, antigens=[{k: v for k, v in a.items() if k != 'sources'}
                                            for a in product.antigens])
     data = template(ranked, {'mrna': [old_product]})
@@ -99,7 +100,7 @@ def test_mixed_historical_and_current_products_do_not_claim_unselected_sources()
     old, = assemble_peptide_constructs(ranked[:1], PeptideConstructConfig())
     old = replace(old, antigens=[])
     current = assemble_mrna_constructs(ranked[1:], RNAConstructConfig(
-        optimize_linkers=False, codon_method='use_best_codon'))
+        optimize_linkers=False, codon_method='use_best_codon'), host_taxon_id=9606)
     data = template(ranked, {'peptide': [old], 'mrna': current})
     assert data['ranked_candidates'][0]['products'] == 'Selection mappings incomplete'
     assert data['ranked_candidates'][1]['products'] == current[0].name

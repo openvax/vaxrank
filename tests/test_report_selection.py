@@ -86,7 +86,8 @@ def test_deduplication_precedes_capacity_and_report_links_all_sources(modality):
         products = assemble_peptide_constructs(ranked, PeptideConstructConfig(**common), selection_audit=audit)
     else:
         products = assemble_mrna_constructs(ranked, RNAConstructConfig(
-            **common, optimize_linkers=False, codon_method='use_best_codon'), selection_audit=audit)
+            **common, optimize_linkers=False, codon_method='use_best_codon'),
+            selection_audit=audit, host_taxon_id=9606)
     emitted, excluded = audit['antigens']
     assert len(emitted['sources']) == 2 and emitted['outcome'] == 'emitted'
     assert excluded['outcome'] == 'construct_capacity' and excluded['products'] == []
@@ -141,7 +142,7 @@ def test_historical_window_metrics_do_not_invent_tie_decisions():
 def test_junction_status_uses_saved_optimization_and_actual_linkers():
     ranked = [candidate(0), candidate(1, 'GILGFVFTL')]
     product, = assemble_mrna_constructs(ranked, RNAConstructConfig(
-        optimize_linkers=False, codon_method='use_best_codon'))
+        optimize_linkers=False, codon_method='use_best_codon'), host_taxon_id=9606)
     data = template(ranked, {'mrna': [product]})
     assert data['product_groups'][0]['products'][0]['junction']['status'] == 'Not assessed: junction prediction disabled'
     optimized = replace(product, elements={**product.elements, 'junction_swap': dict(

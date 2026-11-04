@@ -25,6 +25,7 @@ from topiary import TopiaryPredictor
 from .epitope_config import EpitopeConfig
 from .vaccine_config import VaccineConfig
 from .manufacturability_config import ManufacturabilityConfig
+from .progress import progress
 from .epitope_logic import slice_epitopes, predict_epitopes
 from .mutant_protein_fragment import MutantProteinFragment
 from .ranking import rank_constructs, SOURCE_AGNOSTIC_RANKING_RULES as SOURCE_AGNOSTIC_RANKING_RULES
@@ -193,7 +194,7 @@ def create_vaccine_peptides_dict(
         if vaccine_config is not None else True
     )
     vaccine_peptides_dict = {}
-    for isovar_result in isovar_results:
+    for isovar_result in progress(isovar_results, "Selecting vaccine peptides", "variant"):
         variant = isovar_result.variant
         vaccine_peptides = vaccine_peptides_for_variant(
             isovar_result=isovar_result,

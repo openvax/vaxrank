@@ -5,7 +5,6 @@
 
 """Non-mutating full-context processing through existing mhctools backends."""
 
-import hashlib
 from importlib import metadata, util
 import math
 from numbers import Real
@@ -15,6 +14,7 @@ import mhctools
 from mhctools import PeptideInput
 from mhctools.cleavage import CleavageModel
 
+from .file_digest import file_sha256
 from .cleavage_profile import (
     CleavageProfile, profile_from_cleavage_result, profile_from_residue_scores,
 )
@@ -45,11 +45,7 @@ def _pepsickle_model_identity(human_only):
             path = Path(spec.origin).parent / "trained_model_dict.pickle"
             try:
                 if path.is_file():
-                    hasher = hashlib.sha256()
-                    with path.open("rb") as handle:
-                        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                            hasher.update(chunk)
-                    digest = hasher.hexdigest()
+                    digest = file_sha256(path)
             except OSError as error:
                 identity_error = str(error)
     model = CleavageModel(

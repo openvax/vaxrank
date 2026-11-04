@@ -39,6 +39,7 @@ def source(tmp_path):
     path = tmp_path / 'source.tsv'
     evidence(**{ANTIGEN_COLUMN: [to_native_json(a) for a in antigens],
                 'source_sequence': sequences, 'peptide_offset': [2, 2],
+                'host_species': ['human', 'human'],
                 'sample_name': ['patient', 'patient']}).to_tsv(path)
     return path
 
@@ -363,7 +364,8 @@ def test_actual_products_replay_after_custom_annotation_moves(tmp_path, monkeypa
     _, path = native_dataset(tmp_path, genome)
     first, native = tmp_path / 'first', tmp_path / 'design' / 'native.tsv'
     replay(path, first, '--vaccine-peptide-length', '10',
-           '--mrna-no-optimize-linkers', '--output-epitopes', str(native))
+           '--mrna-no-optimize-linkers', '--mrna-codon-species', 'h_sapiens',
+           '--output-epitopes', str(native))
     saved = EpitopeDataset.load(native)
     assert from_native_json(saved.selection['construct_assembly']['mrna']['products'], list)
     shutil.move(str(native.parent), str(tmp_path / 'relocated'))
@@ -441,3 +443,23 @@ def test_full_report_replay_can_omit_redundant_native_export(tmp_path, monkeypat
         assert 'Effective prediction configuration' in text
         assert str(native) in text
     assert (reports / 'vaccine_report.pdf').read_bytes().startswith(b'%PDF')
+
+
+@pytest.mark.parametrize('explicit', [False, True])
+def test_transgenic_mouse_codon_choice_survives_offline_replay(source, tmp_path, monkeypatch, explicit):
+    from topiary import read_tsv
+    result = read_tsv(source)
+    result.df['host_species'] = 'mouse'
+    result.df['mhc_species'] = 'human'
+    result.to_tsv(source)
+    first, second, native = tmp_path / 'first', tmp_path / 'replay', tmp_path / 'native.tsv'
+    options = ['--vaccine-type', 'mrna', '--mrna-no-optimize-linkers']
+    if explicit:
+        options += ['--mrna-codon-species', 'h_sapiens']
+    design(source, first, native, *options)
+    saved = EpitopeDataset.load(native)
+    expected = 'h_sapiens' if explicit else 'm_musculus'
+    assert saved.selection['construct_assembly']['mrna']['configuration']['codon_species'] == expected
+    monkeypatch.setattr('vaxrank.cli.entry_point.assemble_mrna_constructs', forbidden)
+    replay(native, second)
+    assert (first / 'cds.fasta').read_bytes() == (second / 'cds.fasta').read_bytes()

@@ -318,7 +318,7 @@ mrna:
   poly_a_segmented: false              # set true for BNT162b2-style A30+linker+A70
   poly_a_first_segment: 30
   poly_a_segment_linker: GCATATGACT
-  codon_species: h_sapiens
+  codon_species: null                  # derive from reference/host; explicit override supported
   codon_method: use_best_codon         # | match_codon_usage | harmonize_rca
   optimize_linkers: null               # auto: reuse one VCF/BAM predictor; otherwise keep shared linker
   junction_predictor: null             # one mhctools model, for junction queries only

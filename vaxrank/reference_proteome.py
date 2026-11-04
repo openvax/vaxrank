@@ -29,9 +29,10 @@ from typing import Iterable, Optional
 
 from platformdirs import user_cache_dir
 from pyensembl import Genome
-from tqdm import tqdm
+from .progress import progress
 
 from .config.defaults import DEFAULT_MAX_KMER_LENGTH, DEFAULT_MIN_KMER_LENGTH
+from .file_digest import file_sha256
 from .identifiers import normalize_ensembl_gene_id
 from .vaccine_antigen import (
     SelfReferenceMatch,
@@ -64,12 +65,11 @@ def oncoref_cta_source_gene_ids() -> frozenset[str]:
 
 
 def cta_source_gene_ids_for_genome(genome) -> frozenset[str]:
-    """Human CTA source exclusions, or an empty set for other species."""
-    species = getattr(genome, "species", None)
-    latin_name = str(getattr(species, "latin_name", ""))
-    normalized = latin_name.strip().casefold().replace("_", " ")
-    if normalized not in {"homo sapiens", "human"}:
-        return frozenset()
+    """Human annotation-bound CTA exclusions; other hosts need mapped evidence."""
+    from .input_scope import InputScope, resolve_host_scope
+    if resolve_host_scope(InputScope(), genome).host_taxon_id != 9606:
+        raise ValueError('Human CTA source exclusions require a human reference; '
+                         'use mapped species-specific host-reference evidence')
     from oncoref import cta_annotation_gene_ids
     return frozenset(cta_annotation_gene_ids(genome, unfiltered=True))
 
@@ -160,11 +160,7 @@ def ensembl_dataset_cache_identity(genome) -> Optional[str]:
             with _ensembl_source_digest_cache_lock:
                 source_digest = _ensembl_source_digest_cache.get(digest_key)
             if source_digest is None:
-                digest = hashlib.sha256()
-                with open(resolved_path, "rb") as source_file:
-                    while chunk := source_file.read(1024 * 1024):
-                        digest.update(chunk)
-                source_digest = digest.hexdigest()
+                source_digest = file_sha256(resolved_path)
                 with _ensembl_source_digest_cache_lock:
                     _ensembl_source_digest_cache[digest_key] = source_digest
             files.append((stat.st_size, source_digest))
@@ -227,7 +223,7 @@ def _protein_source_snapshot(genome):
         getattr(getattr(genome, "species", None), "latin_name", "") or ""
     )
     sources_by_sequence: dict[str, set[SelfReferenceSource]] = {}
-    for transcript in genome.transcripts():
+    for transcript in progress(genome.transcripts(), "Reading annotated proteins", "transcripts", leave=False):
         if not transcript.protein_sequence:
             continue
         gene_id = normalize_ensembl_gene_id(
@@ -338,7 +334,7 @@ def build_kmer_set_index(
     # This avoids redundant kmer extraction (250k transcripts -> ~20k proteins)
     unique_proteins = set()
     transcripts = genome.transcripts()
-    for t in tqdm(transcripts, desc="Collecting unique proteins", unit="transcripts"):
+    for t in progress(transcripts, "Collecting unique proteins", "transcripts"):
         if t.protein_sequence:
             unique_proteins.add(t.protein_sequence)
 
@@ -350,7 +346,7 @@ def build_kmer_set_index(
 
     # Extract kmers from unique proteins only, using batch updates
     kmers = set()
-    for protein in tqdm(unique_proteins, desc="Extracting kmers", unit="proteins"):
+    for protein in progress(unique_proteins, "Extracting kmers", "proteins"):
         kmers.update(
             protein[j : j + k]
             for k in range(min_len, max_len + 1)
@@ -407,8 +403,8 @@ def load_kmer_set_index(
 
         if not force_reload and os.path.exists(path):
             file_size = os.path.getsize(path)
-            with tqdm(
-                total=file_size, unit="B", unit_scale=True, desc="Loading reference proteome"
+            with progress(
+                None, "Loading reference proteome", "B", total=file_size, unit_scale=True
             ) as pbar:
                 with open(path, "rb") as raw_f:
                     # Wrap raw file to track compressed bytes read
@@ -429,8 +425,8 @@ def load_kmer_set_index(
         # Check for legacy uncompressed file
         if not force_reload and os.path.exists(legacy_path):
             file_size = os.path.getsize(legacy_path)
-            with tqdm(
-                total=file_size, unit="B", unit_scale=True, desc="Loading reference proteome"
+            with progress(
+                None, "Loading reference proteome", "B", total=file_size, unit_scale=True
             ) as pbar:
                 with open(legacy_path, "rb") as f:
                     data = io.BytesIO()
@@ -509,7 +505,7 @@ def genome_protein_dict(genome, exclude_gene_ids=None):
 
     proteins = {}
     num_excluded_transcripts = 0
-    for t in genome.transcripts():
+    for t in progress(genome.transcripts(), "Reading annotated proteins", "transcripts", leave=False):
         gene_id = normalize_ensembl_gene_id(t.gene_id)
         if gene_id in excluded_gene_ids:
             num_excluded_transcripts += 1

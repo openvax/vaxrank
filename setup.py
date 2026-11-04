@@ -74,13 +74,14 @@ if __name__ == "__main__":
         long_description_content_type="text/markdown",
         packages=find_packages(exclude=["tests", "tests.*"]),
         package_data={"vaxrank": [
-            "templates/*", "data/*", "data/sid-recipe/**/*", "logging.conf", "config/*.yaml"]},
+            "templates/*", "data/*", "logging.conf", "config/*.yaml"],
+            "vaxrank.testdata": ["sid-recipe/**/*"]},
         entry_points={"console_scripts": [
             "vaxrank = vaxrank.cli.entry_point:main",
             "vaxrank-mutation-figure = vaxrank.cli.mutation_visualization:main",
             "vaxrank-evidence-figure = vaxrank.cli.evidence_visualization:main",
             "vaxrank-complex-result-figure = vaxrank.cli.complex_variant_visualization:main",
             "vaxrank-window-exposure = vaxrank.cli.window_exposure:main",
-            "vaxrank-test-data = vaxrank.download_test_data:main",
+            "vaxrank-test-data = vaxrank.testdata.download:main",
         ]},
     )

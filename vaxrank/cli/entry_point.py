@@ -47,7 +47,9 @@ from .vaccine_config_args import (
     manufacturability_config_from_args, vaccine_config_from_args,
 )
 from ..config import load_vaxrank_config
+from .discoverability import format_outputs_block, print_bare_summary, written_outputs
 from .errors import USER_ERRORS, exit_with_user_error
+from ..progress import timed_step
 from ..allele_validation import validate_allele_arguments
 
 from ..core_logic import run_vaxrank
@@ -728,6 +730,9 @@ def _emit_mrna_constructs(args, ranked, target_dir):
     """Build + write mRNA-vaccine constructs. Modality-specific."""
     from ..selection_policy import record_construct_configuration
     yaml_kwargs = construct_config_for_modality(args, 'mrna')
+    from ..input_scope import host_scope_from_args
+    from ..mrna import resolve_codon_species
+    host = host_scope_from_args(args, [getattr(source, 'genome', None) for source, _ in ranked])
 
     def cfg(cli_attr, yaml_key):
         return coalesce_config_value(args, cli_attr, yaml_kwargs, yaml_key)
@@ -763,7 +768,8 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         mitd=cfg('mrna_mitd', 'mitd'),
         utr_5p=cfg('mrna_5p_utr', 'utr_5p'),
         utr_3p=cfg('mrna_3p_utr', 'utr_3p'),
-        codon_species=cfg('mrna_codon_species', 'codon_species'),
+        codon_species=(resolve_codon_species(cfg('mrna_codon_species', 'codon_species'), host.host_taxon_id)
+                       if ranked else cfg('mrna_codon_species', 'codon_species')),
         codon_method=cfg('mrna_codon_method', 'codon_method'),
         antigen_content=antigen_content,
         epitopes_per_antigen=epitopes_per_antigen,
@@ -1382,7 +1388,27 @@ def run_cli(args_list=None):
     if args_list is None:
         args_list = sys.argv[1:]
 
+    if not args_list:
+        print_bare_summary()
+        return None
     args = parse_vaxrank_args(args_list)
+    result = _run_parsed_cli(args, args_list)
+    print_outputs_written(args)
+    return result
+
+
+def print_outputs_written(args):
+    """Close a run with one list of what it wrote, not a dozen scattered log lines."""
+    output_dir = getattr(args, 'output_dir', '') or ''
+    types = resolve_vaccine_types(args)
+    constructs = [(vtype + ' constructs', vaccine_target_dir(output_dir, vtype, types))
+                  for vtype in types] if output_dir else []
+    block = format_outputs_block(written_outputs(args, constructs))
+    if block:
+        print("\n" + block, end="", file=sys.stderr)
+
+
+def _run_parsed_cli(args, args_list):
     if getattr(args, 'reference_context', None):
         direct = any(getattr(args, name, None) for name in ('vcf', 'maf', 'variant', 'json_variants'))
         external = any(getattr(args, name, None) for name in (
@@ -1575,6 +1601,9 @@ def run_cli(args_list=None):
     from ..prediction_policy import retained_processing, effective_prediction_configuration
     dataset = getattr(args, '_design_dataset', None)
     processing_predictions_by_key = retained_processing([dataset]) if dataset is not None else {}
+    from ..input_scope import validate_processing_host
+    validate_processing_host(args, [getattr(source, 'genome', None)
+                                    for source, _ in ranked_variants_with_vaccine_peptides])
     if getattr(args, 'processing_aware_annotation', True) and processing_annotation_available():
         _, processing_predictions_by_key = annotate_predictions_with_processing(
             ranked_variants_with_vaccine_peptides, predictions,
@@ -1726,7 +1755,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     if getattr(args, 'host_reference', None):
         raise ValueError('Use --host-reference with native antigen inputs or saved --input-epitopes')
     from ..input_scope import validate_prediction_species, scope_dict
-    references = list({id(v.ensembl): v.ensembl for v in variants}.values())
+    references = list({id(v.ensembl): v.ensembl for v in loaded_variants}.values())
     if getattr(args, 'genome', None) is not None:
         references.append(args.genome)
     args._input_species_scope = scope_dict(validate_prediction_species(
@@ -1754,15 +1783,18 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         from ..construct_replay import pipeline_native_dataset
         epitope_dataset = pipeline_native_dataset(args, variants, epitope_config,
                                                  patient_background=prepared_background)
-    isovar_results = run_isovar(
-        variants=variants,
-        germline_variants=germline_variants_from_args(args, variants),
-        alignment_file=alignment_file_from_args(args),
-        read_collector=read_collector_from_args(args),
-        protein_sequence_creator=protein_sequence_creator,
-        filter_thresholds=filter_threshold_dict_from_args(args),
-        **phasing_parameters_from_args(args, variants),
-    )
+    with timed_step(
+            logger, "Collecting RNA reads and assembling protein sequences for %d variant(s)",
+            "Assembled RNA-supported sequences for %d variant(s) in %.0fs", len(variants)):
+        isovar_results = run_isovar(
+            variants=variants,
+            germline_variants=germline_variants_from_args(args, variants),
+            alignment_file=alignment_file_from_args(args),
+            read_collector=read_collector_from_args(args),
+            protein_sequence_creator=protein_sequence_creator,
+            filter_thresholds=filter_threshold_dict_from_args(args),
+            **phasing_parameters_from_args(args, variants),
+        )
 
     if args.output_isovar_csv:
         df = isovar_results_to_dataframe(isovar_results)

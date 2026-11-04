@@ -351,6 +351,7 @@ def test_real_lens_fusion_becomes_ranked_construct_with_provenance(tmp_path):
 
     mrna_constructs = assemble_mrna_constructs(
         fusion_pairs,
+        host_taxon_id=9606,
         options=RNAConstructConfig(
             signal_peptide=None,
             include_mitd=False,

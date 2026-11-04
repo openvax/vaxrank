@@ -171,7 +171,7 @@ def test_explicit_antigens_survive_file_reload_and_build(kind, tmp_path):
             mode='minimal_epitope', min_antigen_length_aa=8))
         mrna = assemble_mrna_constructs(ranked, options=RNAConstructConfig(
             antigen_content='minimal_epitope', signal_peptide=None, include_mitd=False,
-            optimize_linkers=False))
+            optimize_linkers=False), host_taxon_id=9606)
         assert sorted(p.sequence for p in peptides) == sorted(a.amino_acids for a in antigens)
         assert all(any(a.amino_acids in r.cds_aa for r in mrna) for a in antigens)
         assert sorted(p.antigen_names[0] for p in peptides) == sorted(
@@ -295,7 +295,7 @@ def test_repeated_discoveries_select_once_without_summing_support(tmp_path):
         mode='minimal_epitope', min_antigen_length_aa=8))
     assert assemble_mrna_constructs(ranked, options=RNAConstructConfig(
         antigen_content='minimal_epitope', signal_peptide=None, include_mitd=False,
-        optimize_linkers=False))
+        optimize_linkers=False), host_taxon_id=9606)
     native = tmp_path / 'native.tsv'
     frame.attrs['epitope_dataset'].save(native)
     again = load_external_ranked(SimpleNamespace(input_epitopes=str(native)))

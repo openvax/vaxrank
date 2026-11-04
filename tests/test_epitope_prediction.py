@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
 from mhctools import RandomBindingPredictor
 from varcode import Variant
 from vaxrank.epitope_config import EpitopeConfig
@@ -87,10 +88,14 @@ def test_reference_peptide_logic(mouse_genome):
         vaccine_peptide.target_epitope_score)
 
 
-def test_predict_epitopes_records_distinct_non_cta_reference_flag(mouse_genome):
-    """The CTA-aware flag must come from its own reference index."""
+@pytest.mark.parametrize('human', [False, True])
+def test_cta_comparison_excludes_only_for_a_human_host(mouse_genome, human):
+    """Human CTA exclusions must not remove sequences from a mouse host."""
     from unittest.mock import patch
+    from pyensembl import EnsemblRelease
+    from vaxrank.vaccine_antigen import SelfReferenceMatch
 
+    genome = EnsemblRelease(102) if human else mouse_genome
     wdr13_transcript = mouse_genome.transcripts_by_name("Wdr13-201")[0]
     protein_fragment = MutantProteinFragment(
         variant=Variant("X", "8125624", "C", "A"),
@@ -105,30 +110,31 @@ def test_predict_epitopes_records_distinct_non_cta_reference_flag(mouse_genome):
         supporting_reference_transcripts=[wdr13_transcript],
     )
 
-    with patch("vaxrank.epitope_logic.ReferenceProteome") as reference_cls:
+    with (patch("vaxrank.epitope_logic.ReferenceProteome") as reference_cls,
+          patch("vaxrank.epitope_logic.self_reference_matches", side_effect=lambda peptides, antigen, genome: {
+              p: SelfReferenceMatch(p, True, antigen.kind) for p in peptides})):
         reference_cls.return_value.contains.return_value = True
         reference_cls.from_genome.return_value.contains.return_value = False
         epitopes = predict_epitopes(
-            mhc_predictor=RandomBindingPredictor(["H-2-Kb"]),
+            mhc_predictor=RandomBindingPredictor(["HLA-A*02:01" if human else "H-2-Kb"]),
             protein_fragment=protein_fragment,
             epitope_config=EpitopeConfig(min_epitope_score=0),
-            genome=mouse_genome,
+            genome=genome,
         )
 
     assert epitopes
     assert all(epitope.occurs_in_reference for epitope in epitopes)
-    assert all(not epitope.occurs_in_non_CTA_reference for epitope in epitopes)
+    assert all(epitope.occurs_in_non_CTA_reference == (not human) for epitope in epitopes)
     reference_cls.assert_called_once_with(
-        mouse_genome,
+        genome,
         min_kmer_length=9,
         max_kmer_length=9,
     )
-    reference_cls.from_genome.assert_called_once_with(
-        mouse_genome,
-        exclude_cta_genes=True,
-        min_kmer_length=9,
-        max_kmer_length=9,
-    )
+    if human:
+        reference_cls.from_genome.assert_called_once_with(
+            genome, exclude_cta_genes=True, min_kmer_length=9, max_kmer_length=9)
+    else:
+        reference_cls.from_genome.assert_not_called()
 
 def test_predict_epitopes_returns_one_row_per_predictor_for_multimodel(mouse_genome):
     """Multi-model TopiaryPredictor (post-2.24, #261) keeps each
