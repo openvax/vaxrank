@@ -411,8 +411,9 @@ def test_osteosarc_cache_environment_is_honoured(tmp_path, tiny_manifest, monkey
 
 def test_test_data_cli_is_installed_as_a_console_script():
     """`vaxrank-test-data` is the documented entry point, so keep it declared."""
-    setup = (ROOT / "setup.py").read_text()
-    assert "vaxrank-test-data = vaxrank.testdata.download:main" in setup
+    packaging_metadata = (ROOT / "pyproject.toml").read_text()
+    assert ('vaxrank-test-data = "vaxrank.testdata.download:main"'
+            in packaging_metadata)
 
 
 @pytest.mark.parametrize("envkey", ["OSTEOSARC_CACHE", "OPENVAX_DATA_CACHE"])

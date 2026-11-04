@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vaxrank"
+dynamic = ["version", "dependencies"]
+description = "Mutant peptide ranking for personalized cancer vaccines"
+readme = { file = "README.md", content-type = "text/markdown" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [
+  { name = "Alex Rubinsteyn", email = "alex@openvax.org" },
+  { name = "Julia Kodysh", email = "julia@openvax.org" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+[project.optional-dependencies]
+hitlist = [
+  "hitlist>=1.65.1,<3",
+  # vaxrank.cta_input reads a Hitlist evidence bundle's .parquet artifacts
+  # through pandas, which needs an Arrow engine. Declared here rather than
+  # relied on through Hitlist's own requirements.
+  "pyarrow",
+]
+# Compatibility spelling: common CTA dependencies are now core.
+cta = []
+
+[project.scripts]
+vaxrank = "vaxrank.cli.entry_point:main"
+vaxrank-mutation-figure = "vaxrank.cli.mutation_visualization:main"
+vaxrank-evidence-figure = "vaxrank.cli.evidence_visualization:main"
+vaxrank-complex-result-figure = "vaxrank.cli.complex_variant_visualization:main"
+vaxrank-window-exposure = "vaxrank.cli.window_exposure:main"
+vaxrank-test-data = "vaxrank.testdata.download:main"
+
+[project.urls]
+Homepage = "https://github.com/openvax/vaxrank"
+Documentation = "https://openvax.github.io/vaxrank/"
+Source = "https://github.com/openvax/vaxrank"
+Issues = "https://github.com/openvax/vaxrank/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "vaxrank.version.__version__" }
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools]
+# pyproject metadata turns include-package-data on by default, which would ship
+# everything MANIFEST.in names (examples/, notes/) inside the wheel. setup.py
+# left it off: the wheel carries only the globs declared below, while the sdist
+# still follows MANIFEST.in.
+include-package-data = false
+
+[tool.setuptools.packages.find]
+# setup.py used find_packages(exclude=["tests", "tests.*"]), which only matched
+# directories holding an __init__.py. Discovery under pyproject defaults to
+# namespace packages, which would additionally claim examples/ and notes/, so
+# name the distributed package tree instead.
+include = ["vaxrank*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+vaxrank = ["templates/*", "data/*", "logging.conf", "config/*.yaml"]
+"vaxrank.testdata" = ["sid-recipe/**/*"]

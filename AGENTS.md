@@ -54,7 +54,7 @@ git tag "v${VERSION}" && git push --tags
 - `vaxrank/` — library + CLI (`vaxrank.cli.entry_point:main`)
 - `vaxrank/templates/`, `vaxrank/data/` — Jinja report templates, static data
 - `tests/` — pytest suite
-- `setup.py` + `requirements.txt` — packaging (no `pyproject.toml` yet)
+- `pyproject.toml` + `requirements.txt` — packaging (PEP 621 metadata; `requirements.txt` stays the dependency list)
 - `vaxrank/version.py` — single source of truth for version
 
 ## Code Style
