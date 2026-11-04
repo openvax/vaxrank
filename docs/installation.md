@@ -11,12 +11,7 @@ Vaxrank requires Python 3.11 or newer.
 The ordinary installation supports OncoRef 1.23.1 through 1.27.0 (installs resolve to 1.24.0 while PirlyGenes, which Topiary requires, caps it; pirl-unc/pirlygenes#665) and requires
 ORFdata 0.42.6 or newer,
 which support the [common RNA restriction policy](antigen-inputs.md#common-rna-restriction-policy-experimental).
-The older `vaxrank[cta]` spelling remains a compatible alias:
-
-```sh
-pip install 'vaxrank[cta]'
-pip check
-```
+CTA dependencies are included in the ordinary installation; no extra is required.
 
 Common CTA evidence and patient-background comparisons use one environment with
 Topiary 5.108.4 or newer. PirlyGenes also constrains the supported OncoRef range,
@@ -24,7 +19,7 @@ so resolve
 related upgrades together:
 
 ```sh
-pip install --upgrade 'vaxrank[cta]' topiary pirlygenes oncoref
+pip install --upgrade vaxrank topiary pirlygenes oncoref
 pip check
 ```
 
