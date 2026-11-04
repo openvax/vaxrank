@@ -19,15 +19,17 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_distributions_include_sid_recipe_and_only_pinned_canine_reads(tmp_path):
     # Call the PEP 517 backend named by pyproject.toml directly: it needs no
     # `build` package in the test environment and no isolated-environment
-    # network access.
-    result = subprocess.run([
-        sys.executable, "-c",
-        "import sys\n"
-        "from setuptools import build_meta\n"
-        "build_meta.build_sdist(sys.argv[1])\n"
-        "build_meta.build_wheel(sys.argv[1])\n",
-        str(tmp_path)], cwd=ROOT, capture_output=True, text=True)
-    assert result.returncode == 0, result.stdout + result.stderr
+    # network access. One hook per interpreter, as a PEP 517 front end does:
+    # setuptools leaves distutils command state behind, so a build_wheel call
+    # after build_sdist in the same process ignores its output directory.
+    for hook in ("build_sdist", "build_wheel"):
+        result = subprocess.run([
+            sys.executable, "-c",
+            "import sys\n"
+            "from setuptools import build_meta\n"
+            "getattr(build_meta, sys.argv[1])(sys.argv[2])\n",
+            hook, str(tmp_path)], cwd=ROOT, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
     sdist_path, = tmp_path.glob("vaxrank-*.tar.gz")
     wheel_path, = tmp_path.glob("vaxrank-*.whl")
     with tarfile.open(sdist_path, "r:gz") as source:
