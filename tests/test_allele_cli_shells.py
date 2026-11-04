@@ -12,7 +12,7 @@ import pytest
 
 
 @pytest.mark.parametrize('shell', ['bash', 'zsh'])
-@pytest.mark.parametrize('separator', [',', ' '])
+@pytest.mark.parametrize('separator', [None, ',', ' '])
 def test_quoted_allele_lists_in_shells(shell, separator, tmp_path):
     executable = shutil.which(shell)
     if executable is None:
@@ -28,9 +28,10 @@ def test_quoted_allele_lists_in_shells(shell, separator, tmp_path):
         'print(json.dumps(mhc_alleles_from_args(args)))'
     )
     alleles = ['HLA-A*02:01', 'HLA-B*07:02']
+    values = alleles if separator is None else [separator.join(alleles)]
     command = shlex.join([
         sys.executable, '-c', code, '--vcf', 'tumor.vcf', '--bam', 'tumor.bam',
-        '--mhc-predictor', 'random', '--mhc-alleles', separator.join(alleles),
+        '--mhc-predictor', 'random', '--mhc-alleles', *values,
         '--output-csv', 'output.csv',
     ])
     env = os.environ.copy()

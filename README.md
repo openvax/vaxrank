@@ -56,13 +56,15 @@ For a real VCF + RNA run, supply:
 
 - `--vcf`: somatic variants, from any variant caller
 - `--bam`: tumor RNA-seq alignments, used by Isovar to assemble mutant transcripts
-- `--mhc-alleles`: the patient's MHC alleles, as one quoted comma- or space-separated list
+- `--mhc-alleles`: the patient's MHC alleles, as separate quoted arguments or a
+  quoted comma- or space-separated list
 - `--mhc-predictor`: which binding predictor to run
   ([available predictors](docs/mhc-predictors.md))
 
-Both allele-list forms work:
+These allele-list forms work:
 
 ```sh
+--mhc-alleles 'HLA-A*02:01' 'HLA-B*07:02'
 --mhc-alleles 'HLA-A*02:01,HLA-B*07:02'
 --mhc-alleles 'HLA-A*02:01 HLA-B*07:02'
 ```
