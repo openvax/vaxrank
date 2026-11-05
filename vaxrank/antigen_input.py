@@ -230,7 +230,7 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     """Shared native-protein prediction for source-specific admission adapters.
 
     ``annotate`` may add source evidence columns to the prediction frame before
-    shared adaptation. It must not change sequence coordinates or measurements.
+    scoring. It must not change sequence coordinates or measurements.
     Distinct source names and repeated native occurrences remain distinct.
     """
     from .patient_background import load_patient_backgrounds, attach_antigen_backgrounds
@@ -282,9 +282,12 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     }.items():
         frame[column] = values
     frame['sample_name'] = provenance.scope.sample_id
+    # Establish native occurrences before adding evidence that can differ by
+    # allele. Generic source grouping treats such annotations as distinct
+    # observations, while these rows describe one known protein occurrence.
+    adapted = EpitopeDataset.from_topiary(TopiaryResult(frame), label=provenance.input_id)
     if annotate is not None:
         annotate(frame)
-    adapted = EpitopeDataset.from_topiary(TopiaryResult(frame), label=provenance.input_id)
 
     def occurrence_id(name, peptide, offset):
         return provenance.input_id + ':' + hashlib.sha256(

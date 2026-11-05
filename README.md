@@ -70,9 +70,21 @@ For a real VCF + RNA run, supply:
 
 - `--vcf`: somatic variants, from any variant caller
 - `--bam`: tumor RNA-seq alignments, used by Isovar to assemble mutant transcripts
-- `--mhc-alleles`: the patient's MHC alleles, e.g. `HLA-A*02:01,HLA-B*07:02`
+- `--mhc-alleles`: the patient's MHC alleles, as separate quoted arguments or a
+  quoted comma- or space-separated list
 - `--mhc-predictor`: which binding predictor to run
   ([available predictors](https://openvax.github.io/vaxrank/mhc-predictors/))
+
+These allele-list forms work:
+
+```sh
+--mhc-alleles 'HLA-A*02:01' 'HLA-B*07:02'
+--mhc-alleles 'HLA-A*02:01,HLA-B*07:02'
+--mhc-alleles 'HLA-A*02:01 HLA-B*07:02'
+```
+
+Keep the quotes: an unquoted `*` can expand to filenames, or cause zsh to
+reject the command before Vaxrank starts.
 
 To emit vaccine constructs, add `--output-dir` (both modalities by default).
 Use `--vaccine-type peptide` or `--vaccine-type mrna` to select one modality.
@@ -133,7 +145,7 @@ experimental [antigen](https://openvax.github.io/vaxrank/antigen-inputs/),
 ```sh
 git clone https://github.com/openvax/vaxrank.git && cd vaxrank
 python -m venv venv && source venv/bin/activate
-pip install -e ".[hitlist]" pytest pytest-cov ruff
+pip install -e "." pytest pytest-cov ruff
 ./lint.sh
 ./test.sh
 ```

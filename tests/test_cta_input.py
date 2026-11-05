@@ -135,6 +135,7 @@ def test_expression_only_cli_outputs_and_offline_replay(tmp_path, monkeypatch, c
     import vaxrank.cta_input
     monkeypatch.setattr(vaxrank.cta_input, 'admit_cta_expression', forbidden)
     monkeypatch.setattr(vaxrank.cta_input, 'load_hitlist_bundle', forbidden)
+    monkeypatch.setattr(vaxrank.cta_input, 'capture_local_hitlist_evidence', forbidden)
     run_cli(['--input-epitopes', str(native), '--output-dir', str(tmp_path / 'replay'),
              '--vaccine-type', 'peptide', 'mrna', '--no-processing-aware-annotation'])
     for file in first.rglob('*.fasta'):
@@ -335,7 +336,7 @@ def test_ms_restriction_categories_and_rejected_observations_are_distinct():
 def test_hitlist_bundle_contract_capture_and_mismatch(tmp_path, monkeypatch, genome):
     import hashlib
     from importlib.metadata import version
-    evidence_bundle = pytest.importorskip('hitlist.evidence_bundle')
+    from hitlist import evidence_bundle
     from vaxrank.cta_input import load_hitlist_bundle
     from .test_cta_expression import run
     admission = run(tmp_path, genome, [(PRAME, 3)])
@@ -375,7 +376,9 @@ def test_real_verified_hitlist_bundle_cli_and_portable_replay(tmp_path, monkeypa
     """Exercise the public verifier on a real producer-exported synthetic bundle."""
     import base64
     import hashlib
-    evidence_bundle = pytest.importorskip('hitlist.evidence_bundle')
+    from hitlist import evidence_bundle
+    # An explicit bundle wins even if local data are unavailable or broken.
+    monkeypatch.setattr('vaxrank.cta_input.capture_local_hitlist_evidence', forbidden)
     fixture = Path(__file__).parent / 'data' / 'cta_hitlist_bundle'
     bundle = tmp_path / 'moved-evidence'
     shutil.copytree(fixture, bundle)
@@ -442,7 +445,8 @@ def test_pooled_cta_admission_and_hitlist_evidence_survive_native_replay(tmp_pat
         report.dataset.selection['hitlist_evidence_bundle'] = {'synthetic_retained_bundle': sample}
         identity = report.input_provenance.input_id
         evidence[identity] = {key: report.dataset.selection[key]
-                             for key in ('cta_expression_admission', 'hitlist_evidence_bundle')}
+                             for key in ('cta_expression_admission', 'hitlist_evidence_bundle',
+                                         'hitlist_local_evidence')}
         sources.append(report)
     _, frame, _ = prepare_reports([], prepared_reports=sources)
     pooled = frame.attrs['epitope_dataset']
