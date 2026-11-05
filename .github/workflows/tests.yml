@@ -87,7 +87,7 @@ jobs:
           # Exercise the optional portable Hitlist evidence consumer on every
           # supported Python, alongside the common CTA policy. Resolve together:
           # an earlier base-only install can leave an orphaned PirlyGenes pin.
-          bash scripts/pip_install.sh '.[hitlist,cta]' 'topiary[weirdo]>=5.95.0,<6'
+          bash scripts/pip_install.sh '.[hitlist]' 'topiary[weirdo]>=5.95.0,<6'
           python -m pip check
           python -c "from vaxrank.cta_reference_adapter import require_common_cta_data; require_common_cta_data()"
       - name: Check package and CLI startup
