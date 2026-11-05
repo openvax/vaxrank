@@ -35,9 +35,6 @@ hitlist = [
   # relied on through Hitlist's own requirements.
   "pyarrow",
 ]
-# Compatibility spelling: common CTA dependencies are now core.
-cta = []
-
 [project.scripts]
 vaxrank = "vaxrank.cli.entry_point:main"
 vaxrank-mutation-figure = "vaxrank.cli.mutation_visualization:main"
