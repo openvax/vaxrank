@@ -24,8 +24,8 @@ varcode>=11.1.0,<12.0.0
 isovar>=1.78.0,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.64.4,<4.0.0
-# 4.7.0 accepts separate --mhc-alleles arguments through the shared parser.
-mhctools>=4.7.0,<5.0.0
+# 4.7.2 accepts separate --mhc-alleles arguments through the shared parser.
+mhctools>=4.7.2,<5.0.0
 # 5.82.0 is the first release compatible with Osteosarc 0.14. It includes
 # context-correct cached scans, presentation metrics and conflict checks in
 # the DSL used for scoring. Keep these floors aligned when Osteosarc moves.
