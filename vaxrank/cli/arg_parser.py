@@ -1127,7 +1127,7 @@ def add_external_rescoring_args(arg_parser):
     cta.add_argument('--cta-allow-gene', action='append',
                      help='Exact target exclusion exception; repeat to replace the default MAGEA4.')
     cta.add_argument('--hitlist-evidence-bundle', metavar='DIRECTORY',
-                     help='Verified portable Hitlist CTA-expression evidence bundle for this input.')
+                     help='Verified portable Hitlist CTA-expression evidence bundle; overrides automatic local MS evidence.')
     cta.add_argument('--output-cta-admission', metavar='JSON',
                      help='Save admission decisions for one CTA input. With multiple CTA inputs, --output-dir writes separate files.')
     arg_parser.add_argument("--input-epitopes", default=None, metavar="FILE",

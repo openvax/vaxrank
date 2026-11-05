@@ -27,14 +27,6 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 
-[project.optional-dependencies]
-hitlist = [
-  "hitlist>=1.65.1,<3",
-  # vaxrank.cta_input reads a Hitlist evidence bundle's .parquet artifacts
-  # through pandas, which needs an Arrow engine. Declared here rather than
-  # relied on through Hitlist's own requirements.
-  "pyarrow",
-]
 [project.scripts]
 vaxrank = "vaxrank.cli.entry_point:main"
 vaxrank-mutation-figure = "vaxrank.cli.mutation_visualization:main"

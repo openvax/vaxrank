@@ -9,6 +9,12 @@ pip install vaxrank
 
 Vaxrank requires Python 3.11 or newer.
 
+Hitlist is included in the ordinary installation. Its evidence datasets are
+installed separately. CTA expression inputs automatically use a current local
+MS index when available; missing data leave the evidence unknown and never
+trigger a download. See [Hitlist evidence](design/expression-cta-inputs.md#hitlist-evidence)
+for data setup, explicit bundles and saved-run replay.
+
 ## Common CTA evidence
 
 The ordinary installation supports OncoRef 1.23.1 through 1.27.0 (installs resolve to 1.24.0 while PirlyGenes, which Topiary requires, caps it; pirl-unc/pirlygenes#665) and requires
