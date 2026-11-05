@@ -39,6 +39,14 @@ def platform_cache_home(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def isolate_hitlist_data(tmp_path, monkeypatch):
+    """Automatic evidence lookup must never read the developer's installed data."""
+    path = tmp_path / 'hitlist-data'
+    monkeypatch.setenv('HITLIST_DATA_DIR', str(path))
+    return path
+
+
+@pytest.fixture(autouse=True)
 def isolate_shared_read_cache(request, monkeypatch):
     """Tests declare their cache environment unless they use the real bundle."""
     if request.node.get_closest_marker("shared_read_cache") is None:

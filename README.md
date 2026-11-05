@@ -137,7 +137,7 @@ Experimental workflows: [unified antigen inputs](docs/antigen-inputs.md),
 ```sh
 git clone https://github.com/openvax/vaxrank.git && cd vaxrank
 python -m venv venv && source venv/bin/activate
-pip install -e ".[hitlist]" pytest pytest-cov ruff
+pip install -e "." pytest pytest-cov ruff
 ./lint.sh
 ./test.sh
 ```

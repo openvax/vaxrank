@@ -868,7 +868,8 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             continue
         selection = report.dataset.selection
         retained = dict(selection.get('source_evidence', {}))
-        evidence = {key: selection[key] for key in ('cta_expression_admission', 'hitlist_evidence_bundle')
+        evidence = {key: selection[key] for key in ('cta_expression_admission', 'hitlist_evidence_bundle',
+                                                  'hitlist_local_evidence')
                     if key in selection}
         if evidence:
             provenance = report.dataset.provenance

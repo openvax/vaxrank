@@ -21,6 +21,7 @@ from .input_scope import (
 )
 from .native_serialization import to_native_json
 from .reference_proteome import self_reference_matches
+from .hitlist_evidence import capture_local_hitlist_evidence
 
 
 def validate_cta_args(args):
@@ -189,14 +190,8 @@ class CTAExpressionSource:
 
 def load_hitlist_bundle(path, admission):
     """Capture the verified public contract, retaining rejected evidence too."""
-    try:
-        from importlib.metadata import version
-        from packaging.version import Version
-        from hitlist.evidence_bundle import verify_evidence_bundle
-    except ImportError as error:
-        raise ValueError('Hitlist evidence requires pip install "vaxrank[hitlist]" (Hitlist >=1.65.1)') from error
-    if Version(version('hitlist')) < Version('1.65.1'):
-        raise ValueError('Hitlist CTA evidence requires Hitlist >=1.65.1')
+    from importlib.metadata import version
+    from hitlist.evidence_bundle import verify_evidence_bundle
     directory = Path(path)
     manifest = verify_evidence_bundle(directory)
     if manifest['kind'] != 'cta_expression':
@@ -232,7 +227,7 @@ def load_hitlist_bundle(path, admission):
     return dict(manifest=manifest, artifacts=artifacts, files_base64=files)
 
 
-def hitlist_annotations(sequences, bundle, alleles=None):
+def hitlist_annotations(sequences, bundle, alleles=None, *, local_evidence=None):
     """Exact public observations; an unqueried sequence has unknown support."""
     columns = ('hitlist_ms_observations', 'hitlist_cta_specific', 'hitlist_avoid_sequence',
                'hitlist_tissue_review_required', 'hitlist_essential_tissue_donors')
@@ -240,23 +235,39 @@ def hitlist_annotations(sequences, bundle, alleles=None):
                  if bundle else {})
     source_fields = ('n_ms_observations', 'cta_specific', 'avoid_sequence',
                      'tissue_review_required', 'n_essential_tissue_donors')
-    from mhcgnomes import ParseError
+    from mhcgnomes import ParseError, parse
     from .allele_validation import parse_prediction_allele
     observations = {}
     if bundle:
         for row in bundle['artifacts'].get('presentation.parquet', {}).get('rows', []):
             observations.setdefault(row['peptide'], []).append(row)
+    local_observations = {}
+    queried_peptides, queried_species, species_by_allele = set(), set(), {}
+    if local_evidence and local_evidence['status'] == 'captured':
+        queried_peptides = set(local_evidence['query']['peptides'])
+        queried_species = set(local_evidence['query']['mhc_species'])
+        for species, table in local_evidence['species_observations'].items():
+            for record in table['rows']:
+                local_observations.setdefault((species, record['peptide']), []).append(record)
     rows = []
     for sequence, allele in zip(sequences, alleles if alleles is not None else [''] * len(sequences)):
         allele = parse_prediction_allele(allele) if allele else ''
         summary = summaries.get(sequence)
+        measured = observations.get(sequence, ())
+        if not bundle and local_evidence and local_evidence['status'] == 'captured' and allele:
+            if allele not in species_by_allele:
+                species_by_allele[allele] = parse(allele, infer_class2_pairing=False).species.name
+            species = species_by_allele[allele]
+            if sequence in queried_peptides and species in queried_species:
+                measured = local_observations.get((species, sequence), ())
+                summary = dict(n_ms_observations=len(measured))
         row = dict(zip(columns, (summary.get(k) if summary is not None else None
                                  for k in source_fields)))
         row['hitlist_query_status'] = 'captured' if summary is not None else 'unqueried'
         counts = dict(hitlist_ms_monoallelic=0, hitlist_ms_experimental_restriction=0,
                       hitlist_ms_predicted_restriction=0, hitlist_ms_donor_hla_candidate=0,
                       hitlist_ms_coarse_or_untyped=0, hitlist_ms_unknown_restriction_evidence=0)
-        for observation in observations.get(sequence, ()):
+        for observation in measured:
             try:
                 restriction = parse_prediction_allele(observation.get('mhc_restriction', ''))
             except (ParseError, TypeError, ValueError):
@@ -273,7 +284,9 @@ def hitlist_annotations(sequences, bundle, alleles=None):
             if observation.get('mhc_allele_provenance') in {'sample_allele_match', 'sample_locus_match'}:
                 candidates = observation.get('mhc_allele_set') or []
                 if isinstance(candidates, str):
-                    candidates = json.loads(candidates)
+                    # Portable bundles encode a JSON list; the local index uses
+                    # Hitlist's semicolon-delimited candidate set.
+                    candidates = json.loads(candidates) if bundle else candidates.split(';')
                 counts['hitlist_ms_donor_hla_candidate'] += int(allele in candidates)
         row.update({k: v if summary is not None else None for k, v in counts.items()})
         rows.append(row)
@@ -331,8 +344,10 @@ def predict_cta_source(source, predictor, *, genome, epitope_config=None, host_r
     contract = admission.input_contract
     antigens = {a.source_identifier: a for a in admission.admitted_antigens}
     decisions = {d.assessment.antigen.source_identifier: d for d in admission.decisions if d.status == 'admitted'}
+    local_evidence = None
 
     def annotate(frame):
+        nonlocal local_evidence
         frame['canonical_gene_id'] = [decisions[n].gene_identity['canonical_gene_id']
                                       for n in frame.source_sequence_name]
         frame['transcript_id'] = [decisions[n].transcript_id for n in frame.source_sequence_name]
@@ -342,7 +357,10 @@ def predict_cta_source(source, predictor, *, genome, epitope_config=None, host_r
         if contract.expression_unit == 'TPM':
             frame['cta_' + contract.measurement_level + '_tpm'] = frame.cta_expression_value
         frame['source_class'] = 'self'
-        annotations = hitlist_annotations(frame.peptide, bundle, frame.allele)
+        if bundle is None:
+            local_evidence = capture_local_hitlist_evidence(frame.peptide, frame.allele)
+        annotations = hitlist_annotations(frame.peptide, bundle, frame.allele,
+                                         local_evidence=local_evidence)
         for name in annotations:
             frame[name] = annotations[name]
 
@@ -358,7 +376,8 @@ def predict_cta_source(source, predictor, *, genome, epitope_config=None, host_r
         dataset.selection['antigen_inputs'] = {provenance.input_id: {}}
     # CTA proteins are encoded by the host; the antigen-aware self match
     # separately retains matches outside the declared CTA source exclusions.
-    dataset.epitopes = tuple(replace(e, occurs_in_reference=True) for e in dataset.epitopes)
+    dataset.epitopes = tuple(replace(e, occurs_in_reference=True, source_class='self')
+                             for e in dataset.epitopes)
     dataset.result.df['occurs_in_reference'] = True
     dataset.selection['antigen_inputs'][provenance.input_id].update({
         d.assessment.antigen.source_identifier: asdict(d.assessment.antigen)
@@ -366,6 +385,8 @@ def predict_cta_source(source, predictor, *, genome, epitope_config=None, host_r
     dataset.selection['cta_expression_admission'] = to_native_json(admission)
     if bundle is not None:
         dataset.selection['hitlist_evidence_bundle'] = bundle
+    if local_evidence is not None:
+        dataset.selection['hitlist_local_evidence'] = local_evidence
     report_frame = dataset.report_frame()
     report_frame.attrs['cta_predictor'] = predictor
     return ExternalReport('cta_expression', provenance.path,

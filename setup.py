@@ -65,9 +65,6 @@ if __name__ == "__main__":
         ],
         python_requires=">=3.11",
         install_requires=requirements,
-        extras_require={
-            'hitlist': ['hitlist>=1.65.1,<3'],
-        },
         long_description=readme_markdown,
         long_description_content_type="text/markdown",
         packages=find_packages(exclude=["tests", "tests.*"]),
