@@ -27,7 +27,7 @@ def test_common_host_builder_rejects_old_owner_before_source_access(monkeypatch)
     def forbidden(*args, **kwargs):
         raise AssertionError('Unsupported common policy accessed source data')
     monkeypatch.setattr(oncoref, 'for_species', forbidden)
-    with pytest.raises(ValueError, match=r"requires OncoRef >=1.23.1; install 'vaxrank\[cta\]'"):
+    with pytest.raises(ValueError, match=r"requires OncoRef >=1\.23\.1; upgrade vaxrank"):
         build_cta_host_reference('human')
 
 
