@@ -332,3 +332,24 @@ def test_global_antigen_cli_and_source_evidence_replay(
     assert again.antigens == saved.antigens
     assert again.selection['source_evidence'] == saved.selection['source_evidence']
     assert [e.per_allele_scores for e in again.epitopes] == [e.per_allele_scores for e in saved.epitopes]
+
+
+def test_collector_can_query_after_allele_free_rows(installed_data):
+    from vaxrank.hitlist_evidence import LocalHitlistLookup
+    lookup = LocalHitlistLookup()
+    unknown = pd.DataFrame({'peptide': [SEQUENCE[:9]], 'allele': ['']})
+    measured = pd.DataFrame({'peptide': [SEQUENCE[:9]], 'allele': [ALLELES[0]]})
+    lookup(unknown)
+    lookup(measured)
+    assert [q['status'] for q in lookup.queries] == ['no_candidates', 'captured']
+    assert unknown.hitlist_ms_observations.isna().all()
+    assert measured.hitlist_ms_observations.tolist() == [2]
+
+
+def test_collector_rejects_index_change_between_queries(installed_data):
+    from vaxrank.hitlist_evidence import LocalHitlistLookup
+    lookup = LocalHitlistLookup()
+    lookup(pd.DataFrame({'peptide': [SEQUENCE[:9]], 'allele': [ALLELES[0]]}))
+    (installed_data / 'observations_meta.json').write_text('{"fixture": "changed index"}')
+    with pytest.raises(ValueError, match='changed between queries'):
+        lookup(pd.DataFrame({'peptide': ['VVVVVVVVV'], 'allele': [ALLELES[0]]}))

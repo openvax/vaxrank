@@ -882,7 +882,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
         if report.dataset is None:
             continue
         selection = report.dataset.selection
-        retained = dict(selection.get('source_evidence', {}))
+        retained = {key: dict(value) for key, value in selection.get('source_evidence', {}).items()}
         evidence = {key: selection[key] for key in ('cta_expression_admission', 'hitlist_evidence_bundle',
                                                   'hitlist_local_evidence', 'hitlist_local_queries')
                     if key in selection}

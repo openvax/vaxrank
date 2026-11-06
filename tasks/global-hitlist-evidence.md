@@ -22,14 +22,23 @@ cover constant scores, allele-free evidence, partial genotype and native replay.
 
 ## Plan
 
-- [ ] Extract reusable annotation helpers without changing CTA defaults.
-- [ ] Wire shared scoring and direct prediction, CLI/API, native source evidence.
-- [ ] Cover exact scope, missing data, opt-in/defaults, allele attribution,
+- [x] Extract reusable annotation helpers without changing CTA defaults.
+- [x] Wire shared scoring and direct prediction, CLI/API, native source evidence.
+- [x] Cover exact scope, missing data, opt-in/defaults, allele attribution,
       occurrence identity, pooled sources, and offline replay with tests.
-- [ ] Document CLI/API behavior; bump the version for the PR.
+- [x] Document CLI/API behavior; bump the version for the PR.
 - [ ] Run lint, full tests, and equivalent CLI smoke; create PR and verify CI.
 - [ ] Follow repository merge/release requirements, accounting for queued releases.
 
 ## Review
 
-Pending implementation and verification.
+PR #809 includes the existing mhctools 4.9 mouse-allele test fix from
+`fix/mhctools-49-mouse-allele-test`, with user-approved release version 3.51.2.
+This preserves the queued docs 3.51.3 and packaging 3.51.4 sequence.
+
+Lint and pip check passed. Strict docs build passed using the CI README-to-index
+preparation. B16 direct smoke and native replay passed (9 candidates, 2 retained
+queries); replay explicitly forbade Hitlist lookup and preserved per-allele scores.
+New Hitlist cases cover viral/mutation antigens, all legacy prediction modes,
+partial native annotation, default opt-in behavior, and unavailable replay.
+Final full suite and GitHub CI are pending.

@@ -151,9 +151,10 @@ class LocalHitlistLookup:
             return
         rows = frame.loc[missing].copy()
         evidence = capture_local_hitlist_evidence(rows.peptide, rows.allele.fillna(''))
-        if self.queries:
+        previous = next((q for q in self.queries if q['status'] != 'no_candidates'), None)
+        if previous is not None and evidence['status'] != 'no_candidates':
             identity = ('status', 'hitlist_version', 'data_directory', 'index_metadata_sha256')
-            if any(evidence.get(key) != self.queries[0].get(key) for key in identity):
+            if any(evidence.get(key) != previous.get(key) for key in identity):
                 raise ValueError('Hitlist data changed between queries; retry with a stable dataset')
         annotate_hitlist_frame(rows, evidence)
         for name in rows:
@@ -197,17 +198,23 @@ def annotate_hitlist_reports(reports):
         dataset = report.dataset
         frame = (dataset.result.long_df if dataset is not None
                  else report.report_df.attrs['topiary_df']).copy()
-        sources = pd.Series(report.input_provenance.input_id, index=frame.index)
+        scoring = dataset.scoring_frame() if dataset is not None else frame.copy()
+        sources = pd.Series(report.input_provenance.input_id, index=scoring.index)
         if dataset is not None:
             by_candidate = {e.prediction_group_source: e.input_provenance.input_id
                             for e in report.epitopes if e.input_provenance is not None}
-            sources = dataset.scoring_frame().prediction_id.map(by_candidate).fillna(sources)
-        captured = annotate_hitlist_sources(frame, sources)
+            sources = scoring.prediction_id.map(by_candidate).fillna(sources)
+        # Generalized observations retain their original restriction in the
+        # raw table; lookup facets use the candidate allele used by the scorer.
+        captured = annotate_hitlist_sources(scoring, sources)
         if not captured:
             updated.append(report)
             continue
         for identity, queries in captured.items():
             evidence.setdefault(identity, {'hitlist_local_queries': []})['hitlist_local_queries'].extend(queries)
+        for name in scoring:
+            if name.startswith('hitlist_'):
+                frame[name] = scoring[name].to_numpy()
         if dataset is not None:
             dataset = replace(dataset, result=TopiaryResult(frame, metadata=dataset.result.metadata))
             display = dataset.report_frame()

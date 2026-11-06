@@ -1248,7 +1248,7 @@ def test_explicit_filter_cannot_restore_rejected_genotype_groups(score_expr):
     frame = epitopes_to_topiary_df(candidates)
     frame['eligible'] = frame.allele.map({allele_a: 1, allele_b: 0})
     scored = attach_per_allele_scores(candidates,
-        EpitopeConfig(filter_expr='eligible > 0 and affinity.value < 500',
+        EpitopeConfig(filter_expr='(eligible > 0) & (affinity.value < 500)',
                       score_expr=score_expr, min_epitope_score=0),
         topiary_df=frame)
     assert len(scored) == 1
