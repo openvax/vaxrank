@@ -14,26 +14,32 @@ theme:
 
 nav:
   - Home: index.md
-  - Installation: installation.md
-  - Input workflows: input-workflows.md
-  - Canine VCF and RNA: canine-vcf-workflow.md
-  - Vaccine designs: vaccine-designs.md
-  - Analysis outputs: outputs.md
-  - Configuration: configuration.md
-  - MHC binding predictors: mhc-predictors.md
-  - How Vaxrank works: how-it-works.md
-  - Varcode, Isovar & Vaxrank: library-responsibilities.md
-  - Isovar support: isovar-support.md
-  - Patient-background comparisons: patient-background-comparisons.md
-  - Published comparison policies: published-policies.md
-  - Named selection policies: selection-policies.md
-  - Moving native datasets: native-references.md
+  - Getting started:
+    - Installation: installation.md
+    - Input workflows: input-workflows.md
+  - Guides:
+    - Vaccine designs: vaccine-designs.md
+    - Analysis outputs: outputs.md
+    - Configuration: configuration.md
+    - MHC binding predictors: mhc-predictors.md
+    - Canine VCF and RNA: canine-vcf-workflow.md
+    - Moving native datasets: native-references.md
+  - Selection policies:
+    - Named selection policies: selection-policies.md
+    - Published comparison policies: published-policies.md
+    - Patient-background comparisons: patient-background-comparisons.md
+  - Experimental:
+    - Antigen inputs: antigen-inputs.md
+    - Isovar inputs: isovar-inputs.md
+    - CTA expression inputs: design/expression-cta-inputs.md
+    - Mixed antigens: mixed-antigen-design.md
+    - Window exposure: core-window-exposure.md
+  - How it works:
+    - How Vaxrank works: how-it-works.md
+    - Varcode, Isovar & Vaxrank: library-responsibilities.md
+    - Isovar support: isovar-support.md
+    - Evidence and provenance: unified_evidence.md
   - Development: development.md
-  - Experimental antigen inputs: antigen-inputs.md
-  - Experimental CTA expression inputs: design/expression-cta-inputs.md
-  - Experimental mixed antigens: mixed-antigen-design.md
-  - Experimental window exposure: core-window-exposure.md
-  - Evidence and provenance: unified_evidence.md
 
 markdown_extensions:
   - pymdownx.highlight:
