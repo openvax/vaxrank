@@ -9,6 +9,11 @@ datacache>=1.14.0,<2.0.0
 # 0.15.6 coordinates runtime and distribution versions for evidence provenance.
 osteosarc>=0.15.6,<0.16
 pandas>=3.0.0,<4.0.0
+# Hitlist's library is standard; its evidence datasets are installed separately.
+# 2.1.9 supplies the public read-only generation snapshot used by local queries.
+hitlist>=2.1.9,<3
+# Vaxrank directly reads captured Hitlist evidence with pandas.read_parquet.
+pyarrow
 # Metadata-only Transcript/Gene restore defers annotation DB access (#563).
 # 2.29.0 exposes resolved assembly identity apart from the cache/display label.
 pyensembl>=2.29.0,<3.0.0

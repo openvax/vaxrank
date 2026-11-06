@@ -52,10 +52,26 @@ queries. Changed products invalidate prior audits. See
 [junction optimization](../vaccine-designs.md#junction-linker-optimization) for
 separate junction-model settings.
 
-## Optional Hitlist evidence
+## Hitlist evidence
 
-Install `vaxrank[hitlist]` and supply `--hitlist-evidence-bundle DIRECTORY`,
-created by Hitlist's `export cta-evidence` command (>=1.65.1). Vaxrank verifies
+Hitlist is installed with Vaxrank; there is no `hitlist` installation extra.
+For CTA expression inputs, Vaxrank automatically queries exact peptides in the
+current local Hitlist MS index, scoped to each predicted allele's MHC species.
+It uses Hitlist's normal data directory, including `HITLIST_DATA_DIR` when set.
+Vaxrank does not download data or build indexes. Use `hitlist data dirs` and
+`hitlist data list` to inspect the installation; register source exports with
+`hitlist data register` and build them explicitly with `hitlist data build`.
+
+Missing, stale or unverifiable data leave MS evidence unknown. The saved dataset
+records this status in `selection["hitlist_local_evidence"]`. Successful queries
+retain their peptide/species scope, returned observations and index metadata,
+so native replay does not need the local installation. Pooled inputs retain
+these records separately under `selection["source_evidence"]`. Local MS records
+alone leave CTA-specificity and tissue-risk columns unknown.
+
+To supply the fuller CTA-expression evidence contract, use
+`--hitlist-evidence-bundle DIRECTORY`, created by Hitlist's `export cta-evidence`
+command. An explicit bundle takes precedence over local data. Vaxrank verifies
 artifact hashes, relationships, expression input, columns, units, measurement
 level, Ensembl release and OncoRef version. It retains the captured evidence
 without rebuilding indexes.
@@ -146,7 +162,8 @@ exclusions on replay. No genome cache migration or reindexing is required.
 
 ## Released prerequisites
 
-Core version requirements are installed with Vaxrank. Hitlist is optional.
+Core version requirements, including Hitlist, are installed with Vaxrank.
+Hitlist datasets are installed separately.
 CTA protein inference accepts `--prediction-cache` under the same contextual
 contract as native antigens and direct variants. Exact source neighbours,
 endpoint and the validated patient genotype must match; missing coverage uses
