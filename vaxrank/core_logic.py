@@ -49,6 +49,7 @@ def run_vaxrank(
     policy_evaluations=None,
     defer_window_selection=True,
     patient_background=None,
+    annotate=None,
 ):
     """
     Parameters
@@ -87,6 +88,10 @@ def run_vaxrank(
         ``epitope_config.comparison_reference='patient_background'`` and the same
         baseline policy. No source is inferred by sequence similarity. Missing
         contexts remain unavailable, including for DNA-only fallback fragments.
+
+    annotate
+        Optional callback enriching each prediction frame before epitope
+        filtering and scoring. The caller owns persistence of captured evidence.
 
     defer_window_selection
         When False, collect evidence and also return selected vaccine peptides.
@@ -127,6 +132,7 @@ def run_vaxrank(
         defer_window_selection=defer_window_selection,
         retained_protein_fragments=retained_protein_fragments,
         patient_background_contexts=comparison_contexts,
+        annotate=annotate,
     )
     ranked_list = ranked_vaccine_peptides(variant_to_vaccine_peptides_dict)
 
@@ -154,6 +160,7 @@ def create_vaccine_peptides_dict(
     defer_window_selection=True,
     retained_protein_fragments=None,
     patient_background_contexts=None,
+    annotate=None,
 ):
     """
     Parameters
@@ -210,6 +217,7 @@ def create_vaccine_peptides_dict(
             policy_evaluations=policy_evaluations,
             defer_window_selection=defer_window_selection,
             retained_protein_fragments=retained_protein_fragments,
+            **({"annotate": annotate} if annotate is not None else {}),
             **({'patient_background': patient_background_contexts.get(id(isovar_result))}
                if patient_background_contexts is not None else {}),
         )
@@ -239,6 +247,7 @@ def vaccine_peptides_for_variant(
     defer_window_selection=True,
     retained_protein_fragments=None,
     patient_background=None,
+    annotate=None,
 ):
     """
     Parameters
@@ -304,6 +313,7 @@ def vaccine_peptides_for_variant(
         protein_fragment=long_protein_fragment,
         epitope_config=epitope_config,
         genome=variant.ensembl,
+        **({"annotate": annotate} if annotate is not None else {}),
         **({"policy_evaluations": policy_evaluations} if policy_evaluations is not None else {}),
         **({'patient_background': patient_background} if patient_background is not None else {}),
     )

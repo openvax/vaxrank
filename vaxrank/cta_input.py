@@ -21,7 +21,7 @@ from .input_scope import (
 )
 from .native_serialization import to_native_json
 from .reference_proteome import self_reference_matches
-from .hitlist_evidence import capture_local_hitlist_evidence
+from .hitlist_evidence import capture_local_hitlist_evidence, hitlist_annotations
 
 
 def validate_cta_args(args):
@@ -225,72 +225,6 @@ def load_hitlist_bundle(path, admission):
     if manifest != verify_evidence_bundle(directory):
         raise ValueError('Hitlist evidence changed during capture')
     return dict(manifest=manifest, artifacts=artifacts, files_base64=files)
-
-
-def hitlist_annotations(sequences, bundle, alleles=None, *, local_evidence=None):
-    """Exact public observations; an unqueried sequence has unknown support."""
-    columns = ('hitlist_ms_observations', 'hitlist_cta_specific', 'hitlist_avoid_sequence',
-               'hitlist_tissue_review_required', 'hitlist_essential_tissue_donors')
-    summaries = ({row['peptide']: row for row in bundle['artifacts']['peptides.parquet']['rows']}
-                 if bundle else {})
-    source_fields = ('n_ms_observations', 'cta_specific', 'avoid_sequence',
-                     'tissue_review_required', 'n_essential_tissue_donors')
-    from mhcgnomes import ParseError, parse
-    from .allele_validation import parse_prediction_allele
-    observations = {}
-    if bundle:
-        for row in bundle['artifacts'].get('presentation.parquet', {}).get('rows', []):
-            observations.setdefault(row['peptide'], []).append(row)
-    local_observations = {}
-    queried_peptides, queried_species, species_by_allele = set(), set(), {}
-    if local_evidence and local_evidence['status'] == 'captured':
-        queried_peptides = set(local_evidence['query']['peptides'])
-        queried_species = set(local_evidence['query']['mhc_species'])
-        for species, table in local_evidence['species_observations'].items():
-            for record in table['rows']:
-                local_observations.setdefault((species, record['peptide']), []).append(record)
-    rows = []
-    for sequence, allele in zip(sequences, alleles if alleles is not None else [''] * len(sequences)):
-        allele = parse_prediction_allele(allele) if allele else ''
-        summary = summaries.get(sequence)
-        measured = observations.get(sequence, ())
-        if not bundle and local_evidence and local_evidence['status'] == 'captured' and allele:
-            if allele not in species_by_allele:
-                species_by_allele[allele] = parse(allele, infer_class2_pairing=False).species.name
-            species = species_by_allele[allele]
-            if sequence in queried_peptides and species in queried_species:
-                measured = local_observations.get((species, sequence), ())
-                summary = dict(n_ms_observations=len(measured))
-        row = dict(zip(columns, (summary.get(k) if summary is not None else None
-                                 for k in source_fields)))
-        row['hitlist_query_status'] = 'captured' if summary is not None else 'unqueried'
-        counts = dict(hitlist_ms_monoallelic=0, hitlist_ms_experimental_restriction=0,
-                      hitlist_ms_predicted_restriction=0, hitlist_ms_donor_hla_candidate=0,
-                      hitlist_ms_coarse_or_untyped=0, hitlist_ms_unknown_restriction_evidence=0)
-        for observation in measured:
-            try:
-                restriction = parse_prediction_allele(observation.get('mhc_restriction', ''))
-            except (ParseError, TypeError, ValueError):
-                restriction = None  # Coarse/untyped restriction remains in captured raw evidence.
-            evidence = observation.get('restriction_evidence')
-            counts['hitlist_ms_coarse_or_untyped'] += int(restriction is None)
-            counts['hitlist_ms_unknown_restriction_evidence'] += int(evidence not in {'monoallelic', 'experimental', 'predicted'})
-            if restriction == allele:
-                key = {'monoallelic': 'hitlist_ms_monoallelic',
-                       'experimental': 'hitlist_ms_experimental_restriction',
-                       'predicted': 'hitlist_ms_predicted_restriction'}.get(evidence)
-                if key:
-                    counts[key] += 1
-            if observation.get('mhc_allele_provenance') in {'sample_allele_match', 'sample_locus_match'}:
-                candidates = observation.get('mhc_allele_set') or []
-                if isinstance(candidates, str):
-                    # Portable bundles encode a JSON list; the local index uses
-                    # Hitlist's semicolon-delimited candidate set.
-                    candidates = json.loads(candidates) if bundle else candidates.split(';')
-                counts['hitlist_ms_donor_hla_candidate'] += int(allele in candidates)
-        row.update({k: v if summary is not None else None for k, v in counts.items()})
-        rows.append(row)
-    return pd.DataFrame(rows)
 
 
 def write_cta_admissions(args, sources):

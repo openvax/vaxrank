@@ -1801,6 +1801,10 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         ensure_parent_dir(args.output_isovar_csv)
         df.to_csv(args.output_isovar_csv, index=False)
 
+    from ..hitlist_evidence import LocalHitlistLookup
+    # Pooled direct inputs are enriched later by the shared scorer.
+    hitlist_lookup = (LocalHitlistLookup() if getattr(args, 'hitlist_local_evidence', False)
+                      and (epitope_dataset is None or capture_native) else None)
     prediction_config = epitope_config
     if epitope_dataset is not None and not capture_native:
         # Preserve every predicted occurrence for shared scoring against the
@@ -1824,6 +1828,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         **({'defer_window_selection': False} if capture_native else {}),
         **({'policy_evaluations': policy_evaluations} if epitope_config.selection_policy else {}),
         **({'patient_background': patient_background} if patient_background is not None else {}),
+        **({'annotate': hitlist_lookup} if hitlist_lookup is not None else {}),
     )
 
     from ..selection_policy import write_run_policy
@@ -1837,6 +1842,12 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
         from ..construct_replay import initialize_construct_replay, capture_direct_sources
         from ..epitope_dataset import EpitopeDataset
         epitope_dataset.result = EpitopeDataset.from_predictions(epitope_dataset.epitopes).result
+        if hitlist_lookup is not None:
+            hitlist_lookup.annotate_captured(epitope_dataset.result.df)
+            epitope_dataset.selection['hitlist_local_queries'] = hitlist_lookup.queries
+            evidence = epitope_dataset.selection.setdefault('source_evidence', {})
+            for provenance in epitope_dataset.provenance:
+                evidence.setdefault(provenance.input_id, {})['hitlist_local_queries'] = hitlist_lookup.queries
         capture_direct_sources(epitope_dataset, vaxrank_results)
         epitope_dataset.policy_evaluations = policy_evaluations
         if run_policy is not None:

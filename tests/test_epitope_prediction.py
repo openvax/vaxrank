@@ -51,8 +51,12 @@ def test_reference_peptide_logic(mouse_genome):
         supporting_reference_transcripts=[wdr13_transcript])
 
     epitope_config = EpitopeConfig(min_epitope_score=0)
+    mhc_predictor = RandomBindingPredictor(["H-2-Kb"])
+    # Predictions carry mhctools' spelling of the allele: H-2-Kb before
+    # mhctools 4.9, H2-K*b from 4.9 on.
+    (allele,) = mhc_predictor.alleles
     epitopes = predict_epitopes(
-        mhc_predictor=RandomBindingPredictor(["H-2-Kb"]),
+        mhc_predictor=mhc_predictor,
         protein_fragment=protein_fragment,
         epitope_config=epitope_config,
         genome=mouse_genome)
@@ -60,8 +64,8 @@ def test_reference_peptide_logic(mouse_genome):
     # Single-predictor test: one Prediction per (peptide, allele).
     by_key = _by_pep_allele(epitopes)
     # occurs in protein ENSMUSP00000033506
-    e_in_ref, p_in_ref = by_key[('NCDESLLAS', 'H-2-Kb')]
-    e_not_in_ref, p_not_in_ref = by_key[('LDVIVNCDE', 'H-2-Kb')]
+    e_in_ref, p_in_ref = by_key[('NCDESLLAS', allele)]
+    e_not_in_ref, p_not_in_ref = by_key[('LDVIVNCDE', allele)]
     ok_(e_in_ref.occurs_in_reference)
     ok_(not e_not_in_ref.occurs_in_reference)
     assert e_in_ref.self_reference_match.occurs

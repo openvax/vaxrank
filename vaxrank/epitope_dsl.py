@@ -396,7 +396,7 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
     readers have no predictor and correctly leave it ``None``, in which
     case topiary resolves dependence from the rows.
     """
-    from topiary.ranking import EvalContext, apply_filter
+    from topiary.ranking import EvalContext, evaluate_filter
 
     df = (epitopes_to_topiary_df(epitopes)
           if topiary_df is None else topiary_df)
@@ -416,15 +416,18 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
             kind_support=kind_support, default_methods=resolved,
             default_versions=resolved_versions)
 
+    retained = None
     filter_node = build_filter_node(cfg)
     if filter_node is not None:
-        df = apply_filter(
-            df, filter_node,
+        filter_context = EvalContext(
+            df, filter_context=True,
             group_keys=group_columns,
             default_methods=resolved,
             default_versions=resolved_versions,
             alleles=alleles,
             kind_support=kind_support)
+        retained = evaluate_filter(df, filter_node, context=filter_context).retained
+        df = df.iloc[retained.to_numpy()[filter_context.row_group_codes()]].reset_index(drop=True)
         if df.empty:
             return pd.Series(dtype=float)
 
@@ -437,11 +440,12 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
         alleles=alleles,
         kind_support=kind_support,
     )
-    return (
-        score_node.eval(ctx)
-        .reindex(ctx.group_index)
-        .fillna(0.0)
-    )
+    scores = score_node.eval(ctx).reindex(ctx.group_index).fillna(0.0)
+    # Declared genotype expansion can recreate groups with no retained rows.
+    # Keep Topiary's decisions, including allele-free supporting evidence (#804).
+    if retained is not None:
+        scores = scores.loc[retained.reindex(scores.index, fill_value=False)]
+    return scores
 
 
 def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,

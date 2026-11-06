@@ -34,6 +34,7 @@ nav:
   - Experimental mixed antigens: mixed-antigen-design.md
   - Experimental window exposure: core-window-exposure.md
   - Evidence and provenance: unified_evidence.md
+  - Local Hitlist evidence: hitlist-evidence.md
 
 markdown_extensions:
   - pymdownx.highlight:

@@ -57,6 +57,8 @@ separate junction-model settings.
 Hitlist is installed with Vaxrank; there is no `hitlist` installation extra.
 For CTA expression inputs, Vaxrank automatically queries exact peptides in the
 current local Hitlist MS index, scoped to each predicted allele's MHC species.
+For other candidate inputs, opt in with `--hitlist-local-evidence` as described
+in [Global Hitlist lookup](../hitlist-evidence.md). Existing defaults are unchanged.
 It uses Hitlist's normal data directory, including `HITLIST_DATA_DIR` when set.
 Vaxrank does not download data or build indexes. Use `hitlist data dirs` and
 `hitlist data list` to inspect the installation; register source exports with
