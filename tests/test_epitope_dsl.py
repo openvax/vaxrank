@@ -1228,3 +1228,29 @@ def test_the_failing_setting_is_named_even_when_both_are_set(tmp_path):
 
     with pytest.raises(ValueError, match="epitopes.filter_expr"):
         read_lens_report(path, epitope_config=config)
+
+
+@pytest.mark.parametrize('score_expr', ['1.0', 'peptide_view(antigen_processing.score)'])
+def test_explicit_filter_cannot_restore_rejected_genotype_groups(score_expr):
+    """#804: keep filter decisions while retaining allele-free supporting rows."""
+    from vaxrank.epitope_dsl import attach_per_allele_scores
+    from mhctools.pred import Prediction
+    from vaxrank.candidate_epitope import CandidateEpitope
+    from vaxrank.epitope_dsl import epitopes_to_topiary_df
+    allele_a, allele_b, unmeasured = 'HLA-A*02:01', 'HLA-B*07:02', 'HLA-C*07:02'
+    predictions = [Prediction(peptide='SIINFEKLA', allele=allele,
+        kind='pMHC_affinity', value=20., predictor_name='model', score=0.9)
+        for allele in (allele_a, allele_b)]
+    predictions.append(Prediction(peptide='SIINFEKLA', allele='',
+        kind='antigen_processing', value=None, predictor_name='processing', score=0.7))
+    candidates = [CandidateEpitope(sequence='SIINFEKLA', offset=0, prediction_id='one',
+        patient_alleles=(allele_a, allele_b, unmeasured), predictions=tuple(predictions))]
+    frame = epitopes_to_topiary_df(candidates)
+    frame['eligible'] = frame.allele.map({allele_a: 1, allele_b: 0})
+    scored = attach_per_allele_scores(candidates,
+        EpitopeConfig(filter_expr='eligible > 0 and affinity.value < 500',
+                      score_expr=score_expr, min_epitope_score=0),
+        topiary_df=frame)
+    assert len(scored) == 1
+    assert scored[0].per_allele_scores == {allele_a: 1.0 if score_expr == '1.0' else 0.7}
+    assert scored[0].patient_alleles == (allele_a, allele_b, unmeasured)

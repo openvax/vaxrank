@@ -691,7 +691,8 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
                     alleles=(), input_predictions_path=None, scopes=None,
                     manifest_path=None, genome=None, model_factory=None,
                     prepared_reports=(), use_flanks=True, prediction_prefix=None,
-                    antigen_predictor_factory=None, antigen_alleles=(), host_reference=None):
+                    antigen_predictor_factory=None, antigen_alleles=(), host_reference=None,
+                    hitlist_local_evidence=False):
     """Read once and score with fresh common models or source input values."""
     from topiary import is_stated
     if mode not in ('input', 'fresh', 'additive'):
@@ -728,6 +729,16 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
         if model_factory is not None:
             models = model_factory()
         reports, additive_result = _add_predictions(reports, models, prediction_prefix, use_flanks)
+    hitlist_captures = {}
+    if hitlist_local_evidence and mode in ('input', 'additive'):
+        from .hitlist_evidence import annotate_hitlist_reports
+        reports, hitlist_captures = annotate_hitlist_reports(reports)
+        if additive_result is not None:
+            from topiary import TopiaryResult
+            enriched = [r.dataset.result.long_df if r.dataset is not None
+                        else r.report_df.attrs['topiary_df'] for r in reports]
+            additive_result = TopiaryResult(
+                pd.concat(enriched, ignore_index=True), metadata=additive_result.metadata)
     if mode in ('input', 'additive'):
         if models and mode == 'input':
             raise ValueError("Input-table prediction mode does not run fresh models")
@@ -769,6 +780,10 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             **{key: value for key, value in record.row.items() if key in biological},
         }) for report in reports for record in report.records]
         scoring = attach_source_annotations(fresh_frame, records)
+        if hitlist_local_evidence:
+            from .hitlist_evidence import annotate_hitlist_sources
+            hitlist_captures = {identity: {'hitlist_local_queries': queries}
+                for identity, queries in annotate_hitlist_sources(scoring, scoring.input_source).items()}
         scored = attach_per_allele_scores(epitopes, epitope_config, topiary_df=scoring,
                                           policy_evaluations=policy_evaluations)
     by_id = {e.prediction_group_key: e for e in original if not e.predictions_flat()}
@@ -869,7 +884,7 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
         selection = report.dataset.selection
         retained = dict(selection.get('source_evidence', {}))
         evidence = {key: selection[key] for key in ('cta_expression_admission', 'hitlist_evidence_bundle',
-                                                  'hitlist_local_evidence')
+                                                  'hitlist_local_evidence', 'hitlist_local_queries')
                     if key in selection}
         if evidence:
             provenance = report.dataset.provenance
@@ -879,6 +894,10 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             if identity in source_evidence and source_evidence[identity] != evidence:
                 raise ValueError('Conflicting retained source evidence for ' + identity)
             source_evidence[identity] = evidence
+    for identity, captured in hitlist_captures.items():
+        retained = source_evidence.setdefault(identity, {})
+        retained['hitlist_local_queries'] = [
+            *retained.get('hitlist_local_queries', ()), *captured['hitlist_local_queries']]
     if source_evidence:
         dataset.selection['source_evidence'] = source_evidence
     if mode in ('input', 'additive'):
@@ -1026,7 +1045,8 @@ def load_unified_external(args, epitope_config, options, genome):
         use_flanks=not getattr(args, 'external_peptide_only', False),
         prediction_prefix=getattr(args, 'external_prediction_prefix', None),
         manifest_path=getattr(args, 'input_manifest', None), genome=genome,
-        input_predictions_path=getattr(args, 'output_input_predictions', None))
+        input_predictions_path=getattr(args, 'output_input_predictions', None),
+        hitlist_local_evidence=getattr(args, 'hitlist_local_evidence', False))
     if cta and len(loaded_reports) == 1:
         frame.attrs['cta_predictor'] = loaded_reports[0].report_df.attrs['cta_predictor']
     epitope_config = frame.attrs['epitope_dataset'].config

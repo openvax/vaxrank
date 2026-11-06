@@ -98,7 +98,8 @@ def predict_epitopes(
         genome : Optional[Genome] = None,
         antigen: Optional[VaccineAntigen] = None,
         policy_evaluations=None,
-        patient_background=None) -> list[CandidateEpitope]:
+        patient_background=None,
+        annotate=None) -> list[CandidateEpitope]:
     """
     Parameters
     ----------
@@ -125,6 +126,10 @@ def predict_epitopes(
     antigen
         Source sequence, targetability, and exact-self semantics. When omitted,
         ``protein_fragment`` is adapted to a mutation ``VaccineAntigen``.
+
+    annotate
+        Optional callback enriching prediction rows in place before filtering
+        and scoring, for example ``LocalHitlistLookup``.
 
     Returns
     -------
@@ -190,6 +195,9 @@ def predict_epitopes(
 
     from .allele_validation import validate_prediction_frame
     validate_prediction_frame(predictions_df, f"MHC output for {source_name!r}")
+
+    if annotate is not None:
+        annotate(predictions_df)
 
     # ``default_methods`` (per-kind ``prediction_method_name`` defaults
     # for unqualified DSL refs) is required when multi-predictor data

@@ -462,3 +462,7 @@ Pepsickle uses its mammalian model by default, including for human hosts.
 `--pepsickle-human-only` requires a known human host and selects the upstream
 experimental training subset. [Pepsickle documents the smaller training set](https://github.com/pdxgx/pepsickle#usage).
 Codon selection follows [DNA Chisel's target-species contract](https://edinburgh-genome-foundry.github.io/DnaChisel/ref/builtin_specifications.html#dnachisel.builtin_specifications.CodonOptimize).
+
+Public MS evidence can annotate any antigen kind before scoring with
+[`--hitlist-local-evidence`](hitlist-evidence.md). This is opt-in for antigen
+JSON and Isovar inputs; CTA expression inputs retain automatic local lookup.

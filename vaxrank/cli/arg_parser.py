@@ -182,6 +182,7 @@ def make_vaxrank_arg_parser():
     add_epitope_prediction_args(arg_parser)
     add_advanced_args(arg_parser)
     add_output_args(arg_parser)
+    add_hitlist_args(arg_parser)
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
     # isovar built this parser, so it does not inherit _ConciseErrorParser.
@@ -212,6 +213,7 @@ def cached_run_arg_parser():
              "(same shape as --output-json-file). Used to re-render "
              "reports without re-running the full pipeline.")
     add_output_args(arg_parser)
+    add_hitlist_args(arg_parser)
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
     return arg_parser
@@ -935,6 +937,9 @@ def check_args(args):
     if policy_dir and os.path.isfile(policy_dir):
         raise ValueError('--output-policy-dir must be a directory, not an existing file')
 
+    if getattr(args, 'input_json_file', None) and getattr(args, 'hitlist_local_evidence', False):
+        raise ValueError('--hitlist-local-evidence requires candidate predictions; '
+                         'legacy ranked JSON cannot be rescored. Use --input-epitopes.')
     if getattr(args, 'input_json_file', None) and getattr(args, 'output_epitopes', None):
         raise ValueError('Legacy ranked JSON has no complete native prediction dataset. '
                          'Use --input-epitopes for replayable native evidence export.')
@@ -1221,6 +1226,7 @@ def external_input_arg_parser():
     # transcripts are resolved (#268). The supplemental + optional groups
     # contribute the namespace shape ``TemplateDataCreator`` expects
     # (manufacturability / wt_epitopes / cosmic_vcf_filename).
+    add_hitlist_args(arg_parser)
     add_optional_output_args(arg_parser)
     add_supplemental_report_args(arg_parser)
     add_epitope_prediction_args(arg_parser)
@@ -1348,3 +1354,10 @@ class _ConfigOverrideAction(Action):
             ordered = []
         ordered.append((self.override_kind, values))
         setattr(namespace, "config_overrides", ordered)
+
+
+def add_hitlist_args(arg_parser):
+    arg_parser.add_argument('--hitlist-local-evidence', action='store_true',
+                            help='Annotate all candidate inputs with exact MS evidence from the current '
+                                 'local Hitlist index before scoring. Never downloads or builds data. '
+                                 'CTA inputs do this automatically; captured native evidence is retained.')
