@@ -54,7 +54,7 @@ The report starts with what was read and what survived each stage:
 ```
 Vaccine Design Report
 Vaccine type: peptide
-MHC alleles: H-2-Kb H-2-Db
+MHC alleles: H2-K*b H2-D*b
 ...
 Parsed variants loaded: 5
 Variants with annotation results: 5
