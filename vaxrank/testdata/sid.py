@@ -45,7 +45,10 @@ def build_sid_test_data(destination):
     bundle = Path(osteosarc.fetch_bundle(READS))
     members = json.loads((bundle / "manifest.json").read_text())["members"]
     sources = json.loads((bundle / "recipe.json").read_text())["sources"]
-    shutil.copytree(recipe / "support", root, dirs_exist_ok=True)
+    # These are newly materialized temporary files. Preserving old checkout
+    # timestamps can make macOS's age-based cleanup remove them mid-run.
+    shutil.copytree(recipe / "support", root, dirs_exist_ok=True,
+                    copy_function=shutil.copy)
     provenance_sources = {}
     for cohort in plan["cohorts"]:
         member = MEMBER_PREFIX + cohort["path"]

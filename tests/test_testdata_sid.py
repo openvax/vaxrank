@@ -3,8 +3,12 @@
 from collections import Counter
 import gzip
 import json
+import os
 from pathlib import Path
+import shutil
 import socket
+import stat
+import time
 
 import osteosarc
 from osteosarc import ReadSubset, check_fixtures, digest
@@ -89,6 +93,37 @@ def test_build_is_offline_once_the_reads_are_cached(tmp_path, monkeypatch):
             assert digest(root / name) == digest(sid_test_data() / name), name
     variant, = sid_variants(["MAP2-chr2-209694768"])
     assert variant.allele == ("chr2", 209694768, "CCTGGGCTACTGTGTGTTCAATA", "C")
+
+
+@pytest.mark.shared_read_cache
+def test_materialized_support_files_have_fresh_timestamps(tmp_path, monkeypatch):
+    """Old checkout dates must not expire a newly created temporary fixture."""
+    import vaxrank.testdata.sid as sid
+
+    recipe = tmp_path / 'recipe'
+    shutil.copytree(recipe_directory(), recipe)
+    names = ('report_expectations/assembled_antigens.json',
+             'osteosarc/protein_reference/protein_reference_manifest.json')
+    old = time.time() - 7 * 24 * 60 * 60
+    expected = {}
+    for name in names:
+        source = recipe / 'support' / name
+        expected[name] = (source.read_bytes(), stat.S_IMODE(source.stat().st_mode))
+        os.utime(source, (old, old))
+    monkeypatch.setattr(sid, 'recipe_directory', lambda: recipe)
+    destination = tmp_path / 'materialized'
+    destination.mkdir()
+    # Allow filesystem timestamp rounding without accepting the source age.
+    created_after = time.time() - 1
+    build_sid_test_data(destination)
+    for name in names:
+        target = destination / name
+        metadata = target.stat()
+        assert metadata.st_atime >= created_after
+        assert metadata.st_mtime >= created_after
+        if hasattr(metadata, 'st_birthtime'):
+            assert metadata.st_birthtime >= created_after
+        assert (target.read_bytes(), stat.S_IMODE(metadata.st_mode)) == expected[name]
 
 
 @pytest.mark.shared_read_cache
