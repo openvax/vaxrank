@@ -254,6 +254,8 @@ Python supplies `CTARestrictionPolicy` and `CTARestrictionEvidence` from
 `vaxrank.cta_restriction` to the existing entry point:
 
 ```python
+from vaxrank.cta_expression import admit_cta_expression
+
 result = admit_cta_expression(
     expression_path, input_contract=input_contract, admission_policy=patient_policy,
     host_reference=host, evidence_snapshot=snapshot_path,

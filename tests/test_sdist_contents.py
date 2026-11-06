@@ -17,10 +17,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.shared_read_cache
 def test_distributions_include_sid_recipe_and_only_pinned_canine_reads(tmp_path):
-    result = subprocess.run([
-        sys.executable, "setup.py", "--quiet", "sdist", "--dist-dir", str(tmp_path),
-        "bdist_wheel", "--dist-dir", str(tmp_path)], cwd=ROOT, capture_output=True, text=True)
-    assert result.returncode == 0, result.stdout + result.stderr
+    # Call the PEP 517 backend named by pyproject.toml directly: it needs no
+    # `build` package in the test environment and no isolated-environment
+    # network access. One hook per interpreter, as a PEP 517 front end does:
+    # setuptools leaves distutils command state behind, so a build_wheel call
+    # after build_sdist in the same process ignores its output directory.
+    for hook in ("build_sdist", "build_wheel"):
+        result = subprocess.run([
+            sys.executable, "-c",
+            "import sys\n"
+            "from setuptools import build_meta\n"
+            "getattr(build_meta, sys.argv[1])(sys.argv[2])\n",
+            hook, str(tmp_path)], cwd=ROOT, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
     sdist_path, = tmp_path.glob("vaxrank-*.tar.gz")
     wheel_path, = tmp_path.glob("vaxrank-*.whl")
     with tarfile.open(sdist_path, "r:gz") as source:
@@ -29,7 +38,7 @@ def test_distributions_include_sid_recipe_and_only_pinned_canine_reads(tmp_path)
     with zipfile.ZipFile(wheel_path) as source:
         wheel = {name: source.read(name) for name in source.namelist()}
     assert not any(name.startswith("tests/") for name in sdist)
-    assert {"LICENSE", "MANIFEST.in", "setup.py", "requirements.txt", "TEST_DATA.md",
+    assert {"LICENSE", "MANIFEST.in", "pyproject.toml", "requirements.txt", "TEST_DATA.md",
             "vaxrank/testdata/sid.py", "examples/osteosarc_test_data/pin_catalog.py",
             "examples/build_cta_host_reference.py", "examples/wlos0001_tp53/README.md",
             "examples/wlos0001_tp53/run.py"} <= set(sdist)

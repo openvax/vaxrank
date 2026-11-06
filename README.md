@@ -16,7 +16,11 @@ It takes somatic variants, tumor RNA-seq and MHC alleles, or previously scored
 candidate epitopes, and returns ranked antigen windows,
 peptide or mRNA construct files, and reports for reviewing the evidence behind
 each design. Unified mutation/CTA/viral inputs and the expanded peptide/mRNA
-design workflows are experimental.
+design workflows are experimental. Vaxrank builds on the openvax stack:
+[varcode](https://github.com/openvax/varcode) annotates variants,
+[isovar](https://github.com/openvax/isovar) assembles mutant protein sequence
+from tumor RNA, and [topiary](https://github.com/openvax/topiary) with
+[mhctools](https://github.com/openvax/mhctools) predicts and ranks MHC ligands.
 
 ## Install
 
@@ -26,7 +30,7 @@ pyensembl install --release 113 --species human   # match your reference genome
 ```
 
 Vaxrank needs Python 3.11 or newer. PDF reports additionally need wkhtmltopdf or
-WeasyPrint; see [installation](docs/installation.md).
+WeasyPrint's system libraries; see [installation](https://openvax.github.io/vaxrank/installation/).
 
 ## Quick start
 
@@ -42,15 +46,25 @@ vaxrank \
     --bam tests/data/b16.f10/b16.combined.bam \
     --mhc-predictor random \
     --mhc-alleles H2-Kb,H2-Db \
-    --output-ascii-report vaccine-peptides.txt \
-    --output-pdf-report vaccine-peptides.pdf \
-    --pdf-backend weasyprint
+    --output-ascii-report vaccine-peptides.txt
 ```
 
-For an offline canine DNA/RNA replay, see the
-[WLOS_0001 TP53 example](https://github.com/openvax/vaxrank/tree/main/examples/wlos0001_tp53). It uses original
-tumor RNA and a published matched-normal somatic call with a random test
-predictor; the dog's DLA genotype is unknown.
+The report starts with what was read and what survived each stage:
+
+```
+Vaccine Design Report
+Vaccine type: peptide
+MHC alleles: H2-K*b H2-D*b
+...
+Parsed variants loaded: 5
+Variants with annotation results: 5
+Coding-effect variants: 4
+Coding-effect variants with an RNA-derived protein: 2
+```
+
+It continues with the selection rules, each ranked candidate window with its
+scored epitopes, per-source outcomes and provenance. Add `--output-pdf-report
+vaccine-peptides.pdf` for a PDF (see [PDF reports](https://openvax.github.io/vaxrank/installation/#pdf-reports)).
 
 For a real VCF + RNA run, supply:
 
@@ -59,7 +73,7 @@ For a real VCF + RNA run, supply:
 - `--mhc-alleles`: the patient's MHC alleles, as separate quoted arguments or a
   quoted comma- or space-separated list
 - `--mhc-predictor`: which binding predictor to run
-  ([available predictors](docs/mhc-predictors.md))
+  ([available predictors](https://openvax.github.io/vaxrank/mhc-predictors/))
 
 These allele-list forms work:
 
@@ -73,13 +87,17 @@ Keep the quotes: an unquoted `*` can expand to filenames, or cause zsh to
 reject the command before Vaxrank starts.
 
 To emit vaccine constructs, add `--output-dir` (both modalities by default).
-Use `--vaccine-type peptide` or `--vaccine-type mrna` to select one modality. [Vaccine designs](docs/vaccine-designs.md) describes the
-peptide and mRNA designs and the files each one writes.
+Use `--vaccine-type peptide` or `--vaccine-type mrna` to select one modality.
+[Vaccine designs](https://openvax.github.io/vaxrank/vaccine-designs/) describes the peptide and mRNA
+designs and the files each one writes. For an offline canine DNA/RNA replay, see
+the [WLOS_0001 TP53 example](https://github.com/openvax/vaxrank/tree/main/examples/wlos0001_tp53).
 
-### Start from an already-scored report
+## Command line
 
-When MHC prediction has happened upstream, design directly from a LENS or
-pVACseq report instead of a VCF and BAM:
+`vaxrank` is the main command; run `vaxrank --help` for every option and
+`vaxrank --version` for the installed release. Besides VCF + BAM input as
+above, it designs directly from a LENS or pVACseq report when MHC prediction
+has happened upstream:
 
 ```sh
 vaxrank --input-lens patient.lens.tsv \
@@ -88,49 +106,39 @@ vaxrank --input-lens patient.lens.tsv \
 ```
 
 Use the Ensembl release the report was annotated with. Original predictions are
-reused by default. [Input workflows](docs/input-workflows.md) covers pVACseq
+reused by default. [Input workflows](https://openvax.github.io/vaxrank/input-workflows/) covers pVACseq
 reports, saved Vaxrank evidence, combining several reports in one run, and when
 to compute new predictions instead.
 
-## Command line
-
-`vaxrank` is the main command; run `vaxrank --help` for every option and
-`vaxrank --version` for the installed release. Companion commands share the
-installed package:
+Companion commands share the installed package:
 
 | Command | Purpose | Documented in |
 |---|---|---|
-| `vaxrank-mutation-figure` | Transcript and protein context figures from `--output-isovar-csv` | [Analysis outputs](docs/outputs.md#mutation-and-assembly-figures) |
-| `vaxrank-evidence-figure` | Evidence summary figure from an evidence JSON | [Analysis outputs](docs/outputs.md) |
-| `vaxrank-complex-result-figure` | Figures for complex-variant results JSON | [Analysis outputs](docs/outputs.md) |
-| `vaxrank-window-exposure` | Delivery exposure of admitted SLP windows | [Window exposure](docs/core-window-exposure.md) |
+| `vaxrank-mutation-figure` | Transcript and protein context figures from `--output-isovar-csv` | [Analysis outputs](https://openvax.github.io/vaxrank/outputs/#mutation-and-assembly-figures) |
+| `vaxrank-evidence-figure` | Evidence summary figure from an evidence JSON | [Analysis outputs](https://openvax.github.io/vaxrank/outputs/) |
+| `vaxrank-complex-result-figure` | Figures for complex-variant results JSON | [Analysis outputs](https://openvax.github.io/vaxrank/outputs/) |
+| `vaxrank-window-exposure` | Delivery exposure of admitted SLP windows | [Window exposure](https://openvax.github.io/vaxrank/core-window-exposure/) |
 | `vaxrank-test-data` | Download the shared Sid test data | [Test data](https://github.com/openvax/vaxrank/blob/main/TEST_DATA.md) |
 
 ## Documentation
 
-Full documentation: <https://openvax.github.io/vaxrank/>
+Full documentation: <https://openvax.github.io/vaxrank/>. In reading order:
 
-- [Installation](docs/installation.md): reference annotation and PDF backends.
-- [Input workflows](docs/input-workflows.md): VCF/BAM, LENS, pVACseq, Topiary
-- [Canine VCF and RNA](docs/canine-vcf-workflow.md): dog reference and DLA workflow
-  tables, CTA expression, antigen sequences and saved evidence.
-- [Vaccine designs](docs/vaccine-designs.md): the design axes, peptide and mRNA
-  construct files, linker library, manifest schema.
-- [Analysis outputs](docs/outputs.md): report formats and the figure commands.
-- [Configuration](docs/configuration.md): YAML config, override order, named
-  policy bundles, RNA reconstruction context, Topiary scoring DSL.
-- [MHC binding predictors](docs/mhc-predictors.md): supported predictor names.
-- [How Vaxrank works](docs/how-it-works.md): pipeline stages, ranking criteria,
-  data model, module map.
-- [Varcode, Isovar, and Vaxrank](docs/library-responsibilities.md): which
-  library owns which decision.
-- [Development](docs/development.md): local setup, test data, release scripts.
+1. [Installation](https://openvax.github.io/vaxrank/installation/): reference annotation and PDF backends.
+2. [Input workflows](https://openvax.github.io/vaxrank/input-workflows/): VCF/BAM, LENS, pVACseq, Topiary tables, CTA expression, antigen sequences and saved evidence.
+3. [Vaccine designs](https://openvax.github.io/vaxrank/vaccine-designs/): the design axes, peptide and mRNA construct files, linker library, manifest schema.
+4. [Analysis outputs](https://openvax.github.io/vaxrank/outputs/): report formats and the figure commands.
+5. [Configuration](https://openvax.github.io/vaxrank/configuration/): YAML config, override order, named policy bundles, RNA reconstruction context, Topiary scoring DSL.
+6. [How Vaxrank works](https://openvax.github.io/vaxrank/how-it-works/): pipeline stages, ranking criteria, data model, module map.
 
-Experimental workflows: [unified antigen inputs](docs/antigen-inputs.md),
-[Isovar ncORF, SV, viral and isoform inputs](docs/isovar-inputs.md),
-[CTA expression inputs](docs/design/expression-cta-inputs.md),
-[mixed mutation/CTA/viral selection](docs/mixed-antigen-design.md) and
-[window exposure](docs/core-window-exposure.md).
+The site also covers [MHC binding predictors](https://openvax.github.io/vaxrank/mhc-predictors/), the
+[canine workflow](https://openvax.github.io/vaxrank/canine-vcf-workflow/),
+[which library owns which decision](https://openvax.github.io/vaxrank/library-responsibilities/), and the
+experimental [antigen](https://openvax.github.io/vaxrank/antigen-inputs/),
+[Isovar](https://openvax.github.io/vaxrank/isovar-inputs/),
+[CTA expression](https://openvax.github.io/vaxrank/design/expression-cta-inputs/),
+[mixed-antigen](https://openvax.github.io/vaxrank/mixed-antigen-design/) and
+[window exposure](https://openvax.github.io/vaxrank/core-window-exposure/) workflows.
 
 ## Development
 
@@ -142,8 +150,9 @@ pip install -e "." pytest pytest-cov ruff
 ./test.sh
 ```
 
-Always run tests through `./test.sh`, not bare `pytest`. See
-[Development](docs/development.md) for test data and reference downloads.
+Always run tests through `./test.sh`, not bare `pytest`. Every pull request
+bumps `vaxrank/version.py`. See [Development](https://openvax.github.io/vaxrank/development/) for test
+data, reference downloads and releases.
 
 <a id="clinical-use"></a>
 
@@ -159,7 +168,7 @@ Methods and published results are cited below.
 
 <a id="papers--citations"></a>
 
-## Papers and citations
+## Citation
 
 Vaxrank algorithm:
 
