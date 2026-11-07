@@ -50,6 +50,10 @@ def _varcode_graph_classes():
         "CrypticAcceptor PhaseCandidateSet HaplotypeEffect"
     ).split()
     classes = [getattr(effect_classes, name) for name in names]
+    # Varcode 11.9 adds this TranslocationToIntergenic, for a breakend mate on a
+    # contig the annotation lacks (openvax/varcode#709); older releases lack it.
+    classes += [cls for cls in (getattr(effect_classes, "TranslocationToUnannotatedContig", None),)
+                if cls is not None]
     classes += [getattr(effect_hypotheses, name) for name in (
         "ClassifiedOutcome EffectHypothesis RealizedEffectCandidate RealizedTranscriptProduct "
         "SpliceOption SplicePlan SpliceSiteKey SpliceAxis").split()]
