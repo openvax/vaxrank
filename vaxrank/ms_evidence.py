@@ -329,8 +329,14 @@ def score_frame(frame, cfg, *, group_keys, alleles=None, kind_support=None,
         criteria.append(dict(name='ms_only_score', expression=repr(config['ms_only_score']), role='score'))
         numeric = f'criterion("ms_adjusted").fillna({config["ms_only_score"]!r})'
     admitted = '(criterion("ms_adjusted_gate") | criterion("ms_direct_admission"))'
+    if config.get('base_score') is None and cfg.min_epitope_score == 0:
+        # The historical affinity profile retains above-cutoff measurements
+        # with a masked zero when the caller explicitly permits zero scores.
+        # Keep those candidates without crediting an unadmitted raw B as MS.
+        numeric = f'({numeric}) * {admitted}'
+        admitted = f'{admitted} | (criterion("ms_base") >= 0)'
     if cfg.filter_expr is not None:
-        admitted = f'({cfg.filter_expr}) & {admitted}'
+        admitted = f'({cfg.filter_expr}) & ({admitted})'
     policy = resolve_selection_policy(dict(name='ms-evidence-v1', criteria=criteria,
         score_by=numeric, filter_by=admitted, default_methods=default_methods))
     from dataclasses import replace

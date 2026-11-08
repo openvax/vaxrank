@@ -125,17 +125,18 @@ def test_frame_policy_crosses_soft_gate_but_preserves_hard_filters():
     assert score_frame(frame, cfg, group_keys=keys).empty
 
 
-def test_default_profile_without_ms_matches_existing_scores():
+@pytest.mark.parametrize('minimum', [0., 1e-5])
+def test_default_profile_without_ms_matches_existing_scores(minimum):
     from vaxrank.epitope_config import EpitopeConfig
     from vaxrank.epitope_dsl import score_predictions
     frame = pd.DataFrame([dict(prediction_id=str(i), peptide='SIINFEKLA', peptide_offset=0,
         allele=A, kind='pMHC_affinity', prediction_method_name='fixture',
         predictor_version='1', value=value, affinity=value, score=None, percentile_rank=None)
         for i, value in enumerate([1., 50., 350., 500., 1500., 5000., 50000.])])
-    cfg = EpitopeConfig()
+    cfg = EpitopeConfig(min_epitope_score=minimum)
     old = score_predictions([], cfg, topiary_df=frame)
     old = old.loc[old >= cfg.min_epitope_score]
-    new = score_predictions([], EpitopeConfig(ms_evidence={}), topiary_df=frame)
+    new = score_predictions([], EpitopeConfig(ms_evidence={}, min_epitope_score=minimum), topiary_df=frame)
     pd.testing.assert_series_equal(old, new, check_names=False, check_exact=False)
 
 
