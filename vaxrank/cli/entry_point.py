@@ -1805,13 +1805,16 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     # Pooled direct inputs are enriched later by the shared scorer.
     hitlist_lookup = (LocalHitlistLookup() if getattr(args, 'hitlist_local_evidence', False)
                       and (epitope_dataset is None or capture_native) else None)
+    if epitope_config.ms_evidence is not None and (epitope_dataset is None or capture_native):
+        from ..ms_lookup import MSLookup
+        hitlist_lookup = MSLookup(epitope_config.ms_evidence)
     prediction_config = epitope_config
     if epitope_dataset is not None and not capture_native:
         # Preserve every predicted occurrence for shared scoring against the
         # enriched evidence frame. No vaccine window has been selected yet.
         from msgspec.structs import replace
         prediction_config = replace(epitope_config, selection_policy=None, filter_expr=None,
-                                    score_expr='1.0', min_epitope_score=0)
+                                    score_expr='1.0', min_epitope_score=0, ms_evidence=None)
     policy_evaluations = []
     patient_background = prepared_background or direct_patient_background(args, epitope_config, isovar_results)
     vaxrank_results = run_vaxrank(

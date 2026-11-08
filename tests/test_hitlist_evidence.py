@@ -353,3 +353,31 @@ def test_collector_rejects_index_change_between_queries(installed_data):
     (installed_data / 'observations_meta.json').write_text('{"fixture": "changed index"}')
     with pytest.raises(ValueError, match='changed between queries'):
         lookup(pd.DataFrame({'peptide': ['VVVVVVVVV'], 'allele': [ALLELES[0]]}))
+
+
+def test_ms_scaling_cli_keeps_components_and_replays_without_data(
+        installed_data, tmp_path, monkeypatch, cli_dependencies):
+    observations = pd.read_parquet(installed_data / 'observations.parquet')
+    observations['has_ptm'] = False
+    observations['is_monoallelic'] = observations.restriction_evidence.eq('monoallelic')
+    observations.to_parquet(installed_data / 'observations.parquet', index=False)
+    expression = tmp_path / 'expression.tsv'
+    pd.DataFrame([(PRAME, 3)], columns=['feature_id', 'patient_tpm']).to_csv(
+        expression, sep='\t', index=False)
+    first, second = tmp_path / 'first', tmp_path / 'replay'
+    run_cli(test_cta_input.argv(expression, first) + ['--ms-evidence', '--vaccine-type', 'peptide'])
+    native = first / 'candidate_predictions.tsv'
+    original = EpitopeDataset.load(native)
+    supported = [e for e in original.epitopes if e.ms_increment > 0]
+    assert supported
+    assert all(e.epitope_score == pytest.approx(sum(e.per_allele_scores.values()) + e.ms_increment)
+               for e in supported)
+    assert max(t['relaxation'] for e in supported for t in e.ms_scoring.values()) > 1
+    assert 'hitlist_ms_records_json' in original.result.df
+    shutil.rmtree(installed_data)
+    monkeypatch.setattr('vaxrank.hitlist_evidence.capture_local_hitlist_evidence', forbidden)
+    run_cli(['--input-epitopes', str(native), '--output-dir', str(second),
+             '--vaccine-type', 'peptide', '--no-processing-aware-annotation'])
+    replayed = EpitopeDataset.load(second / 'candidate_predictions.tsv')
+    assert [e.ms_scoring for e in replayed.epitopes] == [e.ms_scoring for e in original.epitopes]
+    assert (first / 'vaccine.fasta').read_bytes() == (second / 'vaccine.fasta').read_bytes()

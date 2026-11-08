@@ -188,7 +188,7 @@ class LocalHitlistLookup:
                         frame.loc[selected, name] = rows[name].to_numpy()
 
 
-def annotate_hitlist_reports(reports):
+def annotate_hitlist_reports(reports, ms_config=None):
     """Enrich input rows after occurrence adaptation and preserve source capture."""
     from dataclasses import replace
     from topiary import TopiaryResult
@@ -206,7 +206,7 @@ def annotate_hitlist_reports(reports):
             sources = scoring.prediction_id.map(by_candidate).fillna(sources)
         # Generalized observations retain their original restriction in the
         # raw table; lookup facets use the candidate allele used by the scorer.
-        captured = annotate_hitlist_sources(scoring, sources)
+        captured = annotate_hitlist_sources(scoring, sources, ms_config=ms_config)
         if not captured:
             updated.append(report)
             continue
@@ -234,13 +234,17 @@ def annotate_hitlist_reports(reports):
     return updated, evidence
 
 
-def annotate_hitlist_sources(frame, sources):
+def annotate_hitlist_sources(frame, sources, ms_config=None):
     """Capture missing annotations separately for each retained source identity."""
     captured = {}
     for identity in sources.unique():
         selected = sources.eq(identity)
         rows = frame.loc[selected].copy()
-        lookup = LocalHitlistLookup()
+        if ms_config is not None:
+            from .ms_lookup import MSLookup
+            lookup = MSLookup(ms_config)
+        else:
+            lookup = LocalHitlistLookup()
         lookup(rows)
         if not lookup.queries:
             continue

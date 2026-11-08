@@ -279,10 +279,14 @@ class VaccinePeptide(DataclassSerializable):
         # This is what makes the DSL the single source of truth: change
         # the per-prediction formula in one place and the change flows
         # all the way through to ``combined_score``.
-        self.self_epitope_score = sum(
-            e.epitope_score for e in self.self_epitopes)
-        self.target_epitope_score = sum(
-            e.epitope_score for e in self.target_epitopes)
+        def presentation_score(epitopes):
+            increments = {}
+            for epitope in epitopes:
+                increments[epitope.sequence] = max(
+                    increments.get(epitope.sequence, 0.), epitope.ms_increment)
+            return sum(sum(e.per_allele_scores.values()) for e in epitopes) + sum(increments.values())
+        self.self_epitope_score = presentation_score(self.self_epitopes)
+        self.target_epitope_score = presentation_score(self.target_epitopes)
 
         self.manufacturability_scores = ManufacturabilityScores.from_amino_acids(
             self.amino_acids

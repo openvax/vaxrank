@@ -308,3 +308,11 @@ def test_expression_tables_of_any_size_use_the_public_loader(tmp_path, genome, s
     assert len(result.decisions) == n_rows
     assert [d.input_identifier for d in result.decisions] == features[:n_rows]
     assert len(result.admitted_antigens) == (min(n_rows, 2) if level == "gene" else n_rows)
+
+
+def test_ambiguous_reference_protein_is_a_holdout_not_a_failed_import(tmp_path, genome):
+    genome.transcripts[PRAME_TRANSCRIPT].protein_sequence = 'AXAAAAAAA'
+    result = run(tmp_path, genome, [(PRAME, 5), (MAGEA4, 5)])
+    assert [d.status for d in result.decisions] == ['noncanonical_protein_sequence', 'admitted']
+    assert result.decisions[0].transcript_id == PRAME_TRANSCRIPT
+    assert result.decisions[0].assessment is None

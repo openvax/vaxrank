@@ -730,9 +730,9 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             models = model_factory()
         reports, additive_result = _add_predictions(reports, models, prediction_prefix, use_flanks)
     hitlist_captures = {}
-    if hitlist_local_evidence and mode in ('input', 'additive'):
+    if (hitlist_local_evidence or epitope_config.ms_evidence is not None) and mode in ('input', 'additive'):
         from .hitlist_evidence import annotate_hitlist_reports
-        reports, hitlist_captures = annotate_hitlist_reports(reports)
+        reports, hitlist_captures = annotate_hitlist_reports(reports, ms_config=epitope_config.ms_evidence)
         if additive_result is not None:
             from topiary import TopiaryResult
             enriched = [r.dataset.result.long_df if r.dataset is not None
@@ -780,10 +780,10 @@ def prepare_reports(inputs, epitope_config=None, *, mode='input', models=(),
             **{key: value for key, value in record.row.items() if key in biological},
         }) for report in reports for record in report.records]
         scoring = attach_source_annotations(fresh_frame, records)
-        if hitlist_local_evidence:
+        if hitlist_local_evidence or epitope_config.ms_evidence is not None:
             from .hitlist_evidence import annotate_hitlist_sources
             hitlist_captures = {identity: {'hitlist_local_queries': queries}
-                for identity, queries in annotate_hitlist_sources(scoring, scoring.input_source).items()}
+                for identity, queries in annotate_hitlist_sources(scoring, scoring.input_source, ms_config=epitope_config.ms_evidence).items()}
         scored = attach_per_allele_scores(epitopes, epitope_config, topiary_df=scoring,
                                           policy_evaluations=policy_evaluations)
     by_id = {e.prediction_group_key: e for e in original if not e.predictions_flat()}

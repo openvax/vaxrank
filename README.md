@@ -126,7 +126,8 @@ Full documentation: <https://openvax.github.io/vaxrank/>
   library owns which decision.
 - [Development](docs/development.md): local setup, test data, release scripts.
 
-Experimental workflows: [unified antigen inputs](docs/antigen-inputs.md),
+Experimental workflows: [MS-supported scoring](docs/ms-evidence.md),
+[unified antigen inputs](docs/antigen-inputs.md),
 [Isovar ncORF, SV, viral and isoform inputs](docs/isovar-inputs.md),
 [CTA expression inputs](docs/design/expression-cta-inputs.md),
 [mixed mutation/CTA/viral selection](docs/mixed-antigen-design.md) and

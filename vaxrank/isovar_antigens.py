@@ -10,7 +10,7 @@ from hashlib import sha256
 import json
 
 import msgspec
-from isovar.genetic_code import genetic_code_by_id
+from isovar.genetic_code import genetic_code_by_id, translate_cdna
 from isovar.rna_evidence import content_identifier, evidence_set
 from orfdata.reference import canonical_species
 
@@ -51,7 +51,8 @@ def _translation(dna, protein, stop, table=1, start=False):
         raise ValueError('Isovar coding sequence must be unambiguous DNA')
     if type(stop) is not bool or type(start) is not bool:
         raise ValueError('Isovar coding boundary flags must be booleans')
-    amino, observed_stop = genetic_code_by_id(table).translate(dna)
+    amino, observed_stop = (translate_cdna(dna, translation_table=None) if table is None
+                            else genetic_code_by_id(table).translate(dna))
     if start and amino:
         amino = 'M' + amino[1:]
     if (amino, observed_stop) != (protein, stop):

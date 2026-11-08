@@ -143,6 +143,9 @@ def _canonical_native(value):
         return value
     result = {key: _canonical_native(item) for key, item in value.items()}
     metadata = result.get('__class__')
+    if (metadata == dict(__module__='vaxrank.candidate_epitope', __name__='CandidateEpitope')
+            and not result.get('ms_scoring')):
+        result.pop('ms_scoring', None)
     if (metadata == dict(__module__='vaxrank.peptide', __name__='PeptideConstruct')
             and not result.get('antigens')):
         result.pop('antigens', None)
@@ -203,6 +206,8 @@ def _assembly_identity(args, ranked, options, context):
             and epitopes.get('patient_background_baseline', 'focal') == 'focal'):
         epitopes.pop('comparison_reference', None)
         epitopes.pop('patient_background_baseline', None)
+    if epitopes.get('ms_evidence') is None:
+        epitopes.pop('ms_evidence', None)
     if 'epitopes' in policy:
         policy['epitopes'] = epitopes
     definition = (graph, configuration, context, policy)

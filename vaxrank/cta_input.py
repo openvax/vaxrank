@@ -291,6 +291,8 @@ def predict_cta_source(source, predictor, *, genome, epitope_config=None, host_r
         if contract.expression_unit == 'TPM':
             frame['cta_' + contract.measurement_level + '_tpm'] = frame.cta_expression_value
         frame['source_class'] = 'self'
+        if epitope_config is not None and epitope_config.ms_evidence is not None:
+            return  # The common MS lookup captures and annotates this frame.
         if bundle is None:
             local_evidence = capture_local_hitlist_evidence(frame.peptide, frame.allele)
         annotations = hitlist_annotations(frame.peptide, bundle, frame.allele,

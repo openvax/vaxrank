@@ -130,11 +130,12 @@ class CTAExpressionResult(DataclassSerializable):
         if (reference.annotation_assembly != self.reference_assembly
                 or str(reference.annotation_release) != self.annotation_version):
             raise ValueError("CTA admission and annotation reference disagree")
+        reference_fingerprint = reference.fingerprint
         for decision in self.decisions:
             resolution = decision.reference_resolution
             if resolution is None:
                 continue
-            if (resolution.annotation_reference_sha256 != reference.fingerprint
+            if (resolution.annotation_reference_sha256 != reference_fingerprint
                     or resolution.annotation_sha256 != reference.annotation_sha256
                     or resolution.evidence.unfiltered_gene_ids_sha256 != reference.canonical_candidate_gene_ids_sha256
                     or resolution.self_reference_excluded_gene_ids != reference.self_reference_excluded_gene_ids
@@ -326,6 +327,12 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome=None,
         sequence = transcript.protein_sequence
         if not sequence:
             decisions.append(replace(decision, status="no_protein_sequence"))
+            continue
+        from .amino_acids import validate_amino_acid_sequence
+        try:
+            validate_amino_acid_sequence(sequence, "CTA reference protein")
+        except ValueError:
+            decisions.append(replace(decision, status="noncanonical_protein_sequence"))
             continue
         measurement = PatientTumorExpressionEvidence(
             gene_id=gene_id, sample_id=input_contract.sample_id, value=value,

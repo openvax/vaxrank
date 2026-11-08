@@ -228,6 +228,11 @@ def test_numbered_archive_keeps_its_saved_fingerprint():
     assert restored == reference
     assert restored.fingerprint == reference.fingerprint
 
+    # Nested facts remain mutable; a faster digest must not cache away edits.
+    original = reference.fingerprint
+    reference.identities[0]['source_gene_name'] = 'changed'
+    assert reference.fingerprint != original
+
 
 def test_pyensembl_dated_accession_has_independent_assembly_identity():
     from pyensembl import EnsemblRelease
