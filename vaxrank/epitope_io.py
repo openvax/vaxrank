@@ -113,6 +113,7 @@ VAXRANK_COLUMNS = [
     # Preserve the exact configured DSL result so a native reload does not
     # silently revert to an unrelated default scoring formula.
     "per_allele_scores",
+    "ms_scoring",
     # Generic WT fields parallel the mutant prediction fields. The legacy
     # ``wt_ic50`` column remains populated for affinity consumers.
     "wt_prediction_kind",
@@ -199,6 +200,7 @@ def epitope_prediction_rows(epitope):
             "allele_attributions": json.dumps(
                 [a.to_dict() for a in epitope.allele_attributions],
                 sort_keys=True, separators=(",", ":")),
+            "ms_scoring": json.dumps(epitope.ms_scoring, sort_keys=True, separators=(",", ":")),
             "per_allele_scores": json.dumps(
                 epitope.per_allele_scores,
                 sort_keys=True,
@@ -454,6 +456,7 @@ def load_predictions(path):
                 row.get("occurs_in_non_CTA_reference", occurs_in_ref)),
             'patient_alleles': patient_alleles,
             'per_allele_scores': per_allele_scores,
+            'ms_scoring': json.loads(string_or_empty(row.get('ms_scoring', '')) or '{}'),
             'allele_attributions': allele_attributions,
         })
     return candidate_epitopes_from_rows(rows)
@@ -1622,7 +1625,7 @@ def write_neoepitope_report(report_df, epitopes, excel_report_path=None,
         eligible = (
             passed
             and score is not None
-            and (epitope_config.selection_policy is not None
+            and (epitope_config.selection_policy is not None or epitope_config.ms_evidence is not None
                  or float(score) >= epitope_config.min_epitope_score)
         )
         scores.append(float(score) if passed else None)

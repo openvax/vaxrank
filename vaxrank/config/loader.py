@@ -375,6 +375,7 @@ _MISSING = object()
 
 # Declarative mapping: (dotted config path) → (EpitopeConfig kwarg name)
 _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
+    ("evidence.ms", "ms_evidence"),
     ("epitopes.min_score", "min_epitope_score"),
     ("epitopes.scoring_mode", "scoring_mode"),
     ("epitopes.logistic_midpoint", "logistic_epitope_score_midpoint"),

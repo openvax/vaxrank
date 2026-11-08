@@ -409,6 +409,12 @@ def score_predictions(epitopes, cfg, *, topiary_df=None,
     group_columns = prediction_group_columns(df)
     alleles = genotype_lookup(epitopes, group_columns)
 
+    if cfg.ms_evidence is not None:
+        from .ms_evidence import score_frame
+        return score_frame(df, cfg, group_keys=group_columns, alleles=alleles,
+                           kind_support=kind_support, default_methods=resolved,
+                           default_versions=resolved_versions)
+
     if cfg.selection_policy is not None:
         from .selection_policy import evaluate_frame
         return evaluate_frame(
@@ -530,12 +536,15 @@ def attach_per_allele_scores(epitopes, cfg=None, *, topiary_df=None,
         # as a patient allele.
         allele = stated_or_blank(allele)
         if allele:
+            if 'ms_scoring' in score_series.attrs:
+                val = score_series.attrs['ms_scoring'][idx[:-1]][idx[-1]]['baseline']
             by_position.setdefault(
                 (src_name, peptide, offset), {})[allele] = float(val)
     return [
         replace(
             e,
             per_allele_scores=by_position.get(e.prediction_group_key, {}),
+            ms_scoring=score_series.attrs.get('ms_scoring', {}).get(e.prediction_group_key, {}),
             allele_attributions=attributions.get(
                 e.prediction_group_key, ()))
         for e in epitopes
@@ -568,7 +577,8 @@ def epitopes_for_ranking(epitopes, cfg=None):
         retained_alleles = {
             allele
             for allele, score in epitope.per_allele_scores.items()
-            if cfg.selection_policy is not None or score >= cfg.min_epitope_score
+            if cfg.selection_policy is not None or cfg.ms_evidence is not None
+            or score >= cfg.min_epitope_score
         }
         if not retained_alleles:
             continue

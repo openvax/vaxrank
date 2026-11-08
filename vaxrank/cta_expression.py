@@ -327,6 +327,12 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome=None,
         if not sequence:
             decisions.append(replace(decision, status="no_protein_sequence"))
             continue
+        from .amino_acids import validate_amino_acid_sequence
+        try:
+            validate_amino_acid_sequence(sequence, "CTA reference protein")
+        except ValueError:
+            decisions.append(replace(decision, status="noncanonical_protein_sequence"))
+            continue
         measurement = PatientTumorExpressionEvidence(
             gene_id=gene_id, sample_id=input_contract.sample_id, value=value,
             unit=input_contract.expression_unit,

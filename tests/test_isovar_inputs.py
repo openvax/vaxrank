@@ -633,3 +633,12 @@ def test_live_sv_request_retains_absence_of_rna(tmp_path):
         reconstruct=dict(family='sv', inputs=dict(bam=bam.name, event=event_path.name, source='synthetic')))))
     dataset = load_isovar_input(path)
     assert not dataset.antigens and dataset.source_evidence
+
+
+def test_annotated_orf_nullable_code_preserves_native_producer_semantics():
+    from vaxrank.isovar_antigens import _translation
+    _translation('ATGTTTTAA', 'MF', True, table=None)
+    with pytest.raises(ValueError, match='protein disagrees'):
+        _translation('ATGTTTTAA', 'MM', True, table=None)
+    with pytest.raises(ValueError, match='Unsupported'):
+        _translation('ATGTTTTAA', 'MF', True, table=999)

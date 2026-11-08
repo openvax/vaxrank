@@ -123,7 +123,8 @@ def candidate_calculation(peptide):
                 result=display(peptide.combined_score), raw_result=peptide.combined_score,
                 target_score=display(peptide.target_epitope_score),
                 targets=[dict(sequence=e.sequence, offset=e.offset,
-                    allele_scores=dict(e.per_allele_scores), score=e.epitope_score) for e in peptide.target_epitopes])
+                    allele_scores=dict(e.per_allele_scores), ms_increment=e.ms_increment,
+                    ms_scoring=e.ms_scoring, score=e.epitope_score) for e in peptide.target_epitopes])
 
 
 def score_calculations(ranked, rows):

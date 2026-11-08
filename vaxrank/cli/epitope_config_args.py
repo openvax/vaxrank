@@ -20,6 +20,11 @@ from ..epitope_config import EpitopeConfig
 
 def add_epitope_prediction_args(arg_parser : argparse.ArgumentParser):
     epitope_prediction_args = arg_parser.add_argument_group("T-cell epitope prediction options")
+    epitope_prediction_args.add_argument('--ms-evidence', action='store_true',
+        help='Apply the ms-evidence-v1 prediction-scaling policy using installed Hitlist data. '
+             'Configure evidence.ms for acquisition, weights, gain and optional cap.')
+    epitope_prediction_args.add_argument('--ms-evidence-package', metavar='DIRECTORY',
+        help='Verified Hitlist evidence package for --ms-evidence (also enables the policy).')
     epitope_prediction_args.add_argument(
         '--comparison-reference', choices=('annotation_reference', 'patient_background'),
         help='Comparator sequence policy. Default: annotation_reference. Patient backgrounds '
@@ -122,6 +127,11 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
     if merged_config is None:
         merged_config = load_vaxrank_config(args)
     epitope_config_kwargs = extract_epitope_config_kwargs(merged_config)
+    if getattr(args, 'ms_evidence', False) or getattr(args, 'ms_evidence_package', None):
+        options = dict(epitope_config_kwargs.get('ms_evidence') or {})
+        if getattr(args, 'ms_evidence_package', None):
+            options['package'] = args.ms_evidence_package
+        epitope_config_kwargs['ms_evidence'] = options
     for name in ('comparison_reference', 'patient_background_baseline'):
         value = getattr(args, name, None)
         if value is not None:
@@ -165,7 +175,8 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
 
 def has_epitope_config_overrides(args, merged_config):
     """Distinguish an explicit scoring policy from a native reload default."""
-    return bool(extract_epitope_config_kwargs(merged_config)) or any(
+    return (bool(getattr(args, 'ms_evidence', False) or getattr(args, 'ms_evidence_package', None))
+            or bool(extract_epitope_config_kwargs(merged_config))) or any(
         getattr(args, name, None) is not None for name in (
             "min_epitope_score", "scoring_mode", "allele_free_evidence",
             "allele_selection_axis", "default_affinity_predictor",

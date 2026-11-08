@@ -164,6 +164,7 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     allele_free_evidence: str = POLICY_ALL
     allele_selection_axis: str = SELECTION_AUTO
     selection_policy: Optional[dict] = None
+    ms_evidence: Optional[dict] = None
     comparison_reference: str = 'annotation_reference'
     patient_background_baseline: str = 'focal'
 
@@ -176,6 +177,12 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
             self.allele_free_evidence, axis=self.allele_selection_axis)
 
     def __post_init__(self):
+        if self.ms_evidence is not None:
+            from .ms_evidence import validate_config
+            validate_config(self.ms_evidence)
+            if self.selection_policy is not None:
+                raise ValueError('evidence.ms supplies ms-evidence-v1; use its base_score/soft_threshold '
+                                 'and epitopes.filter_expr instead of a second selection_policy')
         if self.comparison_reference not in ('annotation_reference', 'patient_background'):
             raise ValueError('comparison_reference must be annotation_reference or patient_background')
         if self.patient_background_baseline not in ('focal', 'supplied_somatic_haplotype'):

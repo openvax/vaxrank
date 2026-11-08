@@ -35,6 +35,7 @@ nav:
   - Experimental window exposure: core-window-exposure.md
   - Evidence and provenance: unified_evidence.md
   - Local Hitlist evidence: hitlist-evidence.md
+  - MS-supported scoring: ms-evidence.md
 
 markdown_extensions:
   - pymdownx.highlight:

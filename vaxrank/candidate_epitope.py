@@ -663,6 +663,7 @@ class CandidateEpitope(Peptide):
     # from here and never recompute — the DSL is the single source
     # of truth.
     per_allele_scores: dict = field(default_factory=dict)
+    ms_scoring: dict = field(default_factory=dict)
 
     # Why each allele was credited with this candidate's allele-free
     # evidence — from the input file, broadcast across the genotype, or
@@ -707,7 +708,14 @@ class CandidateEpitope(Peptide):
         here exactly once; no parallel formula exists in the
         codebase.
         """
-        return float(sum(self.per_allele_scores.values()))
+        return float(sum(self.per_allele_scores.values())) + self.ms_increment
+
+    @property
+    def ms_increment(self) -> float:
+        """One MS increment, restricted to the currently retained alleles."""
+        return max((row['adjusted'] - row['baseline']
+                    for allele, row in self.ms_scoring.items()
+                    if allele in self.per_allele_scores), default=0.)
 
     @property
     def occurs_in_self_reference(self) -> bool:
@@ -807,6 +815,7 @@ class CandidateEpitope(Peptide):
             input_provenance=self.input_provenance,
             input_evidence=copy.deepcopy(self.input_evidence),
             per_allele_scores=dict(self.per_allele_scores),
+            ms_scoring=copy.deepcopy(self.ms_scoring),
             allele_attributions=self.allele_attributions)
 
     @classmethod
@@ -924,6 +933,7 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                 # all rows for one allele share the same score by
                 # construction of the DSL eval, so last-write-wins.
                 'per_allele_scores': {},
+                'ms_scoring': {},
                 'allele_attributions': (),
             }
             groups[key] = slot
@@ -937,6 +947,10 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             stated
             for allele in (row.get('patient_alleles') or ())
             if (stated := stated_or_blank(allele)))
+        for allele, trace in (row.get('ms_scoring') or {}).items():
+            if allele in slot['ms_scoring'] and slot['ms_scoring'][allele] != trace:
+                raise ValueError('Conflicting MS scoring traces for one occurrence and allele')
+            slot['ms_scoring'][allele] = trace
         for allele, score in (row.get('per_allele_scores') or {}).items():
             score = float(score)
             existing_score = slot['per_allele_scores'].get(allele)
@@ -1020,6 +1034,7 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             patient_alleles=tuple(sorted(slot['patient_alleles'])),
             prediction_id=slot['prediction_id'],
             per_allele_scores=dict(slot['per_allele_scores']),
+            ms_scoring=copy.deepcopy(slot['ms_scoring']),
             allele_attributions=slot['allele_attributions'],
         ))
     return out

@@ -2,7 +2,8 @@
 
 from functools import lru_cache
 
-from mhcgnomes import Allele, Pair, ParseError, parse
+from mhcgnomes import ParseError
+from topiary import canonical_allele_name
 from topiary.ranking import KIND_ALIASES
 
 from . import cells
@@ -11,8 +12,7 @@ from .allele_evidence import is_allele_scoped_kind
 
 @lru_cache(maxsize=4096)
 def parse_prediction_allele(allele):
-    return parse(allele, infer_class2_pairing=False,
-                 required_result_types=(Allele, Pair)).to_string()
+    return canonical_allele_name(allele)
 
 
 def validate_prediction_allele(kind, allele, location):

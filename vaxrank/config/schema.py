@@ -195,6 +195,10 @@ class IsovarConfigSchema(
     sources: Optional[dict[str, dict]] = None
 
 
+class EvidenceConfigSchema(msgspec.Struct, frozen=True, kw_only=True, forbid_unknown_fields=True):
+    ms: Optional[dict] = None
+
+
 class VaxrankConfigSchema(
     msgspec.Struct,
     frozen=True,
@@ -203,6 +207,7 @@ class VaxrankConfigSchema(
 ):
     name: Optional[str] = None
     policy_metadata: Optional[dict] = None
+    evidence: Optional[EvidenceConfigSchema] = None
     isovar: Optional[IsovarConfigSchema] = None
     epitopes: Optional[EpitopesConfigSchema] = None
     vaccine_peptides: Optional[VaccinePeptidesConfigSchema] = None

@@ -11,11 +11,12 @@ These are resolved settings. Invocation defaults do not override saved assembly 
 {% endif %}
 {% if score_calculations %}
 Candidate score calculations:
-target_epitope_score sums retained target-occurrence scores; each occurrence sums its credited allele scores. A window utility can instead use unique sequence/allele pairs. Only named expression terms contribute to this calculation; admission and window constraints act separately.
+target_epitope_score sums retained target-occurrence scores; With MS scoring, use the baseline allele sum plus one maximum MS increment per unique peptide sequence per window. Adjusted score = B^(1/G), G = 1 + gain * log2(1 + max(R, P, J)). These heuristic ranking scores are not probabilities. Without MS, each occurrence sums its credited allele scores. A window utility can instead use unique sequence/allele pairs. Only named expression terms contribute to this calculation; admission and window constraints act separately.
 {% for calculation in score_calculations %}
 {{ calculation.sources | join(', ') }}: {{ calculation.expression }} = {{ calculation.result }}
 {% for term in calculation.terms %}  {{ term.name }} = {{ term.display }} ({{ term.unit }}){% if term.evidence %}; {{ term.evidence }}{% endif %}
 {% endfor %}  Target-epitope total: {{ calculation.target_score }}
-{% for target in calculation.targets %}  {{ target.sequence }}, offset {{ target.offset }}: {% for allele, score in target.allele_scores.items() %}{{ allele }}: {{ '%.6g' | format(score) }}{% if not loop.last %}; {% endif %}{% endfor %}
+{% for target in calculation.targets %}  {{ target.sequence }}, offset {{ target.offset }}: {% for allele, score in target.allele_scores.items() %}{{ allele }}: {{ '%.6g' | format(score) }}{% if not loop.last %}; {% endif %}{% endfor %}{% if target.ms_scoring %}; MS increment (once per sequence): {{ target.ms_increment }}{% for allele, trace in target.ms_scoring.items() %}
+    {{ allele }}: base {{ trace.base }}, adjusted {{ trace.adjusted }}; R={{ trace.resolved }}, P={{ trace.presence }}, J={{ trace.reference }}{% endfor %}{% endif %}
 {% endfor %}{% endfor %}{% endif %}
 {% include "templates/window_decisions.txt" %}

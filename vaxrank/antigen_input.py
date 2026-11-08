@@ -262,6 +262,10 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
             attach_antigen_backgrounds(dataset, predictor, patient_backgrounds, source_evidence)
         return dataset
     frame = predictor.predict_from_named_sequences({name: a.amino_acids for name, a in antigens.items()})
+    if config.ms_evidence is not None:
+        from .ms_lookup import complete_candidate_frame
+        frame = complete_candidate_frame(frame, {n: a.amino_acids for n, a in antigens.items()},
+                                         predictor, alleles=alleles)
     if frame.empty:
         raise ValueError('Antigen predictor returned no peptide measurements')
     frame = frame.reset_index(drop=True)
@@ -288,6 +292,11 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     adapted = EpitopeDataset.from_topiary(TopiaryResult(frame), label=provenance.input_id)
     if annotate is not None:
         annotate(frame)
+    ms_lookup = None
+    if config.ms_evidence is not None:
+        from .ms_lookup import MSLookup
+        ms_lookup = MSLookup(config.ms_evidence)
+        ms_lookup(frame)
 
     def occurrence_id(name, peptide, offset):
         return provenance.input_id + ':' + hashlib.sha256(
@@ -298,6 +307,8 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     candidates = tuple(replace(e, prediction_id=occurrence_id(e.source_name, e.sequence, e.offset))
                        for e in adapted.epitopes)
     dataset = EpitopeDataset.from_predictions(candidates, result=TopiaryResult(frame))
+    if ms_lookup is not None:
+        dataset.selection['hitlist_local_queries'] = ms_lookup.queries
     dataset.antigens = {e.prediction_id: antigens[e.source_name] for e in candidates}
     # Preserve sequences for which the predictor emitted no observations too.
     observed = {e.source_name for e in candidates}

@@ -185,11 +185,19 @@ def predict_epitopes(
         predictions_df = topiary_predictor.predict_from_named_sequences(
             {source_name: antigen.amino_acids})
     except Exception:
+        if epitope_config.ms_evidence is not None:
+            raise
         logger.error(
             'MHC prediction errored for antigen %s, with traceback: %s',
             antigen, traceback.format_exc())
         return []
 
+    if epitope_config.ms_evidence is not None:
+        from .ms_lookup import complete_candidate_frame, MSLookup
+        predictions_df = complete_candidate_frame(predictions_df,
+            {source_name: antigen.amino_acids}, topiary_predictor)
+        if annotate is None:
+            annotate = MSLookup(epitope_config.ms_evidence)
     if predictions_df.empty:
         return []
 
@@ -236,7 +244,7 @@ def predict_epitopes(
         group_columns=prediction_group_columns(predictions_df))
 
     filter_node = (build_filter_node(epitope_config)
-                   if epitope_config.selection_policy is None else None)
+                   if epitope_config.selection_policy is None and epitope_config.ms_evidence is None else None)
     if filter_node is not None:
         predictions_df = apply_filter(
             predictions_df, filter_node,
@@ -276,7 +284,16 @@ def predict_epitopes(
 
     # Evaluate the score expression once; indexed by
     # (source_sequence_name, peptide, peptide_offset, allele) group tuple.
-    if epitope_config.selection_policy is not None:
+    if epitope_config.ms_evidence is not None:
+        from .ms_evidence import score_frame
+        from .epitope_dsl import resolve_default_methods, resolve_default_versions
+        score_series = score_frame(predictions_df, epitope_config,
+            group_keys=prediction_group_columns(predictions_df), kind_support=kind_support,
+            default_methods=resolve_default_methods(epitope_config, predictions_df),
+            default_versions=resolve_default_versions(epitope_config, predictions_df))
+        if policy_evaluations is not None and 'policy_evaluation' in score_series.attrs:
+            policy_evaluations.append(score_series.attrs['policy_evaluation'])
+    elif epitope_config.selection_policy is not None:
         from .selection_policy import evaluate_frame
         from .epitope_dsl import resolve_default_methods, resolve_default_versions
         score_series = evaluate_frame(
@@ -392,9 +409,12 @@ def predict_epitopes(
             num_low_scoring += 1
             continue
         epitope_score = float(score_series[group_key])
-        if epitope_config.selection_policy is None and epitope_score < epitope_config.min_epitope_score:
+        if epitope_config.selection_policy is None and epitope_config.ms_evidence is None and epitope_score < epitope_config.min_epitope_score:
             num_low_scoring += 1
             continue
+
+        if 'ms_scoring' in score_series.attrs:
+            epitope_score = score_series.attrs['ms_scoring'][group_key[:-1]][group_key[-1]]['baseline']
 
         percentile_rank = finite_prediction_value(row.get("percentile_rank"))
 
@@ -450,12 +470,10 @@ def predict_epitopes(
         if prediction_score is None:
             raise ValueError(
                 "Topiary prediction row is missing a finite score")
-        mutant_pred = _prediction_from_row(
-            row,
-            peptide=peptide,
-            score=prediction_score,
-            percentile_rank=percentile_rank,
-        )
+        mutant_pred = (_prediction_from_row(row, peptide=peptide, score=prediction_score,
+                                            percentile_rank=percentile_rank)
+                       if finite_prediction_value(row.get('value')) is not None
+                       or finite_prediction_value(row.get('score')) is not None else None)
         rows.append({
             'peptide': peptide,
             'source': antigen.amino_acids,
@@ -484,6 +502,8 @@ def predict_epitopes(
             # truth — VaccinePeptide reads it directly and never
             # recomputes from ic50 / percentile_rank.
             'allele_score': epitope_score,
+            'per_allele_scores': {row['allele']: epitope_score} if row['allele'] else {},
+            'patient_alleles': (row['allele'],) if row['allele'] else (),
         })
 
     logger.info(
@@ -492,6 +512,10 @@ def predict_epitopes(
         num_occurs_in_reference,
         num_low_scoring)
     candidates = candidate_epitopes_from_rows(rows)
+    if 'ms_scoring' in score_series.attrs:
+        from dataclasses import replace
+        candidates = [replace(e, ms_scoring=score_series.attrs['ms_scoring'].get(
+            (source_name, e.sequence, e.offset), {})) for e in candidates]
     if epitope_config.comparison_reference == 'patient_background':
         from .patient_background import attach_patient_background
         candidates = attach_patient_background(

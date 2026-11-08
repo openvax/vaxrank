@@ -12,14 +12,14 @@ The calculations below use the actual candidate objects; invocation defaults are
 {% if score_calculations %}
 <h3>Candidate score calculations</h3>
 <p>The expression is taken from each candidate. Its <code>target_epitope_score</code> sums the stored scores of retained target occurrences;
-each occurrence score sums its credited allele scores. This is distinct from a window utility that uses unique sequence/allele pairs.
+With MS scoring, this is the baseline allele sum plus one maximum MS increment per unique peptide sequence in the window. The MS transform is B^(1/G), where G = 1 + gain × log2(1 + max(R, P, J)); these are heuristic ranking scores, not probabilities. Without MS scoring, each occurrence sums its credited allele scores. This is distinct from a window utility that uses unique sequence/allele pairs.
 Presentation, WT comparison, cleavage, RNA support and manufacturability affect this expression only when its recorded terms use them.
 Admission and window-selection constraints may act separately.</p>
 <table class="pure-table score-calculations"><thead><tr><th>Sources</th><th>Expression and inputs</th><th>Result / target contributions</th></tr></thead><tbody>
 {% for calculation in score_calculations %}<tr><td>{% for source in calculation.sources %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td>
 <td><code>{{ calculation.expression }}</code>{% for term in calculation.terms %}<br>{{ term.name }} = {{ term.display }} ({{ term.unit }}){% if term.evidence %}<br><span class="note">{{ term.evidence }}</span>{% endif %}{% endfor %}</td>
 <td>Combined score: <strong>{{ calculation.result }}</strong><br>Target-epitope total: {{ calculation.target_score }}
-{% for target in calculation.targets %}<p class="note">{{ target.sequence }}, offset {{ target.offset }}: {% for allele, score in target.allele_scores.items() %}{{ allele }}: {{ '%.6g' | format(score) }}{% if not loop.last %}; {% endif %}{% endfor %}</p>{% endfor %}</td></tr>{% endfor %}
+{% for target in calculation.targets %}<p class="note">{{ target.sequence }}, offset {{ target.offset }}: {% for allele, score in target.allele_scores.items() %}{{ allele }}: {{ '%.6g' | format(score) }}{% if not loop.last %}; {% endif %}{% endfor %}{% if target.ms_scoring %}<br>MS increment (counted once per sequence): {{ "%.6g" | format(target.ms_increment) }}{% for allele, trace in target.ms_scoring.items() %}<br>{{ allele }}: base {{ trace.base }}, adjusted {{ "%.6g" | format(trace.adjusted) }}; resolved support {{ trace.resolved }}, presence {{ trace.presence }}, reference support {{ trace.reference }}{% endfor %}{% endif %}</p>{% endfor %}</td></tr>{% endfor %}
 </tbody></table>{% endif %}
 {% include "templates/window_decisions.html" %}
 {% endautoescape %}
