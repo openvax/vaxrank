@@ -130,11 +130,12 @@ class CTAExpressionResult(DataclassSerializable):
         if (reference.annotation_assembly != self.reference_assembly
                 or str(reference.annotation_release) != self.annotation_version):
             raise ValueError("CTA admission and annotation reference disagree")
+        reference_fingerprint = reference.fingerprint
         for decision in self.decisions:
             resolution = decision.reference_resolution
             if resolution is None:
                 continue
-            if (resolution.annotation_reference_sha256 != reference.fingerprint
+            if (resolution.annotation_reference_sha256 != reference_fingerprint
                     or resolution.annotation_sha256 != reference.annotation_sha256
                     or resolution.evidence.unfiltered_gene_ids_sha256 != reference.canonical_candidate_gene_ids_sha256
                     or resolution.self_reference_excluded_gene_ids != reference.self_reference_excluded_gene_ids

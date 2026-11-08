@@ -1,6 +1,6 @@
 """Persisted annotation-scoped CTA identities from the public OncoRef API."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 import hashlib
 import json
 import re
@@ -89,7 +89,10 @@ class CTAAnnotationReference(DataclassSerializable):
 
     @property
     def fingerprint(self):
-        return identity_digest(asdict(self))
+        # JSON already traverses the plain fields. Deep-copying every identity
+        # adds no isolation and dominates complete expression-table admission.
+        # Recompute from current facts, so nested edits still change identity.
+        return identity_digest({f.name: getattr(self, f.name) for f in fields(self)})
 
 
 def snapshot_cta_annotation(genome):
