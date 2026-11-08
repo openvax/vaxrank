@@ -41,6 +41,11 @@ it contributes the prediction-supported facet only for the compatible allele.
 The current native package adapter does not assert source-prediction qualification
 without its model provenance. Unknown chemical forms and contaminants are held out.
 
+Patient prediction alleles now use Topiary's exact-allele boundary consistently:
+allele groups, null alleles, and ambiguous class-I pairs are rejected at input.
+Source evidence can retain those unresolved declarations without promoting them
+to an exact restriction or assigning them to every patient allele.
+
 Resolved native donors or engineered origins contribute at most once each.
 `R` sums those unit maxima, `P` is the largest presence contribution, and `J`
 is discounted support across connected references. Known shared units and reuse
