@@ -67,6 +67,10 @@ def test_requirements_txt_parses_into_at_least_the_known_dependencies():
     assert {"isovar", "mhctools", "mhcgnomes", "topiary", "varcode"} <= names
 
 
+def test_topiary_floor_supports_the_shared_exact_allele_boundary():
+    assert floor_of(requirement_named("topiary")) >= Version("5.111.0")
+
+
 #: Distribution name -> import name, where they differ.
 _MODULE_NAMES = {"pyyaml": "yaml", "pillow": "PIL"}
 

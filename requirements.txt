@@ -59,7 +59,9 @@ mhctools>=4.8.1,<5.0.0
 # required when antigen/CTA caches contain other patients (topiary#547; vaxrank#725).
 # 5.108.4 accepts Isovar's unlimited hypothesis cap and exact repeated pairs
 # for patient-background comparisons (topiary#561/#562; vaxrank#716).
-topiary>=5.109.0,<6.0.0
+# 5.111.0 supplies the shared exact/expressed patient-allele boundary used by
+# MS attribution and all prediction input validation (topiary#578, vaxrank#789).
+topiary>=5.111.0,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0
