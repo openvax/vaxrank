@@ -1,9 +1,9 @@
 # MS evidence for every antigen category
 
-Status: proposed algorithm, 2026-11-06. This document changes no runtime behavior.
-Vaxrank baseline: 3.51.2, including global Hitlist annotation in PR #809.
-Evidence/scoring contracts inspected with Hitlist 2.1.9, Topiary 5.109.0 and
-MHCtools 4.8.1.
+Status: proposed algorithm, revised 2026-11-07. This document changes no runtime behavior.
+Vaxrank baseline: 3.51.5, including global Hitlist annotation in PR #809.
+Evidence contract: Hitlist 2.1.9. Revised formula validation uses Topiary 5.111.3;
+the validation environment also includes MHCtools 4.9.3.
 Configuration and feature names below are proposals.
 
 The current `--hitlist-local-evidence` option already annotates supported input
@@ -21,9 +21,10 @@ leaves the existing ranking unchanged.
 
 There is one scoring algorithm: qualify positive ligand-MS observations, assign
 patient-allele support weights, deduplicate source units, apply diminishing
-returns, then combine the result with a bounded prediction score. All antigen
-categories use the same rules. Weights and thresholds are explicit policy
-parameters, not separate algorithms for different input types.
+returns, then scale the prediction through an MS-dependent power transform.
+There is no hard evidence cap by default. All antigen categories use the same
+rules. Weights and thresholds are explicit policy parameters, not separate
+algorithms for different input types.
 
 The result is a ranking heuristic, not a calibrated probability of presentation,
 immune response or tumor specificity. Source observations do not establish
@@ -197,7 +198,7 @@ record must not split one known reused experiment into several groups:
     reference_support[g,a] = max(c[o,a] in reference group g)
     J[a] = reference_discount * sum(reference_support[g,a])
     M[a] = max(R[a], P[a], J[a])
-    S[a] = min(ms_cap, log2(1 + M[a]))
+    S[a] = log2(1 + M[a])
 
 Initially `reference_discount=0.25`, allowing limited bibliographic
 corroboration when biological identity is incomplete. This does not label papers
@@ -210,28 +211,45 @@ Report matching, known-nonmatching and unresolved reference sets using unions
 and differences, never sums of per-allele counts. One reference naming two patient
 alleles remains one reference. Keep original bibliography and group membership.
 
-Initially `ms_cap=8`. Combining weights before the logarithm prevents
-facet-splitting bonuses. At fixed unit/reference grouping, qualification and
-policy, additional distinct units or stronger facets cannot reduce support.
+Combining weights before the logarithm prevents facet-splitting bonuses.
+At fixed unit/reference grouping, qualification and policy, additional distinct
+units or stronger facets cannot reduce support. S has no hard cap by default;
+the logarithm supplies diminishing returns from recurrence.
 
-### 4. Combine with prediction
+### 4. Scale predictions with MS evidence
 
 B[p,a] is a named, bounded [0, 1] binding/presentation score before eligibility
 gates zero it out. The initial profile can reuse Vaxrank's normalized affinity
 transform. Other metrics need an explicit bounded criterion; do not silently
 clamp or reinterpret arbitrary user scores.
 
-    H[a] = 1 - 2 ** (-S[a] / ms_scale)
-    C[p,a] = B[p,a] + (1 - B[p,a]) * H[a]
+    G_raw[a] = 1 + ms_gain * S[a]
+    G[a] = G_raw[a]                       # default: max_relaxation is null
+    G[a] = min(G_raw[a], max_relaxation)     # only when explicitly configured
+    C[p,a] = B[p,a] ** (1 / G[a])
 
-Initially `ms_scale=4`; cap=8 limits the boost to 75% of remaining distance to 1.
-No support yields C=B. Increasing support improves C with diminishing returns.
-B=0 can receive positive support; B=1 stays 1. This is score arithmetic, not an
-independent-probability calculation.
+G is the relaxation factor; the power applied to B is 1/G.
+Initially `ms_gain=1` and `max_relaxation=null`. No qualifying evidence gives
+M=S=0, G=1 and C=B. For 0 < B < 1, stronger support increases C toward 1 without
+a default plateau below 1. The transformation is continuous in B and G; it
+does not assign a fixed priority tier. This is a ranking heuristic, not an
+independent-probability calculation. The gain and evidence weights are explicit,
+uncalibrated parameters to validate with ranking examples and held-out evidence.
 
-Keep missing B missing. Only an admitted direct-MS candidate (step 5) may use
-B_effective=0 here, with explicit `score_basis=ms_only`; otherwise it has no
-rankable combined score.
+B=1 remains 1; a true B=0 remains 0 for every finite G. Read B before any
+prediction-cutoff mask: a rejected prediction must not become an artificial
+zero before the transform. When an unthresholded log score is available, compute
+`log(C)=log(B)/G` to avoid premature numerical underflow. Do not add an implicit
+epsilon floor or replace an exact zero with a positive prediction.
+
+Missing B remains missing. By default an MS-only candidate is reported with its
+evidence and `score_status=missing_prediction`, but held out of automatic ranked
+selection. A separately named, explicitly configured `ms_only_score` criterion
+may rank it only if it passes direct-MS admission (step 5). That criterion must
+return a finite score in [0, 1] and retain `score_basis=ms_only`; it supplies C
+directly, never a fabricated B or affinity. The default is no such criterion.
+A present zero stays on the power-transform path and cannot silently switch to
+the missing-prediction policy.
 
 Compute each C from B and S for the same allele. Keep the allele vector; do not
 combine the best prediction for one allele with another allele's MS support.
@@ -240,23 +258,44 @@ preserving the existing prediction-only aggregation.
 
 ### 5. Apply eligibility before final ranking
 
-Separate hard antigen requirements from prediction eligibility:
+Separate hard antigen requirements from the named, relaxable prediction-score
+gate. Evaluate that gate on the MS-scaled score:
 
     admitted = hard_antigen_requirements AND (
-        existing_prediction_gate OR qualified_direct_MS
+        prediction_gate(C) OR qualified_direct_MS
     )
+
+The prediction-only baseline uses `prediction_gate(B)`. Thus increasing MS
+support can lift a weak positive prediction above the configured soft threshold,
+instead of changing scores only after such candidates have already been removed.
+Define the gate in the same bounded score units as B and preserve the original
+prediction-only decisions when G=1. Any conversion of a raw affinity/rank cutoff
+must use the selected model's explicit monotone score transform and retain the
+original cutoff in provenance; unsupported conversions are rejected, not guessed.
 
 The proposed profile's direct-MS route requires at least one accepted exact
 patient-allele experimental or verified monoallelic observation passing the
 quality/context gates, with positive effective direct-facet weight and S>0.
-Zeroing the MS contribution therefore cannot leave a hidden admission bypass.
+Require G>1 as well: zero gain or an explicitly selected maximum relaxation factor of 1
+must not leave a hidden admission bypass. Missing predictions additionally need
+an explicit `ms_only_score` criterion to participate in automatic ranked selection.
 Unknown donor identity does not erase verified restriction.
 Predicted restriction, typed overlap and generic sequence presence
 cannot activate this route. Expose a switch to disable it.
 
-Enrich before the first prediction filter. When a direct-MS candidate has no
-numerical prediction, create an evidence-backed peptide/allele candidate row,
-never a fabricated affinity. All hard antigen requirements still apply.
+Only explicitly named prediction-score gates may use C or be bypassed by direct
+MS. All other user filters remain mandatory by default; do not OR direct-MS
+support with an arbitrary full Topiary `filter_by` expression. Persist separate
+prediction-gate and hard-filter decisions so reports and replay explain which condition admitted the candidate.
+
+Enumerate eligible peptide sequences and source positions independently of
+prediction output, using the configured length and target-region scope. Query
+those sequences before prediction filtering or an empty-prediction return.
+Imports use their declared peptide occurrences even when numeric predictions
+are missing. Create evidence-backed peptide/allele candidate rows without
+fabricated affinities, retaining missing-prediction states and all hard antigen
+requirements. A current annotation callback over prediction rows alone does not
+provide this MS-only candidate-generation path.
 
 ### 6. Add one MS increment per peptide
 
@@ -265,13 +304,15 @@ into vaccine-window scores (`vaccine_peptide.py`). Preserve this prediction
 baseline; summing C across alleles would award the same MS observation repeatedly.
 For each allele admitted by step 5:
 
-    b0[p,a] = B[p,a] if the existing prediction gate passes, otherwise 0
+    b0[p,a] = B[p,a] if prediction_gate(B) passes, otherwise 0
     D[p,a] = C[p,a] - b0[p,a]
     D[p] = max(D[p,a] over admitted patient alleles, default=0)
     peptide_score[p] = sum_a b0[p,a] + D[p]
 
-The no-prediction/direct-MS case has b0=0 and D=C. If a direct observation admits
-an otherwise prediction-filtered allele, C is its evidence-backed contribution.
+An explicitly scored MS-only candidate has b0=0 and D=C. Without that configured
+criterion it contributes neither a fabricated baseline nor an MS increment to
+ranked selection. If MS scaling or direct evidence admits an otherwise
+prediction-filtered allele, C is its evidence-backed contribution.
 Alleles failing both routes do not participate in the maximum. Record the allele
 providing D, with deterministic ties by canonical allele identity. This can
 differ from the best predicted allele; neither attribution is hidden.
@@ -281,29 +322,39 @@ per unique eligible minimal-peptide sequence in that window. Repeated sequence
 positions keep their source mappings but do not receive extra MS increments.
 Compose the resulting presentation contribution with existing expression,
 clonality and context terms. No MS leaves the original baseline unchanged.
-Window/peptide sums need not lie in [0, 1]; only B, H and C have that domain.
+Window/peptide sums need not lie in [0, 1]; B and C have that domain.
 Keep assembly and separate allele-coverage objectives explicit.
+
+Keep the baseline allele vector, adjusted allele vector and once-per-peptide D
+as distinct serialized score components. The adjusted vector is for audit; it
+must not replace every entry of the current additive `per_allele_scores` path.
+Epitope and window reducers must consume the baseline plus their single MS
+increment explicitly. Older snapshots default the new increment to zero.
 
 ## Worked example
 
-For B=0.20, q=t=1, cap=8, scale=4 and the weights above:
+For a synthetic comparison holding B=0.20 and q=t=1 fixed, with gain=1,
+no relaxation cap and the weights above:
 
-| Evidence | M | S | C, for one admitted allele |
+| Evidence | M | G | C, for one admitted allele |
 |---|---:|---:|---:|
-| No qualifying MS | 0 | 0 | 0.200 |
-| Exact peptide, source typing unknown, patient prediction qualifies | 0.5 | 0.585 | 0.277 |
-| One typed sample sharing the patient allele | 1 | 1.000 | 0.327 |
-| Same sample, qualifying source-compatible prediction | 3 | 2.000 | 0.434 |
-| That predicted support in 20 resolved native donors | 60 | 5.931 | 0.714 |
-| Twenty technical acquisitions from the first donor | 3 | 2.000 | 0.434 |
-| Verified monoallelic source, one origin or unresolved origin | 8 | 3.170 | 0.538 |
-| Twenty unresolved sample labels within one reference | 3 | 2.000 | 0.434 |
-| Twenty reference groups with predicted support, lineage unresolved | 15 | 4.000 | 0.600 |
+| No qualifying MS | 0 | 1.000 | 0.200 |
+| Exact peptide, source typing unknown, patient prediction qualifies | 0.5 | 1.585 | 0.362 |
+| One typed sample sharing the patient allele | 1 | 2.000 | 0.447 |
+| Same sample, qualifying source-compatible prediction | 3 | 3.000 | 0.585 |
+| That predicted support in 20 resolved native donors | 60 | 6.931 | 0.793 |
+| Twenty technical acquisitions from the first donor | 3 | 3.000 | 0.585 |
+| Verified monoallelic source, one origin or unresolved origin | 8 | 4.170 | 0.680 |
+| Twenty unresolved sample labels within one reference | 3 | 3.000 | 0.585 |
+| Twenty reference groups with predicted support, lineage unresolved | 15 | 5.000 | 0.725 |
+| Predicted support in 1,000 resolved native donors | 3000 | 12.551 | 0.880 |
 
 These weights let extensive predicted corroboration outweigh one monoallelic
-observation. Weights, reference discount and cap control that tradeoff; the
-numbers are uncalibrated. The example assumes prediction eligibility passes
-where there is no direct experimental restriction.
+observation. Weights, reference discount, gain and any explicitly configured
+relaxation cap control that tradeoff; the numbers are uncalibrated. These examples
+isolate the transform, rather than assert model-consistent prediction/qualification
+pairs. They assume prediction eligibility passes where there is no direct
+experimental restriction.
 
 ## Configuration, audit and replay
 
@@ -317,9 +368,10 @@ where there is no direct experimental restriction.
 | Facet weights | 0.25 / 0.5 / 1 / 1 / 3 / 6 / 8 as listed |
 | Recurrence | Native donors and engineered experimental origins; presence floor for unresolved identity |
 | Reference discount | 0.25; zero disables bibliographic corroboration |
-| Transform | cap=8, scale=4 |
+| Transform | `ms_gain=1`, `max_relaxation=null`; optional relaxation cap must be explicit |
 | Base criterion | Explicit bounded binding/presentation score; prediction gate separately named |
 | Direct-MS admission | Enabled in this opt-in profile; exact experimental/monoallelic support required |
+| MS-only score | Unset by default; an explicit named criterion is required to rank a missing prediction |
 
 Acquisition and evidence definitions belong under `evidence.ms`. Numeric
 criteria, weights, gates and arithmetic compile into existing Topiary selection
@@ -327,14 +379,17 @@ policies, with no new expression language or ad-hoc ranking engine. Recompute
 grouping/identity features from captured observations when policy changes,
 rather than reweighting overlapping raw counts.
 
-Reject non-finite/negative weights or caps, nonpositive scale, and multipliers
-or reference discounts outside [0, 1]. A present B must be finite and in [0, 1].
-Missing B follows the explicit admission rule, not a global missing-value fill.
+Reject non-finite/negative weights or gain, a non-null relaxation cap that is
+non-finite or below 1, and multipliers or reference discounts outside [0, 1].
+A present B must be finite and in [0, 1], and the evaluated relaxation factor must be
+finite and >=1. Missing B follows the explicit MS-only scoring/admission rule,
+not a global missing-value fill.
 
 Reports show availability, strongest facet and basis, all compatible alleles,
 prediction provenance, counted unit/reference IDs, unresolved coverage,
-R/P/J/M/S, B/H/C/D, admission route and final contribution. Show best overall,
-best evidence-supported and increment-providing alleles, including disagreements.
+R/P/J/M/S, G_raw/G, B/C/D, score basis/status, admission route and final
+contribution. Show best overall, best evidence-supported and increment-providing
+alleles, including disagreements.
 Spectra, detected samples, specimens, donors, origins and references retain their
 own units.
 
@@ -367,9 +422,9 @@ or predictors. Explicit refresh produces a new traceable snapshot.
    without numerical predictions. Use Topiary `join_annotations` and named
    criteria. Add report explanations and replay fields.
 5. Compare with the unchanged baseline. Test sensitivity to weights, reference
-   discount, cap/scale, quality, context and predicted association. Use
-   source/lineage-separated validation where available; record training overlap
-   and do not claim independence for unresolved reused evidence.
+   discount, gain/optional relaxation cap, quality, context and predicted
+   association. Use source/lineage-separated validation where available; record
+   training overlap and do not claim independence for unresolved reused evidence.
 
 Hitlist owns modality, curation, typing provenance and lineage. Relevant coverage
 work includes [#855](https://github.com/pirl-unc/hitlist/issues/855),
@@ -393,9 +448,20 @@ Incomplete lineage need not block presence-level annotation.
   Authoritative reuse corrections revise scores with an audit.
 - Exact/coarse/missing/conflicting typing remain distinct. Inferred singleton
   sets never become monoallelic; all qualifying alleles remain available.
-- No support yields B; zeroed weights/multipliers yield no bonus. Support is
-  monotone at fixed identities/policy and C stays in [0, 1]. Missing B is
-  rankable only through direct-MS admission.
+- No support gives G=1 and C=B. Zeroed weights/multipliers/gain yield no bonus
+  or direct-MS admission bypass. Support is monotone at fixed identities/policy
+  and C stays in [0, 1]. Increasing support beyond M=255 still increases a
+  nonendpoint score with the default uncapped relaxation factor; an optional explicit
+  cap takes effect only where configured.
+- True B=0 remains zero and B=1 remains one. A pre-filter zero must not replace
+  the unthresholded B; use available log scores without inventing epsilon floors.
+  Missing B remains visible and unranked unless direct-MS admission and an
+  explicit MS-only score criterion both apply.
+- An empty prediction result does not prevent exact MS lookup over eligible
+  source peptides. Direct-MS admission cannot bypass unnamed/custom hard filters.
+- A weak positive prediction can cross a named soft score threshold as MS
+  support grows; the prediction-only gate and all hard-filter decisions remain
+  separately auditable. No-MS decisions match the original policy exactly.
 - Non-MS, bulk-protein, synthetic-standard and negative/unestablished records
   cannot enter positive ligand-MS. Preserve measurement statuses/quality scope.
 - Patient prediction plus sequence MS never becomes experimental restriction;
