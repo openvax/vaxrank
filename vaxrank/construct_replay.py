@@ -160,6 +160,12 @@ def _canonical_native(value):
     if metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='SelfReferenceMatch'):
         if not result.get('reference_sha256'):
             result.pop('reference_sha256', None)
+    if metadata in (
+            dict(__module__='vaxrank.vaccine_antigen', __name__='VaccineAntigen'),
+            dict(__module__='vaxrank.mutant_protein_fragment', __name__='MutantProteinFragment')):
+        empty_tuple = dict(__class__=dict(__module__='builtins', __name__='tuple'), __value__=[])
+        if result.get('rna_support') == empty_tuple:
+            result.pop('rna_support')
     prediction_tuple = (metadata == dict(__module__='builtins', __name__='tuple')
                         and result['__value__'] and all(
                             isinstance(item, dict) and item.get('__class__') ==

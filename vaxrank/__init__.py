@@ -165,7 +165,10 @@ from .reference_proteome import (
 from .proteome import to_proteome
 from .version import __version__
 
+from .rna_support import RNAFeatureEvidence
+
 __all__ = [
+    "RNAFeatureEvidence",
     "PatientBackgroundPairs",
     "HostReference",
     "AntigenDataset",

@@ -28,7 +28,7 @@ def window_evidence_key(peptide, processing):
     epitopes = [replace(e, prediction_id='', source_name='', predictions=[replace(p, source_sequence_name='')
         for p in e.predictions_flat()]) for e in peptide.epitopes]
     return _key(to_native_json(dict(sequence=peptide.amino_acids,
-        target_mask=peptide.antigen.targetable_mask, epitopes=epitopes,
+        target_mask=peptide.antigen.targetable_mask, rna_support=peptide.antigen.rna_support, epitopes=epitopes,
         processing=processing, score=peptide.combined_score,
         target_score=peptide.target_epitope_score, scoring_expression=peptide.combined_score_expr,
         manufacturability=peptide.manufacturability_scores._asdict())))
@@ -51,7 +51,7 @@ def prediction_table_key(peptide, processing):
 
 def window_measurements_key(peptide):
     return _key(to_native_json(dict(sequence=peptide.amino_acids,
-        target_mask=peptide.antigen.targetable_mask, score=peptide.combined_score,
+        target_mask=peptide.antigen.targetable_mask, rna_support=peptide.antigen.rna_support, score=peptide.combined_score,
         target_score=peptide.target_epitope_score, expression=peptide.combined_score_expr,
         manufacturability=peptide.manufacturability_scores._asdict())))
 
