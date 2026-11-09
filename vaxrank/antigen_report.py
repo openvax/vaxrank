@@ -143,6 +143,31 @@ def patient_background_sections(peptides, source_evidence):
     return sections
 
 
+def rna_support_sections(antigen):
+    """Render source-qualified common RNA measurements without aggregation."""
+    sections = []
+    for index, evidence in enumerate(antigen.rna_support, 1):
+        record = evidence.measurement
+        rows = [("Applicability", evidence.scope), ("Protein interval", evidence.protein_interval),
+                ("Sample / library", record["evidence_scope"]),
+                ("Feature identity", record["feature"]["identifier"]),
+                ("RNA path", record["feature"]["path_id"]),
+                ("Required RNA intervals (nt)", record["feature"]["intervals"]),
+                ("Support rule", record["feature"]["mode"]),
+                ("Geometry model", record["normalization_model"]),
+                ("Geometry extent", record["geometry_scope"])]
+        rows += [(name.replace("_", " "), value) for name, value in record["values"].items()]
+        rows += [(name.replace("_", " ") + " — unavailable", reason)
+                 for name, reason in record["unavailable"].items()]
+        rows += [("Sampling provenance", record["sampling_profile"]["provenance"]),
+                 ("Measurement identity", record["measurement_id"])]
+        sections.append(_section("Common RNA feature support %d" % index, rows,
+            "Counts describe the declared local RNA feature. Geometric normalization is experimental; "
+            "it is not TPM, protein abundance or evidence of translation. Event support does not "
+            "establish observation of the whole coding window. Libraries remain separate."))
+    return sections
+
+
 def antigen_evidence_sections(antigen, source_evidence=None):
     """Render every recorded attestation and source context without merging counts.
 
@@ -151,7 +176,7 @@ def antigen_evidence_sections(antigen, source_evidence=None):
     are retained separately; an ambiguous origin never supplies another origin's
     reference model or sample evidence.
     """
-    sections = []
+    sections = rna_support_sections(antigen)
     attestation = antigen.tumor_specificity
     for index, record in enumerate(attestation.evidence_records, 1):
         rows = [('Evidence type', record.evidence_kind), ('Source', record.evidence_source),

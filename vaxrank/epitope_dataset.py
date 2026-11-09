@@ -12,6 +12,7 @@ import pandas as pd
 from mhctools.pred import Prediction
 from topiary import TopiaryResult, combine_sources, is_stated, read_csv, read_tsv
 
+from .rna_support import RNA_BINDINGS, rna_support_bindings
 from .allele_validation import validate_peptide_alleles
 from .candidate_epitope import CandidateEpitope, Peptide, stated_or_blank
 from .epitope_config import EpitopeConfig
@@ -209,6 +210,9 @@ class EpitopeDataset:
             {key: antigen.kind for key, antigen in self.antigens.items()})
         frame['vaxrank_admission_status'] = frame.prediction_id.map(
             {key: antigen.tumor_specificity.status for key, antigen in self.antigens.items()})
+        rna = {key: rna_support_bindings(antigen) for key, antigen in self.antigens.items()}
+        for name in sorted(RNA_BINDINGS):
+            frame[name] = frame.prediction_id.map({key: values[name] for key, values in rna.items()})
         return frame
 
     def scoring_frames(self):

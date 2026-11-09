@@ -21,6 +21,7 @@ from varcode import iter_candidate_paths, classification_priority
 from varcode.effects import top_priority_effect
 from topiary import FRAGMENTS, varcode_candidate_provenance
 
+from .rna_support import RNAFeatureEvidence, slice_rna_support
 from .varcode_effects import (
     OUTCOME_SELECTION_HIGHEST_PRIORITY,
     OUTCOME_SELECTION_MOST_LIKELY,
@@ -271,6 +272,8 @@ class MutantProteinFragment(DataclassSerializable):
     # Construct assembly only uses (chr, pos) and the AA fragment, so
     # is unaffected. Defaults False since the VCF/BAM pipeline always
     # supplies real alleles.
+    rna_support: tuple[RNAFeatureEvidence, ...] = ()
+
     placeholder_alleles: bool = False
 
     # How the read counts above were obtained, in topiary's vocabulary:
@@ -696,6 +699,7 @@ class MutantProteinFragment(DataclassSerializable):
                 subsequence_mutant_protein_fragment = replace(
                     self,
                     amino_acids=amino_acids,
+                    rna_support=slice_rna_support(self.rna_support, subsequence_start_offset, subsequence_end_offset),
                     protein_start_offset=(None if self.protein_start_offset is None
                                           else self.protein_start_offset + subsequence_start_offset),
                     mutant_amino_acid_start_offset=mutant_amino_acid_start_offset,

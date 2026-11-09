@@ -110,6 +110,8 @@ import ast
 import logging
 import math
 
+from .rna_support import RNA_BINDINGS, rna_support_bindings, applicable_rna_support
+
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +146,7 @@ _FUNCTIONS = {
     'pow': pow,
 }
 
-SOURCE_AGNOSTIC_BINDINGS = frozenset({
+SOURCE_AGNOSTIC_BINDINGS = RNA_BINDINGS | frozenset({
     "target_epitope_score",
     "self_epitope_score",
     "window_epitope_score",
@@ -254,6 +256,7 @@ def combined_score_bindings(vp):
     bindings['window_epitope_score'] = float(utility)
     bindings['window_selection_factor'] = float(utility / vp.target_epitope_score
                                               if vp.target_epitope_score > 0 else 0.)
+    bindings.update(rna_support_bindings(getattr(vp, "antigen", None)))
     frag = vp.mutant_protein_fragment
     if frag is None:
         return bindings
@@ -316,6 +319,14 @@ def evaluate_combined_score(expr_or_tree, vaccine_peptide):
         # only runs on failure.
         expr_text = ast.unparse(tree)
     bindings = combined_score_bindings(vaccine_peptide)
+    missing_rna = [name for name in combined_score_binding_names(tree) & RNA_BINDINGS
+                   if bindings[name] is None]
+    if missing_rna:
+        count = len(applicable_rna_support(getattr(vaccine_peptide, "antigen", None)))
+        raise ValueError("Unavailable RNA score bindings %s (%d applicable measurements). "
+                         "Supply one explicit feature/library measurement for this window, "
+                         "with the required geometry and whole-library denominators; "
+                         "choose longitudinal aggregation separately." % (sorted(missing_rna), count))
     namespace = dict(_FUNCTIONS)
     namespace.update(bindings)
     try:

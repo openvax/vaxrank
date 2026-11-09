@@ -20,6 +20,7 @@ from serializable import DataclassSerializable
 
 from .amino_acids import validate_amino_acid_sequence
 from .identifiers import normalize_ensembl_gene_id
+from .rna_support import RNAFeatureEvidence, validate_rna_support, slice_rna_support
 
 
 ANTIGEN_KIND_MUTATION = "mutation"
@@ -276,8 +277,10 @@ class VaccineAntigen(DataclassSerializable):
     species: str = ""
     source_identifier: str = ""
     source_metadata: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    rna_support: tuple[RNAFeatureEvidence, ...] = field(default_factory=tuple)
 
     def __post_init__(self):
+        object.__setattr__(self, "rna_support", validate_rna_support(self.rna_support, len(self.amino_acids)))
         if self.kind not in ANTIGEN_KINDS:
             raise ValueError(
                 f"Unknown antigen kind {self.kind!r}; expected one of "
@@ -340,6 +343,7 @@ class VaccineAntigen(DataclassSerializable):
             species=self.species,
             source_identifier=self.source_identifier,
             source_metadata=self.source_metadata,
+            rna_support=slice_rna_support(self.rna_support, start, end),
         )
 
     @classmethod
@@ -482,6 +486,7 @@ class VaccineAntigen(DataclassSerializable):
             transcript_ids=transcript_ids,
             protein_ids=protein_ids,
             source_identifier=source_identifier,
+            rna_support=getattr(fragment, "rna_support", ()),
         )
 
     def self_reference_match(

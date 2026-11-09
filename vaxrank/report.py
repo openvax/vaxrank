@@ -31,7 +31,7 @@ from .cancer_hotspots import get_hotspot_url
 from . import cells
 from .epitope_io import ensure_parent_dir
 from .manufacturability import ManufacturabilityScores
-from .antigen_report import ADMISSION_NOTE, antigen_evidence_sections, metadata_values
+from .antigen_report import ADMISSION_NOTE, antigen_evidence_sections, metadata_values, rna_support_sections
 from .coding_context import antigen_source_label, coding_context_label, coding_contexts
 from .report_grouping import (group_report_evidence, prediction_origins, prediction_table_key,
                              source_evidence_key, window_contexts, window_evidence_key,
@@ -1082,7 +1082,7 @@ class TemplateDataCreator(object):
             variant_dict['admission_note'] = ADMISSION_NOTE if entity_label == 'Antigen' else ''
             variant_dict['source_evidence_sections'] = (
                 antigen_evidence_sections(antigen, self.source_evidence)
-                if entity_label == 'Antigen' else [])
+                if entity_label == 'Antigen' else rna_support_sections(antigen))
             from .antigen_report import patient_background_sections
             variant_dict['source_evidence_sections'] += patient_background_sections(
                 vaccine_peptides, self.source_evidence)

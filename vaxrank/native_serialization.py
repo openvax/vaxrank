@@ -116,6 +116,7 @@ def _native_serializable_classes():
         SafetyPredictionCoverage,
         WindowSafetyAssessment,
     )
+    from .rna_support import RNAFeatureEvidence
     from .vaccine_antigen import (
         AminoAcidInterval,
         SelfReferenceMatch,
@@ -169,6 +170,7 @@ def _native_serializable_classes():
         ("vaxrank.vaccine_antigen", "TumorSpecificityAttestation"): TumorSpecificityAttestation,
         ("vaxrank.vaccine_antigen", "TumorSpecificityEvidence"): TumorSpecificityEvidence,
         ("vaxrank.vaccine_antigen", "VaccineAntigen"): VaccineAntigen,
+        ("vaxrank.rna_support", "RNAFeatureEvidence"): RNAFeatureEvidence,
         ("vaxrank.construct_sequence", "ConstructEvidence"): ConstructEvidence,
         ("vaxrank.construct_sequence", "ConstructPlacement"): ConstructPlacement,
         ("vaxrank.construct_sequence", "ConstructSequenceEdit"): ConstructSequenceEdit,
