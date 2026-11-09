@@ -21,7 +21,7 @@ from varcode import iter_candidate_paths, classification_priority
 from varcode.effects import top_priority_effect
 from topiary import FRAGMENTS, varcode_candidate_provenance
 
-from .rna_support import RNAFeatureEvidence, slice_rna_support
+from .rna_support import RNAFeatureEvidence, slice_rna_support, validate_rna_support
 from .varcode_effects import (
     OUTCOME_SELECTION_HIGHEST_PRIORITY,
     OUTCOME_SELECTION_MOST_LIKELY,
@@ -272,8 +272,6 @@ class MutantProteinFragment(DataclassSerializable):
     # Construct assembly only uses (chr, pos) and the AA fragment, so
     # is unaffected. Defaults False since the VCF/BAM pipeline always
     # supplies real alleles.
-    rna_support: tuple[RNAFeatureEvidence, ...] = ()
-
     placeholder_alleles: bool = False
 
     # How the read counts above were obtained, in topiary's vocabulary:
@@ -351,6 +349,10 @@ class MutantProteinFragment(DataclassSerializable):
     # Explicit coordinates are needed for windows entirely inside a changed
     # region, where clipping the local mutation offset loses the window start.
     protein_start_offset: Optional[int] = None
+    rna_support: tuple[RNAFeatureEvidence, ...] = ()
+
+    def __post_init__(self):
+        self.rna_support = validate_rna_support(self.rna_support, len(self.amino_acids))
 
     @staticmethod
     def slp_window_around_mutation(

@@ -101,6 +101,9 @@ def test_invalid_and_duplicate_attachments_fail():
         replace(cta_antigen(), rna_support=(support(), support()))
     with pytest.raises(ValueError, match='scope'):
         RNAFeatureEvidence(support().measurement, 'pooled')
+    fragment = _make_vp().mutant_protein_fragment
+    with pytest.raises(ValueError, match='beyond'):
+        replace(fragment, rna_support=(support(interval=(0,len(fragment.amino_acids)+1)),))
 
 
 def test_common_rna_cli_prediction_report_and_offline_replay(tmp_path, monkeypatch):
