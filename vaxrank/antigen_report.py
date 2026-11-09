@@ -154,6 +154,7 @@ def rna_support_sections(antigen):
                 ("RNA path", record["feature"]["path_id"]),
                 ("Required RNA intervals (nt)", record["feature"]["intervals"]),
                 ("Support rule", record["feature"]["mode"]),
+                ("Fragment rule", record["feature"].get("fragment_mode", "union")),
                 ("Geometry model", record["normalization_model"]),
                 ("Geometry extent", record["geometry_scope"])]
         rows += [(name.replace("_", " "), value) for name, value in record["values"].items()]
@@ -161,6 +162,7 @@ def rna_support_sections(antigen):
                  for name, reason in record["unavailable"].items()]
         rows += [("Sampling provenance", record["sampling_profile"]["provenance"]),
                  ("Measurement identity", record["measurement_id"])]
+        rows += _evidence_rows(record["provenance"], "Observation provenance")
         sections.append(_section("Common RNA feature support %d" % index, rows,
             "Counts describe the declared local RNA feature. Geometric normalization is experimental; "
             "it is not TPM, protein abundance or evidence of translation. Event support does not "

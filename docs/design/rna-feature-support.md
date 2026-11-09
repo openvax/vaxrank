@@ -25,6 +25,11 @@ by the measurement contract. Read and fragment effective lengths are separate;
 SE counterparts must agree. Counts, unit identities, denominators, geometry and
 feature scope must refer to the same observation rule.
 
+The producer feature declares `fragment_mode="union"` for joint sequenced-mate
+support or `"any_read"` for templates with an individually supporting read.
+Both counting and effective length honor this choice. Neither rule is selected
+implicitly by antigen category.
+
 ## Interface
 
 Isovar 1.85 provides `RNAFeature`, `RNASamplingProfile`,
