@@ -169,7 +169,7 @@ def test_balanced_after_dedup_caps_goals_and_ranked_alternative(modality):
 def test_cli_yaml_api_equivalence_and_frozen_default(tmp_path):
     parser = external_input_arg_parser()
     args = parser.parse_args(['--max-windows-per-antigen-source', '4', '--antigen-allocation', 'ranked',
-                              '--min-antigens-per-type', 'mutation=2', '--max-antigens-per-type', 'CTA=3'])
+                              '--min-mutation-antigens', '2', '--max-cta-antigens', '3'])
     cli = vaccine_config_from_args(args)
     path = tmp_path / 'allocation.yaml'
     path.write_text('''vaccine_peptides:
@@ -192,6 +192,41 @@ def test_cli_yaml_api_equivalence_and_frozen_default(tmp_path):
         AntigenAllocation(min_per_kind={'CTA': 4}, max_per_kind={'CTA': 3})
     with pytest.raises(ValueError, match='Unknown antigen type'):
         AntigenAllocation(max_per_kind={'not_a_type': 1})
+
+
+def test_named_type_limits_cover_every_kind_and_override_only_named_yaml_values(tmp_path):
+    parser = external_input_arg_parser()
+    kinds = {'cta': 'CTA', 'erv': 'ERV', 'sv': 'SV', 'mutation': 'mutation',
+             'fusion': 'fusion', 'splice': 'splice', 'viral': 'viral', 'isoform': 'isoform'}
+    options = []
+    for flag in kinds:
+        options += ['--min-%s-antigens' % flag, '1', '--max-%s-antigens' % flag, '3']
+    policy = vaccine_config_from_args(parser.parse_args(options)).antigen_allocation
+    assert policy == {'mode': 'balanced', 'min_per_kind': dict.fromkeys(kinds.values(), 1),
+                      'max_per_kind': dict.fromkeys(kinds.values(), 3)}
+
+    path = tmp_path / 'limits.yaml'
+    path.write_text('''vaccine_peptides:
+  antigen_allocation:
+    mode: ranked
+    min_per_kind: {CTA: 2, mutation: 1}
+    max_per_kind: {CTA: 8, viral: 4}
+''')
+    args = parser.parse_args(['--config', str(path), '--min-cta-antigens', '0',
+                              '--max-viral-antigens', '0', '--max-mutation-antigens', '5'])
+    expected = {'mode': 'ranked', 'min_per_kind': {'CTA': 0, 'mutation': 1},
+                'max_per_kind': {'CTA': 8, 'viral': 0, 'mutation': 5}}
+    assert vaccine_config_from_args(args).antigen_allocation == expected
+    assert _peptide_construct_options(args).antigen_allocation == expected
+
+
+@pytest.mark.parametrize('options, message', [
+    (['--min-cta-antigens', '-1'], 'nonnegative integers'),
+    (['--min-cta-antigens', '3', '--max-cta-antigens', '2'], 'minimum exceeds maximum'),
+])
+def test_named_type_limits_reject_invalid_bounds(options, message):
+    with pytest.raises(ValueError, match=message):
+        vaccine_config_from_args(external_input_arg_parser().parse_args(options))
 
 
 def test_oversubscribed_goals_report_capacity_and_zero_cap_excludes_kind():
@@ -248,7 +283,7 @@ def test_mixed_cli_report_and_native_replay(tmp_path, monkeypatch):
         '--peptide-max-constructs', '5', '--mrna-max-constructs', '1',
         '--mrna-antigens-per-construct', '5', '--mrna-no-optimize-linkers',
         '--config-text', 'epitopes.score_expr=1 / affinity.value',
-        '--min-antigens-per-type', 'mutation=1'])
+        '--min-mutation-antigens', '1'])
     saved = EpitopeDataset.load(out / 'candidate_predictions.tsv')
     for modality, record in saved.selection['construct_assembly'].items():
         graph = from_native_json(record['source_graph'], dict)

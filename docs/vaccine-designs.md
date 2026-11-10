@@ -58,15 +58,51 @@ biological windows all reach assembly without raising `candidates-per-slot`.
 Available sequence/prediction context limits the windows that can be selected;
 a previously truncated input cannot recover omitted regions.
 
-Fresh designs use `--antigen-allocation balanced` to rotate among least
-represented eligible antigen types after sequence deduplication. Set `ranked`
-to preserve score/allele-coverage order. Use `--min-antigens-per-type mutation=5`
-for a representation goal and `--max-antigens-per-type CTA=8` for a hard cap;
-repeat either option for other types. Counts are per unique antigen sequence,
-across the whole vaccine, including mRNA antigen slots. A shared sequence counts
-once under its first ranked source type and retains all other sources. Unused
-capacity passes to other eligible types. Goals cannot override admission or
-capacity; actual counts and unmet goals appear in reports and saved decisions.
+Set goals and caps with a separate flag for each antigen type:
+
+| Type | Minimum goal | Maximum cap |
+|---|---|---|
+| Mutation | `--min-mutation-antigens N` | `--max-mutation-antigens N` |
+| Fusion | `--min-fusion-antigens N` | `--max-fusion-antigens N` |
+| SV | `--min-sv-antigens N` | `--max-sv-antigens N` |
+| CTA | `--min-cta-antigens N` | `--max-cta-antigens N` |
+| ERV | `--min-erv-antigens N` | `--max-erv-antigens N` |
+| Splice | `--min-splice-antigens N` | `--max-splice-antigens N` |
+| Viral | `--min-viral-antigens N` | `--max-viral-antigens N` |
+| Isoform | `--min-isoform-antigens N` | `--max-isoform-antigens N` |
+
+Counts are **unique antigen sequences across the whole vaccine**, including
+all mRNA constructs. They count selected source windows in long-antigen mode
+and individual epitopes in minimal-epitope mode. A shared sequence counts once
+under its first ranked source type and retains all other sources. These are
+category totals, distinct from `--max-windows-per-antigen-source`, which caps
+the number of windows taken from each source protein/event.
+
+Minimums default to zero and are goals subject to eligibility and capacity;
+maximums default to no type-specific cap and are hard limits. A maximum of zero
+excludes that type from the vaccine. Actual counts and unmet goals appear in
+reports and saved decisions. A CLI limit overrides only that type's configured
+value; other YAML limits remain in effect.
+
+`--antigen-allocation` chooses **which eligible sequences fill the available
+slots within those limits**. Both modes serve minimum goals first and enforce
+every maximum. `balanced` (the default for fresh designs) then favors the least
+represented eligible type, using the existing score/allele-coverage order for
+ties and within each type. `ranked` uses that existing order directly after
+serving the goals. Neither mode changes scores or eligibility. Unused capacity
+passes to other eligible types that have room under their caps.
+
+For example, suppose ten slots are available, all CTA candidates rank ahead
+of mutations, mutations rank ahead of viral candidates, and each type has
+enough eligible candidates. With `--min-cta-antigens 2 --max-cta-antigens 4`:
+
+| Mode | CTA | Mutation | Viral |
+|---|---:|---:|---:|
+| `ranked` | 4 | 6 | 0 |
+| `balanced` | 4 | 3 | 3 |
+
+The same limits admit different designs because they do not uniquely specify
+the final category counts. The mode supplies the remaining selection rule.
 
 Equivalent Python/YAML settings are `VaccineConfig.max_windows_per_antigen_source`
 and `VaccineConfig.antigen_allocation`; both construct option classes also accept

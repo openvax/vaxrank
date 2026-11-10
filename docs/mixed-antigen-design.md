@@ -53,8 +53,8 @@ biological ratio. For example:
 ```sh
 vaxrank --input-epitopes mixed/native.tsv \
   --max-windows-per-antigen-source 3 --antigen-allocation balanced \
-  --min-antigens-per-type mutation=5 --max-antigens-per-type CTA=8 \
-  --max-antigens-per-type viral=4 --output-dir mixed-balanced
+  --min-mutation-antigens 5 --max-cta-antigens 8 \
+  --max-viral-antigens 4 --output-dir mixed-balanced
 ```
 
 The limits count distinct antigen sequences across the vaccine, including all
@@ -62,6 +62,9 @@ mRNA constructs. Shared products count once under their first ranked source
 type. Remaining capacity goes to eligible types with space; unmet goals are
 reported. No goal admits a held-out candidate. `--antigen-allocation ranked`
 uses the existing order after serving explicit representation goals.
+Both modes enforce the same maxima; the mode determines how the remaining
+slots are filled. See [type limits and selection order](vaccine-designs.md#distinct-sequences-and-source-mappings)
+for all per-type flags and a worked comparison.
 
 For separate panels instead, filter the saved pool and cap each panel:
 
