@@ -10,7 +10,8 @@ from hashlib import sha256
 import json
 
 import msgspec
-from isovar.genetic_code import genetic_code_by_id, translate_cdna
+from isovar import variant_orf_translation_table
+from isovar.genetic_code import translate_cdna
 from isovar.rna_evidence import content_identifier, evidence_set
 from orfdata.reference import canonical_species
 
@@ -26,6 +27,7 @@ from .vaccine_antigen import (
 
 RESULT_FAMILIES = {
     'isovar.variant_rna_orfs.v1': 'variant_orfs',
+    'isovar.variant_rna_orfs.v2': 'variant_orfs',
     'isovar.sv_rna_candidates.v5': 'sv',
     'isovar.sv_rna_orfs.v4': 'sv',
     'isovar.fusion_rna.v3': 'fusion',
@@ -51,8 +53,7 @@ def _translation(dna, protein, stop, table=1, start=False):
         raise ValueError('Isovar coding sequence must be unambiguous DNA')
     if type(stop) is not bool or type(start) is not bool:
         raise ValueError('Isovar coding boundary flags must be booleans')
-    amino, observed_stop = (translate_cdna(dna, translation_table=None) if table is None
-                            else genetic_code_by_id(table).translate(dna))
+    amino, observed_stop = translate_cdna(dna, translation_table=table)
     if start and amino:
         amino = 'M' + amino[1:]
     if (amino, observed_stop) != (protein, stop):
@@ -98,7 +99,7 @@ class _Candidate:
     evidence: dict = field(default_factory=dict)
 
 
-def _variant_frame(row, reference):
+def _variant_frame(row, reference, schema):
     """Compare frames at the focal allele, independent of window cropping."""
     length = len(row['nucleotide_sequence'])
     coding_start, _ = _interval(row['coding_interval'], length)
@@ -108,7 +109,8 @@ def _variant_frame(row, reference):
     strand = resolved['strand'] if 'strand' in resolved else (model['strand'] if model is not None else None)
     if strand is not None and strand not in ('+', '-'):
         raise ValueError('Isovar reference strand must be + or -')
-    return strand, (variant_start - coding_start) % 3, reference['translation_table']
+    table = variant_orf_translation_table(row, reference, schema=schema)
+    return strand, (variant_start - coding_start) % 3, table
 
 
 def _variants(result):
@@ -116,7 +118,7 @@ def _variants(result):
     frames = {}
     for row in result['protein_candidates']:
         reference = models[row['model_id']]
-        strand, phase, table = _variant_frame(row, reference)
+        strand, phase, table = _variant_frame(row, reference, result['schema'])
         # Unknown carrier orientation (including historical exports without
         # strand) only establishes a shared frame within the same transcript.
         orientation = strand or (reference['reference_key'], reference['resolved_transcript']['id'])
@@ -124,11 +126,11 @@ def _variants(result):
             (orientation, phase, table))
     for row in result['protein_candidates']:
         reference = models[row['model_id']]
-        strand, phase, table = _variant_frame(row, reference)
+        strand, phase, table = _variant_frame(row, reference, result['schema'])
         amino = row['protein_sequence']
         low, high = _interval(row['coding_interval'], len(row['nucleotide_sequence']))
         _translation(row['nucleotide_sequence'][low:high], amino, row['ends_with_stop_codon'],
-                     reference['translation_table'], row['starts_at_reference_start'])
+                     table, row['starts_at_reference_start'])
         interval = _interval(row['mutation_interval'], len(amino))
         changed = row['focal_amino_acid_change']
         if type(changed) is not bool:
@@ -148,7 +150,9 @@ def _variants(result):
                           rna_support=support, coding_support=row['coding_support'],
                           reference_orf_source_gene_id=reference.get('source_gene_id'),
                           reference_strand=strand, variant_codon_phase=phase,
-                          sequence_extent=row['sequence_extent'], translation_table=table))
+                          sequence_extent=row['sequence_extent'], translation_table=table,
+                          **({'translation_table_source': row['translation_table_source']}
+                             if result['schema'] == 'isovar.variant_rna_orfs.v2' else {})))
 
 
 def _sv_support(support, result, scope):
