@@ -372,7 +372,7 @@ def optimize_peptide_windows(ranked, options, audit_out=None, *, source_limit=No
                     candidates.append(replace(
                         peptide, mutant_protein_fragment=part, antigen=antigen,
                         epitopes=slice_epitopes(peptide.epitopes, start, end),
-                        combined_score_expr=(peptide.combined_score_expr if any(
+                        combined_score_expr=(peptide.combined_score_expr if options.window_selection is None or any(
                             name in peptide.combined_score_expr for name in (
                                 'window_epitope_score', 'window_selection_factor')) else
                             '(' + peptide.combined_score_expr + ') * window_selection_factor'),
