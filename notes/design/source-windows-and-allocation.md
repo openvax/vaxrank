@@ -68,3 +68,20 @@ Scoring interaction fixed with this work: window utility previously omitted
 captured MS increments (#828). It now preserves the existing maximum increment
 per peptide sequence alongside the unique peptide/allele prediction terms. An
 intact duplicate copy preserves that increment during cleavage assessment.
+
+## Explicit per-type CLI limits
+
+Replace the CLI's `TYPE=COUNT` limits with `--min-<type>-antigens COUNT` and
+`--max-<type>-antigens COUNT` for every supported antigen kind, using lowercase
+flag names. Counts remain unique emitted antigen sequences across the whole
+vaccine: source windows for long-antigen designs, individual ligands for
+minimal-epitope designs. Do not call these per-source window limits; the separate
+`--max-windows-per-antigen-source` controls that quantity.
+
+Keep the API/YAML maps and saved effective settings unchanged. CLI overrides
+replace only the specified type's value. Explain selection mode separately:
+both modes first serve minimum goals and enforce maxima; `balanced` then favors
+the least represented eligible type, while `ranked` follows the existing
+score/allele-coverage order. Neither mode changes eligibility or scores.
+Verify all named flags, partial YAML overrides, invalid bounds, and both
+modalities through the mixed-design CLI/report/replay smoke.

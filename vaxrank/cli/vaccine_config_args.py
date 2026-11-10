@@ -22,6 +22,7 @@ from ..config.loader import (
 from ..manufacturability_config import ManufacturabilityConfig
 from ..vaccine_config import VaccineConfig
 from ..vaccine_config import LENS_ANTIGEN_SOURCES
+from ..vaccine_antigen import ANTIGEN_KINDS
 
 
 
@@ -33,16 +34,25 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         '--max-windows-per-antigen-source', type=int, default=None,
         help='Maximum distinct non-overlapping windows per antigen source (default: 3). '
              'Manufacturing alternatives do not consume additional windows.')
-    vaccine_peptide_group.add_argument(
+    allocation_group = arg_parser.add_argument_group(
+        'Antigen type selection',
+        'Counts are unique antigen sequences across the whole vaccine after deduplication: '
+        'long windows or individual minimal epitopes. Minimums are representation goals; '
+        'maximums are hard limits.')
+    allocation_group.add_argument(
         '--antigen-allocation', choices=('balanced', 'ranked'), default=None,
-        help='Allocate unique antigen sequences across eligible antigen types: balanced '
-             'rotates among least represented types; ranked keeps score/coverage order (default: balanced).')
-    for bound, description in (('min', 'Requested minimum (a goal, not an admission override)'),
-                               ('max', 'Maximum')):
-        vaccine_peptide_group.add_argument(
-            '--%s-antigens-per-type' % bound, action='append', default=None, metavar='TYPE=COUNT',
-            help=description + ' unique antigen sequences per type. Repeat for multiple types; '
-                 'e.g. mutation=10, CTA=5, viral=3 (each as a separate option).')
+        help='Selection order within the type limits: both modes first serve minimum goals; '
+             'balanced then favors the least represented eligible type, while ranked keeps '
+             'score/allele-coverage order (default: balanced). Scores are unchanged.')
+    for kind in sorted(ANTIGEN_KINDS, key=str.lower):
+        allocation_group.add_argument(
+            '--min-%s-antigens' % kind.lower(), type=int, default=None, metavar='COUNT',
+            help='Minimum requested %s antigen count (default: 0). A goal subject to eligibility '
+                 'and vaccine capacity; unmet goals are reported.' % kind)
+        allocation_group.add_argument(
+            '--max-%s-antigens' % kind.lower(), type=int, default=None, metavar='COUNT',
+            help='Maximum %s antigen count (default: no type-specific cap). '
+                 'Set to 0 to exclude this type from the vaccine.' % kind)
     vaccine_peptide_group.add_argument(
         "--vaccine-peptide-length",
         default=None,
@@ -179,12 +189,10 @@ def antigen_allocation_from_args(args, configured=None):
     if getattr(args, 'antigen_allocation', None) is not None:
         policy['mode'] = args.antigen_allocation
     for bound in ('min', 'max'):
-        for value in getattr(args, bound + '_antigens_per_type', None) or ():
-            try:
-                kind, count = value.split('=')
-                policy[bound + '_per_kind'][kind] = int(count)
-            except (ValueError, TypeError):
-                raise ValueError('--%s-antigens-per-type expects TYPE=COUNT' % bound) from None
+        for kind in ANTIGEN_KINDS:
+            count = getattr(args, '%s_%s_antigens' % (bound, kind.lower()), None)
+            if count is not None:
+                policy[bound + '_per_kind'][kind] = count
     return asdict(AntigenAllocation.resolve(policy))
 
 
