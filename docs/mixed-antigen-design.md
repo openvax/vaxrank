@@ -44,7 +44,26 @@ Select a recorded version with `affinity["mhcflurry", "VERSION"]` when needed.
 For incompatible scores, use
 [common-model prediction](input-workflows.md#generate-common-predictions-and-re-rank).
 
-For separate source allocations, filter the saved pool and cap each panel:
+For a single mixed vaccine, use the shared allocation policy after unique-sequence
+deduplication. The default `balanced` mode rotates through the least represented
+eligible types, preferring the existing score/allele-coverage order within a
+type. These are configurable representation preferences, not an optimal
+biological ratio. For example:
+
+```sh
+vaxrank --input-epitopes mixed/native.tsv \
+  --max-windows-per-antigen-source 3 --antigen-allocation balanced \
+  --min-antigens-per-type mutation=5 --max-antigens-per-type CTA=8 \
+  --max-antigens-per-type viral=4 --output-dir mixed-balanced
+```
+
+The limits count distinct antigen sequences across the vaccine, including all
+mRNA constructs. Shared products count once under their first ranked source
+type. Remaining capacity goes to eligible types with space; unmet goals are
+reported. No goal admits a held-out candidate. `--antigen-allocation ranked`
+uses the existing order after serving explicit representation goals.
+
+For separate panels instead, filter the saved pool and cap each panel:
 
 ```sh
 vaxrank --input-epitopes mixed/native.tsv \
@@ -58,8 +77,8 @@ Use `"mutation"` or `"viral"` for the other panels. These source fields come fro
 native antigen evidence. Compose additional eligibility rules into the same
 filter; it replaces the inherited scalar filter. Named policies use `filter_by`.
 Caps are maxima, not guaranteed slots. Review duplicates, allele coverage and
-total capacity across panels. **Joint source quotas inside one mRNA construct
-are not implemented.**
+total capacity across panels. The shared type limits above apply across the
+vaccine, not independently within each mRNA molecule.
 
 Saved CTA/viral reports need no Ensembl release; mutation reports still need
 annotation when it was not retained. Optional [window exposure](core-window-exposure.md)

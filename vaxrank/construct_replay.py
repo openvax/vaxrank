@@ -188,6 +188,9 @@ def _assembly_identity(args, ranked, options, context):
     # Adding that spelling must not force inference during native replay.
     if configuration.get('junction_rank_kind') == 'auto':
         configuration.pop('junction_rank_kind')
+    from .antigen_allocation import AntigenAllocation
+    if AntigenAllocation.resolve(configuration.get('antigen_allocation')) == AntigenAllocation(mode='ranked'):
+        configuration.pop('antigen_allocation', None)
     graph = _source_graph(ranked, options)
     # Explanatory metadata added in 3.47.24 is protected by the payload
     # checksum, but does not change assembly inputs or invalidate old designs.
@@ -205,6 +208,13 @@ def _assembly_identity(args, ranked, options, context):
                         'selected', 'decision_reason', 'parent_window')} for item in audit['alternatives']]
                 candidate['window_selection'] = audit
     policy = dict(args._construct_policy)
+    vaccine = dict(policy.get('vaccine_peptides') or {})
+    if vaccine.get('max_windows_per_antigen_source') is None:
+        vaccine.pop('max_windows_per_antigen_source', None)
+    if AntigenAllocation.resolve(vaccine.get('antigen_allocation')) == AntigenAllocation(mode='ranked'):
+        vaccine.pop('antigen_allocation', None)
+    if 'vaccine_peptides' in policy:
+        policy['vaccine_peptides'] = vaccine
     epitopes = dict(policy.get('epitopes') or {})
     # Historical annotation-reference designs predate these explicit defaults.
     # Preserve their identity; a patient-background policy still changes it.

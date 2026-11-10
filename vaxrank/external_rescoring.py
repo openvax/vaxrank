@@ -1100,16 +1100,25 @@ def load_unified_external(args, epitope_config, options, genome):
         for entry in outcome.entries:
             source = entry.ranking_source
             scope = report.input_provenance.scope
+            from .vaccine_antigen import VaccineAntigen
+            identity = str(source)
+            if (isinstance(source, VaccineAntigen) and source.source_identifier
+                    and options.vaccine_config is not None
+                    and options.vaccine_config.max_windows_per_antigen_source is not None):
+                identity = (source.kind, source.source_identifier, source.gene_id or source.gene_name,
+                            source.transcript_ids, source.protein_ids, source.species)
             observations[(scope.patient_id, scope.reference_assembly,
-                          type(source).__name__, str(source))].append(entry)
+                          type(source).__name__, identity)].append(entry)
     ranked, dna_vaf = [], {}
     for entries in observations.values():
         candidates = [(e.ranking_source, list(e.ranking_peptides)) for e in entries
                       if e.ranking_peptides]
-        if options.vaccine_config is not None and options.vaccine_config.window_selection is not None:
+        if options.vaccine_config is not None and (options.vaccine_config.window_selection is not None
+                or options.vaccine_config.max_windows_per_antigen_source is not None):
             from .window_selection import optimize_antigen_windows
             candidates = [item for candidate in candidates for item in (
-                [candidate] if all('utility' in p.window_selection_audit for p in candidate[1]) else
+                [candidate] if all('source_window' in p.window_selection_audit or
+                                  'utility' in p.window_selection_audit for p in candidate[1]) else
                 optimize_antigen_windows([candidate], options.vaccine_config))]
         if candidates:
             ranked.append(rank_constructs(candidates)[0])

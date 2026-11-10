@@ -195,21 +195,157 @@ def record_ranked_window_decisions(candidates, retained, selected, *, score_frac
                             for e in peptide.target_epitopes])
 
 
-def optimize_peptide_windows(ranked, options, audit_out=None):
+def target_content(peptide, *, positioned=False):
+    """Target peptide/allele identities, optionally anchored to the source."""
+    start = peptide.window_selection_audit.get('parent_window', {}).get('start', 0)
+    return {(epitope.sequence, allele, start + epitope.offset) if positioned else (epitope.sequence, allele)
+            for epitope in peptide.target_epitopes for allele in epitope.per_allele_scores}
+
+
+def overlapping_windows(left, right):
+    """Shared source residues, using zero-based half-open parent coordinates."""
+    return (left['sequence'] == right['sequence']
+            and left['start'] < right['end'] and right['start'] < left['end'])
+
+
+def select_source_windows(candidates, *, limit=3, score_fraction=.99, policy=None,
+                          preferred_length=25, n_term='free', c_term='free', audit_out=None,
+                          required_content=None):
+    """Greedily select distinct regions; near-best comparisons restart per region.
+
+    Candidates must carry coordinates on one translated source. Scores remain
+    the configured DSL scores; this adds a geometric constraint, not a score.
+    """
+    if type(limit) is not int or limit < 1:
+        raise ValueError('Source window limit must be a positive integer')
+    candidates = list(candidates)
+    if not candidates:
+        return []
+    parents = [vp.window_selection_audit.get('parent_window') for vp in candidates]
+    if any(p is None or p['sequence'][p['start']:p['end']] != vp.amino_acids
+           for p, vp in zip(parents, candidates)):
+        raise ValueError('Source windows require exact parent sequence coordinates')
+    if len({p['sequence'] for p in parents}) != 1:
+        raise ValueError('Select windows separately for competing translated source contexts')
+    if policy is not None:
+        resolved_policy = WindowSelection.resolve(policy)
+        for vp in candidates:
+            # Populate every score before comparing regions: a DSL expression
+            # may use window utility, including self/cleavage penalties.
+            vp.window_selection_audit.update(window_metrics(vp, resolved_policy, n_term=n_term, c_term=c_term))
+    contents = [target_content(vp) for vp in candidates]
+    available = [i for i, vp in enumerate(candidates) if not required_content
+                 or required_content <= target_content(vp, positioned=True)]
+    selected, used_content = [], set()
+    decisions = {i: 'target_preservation' for i in range(len(candidates)) if i not in available}
+    while available and len(selected) < limit:
+        best = max(candidates[i].combined_score for i in available)
+        near_best = [i for i in available if math.isclose(best, 0.) or
+                     candidates[i].combined_score >= best - abs(best) * (1 - score_fraction)]
+        if policy is None:
+            chosen = min(near_best, key=lambda i: (candidates[i].lexicographic_sort_key(), i))
+        else:
+            chosen_peptides = select_windows([candidates[i] for i in near_best], policy,
+                preferred_length=preferred_length, limit=1, n_term=n_term, c_term=c_term)
+            if not chosen_peptides:
+                for i in near_best:
+                    decisions[i] = 'window_policy'
+                available = [i for i in available if i not in near_best]
+                continue
+            chosen = next(i for i in near_best if candidates[i] is chosen_peptides[0])
+        selected.append(chosen)
+        used_content.update(contents[chosen])
+        decisions[chosen] = 'selected_source_window'
+        remaining = []
+        for i in available:
+            if i == chosen:
+                continue
+            if overlapping_windows(parents[i], parents[chosen]):
+                decisions[i] = 'overlaps_selected_window'
+            elif contents[i] and contents[i] <= used_content:
+                decisions[i] = 'no_additional_target_content'
+            else:
+                remaining.append(i)
+        available = remaining
+    for i in available:
+        decisions[i] = 'source_window_limit'
+    alternatives = [dict(sequence=vp.amino_acids, parent_window=parents[i], input_order=i,
+        eligible=decisions[i] not in ('window_policy', 'target_preservation'), selected=i in selected,
+        selection_rank=selected.index(i) + 1 if i in selected else None,
+        decision_reason=decisions[i], combined_score=vp.combined_score, target_score=vp.target_epitope_score,
+        utility=vp.window_selection_audit.get('utility'),
+        source={key: getattr(vp.antigen, key) for key in (
+            'source_identifier', 'gene_name', 'gene_id', 'transcript_ids', 'protein_ids', 'species', 'source_metadata')},
+        ranking_rules=list(vp.ranking_rules if vp.ranking_rules is not None else DEFAULT_RANKING_RULES),
+        ordering_key=[list(vp.lexicographic_sort_key()), i]) for i, vp in enumerate(candidates)]
+    result = []
+    for rank, i in enumerate(selected, 1):
+        vp = candidates[i]
+        required = target_content(vp, positioned=True)
+        manufacturing = [dict(sequence=alt.amino_acids, parent_window=parents[j])
+            for j, alt in enumerate(candidates) if j != i and required
+            and required <= target_content(alt, positioned=True)
+            and not any(overlapping_windows(parents[j], parents[k]) for k in selected if k != i)]
+        vp.window_selection_audit.update(
+            algorithm='non_overlapping_source_windows',
+            policy={**(asdict(WindowSelection.resolve(policy)) if policy is not None else {}),
+                    'score_fraction_of_best': score_fraction},
+            limit=limit, preferred_length=preferred_length, parent_window=parents[i],
+            source_window=dict(index=rank, start=parents[i]['start'], end=parents[i]['end'],
+                               required_targets=[list(item) for item in sorted(required)]),
+            decision={key: alternatives[i][key] for key in (
+                'input_order', 'ordering_key', 'ranking_rules', 'selection_rank', 'selected', 'decision_reason')},
+            combined_score=vp.combined_score, target_score=vp.target_epitope_score,
+            manufacturing_alternatives=manufacturing, alternatives=alternatives)
+        result.append(vp)
+    if audit_out is not None:
+        audit_out.append(dict(algorithm='non_overlapping_source_windows', limit=limit,
+                              alternatives=alternatives, selected=[vp.amino_acids for vp in result]))
+    return result
+
+
+def optimize_peptide_windows(ranked, options, audit_out=None, *, source_limit=None,
+                             score_fraction=.99, required_content=None):
     """Refine available windows independently for the peptide modality.
 
     SLPs only: concatenated constructs and minimal epitope products require a
     different enumeration context. No new predictions are run during selection.
     """
     from .ranking import rank_constructs
-    policy = WindowSelection.resolve(options.window_selection)
+    policy = WindowSelection.resolve(options.window_selection or {})
     output = []
     for source, peptides in ranked:
+        # A manufacturing refinement operates within each biological region;
+        # it cannot replace three independent windows with three nearby shifts.
+        if source_limit is None and any(p.window_selection_audit.get('source_window') for p in peptides):
+            refined = []
+            for peptide in peptides:
+                required = set(tuple(x) for x in peptide.window_selection_audit['source_window']['required_targets'])
+                items = optimize_peptide_windows([(source, [replace(peptide,
+                    window_selection_audit={k: v for k, v in peptide.window_selection_audit.items()
+                                            if k != 'source_window'})])],
+                    options, audit_out, source_limit=1, score_fraction=score_fraction, required_content=required)
+                # Refinement must preserve every selected target occurrence.
+                chosen = next((p for _, ps in items for p in ps
+                               if required <= target_content(p, positioned=True)), None)
+                if chosen is None:
+                    continue
+                else:
+                    chosen.window_selection_audit['source_window'] = peptide.window_selection_audit['source_window']
+                refined.append(chosen)
+            if refined:
+                output.append((source, refined))
+            continue
         candidates = []
         for peptide in peptides:
             maximum = min(len(peptide.amino_acids), options.max_antigen_length_aa)
             lengths = (range(options.min_antigen_length_aa, maximum + 1)
                        if policy.enumerate_lengths else [maximum])
+            if source_limit is not None and required_content is None and maximum < options.min_antigen_length_aa:
+                # Imported contexts can be shorter than a requested window;
+                # retain their real sequence (the writer reports the length).
+                # Manufacturing refinement still enforces its own minimum.
+                lengths = [maximum]
             for length in lengths:
                 fragment = peptide.mutant_protein_fragment
                 windows = (fragment.sorted_subsequences(length) if fragment is not None else
@@ -219,6 +355,8 @@ def optimize_peptide_windows(ranked, options, audit_out=None):
                     if not peptide.antigen.interval_is_targetable(start, end):
                         continue
                     antigen = peptide.antigen.sliced(start, end)
+                    original_parent = peptide.window_selection_audit.get('parent_window') or dict(
+                        sequence=peptide.amino_acids, start=0, end=len(peptide.amino_acids))
                     candidates.append(replace(
                         peptide, mutant_protein_fragment=part, antigen=antigen,
                         epitopes=slice_epitopes(peptide.epitopes, start, end),
@@ -227,8 +365,19 @@ def optimize_peptide_windows(ranked, options, audit_out=None):
                                 'window_epitope_score', 'window_selection_factor')) else
                             '(' + peptide.combined_score_expr + ') * window_selection_factor'),
                         window_selection_audit={'parent_window': dict(
-                            sequence=peptide.amino_acids, start=start, end=end)}))
-        chosen = select_windows(candidates, policy,
+                            sequence=original_parent['sequence'], start=original_parent['start'] + start,
+                            end=original_parent['start'] + end)}))
+        if source_limit is not None and getattr(options, 'require_target_epitopes', True):
+            candidates = [p for p in candidates if p.contains_target_epitopes()]
+        if source_limit is not None:
+            chosen = select_source_windows(candidates, policy=options.window_selection,
+                limit=source_limit, score_fraction=score_fraction,
+                preferred_length=options.max_antigen_length_aa,
+                n_term='acetylated' if options.n_terminal_acetylation else 'free',
+                c_term='amidated' if options.c_terminal_amidation else 'free', audit_out=audit_out,
+                required_content=required_content)
+        else:
+            chosen = select_windows(candidates, policy,
                                 preferred_length=options.max_antigen_length_aa,
                                 limit=options.candidates_per_slot,
                                 n_term='acetylated' if options.n_terminal_acetylation else 'free',
@@ -247,5 +396,7 @@ def optimize_antigen_windows(ranked, config):
         min_antigen_length_aa=config.min_peptide_length,
         max_antigen_length_aa=config.max_peptide_length,
         candidates_per_slot=config.max_vaccine_peptides_per_variant,
+        require_target_epitopes=config.require_target_epitopes_in_variant,
         n_terminal_acetylation=False, c_terminal_amidation=False)
-    return optimize_peptide_windows(ranked, options)
+    return optimize_peptide_windows(ranked, options, source_limit=config.max_windows_per_antigen_source,
+                                    score_fraction=config.score_fraction_of_best)

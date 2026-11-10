@@ -637,7 +637,9 @@ def iter_named_antigens(ranked_vaccine_peptides, candidates_per_slot=1):
                 source.alt,
             )
             if isinstance(source, Variant)
-            else antigen
+            else (antigen.kind, antigen.source_identifier, antigen.gene_id,
+                  antigen.transcript_ids, antigen.protein_ids)
+            if 'source_window' in peptides[0].window_selection_audit else antigen
         )
         identities_per_gene.setdefault(gene, set()).add(
             identity)
@@ -649,18 +651,24 @@ def iter_named_antigens(ranked_vaccine_peptides, candidates_per_slot=1):
     for source, peptides in ranked_vaccine_peptides:
         if not peptides:
             continue
-        for idx, peptide in enumerate(peptides[:max(1, candidates_per_slot)]):
+        windows = (peptides if all('source_window' in p.window_selection_audit for p in peptides)
+                   else peptides[:max(1, candidates_per_slot)])
+        for idx, peptide in enumerate(windows):
             antigen = peptide.antigen
             gene = antigen.display_gene_name
-            yield antigen_construct_name(
+            name = antigen_construct_name(
                 source,
                 antigen,
                 include_source=gene in ambiguous_genes,
-                alternate_index=idx,
-            ), antigen, peptide
+                alternate_index=0 if 'source_window' in peptide.window_selection_audit else idx,
+            )
+            if 'source_window' in peptide.window_selection_audit:
+                region = peptide.window_selection_audit['source_window']
+                name += ' [window %d: %d-%d]' % (region['index'], region['start'] + 1, region['end'])
+            yield name, antigen, peptide
 
 
-def select_antigen_window(antigen, base_name, max_length_aa):
+def select_antigen_window(antigen, base_name, max_length_aa, *, required_target_intervals=()):
     """Return a sub-window that preserves all targetable antigen content.
 
     A naive ``amino_acids[:max_length_aa]`` truncation can drop the
@@ -678,6 +686,11 @@ def select_antigen_window(antigen, base_name, max_length_aa):
     if len(aa) <= max_length_aa:
         return aa
     targetable_span = antigen.targetable_span()
+    if required_target_intervals:
+        from .vaccine_antigen import AminoAcidInterval
+        targetable_span = AminoAcidInterval(
+            min(targetable_span.start, min(start for start, end in required_target_intervals)),
+            max(targetable_span.end, max(end for start, end in required_target_intervals)))
     targetable_length = targetable_span.end - targetable_span.start
     if targetable_length > max_length_aa:
         logger.warning(

@@ -89,10 +89,17 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
         Default: 5
 
     max_vaccine_peptides_per_variant : int
-        Maximum number of vaccine peptides to select for each variant.
-        Multiple peptides may be selected if they have sufficiently
-        different epitope content.
-        Default: 1
+        Legacy overlapping-candidate limit, used when
+        ``max_windows_per_antigen_source`` is None. Default: 1.
+
+    max_windows_per_antigen_source : int or None
+        Maximum distinct non-overlapping target windows from one translated
+        source. Default: 3. None restores legacy candidate selection.
+
+    antigen_allocation : dict or None
+        Shared allocation of unique antigen sequences across kinds. None uses
+        balanced allocation; an explicit policy may set mode, min_per_kind
+        representation goals and max_per_kind limits. Scores are unchanged.
 
     num_target_epitopes_to_keep : int
         Maximum number of epitope predictions to retain per variant
@@ -128,8 +135,8 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     >>> long_peptide_config.preferred_peptide_length
     30
 
-    >>> multi_peptide_config = VaccineConfig(max_vaccine_peptides_per_variant=3)
-    >>> multi_peptide_config.max_vaccine_peptides_per_variant
+    >>> multi_peptide_config = VaccineConfig(max_windows_per_antigen_source=3)
+    >>> multi_peptide_config.max_windows_per_antigen_source
     3
     """
 
@@ -138,6 +145,9 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     max_peptide_length: int = DEFAULT_MAX_PEPTIDE_LENGTH
     padding_around_mutation: int = DEFAULT_PADDING_AROUND_MUTATION
     max_vaccine_peptides_per_variant: int = DEFAULT_MAX_VACCINE_PEPTIDES_PER_VARIANT
+    # None is the pre-3.53 selection contract, retained for saved designs.
+    max_windows_per_antigen_source: Optional[int] = 3
+    antigen_allocation: Optional[dict] = None
     num_target_epitopes_to_keep: int = DEFAULT_NUM_MUTANT_EPITOPES_TO_KEEP
     score_fraction_of_best: float = DEFAULT_VACCINE_PEPTIDE_SCORE_FRACTION_OF_BEST
     # DSL expression evaluated to produce each vaccine peptide's
@@ -162,6 +172,11 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     window_selection: Optional[dict] = None
 
     def __post_init__(self):
+        limit = self.max_windows_per_antigen_source
+        if limit is not None and (type(limit) is not int or limit < 1):
+            raise ValueError('max_windows_per_antigen_source must be a positive integer or None (legacy)')
+        from .antigen_allocation import AntigenAllocation
+        AntigenAllocation.resolve(self.antigen_allocation)
         if self.window_selection is not None:
             from .window_selection import WindowSelection
             policy = WindowSelection.resolve(self.window_selection)

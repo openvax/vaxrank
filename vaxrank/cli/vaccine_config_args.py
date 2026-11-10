@@ -30,6 +30,20 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
 
     vaccine_peptide_group = arg_parser.add_argument_group("Vaccine peptide options")
     vaccine_peptide_group.add_argument(
+        '--max-windows-per-antigen-source', type=int, default=None,
+        help='Maximum distinct non-overlapping windows per antigen source (default: 3). '
+             'Manufacturing alternatives do not consume additional windows.')
+    vaccine_peptide_group.add_argument(
+        '--antigen-allocation', choices=('balanced', 'ranked'), default=None,
+        help='Allocate unique antigen sequences across eligible antigen types: balanced '
+             'rotates among least represented types; ranked keeps score/coverage order (default: balanced).')
+    for bound, description in (('min', 'Requested minimum (a goal, not an admission override)'),
+                               ('max', 'Maximum')):
+        vaccine_peptide_group.add_argument(
+            '--%s-antigens-per-type' % bound, action='append', default=None, metavar='TYPE=COUNT',
+            help=description + ' unique antigen sequences per type. Repeat for multiple types; '
+                 'e.g. mutation=10, CTA=5, viral=3 (each as a separate option).')
+    vaccine_peptide_group.add_argument(
         "--vaccine-peptide-length",
         default=None,
         type=int,
@@ -56,7 +70,8 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         default=None,
         type=int,
         help=(
-            "Number of vaccine peptides to generate for each variant. "
+            "Legacy overlapping candidate limit (saved designs with max_windows_per_antigen_source=null). "
+            "For new designs use --max-windows-per-antigen-source. "
             f"(default: {default_vaccine_config.max_vaccine_peptides_per_variant})"
         ))
 
@@ -114,6 +129,10 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
     if merged_config is None:
         merged_config = load_vaxrank_config(args)
     vaccine_config_kwargs = extract_vaccine_config_kwargs(merged_config)
+    if getattr(args, 'max_windows_per_antigen_source', None) is not None:
+        vaccine_config_kwargs['max_windows_per_antigen_source'] = args.max_windows_per_antigen_source
+    vaccine_config_kwargs['antigen_allocation'] = antigen_allocation_from_args(
+        args, vaccine_config_kwargs.get('antigen_allocation'))
 
     if args.vaccine_peptide_length is not None:
         vaccine_config_kwargs["preferred_peptide_length"] = args.vaccine_peptide_length
@@ -150,6 +169,23 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
 
     vaccine_config = msgspec.convert(vaccine_config_kwargs, VaccineConfig)
     return vaccine_config
+
+
+def antigen_allocation_from_args(args, configured=None):
+    """Merge shared allocation CLI overrides with the resolved YAML/replay policy."""
+    from dataclasses import asdict
+    from ..antigen_allocation import AntigenAllocation
+    policy = asdict(AntigenAllocation.resolve(configured))
+    if getattr(args, 'antigen_allocation', None) is not None:
+        policy['mode'] = args.antigen_allocation
+    for bound in ('min', 'max'):
+        for value in getattr(args, bound + '_antigens_per_type', None) or ():
+            try:
+                kind, count = value.split('=')
+                policy[bound + '_per_kind'][kind] = int(count)
+            except (ValueError, TypeError):
+                raise ValueError('--%s-antigens-per-type expects TYPE=COUNT' % bound) from None
+    return asdict(AntigenAllocation.resolve(policy))
 
 
 def manufacturability_config_from_args(

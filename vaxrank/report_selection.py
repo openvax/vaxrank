@@ -24,6 +24,7 @@ def display(value):
 
 def _rows(configuration, fields):
     none_labels = {'max_ranked_sources': 'No source limit',
+                   'max_windows_per_antigen_source': 'Legacy overlapping-candidate selection',
                    'num_target_epitopes_to_keep': 'No additional cap',
                    'ranking_rules': 'Default order; not expanded in this record',
                    'window_selection': 'Disabled', 'default_methods': 'Resolved per input'}
@@ -70,7 +71,9 @@ def selection_policy_view(selection):
         ('max_peptide_length', 'Maximum candidate length (aa)'),
         ('padding_around_mutation', 'Padding around the altered region (aa)'),
         ('score_fraction_of_best', 'Score fraction retained before window tie breaks'),
-        ('max_vaccine_peptides_per_variant', 'Maximum windows per source'),
+        ('max_windows_per_antigen_source', 'Maximum non-overlapping windows per antigen source'),
+        ('max_vaccine_peptides_per_variant', 'Legacy overlapping candidate limit'),
+        ('antigen_allocation', 'Antigen type allocation'),
         ('num_target_epitopes_to_keep', 'Maximum target epitopes per window'),
         ('ranking_rules', 'Window ranking rules'),
         ('require_target_epitopes_in_variant', 'Require a target epitope'),
@@ -85,7 +88,8 @@ def selection_policy_view(selection):
         if configuration is None:
             configuration = record.get('effective_constructs', {}).get(modality, {})
             origin = 'Resolved construct configuration'
-        fields = [('antigen_content', 'Antigen content'), ('candidates_per_slot', 'Candidate windows per source'),
+        fields = [('antigen_content', 'Antigen content'), ('candidates_per_slot', 'Legacy candidate alternatives per source'),
+                  ('antigen_allocation', 'Antigen type allocation'),
                   ('epitopes_per_antigen', 'Epitopes per antigen'),
                   ('min_antigen_length_aa', 'Minimum refined antigen length (aa)' if configuration.get('window_selection') is not None
                    else 'Minimum antigen length warning threshold (aa)'),
@@ -161,10 +165,14 @@ def window_view(audit, sequence):
     fields = ('sequence', 'eligible', 'ineligibility_reason', 'target_score', 'utility', 'combined_score',
               'ordering_key', 'selection_rank', 'selected', 'decision_reason', 'parent_window')
     policy = audit.get('policy', {})
-    utility = audit.get('algorithm') != 'score_fraction_then_ranking'
+    utility = (audit.get('algorithm') not in ('score_fraction_then_ranking', 'non_overlapping_source_windows')
+               or 'utility' in audit)
     return dict(sequence=sequence, parent=audit.get('parent_window'),
         utility_selector=utility,
-        ordering_description=(UNRECORDED if not audit.get('decision') else
+        ordering_description=('Best remaining non-overlapping region, repeating the configured score and window policy; '
+                              'duplicate target content does not earn another window'
+                              if audit.get('algorithm') == 'non_overlapping_source_windows' else
+                              UNRECORDED if not audit.get('decision') else
                               'negative utility, preferred-length distance, ranking tuple, stable input order'
                               if utility else 'score-fraction eligibility, then ranking tuple and stable input order'),
         none_eligible=audit.get('selected') == [],
@@ -264,7 +272,8 @@ def attach_selection_decisions(data, selection, ranked, products):
         recorded = graphs.get(group['modality'], {}).get('assembly_decisions')
         decisions = None
         if recorded is not None:
-            decisions = dict(order=recorded['order'], rows=[])
+            decisions = dict(order=recorded['order'], rows=[], allocation=recorded.get('allocation'),
+                             overlap=recorded.get('overlap'))
             for item in recorded['antigens']:
                 ids = sorted({identifier for source in item['sources'] for identifier, peptide in candidates
                     if source_matches_candidate(source, peptide.antigen, peptide.amino_acids,
@@ -272,12 +281,14 @@ def attach_selection_decisions(data, selection, ranked, products):
                         {e.input_provenance.input_id for e in peptide.epitopes if e.input_provenance})},
                     key=lambda source: int(source[1:]))
                 decisions['rows'].append(dict(order=item['order'], sequence=item['sequence'],
-                    sources=ids, mapping_count=len(item['sources']), products=item['products'], outcome=item['outcome']))
+                    sources=ids, mapping_count=len(item['sources']), products=item['products'], outcome=item['outcome'],
+                    allocation=item.get('allocation')))
                 for candidate in data['ranked_candidates']:
                     if candidate['source_id'] in ids:
                         candidate['assembly_outcomes'].append(dict(
                             modality=group['modality'], outcome=item['outcome'],
                             shared=len(item['sources']) > 1))
+            decisions['rows'].sort(key=lambda row: (row['order'] is None, row['order'] or 0))
         group['assembly_decisions'] = decisions
         for audit in assembly.get('window_audit') or []:
             if audit.get('selected') != []:

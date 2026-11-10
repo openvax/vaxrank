@@ -113,6 +113,10 @@ def test_pinned_predictions_are_complete_real_model_outputs():
     ))
     # Historical fixture predates optional window-policy settings.
     assert expected_vaccine_config.pop("window_selection") is None
+    # This historical prediction artifact also predates distinct source windows
+    # and category allocation. Do not rewrite its producer configuration.
+    assert expected_vaccine_config.pop("max_windows_per_antigen_source") == 3
+    assert expected_vaccine_config.pop("antigen_allocation") is None
     assert metadata["vaccine_config"] == expected_vaccine_config
     expected_epitope_config = msgspec.to_builtins(EpitopeConfig())
     assert expected_epitope_config.pop("selection_policy") is None
