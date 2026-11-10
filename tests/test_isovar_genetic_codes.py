@@ -13,10 +13,15 @@ from vaxrank import AntigenDataset, antigens_from_isovar
 from .test_isovar_inputs import variant_inputs as variant_inputs
 
 
-@pytest.mark.parametrize('name,table', [('MT-ND5-201', 2), ('MT-ND6-201', 2), ('TP53-001', 1)])
-def test_native_annotated_effective_code_and_replay(name, table, tmp_path):
-    genome = EnsemblRelease(87)
-    transcript = genome.transcripts_by_name(name)[0]
+@pytest.mark.parametrize('transcript_id,table', [
+    pytest.param('ENST00000361567', 2, id='MT-ND5'),
+    pytest.param('ENST00000361681', 2, id='MT-ND6'),
+    pytest.param('ENST00000269305', 1, id='TP53'),
+])
+def test_native_annotated_effective_code_and_replay(transcript_id, table, tmp_path):
+    # Use the human reference provisioned by CI, independent of local caches.
+    genome = EnsemblRelease(93)
+    transcript = genome.transcript_by_id(transcript_id)
     reference = TranscriptORF.from_annotation(transcript)
     positions = [p for start, end in sorted(transcript.exon_intervals)
                  for p in range(start, end + 1)]

@@ -12,3 +12,9 @@ reader. Validate explicit and context-derived mitochondrial candidates,
 nuclear controls, invalid/missing codes, source conflicts, and saved replay.
 Coordinate this release with openvax/isovar#700; do not claim NuMT exclusion
 from a transcript code or mapped RNA alone.
+
+CI reference contract: use the already provisioned human Ensembl release 93
+and stable ND5, ND6 and TP53 transcript IDs. The initial release-87 tests
+passed against a local cache but failed on clean CI because that undeclared
+reference was absent. Keep all three native reconstruction/replay controls;
+verify the corrected fixtures locally and across the complete CI matrix.
