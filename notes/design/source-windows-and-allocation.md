@@ -63,3 +63,8 @@ Existing packing limitation found during implementation: an individual antigen
 larger than the configured length cap is still emitted with a warning. Tracked
 separately in https://github.com/openvax/vaxrank/issues/826; this change preserves
 that existing behavior. Category maxima and construct-count limits are enforced.
+
+Scoring interaction fixed with this work: window utility previously omitted
+captured MS increments (#828). It now preserves the existing maximum increment
+per peptide sequence alongside the unique peptide/allele prediction terms. An
+intact duplicate copy preserves that increment during cleavage assessment.

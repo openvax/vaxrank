@@ -73,11 +73,18 @@ def window_metrics(peptide, policy, *, n_term='free', c_term='free'):
                         and site.score >= policy.dpp4_depletion_threshold)):
                     cuts.add(site.bond)
     target, protected, self_scores = {}, {}, {}
+    target_ms, protected_ms, self_ms = {}, {}, {}
     target_details, self_details = [], []
     for epitope in peptide.target_epitopes:
         internal_cuts = sorted(bond for bond in cuts
                                if epitope.offset < bond < epitope.offset + len(epitope.sequence))
         damaged = bool(internal_cuts)
+        increment = epitope.ms_increment
+        if not math.isfinite(increment) or increment < 0:
+            raise ValueError('Window utility requires finite, nonnegative MS increments')
+        target_ms[epitope.sequence] = max(target_ms.get(epitope.sequence, 0.), increment)
+        protected_ms[epitope.sequence] = max(protected_ms.get(epitope.sequence, 0.),
+                                             0. if damaged else increment)
         for allele, score in epitope.per_allele_scores.items():
             if not math.isfinite(score) or score < 0:
                 raise ValueError('Window utility requires finite, nonnegative epitope scores')
@@ -85,9 +92,14 @@ def window_metrics(peptide, policy, *, n_term='free', c_term='free'):
             target[key] = max(target.get(key, 0.), score)
             protected[key] = max(protected.get(key, 0.), 0. if damaged else score)
         target_details.append(dict(sequence=epitope.sequence, offset=epitope.offset,
+                                   **({'ms_increment': increment} if increment else {}),
                                    allele_scores=epitope.per_allele_scores, internal_cuts=internal_cuts))
     for epitope in peptide.epitopes:
         if epitope.occurs_in_non_CTA_reference:
+            increment = epitope.ms_increment
+            if not math.isfinite(increment) or increment < 0:
+                raise ValueError('Window utility requires finite, nonnegative MS increments')
+            self_ms[epitope.sequence] = max(self_ms.get(epitope.sequence, 0.), increment)
             for allele, score in epitope.per_allele_scores.items():
                 if not math.isfinite(score) or score < 0:
                     raise ValueError('Window utility requires finite, nonnegative self scores')
@@ -97,9 +109,9 @@ def window_metrics(peptide, policy, *, n_term='free', c_term='free'):
                                      allele_scores=epitope.per_allele_scores,
                                      source_match=(asdict(epitope.self_reference_match)
                                                    if epitope.self_reference_match else None)))
-    total = sum(target.values())
-    at_risk = total - sum(protected.values())
-    burden = sum(self_scores.values())
+    total = sum(target.values()) + sum(target_ms.values())
+    at_risk = total - sum(protected.values()) - sum(protected_ms.values())
+    burden = sum(self_scores.values()) + sum(self_ms.values())
     utility = (total - policy.serum_weight * at_risk) / (1 + policy.self_weight * burden)
     return dict(target_score=total, non_cta_self_score=burden, at_risk_target_score=at_risk,
                 utility=utility, cuts=sorted(cuts),

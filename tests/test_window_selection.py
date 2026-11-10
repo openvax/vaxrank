@@ -48,6 +48,25 @@ def test_intact_duplicate_copy_preserves_epitope_content():
     assert metric['at_risk_target_score'] == 0.
 
 
+def test_window_utility_retains_ms_increment_once_and_protects_intact_copies():
+    vp = vaccine('ASIINFEKLASIINFEKL', [(0, 9, 1., False), (9, 18, 1., False)])
+    vp = replace(vp, epitopes=[replace(e, ms_scoring={'HLA-A*02:01': {'baseline': 1., 'adjusted': 4.}})
+                               for e in vp.epitopes])
+    metric = window_metrics(vp, WindowSelection(serum_models=('dpp4-qpisa',), serum_weight=.5,
+                                               dpp4_depletion_threshold=0.))
+    assert metric['target_score'] == 4.  # one prediction + one MS increment
+    assert metric['at_risk_target_score'] == 0.  # the second copy survives
+    assert metric['utility'] == 4.
+
+
+def test_default_window_utility_keeps_ms_adjustment_in_combined_score():
+    vp = vaccine('AASIINFEKL', [(2, 10, 1., False)])
+    vp = replace(vp, epitopes=[replace(vp.epitopes[0], ms_scoring={
+        'HLA-A*02:01': {'baseline': 1., 'adjusted': 4.}})])
+    chosen = select_windows([vp], WindowSelection(), preferred_length=10, limit=1)
+    assert chosen[0].combined_score == chosen[0].target_epitope_score == 4.
+
+
 def test_non_cta_self_burden_changes_choice_without_losing_target():
     contaminated = vaccine('AAAAASIINFEKLAAAAA', [(5, 13, 1., False), (0, 8, 2., True)])
     clean = vaccine('SIINFEKLAAAAA', [(0, 8, 1., False)])

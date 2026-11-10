@@ -194,6 +194,22 @@ def test_cli_yaml_api_equivalence_and_frozen_default(tmp_path):
         AntigenAllocation(max_per_kind={'not_a_type': 1})
 
 
+def test_oversubscribed_goals_report_capacity_and_zero_cap_excludes_kind():
+    ranked = [typed_candidate(0, 'CTA', 'SIINFEKLA'), typed_candidate(1, 'CTA', 'GILGFVFTL'),
+              typed_candidate(2, 'mutation', 'NLVPMVATV'), typed_candidate(3, 'mutation', 'GLLGATCMF')]
+    audit = {}
+    assemble_peptide_constructs(ranked, PeptideConstructConfig(max_constructs=1,
+        antigen_allocation={'min_per_kind': {'CTA': 2, 'mutation': 2}}), selection_audit=audit)
+    goals = audit['allocation']['unmet_goals']
+    assert len(goals) == 2
+    assert all(goal['reason'] == 'construct_capacity' and goal['available'] == 2 for goal in goals)
+    audit = {}
+    products = assemble_peptide_constructs(ranked, PeptideConstructConfig(max_constructs=4,
+        antigen_allocation={'max_per_kind': {'CTA': 0}}), selection_audit=audit)
+    assert len(products) == 2
+    assert audit['allocation']['emitted_counts'] == {'mutation': 2}
+
+
 def mixed_source_table(path):
     """Synthetic, public test evidence; no patient or external model data."""
     import pandas as pd
