@@ -23,13 +23,25 @@ germline background, nucleotide/transcript alternatives and phase uncertainty.
 
 | Family | Producer / accepted result | Candidate interpretation |
 | --- | --- | --- |
-| `variant_orfs` | `reconstruct_variant_orfs`; `isovar.variant_rna_orfs.v1` | Every supplied ordinary CDS/ncORF model and RNA alternative. Kind `mutation`; targetable amino-acid change comes from `mutation_interval`. |
+| `variant_orfs` | `reconstruct_variant_orfs`; `isovar.variant_rna_orfs.v2` (also reads v1) | Every supplied ordinary CDS/ncORF model and RNA alternative. Kind `mutation`; targetable amino-acid change comes from `mutation_interval`. |
 | `sv` | `reconstruct_sv_rna`; `isovar.sv_rna_candidates.v5` | Both annotated-frame translations and exploratory ATG ORFs, kept separately. Kind `SV`; targetable masks cross observed altered junction boundaries. |
 | `sv` | `export_sv_rna_orfs`; `isovar.sv_rna_orfs.v4` | Every exported nucleotide candidate and placement. A placement without independently resolvable support stays held out. |
 | `fusion` | `reconstruct_fusion`; `isovar.fusion_rna.v3` | All fusion coding hypotheses, with split-codon/junction masks. Kind `fusion`. |
 | `viral` | `reconstruct_viral_sequences`; `isovar.viral_sequences.v1` | Observed, reference-anchored coding predictions. Kind `viral`; source species and protein IDs remain separate from the host reference. |
 | `isoforms` | `reconstruct_antigen_isoforms`; `isovar.antigen_isoforms.v1` | All annotated competitors and observed alternatives. Kind `isoform`; a reference model with unobserved coding bases cannot be admitted. |
 | `protein_hypotheses` | `export_protein_hypotheses`; `isovar.protein_hypotheses.v2` | All ordinary variant protein hypotheses, translations, filter outcomes, phasing and support evidence. Kind `mutation`. Live export accepts typed `IsovarResult` objects in Python; the CLI replays an exported result. |
+
+Native variant-ORF v2 candidates record their effective `translation_table`
+separately from the source model's possibly undeclared code. Vaxrank uses
+Isovar's public `variant_orf_translation_table` reader for validation and frame
+grouping, retains `translation_table_source`, and preserves the original model
+record. A missing v2 code or a conflict with its explicit source declaration
+is rejected. Historical v1 exports retain their original nullable-code
+convention during replay; their interpretation is not retroactively changed.
+
+Code selection does not establish read origin. A nuclear NuMT-like carrier
+uses its nuclear context; mitochondrial sequence similarity alone does not
+select table 2 or exclude ambiguous nuclear/mitochondrial placement.
 
 No adapter picks the longest ORF or highest-ranked Isovar protein in advance.
 Synonymous ncORF results and stop-only changes without a targetable residue or

@@ -516,7 +516,7 @@ def test_nonstandard_genetic_code_and_source_species_alias(variant_inputs, table
         assert a.amino_acids[4] == amino
         assert json.loads(dict(a.source_metadata)['isovar_candidate'])['translation_table'] == table
     producer['models'][0]['reference']['translation_table'] = 1
-    with pytest.raises(ValueError, match='protein disagrees'):
+    with pytest.raises(ValueError, match='translation table disagrees'):
         antigens_from_isovar(producer)
 
 

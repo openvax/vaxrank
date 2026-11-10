@@ -63,7 +63,7 @@ def test_carrier_strands_determine_cross_transcript_frame_ambiguity(tmp_path, ki
 def test_carrier_is_authoritative_and_legacy_fallback_requires_an_absent_field(resolved, model, expected):
     row = dict(nucleotide_sequence='ATGAAATAA', coding_interval=[0, 9], variant_cdna_interval=[4, 5])
     reference = dict(resolved_transcript=resolved, model=model, translation_table=1)
-    assert _variant_frame(row, reference) == (expected, 1, 1)
+    assert _variant_frame(row, reference, 'isovar.variant_rna_orfs.v1') == (expected, 1, 1)
 
 
 @pytest.mark.parametrize('invalid', ['', 'forward', 1, True, [], {}])
@@ -71,4 +71,4 @@ def test_invalid_carrier_strand_is_not_hidden_by_a_valid_source_model(invalid):
     row = dict(nucleotide_sequence='ATGAAATAA', coding_interval=[0, 9], variant_cdna_interval=[4, 5])
     reference = dict(resolved_transcript={'strand': invalid}, model={'strand': '+'}, translation_table=1)
     with pytest.raises(ValueError, match='strand must be'):
-        _variant_frame(row, reference)
+        _variant_frame(row, reference, 'isovar.variant_rna_orfs.v1')
