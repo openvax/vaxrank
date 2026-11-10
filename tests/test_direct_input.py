@@ -337,7 +337,8 @@ def test_direct_configured_alternative_windows_survive_reload(direct, tmp_path, 
     monkeypatch.setattr(entry, 'run_vaxrank_from_parsed_args', predict)
     args = parse_vaxrank_args(inputs(tmp_path, direct))
     options = VaccineConfig(preferred_peptide_length=12, min_peptide_length=12,
-                            max_peptide_length=12, max_vaccine_peptides_per_variant=3)
+                            max_peptide_length=12, max_vaccine_peptides_per_variant=3,
+                            max_windows_per_antigen_source=None)
     ranked, frame, _, _, _ = load_external_ranked(args, vaccine_config=options)
     assert len(ranked) == 1
     assert len(ranked[0][1]) == 3

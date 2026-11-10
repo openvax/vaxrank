@@ -113,7 +113,10 @@ def test_cta_viral_and_saved_mutation_share_design_and_replay(inputs, tmp_path, 
     assert 'cta_product_audit' not in result.selection
     product = json.loads((output / 'manifest.json').read_text())
     count = len(product) if modality == 'peptide' else sum(len(p['antigens']) for p in product)
-    assert count == 3  # The two CTA sources produce one identical sequence.
+    assert count == 4  # Two non-overlapping CTA windows, each shared by both source genes.
+    cta_products = [a for p in product for a in p['antigens'] if a['sources'][0]['kind'] == 'CTA']
+    assert len(cta_products) == 2
+    assert all({s['gene_name'] for s in a['sources']} == {'PRAME', 'MAGEA4'} for a in cta_products)
     mappings = [s for p in product for a in p['antigens'] for s in a['sources']]
     assert {s['kind'] for s in mappings} == {'CTA', 'mutation', 'viral'}
     assert {gene for s in mappings if s['kind'] == 'CTA' for gene in s['gene_ids']} == {PRAME, MAGEA4}

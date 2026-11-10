@@ -96,6 +96,8 @@ class VaccinePeptidesConfigSchema(
     max_length: Optional[int] = None
     padding_around_mutation: Optional[int] = None
     per_mutation: Optional[int] = None
+    max_windows_per_antigen_source: Optional[int] = None
+    antigen_allocation: Optional[dict] = None
     max_epitopes_per_candidate: Optional[int] = None
     score_fraction_of_best: Optional[float] = None
     combined_score_expr: Optional[str] = None

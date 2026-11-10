@@ -193,6 +193,7 @@ class RNAConstructConfig:
     # construct; raise for broader coverage.
     max_constructs: int = 2
     candidates_per_slot: int = 1
+    antigen_allocation: dict | None = None
     max_length_nt: int = 4000
     avoid_patterns: tuple = ()
     # Per-junction linker optimization (issue #247). On by default.
@@ -690,6 +691,9 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     """
     options = options or RNAConstructConfig()
     ranked_vaccine_peptides = list(ranked_vaccine_peptides)
+    selection_audit = selection_audit if selection_audit is not None else {}
+    from .assembly_antigens import rank_assembly_windows
+    ranked_vaccine_peptides = rank_assembly_windows(ranked_vaccine_peptides)
     if target_alleles:
         from .coverage import select_antigens_for_coverage
         cap = options.antigens_per_construct * options.max_constructs
@@ -723,7 +727,9 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
 
     selected_antigens = antigens_for_assembly(
         ranked_vaccine_peptides, options, 'mrna', source_evidence=source_evidence)
-    antigens = [(a.name, a.amino_acids) for a in selected_antigens]
+    from .antigen_allocation import allocate_antigens
+    allocated = allocate_antigens(selected_antigens, options.antigen_allocation, selection_audit)
+    antigens = [(a.name, a.amino_acids) for a in allocated]
     source_mappings = {a.name: a.sources for a in selected_antigens}
     if not antigens:
         record_assembly_decisions(selection_audit, selected_antigens, [], target_alleles)

@@ -114,10 +114,14 @@ rank sources that carry different kinds of evidence.
 | `CandidateEpitope` | Peptide occurrence, context, predictions, comparators and scores |
 | `VaccinePeptide` | Selected antigen window and its epitopes |
 
-Ranked outputs are `(source, [VaccinePeptide, ...])` pairs. Direct mutation runs
-can retain multiple windows with `max_vaccine_peptides_per_variant`; external
-adapters select one source-derived window. `--peptide-candidates-per-slot` and
-`--mrna-candidates-per-slot` control how many alternatives are exported.
+Ranked outputs are `(source, [VaccinePeptide, ...])` pairs. New designs retain up
+to three non-overlapping target windows per source, controlled by
+`--max-windows-per-antigen-source`. Direct and native antigen inputs use their
+available parent sequence; table adapters retain the best supported source
+context before window selection. Each selected window competes on its own score.
+Both writers allocate unique sequences across antigen types with the shared
+`--antigen-allocation` policy. See [vaccine designs](vaccine-designs.md) for
+category caps, representation goals, manufacturing alternatives and legacy replay.
 
 See [evidence and provenance](unified_evidence.md) for shared-sequence mappings.
 

@@ -344,6 +344,7 @@ def vaccine_peptides_for_antigen(
     epitope_config: Optional[EpitopeConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
     require_target_epitopes: bool = True,
+    max_windows_per_antigen_source: Optional[int] = 3,
 ):
     """Predict and rank windows from an explicit assembled antigen.
 
@@ -397,6 +398,10 @@ def vaccine_peptides_for_antigen(
         candidates.append(candidate)
     if not candidates:
         return []
+    if max_windows_per_antigen_source is not None:
+        from .window_selection import select_source_windows
+        return select_source_windows(candidates, limit=max_windows_per_antigen_source,
+                                     preferred_length=vaccine_peptide_length)
     all_candidates = list(candidates)
     max_score = max(candidate.combined_score for candidate in candidates)
     if not isclose(max_score, 0.0):
@@ -553,6 +558,14 @@ def vaccine_peptides_from_epitopes(
         candidate_vaccine_peptides.append(candidate_vaccine_peptide)
 
     n_total_candidates = len(candidate_vaccine_peptides)
+    if vaccine_config.max_windows_per_antigen_source is not None:
+        from .window_selection import select_source_windows
+        return select_source_windows([p for p in candidate_vaccine_peptides
+            if not vaccine_config.require_target_epitopes_in_variant or p.contains_target_epitopes()],
+            limit=vaccine_config.max_windows_per_antigen_source,
+            score_fraction=vaccine_config.score_fraction_of_best,
+            preferred_length=vaccine_config.preferred_peptide_length,
+            policy=vaccine_config.window_selection)
     if vaccine_config.window_selection is not None:
         from .window_selection import select_windows
         return select_windows(candidate_vaccine_peptides, vaccine_config.window_selection,

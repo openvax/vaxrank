@@ -16,6 +16,10 @@ Related alternative sequences do not establish independent target coverage.
 {% endif %}
 {% if group.assembly_decisions is defined %}{% if group.assembly_decisions is not none %}
 Assembly order: {{ group.assembly_decisions.order | replace('_', ' ') }}.
+{% if group.assembly_decisions.allocation %}Antigen type allocation: {{ group.assembly_decisions.allocation.policy.mode }}; one count per unique antigen sequence, attributed to its first ranked source type.
+Emitted by type: {% for kind, count in group.assembly_decisions.allocation.emitted_counts.items() %}{{ kind }}: {{ count }}; {% else %}none{% endfor %}
+{% for goal in group.assembly_decisions.allocation.unmet_goals %}Unmet {{ goal.kind }} goal: {{ goal.emitted }} / {{ goal.requested }}; {{ goal.reason | replace('_', ' ') }} ({{ goal.available }} eligible unique sequences).
+{% endfor %}{% endif %}
 Identical final amino-acid sequences share one antigen slot, retaining all mappings. Distinct overlapping sequences remain separate; source-event counts are reported above.
 {% for decision in group.assembly_decisions.rows %}  {{ decision.order }}. {{ decision.sequence }}; sources {{ decision.sources | join(', ') }}; {{ decision.mapping_count }} candidate mappings: {{ decision.outcome | replace('_', ' ') }}{% if decision.products %} ({{ decision.products | join(', ') }}){% endif %}.
 {% endfor %}{% else %}Historical assembly ordering, deduplication and capacity decisions were not recorded. Product mappings describe the saved result.

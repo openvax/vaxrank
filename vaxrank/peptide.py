@@ -103,6 +103,7 @@ class PeptideConstructConfig:
     antigens_per_construct: int = 1
     max_constructs: int = 20
     candidates_per_slot: int = 1
+    antigen_allocation: dict | None = None
     n_terminal_acetylation: bool = False
     c_terminal_amidation: bool = False
     scale_mg: float = 5.0           # synthesis scale per peptide
@@ -111,6 +112,8 @@ class PeptideConstructConfig:
     window_selection: dict | None = None
 
     def __post_init__(self):
+        from .antigen_allocation import AntigenAllocation
+        AntigenAllocation.resolve(self.antigen_allocation)
         # Normalize ``mode`` to lowercase so YAML configs that say
         # ``SLP`` / ``Slp`` / ``slp`` all resolve identically.
         # Argparse already lowercases via ``type=str.lower`` for the
@@ -278,9 +281,12 @@ def assemble_peptide_constructs(
     list[PeptideConstruct]
     """
     options = options or PeptideConstructConfig()
+    selection_audit = selection_audit if selection_audit is not None else {}
     if options.window_selection is not None:
         from .window_selection import optimize_peptide_windows
         ranked_vaccine_peptides = optimize_peptide_windows(ranked_vaccine_peptides, options, window_audit)
+    from .assembly_antigens import rank_assembly_windows
+    ranked_vaccine_peptides = rank_assembly_windows(ranked_vaccine_peptides)
     if target_alleles:
         from .coverage import select_antigens_for_coverage
         cap = options.antigens_per_construct * options.max_constructs
@@ -296,7 +302,9 @@ def assemble_peptide_constructs(
 
     antigens = antigens_for_assembly(
         ranked_vaccine_peptides, options, 'peptide', source_evidence=source_evidence)
-    records = [(a.name, a.amino_acids) for a in antigens]
+    from .antigen_allocation import allocate_antigens
+    allocated = allocate_antigens(antigens, options.antigen_allocation, selection_audit)
+    records = [(a.name, a.amino_acids) for a in allocated]
     source_mappings = {a.name: a.sources for a in antigens}
     audits = {}
     for name, _, vp in iter_named_antigens(ranked_vaccine_peptides, options.candidates_per_slot):

@@ -53,6 +53,10 @@ def _source_record(source, name, antigen, peptide, source_evidence):
         prediction_ids=sorted({e.prediction_group_source for e in peptide.epitopes}),
         input_ids=sorted({e.input_provenance.input_id for e in peptide.epitopes if e.input_provenance}),
         evidence_group=evidence_id, source_event=event)
+    if 'source_window' in peptide.window_selection_audit:
+        record['source_window'] = peptide.window_selection_audit['source_window']
+        record['parent_window'] = peptide.window_selection_audit['parent_window']
+        record['combined_score'] = peptide.combined_score
     contexts = coding_contexts(antigen, source_evidence)
     if contexts or ('isovar_family', 'variant_orfs') in antigen.source_metadata:
         record['coding_contexts'] = contexts
@@ -78,11 +82,25 @@ def antigen_occurrences(ranked, options, modality, *, source_evidence=None):
                          else name + ' (' + suffix + ')' if modality == 'peptide' else name + '_' + suffix)
                 yield AssemblyAntigen(label, epitope.sequence, [source])
         else:
-            sequence = select_antigen_window(antigen, name, options.max_antigen_length_aa)
+            required = ([(e.offset, e.offset + len(e.sequence)) for e in peptide.target_epitopes]
+                        if 'source_window' in peptide.window_selection_audit else ())
+            sequence = select_antigen_window(antigen, name, options.max_antigen_length_aa,
+                                             required_target_intervals=required)
             if len(sequence) < options.min_antigen_length_aa:
                 logger.warning('Antigen %s emitted at %d aa, below --%s-min-antigen-length-aa (%d).',
                                name, len(sequence), modality, options.min_antigen_length_aa)
             yield AssemblyAntigen(name, sequence, [source])
+
+
+def rank_assembly_windows(ranked):
+    """Let each biological window compete on its own configured score."""
+    from .ranking import rank_constructs
+    ranked = list(ranked)
+    if not any('source_window' in p.window_selection_audit for _, ps in ranked for p in ps):
+        return ranked
+    return rank_constructs([entry for source, peptides in ranked for entry in (
+        [(source, [p]) for p in peptides] if peptides and all(
+            'source_window' in p.window_selection_audit for p in peptides) else [(source, peptides)])])
 
 
 def antigens_for_assembly(ranked, options, modality, *, source_evidence=None):
@@ -132,15 +150,25 @@ def record_assembly_decisions(audit, antigens, products, target_alleles):
     """Record outcomes of the current packer; never reconstruct historical reasons."""
     if audit is None:
         return
+    from .antigen_allocation import finalize_allocation
+    finalize_allocation(audit, products)
+    allocation = {d['name']: d for d in audit.get('allocation', {}).get('decisions', ())}
     audit.update(
         order='allele_coverage_then_input_order' if target_alleles else 'input_order',
-        deduplication='exact_amino_acid_sequence', overlap='retain_distinct_sequences',
-        antigens=[dict(name=antigen.name, sequence=antigen.amino_acids, order=index,
+        deduplication='exact_amino_acid_sequence', overlap=(
+            'non_overlapping_source_windows' if any('source_window' in s for a in antigens for s in a.sources)
+            else 'retain_distinct_sequences'),
+        antigens=[dict(name=antigen.name, sequence=antigen.amino_acids,
+                       order=allocation.get(antigen.name, {}).get('allocation_order', index), input_order=index,
                        sources=antigen.sources,
                        products=[p.name for p in products if antigen.name in p.antigen_names],
                        outcome=('emitted' if any(antigen.name in p.antigen_names for p in products)
-                                else 'construct_capacity'))
+                                else 'antigen_type_cap' if allocation.get(antigen.name, {}).get('reason') == 'antigen_type_cap'
+                                else 'construct_capacity'),
+                       allocation=allocation.get(antigen.name))
                   for index, antigen in enumerate(antigens, 1)])
+    if 'allocation' in audit:
+        audit['order'] = audit['allocation']['policy']['mode'] + '_antigen_types_then_' + audit['order']
 
 
 def source_matches_candidate(source, antigen, sequence, prediction_ids, input_ids):

@@ -280,7 +280,10 @@ def construct_config_for_modality(args, modality):
         from ..config.loader import load_vaxrank_config, extract_construct_kwargs
         merged = load_vaxrank_config(args)
         saved = getattr(args, '_saved_modality_config', {}).get(modality, {})
-        return {**saved, **extract_construct_kwargs(merged, modality)}
+        result = {**saved, **extract_construct_kwargs(merged, modality)}
+        from .vaccine_config_args import antigen_allocation_from_args
+        result['antigen_allocation'] = antigen_allocation_from_args(args, result.get('antigen_allocation'))
+        return result
     except (FileNotFoundError, OSError, AttributeError) as e:
         logger.debug(
             "vaccine_constructs config not loaded for %s (%s); "
@@ -381,6 +384,7 @@ def _peptide_construct_options(args):
         counterion=cfg('peptide_counterion', 'counterion'),
         epitopes_per_antigen=epitopes_per_antigen,
         window_selection=yaml_kwargs.get('window_selection'),
+        antigen_allocation=yaml_kwargs.get('antigen_allocation'),
     )
     if antigen_content is not None:
         config_kwargs['antigen_content'] = antigen_content
@@ -782,6 +786,7 @@ def _emit_mrna_constructs(args, ranked, target_dir):
         max_constructs=cfg('mrna_max_constructs', 'max_constructs'),
         candidates_per_slot=cfg(
             'mrna_candidates_per_slot', 'candidates_per_slot'),
+        antigen_allocation=yaml_kwargs.get('antigen_allocation'),
         max_length_nt=cfg('mrna_max_length_nt', 'max_length_nt'),
         optimize_linkers=prediction_args is not None,
         junction_swap_candidates=junction_candidates,

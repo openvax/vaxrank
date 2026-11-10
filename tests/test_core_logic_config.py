@@ -337,7 +337,8 @@ def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
         per_allele_scores={'HLA-A*02:01': score}) for offset, score in [(0, 1.), (1, .85)]]
     results = [vaccine_peptides_from_epitopes(
         variant, fragment, epitopes, vaccine_config=VaccineConfig(
-            score_fraction_of_best=fraction, max_vaccine_peptides_per_variant=2))
+            score_fraction_of_best=fraction, max_vaccine_peptides_per_variant=2,
+            max_windows_per_antigen_source=None))
         for fraction in (.99, .8, 1.)]
     assert [len(result) for result in results] == [1, 2, 1]
     assert [p.target_epitope_score for p in results[1]] == [1., .85]

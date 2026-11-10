@@ -54,6 +54,10 @@ def _read_single_config_file(config_path: str) -> dict[str, Any]:
         raise TypeError(
             f"Expected top-level YAML object in {config_path} to be a mapping"
         )
+    if config_path == resolve_config_path('builtin:openvax-v1'):
+        # Expand compatibility settings without changing the frozen definition.
+        raw.setdefault('vaccine_peptides', {}).setdefault('max_windows_per_antigen_source', None)
+        raw['vaccine_peptides'].setdefault('antigen_allocation', {'mode': 'ranked'})
     return raw
 
 
@@ -158,6 +162,7 @@ def _set_nested_value(target: dict[str, Any], path: str, value: Any) -> None:
 # thread these into the per-modality construct kwargs (so the
 # construct assemblers receive them at the same place they always have).
 _ANTIGEN_DESIGN_KNOBS = (
+    "antigen_allocation",
     "antigen_content",
     "epitopes_per_antigen",
     "candidates_per_slot",
@@ -344,6 +349,11 @@ def load_vaxrank_config(
             raise type(error)("%s (configuration built from: %s)" % (error, "; ".join(inputs))) from error
         raise
     resolved = _schema_to_dict(schema)
+    # Null explicitly requests legacy window selection; an absent key uses
+    # the fresh-design default. Other historical null-as-unset fields keep it.
+    if 'max_windows_per_antigen_source' in raw.get('vaccine_peptides', {}):
+        resolved.setdefault('vaccine_peptides', {})['max_windows_per_antigen_source'] = (
+            raw['vaccine_peptides']['max_windows_per_antigen_source'])
     from ..isovar_options import FAMILIES, source_options
     sources = resolved.get('isovar', {}).get('sources', {})
     if set(sources) - set(FAMILIES):
@@ -400,6 +410,8 @@ _EPITOPE_CONFIG_MAPPING: list[tuple[str, str]] = [
 # ``_MANUFACTURABILITY_CONFIG_MAPPING`` below. ``VaccineConfig``
 # carries only modality-agnostic ranking knobs.
 _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
+    ("vaccine_peptides.max_windows_per_antigen_source", "max_windows_per_antigen_source"),
+    ("vaccine_peptides.antigen_allocation", "antigen_allocation"),
     ("vaccine_peptides.window_selection", "window_selection"),
     ("vaccine_peptides.preferred_length", "preferred_peptide_length"),
     ("vaccine_peptides.min_length", "min_peptide_length"),
@@ -429,7 +441,10 @@ def saved_construct_configuration(record):
     from ..vaccine_config import VaccineConfig
     if record.get('effective_sha256') != configuration_digest(record):
         raise ValueError('Saved run configuration digest does not match its definition')
-    vaccine = msgspec.to_builtins(msgspec.convert(record['effective_vaccine_peptides'], VaccineConfig))
+    retained_vaccine = dict(record['effective_vaccine_peptides'])
+    retained_vaccine.setdefault('max_windows_per_antigen_source', None)
+    retained_vaccine.setdefault('antigen_allocation', {'mode': 'ranked'})
+    vaccine = msgspec.to_builtins(msgspec.convert(retained_vaccine, VaccineConfig))
     original = record.get('configuration', {})
     base = {key: deepcopy(original[key]) for key in ('name', 'policy_metadata', 'peptide', 'mrna')
             if key in original}

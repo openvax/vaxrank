@@ -571,7 +571,14 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
             ranking_rules=options.ranking_rules,
             manufacturability_thresholds=options.manufacturability_thresholds,
             manufacturability_rules=options.manufacturability_rules)
+        vaccines = [vaccine]
+        if options.vaccine_config is not None and options.vaccine_config.max_windows_per_antigen_source is not None:
+            # Window-scoped RNA is intentionally unavailable for the unsliced
+            # parent. Select concrete windows before ranking source contexts.
+            from .window_selection import optimize_antigen_windows
+            selected_windows = optimize_antigen_windows([(antigen, vaccines)], options.vaccine_config)
+            vaccines = selected_windows[0][1] if selected_windows else []
         accumulator.add(ExternalVariantEntry(
-            source=antigen,
-            vaccine_peptide=vaccine, resolved_protein_context=True))
+            source=antigen, vaccine_peptides=tuple(vaccines),
+            vaccine_peptide=vaccines[0] if vaccines else None, resolved_protein_context=True))
     return accumulator.result(report.source_format)

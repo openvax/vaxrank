@@ -234,6 +234,7 @@ def test_cli_reports_native_coverage_and_replays_offline(inputs, tmp_path, monke
         inputs=[dict(format='antigens', path='antigens.json')])))
     output = tmp_path / 'original'
     run_cli(['--input-manifest', str(manifest), '--mhc-predictor', 'random',
+        '--vaccine-type', 'peptide',
         '--output-dir', str(output), '--pdf-backend', 'weasyprint',
         '--config-text', 'epitopes.score_expr=1.0', '--no-processing-aware-annotation'])
     native = output / 'candidate_predictions.tsv'

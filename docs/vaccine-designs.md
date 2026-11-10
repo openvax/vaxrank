@@ -34,11 +34,57 @@ antigen slot. The first candidate in selection order supplies its display name;
 all contributing source mappings remain separate. Scores and RNA support are
 not added across those mappings.
 
-`--peptide-candidates-per-slot` and `--mrna-candidates-per-slot` control how many
-ranked alternative windows per source to consider. Distinct alternatives remain
-eligible; repeating an identical sequence does not create another slot. These
-settings do not request repeated doses or repeated copies within a construct.
-Explicitly supplied constructs retain their stated sequence, including repeats.
+`--max-windows-per-antigen-source N` retains up to **3 non-overlapping source
+windows** by default. A source is a recorded mutation/event or an identified
+translated antigen, not a gene-name spelling or a sample. Boundaries may touch;
+windows cannot share a residue on their parent sequence. Selection takes the
+best remaining region, removes overlaps, and repeats. The near-best score
+comparison restarts each round. A repeated region with no new target
+peptide/allele content does not earn another window. Each retained window then
+competes for vaccine capacity on its own configured combined score.
+
+Manufacturing shifts belong to one selected region. Their recorded alternatives
+must preserve all selected target peptide/allele occurrences and avoid the other
+selected regions. They do not consume extra windows or slots. Peptide refinement
+enforces this target-preservation contract. Scores and eligibility still come
+from the configured DSL and window policy; selection is deterministic and greedy,
+not a global optimization or an estimate of immune response.
+
+`--peptide-candidates-per-slot`, `--mrna-candidates-per-slot`, and
+`--max-vaccine-peptides-per-variant` apply to legacy overlapping-candidate
+selection (`vaccine_peptides.max_windows_per_antigen_source: null`). Saved
+pre-3.53 designs and the frozen `openvax-v1` profile retain that behavior. New
+biological windows all reach assembly without raising `candidates-per-slot`.
+Available sequence/prediction context limits the windows that can be selected;
+a previously truncated input cannot recover omitted regions.
+
+Fresh designs use `--antigen-allocation balanced` to rotate among least
+represented eligible antigen types after sequence deduplication. Set `ranked`
+to preserve score/allele-coverage order. Use `--min-antigens-per-type mutation=5`
+for a representation goal and `--max-antigens-per-type CTA=8` for a hard cap;
+repeat either option for other types. Counts are per unique antigen sequence,
+across the whole vaccine, including mRNA antigen slots. A shared sequence counts
+once under its first ranked source type and retains all other sources. Unused
+capacity passes to other eligible types. Goals cannot override admission or
+capacity; actual counts and unmet goals appear in reports and saved decisions.
+
+Equivalent Python/YAML settings are `VaccineConfig.max_windows_per_antigen_source`
+and `VaccineConfig.antigen_allocation`; both construct option classes also accept
+`antigen_allocation`. For example:
+
+```yaml
+vaccine_peptides:
+  max_windows_per_antigen_source: 3
+  antigen_allocation:
+    mode: balanced
+    min_per_kind: {mutation: 5}
+    max_per_kind: {CTA: 8, viral: 4}
+```
+
+Supported type names are `mutation`, `fusion`, `SV`, `CTA`, `ERV`, `splice`, and
+`viral`, plus explicitly admitted `isoform` inputs. ORF context is retained as
+provenance, not an extra category. These allocation settings are design
+preferences, not scientifically established optimal proportions.
 
 Both modality manifests contain `antigens`: exact amino-acid sequences, lengths,
 zero-based half-open positions in the peptide or mRNA's encoded protein, and a
@@ -48,7 +94,7 @@ identities. The Python products expose the same records as `.antigens` and a
 derived `.antigen_sources` mapping. Full prediction and reconstruction evidence
 remains in the native dataset and its assembly source graph.
 
-Overlapping but different sequences are not merged. In particular, several
+Different sequences are not merged across sources. In legacy selection, several
 ncORF windows from one event are alternative sequences, not independent target
 events. `run_summary.txt` counts actual products, distinct antigen sequences,
 recorded source events and candidate mappings without known events separately.
