@@ -19,7 +19,7 @@ Related alternative sequences do not establish independent target coverage.</p>
 {% if group.assembly_decisions is not none %}
 <p>Assembly order: {{ group.assembly_decisions.order | replace('_', ' ') }}. Identical final amino-acid sequences share one antigen slot, retaining all source mappings. Window policy: {{ group.assembly_decisions.overlap | default('not recorded', true) | replace('_', ' ') }}.</p>
 {% if group.assembly_decisions.allocation %}
-<p>Antigen type allocation: {{ group.assembly_decisions.allocation.policy.mode }}. Each unique antigen sequence counts once, under its first ranked source type.</p>
+<p>{% if group.assembly_decisions.allocation.policy.mode == 'balanced' %}This saved design used the retired category-balancing policy.{% else %}Antigens follow the configured ranking, subject to explicit type goals and caps.{% endif %} Each unique antigen sequence counts once, under its first ranked source type.</p>
 <p>Emitted antigen sequences by type: {% for kind, count in group.assembly_decisions.allocation.emitted_counts.items() %}{{ kind }}: {{ count }}{% if not loop.last %}; {% endif %}{% else %}none{% endfor %}.</p>
 {% for goal in group.assembly_decisions.allocation.unmet_goals %}<p>{{ goal.kind }} representation goal: requested {{ goal.requested }}, emitted {{ goal.emitted }}; {{ goal.reason | replace('_', ' ') }} ({{ goal.available }} eligible unique sequences).</p>{% endfor %}
 {% endif %}

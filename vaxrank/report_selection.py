@@ -73,7 +73,7 @@ def selection_policy_view(selection):
         ('score_fraction_of_best', 'Score fraction retained before window tie breaks'),
         ('max_windows_per_antigen_source', 'Maximum non-overlapping windows per antigen source'),
         ('max_vaccine_peptides_per_variant', 'Legacy overlapping candidate limit'),
-        ('antigen_allocation', 'Antigen type allocation'),
+        ('antigen_allocation', 'Antigen type limits'),
         ('num_target_epitopes_to_keep', 'Maximum target epitopes per window'),
         ('ranking_rules', 'Window ranking rules'),
         ('require_target_epitopes_in_variant', 'Require a target epitope'),
@@ -89,7 +89,7 @@ def selection_policy_view(selection):
             configuration = record.get('effective_constructs', {}).get(modality, {})
             origin = 'Resolved construct configuration'
         fields = [('antigen_content', 'Antigen content'), ('candidates_per_slot', 'Legacy candidate alternatives per source'),
-                  ('antigen_allocation', 'Antigen type allocation'),
+                  ('antigen_allocation', 'Antigen type limits'),
                   ('epitopes_per_antigen', 'Epitopes per antigen'),
                   ('min_antigen_length_aa', 'Minimum refined antigen length (aa)' if configuration.get('window_selection') is not None
                    else 'Minimum antigen length warning threshold (aa)'),

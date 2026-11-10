@@ -44,27 +44,26 @@ Select a recorded version with `affinity["mhcflurry", "VERSION"]` when needed.
 For incompatible scores, use
 [common-model prediction](input-workflows.md#generate-common-predictions-and-re-rank).
 
-For a single mixed vaccine, use the shared allocation policy after unique-sequence
-deduplication. The default `balanced` mode rotates through the least represented
-eligible types, preferring the existing score/allele-coverage order within a
-type. These are configurable representation preferences, not an optimal
+For a single mixed vaccine, selection follows the existing score/allele-coverage
+order after unique-sequence deduplication. Optional type goals and caps can
+change the mix; a type receives no priority merely because it is less
+represented. These are explicit representation preferences, not an optimal
 biological ratio. For example:
 
 ```sh
 vaxrank --input-epitopes mixed/native.tsv \
-  --max-windows-per-antigen-source 3 --antigen-allocation balanced \
+  --max-windows-per-antigen-source 3 \
   --min-mutation-antigens 5 --max-cta-antigens 8 \
-  --max-viral-antigens 4 --output-dir mixed-balanced
+  --max-viral-antigens 4 --output-dir mixed-limits
 ```
 
 The limits count distinct antigen sequences across the vaccine, including all
 mRNA constructs. Shared products count once under their first ranked source
 type. Remaining capacity goes to eligible types with space; unmet goals are
-reported. No goal admits a held-out candidate. `--antigen-allocation ranked`
-uses the existing order after serving explicit representation goals.
-Both modes enforce the same maxima; the mode determines how the remaining
-slots are filled. See [type limits and selection order](vaccine-designs.md#distinct-sequences-and-source-mappings)
-for all per-type flags and a worked comparison.
+reported. No goal admits a held-out candidate. Selection serves explicit
+representation goals first, then uses the existing ranking within the maxima.
+See [type limits and selection order](vaccine-designs.md#distinct-sequences-and-source-mappings)
+for all per-type flags and a worked example.
 
 For separate panels instead, filter the saved pool and cap each panel:
 

@@ -119,8 +119,8 @@ to three non-overlapping target windows per source, controlled by
 `--max-windows-per-antigen-source`. Direct and native antigen inputs use their
 available parent sequence; table adapters retain the best supported source
 context before window selection. Each selected window competes on its own score.
-Both writers allocate unique sequences across antigen types with the shared
-`--antigen-allocation` policy. See [vaccine designs](vaccine-designs.md) for
+Both writers select unique sequences in the existing ranking order, subject
+to explicit antigen-type goals and caps. See [vaccine designs](vaccine-designs.md) for
 category caps, representation goals, manufacturing alternatives and legacy replay.
 
 See [evidence and provenance](unified_evidence.md) for shared-sequence mappings.

@@ -30,10 +30,10 @@ without this setting and the frozen `openvax-v1` profile retain legacy behavior.
 
 After eligibility checks and exact emitted-sequence deduplication, allocate
 unique antigen sequences using a shared `antigen_allocation` policy for peptide
-and mRNA. `balanced` (the fresh-design default) rotates through the least
-represented available antigen kinds, breaking ties by the existing ranked /
-allele-coverage order. `ranked` keeps that order. Optional per-kind minimum
-representation goals are served first; optional maxima are hard limits.
+and mRNA. Selection preserves the existing ranked / allele-coverage order.
+Optional per-kind minimum representation goals are served first; optional
+maxima are hard limits. Category balancing was removed because it could
+displace a stronger candidate solely to represent another antigen kind.
 Unused capacity passes to other eligible kinds. Never admit a held-out antigen
 to meet a goal. Count each unique sequence once, attributed to its first
 (highest-priority) source kind; preserve all other source mappings. ORF context
@@ -79,9 +79,10 @@ minimal-epitope designs. Do not call these per-source window limits; the separat
 `--max-windows-per-antigen-source` controls that quantity.
 
 Keep the API/YAML maps and saved effective settings unchanged. CLI overrides
-replace only the specified type's value. Explain selection mode separately:
-both modes first serve minimum goals and enforce maxima; `balanced` then favors
-the least represented eligible type, while `ranked` follows the existing
-score/allele-coverage order. Neither mode changes eligibility or scores.
+replace only the specified type's value. Explain selection order separately:
+selection first serves explicit minimum goals and enforces maxima, then
+follows the existing score/allele-coverage order. There is no mode selector
+and no change to eligibility or scores. See `ranked-antigen-limits.md` for
+the retirement and saved-design replay contract.
 Verify all named flags, partial YAML overrides, invalid bounds, and both
 modalities through the mixed-design CLI/report/replay smoke.

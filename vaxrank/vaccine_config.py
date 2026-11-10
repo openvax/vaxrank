@@ -97,9 +97,10 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
         source. Default: 3. None restores legacy candidate selection.
 
     antigen_allocation : dict or None
-        Shared allocation of unique antigen sequences across kinds. None uses
-        balanced allocation; an explicit policy may set mode, min_per_kind
-        representation goals and max_per_kind limits. Scores are unchanged.
+        Optional min_per_kind representation goals and max_per_kind limits for
+        unique antigen sequences. None preserves the existing ranking without
+        category preferences. Scores are unchanged. Historical mode values
+        remain readable for native replay, but new selection is always ranked.
 
     num_target_epitopes_to_keep : int
         Maximum number of epitope predictions to retain per variant

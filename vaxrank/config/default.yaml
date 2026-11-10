@@ -179,10 +179,9 @@ vaccine_peptides:
   # DNA-only fallback retains its separate built-in padding of 5.
   padding_around_mutation: null
 
-  # ---- Distinct target regions and vaccine-wide category allocation ----
+  # ---- Distinct target regions and optional vaccine-wide category limits ----
   max_windows_per_antigen_source: 3
   antigen_allocation:
-    mode: balanced
     min_per_kind: {}
     max_per_kind: {}
   # Legacy overlapping-candidate limit, used only when the source-window
