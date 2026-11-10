@@ -61,6 +61,47 @@ def product_files(directory):
             and path.parent.name in ('peptide', 'mrna')}
 
 
+@pytest.fixture
+def balanced_archive(tmp_path):
+    # Actual 3.54.0 export (8f6d242), from mixed_source_table's synthetic
+    # CTA/viral/ERV evidence with three total slots in each modality.
+    path = tmp_path / 'balanced.tsv'
+    fixture = Path(__file__).parent / 'data/epitope_fixtures/native_balanced_design_3_54_0.tsv.gz'
+    path.write_bytes(gzip.decompress(fixture.read_bytes()))
+    return path
+
+
+def test_retired_balanced_design_replays_without_selection(balanced_archive, tmp_path, monkeypatch):
+    saved = EpitopeDataset.load(balanced_archive).selection['construct_assembly']
+    for record in saved.values():
+        audit = from_native_json(record['source_graph'], dict)['assembly_decisions']['allocation']
+        assert audit['policy']['mode'] == 'balanced'
+        assert audit['emitted_counts'] == {'CTA': 1, 'ERV': 1, 'viral': 1}
+    monkeypatch.setattr('vaxrank.cli.entry_point.assemble_peptide_constructs', forbidden)
+    monkeypatch.setattr('vaxrank.cli.entry_point.assemble_mrna_constructs', forbidden)
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', forbidden)
+    output = tmp_path / 'replayed'
+    replay(balanced_archive, output)
+    restored = EpitopeDataset.load(output / 'candidate_predictions.tsv').selection['construct_assembly']
+    assert restored == saved
+    assert product_files(output)
+
+
+def test_retired_balanced_design_cannot_be_reassembled(balanced_archive, tmp_path):
+    with pytest.raises(ValueError, match='Balanced antigen allocation has been removed'):
+        replay(balanced_archive, tmp_path / 'changed', '--peptide-max-constructs', '2')
+
+
+def test_retired_balanced_candidates_can_be_explicitly_redesigned(balanced_archive, tmp_path):
+    output = tmp_path / 'redesigned'
+    replay(balanced_archive, output, '--config-text', 'vaccine_peptides.antigen_allocation.mode=ranked')
+    records = EpitopeDataset.load(output / 'candidate_predictions.tsv').selection['construct_assembly']
+    for record in records.values():
+        audit = from_native_json(record['source_graph'], dict)['assembly_decisions']['allocation']
+        assert audit['policy']['mode'] == 'ranked'
+        assert audit['emitted_counts'] == {'CTA': 2, 'viral': 1}
+
+
 @pytest.mark.parametrize('suffix', ['csv', 'tsv'])
 def test_empty_native_result_replays_scope_settings_and_products(tmp_path, monkeypatch, suffix):
     from vaxrank.epitope_config import EpitopeConfig
@@ -93,8 +134,8 @@ def test_empty_native_result_replays_scope_settings_and_products(tmp_path, monke
         assert from_native_json(record['products'], list) == []
         assert from_native_json(record['source_graph'], dict) == {
             'inputs': [], 'products': {}, 'assembly_decisions': {
-                'order': 'balanced_antigen_types_then_allele_coverage_then_input_order',
-                'allocation': {'policy': {'mode': 'balanced', 'min_per_kind': {}, 'max_per_kind': {}},
+                'order': 'ranked_antigen_types_then_allele_coverage_then_input_order',
+                'allocation': {'policy': {'mode': 'ranked', 'min_per_kind': {}, 'max_per_kind': {}},
                                'unit': 'unique_antigen_sequence', 'attribution': 'first_ranked_source',
                                'decisions': [], 'emitted_counts': {}, 'unmet_goals': []},
                 'deduplication': 'exact_amino_acid_sequence',

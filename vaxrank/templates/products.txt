@@ -16,7 +16,7 @@ Related alternative sequences do not establish independent target coverage.
 {% endif %}
 {% if group.assembly_decisions is defined %}{% if group.assembly_decisions is not none %}
 Assembly order: {{ group.assembly_decisions.order | replace('_', ' ') }}.
-{% if group.assembly_decisions.allocation %}Antigen type allocation: {{ group.assembly_decisions.allocation.policy.mode }}; one count per unique antigen sequence, attributed to its first ranked source type.
+{% if group.assembly_decisions.allocation %}{% if group.assembly_decisions.allocation.policy.mode == 'balanced' %}This saved design used the retired category-balancing policy.{% else %}Antigens follow the configured ranking, subject to explicit type goals and caps.{% endif %} One count per unique antigen sequence, attributed to its first ranked source type.
 Emitted by type: {% for kind, count in group.assembly_decisions.allocation.emitted_counts.items() %}{{ kind }}: {{ count }}; {% else %}none{% endfor %}
 {% for goal in group.assembly_decisions.allocation.unmet_goals %}Unmet {{ goal.kind }} goal: {{ goal.emitted }} / {{ goal.requested }}; {{ goal.reason | replace('_', ' ') }} ({{ goal.available }} eligible unique sequences).
 {% endfor %}{% endif %}

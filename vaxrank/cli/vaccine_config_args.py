@@ -38,12 +38,8 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         'Antigen type selection',
         'Counts are unique antigen sequences across the whole vaccine after deduplication: '
         'long windows or individual minimal epitopes. Minimums are representation goals; '
-        'maximums are hard limits.')
-    allocation_group.add_argument(
-        '--antigen-allocation', choices=('balanced', 'ranked'), default=None,
-        help='Selection order within the type limits: both modes first serve minimum goals; '
-             'balanced then favors the least represented eligible type, while ranked keeps '
-             'score/allele-coverage order (default: balanced). Scores are unchanged.')
+        'maximums are hard limits. Selection follows the existing score/allele-coverage '
+        'order after serving explicit minimum goals, subject to maximum caps.')
     for kind in sorted(ANTIGEN_KINDS, key=str.lower):
         allocation_group.add_argument(
             '--min-%s-antigens' % kind.lower(), type=int, default=None, metavar='COUNT',
@@ -186,8 +182,6 @@ def antigen_allocation_from_args(args, configured=None):
     from dataclasses import asdict
     from ..antigen_allocation import AntigenAllocation
     policy = asdict(AntigenAllocation.resolve(configured))
-    if getattr(args, 'antigen_allocation', None) is not None:
-        policy['mode'] = args.antigen_allocation
     for bound in ('min', 'max'):
         for kind in ANTIGEN_KINDS:
             count = getattr(args, '%s_%s_antigens' % (bound, kind.lower()), None)

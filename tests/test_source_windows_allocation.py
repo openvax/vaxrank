@@ -139,10 +139,13 @@ def typed_candidate(index, kind, sequence):
 
 
 @pytest.mark.parametrize('modality', ['peptide', 'mrna'])
-def test_balanced_after_dedup_caps_goals_and_ranked_alternative(modality):
+def test_ranked_after_dedup_caps_and_explicit_goals(modality):
     ranked = [typed_candidate(0, 'CTA', 'SIINFEKLA'), typed_candidate(1, 'mutation', 'SIINFEKLA'),
               typed_candidate(2, 'CTA', 'GILGFVFTL'), typed_candidate(3, 'CTA', 'NLVPMVATV'),
               typed_candidate(4, 'mutation', 'GLLGATCMF'), typed_candidate(5, 'viral', 'LLFGYPVYV')]
+    # A weak combined score must not be rescued by an implicit viral quota.
+    source, peptides = ranked[-1]
+    ranked[-1] = source, [replace(peptides[0], combined_score_expr='0.001 * window_epitope_score')]
     def build(policy):
         audit = {}
         kwargs = dict(max_constructs=3, antigens_per_construct=1, min_antigen_length_aa=9,
@@ -153,10 +156,10 @@ def test_balanced_after_dedup_caps_goals_and_ranked_alternative(modality):
             products = assemble_mrna_constructs(ranked, RNAConstructConfig(**kwargs, optimize_linkers=False),
                                                selection_audit=audit, host_taxon_id=9606)
         return products, audit
-    balanced, audit = build(None)
-    assert audit['allocation']['emitted_counts'] == {'CTA': 1, 'mutation': 1, 'viral': 1}
-    assert len(balanced[0].antigens[0]['sources']) == 2
-    assert [s['kind'] for s in balanced[0].antigens[0]['sources']] == ['CTA', 'mutation']
+    products, audit = build(None)
+    assert audit['allocation']['emitted_counts'] == {'CTA': 3}
+    assert len(products[0].antigens[0]['sources']) == 2
+    assert [s['kind'] for s in products[0].antigens[0]['sources']] == ['CTA', 'mutation']
     _, plain = build({'mode': 'ranked'})
     assert plain['allocation']['emitted_counts'] == {'CTA': 3}
     _, limited = build({'mode': 'ranked', 'max_per_kind': {'CTA': 1},
@@ -164,18 +167,19 @@ def test_balanced_after_dedup_caps_goals_and_ranked_alternative(modality):
     assert limited['allocation']['emitted_counts'] == {'CTA': 1, 'mutation': 1, 'viral': 1}
     assert {d['kind'] for d in limited['allocation']['unmet_goals']} == {'viral', 'ERV'}
     assert sum(a['outcome'] == 'antigen_type_cap' for a in limited['antigens']) == 2
+    with pytest.raises(ValueError, match='Balanced antigen allocation has been removed'):
+        build({'mode': 'balanced'})
 
 
 def test_cli_yaml_api_equivalence_and_frozen_default(tmp_path):
     parser = external_input_arg_parser()
-    args = parser.parse_args(['--max-windows-per-antigen-source', '4', '--antigen-allocation', 'ranked',
+    args = parser.parse_args(['--max-windows-per-antigen-source', '4',
                               '--min-mutation-antigens', '2', '--max-cta-antigens', '3'])
     cli = vaccine_config_from_args(args)
     path = tmp_path / 'allocation.yaml'
     path.write_text('''vaccine_peptides:
   max_windows_per_antigen_source: 4
   antigen_allocation:
-    mode: ranked
     min_per_kind: {mutation: 2}
     max_per_kind: {CTA: 3}
 ''')
@@ -202,7 +206,7 @@ def test_named_type_limits_cover_every_kind_and_override_only_named_yaml_values(
     for flag in kinds:
         options += ['--min-%s-antigens' % flag, '1', '--max-%s-antigens' % flag, '3']
     policy = vaccine_config_from_args(parser.parse_args(options)).antigen_allocation
-    assert policy == {'mode': 'balanced', 'min_per_kind': dict.fromkeys(kinds.values(), 1),
+    assert policy == {'mode': 'ranked', 'min_per_kind': dict.fromkeys(kinds.values(), 1),
                       'max_per_kind': dict.fromkeys(kinds.values(), 3)}
 
     path = tmp_path / 'limits.yaml'
@@ -227,6 +231,15 @@ def test_named_type_limits_cover_every_kind_and_override_only_named_yaml_values(
 def test_named_type_limits_reject_invalid_bounds(options, message):
     with pytest.raises(ValueError, match=message):
         vaccine_config_from_args(external_input_arg_parser().parse_args(options))
+
+
+@pytest.mark.parametrize('mode', ['balanced', 'ranked'])
+def test_allocation_mode_selector_is_removed(mode):
+    parser = external_input_arg_parser()
+    assert '--antigen-allocation' not in parser.format_help()
+    with pytest.raises(SystemExit) as error:
+        parser.parse_args(['--antigen-allocation', mode])
+    assert error.value.code == 2
 
 
 def test_oversubscribed_goals_report_capacity_and_zero_cap_excludes_kind():
@@ -287,7 +300,7 @@ def test_mixed_cli_report_and_native_replay(tmp_path, monkeypatch):
     saved = EpitopeDataset.load(out / 'candidate_predictions.tsv')
     for modality, record in saved.selection['construct_assembly'].items():
         graph = from_native_json(record['source_graph'], dict)
-        assert graph['assembly_decisions']['allocation']['emitted_counts'] == {'CTA': 2, 'viral': 2, 'ERV': 1}
+        assert graph['assembly_decisions']['allocation']['emitted_counts'] == {'CTA': 3, 'viral': 1, 'ERV': 1}
         assert graph['assembly_decisions']['allocation']['unmet_goals'][0]['kind'] == 'mutation'
         assert sum(len(p.antigen_names) for p in from_native_json(record['products'], list)) == 5
     assert 'Emitted antigen sequences by type:' in (out / 'review.html').read_text()

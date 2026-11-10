@@ -84,25 +84,18 @@ excludes that type from the vaccine. Actual counts and unmet goals appear in
 reports and saved decisions. A CLI limit overrides only that type's configured
 value; other YAML limits remain in effect.
 
-`--antigen-allocation` chooses **which eligible sequences fill the available
-slots within those limits**. Both modes serve minimum goals first and enforce
-every maximum. `balanced` (the default for fresh designs) then favors the least
-represented eligible type, using the existing score/allele-coverage order for
-ties and within each type. `ranked` uses that existing order directly after
-serving the goals. Neither mode changes scores or eligibility. Unused capacity
-passes to other eligible types that have room under their caps.
+Selection always follows the **existing score/allele-coverage order**, after
+serving explicit minimum goals and subject to maximum caps. No type receives
+an automatic quota. A lower-ranked viral candidate cannot displace a stronger
+candidate merely because no viral sequence has been selected. Scores and
+eligibility are unchanged; unused capacity passes to other eligible candidates
+that have room under their caps. No allocation-mode flag is needed.
 
-For example, suppose ten slots are available, all CTA candidates rank ahead
-of mutations, mutations rank ahead of viral candidates, and each type has
-enough eligible candidates. With `--min-cta-antigens 2 --max-cta-antigens 4`:
-
-| Mode | CTA | Mutation | Viral |
-|---|---:|---:|---:|
-| `ranked` | 4 | 6 | 0 |
-| `balanced` | 4 | 3 | 3 |
-
-The same limits admit different designs because they do not uniquely specify
-the final category counts. The mode supplies the remaining selection rule.
+For example, with ten slots, enough eligible candidates, and all CTA candidates
+ranked above mutations, which rank above viral candidates, setting
+`--min-cta-antigens 2 --max-cta-antigens 4` selects four CTA and six mutation
+sequences. A viral minimum would need to be requested explicitly to reserve a
+viral slot in this example.
 
 Equivalent Python/YAML settings are `VaccineConfig.max_windows_per_antigen_source`
 and `VaccineConfig.antigen_allocation`; both construct option classes also accept
@@ -112,7 +105,6 @@ and `VaccineConfig.antigen_allocation`; both construct option classes also accep
 vaccine_peptides:
   max_windows_per_antigen_source: 3
   antigen_allocation:
-    mode: balanced
     min_per_kind: {mutation: 5}
     max_per_kind: {CTA: 8, viral: 4}
 ```
@@ -121,6 +113,18 @@ Supported type names are `mutation`, `fusion`, `SV`, `CTA`, `ERV`, `splice`, and
 `viral`, plus explicitly admitted `isoform` inputs. ORF context is retained as
 provenance, not an extra category. These allocation settings are design
 preferences, not scientifically established optimal proportions.
+
+The former `--antigen-allocation` option and category-balancing algorithm have
+been removed. Unchanged native designs created with balancing retain their
+recorded products and audit on exact replay. They cannot be reassembled using
+the retired policy. To deliberately redesign those candidates using the
+current ranking, override the historical settings with this YAML (the mode
+field is retained only for configuration/replay compatibility):
+
+```yaml
+vaccine_peptides:
+  antigen_allocation: {mode: ranked}
+```
 
 Both modality manifests contain `antigens`: exact amino-acid sequences, lengths,
 zero-based half-open positions in the peptide or mRNA's encoded protein, and a
