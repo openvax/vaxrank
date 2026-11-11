@@ -132,7 +132,7 @@ def test_predict_epitopes_does_not_emit_nan_value_for_presentation():
             return fake_df
 
     fragment = MutantProteinFragment(
-        variant=Variant('X', '1000', 'C', 'A', ensembl=None),
+        variant=Variant('X', '1000', 'C', 'A', genome=None),
         gene_name='gene',
         amino_acids='KLQGHSAPVLDVIVNCDESLLASSD',
         mutant_amino_acid_start_offset=12,

@@ -155,7 +155,7 @@ def _request_inputs(family, inputs, genome, base, stack):
     if family == 'variant_orfs':
         from varcode import Variant
         data['reference_orfs'] = _reference_orfs(data['reference_orfs'], genome, base)
-        data['variant'] = Variant(ensembl=genome, **data['variant'])
+        data['variant'] = Variant(genome=genome, **data['variant'])
     elif family == 'sv':
         from isovar.sv_rna import sv_rna_input_from_dict
         event = data.pop('event')

@@ -25,7 +25,7 @@ import jinja2
 import pandas as pd
 import roman
 from mhctools.pred import Prediction
-from varcode import Variant, load_vcf_fast
+from varcode import Variant, load_vcf
 
 from .cancer_hotspots import get_hotspot_url
 from . import cells
@@ -241,7 +241,7 @@ class TemplateDataCreator(object):
         # map from peptide objects to their COSMIC IDs if they exist
         if cosmic_vcf_filename and candidate_details:
             logger.info('Loading COSMIC data...')
-            self.cosmic_variant_collection = load_vcf_fast(
+            self.cosmic_variant_collection = load_vcf(
                 cosmic_vcf_filename, allow_extended_nucleotides=True, include_info=False)
             logger.info('COSMIC data loaded.')
         else:

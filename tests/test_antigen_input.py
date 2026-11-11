@@ -268,7 +268,7 @@ def test_real_mhctools_cli_and_host_reference(inputs, reference, tmp_path, monke
     # Use the installed MHCtools predictor factory and actual PyEnsembl indexes.
     # Only annotation resolution is redirected to the small local fixture.
     _, variant = reference
-    genome = variant.ensembl
+    genome = variant.genome
     genome.reference_name = 'GRCh38'
     inputs.scope = replace(inputs.scope, annotation='test:1')
     monkeypatch.setattr('vaxrank.cli.entry_point.resolve_ensembl_release',

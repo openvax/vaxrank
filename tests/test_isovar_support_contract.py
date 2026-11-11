@@ -46,7 +46,7 @@ def reference(tmp_path, request):
     genome.index()
     return strand, Variant("1", 1016 if strand == "+" else 1018,
                            "A" if strand == "+" else "T",
-                           "C" if strand == "+" else "G", ensembl=genome)
+                           "C" if strand == "+" else "G", genome=genome)
 
 
 def reconstruct(tmp_path, reference, sequences):

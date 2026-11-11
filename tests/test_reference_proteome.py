@@ -366,7 +366,7 @@ def test_offline_pyensembl_genome_can_index_real_sid_reference(tmp_path, monkeyp
 
     monkeypatch.setenv("VAXRANK_REF_PEPTIDES_DIR", str(tmp_path / "kmers"))
     variants, _, _ = load_osteosarc(tmp_path)
-    genome = variants["DYNC1H1"].ensembl
+    genome = variants["DYNC1H1"].genome
     assert isinstance(genome, Genome)
     assert not hasattr(genome, "species") and not hasattr(genome, "release")
     reference = ReferenceProteome(genome, min_kmer_length=9, max_kmer_length=9)

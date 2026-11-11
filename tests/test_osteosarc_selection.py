@@ -230,7 +230,7 @@ def test_map2_alleles_do_not_enable_dna_fallback(inputs, corrected):
     # sources and coordinate conventions are recorded in the fixture README.
     ref, alt = ("CCTGGGCTACTGTGTGTTCAATAAGTACACAGT", "CAGGG") if corrected else (
         "CCTGGGCTACTGTGTGTTCAATA", "C")
-    expected_variant = Variant("2", 209694768, ref, alt, ensembl=inputs[0])
+    expected_variant = Variant("2", 209694768, ref, alt, genome=inputs[0])
     result, config = reconstruct_selection(
         inputs, "MAP2-chr2-209694768",
         variant=expected_variant if corrected else None)

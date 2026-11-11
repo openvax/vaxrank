@@ -234,7 +234,7 @@ def test_isovar_consumes_original_ntf3_compound_rna_without_network(tmp_path):
         cache_directory=tmp_path / "reference")
     case, = [c for c in MANIFEST["cases"] if c["variant"]["gene"] == "NTF3"]
     allele = case["variant"]
-    variant = Variant(allele["chrom"].removeprefix("chr"), allele["pos"], allele["ref"], allele["alt"], ensembl=genome)
+    variant = Variant(allele["chrom"].removeprefix("chr"), allele["pos"], allele["ref"], allele["alt"], genome=genome)
     with sid_reads("osteosarc/shared-v1/" + case["bam"]).open() as bam:
         evidence = ReadCollector().read_evidence_for_variant(variant, bam)
     assert evidence.alt_reads

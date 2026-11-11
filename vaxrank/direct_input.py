@@ -48,7 +48,7 @@ def prepare_direct_report(args, reports, epitope_config):
         }, 'Direct reference_context'), 'Direct reference_context')
     # Validate actual VCF reference resolution as well as explicit CLI options.
     for variant in variants:
-        genome = variant.ensembl
+        genome = variant.genome
         scope = combine_scopes(scope, scope_from_mapping({
             'reference_assembly': resolved_reference_assembly(genome),
             'annotation': 'ensembl:' + str(genome.release) if hasattr(genome, 'release') else None,
@@ -65,7 +65,7 @@ def prepare_direct_report(args, reports, epitope_config):
         content_sha256='')
     shared = validate_input_scopes([provisional] + [r.input_provenance for r in reports],
                           prediction_alleles=alleles,
-                          retained_genomes={'direct': tuple({id(v.ensembl): v.ensembl for v in variants}.values())},
+                          retained_genomes={'direct': tuple({id(v.genome): v.genome for v in variants}.values())},
                           reference_context=context)
     args._input_species_scope = scope_dict(shared)
     hashes = {str(Path(path).resolve()): file_sha256(path) for path in paths}

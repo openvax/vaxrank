@@ -136,7 +136,7 @@ def filter_unannotatable_variants(variants):
             "Skipping %d variant(s) on contigs not recognized by %s: %s. "
             "These cannot be annotated with gene information.",
             len(variants) - len(valid),
-            variants[0].ensembl.reference_name,
+            variants[0].genome.reference_name,
             ", ".join(sorted(skipped_contigs)),
         )
         return VariantCollection(valid)
@@ -1760,7 +1760,7 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
     if getattr(args, 'host_reference', None):
         raise ValueError('Use --host-reference with native antigen inputs or saved --input-epitopes')
     from ..input_scope import validate_prediction_species, scope_dict
-    references = list({id(v.ensembl): v.ensembl for v in loaded_variants}.values())
+    references = list({id(v.genome): v.genome for v in loaded_variants}.values())
     if getattr(args, 'genome', None) is not None:
         references.append(args.genome)
     args._input_species_scope = scope_dict(validate_prediction_species(

@@ -364,7 +364,7 @@ def test_osteosarc_acquisition_preserves_map2_rna_gate(acquired_selection_inputs
     from vaxrank.core_logic import vaccine_peptides_for_variant
 
     _, acquired = acquired_selection_inputs
-    variant = Variant("2", 209694768, ref, alt, ensembl=acquired[0])
+    variant = Variant("2", 209694768, ref, alt, genome=acquired[0])
     result, config = reconstruct_selection(acquired, "MAP2-chr2-209694768", variant=variant)
     assert result.num_alt_reads == result.num_alt_fragments == 1
     assert result.top_protein_sequence is None
