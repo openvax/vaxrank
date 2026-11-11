@@ -34,9 +34,9 @@ from vaxrank.vaxrank_results import VaxrankResults
 
 
 def _sample_variant():
-    # varcode.Variant with ensembl=None constructs without touching the
+    # varcode.Variant with genome=None constructs without touching the
     # Ensembl DB — enough for serialization roundtrips.
-    return Variant(contig="1", start=1000, ref="A", alt="G", ensembl=None)
+    return Variant(contig="1", start=1000, ref="A", alt="G", genome=None)
 
 
 def _sample_fragment(amino_acids="MKVTHFYL" * 3, n_alt_reads=50):

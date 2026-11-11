@@ -203,7 +203,7 @@ def run_paired_corpus(corpus, sources, cache_directory, helpers):
         variant = helpers["Variant"](
             "MT" if contig == "M" else contig,
             record["pos"], record["ref"], record["alt"],
-            ensembl=genomes[reference_name])
+            genome=genomes[reference_name])
         transcript_ids = manifests[reference_name]["variant_transcripts"][
             record["variant_id"]]
         expectations = {

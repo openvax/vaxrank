@@ -283,7 +283,7 @@ def test_direct_hla_mouse_checks_species_before_model_acquisition(monkeypatch):
     from vaxrank.cli import entry_point as entry
     from vaxrank.cli.arg_parser import parse_vaxrank_args
     genome = EnsemblRelease(93, species='mouse')
-    variants = VariantCollection([Variant('1', 100, 'A', 'T', ensembl=genome)])
+    variants = VariantCollection([Variant('1', 100, 'A', 'T', genome=genome)])
     monkeypatch.setattr(entry, 'variant_collection_from_args', lambda args: variants)
     monkeypatch.setattr(entry, 'filter_unannotatable_variants', lambda variants: variants)
     monkeypatch.setattr(mhctools.cli, 'predictors_from_args', forbidden)

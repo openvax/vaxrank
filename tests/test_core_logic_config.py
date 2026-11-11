@@ -114,7 +114,7 @@ def test_reranking_windows_before_mutation_keeps_valid_antigen_intervals():
     from varcode import Variant
 
     sequence = "ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY"
-    variant = Variant("1", 1000, "A", "G", ensembl=None)
+    variant = Variant("1", 1000, "A", "G", genome=None)
     fragment = MutantProteinFragment(
         variant=variant,
         gene_name="GENE1",
@@ -169,7 +169,7 @@ def test_run_retains_unranked_dna_fallback_window():
     """A DNA window survives even when no epitope earns a vaccine peptide."""
     isovar_result = MagicMock()
     isovar_result.passes_all_filters = False
-    isovar_result.variant.ensembl = None
+    isovar_result.variant.genome = None
     fragment = MagicMock(spec=MutantProteinFragment)
     fragment.amino_acids = "MUTANTWINDOW"
     fragment.protein_start_offset = 42
@@ -191,7 +191,7 @@ def test_run_retains_rna_fragment_without_promoting_alternatives():
     """Isovar inputs remain intact while Vaxrank records the selected window."""
     isovar_result = MagicMock()
     isovar_result.passes_all_filters = True
-    isovar_result.variant.ensembl = None
+    isovar_result.variant.genome = None
     fragment = MagicMock(spec=MutantProteinFragment)
     fragment.sorted_subsequences.return_value = []
 
@@ -209,7 +209,7 @@ def test_vaccine_peptides_for_variant_config_overrides_explicit_params():
     mock_isovar_result = MagicMock()
     mock_isovar_result.passes_all_filters = True
     mock_isovar_result.variant = MagicMock()
-    mock_isovar_result.variant.ensembl = None
+    mock_isovar_result.variant.genome = None
 
     # Mock the MutantProteinFragment
     mock_fragment = MagicMock()
@@ -246,7 +246,7 @@ def test_vaccine_peptides_for_variant_explicit_params_used_without_config():
     mock_isovar_result = MagicMock()
     mock_isovar_result.passes_all_filters = True
     mock_isovar_result.variant = MagicMock()
-    mock_isovar_result.variant.ensembl = None
+    mock_isovar_result.variant.genome = None
 
     mock_fragment = MagicMock()
     mock_fragment.sorted_subsequences.return_value = []
@@ -273,7 +273,7 @@ def test_vaccine_peptides_for_variant_epitope_config_passed_to_predict():
     mock_isovar_result = MagicMock()
     mock_isovar_result.passes_all_filters = True
     mock_isovar_result.variant = MagicMock()
-    mock_isovar_result.variant.ensembl = None
+    mock_isovar_result.variant.genome = None
 
     mock_fragment = MagicMock()
     mock_fragment.sorted_subsequences.return_value = []
@@ -325,7 +325,7 @@ def test_config_integration_vaccine_config_affects_peptide_generation():
 def test_vaccine_peptides_from_epitopes_score_fraction_of_best_from_config():
     from varcode import Variant
     from vaxrank.candidate_epitope import CandidateEpitope
-    variant = Variant("1", 1000, "A", "G", ensembl=None)
+    variant = Variant("1", 1000, "A", "G", genome=None)
     sequence = "ACDEFGHIKLMNPQRSTVWYACDEFGH"
     fragment = MutantProteinFragment(
         variant=variant, gene_name="GENE", amino_acids=sequence,

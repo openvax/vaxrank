@@ -312,7 +312,7 @@ def vaccine_peptides_for_variant(
         mhc_predictor=mhc_predictor,
         protein_fragment=long_protein_fragment,
         epitope_config=epitope_config,
-        genome=variant.ensembl,
+        genome=variant.genome,
         **({"annotate": annotate} if annotate is not None else {}),
         **({"policy_evaluations": policy_evaluations} if policy_evaluations is not None else {}),
         **({'patient_background': patient_background} if patient_background is not None else {}),

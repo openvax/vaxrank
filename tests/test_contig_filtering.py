@@ -34,7 +34,7 @@ def _make_variant(contig, annotatable=True):
     v.contig = contig
     mock_genome = MagicMock()
     mock_genome.reference_name = "GRCh38"
-    v.ensembl = mock_genome
+    v.genome = mock_genome
     if annotatable:
         type(v).gene_names = PropertyMock(return_value=["BRCA1"])
     else:

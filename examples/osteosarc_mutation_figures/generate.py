@@ -226,7 +226,7 @@ def main(argv=None):
         cdna_rows = [cdna_context_columns(result) for result in results]
 
         genome, _, _ = selection_inputs
-        nav2 = Variant("11", 20080142, "C", "T", ensembl=genome)
+        nav2 = Variant("11", 20080142, "C", "T", genome=genome)
         nav2_effect, = [
             effect for effect in nav2.effects()
             if effect.transcript_id == NAV2_CASE["transcript_id"]

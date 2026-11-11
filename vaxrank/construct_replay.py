@@ -25,7 +25,7 @@ def pipeline_native_dataset(args, variants, epitope_config, *, patient_backgroun
     if getattr(args, 'bam', None):
         paths.append(args.bam)
     hashes = {str(Path(path).resolve()): file_sha256(path) for path in paths}
-    genomes = {(v.ensembl.reference_name, getattr(v.ensembl, 'release', None)) for v in variants}
+    genomes = {(v.genome.reference_name, getattr(v.genome, 'release', None)) for v in variants}
     reference, release = next(iter(genomes)) if len(genomes) == 1 else (None, None)
     scope = InputScope(patient_id=getattr(args, 'output_patient_id', None) or None,
                        reference_assembly=reference,

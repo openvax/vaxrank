@@ -21,7 +21,7 @@ def direct(tmp_path, monkeypatch):
     import varcode.cli
     import mhctools.cli
     import vaxrank.cli.entry_point as entry
-    variant = Variant('1', 100, 'A', 'T', ensembl=EnsemblRelease(110))
+    variant = Variant('1', 100, 'A', 'T', genome=EnsemblRelease(110))
     fragment = MutantProteinFragment(
         variant=variant, gene_name='DIRECT', amino_acids='AASIINFEKLKK',
         mutant_amino_acid_start_offset=5, mutant_amino_acid_end_offset=6,

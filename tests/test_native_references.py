@@ -183,7 +183,7 @@ def test_ensembl_release_preserves_identity_and_bundles_attached_dna(tmp_path, m
     dna.write_text(">1\nACGTACGTACGT\n")
     genome = EnsemblRelease(104, species="mouse", genome_fasta=str(dna))
     dataset = EpitopeDataset.from_predictions([_make_epitope("SIINFEKL", ic50=100.)])
-    dataset.direct_sources = [{'variant': to_native_json(Variant('1', 2, 'C', 'T', ensembl=genome)),
+    dataset.direct_sources = [{'variant': to_native_json(Variant('1', 2, 'C', 'T', genome=genome)),
                                'properties': {}}]
     path = tmp_path / "archive" / "native.tsv"
     dataset.save(path)

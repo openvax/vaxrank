@@ -161,7 +161,7 @@ def main(output, processing=False):
                 fragment = MutantProteinFragment.from_isovar_result(result)
                 original = predict_epitopes(predictor, fragment,
                                             EpitopeConfig(score_expr='1.0', min_epitope_score=0.),
-                                            genome=result.variant.ensembl)
+                                            genome=result.variant.genome)
                 provenance = InputProvenance(
                     input_id='sid-policy-' + str(i), source_format='vcf_bam',
                     path=str(DATA / 'netmhcpan42.tsv'), content_sha256=manifest['netmhcpan_sha256'],

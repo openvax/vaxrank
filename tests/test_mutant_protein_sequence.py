@@ -36,7 +36,7 @@ def test_cropped_mutation_intervals_preserve_overlap(mutation):
     from vaxrank.vaccine_antigen import VaccineAntigen
 
     fragment = MutantProteinFragment(
-        variant=Variant("1", 1000, "A", "G", ensembl=None),
+        variant=Variant("1", 1000, "A", "G", genome=None),
         gene_name="GENE1",
         amino_acids="ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY",
         mutant_amino_acid_start_offset=mutation[0],
@@ -64,7 +64,7 @@ def test_generate_subsequences_preserves_evidence_and_provenance():
     from varcode import Variant
 
     fragment = MutantProteinFragment(
-        variant=Variant("1", 1000, "A", "G", ensembl=None),
+        variant=Variant("1", 1000, "A", "G", genome=None),
         gene_name="GENE1",
         amino_acids="ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         mutant_amino_acid_start_offset=12,

@@ -84,7 +84,7 @@ def test_find_mutation_region_extension():
 
 def test_from_variant_dna_substitution(genome):
     """BRAF V600E: a clean substitution should produce a valid fragment."""
-    v = varcode.Variant(contig='7', start=140453136, ref='A', alt='T', ensembl=genome)
+    v = varcode.Variant(contig='7', start=140453136, ref='A', alt='T', genome=genome)
     frag = MutantProteinFragment.from_variant_dna(v, protein_sequence_length=35)
     assert frag is not None
     assert len(frag.amino_acids) == 35
@@ -100,7 +100,7 @@ def test_from_variant_dna_substitution(genome):
 
 def test_from_variant_dna_frameshift(genome):
     """TP53 frameshift should produce a valid fragment with extended mutation region."""
-    v = varcode.Variant(contig='17', start=7577121, ref='G', alt='', ensembl=genome)
+    v = varcode.Variant(contig='17', start=7577121, ref='G', alt='', genome=genome)
     frag = MutantProteinFragment.from_variant_dna(v, protein_sequence_length=35)
     assert frag is not None
     assert len(frag.amino_acids) <= 35
@@ -111,7 +111,7 @@ def test_from_variant_dna_frameshift(genome):
 def test_from_variant_dna_noncoding_returns_none(genome):
     """An intronic variant should return None (no protein-modifying effect)."""
     # Use a known intronic variant
-    v = varcode.Variant(contig='7', start=140500000, ref='A', alt='T', ensembl=genome)
+    v = varcode.Variant(contig='7', start=140500000, ref='A', alt='T', genome=genome)
     effects = v.effects()
     # Make sure it's actually non-coding
     coding = [e for e in effects if hasattr(e, 'transcript') and e.modifies_protein_sequence]
@@ -125,7 +125,7 @@ def test_from_variant_dna_noncoding_returns_none(genome):
 def test_from_variant_dna_short_protein(genome):
     """When the protein is shorter than protein_sequence_length, the window
     should be clamped to the actual protein length."""
-    v = varcode.Variant(contig='7', start=140453136, ref='A', alt='T', ensembl=genome)
+    v = varcode.Variant(contig='7', start=140453136, ref='A', alt='T', genome=genome)
     # Request a very long fragment
     frag = MutantProteinFragment.from_variant_dna(v, protein_sequence_length=5000)
     assert frag is not None
@@ -144,7 +144,7 @@ def test_dna_fallback_disabled_returns_empty(genome):
     from types import SimpleNamespace
     from vaxrank.core_logic import vaccine_peptides_for_variant
 
-    v = varcode.Variant(contig='7', start=140453136, ref='A', alt='T', ensembl=genome)
+    v = varcode.Variant(contig='7', start=140453136, ref='A', alt='T', genome=genome)
     isovar_result = SimpleNamespace(
         variant=v,
         passes_all_filters=False,
@@ -165,7 +165,7 @@ def test_dna_fallback_enabled_attempts_construction(genome):
     from unittest.mock import patch, MagicMock
     from vaxrank.core_logic import vaccine_peptides_for_variant
 
-    v = varcode.Variant(contig='7', start=140453136, ref='A', alt='T', ensembl=genome)
+    v = varcode.Variant(contig='7', start=140453136, ref='A', alt='T', genome=genome)
     isovar_result = SimpleNamespace(
         variant=v,
         passes_all_filters=False,

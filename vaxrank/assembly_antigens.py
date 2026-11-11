@@ -32,7 +32,7 @@ def _source_record(source, name, antigen, peptide, source_evidence):
         result = json.loads(metadata['isovar_fusion_result'])
     event = None
     if isinstance(source, Variant):
-        event = dict(reference_assembly=source.ensembl.reference_name,
+        event = dict(reference_assembly=source.genome.reference_name,
                      contig=source.contig, start=source.start, ref=source.ref, alt=source.alt)
     elif result.get('variant'):
         event = result['variant']

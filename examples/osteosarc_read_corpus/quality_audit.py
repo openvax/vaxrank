@@ -34,7 +34,7 @@ def audit(root, label="", require_qualities=False):
             if "original_44_loci" not in event.get("reasons", []):
                 continue
             contig = "MT" if event["chrom"] == "chrM" else event["chrom"].removeprefix("chr")
-            variant = Variant(contig, event["pos"], event["ref"], event["alt"], ensembl=genome)
+            variant = Variant(contig, event["pos"], event["ref"], event["alt"], genome=genome)
             evidence = collector.read_evidence_for_variant(variant, bam)
             rows.append(dict(event_id=event["event_id"], ref=len(evidence.ref_reads),
                              alt=len(evidence.alt_reads), other=len(evidence.other_reads)))
