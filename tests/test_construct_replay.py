@@ -350,15 +350,26 @@ def test_legacy_native_evidence_does_not_invent_saved_assembly_settings(source, 
 
 def test_saved_source_limit_replays_without_losing_unselected_evidence(source, tmp_path, monkeypatch):
     native, first = tmp_path / 'native.tsv', tmp_path / 'first'
-    design(source, first, native, '--max-mutations-in-report', '1', '--mrna-no-optimize-linkers')
+    design(source, first, native, '--max-design-sources', '1', '--mrna-no-optimize-linkers')
     assert len(EpitopeDataset.load(native).epitopes) == 2
     with monkeypatch.context() as offline:
         offline.setattr('vaxrank.cli.entry_point.assemble_peptide_constructs', forbidden)
         offline.setattr('vaxrank.cli.entry_point.assemble_mrna_constructs', forbidden)
         replay(native, tmp_path / 'replay')
     assert product_files(first) == product_files(tmp_path / 'replay')
-    replay(native, tmp_path / 'changed', '--max-mutations-in-report', '2')
+    replay(native, tmp_path / 'changed', '--max-design-sources', '2')
     assert product_files(first) != product_files(tmp_path / 'changed')
+
+
+def test_older_report_limit_spelling_is_the_same_design_limit(source, tmp_path):
+    """The limit changes constructs, so the old report-sounding flag must not diverge."""
+    new, old = tmp_path / 'new', tmp_path / 'old'
+    design(source, new, tmp_path / 'new.tsv', '--max-design-sources', '1', '--mrna-no-optimize-linkers')
+    design(source, old, tmp_path / 'old.tsv', '--max-mutations-in-report', '1', '--mrna-no-optimize-linkers')
+    assert product_files(new) == product_files(old)
+    unlimited = tmp_path / 'unlimited'
+    design(source, unlimited, tmp_path / 'unlimited.tsv', '--mrna-no-optimize-linkers')
+    assert product_files(new) != product_files(unlimited)
 
 
 def test_saved_mrna_only_design_restores_its_modality_and_ranking_settings(source, tmp_path, monkeypatch):

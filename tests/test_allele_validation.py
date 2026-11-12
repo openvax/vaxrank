@@ -102,7 +102,7 @@ def test_report_json_reload_validates_before_output_overrides(tmp_path):
     path = tmp_path / "prior-report.json"
     path.write_text("{}")
     data = {"variants": [(None, [SimpleNamespace(epitopes=[candidate(allele="")])])], "args": {}}
-    args = SimpleNamespace(input_json_file=str(path), max_mutations_in_report=None)
+    args = SimpleNamespace(input_json_file=str(path), max_design_sources=None)
     with patch("vaxrank.cli.entry_point.serializable.from_json", return_value=data):
         with pytest.raises(ValueError, match="prior-report.json.*variant 1.*vaccine peptide 1.*requires"):
             ranked_vaccine_peptides_with_metadata_from_parsed_args(args)

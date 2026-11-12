@@ -81,7 +81,7 @@ def resolved_saved_design(args, config, dataset):
                 key = {'5p_utr': 'utr_5p', '3p_utr': 'utr_3p'}.get(key, key)
                 if key in values:
                     values[key] = getattr(cli, attribute)
-    limit = (getattr(cli, 'max_mutations_in_report', None) if 'max_mutations_in_report' in explicit
+    limit = (getattr(cli, 'max_design_sources', None) if 'max_design_sources' in explicit
              else dataset.selection.get('run_configuration', {}).get('effective_design', {}).get('max_ranked_sources'))
     vaccine = msgspec.to_builtins(vaccine_config_from_args(cli, merged_config=config))
     types = (getattr(cli, 'vaccine_type', None) if 'vaccine_type' in explicit else
@@ -102,9 +102,9 @@ def initialize_construct_replay(args, dataset, vaccine_config, manufacturability
     args._construct_assembly = dataset.selection.setdefault(
         'construct_assembly', dataset.selection.pop('cta_assembly', {}))
     record = dataset.selection.get('run_configuration') or {}
-    if ('max_mutations_in_report' not in getattr(args, '_explicit_cli_args', ())
-            and getattr(args, 'max_mutations_in_report', None) is None):
-        args.max_mutations_in_report = record.get('effective_design', {}).get(
+    if ('max_design_sources' not in getattr(args, '_explicit_cli_args', ())
+            and getattr(args, 'max_design_sources', None) is None):
+        args.max_design_sources = record.get('effective_design', {}).get(
             'max_ranked_sources', getattr(args, '_inherited_source_limit', None))
     inherited = getattr(args, '_inherited_modality_config', {})
     args._saved_modality_config = {modality: {**inherited.get(modality, {}), **values}

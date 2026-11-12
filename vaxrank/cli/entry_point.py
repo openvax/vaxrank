@@ -507,7 +507,7 @@ _ARG_GROUPS = (
     )),
     ("Reports", (
         'manufacturability', 'wt_epitopes', 'cosmic_vcf_filename',
-        'max_mutations_in_report',
+        'max_design_sources',
     )),
     ("Config", (
         'config', 'config_set_overrides', 'config_expr_overrides',
@@ -1895,9 +1895,9 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
             # be overridden with args from this run (which all be output related)
             data['args'].update(vars(args))
 
-            # if we need to truncate the variant list based on max_mutations_in_report, do that here
-            if args.max_mutations_in_report is not None and len(data['variants']) > args.max_mutations_in_report:
-                data['variants'] = data['variants'][:args.max_mutations_in_report]
+            # if we need to truncate the variant list based on max_design_sources, do that here
+            if args.max_design_sources is not None and len(data['variants']) > args.max_design_sources:
+                data['variants'] = data['variants'][:args.max_design_sources]
             return data
     # get various things from user args
     mhc_alleles = mhc_alleles_from_args(args)
@@ -1928,7 +1928,7 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
 
     ranked_variants_with_vaccine_peptides = vaxrank_results.ranked_vaccine_peptides
     ranked_variants_with_vaccine_peptides_for_report = \
-        ranked_variants_with_vaccine_peptides[:args.max_mutations_in_report]
+        ranked_variants_with_vaccine_peptides[:args.max_design_sources]
     pipeline_inputs = [
         ('VCF (somatic variants)', '; '.join(variants.sources))
     ] if variants.sources else []

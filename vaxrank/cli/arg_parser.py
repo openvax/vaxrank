@@ -522,10 +522,15 @@ def add_output_args(arg_parser):
         help="File path to write the vaxrank Python log to")
 
     output_args_group.add_argument(
-        "--max-mutations-in-report",
+        "--max-design-sources", "--max-mutations-in-report",
+        dest="max_design_sources",
         default=None,
         type=int,
-        help="Number of mutations to report")
+        help="Keep only the top N ranked sources (mutations or antigens) "
+             "when assembling vaccine products. Sources beyond N cannot "
+             "appear in any product or report, so this changes the "
+             "design, not only its length. --max-mutations-in-report is "
+             "the older spelling of the same option.")
 
 
 
