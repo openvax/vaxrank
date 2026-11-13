@@ -133,7 +133,7 @@ def _basic_args(**overrides):
         output_final_review='', pdf_backend='pdfkit',
         log_path='python.log',
         manufacturability=None, wt_epitopes=True,
-        cosmic_vcf_filename='', max_ranked_sources=None,
+        cosmic_vcf_filename='', max_sources=None,
         config=None, config_set_overrides=None,
         config_expr_overrides=None,
         verbose=False,

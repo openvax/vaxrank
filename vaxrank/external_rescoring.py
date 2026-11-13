@@ -1126,7 +1126,7 @@ def load_unified_external(args, epitope_config, options, genome):
         if len(values) == 1 and entries[0].variant is not None:
             dna_vaf[entries[0].variant] = next(iter(values))
     ranked = rank_constructs(ranked)
-    ranked = ranked[:getattr(args, 'max_ranked_sources', None)]
+    ranked = ranked[:getattr(args, 'max_sources', None)]
     passing_path = getattr(args, 'output_passing_variants_csv', None)
     if direct and passing_path:
         from varcode import Variant, StructuralVariant

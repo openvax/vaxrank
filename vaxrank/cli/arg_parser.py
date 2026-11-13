@@ -522,8 +522,8 @@ def add_output_args(arg_parser):
         help="File path to write the vaxrank Python log to")
 
     output_args_group.add_argument(
-        "--max-ranked-sources", "--max-mutations-in-report",
-        dest="max_ranked_sources",
+        "--max-sources", "--max-mutations-in-report",
+        dest="max_sources",
         default=None,
         type=int,
         help="Keep only the top N ranked sources (mutations or antigens) "
