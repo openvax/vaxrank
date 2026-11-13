@@ -251,8 +251,9 @@ Checksums detect altered product payloads. Older exports without saved products
 can reconstruct from available evidence but cannot recover exact historical
 products or omitted settings.
 
-The original `--max-mutations-in-report` limit also applies to assembly; other
-evidence stays in the native file. Move sibling reference bundles with the table
+`--max-sources` (older spelling `--max-mutations-in-report`) keeps only
+the top N ranked sources before assembly, so it changes the constructs, not
+only the report; evidence for the other sources stays in the native file. Move sibling reference bundles with the table
 as described in [Moving native mutation datasets](native-references.md).
 
 ## Saved scoring policies

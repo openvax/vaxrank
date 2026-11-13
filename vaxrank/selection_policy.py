@@ -136,7 +136,7 @@ def write_run_policy(args, evaluations, epitope_config, vaccine_config):
     args._effective_epitope_configuration = resolved['effective_epitopes']
     resolved["effective_vaccine_peptides"] = msgspec.to_builtins(vaccine_config)
     from .cli.entry_point import resolve_vaccine_types
-    resolved["effective_design"] = dict(max_ranked_sources=getattr(args, 'max_mutations_in_report', None),
+    resolved["effective_design"] = dict(max_ranked_sources=getattr(args, 'max_sources', None),
                                       vaccine_types=resolve_vaccine_types(args))
     resolved["vaxrank_version"] = __version__
     resolved["effective_sha256"] = configuration_digest(resolved)
