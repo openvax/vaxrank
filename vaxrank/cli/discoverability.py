@@ -21,7 +21,7 @@ import os
 import sys
 from argparse import HelpFormatter
 
-EXAMPLES = """\
+_EXAMPLES_TEMPLATE = """\
 Examples:
   Rank variants against tumor RNA and write peptide and mRNA constructs:
     vaxrank --vcf somatic.vcf --bam rnaseq.bam \\
@@ -42,13 +42,12 @@ Other activities start with a word:
     vaxrank replay FILE            re-emit a saved run (ranked .json or native evidence)
     vaxrank help [TOPIC]           options for one topic (below)
 
-Help topics: %s, all (every option)."""
+Help topics: @TOPICS@, all (every option)."""
 
-BARE_SUMMARY = """\
+_INTRO = """\
 vaxrank ranks personalized cancer neoantigens from somatic variants, tumor RNA
 and patient HLA type, and writes peptide or mRNA vaccine constructs plus reports.
 
-%s
 """
 
 
@@ -80,8 +79,9 @@ HELP_TOPICS = {
 
 ACTIVITIES = ("run", "policies", "config", "replay", "help")
 
-EXAMPLES = EXAMPLES % ", ".join(HELP_TOPICS)
-BARE_SUMMARY = BARE_SUMMARY % EXAMPLES
+# Built once, after HELP_TOPICS: no literal "%" in the text can break import.
+EXAMPLES = _EXAMPLES_TEMPLATE.replace("@TOPICS@", ", ".join(HELP_TOPICS))
+BARE_SUMMARY = _INTRO + EXAMPLES + "\n"
 
 
 class ExamplesHelpFormatter(HelpFormatter):
@@ -189,7 +189,12 @@ def resolve_command_line(args_list):
     end = tokens.index("--") if "--" in tokens else len(tokens)
     if tokens and not tokens[0].startswith("-"):
         word, rest = tokens[0], tokens[1:]
+        if word != "help" and ("-h" in rest or "--help" in rest):
+            print_short_help()
+            raise SystemExit(0)
         if word == "help":
+            if rest in (["-h"], ["--help"]):
+                rest = []
             if not rest:
                 print_short_help()
             elif len(rest) == 1:

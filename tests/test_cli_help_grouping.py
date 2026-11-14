@@ -1,5 +1,7 @@
 """Mode inference in errors and design flags grouped by purpose (#766)."""
 
+import sys
+
 import pytest
 
 from vaxrank.cli.arg_parser import infer_mode, parse_vaxrank_args
@@ -155,3 +157,15 @@ def test_every_help_group_belongs_to_a_topic():
         assert text.startswith("vaxrank help %s:" % topic)
         for title in HELP_TOPICS[topic][1]:
             assert title + ":" in text
+
+
+@pytest.mark.parametrize("argv", [
+    ["config", "--help"], ["policies", "-h"], ["help", "--help"],
+    ["replay", "x.json", "--help"]])
+def test_help_flag_after_an_activity_word_shows_help(argv, capsys):
+    from vaxrank.cli.entry_point import main
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(argv) or sys.exit(0)
+    assert exit_info.value.code == 0
+    assert capsys.readouterr().out.startswith("usage: vaxrank")
