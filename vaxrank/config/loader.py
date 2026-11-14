@@ -189,6 +189,24 @@ def _migrate_legacy_layout(raw: dict[str, Any]) -> None:
       ``epitopes_per_antigen``, ``candidates_per_slot``,
       ``min_antigen_length_aa``, ``max_antigen_length_aa``).
     """
+    # 0. ``included_antigen_sources`` → ``included_lens_sources`` (it only
+    # ever gated LENS source labels).
+    vp = raw.get("vaccine_peptides")
+    if isinstance(vp, dict) and "included_antigen_sources" in vp:
+        if "included_lens_sources" in vp:
+            raise ValueError(
+                "Cannot set both 'vaccine_peptides.included_antigen_sources' "
+                "and 'vaccine_peptides.included_lens_sources'. Keep "
+                "'included_lens_sources'.")
+        warnings.warn(
+            "Config key 'vaccine_peptides.included_antigen_sources' is "
+            "deprecated; use 'vaccine_peptides.included_lens_sources'. "
+            "Auto-migrating.",
+            DeprecationWarning,
+            stacklevel=4,
+        )
+        vp["included_lens_sources"] = vp.pop("included_antigen_sources")
+
     # 1. ``vaccine_peptides.manufacturability`` → top-level for the
     # next stage to migrate further.
     vp = raw.get("vaccine_peptides")
@@ -421,7 +439,7 @@ _VACCINE_CONFIG_MAPPING: list[tuple[str, str]] = [
     ("vaccine_peptides.score_fraction_of_best", "score_fraction_of_best"),
     ("vaccine_peptides.combined_score_expr", "combined_score_expr"),
     ("vaccine_peptides.ranking_rules", "ranking_rules"),
-    ("vaccine_peptides.included_antigen_sources", "included_antigen_sources"),
+    ("vaccine_peptides.included_lens_sources", "included_lens_sources"),
     ("vaccine_peptides.require_target_epitopes_in_variant",
      "require_target_epitopes_in_variant"),
 ]
@@ -442,6 +460,12 @@ def saved_construct_configuration(record):
     if record.get('effective_sha256') != configuration_digest(record):
         raise ValueError('Saved run configuration digest does not match its definition')
     retained_vaccine = dict(record['effective_vaccine_peptides'])
+    if 'included_antigen_sources' in retained_vaccine:
+        # Records written before the field was renamed for what it gates.
+        retained_vaccine.setdefault(
+            'included_lens_sources',
+            retained_vaccine['included_antigen_sources'])
+        del retained_vaccine['included_antigen_sources']
     retained_vaccine.setdefault('max_windows_per_antigen_source', None)
     retained_vaccine.setdefault('antigen_allocation', {'mode': 'ranked'})
     vaccine = msgspec.to_builtins(msgspec.convert(retained_vaccine, VaccineConfig))
@@ -566,11 +590,11 @@ def extract_vaccine_config_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     if "ranking_rules" in kwargs and kwargs["ranking_rules"] is not None:
         kwargs["ranking_rules"] = tuple(kwargs["ranking_rules"])
     if (
-        "included_antigen_sources" in kwargs
-        and kwargs["included_antigen_sources"] is not None
+        "included_lens_sources" in kwargs
+        and kwargs["included_lens_sources"] is not None
     ):
-        kwargs["included_antigen_sources"] = tuple(
-            kwargs["included_antigen_sources"]
+        kwargs["included_lens_sources"] = tuple(
+            kwargs["included_lens_sources"]
         )
 
     # When preferred_peptide_length is set but min/max are not,

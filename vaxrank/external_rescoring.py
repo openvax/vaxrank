@@ -1024,7 +1024,7 @@ def load_unified_external(args, epitope_config, options, genome):
         args.vaccine_peptide_length = vaccine.preferred_peptide_length
         args.num_epitopes_per_vaccine_peptide = vaccine.num_target_epitopes_to_keep
         args.max_vaccine_peptides_per_variant = vaccine.max_vaccine_peptides_per_variant
-        args.included_antigen_sources = list(vaccine.included_antigen_sources)
+        args.included_lens_sources = list(vaccine.included_lens_sources)
     if cta or antigens:
         from .external_input import ExternalConstructOptions
         from .vaccine_config import VaccineConfig

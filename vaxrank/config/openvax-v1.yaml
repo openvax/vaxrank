@@ -53,7 +53,7 @@ vaccine_peptides:
   - self_epitope_score
   - n_mutant_amino_acids
   - mutation_distance_from_edge
-  included_antigen_sources:
+  included_lens_sources:
   - SNV
   - INDEL
   - FUSION

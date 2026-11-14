@@ -899,7 +899,7 @@ class ExternalConstructOptions:
     manufacturability_thresholds: dict = dataclasses.field(
         default_factory=dict)
     manufacturability_rules: object = None
-    included_antigen_sources: tuple[str, ...] = (
+    included_lens_sources: tuple[str, ...] = (
         DEFAULT_INCLUDED_ANTIGEN_SOURCES
     )
     vaccine_config: object = None
@@ -926,7 +926,7 @@ class ExternalConstructOptions:
                 else vaccine_config.num_target_epitopes_to_keep)
             expr = vaccine_config.combined_score_expr
             rules = vaccine_config.ranking_rules
-            included_sources = vaccine_config.included_antigen_sources
+            included_sources = vaccine_config.included_lens_sources
         if manufacturability_config is None:
             thresholds, mfg_rules = {}, None
         else:
@@ -944,7 +944,7 @@ class ExternalConstructOptions:
                 if vaccine_config is not None else True),
             manufacturability_thresholds=thresholds,
             manufacturability_rules=mfg_rules,
-            included_antigen_sources=tuple(included_sources),
+            included_lens_sources=tuple(included_sources),
         )
 
 
@@ -1523,9 +1523,9 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
     for row_number, r in enumerate(rows, 1):
         coords = r.get('variant')
         kind = external_text(r.get('antigen_source')).upper()
-        if kind and kind not in options.included_antigen_sources:
+        if kind and kind not in options.included_lens_sources:
             exclusions.append(dict(identity=lens_variant_id(r) or 'Input row %d' % row_number,
-                family=kind, reason='Excluded by included_antigen_sources', stage='Source policy'))
+                family=kind, reason='Excluded by included_lens_sources', stage='Source policy'))
             n_policy_excluded += 1
             policy_excluded_kinds[kind] = (
                 policy_excluded_kinds.get(kind, 0) + 1
@@ -1727,7 +1727,7 @@ def lens_ranking_result(report, epitopes, genome=None, options=None):
     if n_policy_excluded:
         funnel.append(
             "  → %d row(s) (%s) excluded from construct ranking by "
-            "included_antigen_sources policy" % (
+            "included_lens_sources policy" % (
                 n_policy_excluded, policy_excluded_breakdown
             )
         )

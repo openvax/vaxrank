@@ -34,23 +34,36 @@ default. A manifest can combine them with new antigen sequences or CTA
 expression. [Input workflows](input-workflows.md) covers prediction modes and
 required metadata.
 
-### LENS antigen source opt-ins
+### LENS source labels
 
 LENS `FUSION` rows can enter constructs using their supplied `pep_context`.
 `SPLICE`, `CTA/SELF` and `ERV` rows remain in reports but need an opt-in for
-construct selection:
+construct selection. A LENS label says where a peptide came from, not that it
+is a safe tumor-specific target, so this gate applies only to `--input-lens`:
 
 ```sh
 vaxrank --input-lens patient.lens.tsv \
-  --include-antigen-source SPLICE \
-  --include-antigen-source CTA/SELF \
-  --include-antigen-source ERV
+  --include-lens-source SPLICE \
+  --include-lens-source CTA/SELF \
+  --include-lens-source ERV
 ```
 
-`--exclude-antigen-source` removes a category. The YAML equivalent is
-`vaccine_peptides.included_antigen_sources`. Source IDs, transcripts, RNA and
-normal-tissue evidence remain attached to each record. Targetable intervals
-come from the report; CTA/self and ERV opt-ins are recorded as overrides.
+`--exclude-lens-source` removes a label. The YAML equivalent is
+`vaccine_peptides.included_lens_sources`. The older spellings
+`--include-antigen-source`, `--exclude-antigen-source` and
+`included_antigen_sources` still work (the YAML key warns, and saved records
+are read under the new name). Source IDs, transcripts, RNA and normal-tissue
+evidence remain attached to each record. Targetable intervals come from the
+report; CTA/self and ERV opt-ins are recorded as overrides.
+
+### Antigen types, for every input
+
+`--include-antigen-type` and `--exclude-antigen-type` work for any input
+(variants, fusions, CTA, LENS, assemblies) and take the antigen types used by
+`--min-TYPE-antigens` / `--max-TYPE-antigens`: mutation, fusion, CTA, ERV,
+splice, viral, SV, isoform. `--exclude-antigen-type SV` is the same as
+`--max-sv-antigens 0`; `--include-antigen-type SV` lifts a zero cap from YAML.
+They do not override the LENS label gate above.
 
 ### Fusion antigens from supplied assemblies
 

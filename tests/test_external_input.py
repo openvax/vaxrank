@@ -455,7 +455,7 @@ def test_lens_nonvariant_antigens_require_opt_in_and_retain_provenance():
     report = read_lens_report(path)
     default_result = lens_ranking_result(report, list(report.epitopes))
     assert {r['family'] for r in default_result.excluded_sources} >= {'CTA/SELF', 'ERV', 'SPLICE'}
-    assert all(r['reason'] == 'Excluded by included_antigen_sources'
+    assert all(r['reason'] == 'Excluded by included_lens_sources'
                for r in default_result.excluded_sources if r['family'] == 'CTA/SELF')
     assert not any(
         isinstance(source, VaccineAntigen)
@@ -465,7 +465,7 @@ def test_lens_nonvariant_antigens_require_opt_in_and_retain_provenance():
         for source, _ in default_result.ranked
     )
 
-    options = ExternalConstructOptions(included_antigen_sources=(
+    options = ExternalConstructOptions(included_lens_sources=(
         "SNV", "INDEL", "FUSION", "SPLICE", "CTA/SELF", "ERV",
     ))
     result = lens_ranking_result(
@@ -582,7 +582,7 @@ def test_lens_source_antigens_degrade_explicitly_without_ensembl_database():
         list(report.epitopes),
         genome=MissingEnsemblDatabase(),
         options=ExternalConstructOptions(
-            included_antigen_sources=("SPLICE",)
+            included_lens_sources=("SPLICE",)
         ),
     )
 
@@ -2058,8 +2058,8 @@ def test_external_input_parser_accepts_vaccine_peptide_flags():
     ])
     assert args.vaccine_peptide_length == 31
     assert args.num_epitopes_per_vaccine_peptide == 2
-    assert args.included_antigen_sources == ["SPLICE", "CTA/SELF"]
-    assert args.excluded_antigen_sources == ["FUSION"]
+    assert args.included_lens_sources == ["SPLICE", "CTA/SELF"]
+    assert args.excluded_lens_sources == ["FUSION"]
 
 
 # ---- code-review regressions ---------------------------------------------

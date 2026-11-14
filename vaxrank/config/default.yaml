@@ -228,7 +228,7 @@ vaccine_peptides:
   # ERV, and SPLICE are visible in the neoepitope report but require an
   # explicit opt-in because a source label alone does not establish a safe
   # tumor-specific target or an exact translated junction.
-  included_antigen_sources:
+  included_lens_sources:
     - SNV
     - INDEL
     - FUSION
