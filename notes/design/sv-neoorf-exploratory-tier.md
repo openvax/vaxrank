@@ -52,6 +52,32 @@ are retained; no new viral or SV targets inferred", so this is unmeasured.
    `exploratory-sv-v1` may bundle the include flag and a small default minimum
    (suggest 1-2). `builtin:openvax-v1` stays frozen (golden hash).
 
+## RNA support must be comparable across kinds
+
+#757 shipped (#822, `docs/design/rna-feature-support.md`): a common
+`RNAFeatureEvidence` record (reads, fragments, per-million, effective-length
+densities) and identical DSL bindings for every kind. An exploratory SV can sit
+in a mixed list only if its support is counted the same way as a mutation's.
+Known differences in the admission gate today (`isovar_antigens.py`):
+
+- Mutation, SV export and fusion use fragment support, but with different
+  scopes: mutation = alt-allele fragments; `_sv` = **minimum** direct-junction
+  fragments; `_sv_export` = union of junction-linked witnesses per occurrence.
+  `min_fragments` therefore does not mean one thing across kinds.
+- CTA admission uses an expression table with its own unit (TPM or similar),
+  not fragments.
+- The default score `sqrt(n_rna_alt) * target_epitope_score` uses RNA only for
+  mutations; other kinds default to `target_epitope_score` alone, so RNA does
+  not currently affect their rank against mutations at all.
+
+Required before mixing: (a) gate and rank every kind on the same
+`RNAFeatureEvidence` measurement and unit, scoped to the allele-bearing
+junction/interval, not the whole gene; (b) name a derived policy whose score
+expression uses that binding for all kinds; (c) report the unit and scope next
+to each product; (d) never convert TPM to fragments or the reverse. Missing
+measurement stays "unknown", not zero. Check whether the Sid RNA design used
+such a named expression; I have not verified that.
+
 ## Non-goals
 
 - No automatic category balancing or "underrepresented kind" priority.
@@ -63,8 +89,6 @@ are retained; no new viral or SV targets inferred", so this is unmeasured.
 - Is the Sid blocker admission, or are SV candidates absent from the input
   files? Step 1 answers it; the answer decides whether steps 2-4 are needed.
 - Should an exploratory product carry a wet-lab/validation flag in the report?
-- Does the status need a native-format version bump? Saved designs read the
-  old two-state value; adding a third value may need `effective_sha256` care.
 
 ## Verification
 
