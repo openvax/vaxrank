@@ -3,11 +3,11 @@
 Inspect the bundled definitions without providing biological inputs:
 
 ```sh
-vaxrank --list-policies
-vaxrank --show-policy lens-v1
-vaxrank --show-policy pvacseq-aggregate-v1
-vaxrank --show-policy tesla-presentation-v1
-vaxrank --show-policy tesla-recognition-v1
+vaxrank policies
+vaxrank policies show lens-v1
+vaxrank policies show pvacseq-aggregate-v1
+vaxrank policies show tesla-presentation-v1
+vaxrank policies show tesla-recognition-v1
 ```
 
 Select a bundle with `--config builtin:NAME`. `--show-policy` prints its resolved

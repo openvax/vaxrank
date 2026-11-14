@@ -21,7 +21,7 @@ import os
 import sys
 from argparse import HelpFormatter
 
-EXAMPLES = """\
+_EXAMPLES_TEMPLATE = """\
 Examples:
   Rank variants against tumor RNA and write peptide and mRNA constructs:
     vaxrank --vcf somatic.vcf --bam rnaseq.bam \\
@@ -33,17 +33,55 @@ Examples:
     vaxrank --input-lens patient.lens.tsv --output-dir vaccine_out/
 
   Replay a run saved earlier with --output-json-file:
-    vaxrank --input-json-file ranked.json --output-dir replay_out/
+    vaxrank replay ranked.json --output-dir replay_out/
 
-Run `vaxrank --help` for every option, or `vaxrank --list-policies` for the
-bundled selection policies."""
+Running a design takes flags only; `vaxrank run FLAGS` means the same thing.
+Other activities start with a word:
+    vaxrank policies [show NAME]   list the bundled selection policies, or show one
+    vaxrank config                 print the default YAML configuration
+    vaxrank replay FILE            re-emit a saved run (ranked .json or native evidence)
+    vaxrank help [TOPIC]           options for one topic (below)
 
-BARE_SUMMARY = """\
+Help topics: @TOPICS@, all (every option)."""
+
+_INTRO = """\
 vaxrank ranks personalized cancer neoantigens from somatic variants, tumor RNA
 and patient HLA type, and writes peptide or mRNA vaccine constructs plus reports.
 
-%s
-""" % EXAMPLES
+"""
+
+
+# topic -> (what it covers, help-group titles it prints)
+HELP_TOPICS = {
+    "variants": ("variant input: VCF, MAF, genome", ("Variants",)),
+    "isovar": ("RNA reads, assembly, translation and filtering (Isovar)", (
+        "RNA", "Determine coding sequence from RNA",
+        "Translation from cDNA to protein sequence",
+        "Protein sequences (grouping equivalent translations)", "Filtering",
+        "Matched germline", "Read phasing")),
+    "cta": ("patient cancer-testis antigen expression input",
+            ("Patient CTA expression input",)),
+    "predict": ("MHC / T-cell epitope prediction and scoring", (
+        "Prediction Options", "T-cell epitope prediction options",
+        "Attribution of peptide-level evidence to alleles",
+        "Default predictor methods (for unqualified DSL references)")),
+    "design": ("what goes in the vaccine: limits, antigen types, LENS labels", (
+        "Vaccine design options", "Vaccine peptide options",
+        "Antigen type selection", "LENS source labels")),
+    "peptide": ("peptide construct options", ("Peptide construct options",)),
+    "mrna": ("mRNA construct options", ("mRNA construct options",)),
+    "annotation": ("processing-aware annotation",
+                   ("Processing-aware annotation options",)),
+    "output": ("output files and reports",
+               ("Output options", "Supplemental report options")),
+    "advanced": ("advanced options", ("Advanced options",)),
+}
+
+ACTIVITIES = ("run", "policies", "config", "replay", "help")
+
+# Built once, after HELP_TOPICS: no literal "%" in the text can break import.
+EXAMPLES = _EXAMPLES_TEMPLATE.replace("@TOPICS@", ", ".join(HELP_TOPICS))
+BARE_SUMMARY = _INTRO + EXAMPLES + "\n"
 
 
 class ExamplesHelpFormatter(HelpFormatter):
@@ -88,6 +126,108 @@ def check_unknown_flags(parser, args_list):
 
 def print_bare_summary(stream=None):
     (stream or sys.stdout).write(BARE_SUMMARY)
+
+
+SHORT_USAGE = (
+    "usage: vaxrank [run] FLAGS   run a design from variants and RNA, "
+    "or an imported report\n"
+    "       vaxrank policies [show NAME] | config | replay FILE | help [TOPIC]\n\n")
+
+
+def print_short_help(stream=None):
+    """The one-screen ``--help``: modes, activities and help topics."""
+    (stream or sys.stdout).write(SHORT_USAGE + BARE_SUMMARY)
+
+
+def _command_error(message):
+    """One line on stderr, exit 2: the manners of an argparse usage error."""
+    print("vaxrank: error: %s" % message, file=sys.stderr)
+    raise SystemExit(2)
+
+
+def topic_help(topic):
+    """Help text for one topic, from the full parser's own argument groups."""
+    from .arg_parser import make_vaxrank_arg_parser
+    if topic not in HELP_TOPICS and topic != "all":
+        _command_error("unknown help topic %r; choose from %s, all"
+                       % (topic, ", ".join(HELP_TOPICS)))
+    parser = make_vaxrank_arg_parser()
+    if topic == "all":
+        return parser.format_help()
+    description, titles = HELP_TOPICS[topic]
+    groups = {group.title: group for group in parser._action_groups}
+    formatter = parser._get_formatter()
+    formatter.add_text("vaxrank help %s: %s" % (topic, description))
+    for title in titles:
+        group = groups[title]
+        formatter.start_section(title)
+        formatter.add_text(group.description)
+        formatter.add_arguments(group._group_actions)
+        formatter.end_section()
+    return formatter.format_help()
+
+
+def resolve_command_line(args_list):
+    """Interpret a bare first word and the help flags.
+
+    Returns ``(handled, args_list)``. Running a design takes flags only. A
+    first word that is not a flag names another activity: it is rewritten to
+    the equivalent flags so one code path serves both spellings, or answered
+    here (``help``). ``run`` is an optional spelling of the default. Help
+    flags print the short screen; ``vaxrank help all`` lists every option.
+    """
+    tokens = list(args_list)
+    if tokens and tokens[0] == "run":
+        # Optional spelling of the default: what follows is an ordinary run.
+        tokens = tokens[1:]
+        if not tokens:
+            print_bare_summary()
+            return True, tokens
+        if not tokens[0].startswith("-"):
+            _command_error("run takes flags, starting with --; the other "
+                           "commands are %s" % ", ".join(ACTIVITIES[1:]))
+    end = tokens.index("--") if "--" in tokens else len(tokens)
+    if tokens and not tokens[0].startswith("-"):
+        word, rest = tokens[0], tokens[1:]
+        if word != "help" and ("-h" in rest or "--help" in rest):
+            print_short_help()
+            raise SystemExit(0)
+        if word == "help":
+            if rest in (["-h"], ["--help"]):
+                rest = []
+            if not rest:
+                print_short_help()
+            elif len(rest) == 1:
+                sys.stdout.write(topic_help(rest[0]))
+            else:
+                _command_error("help takes one topic; choose from %s, all"
+                               % ", ".join(HELP_TOPICS))
+            return True, tokens
+        if word == "policies":
+            if not rest:
+                return False, ["--list-policies"]
+            if rest[0] == "show" and len(rest) == 2:
+                return False, ["--show-policy", rest[1]]
+            _command_error("policies takes nothing, or `show NAME`")
+        if word == "config":
+            if rest:
+                _command_error("vaxrank config takes no arguments; use "
+                                 "--config FILE on a run to apply one")
+            return False, ["--print-default-config"]
+        if word == "replay":
+            if not rest or rest[0].startswith("-"):
+                _command_error("replay needs the saved run first: vaxrank replay FILE [flags]")
+            flag = ("--input-json-file" if rest[0].lower().endswith(".json")
+                    else "--input-epitopes")
+            return False, [flag, rest[0]] + rest[1:]
+        _command_error(
+            "unknown command %r; the commands are %s (a run takes flags, "
+            "starting with --)" % (word, ", ".join(ACTIVITIES[1:])))
+    head = tokens[:end]
+    if "-h" in head or "--help" in head:
+        print_short_help()
+        raise SystemExit(0)
+    return False, tokens
 
 
 OUTPUT_LABELS = (
