@@ -198,13 +198,8 @@ def _migrate_legacy_layout(raw: dict[str, Any]) -> None:
                 "Cannot set both 'vaccine_peptides.included_antigen_sources' "
                 "and 'vaccine_peptides.included_lens_sources'. Keep "
                 "'included_lens_sources'.")
-        warnings.warn(
-            "Config key 'vaccine_peptides.included_antigen_sources' is "
-            "deprecated; use 'vaccine_peptides.included_lens_sources'. "
-            "Auto-migrating.",
-            DeprecationWarning,
-            stacklevel=4,
-        )
+        # Silent: the frozen builtin:openvax-v1 definition still uses the
+        # older key, so every run of it would warn.
         vp["included_lens_sources"] = vp.pop("included_antigen_sources")
 
     # 1. ``vaccine_peptides.manufacturability`` → top-level for the

@@ -51,7 +51,7 @@ vaxrank --input-lens patient.lens.tsv \
 `--exclude-lens-source` removes a label. The YAML equivalent is
 `vaccine_peptides.included_lens_sources`. The older spellings
 `--include-antigen-source`, `--exclude-antigen-source` and
-`included_antigen_sources` still work (the YAML key warns, and saved records
+`included_antigen_sources` still work (saved records
 are read under the new name). Source IDs, transcripts, RNA and normal-tissue
 evidence remain attached to each record. Targetable intervals come from the
 report; CTA/self and ERV opt-ins are recorded as overrides.

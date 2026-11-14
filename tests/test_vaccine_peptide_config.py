@@ -686,8 +686,7 @@ def test_older_included_antigen_sources_yaml_key_still_loads(tmp_path):
         config_expr_overrides=None, vaccine_peptide_length=None,
         padding_around_mutation=None, max_vaccine_peptides_per_mutation=None,
         num_epitopes_per_vaccine_peptide=None)
-    with pytest.warns(DeprecationWarning, match="included_lens_sources"):
-        merged = load_vaxrank_config(args)
+    merged = load_vaxrank_config(args)
     assert vaccine_config_from_args(
         args, merged_config=merged).included_lens_sources == ("SNV", "ERV")
 
