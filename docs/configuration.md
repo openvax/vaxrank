@@ -43,7 +43,7 @@ To start from the shipped, commented YAML of supported keys and current
 defaults:
 
 ```sh
-vaxrank --print-default-config > my-config.yaml
+vaxrank config > my-config.yaml
 ```
 
 YAML keys are the public configuration interface; Python dataclass field names
@@ -83,12 +83,13 @@ explicit choice. See [saved scoring policies](input-workflows.md#saved-scoring-p
 another `--config` derives a policy from it. To inspect what is bundled:
 
 ```sh
-vaxrank --list-policies
-vaxrank --show-policy NAME
+vaxrank policies
+vaxrank policies show NAME
 ```
 
-`--show-policy` prints the resolved formulas and the measurements a policy
-requires. [Published comparison policies](published-policies.md) cover LENS,
+`vaxrank policies show` prints the resolved formulas and the measurements a policy
+requires (the older spellings `--list-policies`, `--show-policy` and
+`--print-default-config` still work). [Published comparison policies](published-policies.md) cover LENS,
 pVACseq aggregate ordering and experimental TESLA gates.
 [Selection policies](selection-policies.md) covers experimental
 presentation/processing ensembles, self-content trimming, serum susceptibility

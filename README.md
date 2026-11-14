@@ -94,8 +94,15 @@ to compute new predictions instead.
 
 ## Command line
 
-`vaxrank` is the main command; run `vaxrank --help` for every option and
-`vaxrank --version` for the installed release. Companion commands share the
+`vaxrank` is the main command. Running a design takes flags only
+(`vaxrank --vcf … --bam …`, `vaxrank --input-lens …`). `vaxrank --help` is a
+one-screen summary; `vaxrank help TOPIC` prints one group of options
+(`variants`, `isovar`, `cta`, `predict`, `design`, `peptide`, `mrna`,
+`annotation`, `output`, `advanced`) and `vaxrank help all` prints every option.
+`vaxrank run FLAGS` is an optional spelling of the bare form. Other words start
+other activities: `vaxrank policies
+[show NAME]`, `vaxrank config`, `vaxrank replay FILE` and `vaxrank help`.
+`vaxrank --version` prints the installed release. Companion commands share the
 installed package:
 
 | Command | Purpose | Documented in |

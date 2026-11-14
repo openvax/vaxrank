@@ -47,7 +47,8 @@ from .vaccine_config_args import (
     manufacturability_config_from_args, vaccine_config_from_args,
 )
 from ..config import load_vaxrank_config
-from .discoverability import format_outputs_block, print_bare_summary, written_outputs
+from .discoverability import (
+    format_outputs_block, print_bare_summary, resolve_command_line, written_outputs)
 from .errors import USER_ERRORS, exit_with_user_error
 from ..progress import timed_step
 from ..allele_validation import validate_allele_arguments
@@ -1394,6 +1395,9 @@ def run_cli(args_list=None):
 
     if not args_list:
         print_bare_summary()
+        return None
+    handled, args_list = resolve_command_line(args_list)
+    if handled:
         return None
     args = parse_vaxrank_args(args_list)
     result = _run_parsed_cli(args, args_list)
