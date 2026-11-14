@@ -81,7 +81,8 @@ such a named expression; I have not verified that.
 ## Non-goals
 
 - No automatic category balancing or "underrepresented kind" priority.
-- No change to scores, the Topiary DSL, or RNA normalization (#757).
+- No change to the Topiary DSL or the #757 measurement definitions. Using them
+  uniformly in a derived policy's gate and score is in scope.
 - No inferred viral or SV targets. Candidates come from supplied Isovar results.
 
 ## Open questions
