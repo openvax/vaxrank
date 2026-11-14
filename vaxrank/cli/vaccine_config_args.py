@@ -91,34 +91,64 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
             f"(default: {default_vaccine_config.num_target_epitopes_to_keep})"
         ))
 
-    vaccine_peptide_group.add_argument(
-        "--include-antigen-source",
-        dest="included_antigen_sources",
+    allocation_group.add_argument(
+        "--include-antigen-type",
+        dest="included_antigen_types",
+        action="append",
+        choices=sorted(ANTIGEN_KINDS, key=str.lower),
+        default=None,
+        help=(
+            "Admit an antigen type to the vaccine for any input (variants, "
+            "fusions, CTA, LENS, assemblies). Repeat for several types. "
+            "Lifts a zero cap set in YAML or by --max-TYPE-antigens 0; "
+            "it does not override LENS source labels "
+            "(see --include-lens-source)."
+        ))
+    allocation_group.add_argument(
+        "--exclude-antigen-type",
+        dest="excluded_antigen_types",
+        action="append",
+        choices=sorted(ANTIGEN_KINDS, key=str.lower),
+        default=None,
+        help=(
+            "Keep an antigen type out of the vaccine for any input. Same as "
+            "--max-TYPE-antigens 0. Exclusion wins if a type is both "
+            "included and excluded."
+        ))
+    lens_group = arg_parser.add_argument_group(
+        "LENS source labels",
+        "Apply only to --input-lens. LENS labels say where a peptide came "
+        "from, not that it is a safe tumor-specific target, so SPLICE, "
+        "CTA/SELF and ERV rows stay in the report but out of constructs "
+        "until opted in.")
+    lens_group.add_argument(
+        "--include-lens-source", "--include-antigen-source",
+        dest="included_lens_sources",
         action="append",
         choices=sorted(LENS_ANTIGEN_SOURCES),
         default=None,
         help=(
-            "Add a LENS antigen source to construct ranking. Repeat for "
+            "Add a LENS source label to construct ranking. Repeat for "
             "multiple sources. SNV, INDEL, and FUSION are included by "
-            "default; SPLICE, CTA/SELF, and ERV require explicit inclusion."
+            "default; SPLICE, CTA/SELF, and ERV require explicit inclusion. "
+            "Older spelling: --include-antigen-source."
         ),
     )
-    vaccine_peptide_group.add_argument(
-        "--exclude-antigen-source",
-        dest="excluded_antigen_sources",
+    lens_group.add_argument(
+        "--exclude-lens-source", "--exclude-antigen-source",
+        dest="excluded_lens_sources",
         action="append",
         choices=sorted(LENS_ANTIGEN_SOURCES),
         default=None,
         help=(
-            "Remove a LENS antigen source from construct ranking. Repeat for "
-            "multiple sources. Exclusion wins if a source is both included "
-            "and excluded."
+            "Remove a LENS source label from construct ranking. Exclusion "
+            "wins if a source is both included and excluded. Older "
+            "spelling: --exclude-antigen-source."
         ),
     )
 
 
 
-    
 
 def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> VaccineConfig:
     """
@@ -158,16 +188,16 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
         )
     if args.num_epitopes_per_vaccine_peptide is not None:
         vaccine_config_kwargs["num_target_epitopes_to_keep"] = args.num_epitopes_per_vaccine_peptide
-    included_antigen_sources = getattr(args, "included_antigen_sources", None)
-    excluded_antigen_sources = getattr(args, "excluded_antigen_sources", None)
-    if included_antigen_sources or excluded_antigen_sources:
+    included_lens_sources = getattr(args, "included_lens_sources", None)
+    excluded_lens_sources = getattr(args, "excluded_lens_sources", None)
+    if included_lens_sources or excluded_lens_sources:
         selected_sources = set(vaccine_config_kwargs.get(
-            "included_antigen_sources",
-            VaccineConfig().included_antigen_sources,
+            "included_lens_sources",
+            VaccineConfig().included_lens_sources,
         ))
-        selected_sources.update(included_antigen_sources or ())
-        selected_sources.difference_update(excluded_antigen_sources or ())
-        vaccine_config_kwargs["included_antigen_sources"] = tuple(
+        selected_sources.update(included_lens_sources or ())
+        selected_sources.difference_update(excluded_lens_sources or ())
+        vaccine_config_kwargs["included_lens_sources"] = tuple(
             source
             for source in sorted(LENS_ANTIGEN_SOURCES)
             if source in selected_sources
@@ -182,11 +212,16 @@ def antigen_allocation_from_args(args, configured=None):
     from dataclasses import asdict
     from ..antigen_allocation import AntigenAllocation
     policy = asdict(AntigenAllocation.resolve(configured))
+    for kind in getattr(args, 'included_antigen_types', None) or ():
+        if policy['max_per_kind'].get(kind) == 0:
+            del policy['max_per_kind'][kind]
     for bound in ('min', 'max'):
         for kind in ANTIGEN_KINDS:
             count = getattr(args, '%s_%s_antigens' % (bound, kind.lower()), None)
             if count is not None:
                 policy[bound + '_per_kind'][kind] = count
+    for kind in getattr(args, 'excluded_antigen_types', None) or ():
+        policy['max_per_kind'][kind] = 0
     return asdict(AntigenAllocation.resolve(policy))
 
 

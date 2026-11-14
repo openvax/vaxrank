@@ -234,12 +234,15 @@ def test_json_writer_handles_nested_numpy_floats_without_mutating_input(value):
     assert payload['nested'][0]['value'] is value
 
 
+class Payload:
+    # Module level: ``serializable`` on Python 3.14 refuses classes it cannot
+    # look up by name in a module, so a function-local class fails there.
+    def __init__(self, value):
+        self.value = value
+
+
 def test_json_writer_normalizes_serializable_containers_and_objects():
     from vaxrank.cli.entry_point import serialize_json_nan_tolerant
-
-    class Payload:
-        def __init__(self, value):
-            self.value = value
 
     payload = {'tuple': (float('nan'),), 'set': {float('inf')},
                'object': Payload(float('-inf'))}

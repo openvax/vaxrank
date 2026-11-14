@@ -145,7 +145,7 @@ def test_repeated_sources_choose_by_combined_score_without_combining_evidence(
 def test_source_agnostic_antigens_rank_without_mutation_rna(tmp_path):
     path = DATA / "real_lens_subsets" / "lens_v1.9_real_subset.tsv"
     ranked = _load(["lens=" + str(path)], INVERSE_SCORE,
-                   included_antigen_sources=("FUSION", "SPLICE", "CTA/SELF", "ERV"))
+                   included_lens_sources=("FUSION", "SPLICE", "CTA/SELF", "ERV"))
     assert {p[0].antigen.kind for _, p in ranked} == {"fusion", "splice", "CTA", "ERV"}
     assert all(p[0].mutant_protein_fragment is None for _, p in ranked)
     _assert_outputs_choose_lowest_epitope_score(ranked, tmp_path)

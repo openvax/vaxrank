@@ -213,6 +213,11 @@ def _assembly_identity(args, ranked, options, context):
         vaccine.pop('max_windows_per_antigen_source', None)
     if AntigenAllocation.resolve(vaccine.get('antigen_allocation')) == AntigenAllocation(mode='ranked'):
         vaccine.pop('antigen_allocation', None)
+    # The LENS source gate was recorded as ``included_antigen_sources`` in
+    # every design saved before it was renamed. Hash it under that spelling
+    # so those designs keep their identity and replay offline.
+    if 'included_lens_sources' in vaccine:
+        vaccine['included_antigen_sources'] = vaccine.pop('included_lens_sources')
     if 'vaccine_peptides' in policy:
         policy['vaccine_peptides'] = vaccine
     epitopes = dict(policy.get('epitopes') or {})

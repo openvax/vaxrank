@@ -355,16 +355,16 @@ def test_vaccine_config_validates_lens_antigen_source_policy():
     )
 
     assert (
-        VaccineConfig().included_antigen_sources
+        VaccineConfig().included_lens_sources
         == DEFAULT_INCLUDED_ANTIGEN_SOURCES
     )
-    with pytest.raises(ValueError, match="Unknown included_antigen_sources"):
-        VaccineConfig(included_antigen_sources=("SNV", "NOT_REAL"))
+    with pytest.raises(ValueError, match="Unknown included_lens_sources"):
+        VaccineConfig(included_lens_sources=("SNV", "NOT_REAL"))
     with pytest.raises(ValueError, match="must not contain duplicates"):
-        VaccineConfig(included_antigen_sources=("SNV", "SNV"))
+        VaccineConfig(included_lens_sources=("SNV", "SNV"))
 
 
-def test_included_antigen_sources_yaml_override(tmp_path):
+def test_included_lens_sources_yaml_override(tmp_path):
     import argparse
     import yaml
 
@@ -374,7 +374,7 @@ def test_included_antigen_sources_yaml_override(tmp_path):
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(yaml.safe_dump({
         "vaccine_peptides": {
-            "included_antigen_sources": ["SPLICE", "CTA/SELF", "ERV"],
+            "included_lens_sources": ["SPLICE", "CTA/SELF", "ERV"],
         },
     }))
     args = argparse.Namespace(
@@ -385,13 +385,13 @@ def test_included_antigen_sources_yaml_override(tmp_path):
         padding_around_mutation=None,
         max_vaccine_peptides_per_mutation=None,
         num_epitopes_per_vaccine_peptide=None,
-        included_antigen_sources=None,
+        included_lens_sources=None,
     )
     merged = load_vaxrank_config(args)
 
     assert vaccine_config_from_args(
         args, merged_config=merged
-    ).included_antigen_sources == ("SPLICE", "CTA/SELF", "ERV")
+    ).included_lens_sources == ("SPLICE", "CTA/SELF", "ERV")
 
 
 def test_antigen_source_cli_adds_and_removes_from_policy():
@@ -404,7 +404,7 @@ def test_antigen_source_cli_adds_and_removes_from_policy():
         "--exclude-antigen-source", "FUSION",
     ])
 
-    assert set(vaccine_config_from_args(args).included_antigen_sources) == {
+    assert set(vaccine_config_from_args(args).included_lens_sources) == {
         "SNV", "INDEL", "SPLICE",
     }
 
@@ -535,7 +535,7 @@ def test_bundled_default_yaml_round_trips_to_default_configs(tmp_path):
         "max_peptide_length", "padding_around_mutation",
         "max_vaccine_peptides_per_variant", "num_target_epitopes_to_keep",
         "score_fraction_of_best", "combined_score_expr",
-        "included_antigen_sources", "require_target_epitopes_in_variant",
+        "included_lens_sources", "require_target_epitopes_in_variant",
     ):
         assert getattr(vc, field) == getattr(vc_defaults, field), (
             f"default.yaml VaccineConfig drift: {field}")
@@ -651,3 +651,82 @@ def test_print_default_config_cli_dumps_yaml(capsys):
     assert "epitopes:" in captured.out
     assert "vaccine_peptides:" in captured.out
     assert "manufacturability:" in captured.out
+
+
+def test_lens_source_flags_and_older_spellings_agree():
+    from vaxrank.cli.arg_parser import external_input_arg_parser
+    from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
+
+    parser = external_input_arg_parser()
+    new = parser.parse_args([
+        "--input-lens", "x.tsv", "--include-lens-source", "SPLICE",
+        "--exclude-lens-source", "FUSION"])
+    old = parser.parse_args([
+        "--input-lens", "x.tsv", "--include-antigen-source", "SPLICE",
+        "--exclude-antigen-source", "FUSION"])
+
+    assert (vaccine_config_from_args(new).included_lens_sources
+            == vaccine_config_from_args(old).included_lens_sources)
+    assert set(vaccine_config_from_args(new).included_lens_sources) == {
+        "SNV", "INDEL", "SPLICE"}
+
+
+def test_older_included_antigen_sources_yaml_key_still_loads(tmp_path):
+    import argparse
+    import yaml
+
+    from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
+    from vaxrank.config.loader import load_vaxrank_config
+
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({
+        "vaccine_peptides": {"included_antigen_sources": ["SNV", "ERV"]}}))
+    args = argparse.Namespace(
+        config=[str(path)], config_set_overrides=None,
+        config_expr_overrides=None, vaccine_peptide_length=None,
+        padding_around_mutation=None, max_vaccine_peptides_per_mutation=None,
+        num_epitopes_per_vaccine_peptide=None)
+    merged = load_vaxrank_config(args)
+    assert vaccine_config_from_args(
+        args, merged_config=merged).included_lens_sources == ("SNV", "ERV")
+
+
+def test_saved_record_with_older_field_name_is_read():
+    from vaxrank.config.loader import saved_construct_configuration
+    from vaxrank.selection_policy import configuration_digest
+
+    record = {
+        "configuration": {"name": "saved"},
+        "effective_vaccine_peptides": {
+            "included_antigen_sources": ["SNV", "SPLICE"]},
+    }
+    record["effective_sha256"] = configuration_digest(record)
+    restored = saved_construct_configuration(record)
+
+    assert restored["vaccine_peptides"]["included_lens_sources"] == (
+        "SNV", "SPLICE")
+
+
+def test_antigen_type_flags_apply_to_any_input():
+    from vaxrank.cli.arg_parser import external_input_arg_parser
+    from vaxrank.cli.vaccine_config_args import vaccine_config_from_args
+
+    parser = external_input_arg_parser()
+    args = parser.parse_args([
+        "--input-lens", "x.tsv", "--exclude-antigen-type", "SV",
+        "--exclude-antigen-type", "viral"])
+    caps = vaccine_config_from_args(args).antigen_allocation["max_per_kind"]
+    assert caps == {"SV": 0, "viral": 0}
+
+    # Exclusion wins over an inclusion of the same type; an inclusion lifts
+    # a zero cap and nothing else.
+    args = parser.parse_args([
+        "--input-lens", "x.tsv", "--max-sv-antigens", "0",
+        "--include-antigen-type", "SV", "--exclude-antigen-type", "viral",
+        "--include-antigen-type", "viral"])
+    caps = vaccine_config_from_args(args).antigen_allocation["max_per_kind"]
+    assert caps == {"SV": 0, "viral": 0}
+    args = parser.parse_args(["--input-lens", "x.tsv",
+                              "--include-antigen-type", "SV"])
+    assert "SV" not in vaccine_config_from_args(
+        args).antigen_allocation["max_per_kind"]

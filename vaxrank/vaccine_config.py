@@ -109,7 +109,7 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
         keep all predicted mutant epitopes.
         Default: 1000
 
-    included_antigen_sources : tuple[str, ...]
+    included_lens_sources : tuple[str, ...]
         LENS antigen-source categories admitted to construct ranking. SNV,
         INDEL, and FUSION are enabled by default; SPLICE, CTA/SELF, and ERV
         require explicit inclusion.
@@ -160,7 +160,7 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     # separate mode enum: the expression IS the mechanism.
     combined_score_expr: str = DEFAULT_COMBINED_SCORE_EXPR
     ranking_rules: Optional[tuple[str, ...]] = None
-    included_antigen_sources: tuple[str, ...] = (
+    included_lens_sources: tuple[str, ...] = (
         DEFAULT_INCLUDED_ANTIGEN_SOURCES
     )
     # When True (default, legacy behavior), variants whose vaccine peptides
@@ -244,16 +244,16 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
                         f"Available: {sorted(RANKING_RULE_REGISTRY)}"
                     )
         unknown_sources = (
-            set(self.included_antigen_sources) - LENS_ANTIGEN_SOURCES
+            set(self.included_lens_sources) - LENS_ANTIGEN_SOURCES
         )
         if unknown_sources:
             raise ValueError(
-                "Unknown included_antigen_sources value(s): %s. Available: %s"
+                "Unknown included_lens_sources value(s): %s. Available: %s"
                 % (
                     ", ".join(sorted(unknown_sources)),
                     ", ".join(sorted(LENS_ANTIGEN_SOURCES)),
                 )
             )
-        if len(set(self.included_antigen_sources)) != len(
-                self.included_antigen_sources):
-            raise ValueError("included_antigen_sources must not contain duplicates")
+        if len(set(self.included_lens_sources)) != len(
+                self.included_lens_sources):
+            raise ValueError("included_lens_sources must not contain duplicates")

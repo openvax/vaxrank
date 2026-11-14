@@ -102,7 +102,7 @@ class VaccinePeptidesConfigSchema(
     score_fraction_of_best: Optional[float] = None
     combined_score_expr: Optional[str] = None
     ranking_rules: Optional[list[str]] = None
-    included_antigen_sources: Optional[list[str]] = None
+    included_lens_sources: Optional[list[str]] = None
     require_target_epitopes_in_variant: Optional[bool] = None
     window_selection: Optional[dict] = None
     # Antigen-design knobs hoisted from ``vaccine_constructs:`` top
