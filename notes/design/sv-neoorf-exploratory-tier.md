@@ -75,8 +75,19 @@ Required before mixing: (a) gate and rank every kind on the same
 junction/interval, not the whole gene; (b) name a derived policy whose score
 expression uses that binding for all kinds; (c) report the unit and scope next
 to each product; (d) never convert TPM to fragments or the reverse. Missing
-measurement stays "unknown", not zero. Check whether the Sid RNA design used
-such a named expression; I have not verified that.
+measurement stays "unknown", not zero.
+
+Checked in the Sid RNA design (`output/sid-rna-design-2026-11-09`): it did not
+use the default. `finish_rna_design.py` scores every product with one explicit
+expression, `sqrt(<binding>) * target_epitope_score`, with the binding one of
+`rna_fragments`, `rna_fragments_per_million` or
+`rna_fragments_per_effective_kb_per_million`. CTAs are measured on the exact
+25-aa coding window of the canonical transcript, which is compatible-placement
+support and not unique-isoform expression. So the CTA-heavy result is not
+caused by ignoring RNA for CTAs. It is a design-script choice, not a vaxrank
+policy: the derived policy in (b) would make it reusable. Whether SV support
+measured on a junction is comparable to a CTA's 25-aa window count is still
+open, since the two features have different effective lengths.
 
 ## Non-goals
 
