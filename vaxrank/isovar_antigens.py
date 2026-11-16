@@ -145,7 +145,7 @@ def _variants(result):
             # Distinct supplied coding models can legitimately translate the
             # same RNA in different frames. Keep each model; their coexistence
             # is not an unresolved frame within this candidate.
-            ambiguous=len(model_frames[(row['rna_candidate_id'], row['model_id'])]) > 1,
+            ambiguous=strand is None or len(model_frames[(row['rna_candidate_id'], row['model_id'])]) > 1,
             reasons=() if row['coding_support']['fully_tiled'] else ('coding_interval_not_observed',),
             gene_names=(row['gene_name'],),
             gene_ids=(reference.get('source_gene_id'),) if reference['on_source_transcript'] else (),

@@ -68,7 +68,8 @@ does not establish translation or bypass RNA support, sequence consistency,
 targetable-change or unresolved-frame checks. Supported local coding windows
 are accepted by default; use `admission.allow_partial: false` to require complete
 coding sequences. Distinct supplied ORF models retain separate candidates even
-when they translate the same RNA in different frames.
+when they translate the same RNA in different frames. Each candidate still
+requires a resolved carrier strand unless ambiguity is explicitly enabled.
 
 For ncORFs, a single request applies a pinned ORFdata catalogue to every
 overlapping variant in the VCF, so there is no per-variant input to prepare:
@@ -147,7 +148,8 @@ sheet. Detailed producer evidence remains in native outputs.
 
 Saved native predictions retain the source evidence, reference identity,
 containment decisions and selection configuration. Replaying them does not load
-the current OncoRef bundle or reconstruct Isovar sequences again:
+the current OncoRef bundle or reconstruct Isovar sequences again. Changing the
+sequence-reference policy requires new CTA inputs:
 
 ```sh
 vaxrank --input-epitopes vaccine/candidate_predictions.tsv --output-dir replay

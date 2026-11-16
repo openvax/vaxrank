@@ -81,7 +81,8 @@ class AntigenDataset:
     def to_dict(self):
         """Return versioned JSON data without Python class metadata."""
         return dict(schema=ANTIGEN_DATASET_SCHEMA, scope=scope_dict(self.scope),
-                    antigens={key: {k: v for k, v in asdict(a).items() if k != "rna_support" or v}
+                    antigens={key: {k: v for k, v in asdict(a).items()
+                                    if k not in ("rna_support", "source_protein_offset") or v}
                               for key, a in self.antigens.items()},
                     provenance=[provenance_dict(p) for p in self.provenance],
                     **({'source_evidence': self.source_evidence} if self.source_evidence else {}))
