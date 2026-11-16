@@ -81,7 +81,8 @@ class AntigenDataset:
     def to_dict(self):
         """Return versioned JSON data without Python class metadata."""
         return dict(schema=ANTIGEN_DATASET_SCHEMA, scope=scope_dict(self.scope),
-                    antigens={key: {k: v for k, v in asdict(a).items() if k != "rna_support" or v}
+                    antigens={key: {k: v for k, v in asdict(a).items()
+                                    if k not in ("rna_support", "source_protein_offset") or v}
                               for key, a in self.antigens.items()},
                     provenance=[provenance_dict(p) for p in self.provenance],
                     **({'source_evidence': self.source_evidence} if self.source_evidence else {}))
@@ -227,7 +228,7 @@ def _batched_self_matches(frame, antigens, genome):
 
 def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
                      annotate=None, self_matcher=None, host_reference=None, source_evidence=None,
-                     patient_backgrounds=None):
+                     patient_backgrounds=None, cta_bundle=None):
     """Shared native-protein prediction for source-specific admission adapters.
 
     ``annotate`` may add source evidence columns to the prediction frame before
@@ -237,6 +238,10 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     from .patient_background import load_patient_backgrounds, attach_antigen_backgrounds
     config = config or EpitopeConfig()
     patient_backgrounds = load_patient_backgrounds(patient_backgrounds, config)
+    if config.cta_sequence_bundle is not None and any(a.kind == 'CTA' for a in antigens.values()):
+        from .cta_targeting import load_bundle, bundle_scope
+        cta_bundle = cta_bundle or load_bundle(config.cta_sequence_bundle)
+        combine_scopes(provenance.scope, bundle_scope(cta_bundle), 'OncoRef sequence bundle')
     batch_reference_queries = self_matcher is None and host_reference is None
     if host_reference is not None:
         from .host_reference import HostReference
@@ -315,16 +320,26 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     observed = {e.source_name for e in candidates}
     dataset.antigens.update({provenance.input_id + ':unmeasured:' + name: a
                             for name, a in antigens.items() if name not in observed})
+    reference_antigens = {name: antigen for name, antigen in antigens.items()
+                          if cta_bundle is None or antigen.kind != 'CTA'}
+    reference_frame = frame[frame.source_sequence_name.isin(reference_antigens)]
     if batch_reference_queries:
-        matches, host_matches = _batched_self_matches(frame, antigens, genome)
+        matches, host_matches = _batched_self_matches(reference_frame, reference_antigens, genome)
     else:
         matches = {name: self_matcher(frame.loc[frame.source_sequence_name.eq(name), 'peptide'], antigen, genome)
-                   for name, antigen in antigens.items() if name in observed}
+                   for name, antigen in reference_antigens.items() if name in observed}
         host_matches = {name: self_matcher(
             frame.loc[frame.source_sequence_name.eq(name), 'peptide'],
             replace(antigen, self_reference_excluded_gene_ids=()), genome)
             if antigen.self_reference_excluded_gene_ids else matches[name]
-            for name, antigen in antigens.items() if name in observed}
+            for name, antigen in reference_antigens.items() if name in observed}
+    # The current bundle supplies both exact host occurrences and targeting
+    # roles below. Do not also run the historical gene-exclusion self policy.
+    for name, antigen in antigens.items():
+        if name not in reference_antigens and name in observed:
+            matches[name] = host_matches[name] = {
+                p: antigen.self_reference_match(p, False)
+                for p in frame.loc[frame.source_sequence_name.eq(name), 'peptide']}
     dataset.epitopes = tuple(replace(
         e, input_provenance=provenance, patient_alleles=alleles,
         occurs_in_reference=host_matches[e.source_name][e.sequence].occurs,
@@ -342,6 +357,9 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
         dataset.selection['source_evidence'] = source_evidence
     if config.comparison_reference == 'patient_background':
         attach_antigen_backgrounds(dataset, predictor, patient_backgrounds, source_evidence)
+    if cta_bundle is not None:
+        from .cta_targeting import apply_cta_targeting
+        apply_cta_targeting(dataset, cta_bundle)
     return dataset
 
 
@@ -350,10 +368,9 @@ def validate_antigen_args(args):
     specs = external_input_specs(args)
     if not any(fmt in ('antigens', 'isovar') for fmt, _, _ in specs):
         return
-    conflicts = ('vcf', 'bam')
-    if any(getattr(args, name, None) for name in conflicts):
-        raise ValueError('Combine new antigen sequences with saved VCF/BAM evidence '
-                         'using epitopes inputs in --input-manifest')
+    if any(getattr(args, name, None) for name in ('vcf', 'bam')) and not getattr(args, 'input_manifest', None):
+        raise ValueError('Combine direct VCF/BAM and antigen inputs in --input-manifest '
+                         'to declare their shared patient, reference and genotype')
     if not getattr(args, 'mhc_predictor', None):
         raise ValueError('--input-antigens requires --mhc-predictor for new predictions')
     if getattr(args, 'external_predictions', 'input') != 'input' or getattr(args, 'external_peptide_only', False):

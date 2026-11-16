@@ -226,10 +226,11 @@ def test_a_new_nested_output_dir_is_still_accepted_and_not_created_early(tmp_pat
     assert args.output_csv.endswith("ranked_candidates.csv")
 
 
-def test_figure_commands_report_input_mistakes_in_one_line(tmp_path, capsys):
+def test_figure_commands_report_input_mistakes_in_one_line(tmp_path, capsys, monkeypatch):
     """The companion commands leaked a traceback for a missing or wrong-shaped file."""
     from vaxrank.cli import (
         complex_variant_visualization, evidence_visualization, mutation_visualization)
+    monkeypatch.setattr(sys, 'argv', ['embedding-application', '-v'])
 
     wrong_shape = tmp_path / "wrong.json"
     wrong_shape.write_text('{"unrelated": 1}')

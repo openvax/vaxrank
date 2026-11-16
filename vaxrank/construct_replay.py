@@ -1,6 +1,6 @@
 """Retain actual modality products and their complete assembly inputs."""
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 from pathlib import Path
 
@@ -160,6 +160,9 @@ def _canonical_native(value):
     if metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='SelfReferenceMatch'):
         if not result.get('reference_sha256'):
             result.pop('reference_sha256', None)
+    if (metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='VaccineAntigen')
+            and result.get('source_protein_offset', 0) == 0):
+        result.pop('source_protein_offset', None)
     if metadata in (
             dict(__module__='vaxrank.vaccine_antigen', __name__='VaccineAntigen'),
             dict(__module__='vaxrank.mutant_protein_fragment', __name__='MutantProteinFragment')):
@@ -196,6 +199,9 @@ def _assembly_identity(args, ranked, options, context):
     # checksum, but does not change assembly inputs or invalidate old designs.
     for source in graph:
         for candidate in source['candidates']:
+            # Display coordinates do not change a recorded assembly decision.
+            # Nonzero coordinates remain protected by the payload checksum.
+            candidate['antigen'] = replace(candidate['antigen'], source_protein_offset=0)
             audit = candidate['window_selection']
             if audit.get('algorithm') == 'score_fraction_then_ranking':
                 candidate['window_selection'] = {}
@@ -229,6 +235,8 @@ def _assembly_identity(args, ranked, options, context):
         epitopes.pop('patient_background_baseline', None)
     if epitopes.get('ms_evidence') is None:
         epitopes.pop('ms_evidence', None)
+    if epitopes.get('cta_sequence_bundle') is None:
+        epitopes.pop('cta_sequence_bundle', None)
     if 'epitopes' in policy:
         policy['epitopes'] = epitopes
     definition = (graph, configuration, context, policy)

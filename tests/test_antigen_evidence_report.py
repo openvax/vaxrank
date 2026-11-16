@@ -42,7 +42,7 @@ def test_colo_partialness_support_and_catalog_have_distinct_subjects():
     sections = antigen_evidence_sections(antigen, data.source_evidence)
     displayed = rows(sections)
     assert displayed['Partial coding candidate'] == 'yes'
-    assert displayed['Ambiguous coding interpretation'] == 'yes'
+    assert displayed['Ambiguous coding interpretation'] == 'no'
     assert displayed['Allow partial coding candidates'] == 'yes'
     assert displayed['Allow ambiguous coding candidates'] == 'yes'
     assert displayed['RNA reconstruction support — fragments'] == candidate['rna_support']['fragments']

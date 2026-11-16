@@ -127,6 +127,8 @@ def epitope_config_from_args(args : argparse.Namespace, merged_config=None) -> E
     if merged_config is None:
         merged_config = load_vaxrank_config(args)
     epitope_config_kwargs = extract_epitope_config_kwargs(merged_config)
+    if getattr(args, 'cta_sequence_bundle', None) is not None:
+        epitope_config_kwargs['cta_sequence_bundle'] = args.cta_sequence_bundle
     if getattr(args, 'ms_evidence', False) or getattr(args, 'ms_evidence_package', None):
         options = dict(epitope_config_kwargs.get('ms_evidence') or {})
         if getattr(args, 'ms_evidence_package', None):
@@ -181,4 +183,4 @@ def has_epitope_config_overrides(args, merged_config):
             "min_epitope_score", "scoring_mode", "allele_free_evidence",
             "allele_selection_axis", "default_affinity_predictor",
             "default_stability_predictor", "default_presentation_predictor",
-            "comparison_reference", "patient_background_baseline"))
+            "comparison_reference", "patient_background_baseline", "cta_sequence_bundle"))

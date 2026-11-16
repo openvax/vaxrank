@@ -1099,6 +1099,9 @@ def require_annotations_for_template_reports(args, ranked):
 
 
 def add_external_rescoring_args(arg_parser):
+    arg_parser.add_argument('--cta-sequence-bundle', metavar='PATH',
+        help='Verified OncoRef sequence bundle for CTA peptide targeting. Use current for the installed '
+             'bundle. Unsafe matches are excluded; unresolved matches require review. Saved decisions replay offline.')
     arg_parser.add_argument('--host-reference', metavar='SNAPSHOT',
                             help='Experimental: ORFdata host proteome snapshot, including selected extra ORFs.')
     arg_parser.add_argument('--reference-context', metavar='JSON',

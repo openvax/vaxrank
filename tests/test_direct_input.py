@@ -16,6 +16,34 @@ from .test_core_logic_config import _make_epitope
 from .test_epitope_dataset import evidence, forbidden
 
 
+def test_direct_and_all_native_sources_share_prediction_design_and_report(direct, tmp_path, monkeypatch):
+    from dataclasses import replace
+    from .test_antigen_input import inputs as antigen_inputs
+    from .test_external_rescoring import ContextPredictor, ALLELES
+    native = antigen_inputs.__wrapped__()
+    native.scope = replace(native.scope, annotation='ensembl:110')
+    source = tmp_path / 'antigens.json'
+    native.save(source)
+    manifest = write_input_manifest(tmp_path / 'mixed.json', [('antigens', source)],
+        patient_id='patient', sample_id='sample', annotation='ensembl:110')
+    predictor = ContextPredictor()
+    monkeypatch.setattr('mhctools.cli.predictors_from_args', lambda args: [predictor])
+    monkeypatch.setattr('vaxrank.antigen_input.self_reference_matches',
+        lambda peptides, antigen, genome: {p: antigen.self_reference_match(p, False) for p in peptides})
+    saved, report = tmp_path / 'native.tsv', tmp_path / 'report.html'
+    run_cli(['--vcf', str(direct[0]), '--bam', str(direct[1]), '--mhc-predictor', 'random',
+        '--mhc-alleles', ','.join(ALLELES), '--ensembl-release', '110', '--input-manifest', manifest,
+        '--output-epitopes', str(saved), '--output-html-report', str(report),
+        '--vaccine-peptide-length', '10', '--no-processing-aware-annotation',
+        '--config-text', 'epitopes.score_expr=1.0',
+        '--config-text', 'vaccine_peptides.combined_score_expr=target_epitope_score'])
+    data = EpitopeDataset.load(saved)
+    assert data.mutation_fragments and predictor.calls and len(direct[3]) == 1
+    assert {a.kind for a in data.antigens.values()} == {a.kind for a in native.antigens.values()}
+    assert {p.source_format for p in data.provenance} == {'vcf_bam', 'antigens'}
+    assert 'Antigen biology and targeting' in report.read_text()
+
+
 @pytest.fixture
 def direct(tmp_path, monkeypatch):
     import varcode.cli

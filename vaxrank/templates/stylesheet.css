@@ -17,10 +17,11 @@ p { line-height: 1.45; }
     padding: 0.8em; background: #f2f6f8; border-left: 3px solid #326681; }
 .sequence-cell { font-family: monospace; word-break: break-all; }
 .candidate-ranking { table-layout: fixed; }
-.candidate-ranking th:nth-child(1) { width: 6%; }
-.candidate-ranking th:nth-child(2) { width: 27%; }
-.candidate-ranking th:nth-child(3) { width: 9%; }
-.candidate-ranking th:nth-child(4) { width: 35%; }
+.candidate-ranking th:nth-child(1) { width: 7%; }
+.candidate-ranking th:nth-child(2) { width: 25%; }
+.candidate-ranking th:nth-child(3) { width: 13%; }
+.candidate-ranking th:nth-child(4) { width: 32%; }
+.candidate-ranking th { word-break: normal; overflow-wrap: normal; }
 .candidate-ranking th:nth-child(5) { width: 23%; }
 .product-antigens { table-layout: fixed; }
 .product-antigens th:nth-child(1) { width: 30%; }
@@ -81,3 +82,13 @@ a { color: #245d7a; }
 .evidence-table { margin-top: 1.8em; }
 .score-calculations th:first-child { width: 18%; }
 .score-calculations th:nth-child(2) { width: 43%; }
+/* The default biological overview keeps source evidence beside its sequence. */
+.antigen-biology { margin: 1.2em 0 1.8em; border-top: 1px solid #ccd6dc; padding-top: .5em; page-break-inside: avoid; }
+#antigen-biology > .note, .comparison-label { page-break-after: avoid; }
+.source-kind { font-size: .8em; font-weight: normal; color: #34596a; }
+.biology-facts { display: grid; grid-template-columns: 13em 1fr; gap: .25em 1em; font-size: .9em; }
+.biology-facts dt { font-weight: bold; }
+.biology-facts dd { margin: 0; }
+.biology-sequence, .biology-comparison { font-family: monospace; font-size: 10pt; overflow-wrap: anywhere; }
+.biology-comparison { line-height: 1.35; padding: .5em; background: #f4f6f7; break-inside: avoid; }
+.comparison-label, .junction-description { margin-bottom: .25em; font-size: .9em; }

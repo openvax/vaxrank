@@ -76,15 +76,11 @@ platformdirs
 msgspec>=0.18.6,<1.0.0
 dnachisel>=3.2.0,<4.0.0
 serializable>=1.1.0,<2.0.0
-# OncoRef 1.23.1 supplies sequence-backed common CTA snapshots alongside the
-# historical annotation-bound APIs. The tested range runs through 1.27.0
-# (1.24.0 adds product-scoped clinical evidence; 1.25.0 widens the CTA candidate
-# universe and drops the Neither / Tumor-restricted categories). PirlyGenes, which
-# Topiary requires, still caps OncoRef at 1.24.0 (pirl-unc/pirlygenes#665), so
-# installs resolve to 1.24.0 until it lifts that cap. Saved policy/data identities
-# remain unchanged; package compatibility does not silently adopt a new
-# target-selection policy (#687).
-oncoref>=1.23.1,<2.0.0
+# Current verified sequence roles/representatives and their coverage manifest.
+# PirlyGenes 6.1.1 lifts the former cap and refreshes its owner-derived matrices.
+# The current targeting policy is selected with --cta-sequence-bundle; saved
+# evidence retains its original decisions for offline replay.
+oncoref>=1.38.0,<2.0.0
 # 0.42.6 accepts canonical PyEnsembl metadata for the pinned Ensembl builder.
 orfdata>=0.42.6,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
@@ -92,3 +88,7 @@ orfdata>=0.42.6,<1.0.0
 # / pip, but pinned explicitly so minimal / --no-deps installs don't break
 # at import time.
 packaging>=21.0
+# Batched exact peptide containment in OncoRef sequence segments.
+pyahocorasick>=2.0,<3
+# Protein alignments in the biological report (display only).
+biopython>=1.83,<2

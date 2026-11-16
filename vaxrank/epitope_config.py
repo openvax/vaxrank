@@ -167,6 +167,7 @@ class EpitopeConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     ms_evidence: Optional[dict] = None
     comparison_reference: str = 'annotation_reference'
     patient_background_baseline: str = 'focal'
+    cta_sequence_bundle: Optional[str] = None
 
     @property
     def allele_policy(self):

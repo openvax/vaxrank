@@ -82,7 +82,7 @@ def _native_serializable_classes():
         CTAReferenceEvidence, CTAReferenceResolution, PatientTumorExpressionEvidence,
     )
     from .cta_expression import (
-        CTAExpressionInput, CTAExpressionDecision, CTAExpressionResult,
+        CTAExpressionInput, CTAExpressionDecision, CTAExpressionResult, CTASequenceAssessment,
         CTATargetExclusionPolicy,
     )
     from .cta_identity import CTAAnnotationReference
@@ -136,7 +136,7 @@ def _native_serializable_classes():
         **{(cls.__module__, cls.__name__): cls for cls in (
             CTAAdmissionAssessment, CTAAdmissionPolicy, CTAOverrideEvidence,
             CTAReferenceEvidence, CTAReferenceResolution, PatientTumorExpressionEvidence,
-            CTAExpressionInput, CTAExpressionDecision, CTAExpressionResult,
+            CTAExpressionInput, CTAExpressionDecision, CTAExpressionResult, CTASequenceAssessment,
             CTATargetExclusionPolicy, SpeciesCTAAdmission, SpeciesCTAExpressionDecision,
             SpeciesCTAExpressionInput, SpeciesCTAExpressionResult,
             CTARestrictionAssessment, CTARestrictionEvidence, CTARestrictionFinding,
