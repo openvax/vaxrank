@@ -2,7 +2,7 @@
 {% if window_decisions %}
 <h3>Recorded window decisions</h3>
 <p>Identical displayed decision summaries share a reference. The native dataset retains all alternatives and source evidence.
-New records include the actual ordering rules and sort keys.</p>
+Ordering rules, sort keys and alternatives are available with candidate details.</p>
 {% for window in window_decisions %}<section class="window-decision">
 <h4 id="window-{{ window.identifier }}">{{ window.identifier }} &middot; {{ window.sequence or 'No eligible window' }}</h4>
 <p>Sources: {% for source in window.sources %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.
@@ -11,9 +11,10 @@ New records include the actual ordering rules and sort keys.</p>
 {% else %}<p class="note">Parent candidate coordinates were not recorded.</p>{% endif %}
 {% if window.none_eligible %}<p>No windows met the recorded eligibility constraints.</p>
 {% elif window.decision %}<p>Recorded rank {{ window.decision.selection_rank }}; {{ window.decision.decision_reason | replace('_', ' ') }}.
-Sort key: {{ window.decision.ordering_key | tojson | e }}. Ranking rules: {{ window.decision.ranking_rules | join(', ') }}.</p>
+{% if candidate_details %}Sort key: {{ window.decision.ordering_key | tojson | e }}. Ranking rules: {{ window.decision.ranking_rules | join(', ') }}.{% endif %}</p>
 {% else %}<p class="note">Historical selection order and tie-break decisions were not recorded.</p>{% endif %}
 <p>{{ window.self_status }}. {{ window.serum_status }}.</p>
+{% if candidate_details %}
 <p class="note">Ordering: {{ window.ordering_description }}. Recorded policy: {{ window.policy | tojson | e }}.
 {% if window.utility_selector %}Utility uses (target score − serum weight × at-risk target score) / (1 + self weight × non-CTA self score).{% endif %}</p>
 <table class="pure-table"><tbody>{% for label, value in window.metrics %}<tr><th>{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody></table>
@@ -26,5 +27,5 @@ Sort key: {{ window.decision.ordering_key | tojson | e }}. Ranking rules: {{ win
 <td>{{ alternative.target_score | display_epitope_value }} / {{ (alternative.utility if window.utility_selector else alternative.combined_score) | display_epitope_value }}</td><td>{{ (alternative.decision_reason or alternative.ineligibility_reason or 'Eligible; final choice not recorded') | replace('_', ' ') }}
 {% if alternative.selection_rank %}; rank {{ alternative.selection_rank }}{% endif %}
 {% if alternative.ordering_key %}<br>Sort key: {{ alternative.ordering_key | tojson | e }}{% endif %}</td></tr>{% endfor %}</tbody></table>{% endif %}
-</section>{% endfor %}{% endif %}
+{% endif %}</section>{% endfor %}{% endif %}
 {% endautoescape %}

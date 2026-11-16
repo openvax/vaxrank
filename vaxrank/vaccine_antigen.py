@@ -278,8 +278,11 @@ class VaccineAntigen(DataclassSerializable):
     source_identifier: str = ""
     source_metadata: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     rna_support: tuple[RNAFeatureEvidence, ...] = field(default_factory=tuple)
+    source_protein_offset: int = 0
 
     def __post_init__(self):
+        if type(self.source_protein_offset) is not int or self.source_protein_offset < 0:
+            raise ValueError('Source protein offset must be a nonnegative integer')
         object.__setattr__(self, "rna_support", validate_rna_support(self.rna_support, len(self.amino_acids)))
         if self.kind not in ANTIGEN_KINDS:
             raise ValueError(
@@ -344,6 +347,7 @@ class VaccineAntigen(DataclassSerializable):
             source_identifier=self.source_identifier,
             source_metadata=self.source_metadata,
             rna_support=slice_rna_support(self.rna_support, start, end),
+            source_protein_offset=self.source_protein_offset + start,
         )
 
     @classmethod

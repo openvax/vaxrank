@@ -79,16 +79,19 @@ def test_ncorf_masks_synonymous_and_tiled_support():
         assert coding['fully_tiled']
 
 
-def test_partial_ncorf_opt_in_keeps_all_real_colo829_alternatives():
+def test_supported_local_ncorfs_keep_all_real_colo829_alternatives():
     producer = result('colo829_dynll2')
     default = antigens_from_isovar(producer, tumor_specificity=attestation())
     assert len(default.antigens) == len(producer['protein_candidates']) == 300
-    assert not any(a.tumor_specificity.admits_construct for a in default.antigens.values())
+    assert any(a.tumor_specificity.admits_construct for a in default.antigens.values())
     relaxed = antigens_from_isovar(producer, tumor_specificity=attestation(),
                                   options=IsovarSourceOptions(admission=IsovarAdmission(
                                       allow_partial=True)))
     assert set(relaxed.antigens) == set(default.antigens)
-    assert not any(a.tumor_specificity.admits_construct for a in relaxed.antigens.values())
+    assert relaxed.antigens == default.antigens
+    strict = antigens_from_isovar(producer, somatic=True,
+                                  options={'admission': {'allow_partial': False}})
+    assert not any(a.tumor_specificity.admits_construct for a in strict.antigens.values())
     relaxed = antigens_from_isovar(producer, tumor_specificity=attestation(),
                                   options=IsovarSourceOptions(admission=IsovarAdmission(
                                       allow_partial=True, allow_ambiguous=True)))
@@ -249,7 +252,8 @@ def test_viral_coding_keeps_foreign_source_and_partial_boundaries():
     assert e7.tumor_specificity.admits_construct
     evidence = json.loads(dict(e7.source_metadata)['isovar_candidate'])
     assert evidence['reference_orfs'][0]['protein_matches_reference'] is True
-    partial, = antigens_from_isovar(result('viral_partial'), tumor_specificity=attestation()).antigens.values()
+    partial, = antigens_from_isovar(result('viral_partial'), tumor_specificity=attestation(),
+        options={'admission': {'allow_partial': False}}).antigens.values()
     assert not partial.tumor_specificity.admits_construct
     assert partial.amino_acids.startswith('L') and len(partial.amino_acids) == 20
 
@@ -323,8 +327,9 @@ def test_competing_frames_remain_ambiguous_after_window_rebasing(variant_inputs)
             row[key] = [value - prefix for value in row[key]]
     dataset = antigens_from_isovar(producer, tumor_specificity=attestation(),
                                    options={'admission': {'allow_partial': True}})
-    assert all('ambiguous_coding_candidate' in dataset.antigens[row['candidate_id']].tumor_specificity.rationale_code
-               for row in competing)
+    assert all(dataset.antigens[row['candidate_id']].tumor_specificity.admits_construct for row in competing)
+    assert all(json.loads(dict(dataset.antigens[row['candidate_id']].source_metadata)[
+        'isovar_candidate'])['competing_reference_frames'] == 2 for row in competing)
     relaxed = antigens_from_isovar(producer, tumor_specificity=attestation(),
         options={'admission': {'allow_partial': True, 'allow_ambiguous': True}})
     assert all(relaxed.antigens[row['candidate_id']].tumor_specificity.admits_construct for row in competing)
@@ -452,6 +457,49 @@ def test_live_bam_request_and_saved_replay_share_owner_contract(variant_inputs, 
     replay = load_isovar_input(path)
     assert replay.antigens == live.antigens
     assert next(iter(replay.source_evidence.values()))['isovar_result'] == evidence['isovar_result']
+
+
+def test_one_catalog_request_reconstructs_vcf_without_per_variant_envelopes(variant_inputs, tmp_path):
+    import hashlib
+    import pysam
+    from orfdata import ORFCatalog, ORFRecord
+    reference, = variant_inputs['reference_orfs']
+    catalog_path = tmp_path / 'catalog.json'
+    exported = reference.to_dict()
+    record = ORFRecord(orf_id='catalog-orf', gene_id='G', gene_name='NONCODING', transcript_id='T',
+        contig='1', strand='+', coding_blocks=tuple(map(tuple, exported['coding_blocks'])),
+        protein_sequence=exported['protein_sequence'], biotype='lncRNA_ORF', ribosome_studies=(), peptides=(),
+        genome_build=reference.context.genome_build, species=reference.context.species,
+        taxon_id=reference.context.taxon_id, reference_context=reference.context, source='synthetic')
+    ORFCatalog([record], dict(
+        genome_build=reference.context.genome_build, species=reference.context.species,
+        taxon_id=reference.context.taxon_id, coordinates='1-based-inclusive',
+        sources=['synthetic'])).save(catalog_path)
+    bam_path = tmp_path / 'input.bam'
+    sequence = variant_inputs['read_evidence'].alt_reads[0].sequence
+    with pysam.AlignmentFile(bam_path, 'wb', header={'SQ': [{'SN': '1', 'LN': 1000}]}) as bam:
+        for index in range(2):
+            read = pysam.AlignedSegment(bam.header)
+            read.query_name, read.query_sequence = 'read' + str(index), sequence
+            read.reference_id, read.reference_start = 0, 99
+            read.cigarstring, read.mapping_quality = str(len(sequence)) + 'M', 60
+            read.query_qualities = [30] * len(sequence)
+            bam.write(read)
+    pysam.index(str(bam_path))
+    (tmp_path / 'somatic.vcf').write_text('##fileformat=VCFv4.2\n'
+        '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n1\t134\t.\tC\tT\t.\tPASS\t.\n')
+    path = tmp_path / 'request.json'
+    path.write_text(json.dumps(dict(schema=ISOVAR_INPUT_SCHEMA, somatic=True,
+        scope=dict(sample_id='sample'), options=dict(protein=dict(min_variant_sequence_coverage=1)),
+        reconstruct=dict(family='variant_orfs', inputs=dict(vcf='somatic.vcf', bam='input.bam',
+            catalog=catalog_path.name, expected_sha256=hashlib.sha256(catalog_path.read_bytes()).hexdigest())))))
+    data = load_isovar_input(path, genome=variant_inputs['variant'].genome)
+    assert any(a.amino_acids == 'MAAAAAVAAAA' and a.tumor_specificity.admits_construct
+               for a in data.antigens.values())
+    assert all(json.loads(dict(a.source_metadata)['isovar_candidate'])['coding_reference']['kind'] == 'extra_orf'
+               for a in data.antigens.values())
+    evidence, = data.source_evidence.values()
+    assert evidence['reconstruction']['request']['inputs']['vcf'] == 'somatic.vcf'
 
 
 def test_isovar_manifest_combines_fresh_sequences_and_saved_predictions(inputs, dependencies, tmp_path):

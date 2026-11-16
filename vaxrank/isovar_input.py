@@ -37,7 +37,7 @@ def _configured_read_collector(family, settings):
 
 
 def reconstruct_isovar_antigens(family, *, inputs, options=None, scope=None, species='',
-                                tumor_specificity=None, candidate_attestations=None):
+                                tumor_specificity=None, candidate_attestations=None, somatic=False):
     """Call a public Isovar producer and adapt its complete result.
 
     ``inputs`` contains the selected function's typed data arguments: for
@@ -97,6 +97,7 @@ def reconstruct_isovar_antigens(family, *, inputs, options=None, scope=None, spe
     resolved['reconstruction'] = controls
     result = function(**data, **controls)
     dataset = antigens_from_isovar(result, scope=scope, species=species,
+        somatic=somatic,
         tumor_specificity=tumor_specificity, candidate_attestations=candidate_attestations,
         options=IsovarSourceOptions(admission=options.admission))
     for evidence in dataset.source_evidence.values():
@@ -176,6 +177,42 @@ def _request_inputs(family, inputs, genome, base, stack):
     return data
 
 
+def _reconstruct_catalog_input(inputs, genome, base, options, adapter):
+    """Apply one pinned ORFdata catalogue to all overlapping VCF variants."""
+    from varcode import load_vcf
+    from orfdata import load_catalog
+    from isovar.cli.rna_args import alignment_file_from_args
+    from isovar.default_parameters import NUM_RNA_DECOMPRESSION_THREADS
+    from .antigen_input import AntigenDataset
+    allowed = {'vcf', 'bam', 'catalog', 'expected_sha256', 'num_rna_decompression_threads'}
+    if set(inputs) - allowed or not {'vcf', 'bam', 'catalog', 'expected_sha256'} <= set(inputs):
+        raise ValueError('Catalogue reconstruction requires vcf, bam, catalog and expected_sha256')
+    if genome is None:
+        raise ValueError('Catalogue reconstruction requires a selected host annotation')
+    catalog = load_catalog(_resolve_path(inputs['catalog'], base), expected_sha256=inputs['expected_sha256'])
+    variants = load_vcf(_resolve_path(inputs['vcf'], base), genome=genome)
+    scope = adapter['scope']
+    if not scope.sample_id:
+        raise ValueError('Catalogue reconstruction requires a declared RNA sample_id')
+    result = AntigenDataset({}, scope=scope)
+    with alignment_file_from_args(SimpleNamespace(bam=_resolve_path(inputs['bam'], base),
+            num_rna_decompression_threads=inputs.get('num_rna_decompression_threads',
+                                                    NUM_RNA_DECOMPRESSION_THREADS))) as bam:
+        for variant in variants:
+            references = [orf for transcript in variant.transcripts for orf in catalog.for_transcript(transcript)]
+            dataset = reconstruct_isovar_antigens('variant_orfs', options=options, **adapter,
+                inputs=dict(variant=variant, bam=bam, reference_orfs=references,
+                            sample_id=scope.sample_id, source=str(inputs['bam'])))
+            for name, antigen in dataset.antigens.items():
+                if name in result.antigens and result.antigens[name] != antigen:
+                    raise ValueError('Catalogue variants produced conflicting candidate identities')
+                result.antigens[name] = antigen
+            result.source_evidence.update(dataset.source_evidence)
+    if not result.source_evidence:
+        raise ValueError('Catalogue reconstruction VCF contains no variants')
+    return result
+
+
 def load_isovar_input(path, *, scope=None, genome=None, options=None, configured_sources=None):
     """Read one source request/result, resolving file paths beside its envelope.
 
@@ -191,7 +228,7 @@ def load_isovar_input(path, *, scope=None, genome=None, options=None, configured
         document = dict(schema=ISOVAR_INPUT_SCHEMA, result=document)
     if document.get('schema') != ISOVAR_INPUT_SCHEMA:
         raise ValueError('Expected ' + ISOVAR_INPUT_SCHEMA + ' or a supported Isovar result')
-    allowed = {'schema', 'scope', 'species', 'tumor_specificity', 'candidate_attestations',
+    allowed = {'schema', 'scope', 'species', 'somatic', 'tumor_specificity', 'candidate_attestations',
                'options', 'result', 'reconstruct'}
     if set(document) - allowed:
         raise ValueError('Unknown Isovar input fields: ' + ', '.join(sorted(set(document) - allowed)))
@@ -199,6 +236,7 @@ def load_isovar_input(path, *, scope=None, genome=None, options=None, configured
         raise ValueError('Isovar input requires exactly one of result or reconstruct')
     scope = combine_scopes(scope or InputScope(), scope_from_mapping(document.get('scope', {}), str(path)), str(path))
     adapter = dict(scope=scope, species=document.get('species', ''),
+                   somatic=document.get('somatic', False),
                    tumor_specificity=document.get('tumor_specificity'),
                    candidate_attestations=document.get('candidate_attestations'))
     sources = configured_sources or {}
@@ -221,9 +259,12 @@ def load_isovar_input(path, *, scope=None, genome=None, options=None, configured
         if isinstance(raw_inputs, str):
             input_path = Path(_resolve_path(raw_inputs, base))
             raw_inputs, base = _read_json(input_path), input_path.parent
-        with ExitStack() as stack:
-            data = _request_inputs(family, raw_inputs, genome, base, stack)
-            dataset = reconstruct_isovar_antigens(family, inputs=data, options=resolved, **adapter)
+        if family == 'variant_orfs' and 'vcf' in raw_inputs:
+            dataset = _reconstruct_catalog_input(raw_inputs, genome, base, resolved, adapter)
+        else:
+            with ExitStack() as stack:
+                data = _request_inputs(family, raw_inputs, genome, base, stack)
+                dataset = reconstruct_isovar_antigens(family, inputs=data, options=resolved, **adapter)
         for evidence in dataset.source_evidence.values():
             evidence['reconstruction']['request'] = json.loads(json.dumps(request))
     return dataset

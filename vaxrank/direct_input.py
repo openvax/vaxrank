@@ -19,12 +19,12 @@ from .input_scope import (
 )
 
 
-def prepare_direct_report(args, reports, epitope_config):
-    """Validate pooled scope, then predict only the direct candidates."""
+def direct_input_scope(args, epitope_config):
+    """Resolve actual VCF/RNA scope before any source starts prediction."""
+    from .epitope_config import EpitopeConfig
+    epitope_config = epitope_config or EpitopeConfig()
     from mhctools.cli import mhc_alleles_from_args
     from varcode.cli import variant_collection_from_args
-    from .cli.entry_point import run_vaxrank_from_parsed_args
-    from .vaf import extract_dna_vaf_by_variant
 
     manifest = getattr(args, 'input_manifest', None)
     if not manifest:
@@ -63,6 +63,19 @@ def prepare_direct_report(args, reports, epitope_config):
     provisional = InputProvenance(
         input_id='direct', source_format='vcf_bam', path='; '.join(paths), scope=scope,
         content_sha256='')
+    validate_input_scopes([provisional], prediction_alleles=alleles,
+        retained_genomes={'direct': tuple({id(v.genome): v.genome for v in variants}.values())},
+        reference_context=context)
+    return provisional, variants, context, declarations, paths, alleles
+
+
+def prepare_direct_report(args, reports, epitope_config):
+    """Validate pooled scope, then predict only the direct candidates."""
+    from .cli.entry_point import run_vaxrank_from_parsed_args
+    from .vaf import extract_dna_vaf_by_variant
+    provisional, variants, context, declarations, paths, alleles = direct_input_scope(args, epitope_config)
+    scope = provisional.scope
+    manifest = args.input_manifest
     shared = validate_input_scopes([provisional] + [r.input_provenance for r in reports],
                           prediction_alleles=alleles,
                           retained_genomes={'direct': tuple({id(v.genome): v.genome for v in variants}.values())},

@@ -19,7 +19,7 @@ class IsovarAdmission(msgspec.Struct, frozen=True, kw_only=True, forbid_unknown_
     independent molecules or evidence of protein translation.
     """
 
-    allow_partial: bool = False
+    allow_partial: bool = True
     allow_ambiguous: bool = False
     min_fragments: int = 2
 

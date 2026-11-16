@@ -124,12 +124,16 @@ The Python `vaxrank.external_rescoring.prepare_reports` API accepts the same
 `("antigens", path)` inputs and an `antigen_predictor_factory(scope)` returning
 a Topiary predictor. The factory runs once after validation.
 
-Direct VCF/BAM still runs its source adapter first; add
-its saved candidate file to this manifest. Fresh/additive table rescoring
+Direct `--vcf`/`--bam` inputs can join this manifest in the same run; their actual
+reference and declared patient scope are checked before prediction. Fresh/additive table rescoring
 is a separate step. Pooling does not calibrate different models or evidence
 types: use an explicit [selection policy](mixed-antigen-design.md).
 
 ## Add CTA expression
+
+For current qualified representatives and peptide-level Unsafe containment, see
+the [unified workflow](unified-antigen-workflow.md). The historical admission
+options below remain available when no current sequence bundle is selected.
 
 Add a `cta_expression` entry beside `antigens` or `epitopes` to select CTA targets
 from patient expression before prediction:

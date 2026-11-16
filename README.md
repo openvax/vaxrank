@@ -136,6 +136,7 @@ Full documentation: <https://openvax.github.io/vaxrank/>
 Experimental workflows: [MS-supported scoring](docs/ms-evidence.md),
 [unified antigen inputs](docs/antigen-inputs.md),
 [Isovar ncORF, SV, viral and isoform inputs](docs/isovar-inputs.md),
+[unified mutations/ncORFs/SVs/fusions/CTA workflow](docs/unified-antigen-workflow.md),
 [CTA expression inputs](docs/design/expression-cta-inputs.md),
 [mixed mutation/CTA/viral selection](docs/mixed-antigen-design.md) and
 [window exposure](docs/core-window-exposure.md).

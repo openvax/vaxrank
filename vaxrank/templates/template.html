@@ -28,6 +28,8 @@
                 <a href="#input-coverage">Input coverage</a> &middot; <a href="#products">Emitted products</a> &middot;
                 {% if selection_policy is defined %}<a href="#selection-rules">Selection rules</a> &middot; {% endif %}
                 <a href="#ranking">Candidate ranking</a> &middot; <a href="#source-outcomes">Source outcomes</a> &middot;
+                {% if biological_candidates %}<a href="#antigen-biology">Antigen biology</a> &middot;{% endif %}
+                {% if cta_targeting_summary %}<a href="#cta-targeting">CTA regions</a> &middot;{% endif %}
                 {% if candidate_details and variants %}<a href="#candidate-details">Candidate groups</a> &middot;
                 <a href="#shared-evidence">Supporting evidence</a> &middot; {% endif %}
                 <a href="#score-guide">Score guide</a> &middot; <a href="#run-details">Methods and provenance</a>
@@ -37,6 +39,7 @@
             <section class="appendix">{% include "templates/products.html" %}</section>
             {% if selection_policy is defined %}{% include "templates/selection_policy.html" %}{% endif %}
             {% if ranked_candidates is defined %}{% include "templates/ranking.html" %}{% endif %}
+            {% include "templates/antigen_biology.html" %}
             {% if input_coverage %}{% include "templates/source_outcomes.html" %}{% endif %}
             {% if candidate_details | default(true) and variants %}
             {% include "templates/candidate_details.html" %}
