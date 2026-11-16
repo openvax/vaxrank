@@ -10,7 +10,7 @@ Comparisons show recorded reference sequences or computed backgrounds, not obser
 <div class="biology-sequence">{{ antigen.sequence_html }} <small>source aa {{ antigen.sequence_start }}–{{ antigen.sequence_end }}</small></div>
 {% for junction in antigen.junctions %}
 <p class="junction-description"><strong>{{ junction.left | e }} → {{ junction.right | e }}</strong>
-{% for start, end in junction.boundaries %} · {% if start == end %}junction after aa {{ start }}{% else %}split codon at aa {{ start + 1 }}{% endif %}{% endfor %}</p>
+{% for start, end in junction.boundaries %} · {% if start == end %}junction after source aa {{ antigen.sequence_start - 1 + start }}{% else %}split codon at source aa {{ antigen.sequence_start + start }}{% endif %}{% endfor %}</p>
 {% endfor %}
 {% for comparison in antigen.comparisons %}
 <p class="comparison-label">{{ comparison.label | e }} · tumor aa {{ comparison.tumor_start }}–{{ comparison.tumor_end }}, reference aa {{ comparison.reference_start }}–{{ comparison.reference_end }}</p>

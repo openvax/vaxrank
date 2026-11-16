@@ -6,7 +6,7 @@ Reference comparisons are not measurements of patient-normal protein.
 {{ antigen.rank }}. {{ antigen.gene }} — {{ antigen.kind }}
 {% for label, value in antigen.facts %}{{ label }}: {{ value }}
 {% endfor %}Tumor: {{ antigen.sequence }} [source aa {{ antigen.sequence_start }}–{{ antigen.sequence_end }}]
-{% for junction in antigen.junctions %}Junction: {{ junction.left }} -> {{ junction.right }}{% for start, end in junction.boundaries %}; {% if start == end %}after aa {{ start }}{% else %}split codon at aa {{ start + 1 }}{% endif %}{% endfor %}
+{% for junction in antigen.junctions %}Junction: {{ junction.left }} -> {{ junction.right }}{% for start, end in junction.boundaries %}; {% if start == end %}after source aa {{ antigen.sequence_start - 1 + start }}{% else %}split codon at source aa {{ antigen.sequence_start + start }}{% endif %}{% endfor %}
 {% endfor %}{% for comparison in antigen.comparisons %}{{ comparison.label }}:
 {% for start in range(0, comparison.tumor | length, 65) %}Tumor  {{ comparison.tumor[start:start + 65] }}
        {{ comparison.differences[start:start + 65] }}
@@ -18,6 +18,6 @@ Ref    {{ comparison.reference[start:start + 65] }}
 {% if cta_targeting_summary %}
 === CTA regions assessed against OncoRef ===
 Positions are peptide starts (1-based), grouped by peptide length.
-{% for source in cta_targeting_summary %}{{ source.gene }} — {{ source.identifier }}
+{% for source in cta_targeting_summary %}{{ source.gene }}{% if source.gene_id %} — {{ source.gene_id }}{% endif %}
 {% for row in source.rows %}{{ row.length }} aa; starts {{ row.starts }}: {{ row.status }}{% if row.status == 'excluded' %} (do not target: Unsafe containment){% endif %}; {{ row.matches }}
 {% endfor %}{% endfor %}{% endif %}
