@@ -94,4 +94,6 @@ def run_reporting_user_errors(prog, function, *args, **kwargs):
     try:
         return function(*args, **kwargs)
     except USER_ERRORS as error:
-        exit_with_user_error(error, prog=prog, traceback_hint=False)
+        # Companion commands expose no verbosity option. Do not inherit a
+        # caller's argv (for example pytest -v or an embedding application).
+        exit_with_user_error(error, args_list=(), prog=prog, traceback_hint=False)
