@@ -839,6 +839,18 @@ class TemplateDataCreator(object):
                 selected_products=sorted(selected)))
         return rows
 
+    def _biological_candidates(self):
+        from .antigen_biology import antigen_biology
+        rows = []
+        for _, peptides in self.ranked_variants_with_vaccine_peptides:
+            if not peptides:
+                continue
+            row = antigen_biology(peptides[0].antigen, source_evidence=self.source_evidence,
+                                  peptides=peptides[:1])
+            row['rank'] = len(rows) + 1
+            rows.append(row)
+        return rows
+
     def _product_data(self):
         """Small template view of the products already written by the CLI."""
         from .assembly_antigens import source_matches_candidate, summarize_products
@@ -1097,6 +1109,9 @@ class TemplateDataCreator(object):
 
         self.template_data.update({
             'patient_info': patient_info,
+            'biological_candidates': self._biological_candidates(),
+            'cta_targeting_summary': [value for value in self.source_evidence.values()
+                if value.get('schema') == 'vaxrank.cta_targeting_summary.v1'],
             'patient_summary': {key: value for key, value in patient_info.items()
                                 if key in {'Patient ID', 'Vaccine type', 'MHC alleles'}},
             'prediction_models': model_inventory(self.ranked_variants_with_vaccine_peptides,
@@ -1213,6 +1228,8 @@ def new_columns():
     names = [
         'source_rank', 'window_rank', 'source_kind', 'source_identifier',
         'coding_context', 'coding_references',
+        'source_protein_start', 'source_protein_end', 'biological_evidence',
+        'reference_comparisons', 'junctions', 'cta_targeting',
         'gene_name', 'gene_ids', 'transcript_ids', 'protein_ids', 'source_species',
         'amino_acids', 'targetable_intervals', 'chr', 'pos', 'ref', 'alt',
         'mutation_start', 'mutation_end', 'combined_score', 'expression_score',
@@ -1331,6 +1348,8 @@ def make_csv_report(
         rows = []
         for j, peptide in enumerate(peptides, 1):
             antigen = peptide.antigen
+            from .antigen_biology import antigen_biology
+            biology = antigen_biology(antigen, source_evidence=source_evidence, peptides=[peptide])
             fragment = peptide.mutant_protein_fragment
             variant = source if fragment is not None else None
             genes = set(json.loads(dict(antigen.source_metadata).get('gene_ids', '[]')))
@@ -1342,6 +1361,10 @@ def make_csv_report(
                 source_rank=i, window_rank=j, source_kind=antigen.kind,
                 coding_context=coding_context_label(coding_contexts(antigen, source_evidence)),
                 coding_references=json.dumps(coding_contexts(antigen, source_evidence), sort_keys=True),
+                source_protein_start=biology['sequence_start'], source_protein_end=biology['sequence_end'],
+                biological_evidence='; '.join('%s: %s' % pair for pair in biology['facts']),
+                reference_comparisons=json.dumps(biology['comparisons']),
+                junctions=json.dumps(biology['junctions']), cta_targeting=json.dumps(biology['targeting']),
                 source_identifier=(variant.short_description if variant is not None else antigen.display_identifier),
                 gene_name=antigen.gene_name, gene_ids=json.dumps(sorted(genes)),
                 transcript_ids=json.dumps(list(antigen.transcript_ids)),
@@ -1372,6 +1395,13 @@ def make_csv_report(
     if excel_report_path:
         ensure_parent_dir(excel_report_path)
         with pd.ExcelWriter(excel_report_path, engine='openpyxl') as writer:
+            cta_rows = [dict(gene=source['gene'], source_identifier=source['identifier'],
+                            bundle_id=source['bundle_id'], **row)
+                        for source in (source_evidence or {}).values()
+                        if source.get('schema') == 'vaxrank.cta_targeting_summary.v1'
+                        for row in source['rows']]
+            if cta_rows:
+                frames['CTA targeting'] = pd.DataFrame(cta_rows)
             for sheet, frame in [('All', combined), *frames.items()]:
                 frame.to_excel(writer, sheet_name=sheet, index=False)
                 worksheet = writer.sheets[sheet]

@@ -8,6 +8,7 @@ Vaccine Design Report
 {% include "templates/products.txt" %}
 {% if selection_policy is defined %}{% include "templates/selection_policy.txt" %}{% endif %}
 {% if ranked_candidates is defined %}{% include "templates/ranking.txt" %}{% endif %}
+{% include "templates/antigen_biology.txt" %}
 {% if input_coverage %}{% include "templates/source_outcomes.txt" %}{% endif %}
 
 {% if candidate_details | default(true) and variants %}

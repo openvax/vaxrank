@@ -116,6 +116,7 @@ def _variant_frame(row, reference, schema):
 def _variants(result):
     models = {m['model_id']: m['reference'] for m in result['models']}
     frames = {}
+    model_frames = {}
     for row in result['protein_candidates']:
         reference = models[row['model_id']]
         strand, phase, table = _variant_frame(row, reference, result['schema'])
@@ -123,6 +124,8 @@ def _variants(result):
         # strand) only establishes a shared frame within the same transcript.
         orientation = strand or (reference['reference_key'], reference['resolved_transcript']['id'])
         frames.setdefault(row['rna_candidate_id'], set()).add(
+            (orientation, phase, table))
+        model_frames.setdefault((row['rna_candidate_id'], row['model_id']), set()).add(
             (orientation, phase, table))
     for row in result['protein_candidates']:
         reference = models[row['model_id']]
@@ -139,7 +142,10 @@ def _variants(result):
         support = row['rna_support']
         yield _Candidate(row['candidate_id'], 'mutation', amino, intervals, support['fragments'],
             partial=row['sequence_extent'] != 'complete_coding_candidate',
-            ambiguous=len(frames[row['rna_candidate_id']]) > 1,
+            # Distinct supplied coding models can legitimately translate the
+            # same RNA in different frames. Keep each model; their coexistence
+            # is not an unresolved frame within this candidate.
+            ambiguous=strand is None or len(model_frames[(row['rna_candidate_id'], row['model_id'])]) > 1,
             reasons=() if row['coding_support']['fully_tiled'] else ('coding_interval_not_observed',),
             gene_names=(row['gene_name'],),
             gene_ids=(reference.get('source_gene_id'),) if reference['on_source_transcript'] else (),
@@ -147,9 +153,16 @@ def _variants(result):
             species=reference['resolved_transcript'].get('species') or '',
             evidence=dict(model_id=row['model_id'], rna_candidate_id=row['rna_candidate_id'],
                           coding_reference=reference_context(reference),
+                          reference_allele_counterfactual_protein=row.get('reference_allele_counterfactual_protein'),
+                          reference_protein_window=row.get('reference_protein_window'),
+                          comparison_scope=row.get('comparison_scope'),
+                          translation_observed=row.get('translation_observed'),
+                          initiation_observed=row.get('initiation_observed'),
+                          translation_evidence=reference.get('evidence', {}),
                           rna_support=support, coding_support=row['coding_support'],
                           reference_orf_source_gene_id=reference.get('source_gene_id'),
                           reference_strand=strand, variant_codon_phase=phase,
+                          competing_reference_frames=len(frames[row['rna_candidate_id']]),
                           sequence_extent=row['sequence_extent'], translation_table=table,
                           **({'translation_table_source': row['translation_table_source']}
                              if result['schema'] == 'isovar.variant_rna_orfs.v2' else {})))
@@ -221,6 +234,11 @@ def _sv_export(result, observations=None):
                 transcripts=transcripts,
                 evidence=dict(candidate_id=row['candidate_id'], occurrence_index=index,
                               path_id=occurrence['path_id'], rna_support=row['rna_support'],
+                              junctions=occurrence['junctions'],
+                              reference_comparisons=occurrence.get('reference_comparisons', []),
+                              translation_observed=row.get('translation_observed'),
+                              initiation_observed=row.get('initiation_observed'),
+                              coding_start=low,
                               occurrence_rna_support=support,
                               uncertainty_flags=row['uncertainty_flags'], translation_table=1))
 
@@ -243,6 +261,9 @@ def _sv(result):
                 partial=not (row['complete_5prime'] and row['ends_with_stop_codon']),
                 ambiguous=path['frame_status'] != 'translated', transcripts=tuple(row['transcript_ids']),
                 evidence=dict(path_id=path['path_id'], translation_index=index, translation_table=1,
+                              junctions=junctions, coding_start=low,
+                              translation_observed=row.get('translation_observed'),
+                              rna_support={'fragments': min(supports) if supports else None},
                               frame_evidence=row['frame_evidence'], support_scope='minimum_direct_junction_fragments'))
     yield from _sv_export(export_sv_rna_orfs(result), observations=result['observations'])
 
@@ -309,7 +330,11 @@ def _fusion(result):
             path['junctions'][0]['direct_support']['fragments'],
             partial=not (row['complete_5prime'] and row['ends_with_stop_codon']),
             ambiguous=result['status'] != 'translated', transcripts=antigen.transcript_ids,
-            evidence=dict(translation_index=index, translation_table=1))
+            gene_names=(antigen.gene_name,), gene_ids=(antigen.gene_id,),
+            evidence=dict(translation_index=index, translation_table=1,
+                          junctions=path['junctions'], coding_start=row['translation_start'],
+                          rna_support=path['junctions'][0]['direct_support'],
+                          translation_observed=row.get('translation_observed')))
 
 
 def _attestation(value):
@@ -325,19 +350,33 @@ def _attestation(value):
 
 
 def antigens_from_isovar(result, *, scope=None, species='', tumor_specificity=None,
-                         candidate_attestations=None, options=None):
+                         candidate_attestations=None, options=None, somatic=False):
     """Adapt all supported Isovar hypotheses into one native antigen dataset.
 
     ``tumor_specificity`` is an explicit source-wide assertion; use
     ``candidate_attestations`` to restrict it to reviewed candidate IDs instead.
-    RNA support never supplies this assertion. Partial/ambiguous candidates
-    require the corresponding admission opt-in in addition to an attestation.
+    ``somatic=True`` declares somatic event provenance without a separate
+    attestation. RNA support never supplies that declaration. Supported local
+    coding windows are accepted; unresolved frames require an explicit opt-in.
     Full source results and decisions survive native antigen/prediction replay.
     """
     result = json.loads(_json(result))
     family = RESULT_FAMILIES.get(result.get('schema'))
     if family is None:
         raise ValueError('Unsupported Isovar result schema: ' + str(result.get('schema')))
+    if type(somatic) is not bool:
+        raise ValueError('somatic must be a boolean declaration about the input event')
+    if somatic:
+        if family not in ('variant_orfs', 'protein_hypotheses', 'sv', 'fusion'):
+            raise ValueError('Somatic event declarations apply only to mutations, SVs and fusions')
+        if tumor_specificity is not None:
+            raise ValueError('Declare somatic origin or tumor_specificity, not both')
+        tumor_specificity = TumorSpecificityAttestation(status='admitted',
+            evidence_kind='declared_somatic_event', evidence_source='Vaxrank somatic source input',
+            patient_specific=True, rationale_code='somatic_event_with_source_supported_target',
+            evidence_records=(TumorSpecificityEvidence(evidence_kind='somatic_origin_declaration',
+                evidence_source='Vaxrank source input', sample_id=result.get('sample_id', ''),
+                patient_specific=True, passed=True),))
     options = source_options(options)
     if options.reads or options.protein or options.reconstruction:
         raise ValueError('Reconstruction controls cannot be applied to a saved Isovar result')
@@ -390,9 +429,13 @@ def antigens_from_isovar(result, *, scope=None, species='', tumor_specificity=No
             protein_ids=tuple(sorted({s for s in candidate.proteins if s})), species=candidate.species or species,
             source_identifier=key, source_metadata=(('isovar_evidence_id', identity), ('isovar_family', family),
                 ('gene_ids', _json(genes)), ('isovar_candidate', _json(dict(
-                    candidate.evidence, partial_coding_candidate=candidate.partial,
+                    candidate.evidence, protein_sequence=candidate.protein,
+                    partial_coding_candidate=candidate.partial,
                     ambiguous_coding_candidate=candidate.ambiguous)))))
-        decisions.append(dict(candidate_id=key, status=attestation.status, reasons=reasons,
+        decision_reasons = list(reasons)
+        if not requested.admits_construct:
+            decision_reasons.append(requested.rationale_code or 'missing_tumor_specificity')
+        decisions.append(dict(candidate_id=key, status=attestation.status, reasons=decision_reasons,
                               requested_tumor_specificity=asdict(requested)))
     if set(candidate_attestations) - set(antigens):
         raise ValueError('Attestations name unknown Isovar candidates')

@@ -7,6 +7,19 @@ import msgspec
 
 from .vaccine_antigen import ANTIGEN_KINDS
 
+ANTIGEN_SELECTION_TYPES = ANTIGEN_KINDS | {'ncORF'}
+
+
+def normalize_selection_type(value):
+    return next((kind for kind in ANTIGEN_SELECTION_TYPES if kind.lower() == value.lower()), value)
+
+
+def selection_type(source):
+    if source['kind'] == 'mutation' and any(
+            context.get('kind') == 'extra_orf' for context in source.get('coding_contexts', ())):
+        return 'ncORF'
+    return source['kind']
+
 
 @dataclass(frozen=True)
 class AntigenAllocation:
@@ -21,8 +34,8 @@ class AntigenAllocation:
             raise ValueError('Unknown recorded antigen allocation mode: %r' % self.mode)
         for limits in (self.min_per_kind, self.max_per_kind):
             for kind, count in limits.items():
-                if kind not in ANTIGEN_KINDS:
-                    raise ValueError('Unknown antigen type %r; choose from %s' % (kind, sorted(ANTIGEN_KINDS)))
+                if kind not in ANTIGEN_SELECTION_TYPES:
+                    raise ValueError('Unknown antigen type %r; choose from %s' % (kind, sorted(ANTIGEN_SELECTION_TYPES)))
                 if type(count) is not int or count < 0:
                     raise ValueError('Antigen type limits must be nonnegative integers')
         for kind, minimum in self.min_per_kind.items():
@@ -57,17 +70,17 @@ def allocate_antigens(antigens, policy, audit):
     ordered, decisions = [], []
     while pending:
         eligible = [(index, antigen) for index, antigen in pending
-                    if counts[antigen.sources[0]['kind']] < policy.max_per_kind.get(
-                        antigen.sources[0]['kind'], len(antigens))]
+                    if counts[selection_type(antigen.sources[0])] < policy.max_per_kind.get(
+                        selection_type(antigen.sources[0]), len(antigens))]
         if not eligible:
             break
         def key(item):
             index, antigen = item
-            kind = antigen.sources[0]['kind']
+            kind = selection_type(antigen.sources[0])
             deficit = counts[kind] < policy.min_per_kind.get(kind, 0)
             return (not deficit, counts[kind] if deficit else 0, index)
         index, antigen = min(eligible, key=key)
-        kind = antigen.sources[0]['kind']
+        kind = selection_type(antigen.sources[0])
         reason = ('representation_goal' if counts[kind] < policy.min_per_kind.get(kind, 0)
                   else 'ranked_order')
         counts[kind] += 1
@@ -75,7 +88,7 @@ def allocate_antigens(antigens, policy, audit):
         decisions.append(dict(name=antigen.name, kind=kind, original_order=index + 1,
                               allocation_order=len(ordered), reason=reason))
         pending.remove((index, antigen))
-    decisions.extend(dict(name=a.name, kind=a.sources[0]['kind'], original_order=i + 1,
+    decisions.extend(dict(name=a.name, kind=selection_type(a.sources[0]), original_order=i + 1,
                           allocation_order=None, reason='antigen_type_cap') for i, a in pending)
     audit['allocation'] = dict(policy=asdict(policy), unit='unique_antigen_sequence',
                                attribution='first_ranked_source', decisions=decisions)

@@ -418,7 +418,7 @@ def _observed_alleles(report):
 def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, alleles=(),
                  antigen_predictor_factory=None, antigen_alleles=(), epitope_config=None,
                  prepared_reports=(), cta_admission_writer=None, host_reference=None,
-                 isovar_sources=None, patient_backgrounds=None):
+                 isovar_sources=None, patient_backgrounds=None, validation_provenance=()):
     """Validate every input before predicting new sequences or scoring evidence.
 
     Experimental ``antigens`` and admitted ``cta_expression`` inputs need an ``antigen_predictor_factory``
@@ -524,7 +524,8 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
             if fmt == 'cta_expression':
                 source = CTAExpressionSource.load(path, options=declarations.get('cta_expression'),
                     scope=declared, genome=genome, manifest_path=manifest_path, declarations=declarations,
-                    host_reference=host_reference)
+                    host_reference=host_reference,
+                    sequence_bundle=(epitope_config.cta_sequence_bundle if epitope_config else None))
                 provenance = source.provenance
             else:
                 source = sequences[input_index]
@@ -572,7 +573,7 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
                                  'predict the source antigens with the selected reference first')
     loaded = [report for report in reports if report is not None]
     shared_scope = validate_input_scopes(
-        [report.input_provenance for report in loaded] + [p for _, _, p in pending],
+        [report.input_provenance for report in loaded] + [p for _, _, p in pending] + list(validation_provenance),
         genome=genome, prediction_alleles=alleles, host_reference=host_reference,
         retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in loaded})
     for stored, references in native_scopes:
@@ -631,6 +632,16 @@ def report_config(reports, epitope_config=None):
                 for name in ('comparison_reference', 'patient_background_baseline')):
             raise ValueError('Saved comparisons retain their reference and baseline policy. '
                              'Keep those settings when rescoring, or create new comparisons from Isovar inputs.')
+    saved_cta_bundles = {r.dataset.config.cta_sequence_bundle for r in reports
+        if r.source_format == 'epitopes' and r.dataset is not None and r.dataset.config is not None
+        and any(a.kind == 'CTA' for a in r.dataset.antigens.values())}
+    if saved_cta_bundles:
+        from msgspec.structs import replace as replace_config
+        if len(saved_cta_bundles) != 1 or (epitope_config.cta_sequence_bundle is not None
+                and epitope_config.cta_sequence_bundle not in saved_cta_bundles):
+            raise ValueError('Saved CTA targeting retains its sequence reference. '
+                             'Create new CTA inputs to change the OncoRef sequence bundle.')
+        epitope_config = replace_config(epitope_config, cta_sequence_bundle=next(iter(saved_cta_bundles)))
     return epitope_config
 
 
@@ -972,12 +983,17 @@ def load_unified_external(args, epitope_config, options, genome):
             "for an explicit HLA set.")
     from .cta_input import write_cta_admissions
     from .config.loader import load_vaxrank_config
+    validation_provenance = ()
+    if direct:
+        from .direct_input import direct_input_scope
+        validation_provenance = (direct_input_scope(args, epitope_config)[0],)
     loaded_reports = read_reports(
         [(fmt, path) for fmt, path, _ in specs],
         scopes=[scope for _, _, scope in specs],
         manifest_path=getattr(args, 'input_manifest', None), genome=genome,
         antigen_predictor_factory=antigen_predictor_factory, antigen_alleles=antigen_alleles,
         epitope_config=epitope_config,
+        validation_provenance=validation_provenance,
         patient_backgrounds=getattr(args, 'patient_background_pairs', None) if antigens else None,
         isovar_sources=load_vaxrank_config(args).get('isovar', {}).get('sources', {}),
         cta_admission_writer=lambda sources: write_cta_admissions(args, sources))
@@ -1172,8 +1188,9 @@ def load_unified_external(args, epitope_config, options, genome):
             input_features=len(admission.decisions), admitted_targets=len(admission.admitted_antigens),
             selected_targets=len(ranked), measurement_level=admission.input_contract.measurement_level,
             expression_unit=admission.input_contract.expression_unit)
-        patient.num_somatic_variants = patient.num_coding_effect_variants = 0
-        patient.num_variants_with_rna_support = patient.num_variants_with_vaccine_peptides = 0
+        if not direct:
+            patient.num_somatic_variants = patient.num_coding_effect_variants = 0
+            patient.num_variants_with_rna_support = patient.num_variants_with_vaccine_peptides = 0
     # Preparation already validated every input before scoring. Pooled inputs
     # all declare the same patient/genotype; single-input unknowns stay unknown.
     scope = patient.input_provenance[0].scope

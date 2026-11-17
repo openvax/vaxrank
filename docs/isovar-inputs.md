@@ -118,15 +118,17 @@ its own native prediction export: that duplicates candidate identities.
 
 | Control | Default | Meaning |
 | --- | --- | --- |
-| `allow_partial` | `false` | Permit an observed local coding window to pass the completeness gate. Missing termini remain missing. |
-| `allow_ambiguous` | `false` | Permit competing reference frames or unresolved/exploratory SV frames to pass the ambiguity gate. All alternatives remain separate. |
+| `allow_partial` | `true` | Permit a supported local coding window. Missing termini remain missing; set false to require completeness. |
+| `allow_ambiguous` | `false` | Permit unresolved frames within a model or exploratory SV frames. Distinct supplied ORF models remain separate without this opt-in. |
 | `min_fragments` | `2` | Minimum producer-scoped RNA fragments; positive integer. Does not mean molecules, TPM, independent libraries, or protein expression. |
 
-These controls **also require an independent tumor-specificity attestation**.
+Somatic mutation, SV and fusion inputs can declare `"somatic": true` in the
+envelope. This records called-event provenance without a handwritten attestation.
+Other sources still require an independent admission assertion.
 They do not bypass absent targetable content, unobserved isoform coding bases,
 unavailable support, failed producer filters, or the minimum support gate.
 Relaxing partialness does not relax frame ambiguity.
-For variant ORFs, frames are compared within each RNA candidate using the
+For variant ORFs, frames are compared within each RNA candidate and reference model using the
 resolved carrier transcript's strand, the focal allele's codon phase (0, 1 or 2 in
 transcript orientation), and the translation table. Trimming a noncoding
 prefix cannot change this comparison. Candidate evidence records
@@ -136,8 +138,8 @@ annotated CDSs and `TranscriptORF.at` placements. This carrier field is authorit
 including an explicit `null` for unknown orientation. Historical snapshots without
 the field retain their original source-model strand fallback.
 For unknown orientation (`reference_strand: null`), phase comparisons can establish a shared frame only within the same
-identified transcript and reference; alternatives across different transcripts
-remain ambiguous because their relative orientation is unavailable.
+identified transcript and reference. Distinct reference models are retained as
+separate coding interpretations; their coexistence is not an unresolved frame.
 
 The envelope accepts the existing `TumorSpecificityAttestation` record as
 `tumor_specificity`, applying to every candidate in that source, or a

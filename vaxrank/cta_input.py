@@ -31,7 +31,7 @@ def validate_cta_args(args):
         if getattr(args, 'hitlist_evidence_bundle', None):
             raise ValueError('--hitlist-evidence-bundle requires --input-cta-expression')
         explicit = getattr(args, '_explicit_cli_args', ())
-        if any(name.startswith('cta_') for name in explicit):
+        if any(name.startswith('cta_') and name != 'cta_sequence_bundle' for name in explicit):
             raise ValueError('Declare CTA expression options per input in --input-manifest')
     required = ('cta_expression_level', 'cta_id_column', 'cta_value_column',
                 'cta_expression_unit', 'cta_sample_id', 'cta_expression_source',
@@ -45,8 +45,9 @@ def validate_cta_args(args):
     specs = external_input_specs(args)
     if not any(fmt == 'cta_expression' for fmt, _, _ in specs):
         return
-    if any(getattr(args, name, None) for name in ('vcf', 'bam')):
-        raise ValueError('CTA expression inputs can join saved VCF/BAM evidence using epitopes inputs')
+    if any(getattr(args, name, None) for name in ('vcf', 'bam')) and not getattr(args, 'input_manifest', None):
+        raise ValueError('Combine direct VCF/BAM and CTA expression in --input-manifest '
+                         'to declare their shared patient, reference and genotype')
     if not getattr(args, 'mhc_predictor', None):
         raise ValueError('CTA expression inputs require --mhc-predictor')
     if (getattr(args, 'ensembl_release', None) is None
@@ -147,9 +148,11 @@ class CTAExpressionSource:
     admission: CTAExpressionResult
     provenance: InputProvenance
     bundle: dict | None = None
+    target_reference: object | None = None
 
     @classmethod
-    def load(cls, path, *, options, scope, genome, manifest_path=None, declarations=None, host_reference=None):
+    def load(cls, path, *, options, scope, genome, manifest_path=None, declarations=None, host_reference=None,
+             sequence_bundle=None):
         if host_reference is not None:
             scope = host_reference.validate(scope, genome=genome, location=str(path))
         scope = resolve_host_scope(scope, genome, location=str(path))
@@ -173,7 +176,15 @@ class CTAExpressionSource:
                               genome=genome, host_reference=host_reference)
         from .species_cta import cta_overrides
         restriction_policy, restriction_evidence = restriction_options(options)
-        admission = admit_cta_expression(path, input_contract=contract, admission_policy=policy,
+        target_reference = None
+        if sequence_bundle is not None:
+            if any(options.get(key) for key in ('restriction_policy', 'restriction_evidence', 'evidence_snapshot', 'overrides', 'exclusion_policy')):
+                raise ValueError('Current CTA sequence policy cannot be combined with legacy admission overrides')
+            from .cta_targeting import admit_expression, load_bundle
+            target_reference = load_bundle(sequence_bundle)
+            admission = admit_expression(path, contract, policy, target_reference, scope)
+        else:
+            admission = admit_cta_expression(path, input_contract=contract, admission_policy=policy,
                                         exclusion_policy=exclusions, genome=genome, host_reference=host_reference,
                                         overrides=cta_overrides(options), evidence_snapshot=options.get('evidence_snapshot'),
                                         restriction_policy=restriction_policy, restriction_evidence=restriction_evidence)
@@ -185,7 +196,7 @@ class CTAExpressionSource:
             source_format='cta_expression', path=str(path), content_sha256=admission.input_sha256,
             scope=scope, manifest_path=str(Path(manifest_path).resolve()) if manifest_path else None,
             manifest_declarations=dict(declarations or {}))
-        return cls(admission, provenance, bundle)
+        return cls(admission, provenance, bundle, target_reference)
 
 
 def load_hitlist_bundle(path, admission):
@@ -303,7 +314,8 @@ def predict_cta_source(source, predictor, *, genome, epitope_config=None, host_r
     if antigens:
         dataset = predict_antigens(antigens, predictor, genome=genome, provenance=provenance,
                                    config=epitope_config, annotate=annotate,
-                                   self_matcher=self_reference_matches, host_reference=host_reference)
+                                   self_matcher=self_reference_matches, host_reference=host_reference,
+                                   cta_bundle=source.target_reference)
     else:
         from .epitope_dataset import EpitopeDataset
         dataset = EpitopeDataset.from_predictions((), config=epitope_config)
@@ -319,6 +331,11 @@ def predict_cta_source(source, predictor, *, genome, epitope_config=None, host_r
         d.assessment.antigen.source_identifier: asdict(d.assessment.antigen)
         for d in admission.decisions if d.assessment is not None})
     dataset.selection['cta_expression_admission'] = to_native_json(admission)
+    if getattr(admission, 'target_reference', None) is not None:
+        reference = admission.target_reference
+        dataset.selection.setdefault('source_evidence', {})[reference['bundle_id']] = dict(
+            schema='vaxrank.oncoref_target_reference.v1', manifest=reference['manifest'],
+            coverage=reference['coverage'])
     if bundle is not None:
         dataset.selection['hitlist_evidence_bundle'] = bundle
     if local_evidence is not None:

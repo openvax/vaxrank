@@ -33,16 +33,16 @@ def paired_transcripts(left, right, kind):
 
 
 @pytest.mark.parametrize('kind', ['annotated', 'extra_orf'])
-@pytest.mark.parametrize('left,right,ambiguous', [
-    ('+', '+', False), ('-', '-', False), ('+', '-', True),
-    ('+', None, True), (None, None, True),
+@pytest.mark.parametrize('left,right', [
+    ('+', '+'), ('-', '-'), ('+', '-'), ('+', None), (None, None),
 ])
-def test_carrier_strands_determine_cross_transcript_frame_ambiguity(tmp_path, kind, left, right, ambiguous):
+def test_each_reference_model_requires_its_own_resolved_carrier_strand(tmp_path, kind, left, right):
     producer = paired_transcripts(left, right, kind)
     dataset = antigens_from_isovar(producer, tumor_specificity=attestation())
     assert len(dataset.antigens) == 2
-    assert all(a.tumor_specificity.admits_construct == (not ambiguous)
-               for a in dataset.antigens.values())
+    for antigen in dataset.antigens.values():
+        strand = json.loads(dict(antigen.source_metadata)['isovar_candidate'])['reference_strand']
+        assert antigen.tumor_specificity.admits_construct == (strand is not None)
     assert {json.loads(dict(a.source_metadata)['isovar_candidate'])['reference_strand']
             for a in dataset.antigens.values()} == {left, right}
     evidence, = dataset.source_evidence.values()

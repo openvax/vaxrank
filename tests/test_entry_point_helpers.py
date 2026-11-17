@@ -488,6 +488,7 @@ def _stub_vaccine_peptide():
         amino_acids=fragment.amino_acids,
         mutant_protein_fragment=fragment,
         contains_target_epitopes=lambda: True,
+        epitopes=[_stub_epitope()],
         target_epitopes=[_stub_epitope()],
         combined_score=1.0, expression_score=1.0, target_epitope_score=1.0,
         manufacturability_scores=ManufacturabilityScores(

@@ -22,7 +22,7 @@ from ..config.loader import (
 from ..manufacturability_config import ManufacturabilityConfig
 from ..vaccine_config import VaccineConfig
 from ..vaccine_config import LENS_ANTIGEN_SOURCES
-from ..vaccine_antigen import ANTIGEN_KINDS
+from ..antigen_allocation import ANTIGEN_SELECTION_TYPES, normalize_selection_type
 
 
 
@@ -40,7 +40,12 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         'long windows or individual minimal epitopes. Minimums are representation goals; '
         'maximums are hard limits. Selection follows the existing score/allele-coverage '
         'order after serving explicit minimum goals, subject to maximum caps.')
-    for kind in sorted(ANTIGEN_KINDS, key=str.lower):
+    allocation_group.add_argument('--antigen-types', nargs='+', type=normalize_selection_type,
+        choices=sorted(ANTIGEN_SELECTION_TYPES), default=None,
+        help='Antigen types eligible for vaccine products (default: all supplied types). '
+             'Use mutation for ordinary SNVs/indels; add ncORF, fusion, SV or CTA as needed. '
+             'Source evidence remains available in reports.')
+    for kind in sorted(ANTIGEN_SELECTION_TYPES, key=str.lower):
         allocation_group.add_argument(
             '--min-%s-antigens' % kind.lower(), type=int, default=None, metavar='COUNT',
             help='Minimum requested %s antigen count (default: 0). A goal subject to eligibility '
@@ -95,20 +100,21 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         "--include-antigen-type",
         dest="included_antigen_types",
         action="append",
-        choices=sorted(ANTIGEN_KINDS, key=str.lower),
+        choices=sorted(ANTIGEN_SELECTION_TYPES, key=str.lower), type=normalize_selection_type,
         default=None,
         help=(
-            "Admit an antigen type to the vaccine for any input (variants, "
+            "Enable an eligible antigen type for vaccine selection (variants, "
             "fusions, CTA, LENS, assemblies). Repeat for several types. "
             "Lifts a zero cap set in YAML or by --max-TYPE-antigens 0; "
-            "it does not override LENS source labels "
+            "ncORF selects mutations in recorded noncanonical ORFs separately from ordinary mutations. "
+            "Does not bypass source evidence or override LENS source labels "
             "(see --include-lens-source)."
         ))
     allocation_group.add_argument(
         "--exclude-antigen-type",
         dest="excluded_antigen_types",
         action="append",
-        choices=sorted(ANTIGEN_KINDS, key=str.lower),
+        choices=sorted(ANTIGEN_SELECTION_TYPES, key=str.lower), type=normalize_selection_type,
         default=None,
         help=(
             "Keep an antigen type out of the vaccine for any input. Same as "
@@ -212,11 +218,19 @@ def antigen_allocation_from_args(args, configured=None):
     from dataclasses import asdict
     from ..antigen_allocation import AntigenAllocation
     policy = asdict(AntigenAllocation.resolve(configured))
+    selected = getattr(args, 'antigen_types', None)
+    if selected is not None:
+        for kind in ANTIGEN_SELECTION_TYPES:
+            if kind not in selected:
+                policy['max_per_kind'][kind] = 0
+                policy['min_per_kind'].pop(kind, None)
+            elif policy['max_per_kind'].get(kind) == 0:
+                del policy['max_per_kind'][kind]
     for kind in getattr(args, 'included_antigen_types', None) or ():
         if policy['max_per_kind'].get(kind) == 0:
             del policy['max_per_kind'][kind]
     for bound in ('min', 'max'):
-        for kind in ANTIGEN_KINDS:
+        for kind in ANTIGEN_SELECTION_TYPES:
             count = getattr(args, '%s_%s_antigens' % (bound, kind.lower()), None)
             if count is not None:
                 policy[bound + '_per_kind'][kind] = count

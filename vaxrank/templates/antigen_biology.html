@@ -1,0 +1,40 @@
+{% if biological_candidates %}
+<section id="antigen-biology">
+<h2>Antigen biology and targeting</h2>
+<p class="note">Each source shows its highest-ranked candidate window. Highlighted residues or junctions define the altered region. CTA targeting is assessed per peptide in the tables below. Reference translation evidence and patient RNA support are shown separately.
+Comparisons show recorded reference sequences or computed backgrounds, not observed patient-normal protein.</p>
+{% for antigen in biological_candidates %}
+<article class="antigen-biology">
+<h3>{{ antigen.rank }}. {{ antigen.gene | e }} <span class="source-kind">{{ antigen.kind | e }}</span></h3>
+{% if antigen.facts %}<dl class="biology-facts">{% for label, value in antigen.facts %}<dt>{{ label | e }}</dt><dd>{{ value | e }}</dd>{% endfor %}</dl>{% endif %}
+<div class="biology-sequence">{{ antigen.sequence_html }} <small>source aa {{ antigen.sequence_start }}–{{ antigen.sequence_end }}</small></div>
+{% for junction in antigen.junctions %}
+<p class="junction-description"><strong>{{ junction.left | e }} → {{ junction.right | e }}</strong>
+{% for start, end in junction.boundaries %} · {% if start == end %}junction after source aa {{ antigen.sequence_start - 1 + start }}{% else %}split codon at source aa {{ antigen.sequence_start + start }}{% endif %}{% endfor %}</p>
+{% endfor %}
+{% for comparison in antigen.comparisons %}
+<p class="comparison-label">{{ comparison.label | e }} · tumor aa {{ comparison.tumor_start }}–{{ comparison.tumor_end }}, reference aa {{ comparison.reference_start }}–{{ comparison.reference_end }}</p>
+{% for start in range(0, comparison.tumor | length, 65) %}<pre class="biology-comparison">Tumor  {{ comparison.tumor[start:start + 65] | e }}
+       {{ comparison.differences[start:start + 65] | e }}
+Ref    {{ comparison.reference[start:start + 65] | e }}</pre>{% endfor %}
+{% else %}{% if antigen.kind != 'CTA' %}<p class="note">Normal/reference protein comparison not recorded.</p>{% endif %}{% endfor %}
+{% if antigen.targeting %}<table class="pure-table"><thead><tr><th>Peptide / position</th><th>Targeting</th><th>Matching reference proteins</th></tr></thead><tbody>
+{% for target in antigen.targeting_preview %}<tr><td class="epitope-sequence">{{ target.peptide | e }} · {{ target.start + 1 }}–{{ target.end }}</td><td>{{ target.status | e }}</td><td>{{ target.source_summary | e }}</td></tr>{% endfor %}
+</tbody></table>{% if antigen.targeting | length > 8 %}<p class="note">Showing 8 of {{ antigen.targeting | length }} assessed peptides in this window; all tested positions are summarized below. Exact protein accessions remain in the native evidence and workbook.</p>{% endif %}{% endif %}
+</article>
+{% endfor %}
+</section>
+{% endif %}
+{% if cta_targeting_summary %}
+<section id="cta-targeting">
+<h2>CTA regions assessed against OncoRef</h2>
+<p class="note">Positions below are peptide starts in the source protein, grouped by peptide length. Unsafe containment excludes a peptide from CTA targeting. Eligible peptides still undergo the shared expression, prediction and ranking rules. Unmeasured peptide lengths and reference coverage gaps remain unassessed.</p>
+{% for source in cta_targeting_summary %}
+<h3>{{ source.gene | e }}</h3>
+{% if source.gene_id %}<p class="note">{{ source.gene_id | e }}</p>{% endif %}
+<table class="pure-table"><thead><tr><th>Peptide length</th><th>Start positions (1-based)</th><th>Sequence policy</th><th>Unsafe / review proteins</th></tr></thead><tbody>
+{% for row in source.rows %}<tr><td>{{ row.length }} aa</td><td>{{ row.starts }}</td><td>{% if row.status == 'excluded' %}Do not target: Unsafe containment{% elif row.status == 'eligible' %}Eligible under sequence policy{% elif row.status == 'review' %}Review: unresolved occurrence{% else %}Unassessed{% endif %}</td><td>{{ row.matches | e }}</td></tr>{% endfor %}
+</tbody></table>
+{% endfor %}
+</section>
+{% endif %}

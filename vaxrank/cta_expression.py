@@ -24,6 +24,7 @@ from .cta_admission import (
 )
 from .native_serialization import from_native_json, to_native_json
 from .cta_identity import CTAAnnotationReference, cta_annotation_identity, snapshot_cta_annotation
+from .vaccine_antigen import VaccineAntigen
 
 if TYPE_CHECKING:
     from .species_cta import SpeciesCTAAdmission
@@ -80,6 +81,18 @@ class CTATargetExclusionPolicy(DataclassSerializable):
 
 
 @dataclass(frozen=True)
+class CTASequenceAssessment(DataclassSerializable):
+    """Current OncoRef representative plus independent patient expression."""
+
+    antigen: VaccineAntigen
+    bundle_id: str
+    record_id: str
+    occurrence: dict
+    reference_resolution: None = None
+    equivalent_occurrences: tuple[dict, ...] = ()
+
+
+@dataclass(frozen=True)
 class CTAExpressionDecision(DataclassSerializable):
     """One input feature, including rejected/unknown evidence and its reason."""
 
@@ -89,7 +102,7 @@ class CTAExpressionDecision(DataclassSerializable):
     gene_name: str = ""
     transcript_id: str = ""
     status: str = ""
-    assessment: "CTAAdmissionAssessment | SpeciesCTAAdmission | None" = None
+    assessment: "CTAAdmissionAssessment | SpeciesCTAAdmission | CTASequenceAssessment | None" = None
     reference_resolution: CTAReferenceResolution | None = None
     gene_identity: dict | None = None
 
@@ -115,6 +128,7 @@ class CTAExpressionResult(DataclassSerializable):
     annotation_version: str
     decisions: tuple[CTAExpressionDecision, ...]
     annotation_reference: CTAAnnotationReference | None = None
+    target_reference: dict | None = None
 
     def __post_init__(self):
         if self.annotation_reference is None:
