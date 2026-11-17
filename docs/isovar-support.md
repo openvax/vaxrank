@@ -1,7 +1,8 @@
 # Isovar support compatibility
 
-Vaxrank 3.47 requires Isovar 1.61.0 or later, below 2.0, with ORFdata
-0.39.1 or later and the compatible Osteosarc 0.15 series. Native
+Vaxrank requires Isovar 1.89.0 or later, below 2.0, with ORFdata 0.42.6 or
+later and Osteosarc 0.15.6 or later in the 0.15 series (the pins in
+`requirements.txt`). Native
 [Isovar inputs](isovar-inputs.md) cover variant/ncORFs, SV ORFs, fusion,
 viral coding, targeted isoforms and ordinary protein-hypothesis exports.
 That guide documents exact supported schemas, reconstruction/admission controls,
@@ -41,7 +42,8 @@ The ordinary VCF/BAM workflow keeps its frozen `openvax-v1` formula and
 selection policy. It continues to consume assembly-support counts and ordering;
 it does not enable fractional allocation or substitute those scores into RNA
 counts. New Isovar source inputs retain every candidate before shared ranking;
-their admission requires an explicit tumor-specificity attestation. Reports
+their admission requires an explicit tumor-specificity attestation or a somatic
+variant declaration for a reconstructed changed sequence. Reports
 distinguish that assertion from measured sample evidence and catalog attribution.
 
 New direct fragments store the actual runtime Isovar version as

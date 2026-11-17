@@ -17,7 +17,10 @@ through an ORFdata extra-ORF model, including uORFs and dORFs; it is separate fr
 ordinary `mutation` allocation. These switches select supplied evidence, not
 discoveries to fabricate. `--exclude-antigen-type CTA` and the existing per-type
 minimum/maximum options remain available. Identical product sequences share a
-slot and retain all source mappings; allocation uses the first ranked source.
+slot and retain all source mappings; allocation uses the first enabled ranked source.
+Disabled categories do not consume `--max-sources`. The source inventory records
+category exclusions and ranked-source limits separately from admission failures.
+Positive per-type caps count unique assembled antigen sequences.
 
 ## Combine inputs
 
@@ -154,6 +157,16 @@ sequence-reference policy requires new CTA inputs:
 ```sh
 vaxrank --input-epitopes vaccine/candidate_predictions.tsv --output-dir replay
 ```
+
+Combining saved and newly predicted CTAs inherits the saved admission policy
+before reading expression. The actual OncoRef bundle identity must agree across
+all inputs; the alias `current` alone does not establish agreement. Select the
+same pinned bundle when adding new inputs to an older design.
+
+Separate transcript expression measurements retain their own values and
+admission decisions even when they encode the same protein. Identical emitted
+sequences are grouped only during assembly. A supplied host-reference snapshot
+and the CTA targeting bundle retain separate matches and reference identities.
 
 Reference translation catalogues and exact Unsafe containment do not establish
 patient presentation or clinical safety. OncoRef's recorded coverage gaps remain

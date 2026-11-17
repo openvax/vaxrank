@@ -199,7 +199,7 @@ prediction has independent model and allele settings; see
 
 LENS supplies reported context windows. pVACseq generally supplies the epitope
 alone; Vaxrank does not fetch its separate mutant/wild-type FASTAs. LENS splice,
-CTA/self and ERV construction require [source opt-ins](how-it-works.md#lens-antigen-source-opt-ins).
+CTA/self and ERV construction require [source opt-ins](how-it-works.md#lens-source-labels).
 
 Native exports retain source rows, scope, content hashes, producer declarations,
 manifest assertions, comparators and RNA units/derivation. Output directories

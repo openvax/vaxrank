@@ -1,11 +1,14 @@
 # Development
 
+Setting up a checkout, running lint and tests, the test data, and how releases
+are cut. For contributors; users need only [Installation](installation.md).
+
 ```bash
 git clone git@github.com:openvax/vaxrank.git
 cd vaxrank
 python -m venv venv
 source venv/bin/activate
-pip install -e "." pytest pytest-cov ruff mkdocs-material
+pip install -e "." 'setuptools>=77.0.3' pytest pytest-cov ruff mkdocs-material
 # Reference releases exercised by the test suite
 pyensembl install --release 75 93 --species human
 pyensembl install --release 93 102 --species mouse
@@ -16,6 +19,15 @@ for the original-read integration tests. Run linting and tests:
 
 ```bash
 ./lint.sh && ./test.sh
+```
+
+The distribution test invokes the build backend offline in this environment,
+so it needs the declared setuptools version even when editable installation
+used an isolated build environment. To check the documentation and README links:
+
+```bash
+python scripts/prepare_docs.py
+mkdocs build --strict
 ```
 
 See [CONTRIBUTING.md](https://github.com/openvax/vaxrank/blob/main/CONTRIBUTING.md)

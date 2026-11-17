@@ -22,9 +22,7 @@ jobs:
         run: pip install mkdocs mkdocs-material
 
       - name: Prepare docs
-        run: |
-          mkdir -p docs
-          python -c "from pathlib import Path; Path('docs/index.md').write_text(Path('README.md').read_text().replace('](docs/', ']('))"
+        run: python scripts/prepare_docs.py
 
       - name: Build documentation
         run: mkdocs build --strict
