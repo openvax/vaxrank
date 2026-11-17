@@ -1324,7 +1324,7 @@ def configure_logging(args):
 
 
 def resolve_ensembl_release(args):
-    """Select a release without changing an explicitly requested species/build."""
+    """Select a release without changing an explicit species/build/release pin."""
     ensembl_release = getattr(args, 'ensembl_release', None)
     if ensembl_release is not None:
         import pyensembl
@@ -1333,7 +1333,20 @@ def resolve_ensembl_release(args):
             args.genome = pyensembl.EnsemblRelease(ensembl_release)
         else:
             from ..input_scope import resolve_input_genome
+            # Use the same release grammar as Varcode's genome resolver, including
+            # aliases and dated releases, without confusing assembly suffixes for pins.
+            from varcode.reference import _split_release
             reference = resolve_input_genome(requested)
+            pinned_release = (_split_release(requested)[1] if isinstance(requested, str)
+                              else getattr(reference, 'release', None))
+            if pinned_release is not None:
+                if pinned_release != ensembl_release:
+                    raise ValueError(f'--ensembl-release {ensembl_release} conflicts with '
+                                     f'--genome annotation release {pinned_release}; '
+                                     'use matching releases or specify an unpinned assembly')
+                args.genome = reference
+                logger.info("Using Ensembl release %s", ensembl_release)
+                return
             species = getattr(reference, 'species', None)
             if species is None:
                 raise ValueError('Cannot select an Ensembl release for a genome without species metadata')

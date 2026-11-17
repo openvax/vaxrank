@@ -153,7 +153,8 @@ def make_vaxrank_arg_parser():
         type=int,
         help="Ensembl release number to use for gene annotations (e.g. 75, 93, 102). "
              "By default, pyensembl picks the most recent locally installed release "
-             "for the reference assembly specified by --genome.")
+             "for the reference assembly specified by --genome. An explicit --genome "
+             "release pin (e.g. GRCh38:93) must match --ensembl-release.")
 
     arg_parser.add_argument(
         "--verbose", "-v",
@@ -1219,7 +1220,8 @@ def external_input_arg_parser():
         "--genome",
         default=None,
         help="Reference assembly for annotation (e.g. GRCh38 or GRCm38). "
-             "With --ensembl-release, selects that species and requires a matching assembly.")
+             "With --ensembl-release, requires a matching assembly and any explicit "
+             "release pin (e.g. GRCh38:93).")
     # Mutation reports need annotation; native inputs may retain it already.
     arg_parser.add_argument(
         "--ensembl-release",
@@ -1228,6 +1230,7 @@ def external_input_arg_parser():
         help="Ensembl release for resolving transcript IDs (e.g. 75, 102). "
              "Required for mutation ASCII/HTML/PDF reports without retained "
              "transcript annotation; match the input annotation release. "
+             "Must agree with any explicit --genome release pin. "
              "Native nonmutation antigen reports use their source provenance.")
     add_output_args(arg_parser)
     # Vaccine-peptide options apply to external inputs exactly as they do to
