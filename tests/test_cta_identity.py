@@ -40,7 +40,9 @@ class Annotation:
                 continue
             transcripts = [SimpleNamespace(**t, gene_id=row["gene_id"],
                            gene_name=row["gene_name"], transcript_version=None,
-                           biotype="protein_coding") for t in row["transcripts"]]
+                           biotype="protein_coding", id=t["transcript_id"],
+                           complete=False, is_protein_coding=True) for t in row["transcripts"]]
+            # This protein-only fixture does not record CDS completeness.
             self.proteins.update({t.transcript_id: t for t in transcripts})
             self.genes[row["gene_id"]] = SimpleNamespace(**dict(row, transcripts=transcripts))
 
@@ -84,7 +86,7 @@ def test_gene_admission_keeps_actual_sources_and_distinct_membership_hashes(tmp_
     assert decision.assessment.tumor_expression.input_identifier == ALTERNATE + ".2"
     assert decision.assessment.reference_evidence.gene_id == PRAME
     assert decision.reference_resolution.gene_identity["input_gene_id"] == ALTERNATE + ".2"
-    assert dict(antigen.source_metadata)["sequence_selection"] == "annotation_longest_protein"
+    assert dict(antigen.source_metadata)["sequence_selection"] == "annotation_representative_transcript"
     assert antigen.transcript_ids == ("ENST00000539862",)
     assert antigen.protein_ids == ("ENSP00000445097",)
     assert antigen.species == "Homo sapiens"

@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
 from serializable import DataclassSerializable
-from topiary import TopiaryPredictor
+from topiary import TopiaryPredictor, representative_transcript
 
 from .amino_acids import (
     has_only_standard_amino_acids,
@@ -29,10 +29,13 @@ from .tissue_risk import (
 
 
 PROTEIN_RESOLUTION_ALL_ISOFORMS = "all_protein_coding_isoforms"
+# Retained for callers and historical records; new resolution uses the shared rule.
 PROTEIN_RESOLUTION_LONGEST_ISOFORM = "longest_protein_coding_isoform"
+PROTEIN_RESOLUTION_REPRESENTATIVE = "representative_protein_coding_isoform"
 PROTEIN_RESOLUTION_POLICIES = frozenset({
     PROTEIN_RESOLUTION_ALL_ISOFORMS,
     PROTEIN_RESOLUTION_LONGEST_ISOFORM,
+    PROTEIN_RESOLUTION_REPRESENTATIVE,
 })
 RISK_COMBINATION_UNION = "union"
 RISK_COMBINATION_INTERSECTION = "intersection"
@@ -456,11 +459,15 @@ def resolve_tissue_risk_protein_sequences(
     """Resolve risk genes to Ensembl proteins without inventing an HPA isoform.
 
     HPA IHC is gene-level. The safety-conservative default therefore scans every
-    distinct protein-coding isoform; callers may choose the deterministic longest
-    isoform policy as an explicit performance tradeoff.
+    distinct protein-coding isoform. Callers may explicitly choose one
+    representative using Topiary's completeness, alphabet, length and ID rule.
+    The historical longest-isoform option aliases this representative policy;
+    previously saved sequence sets retain their recorded policy unchanged.
     """
     if resolution_policy not in PROTEIN_RESOLUTION_POLICIES:
         raise ValueError("Unknown protein resolution policy")
+    if resolution_policy == PROTEIN_RESOLUTION_LONGEST_ISOFORM:
+        resolution_policy = PROTEIN_RESOLUTION_REPRESENTATIVE
     proteins = []
     unresolved = []
     transcript_count = 0
@@ -473,6 +480,7 @@ def resolve_tissue_risk_protein_sequences(
         except Exception:
             transcripts = ()
         by_sequence: dict[str, dict[str, set[str]]] = {}
+        eligible_transcripts = []
         for transcript in transcripts:
             if not bool(getattr(transcript, "is_protein_coding", False)):
                 continue
@@ -484,6 +492,7 @@ def resolve_tissue_risk_protein_sequences(
             if not sequence or not has_only_standard_amino_acids(sequence):
                 invalid_count += 1
                 continue
+            eligible_transcripts.append(transcript)
             slot = by_sequence.setdefault(
                 sequence, {"transcript_ids": set(), "protein_ids": set()}
             )
@@ -501,15 +510,10 @@ def resolve_tissue_risk_protein_sequences(
             continue
         resolved_gene_count += 1
         sequence_items = list(by_sequence.items())
-        if resolution_policy == PROTEIN_RESOLUTION_LONGEST_ISOFORM:
-            sequence_items = [sorted(
-                sequence_items,
-                key=lambda item: (
-                    -len(item[0]),
-                    tuple(sorted(item[1]["transcript_ids"])),
-                    item[0],
-                ),
-            )[0]]
+        if resolution_policy == PROTEIN_RESOLUTION_REPRESENTATIVE:
+            transcript = representative_transcript(eligible_transcripts)
+            sequence = transcript.protein_sequence.rstrip("*")
+            sequence_items = [(sequence, by_sequence[sequence])]
         for sequence, source in sequence_items:
             proteins.append(ResolvedRiskProtein(
                 gene_id=risk_protein.gene_id,

@@ -198,6 +198,20 @@ the native evidence, even when a CTA source contributes no admitted proteins
 to an otherwise usable mixed run. A wholly unadmitted CTA-only run stops after
 writing requested admission records.
 
+For gene-level expression mapped to an alternate annotated CTA gene, Vaxrank
+uses Topiary's `representative_transcript`: complete protein-coding translation
+first, then standard amino-acid alphabet, length, and lowest transcript ID.
+Measured transcript inputs keep the specified transcript. This deterministic
+selection is not a claim of patient isoform abundance or MANE/canonical status.
+See [Ensembl transcript flags](https://www.ensembl.org/info/genome/genebuild/transcript_quality_tags.html)
+for the distinction between complete CDS annotations and canonical transcripts.
+
+Tissue-risk protein resolution uses the same ranking when explicitly requested
+with `PROTEIN_RESOLUTION_REPRESENTATIVE`; its default still scans every distinct
+eligible protein-coding isoform. `PROTEIN_RESOLUTION_LONGEST_ISOFORM` remains an
+accepted input alias, but newly resolved sets record the representative policy.
+Previously saved sets retain their original policy and sequences.
+
 ### Species-specific CTA expression (experimental)
 
 For dogs, declare `host_species: dog` and a `host_reference` snapshot. The same

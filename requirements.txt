@@ -61,7 +61,9 @@ mhctools>=4.8.1,<5.0.0
 # for patient-background comparisons (topiary#561/#562; vaxrank#716).
 # 5.111.0 supplies the shared exact/expressed patient-allele boundary used by
 # MS attribution and all prediction input validation (topiary#578, vaxrank#789).
-topiary>=5.111.0,<6.0.0
+# 5.113.0 exposes the representative-transcript rule shared by CTA and risk
+# protein resolution (vaxrank#836).
+topiary>=5.113.0,<6.0.0
 roman
 jinja2>=3.1
 weasyprint>=62.0
