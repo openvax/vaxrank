@@ -32,14 +32,6 @@ def sequence_difference(tumor, reference, start=0, end=None):
                 reference_end=len(right[:high].replace('-', '')))
 
 
-def _locus(value):
-    if isinstance(value, (list, tuple)) and len(value) == 3:
-        return '%s:%s (%s)' % tuple(value)
-    if isinstance(value, dict):
-        return '%s:%s (%s)' % (value.get('contig', '?'), value.get('position', '?'), value.get('strand', '?'))
-    return 'Not recorded'
-
-
 def antigen_biology(antigen, *, source_evidence=None, peptides=()):
     """Summarize recorded source facts, keeping RNA and translation separate.
 
@@ -47,23 +39,25 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=()):
     comparators. Source offsets, rather than sequence search, locate a window
     even when the original protein contains repeated sequences.
     """
+    from .antigen_origin import biology_origin
     candidates = isovar_candidates(antigen)
     facts, comparisons, junctions = [], [], []
     identities = [value for key, value in antigen.source_metadata if key == 'isovar_evidence_id']
     evidence = (source_evidence or {}).get(identities[0], {}) if len(identities) == 1 else {}
     result = evidence.get('isovar_result', {})
-    if antigen.origin is not None:
-        for variant in antigen.origin.variants:
+    origin = biology_origin(antigen, result=result, candidates=candidates, peptides=peptides)
+    if origin is not None:
+        for variant in origin.variants:
             facts.append(('Variant type', variant.variant_type + (':' + variant.sv_type if variant.sv_type else '')))
             if variant.contig and variant.start is not None:
                 facts.append(('Variant', '%s:%s %s → %s' % (
                     variant.contig, variant.start, variant.ref or '∅', variant.alt or '∅')))
-            if variant.end is not None:
+            if variant.end is not None and (variant.sv_type != 'BND' or variant.end != variant.start):
                 facts.append(('End coordinate', str(variant.end)))
             if variant.mate_contig:
-                facts.append(('Breakend mate', '%s:%s %s' % (
-                    variant.mate_contig, variant.mate_start, variant.mate_orientation)))
-        for junction in antigen.origin.junctions:
+                mate = '%s:%s' % (variant.mate_contig, variant.mate_start if variant.mate_start is not None else '?')
+                facts.append(('Breakend mate', mate + (' ' + variant.mate_orientation if variant.mate_orientation else '')))
+        for junction in origin.junctions:
             boundaries = [(a - antigen.source_protein_offset, b - antigen.source_protein_offset)
                 for a, b in junction.protein_intervals
                 if antigen.source_protein_offset <= a <= b <= antigen.source_protein_offset + len(antigen.amino_acids)]
@@ -71,28 +65,10 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=()):
                 junctions.append(dict(left=junction.left.label(), right=junction.right.label(), boundaries=boundaries))
             if junction.description:
                 facts.append(('RNA junction', junction.description))
-        if antigen.origin.rna_product:
-            facts.append(('RNA product', antigen.origin.rna_product))
-            if not antigen.origin.variants:
+        if origin.rna_product:
+            facts.append(('RNA product', origin.rna_product))
+            if not origin.variants:
                 facts.append(('Causal DNA variant', 'Not recorded'))
-    variant = result.get('variant')
-    if variant:
-        facts.append(('Variant', '%s:%s %s → %s' % (
-            variant.get('contig', '?'), variant.get('start', '?'),
-            variant.get('ref') or '∅', variant.get('alt') or '∅')))
-    if result.get('donor') or result.get('acceptor'):
-        facts.append(('Event', _locus(result.get('donor')) + ' → ' + _locus(result.get('acceptor'))))
-    event = result.get('event_provenance') or {}
-    event_type = result.get('event_type') or event.get('sv_type') or event.get('SVTYPE')
-    if not event_type:
-        from varcode import StructuralVariant
-        variants = [getattr(p.mutant_protein_fragment, 'variant', None) for p in peptides]
-        structural = next((v for v in variants if isinstance(v, StructuralVariant)), None)
-        if structural is not None:
-            event_type = structural.sv_type
-            facts.append(('Variant', structural.short_description))
-    if event_type:
-        facts.append(('Structural event', str(event_type)))
     for candidate in candidates:
         original = candidate.get('protein_sequence')
         if original is None and len(candidates) == 1:
@@ -124,20 +100,6 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=()):
             facts.append(('Coding interpretation', 'Competing or unresolved reading frame'))
         if candidate.get('partial_coding_candidate'):
             facts.append(('Sequence extent', 'Local coding window; full protein not reconstructed'))
-        for junction in (candidate.get('junctions', []) if antigen.origin is None else []):
-            if junction.get('annotated') or junction.get('termination_only'):
-                continue
-            boundaries = []
-            for boundary in junction.get('query_interval', []):
-                coding_start = candidate.get('coding_start')
-                if coding_start is not None:
-                    relative = boundary - coding_start
-                    low = relative // 3 - antigen.source_protein_offset
-                    high = (relative + 2) // 3 - antigen.source_protein_offset
-                    if 0 <= low <= high <= len(antigen.amino_acids):
-                        boundaries.append((low, high))
-            junctions.append(dict(left=_locus(junction.get('left')), right=_locus(junction.get('right')),
-                                  boundaries=sorted(set(boundaries))))
         reference = candidate.get('reference_allele_counterfactual_protein')
         label = 'Focal allele reverted on the same RNA background'
         if reference is None:

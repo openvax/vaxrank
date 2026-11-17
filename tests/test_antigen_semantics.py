@@ -266,3 +266,39 @@ def test_origin_retains_vcf_telomeric_breakend_coordinates(start, mate):
     origin = VariantOrigin.from_variant(variant)
     assert (origin.start, origin.mate_start) == (start, mate)
     assert GenomicEndpoint.from_record({'contig': '1', 'position': 0, 'strand': '+'}).position == 0
+
+
+@pytest.mark.parametrize('modality', ['peptide', 'mrna'])
+def test_legacy_saved_isovar_context_uses_source_evidence_in_variant_filters(modality):
+    from dataclasses import replace
+    import json
+    from vaxrank.antigen_allocation import AntigenAllocation, select_ranked_sources, variant_enabled
+    from vaxrank.peptide import PeptideConstructConfig, assemble_peptide_constructs
+    from vaxrank.mrna import RNAConstructConfig, assemble_mrna_constructs
+    from .test_assembly_antigens import candidate
+
+    base, peptides = candidate(0, 'SIINFEKLA')
+    legacy = replace(base, kind='mutation', origin=None, source_metadata=(
+        ('isovar_evidence_id', 'ev-1'),
+        ('isovar_candidate', json.dumps({'candidate_id': 'c-1', 'model_id': 'm-1'})),
+    ))
+    source_evidence = {'ev-1': {'isovar_result': {'models': [
+        {'model_id': 'm-1', 'reference': {'kind': 'extra_orf', 'orf_type': 'uORF'}}]}}}
+    ranked = [(legacy, [replace(peptides[0], antigen=legacy)])]
+    uorf_policy = AntigenAllocation(variant_contexts=('uORF',))
+    cds_policy = AntigenAllocation(variant_contexts=('annotated',))
+
+    assert variant_enabled(legacy, uorf_policy, source_evidence)
+    assert not variant_enabled(legacy, cds_policy, source_evidence)
+    assert len(select_ranked_sources(ranked, uorf_policy, source_evidence=source_evidence)) == 1
+    assert not select_ranked_sources(ranked, cds_policy, source_evidence=source_evidence)
+
+    options = dict(min_antigen_length_aa=8, max_antigen_length_aa=13, antigen_allocation=uorf_policy)
+    if modality == 'peptide':
+        products = assemble_peptide_constructs(ranked, PeptideConstructConfig(**options),
+                                               source_evidence=source_evidence)
+    else:
+        products = assemble_mrna_constructs(ranked, RNAConstructConfig(**options, optimize_linkers=False,
+            codon_method='use_best_codon'), source_evidence=source_evidence, host_taxon_id=9606)
+    assert len(products) == 1
+    assert products[0].antigens[0]['sources'][0]['coding_contexts'][0]['orf_type'] == 'uORF'

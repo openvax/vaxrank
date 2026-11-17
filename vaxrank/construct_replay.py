@@ -57,6 +57,9 @@ def saved_modalities(dataset):
 
 def capture_direct_sources(dataset, results, **property_options):
     """Keep every annotated direct source, including those with no predictions."""
+    if 'gene_pathway_check' not in property_options:
+        from .gene_pathway_check import GenePathwayCheck
+        property_options['gene_pathway_check'] = GenePathwayCheck()
     dataset.direct_sources = [
         {'variant': to_native_json(result.variant), 'properties': properties}
         for result, properties in zip(results.isovar_results, results.variant_properties(**property_options))]

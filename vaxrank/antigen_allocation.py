@@ -23,7 +23,7 @@ def expand_selection_types(values):
     return selected
 
 
-def variant_enabled(antigen, policy):
+def variant_enabled(antigen, policy, source_evidence=None):
     """Constrain recorded variant facts; expression/RNA-only sources are unaffected."""
     from .antigen_origin import has_variant
     from .coding_context import coding_contexts
@@ -37,7 +37,7 @@ def variant_enabled(antigen, policy):
             for event in events for wanted in policy.variant_types):
         return False
     if policy.variant_contexts:
-        contexts = coding_contexts(antigen)
+        contexts = coding_contexts(antigen, source_evidence)
         labels = {str(c.get('kind') or '').lower() for c in contexts}
         labels.update(str(c.get('orf_type') or '').lower() for c in contexts)
         if 'extra_orf' in labels:
@@ -70,7 +70,7 @@ def select_ranked_sources(ranked, policy=None, limit=None, *, source_evidence=No
     for source, peptides in ranked:
         enabled = [p for p in peptides if policy.max_per_kind.get(
             selection_type(p.antigen, source_evidence)) != 0]
-        eligible = [p for p in enabled if variant_enabled(p.antigen, policy)]
+        eligible = [p for p in enabled if variant_enabled(p.antigen, policy, source_evidence)]
         reason = ('antigen_type_disabled' if not enabled else 'variant_filter_mismatch'
                   if not eligible else 'ranked_source_limit'
                   if limit is not None and len(selected) >= limit else 'selected')

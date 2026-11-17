@@ -176,7 +176,10 @@ def test_direct_structural_fragment_keeps_sv_category_in_both_products(sv_type, 
         n_alt_reads_supporting_protein_sequence=5)
     peptide = VaccinePeptide(mutant_protein_fragment=fragment, epitopes=peptides[0].epitopes)
     assert peptide.antigen.kind == 'SV'
-    assert dict(antigen_biology(peptide.antigen, peptides=[peptide])['facts'])['Structural event'] == sv_type
+    facts = antigen_biology(peptide.antigen, peptides=[peptide])['facts']
+    assert [label for label, _ in facts].count('Variant') == 1
+    assert dict(facts)['Variant type'] == 'SV:' + sv_type
+    assert 'Structural event' not in dict(facts)
     ranked = [(variant, [peptide])]
     assert not select_ranked_sources(ranked, {'max_per_kind': {'SV': 0}})
     assert select_ranked_sources(ranked, {'max_per_kind': {'mutation': 0}}) == ranked

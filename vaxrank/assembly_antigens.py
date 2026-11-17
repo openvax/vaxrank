@@ -82,7 +82,7 @@ def antigen_occurrences(ranked, options, modality, *, source_evidence=None):
         raise ValueError("antigen_content must be 'mutation_spanning' or 'minimal_epitope'")
     sources = {id(peptide): source for source, peptides in ranked for peptide in peptides}
     for name, antigen, peptide in iter_named_antigens(ranked, options.candidates_per_slot):
-        if not variant_enabled(antigen, policy):
+        if not variant_enabled(antigen, policy, source_evidence):
             continue
         source = _source_record(sources[id(peptide)], name, antigen, peptide, source_evidence or {})
         if options.antigen_content == 'minimal_epitope':
