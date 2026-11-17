@@ -35,3 +35,7 @@ as ordinary mutations. Preserve the producer's SV class and event endpoints
 through source switches, native evidence, both writers and biological reports.
 The primary contract is Varcode's `structural_variant.py`; this change does not
 infer translations or gene fusions from an SV type.
+
+The packaging review also confirms #788: build the distribution regression from
+current tracked sources in a temporary tree, excluding stale checkout artifacts,
+and compare the wheel's Python modules against that clean source tree.

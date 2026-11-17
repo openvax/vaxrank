@@ -3,6 +3,7 @@
 import gzip
 import os
 from pathlib import Path, PurePosixPath
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -17,6 +18,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.shared_read_cache
 def test_distributions_include_sid_recipe_and_only_pinned_canine_reads(tmp_path):
+    # Build current tracked sources in isolation: ignored build/lib files from
+    # earlier releases must not leak into this wheel or mutate the checkout.
+    source_root = tmp_path / 'source'
+    tracked = subprocess.check_output(
+        ['git', 'ls-files', '-z'], cwd=ROOT).decode().split('\0')
+    for name in filter(None, tracked):
+        path = ROOT / name
+        if path.is_file():
+            destination = source_root / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, destination)
     # Call the PEP 517 backend named by pyproject.toml directly: it needs no
     # `build` package in the test environment and no isolated-environment
     # network access. One hook per interpreter, as a PEP 517 front end does:
@@ -28,7 +40,7 @@ def test_distributions_include_sid_recipe_and_only_pinned_canine_reads(tmp_path)
             "import sys\n"
             "from setuptools import build_meta\n"
             "getattr(build_meta, sys.argv[1])(sys.argv[2])\n",
-            hook, str(tmp_path)], cwd=ROOT, capture_output=True, text=True)
+            hook, str(tmp_path)], cwd=source_root, capture_output=True, text=True)
         assert result.returncode == 0, result.stdout + result.stderr
     sdist_path, = tmp_path.glob("vaxrank-*.tar.gz")
     wheel_path, = tmp_path.glob("vaxrank-*.whl")
@@ -37,6 +49,9 @@ def test_distributions_include_sid_recipe_and_only_pinned_canine_reads(tmp_path)
                  for m in source if m.isfile()}
     with zipfile.ZipFile(wheel_path) as source:
         wheel = {name: source.read(name) for name in source.namelist()}
+    assert {name for name in wheel if name.endswith('.py')} == {
+        path.relative_to(source_root).as_posix()
+        for path in (source_root / 'vaxrank').rglob('*.py')}
     assert not any(name.startswith("tests/") for name in sdist)
     assert {"LICENSE", "MANIFEST.in", "pyproject.toml", "requirements.txt", "TEST_DATA.md",
             "vaxrank/testdata/sid.py", "examples/osteosarc_test_data/pin_catalog.py",
