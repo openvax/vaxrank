@@ -785,20 +785,7 @@ class ReferenceProteome:
 
 
 def _read_fasta(path):
-    """Read a FASTA file into a dict of name -> sequence."""
-    proteins = {}
-    current_name = None
-    current_seq = []
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith(">"):
-                if current_name is not None:
-                    proteins[current_name] = "".join(current_seq)
-                current_name = line[1:].split()[0]
-                current_seq = []
-            elif current_name is not None:
-                current_seq.append(line)
-    if current_name is not None:
-        proteins[current_name] = "".join(current_seq)
-    return proteins
+    """Read FASTA with Biotite, retaining first-token IDs and last duplicate wins."""
+    from biotite.sequence.io.fasta import FastaFile
+
+    return {header.split()[0]: sequence for header, sequence in FastaFile.read_iter(path)}
