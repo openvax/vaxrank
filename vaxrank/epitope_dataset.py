@@ -548,19 +548,21 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
                 continue
             epitope = replace(epitope, per_allele_scores=scores)
         fragment = dataset.mutation_fragments.get(key)
+        antigen = dataset.antigens.get(key)
+        if antigen is not None and not antigen.tumor_specificity.admits_construct:
+            continue
         if fragment is not None:
             identity = (epitope.input_provenance.input_id if epitope.input_provenance else '',
-                        to_native_json(fragment))
-            mutation_groups.setdefault(identity, (fragment, []))[1].append(epitope)
+                        to_native_json(fragment), to_native_json(antigen))
+            mutation_groups.setdefault(identity, (fragment, antigen, []))[2].append(epitope)
             continue
-        antigen = dataset.antigens.get(key)
-        if antigen is None or not antigen.tumor_specificity.admits_construct:
+        if antigen is None:
             continue
         identity = to_native_json(antigen)
         groups.setdefault(identity, (antigen, []))[1].append(epitope)
-    for fragment, candidates in mutation_groups.values():
+    for fragment, antigen, candidates in mutation_groups.values():
         vaccines = vaccine_peptides_from_epitopes(
-            fragment.variant, fragment, candidates, epitope_config=dataset.config,
+            fragment.variant, fragment, candidates, epitope_config=dataset.config, antigen=antigen,
             vaccine_config=options.vaccine_config,
             vaccine_peptide_length=options.vaccine_peptide_length,
             num_target_epitopes_to_keep=(options.num_target_epitopes_to_keep

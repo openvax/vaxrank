@@ -213,3 +213,43 @@ def test_product_event_identity_is_shared_by_direct_and_isovar_origins():
     sources = products[0].antigens[0]['sources']
     assert len(sources) == 2 and sources[0]['source_event'] == sources[1]['source_event']
     assert summarize_products(products)['source_events'] == 1
+
+
+@pytest.mark.parametrize('recorded_origin', [False, True])
+def test_native_fragment_ranking_preserves_saved_origin(tmp_path, recorded_origin):
+    from dataclasses import replace
+    from varcode import Variant
+    from vaxrank.antigen_origin import AntigenOrigin, CodingReference, VariantOrigin
+    from vaxrank.epitope_dataset import EpitopeDataset, dataset_ranking_result
+    from vaxrank.external_input import ExternalConstructOptions
+    from vaxrank.vaccine_config import VaccineConfig
+    from vaxrank.vaccine_antigen import VaccineAntigen
+    from .test_core_logic_config import _make_epitope
+    variant = Variant('1', 100, 'A', 'T', genome=EnsemblRelease(110))
+    fragment = MutantProteinFragment(variant=variant, gene_name='RNA', amino_acids='AASIINFEKLKK',
+        mutant_amino_acid_start_offset=5, mutant_amino_acid_end_offset=6,
+        supporting_reference_transcripts=[], n_overlapping_reads=20, n_alt_reads=10,
+        n_ref_reads=10, n_alt_reads_supporting_protein_sequence=10)
+    origin = AntigenOrigin(variants=(VariantOrigin.from_variant(variant),),
+        coding_references=(CodingReference(kind='extra_orf', orf_type='uORF'),)) if recorded_origin else None
+    antigen = replace(VaccineAntigen.from_mutant_protein_fragment(fragment), origin=origin)
+    data = EpitopeDataset.from_predictions((), config=EpitopeConfig(score_expr='1.0'))
+    from vaxrank.input_scope import InputProvenance, InputScope
+    data.provenance = (InputProvenance('direct', 'vcf_bam', 'fixture.vcf', 'test', InputScope()),)
+    data.add_mutation(fragment, [_make_epitope('SIINFEKL', 20., offset=2, source_sequence=fragment.amino_acids)])
+    data.antigens = {key: antigen for key in data.antigens}
+    path = tmp_path / 'recorded.tsv'
+    data.save(path)
+    saved = EpitopeDataset.load(path)
+    options = ExternalConstructOptions.from_configs(VaccineConfig(preferred_peptide_length=10,
+        min_peptide_length=8, max_peptide_length=12, combined_score_expr='target_epitope_score'))
+    outcome = dataset_ranking_result(SimpleNamespace(dataset=saved, source_format='epitopes'), saved.epitopes, options=options)
+    assert outcome.ranked
+    for _, peptides in outcome.ranked:
+        assert all(p.antigen.origin == origin for p in peptides)
+        assert all(p.amino_acids == antigen.amino_acids[p.antigen.source_protein_offset:
+            p.antigen.source_protein_offset+len(p.amino_acids)] for p in peptides)
+    saved.antigens = {key: replace(value, tumor_specificity=replace(value.tumor_specificity,
+        status='held_out', rationale_code='not_tumor_specific')) for key, value in saved.antigens.items()}
+    assert not dataset_ranking_result(SimpleNamespace(dataset=saved, source_format='epitopes'),
+        saved.epitopes, options=options).ranked
