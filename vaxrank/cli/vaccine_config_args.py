@@ -22,7 +22,9 @@ from ..config.loader import (
 from ..manufacturability_config import ManufacturabilityConfig
 from ..vaccine_config import VaccineConfig
 from ..vaccine_config import LENS_ANTIGEN_SOURCES
-from ..antigen_allocation import ANTIGEN_SELECTION_TYPES, normalize_selection_type
+from ..antigen_allocation import (
+    ANTIGEN_SELECTION_TYPES, ANTIGEN_SELECTION_CHOICES, normalize_selection_type, expand_selection_types,
+)
 
 
 
@@ -41,10 +43,19 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         'maximums are hard limits. Selection follows the existing score/allele-coverage '
         'order after serving explicit minimum goals, subject to maximum caps.')
     allocation_group.add_argument('--antigen-types', nargs='+', type=normalize_selection_type,
-        choices=sorted(ANTIGEN_SELECTION_TYPES), default=None,
+        choices=sorted(ANTIGEN_SELECTION_CHOICES), default=None,
         help='Antigen types eligible for vaccine products (default: all supplied types). '
-             'Use mutation for ordinary SNVs/indels; add ncORF, fusion, SV or CTA as needed. '
+             'Use variant for small and structural variants in any coding context. '
+             'Historical mutation selects small variants outside recorded ncORFs. '
              'Source evidence remains available in reports.')
+    from ..antigen_origin import VARIANT_TYPES, SV_TYPES
+    allocation_group.add_argument('--variant-types', nargs='+', type=str.upper, default=None,
+        choices=sorted(VARIANT_TYPES | {'SV:' + kind for kind in SV_TYPES}),
+        help='Restrict genomic variant sources by recorded type (case insensitive). '
+             'Examples: SNV INDEL; SV:DEL SV:INV. Other selected antigen categories are unaffected.')
+    allocation_group.add_argument('--variant-contexts', nargs='+', type=str.lower, default=None,
+        help='Restrict variant coding contexts: annotated, ncORF, an ORFdata orf_type such as '
+             'uORF, or unknown. Multiple values are alternatives, case insensitive.')
     for kind in sorted(ANTIGEN_SELECTION_TYPES, key=str.lower):
         allocation_group.add_argument(
             '--min-%s-antigens' % kind.lower(), type=int, default=None, metavar='COUNT',
@@ -100,7 +111,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         "--include-antigen-type",
         dest="included_antigen_types",
         action="append",
-        choices=sorted(ANTIGEN_SELECTION_TYPES, key=str.lower), type=normalize_selection_type,
+        choices=sorted(ANTIGEN_SELECTION_CHOICES, key=str.lower), type=normalize_selection_type,
         default=None,
         help=(
             "Enable an eligible antigen type for vaccine selection (variants, "
@@ -114,7 +125,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         "--exclude-antigen-type",
         dest="excluded_antigen_types",
         action="append",
-        choices=sorted(ANTIGEN_SELECTION_TYPES, key=str.lower), type=normalize_selection_type,
+        choices=sorted(ANTIGEN_SELECTION_CHOICES, key=str.lower), type=normalize_selection_type,
         default=None,
         help=(
             "Keep an antigen type out of the vaccine for any input. Same as "
@@ -131,7 +142,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         "--include-lens-source", "--include-antigen-source",
         dest="included_lens_sources",
         action="append",
-        choices=sorted(LENS_ANTIGEN_SOURCES),
+        choices=sorted(LENS_ANTIGEN_SOURCES), type=str.upper,
         default=None,
         help=(
             "Add a LENS source label to construct ranking. Repeat for "
@@ -144,7 +155,7 @@ def add_vaccine_peptide_args(arg_parser : argparse.ArgumentParser) -> None:
         "--exclude-lens-source", "--exclude-antigen-source",
         dest="excluded_lens_sources",
         action="append",
-        choices=sorted(LENS_ANTIGEN_SOURCES),
+        choices=sorted(LENS_ANTIGEN_SOURCES), type=str.upper,
         default=None,
         help=(
             "Remove a LENS source label from construct ranking. Exclusion "
@@ -215,18 +226,18 @@ def vaccine_config_from_args(args : argparse.Namespace, merged_config=None) -> V
 
 def antigen_allocation_from_args(args, configured=None):
     """Merge shared allocation CLI overrides with the resolved YAML/replay policy."""
-    from dataclasses import asdict
     from ..antigen_allocation import AntigenAllocation
-    policy = asdict(AntigenAllocation.resolve(configured))
+    policy = AntigenAllocation.resolve(configured).to_dict()
     selected = getattr(args, 'antigen_types', None)
     if selected is not None:
+        selected = expand_selection_types(selected)
         for kind in ANTIGEN_SELECTION_TYPES:
             if kind not in selected:
                 policy['max_per_kind'][kind] = 0
                 policy['min_per_kind'].pop(kind, None)
             elif policy['max_per_kind'].get(kind) == 0:
                 del policy['max_per_kind'][kind]
-    for kind in getattr(args, 'included_antigen_types', None) or ():
+    for kind in expand_selection_types(getattr(args, 'included_antigen_types', None) or ()):
         if policy['max_per_kind'].get(kind) == 0:
             del policy['max_per_kind'][kind]
     for bound in ('min', 'max'):
@@ -234,9 +245,13 @@ def antigen_allocation_from_args(args, configured=None):
             count = getattr(args, '%s_%s_antigens' % (bound, kind.lower()), None)
             if count is not None:
                 policy[bound + '_per_kind'][kind] = count
-    for kind in getattr(args, 'excluded_antigen_types', None) or ():
+    for kind in expand_selection_types(getattr(args, 'excluded_antigen_types', None) or ()):
         policy['max_per_kind'][kind] = 0
-    return asdict(AntigenAllocation.resolve(policy))
+    for name in ('variant_types', 'variant_contexts'):
+        value = getattr(args, name, None)
+        if value is not None:
+            policy[name] = value
+    return AntigenAllocation.resolve(policy).to_dict()
 
 
 def manufacturability_config_from_args(

@@ -41,7 +41,7 @@ def test_producer_context_survives_native_antigen_round_trip(tmp_path, kind, orf
     dataset.save(path)
     antigen, = AntigenDataset.load(path).antigens.values()
     assert antigen.kind == 'mutation'
-    assert antigen_source_label(antigen) == 'mutation / ' + label
+    assert antigen_source_label(antigen) == 'SNV / ' + label
     context, = coding_contexts(antigen)
     assert context['kind'] == kind and context['orf_type'] == orf_type
     assert context['orf_id'] == 'noncoding_orf' and context['source'] == 'synthetic'
@@ -55,7 +55,7 @@ def test_historical_catalog_recovery_requires_unambiguous_model_pair():
     value = json.loads(metadata['isovar_candidate'])
     value.pop('coding_reference')
     metadata['isovar_candidate'] = json.dumps(value)
-    historical = replace(antigen, source_metadata=tuple(metadata.items()))
+    historical = replace(antigen, origin=None, source_metadata=tuple(metadata.items()))
     assert coding_contexts(historical) == []
     assert 'not recorded' in antigen_source_label(historical)
     assert coding_contexts(historical, dataset.source_evidence) == coding_contexts(antigen)

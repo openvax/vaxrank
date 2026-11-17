@@ -15,7 +15,7 @@ No supplied evidence recorded means this report cannot establish that a family w
 Retained predictions do not prove complete inference coverage. Original input denominators are shown separately below.</p>
 {% for original in input_coverage.direct %}
 <h3>Original variant input observation {{ loop.index }}</h3>
-<p>Input {{ original.input_id | e }}; Vaxrank {{ original.producer_version }}. Unit: {{ original.unit }}.
+<p>Input <span class="source-identifier">{{ original.input_id | e }}</span>; Vaxrank {{ original.producer_version }}. Unit: {{ original.unit }}.
 Stage: {{ original.stage }}. Distinct observations of one input are separate histories and must not be added.</p>
 <table class="pure-table pure-table-bordered">
 {% for key, label in [('loaded', 'Parsed variants loaded'), ('annotatable', 'Variants with annotation results'), ('coding_effect', 'Coding-effect variants'), ('coding_with_rna_protein', 'Coding-effect variants with an RNA-derived protein'), ('with_candidate_windows', 'Variants with candidate windows')] %}

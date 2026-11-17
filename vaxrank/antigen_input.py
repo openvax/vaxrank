@@ -46,6 +46,15 @@ def _antigen_from_dict(value):
     attestation['evidence_records'] = tuple(
         _typed_record(TumorSpecificityEvidence, r) for r in attestation.get('evidence_records', ()))
     value['tumor_specificity'] = _typed_record(TumorSpecificityAttestation, attestation)
+    if value.get('origin') is not None:
+        from .antigen_origin import AntigenOrigin, CodingReference, VariantOrigin, GenomicEndpoint, JunctionOrigin
+        origin = dict(value['origin'])
+        for name, cls in (('variants', VariantOrigin), ('coding_references', CodingReference)):
+            origin[name] = tuple(_typed_record(cls, row) for row in origin.get(name, ()))
+        origin['junctions'] = tuple(_typed_record(JunctionOrigin, {**row,
+            'left': _typed_record(GenomicEndpoint, row['left']),
+            'right': _typed_record(GenomicEndpoint, row['right'])}) for row in origin.get('junctions', ()))
+        value['origin'] = _typed_record(AntigenOrigin, origin)
     return _typed_record(VaccineAntigen, value)
 
 
@@ -82,7 +91,7 @@ class AntigenDataset:
         """Return versioned JSON data without Python class metadata."""
         return dict(schema=ANTIGEN_DATASET_SCHEMA, scope=scope_dict(self.scope),
                     antigens={key: {k: v for k, v in asdict(a).items()
-                                    if k not in ("rna_support", "source_protein_offset") or v}
+                                    if k not in ("rna_support", "source_protein_offset", "origin") or v}
                               for key, a in self.antigens.items()},
                     provenance=[provenance_dict(p) for p in self.provenance],
                     **({'source_evidence': self.source_evidence} if self.source_evidence else {}))

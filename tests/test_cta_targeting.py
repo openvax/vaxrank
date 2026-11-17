@@ -153,10 +153,11 @@ def test_equivalent_bundle_paths_do_not_change_frozen_policy(bundle, monkeypatch
         report_config(reports, config)
 
 
+@pytest.mark.parametrize('admission_only', [False, True])
 @pytest.mark.parametrize('saved_first', [False, True])
 @pytest.mark.parametrize('same_bundle', [False, True])
 def test_mixed_cta_admission_inherits_and_verifies_saved_bundle(
-        bundle, tmp_path, monkeypatch, saved_first, same_bundle):
+        bundle, tmp_path, monkeypatch, saved_first, same_bundle, admission_only):
     from copy import copy
     from dataclasses import asdict
     from topiary import TopiaryPredictor
@@ -170,13 +171,15 @@ def test_mixed_cta_admission_inherits_and_verifies_saved_bundle(
     options = {k: v for k, v in asdict(contract()).items() if k != 'sample_id'}
     options['min_expression'] = 2
     original = tmp_path / 'original.tsv'
-    original.write_text('feature_id\tpatient_tpm\n' + PRAME + '\t10\n')
+    original.write_text('feature_id\tpatient_tpm\n' + PRAME + ('\t0\n' if admission_only else '\t10\n'))
     genome = EnsemblRelease(115)
     source = CTAExpressionSource.load(original, options=options, scope=scope, genome=genome,
                                       sequence_bundle='current')
     config = EpitopeConfig(score_expr='1.0', cta_sequence_bundle='current')
     report = predict_cta_source(source, TopiaryPredictor(models=[ContextPredictor()]),
                                 genome=genome, epitope_config=config)
+    if admission_only:
+        assert not report.dataset.antigens and not report.dataset.epitopes
     native = tmp_path / 'native.tsv'
     report.dataset.save(native)
     fresh = tmp_path / 'fresh.tsv'
@@ -195,14 +198,16 @@ def test_mixed_cta_admission_inherits_and_verifies_saved_bundle(
         predictions.append(scope)
         return TopiaryPredictor(models=[ContextPredictor()])
     if same_bundle:
-        reports = read_reports(inputs, scopes=scopes, genome=genome, antigen_predictor_factory=factory)
+        reports = read_reports(inputs, scopes=scopes, genome=genome, antigen_predictor_factory=factory,
+            epitope_config=EpitopeConfig(score_expr='2.0'))
         assert len(predictions) == 1
         assert all(r.dataset.config.cta_sequence_bundle == 'current' for r in reports)
         fresh_report = next(r for r in reports if r.source_format == 'cta_expression')
         assert {targeting_evidence(e)['bundle_id'] for e in fresh_report.epitopes} == {bundle.identity}
     else:
         with pytest.raises(ValueError, match='different OncoRef sequence bundle identities'):
-            read_reports(inputs, scopes=scopes, genome=genome, antigen_predictor_factory=factory)
+            read_reports(inputs, scopes=scopes, genome=genome, antigen_predictor_factory=factory,
+            epitope_config=EpitopeConfig(score_expr='2.0'))
         assert not predictions
 
 
@@ -343,3 +348,18 @@ def test_current_cta_cli_reports_unsafe_regions_and_replays_without_reference(bu
     run_cli(['--input-epitopes', str(saved), '--output-html-report', str(output / 'replay.html'),
              '--no-processing-aware-annotation'])
     assert 'Do not target: Unsafe containment' in (output / 'replay.html').read_text()
+
+
+@pytest.mark.parametrize('override', [False, True])
+def test_admission_only_saved_cta_retains_reference_policy(bundle, monkeypatch, override):
+    from vaxrank.external_rescoring import report_config
+    data = EpitopeDataset.from_predictions((), config=EpitopeConfig(cta_sequence_bundle='current'))
+    data.selection['source_evidence'] = {bundle.identity: {
+        'schema': 'vaxrank.oncoref_target_reference.v1', 'manifest': bundle.manifest}}
+    report = SimpleNamespace(dataset=data, source_format='epitopes')
+    resolved = report_config([report], EpitopeConfig(score_expr='2.0') if override else None)
+    assert resolved.cta_sequence_bundle == 'current'
+    monkeypatch.setattr('vaxrank.cta_targeting.load_bundle',
+                        lambda path: SimpleNamespace(identity='oncoref:different'))
+    with pytest.raises(ValueError, match='Saved CTA targeting retains'):
+        report_config([report], EpitopeConfig(cta_sequence_bundle='/different'))

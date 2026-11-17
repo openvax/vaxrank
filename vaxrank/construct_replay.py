@@ -163,6 +163,9 @@ def _canonical_native(value):
     if metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='SelfReferenceMatch'):
         if not result.get('reference_sha256'):
             result.pop('reference_sha256', None)
+    if metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='VaccineAntigen'):
+        if result.get('origin') is None:
+            result.pop('origin', None)
     if (metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='VaccineAntigen')
             and result.get('source_protein_offset', 0) == 0):
         result.pop('source_protein_offset', None)
@@ -197,6 +200,10 @@ def _assembly_identity(args, ranked, options, context):
     from .antigen_allocation import AntigenAllocation
     if AntigenAllocation.resolve(configuration.get('antigen_allocation')) == AntigenAllocation(mode='ranked'):
         configuration.pop('antigen_allocation', None)
+    if configuration.get('antigen_allocation'):
+        for key in ('variant_types', 'variant_contexts'):
+            if not configuration['antigen_allocation'].get(key):
+                configuration['antigen_allocation'].pop(key, None)
     graph = _source_graph(ranked, options)
     # Explanatory metadata added in 3.47.24 is protected by the payload
     # checksum, but does not change assembly inputs or invalidate old designs.
@@ -222,6 +229,10 @@ def _assembly_identity(args, ranked, options, context):
         vaccine.pop('max_windows_per_antigen_source', None)
     if AntigenAllocation.resolve(vaccine.get('antigen_allocation')) == AntigenAllocation(mode='ranked'):
         vaccine.pop('antigen_allocation', None)
+    if vaccine.get('antigen_allocation'):
+        for key in ('variant_types', 'variant_contexts'):
+            if not vaccine['antigen_allocation'].get(key):
+                vaccine['antigen_allocation'].pop(key, None)
     # The LENS source gate was recorded as ``included_antigen_sources`` in
     # every design saved before it was renamed. Hash it under that spelling
     # so those designs keep their identity and replay offline.

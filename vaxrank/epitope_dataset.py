@@ -176,8 +176,12 @@ class EpitopeDataset:
                 if antigen.amino_acids[int(offset):int(offset) + len(peptide)] != peptide:
                     raise ValueError("Peptide does not match its supplied VaccineAntigen")
                 antigens[identity] = antigen
+                from .antigen_origin import has_variant, source_class
                 candidate = replace(
                     candidate, source_sequence=antigen.amino_acids,
+                    source_class=source_class(antigen),
+                    overlaps_mutation=has_variant(antigen) and antigen.interval_is_targetable(
+                        int(offset), int(offset) + len(peptide)),
                     overlaps_targetable=antigen.targetable_mask.overlaps(
                         int(offset), int(offset) + len(peptide)))
             epitopes.append(candidate)
@@ -208,6 +212,10 @@ class EpitopeDataset:
         # untouched in result; missing construction evidence stays unknown.
         frame['vaxrank_antigen_kind'] = frame.prediction_id.map(
             {key: antigen.kind for key, antigen in self.antigens.items()})
+        from .antigen_origin import variant_labels
+        frame['vaxrank_variant_types'] = frame.prediction_id.map(
+            {key: ';'.join(variant_labels(antigen.origin)) for key, antigen in self.antigens.items()})
+
         frame['vaxrank_admission_status'] = frame.prediction_id.map(
             {key: antigen.tumor_specificity.status for key, antigen in self.antigens.items()})
         rna = {key: rna_support_bindings(antigen) for key, antigen in self.antigens.items()}

@@ -1859,7 +1859,10 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
             evidence = epitope_dataset.selection.setdefault('source_evidence', {})
             for provenance in epitope_dataset.provenance:
                 evidence.setdefault(provenance.input_id, {})['hitlist_local_queries'] = hitlist_lookup.queries
-        capture_direct_sources(epitope_dataset, vaxrank_results)
+        capture_direct_sources(epitope_dataset, vaxrank_results,
+            gene_pathway_check=GenePathwayCheck() if getattr(args, 'output_passing_variants_csv', None) else None,
+            dna_vaf_by_variant=extract_dna_vaf_by_variant(
+                loaded_variants, tumor_sample_name=getattr(args, 'tumor_sample_name', None)))
         epitope_dataset.policy_evaluations = policy_evaluations
         if run_policy is not None:
             epitope_dataset.selection['run_configuration'] = run_policy
@@ -1901,6 +1904,8 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
             from ..antigen_allocation import select_ranked_sources
             data['variants'] = select_ranked_sources(data['variants'],
                 vaccine_config_from_args(args).antigen_allocation, args.max_sources)
+            data['patient_info'].num_variants_with_vaccine_peptides = sum(
+                bool(peptides) for _, peptides in data['variants'])
             return data
     # get various things from user args
     mhc_alleles = mhc_alleles_from_args(args)
@@ -1921,14 +1926,6 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
         "Len(variants) is %d but variants_count_dict came back with %d" % (
             len(variants), variants_count_dict['num_total_variants'])
 
-    if args.output_passing_variants_csv:
-        variant_metadata_dicts = vaxrank_results.variant_properties(
-            gene_pathway_check=GenePathwayCheck(),
-            dna_vaf_by_variant=dna_vaf_by_variant)
-        df = pd.DataFrame(variant_metadata_dicts)
-        ensure_parent_dir(args.output_passing_variants_csv)
-        df.to_csv(args.output_passing_variants_csv, index=False)
-
     ranked_variants_with_vaccine_peptides = vaxrank_results.ranked_vaccine_peptides
     from ..antigen_allocation import select_ranked_sources
     design_dataset = getattr(args, '_design_dataset', None)
@@ -1937,6 +1934,20 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
         args.max_sources, source_evidence=(design_dataset.selection.get('source_evidence')
             if design_dataset is not None else None),
         audit=design_dataset.selection if design_dataset is not None else None)
+    variants_count_dict['num_variants_with_vaccine_peptides'] = sum(
+        bool(peptides) for _, peptides in ranked_variants_with_vaccine_peptides_for_report)
+    if args.output_passing_variants_csv:
+        variant_metadata_dicts = vaxrank_results.variant_properties(
+            gene_pathway_check=GenePathwayCheck(),
+            dna_vaf_by_variant=dna_vaf_by_variant)
+        if variant_metadata_dicts:
+            from ..vaxrank_results import selected_variant_properties
+            variant_metadata_dicts = selected_variant_properties(variant_metadata_dicts,
+                vaxrank_results.variants, ranked_variants_with_vaccine_peptides_for_report)
+        df = pd.DataFrame(variant_metadata_dicts)
+        ensure_parent_dir(args.output_passing_variants_csv)
+        df.to_csv(args.output_passing_variants_csv, index=False)
+
     pipeline_inputs = [
         ('VCF (somatic variants)', '; '.join(variants.sources))
     ] if variants.sources else []

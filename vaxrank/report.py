@@ -32,7 +32,7 @@ from . import cells
 from .epitope_io import ensure_parent_dir
 from .manufacturability import ManufacturabilityScores
 from .antigen_report import ADMISSION_NOTE, antigen_evidence_sections, metadata_values, rna_support_sections
-from .coding_context import antigen_source_label, coding_context_label, coding_contexts
+from .coding_context import antigen_source_label, coding_context_label, coding_contexts, source_label as origin_label
 from .report_grouping import (group_report_evidence, prediction_origins, prediction_table_key,
                              source_evidence_key, window_contexts, window_evidence_key,
                              window_measurements_key)
@@ -868,7 +868,7 @@ class TemplateDataCreator(object):
 
         def source_label(source):
             if 'coding_contexts' in source:
-                return source['kind'] + ' / ' + coding_context_label(source['coding_contexts'])
+                return origin_label(source['kind'], source.get('origin'), source['coding_contexts'], show_context=True)
             contexts = []
             applicable = False
             for _, peptide in matching_candidates(source):
@@ -876,8 +876,7 @@ class TemplateDataCreator(object):
                 for context in coding_contexts(peptide.antigen, self.source_evidence):
                     if context not in contexts:
                         contexts.append(context)
-            return (source['kind'] + ' / ' + coding_context_label(contexts)
-                    if applicable or contexts else source['kind'])
+            return origin_label(source['kind'], source.get('origin'), contexts, show_context=applicable)
         groups = []
         for modality, products in self.products.items():
             rows = []
@@ -1227,7 +1226,7 @@ def new_columns():
     """Stable candidate-window schema, including successful empty results."""
     names = [
         'source_rank', 'window_rank', 'source_kind', 'source_identifier',
-        'coding_context', 'coding_references',
+        'variant_types', 'rna_product', 'origin', 'coding_context', 'coding_references',
         'source_protein_start', 'source_protein_end', 'biological_evidence',
         'reference_comparisons', 'junctions', 'cta_targeting',
         'gene_name', 'gene_ids', 'transcript_ids', 'protein_ids', 'source_species',
@@ -1357,8 +1356,12 @@ def make_csv_report(
                 genes.add(antigen.gene_id)
             genes.update(t.gene_id for t in getattr(fragment, 'supporting_reference_transcripts', ())
                          if getattr(t, 'gene_id', None))
+            from .antigen_origin import origin_dict, variant_labels
             row = dict(
                 source_rank=i, window_rank=j, source_kind=antigen.kind,
+                variant_types=';'.join(variant_labels(antigen.origin)),
+                rna_product=antigen.origin.rna_product if antigen.origin else '',
+                origin=json.dumps(origin_dict(antigen), sort_keys=True),
                 coding_context=coding_context_label(coding_contexts(antigen, source_evidence)),
                 coding_references=json.dumps(coding_contexts(antigen, source_evidence), sort_keys=True),
                 source_protein_start=biology['sequence_start'], source_protein_end=biology['sequence_end'],

@@ -375,3 +375,18 @@ def test_direct_configured_alternative_windows_survive_reload(direct, tmp_path, 
     again, _, _, _, _ = load_external_ranked(
         parse_vaxrank_args(['--input-epitopes', str(native)]), vaccine_config=options)
     assert [p.amino_acids for p in ranked[0][1]] == [p.amino_acids for p in again[0][1]]
+
+
+def test_native_direct_replay_writes_passing_csv_after_type_exclusion(direct, tmp_path):
+    import pandas as pd
+    saved = tmp_path / 'saved.tsv'
+    run_cli(inputs(tmp_path, direct) + ['--output-epitopes', str(saved),
+        '--no-processing-aware-annotation'])
+    assert EpitopeDataset.load(saved).direct_sources
+    passing = tmp_path / 'replay-passing.csv'
+    run_cli(['--input-epitopes', str(saved), '--exclude-antigen-type', 'mutation',
+        '--output-passing-variants-csv', str(passing), '--output-csv', str(tmp_path / 'ranked.csv'),
+        '--no-processing-aware-annotation'])
+    rows = pd.read_csv(passing)
+    assert len(rows) == 1 and not rows.has_vaccine_peptide.any()
+    assert rows.rna_support.all()

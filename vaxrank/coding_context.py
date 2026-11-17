@@ -29,6 +29,9 @@ def isovar_candidates(antigen):
 
 def coding_contexts(antigen, source_evidence=None):
     """Return all recorded contexts; resolve legacy models only when unambiguous."""
+    if antigen.origin is not None and antigen.origin.coding_references:
+        from dataclasses import asdict
+        return [asdict(reference) for reference in antigen.origin.coding_references]
     candidates = isovar_candidates(antigen)
     identities = [value for name, value in antigen.source_metadata if name == 'isovar_evidence_id']
     contexts = []
@@ -66,8 +69,13 @@ def coding_context_label(contexts):
     return '; '.join(labels) or 'coding context not recorded'
 
 
+def source_label(kind, origin=None, contexts=(), *, show_context=False):
+    from .antigen_origin import variant_labels
+    labels = variant_labels(origin)
+    label = ', '.join(labels) if labels and kind in {'mutation', 'SV'} else kind
+    return label + ' / ' + coding_context_label(contexts) if contexts or show_context else label
+
+
 def antigen_source_label(antigen, source_evidence=None):
-    contexts = coding_contexts(antigen, source_evidence)
-    if contexts or ('isovar_family', 'variant_orfs') in antigen.source_metadata:
-        return antigen.kind + ' / ' + coding_context_label(contexts)
-    return antigen.kind
+    return source_label(antigen.kind, antigen.origin, coding_contexts(antigen, source_evidence),
+        show_context=('isovar_family', 'variant_orfs') in antigen.source_metadata)

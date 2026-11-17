@@ -134,6 +134,7 @@ def ranking_coverage(dataset, reports, outcomes, ranked):
             row['reasons'] = [{
                 'antigen_type_disabled': 'Antigen category disabled by the effective selection policy',
                 'ranked_source_limit': 'Ranked source limit reached',
+                'variant_filter_mismatch': 'Recorded variant type or coding context does not match the selection policy',
             }.get(selection_reasons.get(key), 'Window available but absent from the final ranked list')]
         else:
             row['stage'] = 'Candidate windows'

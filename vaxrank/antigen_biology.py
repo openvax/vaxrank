@@ -52,6 +52,29 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=()):
     identities = [value for key, value in antigen.source_metadata if key == 'isovar_evidence_id']
     evidence = (source_evidence or {}).get(identities[0], {}) if len(identities) == 1 else {}
     result = evidence.get('isovar_result', {})
+    if antigen.origin is not None:
+        for variant in antigen.origin.variants:
+            facts.append(('Variant type', variant.variant_type + (':' + variant.sv_type if variant.sv_type else '')))
+            if variant.contig and variant.start is not None:
+                facts.append(('Variant', '%s:%s %s → %s' % (
+                    variant.contig, variant.start, variant.ref or '∅', variant.alt or '∅')))
+            if variant.end is not None:
+                facts.append(('End coordinate', str(variant.end)))
+            if variant.mate_contig:
+                facts.append(('Breakend mate', '%s:%s %s' % (
+                    variant.mate_contig, variant.mate_start, variant.mate_orientation)))
+        for junction in antigen.origin.junctions:
+            boundaries = [(a - antigen.source_protein_offset, b - antigen.source_protein_offset)
+                for a, b in junction.protein_intervals
+                if antigen.source_protein_offset <= a <= b <= antigen.source_protein_offset + len(antigen.amino_acids)]
+            if boundaries or junction.left.label() != 'Not recorded' or junction.right.label() != 'Not recorded':
+                junctions.append(dict(left=junction.left.label(), right=junction.right.label(), boundaries=boundaries))
+            if junction.description:
+                facts.append(('RNA junction', junction.description))
+        if antigen.origin.rna_product:
+            facts.append(('RNA product', antigen.origin.rna_product))
+            if not antigen.origin.variants:
+                facts.append(('Causal DNA variant', 'Not recorded'))
     variant = result.get('variant')
     if variant:
         facts.append(('Variant', '%s:%s %s → %s' % (
@@ -101,7 +124,7 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=()):
             facts.append(('Coding interpretation', 'Competing or unresolved reading frame'))
         if candidate.get('partial_coding_candidate'):
             facts.append(('Sequence extent', 'Local coding window; full protein not reconstructed'))
-        for junction in candidate.get('junctions', []):
+        for junction in (candidate.get('junctions', []) if antigen.origin is None else []):
             if junction.get('annotated') or junction.get('termination_only'):
                 continue
             boundaries = []

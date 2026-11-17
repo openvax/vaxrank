@@ -92,3 +92,5 @@ a { color: #245d7a; }
 .biology-sequence, .biology-comparison { font-family: monospace; font-size: 10pt; overflow-wrap: anywhere; }
 .biology-comparison { line-height: 1.35; padding: .5em; background: #f4f6f7; break-inside: avoid; }
 .comparison-label, .junction-description { margin-bottom: .25em; font-size: .9em; }
+
+.source-identifier { overflow-wrap: anywhere; word-wrap: break-word; word-break: break-all; }

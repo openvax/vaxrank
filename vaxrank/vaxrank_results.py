@@ -165,3 +165,10 @@ class VaxrankResults(DataclassSerializable):
 
             variant_properties_list.append(variant_dict)
         return variant_properties_list
+
+
+def selected_variant_properties(rows, variants, ranked):
+    """Use final source selection for both live and saved variant summaries."""
+    selected = {source for source, peptides in ranked if peptides}
+    return [{**row, 'has_vaccine_peptide': variant in selected}
+            for row, variant in zip(rows, variants, strict=True)]

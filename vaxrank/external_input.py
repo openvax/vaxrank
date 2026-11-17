@@ -34,8 +34,6 @@ from .amino_acids import has_only_standard_amino_acids
 from .epitope_logic import slice_epitopes
 from .candidate_epitope import (
     COMPARATOR_WT,
-    SOURCE_CLASS_MUTATION,
-    SOURCE_CLASS_SELF,
 )
 from .external_prediction import (
     _PVACSEQ_DNA_VAF_COLUMNS,
@@ -1224,8 +1222,10 @@ def lens_source_antigen_vaccine_entry(
         "CTA/SELF": "caller_curated_CTA_self_expression",
         "ERV": "caller_curated_ERV_expression",
     }[antigen_source]
+    from .antigen_origin import origin_from_lens, source_class as antigen_source_class
     antigen = VaccineAntigen(
         kind=antigen_kind,
+        origin=origin_from_lens(antigen_kind, source_metadata),
         amino_acids=windowed,
         targetable_mask=TargetableMask(_merged_epitope_intervals(epitopes)),
         tumor_specificity=TumorSpecificityAttestation(
@@ -1264,11 +1264,7 @@ def lens_source_antigen_vaccine_entry(
         source_metadata=source_metadata,
     )
     self_matches = _lens_self_reference_matches(epitopes, antigen, genome)
-    source_class = (
-        SOURCE_CLASS_SELF
-        if antigen_source in {"CTA/SELF", "ERV"}
-        else SOURCE_CLASS_MUTATION
-    )
+    source_class = antigen_source_class(antigen)
     epitopes = [
         dataclasses.replace(
             epitope,

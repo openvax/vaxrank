@@ -31,14 +31,11 @@ from .prediction_input import (
     finite_prediction_value, physical_prediction_value,
 )
 from .candidate_epitope import (
-    CandidateEpitope, SOURCE_CLASS_MUTATION, SOURCE_CLASS_SELF,
+    CandidateEpitope,
     candidate_epitopes_from_rows,
 )
 from .reference_proteome import ReferenceProteome, self_reference_matches
 from .vaccine_antigen import (
-    ANTIGEN_KIND_CTA,
-    ANTIGEN_KIND_FUSION,
-    ANTIGEN_KIND_MUTATION,
     VaccineAntigen,
 )
 
@@ -154,11 +151,6 @@ def predict_epitopes(
         and antigen.amino_acids != protein_fragment.amino_acids
     ):
         raise ValueError("Antigen and protein fragment amino-acid sequences differ")
-    if antigen.kind not in {
-            ANTIGEN_KIND_MUTATION, ANTIGEN_KIND_FUSION, ANTIGEN_KIND_CTA}:
-        raise NotImplementedError(
-            f"Prediction for {antigen.kind!r} antigens is not implemented"
-        )
 
     source_name = (
         antigen.source_identifier
@@ -166,11 +158,8 @@ def predict_epitopes(
         or antigen.gene_id
         or antigen.kind
     )
-    source_class = (
-        SOURCE_CLASS_MUTATION
-        if antigen.kind in {ANTIGEN_KIND_MUTATION, ANTIGEN_KIND_FUSION}
-        else SOURCE_CLASS_SELF
-    )
+    from .antigen_origin import has_variant, source_class as antigen_source_class
+    source_class = antigen_source_class(antigen)
 
     # Wrap bare mhctools predictors in a TopiaryPredictor
     if not isinstance(mhc_predictor, TopiaryPredictor):
@@ -323,7 +312,7 @@ def predict_epitopes(
         overlaps_targetable = antigen.interval_is_targetable(
             peptide_start_offset, peptide_end_offset)
         overlaps_mutation = (
-            antigen.kind == ANTIGEN_KIND_MUTATION and overlaps_targetable
+            has_variant(antigen) and overlaps_targetable
         )
 
         if (
@@ -389,7 +378,7 @@ def predict_epitopes(
         overlaps_targetable = antigen.interval_is_targetable(
             peptide_start_offset, peptide_end_offset)
         overlaps_mutation = (
-            antigen.kind == ANTIGEN_KIND_MUTATION and overlaps_targetable
+            has_variant(antigen) and overlaps_targetable
         )
 
         occurs_in_reference = reference_proteome.contains(peptide)

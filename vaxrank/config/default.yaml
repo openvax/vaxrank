@@ -184,6 +184,10 @@ vaccine_peptides:
   antigen_allocation:
     min_per_kind: {}
     max_per_kind: {}
+    # Optional event/context restrictions, independent of input format.
+    # Empty lists impose no restriction. Types/contexts are case insensitive.
+    # variant_types: [SNV, INDEL, "SV:DEL"]
+    # variant_contexts: [annotated, ncORF]
   # Legacy overlapping-candidate limit, used only when the source-window
   # setting is explicitly null (also the frozen openvax-v1/replay behavior).
   per_mutation: 1
