@@ -666,7 +666,8 @@ def report_config(reports, epitope_config=None):
                              'Keep those settings when rescoring, or create new comparisons from Isovar inputs.')
     saved_cta_reports = [r for r in reports
         if r.source_format == 'epitopes' and r.dataset is not None and r.dataset.config is not None
-        and (recorded_bundle_ids(r.dataset) or any(a.kind == 'CTA' for a in r.dataset.antigens.values()))]
+        and (recorded_bundle_ids(r.dataset) or 'cta_expression_admission' in r.dataset.selection
+             or any(a.kind == 'CTA' for a in r.dataset.antigens.values()))]
     saved_cta_bundles = {r.dataset.config.cta_sequence_bundle for r in saved_cta_reports}
     if saved_cta_bundles:
         requested = epitope_config.cta_sequence_bundle

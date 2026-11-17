@@ -377,16 +377,34 @@ def test_direct_configured_alternative_windows_survive_reload(direct, tmp_path, 
     assert [p.amino_acids for p in ranked[0][1]] == [p.amino_acids for p in again[0][1]]
 
 
-def test_native_direct_replay_writes_passing_csv_after_type_exclusion(direct, tmp_path):
+def test_native_direct_replay_writes_passing_csv_after_type_exclusion(tmp_path, mouse_genome):
     import pandas as pd
+    from .testing_helpers import data_path
     saved = tmp_path / 'saved.tsv'
-    run_cli(inputs(tmp_path, direct) + ['--output-epitopes', str(saved),
-        '--no-processing-aware-annotation'])
+    direct_csv = tmp_path / 'direct-passing.csv'
+    common = ['--vcf', data_path('b16.f10/b16.vcf'),
+              '--bam', data_path('b16.f10/b16.combined.bam'),
+              '--mhc-predictor', 'random', '--mhc-alleles', 'H2-Kb,H2-Db',
+              '--mhc-epitope-lengths', '8', '--padding-around-mutation', '0',
+              '--vaccine-peptide-length', '15', '--min-epitope-score', '0',
+              '--no-processing-aware-annotation']
+    # Capture native evidence WITHOUT requesting --output-passing-variants-csv.
+    run_cli(common + ['--output-epitopes', str(saved)])
     assert EpitopeDataset.load(saved).direct_sources
+    # A direct run requesting --output-passing-variants-csv defines the full 11-column schema.
+    run_cli(common + ['--exclude-antigen-type', 'mutation',
+        '--output-passing-variants-csv', str(direct_csv), '--output-csv', str(tmp_path / 'direct-ranked.csv')])
     passing = tmp_path / 'replay-passing.csv'
     run_cli(['--input-epitopes', str(saved), '--exclude-antigen-type', 'mutation',
         '--output-passing-variants-csv', str(passing), '--output-csv', str(tmp_path / 'ranked.csv'),
         '--no-processing-aware-annotation'])
     rows = pd.read_csv(passing)
-    assert len(rows) == 1 and not rows.has_vaccine_peptide.any()
-    assert rows.rna_support.all()
+    direct_rows = pd.read_csv(direct_csv)
+    assert list(rows.columns) == list(direct_rows.columns)
+    assert {
+        'interferon_gamma_response', 'class1_mhc_presentation_pathway',
+        'cancer_driver_gene', 'cancer_driver_variant',
+    } <= set(rows.columns)
+    pd.testing.assert_frame_equal(rows, direct_rows)
+    assert len(rows) == 5 and not rows.has_vaccine_peptide.any()
+    assert rows.rna_support.any()

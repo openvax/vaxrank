@@ -95,11 +95,7 @@ def prepare_direct_report(args, reports, epitope_config):
     dna_vaf = extract_dna_vaf_by_variant(
         variants, tumor_sample_name=getattr(args, 'tumor_sample_name', None))
     from .construct_replay import capture_direct_sources
-    from .gene_pathway_check import GenePathwayCheck
-    gene_pathway_check = (GenePathwayCheck()
-                          if getattr(args, 'output_passing_variants_csv', None) else None)
-    capture_direct_sources(dataset, results, dna_vaf_by_variant=dna_vaf,
-                           gene_pathway_check=gene_pathway_check)
+    capture_direct_sources(dataset, results, dna_vaf_by_variant=dna_vaf)
     dataset.mutation_fragments = {
         key: replace(fragment, dna_vaf=dna_vaf.get(fragment.variant, fragment.dna_vaf))
         for key, fragment in dataset.mutation_fragments.items()}

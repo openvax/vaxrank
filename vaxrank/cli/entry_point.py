@@ -1860,7 +1860,6 @@ def run_vaxrank_from_parsed_args(args, *, epitope_dataset=None, epitope_config_o
             for provenance in epitope_dataset.provenance:
                 evidence.setdefault(provenance.input_id, {})['hitlist_local_queries'] = hitlist_lookup.queries
         capture_direct_sources(epitope_dataset, vaxrank_results,
-            gene_pathway_check=GenePathwayCheck() if getattr(args, 'output_passing_variants_csv', None) else None,
             dna_vaf_by_variant=extract_dna_vaf_by_variant(
                 loaded_variants, tumor_sample_name=getattr(args, 'tumor_sample_name', None)))
         epitope_dataset.policy_evaluations = policy_evaluations
@@ -1937,9 +1936,12 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
     variants_count_dict['num_variants_with_vaccine_peptides'] = sum(
         bool(peptides) for _, peptides in ranked_variants_with_vaccine_peptides_for_report)
     if args.output_passing_variants_csv:
-        variant_metadata_dicts = vaxrank_results.variant_properties(
-            gene_pathway_check=GenePathwayCheck(),
-            dna_vaf_by_variant=dna_vaf_by_variant)
+        if design_dataset is not None and design_dataset.direct_sources:
+            variant_metadata_dicts = [dict(source['properties']) for source in design_dataset.direct_sources]
+        else:
+            variant_metadata_dicts = vaxrank_results.variant_properties(
+                gene_pathway_check=GenePathwayCheck(),
+                dna_vaf_by_variant=dna_vaf_by_variant)
         if variant_metadata_dicts:
             from ..vaxrank_results import selected_variant_properties
             variant_metadata_dicts = selected_variant_properties(variant_metadata_dicts,

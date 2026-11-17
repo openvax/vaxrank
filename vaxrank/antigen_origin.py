@@ -217,3 +217,39 @@ def variant_labels(origin):
     events = origin.get('variants', ()) if isinstance(origin, dict) else map(asdict, origin.variants)
     return tuple(sorted({event['variant_type'] + (':' + event['sv_type'] if event.get('sv_type') else '')
                          for event in events}))
+
+
+def biology_origin(antigen, *, result=None, candidates=(), peptides=()):
+    """Return recorded origin, or reconstruct display-only origin for legacy inputs."""
+    if antigen.origin is not None:
+        return antigen.origin
+    import json
+    from varcode import Variant
+    metadata = dict(antigen.source_metadata)
+    result = result or (json.loads(metadata['isovar_fusion_result'])
+                        if metadata.get('isovar_fusion_result') else {})
+    family = metadata.get('isovar_family', '')
+    if not family:
+        event = result.get('event_provenance') or {}
+        if result.get('event_type') or event.get('sv_type') or event.get('SVTYPE'):
+            family = 'sv'
+        elif antigen.kind in {'fusion', 'splice', 'isoform'}:
+            family = {'isoform': 'isoforms'}.get(antigen.kind, antigen.kind)
+    if result or candidates:
+        origin = origin_from_isovar(result, family, candidates[0] if candidates else {})
+        if len(candidates) > 1:
+            extra = [j for c in candidates[1:] for j in origin_from_isovar(result, family, c).junctions
+                     if j not in origin.junctions]
+            if extra:
+                origin = AntigenOrigin(variants=origin.variants,
+                    coding_references=origin.coding_references,
+                    rna_product=origin.rna_product,
+                    junctions=origin.junctions + tuple(extra))
+        return origin
+    variants = [getattr(p.mutant_protein_fragment, 'variant', None) for p in peptides]
+    variant = next((v for v in variants if isinstance(v, Variant)), None)
+    if variant is not None:
+        return AntigenOrigin(variants=(VariantOrigin.from_variant(variant),))
+    if antigen.kind in {'fusion', 'splice', 'isoform'}:
+        return AntigenOrigin(rna_product=antigen.kind)
+    return None
