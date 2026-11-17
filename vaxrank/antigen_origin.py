@@ -148,10 +148,16 @@ class AntigenOrigin(DataclassSerializable):
 
 
 def origin_from_isovar(result, family, candidate):
+    """Extract available facts from a producer result or partial saved evidence.
+
+    Producer adapters validate their required fields before calling this
+    projection. Reports can also call it without the external event inventory.
+    """
     variants = ()
     variant = result.get('variant')
     if family == 'protein_hypotheses':
-        event = next((event for event in result['events'] if event['event_id'] == candidate['event_id']), {})
+        event = next((event for event in result.get('events', ())
+                      if candidate.get('event_id') and event['event_id'] == candidate['event_id']), {})
         variant = event.get('variant')
     if variant:
         variants = (VariantOrigin.from_alleles(variant),)
