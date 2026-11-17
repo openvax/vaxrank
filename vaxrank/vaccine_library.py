@@ -72,7 +72,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from varcode import Variant
+from varcode import Variant, StructuralVariant
 
 from .vaccine_antigen import VaccineAntigen
 
@@ -553,7 +553,9 @@ def antigen_description(source, antigen):
 def antigen_construct_name(
         source, antigen, *, include_source=False, alternate_index=0):
     """Build the stable name shared by peptide and mRNA constructs."""
-    if isinstance(source, Variant):
+    if isinstance(source, StructuralVariant):
+        category = 'SV ' + source.sv_type
+    elif isinstance(source, Variant):
         if getattr(source, 'is_snv', False):
             category = 'SNV'
         elif (getattr(source, 'is_insertion', False)
@@ -565,7 +567,9 @@ def antigen_construct_name(
     else:
         category = antigen.kind
     if include_source:
-        if isinstance(source, Variant):
+        if isinstance(source, StructuralVariant):
+            source_detail = source.short_description
+        elif isinstance(source, Variant):
             source_detail = "%s:%s %s>%s" % (
                 source.contig,
                 source.start,
@@ -629,7 +633,7 @@ def iter_named_antigens(ranked_vaccine_peptides, candidates_per_slot=1):
         antigen = peptides[0].antigen
         gene = antigen.display_gene_name
         identity = (
-            (
+            (antigen.kind, source.short_description) if isinstance(source, StructuralVariant) else (
                 antigen.kind,
                 source.contig,
                 source.start,

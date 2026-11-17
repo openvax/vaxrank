@@ -447,6 +447,7 @@ class VaccineAntigen(DataclassSerializable):
     @classmethod
     def from_mutant_protein_fragment(cls, fragment: Any) -> "VaccineAntigen":
         """Represent a legacy mutation fragment without changing its policy."""
+        from varcode import StructuralVariant
         transcripts = tuple(
             getattr(fragment, "supporting_reference_transcripts", ()) or ()
         )
@@ -472,7 +473,7 @@ class VaccineAntigen(DataclassSerializable):
             getattr(variant, "short_description", "") or variant or ""
         )
         return cls(
-            kind=ANTIGEN_KIND_MUTATION,
+            kind=ANTIGEN_KIND_SV if isinstance(variant, StructuralVariant) else ANTIGEN_KIND_MUTATION,
             amino_acids=fragment.amino_acids,
             targetable_mask=TargetableMask((AminoAcidInterval(
                 fragment.mutant_amino_acid_start_offset,

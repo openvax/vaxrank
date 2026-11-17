@@ -29,3 +29,9 @@ Scientific contract: OncoRef's primary `docs/sequence-bundle.md` distinguishes
 raw host inventory from CTA policy roles; all matching occurrences aggregate as
 exclude > review > allow. Independent transcript expression measurements remain
 independent even when the encoded amino-acid sequence is identical.
+
+The audit also found direct Varcode StructuralVariant fragments being labeled
+as ordinary mutations. Preserve the producer's SV class and event endpoints
+through source switches, native evidence, both writers and biological reports.
+The primary contract is Varcode's `structural_variant.py`; this change does not
+infer translations or gene fusions from an SV type.

@@ -129,6 +129,30 @@ def test_saved_current_alias_does_not_hide_different_bundle_identities(bundle):
         report_config(reports)
 
 
+def test_equivalent_bundle_paths_do_not_change_frozen_policy(bundle, monkeypatch):
+    from copy import copy
+    from msgspec.structs import replace as replace_config
+    from vaxrank.external_rescoring import report_config
+    from .test_epitope_dataset import forbidden
+    reports = []
+    for path in ('current', '/old-machine/bundle'):
+        data = dataset()
+        apply_cta_targeting(data, bundle)
+        data.config = replace_config(data.config, cta_sequence_bundle=path)
+        reports.append(SimpleNamespace(dataset=data, source_format='epitopes'))
+    monkeypatch.setattr('vaxrank.cta_targeting.load_bundle', forbidden)
+    assert report_config(reports).cta_sequence_bundle == 'current'
+    # An explicit replacement locator must resolve to the same frozen bundle.
+    monkeypatch.setattr('vaxrank.cta_targeting.load_bundle', lambda path: bundle)
+    config = EpitopeConfig(cta_sequence_bundle='/new-machine/pinned-bundle')
+    assert report_config(reports, config).cta_sequence_bundle == config.cta_sequence_bundle
+    other = copy(bundle)
+    other.identity = 'oncoref:different'
+    monkeypatch.setattr('vaxrank.cta_targeting.load_bundle', lambda path: other)
+    with pytest.raises(ValueError, match='Saved CTA targeting retains'):
+        report_config(reports, config)
+
+
 @pytest.mark.parametrize('saved_first', [False, True])
 @pytest.mark.parametrize('same_bundle', [False, True])
 def test_mixed_cta_admission_inherits_and_verifies_saved_bundle(

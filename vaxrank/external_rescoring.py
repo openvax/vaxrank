@@ -641,6 +641,7 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
 
 def report_config(reports, epitope_config=None):
     """Resolve an explicit policy or require agreement between saved policies."""
+    from msgspec.structs import replace as replace_config
     from .cta_targeting import recorded_bundle_ids
     identities = set().union(*(recorded_bundle_ids(r.dataset)
         for r in reports if r.dataset is not None))
@@ -651,7 +652,10 @@ def report_config(reports, epitope_config=None):
         from .epitope_config import EpitopeConfig
         configs = [r.dataset.config for r in reports
                    if r.dataset is not None and r.dataset.config is not None]
-        if configs and any(cfg != configs[0] for cfg in configs):
+        # A path/current alias locates a bundle; frozen evidence above defines
+        # its identity. Equivalent copies must not become different policies.
+        comparable = [replace_config(cfg, cta_sequence_bundle=None) for cfg in configs]
+        if comparable and any(cfg != comparable[0] for cfg in comparable):
             raise ValueError("Saved inputs use different scoring policies; supply an explicit epitope config")
         epitope_config = configs[0] if configs else EpitopeConfig()
     for report in reports:
@@ -664,12 +668,19 @@ def report_config(reports, epitope_config=None):
         if r.source_format == 'epitopes' and r.dataset is not None and r.dataset.config is not None
         and any(a.kind == 'CTA' for a in r.dataset.antigens.values())}
     if saved_cta_bundles:
-        from msgspec.structs import replace as replace_config
-        if len(saved_cta_bundles) != 1 or (epitope_config.cta_sequence_bundle is not None
-                and epitope_config.cta_sequence_bundle not in saved_cta_bundles):
-            raise ValueError('Saved CTA targeting retains its sequence reference. '
-                             'Create new CTA inputs to change the OncoRef sequence bundle.')
-        epitope_config = replace_config(epitope_config, cta_sequence_bundle=next(iter(saved_cta_bundles)))
+        requested = epitope_config.cta_sequence_bundle
+        if requested is not None and requested not in saved_cta_bundles:
+            from .cta_targeting import load_bundle
+            if not identities or None in identities or {load_bundle(requested).identity} != identities:
+                raise ValueError('Saved CTA targeting retains its sequence reference. '
+                                 'Create new CTA inputs to change the OncoRef sequence bundle.')
+        elif requested is None:
+            if len(saved_cta_bundles) > 1 and (not identities or None in identities):
+                raise ValueError('Saved CTA targeting lacks a common frozen sequence reference identity')
+            requested = next((r.dataset.config.cta_sequence_bundle for r in reports
+                if r.source_format == 'epitopes' and r.dataset is not None and r.dataset.config is not None
+                and any(a.kind == 'CTA' for a in r.dataset.antigens.values())), None)
+        epitope_config = replace_config(epitope_config, cta_sequence_bundle=requested)
     return epitope_config
 
 

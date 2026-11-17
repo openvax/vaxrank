@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import json
 import logging
 
-from varcode import Variant
+from varcode import Variant, StructuralVariant
 
 from .vaccine_library import iter_named_antigens, select_antigen_window, top_target_epitopes
 from .coding_context import coding_contexts
@@ -34,6 +34,10 @@ def _source_record(source, name, antigen, peptide, source_evidence):
     if isinstance(source, Variant):
         event = dict(reference_assembly=source.genome.reference_name,
                      contig=source.contig, start=source.start, ref=source.ref, alt=source.alt)
+        if isinstance(source, StructuralVariant):
+            event.update(sv_type=source.sv_type, end=source.end,
+                         mate_contig=source.mate_contig, mate_start=source.mate_start,
+                         mate_orientation=source.mate_orientation)
     elif result.get('variant'):
         event = result['variant']
     elif result.get('event_id'):
