@@ -133,3 +133,49 @@ def test_origin_facts_do_not_duplicate_indel_sv_or_fusion_events():
     assert 'Event' not in dict(fusion_view['facts'])
     assert dict(fusion_view['facts'])['RNA product'] == 'fusion'
     assert antigen_biology(replace(fusion, origin=None), source_evidence=fusion_data.source_evidence) == fusion_view
+
+
+@pytest.mark.parametrize('evidence_state', [
+    'absent', 'missing_events', 'ambiguous', 'missing_event_id', 'complete',
+])
+@pytest.mark.parametrize('extension', ['html', 'txt'])
+def test_legacy_protein_reports_retain_available_facts(evidence_state, extension):
+    from vaxrank.native_serialization import to_native_json
+
+    base, peptides = candidate(0)
+    saved = dict(event_id='event-1', protein_sequence=base.amino_acids,
+                 rna_support={'fragments': 7}, translation_observed=False)
+    if evidence_state == 'missing_event_id':
+        del saved['event_id']
+    metadata = [('isovar_family', 'protein_hypotheses'),
+                ('isovar_evidence_id', 'evidence-1'),
+                ('isovar_candidate', json.dumps(saved))]
+    producer = {'events': [{'event_id': 'event-1', 'variant': {
+        'contig': '1', 'start': 100, 'ref': 'A', 'alt': 'T', 'reference_name': 'GRCh38',
+    }}]}
+    evidence = {'evidence-1': {'isovar_result': producer,
+                             'family': 'protein_hypotheses', 'decisions': []}}
+    if evidence_state == 'absent':
+        evidence = None
+    elif evidence_state == 'missing_events':
+        evidence['evidence-1']['isovar_result'] = {'sample_id': 'tumor'}
+    elif evidence_state == 'ambiguous':
+        metadata.append(('isovar_evidence_id', 'evidence-2'))
+        evidence['evidence-2'] = dict(evidence['evidence-1'])
+    legacy = replace(base, origin=None, source_metadata=tuple(metadata))
+    before = to_native_json(legacy)
+    peptides = [replace(peptides[0], antigen=legacy)]
+    view = antigen_biology(legacy, source_evidence=evidence)
+    assert ('Patient RNA', '7 fragments') in view['facts']
+    assert ('Patient translation', 'Not measured by RNA reconstruction') in view['facts']
+    expected = [('Variant', '1:100 A → T')] if evidence_state == 'complete' else []
+    assert [fact for fact in view['facts'] if fact[0] == 'Variant'] == expected
+    text = render(template([(legacy, peptides)], source_evidence=evidence), extension)
+    assert 'Antigen biology and targeting' in text and '7 fragments' in text
+    assert ('1:100' in text) == (evidence_state == 'complete')
+    assert to_native_json(legacy) == before
+
+
+def test_protein_hypothesis_input_still_requires_events():
+    with pytest.raises(KeyError, match='events'):
+        antigens_from_isovar({'schema': 'isovar.protein_hypotheses.v2', 'sample_id': 'tumor'})
