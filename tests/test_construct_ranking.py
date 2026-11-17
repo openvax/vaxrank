@@ -73,7 +73,10 @@ def _assert_outputs_choose_lowest_epitope_score(ranked, tmp_path):
     report_path = tmp_path / "ranking.txt"
     make_ascii_report(data, str(report_path))
     report = report_path.read_text()
-    positions = [report.index(row["short_description"]) for row in data["variants"]]
+    # Origin descriptions also appear in biological evidence. Check the
+    # rendered ranking rows, not the first mention anywhere in the report.
+    positions = [report.index('%s. %s (%s), %s; score' % (
+        row['rank'], row['gene'], row['kind'], row['source_id'])) for row in data['ranked_candidates']]
     assert positions == sorted(positions)
 
 

@@ -191,3 +191,25 @@ def test_native_origin_rejects_unknown_nested_fields(tmp_path):
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError, match='Unknown VariantOrigin fields'):
         AntigenDataset.load(path)
+
+
+def test_product_event_identity_is_shared_by_direct_and_isovar_origins():
+    from dataclasses import replace
+    from varcode import Variant
+    from vaxrank.antigen_origin import AntigenOrigin, VariantOrigin
+    from vaxrank.assembly_antigens import summarize_products
+    from vaxrank.peptide import assemble_peptide_constructs, PeptideConstructConfig
+    from .test_assembly_antigens import candidate
+    variant = Variant('1', 100, 'A', 'T', genome=EnsemblRelease(110))
+    direct = VariantOrigin.from_variant(variant)
+    exported = VariantOrigin.from_alleles(dict(contig='1', start=100, ref='A', alt='T', reference_name='GRCh38'))
+    ranked = []
+    for index, origin in enumerate((direct, exported)):
+        antigen, peptides = candidate(index)
+        antigen = replace(antigen, origin=AntigenOrigin(variants=(origin,)))
+        ranked.append((variant if index == 0 else antigen, [replace(peptides[0], antigen=antigen)]))
+    products = assemble_peptide_constructs(ranked, PeptideConstructConfig())
+    assert len(products) == 1
+    sources = products[0].antigens[0]['sources']
+    assert len(sources) == 2 and sources[0]['source_event'] == sources[1]['source_event']
+    assert summarize_products(products)['source_events'] == 1

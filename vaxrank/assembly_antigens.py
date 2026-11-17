@@ -31,7 +31,12 @@ def _source_record(source, name, antigen, peptide, source_evidence):
     if not result and metadata.get('isovar_fusion_result'):
         result = json.loads(metadata['isovar_fusion_result'])
     event = None
-    if isinstance(source, Variant):
+    if antigen.origin is not None and antigen.origin.variants:
+        from dataclasses import asdict
+        variants = [{key: value for key, value in asdict(variant).items() if value not in ('', None)}
+                    for variant in antigen.origin.variants]
+        event = variants[0] if len(variants) == 1 else {'variants': variants}
+    elif isinstance(source, Variant):
         event = dict(reference_assembly=source.genome.reference_name,
                      contig=source.contig, start=source.start, ref=source.ref, alt=source.alt)
         if isinstance(source, StructuralVariant):
