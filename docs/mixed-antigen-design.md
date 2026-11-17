@@ -58,7 +58,7 @@ vaxrank --input-epitopes mixed/native.tsv \
 ```
 
 The limits count distinct antigen sequences across the vaccine, including all
-mRNA constructs. Shared products count once under their first ranked source
+mRNA constructs. Shared products count once under their first enabled ranked source
 type. Remaining capacity goes to eligible types with space; unmet goals are
 reported. No goal admits a held-out candidate. Selection serves explicit
 representation goals first, then uses the existing ranking within the maxima.

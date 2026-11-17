@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import json
 import logging
 
-from varcode import Variant
+from varcode import Variant, StructuralVariant
 
 from .vaccine_library import iter_named_antigens, select_antigen_window, top_target_epitopes
 from .coding_context import coding_contexts
@@ -34,6 +34,10 @@ def _source_record(source, name, antigen, peptide, source_evidence):
     if isinstance(source, Variant):
         event = dict(reference_assembly=source.genome.reference_name,
                      contig=source.contig, start=source.start, ref=source.ref, alt=source.alt)
+        if isinstance(source, StructuralVariant):
+            event.update(sv_type=source.sv_type, end=source.end,
+                         mate_contig=source.mate_contig, mate_start=source.mate_start,
+                         mate_orientation=source.mate_orientation)
     elif result.get('variant'):
         event = result['variant']
     elif result.get('event_id'):
@@ -110,8 +114,15 @@ def antigens_for_assembly(ranked, options, modality, *, source_evidence=None):
     evidence-group identities make their related provenance explicit; neither
     sequence count nor candidate count establishes independent target coverage.
     """
+    from .antigen_allocation import AntigenAllocation, selection_type
+    policy = AntigenAllocation.resolve(options.antigen_allocation)
+    occurrences = list(antigen_occurrences(ranked, options, modality, source_evidence=source_evidence))
+    # Enabled sources establish the shared product's name and allocation kind.
+    # Disabled origins remain in the provenance and audit, but cannot hide an
+    # independently eligible occurrence of the same sequence.
+    occurrences.sort(key=lambda a: policy.max_per_kind.get(selection_type(a.sources[0])) == 0)
     by_sequence, used_names = {}, set()
-    for occurrence in antigen_occurrences(ranked, options, modality, source_evidence=source_evidence):
+    for occurrence in occurrences:
         existing = by_sequence.get(occurrence.amino_acids)
         if existing is not None:
             existing.sources.extend(s for s in occurrence.sources if s not in existing.sources)

@@ -61,6 +61,13 @@ def antigen_biology(antigen, *, source_evidence=None, peptides=()):
         facts.append(('Event', _locus(result.get('donor')) + ' → ' + _locus(result.get('acceptor'))))
     event = result.get('event_provenance') or {}
     event_type = result.get('event_type') or event.get('sv_type') or event.get('SVTYPE')
+    if not event_type:
+        from varcode import StructuralVariant
+        variants = [getattr(p.mutant_protein_fragment, 'variant', None) for p in peptides]
+        structural = next((v for v in variants if isinstance(v, StructuralVariant)), None)
+        if structural is not None:
+            event_type = structural.sv_type
+            facts.append(('Variant', structural.short_description))
     if event_type:
         facts.append(('Structural event', str(event_type)))
     for candidate in candidates:

@@ -114,6 +114,98 @@ def test_replay_preserves_cta_reference_under_score_overrides():
         report_config([report], EpitopeConfig(cta_sequence_bundle='/different/reference'))
 
 
+def test_saved_current_alias_does_not_hide_different_bundle_identities(bundle):
+    from copy import copy
+    from vaxrank.external_rescoring import report_config
+    from msgspec.structs import replace as replace_config
+    first, second = dataset(), dataset()
+    other = copy(bundle)
+    other.identity = 'oncoref:other-release'
+    for data, reference in ((first, bundle), (second, other)):
+        apply_cta_targeting(data, reference)
+        data.config = replace_config(data.config, cta_sequence_bundle='current')
+    reports = [SimpleNamespace(dataset=data, source_format='epitopes') for data in (first, second)]
+    with pytest.raises(ValueError, match='different sequence bundle identities'):
+        report_config(reports)
+
+
+def test_equivalent_bundle_paths_do_not_change_frozen_policy(bundle, monkeypatch):
+    from copy import copy
+    from msgspec.structs import replace as replace_config
+    from vaxrank.external_rescoring import report_config
+    from .test_epitope_dataset import forbidden
+    reports = []
+    for path in ('current', '/old-machine/bundle'):
+        data = dataset()
+        apply_cta_targeting(data, bundle)
+        data.config = replace_config(data.config, cta_sequence_bundle=path)
+        reports.append(SimpleNamespace(dataset=data, source_format='epitopes'))
+    monkeypatch.setattr('vaxrank.cta_targeting.load_bundle', forbidden)
+    assert report_config(reports).cta_sequence_bundle == 'current'
+    # An explicit replacement locator must resolve to the same frozen bundle.
+    monkeypatch.setattr('vaxrank.cta_targeting.load_bundle', lambda path: bundle)
+    config = EpitopeConfig(cta_sequence_bundle='/new-machine/pinned-bundle')
+    assert report_config(reports, config).cta_sequence_bundle == config.cta_sequence_bundle
+    other = copy(bundle)
+    other.identity = 'oncoref:different'
+    monkeypatch.setattr('vaxrank.cta_targeting.load_bundle', lambda path: other)
+    with pytest.raises(ValueError, match='Saved CTA targeting retains'):
+        report_config(reports, config)
+
+
+@pytest.mark.parametrize('saved_first', [False, True])
+@pytest.mark.parametrize('same_bundle', [False, True])
+def test_mixed_cta_admission_inherits_and_verifies_saved_bundle(
+        bundle, tmp_path, monkeypatch, saved_first, same_bundle):
+    from copy import copy
+    from dataclasses import asdict
+    from topiary import TopiaryPredictor
+    from vaxrank.cta_input import CTAExpressionSource, predict_cta_source
+    from vaxrank.external_rescoring import read_reports
+    from vaxrank.input_scope import scope_dict
+    from .test_external_rescoring import ContextPredictor, ALLELES
+    monkeypatch.setattr('vaxrank.cta_input.capture_local_hitlist_evidence', lambda *a, **k: {})
+    monkeypatch.setattr('vaxrank.cta_targeting.load_bundle', lambda path: bundle)
+    scope = replace(dataset().provenance[0].scope, sample_id='patient-001', mhc_alleles=tuple(ALLELES))
+    options = {k: v for k, v in asdict(contract()).items() if k != 'sample_id'}
+    options['min_expression'] = 2
+    original = tmp_path / 'original.tsv'
+    original.write_text('feature_id\tpatient_tpm\n' + PRAME + '\t10\n')
+    genome = EnsemblRelease(115)
+    source = CTAExpressionSource.load(original, options=options, scope=scope, genome=genome,
+                                      sequence_bundle='current')
+    config = EpitopeConfig(score_expr='1.0', cta_sequence_bundle='current')
+    report = predict_cta_source(source, TopiaryPredictor(models=[ContextPredictor()]),
+                                genome=genome, epitope_config=config)
+    native = tmp_path / 'native.tsv'
+    report.dataset.save(native)
+    fresh = tmp_path / 'fresh.tsv'
+    fresh.write_text('feature_id\tpatient_tpm\n' + PRAME + '\t20\n')
+    current = copy(bundle)
+    if not same_bundle:
+        current.identity = 'oncoref:changed-current'
+    monkeypatch.setattr('vaxrank.cta_targeting.load_bundle', lambda path: current)
+    inputs = [('epitopes', native), ('cta_expression', fresh)]
+    scopes = [{}, {**scope_dict(scope), 'cta_expression': options}]
+    if not saved_first:
+        inputs.reverse()
+        scopes.reverse()
+    predictions = []
+    def factory(scope):
+        predictions.append(scope)
+        return TopiaryPredictor(models=[ContextPredictor()])
+    if same_bundle:
+        reports = read_reports(inputs, scopes=scopes, genome=genome, antigen_predictor_factory=factory)
+        assert len(predictions) == 1
+        assert all(r.dataset.config.cta_sequence_bundle == 'current' for r in reports)
+        fresh_report = next(r for r in reports if r.source_format == 'cta_expression')
+        assert {targeting_evidence(e)['bundle_id'] for e in fresh_report.epitopes} == {bundle.identity}
+    else:
+        with pytest.raises(ValueError, match='different OncoRef sequence bundle identities'):
+            read_reports(inputs, scopes=scopes, genome=genome, antigen_predictor_factory=factory)
+        assert not predictions
+
+
 def test_current_expression_admission_uses_qualified_sequence_and_preserves_missing(bundle, tmp_path):
     path = tmp_path / 'expression.tsv'
     path.write_text('feature_id\tpatient_tpm\n' + PRAME + '\t12\nENSG00000111111\tNaN\n')
@@ -143,6 +235,82 @@ def test_identical_qualified_cta_sequences_keep_all_accessions_in_one_candidate(
     antigen, = admission.admitted_antigens
     assert antigen.protein_ids == ('equivalent-protein', 'representative')
     assert len(antigen.transcript_ids) == len(admission.decisions[0].assessment.equivalent_occurrences) == 2
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+@pytest.mark.parametrize('second_tpm', [1, 100])
+def test_transcript_measurements_survive_prediction_and_replay(bundle, tmp_path, monkeypatch, reverse, second_tpm):
+    from copy import deepcopy
+    from topiary import TopiaryPredictor
+    from vaxrank.cta_input import CTAExpressionSource, predict_cta_source
+    from .test_external_rescoring import ContextPredictor, ALLELES
+    records = list(bundle.records())
+    duplicate = deepcopy(records[0])
+    duplicate['record_id'] = 'equivalent-protein'
+    duplicate['occurrences'][0]['transcript_id'] = 'ENST00000398742.2'
+    records.append(duplicate)
+    bundle.records = lambda: iter(records)
+    rows = [(PRAME_TRANSCRIPT + '.3', 10), ('ENST00000398742.2', second_tpm)]
+    path = tmp_path / 'expression.tsv'
+    path.write_text('feature_id\tpatient_tpm\n' + ''.join('%s\t%s\n' % row
+                    for row in (rows[::-1] if reverse else rows)))
+    scope = replace(dataset().provenance[0].scope, sample_id='patient-001', mhc_alleles=tuple(ALLELES))
+    admission = admit_expression(path, contract('transcript'), CTAAdmissionPolicy(2, 'TPM'), bundle, scope)
+    assert len({d.assessment.antigen.source_identifier for d in admission.decisions}) == 2
+    provenance = InputProvenance('transcripts', 'cta_expression', str(path), '', scope)
+    source = CTAExpressionSource(admission, provenance, target_reference=bundle)
+    monkeypatch.setattr('vaxrank.cta_input.capture_local_hitlist_evidence', lambda *args: {})
+    report = predict_cta_source(source, TopiaryPredictor(models=[ContextPredictor()]),
+        genome=EnsemblRelease(115), epitope_config=EpitopeConfig(score_expr='1.0'))
+    native = tmp_path / 'predictions.tsv'
+    report.dataset.save(native)
+    restored = EpitopeDataset.load(native)
+    measured = restored.result.df[['transcript_id', 'cta_expression_value']].drop_duplicates()
+    assert dict(measured.itertuples(index=False, name=None)) == {
+        name: value for name, value in rows if value >= 2}
+    retained = restored.selection['antigen_inputs']['transcripts']
+    assert len(retained) == 2
+    assert {a['tumor_specificity']['status'] for a in retained.values()} == (
+        {'admitted'} if second_tpm >= 2 else {'admitted', 'held_out'})
+
+
+def test_host_snapshot_and_cta_policy_keep_independent_replayable_matches(bundle, tmp_path):
+    from orfdata import Proteome
+    from topiary import TopiaryPredictor
+    from vaxrank import HostReference
+    from vaxrank.antigen_input import predict_antigens
+    from vaxrank.epitope_io import save_predictions, load_predictions
+    from .test_host_reference import reference
+    from .test_external_rescoring import ContextPredictor, ALLELES
+    genome = EnsemblRelease(115)
+    base = reference(extra=False)
+    host = HostReference(Proteome(ReferenceContext.from_genome(genome),
+        [replace(e, source='ensembl:115') for e in base.proteins]), coverage=None)
+    fixture = dataset()
+    provenance = replace(fixture.provenance[0], scope=replace(fixture.provenance[0].scope,
+        sample_id='sample', mhc_alleles=tuple(ALLELES)))
+    antigen = fixture.antigens['0']
+    data = predict_antigens({'CTA': antigen, 'mutation': replace(antigen, kind='mutation')},
+        TopiaryPredictor(models=[ContextPredictor()]), genome=genome, provenance=provenance,
+        config=EpitopeConfig(score_expr='1.0'), host_reference=host, cta_bundle=bundle)
+    path = tmp_path / 'native.tsv'
+    data.save(path)
+    restored = EpitopeDataset.load(path)
+    assert restored.epitopes == data.epitopes
+    assert all(e.host_reference_match.reference_sha256 == host.identity for e in restored.epitopes)
+    cta = [e for e in restored.epitopes if restored.antigens[e.prediction_id].kind == 'CTA']
+    assert all(e.self_reference_match.reference_sha256 == bundle.identity for e in cta)
+    sliced = cta[0].sliced(0, len(cta[0].source_sequence))
+    assert sliced.host_reference_match == cta[0].host_reference_match
+    table = tmp_path / 'predictions.csv'
+    save_predictions(restored.epitopes, table)
+    assert [e.host_reference_match for e in load_predictions(table)] == [e.host_reference_match for e in restored.epitopes]
+    # A separate policy reference must never excuse a tampered host identity.
+    data.epitopes = (replace(data.epitopes[0], host_reference_match=replace(
+        data.epitopes[0].host_reference_match, reference_sha256='wrong-host')), *data.epitopes[1:])
+    data.save(path)
+    with pytest.raises(ValueError, match='disagrees with its host reference'):
+        EpitopeDataset.load(path)
 
 
 def test_current_cta_cli_reports_unsafe_regions_and_replays_without_reference(bundle, tmp_path, monkeypatch):

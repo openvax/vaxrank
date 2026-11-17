@@ -152,9 +152,11 @@ class VaccinePeptide(DataclassSerializable):
                 "A held-out antigen cannot be used to construct a VaccinePeptide"
             )
         if self.antigen.kind != ANTIGEN_KIND_MUTATION and fragment is not None:
-            raise ValueError(
-                "A non-mutation VaccinePeptide must not carry a mutation fragment"
-            )
+            from varcode import StructuralVariant
+            if self.antigen.kind != 'SV' or not isinstance(fragment.variant, StructuralVariant):
+                raise ValueError(
+                    "A non-mutation VaccinePeptide must not carry a mutation fragment"
+                )
         if (
             fragment is not None
             and fragment.amino_acids != self.antigen.amino_acids

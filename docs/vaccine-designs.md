@@ -74,7 +74,7 @@ Set goals and caps with a separate flag for each antigen type:
 Counts are **unique antigen sequences across the whole vaccine**, including
 all mRNA constructs. They count selected source windows in long-antigen mode
 and individual epitopes in minimal-epitope mode. A shared sequence counts once
-under its first ranked source type and retains all other sources. These are
+under its first enabled ranked source type and retains all other sources. These are
 category totals, distinct from `--max-windows-per-antigen-source`, which caps
 the number of windows taken from each source protein/event.
 

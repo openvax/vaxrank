@@ -372,10 +372,11 @@ class EpitopeDataset:
                     raise ValueError('Native provenance disagrees with its host reference')
                 dataset.host_reference.validate(source.scope)
             for candidate in dataset.epitopes:
+                host_match = candidate.host_reference_match or candidate.self_reference_match
                 if (candidate.input_provenance is None
                         or candidate.input_provenance.scope.host_reference_sha256 != dataset.host_reference.identity
-                        or candidate.self_reference_match is None
-                        or candidate.self_reference_match.reference_sha256 != dataset.host_reference.identity):
+                        or host_match is None
+                        or host_match.reference_sha256 != dataset.host_reference.identity):
                     raise ValueError('Native candidate disagrees with its host reference')
         elif any(p.scope.host_reference_sha256 is not None for p in dataset.provenance):
             raise ValueError('Native evidence is missing its declared host reference')

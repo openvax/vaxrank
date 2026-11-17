@@ -138,6 +138,98 @@ def typed_candidate(index, kind, sequence):
     return antigen, [replace(peptides[0], antigen=antigen)]
 
 
+@pytest.mark.parametrize('disabled', ['ncORF', 'CTA', 'SV', 'fusion', 'viral'])
+def test_category_switch_precedes_ranked_source_limit(disabled):
+    import json
+    from vaxrank.antigen_allocation import select_ranked_sources
+    source, peptides = typed_candidate(0, 'mutation' if disabled == 'ncORF' else disabled, 'SIINFEKLA')
+    if disabled == 'ncORF':
+        source = replace(source, source_metadata=(('isovar_candidate', json.dumps(
+            {'coding_reference': {'kind': 'extra_orf', 'orf_type': 'uORF'}})),))
+        peptides = [replace(peptides[0], antigen=source)]
+    ordinary = candidate(1, 'GILGFVFTL')
+    audit = {}
+    selected = select_ranked_sources([(source, peptides), ordinary, candidate(2)],
+        {'max_per_kind': {disabled: 0}}, limit=1, audit=audit)
+    assert selected == [ordinary]
+    assert [d['reason'] for d in audit['ranked_source_selection']] == [
+        'antigen_type_disabled', 'selected', 'ranked_source_limit']
+
+
+@pytest.mark.parametrize('sv_type', ['DEL', 'DUP', 'INV', 'BND'])
+def test_direct_structural_fragment_keeps_sv_category_in_both_products(sv_type, tmp_path):
+    from pyensembl import EnsemblRelease
+    from varcode import StructuralVariant
+    from vaxrank.antigen_allocation import select_ranked_sources
+    from vaxrank.antigen_biology import antigen_biology
+    from vaxrank.epitope_dataset import EpitopeDataset
+    from vaxrank.input_scope import InputProvenance, InputScope
+    from vaxrank.mutant_protein_fragment import MutantProteinFragment
+    from vaxrank.vaccine_peptide import VaccinePeptide
+    variant = StructuralVariant('1', 100, sv_type, end=200, genome=EnsemblRelease(110),
+        **(dict(mate_contig='2', mate_start=300, mate_orientation='++') if sv_type == 'BND' else {}))
+    original, peptides = candidate(0)
+    fragment = MutantProteinFragment(variant=variant, gene_name='SVGENE',
+        amino_acids=original.amino_acids, mutant_amino_acid_start_offset=5,
+        mutant_amino_acid_end_offset=5, supporting_reference_transcripts=[],
+        n_overlapping_reads=10, n_alt_reads=5, n_ref_reads=5,
+        n_alt_reads_supporting_protein_sequence=5)
+    peptide = VaccinePeptide(mutant_protein_fragment=fragment, epitopes=peptides[0].epitopes)
+    assert peptide.antigen.kind == 'SV'
+    assert dict(antigen_biology(peptide.antigen, peptides=[peptide])['facts'])['Structural event'] == sv_type
+    ranked = [(variant, [peptide])]
+    assert not select_ranked_sources(ranked, {'max_per_kind': {'SV': 0}})
+    assert select_ranked_sources(ranked, {'max_per_kind': {'mutation': 0}}) == ranked
+    data = EpitopeDataset.from_predictions(())
+    data.provenance = (InputProvenance('direct-sv', 'vcf_bam', 'synthetic.vcf', 'test', InputScope()),)
+    data.add_mutation(fragment, peptide.epitopes)
+    path = tmp_path / 'sv.tsv'
+    data.save(path)
+    assert {a.kind for a in EpitopeDataset.load(path).antigens.values()} == {'SV'}
+    options = dict(min_antigen_length_aa=9, max_antigen_length_aa=13)
+    for products in (
+        assemble_peptide_constructs(ranked, PeptideConstructConfig(**options)),
+        assemble_mrna_constructs(ranked, RNAConstructConfig(**options, optimize_linkers=False,
+            codon_method='use_best_codon'), host_taxon_id=9606),
+    ):
+        product, = products
+        assert 'SV ' + sv_type in product.antigen_names[0]
+        source, = product.antigens[0]['sources']
+        assert source['kind'] == 'SV' and source['source_event']['sv_type'] == sv_type
+        assert source['source_event']['end'] == 200
+        if sv_type == 'BND':
+            assert source['source_event']['mate_contig'] == '2'
+            assert source['source_event']['mate_start'] == 300
+
+
+@pytest.mark.parametrize('modality', ['peptide', 'mrna'])
+@pytest.mark.parametrize('disabled', ['ncORF', 'CTA', 'SV', 'fusion', 'viral', 'splice', 'ERV', 'isoform'])
+@pytest.mark.parametrize('disabled_first', [False, True])
+def test_disabled_duplicate_cannot_remove_enabled_source(modality, disabled, disabled_first):
+    import json
+    ordinary = candidate(0)
+    other, peptides = typed_candidate(1, 'mutation' if disabled == 'ncORF' else disabled, 'SIINFEKLA')
+    if disabled == 'ncORF':
+        other = replace(other, source_metadata=(('isovar_candidate', json.dumps(
+            {'coding_reference': {'kind': 'extra_orf', 'orf_type': 'uORF'}})),))
+        peptides = [replace(peptides[0], antigen=other)]
+    ranked = [(other, peptides), ordinary] if disabled_first else [ordinary, (other, peptides)]
+    options = dict(min_antigen_length_aa=9, max_antigen_length_aa=13,
+                   antigen_allocation={'max_per_kind': {disabled: 0}})
+    audit = {}
+    if modality == 'peptide':
+        products = assemble_peptide_constructs(ranked, PeptideConstructConfig(**options), selection_audit=audit)
+    else:
+        products = assemble_mrna_constructs(ranked, RNAConstructConfig(**options, optimize_linkers=False),
+                                           selection_audit=audit, host_taxon_id=9606)
+    assert len(products) == 1
+    assert products[0].antigens[0]['aa'] == ordinary[0].amino_acids
+    sources = products[0].antigens[0]['sources']
+    assert sources[0]['source_identifier'] == ordinary[0].source_identifier
+    assert {s['source_identifier'] for s in sources} == {'candidate-0', 'candidate-1'}
+    assert audit['allocation']['emitted_counts'] == {'mutation': 1}
+
+
 @pytest.mark.parametrize('modality', ['peptide', 'mrna'])
 def test_ranked_after_dedup_caps_and_explicit_goals(modality):
     ranked = [typed_candidate(0, 'CTA', 'SIINFEKLA'), typed_candidate(1, 'mutation', 'SIINFEKLA'),

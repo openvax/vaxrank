@@ -37,6 +37,8 @@ def admit_expression(path, contract, policy, bundle, scope):
                                  TumorSpecificityEvidence, VaccineAntigen)
     reference = bundle_scope(bundle)
     combine_scopes(scope, reference, 'CTA sequence bundle')
+    if contract.expression_unit != policy.expression_unit:
+        raise ValueError('Expression input units do not match the CTA admission policy')
     annotation_name, annotation_version = reference.annotation.split(':', 1)
     expression = list(_expression_rows(path, contract))
     wanted = {feature for _, feature, _ in expression}
@@ -78,7 +80,9 @@ def admit_expression(path, contract, policy, bundle, scope):
                 gene_id=gene_id, gene_name=occurrence.get('gene_name') or '',
                 transcript_ids=transcripts, protein_ids=proteins,
                 species=species_name_for_taxon(reference.host_taxon_id),
-                source_identifier=gene_id + ':' + hashlib.sha256(sequence.encode()).hexdigest(),
+                source_identifier=gene_id + ':' + (
+                    identifier + ':' if contract.measurement_level == 'transcript' else ''
+                ) + hashlib.sha256(sequence.encode()).hexdigest(),
                 source_metadata=(('oncoref_sequence_bundle', bundle.identity),),
                 tumor_specificity=TumorSpecificityAttestation(
                     status='admitted' if admitted else 'held_out', evidence_kind='cta_expression',
@@ -125,6 +129,25 @@ def peptide_containment(peptides, bundle):
 
 def targeting_evidence(epitope):
     return next((record for record in epitope.input_evidence if record.get('schema') == SCHEMA), None)
+
+
+def recorded_bundle_ids(dataset):
+    """Identify frozen CTA policies from evidence, without resolving live aliases."""
+    identities = set()
+    for epitope in dataset.epitopes:
+        antigen = dataset.antigens.get(epitope.prediction_group_source)
+        if antigen is not None and antigen.kind == 'CTA':
+            evidence = targeting_evidence(epitope)
+            identities.add(evidence['bundle_id'] if evidence else None)
+    for antigen in dataset.antigens.values():
+        if antigen.kind == 'CTA':
+            identities.update(value for key, value in antigen.source_metadata
+                              if key == 'oncoref_sequence_bundle')
+    # Admission-only sources can have no retained predictions.
+    for identity, evidence in dataset.selection.get('source_evidence', {}).items():
+        if evidence.get('schema') == 'vaxrank.oncoref_target_reference.v1':
+            identities.add(identity)
+    return identities
 
 
 def matching_gene_summary(matches, roles=('exclude', 'review')):

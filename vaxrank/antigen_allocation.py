@@ -14,11 +14,37 @@ def normalize_selection_type(value):
     return next((kind for kind in ANTIGEN_SELECTION_TYPES if kind.lower() == value.lower()), value)
 
 
-def selection_type(source):
+def selection_type(source, source_evidence=None):
+    if not isinstance(source, dict):
+        from .coding_context import coding_contexts
+        source = dict(kind=source.kind, coding_contexts=coding_contexts(source, source_evidence))
     if source['kind'] == 'mutation' and any(
             context.get('kind') == 'extra_orf' for context in source.get('coding_contexts', ())):
         return 'ncORF'
     return source['kind']
+
+
+def select_ranked_sources(ranked, policy=None, limit=None, *, source_evidence=None, audit=None):
+    """Apply category switches before the shared ranked-source budget.
+
+    Positive type caps count unique assembled sequences later. This stage only
+    removes disabled categories; the native dataset retains their evidence.
+    """
+    policy = AntigenAllocation.resolve(policy)
+    selected, decisions = [], []
+    for source, peptides in ranked:
+        eligible = [p for p in peptides if policy.max_per_kind.get(
+            selection_type(p.antigen, source_evidence)) != 0]
+        reason = ('antigen_type_disabled' if not eligible else 'ranked_source_limit'
+                  if limit is not None and len(selected) >= limit else 'selected')
+        if reason == 'selected':
+            selected.append((source, eligible))
+        if audit is not None:
+            from .input_coverage import report_source_key
+            decisions.append(dict(source_key=report_source_key(source), reason=reason))
+    if audit is not None:
+        audit['ranked_source_selection'] = decisions
+    return selected
 
 
 @dataclass(frozen=True)
@@ -56,7 +82,7 @@ class AntigenAllocation:
 def allocate_antigens(antigens, policy, audit):
     """Return a deterministic packing order after sequence deduplication.
 
-    One product is attributed to the kind of its first ranked source. All other
+    One product is attributed to the kind of its first enabled ranked source. All other
     source kinds remain in provenance, but cannot earn multiple allocation units.
     Minimums are goals; packing may truncate them. No eligible type is fabricated.
     """
@@ -91,7 +117,7 @@ def allocate_antigens(antigens, policy, audit):
     decisions.extend(dict(name=a.name, kind=selection_type(a.sources[0]), original_order=i + 1,
                           allocation_order=None, reason='antigen_type_cap') for i, a in pending)
     audit['allocation'] = dict(policy=asdict(policy), unit='unique_antigen_sequence',
-                               attribution='first_ranked_source', decisions=decisions)
+                               attribution='first_enabled_ranked_source', decisions=decisions)
     return ordered
 
 

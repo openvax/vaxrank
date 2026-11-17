@@ -152,7 +152,7 @@ class CTAExpressionSource:
 
     @classmethod
     def load(cls, path, *, options, scope, genome, manifest_path=None, declarations=None, host_reference=None,
-             sequence_bundle=None):
+             sequence_bundle=None, target_reference=None):
         if host_reference is not None:
             scope = host_reference.validate(scope, genome=genome, location=str(path))
         scope = resolve_host_scope(scope, genome, location=str(path))
@@ -176,12 +176,11 @@ class CTAExpressionSource:
                               genome=genome, host_reference=host_reference)
         from .species_cta import cta_overrides
         restriction_policy, restriction_evidence = restriction_options(options)
-        target_reference = None
         if sequence_bundle is not None:
             if any(options.get(key) for key in ('restriction_policy', 'restriction_evidence', 'evidence_snapshot', 'overrides', 'exclusion_policy')):
                 raise ValueError('Current CTA sequence policy cannot be combined with legacy admission overrides')
             from .cta_targeting import admit_expression, load_bundle
-            target_reference = load_bundle(sequence_bundle)
+            target_reference = target_reference or load_bundle(sequence_bundle)
             admission = admit_expression(path, contract, policy, target_reference, scope)
         else:
             admission = admit_cta_expression(path, input_contract=contract, admission_policy=policy,

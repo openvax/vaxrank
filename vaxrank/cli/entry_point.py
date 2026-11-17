@@ -1898,9 +1898,9 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
             # be overridden with args from this run (which all be output related)
             data['args'].update(vars(args))
 
-            # if we need to truncate the variant list based on max_sources, do that here
-            if args.max_sources is not None and len(data['variants']) > args.max_sources:
-                data['variants'] = data['variants'][:args.max_sources]
+            from ..antigen_allocation import select_ranked_sources
+            data['variants'] = select_ranked_sources(data['variants'],
+                vaccine_config_from_args(args).antigen_allocation, args.max_sources)
             return data
     # get various things from user args
     mhc_alleles = mhc_alleles_from_args(args)
@@ -1930,8 +1930,13 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
         df.to_csv(args.output_passing_variants_csv, index=False)
 
     ranked_variants_with_vaccine_peptides = vaxrank_results.ranked_vaccine_peptides
-    ranked_variants_with_vaccine_peptides_for_report = \
-        ranked_variants_with_vaccine_peptides[:args.max_sources]
+    from ..antigen_allocation import select_ranked_sources
+    design_dataset = getattr(args, '_design_dataset', None)
+    ranked_variants_with_vaccine_peptides_for_report = select_ranked_sources(
+        ranked_variants_with_vaccine_peptides, vaccine_config_from_args(args).antigen_allocation,
+        args.max_sources, source_evidence=(design_dataset.selection.get('source_evidence')
+            if design_dataset is not None else None),
+        audit=design_dataset.selection if design_dataset is not None else None)
     pipeline_inputs = [
         ('VCF (somatic variants)', '; '.join(variants.sources))
     ] if variants.sources else []

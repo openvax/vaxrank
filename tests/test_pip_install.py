@@ -94,7 +94,7 @@ def test_workflow_routes_dependency_installs_through_retry_script(tmp_path, pip_
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     installs = [call for call in calls if call[:3] == ["-m", "pip", "install"]]
     expected = ([["-m", "pip", "install", "--upgrade", "pip"],
-                 ["-m", "pip", "install", "pytest", "pytest-cov", "ruff"],
+                 ["-m", "pip", "install", "setuptools>=77.0.3", "pytest", "pytest-cov", "ruff"],
                  ["-m", "pip", "install", ".", "topiary[weirdo]>=5.95.0,<6"],
                  ["-m", "pip", "install", "--no-cache-dir", ".", "topiary[weirdo]>=5.95.0,<6"]]
                 if job == "build" else [["-m", "pip", "install", ".", "pytest", "msgspec==0.18.6"],

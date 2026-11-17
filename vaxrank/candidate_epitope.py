@@ -633,6 +633,11 @@ class CandidateEpitope(Peptide):
     # raw-reference behavior for legacy files and external-input loaders.
     self_reference_match: Optional["SelfReferenceMatch"] = None
 
+    # Raw host-inventory evidence is independent of antigen-specific exclusion
+    # policy (e.g. OncoRef CTA roles). A frozen host snapshot keeps its own
+    # identity even when the target policy uses a different reference bundle.
+    host_reference_match: Optional["SelfReferenceMatch"] = None
+
     # Patient alleles for which this candidate has input evidence. This is
     # usually identical to the non-empty alleles on prediction leaves, but
     # must be retained separately for allele-independent evidence such as
@@ -810,6 +815,7 @@ class CandidateEpitope(Peptide):
             occurs_in_reference=self.occurs_in_reference,
             occurs_in_non_CTA_reference=self.occurs_in_non_CTA_reference,
             self_reference_match=self.self_reference_match,
+            host_reference_match=self.host_reference_match,
             patient_alleles=self.patient_alleles,
             prediction_id=self.prediction_id,
             input_provenance=self.input_provenance,
@@ -927,6 +933,7 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
                 'occurs_in_reference': False,
                 'occurs_in_non_CTA_reference': False,
                 'self_reference_match': None,
+                'host_reference_match': None,
                 'patient_alleles': set(),
                 # Accumulator for per-allele DSL scores. Same allele
                 # may appear in multiple rows (different predictors);
@@ -973,14 +980,14 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
         slot['occurs_in_reference'] |= bool(row.get('occurs_in_reference', False))
         slot['occurs_in_non_CTA_reference'] |= bool(
             row.get('occurs_in_non_CTA_reference', False))
-        self_reference_match = row.get('self_reference_match')
-        if self_reference_match is not None:
-            existing_match = slot['self_reference_match']
-            if existing_match is not None and existing_match != self_reference_match:
-                raise ValueError(
-                    "Conflicting self-reference matches for one candidate epitope"
-                )
-            slot['self_reference_match'] = self_reference_match
+        for name in ('self_reference_match', 'host_reference_match'):
+            match = row.get(name)
+            if match is not None:
+                existing_match = slot[name]
+                if existing_match is not None and existing_match != match:
+                    raise ValueError('Conflicting %s matches for one candidate epitope' %
+                                     name.removesuffix('_match').replace('_', '-'))
+                slot[name] = match
         if 'allele_score' in row and row.get('mutant') is not None and row['mutant'].allele:
             # Allele-free leaves (antigen_processing, proteasome_cleavage)
             # carry a score for the peptide, not for an allele. Writing it
@@ -1031,6 +1038,7 @@ def candidate_epitopes_from_rows(rows) -> list["CandidateEpitope"]:
             occurs_in_reference=slot['occurs_in_reference'],
             occurs_in_non_CTA_reference=slot['occurs_in_non_CTA_reference'],
             self_reference_match=slot['self_reference_match'],
+            host_reference_match=slot['host_reference_match'],
             patient_alleles=tuple(sorted(slot['patient_alleles'])),
             prediction_id=slot['prediction_id'],
             per_allele_scores=dict(slot['per_allele_scores']),

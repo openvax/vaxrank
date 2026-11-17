@@ -55,6 +55,8 @@ def ranking_coverage(dataset, reports, outcomes, ranked):
     retained = Counter()
     target_overlap = Counter()
     ranked_keys = {report_source_key(source): i for i, (source, _) in enumerate(ranked, 1)}
+    selection_reasons = {d['source_key']: d['reason']
+                         for d in dataset.selection.get('ranked_source_selection', ())}
 
     def add(source, input_ids=()):
         key = report_source_key(source)
@@ -129,7 +131,10 @@ def ranking_coverage(dataset, reports, outcomes, ranked):
             row['stage'] = 'Ranked'
         elif row['has_window']:
             row['stage'] = 'Shared ranking'
-            row['reasons'] = ['Window available but absent from the final ranked list']
+            row['reasons'] = [{
+                'antigen_type_disabled': 'Antigen category disabled by the effective selection policy',
+                'ranked_source_limit': 'Ranked source limit reached',
+            }.get(selection_reasons.get(key), 'Window available but absent from the final ranked list')]
         else:
             row['stage'] = 'Candidate windows'
             row['reasons'] = ['No ranked window under the effective configuration']
