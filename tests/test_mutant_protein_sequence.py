@@ -249,13 +249,16 @@ def test_keep_top_k_epitopes():
         "--vaccine-peptide-length", "15",
         "--padding-around-mutation", "5",
         "--num-epitopes-per-vaccine-peptide", str(keep_k_epitopes),
-        "--mhc-predictor", "netmhc",
+        "--mhc-predictor", "random",
+        # Keep enough generated predictions to exercise top-K truncation.
+        "--min-epitope-score", "0",
         "--mhc-alleles", "HLA-A*02:01",
         "--mhc-species", "human",
     ])
     results = run_vaxrank_from_parsed_args(args)
 
     ranked_list = results.ranked_vaccine_peptides
+    assert ranked_list
 
     from tests._legacy_score_reference import legacy_score_one as _legacy_score_one
     for variant, vaccine_peptides in ranked_list:
@@ -310,13 +313,15 @@ def test_mutant_protein_fragment_serialization():
         "--vaccine-peptide-length", "15",
         "--padding-around-mutation", "5",
         "--num-epitopes-per-vaccine-peptide", str(keep_k_epitopes),
-        "--mhc-predictor", "netmhc",
+        "--mhc-predictor", "random",
+        "--min-epitope-score", "0",
         "--mhc-alleles", "HLA-A*02:01",
         "--mhc-species", "human",
     ])
     results = run_vaxrank_from_parsed_args(args)
 
     ranked_list = results.ranked_vaccine_peptides
+    assert ranked_list
 
     for _, vaccine_peptides in ranked_list:
         mutant_protein_fragment = vaccine_peptides[0].mutant_protein_fragment
