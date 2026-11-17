@@ -136,7 +136,7 @@ def test_empty_native_result_replays_scope_settings_and_products(tmp_path, monke
             'inputs': [], 'products': {}, 'assembly_decisions': {
                 'order': 'ranked_antigen_types_then_allele_coverage_then_input_order',
                 'allocation': {'policy': {'mode': 'ranked', 'min_per_kind': {}, 'max_per_kind': {}},
-                               'unit': 'unique_antigen_sequence', 'attribution': 'first_ranked_source',
+                               'unit': 'unique_antigen_sequence', 'attribution': 'first_enabled_ranked_source',
                                'decisions': [], 'emitted_counts': {}, 'unmet_goals': []},
                 'deduplication': 'exact_amino_acid_sequence',
                 'overlap': 'retain_distinct_sequences', 'antigens': []}}

@@ -67,8 +67,8 @@ def test_ncorf_switch_is_independent_of_ordinary_mutations():
     ncorf = replace(ordinary, source_identifier='ncorf', source_metadata=(('isovar_candidate',
         json.dumps({'coding_reference': {'kind': 'extra_orf', 'orf_type': 'uORF'}})),))
     ncorf_peptide = VaccinePeptide(antigen=ncorf, epitopes=peptides[0].epitopes)
-    # Different windows avoid sequence deduplication attributing one product
-    # to its first source, which is intentionally independent of the switch.
+    # Distinct sequences exercise independent category selection; shared
+    # sequences are covered by the allocation regression tests.
     ordinary2, peptides2 = candidate(1, 'GILGFVFTL')
     ranked = [(ordinary2, peptides2), (ncorf, [ncorf_peptide])]
     config = PeptideConstructConfig(antigen_allocation=AntigenAllocation(max_per_kind={'ncORF': 0}))
