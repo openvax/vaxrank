@@ -402,7 +402,7 @@ def test_high_level_predictor_error_is_not_empty_success():
 
 
 def test_invalid_allele_uses_mhcgnomes_and_fails_closed():
-    with pytest.raises(RiskLigandError, match="Invalid MHC allele"):
+    with pytest.raises(RiskLigandError, match="not-an-allele"):
         risk_ligand_index_from_prediction_frame(
             pd.DataFrame(),
             protein_sequences=_protein_sequences(),
