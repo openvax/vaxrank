@@ -78,6 +78,7 @@ VAXRANK_COLUMNS = [
     # the permissive legacy behavior when absent.
     "overlaps_targetable",
     "self_reference_match",
+    "host_reference_match",
     "source_sequence",
     "source_name",
     # Flanking residues drive processing/cleavage predictors, so a reload
@@ -177,6 +178,9 @@ def epitope_prediction_rows(epitope):
             "self_reference_match": (
                 epitope.self_reference_match.to_json()
                 if epitope.self_reference_match is not None else ""),
+            "host_reference_match": (
+                epitope.host_reference_match.to_json()
+                if epitope.host_reference_match is not None else ""),
             "source_sequence": epitope.source_sequence,
             "source_name": epitope.source_name,
             "n_flank": epitope.n_flank,
@@ -427,13 +431,11 @@ def load_predictions(path):
         overlaps_targetable = (
             None if cells.missing(targetable_raw)
             else cells.boolean(targetable_raw))
-        self_reference_raw = string_or_empty(
-            row.get("self_reference_match", ""))
-        self_reference_match = None
-        if self_reference_raw:
-            from .vaccine_antigen import SelfReferenceMatch
-            self_reference_match = from_native_json(
-                self_reference_raw, SelfReferenceMatch)
+        from .vaccine_antigen import SelfReferenceMatch
+        reference_matches = {}
+        for name in ('self_reference_match', 'host_reference_match'):
+            raw = string_or_empty(row.get(name, ''))
+            reference_matches[name] = from_native_json(raw, SelfReferenceMatch) if raw else None
         rows.append({
             'peptide': peptide,
             'source': string_or_empty(row.get("source_sequence", "")),
@@ -443,7 +445,7 @@ def load_predictions(path):
             'prediction_id': string_or_empty(row.get("prediction_id", "")),
             'offset': int(row.get("offset", 0)),
             'overlaps_targetable': overlaps_targetable,
-            'self_reference_match': self_reference_match,
+            **reference_matches,
             'mutant': mutant,
             'wt': wt,
             'source_class': string_or_empty(

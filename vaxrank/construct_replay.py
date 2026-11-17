@@ -144,6 +144,9 @@ def _canonical_native(value):
     result = {key: _canonical_native(item) for key, item in value.items()}
     metadata = result.get('__class__')
     if (metadata == dict(__module__='vaxrank.candidate_epitope', __name__='CandidateEpitope')
+            and result.get('host_reference_match') is None):
+        result.pop('host_reference_match', None)
+    if (metadata == dict(__module__='vaxrank.candidate_epitope', __name__='CandidateEpitope')
             and not result.get('ms_scoring')):
         result.pop('ms_scoring', None)
     if (metadata == dict(__module__='vaxrank.peptide', __name__='PeptideConstruct')

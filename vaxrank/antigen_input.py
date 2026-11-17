@@ -340,11 +340,17 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
             matches[name] = host_matches[name] = {
                 p: antigen.self_reference_match(p, False)
                 for p in frame.loc[frame.source_sequence_name.eq(name), 'peptide']}
+            if host_reference is not None:
+                host_matches[name] = host_reference.matches(
+                    frame.loc[frame.source_sequence_name.eq(name), 'peptide'],
+                    replace(antigen, self_reference_excluded_gene_ids=()))
     dataset.epitopes = tuple(replace(
         e, input_provenance=provenance, patient_alleles=alleles,
         occurs_in_reference=host_matches[e.source_name][e.sequence].occurs,
         occurs_in_non_CTA_reference=matches[e.source_name][e.sequence].occurs,
-        self_reference_match=matches[e.source_name][e.sequence]) for e in dataset.epitopes)
+        self_reference_match=matches[e.source_name][e.sequence],
+        host_reference_match=(host_matches[e.source_name][e.sequence]
+                              if host_reference is not None else None)) for e in dataset.epitopes)
     dataset.result.df['occurs_in_reference'] = [host_matches[r.source_sequence_name][r.peptide].occurs
                                                for r in frame.itertuples()]
     dataset.result.df['occurs_in_non_CTA_reference'] = [matches[r.source_sequence_name][r.peptide].occurs
@@ -378,12 +384,13 @@ def validate_antigen_args(args):
 
 
 def antigen_report(inputs, predictor, *, genome, provenance, config=None, host_reference=None,
-                   patient_backgrounds=None):
+                   patient_backgrounds=None, cta_bundle=None):
     """Adapt validated sequences into the common report representation."""
     from .external_report import ExternalReport
     dataset = predict_antigens(inputs.antigens, predictor, genome=genome,
                                provenance=provenance, config=config, host_reference=host_reference,
-                               source_evidence=inputs.source_evidence, patient_backgrounds=patient_backgrounds)
+                               source_evidence=inputs.source_evidence, patient_backgrounds=patient_backgrounds,
+                               cta_bundle=cta_bundle)
     return ExternalReport(provenance.source_format, provenance.path, report_df=dataset.report_frame(),
                           epitopes=dataset.epitopes, dataset=dataset,
                           input_provenance=provenance)

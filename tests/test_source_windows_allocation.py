@@ -138,6 +138,52 @@ def typed_candidate(index, kind, sequence):
     return antigen, [replace(peptides[0], antigen=antigen)]
 
 
+@pytest.mark.parametrize('disabled', ['ncORF', 'CTA', 'SV', 'fusion', 'viral'])
+def test_category_switch_precedes_ranked_source_limit(disabled):
+    import json
+    from vaxrank.antigen_allocation import select_ranked_sources
+    source, peptides = typed_candidate(0, 'mutation' if disabled == 'ncORF' else disabled, 'SIINFEKLA')
+    if disabled == 'ncORF':
+        source = replace(source, source_metadata=(('isovar_candidate', json.dumps(
+            {'coding_reference': {'kind': 'extra_orf', 'orf_type': 'uORF'}})),))
+        peptides = [replace(peptides[0], antigen=source)]
+    ordinary = candidate(1, 'GILGFVFTL')
+    audit = {}
+    selected = select_ranked_sources([(source, peptides), ordinary, candidate(2)],
+        {'max_per_kind': {disabled: 0}}, limit=1, audit=audit)
+    assert selected == [ordinary]
+    assert [d['reason'] for d in audit['ranked_source_selection']] == [
+        'antigen_type_disabled', 'selected', 'ranked_source_limit']
+
+
+@pytest.mark.parametrize('modality', ['peptide', 'mrna'])
+@pytest.mark.parametrize('disabled', ['ncORF', 'CTA', 'SV', 'fusion', 'viral', 'splice', 'ERV', 'isoform'])
+@pytest.mark.parametrize('disabled_first', [False, True])
+def test_disabled_duplicate_cannot_remove_enabled_source(modality, disabled, disabled_first):
+    import json
+    ordinary = candidate(0)
+    other, peptides = typed_candidate(1, 'mutation' if disabled == 'ncORF' else disabled, 'SIINFEKLA')
+    if disabled == 'ncORF':
+        other = replace(other, source_metadata=(('isovar_candidate', json.dumps(
+            {'coding_reference': {'kind': 'extra_orf', 'orf_type': 'uORF'}})),))
+        peptides = [replace(peptides[0], antigen=other)]
+    ranked = [(other, peptides), ordinary] if disabled_first else [ordinary, (other, peptides)]
+    options = dict(min_antigen_length_aa=9, max_antigen_length_aa=13,
+                   antigen_allocation={'max_per_kind': {disabled: 0}})
+    audit = {}
+    if modality == 'peptide':
+        products = assemble_peptide_constructs(ranked, PeptideConstructConfig(**options), selection_audit=audit)
+    else:
+        products = assemble_mrna_constructs(ranked, RNAConstructConfig(**options, optimize_linkers=False),
+                                           selection_audit=audit, host_taxon_id=9606)
+    assert len(products) == 1
+    assert products[0].antigens[0]['aa'] == ordinary[0].amino_acids
+    sources = products[0].antigens[0]['sources']
+    assert sources[0]['source_identifier'] == ordinary[0].source_identifier
+    assert {s['source_identifier'] for s in sources} == {'candidate-0', 'candidate-1'}
+    assert audit['allocation']['emitted_counts'] == {'mutation': 1}
+
+
 @pytest.mark.parametrize('modality', ['peptide', 'mrna'])
 def test_ranked_after_dedup_caps_and_explicit_goals(modality):
     ranked = [typed_candidate(0, 'CTA', 'SIINFEKLA'), typed_candidate(1, 'mutation', 'SIINFEKLA'),
