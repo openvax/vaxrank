@@ -28,6 +28,12 @@ vaxrank-window-exposure --input-epitopes native.tsv --profile profile.json \
 Outputs: `request.json`, `exposure.json`, `cores.csv` and `report.md`.
 The request also works with `mhctools vaccine-windows`.
 
+Alleles in saved scores and supplied `core_intervals` use the same
+Topiary/mhcgnomes validation as prediction inputs. Aliases match their canonical
+names, including nonhuman alleles and class II pairs. Genes, serotypes, allele
+groups and null alleles are rejected instead of being treated as expressed
+prediction alleles. The library's `normalize_mhc_allele` follows the same rule.
+
 ## Interpret
 
 - Free linear peptides default to **1 µg per window**. Supply the actual terminal
