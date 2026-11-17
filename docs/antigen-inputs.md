@@ -23,7 +23,8 @@ variants, LENS and Isovar. It contains:
 - `rna_product`: fusion, splice or isoform when supplied.
 - `junctions`: `JunctionOrigin` records with shared genomic endpoints and,
   only when provided by reconstruction, source-protein intervals. Genomic
-  positions are one-based; protein intervals are zero-based, half-open.
+  positions are one-based, including VCF virtual telomeric positions 0 and
+  chromosome length + 1; protein intervals are zero-based, half-open.
 
 These fields travel through prediction, slicing, native serialization, reports
 and product source mappings. Original producer evidence stays separately

@@ -193,16 +193,17 @@ def test_native_origin_rejects_unknown_nested_fields(tmp_path):
         AntigenDataset.load(path)
 
 
-def test_product_event_identity_is_shared_by_direct_and_isovar_origins():
+@pytest.mark.parametrize('ref,alt', [('A', 'T'), ('A', 'AT'), ('AT', 'A')])
+def test_product_event_identity_is_shared_by_direct_and_isovar_origins(ref, alt):
     from dataclasses import replace
     from varcode import Variant
     from vaxrank.antigen_origin import AntigenOrigin, VariantOrigin
     from vaxrank.assembly_antigens import summarize_products
     from vaxrank.peptide import assemble_peptide_constructs, PeptideConstructConfig
     from .test_assembly_antigens import candidate
-    variant = Variant('1', 100, 'A', 'T', genome=EnsemblRelease(110))
+    variant = Variant('1', 100, ref, alt, genome=EnsemblRelease(110))
     direct = VariantOrigin.from_variant(variant)
-    exported = VariantOrigin.from_alleles(dict(contig='1', start=100, ref='A', alt='T', reference_name='GRCh38'))
+    exported = VariantOrigin.from_alleles(dict(contig='1', start=variant.start, ref=variant.ref, alt=variant.alt, reference_name='GRCh38'))
     ranked = []
     for index, origin in enumerate((direct, exported)):
         antigen, peptides = candidate(index)
@@ -212,6 +213,8 @@ def test_product_event_identity_is_shared_by_direct_and_isovar_origins():
     assert len(products) == 1
     sources = products[0].antigens[0]['sources']
     assert len(sources) == 2 and sources[0]['source_event'] == sources[1]['source_event']
+    assert sources[0]['source_event']['ref'] == variant.ref
+    assert sources[0]['source_event']['alt'] == variant.alt
     assert summarize_products(products)['source_events'] == 1
 
 
@@ -253,3 +256,13 @@ def test_native_fragment_ranking_preserves_saved_origin(tmp_path, recorded_origi
         status='held_out', rationale_code='not_tumor_specific')) for key, value in saved.antigens.items()}
     assert not dataset_ranking_result(SimpleNamespace(dataset=saved, source_format='epitopes'),
         saved.epitopes, options=options).ranked
+
+
+@pytest.mark.parametrize('start,mate', [(0, 100), (100, 0)])
+def test_origin_retains_vcf_telomeric_breakend_coordinates(start, mate):
+    from vaxrank.antigen_origin import VariantOrigin, GenomicEndpoint
+    variant = StructuralVariant('1', start, 'BND', genome=EnsemblRelease(110),
+        mate_contig='2', mate_start=mate, mate_orientation='++')
+    origin = VariantOrigin.from_variant(variant)
+    assert (origin.start, origin.mate_start) == (start, mate)
+    assert GenomicEndpoint.from_record({'contig': '1', 'position': 0, 'strand': '+'}).position == 0

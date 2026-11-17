@@ -1,6 +1,7 @@
 """Shared biological origin, independent of input format and targetability.
 
-Coordinates are the producer's one-based genomic allele coordinates. RNA
+Coordinates are the producer's one-based genomic allele coordinates (including
+VCF virtual telomeric breakends at 0 and chromosome length + 1). RNA
 products do not imply a causal DNA event. Missing facts remain unspecified.
 """
 from dataclasses import asdict, dataclass
@@ -36,8 +37,8 @@ class VariantOrigin(DataclassSerializable):
             raise ValueError('SV subtype requires variant_type=SV')
         for name in ('start', 'end', 'mate_start'):
             value = getattr(self, name)
-            if value is not None and (type(value) is not int or value < 1):
-                raise ValueError(name + ' must be a positive one-based genomic coordinate')
+            if value is not None and (type(value) is not int or value < 0):
+                raise ValueError(name + ' must be a nonnegative genomic coordinate (0 denotes a VCF telomeric position)')
 
     @classmethod
     def from_variant(cls, variant):
@@ -86,8 +87,8 @@ class GenomicEndpoint(DataclassSerializable):
     description: str = ''
 
     def __post_init__(self):
-        if self.position is not None and (type(self.position) is not int or self.position < 1):
-            raise ValueError('Endpoint position must be a positive one-based coordinate')
+        if self.position is not None and (type(self.position) is not int or self.position < 0):
+            raise ValueError('Endpoint position must be nonnegative (0 denotes a VCF telomeric position)')
         if self.strand not in ('', '+', '-'):
             raise ValueError('Endpoint strand must be +, - or unspecified')
 
