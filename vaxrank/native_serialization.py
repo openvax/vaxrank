@@ -117,6 +117,7 @@ def _native_serializable_classes():
         WindowSafetyAssessment,
     )
     from .rna_support import RNAFeatureEvidence
+    from .antigen_origin import AntigenOrigin, CodingReference, VariantOrigin, GenomicEndpoint, JunctionOrigin
     from .vaccine_antigen import (
         AminoAcidInterval,
         SelfReferenceMatch,
@@ -132,6 +133,7 @@ def _native_serializable_classes():
         ("vaxrank.peptide", "PeptideConstruct"): PeptideConstruct,
         **{(cls.__module__, cls.__name__): cls for cls in (
             Variant, StructuralVariant, Genome, EnsemblRelease, Transcript, Species,
+            AntigenOrigin, CodingReference, VariantOrigin, GenomicEndpoint, JunctionOrigin,
             MutantProteinFragment, ExternalRecord, ExternalPredictionKey)},
         **{(cls.__module__, cls.__name__): cls for cls in (
             CTAAdmissionAssessment, CTAAdmissionPolicy, CTAOverrideEvidence,

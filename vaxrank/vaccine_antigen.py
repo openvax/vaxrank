@@ -19,6 +19,7 @@ from typing import Any, Optional
 from serializable import DataclassSerializable
 
 from .amino_acids import validate_amino_acid_sequence
+from .antigen_origin import AntigenOrigin, CodingReference, VariantOrigin
 from .identifiers import normalize_ensembl_gene_id
 from .rna_support import RNAFeatureEvidence, validate_rna_support, slice_rna_support
 
@@ -279,8 +280,13 @@ class VaccineAntigen(DataclassSerializable):
     source_metadata: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     rna_support: tuple[RNAFeatureEvidence, ...] = field(default_factory=tuple)
     source_protein_offset: int = 0
+    origin: AntigenOrigin | None = None
 
     def __post_init__(self):
+        normalized = next((kind for kind in ANTIGEN_KINDS if kind.lower() == self.kind.lower()), self.kind)
+        object.__setattr__(self, 'kind', normalized)
+        if self.origin is not None and not isinstance(self.origin, AntigenOrigin):
+            raise TypeError('Antigen origin must be an AntigenOrigin record')
         if type(self.source_protein_offset) is not int or self.source_protein_offset < 0:
             raise ValueError('Source protein offset must be a nonnegative integer')
         object.__setattr__(self, "rna_support", validate_rna_support(self.rna_support, len(self.amino_acids)))
@@ -348,6 +354,7 @@ class VaccineAntigen(DataclassSerializable):
             source_metadata=self.source_metadata,
             rna_support=slice_rna_support(self.rna_support, start, end),
             source_protein_offset=self.source_protein_offset + start,
+            origin=self.origin,
         )
 
     @classmethod
@@ -432,6 +439,7 @@ class VaccineAntigen(DataclassSerializable):
         )
         return cls(
             kind=ANTIGEN_KIND_FUSION,
+            origin=AntigenOrigin(rna_product="fusion"),
             amino_acids=amino_acids,
             targetable_mask=TargetableMask((AminoAcidInterval(
                 junction_offset, junction_offset,
@@ -447,7 +455,7 @@ class VaccineAntigen(DataclassSerializable):
     @classmethod
     def from_mutant_protein_fragment(cls, fragment: Any) -> "VaccineAntigen":
         """Represent a legacy mutation fragment without changing its policy."""
-        from varcode import StructuralVariant
+        from varcode import StructuralVariant, Variant
         transcripts = tuple(
             getattr(fragment, "supporting_reference_transcripts", ()) or ()
         )
@@ -474,6 +482,9 @@ class VaccineAntigen(DataclassSerializable):
         )
         return cls(
             kind=ANTIGEN_KIND_SV if isinstance(variant, StructuralVariant) else ANTIGEN_KIND_MUTATION,
+            origin=AntigenOrigin(variants=(VariantOrigin.from_variant(variant),) if isinstance(variant, Variant) else (),
+                coding_references=tuple(CodingReference(kind="annotated", source_transcript_id=t)
+                                        for t in transcript_ids)),
             amino_acids=fragment.amino_acids,
             targetable_mask=TargetableMask((AminoAcidInterval(
                 fragment.mutant_amino_acid_start_offset,

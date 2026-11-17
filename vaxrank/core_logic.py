@@ -428,6 +428,7 @@ def vaccine_peptides_from_epitopes(
     epitope_config: Optional[EpitopeConfig] = None,
     vaccine_config: Optional[VaccineConfig] = None,
     manufacturability_config: Optional[ManufacturabilityConfig] = None,
+    antigen: Optional[VaccineAntigen] = None,
 ):
     """
     Generate vaccine peptide candidates from epitopes.
@@ -454,6 +455,11 @@ def vaccine_peptides_from_epitopes(
 
     epitope_config
         Configuration options for epitope scoring, using defaults if not provided
+
+    antigen
+        Retained source annotation when replaying or ranking an imported
+        fragment. Preserve its annotation while the retained mutation fragment
+        supplies the window coordinates.
 
     Returns
     -------
@@ -485,6 +491,11 @@ def vaccine_peptides_from_epitopes(
                     "vaccine_config.%s=%s overrides explicit %s=%s",
                     param_name, config_val, param_name, explicit_val,
                 )
+    if antigen is not None:
+        if antigen.amino_acids != long_protein_fragment.amino_acids:
+            raise ValueError('Retained antigen and mutation fragment sequences disagree')
+        if antigen.targetable_mask != VaccineAntigen.from_mutant_protein_fragment(long_protein_fragment).targetable_mask:
+            raise ValueError('Retained antigen and mutation fragment target intervals disagree')
     candidate_vaccine_peptides = []
     n_fragments_without_epitopes = 0
 
@@ -498,7 +509,7 @@ def vaccine_peptides_from_epitopes(
                long_protein_fragment.sorted_subsequences(subsequence_length=length))
     for offset, candidate_fragment in windows:
         if vaccine_config.window_selection is not None and not (
-                VaccineAntigen.from_mutant_protein_fragment(long_protein_fragment)
+                (antigen or VaccineAntigen.from_mutant_protein_fragment(long_protein_fragment))
                 .interval_is_targetable(offset, offset + len(candidate_fragment))):
             continue
         # Isovar can legitimately return a shorter protein when no full
@@ -538,8 +549,16 @@ def vaccine_peptides_from_epitopes(
         # then a tie-break against those defaults rather than against
         # user-overridden thresholds.
         mfg = manufacturability_config or ManufacturabilityConfig()
+        candidate_antigen = None
+        if antigen is not None:
+            from dataclasses import replace
+            window = VaccineAntigen.from_mutant_protein_fragment(candidate_fragment)
+            candidate_antigen = replace(antigen, amino_acids=window.amino_acids,
+                targetable_mask=window.targetable_mask, rna_support=window.rna_support,
+                source_protein_offset=antigen.source_protein_offset + offset)
         candidate_vaccine_peptide = VaccinePeptide(
             mutant_protein_fragment=candidate_fragment,
+            **({'antigen': candidate_antigen} if candidate_antigen is not None else {}),
             epitopes=subsequence_epitopes,
             num_target_epitopes_to_keep=vaccine_config.num_target_epitopes_to_keep,
             manufacturability_thresholds=mfg.thresholds_dict(),

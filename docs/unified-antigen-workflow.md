@@ -9,7 +9,7 @@ choose the types eligible for vaccine products:
 vaxrank ... --antigen-types mutation
 
 # Add the other sources to the same design
-vaxrank ... --antigen-types mutation ncORF fusion SV CTA
+vaxrank ... --antigen-types variant fusion CTA
 ```
 
 The default includes all supplied types. `ncORF` selects mutations translated
@@ -21,6 +21,66 @@ slot and retain all source mappings; allocation uses the first enabled ranked so
 Disabled categories do not consume `--max-sources`. The source inventory records
 category exclusions and ranked-source limits separately from admission failures.
 Positive per-type caps count unique assembled antigen sequences.
+
+## Event type, coding context and RNA product
+
+`variant` includes small variants and structural variants in any coding context.
+A structural variant is a mutation; the historical `mutation` selector has the
+narrower meaning of small variants outside recorded ncORFs. It remains available
+so older command lines keep their selection behavior. `SV` and `ncORF` remain
+separate allocation categories for per-type goals and caps.
+
+All selectors are case insensitive and accept multiple values. Select a parent
+category, then constrain its recorded event type or coding context:
+
+```sh
+# SNVs and indels in annotated CDSs, from any supported input
+vaxrank ... --antigen-types variant --variant-types SNV INDEL --variant-contexts annotated
+
+# uORF mutations plus CTAs; the variant restrictions do not filter CTAs
+vaxrank ... --antigen-types variant CTA --variant-contexts uORF
+
+# Deletions and inversions, alongside fusions
+vaxrank ... --antigen-types variant fusion --variant-types SV:DEL SV:INV
+```
+
+`--variant-types` accepts `SNV`, `MNV`, `INDEL`, `SV`, or `SV:DEL`, `SV:DUP`,
+`SV:INV`, `SV:INS`, `SV:BND`, `SV:CNV`. A subtype restriction requires that subtype
+to have been recorded; a generic SV does not qualify as a deletion or fusion.
+`--variant-contexts` accepts `annotated`, `ncORF`, a supplied ORFdata `orf_type`
+(such as `uORF` or `dORF`), or `unknown`. Values within an option are alternatives;
+the event and context restrictions both apply when supplied together. Historical
+saved records without event annotations remain replayable, but do not acquire an
+inferred subtype merely to pass a new restriction.
+
+Equivalent YAML, shared by peptide and mRNA output:
+
+```yaml
+vaccine_peptides:
+  antigen_allocation:
+    variant_types: [SNV, INDEL, 'SV:DEL']
+    variant_contexts: [annotated, ncORF]
+    max_per_kind: {CTA: 3}
+```
+
+| Concept | Meaning and available input paths |
+| --- | --- |
+| SNV, MNV, indel | Genomic allele changes; direct VCF/Isovar and resolved LENS variant records share allele fields. |
+| SV | A structural genomic event. Preserve its supplied subtype, endpoints and orientation. VCF/Isovar provide supported protein products; different events can have different target intervals and reference comparators. |
+| Fusion | A chimeric RNA/protein product from LENS or Isovar. Partner loci alone do not establish the causal DNA event or an exact translated junction. |
+| Splice | A caller-selected splice product, currently imported from LENS. This label alone does not establish a splice-site DNA mutation. |
+| Isoform | Targeted RNA reconstruction through Isovar, including annotated competitors and observed alternatives. Vaxrank accepts BAM plus nominated targets or saved results; this is not genome-wide differential-splicing discovery. |
+| ncORF | The coding reference for a variant, including ORFdata uORFs and other extra ORFs. An SNV in a uORF is both an SNV and an ncORF mutation. |
+| CTA | An expression-defined target. Its targetability map retains OncoRef Unsafe-protein containment independently of event classification. |
+
+LENS source inclusion remains an evidence-admission setting: `--include-lens-source
+SPLICE` opts in to caller-curated splice candidates. The general selectors do not
+supply missing tumor specificity or override that admission setting. They also
+do not infer tumor-specific alternative splicing from RNA support alone.
+
+These distinctions follow the [VCF specification](https://samtools.github.io/hts-specs/VCFv4.5.pdf)
+and [Ensembl consequence definitions](https://www.ensembl.org/info/genome/variation/prediction/predicted_data.html):
+a sequence variant and its effects on individual transcripts are separate facts.
 
 ## Combine inputs
 

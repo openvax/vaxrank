@@ -664,9 +664,10 @@ def report_config(reports, epitope_config=None):
                 for name in ('comparison_reference', 'patient_background_baseline')):
             raise ValueError('Saved comparisons retain their reference and baseline policy. '
                              'Keep those settings when rescoring, or create new comparisons from Isovar inputs.')
-    saved_cta_bundles = {r.dataset.config.cta_sequence_bundle for r in reports
+    saved_cta_reports = [r for r in reports
         if r.source_format == 'epitopes' and r.dataset is not None and r.dataset.config is not None
-        and any(a.kind == 'CTA' for a in r.dataset.antigens.values())}
+        and (recorded_bundle_ids(r.dataset) or any(a.kind == 'CTA' for a in r.dataset.antigens.values()))]
+    saved_cta_bundles = {r.dataset.config.cta_sequence_bundle for r in saved_cta_reports}
     if saved_cta_bundles:
         requested = epitope_config.cta_sequence_bundle
         if requested is not None and requested not in saved_cta_bundles:
@@ -677,9 +678,7 @@ def report_config(reports, epitope_config=None):
         elif requested is None:
             if len(saved_cta_bundles) > 1 and (not identities or None in identities):
                 raise ValueError('Saved CTA targeting lacks a common frozen sequence reference identity')
-            requested = next((r.dataset.config.cta_sequence_bundle for r in reports
-                if r.source_format == 'epitopes' and r.dataset is not None and r.dataset.config is not None
-                and any(a.kind == 'CTA' for a in r.dataset.antigens.values())), None)
+            requested = next((r.dataset.config.cta_sequence_bundle for r in saved_cta_reports), None)
         epitope_config = replace_config(epitope_config, cta_sequence_bundle=requested)
     return epitope_config
 
@@ -1187,13 +1186,14 @@ def load_unified_external(args, epitope_config, options, genome):
         getattr(args, 'max_sources', None),
         source_evidence=dataset.selection.get('source_evidence'), audit=dataset.selection)
     passing_path = getattr(args, 'output_passing_variants_csv', None)
-    if direct and passing_path:
+    if (direct or dataset.direct_sources) and passing_path:
         from varcode import Variant, StructuralVariant
         from .native_serialization import from_native_json
-        selected_variants = {source for source, _ in ranked if isinstance(source, Variant)}
-        rows = [{**source['properties'], 'has_vaccine_peptide':
-                 from_native_json(source['variant'], (Variant, StructuralVariant)) in selected_variants}
-                for source in dataset.direct_sources]
+        from .vaxrank_results import selected_variant_properties
+        rows = selected_variant_properties(
+            [source['properties'] for source in dataset.direct_sources],
+            [from_native_json(source['variant'], (Variant, StructuralVariant)) for source in dataset.direct_sources],
+            ranked)
         Path(passing_path).parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(rows).to_csv(passing_path, index=False)
     summary = ExternalInputSummary(

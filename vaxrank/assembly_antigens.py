@@ -31,7 +31,11 @@ def _source_record(source, name, antigen, peptide, source_evidence):
     if not result and metadata.get('isovar_fusion_result'):
         result = json.loads(metadata['isovar_fusion_result'])
     event = None
-    if isinstance(source, Variant):
+    if antigen.origin is not None and antigen.origin.variants:
+        from dataclasses import asdict
+        variants = [asdict(variant) for variant in antigen.origin.variants]
+        event = variants[0] if len(variants) == 1 else {'variants': variants}
+    elif isinstance(source, Variant):
         event = dict(reference_assembly=source.genome.reference_name,
                      contig=source.contig, start=source.start, ref=source.ref, alt=source.alt)
         if isinstance(source, StructuralVariant):
@@ -57,6 +61,9 @@ def _source_record(source, name, antigen, peptide, source_evidence):
         prediction_ids=sorted({e.prediction_group_source for e in peptide.epitopes}),
         input_ids=sorted({e.input_provenance.input_id for e in peptide.epitopes if e.input_provenance}),
         evidence_group=evidence_id, source_event=event)
+    if antigen.origin is not None:
+        from .antigen_origin import origin_dict
+        record['origin'] = origin_dict(antigen)
     if 'source_window' in peptide.window_selection_audit:
         record['source_window'] = peptide.window_selection_audit['source_window']
         record['parent_window'] = peptide.window_selection_audit['parent_window']
@@ -69,10 +76,14 @@ def _source_record(source, name, antigen, peptide, source_evidence):
 
 def antigen_occurrences(ranked, options, modality, *, source_evidence=None):
     """Yield exact windows/ligands using the same content rules in both modalities."""
+    from .antigen_allocation import AntigenAllocation, variant_enabled
+    policy = AntigenAllocation.resolve(options.antigen_allocation)
     if options.antigen_content not in ('mutation_spanning', 'minimal_epitope'):
         raise ValueError("antigen_content must be 'mutation_spanning' or 'minimal_epitope'")
     sources = {id(peptide): source for source, peptides in ranked for peptide in peptides}
     for name, antigen, peptide in iter_named_antigens(ranked, options.candidates_per_slot):
+        if not variant_enabled(antigen, policy):
+            continue
         source = _source_record(sources[id(peptide)], name, antigen, peptide, source_evidence or {})
         if options.antigen_content == 'minimal_epitope':
             targets = top_target_epitopes(peptide, n=options.epitopes_per_antigen)

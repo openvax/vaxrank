@@ -422,7 +422,9 @@ def antigens_from_isovar(result, *, scope=None, species='', tumor_specificity=No
         genes = tuple(sorted({s for s in candidate.gene_ids if s}))
         if species and candidate.species and canonical_species(species) != canonical_species(candidate.species):
             raise ValueError('Declared species disagrees with Isovar source species')
+        from .antigen_origin import origin_from_isovar
         antigens[key] = VaccineAntigen(kind=candidate.kind, amino_acids=candidate.protein,
+            origin=origin_from_isovar(result, family, candidate.evidence),
             targetable_mask=TargetableMask(tuple(AminoAcidInterval(*i) for i in candidate.intervals)),
             tumor_specificity=attestation, gene_name=';'.join(names), gene_id=genes[0] if len(genes) == 1 else '',
             transcript_ids=tuple(sorted(set(candidate.transcripts))),

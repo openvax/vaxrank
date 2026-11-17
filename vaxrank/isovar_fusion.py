@@ -90,8 +90,11 @@ def fusion_antigens_from_isovar(result, *, tumor_specificity=None, gene_name="",
             attestation = replace(attestation, status=ATTESTATION_HELD_OUT,
                 rationale_code="isovar_" + (status if status != "translated" else "partial_cds"),
                 requires_review=True, override_reason="")
+        from .antigen_origin import origin_from_isovar
+        origin = origin_from_isovar(result, 'fusion',
+            dict(junctions=path['junctions'], coding_start=start))
         antigens.append(VaccineAntigen(
-            kind=ANTIGEN_KIND_FUSION, amino_acids=protein["amino_acids"],
+            kind=ANTIGEN_KIND_FUSION, amino_acids=protein["amino_acids"], origin=origin,
             targetable_mask=TargetableMask(tuple(AminoAcidInterval(a, b) for a, b in intervals)),
             tumor_specificity=attestation, gene_name=gene_name, species=species,
             transcript_ids=tuple(sorted(set(protein["transcript_ids"])

@@ -11,6 +11,33 @@ can also reconstruct ncORFs, SV ORFs, viral coding and targeted isoforms directl
 retaining the producer evidence and unresolved/no-protein outcomes in
 `AntigenDataset.source_evidence`.
 
+## Shared origin fields
+
+`VaccineAntigen.origin` is an optional `AntigenOrigin` record shared by direct
+variants, LENS and Isovar. It contains:
+
+- `variants`: `VariantOrigin` records with SNV/MNV/INDEL/SV type, supplied SV
+  subtype, genomic alleles/coordinates, reference assembly and event identity.
+- `coding_references`: `CodingReference` records with annotated/extra-ORF kind,
+  ORF type/ID/source, reference key and source transcript.
+- `rna_product`: fusion, splice or isoform when supplied.
+- `junctions`: `JunctionOrigin` records with shared genomic endpoints and,
+  only when provided by reconstruction, source-protein intervals. Genomic
+  positions are one-based, including VCF virtual telomeric positions 0 and
+  chromosome length + 1; protein intervals are zero-based, half-open.
+
+These fields travel through prediction, slicing, native serialization, reports
+and product source mappings. Original producer evidence stays separately
+available. Missing origin fields are valid for historical and unresolved inputs;
+unknown does not mean no event occurred. `kind` remains the compatible allocation
+category, not a complete biological classification. See the
+[event/context selectors](unified-antigen-workflow.md#event-type-coding-context-and-rna-product).
+
+Targetable intervals, tumor-specificity evidence, RNA support, translation
+evidence and normal/reference comparisons retain their distinct meanings.
+Sharing origin fields does not synthesize missing comparisons or expand a
+caller-selected LENS epitope into a reconstructed junction.
+
 ## Prepare and predict
 
 Given `mutation` and `viral` objects from your evidence adapters:

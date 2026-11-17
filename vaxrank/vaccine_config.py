@@ -243,6 +243,8 @@ class VaccineConfig(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
                         f"Unknown ranking rule '{rule_name}'. "
                         f"Available: {sorted(RANKING_RULE_REGISTRY)}"
                     )
+        msgspec.structs.force_setattr(self, 'included_lens_sources',
+            tuple(value.upper() for value in self.included_lens_sources))
         unknown_sources = (
             set(self.included_lens_sources) - LENS_ANTIGEN_SOURCES
         )

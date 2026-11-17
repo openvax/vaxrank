@@ -23,6 +23,7 @@ from .epitope_config import EpitopeConfig
 from .epitope_logic import predict_epitopes
 from .candidate_epitope import CandidateEpitope, Peptide
 from .vaccine_config import VaccineConfig
+from .antigen_origin import AntigenOrigin, VariantOrigin, CodingReference, GenomicEndpoint, JunctionOrigin
 from .vaccine_antigen import (
     ANTIGEN_KIND_CTA,
     ANTIGEN_KIND_ERV,
@@ -267,6 +268,11 @@ __all__ = [
     "TumorSpecificityAttestation",
     "TumorSpecificityEvidence",
     "VaccineAntigen",
+    "AntigenOrigin",
+    "VariantOrigin",
+    "CodingReference",
+    "GenomicEndpoint",
+    "JunctionOrigin",
     "IsovarFusionAntigens",
     "IsovarAdmission",
     "IsovarSourceOptions",

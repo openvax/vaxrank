@@ -653,3 +653,32 @@ def test_native_export_can_be_explicitly_disabled_without_disabling_reports():
     assert args.output_pdf_report == '/tmp/reports/vaccine_report.pdf'
     with pytest.raises(SystemExit):
         parse_vaxrank_args(['--output-epitopes', '/tmp/export.tsv', '--no-output-epitopes'])
+
+
+@pytest.mark.parametrize('exclude,limit,expected', [(True, None, False), (False, 0, False), (False, 1, True)])
+def test_direct_selected_variant_csv_and_patient_count(tmp_path, monkeypatch, exclude, limit, expected):
+    from varcode import VariantCollection, Variant
+    from pyensembl import EnsemblRelease
+    from vaxrank.vaxrank_results import VaxrankResults, selected_variant_properties
+    from .test_assembly_antigens import candidate
+    from dataclasses import replace
+    import pandas as pd
+    entry, args = _pipeline_args(tmp_path, monkeypatch,
+        output_passing_variants_csv=str(tmp_path / 'passing.csv'), max_sources=limit,
+        excluded_antigen_types=['mutation'] if exclude else None)
+    variant = Variant('1', 100, 'A', 'T', genome=EnsemblRelease(110))
+    antigen, peptides = candidate(0)
+    antigen = replace(antigen, kind='mutation')
+    peptides = [replace(peptides[0], antigen=antigen)]
+    observation = SimpleNamespace(variant=variant, top_gene_name='TEST',
+        predicted_effect_modifies_protein_sequence=True, has_mutant_protein_sequence_from_rna=True)
+    results = VaxrankResults([observation], {variant: peptides}, [(variant, peptides)])
+    monkeypatch.setattr(entry, 'run_vaxrank_from_parsed_args', lambda args: results)
+    monkeypatch.setattr(entry, 'filter_unannotatable_variants', lambda values: VariantCollection([variant]))
+    data = entry.ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
+    assert data['patient_info'].num_variants_with_vaccine_peptides == int(expected)
+    rows = pd.read_csv(args.output_passing_variants_csv)
+    assert bool(rows.has_vaccine_peptide.iloc[0]) is expected
+    replay_rows = selected_variant_properties(results.variant_properties(), [variant], data['variants'])
+    assert replay_rows[0]['has_vaccine_peptide'] is expected
+    assert rows.rna_support.iloc[0] and len(rows) == 1
