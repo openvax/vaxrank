@@ -497,3 +497,38 @@ def test_direct_variants_are_loaded_once_and_reports_do_not_change_ranking(direc
     assert len(loads) == len(direct[3]) == 2
     assert first.read_bytes() == second.read_bytes()
     assert EpitopeDataset.load(native).provenance[0].source_format == 'vcf_bam'
+
+
+@pytest.mark.parametrize('format', ['vcf', 'maf', 'json-variants', 'variant'])
+def test_all_direct_variant_flags_share_the_common_loader(direct, tmp_path, format):
+    flags = direct_args(direct, tmp_path)
+    flags[:2] = ['--' + format, *(('1', '100', 'A', 'T') if format == 'variant' else (str(direct[0]),))]
+    saved = tmp_path / 'native.tsv'
+    run_cli(flags + ['--output-epitopes', str(saved)])
+    data = EpitopeDataset.load(saved)
+    assert len(data.direct_sources) == 1 and len(direct[3]) == 1
+    assert next(iter(data.mutation_fragments.values())).variant == direct[2].variant
+
+
+
+def test_direct_without_predictions_retains_outcomes_for_replay(direct, tmp_path, monkeypatch):
+    import vaxrank.cli.entry_point as entry
+    from vaxrank.input_coverage import record_direct_coverage
+    from vaxrank.external_input import load_ranked_inputs
+    predict = entry.run_vaxrank_from_parsed_args
+    def empty(args, **kwargs):
+        results = predict(args, **kwargs)
+        dataset = kwargs['epitope_dataset']
+        dataset.epitopes, dataset.antigens, dataset.mutation_fragments = (), {}, {}
+        record_direct_coverage(dataset, results, kwargs['loaded_variants'], window_selection_performed=False)
+        return results
+    monkeypatch.setattr(entry, 'run_vaxrank_from_parsed_args', empty)
+    saved = tmp_path / 'empty.tsv'
+    run_cli(direct_args(direct, tmp_path, '--output-epitopes', str(saved)))
+    dataset = EpitopeDataset.load(saved)
+    assert not dataset.epitopes and len(dataset.direct_sources) == 1
+    assert dataset.selection['source_evidence']
+    ranked, _, _, patient, _ = load_ranked_inputs(parse_vaxrank_args(['--input-epitopes', str(saved)]))
+    assert not ranked and patient.num_somatic_variants == 1
+    assert patient.num_variants_with_vaccine_peptides == 0
+    assert len(patient.input_coverage['sources']) == 1

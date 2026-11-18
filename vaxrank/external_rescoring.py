@@ -1211,7 +1211,7 @@ def load_unified_external(args, epitope_config, options, genome):
     patient = patient_info_from_external(
         ranked, '', getattr(args, 'output_patient_id', '') or '', summary,
         predictions=predictions)
-    patient.inputs = [(('VCF/BAM' if r.source_format == 'vcf_bam' else r.source_format + ' report'),
+    patient.inputs = [(('Direct variants/RNA' if r.source_format == 'vcf_bam' else r.source_format + ' report'),
                        r.path) for r in reports]
     patient.input_provenance = [r.input_provenance for r in reports]
     from .input_coverage import ranking_coverage

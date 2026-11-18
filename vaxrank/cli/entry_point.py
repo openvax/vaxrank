@@ -1150,8 +1150,9 @@ def write_run_summary(args, patient_info, source, products=None):
             lines.append("Input: %s — %s" % (label, path))
         from ..direct_input import has_direct_input
         if has_direct_input(args):
-            lines.append("Prediction evidence: direct variant predictions; imported evidence policy: %s"
-                         % getattr(args, 'external_predictions', 'input'))
+            lines.append("Prediction evidence: direct variant predictions")
+            if any(p.source_format != 'vcf_bam' for p in provenance):
+                lines.append("Imported prediction evidence: %s" % getattr(args, 'external_predictions', 'input'))
         else:
             lines.append("Prediction evidence: %s" % getattr(args, 'external_predictions', 'input'))
         prefix = getattr(args, 'external_prediction_prefix', None)
@@ -1466,6 +1467,8 @@ def _load_ranked_input_data(args):
         epitope_config=epitope_config,
         vaccine_config=vaccine_config,
         manufacturability_config=manufacturability_config)
+    if loaded is None:
+        raise ValueError('No antigen input supplied; provide direct variants, an antigen input or a saved report')
     ranked, report_df, predictions, patient_info, dna_vaf = loaded
     data = dict(variants=ranked, patient_info=patient_info,
                 args={key: value for key, value in vars(args).items() if key != '_design_dataset'},
@@ -1893,4 +1896,7 @@ def ranked_vaccine_peptides_with_metadata_from_parsed_args(args):
             data['patient_info'].num_variants_with_vaccine_peptides = sum(
                 bool(peptides) for _, peptides in data['variants'])
             return data
-    return _load_ranked_input_data(args)[0]
+    data = _load_ranked_input_data(args)[0]
+    if getattr(args, 'output_epitopes', None):
+        args._design_dataset.save(args.output_epitopes)
+    return data
