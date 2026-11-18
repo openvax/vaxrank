@@ -11,13 +11,14 @@ from topiary import TopiaryResult
 from .allele_validation import parse_prediction_allele, validate_prediction_frame
 from .cells import text as cell_text
 from .epitope_config import EpitopeConfig
-from .epitope_dataset import ANTIGEN_COLUMN, EpitopeDataset
+from .epitope_dataset import EpitopeDataset
 from .input_scope import (
     InputProvenance, InputScope, SHARED_FIELDS, combine_scopes,
     scope_from_mapping, scope_dict, provenance_dict, validate_input_scopes, validate_host_taxon,
 )
 from .native_serialization import _json_loads, to_native_json
 from .reference_proteome import self_reference_matches
+from .rna_support import RNASupportArchive
 from .vaccine_antigen import (
     AminoAcidInterval, TargetableMask, TumorSpecificityAttestation,
     TumorSpecificityEvidence, VaccineAntigen,
@@ -89,12 +90,18 @@ class AntigenDataset:
 
     def to_dict(self):
         """Return versioned JSON data without Python class metadata."""
-        return dict(schema=ANTIGEN_DATASET_SCHEMA, scope=scope_dict(self.scope),
-                    antigens={key: {k: v for k, v in asdict(a).items()
-                                    if k not in ("rna_support", "source_protein_offset", "origin") or v}
-                              for key, a in self.antigens.items()},
-                    provenance=[provenance_dict(p) for p in self.provenance],
-                    **({'source_evidence': self.source_evidence} if self.source_evidence else {}))
+        archive = RNASupportArchive()
+        antigens = archive.encode_tree({
+            key: {k: v for k, v in asdict(a).items()
+                  if k not in ("rna_support", "source_protein_offset", "origin") or v}
+            for key, a in self.antigens.items()
+        })
+        payload = dict(schema=ANTIGEN_DATASET_SCHEMA, scope=scope_dict(self.scope),
+                       antigens=antigens,
+                       provenance=[provenance_dict(p) for p in self.provenance],
+                       **({'source_evidence': self.source_evidence} if self.source_evidence else {}))
+        archive.write_to_payload(payload)
+        return payload
 
     def save(self, path):
         """Write the same portable evidence format accepted by the CLI."""
@@ -108,16 +115,20 @@ class AntigenDataset:
         document = _json_loads(Path(path).read_text())
         if not isinstance(document, dict) or document.get('schema') != ANTIGEN_DATASET_SCHEMA:
             raise ValueError('Expected antigen schema: ' + ANTIGEN_DATASET_SCHEMA)
-        if set(document) - {'schema', 'scope', 'antigens', 'provenance', 'source_evidence'}:
+        allowed = {'schema', 'scope', 'antigens', 'provenance', 'source_evidence',
+                   'rna_measurements', 'rna_sampling_profiles'}
+        if set(document) - allowed:
             raise ValueError('Unknown antigen dataset fields')
         if not isinstance(document.get('antigens'), dict):
             raise ValueError('Antigens must be an object keyed by record identifier')
+        archive = RNASupportArchive.from_payload(document)
+        antigens = archive.decode_tree(document['antigens'])
         try:
             provenance = tuple(_typed_record(InputProvenance, {
                 **p, 'scope': scope_from_mapping(p['scope'], 'Antigen provenance'),
                 'observed_mhc_alleles': tuple(p.get('observed_mhc_alleles', ())),
             }) for p in document.get('provenance', ()))
-            return cls({key: _antigen_from_dict(a) for key, a in document['antigens'].items()},
+            return cls({key: _antigen_from_dict(a) for key, a in antigens.items()},
                        scope_from_mapping(document.get('scope', {}), 'Antigen dataset'), provenance,
                        document.get('source_evidence', {}))
         except (TypeError, KeyError) as error:
@@ -294,7 +305,6 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
         raise ValueError('Antigen predictor returned an unknown source sequence')
     for column, values in {
         'source_sequence': [antigens[n].amino_acids for n in frame.source_sequence_name],
-        ANTIGEN_COLUMN: [to_native_json(antigens[n]) for n in frame.source_sequence_name],
         'gene_id': [antigens[n].gene_id for n in frame.source_sequence_name],
         'gene_name': [antigens[n].display_gene_name for n in frame.source_sequence_name],
         'source_species': [antigens[n].species for n in frame.source_sequence_name],
@@ -304,7 +314,8 @@ def predict_antigens(antigens, predictor, *, genome, provenance, config=None,
     # Establish native occurrences before adding evidence that can differ by
     # allele. Generic source grouping treats such annotations as distinct
     # observations, while these rows describe one known protein occurrence.
-    adapted = EpitopeDataset.from_topiary(TopiaryResult(frame), label=provenance.input_id)
+    adapted = EpitopeDataset.from_topiary(
+        TopiaryResult(frame), label=provenance.input_id, source_antigens=antigens)
     if annotate is not None:
         annotate(frame)
     ms_lookup = None

@@ -4,6 +4,7 @@ Topiary owns the table and its encoding. Native Vaxrank objects supplement it;
 they never replace source rows or reconstruct missing biological evidence.
 """
 
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -12,13 +13,17 @@ import pandas as pd
 from mhctools.pred import Prediction
 from topiary import TopiaryResult, combine_sources, is_stated, read_csv, read_tsv
 
-from .rna_support import RNA_BINDINGS, rna_support_bindings
+from .rna_support import (
+    RNA_BINDINGS, RNASupportArchive, _canonical_json, _sha256,
+    is_sha256_digest, rna_support_bindings,
+)
 from .allele_validation import validate_peptide_alleles
 from .candidate_epitope import CandidateEpitope, Peptide, stated_or_blank
 from .epitope_config import EpitopeConfig
 from .epitope_dsl import epitopes_to_topiary_df
 from .input_scope import InputProvenance
-from .native_serialization import from_native_json, to_native_json
+from .native_references import SHARED_RECORD_FIELD, is_shared_record_ref
+from .native_serialization import _json_loads, from_native_json, to_native_json
 from .vaccine_antigen import VaccineAntigen
 
 
@@ -38,6 +43,81 @@ def read_table(path):
 def _value(row, name, default=None):
     value = row.get(name)
     return value if is_stated(value) else default
+
+
+def _stage_record_map(records, archive):
+    by_id = {}
+    by_json = {}
+    for key, obj in records.items():
+        obj_id = id(obj)
+        if obj_id not in by_id:
+            by_id[obj_id] = to_native_json(obj)
+        by_json.setdefault(by_id[obj_id], []).append(key)
+    inline, shared, shared_keys = {}, {}, {}
+    for index, (raw, keys) in enumerate(by_json.items()):
+        encoded = archive.encode_json(raw)
+        if len(keys) == 1:
+            inline[keys[0]] = encoded
+        else:
+            slot = f"group_{index}"
+            shared[slot] = encoded
+            shared_keys[slot] = keys
+    return inline, shared, shared_keys
+
+
+def _transform_selection_rna(selection, transform_tree, transform_json):
+    result = deepcopy(selection)
+    if "antigen_inputs" in result:
+        result["antigen_inputs"] = transform_tree(result["antigen_inputs"])
+    for key in ("construct_assembly", "cta_assembly"):
+        for saved in result.get(key, {}).values():
+            for field_name in ("products", "source_graph"):
+                if saved.get(field_name) is not None:
+                    saved[field_name] = transform_json(saved[field_name])
+    audit = result.get("cta_product_audit")
+    if isinstance(audit, dict) and audit.get("payload") is not None:
+        audit["payload"] = transform_json(audit["payload"])
+    return result
+
+
+def _shared_ref_digest(serialized):
+    if not isinstance(serialized, str) or SHARED_RECORD_FIELD not in serialized:
+        return None
+    parsed = _json_loads(serialized)
+    if not isinstance(parsed, dict) or SHARED_RECORD_FIELD not in parsed:
+        return None
+    if set(parsed) != {SHARED_RECORD_FIELD} or not is_sha256_digest(parsed[SHARED_RECORD_FIELD]):
+        raise ValueError("Malformed native shared record reference")
+    return parsed[SHARED_RECORD_FIELD]
+
+
+def _verify_shared_tables(payload):
+    for shared_field in ("shared_antigens", "shared_fragments"):
+        if shared_field not in payload:
+            continue
+        table = payload[shared_field]
+        if not isinstance(table, dict):
+            raise ValueError(f"Native {shared_field} must be an object")
+        for digest, raw_json in table.items():
+            if (not is_sha256_digest(digest) or not isinstance(raw_json, str)
+                    or is_shared_record_ref(raw_json) or _sha256(raw_json) != digest):
+                raise ValueError(f"Native {shared_field} checksum mismatch")
+
+
+def _resolve_record_map(raw_map, shared_decoded, expected_cls, *, clone=False):
+    if not isinstance(raw_map, dict):
+        raise ValueError("Native record mapping must be an object")
+    resolved = {}
+    for key, serialized in raw_map.items():
+        digest = _shared_ref_digest(serialized)
+        if digest is not None:
+            if digest not in shared_decoded:
+                raise ValueError("Unknown native shared record reference")
+            item = shared_decoded[digest]
+            resolved[key] = replace(item) if clone else item
+        else:
+            resolved[key] = from_native_json(serialized, expected_cls)
+    return resolved
 
 
 @dataclass
@@ -97,7 +177,7 @@ class EpitopeDataset:
         return cls(result, epitopes, tuple(provenance.values()), **kwargs)
 
     @classmethod
-    def from_topiary(cls, result, *, label="input", sample_name=None):
+    def from_topiary(cls, result, *, label="input", sample_name=None, source_antigens=None):
         """Adapt reported observations; no inferred intervals or admission."""
         if isinstance(result, pd.DataFrame):
             result = TopiaryResult(result)
@@ -171,8 +251,12 @@ class EpitopeDataset:
                 overlaps_targetable=False)
             validate_peptide_alleles(candidate, f"Topiary observation {identity}")
             payload = _value(row, ANTIGEN_COLUMN)
+            antigen = None
             if payload is not None:
                 antigen = from_native_json(payload, VaccineAntigen)
+            elif source_antigens is not None:
+                antigen = source_antigens.get(_value(row, "source_sequence_name"))
+            if antigen is not None:
                 if antigen.amino_acids[int(offset):int(offset) + len(peptide)] != peptide:
                     raise ValueError("Peptide does not match its supplied VaccineAntigen")
                 antigens[identity] = antigen
@@ -312,25 +396,56 @@ class EpitopeDataset:
     def save(self, path):
         """Persist evidence with Topiary and objects with the native codec."""
         from .selection_policy import encode_evaluations
-        extra = dict(self.result.extra)
-        extra[DATASET_METADATA] = {
+        archive = RNASupportArchive()
+        inline_antigens, shared_antigens, antigen_keys = _stage_record_map(self.antigens, archive)
+        inline_fragments, shared_fragments, fragment_keys = _stage_record_map(
+            self.mutation_fragments, archive)
+        reports = [
+            {
+                **report,
+                "rows": archive.encode_json(report["rows"]),
+                "records": [archive.encode_json(value) for value in report["records"]],
+            }
+            for report in deepcopy(self.construction_reports)
+        ]
+        metadata = {
             "schema": DATASET_SCHEMA,
-            "epitopes": [to_native_json(e) for e in self.epitopes],
+            "epitopes": [archive.encode_json(to_native_json(e)) for e in self.epitopes],
             "provenance": [to_native_json(p) for p in self.provenance],
             "config": msgspec.to_builtins(self.config) if self.config is not None else None,
-            "antigens": {key: to_native_json(a) for key, a in self.antigens.items()},
-            "selection": self.selection,
-            "mutation_fragments": {key: to_native_json(fragment)
-                                   for key, fragment in self.mutation_fragments.items()},
-            "construction_reports": self.construction_reports,
+            "antigens": inline_antigens,
+            "selection": _transform_selection_rna(
+                self.selection, archive.encode_tree, archive.encode_json),
+            "mutation_fragments": inline_fragments,
+            "construction_reports": reports,
             "direct_sources": self.direct_sources,
             "policy_evidence": encode_evaluations(self.policy_evaluations),
         }
+        if shared_antigens:
+            metadata["shared_antigens"] = shared_antigens
+        if shared_fragments:
+            metadata["shared_fragments"] = shared_fragments
+        archive.write_to_payload(metadata)
         if self.host_reference is not None:
-            extra[DATASET_METADATA]['host_reference'] = self.host_reference
+            metadata['host_reference'] = self.host_reference
         from .native_references import NativeReferences
-        extra[DATASET_METADATA] = NativeReferences(path, self.native_references).transform(
-            extra[DATASET_METADATA])
+        metadata = NativeReferences(path, self.native_references).transform(metadata)
+        for map_field, shared_field, keys_by_slot in (
+            ("antigens", "shared_antigens", antigen_keys),
+            ("mutation_fragments", "shared_fragments", fragment_keys),
+        ):
+            if shared_field not in metadata:
+                continue
+            by_digest = {}
+            for slot, transformed in metadata.pop(shared_field).items():
+                digest = _sha256(transformed)
+                by_digest[digest] = transformed
+                pointer = _canonical_json({SHARED_RECORD_FIELD: digest})
+                for key in keys_by_slot[slot]:
+                    metadata[map_field][key] = pointer
+            metadata[shared_field] = by_digest
+        extra = dict(self.result.extra)
+        extra[DATASET_METADATA] = metadata
         result = TopiaryResult(self.result.df.copy(), metadata=self.result.metadata)
         result.extra = extra
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -344,16 +459,46 @@ class EpitopeDataset:
         payload = result.extra.pop(DATASET_METADATA, None)
         if not isinstance(payload, dict) or payload.get("schema") != DATASET_SCHEMA:
             raise ValueError("Expected a native Vaxrank epitope dataset")
+        _verify_shared_tables(payload)
         from .native_references import NativeReferences
         references = NativeReferences(path)
         payload = references.transform(payload, decode=True)
-        epitopes = tuple(from_native_json(e, CandidateEpitope) for e in payload["epitopes"])
+        archive = RNASupportArchive.from_payload(payload)
+        epitopes = tuple(
+            from_native_json(archive.decode_json(e), CandidateEpitope)
+            for e in payload["epitopes"]
+        )
         for epitope in epitopes:
             validate_peptide_alleles(epitope, str(path))
-        antigens = {key: from_native_json(a, VaccineAntigen)
-                    for key, a in payload["antigens"].items()}
-        fragments = {key: from_native_json(value, MutantProteinFragment)
-                     for key, value in payload.get("mutation_fragments", {}).items()}
+        shared_antigens = {
+            digest: from_native_json(archive.decode_json(value), VaccineAntigen)
+            for digest, value in payload.pop("shared_antigens", {}).items()
+        }
+        shared_fragments = {
+            digest: from_native_json(archive.decode_json(value), MutantProteinFragment)
+            for digest, value in payload.pop("shared_fragments", {}).items()
+        }
+        raw_antigens = {
+            key: value if is_shared_record_ref(value) else archive.decode_json(value)
+            for key, value in payload["antigens"].items()
+        }
+        raw_fragments = {
+            key: value if is_shared_record_ref(value) else archive.decode_json(value)
+            for key, value in payload.get("mutation_fragments", {}).items()
+        }
+        antigens = _resolve_record_map(raw_antigens, shared_antigens, VaccineAntigen)
+        fragments = _resolve_record_map(
+            raw_fragments, shared_fragments, MutantProteinFragment, clone=True)
+        reports = [
+            {
+                **report,
+                "rows": archive.decode_json(report["rows"]),
+                "records": [archive.decode_json(value) for value in report["records"]],
+            }
+            for report in payload.get("construction_reports", [])
+        ]
+        selection = _transform_selection_rna(
+            payload["selection"], archive.decode_tree, archive.decode_json)
         # Older datasets already persisted these IDs on the construction
         # antigen. Reuse that recorded provenance only for the same transcripts;
         # do not query an absent annotation to recreate it during replay.
@@ -368,9 +513,9 @@ class EpitopeDataset:
             provenance=tuple(from_native_json(p, InputProvenance) for p in payload["provenance"]),
             config=msgspec.convert(payload["config"], EpitopeConfig) if payload["config"] else None,
             antigens=antigens,
-            selection=payload["selection"],
+            selection=selection,
             mutation_fragments=fragments,
-            construction_reports=payload.get("construction_reports", []),
+            construction_reports=reports,
             direct_sources=payload.get("direct_sources", []),
             policy_evaluations=decode_evaluations(payload.get("policy_evidence", [])),
             native_references=references, host_reference=payload.get('host_reference'))
@@ -535,6 +680,14 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
             has_rna_support=properties['rna_support'], dna_vaf=properties['dna_vaf']))
     mutation_groups = {}
     groups = {}
+    json_by_id = {}
+
+    def _object_json(obj):
+        obj_id = id(obj)
+        if obj_id not in json_by_id:
+            json_by_id[obj_id] = to_native_json(obj)
+        return json_by_id[obj_id]
+
     generalized_ids = (set(dataset.scoring_frame().loc[
         dataset.result.long_df.source_observation_id.notna(), 'prediction_id'].dropna())
                        if 'source_observation_id' in dataset.result.df else set())
@@ -553,12 +706,12 @@ def dataset_ranking_result(report, epitopes, genome=None, options=None):
             continue
         if fragment is not None:
             identity = (epitope.input_provenance.input_id if epitope.input_provenance else '',
-                        to_native_json(fragment), to_native_json(antigen))
+                        _object_json(fragment), _object_json(antigen) if antigen is not None else '')
             mutation_groups.setdefault(identity, (fragment, antigen, []))[2].append(epitope)
             continue
         if antigen is None:
             continue
-        identity = to_native_json(antigen)
+        identity = _object_json(antigen)
         groups.setdefault(identity, (antigen, []))[1].append(epitope)
     for fragment, antigen, candidates in mutation_groups.values():
         vaccines = vaccine_peptides_from_epitopes(

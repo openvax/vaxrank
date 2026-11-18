@@ -156,5 +156,5 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
             interpretation='Public MS is not a patient measurement. MHC inventories and target masks do not establish processing, immunogenicity or clinical safety.')) + '\n')
         if audit['predictions']:
             TopiaryResult(pd.DataFrame(audit['predictions'])).to_tsv(directory / 'cta_product_predictions.tsv')
-    if args.output_epitopes:
+    if args.output_epitopes and getattr(args, '_design_dataset', None) is not dataset:
         dataset.save(args.output_epitopes)
