@@ -129,6 +129,7 @@ def test_mixed_cli_and_native_reload_keep_original_values_and_direct_context(dir
     ({'reference_assembly': 'GRCh37'}, 'reference_assembly'),
     ({'annotation': 'ensembl:109'}, 'annotation'),
     ({'mhc_alleles': ['HLA-B*07:02']}, 'alleles outside'),
+    ({'mhc_alleles': None}, 'mhc_alleles'),
 ])
 def test_scope_conflicts_precede_direct_prediction(direct, tmp_path, scope, message):
     with pytest.raises(ValueError, match=message):

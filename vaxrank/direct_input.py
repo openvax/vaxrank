@@ -61,7 +61,7 @@ def direct_input_scope(args, epitope_config, *, pooled=False):
     alleles = normalize_alleles(mhc_alleles_from_args(args), 'Direct prediction')
     if not alleles:
         raise ValueError('Direct VCF/BAM predictions require explicit MHC alleles')
-    if scope.mhc_alleles is None:
+    if scope.mhc_alleles is None and not manifest:
         scope = combine_scopes(scope, scope_from_mapping({'mhc_alleles': alleles}, 'Direct alleles'), 'Direct alleles')
     variants = variant_collection_from_args(args)
     context = load_reference_context(getattr(args, 'reference_context', None))
