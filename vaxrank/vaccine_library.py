@@ -699,7 +699,7 @@ def select_antigen_window(antigen, base_name, max_length_aa, *, required_target_
     if targetable_length > max_length_aa:
         logger.warning(
             "Targetable content in %s spans %d aa, longer than the antigen-length "
-            "cap (%d); emitting the full antigen without truncation.",
+            "cap (%d); preserving the full antigen for construct-capacity assessment.",
             base_name, targetable_length, max_length_aa)
         return aa
     midpoint = (targetable_span.start + targetable_span.end) // 2

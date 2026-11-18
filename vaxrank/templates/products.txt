@@ -22,7 +22,8 @@ Emitted by type: {% for kind, count in group.assembly_decisions.allocation.emitt
 {% endfor %}{% endif %}
 Identical final amino-acid sequences share one antigen slot, retaining all mappings. Distinct overlapping sequences remain separate; source-event counts are reported above.
 {% for decision in group.assembly_decisions.rows %}  {{ decision.order }}. {{ decision.sequence }}; sources {{ decision.sources | join(', ') }}; {{ decision.mapping_count }} candidate mappings: {{ decision.outcome | replace('_', ' ') }}{% if decision.products %} ({{ decision.products | join(', ') }}){% endif %}.
-{% endfor %}{% else %}Historical assembly ordering, deduplication and capacity decisions were not recorded. Product mappings describe the saved result.
+{% if decision.length_constraint %}     Assembled length {{ decision.length_constraint.length }} {{ decision.length_constraint.unit }}; limit {{ decision.length_constraint.limit }} {{ decision.length_constraint.unit }}.
+{% endif %}{% endfor %}{% else %}Historical assembly ordering, deduplication and capacity decisions were not recorded. Product mappings describe the saved result.
 {% endif %}{% endif %}
 {% for product in group.products %}
 

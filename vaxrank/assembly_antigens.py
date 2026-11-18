@@ -168,7 +168,44 @@ def summarize_products(products):
                 source_candidates_without_event=unassigned, evidence_groups=len(evidence_groups))
 
 
-def record_assembly_decisions(audit, antigens, products, target_alleles):
+def pack_antigens(antigens, options, length_for_group, max_length, unit, audit):
+    """Allocate and pack whole sequences within hard product limits.
+
+    Modality-specific callers supply the assembled length, including linkers
+    and other fixed elements. An oversized sequence is excluded before type
+    allocation, so it cannot displace a later sequence that fits.
+    """
+    from .antigen_allocation import allocate_antigens
+    eligible, exclusions = [], {}
+    for antigen in antigens:
+        length = length_for_group([antigen])
+        if length > max_length:
+            exclusions[antigen.name] = dict(
+                outcome='construct_length_limit', length=length, limit=max_length, unit=unit)
+            logger.warning('Excluding %s: assembled length %d exceeds limit %d %s.',
+                           antigen.name, length, max_length, unit)
+        else:
+            eligible.append(antigen)
+    ordered = allocate_antigens(eligible, options.antigen_allocation, audit)
+    groups, current = [], []
+    for antigen in ordered:
+        if current and (len(current) >= options.antigens_per_construct or
+                        length_for_group(current + [antigen]) > max_length):
+            groups.append(current)
+            current = []
+        if len(groups) >= options.max_constructs:
+            break
+        current.append(antigen)
+    if current:
+        groups.append(current)
+    logger.info('Construct assembly: selected %d / %d eligible antigen sequences into %d constructs '
+                '(maximum %d constructs); %d excluded by length.',
+                sum(len(group) for group in groups), len(ordered), len(groups),
+                options.max_constructs, len(exclusions))
+    return groups, exclusions
+
+
+def record_assembly_decisions(audit, antigens, products, target_alleles, exclusions=None):
     """Record outcomes of the current packer; never reconstruct historical reasons."""
     if audit is None:
         return
@@ -184,10 +221,13 @@ def record_assembly_decisions(audit, antigens, products, target_alleles):
                        order=allocation.get(antigen.name, {}).get('allocation_order', index), input_order=index,
                        sources=antigen.sources,
                        products=[p.name for p in products if antigen.name in p.antigen_names],
-                       outcome=('emitted' if any(antigen.name in p.antigen_names for p in products)
+                       outcome=((exclusions or {}).get(antigen.name, {}).get('outcome') or
+                                ('emitted' if any(antigen.name in p.antigen_names for p in products)
                                 else 'antigen_type_cap' if allocation.get(antigen.name, {}).get('reason') == 'antigen_type_cap'
-                                else 'construct_capacity'),
-                       allocation=allocation.get(antigen.name))
+                                else 'construct_capacity')),
+                       allocation=allocation.get(antigen.name),
+                       length_constraint={k: v for k, v in (exclusions or {}).get(antigen.name, {}).items()
+                                          if k != 'outcome'})
                   for index, antigen in enumerate(antigens, 1)])
     if 'allocation' in audit:
         audit['order'] = audit['allocation']['policy']['mode'] + '_antigen_types_then_' + audit['order']

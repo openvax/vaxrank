@@ -506,8 +506,7 @@ def test_mrna_max_constructs_logs_topk_selection_at_info(caplog):
     # The cap event surfaces at INFO, never WARNING.
     cap_records = [
         r for r in caplog.records
-        if 'mRNA assembly' in r.getMessage()
-        and '--mrna-max-constructs' in r.getMessage()
+        if 'Construct assembly: selected' in r.getMessage()
     ]
     assert cap_records, \
         "Expected an mRNA assembly top-k log line at the cap"
@@ -517,8 +516,7 @@ def test_mrna_max_constructs_logs_topk_selection_at_info(caplog):
     # Selected 2 of 6 ranked antigens.
     assert "2" in msg
     assert "6" in msg
-    # The next-best (not-selected) antigen is named for traceability.
-    assert "GENE2" in msg
+    assert "maximum 1 constructs" in msg
 
 
 def test_mrna_min_antigen_length_warning(caplog):

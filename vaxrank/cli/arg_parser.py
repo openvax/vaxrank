@@ -753,8 +753,9 @@ def add_mrna_output_args(group):
         "--mrna-max-length-nt",
         default=4000,
         type=int,
-        help="Maximum total nucleotide length per construct (UTRs + CDS + stop). "
-             "Antigens that would exceed this spill into additional constructs.")
+        help="Maximum nucleotide length before poly(A) (UTRs + CDS + stop). "
+             "Antigens spill into additional constructs when available; an antigen "
+             "that cannot fit alone is excluded and reported.")
 
 
 def add_peptide_output_args(group):

@@ -84,7 +84,7 @@ def test_native_full_antigen_enumeration_and_content_preserving_refinement():
 def test_secondary_windows_compete_on_their_own_scores():
     full, choices = windows()
     selected = select_source_windows(choices)
-    other = vaccine('AALLFGYPVYVAA', [(2, 11, 5., False)])
+    other = vaccine('AALLFGYPVYVA', [(2, 11, 5., False)])
     other = replace(other, antigen=replace(other.antigen, source_identifier='another-source'))
     products = assemble_peptide_constructs([(full.antigen, selected), (other.antigen, [other])],
         PeptideConstructConfig(max_constructs=2, min_antigen_length_aa=8, max_antigen_length_aa=12))

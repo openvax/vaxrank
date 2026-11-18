@@ -267,7 +267,7 @@ comes from `--antigen-content` and `--peptide-antigens-per-construct`.
 |---|---|
 | `--output-dir` | Where to write the construct files |
 | `--peptide-linker` | Inter-antigen spacer (e.g. `AAY`, `(G4S)2`); default `G4S3` |
-| `--peptide-max-antigen-length-aa` | Truncate antigens longer than this |
+| `--peptide-max-antigen-length-aa` | Maximum requested antigen window length; preserve required target content |
 | `--peptide-n-terminal-acetyl` | Add an N-terminal acetylation note to the manifest |
 | `--peptide-c-terminal-amide` | Add a C-terminal amide note to the manifest |
 
@@ -289,9 +289,19 @@ Construct anatomy:
 | `--mrna-3p-utr` | 3' UTR |
 | `--mrna-include-mitd` / `--mrna-no-mitd` | Include the BioNTech MITD trafficking domain |
 | `--mrna-mitd` | Which MITD variant (`HLA-A` / `HLA-B`) |
-| `--mrna-max-length-nt` | Hard cap on construct length (nt) |
+| `--mrna-max-length-nt` | Hard cap on construct length before poly(A), including UTRs and all coding elements |
 | `--mrna-antigens-per-construct` | Antigens per CDS |
 | `--mrna-max-constructs` | Stop emitting after this many constructs |
+
+Both modalities use the same packing policy. An antigen that cannot fit in a
+construct by itself is excluded before category allocation; later candidates
+that fit remain eligible. Required target content is never cut to force a fit.
+Peptide construct capacity is the configured number of antigens times the
+maximum antigen length, plus intervening linkers. mRNA packing reserves the
+longest allowed optimized linker at each junction. Reports record length
+exclusions and unmet representation goals, and native replay preserves these
+decisions. Historical saved products remain reproducible; redesigning applies
+the current limits.
 
 PolyA tail:
 
