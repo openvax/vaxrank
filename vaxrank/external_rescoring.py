@@ -391,11 +391,21 @@ def _retained_genomes(report):
     return tuple(genomes.values())
 
 
+def _retained_reference_context(reports, additional_provenance=()):
+    from .input_scope import reference_context_from_provenance
+    provenance = [*additional_provenance, *(r.input_provenance for r in reports)]
+    for report in reports:
+        if report.dataset is not None:
+            provenance.extend(report.dataset.provenance)
+    return reference_context_from_provenance(provenance)
+
+
 def _validate_report_scopes(reports, *, genome=None, alleles=()):
     from .host_reference import combine_host_references
     return validate_input_scopes(
         [replace(r.input_provenance, observed_mhc_alleles=_observed_alleles(r))
          for r in reports], genome=genome, prediction_alleles=alleles,
+        reference_context=_retained_reference_context(reports),
         retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in reports},
         host_reference=combine_host_references(
             r.dataset.host_reference for r in reports if r.dataset is not None))
@@ -594,14 +604,16 @@ def read_reports(inputs, *, scopes=None, manifest_path=None, genome=None, allele
                 raise ValueError(f'{path}: saved predictions have no host_reference; '
                                  'predict the source antigens with the selected reference first')
     loaded = [report for report in reports if report is not None]
+    context = _retained_reference_context(loaded, validation_provenance)
     shared_scope = validate_input_scopes(
         [report.input_provenance for report in loaded] + [p for _, _, p in pending] + list(validation_provenance),
-        genome=genome, prediction_alleles=alleles, host_reference=host_reference,
+        genome=genome, prediction_alleles=alleles, host_reference=host_reference, reference_context=context,
         retained_genomes={r.input_provenance.input_id: _retained_genomes(r) for r in loaded})
     for stored, references in native_scopes:
         validate_input_scopes([
             replace(p, scope=combine_scopes(p.scope, shared_scope, p.path, SPECIES_FIELDS))
             for p in stored], genome=genome, prediction_alleles=alleles, host_reference=host_reference,
+            reference_context=context,
             retained_genomes={p.input_id: references for p in stored})
     if pending:
         retained_ids = {p.input_id for r in loaded if r.dataset is not None for p in r.dataset.provenance}
@@ -971,13 +983,14 @@ def load_unified_external(args, epitope_config, options, genome):
     if mode == 'input' and getattr(args, 'external_peptide_only', False):
         raise ValueError('--external-peptide-only requires fresh or additive prediction mode')
     model_factory, alleles = None, []
-    direct = bool(getattr(args, 'vcf', None) or getattr(args, 'bam', None))
+    from .direct_input import has_direct_input
+    direct = has_direct_input(args)
     specs = external_input_specs(args)
     cta = any(fmt == 'cta_expression' for fmt, _, _ in specs)
     antigens = any(fmt in ('antigens', 'isovar') for fmt, _, _ in specs)
     if not direct:
         if getattr(args, 'rna_sample_id', None) or getattr(args, 'rna_source', None):
-            raise ValueError('--rna-sample-id and --rna-source require direct VCF/BAM inputs')
+            raise ValueError('--rna-sample-id and --rna-source require direct variant/RNA inputs')
         if getattr(args, 'patient_background_pairs', None) and not antigens:
             raise ValueError('Patient-background pairs require new Isovar antigen inputs; '
                              'saved comparisons already contain their source evidence')
@@ -1023,9 +1036,11 @@ def load_unified_external(args, epitope_config, options, genome):
     from .cta_input import write_cta_admissions
     from .config.loader import load_vaxrank_config
     validation_provenance = ()
+    prepared_direct = None
     if direct:
         from .direct_input import direct_input_scope
-        validation_provenance = (direct_input_scope(args, epitope_config)[0],)
+        prepared_direct = direct_input_scope(args, epitope_config, pooled=bool(specs))
+        validation_provenance = (prepared_direct[0],)
     loaded_reports = read_reports(
         [(fmt, path) for fmt, path, _ in specs],
         scopes=[scope for _, _, scope in specs],
@@ -1093,7 +1108,8 @@ def load_unified_external(args, epitope_config, options, genome):
     epitope_config = report_config(loaded_reports, epitope_config)
     if direct:
         from .direct_input import prepare_direct_report
-        loaded_reports.insert(0, prepare_direct_report(args, loaded_reports, epitope_config))
+        loaded_reports.insert(0, prepare_direct_report(
+            args, loaded_reports, epitope_config, prepared_input=prepared_direct))
     reports, frame, predictions = prepare_reports(
         [], epitope_config, mode=mode, prepared_reports=loaded_reports,
         model_factory=model_factory, alleles=alleles,
@@ -1206,7 +1222,7 @@ def load_unified_external(args, epitope_config, options, genome):
     patient = patient_info_from_external(
         ranked, '', getattr(args, 'output_patient_id', '') or '', summary,
         predictions=predictions)
-    patient.inputs = [(('VCF/BAM' if r.source_format == 'vcf_bam' else r.source_format + ' report'),
+    patient.inputs = [(('Direct variants/RNA' if r.source_format == 'vcf_bam' else r.source_format + ' report'),
                        r.path) for r in reports]
     patient.input_provenance = [r.input_provenance for r in reports]
     from .input_coverage import ranking_coverage

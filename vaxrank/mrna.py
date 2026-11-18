@@ -24,10 +24,10 @@ opts out of a signal peptide and the first antigen does not start
 with M, the assembler prepends one to keep the CDS translatable.
 
 Each amino-acid block is back-translated and codon-optimized for the
-target species via DnaChisel (see ``codon_optimize``). When the
-combined antigen string would exceed ``max_length_nt`` or
-``antigens_per_construct``, antigens spill into additional
-constructs returned in the same order.
+target species via DnaChisel (see ``codon_optimize``). Packing limits the
+complete pre-poly(A) RNA to ``max_length_nt`` and the number of antigen
+windows to ``antigens_per_construct``. Additional molecules are emitted up
+to ``max_constructs``; a window that cannot fit alone is excluded and reported.
 """
 
 import csv
@@ -153,16 +153,17 @@ def resolve_codon_species(species=None, host_taxon_id=None):
 class RNAConstructConfig:
     """User-configurable mRNA construct parameters.
 
-    Defaults reproduce the BioNTech IVAC MUTANOME / FixVac design as
-    published in Sahin et al., Nature 547:222, 2017 (doi:10.1038/nature23003)
-    and originally engineered in Kreiter et al., J Immunol 180:309, 2008
-    (doi:10.4049/jimmunol.180.1.309):
+    The default layout is:
 
     - HLA-B signal peptide + HLA-B MITD (consistent self-pairing)
     - 5 antigens per construct, 25-aa windows
     - (G4S)2 inter-antigen linker
     - HBB 5' UTR + tandem 2× HBB 3' UTR (FI element / "2hBg")
-    - Single construct per vaccine
+    - Up to two RNA constructs per vaccine
+
+    Antigen-window length and complete RNA length are separate quantities.
+    Each RNA encodes its selected antigen windows plus coding elements;
+    the configured window size is not a limit on the whole translated product.
 
     ``max_length_nt`` caps the complete construct before poly(A), including
     UTRs, start/stop codons, signal/trafficking sequences and linkers.
@@ -185,11 +186,9 @@ class RNAConstructConfig:
     antigen_content: str = "mutation_spanning"
     epitopes_per_antigen: int = 1
     min_antigen_length_aa: int = 15
-    max_antigen_length_aa: int = 25  # Sahin 2017 used 27mers; 25 is typical
+    max_antigen_length_aa: int = 25
     antigens_per_construct: int = 5
-    # BioNTech FixVac canonical: 2× pentatope = 10 antigens at
-    # 5 antigens/construct (Sahin 2017). Set to 1 for a single
-    # construct; raise for broader coverage.
+    # At most ten antigen windows across two RNA molecules by default.
     max_constructs: int = 2
     candidates_per_slot: int = 1
     antigen_allocation: dict | None = None
@@ -209,10 +208,8 @@ class RNAConstructConfig:
     junction_rank_kind: str = 'auto'
     junction_rank_strong: float = 0.5
     junction_rank_mild: float = 2.0
-    # PolyA tail (issue #252). Default A120 matches BioNTech IVAC
-    # MUTANOME / FixVac (Sahin 2017). When ``poly_a_segmented`` is
-    # True, the tail is split as A_first + linker + A_rest, mirroring
-    # BNT162b2 (A30 + GCATATGACT + A70 per Xia 2021, PMC8310186).
+    # Poly(A) length counts adenosines. Optional segmentation inserts the
+    # configured linker between the first segment and the remaining adenosines.
     poly_a_length: int = 120
     poly_a_segmented: bool = False
     poly_a_first_segment: int = 30

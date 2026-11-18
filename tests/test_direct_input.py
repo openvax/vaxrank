@@ -63,7 +63,7 @@ def direct(tmp_path, monkeypatch):
     vcf.write_text('synthetic VCF')
     bam.write_bytes(b'synthetic BAM')
     calls = []
-    def predict(args, *, epitope_dataset, epitope_config_override):
+    def predict(args, *, epitope_dataset, epitope_config_override, loaded_variants=None):
         calls.append(epitope_config_override)
         epitope_dataset.add_mutation(fragment, candidates)
         return SimpleNamespace(
@@ -129,6 +129,7 @@ def test_mixed_cli_and_native_reload_keep_original_values_and_direct_context(dir
     ({'reference_assembly': 'GRCh37'}, 'reference_assembly'),
     ({'annotation': 'ensembl:109'}, 'annotation'),
     ({'mhc_alleles': ['HLA-B*07:02']}, 'alleles outside'),
+    ({'mhc_alleles': None}, 'mhc_alleles'),
 ])
 def test_scope_conflicts_precede_direct_prediction(direct, tmp_path, scope, message):
     with pytest.raises(ValueError, match=message):
@@ -359,7 +360,7 @@ def test_direct_configured_alternative_windows_survive_reload(direct, tmp_path, 
     fragment = replace(direct[2], amino_acids='AAAAASIINFEKLAAAAAAA',
                        mutant_amino_acid_start_offset=8, mutant_amino_acid_end_offset=9)
     candidate = _make_epitope('SIINFEKL', 25., source_sequence=fragment.amino_acids, offset=5)
-    def predict(args, *, epitope_dataset, epitope_config_override):
+    def predict(args, *, epitope_dataset, epitope_config_override, loaded_variants=None):
         epitope_dataset.add_mutation(fragment, [candidate])
         return SimpleNamespace(isovar_results=[], variant_properties=lambda **kwargs: [])
     monkeypatch.setattr(entry, 'run_vaxrank_from_parsed_args', predict)
@@ -408,3 +409,127 @@ def test_native_direct_replay_writes_passing_csv_after_type_exclusion(tmp_path, 
     pd.testing.assert_frame_equal(rows, direct_rows)
     assert len(rows) == 5 and not rows.has_vaccine_peptide.any()
     assert rows.rna_support.any()
+
+
+def direct_args(direct, tmp_path, *extra):
+    return ['--vcf', str(direct[0]), '--bam', str(direct[1]),
+            '--mhc-predictor', 'random', '--mhc-alleles', 'HLA-A*02:01',
+            '--ensembl-release', '110', '--no-processing-aware-annotation',
+            '--config-value', 'vaccine_peptides.min_length=8',
+            '--config-value', 'vaccine_peptides.preferred_length=12',
+            '--output-csv', str(tmp_path / 'ranked.csv'), *extra]
+
+
+@pytest.mark.parametrize('directory_bundle', [False, True])
+def test_direct_metadata_export_creates_parent_directories(direct, tmp_path, directory_bundle):
+    from vaxrank.cli.entry_point import (
+        populate_default_output_paths, ranked_vaccine_peptides_with_metadata_from_parsed_args)
+    target = tmp_path / 'missing' / 'deeper'
+    args = parse_vaxrank_args(direct_args(direct, tmp_path,
+        '--output-json-file', str(target / 'ranked.json'),
+        '--output-passing-variants-csv', str(target / 'passing.csv')))
+    if directory_bundle:
+        args.output_dir = str(target)
+        populate_default_output_paths(args)
+    data = ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
+    assert data['patient_info'].num_variants_with_vaccine_peptides == 1
+    assert (target / 'ranked.json').is_file()
+    assert (target / 'passing.csv').is_file()
+    assert len(direct[3]) == 1
+
+
+@pytest.mark.parametrize('options,expected', [
+    (['--exclude-antigen-type', 'mutation'], False),
+    (['--max-sources', '0'], False), (['--max-sources', '1'], True)])
+def test_single_direct_selection_matches_replay(direct, tmp_path, options, expected):
+    import pandas as pd
+    from vaxrank.cli.entry_point import ranked_vaccine_peptides_with_metadata_from_parsed_args
+    original, saved, replay = (tmp_path / name for name in ('passing.csv', 'native.tsv', 'again.csv'))
+    args = parse_vaxrank_args(direct_args(direct, tmp_path,
+        '--output-passing-variants-csv', str(original), '--output-epitopes', str(saved), *options))
+    data = ranked_vaccine_peptides_with_metadata_from_parsed_args(args)
+    assert data['patient_info'].num_variants_with_vaccine_peptides == int(expected)
+    rows = pd.read_csv(original)
+    assert bool(rows.has_vaccine_peptide.iloc[0]) is expected
+    assert rows.rna_support.iloc[0] and len(rows) == 1
+    run_cli(['--input-epitopes', str(saved), '--output-passing-variants-csv', str(replay),
+             '--no-processing-aware-annotation'])
+    assert original.read_bytes() == replay.read_bytes()
+    assert len(direct[3]) == 1
+
+
+@pytest.mark.parametrize('field', ['vcf', 'maf', 'json_variants'])
+def test_direct_content_identity_includes_all_variant_files(tmp_path, field):
+    from vaxrank.direct_input import direct_content_identity
+    path = tmp_path / field
+    path.write_text('first variant file')
+    args = SimpleNamespace(**{field: [str(path)]})
+    first, hashes = direct_content_identity(args, [])
+    assert list(hashes) == [str(path)]
+    path.write_text('second variant file')
+    assert direct_content_identity(args, [])[0] != first
+
+
+def test_inline_variant_identity_cannot_collide_with_same_rna_input(direct, tmp_path):
+    from vaxrank.direct_input import direct_content_identity
+    from vaxrank.construct_replay import pipeline_native_dataset
+    from vaxrank.epitope_config import EpitopeConfig
+    args = parse_vaxrank_args(direct_args(direct, tmp_path))
+    args.vcf = []
+    first = [direct[2].variant]
+    second = [Variant('1', 200, 'C', 'G', genome=first[0].genome)]
+    assert direct_content_identity(args, first)[0] != direct_content_identity(args, second)[0]
+    assert pipeline_native_dataset(args, first, EpitopeConfig()).provenance[0].input_id != (
+        pipeline_native_dataset(args, second, EpitopeConfig()).provenance[0].input_id)
+
+
+def test_direct_variants_are_loaded_once_and_reports_do_not_change_ranking(direct, tmp_path, monkeypatch):
+    import varcode.cli
+    loads = []
+    def load(args):
+        loads.append(args)
+        return VariantCollection([direct[2].variant])
+    monkeypatch.setattr(varcode.cli, 'variant_collection_from_args', load)
+    native = tmp_path / 'saved.tsv'
+    first, second = tmp_path / 'csv-only.csv', tmp_path / 'with-evidence.csv'
+    run_cli(direct_args(direct, tmp_path, '--output-csv', str(first)))
+    assert len(loads) == len(direct[3]) == 1
+    run_cli(direct_args(direct, tmp_path, '--output-csv', str(second), '--output-epitopes', str(native)))
+    assert len(loads) == len(direct[3]) == 2
+    assert first.read_bytes() == second.read_bytes()
+    assert EpitopeDataset.load(native).provenance[0].source_format == 'vcf_bam'
+
+
+@pytest.mark.parametrize('format', ['vcf', 'maf', 'json-variants', 'variant'])
+def test_all_direct_variant_flags_share_the_common_loader(direct, tmp_path, format):
+    flags = direct_args(direct, tmp_path)
+    flags[:2] = ['--' + format, *(('1', '100', 'A', 'T') if format == 'variant' else (str(direct[0]),))]
+    saved = tmp_path / 'native.tsv'
+    run_cli(flags + ['--output-epitopes', str(saved)])
+    data = EpitopeDataset.load(saved)
+    assert len(data.direct_sources) == 1 and len(direct[3]) == 1
+    assert next(iter(data.mutation_fragments.values())).variant == direct[2].variant
+
+
+
+def test_direct_without_predictions_retains_outcomes_for_replay(direct, tmp_path, monkeypatch):
+    import vaxrank.cli.entry_point as entry
+    from vaxrank.input_coverage import record_direct_coverage
+    from vaxrank.external_input import load_ranked_inputs
+    predict = entry.run_vaxrank_from_parsed_args
+    def empty(args, **kwargs):
+        results = predict(args, **kwargs)
+        dataset = kwargs['epitope_dataset']
+        dataset.epitopes, dataset.antigens, dataset.mutation_fragments = (), {}, {}
+        record_direct_coverage(dataset, results, kwargs['loaded_variants'], window_selection_performed=False)
+        return results
+    monkeypatch.setattr(entry, 'run_vaxrank_from_parsed_args', empty)
+    saved = tmp_path / 'empty.tsv'
+    run_cli(direct_args(direct, tmp_path, '--output-epitopes', str(saved)))
+    dataset = EpitopeDataset.load(saved)
+    assert not dataset.epitopes and len(dataset.direct_sources) == 1
+    assert dataset.selection['source_evidence']
+    ranked, _, _, patient, _ = load_ranked_inputs(parse_vaxrank_args(['--input-epitopes', str(saved)]))
+    assert not ranked and patient.num_somatic_variants == 1
+    assert patient.num_variants_with_vaccine_peptides == 0
+    assert len(patient.input_coverage['sources']) == 1

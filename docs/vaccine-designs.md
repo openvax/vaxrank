@@ -25,14 +25,32 @@ That matrix yields eight designs, four per vaccine type:
 `--epitopes-per-antigen` sets how many top ligands to take from each ranked
 vaccine peptide in `minimal_epitope` mode (default `1`).
 
+An **antigen window** is a selected amino-acid sequence. A **construct** is one
+peptide or RNA molecule. A **peptide pool** contains separate peptide molecules;
+concatenating antigens makes one longer molecule.
+
+| Default setting | Synthetic peptide | mRNA |
+|---|---|---|
+| Requested antigen-window length | 15–25 aa | 15–25 aa |
+| Antigen windows per molecule | 1 | Up to 5 |
+| Molecules per vaccine design | Up to 20 | Up to 2 |
+| Whole-molecule length limit | 25 aa with the default single-window layout | 4,000 nt before poly(A), including UTRs and coding elements |
+
+These are configurable design defaults. The RNA cap is a ceiling, not a target.
+Peptide and mRNA assembly share packing code while supplying separate length
+calculations and budgets. For concatenated peptide designs, the current total
+capacity is derived from the configured antigen count, window length and linkers;
+it is not an independent synthesis-vendor limit. The length check does not
+establish manufacturability.
+
 ## Distinct sequences and source mappings
 
 Peptide and mRNA assembly group identical **emitted antigen sequences** after
 window selection or minimal-epitope selection, before packing or applying
 construct caps. Ten candidate IDs producing the same sequence occupy one
-antigen slot. The first candidate in selection order supplies its display name;
-all contributing source mappings remain separate. Scores and RNA support are
-not added across those mappings.
+antigen slot. Its label names all retained origins, and all contributing source
+mappings remain separate. The first enabled ranked source supplies its allocation
+category. Scores and RNA support are not added across those mappings.
 
 `--max-windows-per-antigen-source N` retains up to **3 non-overlapping source
 windows** by default. A source is a recorded mutation/event or an identified

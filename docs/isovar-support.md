@@ -1,6 +1,6 @@
 # Isovar support compatibility
 
-Vaxrank requires Isovar 1.89.0 or later, below 2.0, with ORFdata 0.42.6 or
+Vaxrank requires Isovar 1.90.9 or later, below 2.0, with ORFdata 0.52.0 or
 later and Osteosarc 0.15.6 or later in the 0.15 series (the pins in
 `requirements.txt`). Native
 [Isovar inputs](isovar-inputs.md) cover variant/ncORFs, SV ORFs, fusion,

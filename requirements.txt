@@ -18,17 +18,20 @@ hitlist>=2.1.9,<3
 pyarrow
 # Metadata-only Transcript/Gene restore defers annotation DB access (#563).
 # 2.29.0 exposes resolved assembly identity apart from the cache/display label.
-pyensembl>=2.29.0,<3.0.0
+# Varcode 11.15 requires the shared reference API from 2.34.1.
+pyensembl>=2.34.1,<3.0.0
 # 11.1 supplies shared candidate traversal and local consequence priority.
 # Ordinary annotations can retain realized splice/phase alternatives; the
 # selected comparison and its patient baseline remain distinct from the set.
-varcode>=11.1.0,<12.0.0
+# 11.15.1 restores saved effects without eagerly opening the gene database.
+varcode>=11.15.1,<12.0.0
 # 1.62.2 adds occurrence-scoped RNA support for exported SV ORF placements.
 # 1.61 adds reference-frame ncORF reconstruction. The Isovar input adapters
 # validate each supported result schema; producer evidence is retained losslessly.
 # 1.76 exposes shared read policies for live viral and antigen-isoform sources.
 # 1.78 retains Varcode 11 comparisons and filters by aggregate coding potential.
-isovar>=1.89.0,<2.0.0
+# 1.90.9 uses shared IUPAC complementation for structural-variant RNA.
+isovar>=1.90.9,<2.0.0
 # 3.33.5 makes bundled YAML loading independent of the host locale.
 mhcgnomes>=3.64.4,<4.0.0
 # 4.8.1 accepts separate --mhc-alleles arguments through the shared parser.
@@ -85,8 +88,8 @@ serializable>=1.1.0,<2.0.0
 # The current targeting policy is selected with --cta-sequence-bundle; saved
 # evidence retains its original decisions for offline replay.
 oncoref>=1.38.0,<2.0.0
-# 0.42.6 accepts canonical PyEnsembl metadata for the pinned Ensembl builder.
-orfdata>=0.42.6,<1.0.0
+# Keep the shared ORF model compatible with Varcode 11.15.
+orfdata>=0.52.0,<1.0.0
 # vaxrank.peptide_context imports packaging.version for PEP 440 ordering
 # of predictor_version strings. Always pulled in transitively via setuptools
 # / pip, but pinned explicitly so minimal / --no-deps installs don't break

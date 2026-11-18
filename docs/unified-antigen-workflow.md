@@ -84,7 +84,13 @@ a sequence variant and its effects on individual transcripts are separate facts.
 
 ## Combine inputs
 
-Use a patient-scoped manifest when combining direct VCF/BAM with other sources.
+Direct VCF, MAF, JSON variant collections and inline `--variant` inputs all
+produce native evidence before the shared scoring and selection steps. A single
+direct input needs no manifest. Adding a report output does not change candidate
+selection; CSV-only runs use the same path. Native exports retain the variant
+and RNA content identities, including inline alleles, for offline replay.
+
+Use a patient-scoped manifest when combining direct variants/RNA with other sources.
 The reference annotation and patient genotype must agree across the inputs.
 
 ```yaml

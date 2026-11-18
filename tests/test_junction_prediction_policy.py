@@ -268,11 +268,15 @@ def test_osteosarc_vcf_bam_with_multiple_models_emits_default_reports(tmp_path, 
     from mhctools import RandomBindingPredictor
     from mhctools.cli import mhc_predictors
     from varcode import load_vcf
+    from orfdata import ReferenceContext
     from vaxrank.testdata.sid import sid_reads, sid_variants
     from .osteosarc_selection_helpers import DATA as SID_DATA, load_selection_inputs
 
-    monkeypatch.setattr(socket.socket, 'connect', forbidden)
-    monkeypatch.setattr(socket, 'create_connection', forbidden)
+    def no_network(*args, **kwargs):
+        raise AssertionError('Offline fixture attempted a network connection')
+
+    monkeypatch.setattr(socket.socket, 'connect', no_network)
+    monkeypatch.setattr(socket, 'create_connection', no_network)
     monkeypatch.setattr(ep, 'mhc_binding_predictor_from_args', forbidden)
     monkeypatch.setenv('VAXRANK_REF_PEPTIDES_DIR', str(tmp_path / 'kmers'))
     model_calls = []
@@ -289,6 +293,10 @@ def test_osteosarc_vcf_bam_with_multiple_models_emits_default_reports(tmp_path, 
     config = tmp_path / 'config.yaml'
     config.write_text('epitopes:\n  default_methods:\n    pMHC_affinity: random\n')
     genome, cases, _ = load_selection_inputs(tmp_path / 'reference')
+    context = tmp_path / 'reference-context.json'
+    context.write_text(json.dumps(ReferenceContext(
+        9606, 'human', genome.reference_name, genome.annotation_name,
+        str(genome.annotation_version)).to_dict()))
     ids = ['DYNC1H1-chr14-101980529', 'EXOC4-chr7-133274996']
     subsets = [sid_reads('osteosarc/selection_validation/isovar/' + cases[v]['bam'])
                for v in ids]
@@ -303,8 +311,13 @@ def test_osteosarc_vcf_bam_with_multiple_models_emits_default_reports(tmp_path, 
                        '%s\t%d\t.\t%s\t%s\t.\tPASS\t.\n' % v.allele
                        for v in sid_variants(ids)))
     # Supply the fixture's isolated, partial Ensembl reference to the real VCF reader.
-    monkeypatch.setattr(ep, 'variant_collection_from_args',
-                        lambda args: load_vcf(str(vcf), genome=genome))
+    loads = []
+
+    def load_fixture(args):
+        loads.append(args.vcf)
+        return load_vcf(str(vcf), genome=genome)
+
+    monkeypatch.setattr('varcode.cli.variant_collection_from_args', load_fixture)
     output = tmp_path / 'vaccines'
     output.mkdir()
     state = random.getstate()
@@ -315,12 +328,13 @@ def test_osteosarc_vcf_bam_with_multiple_models_emits_default_reports(tmp_path, 
             '--mhc-predictor', 'random', 'other-random', '--mhc-alleles', 'HLA-B*27:05',
             '--config', str(config),
             '--vaccine-peptide-length', '25', '--min-epitope-score', '0',
-            '--no-processing-aware-annotation', '--ensembl-release', '87',
+            '--no-processing-aware-annotation', '--reference-context', str(context),
             '--mrna-antigens-per-construct', '2', '--mrna-max-constructs', '1',
             '--mrna-signal-peptide', '', '--mrna-no-mitd',
             '--pdf-backend', 'weasyprint', '--output-dir', str(output)])
     finally:
         random.setstate(state)
+    assert loads == [[str(vcf)]]
     assert model_calls
     for modality in ['peptide', 'mrna']:
         assert json.loads((output / modality / 'manifest.json').read_text())

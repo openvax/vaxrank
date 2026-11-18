@@ -2070,12 +2070,13 @@ def patient_info_from_external(ranked, source_path, patient_id,
     )
 
 
-def load_external_ranked(args, epitope_config=None, vaccine_config=None,
+def load_ranked_inputs(args, epitope_config=None, vaccine_config=None,
                          manufacturability_config=None):
-    """Dispatch helper: load LENS / pVACseq based on args, return
-    ``(ranked, report_df, predictions, patient_info, dna_vaf)`` or ``None``
-    when no external input is supplied. Single-file aliases and repeatable
-    ``--external-input`` use the same preparation and validation path.
+    """Rank direct, imported and saved evidence through one policy.
+
+    Return ``(ranked, report_df, predictions, patient_info, dna_vaf)`` or
+    ``None`` when no input is supplied. Single-file aliases, manifests and
+    repeatable inputs share preparation, validation and selection.
 
     ``patient_info`` carries the variant-count metadata template reports
     (ASCII / HTML / PDF) need. Input counts are captured before filtering;
@@ -2097,7 +2098,8 @@ def load_external_ranked(args, epitope_config=None, vaccine_config=None,
     """
     from .external_rescoring import external_inputs, load_unified_external
 
-    if not external_inputs(args) and not getattr(args, 'input_cta_expression', None) and not getattr(args, 'input_antigens', None) and not getattr(args, 'input_isovar', None):
+    from .direct_input import has_direct_input
+    if not has_direct_input(args) and not external_inputs(args) and not getattr(args, 'input_cta_expression', None) and not getattr(args, 'input_antigens', None) and not getattr(args, 'input_isovar', None):
         return None
     options = ExternalConstructOptions.from_configs(
         vaccine_config=vaccine_config,
@@ -2109,3 +2111,7 @@ def load_external_ranked(args, epitope_config=None, vaccine_config=None,
     genome = getattr(args, 'genome', None)
 
     return load_unified_external(args, epitope_config, options, genome)
+
+
+# Compatibility for callers using the former import-only name.
+load_external_ranked = load_ranked_inputs

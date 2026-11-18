@@ -185,7 +185,9 @@ def test_real_direct_pipeline_and_native_replay_keep_original_coverage(tmp_path,
     observation, = (r['direct_input_coverage'] for r in dataset.selection['source_evidence'].values())
     assert observation['counts']['loaded'] == 5
     assert len(dataset.direct_sources) == observation['counts']['annotatable'] == 5
-    assert observation['counts']['with_candidate_windows'] > 0
+    # Producer coverage precedes the common window selector for every input mode.
+    assert observation['counts']['with_candidate_windows'] is None
+    assert observation['window_selection_performed'] is False
     assert observation['isovar_filter_thresholds']
 
     def forbidden(*args, **kwargs):

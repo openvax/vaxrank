@@ -1,7 +1,5 @@
-"""Adapt the existing VCF/BAM pipeline to shared, reloadable input evidence."""
+"""Adapt direct variant/RNA prediction to shared, reloadable input evidence."""
 from dataclasses import replace
-import hashlib
-import json
 from pathlib import Path
 
 from topiary import TopiaryResult, combine_sources
@@ -19,26 +17,52 @@ from .input_scope import (
 )
 
 
-def direct_input_scope(args, epitope_config):
-    """Resolve actual VCF/RNA scope before any source starts prediction."""
+def has_direct_input(args):
+    return any(getattr(args, name, None) for name in ('vcf', 'maf', 'variant', 'json_variants', 'bam'))
+
+
+def direct_input_paths(args):
+    """File-backed variant and RNA evidence; inline alleles are hashed separately."""
+    paths = []
+    for name in ('vcf', 'maf', 'json_variants', 'germline_vcf', 'bam'):
+        value = getattr(args, name, None)
+        paths.extend([value] if isinstance(value, str) else value or ())
+    return list(dict.fromkeys(paths))
+
+
+def direct_content_identity(args, variants):
+    from .selection_policy import canonical_digest
+    from .native_serialization import to_native_json
+    hashes = {str(Path(path).resolve()): file_sha256(path) for path in direct_input_paths(args)}
+    # File bytes include metadata; normalized variants also identify inline input
+    # and the actual alleles/reference used by every direct input format.
+    content = dict(file_sha256=list(hashes.values()), variants=[to_native_json(v) for v in variants])
+    return canonical_digest(content), hashes
+
+
+def direct_input_scope(args, epitope_config, *, pooled=False):
+    """Resolve actual variant/RNA scope before any source starts prediction."""
     from .epitope_config import EpitopeConfig
     epitope_config = epitope_config or EpitopeConfig()
     from mhctools.cli import mhc_alleles_from_args
     from varcode.cli import variant_collection_from_args
 
     manifest = getattr(args, 'input_manifest', None)
-    if not manifest:
-        raise ValueError('Combining VCF/BAM with tables requires --input-manifest '
+    if pooled and not manifest:
+        raise ValueError('Combining direct variants/RNA with other sources requires --input-manifest '
                          'to declare their shared patient, reference_assembly and mhc_alleles')
-    _, declarations = read_input_manifest(manifest, include_direct=True)
-    declarations = with_species_declarations(declarations, species_scope_from_args(args), 'Direct VCF/BAM input')
-    scope = scope_from_mapping(declarations, 'Direct VCF/BAM input')
+    declarations = read_input_manifest(manifest, include_direct=True)[1] if manifest else {
+        'patient_id': getattr(args, 'output_patient_id', None) or None}
+    declarations = with_species_declarations(declarations, species_scope_from_args(args), 'Direct variant/RNA input')
+    scope = scope_from_mapping(declarations, 'Direct variant/RNA input')
     from .patient_background import direct_patient_background, direct_rna_scope
     background = direct_patient_background(args, epitope_config)
     scope = combine_scopes(scope, direct_rna_scope(args, background), 'Direct RNA')
     alleles = normalize_alleles(mhc_alleles_from_args(args), 'Direct prediction')
     if not alleles:
-        raise ValueError('Direct VCF/BAM predictions require explicit MHC alleles')
+        raise ValueError('Direct variant/RNA predictions require explicit MHC alleles')
+    if scope.mhc_alleles is None and not manifest:
+        scope = combine_scopes(scope, scope_from_mapping({'mhc_alleles': alleles}, 'Direct alleles'), 'Direct alleles')
     variants = variant_collection_from_args(args)
     context = load_reference_context(getattr(args, 'reference_context', None))
     if context is not None:
@@ -46,52 +70,48 @@ def direct_input_scope(args, epitope_config):
             'host_taxon_id': context.taxon_id, 'reference_assembly': context.genome_build,
             'annotation': f'{context.annotation_name}:{context.annotation_version}',
         }, 'Direct reference_context'), 'Direct reference_context')
-    # Validate actual VCF reference resolution as well as explicit CLI options.
+    # Validate actual variant reference resolution as well as explicit CLI options.
     for variant in variants:
         genome = variant.genome
         scope = combine_scopes(scope, scope_from_mapping({
             'reference_assembly': resolved_reference_assembly(genome),
             'annotation': 'ensembl:' + str(genome.release) if hasattr(genome, 'release') else None,
-        }, 'Direct VCF reference'), 'Direct VCF reference')
-    paths = list(getattr(args, 'vcf', None) or [])
-    if not paths:
-        raise ValueError('Combined direct inputs require --vcf')
-    if getattr(args, 'bam', None):
-        paths.append(args.bam)
-    paths.extend(getattr(args, 'germline_vcf', None) or [])
+        }, 'Direct variant reference'), 'Direct variant reference')
+    paths = direct_input_paths(args)
     # Check scope before hashing large BAMs, instantiating predictors, or outputs.
     provisional = InputProvenance(
-        input_id='direct', source_format='vcf_bam', path='; '.join(paths), scope=scope,
-        content_sha256='')
+        input_id='direct', source_format='vcf_bam', path='; '.join(paths) or 'inline variants', scope=scope,
+        content_sha256='', report_declarations={'reference_context': context.to_dict()} if context else {})
     validate_input_scopes([provisional], prediction_alleles=alleles,
         retained_genomes={'direct': tuple({id(v.genome): v.genome for v in variants}.values())},
         reference_context=context)
     return provisional, variants, context, declarations, paths, alleles
 
 
-def prepare_direct_report(args, reports, epitope_config):
-    """Validate pooled scope, then predict only the direct candidates."""
+def prepare_direct_report(args, reports, epitope_config, *, prepared_input=None):
+    """Validate input scope, then predict only the direct candidates."""
     from .cli.entry_point import run_vaxrank_from_parsed_args
     from .vaf import extract_dna_vaf_by_variant
-    provisional, variants, context, declarations, paths, alleles = direct_input_scope(args, epitope_config)
+    provisional, variants, context, declarations, paths, alleles = (
+        prepared_input or direct_input_scope(args, epitope_config, pooled=bool(reports)))
     scope = provisional.scope
-    manifest = args.input_manifest
+    manifest = getattr(args, 'input_manifest', None)
     shared = validate_input_scopes([provisional] + [r.input_provenance for r in reports],
                           prediction_alleles=alleles,
                           retained_genomes={'direct': tuple({id(v.genome): v.genome for v in variants}.values())},
                           reference_context=context)
     args._input_species_scope = scope_dict(shared)
-    hashes = {str(Path(path).resolve()): file_sha256(path) for path in paths}
-    content_hash = hashlib.sha256(json.dumps(list(hashes.values())).encode()).hexdigest()
-    scope_hash = hashlib.sha256(json.dumps(scope_dict(scope), sort_keys=True).encode()).hexdigest()
+    from .selection_policy import canonical_digest
+    content_hash, hashes = direct_content_identity(args, variants)
     provenance = replace(
-        provisional, input_id='vcf_bam:' + content_hash + ':' + scope_hash,
-        content_sha256=content_hash, manifest_path=str(Path(manifest).resolve()),
-        manifest_declarations=declarations, report_declarations={'file_sha256': hashes})
+        provisional, input_id='vcf_bam:' + content_hash + ':' + canonical_digest(scope_dict(scope)),
+        content_sha256=content_hash, manifest_path=str(Path(manifest).resolve()) if manifest else None,
+        manifest_declarations=declarations,
+        report_declarations=dict(provisional.report_declarations, file_sha256=hashes))
     dataset = EpitopeDataset.from_predictions((), config=epitope_config)
     dataset.provenance = (provenance,)
     results = run_vaxrank_from_parsed_args(
-        args, epitope_dataset=dataset, epitope_config_override=epitope_config)
+        args, epitope_dataset=dataset, epitope_config_override=epitope_config, loaded_variants=variants)
     dna_vaf = extract_dna_vaf_by_variant(
         variants, tumor_sample_name=getattr(args, 'tumor_sample_name', None))
     from .construct_replay import capture_direct_sources
@@ -131,7 +151,7 @@ def prepare_direct_report(args, reports, epitope_config):
     frame['input_format'] = 'vcf_bam'
     frame['input_path'] = provenance.path
     dataset.result = combine_sources({provenance.input_id: TopiaryResult(frame)},
-                                     sample_name=scope.patient_id)
+                                     sample_name=scope.sample_id or scope.patient_id or provenance.input_id)
     identities = dataset.result.df[['prediction_id', 'source_observation_id']].drop_duplicates()
     if identities.prediction_id.duplicated().any():
         raise ValueError('Direct prediction rows disagree about source occurrence identity')

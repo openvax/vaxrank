@@ -193,7 +193,7 @@ def test_unparseable_allele_names_the_flag_and_the_entry_as_typed(tmp_path, caps
     def must_not_run(args):
         raise AssertionError("input loading started before the alleles were checked")
 
-    monkeypatch.setattr(entry_point, "variant_collection_from_args", must_not_run)
+    monkeypatch.setattr("varcode.cli.variant_collection_from_args", must_not_run)
     with pytest.raises(SystemExit) as exit_info:
         entry_point.main(_pipeline_args(
             tmp_path, "--mhc-alleles", "H2-Kb,HLA-Z*99:99", "--output-csv", str(tmp_path / "o.csv")))
@@ -206,7 +206,7 @@ def test_unwritable_output_destinations_fail_before_the_pipeline(tmp_path, capsy
     def must_not_run(args):
         raise AssertionError("pipeline started before the destination was checked")
 
-    monkeypatch.setattr(entry_point, "variant_collection_from_args", must_not_run)
+    monkeypatch.setattr("varcode.cli.variant_collection_from_args", must_not_run)
     blocker = tmp_path / "a_file"
     blocker.write_text("not a directory")
     for flag in ("--output-dir", "--output-csv"):
@@ -352,7 +352,7 @@ def test_explicit_pepsickle_request_fails_before_the_pipeline(tmp_path, monkeypa
     def must_not_run(args):
         raise AssertionError("pipeline started before pepsickle availability was checked")
 
-    monkeypatch.setattr(entry_point, "variant_collection_from_args", must_not_run)
+    monkeypatch.setattr("varcode.cli.variant_collection_from_args", must_not_run)
     with pytest.raises(SystemExit) as exit_info:
         entry_point.main(_pipeline_args(
             tmp_path, "--processing-aware-annotation", "--output-csv", str(tmp_path / "o.csv")))
@@ -399,7 +399,7 @@ def test_missing_input_paths_name_the_flag_before_any_work(tmp_path, monkeypatch
     def must_not_run(args):
         raise AssertionError("input loading started before the paths were checked")
 
-    monkeypatch.setattr(entry_point, "variant_collection_from_args", must_not_run)
+    monkeypatch.setattr("varcode.cli.variant_collection_from_args", must_not_run)
     out = ["--output-csv", str(tmp_path / "o.csv")]
     cases = [
         ("--bam", str(tmp_path / "nope.bam"), "--bam: no such file"),
