@@ -18,7 +18,7 @@ class AssemblyAntigen:
 
     Sources remain separate observations: their scores and RNA support are not
     added. The label names every recorded origin; the first enabled occurrence
-    supplies the allocation category and representative score.
+    supplies the allocation category; ranking and RNA evidence stay source-specific.
     """
     name: str
     amino_acids: str
@@ -58,7 +58,7 @@ def _source_record(source, name, antigen, peptide, source_evidence):
     genes.update(t.gene_id for t in getattr(fragment, 'supporting_reference_transcripts', ())
                  if getattr(t, 'gene_id', None))
     record = dict(
-        candidate_name=name, candidate_sequence=peptide.amino_acids, combined_score=peptide.combined_score,
+        candidate_name=name, candidate_sequence=peptide.amino_acids,
         source_identifier=antigen.source_identifier, kind=antigen.kind,
         gene_name=antigen.gene_name, gene_ids=sorted(genes),
         transcript_ids=list(antigen.transcript_ids), protein_ids=list(antigen.protein_ids),
@@ -72,6 +72,7 @@ def _source_record(source, name, antigen, peptide, source_evidence):
     if 'source_window' in peptide.window_selection_audit:
         record['source_window'] = peptide.window_selection_audit['source_window']
         record['parent_window'] = peptide.window_selection_audit['parent_window']
+        record['combined_score'] = peptide.combined_score
     contexts = coding_contexts(antigen, source_evidence)
     if contexts or ('isovar_family', 'variant_orfs') in antigen.source_metadata:
         record['coding_contexts'] = contexts
@@ -136,8 +137,9 @@ def antigens_for_assembly(ranked, options, modality, *, source_evidence=None):
     # Disabled origins remain in the provenance and audit, but cannot hide an
     # independently eligible occurrence of the same sequence.
     occurrences.sort(key=lambda a: policy.max_per_kind.get(selection_type(a.sources[0])) == 0)
-    by_sequence = {}
+    by_sequence, labels = {}, {}
     for occurrence in occurrences:
+        labels.setdefault(occurrence.amino_acids, []).append(occurrence.name)
         existing = by_sequence.get(occurrence.amino_acids)
         if existing is not None:
             existing.sources.extend(s for s in occurrence.sources if s not in existing.sources)
@@ -145,7 +147,7 @@ def antigens_for_assembly(ranked, options, modality, *, source_evidence=None):
         by_sequence[occurrence.amino_acids] = occurrence
     used_names = set()
     for antigen in by_sequence.values():
-        name = ' / '.join(dict.fromkeys(s['candidate_name'] for s in antigen.sources))
+        name = ' / '.join(dict.fromkeys(labels[antigen.amino_acids]))
         antigen.name = name
         index = 2
         while antigen.name in used_names:

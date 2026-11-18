@@ -111,7 +111,6 @@ def test_shared_sequence_labels_and_fasta_name_every_origin(tmp_path, modality):
     [product] = products
     assert all(gene in product.antigen_names[0] for gene in ('GENE0', 'GENE1'))
     assert product.antigens[0]['gene_names'] == ['GENE0', 'GENE1']
-    assert product.antigens[0]['sources'][0]['combined_score'] == ranked[0][1][0].combined_score
     header = path.read_text().splitlines()[0]
     assert 'GENE1' in header.split('genes=', 1)[1]
 

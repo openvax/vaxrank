@@ -116,7 +116,7 @@ def test_shared_product_reports_attribute_score_and_separate_candidate_contexts(
     data = template(ranked, {'peptide': [product]})
     row = data['product_groups'][0]['products'][0]['antigens'][0]
     assert row['candidate_contexts'] == 2
-    assert float(row['representative']['score']) == first[1][0].combined_score
+    assert row['representative']['source_ids'] == ['S1']
     text = render(data, extension)
     assert 'Allocation source: GENE0' in text
     assert '2 distinct candidate contexts' in text

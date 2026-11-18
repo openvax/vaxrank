@@ -899,8 +899,8 @@ class TemplateDataCreator(object):
                         context_labels=context_labels,
                         candidate_contexts=len({s['candidate_sequence'] for s in sources}) if sources else None,
                         representative=(dict(name=sources[0]['candidate_name'],
-                            score=(_sanitize(sources[0]['combined_score'])
-                                   if sources[0].get('combined_score') is not None else None)) if sources else None),
+                            source_keys=list(dict.fromkeys(report_source_key(key)
+                                for key, _ in matching_candidates(sources[0])))) if sources else None),
                         sequence_html=marked_sequence(antigen['aa'], intervals or ()),
                         target_coordinates_known=intervals is not None,
                         target_intervals=intervals,

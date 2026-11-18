@@ -417,7 +417,7 @@ Identical emitted amino-acid sequences occupy one antigen slot, even when
 several genes or source candidates contribute them. Product labels, FASTA
 headers and manifests retain all recorded origins. Reports link the shared
 product to each source and identify the first enabled ranked source used for
-allocation and its recorded candidate score. Scores and RNA counts are not
+allocation and links to its ranking score and RNA evidence. Scores and RNA counts are not
 summed across origins.
 
 Identity of a selected window does not establish identity of complete proteins

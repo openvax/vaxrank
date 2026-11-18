@@ -46,6 +46,10 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
     regions = selected_regions(ranked, dataset)
     mhc_species = next((p.scope.mhc_species for p in dataset.provenance if p.scope.mhc_species), None)
     products = products or {}
+    from .assembly_antigens import emitted_antigens_for_candidate, source_matches_candidate
+    all_products = [p for records in products.values() for p in records or ()]
+    emitted = {r['name']: emitted_antigens_for_candidate(
+        r['antigen'], r['sequence'], r['epitopes'], all_products) for r in regions}
     sequences = {modality + ':' + p.name: p.cds_aa if modality == 'mrna' else p.sequence
                  for modality, records in products.items() for p in records or ()}
     unsupported = {modality + ':' + p.name: 'unsupported_chemical_modifications'
@@ -71,13 +75,18 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
         from .version import __version__
         evidence = ConstructEvidence('vaxrank CTA design', 'documented',
                                      'Actual emitted product', vaccine_version=__version__)
-        by_name = {r['name']: r for r in regions}
         product_audits = []
         for modality, records in products.items():
             for product in records:
                 name = modality + ':' + product.name
                 sequence = sequences[name]
-                region = by_name.get(product.antigen_names[0]) if len(product.antigen_names) == 1 else None
+                first_source = (product.antigen_sources.get(product.antigen_names[0], [None])[0]
+                                if len(product.antigen_names) == 1 else None)
+                matches = [r for r in regions if first_source and source_matches_candidate(
+                    first_source, r['antigen'], r['sequence'],
+                    {e.prediction_group_source for e in r['epitopes']},
+                    {e.input_provenance.input_id for e in r['epitopes'] if e.input_provenance})]
+                region = matches[0] if len(matches) == 1 else None
                 mapping = (dict(native_antigen=region['antigen'], native_start=region['start'], native_end=region['end'])
                            if region and sequence == region['sequence'] else
                            dict(mapping_status='unresolved', mapping_reason='composite_or_changed_native_region_mapping'))
@@ -96,9 +105,11 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
         audit['product_audits'] = tuple(product_audits)
         emitted_names = {name for records in products.values() for p in records for name in p.antigen_names}
         audit['assembly_coverage'] = dict(
-            selected_regions=len(regions), emitted_regions=sum(r['name'] in emitted_names for r in regions),
-            unassembled_region_names=tuple(r['name'] for r in regions if r['name'] not in emitted_names),
-            unresolved_product_antigen_names=tuple(sorted(emitted_names - set(by_name))))
+            native_mapping_policy='first_enabled_ranked_source',
+            selected_regions=len(regions), emitted_regions=sum(any(emitted[r['name']].values()) for r in regions),
+            unassembled_region_names=tuple(r['name'] for r in regions if not any(emitted[r['name']].values())),
+            unresolved_product_antigen_names=tuple(sorted(emitted_names - {
+                name for r in regions for names in emitted[r['name']].values() for name in names})))
         if predictor is not None and sequences:
             evidence = ConstructEvidence('vaxrank CTA design', 'documented',
                                          'Selected native protein region', vaccine_version=__version__)
@@ -125,7 +136,7 @@ def write_cta_design(args, ranked, dataset, products, predictor=None):
         directory.mkdir(parents=True, exist_ok=True)
         admitted_ids = {r['antigen'].source_identifier for r in regions}
         contributed_ids = {r['antigen'].source_identifier for r in regions
-                           if r['name'] in {n for records in products.values() for p in records for n in p.antigen_names}}
+                           if any(emitted[r['name']].values())}
         decisions = [dict(input_identifier=d.input_identifier, gene_id=d.gene_id,
                           canonical_gene_id=d.gene_identity.get('canonical_gene_id') if d.gene_identity else None,
                           identity_status=d.gene_identity.get('status') if d.gene_identity else 'legacy_unverified',
