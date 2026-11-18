@@ -215,3 +215,48 @@ def test_blank_patient_id_is_omitted_not_printed_empty():
     for kind in ("txt", "html"):
         assert "Patient ID" not in render(data_for(""), kind)
         assert "Patient ID" in render(data_for("SID-001"), kind)
+
+
+def test_variant_report_includes_overlapping_genes_only_when_multiple_or_different():
+    from dataclasses import dataclass
+    from types import SimpleNamespace
+
+    @dataclass(frozen=True)
+    class _VariantStub:
+        contig: str
+        start: int
+        gene_names: tuple[str, ...]
+
+    creator = TemplateDataCreator.__new__(TemplateDataCreator)
+    creator.dna_vaf_by_variant = {}
+    creator.source_vaf_by_variant = {}
+    fragment = SimpleNamespace(
+        gene_name='GENE_A',
+        rna_vaf=0.5,
+        dna_vaf=0.4,
+        n_alt_reads=10,
+        n_ref_reads=10,
+        n_dna_alt=None,
+        n_dna_ref=None,
+        n_dna_overlapping=None,
+        dna_evidence_method=None,
+        n_other_reads=None,
+        n_alt_fragments=None,
+        n_ref_fragments=None,
+        n_other_fragments=None,
+        rna_evidence_method=None,
+        rna_evidence_subject=None,
+        sequence_source=None,
+    )
+    top_vp = SimpleNamespace(mutant_protein_fragment=fragment, combined_score=1.25)
+
+    single_gene_variant = _VariantStub(contig='1', start=100, gene_names=('GENE_A',))
+    single_data = creator._variant_data(single_gene_variant, top_vp)
+    assert 'Overlapping genes' not in single_data
+
+    multi_gene_variant = _VariantStub(contig='1', start=100, gene_names=('GENE_A', 'GENE_B'))
+    multi_data = creator._variant_data(multi_gene_variant, top_vp)
+    assert multi_data['Gene name'] == 'GENE_A'
+    assert multi_data['Overlapping genes'] == 'GENE_A, GENE_B'
+    keys = list(multi_data.keys())
+    assert keys.index('Overlapping genes') == keys.index('Gene name') + 1

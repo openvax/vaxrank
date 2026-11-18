@@ -93,7 +93,9 @@ class AntigenDataset:
         archive = RNASupportArchive()
         antigens = archive.encode_tree({
             key: {k: v for k, v in asdict(a).items()
-                  if k not in ("rna_support", "source_protein_offset", "origin") or v}
+                  if (k not in ("rna_support", "source_protein_offset", "origin",
+                                "source_protein_sha256", "source_protein_length") or v)
+                  and not (k == "source_protein_completeness" and v == "unassessed")}
             for key, a in self.antigens.items()
         })
         payload = dict(schema=ANTIGEN_DATASET_SCHEMA, scope=scope_dict(self.scope),

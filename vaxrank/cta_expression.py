@@ -362,7 +362,8 @@ def admit_cta_expression(path, *, input_contract, admission_policy, genome=None,
             reference_resolution=cta,
             override_evidence=(overrides or {}).get(gene_id),
             protein_ids=(transcript.protein_id,) if transcript.protein_id else (),
-            source_identifier=f"{input_contract.sample_id}:{identifier}")
+            source_identifier=f"{input_contract.sample_id}:{identifier}",
+            source_protein_completeness="complete")
         if gene_id in (overrides or {}):
             used_overrides.add(gene_id)
         metadata = (

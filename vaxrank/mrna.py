@@ -644,6 +644,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
         selected_antigens, options, assembled_length, options.max_length_nt, 'nt', selection_audit)
     source_mappings = {a.name: a.sources for a in selected_antigens}
     gene_names = {a.name: a.gene_names for a in selected_antigens}
+    protein_groups = {a.name: a.source_protein_groups for a in selected_antigens}
     if not packed:
         record_assembly_decisions(selection_audit, selected_antigens, [], target_alleles, exclusions)
         return []
@@ -794,6 +795,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             if seg['kind'] == 'antigen':
                 seg_record['sources'] = source_mappings[seg['name']]
                 seg_record['gene_names'] = gene_names[seg['name']]
+                seg_record['source_protein_groups'] = protein_groups[seg['name']]
                 antigens_meta.append(seg_record)
             elif seg['kind'] == 'linker':
                 ls = dict(seg_record)

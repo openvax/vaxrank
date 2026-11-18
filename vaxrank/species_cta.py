@@ -383,6 +383,7 @@ def admit_species_cta_expression(path, *, input_contract, admission_policy, host
             gene_id=gene, gene_name=decision.gene_name, transcript_ids=(occurrence.transcript_id,),
             protein_ids=(entry.accession,), species=reference.species,
             source_identifier=f'{input_contract.sample_id}:{identifier}',
+            source_protein_completeness='complete',
             source_metadata=(('host_reference_sha256', host_reference.identity),
                              ('protein_sequence_sha256', hashlib.sha256(entry.sequence.encode()).hexdigest()),
                              ('sequence_selection', 'measured_transcript' if measured_transcript else 'annotation_longest_protein'),

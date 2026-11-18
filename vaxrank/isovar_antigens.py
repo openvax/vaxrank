@@ -429,7 +429,9 @@ def antigens_from_isovar(result, *, scope=None, species='', tumor_specificity=No
             tumor_specificity=attestation, gene_name=';'.join(names), gene_id=genes[0] if len(genes) == 1 else '',
             transcript_ids=tuple(sorted(set(candidate.transcripts))),
             protein_ids=tuple(sorted({s for s in candidate.proteins if s})), species=candidate.species or species,
-            source_identifier=key, source_metadata=(('isovar_evidence_id', identity), ('isovar_family', family),
+            source_identifier=key,
+            source_protein_completeness='partial' if candidate.partial else 'complete',
+            source_metadata=(('isovar_evidence_id', identity), ('isovar_family', family),
                 ('gene_ids', _json(genes)), ('isovar_candidate', _json(dict(
                     candidate.evidence, protein_sequence=candidate.protein,
                     partial_coding_candidate=candidate.partial,

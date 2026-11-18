@@ -394,6 +394,7 @@ def assess_cta_antigen(
     species: str = "Homo sapiens",
     source_identifier: str = "",
     reference_resolution: Optional[CTAReferenceResolution] = None,
+    source_protein_completeness: str = "unassessed",
 ) -> CTAAdmissionAssessment:
     """Resolve oncoref CTA status and patient-expression construct admission."""
     input_gene_id = gene_id
@@ -522,6 +523,7 @@ def assess_cta_antigen(
         protein_ids=protein_ids,
         species=species,
         source_identifier=source_identifier or gene_id,
+        source_protein_completeness=source_protein_completeness,
     )
     return CTAAdmissionAssessment(
         antigen=antigen,
@@ -545,6 +547,7 @@ def build_cta_vaccine_antigen(
     protein_ids: tuple[str, ...] = (),
     species: str = "Homo sapiens",
     source_identifier: str = "",
+    source_protein_completeness: str = "unassessed",
 ) -> VaccineAntigen:
     """Build a CTA antigen while retaining evidence in its attestation."""
     return assess_cta_antigen(
@@ -558,4 +561,5 @@ def build_cta_vaccine_antigen(
         protein_ids=protein_ids,
         species=species,
         source_identifier=source_identifier,
+        source_protein_completeness=source_protein_completeness,
     ).antigen

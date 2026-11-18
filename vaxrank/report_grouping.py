@@ -185,6 +185,14 @@ def group_report_evidence(data):
                     antigen['representative']['source_ids'] = list(dict.fromkeys(
                         identities[key]['identifier'] for key in antigen['representative']['source_keys']
                         if key in identities))
+                for protein_group in antigen.get('protein_groups', ()):
+                    protein_group['source_ids'] = list(dict.fromkeys(
+                        identities[key]['identifier'] for key in protein_group.get('source_keys', ())
+                        if key in identities))
+                for origin_summary in antigen.get('origin_summaries', ()):
+                    origin_summary['source_ids'] = list(dict.fromkeys(
+                        identities[key]['identifier'] for key in origin_summary.get('source_keys', ())
+                        if key in identities))
     groups, tables = grouped_candidate_details(data['variants'])
     by_id = {row['identifier']: row for row in directory}
     for group in groups:

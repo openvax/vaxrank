@@ -122,3 +122,102 @@ def test_shared_product_reports_attribute_score_and_separate_candidate_contexts(
     assert '2 distinct candidate contexts' in text
     assert 'Complete protein identity is not established by this window' in text
     assert 'Scores and RNA measurements remain source-specific' in text
+
+
+@pytest.mark.parametrize('extension', ['txt', 'html'])
+@pytest.mark.parametrize('modality', ['peptide', 'mrna'])
+def test_shared_product_reports_distinguish_identical_vs_distinct_complete_proteins_and_separate_rna(
+        extension, modality):
+    from isovar import RNAFeature, RNASamplingGeometry, RNASamplingProfile, measure_rna_feature
+    from isovar.rna_path_linkage import OriginalPathMatch
+    from vaxrank.rna_support import RNAFeatureEvidence
+    from vaxrank.vaccine_antigen import TumorSpecificityEvidence
+    from .test_assembly_antigens import _full_protein_candidate
+
+    window = 'SIINFEKLAKKVV'
+    same_protein = 'MAAAA' + window + 'GGGGGGGGGG'
+    diff_protein_a = 'MVVVV' + window + 'HHHHHHHH'
+    diff_protein_b = 'MLLLL' + window + 'YYYYYYYYYYYY'
+
+    def _rna_ev(feature_id, sample_id, n_reads, eff_template_len):
+        obs = [OriginalPathMatch(('rg1', f'{feature_id}_q{i}', 0), 'placement', 0, 80)
+               for i in range(n_reads)]
+        p = RNASamplingProfile(
+            'original-library',
+            (RNASamplingGeometry(((0, 80),), eff_template_len),),
+            1000000, 1000000, 'whole_library',
+        )
+        m = measure_rna_feature(
+            RNAFeature(feature_id, 'path-' + feature_id, ((10, 49),), 'coding_interval'),
+            obs,
+            evidence_scope=(sample_id, 'lib-' + sample_id),
+            profile=p,
+        )
+        return RNAFeatureEvidence(measurement=m, scope='window', protein_interval=(0, len(window)))
+
+    # 1) Identical complete proteins across two paralogs with different scores, RNA, and temporal facts
+    src_a, vps_a = _full_protein_candidate(
+        'CTAG1A', 'ENSG00000184033', 'ENST_CTAG1A', 'ENSP_CTAG1A', same_protein, 5, 5 + len(window), score=1.6)
+    src_b, vps_b = _full_protein_candidate(
+        'CTAG1B', 'ENSG00000184034', 'ENST_CTAG1B', 'ENSP_CTAG1B', same_protein, 5, 5 + len(window), score=0.9)
+    ag_a = replace(
+        vps_a[0].antigen,
+        rna_support=(_rna_ev('ctag1a', 'T0', 7, 100),),
+        tumor_specificity=replace(
+            vps_a[0].antigen.tumor_specificity,
+            evidence_records=(TumorSpecificityEvidence(
+                evidence_kind='patient_tumor_expression', evidence_source='rnaseq',
+                sample_id='T0', patient_specific=True, passed=True,
+                numeric_value=42.5, unit='TPM', threshold=5.0),),
+        ),
+    )
+    ag_b = replace(
+        vps_b[0].antigen,
+        rna_support=(_rna_ev('ctag1b', 'T1', 3, 140),),
+        tumor_specificity=replace(
+            vps_b[0].antigen.tumor_specificity,
+            status='overridden', override_reason='paralog review',
+            evidence_records=(TumorSpecificityEvidence(
+                evidence_kind='patient_tumor_expression', evidence_source='rnaseq',
+                sample_id='T1', patient_specific=True, passed=False,
+                numeric_value=2.0, unit='TPM', threshold=5.0),),
+        ),
+    )
+    ranked_same = [(src_a, [replace(vps_a[0], antigen=ag_a)]), (src_b, [replace(vps_b[0], antigen=ag_b)])]
+    opts = dict(min_antigen_length_aa=len(window), max_antigen_length_aa=len(window), antigens_per_construct=1)
+    products_same = (
+        assemble_peptide_constructs(ranked_same, PeptideConstructConfig(**opts))
+        if modality == 'peptide'
+        else assemble_mrna_constructs(ranked_same, RNAConstructConfig(**opts, optimize_linkers=False), host_taxon_id=9606)
+    )
+    data_same = template(ranked_same, {modality: products_same})
+    text_same = render(data_same, extension)
+    assert f'Identical complete supplied source protein ({len(same_protein)} aa) across recorded origins' in text_same
+    assert 'Source-protein groups (1): CTAG1A, CTAG1B (ENSP_CTAG1A, ENSP_CTAG1B)' in text_same
+    assert 'Displayed representative: CTAG1A (CTA)' in text_same
+    assert 'Alternative origin: CTAG1B (CTA)' in text_same
+    assert '7 reads, 7 fragments' in text_same and '3 reads, 3 fragments' in text_same
+    assert '10 reads' not in text_same and '10 fragments' not in text_same
+    assert 'T0: 42.5 TPM' in text_same and 'T1: 2 TPM' in text_same
+    assert 'admission overridden' in text_same
+    # Source-annotation ranking stays separate per origin
+    assert len(data_same['ranked_candidates']) == 2
+
+    # 2) Distinct complete source proteins sharing one emitted window
+    ranked_diff = [
+        _full_protein_candidate('PARALOG1', 'ENSG00000100001', 'ENST_P1', 'ENSP_P1',
+                                diff_protein_a, 5, 5 + len(window), score=1.5),
+        _full_protein_candidate('PARALOG2', 'ENSG00000100002', 'ENST_P2', 'ENSP_P2',
+                                diff_protein_b, 5, 5 + len(window), score=1.1),
+    ]
+    products_diff = (
+        assemble_peptide_constructs(ranked_diff, PeptideConstructConfig(**opts))
+        if modality == 'peptide'
+        else assemble_mrna_constructs(ranked_diff, RNAConstructConfig(**opts, optimize_linkers=False), host_taxon_id=9606)
+    )
+    data_diff = template(ranked_diff, {modality: products_diff})
+    text_diff = render(data_diff, extension)
+    assert '2 distinct complete source proteins share this window' in text_diff
+    assert 'Source-protein groups (2):' in text_diff
+    assert f'PARALOG1 (ENSP_P1) [complete, {len(diff_protein_a)} aa]' in text_diff
+    assert f'PARALOG2 (ENSP_P2) [complete, {len(diff_protein_b)} aa]' in text_diff

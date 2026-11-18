@@ -322,12 +322,22 @@ class ConstructSequence(DataclassSerializable):
             attestation = replace(
                 attestation, status="held_out", requires_review=True,
                 rationale_code="construct_removed_targetable_content")
+        from .rna_support import slice_rna_support
+        edited = bool(self.sequence_edits)
         return replace(
             self.native_antigen,
             amino_acids=self.sequence,
             targetable_mask=self.targetable_mask,
             tumor_specificity=attestation,
             source_identifier=self.cache_identity,
+            rna_support=() if edited else slice_rna_support(
+                self.native_antigen.rna_support, self.native_start, self.native_end),
+            source_protein_offset=0 if edited else (
+                self.native_antigen.source_protein_offset + self.native_start),
+            source_protein_completeness=('unassessed' if edited
+                                         else self.native_antigen.source_protein_completeness),
+            source_protein_sha256='' if edited else self.native_antigen.source_protein_sha256,
+            source_protein_length=None if edited else self.native_antigen.source_protein_length,
         )
 
 

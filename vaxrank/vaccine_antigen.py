@@ -12,6 +12,7 @@
 
 """Source-agnostic antigen targetability and exact-self result types."""
 
+import hashlib
 import math
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -21,7 +22,7 @@ from serializable import DataclassSerializable
 from .amino_acids import validate_amino_acid_sequence
 from .antigen_origin import AntigenOrigin, CodingReference, VariantOrigin
 from .identifiers import normalize_ensembl_gene_id
-from .rna_support import RNAFeatureEvidence, validate_rna_support, slice_rna_support
+from .rna_support import RNAFeatureEvidence, is_sha256_digest, validate_rna_support, slice_rna_support
 
 
 ANTIGEN_KIND_MUTATION = "mutation"
@@ -50,6 +51,15 @@ ATTESTATION_STATUSES = frozenset({
     ATTESTATION_ADMITTED,
     ATTESTATION_HELD_OUT,
     ATTESTATION_OVERRIDDEN,
+})
+
+SOURCE_PROTEIN_COMPLETE = "complete"
+SOURCE_PROTEIN_PARTIAL = "partial"
+SOURCE_PROTEIN_UNASSESSED = "unassessed"
+SOURCE_PROTEIN_COMPLETENESS_VALUES = frozenset({
+    SOURCE_PROTEIN_COMPLETE,
+    SOURCE_PROTEIN_PARTIAL,
+    SOURCE_PROTEIN_UNASSESSED,
 })
 @dataclass(frozen=True)
 class AminoAcidInterval(DataclassSerializable):
@@ -281,6 +291,9 @@ class VaccineAntigen(DataclassSerializable):
     rna_support: tuple[RNAFeatureEvidence, ...] = field(default_factory=tuple)
     source_protein_offset: int = 0
     origin: AntigenOrigin | None = None
+    source_protein_completeness: str = SOURCE_PROTEIN_UNASSESSED
+    source_protein_sha256: str = ""
+    source_protein_length: Optional[int] = None
 
     def __post_init__(self):
         normalized = next((kind for kind in ANTIGEN_KINDS if kind.lower() == self.kind.lower()), self.kind)
@@ -289,6 +302,11 @@ class VaccineAntigen(DataclassSerializable):
             raise TypeError('Antigen origin must be an AntigenOrigin record')
         if type(self.source_protein_offset) is not int or self.source_protein_offset < 0:
             raise ValueError('Source protein offset must be a nonnegative integer')
+        if self.source_protein_completeness not in SOURCE_PROTEIN_COMPLETENESS_VALUES:
+            raise ValueError(
+                f"Unknown source_protein_completeness {self.source_protein_completeness!r}; "
+                f"expected one of {sorted(SOURCE_PROTEIN_COMPLETENESS_VALUES)}"
+            )
         object.__setattr__(self, "rna_support", validate_rna_support(self.rna_support, len(self.amino_acids)))
         if self.kind not in ANTIGEN_KINDS:
             raise ValueError(
@@ -296,6 +314,30 @@ class VaccineAntigen(DataclassSerializable):
                 f"{sorted(ANTIGEN_KINDS)}"
             )
         validate_amino_acid_sequence(self.amino_acids, "Vaccine antigen")
+        if self.source_protein_completeness == SOURCE_PROTEIN_COMPLETE:
+            if not self.source_protein_sha256 and self.source_protein_length is None:
+                if self.source_protein_offset != 0:
+                    raise ValueError(
+                        "Complete source protein at nonzero offset requires explicit "
+                        "source_protein_sha256 and source_protein_length"
+                    )
+                digest = hashlib.sha256(self.amino_acids.encode("ascii")).hexdigest()
+                object.__setattr__(self, "source_protein_sha256", digest)
+                object.__setattr__(self, "source_protein_length", len(self.amino_acids))
+            else:
+                if not is_sha256_digest(self.source_protein_sha256):
+                    raise ValueError("Complete source protein requires a SHA-256 digest")
+                if (
+                    type(self.source_protein_length) is not int
+                    or self.source_protein_length < self.source_protein_offset + len(self.amino_acids)
+                ):
+                    raise ValueError(
+                        "Complete source protein length must be an integer covering the window"
+                    )
+        elif self.source_protein_sha256 or self.source_protein_length is not None:
+            raise ValueError(
+                "Only complete source proteins carry source_protein_sha256 and source_protein_length"
+            )
         if (
             self.tumor_specificity.admits_construct
             and not self.targetable_mask.intervals
@@ -355,6 +397,9 @@ class VaccineAntigen(DataclassSerializable):
             rna_support=slice_rna_support(self.rna_support, start, end),
             source_protein_offset=self.source_protein_offset + start,
             origin=self.origin,
+            source_protein_completeness=self.source_protein_completeness,
+            source_protein_sha256=self.source_protein_sha256,
+            source_protein_length=self.source_protein_length,
         )
 
     @classmethod
@@ -370,6 +415,7 @@ class VaccineAntigen(DataclassSerializable):
             species: str = "",
             source_identifier: str = "",
             source_metadata: tuple[tuple[str, str], ...] = (),
+            source_protein_completeness: str = SOURCE_PROTEIN_UNASSESSED,
     ) -> "VaccineAntigen":
         """Represent a sample-specific RNA translation of mutation(s).
 
@@ -391,6 +437,7 @@ class VaccineAntigen(DataclassSerializable):
             species=species,
             source_identifier=source_identifier,
             source_metadata=source_metadata,
+            source_protein_completeness=source_protein_completeness,
         )
 
     @property
@@ -420,6 +467,7 @@ class VaccineAntigen(DataclassSerializable):
             species: str = "",
             source_identifier: str = "",
             source_metadata: tuple[tuple[str, str], ...] = (),
+            source_protein_completeness: str = SOURCE_PROTEIN_UNASSESSED,
     ) -> "VaccineAntigen":
         """Represent an assembled fusion translation and its exact junction.
 
@@ -450,6 +498,7 @@ class VaccineAntigen(DataclassSerializable):
             species=species,
             source_identifier=source_identifier,
             source_metadata=metadata,
+            source_protein_completeness=source_protein_completeness,
         )
 
     @classmethod
