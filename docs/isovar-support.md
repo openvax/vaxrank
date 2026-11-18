@@ -72,5 +72,9 @@ is reported explicitly instead of assigning one origin's evidence to another.
 
 HTML/PDF and text use the same evidence sections. Native prediction replay reads
 the linked source catalog already stored in the dataset; it needs no new
-sidecar, reconstruction or prediction. API callers can pass that catalog as
+sidecar, reconstruction or prediction. Shared RNA feature measurements,
+whole-library sampling profiles and multi-epitope antigen/fragment records are
+stored once per unique SHA-256 content identity inside native exports and
+validated on load before restoring per-occurrence attachments. API callers can
+pass the source catalog as
 `TemplateDataCreator(source_evidence=dataset.selection['source_evidence'], ...)`.

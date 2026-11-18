@@ -14,6 +14,15 @@ from .native_serialization import _json_loads
 
 REFERENCE_FIELD = "__vaxrank_reference__"
 REFERENCE_SCHEMA = "vaxrank.native_reference.v1"
+SHARED_RECORD_FIELD = "__vaxrank_shared__"
+
+
+def is_shared_record_ref(serialized) -> bool:
+    """Return True when a serialized slot holds a shared-record reference."""
+    if not isinstance(serialized, str) or SHARED_RECORD_FIELD not in serialized:
+        return False
+    parsed = _json_loads(serialized)
+    return isinstance(parsed, dict) and SHARED_RECORD_FIELD in parsed
 
 
 class NativeReferences:
@@ -239,8 +248,16 @@ class NativeReferences:
                 payload['host_reference'] = dict(resource, identity=host_reference.identity, coverage=host_reference.coverage)
         for field in ("epitopes", "provenance"):
             payload[field] = [native(value) for value in payload[field]]
+        for field in ("shared_antigens", "shared_fragments"):
+            if field in payload:
+                if not isinstance(payload[field], dict):
+                    raise ValueError(f"Native {field} must be an object")
+                payload[field] = {key: native(value) for key, value in payload[field].items()}
         for field in ("antigens", "mutation_fragments"):
-            payload[field] = {key: native(value) for key, value in payload.get(field, {}).items()}
+            payload[field] = {
+                key: value if is_shared_record_ref(value) else native(value)
+                for key, value in payload.get(field, {}).items()
+            }
         for source in payload.get("direct_sources", []):
             source["variant"] = native(source["variant"])
         for report in payload.get("construction_reports", []):

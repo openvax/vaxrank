@@ -312,7 +312,10 @@ def emit_external_neoepitope_report(
     dataset = report_df.attrs.get('epitope_dataset') if report_df is not None else None
     if dataset is not None:
         epitope_config = dataset.config
-    if getattr(args, 'output_epitopes', ''):
+    design_dataset = getattr(args, '_design_dataset', None)
+    if design_dataset is not None and design_dataset is dataset:
+        design_dataset.epitopes = tuple(epitopes)
+    elif getattr(args, 'output_epitopes', ''):
         save_predictions(epitopes, args.output_epitopes, dataset=dataset)
     if report_df is None:
         return
