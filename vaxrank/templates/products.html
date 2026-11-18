@@ -59,6 +59,8 @@ C-terminal amidation: {{ 'yes' if product.c_terminal_amidation else 'no' }}.</p>
 {% for label in antigen.context_labels %}<br>{{ label }}{% endfor %}</td>
 <td class="sequence-cell">{{ antigen.sequence_html }}{% if not antigen.target_coordinates_known %}<br><span class="note">Target coordinates unavailable or differ across sources.</span>{% endif %}</td><td>[{{ antigen.start }}, {{ antigen.end }})<br>{{ antigen.length }} aa</td>
 <td>{{ antigen.sources if antigen.sources is not none else "unavailable" }} candidate mapping{{ "" if antigen.sources == 1 else "s" }}; {{ antigen.transcripts if antigen.transcripts is not none else "unavailable" }} transcript{{ "" if antigen.transcripts == 1 else "s" }}
+{% if antigen.sources and antigen.sources > 1 %}<br>Shared emitted sequence; {{ antigen.candidate_contexts }} distinct candidate contexts. Complete protein identity is not established by this window.
+{% if antigen.representative %}<br>Allocation source: {{ antigen.representative.name | e }}; recorded candidate score: {{ antigen.representative.score if antigen.representative.score is not none else 'unavailable' }}. Scores and RNA measurements remain source-specific.{% endif %}{% endif %}
 {% if antigen.source_ids %}<br>Report sources: {% for source in antigen.source_ids %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</td></tr>
 {% endfor %}</tbody></table>
 <p class="note">Full antigen labels and source identities are in Methods and provenance. Exact evidence mappings remain in the manifest and native dataset.</p>

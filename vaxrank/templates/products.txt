@@ -56,7 +56,9 @@ Identical final amino-acid sequences share one antigen slot, retaining all mappi
 {% else %}  Target coordinates unavailable or differ across sources.
 {% endif %}
   Source mappings: {{ antigen.sources if antigen.sources is not none else "unavailable" }} candidates, {{ antigen.transcripts if antigen.transcripts is not none else "unavailable" }} transcripts; genes: {{ antigen.genes or 'unavailable' }}.
-{% if antigen.source_ids %}  Report sources: {{ antigen.source_ids | join(', ') }}.
+{% if antigen.sources and antigen.sources > 1 %}  Shared emitted sequence; {{ antigen.candidate_contexts }} distinct candidate contexts. Complete protein identity is not established by this window.
+{% if antigen.representative %}  Allocation source: {{ antigen.representative.name }}; recorded candidate score: {{ antigen.representative.score if antigen.representative.score is not none else 'unavailable' }}. Scores and RNA measurements remain source-specific.
+{% endif %}{% endif %}{% if antigen.source_ids %}  Report sources: {{ antigen.source_ids | join(', ') }}.
 {% endif %}
 {% else %}Historical product: antigen placement/source mappings were not recorded. Labels: {{ product.antigen_names | join(', ') }}.
 {% endfor %}

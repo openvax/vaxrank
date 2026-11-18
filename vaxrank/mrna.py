@@ -47,7 +47,7 @@ from dnachisel import (
 )
 from dnachisel.biotools import reverse_translate
 
-from .assembly_antigens import antigens_for_assembly, pack_antigens, record_assembly_decisions
+from .assembly_antigens import antigens_for_assembly, pack_antigens, product_gene_names, record_assembly_decisions
 from .mrna_library import (
     MITDS,
     SIGNAL_PEPTIDES,
@@ -55,7 +55,6 @@ from .mrna_library import (
     UTRS_5P,
 )
 from .vaccine_library import (
-    gene_names_from_antigen_names,
     get_linker,
 )
 from .construct_sequence import validate_construct_placements
@@ -647,6 +646,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     packed, exclusions = pack_antigens(
         selected_antigens, options, assembled_length, options.max_length_nt, 'nt', selection_audit)
     source_mappings = {a.name: a.sources for a in selected_antigens}
+    gene_names = {a.name: a.gene_names for a in selected_antigens}
     if not packed:
         record_assembly_decisions(selection_audit, selected_antigens, [], target_alleles, exclusions)
         return []
@@ -796,6 +796,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             }
             if seg['kind'] == 'antigen':
                 seg_record['sources'] = source_mappings[seg['name']]
+                seg_record['gene_names'] = gene_names[seg['name']]
                 antigens_meta.append(seg_record)
             elif seg['kind'] == 'linker':
                 ls = dict(seg_record)
@@ -990,7 +991,7 @@ def write_mrna_outputs(constructs, output_dir, manifest_path=None,
                 # avoids the trap where downstream tools split the
                 # FASTA description on ',' (treating each antigen
                 # name as a separate token).
-                genes = gene_names_from_antigen_names(c.antigen_names)
+                genes = product_gene_names(c)
                 f.write(">%s antigens=%s length=%d genes=%s\n" % (
                     c.name, ';'.join(c.antigen_names), len(seq),
                     ';'.join(genes)))

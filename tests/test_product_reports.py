@@ -104,3 +104,21 @@ def test_mixed_historical_and_current_products_do_not_claim_unselected_sources()
     data = template(ranked, {'peptide': [old], 'mrna': current})
     assert data['ranked_candidates'][0]['products'] == 'Selection mappings incomplete'
     assert data['ranked_candidates'][1]['products'] == current[0].name
+
+
+@pytest.mark.parametrize('extension', ['txt', 'html'])
+def test_shared_product_reports_attribute_score_and_separate_candidate_contexts(extension):
+    first, second = candidate(0), candidate(1, prefix='GGG')
+    second[1][0].combined_score_expr = '2 * window_epitope_score'
+    ranked = [first, second]
+    [product] = assemble_peptide_constructs(ranked, PeptideConstructConfig(
+        min_antigen_length_aa=9, max_antigen_length_aa=9))
+    data = template(ranked, {'peptide': [product]})
+    row = data['product_groups'][0]['products'][0]['antigens'][0]
+    assert row['candidate_contexts'] == 2
+    assert float(row['representative']['score']) == first[1][0].combined_score
+    text = render(data, extension)
+    assert 'Allocation source: GENE0' in text
+    assert '2 distinct candidate contexts' in text
+    assert 'Complete protein identity is not established by this window' in text
+    assert 'Scores and RNA measurements remain source-specific' in text
