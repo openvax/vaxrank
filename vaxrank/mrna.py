@@ -47,7 +47,7 @@ from dnachisel import (
 )
 from dnachisel.biotools import reverse_translate
 
-from .assembly_antigens import antigens_for_assembly, record_assembly_decisions
+from .assembly_antigens import antigens_for_assembly, pack_antigens, record_assembly_decisions
 from .mrna_library import (
     MITDS,
     SIGNAL_PEPTIDES,
@@ -165,9 +165,9 @@ class RNAConstructConfig:
     - HBB 5' UTR + tandem 2× HBB 3' UTR (FI element / "2hBg")
     - Single construct per vaccine
 
-    ``max_length_nt`` is a belt-and-suspenders cap that triggers
-    spillover into additional constructs only on pathologically long
-    inputs.
+    ``max_length_nt`` caps the complete construct before poly(A), including
+    UTRs, start/stop codons, signal/trafficking sequences and linkers.
+    Individually oversized antigens are excluded without truncating targets.
     """
     signal_peptide: Optional[str] = "HLA_B"
     linker: str = "(G4S)2"
@@ -553,96 +553,6 @@ def packing_linker_amino_acids(options, linker):
     return longest
 
 
-def _pack_constructs(antigen_pairs, options, signal_peptide_aa, linker,
-                     mitd_aa, utr_5p_dna, utr_3p_dna):
-    """Greedy bin-packing of antigens into constructs honoring the caps.
-
-    Packing uses ``max(shared_linker, longest_candidate)`` for size
-    estimation when the per-junction optimizer (#247) is on, so the
-    swap step at assembly time can never exceed the cap by picking a
-    candidate longer than the shared linker.
-    """
-    linker_aa = packing_linker_amino_acids(options, linker)
-    # When there is no signal peptide, the assembler prepends an ATG to the
-    # CDS body if the first antigen doesn't already start with M (see
-    # build_protein_with_segments). Reserve 3 nt up-front to keep packing
-    # honest.
-    start_codon_nt = 3 if not signal_peptide_aa else 0
-    fixed_overhead_nt = (
-        len(utr_5p_dna)
-        + (len(signal_peptide_aa) * 3 if signal_peptide_aa else 0)
-        + start_codon_nt
-        + ((len(linker_aa) + len(mitd_aa)) * 3 if mitd_aa else 0)
-        + len(STOP_CODON)
-        + len(utr_3p_dna)
-    )
-    constructs = []
-    current = []
-    current_aa_nt = 0
-    total_antigens = (
-        len(antigen_pairs) if hasattr(antigen_pairs, '__len__') else None)
-    for i, (name, aa) in enumerate(antigen_pairs):
-        antigen_nt = len(aa) * 3
-        linker_nt = len(linker_aa) * 3 if current else 0
-        projected = fixed_overhead_nt + current_aa_nt + linker_nt + antigen_nt
-        cap_hit = (
-            projected > options.max_length_nt
-            or len(current) >= options.antigens_per_construct
-        )
-        if cap_hit and current:
-            constructs.append(current)
-            current = []
-            current_aa_nt = 0
-            antigen_nt = len(aa) * 3
-            linker_nt = 0
-            if len(constructs) >= options.max_constructs:
-                # Top-k selection log. Ranking N candidates and
-                # keeping the top k (the chosen 5 antigens × 1
-                # construct here) is *the whole point* — not a
-                # warning, not "spill" / "drop" panic language.
-                # Operators who want a different cut control it via
-                # ``--mrna-max-constructs`` /
-                # ``--mrna-antigens-per-construct``. ``total_antigens``
-                # is None on a generator caller; the count line is
-                # the only thing that requires it.
-                kept = sum(len(c) for c in constructs)
-                if total_antigens is not None:
-                    logger.info(
-                        "mRNA assembly: selected top %d / %d "
-                        "ranked antigen(s) into %d construct(s) at "
-                        "--mrna-max-constructs=%d. Lower-ranked "
-                        "antigens past the cap (e.g. %s) are "
-                        "available in --output-csv / "
-                        "--output-json-file for downstream review.",
-                        kept, total_antigens, len(constructs),
-                        options.max_constructs, name)
-                else:
-                    logger.info(
-                        "mRNA assembly: selected top %d ranked "
-                        "antigen(s) into %d construct(s) at "
-                        "--mrna-max-constructs=%d (next-best: %s).",
-                        kept, len(constructs),
-                        options.max_constructs, name)
-                return constructs
-        # A single antigen larger than the length cap is still emitted in
-        # its own construct — splitting one antigen would corrupt the
-        # epitope. Warn the user so they can adjust caps or drop it.
-        if not current and (fixed_overhead_nt + antigen_nt) > options.max_length_nt:
-            logger.warning(
-                "Antigen %s exceeds --mrna-max-length-nt (%d > %d) on its "
-                "own; emitting in a single-antigen construct anyway.",
-                name, fixed_overhead_nt + antigen_nt, options.max_length_nt)
-        current.append((name, aa))
-        current_aa_nt += linker_nt + antigen_nt
-    if current and len(constructs) < options.max_constructs:
-        constructs.append(current)
-    elif current:
-        logger.warning(
-            "Dropped final %d antigen(s); --mrna-max-constructs (%d) reached.",
-            len(current), options.max_constructs)
-    return constructs
-
-
 def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
                              mhc_predictor=None, mhc_alleles=None,
                              reference_proteome=None, *,
@@ -727,12 +637,18 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
 
     selected_antigens = antigens_for_assembly(
         ranked_vaccine_peptides, options, 'mrna', source_evidence=source_evidence)
-    from .antigen_allocation import allocate_antigens
-    allocated = allocate_antigens(selected_antigens, options.antigen_allocation, selection_audit)
-    antigens = [(a.name, a.amino_acids) for a in allocated]
+    packing_linker = packing_linker_amino_acids(options, linker)
+    def assembled_length(group):
+        start_aa = int(not signal_peptide_aa and not group[0].amino_acids.startswith('M'))
+        protein_length = (len(signal_peptide_aa) + start_aa + sum(len(a.amino_acids) for a in group)
+                          + max(0, len(group) - 1) * len(packing_linker)
+                          + (len(packing_linker) + len(mitd_aa) if mitd_aa else 0))
+        return len(utr_5p_dna) + protein_length * 3 + len(STOP_CODON) + len(utr_3p_dna)
+    packed, exclusions = pack_antigens(
+        selected_antigens, options, assembled_length, options.max_length_nt, 'nt', selection_audit)
     source_mappings = {a.name: a.sources for a in selected_antigens}
-    if not antigens:
-        record_assembly_decisions(selection_audit, selected_antigens, [], target_alleles)
+    if not packed:
+        record_assembly_decisions(selection_audit, selected_antigens, [], target_alleles, exclusions)
         return []
 
     from .input_scope import InputScope, resolve_host_scope
@@ -742,14 +658,10 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
     options = replace(options, codon_species=resolve_codon_species(
         options.codon_species, host.host_taxon_id))
 
-    packed = _pack_constructs(
-        antigens, options, signal_peptide_aa, linker, mitd_aa,
-        utr_5p_dna, utr_3p_dna)
-
     constructs = []
     for i, antigen_group in enumerate(packed):
-        names = [n for n, _ in antigen_group]
-        antigen_aas = [aa for _, aa in antigen_group]
+        names = [a.name for a in antigen_group]
+        antigen_aas = [a.amino_acids for a in antigen_group]
 
         per_junction_linkers = None
         pre_mitd_linker = None  # overrides shared linker for the MITD junction
@@ -970,7 +882,7 @@ def assemble_mrna_constructs(ranked_vaccine_peptides, options=None,
             elements=elements,
             antigens=antigens_meta,
         ))
-    record_assembly_decisions(selection_audit, selected_antigens, constructs, target_alleles)
+    record_assembly_decisions(selection_audit, selected_antigens, constructs, target_alleles, exclusions)
     return constructs
 
 

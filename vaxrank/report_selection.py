@@ -282,7 +282,7 @@ def attach_selection_decisions(data, selection, ranked, products):
                     key=lambda source: int(source[1:]))
                 decisions['rows'].append(dict(order=item['order'], sequence=item['sequence'],
                     sources=ids, mapping_count=len(item['sources']), products=item['products'], outcome=item['outcome'],
-                    allocation=item.get('allocation')))
+                    allocation=item.get('allocation'), length_constraint=item.get('length_constraint')))
                 for candidate in data['ranked_candidates']:
                     if candidate['source_id'] in ids:
                         candidate['assembly_outcomes'].append(dict(

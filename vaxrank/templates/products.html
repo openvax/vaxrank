@@ -25,7 +25,7 @@ Related alternative sequences do not establish independent target coverage.</p>
 {% endif %}
 <table class="pure-table"><thead><tr><th>Order / sources</th><th>Final antigen sequence</th><th>Packing outcome</th></tr></thead><tbody>
 {% for decision in group.assembly_decisions.rows %}<tr><td>{{ decision.order }}: {% for source in decision.sources %}<a href="#source-{{ source }}">{{ source }}</a>{% if not loop.last %}, {% endif %}{% endfor %}<br>{{ decision.mapping_count }} candidate mappings</td>
-<td class="sequence-cell">{{ decision.sequence }}</td><td>{{ decision.outcome | replace('_', ' ') }}{% if decision.products %}: {{ decision.products | join(', ') }}{% endif %}</td></tr>{% endfor %}</tbody></table>
+<td class="sequence-cell">{{ decision.sequence }}</td><td>{{ decision.outcome | replace('_', ' ') }}{% if decision.products %}: {{ decision.products | join(', ') }}{% endif %}{% if decision.length_constraint %}<br>Assembled length {{ decision.length_constraint.length }} {{ decision.length_constraint.unit }}; limit {{ decision.length_constraint.limit }} {{ decision.length_constraint.unit }}.{% endif %}</td></tr>{% endfor %}</tbody></table>
 {% else %}<p class="note">Historical assembly ordering, deduplication and capacity decisions were not recorded. Product mappings below describe the saved result.</p>{% endif %}{% endif %}
 {% if group.files %}<p>Product files (relative to the run output directory):
 {% for file in group.files %}<code>{{ file }}</code>{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}

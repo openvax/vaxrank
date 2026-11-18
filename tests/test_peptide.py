@@ -92,14 +92,17 @@ def test_slp_truncation_preserves_mutation():
     assert "WHY" in c.sequence
 
 
-def test_slp_emits_full_fragment_when_mutation_exceeds_cap():
+def test_slp_excludes_fragment_when_mutation_exceeds_cap():
     # Inframe insertion longer than --peptide-max-length-aa: refuse
     # to truncate (the mutation can't be retained otherwise).
     aa = "A" * 5 + "M" * 25 + "A" * 10  # 40 aa, mutation spans 25 aa
-    [c] = assemble_peptide_constructs(
+    audit = {}
+    constructs = assemble_peptide_constructs(
         [_variant_pair(aa, mut_start=5, mut_end=30)],
-        options=PeptideConstructConfig(max_antigen_length_aa=20))
-    assert c.sequence == aa
+        options=PeptideConstructConfig(max_antigen_length_aa=20), selection_audit=audit)
+    assert constructs == []
+    assert audit['antigens'][0]['outcome'] == 'construct_length_limit'
+    assert audit['antigens'][0]['sequence'] == aa
 
 
 def test_minimal_epitope_uses_top_prediction():
@@ -374,28 +377,19 @@ def test_min_antigen_length_warning_when_emitted_below_floor(caplog):
         "Expected a min-antigen-length warning for an undersized SLP"
 
 
-def test_multi_epitope_warns_on_dropped_antigens(caplog):
-    # 4 antigens, antigens_per_construct=2, max_constructs=1 → only
-    # the first 2 antigens fit; the last 2 must produce a drop warning
-    # so the user can see they're being silently dropped.
+def test_multi_epitope_logs_construct_selection(caplog):
     import logging
     pairs = [_variant_pair("A" * 19 + aa, start=i) for i, aa in enumerate("ACDE")]
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.INFO):
         constructs = assemble_peptide_constructs(
-            pairs,
-            options=PeptideConstructConfig(
+            pairs, options=PeptideConstructConfig(
                 mode='multi_epitope', linker='GS', antigens_per_construct=2,
                 max_constructs=1, max_antigen_length_aa=20))
     assert len(constructs) == 1
     assert len(constructs[0].antigen_names) == 2
-    drop_warnings = [
-        r for r in caplog.records
-        if "max-constructs" in r.message
-        and ("dropping" in r.message.lower() or "dropped" in r.message.lower())
-    ]
-    assert drop_warnings, \
-        "Expected a max-constructs drop warning. Got: %s" % (
-            [r.message for r in caplog.records],)
+    records = [r for r in caplog.records if 'Construct assembly: selected' in r.message]
+    assert len(records) == 1 and records[0].levelno == logging.INFO
+    assert '2 / 4 eligible antigen sequences' in records[0].message
 
 
 def test_order_form_includes_scale_purity_counterion():

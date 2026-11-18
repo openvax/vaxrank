@@ -34,7 +34,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
-from .assembly_antigens import antigens_for_assembly, record_assembly_decisions
+from .assembly_antigens import antigens_for_assembly, pack_antigens, record_assembly_decisions
 from .manufacturability import ManufacturabilityScores
 from .construct_sequence import ConstructPlacement, validate_construct_placements
 from .native_serialization import to_native_json
@@ -196,62 +196,6 @@ def _manufacturability_for(sequence):
     return {f: getattr(scores, f) for f in ManufacturabilityScores._fields}
 
 
-def _pack_multi_epitope(records, options, linker):
-    """Bin-pack antigens into multi-epitope constructs honoring AA caps.
-
-    The per-construct cap is ``antigens_per_construct * max_antigen_length_aa
-    + (antigens_per_construct - 1) * len(linker)`` — generous enough that a
-    typical 5-antigen / 25-aa-window construct fits without churn.
-    """
-    linker_aa = linker.amino_acids
-    # Belt-and-suspenders length cap to catch pathologically long antigens.
-    max_construct_aa = (
-        options.antigens_per_construct * options.max_antigen_length_aa
-        + max(0, options.antigens_per_construct - 1) * len(linker_aa)
-    )
-    constructs = []
-    current = []
-    current_aa = 0
-    for name, aa in records:
-        if len(constructs) >= options.max_constructs:
-            logger.warning(
-                "Reached --peptide-max-constructs (%d); dropping remaining "
-                "antigens including %s.", options.max_constructs, name)
-            break
-        antigen_aa = len(aa)
-        linker_extra = len(linker_aa) if current else 0
-        projected = current_aa + linker_extra + antigen_aa
-        cap_hit = (
-            projected > max_construct_aa
-            or len(current) >= options.antigens_per_construct
-        )
-        if cap_hit and current:
-            constructs.append(current)
-            current = []
-            current_aa = 0
-            linker_extra = 0
-            if len(constructs) >= options.max_constructs:
-                logger.warning(
-                    "Reached --peptide-max-constructs (%d); dropping "
-                    "remaining antigens including %s.",
-                    options.max_constructs, name)
-                break
-        if not current and antigen_aa > max_construct_aa:
-            logger.warning(
-                "Antigen %s exceeds the multi_epitope construct cap "
-                "(%d > %d aa) on its own; emitting as-is.",
-                name, antigen_aa, max_construct_aa)
-        current.append((name, aa))
-        current_aa += linker_extra + antigen_aa
-    if current and len(constructs) < options.max_constructs:
-        constructs.append(current)
-    elif current:
-        logger.warning(
-            "Dropped final %d antigen(s); --peptide-max-constructs (%d) "
-            "reached.", len(current), options.max_constructs)
-    return constructs
-
-
 def assemble_peptide_constructs(
         ranked_vaccine_peptides, options=None, *,
         target_alleles=None, window_audit=None, source_evidence=None, selection_audit=None):
@@ -302,16 +246,16 @@ def assemble_peptide_constructs(
 
     antigens = antigens_for_assembly(
         ranked_vaccine_peptides, options, 'peptide', source_evidence=source_evidence)
-    from .antigen_allocation import allocate_antigens
-    allocated = allocate_antigens(antigens, options.antigen_allocation, selection_audit)
-    records = [(a.name, a.amino_acids) for a in allocated]
-    source_mappings = {a.name: a.sources for a in antigens}
+    linker = get_linker(options.linker) if options.antigens_per_construct > 1 else None
+    linker_aa = linker.amino_acids if linker else ''
+    max_length = (options.antigens_per_construct * options.max_antigen_length_aa
+                  + max(0, options.antigens_per_construct - 1) * len(linker_aa))
+    def assembled_length(group):
+        return sum(len(a.amino_acids) for a in group) + max(0, len(group) - 1) * len(linker_aa)
+    packed, exclusions = pack_antigens(antigens, options, assembled_length, max_length, 'aa', selection_audit)
     audits = {}
     for name, _, vp in iter_named_antigens(ranked_vaccine_peptides, options.candidates_per_slot):
         audits.setdefault((name, vp.amino_acids), []).append(vp.window_selection_audit)
-    if not records:
-        record_assembly_decisions(selection_audit, antigens, [], target_alleles)
-        return []
 
     # ``mode`` retained in the manifest for back-compat; ``antigen_content``
     # + ``antigens_per_construct`` are the orthogonal axes that actually
@@ -324,66 +268,34 @@ def assemble_peptide_constructs(
         'c_terminal_amidation': options.c_terminal_amidation,
     }
 
-    constructs = []
-    if options.antigens_per_construct <= 1:
-        # One construct per distinct emitted sequence. Covers both
-        # SLP (mutation_spanning, 1 per construct) and minimal-epitope
-        # (one short ligand per variant) designs.
-        for i, (name, sequence) in enumerate(records):
-            if len(constructs) >= options.max_constructs:
-                logger.info(
-                    "Reached --peptide-max-constructs (%d); dropping "
-                    "remaining %d candidate(s).",
-                    options.max_constructs, len(records) - i)
-                break
-            audit_queue = audits.get((name, sequence), [])
-            audit = audit_queue.pop(0) if audit_queue else {}
-            constructs.append(PeptideConstruct(
-                name="peptide_%03d" % (len(constructs) + 1),
-                sequence=sequence,
-                antigen_names=[name],
-                antigens=[dict(name=name, aa=sequence, length_aa=len(sequence), start_aa=0,
-                               end_aa=len(sequence), sources=source_mappings[name])],
-                components={**base_components, **({'window_selection': audit} if audit else {})},
-                manufacturability=_manufacturability_for(sequence),
-            ))
-        record_assembly_decisions(selection_audit, antigens, constructs, target_alleles)
-        return constructs
-
-    # antigens_per_construct > 1: bin-pack into multi-antigen
-    # constructs. Works for both content types — concatenated SLPs
-    # (the legacy ``multi_epitope`` design) and concatenated minimal
-    # ligands (a new combination unlocked by the orthogonal axes).
-    linker = get_linker(options.linker)
-    if linker.inert_in_peptide_mode:
+    if linker and linker.inert_in_peptide_mode:
         logger.warning(
             "Linker '%s' is functionally inert in synthesized peptides "
             "(2A skipping is co-translational). Including for vocabulary "
-            "symmetry; manifest annotates components.linker_inert=True.",
-            options.linker)
-    packed = _pack_multi_epitope(records, options, linker)
+            "symmetry; manifest annotates components.linker_inert=True.", options.linker)
+    constructs = []
     for group in packed:
-        names = [n for n, _ in group]
-        sequence = linker.amino_acids.join(aa for _, aa in group)
+        names = [a.name for a in group]
+        sequence = linker_aa.join(a.amino_acids for a in group)
         segments, offset = [], 0
-        for name, aa in group:
-            segments.append(dict(name=name, aa=aa, length_aa=len(aa), start_aa=offset,
-                                 end_aa=offset + len(aa), sources=source_mappings[name]))
-            offset += len(aa) + len(linker.amino_acids)
+        for antigen in group:
+            aa = antigen.amino_acids
+            segments.append(dict(name=antigen.name, aa=aa, length_aa=len(aa), start_aa=offset,
+                                 end_aa=offset + len(aa), sources=antigen.sources))
+            offset += len(aa) + len(linker_aa)
         components = dict(base_components)
-        components.update({
-            'linker': options.linker,
-            'linker_inert': linker.inert_in_peptide_mode,
-        })
+        if linker:
+            components.update(linker=options.linker, linker_inert=linker.inert_in_peptide_mode)
+        else:
+            audit_queue = audits.get((names[0], sequence), [])
+            audit = audit_queue.pop(0) if audit_queue else {}
+            if audit:
+                components['window_selection'] = audit
         constructs.append(PeptideConstruct(
             name="peptide_%03d" % (len(constructs) + 1),
-            sequence=sequence,
-            antigen_names=names,
-            antigens=segments,
-            components=components,
-            manufacturability=_manufacturability_for(sequence),
-        ))
-    record_assembly_decisions(selection_audit, antigens, constructs, target_alleles)
+            sequence=sequence, antigen_names=names, antigens=segments,
+            components=components, manufacturability=_manufacturability_for(sequence)))
+    record_assembly_decisions(selection_audit, antigens, constructs, target_alleles, exclusions)
     return constructs
 
 
