@@ -434,12 +434,16 @@ Prefer the explicit content and count flags for new designs.
 Identical emitted amino-acid sequences occupy one antigen slot, even when
 several genes or source candidates contribute them. Product labels, FASTA
 headers and manifests retain all recorded origins. Reports link the shared
-product to each source and identify the first enabled ranked source used for
-allocation and links to its ranking score and RNA evidence. Scores and RNA counts are not
-summed across origins.
+product to each source, mark the first enabled ranked source as the displayed
+representative (`is_representative: true`), and list each alternative origin's
+separate candidate score, admission status, RNA counts, effective lengths and
+sample/temporal evidence without summing counts across origins.
 
 Identity of a selected window does not establish identity of complete proteins
-or translation of every possible source. Reports distinguish the supplied
-candidate contexts sharing a window; the source identifiers, transcripts and
-protein identifiers remain separate in the manifest and native evidence.
-Historical native designs retain their recorded labels during exact replay.
+or translation of every possible source. When complete source-protein sequences
+are supplied (such as verified CTA reference proteins or complete Isovar coding
+candidates), manifests and reports group origins that share the exact complete
+protein sequence (`source_protein_groups`) while keeping distinct full proteins
+separate beneath the shared window; partial or local-fragment sources remain
+explicitly `partial` or `unassessed`. Historical native designs retain their
+recorded labels during exact replay.

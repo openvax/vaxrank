@@ -56,9 +56,11 @@ Identical final amino-acid sequences share one antigen slot, retaining all mappi
 {% else %}  Target coordinates unavailable or differ across sources.
 {% endif %}
   Source mappings: {{ antigen.sources if antigen.sources is not none else "unavailable" }} candidates, {{ antigen.transcripts if antigen.transcripts is not none else "unavailable" }} transcripts; genes: {{ antigen.genes or 'unavailable' }}.
-{% if antigen.sources and antigen.sources > 1 %}  Shared emitted sequence; {{ antigen.candidate_contexts }} distinct candidate contexts. Complete protein identity is not established by this window.
-{% if antigen.representative %}  Allocation source: {{ antigen.representative.name }}; ranking and RNA evidence: {{ antigen.representative.source_ids | join(', ') if antigen.representative.source_ids else 'source mapping unavailable' }}. Scores and RNA measurements remain source-specific.
-{% endif %}{% endif %}{% if antigen.source_ids %}  Report sources: {{ antigen.source_ids | join(', ') }}.
+{% if antigen.sources and antigen.sources > 1 %}  Shared emitted sequence; {{ antigen.candidate_contexts }} distinct candidate contexts. {{ antigen.protein_identity_note }}
+{% if antigen.protein_groups %}  Source-protein groups ({{ antigen.protein_groups | length }}): {% for pg in antigen.protein_groups %}{{ pg.genes }}{% if pg.proteins %} ({{ pg.proteins }}){% elif pg.transcripts %} ({{ pg.transcripts }}){% endif %} [{{ pg.completeness }}{% if pg.length_aa %}, {{ pg.length_aa }} aa{% endif %}]{% if not loop.last %}; {% endif %}{% endfor %}.
+{% endif %}{% if antigen.representative %}  Allocation source: {{ antigen.representative.name }}; ranking and RNA evidence: {{ antigen.representative.source_ids | join(', ') if antigen.representative.source_ids else 'source mapping unavailable' }}. Scores and RNA measurements remain source-specific.
+{% endif %}{% for origin in antigen.origin_summaries %}  {{ 'Displayed representative' if origin.is_representative else 'Alternative origin' }}: {{ origin.name }}{% if origin.identifiers %} ({{ origin.identifiers }}){% endif %}{% if origin.source_ids %} [{{ origin.source_ids | join(', ') }}]{% endif %}; source sequence {{ origin.completeness }}; score {{ origin.score }}{% if origin.admission %}; admission {{ origin.admission }}{% endif %}{% if origin.evidence %}; {{ origin.evidence }}{% endif %}.
+{% endfor %}{% endif %}{% if antigen.source_ids %}  Report sources: {{ antigen.source_ids | join(', ') }}.
 {% endif %}
 {% else %}Historical product: antigen placement/source mappings were not recorded. Labels: {{ product.antigen_names | join(', ') }}.
 {% endfor %}

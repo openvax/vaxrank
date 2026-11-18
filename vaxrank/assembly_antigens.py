@@ -1,15 +1,111 @@
 """Select distinct emitted sequences while retaining their separate sources."""
 
 from dataclasses import dataclass, field
+import hashlib
 import json
 import logging
 
 from varcode import Variant, StructuralVariant
 
 from .vaccine_library import iter_named_antigens, select_antigen_window, top_target_epitopes
-from .coding_context import coding_contexts
+from .coding_context import coding_contexts, isovar_candidates
 
 logger = logging.getLogger(__name__)
+
+
+def _source_gene_label(source):
+    if source.get('gene_name'):
+        return source['gene_name']
+    gene_ids = source.get('gene_ids') or ()
+    return gene_ids[0] if len(gene_ids) == 1 else ';'.join(gene_ids)
+
+
+def source_protein_record(antigen):
+    """Return supplied source-protein completeness and digest without guessing."""
+    completeness = getattr(antigen, 'source_protein_completeness', 'unassessed')
+    if completeness == 'complete':
+        return dict(
+            completeness='complete',
+            sha256=antigen.source_protein_sha256,
+            length_aa=antigen.source_protein_length,
+        )
+    if completeness == 'partial':
+        return dict(completeness='partial')
+    candidates = isovar_candidates(antigen)
+    if len(candidates) == 1 and candidates[0].get('protein_sequence'):
+        candidate = candidates[0]
+        partial = candidate.get('partial_coding_candidate', {
+            'complete_coding_candidate': False,
+            'partial_coding_candidate': True,
+        }.get(candidate.get('sequence_extent')))
+        if partial is False:
+            sequence = candidate['protein_sequence']
+            return dict(
+                completeness='complete',
+                sha256=hashlib.sha256(sequence.encode('ascii')).hexdigest(),
+                length_aa=len(sequence),
+            )
+        if partial is True:
+            return dict(completeness='partial')
+    return dict(completeness='unassessed')
+
+
+def group_source_proteins(sources):
+    """Group origins by complete supplied protein sequence when known.
+
+    Distinct complete proteins stay separate beneath a shared vaccine window.
+    Partial or unassessed origins are never merged into one protein group.
+    """
+    groups, complete_by_sha = [], {}
+    for index, source in enumerate(sources):
+        protein = source.get('source_protein') or {'completeness': 'unassessed'}
+        completeness = protein.get('completeness', 'unassessed')
+        digest = protein.get('sha256') if completeness == 'complete' else None
+        if digest:
+            group = complete_by_sha.get(digest)
+            if group is None:
+                group = dict(
+                    completeness='complete',
+                    protein_sha256=digest,
+                    length_aa=protein.get('length_aa'),
+                    gene_names=[],
+                    transcript_ids=[],
+                    protein_ids=[],
+                    source_identifiers=[],
+                    member_indices=[],
+                    contains_representative=False,
+                )
+                complete_by_sha[digest] = group
+                groups.append(group)
+        else:
+            group = dict(
+                completeness=completeness if completeness in ('partial', 'unassessed') else 'unassessed',
+                protein_sha256=None,
+                length_aa=None,
+                gene_names=[],
+                transcript_ids=[],
+                protein_ids=[],
+                source_identifiers=[],
+                member_indices=[],
+                contains_representative=False,
+            )
+            groups.append(group)
+        gene_label = _source_gene_label(source)
+        if gene_label and gene_label not in group['gene_names']:
+            group['gene_names'].append(gene_label)
+        for transcript_id in source.get('transcript_ids', ()):
+            if transcript_id and transcript_id not in group['transcript_ids']:
+                group['transcript_ids'].append(transcript_id)
+        for protein_id in source.get('protein_ids', ()):
+            if protein_id and protein_id not in group['protein_ids']:
+                group['protein_ids'].append(protein_id)
+        identifier = source.get('source_identifier')
+        if identifier and identifier not in group['source_identifiers']:
+            group['source_identifiers'].append(identifier)
+        group['member_indices'].append(index)
+        if source.get('is_representative', index == 0):
+            group['contains_representative'] = True
+    return groups
 
 
 @dataclass
@@ -26,7 +122,13 @@ class AssemblyAntigen:
 
     @property
     def gene_names(self):
-        return list(dict.fromkeys(s['gene_name'] for s in self.sources if s['gene_name']))
+        return list(dict.fromkeys(
+            label for s in self.sources if (label := _source_gene_label(s))
+        ))
+
+    @property
+    def source_protein_groups(self):
+        return group_source_proteins(self.sources)
 
 
 def _source_record(source, name, antigen, peptide, source_evidence):
@@ -65,7 +167,8 @@ def _source_record(source, name, antigen, peptide, source_evidence):
         species=antigen.species,
         prediction_ids=sorted({e.prediction_group_source for e in peptide.epitopes}),
         input_ids=sorted({e.input_provenance.input_id for e in peptide.epitopes if e.input_provenance}),
-        evidence_group=evidence_id, source_event=event)
+        evidence_group=evidence_id, source_event=event,
+        source_protein=source_protein_record(antigen))
     if antigen.origin is not None:
         from .antigen_origin import origin_dict
         record['origin'] = origin_dict(antigen)
@@ -147,6 +250,8 @@ def antigens_for_assembly(ranked, options, modality, *, source_evidence=None):
         by_sequence[occurrence.amino_acids] = occurrence
     used_names = set()
     for antigen in by_sequence.values():
+        for source_index, source in enumerate(antigen.sources):
+            source['is_representative'] = (source_index == 0)
         name = ' / '.join(dict.fromkeys(labels[antigen.amino_acids]))
         antigen.name = name
         index = 2
@@ -256,6 +361,8 @@ def source_matches_candidate(source, antigen, sequence, prediction_ids, input_id
     """Match one retained product source to a candidate's exact evidence identity."""
     return (source['source_identifier'] == antigen.source_identifier
             and source['gene_name'] == antigen.gene_name
+            and source.get('transcript_ids', list(antigen.transcript_ids)) == list(antigen.transcript_ids)
+            and source.get('protein_ids', list(antigen.protein_ids)) == list(antigen.protein_ids)
             and set(source['input_ids']) <= input_ids
             and set(source['prediction_ids']) <= prediction_ids
             and source['candidate_sequence'] in sequence)

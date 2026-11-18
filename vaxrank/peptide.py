@@ -279,7 +279,8 @@ def assemble_peptide_constructs(
         for antigen in group:
             aa = antigen.amino_acids
             segments.append(dict(name=antigen.name, aa=aa, length_aa=len(aa), start_aa=offset,
-                                 end_aa=offset + len(aa), sources=antigen.sources, gene_names=antigen.gene_names))
+                                 end_aa=offset + len(aa), sources=antigen.sources, gene_names=antigen.gene_names,
+                                 source_protein_groups=antigen.source_protein_groups))
             offset += len(aa) + len(linker_aa)
         components = dict(base_components)
         if linker:

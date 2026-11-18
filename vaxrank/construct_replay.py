@@ -169,6 +169,12 @@ def _canonical_native(value):
     if metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='VaccineAntigen'):
         if result.get('origin') is None:
             result.pop('origin', None)
+        if result.get('source_protein_completeness', 'unassessed') == 'unassessed':
+            result.pop('source_protein_completeness', None)
+        if not result.get('source_protein_sha256'):
+            result.pop('source_protein_sha256', None)
+        if result.get('source_protein_length') is None:
+            result.pop('source_protein_length', None)
     if (metadata == dict(__module__='vaxrank.vaccine_antigen', __name__='VaccineAntigen')
             and result.get('source_protein_offset', 0) == 0):
         result.pop('source_protein_offset', None)
@@ -212,9 +218,16 @@ def _assembly_identity(args, ranked, options, context):
     # checksum, but does not change assembly inputs or invalidate old designs.
     for source in graph:
         for candidate in source['candidates']:
-            # Display coordinates do not change a recorded assembly decision.
-            # Nonzero coordinates remain protected by the payload checksum.
-            candidate['antigen'] = replace(candidate['antigen'], source_protein_offset=0)
+            # Display coordinates and source-protein completeness provenance do
+            # not change a recorded assembly decision. Non-default fields
+            # remain protected by the payload checksum.
+            candidate['antigen'] = replace(
+                candidate['antigen'],
+                source_protein_offset=0,
+                source_protein_completeness='unassessed',
+                source_protein_sha256='',
+                source_protein_length=None,
+            )
             audit = candidate['window_selection']
             if audit.get('algorithm') == 'score_fraction_then_ranking':
                 candidate['window_selection'] = {}

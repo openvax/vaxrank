@@ -84,6 +84,7 @@ def admit_expression(path, contract, policy, bundle, scope):
                     identifier + ':' if contract.measurement_level == 'transcript' else ''
                 ) + hashlib.sha256(sequence.encode()).hexdigest(),
                 source_metadata=(('oncoref_sequence_bundle', bundle.identity),),
+                source_protein_completeness='complete',
                 tumor_specificity=TumorSpecificityAttestation(
                     status='admitted' if admitted else 'held_out', evidence_kind='cta_expression',
                     evidence_source='OncoRef current representative and patient expression',

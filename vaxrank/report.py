@@ -370,6 +370,16 @@ class TemplateDataCreator(object):
         variant_data = OrderedDict([
             ('IGV locus', igv_locus),
             ('Gene name', mutant_protein_fragment.gene_name),
+        ])
+        try:
+            overlapping_genes = [gene for gene in (variant.gene_names or ()) if gene]
+        except (AttributeError, ValueError):
+            overlapping_genes = []
+        if len(overlapping_genes) > 1 or (
+            overlapping_genes and mutant_protein_fragment.gene_name not in overlapping_genes
+        ):
+            variant_data['Overlapping genes'] = ', '.join(overlapping_genes)
+        variant_data.update([
             ('Top score', top_score),
             ('DNA VAF', '%.3f' % dna_vaf if dna_vaf is not None else 'n/a'),
             ('RNA VAF', '%.3f' % rna_vaf if rna_vaf is not None else 'n/a'),
@@ -853,7 +863,9 @@ class TemplateDataCreator(object):
 
     def _product_data(self):
         """Small template view of the products already written by the CLI."""
-        from .assembly_antigens import source_matches_candidate, summarize_products
+        from .assembly_antigens import (
+            _source_gene_label, group_source_proteins, source_matches_candidate, summarize_products,
+        )
         from .input_coverage import report_source_key
         candidates = {}
         for source, peptides in self.ranked_variants_with_vaccine_peptides:
@@ -877,6 +889,100 @@ class TemplateDataCreator(object):
                     if context not in contexts:
                         contexts.append(context)
             return origin_label(source['kind'], source.get('origin'), contexts, show_context=applicable)
+
+        def summarize_shared_origins(antigen, sources):
+            if len(sources) <= 1:
+                return [], '', []
+            raw_groups = antigen.get('source_protein_groups') or group_source_proteins(sources)
+            protein_groups = []
+            for group in raw_groups:
+                members = [sources[idx] for idx in group['member_indices'] if idx < len(sources)]
+                protein_groups.append(dict(
+                    completeness=group['completeness'],
+                    length_aa=group['length_aa'],
+                    protein_sha256=group.get('protein_sha256'),
+                    genes=', '.join(group['gene_names']) or 'unidentified',
+                    transcripts=', '.join(group['transcript_ids']),
+                    proteins=', '.join(group['protein_ids']),
+                    member_count=len(group['member_indices']),
+                    source_keys=list(dict.fromkeys(
+                        report_source_key(key) for member in members for key, _ in matching_candidates(member)
+                    )),
+                ))
+            if protein_groups and all(g['completeness'] == 'complete' for g in protein_groups):
+                if len(protein_groups) == 1:
+                    protein_note = (
+                        'Identical complete supplied source protein (%d aa) across recorded origins; '
+                        'shared window or RNA/MS evidence alone does not establish patient proteoform translation.'
+                        % protein_groups[0]['length_aa']
+                    )
+                else:
+                    protein_note = (
+                        '%d distinct complete source proteins share this window. '
+                        'Complete protein identity is not established by this window.'
+                        % len(protein_groups)
+                    )
+            else:
+                protein_note = 'Complete protein identity is not established by this window.'
+
+            origin_summaries = []
+            for index, source in enumerate(sources):
+                matches = matching_candidates(source)
+                peptide = matches[0][1] if matches else None
+                protein_meta = source.get('source_protein') or {'completeness': 'unassessed'}
+                completeness = protein_meta.get('completeness', 'unassessed')
+                completeness_label = (
+                    'complete (%d aa)' % protein_meta['length_aa']
+                    if completeness == 'complete' and protein_meta.get('length_aa')
+                    else completeness
+                )
+                score = (
+                    _sanitize(peptide.combined_score) if peptide is not None
+                    else _sanitize(source['combined_score']) if source.get('combined_score') is not None
+                    else 'unavailable'
+                )
+                admission = peptide.antigen.tumor_specificity.status if peptide is not None else None
+                evidence_parts = []
+                if peptide is not None:
+                    if peptide.antigen.rna_support:
+                        for ev in peptide.antigen.rna_support:
+                            scope_text = '/'.join(ev.measurement['evidence_scope'])
+                            values = ev.measurement['values']
+                            items = ['%d reads' % values['reads'], '%d fragments' % values['fragments']]
+                            eff = (
+                                values.get('effective_length_fragments')
+                                if values.get('effective_length_fragments') is not None
+                                else values.get('effective_length_reads')
+                            )
+                            if eff is not None:
+                                items.append('effective length %.1f nt' % eff)
+                            evidence_parts.append('%s (%s): %s' % (scope_text, ev.scope, ', '.join(items)))
+                    elif peptide.mutant_protein_fragment is not None:
+                        frag = peptide.mutant_protein_fragment
+                        items = ['%d alt reads' % frag.n_alt_reads]
+                        if frag.n_alt_fragments is not None:
+                            items.append('%d alt fragments' % frag.n_alt_fragments)
+                        evidence_parts.append(', '.join(items))
+                    for rec in peptide.antigen.tumor_specificity.evidence_records:
+                        if rec.numeric_value is not None and rec.unit:
+                            prefix = (rec.sample_id + ': ') if rec.sample_id else ''
+                            evidence_parts.append('%s%g %s' % (prefix, rec.numeric_value, rec.unit))
+                identifiers = list(dict.fromkeys([
+                    *source.get('protein_ids', ()),
+                    *source.get('transcript_ids', ()),
+                ]))
+                origin_summaries.append(dict(
+                    name=source['candidate_name'],
+                    is_representative=bool(source.get('is_representative', index == 0)),
+                    identifiers=', '.join(identifiers),
+                    completeness=completeness_label,
+                    score=score,
+                    admission=admission,
+                    evidence='; '.join(evidence_parts),
+                    source_keys=list(dict.fromkeys(report_source_key(key) for key, _ in matches)),
+                ))
+            return protein_groups, protein_note, origin_summaries
+
         groups = []
         for modality, products in self.products.items():
             rows = []
@@ -887,7 +993,11 @@ class TemplateDataCreator(object):
                 for antigen_index, antigen in enumerate(product.antigens, 1):
                     sources = antigen.get('sources', ())
                     context_labels = list(dict.fromkeys(source_label(source) for source in sources))
-                    genes = ', '.join(sorted({s['gene_name'] for s in sources if s['gene_name']}))
+                    gene_list = antigen.get('gene_names') or list(dict.fromkeys(
+                        label for s in sources if (label := _source_gene_label(s))
+                    ))
+                    genes = ', '.join(gene_list)
+                    protein_groups, protein_note, origin_summaries = summarize_shared_origins(antigen, sources)
                     intervals = target_intervals[antigen['name']]
                     if intervals is not None:
                         product_intervals.extend((start + antigen['start_aa'], end + antigen['start_aa'])
@@ -898,6 +1008,9 @@ class TemplateDataCreator(object):
                             for source in sources for key, _ in matching_candidates(source))),
                         context_labels=context_labels,
                         candidate_contexts=len({s['candidate_sequence'] for s in sources}) if sources else None,
+                        protein_groups=protein_groups,
+                        protein_identity_note=protein_note,
+                        origin_summaries=origin_summaries,
                         representative=(dict(name=sources[0]['candidate_name'],
                             source_keys=list(dict.fromkeys(report_source_key(key)
                                 for key, _ in matching_candidates(sources[0])))) if sources else None),
