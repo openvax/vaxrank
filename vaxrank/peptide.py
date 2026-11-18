@@ -15,14 +15,13 @@
 Three assembly modes:
 
 - ``slp`` (default) — one synthetic long peptide per construct, using
-  the vaccine peptide's amino-acid window straight from the ranking
-  pipeline. This is the canonical neoantigen peptide vaccine format.
+  the selected antigen window.
 - ``minimal_epitope`` — emit only the predicted MHC ligand for each
   vaccine peptide (the top-scoring epitope), one peptide per
   construct. Useful for short-peptide pools.
-- ``multi_epitope`` — concatenate antigens with a linker, mirroring
-  the mRNA mode. Uncommon for peptide vaccines; included for
-  vocabulary symmetry. 2A linkers are accepted but flagged as
+- ``multi_epitope`` — concatenate antigens with a linker into one
+  synthetic peptide molecule. This is distinct from a pool of separate
+  peptides. 2A linkers are accepted but flagged as
   functionally inert (ribosomal skipping is co-translational).
 
 The output API mirrors ``vaxrank/mrna.py`` — see issue #245 for the
@@ -66,8 +65,7 @@ class PeptideConstructConfig:
 
       content=mutation_spanning, per_construct=1   → SLP (one peptide
                                                      per ranked vaccine
-                                                     peptide; PGV-001
-                                                     canonical)
+                                                     peptide)
       content=mutation_spanning, per_construct=N   → Multi-SLP /
                                                      "multi-epitope long"
                                                      concatenation
@@ -76,11 +74,12 @@ class PeptideConstructConfig:
                                                      ligand per variant)
       content=minimal_epitope,  per_construct=N   → Concatenated
                                                      minimal-ligand
-                                                     pool
+                                                     peptide
 
-    Defaults match the canonical PGV-001 personalized peptide vaccine
-    layout: ~20 synthetic long peptides per pool, one antigen per
-    peptide, 15-25 aa per peptide.
+    Defaults produce up to 20 separate synthetic long peptides, one antigen
+    per molecule, with requested antigen windows of 15-25 aa. A pool contains
+    separate peptide molecules; increasing ``antigens_per_construct`` instead
+    joins antigen sequences into one molecule, including intervening linkers.
 
     Legacy ``mode`` field (``slp`` / ``minimal_epitope`` /
     ``multi_epitope``) is preserved as a back-compat shorthand; when
